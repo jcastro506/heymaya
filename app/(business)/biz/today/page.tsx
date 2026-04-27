@@ -31,6 +31,7 @@ import { Section } from "@/components/business/Section";
 import { EmptyState } from "@/components/business/EmptyState";
 import { JobCard } from "@/components/business/JobCard";
 import { MarkdownLite } from "@/components/business/MarkdownLite";
+import { MayaContributionCard } from "@/components/business/growth/MayaContributionCard";
 
 export default function TodayPage() {
   const profile = useQuery(api.queries.business.profile.getProfile);
@@ -40,6 +41,9 @@ export default function TodayPage() {
   const activity = useQuery(api.queries.business.today.getRecentActivity);
   const leadsCounter = useQuery(
     api.queries.business.today.getInboundLeadsCounter
+  );
+  const mayaContribution = useQuery(
+    api.queries.business.growth.getMayaContributionThisWeek
   );
 
   if (profile === undefined) {
@@ -64,6 +68,11 @@ export default function TodayPage() {
 
   return (
     <div className="pb-12 pt-4 sm:pt-6">
+      {/* Wave C.7 — Maya's contribution this week. Renders nothing on Day-0
+          accounts; renders a 3-stat card otherwise. Sits ABOVE the greeting
+          so it's the first thing the operator sees. */}
+      <MayaContributionCard data={mayaContribution} />
+
       {/* Greeting */}
       <Section
         eyebrow={`Today · ${formatToday(profile.account.timezone)}`}

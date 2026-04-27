@@ -13,6 +13,7 @@
 
 import type { Doc } from "@/convex/_generated/dataModel";
 import { Mail, Phone, X } from "lucide-react";
+import { CustomerProvenanceChain } from "./growth/CustomerProvenanceChain";
 
 export interface CustomerDetailProps {
   customer: Doc<"serviceCustomers">;
@@ -76,6 +77,10 @@ export function CustomerDetail({
             <p className="text-paper-faint">{customer.address}</p>
           )}
         </section>
+
+        {/* Wave C.7 — provenance chain. Renders nothing when no Maya action
+            is attributed to this customer (direct contact). */}
+        <CustomerProvenanceChain customerId={customer._id} />
 
         <section>
           <h4 className="mb-2 font-display text-base text-paper">

@@ -20,12 +20,12 @@ const REPO_ROOT = resolve(__dirname, "../../..");
 
 describe("Wave C HQ UI sibling-file scan", () => {
   it("every nav item in BusinessLayout resolves to an existing page.tsx", () => {
-    const layoutPath = resolve(
-      REPO_ROOT,
-      "app/(business)/layout.tsx"
-    );
-    expect(existsSync(layoutPath)).toBe(true);
-    const src = readFileSync(layoutPath, "utf8");
+    // Wave C.7 moved the NAV array out of layout.tsx into _nav.ts so the
+    // sibling-file scan can read it without pulling in client React +
+    // Next.js navigation hooks. The layout re-imports from _nav.ts.
+    const navPath = resolve(REPO_ROOT, "app/(business)/_nav.ts");
+    expect(existsSync(navPath)).toBe(true);
+    const src = readFileSync(navPath, "utf8");
 
     // Match every `href: "/biz/<segment>"` literal in the nav definition.
     const matches = Array.from(src.matchAll(/href:\s*"(\/biz\/[a-z]+)"/g));
@@ -44,9 +44,11 @@ describe("Wave C HQ UI sibling-file scan", () => {
   });
 
   it("every spec'd HQ route in Service Sprint Plan § 12 has a page on disk", () => {
-    // Spec § 12 lists 6 screens — they all live under app/(business)/biz/<route>/page.tsx.
+    // Spec § 12 + Wave C.7 list 7 screens — they all live under
+    // app/(business)/biz/<route>/page.tsx. Wave C.7 added "growth".
     const ROUTES = [
       "today",
+      "growth",
       "jobs",
       "reviews",
       "posts",

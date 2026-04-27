@@ -29,31 +29,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Camera,
-  Hammer,
-  LayoutDashboard,
-  Sparkles,
-  Star,
-  UserCircle,
-  Users,
-} from "lucide-react";
-
-interface NavItem {
-  href: string;
-  label: string;
-  short: string;
-  icon: typeof LayoutDashboard;
-}
-
-const NAV: ReadonlyArray<NavItem> = [
-  { href: "/biz/today", label: "Today", short: "Today", icon: LayoutDashboard },
-  { href: "/biz/jobs", label: "Jobs", short: "Jobs", icon: Hammer },
-  { href: "/biz/reviews", label: "Reviews", short: "Reviews", icon: Star },
-  { href: "/biz/posts", label: "Posts", short: "Posts", icon: Camera },
-  { href: "/biz/customers", label: "Customers", short: "People", icon: Users },
-  { href: "/biz/profile", label: "Profile", short: "You", icon: UserCircle },
-];
+import { Sparkles } from "lucide-react";
+import { NAV } from "./_nav";
 
 export default function BusinessLayout({
   children,
@@ -193,7 +170,7 @@ function BottomNav() {
       aria-label="Primary"
       className="fixed inset-x-0 bottom-0 z-30 flex items-stretch justify-between border-t border-[var(--hairline)] bg-[var(--ink)]/92 px-1 py-1.5 backdrop-blur lg:hidden"
     >
-      {NAV.map((item) => {
+      {NAV.filter((item) => !item.mobileHidden).map((item) => {
         const active = isActive(pathname, item.href);
         const Icon = item.icon;
         return (
