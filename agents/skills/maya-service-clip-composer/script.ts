@@ -1,22 +1,25 @@
 /**
- * maya-service-clip-composer — Wave C.6 implementation.
+ * maya-service-clip-composer — Wave C.6 implementation, corrected per
+ * operator rule (2026-04-27, third correction): no vendoring of low-level
+ * binaries; ClawHub-installed cloud video composer instead.
  *
  * JUDGMENT wrapper. Per `agents/skills/maya-service-clip-composer/SKILL.md`
- * AND the operator's install-first directive: this skill OWNS composition
- * judgment (which clips, hook, aspect ratio, duration, music vibe). It
- * DELEGATES ffmpeg mechanics to the installed skill at
- * `agents/skills/installed/ffmpeg/` (vendored per Phase 0 audit at
- * `docs/spikes/video-clip-skill-decision.md`).
+ * AND the operator's install-first + no-vendoring directive: this skill
+ * OWNS composition judgment (which clips, hook, aspect ratio, duration,
+ * music vibe). It DELEGATES rendering mechanics to a ClawHub-installed
+ * cloud video composer skill (NemoVideo / Free Video Generator (CapCut) /
+ * operator-selected equivalent) — installed via OpenClaw's runtime skill
+ * download, NOT vendored on disk. See `docs/spikes/video-clip-skill-decision.md`.
  *
  * Plan-tier: Studio-only initial gate. The orchestrator that invokes this
  * wrapper MUST check `planFeaturesService(business).mayaVideoEditing` and
  * fail closed before this script runs.
  *
  * Routing: Gemini 3 Flash MEDIUM thinking for the composition judgment.
- * The mechanics dispatched to the ffmpeg skill consume no LLM budget.
+ * Cloud rendering consumes no local compute and no LLM budget.
  *
- * Test seam: the LLM seam is `llmCaller`. The installed skill seam is
- * `installedFfmpegInvoker`. Both are injectable; both have safe
+ * Test seam: the LLM seam is `llmCaller`. The cloud composer seam is
+ * `cloudVideoComposerInvoker`. Both are injectable; both have safe
  * deterministic fallbacks.
  */
 
@@ -25,7 +28,7 @@ export const SKILL_METADATA = {
   modelTarget: "gemini-3-flash" as const,
   thinkingBudget: "medium" as const,
   routedReason:
-    "video composition judgment (clip selection + hook + music vibe + cut points) over multi-clip cataloger metadata. Mechanics delegated to installed ffmpeg skill — no LLM thinking on the pipeline itself.",
+    "video composition judgment (clip selection + hook + music vibe + cut points) over multi-clip cataloger metadata. Cloud rendering delegated to ClawHub-installed video composer skill — no LLM thinking on the pipeline itself.",
   planTier: ["studio"] as const, // initial gate per § 12.5.7
 } as const;
 
@@ -95,13 +98,21 @@ export interface LlmCaller {
 }
 
 /**
- * Installed ffmpeg skill seam. Production wires this to the OpenClaw
- * skill-invocation surface (skill at `agents/skills/installed/ffmpeg/`).
- * Returns true on a successful render-job enqueue; false when the skill
- * isn't available (graceful degrade — operator sees "video skill not
- * installed; ask Mike to install ffmpeg on the workspace").
+ * Cloud video composer seam. Production wires this to the OpenClaw
+ * skill-invocation surface for whichever ClawHub video-editor skill the
+ * operator approved at deploy (NemoVideo / Free Video Generator (CapCut) /
+ * etc.). Returns true on a successful render-job enqueue; false when no
+ * video composer skill is reachable (graceful degrade — operator sees
+ * "no video composer skill installed; Maya can install one from ClawHub
+ * via the maya-skill-installer meta-skill on your approval").
+ *
+ * The seam is intentionally generic over which ClawHub skill is wired —
+ * we don't lock to a single skill ID at code time. The deploy bundle's
+ * skill manifest decides; the maya-skill-installer can swap at runtime
+ * with operator approval. Keeping the seam abstract avoids re-coding the
+ * wrapper if we change vendors.
  */
-export interface InstalledFfmpegInvoker {
+export interface CloudVideoComposerInvoker {
   (plan: CompositionPlan & { sourceClips: ReadonlyArray<ClipInput> }): Promise<{
     enqueued: boolean;
   }>;
@@ -273,7 +284,7 @@ async function proposeHook(
 
 export interface ComposeOptions {
   llmCaller?: LlmCaller | null;
-  installedFfmpegInvoker?: InstalledFfmpegInvoker | null;
+  cloudVideoComposerInvoker?: CloudVideoComposerInvoker | null;
 }
 
 export class ClipComposerError extends Error {
@@ -365,12 +376,13 @@ export async function composeClipDraft(
     captionTextOverlay,
   };
 
-  // Delegate mechanics to the installed ffmpeg skill. Graceful degrade on
-  // unavailability (operator sees a clear "install ffmpeg on workspace").
+  // Delegate rendering to the ClawHub-installed cloud video composer.
+  // Graceful degrade on unavailability (operator sees a clear "no video
+  // composer skill installed; install one from ClawHub via maya-skill-installer").
   let enqueuedForRender = false;
-  if (options.installedFfmpegInvoker) {
+  if (options.cloudVideoComposerInvoker) {
     try {
-      const result = await options.installedFfmpegInvoker({
+      const result = await options.cloudVideoComposerInvoker({
         ...plan,
         sourceClips: selectedClipInputs,
       });

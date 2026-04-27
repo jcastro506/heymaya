@@ -25,7 +25,7 @@ import {
   type ComposerInputs,
   type ClipInput,
   type LlmCaller,
-  type InstalledFfmpegInvoker,
+  type CloudVideoComposerInvoker,
 } from "../script";
 
 function makeClip(overrides: Partial<ClipInput> = {}): ClipInput {
@@ -221,26 +221,26 @@ describe("composeClipDraft — captions", () => {
   });
 });
 
-describe("composeClipDraft — installed skill availability", () => {
+describe("composeClipDraft — cloud composer availability", () => {
   it("enqueuedForRender=false when no invoker is provided (graceful degrade)", async () => {
     const out = await composeClipDraft(BASE);
     expect(out.enqueuedForRender).toBe(false);
   });
 
   it("enqueuedForRender=true when invoker reports success", async () => {
-    const okInvoker: InstalledFfmpegInvoker = async () => ({ enqueued: true });
+    const okInvoker: CloudVideoComposerInvoker = async () => ({ enqueued: true });
     const out = await composeClipDraft(BASE, {
-      installedFfmpegInvoker: okInvoker,
+      cloudVideoComposerInvoker: okInvoker,
     });
     expect(out.enqueuedForRender).toBe(true);
   });
 
   it("enqueuedForRender=false when invoker throws (graceful degrade)", async () => {
-    const explodingInvoker: InstalledFfmpegInvoker = async () => {
-      throw new Error("ffmpeg not installed on workspace");
+    const explodingInvoker: CloudVideoComposerInvoker = async () => {
+      throw new Error("no cloud video composer reachable");
     };
     const out = await composeClipDraft(BASE, {
-      installedFfmpegInvoker: explodingInvoker,
+      cloudVideoComposerInvoker: explodingInvoker,
     });
     expect(out.enqueuedForRender).toBe(false);
   });

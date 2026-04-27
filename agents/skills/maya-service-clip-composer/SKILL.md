@@ -1,10 +1,10 @@
 ---
 name: maya-service-clip-composer
-version: 0.1.0-waveC6
-description: JUDGMENT wrapper around an installed ffmpeg/composition skill. Owns "which clips, what order, hook at second 0, what aspect ratio per platform, max-duration, music vibe, captions" — delegates the ffmpeg mechanics down. NO ffmpeg shell-out in this skill.
-when-to-use: When a job upload includes ≥1 video clip + the asset cataloger has marked them as a "good content moment" (operator pre-set OR Maya's judgment), `clip-composer` queues a draft Reel/Short/GBP-video for operator approval. Studio-only initial gate (CPU-heavy renders).
+version: 0.2.0-clawhub-cloud
+description: JUDGMENT wrapper around a ClawHub-installed cloud video composer (NemoVideo / Free Video Generator (CapCut) / operator-selected equivalent). Owns "which clips, what order, hook at second 0, what aspect ratio per platform, max-duration, music vibe, captions" — delegates rendering to the cloud skill. NO ffmpeg, NO local binaries, NO vendoring.
+when-to-use: When a job upload includes ≥1 video clip + the asset cataloger has marked them as a "good content moment" (operator pre-set OR Maya's judgment), `clip-composer` queues a draft Reel/Short for operator approval. Studio-only initial gate (cloud render credits).
 plan-tier: studio (initial gate per § 12.5.7 + Wave-4 video editing flag in `planFeaturesService.mayaVideoEditing`).
-model-routing: Gemini 3 Flash MEDIUM thinking for the COMPOSITION JUDGMENT (which clips, what hook, what music). Mechanics (ffmpeg) is the installed skill — no LLM thinking budget consumed for that.
+model-routing: Gemini 3 Flash MEDIUM thinking for the COMPOSITION JUDGMENT (which clips, what hook, what music). Cloud rendering is the installed ClawHub skill — no LLM thinking budget consumed for that, no local compute consumed either.
 ---
 
 # maya-service-clip-composer
@@ -13,9 +13,9 @@ model-routing: Gemini 3 Flash MEDIUM thinking for the COMPOSITION JUDGMENT (whic
 
 When the operator sends multiple video clips from a job site, the clips are typically raw and unedited. Posting them as-is on Instagram or TikTok is a guaranteed flop — those platforms punish unedited dumps. Maya's value-add is **judgment about composition**: which 4-6 seconds carry the story; what hook lands at second 0; what aspect ratio for which platform; what music vibe (or none) matches the brand voice; what max-duration the platform's algorithm rewards.
 
-The actual ffmpeg work — cutting, concatenating, rescaling, audio overlay, captions — is delegated to an installed skill (per Phase 0 audit at `docs/spikes/video-clip-skill-decision.md`: the `ffmpeg` skill from `digitalsamba/claude-code-video-toolkit` v0.15.0, MIT, vendored at `agents/skills/installed/ffmpeg/`). This skill is the JUDGMENT wrapper, not the pipeline.
+The actual rendering work — cutting, concatenating, rescaling, audio overlay, captions — is delegated to a **ClawHub-installed cloud video composer skill** (NemoVideo / Free Video Generator (CapCut) / operator-selected equivalent), installed via OpenClaw's runtime skill-download — NOT vendored on disk. See `docs/spikes/video-clip-skill-decision.md` for the corrected install-first decision (the original Wave C.6 vendor approach was rejected per the operator's no-vendoring rule, 2026-04-27 third correction). This skill is the JUDGMENT wrapper, not the pipeline.
 
-**Per `feedback_install_first_not_build.md`**: Maya never authors ffmpeg from scratch. The wrapper composes a `compositionPlan` and hands it to the installed skill via OpenClaw's skill-invocation surface; render is async via `services/video-synth-worker/`.
+**Per `feedback_install_first_not_build.md`**: Maya never authors video pipeline code, never vendors low-level binaries like ffmpeg. The wrapper composes a `compositionPlan` and hands it to the ClawHub-installed cloud composer via OpenClaw's skill-invocation surface; render is cloud-side (no local compute, no ffmpeg-on-Fly install dep).
 
 ## Inputs
 
@@ -116,11 +116,11 @@ Studio-only initial gate. Per § 12.5.7 the wave-4 video-edit worker is Studio g
 3. **Adversarial** — empty clip array, all-poor-quality clips, malformed cataloger output, prompt-injection in `framingNotes`, invented hook (not in `approvedCaption`).
 4. **Composition determinism on fixture clips** — given a fixed set of cataloged clips, the script picks consistent cuts (LLM seam injectable for stability).
 5. **Aspect-ratio + max-duration enforcement** — output plan is always within bounds; over-budget plans are truncated.
-6. **Install-skill-availability fail-gracefully** — when the installed ffmpeg skill is missing, the wrapper returns `enqueuedForRender: false` + a clear rationale; never crashes the brief.
+6. **Install-skill-availability fail-gracefully** — when no ClawHub cloud video composer is installed, the wrapper returns `enqueuedForRender: false` + a clear rationale ("Maya can install one from ClawHub via maya-skill-installer on operator approval"); never crashes the brief.
 
 ## Sibling files
 
-- Calls (delegate): `agents/skills/installed/ffmpeg/` (vendored from `digitalsamba/claude-code-video-toolkit` v0.15.0; install action in operator deploy script).
+- Calls (delegate): a ClawHub-installed cloud video composer skill — installed via OpenClaw's skill-download runtime, NOT vendored. Specific skill ID set at deploy by `maya-skill-installer` on operator approval. Top candidates: `vcarolxhberger/free-video-generator-capcut` (CapCut wrapper, NemoVideo backend, 100 free credits / 7d for anonymous), or NemoVideo first-party `nemovideo/nemovideo_skills`.
 - Calls: `maya-service-citation-firewall` for the `approvedCaption` cite trail.
 - Reads: `mediaAssets.catalog` for clip metadata; `wiki_get("concepts/what-works/video/*")` for outcome weights.
 - Writes: `gbpPosts` row with `status="pending"`; `mediaAssets` row for the rendered output (lineage via `derivedFromAssetIds`).

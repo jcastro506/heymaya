@@ -35,38 +35,37 @@ they are not the right primitive.
 | `clawhub:ffmpeg-cli` (ascendswang) | unspecified | 5,273 dl, 35 installs | cut/merge/extract/thumbs/gifs/subtitles/watermarks | **suspicious.vt_suspicious** | Disqualifying |
 | `digitalsamba/claude-code-video-toolkit` `.claude/skills/ffmpeg` | **MIT** | v0.15.0 (Apr 21 2026), commercial maintainer (Digital Samba), full skills dir (acestep / elevenlabs / ffmpeg / moviepy / remotion / playwright-recording / qwen-edit / runpod) | concat + aspect + audio + captions + transitions via ffmpeg + moviepy + Remotion delegation | clean (known-good repo) | Best fit |
 
-## Decision
+## Decision (REVISED 2026-04-27 — third operator correction)
 
-**Adopt the `ffmpeg` skill from `digitalsamba/claude-code-video-toolkit`,
-pinned to v0.15.0.**
+**Adopt a ClawHub-installed cloud video composer skill, downloaded by OpenClaw at runtime. Specific skill ID set at deploy via `maya-skill-installer` on operator approval.**
 
-Rationale (2 lines):
+Top candidates:
+1. `vcarolxhberger/free-video-generator-capcut` (community wrapper for NemoVideo backend)
+2. NemoVideo first-party publish (`nemovideo/nemovideo_skills`)
 
-1. Only candidate with a clearly compatible license (MIT), recent commit
-   activity (Apr 21 2026), and a commercial maintainer behind it — the two
-   purpose-built ClawHub candidates each carry suspicious-moderation
-   verdicts and the third (`ffmpeg-video-editor`) lacks any license at all.
-2. Capability surface matches our needs end-to-end: concat / aspect-ratio
-   rescale / audio overlay / captions / transitions are all in the
-   toolkit's documented skills directory, with Remotion available as a
-   richer composition fallback if a future arc needs it.
+Both call the same cloud API at `https://mega-api-prod.nemovideo.ai`. Free tier: 100 credits / 7 days for anonymous tokens. Output: 1080p MP4, H.264, up to 1080×1920. Cloud-rendered, no local compute, no ffmpeg-on-Fly install dep.
 
-## Vendoring strategy
+### Why the original Wave C.6 vendor decision was reversed
 
-- We do NOT clone the full toolkit (it pulls in Remotion + Playwright +
-  RunPod — heavy, not all relevant).
-- We vendor only `digitalsamba/claude-code-video-toolkit/.claude/skills/ffmpeg/`
-  into `agents/skills/installed/ffmpeg/` at the v0.15.0 git ref.
-- Add a sibling `LICENSE` copy + a top-of-folder `VENDORED.md` with
-  upstream URL + ref + the script path the wrapper invokes.
-- Operator action: install `ffmpeg` + `moviepy` (Python) on the per-business
-  Fly machine boot — `apt-get install -y ffmpeg && pip install moviepy` in
-  the workspace bundle deploy script. (Operator-blocked item: Wave D
-  picks this up alongside the `voice-call` plugin install ordering; not
-  our wave's responsibility to ship, but documented.)
-- Wrapper invokes via OpenClaw's skill-invocation mechanism — Maya emits a
-  `Skill("installed/ffmpeg", { op: "concat" | "rescale" | "overlay" | ... })`
-  call, not a direct ffmpeg shell-out.
+The original decision below adopted `digitalsamba/claude-code-video-toolkit` `.claude/skills/ffmpeg/` v0.15.0, vendored at `agents/skills/installed/ffmpeg/`. This violated two operator-stated rules — the second one stated *after* this decision was made:
+
+1. **No vendoring of low-level binaries / tooling** (operator rule, 2026-04-27 third correction): "We shouldn't be installing FFM peg or whatever, like nothing weird like that, okay? OpenClaw is great because it could just download skills, and then all of a sudden it's an expert on that workflow."
+2. **Climb up the skill stack to the highest-level fit, not the first hit at the lowest layer.** The original Phase 0 search stopped at "ffmpeg skill" candidates. ClawHub also has higher-level cloud-rendered video-editor skills (NemoVideo / CapCut family) that replace BOTH the vendored ffmpeg skill AND most of the custom judgment wrapper's deterministic-fallback code.
+
+The reversal also drops a Tier-4 operator-blocked dep entirely: `apt-get install -y ffmpeg && pip install moviepy` on per-business Fly machine boot is no longer needed.
+
+### What stayed unchanged after the reversal
+
+- **Maya owns judgment** (which clips, hook at second 0, aspect ratio per platform, max duration, music vibe, caption overlay). Cloud composer owns mechanics. Same wrapper-vs-mechanics split as before.
+- **Test seam pattern** (`CloudVideoComposerInvoker` injectable; deterministic fallback for tests) — same shape, different name. The pattern survives a vendor swap.
+- **Studio-only initial gate** via `planFeaturesService(business).mayaVideoEditing`.
+- **Graceful degrade** when no cloud composer is reachable: `enqueuedForRender: false` + clear rationale, surfaced as a maya-skill-installer install opportunity.
+
+### Original Wave C.6 decision (PRESERVED for history; SUPERSEDED by the above)
+
+> **Adopt the `ffmpeg` skill from `digitalsamba/claude-code-video-toolkit`, pinned to v0.15.0.** Rationale: only candidate with clearly compatible license (MIT), recent commit activity (Apr 21 2026), and a commercial maintainer behind it. Vendor at `agents/skills/installed/ffmpeg/`; operator installs `ffmpeg + moviepy` on Fly machine boot.
+
+This decision was reversed before any actual files were vendored on disk — the C.6 wave wrote the wrapper as-if vendoring had happened but the `agents/skills/installed/ffmpeg/` directory was never created. The reversal is therefore a doc-and-comment update, not a file-removal cleanup.
 
 ## What the wrapper (`maya-service-clip-composer`) owns vs delegates
 
@@ -85,14 +84,13 @@ Rationale (2 lines):
 - `gbpPosts` row creation with `status="pending"`.
 - Async render dispatch via `services/video-synth-worker/`.
 
-**Installed skill (mechanics):**
+**Cloud video composer skill (mechanics, post-revision):**
 
-- ffmpeg invocation + flag composition.
-- Stream cuts + concat without re-encode where possible.
-- Aspect-ratio rescale (`scale=...,pad=...`).
-- Audio overlay (`-i music.mp3 -filter_complex amix`).
-- Caption burn-in (`drawtext` filter).
-- Container muxing.
+- Upload clips/images via the composer's `/api/upload-video` endpoint
+- Compose via the composer's natural-language session (clip cuts, ordering, aspect-ratio rescale, audio overlay, caption burn-in)
+- Cloud-side render (GPU-backed); 30-90s typical job duration
+- Returns 1080p MP4 download URL on completion
+- All compute remote — no Fly machine compute consumed, no ffmpeg/moviepy/imagemagick install dep
 
 ## Fallback if Phase 0 had turned up nothing usable
 
