@@ -69,6 +69,7 @@ import type * as webhooks_crm from "../webhooks/crm.js";
 import type * as integrations_gbp_direct_client from "../integrations/gbp/direct/client.js";
 import type * as integrations_gbp_index from "../integrations/gbp/index.js";
 import type * as integrations_gbp_zernio from "../integrations/gbp/zernio.js";
+import type * as gbp_computeHealthScore from "../gbp/computeHealthScore.js";
 import type * as integrations_openclaw_channels from "../integrations/openclaw/channels.js";
 import type * as integrations_openclaw_cliClient from "../integrations/openclaw/cliClient.js";
 import type * as integrations_photoBridgeWorker_client from "../integrations/photoBridgeWorker/client.js";
@@ -205,6 +206,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/gbp/direct/client": typeof integrations_gbp_direct_client;
   "integrations/gbp/index": typeof integrations_gbp_index;
   "integrations/gbp/zernio": typeof integrations_gbp_zernio;
+  "gbp/computeHealthScore": typeof gbp_computeHealthScore;
   "integrations/openclaw/channels": typeof integrations_openclaw_channels;
   "integrations/openclaw/cliClient": typeof integrations_openclaw_cliClient;
   "integrations/photoBridgeWorker/client": typeof integrations_photoBridgeWorker_client;

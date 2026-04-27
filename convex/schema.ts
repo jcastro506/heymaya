@@ -2421,5 +2421,62 @@ export default defineSchema({
     .index("by_business", ["businessId"])
     .index("by_business_and_week", ["businessId", "weekStartMs"]),
   // ─── end Service product Wave C.5 (weekly learnings) ──────────────────
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Service product Wave C.6 — GBP local SEO health score (Maya's judgment)
+  //
+  // Per `project_north_star_outcomes.md`: "the lever between Maya's actions
+  // and jobs/5-stars is GBP local pack ranking." Per the operator directive
+  // (2026-04-27, Wave C.6 mid-flight): this score is **Maya's judgment**,
+  // not a deterministic weighted-input calculation. Hardcoded rules calcify
+  // wrong; LLM judgment + memory-wiki + outcome learnings is the
+  // differentiator. The auditor skill takes the operator's full GBP picture
+  // (profile + posts + reviews + competitors + Insights) and the relevant
+  // wiki pages (`concepts/what-works/gbp/*`) and produces:
+  //   - a 0-100 score reflecting Maya's read on local-pack health
+  //   - short reasoning prose explaining her score
+  //   - the count of nudges she queued this run
+  //
+  // The HQ Growth tab (Wave C.7) shows score + reasoning as a primary
+  // number, NOT a breakdown of inputs. Audit/forensics is via the wiki
+  // provenance pointers, not a per-input weights snapshot.
+  //
+  // Producer: `convex/gbp/computeHealthScore.ts#runGbpHealthAuditForBusiness`
+  // — thin orchestration action that fetches the auditor's input bundle,
+  // invokes the `maya-service-gbp-seo-auditor` skill, and persists the
+  // resulting row. Triggered via prose inside the existing `morning_brief`
+  // standing order; standingOrders.ts array length stays locked at 15 per
+  // Wave C.5 precedent.
+  //
+  // Cross-tenant: `businessId`-indexed; every reader filters. No global
+  // index. Persistence asserts `businessId` matches before insert.
+  //
+  // Plan-tier: storage + audit run is plan-agnostic — every business at
+  // every tier gets the audit (gating off self-defeating per north star).
+  // HQ read-surface gating happens in Wave C.7.
+  // ────────────────────────────────────────────────────────────────────────
+  gbpHealthScores: defineTable({
+    businessId: v.id("businesses"),
+    /** UTC ms when the audit ran. */
+    scoreAt: v.number(),
+    /** Maya's 0-100 score. Higher = healthier. Her judgment, not a formula. */
+    compositeScore: v.number(),
+    /**
+     * Maya's short justification (≤500 chars). Surfaced verbatim on the
+     * Growth tab so the operator can see the "why" behind the number.
+     */
+    reasoning: v.string(),
+    /** Count of nudges this run produced + queued for the operator. */
+    nudgesPending: v.number(),
+    /**
+     * Audit-trail metadata. The model + thinking budget are persisted so
+     * we can correlate score quality against routing changes over time.
+     */
+    model: v.string(),
+    thinkingBudget: v.string(),
+  })
+    .index("by_business", ["businessId"])
+    .index("by_business_and_at", ["businessId", "scoreAt"]),
+  // ─── end Service product Wave C.6 (GBP health score) ──────────────────
   // ─── end Service product Sprint 0 ─────────────────────────────────────
 });

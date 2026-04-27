@@ -296,6 +296,13 @@ export type ZernioWebhookEventType =
   | "post.partial"
   | "engagement.received"
   | "account.disconnected"
+  // Wave C.6 — GBP Q&A inbound. Maps to Zernio's `question.created` /
+  // `question.updated` events for `platform=googlebusiness`. The webhook
+  // dispatcher enqueues a `mayaTaskQueue.kind="question.created"` row;
+  // Maya's heartbeat picks it up and invokes the Q&A draft variant of
+  // `maya-service-review-reply-drafter`.
+  | "question.created"
+  | "question.updated"
   | "webhook.test";
 
 /**

@@ -75,6 +75,11 @@ const ZERNIO_EVENT_TYPE_VALIDATOR = v.union(
   v.literal("post.partial"),
   v.literal("engagement.received"),
   v.literal("account.disconnected"),
+  // Wave C.6 — GBP Q&A inbound. Mirrors `review.created`/`review.updated`
+  // wiring; Maya's heartbeat dispatches to the Q&A variant of
+  // `maya-service-review-reply-drafter`.
+  v.literal("question.created"),
+  v.literal("question.updated"),
   v.literal("webhook.test")
 );
 
@@ -255,6 +260,25 @@ async function handleVerifiedEvent(
       const queueRowId = await enqueueMayaTask(ctx, {
         businessId,
         kind: args.type, // "review.created" or "review.updated"
+        payload: {
+          platform: args.platform ?? "gbp",
+          occurredAt: args.occurredAt,
+          data: args.data,
+        },
+        source: "zernio-webhook",
+      });
+      await recordEvent(ctx, args.externalEventId, args.type);
+      return { status: "processed", queueRowId };
+    }
+
+    case "question.created":
+    case "question.updated": {
+      // Wave C.6 — GBP Q&A inbound. Mirrors review wiring exactly: enqueue,
+      // audit-log, return processed. Maya's heartbeat picks up the queue
+      // row + dispatches the Q&A variant of review-reply-drafter.
+      const queueRowId = await enqueueMayaTask(ctx, {
+        businessId,
+        kind: args.type,
         payload: {
           platform: args.platform ?? "gbp",
           occurredAt: args.occurredAt,
@@ -679,6 +703,8 @@ export function parseZernioWebhookEnvelope(
     "post.partial",
     "engagement.received",
     "account.disconnected",
+    "question.created",
+    "question.updated",
     "webhook.test",
   ];
   if (!allowedTypes.includes(type as ZernioWebhookEventType)) return null;

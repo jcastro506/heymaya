@@ -63,6 +63,18 @@ const WIKI_INTEGRATED_SKILLS: ReadonlyArray<{
     slug: "maya-service-learnings-extractor",
     expectedTools: ["wiki_apply"],
   },
+  // Wave C.6 — judgment-driven GBP local-SEO auditor reads
+  // `concepts/what-works/gbp/*` to weight nudges by historical outcome.
+  {
+    slug: "maya-service-gbp-seo-auditor",
+    expectedTools: ["wiki_get"],
+  },
+  // Wave C.6 — clip composer reads `concepts/what-works/video/*` for outcome
+  // weights and writes per-render `sources/video-renders/*` source pages.
+  {
+    slug: "maya-service-clip-composer",
+    expectedTools: ["wiki_get", "wiki_apply"],
+  },
 ];
 
 function readSkill(slug: string): string {

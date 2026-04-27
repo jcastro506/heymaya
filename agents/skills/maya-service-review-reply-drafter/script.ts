@@ -440,3 +440,266 @@ export const SKILL_METADATA = {
   /** LOCKED: never auto-publish at any tier. Server-side fail-closed. */
   autoPublishForbidden: true as const,
 };
+
+/* -------------------------------------------------------------------------- */
+/* GBP Q&A reply (Wave C.6) — folded into this skill per SKILL.md.             */
+/*                                                                             */
+/* Reuses the same risk-flag detector + neutralizer + char-cap so the safety   */
+/* engineering compounds rather than duplicating across skills. The intent     */
+/* classifier is rule-based + deterministic; the LLM is invoked for prose      */
+/* polish only and is fully optional (deterministic fallback ships if it       */
+/* errors or is omitted).                                                      */
+/* -------------------------------------------------------------------------- */
+
+export type QAndAIntent =
+  | "service-availability"
+  | "pricing-inquiry"
+  | "hours"
+  | "warranty"
+  | "general";
+
+export interface QAndADrafterInputs {
+  questionText: string;
+  askerName: string | null;
+  brandVoice: string;
+  servicesList: ReadonlyArray<string>;
+  operatorFirstName: string;
+}
+
+export interface QAndADrafterOutput {
+  replyText: string;
+  intentClass: QAndAIntent;
+  riskFlags: ReadonlyArray<ReviewRiskFlag>;
+  citationContext: {
+    citedFromServicesList: boolean;
+  };
+}
+
+/**
+ * Rule-based intent classifier. Order matters — pricing patterns must run
+ * before "hours" because phrases like "how much during business hours" exist
+ * in the wild (rare but plausible).
+ */
+function classifyQAndAIntent(question: string): QAndAIntent {
+  const q = question.toLowerCase();
+  if (
+    /\b(?:how much|cost|price|priced|charge|charges|quote|estimate|rate|pricing)\b/.test(
+      q
+    )
+  ) {
+    return "pricing-inquiry";
+  }
+  if (
+    /\b(?:warranty|warranties|warrantied|guarantee|guaranteed|covered)\b/.test(
+      q
+    )
+  ) {
+    return "warranty";
+  }
+  if (/\b(?:hours|open|closed|when do you|what time|sunday|holiday)\b/.test(q)) {
+    return "hours";
+  }
+  if (
+    /\b(?:do you do|do you offer|can you|do you handle|do you service|do you install|provide)\b/.test(
+      q
+    )
+  ) {
+    return "service-availability";
+  }
+  return "general";
+}
+
+/**
+ * Service-availability cited match. Returns the service from the operator's
+ * services list that the question is likely asking about, or null if none.
+ * Conservative: requires a substring match, lowercased, on a token-ish span.
+ */
+function matchAvailabilityToService(
+  question: string,
+  servicesList: ReadonlyArray<string>
+): string | null {
+  const q = question.toLowerCase();
+  for (const s of servicesList) {
+    if (!s.trim()) continue;
+    const lower = s.toLowerCase();
+    if (q.includes(lower)) return s;
+    // Also try the dash-stripped form so "water heater" matches "water-heater"
+    // and vice versa.
+    const stripped = lower.replace(/[-_]/g, " ");
+    if (q.includes(stripped)) return s;
+  }
+  return null;
+}
+
+function safeQAndAFallback(
+  inputs: QAndADrafterInputs,
+  intent: QAndAIntent,
+  matchedService: string | null
+): string {
+  const sign = ` — ${inputs.operatorFirstName}`;
+  switch (intent) {
+    case "service-availability": {
+      if (matchedService) {
+        return cap(
+          `Yes — ${matchedService} is one of the services we handle. Give us a call and we'll get you scheduled.${sign}`,
+          REPLY_HARD_CAP
+        );
+      }
+      const offered = inputs.servicesList.slice(0, 3).join(", ");
+      return cap(
+        offered
+          ? `We focus on ${offered}. Happy to point you toward a shop that handles what you're asking about.${sign}`
+          : `Give us a call — happy to talk through whether we're the right fit.${sign}`,
+        REPLY_HARD_CAP
+      );
+    }
+    case "pricing-inquiry":
+      return cap(
+        `Pricing varies by job — give us a call and we'll get you a quote in 5 minutes.${sign}`,
+        REPLY_HARD_CAP
+      );
+    case "hours":
+      return cap(
+        `Our hours are listed on this profile. For after-hours emergencies, please call.${sign}`,
+        REPLY_HARD_CAP
+      );
+    case "warranty":
+      return cap(
+        `Reach out and we'll walk you through your warranty coverage in detail.${sign}`,
+        REPLY_HARD_CAP
+      );
+    case "general":
+    default:
+      return cap(
+        `Thanks for reaching out — give us a call or message and we'll get you taken care of.${sign}`,
+        REPLY_HARD_CAP
+      );
+  }
+}
+
+function validateQAndAInputs(inputs: QAndADrafterInputs): void {
+  if (!inputs.questionText || !inputs.questionText.trim()) {
+    throw new ServiceSkillError(SKILL_ID, "missing questionText");
+  }
+  if (!inputs.brandVoice || !inputs.brandVoice.trim()) {
+    throw new ServiceSkillError(SKILL_ID, "missing brandVoice");
+  }
+  if (!inputs.operatorFirstName || !inputs.operatorFirstName.trim()) {
+    throw new ServiceSkillError(SKILL_ID, "missing operatorFirstName");
+  }
+}
+
+export async function draftQAndAReply(
+  inputs: QAndADrafterInputs,
+  overrides: ReviewReplyDrafterOverrides = {},
+  firewallContext: ReviewReplyFirewallContext = {}
+): Promise<QAndADrafterOutput> {
+  validateQAndAInputs(inputs);
+
+  const riskFlags = detectRiskFlags(inputs.questionText);
+  // Hard escalation: extortion or legal-threat → operator-only. We do NOT
+  // call the LLM and we ship a placeholder.
+  if (
+    riskFlags.includes("extortion-language") ||
+    riskFlags.includes("legal-threat")
+  ) {
+    return {
+      replyText: operatorOnlyPlaceholder(riskFlags),
+      intentClass: "general",
+      riskFlags,
+      citationContext: { citedFromServicesList: false },
+    };
+  }
+
+  const intent = classifyQAndAIntent(inputs.questionText);
+  const matchedService =
+    intent === "service-availability"
+      ? matchAvailabilityToService(inputs.questionText, inputs.servicesList)
+      : null;
+
+  // Build deterministic fallback first; LLM output is polish-only.
+  let reply = safeQAndAFallback(inputs, intent, matchedService);
+
+  // Optional LLM polish — only if API key present. Test seam: tests omit
+  // overrides.apiKey + process.env to stay deterministic.
+  const apiKey = overrides.apiKey ?? process.env.OPENROUTER_API_KEY ?? "";
+  if (apiKey) {
+    const cleanQuestion = neutralizeInjection(inputs.questionText);
+    const cleanVoice = neutralizeInjection(inputs.brandVoice);
+    const model =
+      overrides.model ??
+      process.env.OPENROUTER_DEFAULT_MODEL ??
+      "google/gemini-3-flash";
+    const prompt = [
+      `Draft a Google Business Profile Q&A reply.`,
+      ``,
+      `Question (verbatim): """${cleanQuestion}"""`,
+      `Intent class: ${intent}${matchedService ? ` (matched service: "${matchedService}")` : ""}`,
+      `Operator services list: ${JSON.stringify(inputs.servicesList)}`,
+      `Operator first name (sign-off): ${inputs.operatorFirstName}`,
+      `Brand voice to mirror: """${cleanVoice}"""`,
+      ``,
+      `Hard rules:`,
+      `- ≤350 characters total.`,
+      `- Never quote a price.`,
+      `- Never claim a service NOT in the operator services list.`,
+      `- Never restate hours inline (defer to the profile).`,
+      `- Never guarantee warranty specifics.`,
+      `- Never name a competitor.`,
+      `- For service-availability with NO matched service: redirect, do not say "yes".`,
+      ``,
+      `Return STRICT JSON only: {"replyText":"<= 350 chars"}`,
+    ].join("\n");
+    try {
+      const completion = await callOpenRouter({
+        model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are Maya, an AI manager for a service-business operator. You draft GBP Q&A replies that pass Google's moderation. Output strict JSON when asked.",
+          },
+          { role: "user", content: prompt },
+        ],
+        thinkingBudget: SKILL_METADATA.thinkingBudget,
+        apiKey,
+        fetchImpl: overrides.fetchImpl,
+        maxOutputTokens: 400,
+      });
+      const parsed = parseLlmJson(completion.content);
+      const llmText =
+        typeof parsed.replyText === "string" ? parsed.replyText.trim() : "";
+      if (llmText) {
+        let candidate = cap(llmText, REPLY_HARD_CAP);
+        // Citation firewall: reject competitor mentions in polished output.
+        const competitors = firewallContext.competitorNames ?? [];
+        if (detectCompetitorMention(candidate, competitors)) {
+          riskFlags.push("competitor-name-drop");
+          candidate = reply; // fall back to deterministic
+        }
+        // Cite-from-services-list invariant: if intent is service-availability
+        // and there's no matched service, the polished reply MUST NOT contain
+        // a "yes we do X" affirmation that wasn't substantiated.
+        if (intent === "service-availability" && !matchedService) {
+          if (/\byes\b/i.test(candidate) && !/\bcheck\s+with\b/i.test(candidate)) {
+            candidate = reply; // unground "yes" → fall back
+          }
+        }
+        // Pricing leak: reject if a $ figure shows up.
+        if (intent === "pricing-inquiry" && /\$\s*\d/.test(candidate)) {
+          candidate = reply;
+        }
+        if (candidate) reply = candidate;
+      }
+    } catch {
+      // LLM failure is non-blocking — the deterministic fallback ships.
+    }
+  }
+
+  return {
+    replyText: reply,
+    intentClass: intent,
+    riskFlags,
+    citationContext: { citedFromServicesList: matchedService !== null },
+  };
+}
