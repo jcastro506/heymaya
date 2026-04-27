@@ -241,6 +241,17 @@ export const getGrowthSummary = query({
     // (the poller writes the absolute totals on each pull). For accurate
     // window math we'd need delta-snapshots; for v0 we use the latest poll
     // per post that lands in window.
+    //
+    // NOTE (2026-04-27 audit): per-post GBP analytics are deprecated at
+    // Google level (LOCAL_POST_VIEWS_SEARCH + LOCAL_POST_ACTIONS_CALL_TO_ACTION
+    // discontinued 2023-02-20, no replacement). For GBP-platform posts,
+    // `engagementMetrics` will always be null and this loop will skip them
+    // — the GBP-side metric totals therefore aggregate to 0 until a
+    // future wave wires the location-level Performance API
+    // (`locations.fetchMultiDailyMetricsTimeSeries`) to a separate
+    // location-metrics table that this query reads. FB/IG posts via
+    // metaInsightsPoller still populate `engagementMetrics` correctly.
+    // See `docs/spikes/zernio-capability-audit.md`.
     let gbpCalls = 0;
     let gbpDirections = 0;
     let gbpWebsite = 0;

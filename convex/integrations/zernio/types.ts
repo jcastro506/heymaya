@@ -296,11 +296,16 @@ export type ZernioWebhookEventType =
   | "post.partial"
   | "engagement.received"
   | "account.disconnected"
-  // Wave C.6 — GBP Q&A inbound. Maps to Zernio's `question.created` /
-  // `question.updated` events for `platform=googlebusiness`. The webhook
-  // dispatcher enqueues a `mayaTaskQueue.kind="question.created"` row;
-  // Maya's heartbeat picks it up and invokes the Q&A draft variant of
-  // `maya-service-review-reply-drafter`.
+  // [DEPRECATED 2026-04-27 — never fires]
+  // GBP Q&A API was deprecated by Google ("replaced by AI-powered 'Ask
+  // Maps'" per Zernio's docs verbatim). The Q&A draft variant of
+  // `maya-service-review-reply-drafter` was removed in Path D. These
+  // webhook event types stay in the union for additive-schema safety
+  // and as defensive handling if Zernio ever delivers stale events,
+  // but the dispatcher's normalize function is now a no-op for these
+  // — the resulting mayaTaskQueue rows are inert (no skill claims them).
+  // See `docs/spikes/zernio-capability-audit.md` and the SKILL.md
+  // strikethrough section in maya-service-review-reply-drafter.
   | "question.created"
   | "question.updated"
   | "webhook.test";

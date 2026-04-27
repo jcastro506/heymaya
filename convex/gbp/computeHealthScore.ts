@@ -287,6 +287,13 @@ export function buildAuditorInputsFromBundle(
       sundayHoursSet: false,
       holidayHoursSet: false,
       servicesList: business.serviceTypes,
+      // Q&A counts are stubbed at zero — Google deprecated the GBP Q&A API
+      // entirely ("replaced by AI-powered 'Ask Maps'"). The auditor
+      // schema retains the field for forward-compat (in case Google ever
+      // resurrects an Ask-Maps-API replacement) but the values are
+      // permanently 0 in v0. Maya's judgment about Q&A health falls back
+      // to whatever the operator self-reports via memory-wiki entries.
+      // See docs/spikes/zernio-capability-audit.md.
       qAndA: { totalQuestions: 0, unansweredQuestions: 0 },
       primaryPhotosSet: bundle.latestPhotoReceivedAt !== null,
       photoCount: bundle.photoCount30d,

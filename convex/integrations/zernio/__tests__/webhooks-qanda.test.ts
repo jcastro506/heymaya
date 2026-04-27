@@ -1,8 +1,21 @@
 /**
  * Wave C.6 — GBP Q&A webhook routing.
  *
- * Mirrors the existing review.created tests for the new question.created /
- * question.updated event types. Five mandatory categories applied:
+ * [DEPRECATED 2026-04-27 — Q&A path retired]
+ * GBP Q&A API was deprecated by Google ("replaced by AI-powered
+ * 'Ask Maps'"). The Q&A draft variant of `maya-service-review-reply-drafter`
+ * was removed in Path D. These tests stay green because they exercise the
+ * webhook normalizer's defensive handling — the normalizer still parses
+ * `question.created` / `question.updated` events without crashing. But:
+ *   - The resulting `mayaTaskQueue` rows are inert (no skill claims them).
+ *   - In production, Zernio will never send these events because GBP no
+ *     longer exposes Q&A via API.
+ *   - These tests provide regression coverage for the defensive handling
+ *     in case Zernio ever back-ports an "Ask Maps" replacement.
+ *
+ * See `docs/spikes/zernio-capability-audit.md`.
+ *
+ * Five mandatory categories applied:
  *   1. Cross-tenant — Business B's question does not land in Business A's queue.
  *   2. Plan-tier — webhook layer plan-agnostic (Q&A drafting is universal per
  *      north-star rule).
