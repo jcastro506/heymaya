@@ -60,6 +60,14 @@ import {
 import { runOpenclawChannelCommand } from "../../integrations/openclaw/cliClient";
 import { generateMemoryWikiPluginEntries } from "../../agents/packs/maya_service/memoryWikiConfig";
 import { generateVoiceCallPluginEntries } from "../../agents/packs/maya_service/voiceCallConfig";
+import {
+  ANTHROPIC_BASELINE_SKILLS,
+  ANTHROPIC_SKILLS_REPO,
+} from "../../agents/packs/maya_service/anthropicSkillsManifest";
+import {
+  CLAWHUB_BASELINE_SKILLS,
+  CLAWHUB_REGISTRY_URL,
+} from "../../agents/packs/maya_service/clawhubManifest";
 
 /* -------------------------------------------------------------------------- */
 /* Memory seed loader — maps a primary serviceType to its bundled markdown.    */
@@ -299,6 +307,8 @@ export function assembleServiceWorkspace(
   });
   const jobsJsonStr = JSON.stringify(jobs, null, 2);
 
+  const manifestJsonStr = JSON.stringify(buildSkillManifest(), null, 2);
+
   const files = new Map<string, string>([
     ["AGENTS.md", agentsMd],
     ["SOUL.md", soulMd],
@@ -309,9 +319,51 @@ export function assembleServiceWorkspace(
     ["MEMORY.md", memoryMd],
     ["USER.md", userMd],
     ["jobs.json", jobsJsonStr],
+    ["manifest.json", manifestJsonStr],
   ]);
 
   return { files, jobsJsonStr, cronCount: jobs.jobs.length };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Skill manifest — uniform across every Maya at deploy                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Per the operator-locked rule (2026-04-27): every Maya gets the SAME
+ * curated skill bundle at deploy time. The manifest enumerates the
+ * download-required skills (Anthropic public + ClawHub baseline) so
+ * OpenClaw's runtime can fetch them on first boot. Custom maya-service-*
+ * skills are bundled as files in the workspace tarball directly — they
+ * don't need download URLs.
+ *
+ * The manifest is uniform — `buildSkillManifest()` takes no per-business
+ * arguments. If anyone adds business-specific branching here, that's a
+ * regression on the uniform-skills rule (see
+ * `memory/feedback_install_first_not_build.md`).
+ */
+export function buildSkillManifest(): {
+  version: 1;
+  anthropic: {
+    repo: string;
+    skills: ReadonlyArray<(typeof ANTHROPIC_BASELINE_SKILLS)[number]>;
+  };
+  clawhub: {
+    registry: string;
+    skills: ReadonlyArray<(typeof CLAWHUB_BASELINE_SKILLS)[number]>;
+  };
+} {
+  return {
+    version: 1,
+    anthropic: {
+      repo: ANTHROPIC_SKILLS_REPO,
+      skills: ANTHROPIC_BASELINE_SKILLS,
+    },
+    clawhub: {
+      registry: CLAWHUB_REGISTRY_URL,
+      skills: CLAWHUB_BASELINE_SKILLS,
+    },
+  };
 }
 
 /**

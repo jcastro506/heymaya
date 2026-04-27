@@ -125,6 +125,21 @@ Day 8-30:
 - **Maya makes a hallucinated claim in a review reply.** P0 bug. Pause that operator's auto-publish, ship a fix in <24h, manually apologize.
 - **Voice latency >300ms first-token.** Surface to ElevenLabs immediately; if not fixable in 48h, downgrade that operator off Studio voice for the remainder of the beta.
 
+## Pre-beta env var checklist (operator-blocked)
+
+Before any beta operator's Maya can boot cleanly, these env vars must be set on the Convex deployment:
+
+- `DEEPREAD_API_KEY` — for the OCR skill (`uday390/deepread-ocr` from ClawHub baseline). Free tier 2000 pages/month, 10 req/min, no credit card. Get from [deepread.ai](https://deepread.ai). Per-operator usage at beta scale (5-10 ops × ~30 receipts/op/mo) sits well under the free cap.
+- `ZERNIO_API_KEY` — for review monitoring + reply + posting. Build tier $19/mo + Inbox addon $10/mo (or scale to Accelerate $49/mo + Inbox $50 + Analytics $50 = ~$149/mo total).
+- `ELEVENLABS_API_KEY` — for Studio voice tier.
+- `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — for billing.
+- `CONVEX_SITE_URL` — for webhook receivers.
+- `VOICE_TRANSCRIPT_HMAC_SECRET` — `openssl rand -hex 32`.
+- `OPENROUTER_API_KEY` — for Maya's Gemini 3 Flash brain.
+- `CLERK_SECRET_KEY` + `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` — for auth.
+
+The full v0 ClawHub + Anthropic baseline skill list lives in `convex/agents/packs/maya_service/{clawhubManifest,anthropicSkillsManifest}.ts`. Every Maya gets the same 24 skills (4 Anthropic public + 2 ClawHub baseline + 18 custom maya-service-*). Variation per operator is `soul.md` + memory-wiki + connected accounts only.
+
 ## Reporting
 
 Weekly digest, internal:

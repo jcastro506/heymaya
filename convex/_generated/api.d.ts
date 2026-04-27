@@ -37,6 +37,8 @@ import type * as agents_packs_maya_service_generateSoul from "../agents/packs/ma
 import type * as agents_packs_maya_service_generateTools from "../agents/packs/maya_service/generateTools.js";
 import type * as agents_packs_maya_service_memoryWikiConfig from "../agents/packs/maya_service/memoryWikiConfig.js";
 import type * as agents_packs_maya_service_voiceCallConfig from "../agents/packs/maya_service/voiceCallConfig.js";
+import type * as agents_packs_maya_service_anthropicSkillsManifest from "../agents/packs/maya_service/anthropicSkillsManifest.js";
+import type * as agents_packs_maya_service_clawhubManifest from "../agents/packs/maya_service/clawhubManifest.js";
 import type * as agents_packs_maya_service_standingOrders from "../agents/packs/maya_service/standingOrders.js";
 import type * as agents_packs_maya_service_types from "../agents/packs/maya_service/types.js";
 import type * as agents_packs_maya_service_wikiInitialPages from "../agents/packs/maya_service/wikiInitialPages.js";
@@ -177,6 +179,8 @@ declare const fullApi: ApiFromModules<{
   "agents/packs/maya_service/generateTools": typeof agents_packs_maya_service_generateTools;
   "agents/packs/maya_service/memoryWikiConfig": typeof agents_packs_maya_service_memoryWikiConfig;
   "agents/packs/maya_service/voiceCallConfig": typeof agents_packs_maya_service_voiceCallConfig;
+  "agents/packs/maya_service/anthropicSkillsManifest": typeof agents_packs_maya_service_anthropicSkillsManifest;
+  "agents/packs/maya_service/clawhubManifest": typeof agents_packs_maya_service_clawhubManifest;
   "agents/packs/maya_service/standingOrders": typeof agents_packs_maya_service_standingOrders;
   "agents/packs/maya_service/types": typeof agents_packs_maya_service_types;
   "agents/packs/maya_service/wikiInitialPages": typeof agents_packs_maya_service_wikiInitialPages;
