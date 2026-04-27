@@ -59,6 +59,7 @@ import {
 } from "../../agents/packs/maya_service/types";
 import { runOpenclawChannelCommand } from "../../integrations/openclaw/cliClient";
 import { generateMemoryWikiPluginEntries } from "../../agents/packs/maya_service/memoryWikiConfig";
+import { generateVoiceCallPluginEntries } from "../../agents/packs/maya_service/voiceCallConfig";
 
 /* -------------------------------------------------------------------------- */
 /* Memory seed loader — maps a primary serviceType to its bundled markdown.    */
@@ -131,6 +132,21 @@ export const getBusinessPictureForDeploy = internalQuery({
   handler: async (ctx, args): Promise<Doc<"businessPicture"> | null> => {
     return await ctx.db
       .query("businessPicture")
+      .withIndex("by_business", (q) => q.eq("businessId", args.businessId))
+      .first();
+  },
+});
+
+/**
+ * Voice-channel lookup for the deploy bundle's Studio-only voice-call plugin
+ * config (Wave D — service plan § 13 Sprint 6). Returns null on Pro/Starter
+ * deploys (no voice channel row) so the bundler emits NO plugin block.
+ */
+export const getVoiceChannelForDeploy = internalQuery({
+  args: { businessId: v.id("businesses") },
+  handler: async (ctx, args): Promise<Doc<"voiceChannels"> | null> => {
+    return await ctx.db
+      .query("voiceChannels")
       .withIndex("by_business", (q) => q.eq("businessId", args.businessId))
       .first();
   },
@@ -585,6 +601,40 @@ export const deployServiceMaya = internalAction({
         businessId: args.businessId,
         businessName: business.name || "Business",
       });
+
+      // Voice-call plugin config (§ 13 Sprint 6) — Studio-only. Per
+      // `feedback_openclaw_native_first.md`, the plugin owns Twilio Media
+      // Streams + STT + TTS + tool dispatch; we only configure. NON-Studio
+      // tiers MUST omit the plugin entirely (returned object is empty `{}`
+      // for Pro/Starter, which spreads to nothing).
+      let voiceCallEntries: Record<string, unknown> = {};
+      const voiceChannel = await ctx.runQuery(
+        internal.onboarding.business.deployServiceMaya.getVoiceChannelForDeploy,
+        { businessId: args.businessId }
+      );
+      const planTierForVoice = business.planTier ?? "starter";
+      if (planTierForVoice === "studio" && voiceChannel) {
+        const convexHttpBase =
+          process.env.CONVEX_SITE_URL ??
+          process.env.NEXT_PUBLIC_CONVEX_SITE_URL ??
+          "";
+        if (!convexHttpBase) {
+          throw new Error(
+            "deployServiceMaya: CONVEX_SITE_URL must be set so voice-call's transcripts hook resolves."
+          );
+        }
+        voiceCallEntries = generateVoiceCallPluginEntries({
+          businessId: args.businessId,
+          businessName: business.name || "Business",
+          plan: "studio",
+          twilioFromNumber: voiceChannel.twilioPhoneNumber,
+          inboundAllowlist: voiceChannel.inboundAllowlist ?? [],
+          realtimeProvider:
+            voiceChannel.realtimeProvider ?? "elevenlabs",
+          convexHttpBase,
+        });
+      }
+
       const secrets: Record<string, string> = {
         MAYA_BOOTSTRAP_JSON: JSON.stringify({
           businessId: String(args.businessId),
@@ -596,6 +646,7 @@ export const deployServiceMaya = internalAction({
             plugins: {
               entries: {
                 ...memoryWikiEntries,
+                ...voiceCallEntries,
               },
             },
           },
@@ -606,6 +657,12 @@ export const deployServiceMaya = internalAction({
         "OPENROUTER_API_KEY",
         "ZERNIO_PROVISIONING_API_KEY",
         "ENCRYPTION_KEY",
+        // Voice-call plugin secrets (Studio only — harmless on non-Studio).
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN",
+        "ELEVENLABS_API_KEY",
+        "GEMINI_API_KEY",
+        "VOICE_TRANSCRIPT_HMAC_SECRET",
       ]) {
         const v = process.env[k];
         if (v) secrets[k] = v;
@@ -728,6 +785,23 @@ export const deployServiceMaya = internalAction({
         true,
         startedAt
       );
+    }
+
+    // Studio voice webhook configuration — surgical addition (Wave D —
+    // service plan § 13 Sprint 6). Studio operators only. Best-effort: a
+    // failure here doesn't fail the deploy because the webhook can be re-
+    // applied from Profile after the fact. Non-Studio tiers skip entirely.
+    if ((business.planTier ?? "starter") === "studio") {
+      try {
+        await ctx.runAction(
+          internal.integrations.twilio.configureWebhooks
+            .configureVoiceWebhook,
+          { businessId: args.businessId }
+        );
+      } catch (err) {
+        // Surface in logs; non-fatal. Operator can retry from HQ.
+        void (err as Error).message;
+      }
     }
 
     return {

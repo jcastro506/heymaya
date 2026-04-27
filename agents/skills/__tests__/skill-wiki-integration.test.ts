@@ -15,12 +15,15 @@
  * This is the same shape as the standing-order ↔ jobs.json ↔ skill scan in
  * `agents/skills/maya-service-platform/__tests__/siblingFileScan.test.ts`.
  *
- * The five skills that integrate memory-wiki (per the Wave C scope):
+ * The skills that integrate memory-wiki (per the Wave C scope):
  *   1. maya-service-citation-firewall (PRIMARY consumer of `wiki_get`)
  *   2. maya-service-review-reply-drafter (writes per-review source pages)
  *   3. maya-service-gbp-post-optimizer (cites local-positioning concept)
  *   4. maya-service-content-arc-planner (cites recurring-hooks concept)
  *   5. maya-service-asset-cataloger (writes per-asset source pages)
+ *   6. maya-service-learnings-extractor (Wave C.5 — writes per-week
+ *      `concepts/what-works/<platform>/*` pages from outcome-attributed
+ *      patterns; provenance pins gbpPost / inboundLead / serviceJob ids).
  */
 
 import { describe, it, expect } from "vitest";
@@ -54,6 +57,10 @@ const WIKI_INTEGRATED_SKILLS: ReadonlyArray<{
   },
   {
     slug: "maya-service-asset-cataloger",
+    expectedTools: ["wiki_apply"],
+  },
+  {
+    slug: "maya-service-learnings-extractor",
     expectedTools: ["wiki_apply"],
   },
 ];

@@ -1449,11 +1449,44 @@ export default defineSchema({
     ),
     /** Service-side trial expiry (mirrors creators.trialEndsAt). */
     trialEndsAt: v.optional(v.number()),
+    // ─── Wave D Stripe billing (service-tier) — added 2026-04-27 ────────────
+    // Stripe identifiers + subscription lifecycle state for the SERVICE
+    // product. Mirrors the equivalent fields on `creators.*` (creator-side
+    // Stripe pipeline lives on the `creators` row). Service product anchors
+    // billing on the `businesses` row because:
+    //   - `planTier` already lives here (separate enum from `creators.plan`)
+    //   - Multi-business-per-account is a future possibility; per-business
+    //     subscription state is the right grain.
+    // All optional so businesses created pre-Stripe (mid-onboarding) don't
+    // blow up. Webhook handlers in `convex/integrations/stripe/webhooks.ts`
+    // are the ONLY writers — UI cannot patch `planTier` directly.
+    stripeCustomerId: v.optional(v.string()),
+    stripeSubscriptionId: v.optional(v.string()),
+    /** Unix-ms — end of the current paid (or trial) billing period. */
+    currentPlanPeriodEnd: v.optional(v.number()),
+    /** Subscription status from Stripe — used by HQ to gate writes when past_due/canceled. */
+    subscriptionStatus: v.optional(
+      v.union(
+        v.literal("active"),
+        v.literal("trialing"),
+        v.literal("past_due"),
+        v.literal("canceled"),
+        v.literal("incomplete"),
+        v.literal("incomplete_expired"),
+        v.literal("unpaid"),
+        v.literal("paused")
+      )
+    ),
+    billingInterval: v.optional(
+      v.union(v.literal("monthly"), v.literal("annual"))
+    ),
+    // ─── end Wave D Stripe billing ─────────────────────────────────────────
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_account", ["accountId"])
-    .index("by_fly_app", ["mayaFlyAppId"]),
+    .index("by_fly_app", ["mayaFlyAppId"])
+    .index("by_stripe_customer", ["stripeCustomerId"]),
 
   // Parallel to `creatorPicture`. High-thinking synthesis output written
   // once at onboarding (Gemini 3 Flash @ HIGH per § 3 routing matrix).
@@ -1545,11 +1578,19 @@ export default defineSchema({
     notes: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
+    /**
+     * Wave C.5 attribution chain (additive). The inboundLeads row this job
+     * was reconciled from. Set by `linkLeadToJob`. Closes the outcome
+     * chain: post → lead → job. The lead's own `convertedJobId` mirrors
+     * back to this job — bidirectional for query convenience.
+     */
+    originatingLeadId: v.optional(v.id("inboundLeads")),
   })
     .index("by_business", ["businessId"])
     .index("by_business_and_crm_id", ["businessId", "crmJobId"])
     .index("by_business_and_status", ["businessId", "status"])
-    .index("by_business_and_completed_at", ["businessId", "completedAt"]),
+    .index("by_business_and_completed_at", ["businessId", "completedAt"])
+    .index("by_business_and_originating_lead", ["businessId", "originatingLeadId"]),
 
   // Maya-generated + operator-approved GBP posts. `status` lifecycle:
   //   draft → pending → posted | rejected.
@@ -1583,6 +1624,31 @@ export default defineSchema({
         lastRefreshedAt: v.optional(v.number()),
       })
     ),
+    /**
+     * Wave C.5 outcome wire-back (additive). Polled nightly by
+     * `convex/outcomes/gbpInsightsPoller.ts` from GBP Insights via Zernio.
+     * Source-of-truth for "did this post drive a call / direction / website
+     * click / view" — feeds the weekly learnings extractor (§ north star:
+     * jobs + 5-stars). Counts are absolute, not deltas; the poller is
+     * idempotent on (businessId, gbpLocalPostId).
+     */
+    engagementMetrics: v.optional(
+      v.object({
+        callsClicked: v.number(),
+        directionsClicked: v.number(),
+        websiteClicked: v.number(),
+        postViews: v.number(),
+      })
+    ),
+    /** UTC ms timestamp of the last successful Insights poll for this post. */
+    engagementPolledAt: v.optional(v.number()),
+    /**
+     * inboundLeads ids that the attribution layer linked back to THIS post.
+     * Append-only; entries never removed once linked (the audit trail is the
+     * outcome story). Keyed for cross-tenant safety: lead.businessId must
+     * match this post.businessId at link time (`linkLeadToAction` enforces).
+     */
+    attributedLeadIds: v.optional(v.array(v.id("inboundLeads"))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1651,6 +1717,19 @@ export default defineSchema({
     followupCount: v.number(),
     lastFollowupAt: v.optional(v.number()),
     createdAt: v.number(),
+    /**
+     * Wave C.5 outcome wire-back (additive). Set by
+     * `convex/outcomes/attribution.ts#recordReviewArrival` when a `reviews`
+     * row arrives whose customer matches the request's customer within an
+     * outcome window (≤30d after sentAt). The link is a primary signal for
+     * the learnings extractor — review-request → review conversion is one
+     * of the two north-star outcome chains.
+     */
+    responseAt: v.optional(v.number()),
+    /** Star rating of the matched review (1-5). Mirror of reviews.starRating at link time. */
+    responseRating: v.optional(v.number()),
+    /** FK to the `reviews` row that this request drove. */
+    attributedReviewId: v.optional(v.id("reviews")),
   })
     .index("by_business", ["businessId"])
     .index("by_business_and_status", ["businessId", "status"])
@@ -1695,10 +1774,51 @@ export default defineSchema({
     capturedAt: v.number(),
     operatorRespondedAt: v.optional(v.number()),
     mayaNudgedAt: v.optional(v.number()),
+    /**
+     * Wave C.5 attribution chain (additive). The Maya action that PRODUCED
+     * this lead — set by `convex/outcomes/attribution.ts#linkLeadToAction`
+     * when a producing action is identified. `none` means "lead arrived
+     * without traceable Maya action". For the learnings extractor: this is
+     * the hop from "Maya did X" → "X drove a lead" → (downstream) "lead
+     * converted to a job".
+     */
+    originatingActionKind: v.optional(
+      v.union(
+        v.literal("gbp-post"),
+        v.literal("lead-nudge"),
+        v.literal("review-request"),
+        v.literal("review-reply"),
+        v.literal("none")
+      )
+    ),
+    /**
+     * String FK to the producing action's row id. We use a free string
+     * (not a typed v.id(...)) because the kind dispatches across multiple
+     * tables (gbpPosts / reviewRequests / reviews / inboundLeads-self for
+     * nudges) — a typed FK would force a polymorphic union of ids that
+     * Convex doesn't support natively. The attribution layer validates
+     * the id resolves within `businessId` before persisting.
+     */
+    originatingActionId: v.optional(v.string()),
+    /**
+     * The serviceJobs row this lead converted into. Set by
+     * `linkLeadToJob` once a CRM job is reconciled to the lead. Closes
+     * the outcome chain: post → lead → job.
+     */
+    convertedJobId: v.optional(v.id("serviceJobs")),
+    /** UTC ms when operator (or Maya nudge) replied. Used for response-latency telemetry. */
+    respondedAtMs: v.optional(v.number()),
+    /** ms-since-capture latency. Computed once on response, frozen. */
+    responseLatencyMs: v.optional(v.number()),
   })
     .index("by_business", ["businessId"])
     .index("by_business_and_source", ["businessId", "source"])
-    .index("by_business_and_captured_at", ["businessId", "capturedAt"]),
+    .index("by_business_and_captured_at", ["businessId", "capturedAt"])
+    .index("by_business_and_originating_action", [
+      "businessId",
+      "originatingActionKind",
+      "originatingActionId",
+    ]),
 
   // CRM connections (separate from `connectedAccounts` which is creator-side
   // Composio-only) so the creator-side schema stays clean. Tokens are
@@ -1740,9 +1860,127 @@ export default defineSchema({
     provisionedAt: v.number(),
     monthlyMinutesUsed: v.number(),
     lastBilledAt: v.optional(v.number()),
+    /**
+     * 4-digit PIN, PBKDF2-SHA256 hashed (Wave D voice agent — service plan
+     * § 13 Sprint 6 PIN-challenge flow). Required before Maya executes
+     * sensitive CRM writes via voice (caller-ID-trust pattern). Format:
+     * `${saltB64}.${derivedB64}`. Null until operator sets one in Profile;
+     * sensitive ops fail-closed when null.
+     */
+    pinHash: v.optional(v.string()),
+    /** When the operator last set/rotated their PIN. */
+    pinSetAt: v.optional(v.number()),
+    /**
+     * Allowlist of E.164 numbers Maya answers on inbound. Empty array means
+     * no allowlist gating (plugin's `inboundPolicy: "allowlist"` blocks all).
+     * Operator manages this from Profile → Connections → Voice.
+     */
+    inboundAllowlist: v.optional(v.array(v.string())),
+    /** Realtime provider chosen by operator. Default: elevenlabs. */
+    realtimeProvider: v.optional(
+      v.union(v.literal("elevenlabs"), v.literal("gemini-live"))
+    ),
   })
     .index("by_business", ["businessId"])
     .index("by_twilio_phone", ["twilioPhoneNumber"]),
+
+  // Inbound + outbound voice-call transcripts persisted via the OpenClaw
+  // `voice-call` plugin's transcript hook (Wave D — service plan § 13
+  // Sprint 6). The plugin streams chunks to our Convex HTTP endpoint, which
+  // writes here. Cross-tenant: every row keyed by `businessId`; queries
+  // gate via `getCurrentBusinessSession`.
+  //
+  // Idempotency: `(callId, chunkIdx)` ordering enforced at the
+  // `recordTranscriptChunk` mutation by appending in order; redelivery of
+  // a prior chunkIdx is dropped silently. Finalization is one-shot keyed
+  // by `callId` — second finalize call is a no-op.
+  voiceCallTranscripts: defineTable({
+    businessId: v.id("businesses"),
+    /** Twilio CallSid — stable per call across both legs. */
+    callId: v.string(),
+    direction: v.union(v.literal("inbound"), v.literal("outbound")),
+    fromNumber: v.string(),
+    toNumber: v.string(),
+    startedAt: v.number(),
+    endedAt: v.optional(v.number()),
+    durationSec: v.optional(v.number()),
+    /**
+     * Append-only ordered transcript chunks. Each chunk is one streaming
+     * STT segment from the realtime provider. Plugin-supplied `ts` is the
+     * caller-relative timestamp (ms from call start).
+     */
+    transcript: v.array(
+      v.object({
+        role: v.union(
+          v.literal("caller"),
+          v.literal("agent"),
+          v.literal("system")
+        ),
+        ts: v.number(),
+        text: v.string(),
+        chunkIdx: v.number(),
+      })
+    ),
+    /** One-shot post-call summary. Populated by `finalizeTranscript`. */
+    summary: v.optional(v.string()),
+    /** Whether the call escalated to a live operator. */
+    escalatedToOperator: v.boolean(),
+    /**
+     * PIN challenge result. `null` = no sensitive op attempted; `true` =
+     * operator entered correct PIN; `false` = wrong PIN, op blocked.
+     */
+    pinChallengePassed: v.union(v.boolean(), v.null()),
+    /** Maya runtime call cost (US cents). Used for Wave D Stripe metering. */
+    costCents: v.optional(v.number()),
+  })
+    .index("by_business", ["businessId"])
+    .index("by_business_and_started_at", ["businessId", "startedAt"])
+    .index("by_callId", ["callId"]),
+
+  // ─── Wave D voice metering — added 2026-04-27 ──────────────────────────
+  //
+  // Per-business, per-billing-period voice-minute counter feeding Stripe
+  // metered billing. Service plan § 3:
+  //   - Pro ($149) — 30 min/mo inclusion + $0.20/min overage
+  //   - Studio ($199) — 100 min/mo inclusion + $0.15/min overage,
+  //                     hard cap 500 min/mo
+  //
+  // The (businessId, periodStartMs) tuple is unique. We never roll up across
+  // periods; a new period creates a new row. The voice agent's
+  // `finalizeTranscript` flow calls `recordVoiceMinutes(businessId, minutes)`
+  // which:
+  //   1. Resolves the current open period (or creates one).
+  //   2. Increments `minutesUsed` atomically.
+  //   3. If post-increment minutesUsed > planFeatures.voiceMinIncluded,
+  //      schedules a meter-event report to Stripe in $5 increments.
+  //   4. If post-increment minutesUsed >= planFeatures.voiceHardCap (Studio
+  //      only), sets `cappedAt` so the next outbound-voice attempt refuses.
+  //
+  // Cross-tenant: `businessId` indexed; every reader filters on it. Period
+  // rollover is bound to the Stripe billing period (current_period_end on
+  // the subscription) so reset never drifts from the invoice cycle.
+  // ────────────────────────────────────────────────────────────────────────
+  voiceUsage: defineTable({
+    businessId: v.id("businesses"),
+    /** Unix-ms — start of this billing period. */
+    periodStartMs: v.number(),
+    /** Unix-ms — end of this billing period (= subscription.current_period_end). */
+    periodEndMs: v.number(),
+    /** Total voice minutes used in this period. Floor-rounded — partial minutes round up at recordVoiceMinutes time. */
+    minutesUsed: v.number(),
+    /**
+     * Cumulative minutes already reported to Stripe via meter events. Used
+     * by the $5-increment batcher to avoid double-reporting overage minutes
+     * across multiple call finalizations within the same period.
+     */
+    minutesReportedToStripe: v.optional(v.number()),
+    /** Unix-ms when minutesUsed crossed the hard cap (Studio 500). Null = uncapped. */
+    cappedAt: v.optional(v.number()),
+    /** Last call-finalize update — for observability. */
+    lastUpdatedAt: v.number(),
+  })
+    .index("by_business", ["businessId"])
+    .index("by_business_and_period", ["businessId", "periodStartMs"]),
 
   // Webhook idempotency log. 24h TTL (purge cron lands later) +
   // fail-closed-on-duplicate per R3 § 4. Every inbound webhook records
@@ -2111,5 +2349,77 @@ export default defineSchema({
     .index("by_business_and_kind", ["businessId", "kind"])
     .index("by_business_and_path", ["businessId", "vaultPath"]),
   // ─── end Service product Wave C (memory-wiki projection) ──────────────
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Service product Wave C.5 — weekly learnings synthesis (north star)
+  //
+  // Per `project_north_star_outcomes.md`: Maya's only success metric is jobs
+  // booked + 5-star reviews. The learnings extractor (Sun 10pm cron, folded
+  // into `weekly_review`/`competitor_watch` standing-order prose, NOT a new
+  // standing order) reads the prior 7d outcome chain (gbpPosts.engagement
+  // Metrics → inboundLeads.originatingActionId → serviceJobs.originatingLeadId,
+  // plus reviewRequests.responseRating) and produces patterns ranked by
+  // outcome impact. Each row here is one weekly synthesis.
+  //
+  // The patterns themselves get materialized into the memory-wiki vault
+  // under `concepts/what-works/<platform>/*` via `wiki_apply` — that's where
+  // the learnings COMPOUND personalization. This table is the Convex
+  // projection / audit trail so HQ can show "what Maya learned this week"
+  // without round-tripping to the agent runtime.
+  //
+  // Cross-tenant: `businessId`-indexed; every reader filters. Phantom-pattern
+  // guard (no claim with sampleSize < 3) is enforced in the extractor + tests
+  // so this table never carries unsupported claims.
+  // ────────────────────────────────────────────────────────────────────────
+  weeklyLearnings: defineTable({
+    businessId: v.id("businesses"),
+    /** UTC ms — start of the 7d window (inclusive). */
+    weekStartMs: v.number(),
+    /** UTC ms — end of the 7d window (exclusive). */
+    weekEndMs: v.number(),
+    /** UTC ms — when the extractor produced this row. */
+    synthesizedAt: v.number(),
+    /**
+     * Top patterns this week, ranked by outcome impact. Each pattern is a
+     * grounded claim with sample size + attribution counts. `wikiVaultPath`
+     * pins the materialized wiki page under `concepts/what-works/<...>`.
+     * Phantom-pattern guard: extractor refuses to include any pattern with
+     * `sampleSize < 3` (enforced server-side + by tests).
+     */
+    topPatterns: v.array(
+      v.object({
+        kind: v.union(
+          v.literal("hook-text"),
+          v.literal("photo-style"),
+          v.literal("time-of-day"),
+          v.literal("response-latency"),
+          v.literal("review-request-channel"),
+          v.literal("review-reply-tone"),
+          v.literal("local-hook")
+        ),
+        claim: v.string(),
+        sampleSize: v.number(),
+        jobsAttributed: v.number(),
+        fiveStarsAttributed: v.number(),
+        confidence: v.number(),
+        wikiVaultPath: v.string(),
+      })
+    ),
+    /**
+     * Diff vs the prior week's row. `null` for the very first week.
+     * Drives Wave C.7's "Maya is getting smarter" Growth-tab affordance.
+     */
+    priorWeekDelta: v.optional(
+      v.object({
+        jobsAttributedDelta: v.number(),
+        fiveStarsAttributedDelta: v.number(),
+        newPatternCount: v.number(),
+        droppedPatternCount: v.number(),
+      })
+    ),
+  })
+    .index("by_business", ["businessId"])
+    .index("by_business_and_week", ["businessId", "weekStartMs"]),
+  // ─── end Service product Wave C.5 (weekly learnings) ──────────────────
   // ─── end Service product Sprint 0 ─────────────────────────────────────
 });

@@ -66,6 +66,21 @@ export interface StripeClientLike {
       tolerance?: number
     ): Stripe.Event;
   };
+  // ─── Wave D — service voice metering surface (additive) ───────────────────
+  // The Stripe v22+ Billing Meter Events API replaces the legacy
+  // `subscriptionItems.createUsageRecord` flow. We report voice-overage
+  // minutes via `billing.meterEvents.create({ event_name, payload })` where
+  // `event_name` is one of `SERVICE_VOICE_METER_EVENT_NAMES.{pro,studio}` and
+  // payload includes `stripe_customer_id` + `value`. See:
+  // https://docs.stripe.com/billing/subscriptions/usage-based/meters
+  billing: {
+    meterEvents: {
+      create(
+        params: Stripe.Billing.MeterEventCreateParams,
+        options?: Stripe.RequestOptions
+      ): Promise<Stripe.Response<Stripe.Billing.MeterEvent>>;
+    };
+  };
 }
 
 let cachedClient: StripeClientLike | null = null;

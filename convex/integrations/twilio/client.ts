@@ -1,14 +1,15 @@
 /**
- * PARKED FOR RE-SCOPE (operator decision 2026-04-27):
- *   The Twilio-direct number-provisioning architecture is on hold. Locked
- *   `memory/project_openclaw_alignment.md` says OpenClaw handles 50+ channels
- *   (iMessage, WhatsApp, SMS, etc.) NATIVELY via `openclaw cli channels
- *   pair`. The Twilio direct path may be redundant. Step 11 of the onboarding
- *   flow now uses OpenClaw native channel pairing instead. This file is kept
- *   in tree (no broken imports) so a future re-scope decision can either
- *   delete it or wire it back in cleanly.
- *
  * Twilio HTTP client.
+ *
+ * UN-PARKED Wave D (service plan § 13 Sprint 6) — voice agent re-activates
+ * this client to configure the Voice webhook on the operator's already-
+ * provisioned Twilio number. Number provisioning itself stays parked at
+ * `provisionNumber.ts` (operator provisions out-of-band; OpenClaw owns
+ * channel pairing per `feedback_openclaw_native_first.md`). What we do
+ * actively use:
+ *   - `configureWebhooks.ts` POSTs to `IncomingPhoneNumbers/{sid}` to
+ *     point the operator's Voice URL at the Fly machine's voice-call
+ *     plugin endpoint.
  *
  * Sprint 2 (service product). v0 surface: number provisioning + inbound
  * webhook configuration. We hit Twilio's REST API directly via `fetch` rather

@@ -300,39 +300,42 @@ export const SERVICE_STANDING_ORDERS: ReadonlyArray<ServiceStandingOrderProgram>
   },
   {
     id: "competitor_watch",
-    title: "Competitor watch",
+    title: "Competitor watch + weekly outcome learnings",
     tier: "pro+",
     kind: "cron",
     defaultCron: "0 9 * * 0",
     session: "isolated",
     skill: "maya-service-competitor-watcher",
-    description: "Sundays 9am: weekly digest of named competitor GBP changes.",
+    description:
+      "Sundays 9am: weekly digest of named competitor GBP changes; afterwards (≈Sun 10pm via the same cron tail) the outcome poller refreshes engagementMetrics for the prior week's gbpPosts and the learnings extractor synthesizes patterns into memory-wiki concepts/what-works/*.",
     scope:
-      "Sundays 9am op-tz: ScrapeCreators sweep of `localPositioning.namedCompetitors[]` GBPs. Run `maya-service-competitor-watcher` for a weekly digest: rating changes, new posts, promo prices. Fold into Monday's morning brief.",
+      "Sundays 9am op-tz: ScrapeCreators sweep of `localPositioning.namedCompetitors[]` GBPs. Run `maya-service-competitor-watcher` for a weekly digest: rating changes, new posts, promo prices. Then nightly (≈Sun 10pm op-tz, same standing-order tail): trigger the outcome polls — `convex/outcomes/gbpInsightsPoller.ts#pollGbpInsightsForBusiness` (refreshes `gbpPosts.engagementMetrics` for the trailing 30d) and `convex/outcomes/metaInsightsPoller.ts#pollMetaInsightsForBusiness` (FB Pages messages count) — and run `maya-service-learnings-extractor` via `convex/agents/packs/maya_service/runLearningsExtractor.ts#runLearningsExtractor`. The extractor reads the now-fresh outcome chain (gbpPosts.engagementMetrics → inboundLeads.originatingActionId → serviceJobs.originatingLeadId, plus reviewRequests.responseRating from `convex/outcomes/attribution.ts`) and writes a `weeklyLearnings` row + `concepts/what-works/<platform>/*` wiki pages (sample-size ≥ 3, outcome-attributed only). All polls + extraction run at every tier — outcome learnings are the moat. Fold competitor digest into Monday's morning brief; the wiki pages compound automatically.",
     triggers: "Cron `competitor_watch` Sundays 9:00am op-tz.",
-    approvalGates: "None — read surface.",
+    approvalGates:
+      "None — read surface for competitor digest; outcome polls + learnings extraction are observability writes (no operator-facing surface this run; Wave C.7 Growth tab surfaces them).",
     escalation:
-      "If a named competitor's GBP is suspended or returns 404, drop with note in next brief. Do not editorialize about whether to copy a competitor move — cite, the operator decides.",
+      "If a named competitor's GBP is suspended or returns 404, drop with note in next brief. Do not editorialize about whether to copy a competitor move — cite, the operator decides. If the GBP Insights / Meta Insights poll fails for a single post, skip that post and continue (errors collected; never block the rest). If the learnings extractor finds no patterns ≥ 3 samples, write `weeklyLearnings` with empty `topPatterns` rather than skipping — the empty row is itself a signal.",
     cronMessage:
-      "Run competitor watch: ScrapeCreators sweep of named competitor GBPs, call `maya-service-competitor-watcher` for digest, fold into Monday morning brief.",
+      "Run competitor watch: ScrapeCreators sweep of named competitor GBPs, call `maya-service-competitor-watcher` for digest, fold into Monday morning brief. Same standing order tail (≈Sun 10pm op-tz): poll `gbpPosts.engagementMetrics` via `gbpInsightsPoller.pollGbpInsightsForBusiness` and Meta Pages via `metaInsightsPoller.pollMetaInsightsForBusiness`, then run `runLearningsExtractor.runLearningsExtractor` to synthesize `weeklyLearnings` + `concepts/what-works/*` wiki pages.",
   },
   {
     id: "revenue_snapshot",
-    title: "Revenue snapshot",
+    title: "Revenue snapshot (incorporates prior-week learnings)",
     tier: "pro+",
     kind: "cron",
     defaultCron: "0 9 * * 1",
     session: "isolated",
     skill: "maya-service-revenue-snapshot-renderer",
-    description: "Mondays 9am: prior-week revenue snapshot from CRM jobs + invoices (CRM-required).",
+    description:
+      "Mondays 9am: prior-week revenue snapshot from CRM jobs + invoices (CRM-required); incorporates the prior week's `weeklyLearnings.topPatterns` into the snapshot context so Maya's framing reflects what actually drove jobs/5-stars.",
     scope:
-      "Mondays 9am op-tz: pull `serviceJobs` completed + invoices.paid + invoices.outstanding for last 7d via the CRM adapter. Run `maya-service-revenue-snapshot-renderer` for a one-paragraph snapshot. Push to `revenueSnapshots`; surface in morning brief.",
+      "Mondays 9am op-tz: pull `serviceJobs` completed + invoices.paid + invoices.outstanding for last 7d via the CRM adapter. Read the most recent `weeklyLearnings` row (synthesized by `runLearningsExtractor` on Sunday) — its `topPatterns` array surfaces hooks/time-of-day/response-latency claims tied to outcomes. Run `maya-service-revenue-snapshot-renderer` for a one-paragraph snapshot, threading in 1-2 of those patterns when relevant ('the Friday-freeze hook drove 3 of last week's bookings'). Push to `revenueSnapshots`; surface in morning brief.",
     triggers: "Cron `revenue_snapshot` Mondays 9:00am op-tz. Conditional — silent no-op if no `crmConnections.provider`.",
     approvalGates: "None — informational read.",
     escalation:
-      "Skip silently if no CRM connected. If CRM returned an error mid-pull, surface 'CRM was unreachable this morning, will retry on next heartbeat' — never invent revenue numbers.",
+      "Skip silently if no CRM connected. If CRM returned an error mid-pull, surface 'CRM was unreachable this morning, will retry on next heartbeat' — never invent revenue numbers. If `weeklyLearnings` row is missing or empty (Sunday's extractor found no patterns ≥ 3 samples), render the snapshot WITHOUT learnings prose — never invent a pattern.",
     cronMessage:
-      "Run revenue snapshot: CRM pull last 7d completed jobs + paid invoices + outstanding, call `maya-service-revenue-snapshot-renderer`, push to `revenueSnapshots`.",
+      "Run revenue snapshot: CRM pull last 7d completed jobs + paid invoices + outstanding, read most recent `weeklyLearnings.topPatterns`, call `maya-service-revenue-snapshot-renderer` with both, push to `revenueSnapshots`.",
   },
   {
     id: "manager_readiness_packet",

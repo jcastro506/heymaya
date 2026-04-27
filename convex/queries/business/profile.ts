@@ -168,11 +168,14 @@ export const getConnections = query({
 });
 
 /**
- * Billing-tab data: plan + MTD voice minutes.
+ * Billing-tab data: plan + MTD voice minutes + subscription status.
  *
- * MTD computation: `voiceChannels.monthlyMinutesUsed` is the canonical
- * counter and resets monthly via a billing cron (Wave D scope). We just
- * surface it here with the inclusion + overage rate from planFeaturesService.
+ * MTD voice computation (Wave D Stripe agent): the canonical counter is the
+ * latest `voiceUsage` row's `minutesUsed`. The legacy
+ * `voiceChannels.monthlyMinutesUsed` is preserved for backwards-compat (Wave
+ * D voice agent may still write to it for telemetry) but the source of
+ * truth for billing-tab display is `voiceUsage` since it tracks Stripe-
+ * billing-period boundaries (matches `currentPlanPeriodEnd` rollover).
  */
 export const getBilling = query({
   args: {},
@@ -186,35 +189,58 @@ export const getBilling = query({
       minutesIncluded: number;
       overageRate: number | null;
       hardCap: number | null;
+      cappedAt: number | null;
     };
     chat: {
       cap: ServicePlanFeatures["chatTurnsPerMonth"];
     };
     trialEndsAt: number | null;
+    subscriptionStatus: string | null;
+    stripeCustomerId: string | null;
+    billingInterval: "monthly" | "annual" | null;
   } | null> => {
     const session = await getCurrentBusinessSession(ctx);
     if (!session) return null;
 
     const features = planFeaturesService(session.business);
 
-    const voiceChannel = await ctx.db
-      .query("voiceChannels")
-      .withIndex("by_business", (q) =>
-        q.eq("businessId", session.business._id)
-      )
-      .first();
+    const [voiceChannel, voiceUsage] = await Promise.all([
+      ctx.db
+        .query("voiceChannels")
+        .withIndex("by_business", (q) =>
+          q.eq("businessId", session.business._id)
+        )
+        .first(),
+      ctx.db
+        .query("voiceUsage")
+        .withIndex("by_business_and_period", (q) =>
+          q.eq("businessId", session.business._id)
+        )
+        .order("desc")
+        .first(),
+    ]);
+
+    // Prefer voiceUsage (Stripe-period-aligned) over voiceChannels.monthly-
+    // MinutesUsed (legacy counter) for the surfaced number. Fall back to
+    // voiceChannels for ops who haven't crossed a finalize event yet.
+    const minutesUsed =
+      voiceUsage?.minutesUsed ?? voiceChannel?.monthlyMinutesUsed ?? 0;
 
     return {
       plan: features.plan,
       voice: {
         enabled: features.voice,
-        minutesUsed: voiceChannel?.monthlyMinutesUsed ?? 0,
+        minutesUsed,
         minutesIncluded: features.voiceMinIncluded,
         overageRate: features.voiceOverageRate,
         hardCap: features.voiceHardCap,
+        cappedAt: voiceUsage?.cappedAt ?? null,
       },
       chat: { cap: features.chatTurnsPerMonth },
       trialEndsAt: session.business.trialEndsAt ?? null,
+      subscriptionStatus: session.business.subscriptionStatus ?? null,
+      stripeCustomerId: session.business.stripeCustomerId ?? null,
+      billingInterval: session.business.billingInterval ?? null,
     };
   },
 });

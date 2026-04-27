@@ -122,6 +122,15 @@ function buildFakeStripeClient(): {
         throw new Error("webhooks.constructEvent runs in the Next.js route, not Convex tests");
       },
     },
+    billing: {
+      meterEvents: {
+        async create() {
+          throw new Error(
+            "billing.meterEvents.create not used in these unit tests"
+          );
+        },
+      },
+    },
   };
 
   return { client, customersCreated, checkoutSessionsCreated, portalSessionsCreated };

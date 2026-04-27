@@ -23,6 +23,7 @@ import { EmptyState } from "@/components/business/EmptyState";
 import { ConnectionsPanel } from "@/components/business/ConnectionsPanel";
 import { ApprovalRulesPanel } from "@/components/business/ApprovalRulesPanel";
 import { BillingPanel } from "@/components/business/BillingPanel";
+import { VoiceSetupPanel } from "@/components/business/VoiceSetupPanel";
 
 type Tab = "overview" | "connections" | "trust" | "billing";
 
@@ -98,15 +99,25 @@ export default function ProfilePage() {
           (connections === undefined ? (
             <div className="h-64 animate-pulse rounded-2xl bg-ink-3/60" />
           ) : connections ? (
-            <ConnectionsPanel
-              gbpLocations={connections.gbpLocations}
-              crmConnections={connections.crmConnections}
-              voiceChannel={connections.voiceChannel}
-              zernioConnection={connections.zernioConnection}
-              canConnectVoice={connections.canConnectVoice}
-              canConnectCrm={connections.canConnectCrm}
-              maxGbpLocations={connections.maxGbpLocations}
-            />
+            <div className="space-y-3">
+              <ConnectionsPanel
+                gbpLocations={connections.gbpLocations}
+                crmConnections={connections.crmConnections}
+                voiceChannel={connections.voiceChannel}
+                zernioConnection={connections.zernioConnection}
+                canConnectVoice={connections.canConnectVoice}
+                canConnectCrm={connections.canConnectCrm}
+                maxGbpLocations={connections.maxGbpLocations}
+              />
+              <VoiceSetupPanel
+                voiceChannel={connections.voiceChannel}
+                studioVoice={
+                  connections.canConnectVoice &&
+                  profile.features.plan === "studio"
+                }
+                proInclusion={profile.features.plan === "pro"}
+              />
+            </div>
           ) : (
             <EmptyState
               stage="ready"
@@ -136,6 +147,9 @@ export default function ProfilePage() {
               voice={billing.voice}
               chat={billing.chat}
               trialEndsAt={billing.trialEndsAt}
+              subscriptionStatus={billing.subscriptionStatus}
+              hasStripeCustomer={Boolean(billing.stripeCustomerId)}
+              billingInterval={billing.billingInterval}
             />
           ) : null)}
       </div>
