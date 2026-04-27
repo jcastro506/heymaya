@@ -112,6 +112,7 @@ import type * as onboarding_business_pipeline from "../onboarding/business/pipel
 import type * as outcomes_attribution from "../outcomes/attribution.js";
 import type * as outcomes_gbpInsightsPoller from "../outcomes/gbpInsightsPoller.js";
 import type * as outcomes_metaInsightsPoller from "../outcomes/metaInsightsPoller.js";
+import type * as outcomes_reviewReplyVerifier from "../outcomes/reviewReplyVerifier.js";
 import type * as agents_packs_maya_service_runLearningsExtractor from "../agents/packs/maya_service/runLearningsExtractor.js";
 import type * as onboarding_maya_deployMaya from "../onboarding/maya/deployMaya.js";
 import type * as onboarding_maya_jobs from "../onboarding/maya/jobs.js";
@@ -251,6 +252,7 @@ declare const fullApi: ApiFromModules<{
   "outcomes/attribution": typeof outcomes_attribution;
   "outcomes/gbpInsightsPoller": typeof outcomes_gbpInsightsPoller;
   "outcomes/metaInsightsPoller": typeof outcomes_metaInsightsPoller;
+  "outcomes/reviewReplyVerifier": typeof outcomes_reviewReplyVerifier;
   "agents/packs/maya_service/runLearningsExtractor": typeof agents_packs_maya_service_runLearningsExtractor;
   "onboarding/maya/deployMaya": typeof onboarding_maya_deployMaya;
   "onboarding/maya/jobs": typeof onboarding_maya_jobs;

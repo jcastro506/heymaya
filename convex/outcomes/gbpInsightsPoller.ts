@@ -7,6 +7,24 @@
  * resolves engagement counts for every published `gbpPosts` row from the
  * last 30d and writes `engagementMetrics` + `engagementPolledAt`.
  *
+ * IMPORTANT — per-post GBP analytics deprecation (verified 2026-04-27):
+ * `LOCAL_POST_VIEWS_SEARCH` and `LOCAL_POST_ACTIONS_CALL_TO_ACTION` were
+ * deprecated 2022-11-21 and discontinued 2023-02-20 with NO replacement
+ * per Google's deprecation schedule
+ * (https://developers.google.com/my-business/content/sunset-dates). The
+ * new Performance API (`locations.fetchMultiDailyMetricsTimeSeries`)
+ * exposes **location-level metrics only**. Direct GBP partner access
+ * does NOT bring per-post metrics back. See
+ * `docs/spikes/zernio-capability-audit.md` for the full audit.
+ *
+ * What this means: `engagementMetrics` per-row on `gbpPosts` will be
+ * NULL for GBP-platform posts. Schema field stays additive (forward-
+ * compatible if Google ever resurrects). Outcome attribution for GBP
+ * posts is therefore **correlational not causal** — "during weeks Maya
+ * posted N times, location calls went up X%", not "post P drove K
+ * calls". For FB/IG posts, per-post metrics survive and causal
+ * attribution holds — the metaInsightsPoller handles those.
+ *
  * Cron lifecycle: NOT a new standing order. Per the Wave C.5 scope rules
  * (see `convex/agents/packs/maya_service/standingOrders.ts` length lock at
  * 15), the poller is referenced from the EXISTING `weekly_review`-style

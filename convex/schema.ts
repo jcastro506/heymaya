@@ -1681,13 +1681,32 @@ export default defineSchema({
     ),
     customerMatchedJobId: v.optional(v.id("serviceJobs")),
     draftReply: v.optional(v.string()),
-    /** CRITICAL: never auto-posted on GBP per Google ReviewReplyState moderation. */
+    /**
+     * CRITICAL: never auto-posted on GBP per Google ReviewReplyState moderation.
+     *
+     * Lifecycle: drafted → approved → posted | rejected | rejected-by-google
+     *
+     * `rejected-by-google` is a silent-failure mode added 2026-04-27. Zernio's
+     * API surface does NOT pass through Google's `ReviewReplyState`
+     * rejection signal — confirmed via the Zernio capability audit at
+     * `docs/spikes/zernio-capability-audit.md`. So a reply can appear
+     * "posted" via Zernio's success response while Google silently strips
+     * it on moderation grounds (AI-flavored language, promotional content,
+     * policy violations). The 24h passive verifier in
+     * `convex/outcomes/reviewReplyVerifier.ts` re-fetches the review one
+     * day after `posted` and flips this status to `rejected-by-google`
+     * if the reply is no longer attached. Distinguishing this from
+     * operator-issued `rejected` matters for telemetry and operator
+     * surfacing (operator can see "Google moderation flagged this — try
+     * different language" rather than thinking they rejected it).
+     */
     replyStatus: v.optional(
       v.union(
         v.literal("drafted"),
         v.literal("approved"),
         v.literal("posted"),
-        v.literal("rejected")
+        v.literal("rejected"),
+        v.literal("rejected-by-google")
       )
     ),
     publishedAt: v.optional(v.number()),
@@ -1762,6 +1781,14 @@ export default defineSchema({
   inboundLeads: defineTable({
     businessId: v.id("businesses"),
     source: v.union(
+      // [DEPRECATED 2026-04-27 — never fires in v0]
+      // Google Business Messages was sunset 2024-07-31. There is no
+      // GBP messaging API for Zernio (or anyone) to surface as an
+      // inbound-lead source. The enum value stays for additive-schema
+      // safety; no code path inserts rows with this source. UI surfaces
+      // that list lead sources should not show "GBP message" — see
+      // docs/spikes/zernio-capability-audit.md.
+      // Source: https://support.google.com/business/answer/14919056
       v.literal("gbp-msg"),
       v.literal("fb-dm"),
       v.literal("twilio-missed-call"),

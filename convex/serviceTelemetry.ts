@@ -63,7 +63,17 @@ export const OUTCOME_WHITELIST: Record<
   ReadonlyArray<string>
 > = {
   "review-request-approval": ["approved", "rejected", "edited-then-approved"],
-  "review-reply-moderation": ["pass", "fail", "edited"],
+  // "silent-rejection" added 2026-04-27 — emitted by the 24h passive
+  // verifier (`convex/outcomes/reviewReplyVerifier.ts`) when Google's
+  // moderation strips a reply Zernio reported as posted. Distinct from
+  // "fail" (which is operator/system-side) — silent-rejection is a
+  // Google-side moderation outcome we discover post-hoc.
+  "review-reply-moderation": [
+    "pass",
+    "fail",
+    "edited",
+    "silent-rejection",
+  ],
   "lead-response-nudge-open": ["opened", "dismissed", "acted-on"],
   // Voice-satisfaction outcomes are coarse buckets so the operator can scan
   // a digest without parsing per-row numericValue. The numericValue carries

@@ -99,60 +99,10 @@ Gemini 3 Flash, MEDIUM thinking. Per § 3 routing matrix — review replies are 
 - Calls: `maya-service-citation-firewall` (mandatory pre-send), `maya-service-brand-voice-applier`.
 - Convex tables: writes `reviews.draftReply` + `reviews.replyStatus='drafted'`; reads `serviceJobs` + `businessPicture` + `serviceCustomers` for jobContext matching.
 
-## GBP Q&A reply — folded into this skill (Wave C.6)
+## ~~GBP Q&A reply — folded into this skill (Wave C.6)~~ — REMOVED 2026-04-27
 
-Per `project_north_star_outcomes.md`: Q&A on the GBP profile is one of the documented engagement-signal ranking inputs. Unanswered Q&A signals an inactive operator and tanks local-pack ranking. Answered Q&A signals an active business and is searchable.
+The Wave C.6 fold-in of GBP Q&A drafting into this skill has been removed. Per Zernio's [Google Business Profile docs](https://docs.zernio.com/platforms/google-business) verbatim: "Respond to Q&A (deprecated by Google, replaced by AI-powered 'Ask Maps')." The GBP Q&A API is **gone at Google level**, not just unavailable in Zernio's wrapper. There's nothing for Maya to subscribe to via webhooks (no `NEW_QUESTION` event) and nothing for her to reply to via the API.
 
-**Why this is folded into the review-reply-drafter** rather than a new skill: the same drafting pattern (cited, brand-voiced, ≤350 chars, no autopost) applies. Adding a parallel skill would duplicate every safety rule — citation firewall, brand-voice integration, no-pricing, no-liability — that is already engineered here.
+Confirmed via the Zernio capability audit — see `docs/spikes/zernio-capability-audit.md`. The previously-imagined `maya-service-gbp-seo-auditor` "answer-q-and-a" nudge type is also dropped — Maya cannot answer Q&A through the API, so generating a nudge to do so would just frustrate the operator.
 
-### When to use Q&A mode
-
-- Triggered by Zernio `NEW_QUESTION` GBP webhook events (mirroring the existing `NEW_REVIEW` wiring at `convex/integrations/zernio/webhooks.ts`).
-- Triggered by `maya-service-gbp-seo-auditor` when it surfaces an `answer-q-and-a` nudge with `suggestedAction="maya-draft"`.
-
-### Inputs (Q&A variant)
-
-```ts
-{
-  mode: "q-and-a";                              // discriminator
-  questionText: string;                         // the GBP question, verbatim
-  askerName: string | null;                     // GBP often hides this
-  brandVoice: string;                           // from businessPicture.brandVoice
-  servicesList: ReadonlyArray<string>;          // operator's GBP services
-  operatorFirstName: string;
-}
-```
-
-### Outputs (Q&A variant)
-
-```ts
-{
-  replyText: string;                            // ≤350 chars
-  intentClass: "service-availability" | "pricing-inquiry" | "hours" | "warranty" | "general";
-  riskFlags: ReadonlyArray<                     // identical scrub set as reviews
-    | "extortion-language"
-    | "profanity"
-    | "competitor-name-drop"
-    | "personal-info-leak"
-    | "legal-threat"
-  >;
-  citationContext: {
-    citedFromServicesList: boolean;             // true if reply references a service the operator actually has
-  };
-}
-```
-
-### Q&A drafting rules
-
-- **Service-availability** ("do you do water heaters?"): answer YES only if the service appears in `servicesList`; otherwise "we do A, B, C — for X you may want to check with another shop." Never invent a capability.
-- **Pricing-inquiry** ("how much for an AC tune-up?"): never quote a price. "Tune-ups vary by system — give us a call and we'll get you a quote in 5 minutes."
-- **Hours**: defer to the GBP hours field, never restate them inline (avoid drift). "Our hours are listed on this profile — we're closed on Sundays unless it's an emergency."
-- **Warranty**: defer to operator. "Reach out and we'll walk you through your warranty coverage." Never guarantee specifics.
-- **General**: brand-voiced acknowledgment, redirect to call/message.
-
-### Hard rules (Q&A variant)
-
-- Same set as reviews — no auto-post, no competitor mentions, no pricing, no liability. Plus:
-- Never claim a service that isn't in `servicesList` (citation-firewall enforced).
-- Never invent operating hours or address details.
-- Q&A replies that pass risk-flag detection STILL pass through `maya-service-citation-firewall` before queueing.
+If Google ever resurrects the Q&A API (or surfaces an "Ask Maps" alternative the API can interact with), this fold-in design would be the place to restart from.
