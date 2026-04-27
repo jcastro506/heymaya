@@ -389,11 +389,65 @@ export const recordVoiceMinutes = internalAction({
       }
     );
 
+    // Wave D telemetry — mirror the per-overage-chunk cost into
+    // `serviceTelemetry`. The dollar value reported here is what hit
+    // Stripe's meter event (chunkCount × $5). aiCallLog stays the
+    // creator-side source of truth; this row is the service-tier audit
+    // trail visible in Growth tab.
+    await ctx.runMutation(
+      internal.integrations.stripe.voiceMetering.recordAiCostTelemetry,
+      {
+        businessId: args.businessId,
+        costUsd: chunksToReport * 5,
+        metadata: {
+          source: "voice-overage",
+          callId: args.callId,
+          minutesReported: minutesToReport,
+          plan: result.plan,
+          stripeIdentifier: identifier,
+        },
+      }
+    );
+
     return {
       reported: true,
       minutesAdded,
       capCrossed: result.crossedCap,
     };
+  },
+});
+
+/**
+ * Wave D — internal mutation wrapper for the ai-cost telemetry emit.
+ * Lives here (not in `convex/serviceTelemetry.ts`) so the Stripe path
+ * imports stay local + the call-site context (voice overage chunk vs
+ * morning-brief LLM call) is captured in metadata.
+ */
+export const recordAiCostTelemetry = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    costUsd: v.number(),
+    metadata: v.optional(v.any()),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    if (
+      typeof args.costUsd !== "number" ||
+      !Number.isFinite(args.costUsd) ||
+      args.costUsd < 0
+    ) {
+      // Fail-closed silently — never let bad cost data break the meter
+      // path. Operator-visible budgeting comes from aiCallLog (creator-
+      // side) + Stripe's authoritative invoice.
+      return;
+    }
+    await ctx.db.insert("serviceTelemetry", {
+      businessId: args.businessId,
+      signal: "ai-cost",
+      outcome: "recorded",
+      numericValue: args.costUsd,
+      metadata: args.metadata,
+      ts: Date.now(),
+    });
   },
 });
 

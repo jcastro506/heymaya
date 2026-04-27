@@ -74,6 +74,48 @@ async function isDuplicateEvent(
   return existing !== null;
 }
 
+/**
+ * Wave D telemetry — emit `crm-webhook-idempotency-hit` when a duplicate
+ * event-id is detected. Best-effort: never blocks the webhook ack budget.
+ * Resolves the businessId from the connection if we can; otherwise drops
+ * the emit (no businessId = no per-tenant row, by design).
+ */
+async function emitIdempotencyHit(
+  ctx: MutationCtx,
+  envelope: NangoWebhookEnvelope
+): Promise<void> {
+  // Try to resolve businessId from connectionId. Same parsing as
+  // dispatchEnvelope below; we duplicate the prefix-strip rather than
+  // refactor because dispatch's logic is still mid-flight elsewhere in
+  // this file and we need this to fail open (no throw on parse failure).
+  const idx = envelope.connectionId.indexOf("_");
+  if (idx <= 0) return;
+  const rest = envelope.connectionId.slice(idx + 1);
+  const lastUnderscore = rest.lastIndexOf("_");
+  const businessIdStr =
+    lastUnderscore > 0 ? rest.slice(0, lastUnderscore) : rest;
+  let business;
+  try {
+    business = await ctx.db.get(businessIdStr as Id<"businesses">);
+  } catch {
+    business = null;
+  }
+  if (!business) return;
+  const provider =
+    envelope.providerConfigKey === JOBBER_PROVIDER_KEY
+      ? "jobber"
+      : envelope.providerConfigKey === HCP_PROVIDER_KEY
+        ? "hcp"
+        : "nango";
+  await ctx.db.insert("serviceTelemetry", {
+    businessId: business._id,
+    signal: "crm-webhook-idempotency-hit",
+    outcome: provider,
+    metadata: { externalEventId: envelope.eventId, providerConfigKey: envelope.providerConfigKey },
+    ts: Date.now(),
+  });
+}
+
 async function recordEvent(
   ctx: MutationCtx,
   externalEventId: string,
@@ -122,6 +164,9 @@ async function dispatchEnvelope(
   envelope: NangoWebhookEnvelope
 ): Promise<CrmWebhookResult> {
   if (await isDuplicateEvent(ctx, envelope.eventId)) {
+    // Wave D telemetry — best-effort idempotency-hit emit. Never blocks
+    // the duplicate-short-circuit return.
+    await emitIdempotencyHit(ctx, envelope);
     return { status: "duplicate" };
   }
 

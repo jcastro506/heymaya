@@ -285,6 +285,10 @@ export const recordTranscriptChunk = internalMutation({
 /**
  * One-shot finalization — sets endedAt + durationSec + summary. Second
  * call is a no-op.
+ *
+ * Wave D telemetry: when `voiceRating` is provided (1-5), emit a
+ * `voice-satisfaction` row. The plugin can optionally collect a
+ * post-call rating via SMS or in-call IVR; when absent, no signal emits.
  */
 export const finalizeTranscript = internalMutation({
   args: {
@@ -295,6 +299,11 @@ export const finalizeTranscript = internalMutation({
     summary: v.optional(v.string()),
     escalatedToOperator: v.optional(v.boolean()),
     costCents: v.optional(v.number()),
+    /**
+     * Optional 1-5 post-call rating. Omitted = no signal emitted (the
+     * common path; rating is collected out-of-band on operator opt-in).
+     */
+    voiceRating: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<void> => {
     const existing = await ctx.db
@@ -322,6 +331,30 @@ export const finalizeTranscript = internalMutation({
       escalatedToOperator: args.escalatedToOperator ?? false,
       costCents: args.costCents,
     });
+
+    // Wave D — voice-satisfaction emit (Studio-only signal in practice;
+    // gated by the fact that only Studio businesses provision voice).
+    if (
+      args.voiceRating !== undefined &&
+      Number.isFinite(args.voiceRating) &&
+      args.voiceRating >= 1 &&
+      args.voiceRating <= 5
+    ) {
+      const outcome =
+        args.voiceRating >= 4
+          ? "positive"
+          : args.voiceRating <= 2
+            ? "negative"
+            : "neutral";
+      await ctx.db.insert("serviceTelemetry", {
+        businessId: args.businessId,
+        signal: "voice-satisfaction",
+        outcome,
+        numericValue: args.voiceRating,
+        metadata: { callId: args.callId, durationSec: args.durationSec },
+        ts: Date.now(),
+      });
+    }
   },
 });
 

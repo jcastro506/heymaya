@@ -880,3 +880,113 @@ export const getLatestWeeklyLearnings = query({
       .first();
   },
 });
+
+/* -------------------------------------------------------------------------- */
+/* getTelemetrySummary — Pro/Studio audit log feed (Wave D)                    */
+/* -------------------------------------------------------------------------- */
+
+export type TelemetrySignalKind =
+  | "review-request-approval"
+  | "review-reply-moderation"
+  | "lead-response-nudge-open"
+  | "voice-satisfaction"
+  | "ai-cost"
+  | "crm-webhook-idempotency-hit";
+
+export interface TelemetrySignalSummary {
+  signal: TelemetrySignalKind;
+  /** Total emit count in the window. */
+  count: number;
+  /** Per-outcome breakdown — counts only, never weighted scores. */
+  byOutcome: Record<string, number>;
+  /** Sum of `numericValue` across rows in window. Null when no numeric. */
+  numericSum: number | null;
+  /** Latest 8 rows in window, newest-first. Surfaces in audit log. */
+  recent: ReadonlyArray<{
+    id: Id<"serviceTelemetry">;
+    outcome: string;
+    numericValue: number | null;
+    ts: number;
+  }>;
+}
+
+export interface TelemetrySummary {
+  window: GrowthWindow;
+  startMs: number;
+  endMs: number;
+  signals: ReadonlyArray<TelemetrySignalSummary>;
+}
+
+/**
+ * Aggregates Wave D telemetry for the audit log section of the Growth tab.
+ *
+ * Plan-tier:
+ *   - Starter → null (audit log isn't surfaced; tier-gated).
+ *   - Pro/Studio → counts, byOutcome, numericSum, recent[8].
+ *
+ * Hard rule: this query computes COUNTS and SUMS only — never a derived
+ * "score" or "rank". The judgment-not-rules invariant test enforces this.
+ */
+export const getTelemetrySummary = query({
+  args: { window: WINDOW_VALIDATOR },
+  handler: async (ctx, args): Promise<TelemetrySummary | null> => {
+    const session = await getCurrentBusinessSession(ctx);
+    if (!session) return null;
+    const features = planFeaturesService(session.business);
+    if (features.plan === "starter") return null;
+
+    const resolved = resolveWindow(session.business, args.window);
+    const businessId = session.business._id;
+
+    const rows = await ctx.db
+      .query("serviceTelemetry")
+      .withIndex("by_business_and_ts", (q) =>
+        q
+          .eq("businessId", businessId)
+          .gte("ts", resolved.startMs)
+          .lte("ts", resolved.endMs - 1)
+      )
+      .order("desc")
+      .collect();
+
+    const SIGNALS: TelemetrySignalKind[] = [
+      "review-request-approval",
+      "review-reply-moderation",
+      "lead-response-nudge-open",
+      "voice-satisfaction",
+      "ai-cost",
+      "crm-webhook-idempotency-hit",
+    ];
+
+    const summaries: TelemetrySignalSummary[] = SIGNALS.map((signal) => {
+      const subset = rows.filter((r) => r.signal === signal);
+      const byOutcome: Record<string, number> = {};
+      let numericSum: number | null = null;
+      for (const r of subset) {
+        byOutcome[r.outcome] = (byOutcome[r.outcome] ?? 0) + 1;
+        if (typeof r.numericValue === "number" && Number.isFinite(r.numericValue)) {
+          numericSum = (numericSum ?? 0) + r.numericValue;
+        }
+      }
+      return {
+        signal,
+        count: subset.length,
+        byOutcome,
+        numericSum,
+        recent: subset.slice(0, 8).map((r) => ({
+          id: r._id,
+          outcome: r.outcome,
+          numericValue: r.numericValue ?? null,
+          ts: r.ts,
+        })),
+      };
+    });
+
+    return {
+      window: resolved.effective,
+      startMs: resolved.startMs,
+      endMs: resolved.endMs,
+      signals: summaries,
+    };
+  },
+});

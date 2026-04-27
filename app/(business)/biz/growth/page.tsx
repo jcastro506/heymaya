@@ -34,6 +34,7 @@ import type { WindowChoice } from "@/components/business/growth/GrowthHeader";
 import { MetricsGrid } from "@/components/business/growth/MetricsGrid";
 import { GbpHealthDrilldown } from "@/components/business/growth/GbpHealthDrilldown";
 import { LearningsCallout } from "@/components/business/growth/LearningsCallout";
+import { TelemetryAuditList } from "@/components/business/growth/TelemetryAuditList";
 
 export default function GrowthPage() {
   const [window, setWindow] = useState<WindowChoice>("30d");
@@ -48,6 +49,10 @@ export default function GrowthPage() {
   );
   const learnings = useQuery(
     api.queries.business.growth.getLatestWeeklyLearnings
+  );
+  const telemetry = useQuery(
+    api.queries.business.growth.getTelemetrySummary,
+    { window }
   );
 
   if (profile === undefined) {
@@ -113,6 +118,18 @@ export default function GrowthPage() {
           caption="Maya synthesizes a weekly read on what's working in YOUR business. Sample size + attribution counts are visible so you can sanity-check her claims."
         >
           <LearningsCallout learnings={learnings} />
+        </Section>
+      )}
+
+      {/* Pro/Studio per-nudge audit log — Wave D telemetry surface.
+          Renders nothing on Starter (telemetry === null). */}
+      {telemetry !== null && (
+        <Section
+          eyebrow="Audit log"
+          title="What Maya logged this period"
+          caption="Approval outcomes, reply-moderation results, nudge engagement, voice ratings, mirrored AI costs, and webhook dedupe hits. Counts only — no synthesized scores."
+        >
+          <TelemetryAuditList data={telemetry} />
         </Section>
       )}
 

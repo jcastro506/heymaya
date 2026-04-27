@@ -2478,5 +2478,67 @@ export default defineSchema({
     .index("by_business", ["businessId"])
     .index("by_business_and_at", ["businessId", "scoreAt"]),
   // ─── end Service product Wave C.6 (GBP health score) ──────────────────
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Service product Wave D — beta hardening telemetry
+  //
+  // The 6 signals the operator wants observability on through beta. Each row
+  // is one event. Aggregations live in `convex/queries/business/growth.ts`
+  // (`getTelemetrySummary`); this table is append-only.
+  //
+  // Hard rule (operator directive 2026-04-27): no helper computes a "score"
+  // or "rating" or "rank" from telemetry inputs. Counts and aggregations
+  // are fine; weighted-composite synthesis is not. Telemetry stores facts;
+  // analysis is for Maya's brain or the operator's eyes.
+  //
+  // The 6 signals:
+  //   - "review-request-approval"     (outcome: approved | rejected | edited-then-approved)
+  //   - "review-reply-moderation"     (outcome: pass | fail | edited)
+  //   - "lead-response-nudge-open"    (outcome: opened | dismissed | acted-on)
+  //   - "voice-satisfaction"          (numericValue: 1-5 from post-call rating)
+  //   - "ai-cost"                     (numericValue: costUsd; thin wrapper around aiCallLog)
+  //   - "crm-webhook-idempotency-hit" (outcome: provider key — jobber|hcp|qbo|nango)
+  //
+  // Cross-tenant: `businessId`-indexed; every reader filters. Mutations
+  // assert `businessId` matches caller's session before insert. No global
+  // `by_signal` index — every read is `by_business_and_signal` so a query
+  // for one business can never iterate another's signals.
+  //
+  // Plan-tier: insertion is plan-agnostic (every business emits the
+  // signals it generates). Read-surface gating happens in
+  // `getTelemetrySummary` — Starter sees null (no audit log); Pro/Studio
+  // see counts. Voice-satisfaction signals only ever arrive for Studio
+  // (Studio is the dedicated voice tier).
+  // ────────────────────────────────────────────────────────────────────────
+  serviceTelemetry: defineTable({
+    businessId: v.id("businesses"),
+    signal: v.union(
+      v.literal("review-request-approval"),
+      v.literal("review-reply-moderation"),
+      v.literal("lead-response-nudge-open"),
+      v.literal("voice-satisfaction"),
+      v.literal("ai-cost"),
+      v.literal("crm-webhook-idempotency-hit")
+    ),
+    /**
+     * Free-form per-signal outcome enum. Validated against the per-signal
+     * outcome whitelist in `convex/serviceTelemetry.ts#emit`. Stored as a
+     * plain string so future signal kinds can extend without a schema
+     * migration.
+     */
+    outcome: v.string(),
+    /**
+     * Optional numeric — rating (1-5 for voice-satisfaction), cost (USD for
+     * ai-cost), latency ms, etc. Per-signal semantics doc'd in the emitter.
+     */
+    numericValue: v.optional(v.number()),
+    /** Free-form per-signal metadata bag (e.g. Stripe identifier, callId). */
+    metadata: v.optional(v.any()),
+    ts: v.number(),
+  })
+    .index("by_business", ["businessId"])
+    .index("by_business_and_signal", ["businessId", "signal"])
+    .index("by_business_and_ts", ["businessId", "ts"]),
+  // ─── end Service product Wave D (beta hardening telemetry) ────────────
   // ─── end Service product Sprint 0 ─────────────────────────────────────
 });

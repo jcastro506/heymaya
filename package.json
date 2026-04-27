@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "smoke": "tsx scripts/mvp-smoke.ts",
-    "smoke:cron": "tsx scripts/cron-smoke.ts"
+    "smoke:cron": "tsx scripts/cron-smoke.ts",
+    "smoke:service": "tsx scripts/service-mvp-smoke.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.2.7",

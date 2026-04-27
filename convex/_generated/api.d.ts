@@ -123,6 +123,7 @@ import type * as planService from "../planService.js";
 import type * as prePostReview from "../prePostReview.js";
 import type * as prePostReviewQueries from "../prePostReviewQueries.js";
 import type * as profile from "../profile.js";
+import type * as serviceTelemetry from "../serviceTelemetry.js";
 import type * as queries_business_customers from "../queries/business/customers.js";
 import type * as queries_business_growth from "../queries/business/growth.js";
 import type * as queries_business_jobs from "../queries/business/jobs.js";
@@ -261,6 +262,7 @@ declare const fullApi: ApiFromModules<{
   prePostReview: typeof prePostReview;
   prePostReviewQueries: typeof prePostReviewQueries;
   profile: typeof profile;
+  serviceTelemetry: typeof serviceTelemetry;
   "queries/business/customers": typeof queries_business_customers;
   "queries/business/growth": typeof queries_business_growth;
   "queries/business/jobs": typeof queries_business_jobs;

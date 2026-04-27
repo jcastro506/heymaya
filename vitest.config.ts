@@ -24,6 +24,9 @@ export default defineConfig({
       "components/**/__tests__/**/*.test.{ts,tsx}",
       "tests/**/*.test.ts",
       "agents/**/__tests__/**/*.test.ts",
+      // Wave D — HQ render-states + service smoke self-test.
+      "app/**/__tests__/**/*.test.{ts,tsx}",
+      "scripts/**/__tests__/**/*.test.ts",
     ],
   },
 });
