@@ -2073,10 +2073,20 @@ export default defineSchema({
     .index("by_business_and_content_hash", ["businessId", "contentHash"])
     .index("by_service_job", ["serviceJobId"]),
 
-  // Operator-installed third-party / community skills (§ 8.5 meta-skill
-  // `maya-skill-installer`). Pro+ only at the search-call entry point;
-  // every install requires operator approval. Pinned per-business; no
-  // auto-upgrade.
+  // [v0 STATUS — DEPRECATED, not populated]
+  //
+  // Originally designed as the per-business install tracker for the
+  // `maya-skill-installer` meta-skill (§ 8.5). Operator decision
+  // 2026-04-27 (fourth correction): runtime skill installation is retired
+  // for v0. Every Maya gets the same curated skill bundle at deploy time;
+  // no per-business skill divergence; no operator-approved on-demand
+  // installs. This table stays in schema (additive-only rule) but is
+  // never written to in production v0. Cross-tenant + schema-shape tests
+  // still reference it for invariant coverage; that's fine.
+  //
+  // If runtime extension is reintroduced post-MVP (Phase 1.5+), this
+  // table becomes the install tracker again. Until then, treat any
+  // production write as a bug.
   customSkills: defineTable({
     businessId: v.id("businesses"),
     skillName: v.string(),

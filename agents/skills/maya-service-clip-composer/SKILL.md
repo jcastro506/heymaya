@@ -120,7 +120,7 @@ Studio-only initial gate. Per § 12.5.7 the wave-4 video-edit worker is Studio g
 
 ## Sibling files
 
-- Calls (delegate): a ClawHub-installed cloud video composer skill — installed via OpenClaw's skill-download runtime, NOT vendored. Specific skill ID set at deploy by `maya-skill-installer` on operator approval. Top candidates: `vcarolxhberger/free-video-generator-capcut` (CapCut wrapper, NemoVideo backend, 100 free credits / 7d for anonymous), or NemoVideo first-party `nemovideo/nemovideo_skills`.
+- Calls (delegate): a ClawHub-installed cloud video composer skill — downloaded by OpenClaw at runtime from the ID locked into the deploy-time workspace manifest at `convex/agents/packs/maya_service/`. Same uniform manifest for every Maya — no per-business install divergence. Top candidates: `vcarolxhberger/free-video-generator-capcut` (CapCut wrapper, NemoVideo backend, 100 free credits / 7d for anonymous), or NemoVideo first-party `nemovideo/nemovideo_skills`.
 - Calls: `maya-service-citation-firewall` for the `approvedCaption` cite trail.
 - Reads: `mediaAssets.catalog` for clip metadata; `wiki_get("concepts/what-works/video/*")` for outcome weights.
 - Writes: `gbpPosts` row with `status="pending"`; `mediaAssets` row for the rendered output (lineage via `derivedFromAssetIds`).

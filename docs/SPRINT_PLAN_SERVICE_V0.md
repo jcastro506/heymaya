@@ -411,9 +411,25 @@ Every business-scoped table indexed `by_business` on `businessId`. Cross-tenant 
 
 ---
 
-## § 8.5 — Maya's dynamic skill discovery + install
+## § 8.5 — Maya's dynamic skill discovery + install (RETIRED FOR V0 — 2026-04-27 fourth correction)
 
-**Operator framing:** "Maya should already have these (the curated baseline in § 7), as well as the ability to go search ClawHub or skills.sh and install skills she doesn't have but needs."
+> **2026-04-27 status:** This section is preserved for historical reference and Phase 1.5+ design. **Runtime skill discovery + install is RETIRED for v0.** Per operator (fourth correction this day): every Maya gets the SAME curated skill bundle at deploy time. No per-business skill divergence. No operator-approved on-demand installs. The variation surface in v0 is `soul.md` + memory-wiki seed pages + connected accounts only.
+>
+> **What this means in code:**
+> - The `maya-skill-installer` SKILL.md stays in-repo as a dev-time reference shape but is NOT shipped in any v0 workspace bundle (annotated with `status: NOT-SHIPPED-IN-V0` in its frontmatter).
+> - The `customSkills` schema table stays additive but is annotated deprecated; production writes are bugs.
+> - The HQ Profile "Skills tab" planned for Sprint 5 is dropped from v0.
+> - The plan-tier matrix Pro+ "extension path" gate is dropped from v0.
+>
+> **What survives:** the *capability shape* (search ClawHub, evaluate candidates, risk-flag) is a sound dev-time curation tool **we** could use when picking the v0 baseline ClawHub skills (NemoVideo for video, etc.). Just not a runtime surface Maya invokes.
+>
+> **Phase 1.5+ revisit:** if post-MVP feedback shows operators wanting niche skills the curated baseline doesn't cover, this whole section is the design spec to reintroduce.
+
+---
+
+### Original § 8.5 design (HISTORICAL, NOT V0)
+
+**Operator framing (original):** "Maya should already have these (the curated baseline in § 7), as well as the ability to go search ClawHub or skills.sh and install skills she doesn't have but needs."
 
 **Why this matters:** service businesses have wildly varied operational shapes (HVAC vs landscaping vs roofing vs cleaning vs mobile detailing). Curating *every* possible niche skill in our § 7 baseline is impossible. A roofer might need a "drone-footage post-production" skill; a cleaner might need a "recurring-customer cadence" skill; a restoration contractor might need a "FEMA-claim documentation" skill. Maya extending herself based on operator needs is a wedge — fixed-feature competitors can't keep up with the tail. The skills.sh + ClawHub ecosystems are growing fast (Vercel launched skills.sh on Jan 20 2026 per [Vercel changelog](https://vercel.com/changelog/introducing-skills-the-open-agent-skills-ecosystem); ClawHub hit 13,729 skills by Feb 28 2026 per [DataCamp guide](https://www.datacamp.com/blog/best-clawhub-skills) and [Mehul Gupta Medium piece](https://medium.com/data-science-in-your-pocket/what-is-openclaw-clawhub-e123c2dd0db1)). Riding that growth means Maya gets more capable over time without us shipping every feature.
 

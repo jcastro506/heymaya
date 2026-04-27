@@ -1,19 +1,26 @@
 ---
 name: maya-skill-installer
 version: 0.1.0-sprint3.5
-description: Meta-skill — when Maya identifies a capability gap during her work, search ClawHub + skills.sh for relevant skills, present top candidates to the operator with risk flags + permissions list, install on operator approval.
-when-to-use: When Maya hits a capability gap mid-task (e.g. "I want to extract structured data from this drone-footage operator's job photos but I don't have a drone-photogrammetry skill"). Pro+ only — Starter has the curated § 7 baseline + nothing else.
-plan-tier: pro+ (Pro and Studio).
-model-routing: Gemini 3 Flash, MEDIUM thinking. Per § 8.5 — search ranking + risk-flag classification benefit from medium reasoning.
+status: NOT-SHIPPED-IN-V0 (operator decision 2026-04-27 fourth correction)
+description: DEV-TIME REFERENCE ONLY. This was originally designed as a runtime meta-skill that Maya would invoke when she hit a capability gap mid-task — search ClawHub + skills.sh, present candidates, install on operator approval. Reversed by operator 2026-04-27: every Maya gets the same curated skill bundle at deploy time; no runtime skill installation; no per-business skill divergence. Kept in-repo as a reference shape we may use as our own dev-time curation tool when picking ClawHub baseline skills.
+when-to-use: NOT INVOKED IN V0. The runtime extension surface is retired. If reintroduced post-MVP (Phase 1.5+), it would gate behind explicit operator opt-in + the security gates documented below. For v0, the curated baseline ships uniformly with every Maya — no operator-approved on-demand installs.
+plan-tier: not-applicable-v0 (Phase 1.5+ would be Pro+ only).
+model-routing: not-applicable-v0.
 ---
 
-# maya-skill-installer
+# maya-skill-installer (NOT SHIPPED IN V0)
 
-## Purpose (per plan § 8.5)
+> **2026-04-27 status:** This SKILL.md is preserved in-repo for reference but **does NOT ship in any v0 Maya's workspace bundle**. Per operator (fourth correction this day): every Maya gets the same curated skill bundle at deploy time; no runtime skill installation; no per-business skill divergence; no operator-approved on-demand install surface. The `customSkills` schema table is similarly retired in v0 (kept additive; never populated). The HQ Profile "Skills tab" planned for Sprint 5 is dropped.
+>
+> **What stays useful from this design:** the *capability shape* (search ClawHub, evaluate candidates, risk-flag, version-pin) is a sound dev-time curation tool **we** could use when picking the v0 baseline ClawHub skills (NemoVideo for video, etc.). It's just not a runtime surface Maya invokes.
 
-Maya's curated baseline is 15 service-skills + 4 Anthropic public skills. Service businesses are too varied to predict every niche skill in advance — a roofer might need drone-photogrammetry; a cleaner might need recurring-customer cadence; a restoration contractor might need FEMA-claim documentation. This skill lets Maya extend herself with ClawHub or skills.sh community skills, **gated by operator approval at every install**.
+---
 
-This is a **deliberate v0 policy reversal** for the service product (creator-side keeps the no-third-party-skills posture). The curated baseline stays Anthropic + custom-Maya only; the extension path is gated through this meta-skill with a Pro+ opt-in toggle (default OFF on first Pro upgrade).
+## Purpose (HISTORICAL — Sprint 3.5 design, NOT v0)
+
+Maya's curated baseline is 15 service-skills + 4 Anthropic public skills. Service businesses are too varied to predict every niche skill in advance — a roofer might need drone-photogrammetry; a cleaner might need recurring-customer cadence; a restoration contractor might need FEMA-claim documentation. This skill *was originally designed* to let Maya extend herself with ClawHub or skills.sh community skills, **gated by operator approval at every install**.
+
+**v0 policy (post-correction 2026-04-27):** every Maya gets the SAME bundle. No runtime extension. The variation surface in v0 is `soul.md` + memory-wiki seeds + connected accounts only.
 
 ## Inputs
 
