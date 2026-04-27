@@ -1,0 +1,167 @@
+{
+  "_doc": "Synthetic QBO-via-Unified.to fixture corpus for tests. Three scenarios cover the locked mapping behaviors: (1) plain customer + invoice, (2) sub-customer (the QBO 'Job' pattern) + invoice, (3) estimate-then-invoice round-trip preserving the same crmJobId. Field shapes mirror Unified's documented normalized accounting domain. The 'raw' field is illustrative QBO passthrough — the wrapper does not depend on it but tests assert it survives.",
+
+  "scenario_plain_customer": {
+    "customer": {
+      "id": "uniq_cust_001",
+      "external_id": "qbo_cust_42",
+      "name": "Acme Restaurants LLC",
+      "parent_id": null,
+      "is_job": false,
+      "emails": [{ "email": "ops@acmerestaurants.example" }],
+      "telephones": [{ "telephone": "+15551112222" }],
+      "address": {
+        "address1": "100 Main St",
+        "city": "Austin",
+        "region": "TX",
+        "postal_code": "78701",
+        "country": "US"
+      },
+      "active": true,
+      "created_at": "2026-04-01T12:00:00Z",
+      "updated_at": "2026-04-01T12:00:00Z",
+      "raw": { "Id": "42", "DisplayName": "Acme Restaurants LLC", "Job": false, "SyncToken": "0" }
+    },
+    "invoice": {
+      "id": "uniq_inv_001",
+      "external_id": "qbo_inv_777",
+      "type": "invoice",
+      "customer_id": "uniq_cust_001",
+      "invoice_at": "2026-04-15T10:00:00Z",
+      "due_at": "2026-05-15T10:00:00Z",
+      "total_amount": 1250.0,
+      "paid_amount": 0,
+      "balance_amount": 1250.0,
+      "currency": "USD",
+      "status": "open",
+      "line_items": [
+        {
+          "id": "line_1",
+          "description": "HVAC system tune-up",
+          "quantity": 1,
+          "unit_amount": 1250.0,
+          "total_amount": 1250.0,
+          "item_id": "qbo_item_99"
+        }
+      ],
+      "reference": "PO-12345",
+      "notes": "Quarterly maintenance visit",
+      "created_at": "2026-04-15T10:00:00Z",
+      "updated_at": "2026-04-15T10:00:00Z",
+      "raw": { "Id": "777", "DocNumber": "INV-777", "TotalAmt": 1250.0, "SyncToken": "0" }
+    }
+  },
+
+  "scenario_sub_customer": {
+    "parent_customer": {
+      "id": "uniq_cust_010",
+      "external_id": "qbo_cust_100",
+      "name": "Riverdale HOA",
+      "parent_id": null,
+      "is_job": false,
+      "emails": [{ "email": "manager@riverdale.example" }],
+      "telephones": [{ "telephone": "+15554443333" }],
+      "active": true
+    },
+    "sub_customer_job": {
+      "id": "uniq_cust_011",
+      "external_id": "qbo_cust_101",
+      "name": "Riverdale HOA — Pool House Roof",
+      "parent_id": "uniq_cust_010",
+      "is_job": true,
+      "active": true,
+      "raw": { "Id": "101", "Job": true, "ParentRef": { "value": "100" }, "SyncToken": "0" }
+    },
+    "invoice": {
+      "id": "uniq_inv_010",
+      "external_id": "qbo_inv_810",
+      "type": "invoice",
+      "customer_id": "uniq_cust_011",
+      "invoice_at": "2026-04-20T15:00:00Z",
+      "total_amount": 6800.0,
+      "currency": "USD",
+      "status": "paid",
+      "line_items": [
+        {
+          "description": "Pool house roof replacement",
+          "quantity": 1,
+          "unit_amount": 6800.0,
+          "total_amount": 6800.0
+        }
+      ],
+      "notes": "Job complete; insurance claim closed",
+      "raw": { "Id": "810", "TotalAmt": 6800.0, "SyncToken": "1" }
+    }
+  },
+
+  "scenario_estimate_then_invoice": {
+    "customer": {
+      "id": "uniq_cust_020",
+      "external_id": "qbo_cust_200",
+      "name": "Sunny Side Apartments",
+      "parent_id": null,
+      "is_job": false,
+      "telephones": [{ "telephone": "+15556667777" }]
+    },
+    "estimate": {
+      "id": "uniq_est_020",
+      "external_id": "qbo_est_500",
+      "type": "estimate",
+      "customer_id": "uniq_cust_020",
+      "invoice_at": "2026-04-10T09:00:00Z",
+      "total_amount": 4200.0,
+      "currency": "USD",
+      "status": "draft",
+      "line_items": [
+        {
+          "description": "Replace 2x condenser units",
+          "quantity": 2,
+          "unit_amount": 2100.0,
+          "total_amount": 4200.0
+        }
+      ],
+      "notes": "Estimate pending client signoff",
+      "raw": { "Id": "500", "DocNumber": "EST-500", "TxnStatus": "Pending", "SyncToken": "0" }
+    },
+    "invoice_followup": {
+      "id": "uniq_est_020",
+      "external_id": "qbo_inv_501",
+      "type": "invoice",
+      "customer_id": "uniq_cust_020",
+      "invoice_at": "2026-04-22T09:00:00Z",
+      "total_amount": 4200.0,
+      "currency": "USD",
+      "status": "open",
+      "line_items": [
+        {
+          "description": "Replace 2x condenser units",
+          "quantity": 2,
+          "unit_amount": 2100.0,
+          "total_amount": 4200.0
+        }
+      ],
+      "notes": "Job complete; awaiting payment",
+      "raw": { "Id": "501", "DocNumber": "INV-501", "LinkedTxn": [{ "TxnId": "500", "TxnType": "Estimate" }], "SyncToken": "0" }
+    }
+  },
+
+  "_webhook_envelope_examples": {
+    "_doc": "Wrapping the entities above in Unified.to webhook envelopes. Tests use these to exercise the verify→dispatch→upsert path.",
+    "customer_created": {
+      "event_id": "evt_unified_001",
+      "type": "accounting.customer.created",
+      "connection_id": "conn_unified_abc123",
+      "provider": "quickbooks",
+      "occurred_at": "2026-04-01T12:00:01Z",
+      "data": "<populate from scenario_plain_customer.customer at test time>"
+    },
+    "invoice_paid": {
+      "event_id": "evt_unified_002",
+      "type": "accounting.invoice.paid",
+      "connection_id": "conn_unified_abc123",
+      "provider": "quickbooks",
+      "occurred_at": "2026-04-22T09:00:01Z",
+      "data": "<populate from scenario_estimate_then_invoice.invoice_followup at test time>"
+    }
+  }
+}

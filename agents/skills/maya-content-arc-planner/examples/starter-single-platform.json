@@ -1,0 +1,15 @@
+{
+  "_comment": "Starter creator — 1 platform, 3-day theme arc. The skill respects maxPlatformVariantsPerDay=1.",
+  "theme": "Studio open-house weekend",
+  "creatorPicture": {
+    "niche": "Indie ceramics / pottery process",
+    "voiceFingerprint": "lowercase, observational, no caps, periods only",
+    "postingCadence": [
+      { "platform": "instagram", "postsPerWeek": 2, "bestHoursLocal": [11, 19] }
+    ]
+  },
+  "platforms": ["instagram"],
+  "lookAheadDays": 3,
+  "maxPlatformVariantsPerDay": 1,
+  "timezoneIana": "America/New_York"
+}

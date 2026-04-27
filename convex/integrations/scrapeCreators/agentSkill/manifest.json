@@ -1,0 +1,135 @@
+{
+  "name": "scrapecreators",
+  "version": "0.1.0-heymaya-pinned",
+  "displayName": "ScrapeCreators",
+  "description": "Read-only access to 27+ social platforms (TikTok, Instagram, YouTube, LinkedIn, X, Reddit, Pinterest, Threads, etc.) for profile, post, comment, audience, and transcript data. Authoritative source for everything Maya knows about a creator's public footprint.",
+  "homepage": "https://docs.scrapecreators.com",
+  "auth": {
+    "type": "api_key",
+    "header": "x-api-key",
+    "envVar": "SCRAPE_CREATORS_API_KEY"
+  },
+  "baseUrl": "https://api.scrapecreators.com",
+  "tools": [
+    {
+      "name": "tiktok_profile",
+      "description": "Fetch a TikTok creator's profile (bio, follower count, verified status, bio link).",
+      "method": "GET",
+      "path": "/v1/tiktok/profile",
+      "params": [{ "name": "handle", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "tiktok_user_posts",
+      "description": "Fetch a TikTok creator's most recent posts.",
+      "method": "GET",
+      "path": "/v1/tiktok/user/posts",
+      "params": [
+        { "name": "handle", "in": "query", "required": true, "type": "string" },
+        { "name": "limit", "in": "query", "required": false, "type": "number" }
+      ]
+    },
+    {
+      "name": "tiktok_post",
+      "description": "Fetch a single TikTok post's metadata + metrics.",
+      "method": "GET",
+      "path": "/v1/tiktok/post",
+      "params": [{ "name": "id", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "tiktok_comments",
+      "description": "Fetch comments on a TikTok post (sorted by API default).",
+      "method": "GET",
+      "path": "/v1/tiktok/comments",
+      "params": [{ "name": "id", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "tiktok_transcript",
+      "description": "Fetch the auto-generated transcript of a TikTok video.",
+      "method": "GET",
+      "path": "/v1/tiktok/transcript",
+      "params": [{ "name": "id", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "instagram_profile",
+      "description": "Fetch an Instagram user's profile (bio, follower / following counts, verified, external URL).",
+      "method": "GET",
+      "path": "/v1/instagram/profile",
+      "params": [{ "name": "handle", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "instagram_user_posts",
+      "description": "Fetch an Instagram user's most recent posts.",
+      "method": "GET",
+      "path": "/v1/instagram/user/posts",
+      "params": [
+        { "name": "handle", "in": "query", "required": true, "type": "string" },
+        { "name": "limit", "in": "query", "required": false, "type": "number" }
+      ]
+    },
+    {
+      "name": "instagram_post",
+      "description": "Fetch a single Instagram post by shortcode.",
+      "method": "GET",
+      "path": "/v1/instagram/post",
+      "params": [{ "name": "shortcode", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "youtube_channel",
+      "description": "Fetch a YouTube channel's profile (subscriber count, video count, description).",
+      "method": "GET",
+      "path": "/v1/youtube/channel",
+      "params": [{ "name": "handle", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "youtube_channel_videos",
+      "description": "Fetch a YouTube channel's recent videos.",
+      "method": "GET",
+      "path": "/v1/youtube/channel/videos",
+      "params": [
+        { "name": "handle", "in": "query", "required": true, "type": "string" },
+        { "name": "limit", "in": "query", "required": false, "type": "number" }
+      ]
+    },
+    {
+      "name": "youtube_video",
+      "description": "Fetch a single YouTube video by id.",
+      "method": "GET",
+      "path": "/v1/youtube/video",
+      "params": [{ "name": "id", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "linkedin_profile",
+      "description": "Fetch a LinkedIn profile (headline, summary, follower count, connection count).",
+      "method": "GET",
+      "path": "/v1/linkedin/profile",
+      "params": [{ "name": "handle", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "linkedin_posts",
+      "description": "Fetch a LinkedIn user's recent posts.",
+      "method": "GET",
+      "path": "/v1/linkedin/posts",
+      "params": [
+        { "name": "handle", "in": "query", "required": true, "type": "string" },
+        { "name": "limit", "in": "query", "required": false, "type": "number" }
+      ]
+    },
+    {
+      "name": "twitter_profile",
+      "description": "Fetch an X / Twitter profile (followers, bio, verified).",
+      "method": "GET",
+      "path": "/v1/twitter/profile",
+      "params": [{ "name": "handle", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "twitter_user_tweets",
+      "description": "Fetch an X / Twitter user's recent tweets.",
+      "method": "GET",
+      "path": "/v1/twitter/user/tweets",
+      "params": [
+        { "name": "handle", "in": "query", "required": true, "type": "string" },
+        { "name": "limit", "in": "query", "required": false, "type": "number" }
+      ]
+    }
+  ]
+}

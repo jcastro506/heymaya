@@ -1,0 +1,23 @@
+{
+  "_comment": "Small fitness creator (4.5K followers, no revenue) is matched with Lululemon by maya-opportunity-scout. The ask: pitch the brand for a portfolio piece (gifted Reel) so the creator has the logo on their deck 6 months from now.",
+  "input": {
+    "creatorPicture": {
+      "followerCount": 4500,
+      "monthlyRevenueUsd": 0,
+      "brandDealHistory": []
+    },
+    "opportunity": {
+      "brandName": "Lululemon",
+      "deliverables": "1× IG Reel",
+      "urgency": "low"
+    },
+    "creatorGoals": "Build my fitness brand and grow to 50K followers within a year."
+  },
+  "expectedOutput": {
+    "recommendation": "pitch-free-build-book",
+    "suggestedRateUsd": null,
+    "expectedConversionLikelihood": 0.3,
+    "riskOfMisaligningCreator": "low",
+    "reasoning_pattern": "Mentions hobbyist tier, no paid deal history, free-build-book recommendation citing portfolio leverage."
+  }
+}

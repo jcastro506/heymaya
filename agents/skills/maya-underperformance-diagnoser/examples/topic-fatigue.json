@@ -1,0 +1,48 @@
+{
+  "input": {
+    "post": {
+      "id": "tt_post_2026_04_24_010",
+      "platform": "tiktok",
+      "caption": "macros 101 part 6 — protein intake explained",
+      "mediaType": "video",
+      "postedAt": 1745524800000,
+      "hookPattern": "specific-number-lead"
+    },
+    "postMetrics": [
+      { "ts": 1745528400000, "viewCount": 8500, "likeCount": 180, "commentCount": 12 }
+    ],
+    "creatorTrailingBaseline": {
+      "medianViews": 24000,
+      "medianEngagementRate": 0.043,
+      "p25Views": 13000,
+      "p75Views": 41000
+    },
+    "creatorPicture": {
+      "bottomHooks": [
+        { "pattern": "talking-head-intro", "examplePostId": "tt_post_2026_03_28_004", "platform": "tiktok" }
+      ],
+      "postingCadence": {
+        "perPlatform": [
+          { "platform": "tiktok", "bestDays": ["tue", "wed", "thu"], "bestHoursLocal": [11, 12, 18, 19] }
+        ]
+      },
+      "audience": { "interestTags": ["fitness", "macros", "nutrition"], "topGeos": ["US"] }
+    },
+    "recentPosts": [
+      { "id": "tt_post_2026_04_22_009", "platform": "tiktok", "caption": "macros 101 part 5 — fats explained", "mediaType": "video", "postedAt": 1745366400000, "medianEngagementRate": 0.041 },
+      { "id": "tt_post_2026_04_21_008", "platform": "tiktok", "caption": "macros 101 part 4 — carbs and timing", "mediaType": "video", "postedAt": 1745280000000, "medianEngagementRate": 0.038 },
+      { "id": "tt_post_2026_04_20_007", "platform": "tiktok", "caption": "macros 101 part 3 — what counts as a serving", "mediaType": "video", "postedAt": 1745193600000, "medianEngagementRate": 0.036 },
+      { "id": "tt_post_2026_04_19_006", "platform": "tiktok", "caption": "macros 101 part 2 — calorie deficit math", "mediaType": "video", "postedAt": 1745107200000, "medianEngagementRate": 0.044 },
+      { "id": "tt_post_2026_04_18_005", "platform": "tiktok", "caption": "macros 101 part 1 — what are macros", "mediaType": "video", "postedAt": 1745020800000, "medianEngagementRate": 0.062 }
+    ],
+    "creatorTimezone": "America/Los_Angeles",
+    "creatorId": "kx_creator_demo"
+  },
+  "expectedOutputShape": {
+    "severity": "significant",
+    "primaryCauseHint": "Topic fatigue — six 'macros 101' posts in seven days, engagement decaying with each.",
+    "topicFatigueDetected": true,
+    "similarPostsLast7d": 5,
+    "notes": "Maya should suggest pivoting to a different topic for the next post and cite the engagement decay across the series."
+  }
+}

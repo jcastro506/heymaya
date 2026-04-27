@@ -1,0 +1,28 @@
+{
+  "_comment": "200K finance creator at $20K/mo. Brand offers $1k–$2.5k for a Reel. Creator's trailing-3 average is $11K, so the floor is $8.25K. Brand offer is below floor — decline politely, surface the floor.",
+  "input": {
+    "creatorPicture": {
+      "followerCount": 250000,
+      "monthlyRevenueUsd": 25000,
+      "brandDealHistory": [
+        { "amountUsd": 10000, "date": "2026-04-11" },
+        { "amountUsd": 12000, "date": "2026-03-12" },
+        { "amountUsd": 11000, "date": "2026-02-10" }
+      ]
+    },
+    "opportunity": {
+      "brandName": "TinyBrand",
+      "estimatedRateRange": { "low": 1000, "high": 2500 },
+      "deliverables": "1× IG Reel",
+      "urgency": "low"
+    },
+    "creatorGoals": "Maintain $25K/mo and protect rate."
+  },
+  "expectedOutput": {
+    "recommendation": "decline",
+    "suggestedRateUsd": null,
+    "expectedConversionLikelihood": 0,
+    "riskOfMisaligningCreator": "low",
+    "reasoning_pattern": "Established tier; trailing-3 average and floor cited; brand high-end below floor; recommend decline and surface floor publicly."
+  }
+}

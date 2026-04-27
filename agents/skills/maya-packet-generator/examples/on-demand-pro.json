@@ -1,0 +1,51 @@
+{
+  "_comment": "Example input for an on-demand Pro packet. The skill itself reads PacketData from Convex; this example shows the shape the orchestrating action passes in.",
+  "creatorId": "j0123abc456def789ghijklmnop",
+  "windowDays": 90,
+  "triggeredBy": "on-demand",
+  "data": {
+    "creatorName": "Sam Rivera",
+    "primaryHandle": "samrivera.fit",
+    "niche": "Beginner-friendly home strength training for women 25–40",
+    "audience": {
+      "ageRanges": ["25-34", "35-44"],
+      "topGeos": ["US", "CA", "UK"],
+      "interestTags": ["fitness", "wellness", "home-workout", "beginner"]
+    },
+    "voiceFingerprint": "warm, specific, no jargon, em-dash heavy",
+    "followerCountByPlatform": [
+      { "platform": "tiktok", "count": 142000 },
+      { "platform": "instagram", "count": 98500 }
+    ],
+    "postingCadence": [
+      { "platform": "tiktok", "postsPerWeek": 4 },
+      { "platform": "instagram", "postsPerWeek": 3 }
+    ],
+    "topPosts": [
+      {
+        "postId": "p_tt_001",
+        "platform": "tiktok",
+        "hookPattern": "POV bold-claim",
+        "views": 482000,
+        "saves": 18400,
+        "comments": 2100,
+        "mayaAnnotation": "Pattern interrupt at 0.4s, claim landed in 1.2s — repeatable.",
+        "captionExcerpt": "I haven't done a real squat in 4 months — here's why that's fine."
+      }
+    ],
+    "brandDealHistory": [
+      {
+        "dealId": "d_001",
+        "brand": "Lululemon",
+        "format": "IG Reel + TT post",
+        "deliverables": "1 Reel, 1 TT, 90-day usage rights",
+        "valueUsd": 4500,
+        "paymentStatus": "paid"
+      }
+    ],
+    "voiceSamples": [
+      { "postId": "p_tt_001", "captionExcerpt": "I haven't done a real squat in 4 months — here's why that's fine." }
+    ],
+    "goals": ["sign with a real talent agent in next 6 months", "hit 250k followers on TikTok"]
+  }
+}

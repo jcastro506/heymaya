@@ -1,0 +1,15 @@
+{
+  "_comment": "Low-news cycle. Nothing crossed the relevance threshold. Maya never invents news to fill the gap.",
+  "input": {
+    "creatorContext": {
+      "niche": "art",
+      "platforms": ["instagram"]
+    },
+    "creatorId": "k99xyz999",
+    "maxItems": 5
+  },
+  "output": {
+    "items": [],
+    "summary": "Quiet day in the creator-economy news cycle — nothing crossed the relevance threshold for an Instagram-first art creator. Industry-intel section omitted from today's morning brief."
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "_comment": "Pro fitness creator, theme arc with no calendar anchor. Cadence-driven distribution across 7 days.",
+  "theme": "Recovery week — what to do (and not do) when your body is asking for rest",
+  "creatorPicture": {
+    "niche": "Beginner-friendly home strength training",
+    "voiceFingerprint": "lowercase, em-dash heavy, no exclamation marks",
+    "postingCadence": [
+      { "platform": "tiktok", "postsPerWeek": 4, "bestHoursLocal": [12, 18, 21] },
+      { "platform": "instagram", "postsPerWeek": 3, "bestHoursLocal": [10, 19] }
+    ]
+  },
+  "platforms": ["tiktok", "instagram"],
+  "lookAheadDays": 7,
+  "maxPlatformVariantsPerDay": 2,
+  "timezoneIana": "America/Los_Angeles"
+}

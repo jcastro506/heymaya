@@ -1,0 +1,22 @@
+{
+  "_comment": "Adversarial spam — free webmail + prize keyword + URL. Classification: spam.",
+  "gmailThread": {
+    "threadId": "thr_003",
+    "from": { "email": "winner@gmail.com", "domain": "gmail.com" },
+    "subject": "Congratulations! You've been selected",
+    "bodyText": "Congratulations! You've been selected to claim your prize. Click here to claim now: https://sketchy-link.example",
+    "receivedMs": 1714435200000,
+    "attachments": []
+  },
+  "creatorContext": {
+    "creatorId": "c_sam_rivera",
+    "picture": {
+      "niche": "Beginner-friendly home strength training",
+      "voiceFingerprint": "lowercase",
+      "followerCountByPlatform": [{ "platform": "tiktok", "count": 142000 }]
+    },
+    "floorRate": 3000,
+    "recentDeals": []
+  },
+  "brandContextLookupEnabled": false
+}

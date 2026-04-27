@@ -1,0 +1,27 @@
+{
+  "_comment": "30K beauty creator with two prior small deals — emerging-tier default is paid for in-niche brands. Glossier is in-niche, deal estimate is in range, $500 floor easily cleared.",
+  "input": {
+    "creatorPicture": {
+      "followerCount": 30000,
+      "monthlyRevenueUsd": 5000,
+      "brandDealHistory": [
+        { "amountUsd": 1500, "date": "2026-03-12" },
+        { "amountUsd": 2000, "date": "2026-02-25" }
+      ]
+    },
+    "opportunity": {
+      "brandName": "Glossier",
+      "estimatedRateRange": { "low": 1500, "high": 3000 },
+      "deliverables": "1× IG Reel + 2× Story",
+      "urgency": "high"
+    },
+    "creatorGoals": "Land in-niche beauty deals."
+  },
+  "expectedOutput": {
+    "recommendation": "pitch-paid",
+    "suggestedRateUsd": 2250,
+    "expectedConversionLikelihood": 0.3,
+    "riskOfMisaligningCreator": "low",
+    "reasoning_pattern": "Emerging tier in-niche default to paid, $500 floor enforced, anchored at midpoint of brand's estimated range."
+  }
+}

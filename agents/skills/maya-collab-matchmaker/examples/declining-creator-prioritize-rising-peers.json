@@ -1,0 +1,52 @@
+{
+  "_comment": "Beauty creator with declining momentum. Maya surfaces 3 matches with deliberate bias toward rising peers — collabs with rising peers compound returns and break the declining-momentum cycle. The prioritize-rising-peers anti-pattern surfaces as a hint.",
+  "input": {
+    "creatorPicture": {
+      "niche": "beauty",
+      "audience": { "topGeos": ["US", "CA"], "interestTags": ["clean-beauty", "skincare"], "ageRanges": ["18-24", "25-34"] },
+      "followerCount": 45000,
+      "namedPeers": [
+        { "handle": "skincareisla", "platform": "tiktok", "relationship": "follower" }
+      ],
+      "platforms": ["instagram", "tiktok"],
+      "voiceFingerprint": "Friendly, lowercase, specific over generic."
+    },
+    "recentMomentum": "declining",
+    "collabHistory": [
+      { "peerHandle": "lipkitlex", "format": "cross-shoutout", "outcome": "okay", "happenedAt": "2026-02-14" }
+    ],
+    "maxMatches": 3
+  },
+  "expectedOutput": {
+    "matches": [
+      {
+        "peerHandle": "skincareisla",
+        "platform": "tiktok",
+        "followerCount": 52000,
+        "niche": "beauty",
+        "audienceOverlapScore": 0.42,
+        "recentMomentum": "rising",
+        "suggestedFormat": "duet"
+      },
+      {
+        "peerHandle": "cleanbeautymo",
+        "platform": "instagram",
+        "followerCount": 48000,
+        "niche": "beauty",
+        "audienceOverlapScore": 0.38,
+        "recentMomentum": "rising",
+        "suggestedFormat": "cross-shoutout"
+      },
+      {
+        "peerHandle": "skincareyt_jay",
+        "platform": "youtube",
+        "followerCount": 60000,
+        "niche": "beauty",
+        "audienceOverlapScore": 0.31,
+        "recentMomentum": "rising",
+        "suggestedFormat": "guest-podcast"
+      }
+    ],
+    "antiPatterns": ["prioritize-rising-peers"]
+  }
+}

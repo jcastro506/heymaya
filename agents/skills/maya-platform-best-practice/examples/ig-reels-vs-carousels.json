@@ -1,0 +1,11 @@
+{
+  "input": {
+    "platform": "instagram",
+    "contentType": "carousel",
+    "question": "Should I post a Reel or a carousel for educational content?"
+  },
+  "expectedOutput": {
+    "confidenceLevel": "medium",
+    "notes": "Static body answer for IG. Carousels are highlighted as save-driving in the static body."
+  }
+}
