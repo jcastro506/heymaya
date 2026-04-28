@@ -31,6 +31,7 @@ import { v } from "convex/values";
 import {
   internalMutation,
   internalAction,
+  internalQuery,
 } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -279,6 +280,511 @@ export const destroyServiceFixtureWithFly = internalAction({
       flyAppDestroyed,
       flyError,
       deletedCounts,
+    };
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* Soak harness — realistic data seeding + event injection                     */
+/* -------------------------------------------------------------------------- */
+
+const SOAK_FIRST_NAMES = [
+  "Mike",
+  "Sarah",
+  "James",
+  "Emily",
+  "David",
+  "Linda",
+  "Robert",
+  "Jennifer",
+  "Tom",
+  "Karen",
+];
+const SOAK_LAST_NAMES = [
+  "Johnson",
+  "Smith",
+  "Garcia",
+  "Williams",
+  "Brown",
+  "Davis",
+  "Miller",
+  "Wilson",
+  "Anderson",
+  "Taylor",
+];
+const SOAK_SERVICE_TYPES = [
+  "AC tune-up",
+  "AC repair",
+  "furnace replacement",
+  "furnace tune-up",
+  "thermostat install",
+  "ductwork inspection",
+  "emergency no-cool",
+  "heat pump repair",
+];
+const SOAK_REVIEW_BODIES_5 = [
+  "Mike was on time and explained everything before doing anything. Fair price, fast work, no upsell. Highly recommend.",
+  "Showed up exactly when he said. AC running cold again within an hour. Great experience.",
+  "Honest, knowledgeable, and reasonably priced. Will use again.",
+  "Best HVAC tech we've had. Cleaned up after himself and walked us through the whole repair.",
+  "Mike fixed our furnace on a Sunday in January. Truly went above and beyond.",
+];
+const SOAK_REVIEW_BODIES_4 = [
+  "Good service, slight delay getting here but the work was solid.",
+  "Knew what he was doing. Took a bit longer than estimated but I'd hire again.",
+];
+const SOAK_REVIEW_BODIES_3 = [
+  "It was OK. Got the job done but communication could be better.",
+];
+
+function rng(seedStr: string): () => number {
+  let h = 2166136261;
+  for (let i = 0; i < seedStr.length; i++) {
+    h ^= seedStr.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return ((h ^= h >>> 16) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Seed a soak-target business with realistic data: 1 GBP location, 50
+ * historical reviews, 10 customers, 20 service jobs (mix of completed +
+ * scheduled). Deterministic via seed = businessId. Idempotent — safe to
+ * re-run; second call detects existing rows + adds nothing.
+ */
+export const seedSoakData = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    seeded: boolean;
+    counts: {
+      gbpLocation: number;
+      customers: number;
+      jobs: number;
+      reviews: number;
+    };
+  }> => {
+    // Idempotent: if we've already seeded (>0 reviews), skip.
+    const existingReview = await ctx.db
+      .query("reviews")
+      .withIndex("by_business", (q) => q.eq("businessId", args.businessId))
+      .first();
+    if (existingReview) {
+      const counts = await Promise.all([
+        ctx.db
+          .query("gbpLocations")
+          .withIndex("by_business", (q) =>
+            q.eq("businessId", args.businessId)
+          )
+          .collect(),
+        ctx.db
+          .query("serviceCustomers")
+          .withIndex("by_business", (q) =>
+            q.eq("businessId", args.businessId)
+          )
+          .collect(),
+        ctx.db
+          .query("serviceJobs")
+          .withIndex("by_business", (q) =>
+            q.eq("businessId", args.businessId)
+          )
+          .collect(),
+        ctx.db
+          .query("reviews")
+          .withIndex("by_business", (q) =>
+            q.eq("businessId", args.businessId)
+          )
+          .collect(),
+      ]);
+      return {
+        seeded: false,
+        counts: {
+          gbpLocation: counts[0].length,
+          customers: counts[1].length,
+          jobs: counts[2].length,
+          reviews: counts[3].length,
+        },
+      };
+    }
+
+    const random = rng(String(args.businessId));
+    const pick = <T>(arr: ReadonlyArray<T>): T =>
+      arr[Math.floor(random() * arr.length)];
+    const now = Date.now();
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+
+    // 1. GBP location.
+    const gbpLocationId = await ctx.db.insert("gbpLocations", {
+      businessId: args.businessId,
+      gbpLocationId: `soak-gbp-${args.businessId}`,
+      gbpAccountId: `soak-acc-${args.businessId}`,
+      address: "123 Main St, Boise, ID 83702",
+      primaryCategory: "HVAC contractor",
+      verifiedAt: now - 547 * ONE_DAY,
+      ownerEmail: "soak@heymaya.smoke",
+      createdAt: now - 547 * ONE_DAY,
+    });
+
+    // 2. 10 customers.
+    const customerIds: Id<"serviceCustomers">[] = [];
+    for (let i = 0; i < 10; i++) {
+      const first = pick(SOAK_FIRST_NAMES);
+      const last = pick(SOAK_LAST_NAMES);
+      const id = await ctx.db.insert("serviceCustomers", {
+        businessId: args.businessId,
+        name: `${first} ${last}`,
+        phone: `+1-208-555-${String(1000 + i).padStart(4, "0")}`,
+        email: `${first.toLowerCase()}.${last.toLowerCase()}@example.com`,
+        address: `${100 + i * 7} Oak St, Boise, ID 83702`,
+        lifetimeValueUsd: Math.floor(random() * 5000) + 250,
+        lastJobAt: now - Math.floor(random() * 365) * ONE_DAY,
+        reviewStatus: i < 4 ? "left" : i < 7 ? "asked" : "not-yet",
+        createdAt: now - Math.floor(random() * 730) * ONE_DAY,
+        updatedAt: now,
+      });
+      customerIds.push(id);
+    }
+
+    // 3. 20 jobs — 14 completed, 4 scheduled, 2 in-progress.
+    let jobCount = 0;
+    for (let i = 0; i < 20; i++) {
+      const customerId = customerIds[i % customerIds.length];
+      const completedAgoDays = Math.floor(random() * 180);
+      const status =
+        i < 14 ? "completed" : i < 18 ? "scheduled" : "in-progress";
+      await ctx.db.insert("serviceJobs", {
+        businessId: args.businessId,
+        customerId,
+        status,
+        scheduledAt: now - completedAgoDays * ONE_DAY,
+        completedAt:
+          status === "completed"
+            ? now - completedAgoDays * ONE_DAY + 4 * 60 * 60 * 1000
+            : undefined,
+        technicianName: "Mike",
+        serviceType: pick(SOAK_SERVICE_TYPES),
+        ticketAmountUsd: Math.floor(random() * 2000) + 200,
+        photos: [],
+        notes: undefined,
+        createdAt: now - (completedAgoDays + 1) * ONE_DAY,
+        updatedAt: now - completedAgoDays * ONE_DAY,
+      });
+      jobCount++;
+    }
+
+    // 4. 50 reviews — distribution: 35 5-star, 10 4-star, 5 3-star.
+    let reviewCount = 0;
+    for (let i = 0; i < 50; i++) {
+      const stars = i < 35 ? 5 : i < 45 ? 4 : 3;
+      const body =
+        stars === 5
+          ? pick(SOAK_REVIEW_BODIES_5)
+          : stars === 4
+            ? pick(SOAK_REVIEW_BODIES_4)
+            : pick(SOAK_REVIEW_BODIES_3);
+      const receivedAt = now - Math.floor(random() * 547) * ONE_DAY;
+      await ctx.db.insert("reviews", {
+        businessId: args.businessId,
+        gbpLocationId,
+        platform: "gbp",
+        externalReviewId: `soak-rev-${i}-${args.businessId}`,
+        reviewerName: `${pick(SOAK_FIRST_NAMES)} ${pick(SOAK_LAST_NAMES)}`,
+        starRating: stars,
+        body,
+        sentiment: stars >= 4 ? "positive" : "neutral",
+        receivedAt,
+      });
+      reviewCount++;
+    }
+
+    return {
+      seeded: true,
+      counts: {
+        gbpLocation: 1,
+        customers: customerIds.length,
+        jobs: jobCount,
+        reviews: reviewCount,
+      },
+    };
+  },
+});
+
+/**
+ * Inject a synthetic job-completed event. Calls the production
+ * `upsertJobFromWebhook` flow with a synthetic normalized job so the
+ * downstream behaviors fire identically to a real CRM webhook.
+ */
+export const injectJobCompleted = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    /** Optional override; default picks from the pool. */
+    customerName: v.optional(v.string()),
+    serviceType: v.optional(v.string()),
+    ticketAmountUsd: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<{ jobId: Id<"serviceJobs"> }> => {
+    const random = rng(`${args.businessId}-${Date.now()}-${Math.random()}`);
+    const pick = <T>(arr: ReadonlyArray<T>): T =>
+      arr[Math.floor(random() * arr.length)];
+    const first = pick(SOAK_FIRST_NAMES);
+    const last = pick(SOAK_LAST_NAMES);
+    const customerName = args.customerName ?? `${first} ${last}`;
+    const serviceType = args.serviceType ?? pick(SOAK_SERVICE_TYPES);
+    const ticketAmountUsd =
+      args.ticketAmountUsd ?? Math.floor(random() * 1500) + 250;
+    const externalJobId = `soak-job-${Date.now()}-${Math.floor(random() * 9999)}`;
+
+    // Match upsertJobFromWebhook contract via direct insert (simpler than
+    // round-tripping the action call from another mutation).
+    const customerId = await ctx.db.insert("serviceCustomers", {
+      businessId: args.businessId,
+      name: customerName,
+      phone: `+1-208-555-${String(Math.floor(random() * 9000) + 1000)}`,
+      email: undefined,
+      address: undefined,
+      reviewStatus: "not-yet",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    const jobId = await ctx.db.insert("serviceJobs", {
+      businessId: args.businessId,
+      customerId,
+      crmJobId: externalJobId,
+      status: "completed",
+      scheduledAt: Date.now() - 4 * 60 * 60 * 1000,
+      completedAt: Date.now(),
+      technicianName: "Mike",
+      serviceType,
+      ticketAmountUsd,
+      photos: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    // Enqueue a job-completed task for Maya's queue. The skill on the
+    // Fly machine polls this queue.
+    await ctx.db.insert("mayaTaskQueue", {
+      businessId: args.businessId,
+      kind: "job-completed",
+      payload: {
+        jobId,
+        customerId,
+        source: "crm-webhook",
+        provider: "jobber",
+      },
+      source: "crm-webhook",
+      enqueuedAt: Date.now(),
+      attemptCount: 0,
+    });
+
+    return { jobId };
+  },
+});
+
+/**
+ * Inject a synthetic GBP review. Creates a `reviews` row + enqueues
+ * review-reply task.
+ */
+export const injectGbpReview = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    starRating: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<{ reviewId: Id<"reviews"> }> => {
+    const random = rng(`${args.businessId}-${Date.now()}-${Math.random()}`);
+    const pick = <T>(arr: ReadonlyArray<T>): T =>
+      arr[Math.floor(random() * arr.length)];
+    const stars = args.starRating ?? (random() < 0.85 ? 5 : random() < 0.7 ? 4 : 3);
+    const body =
+      stars === 5
+        ? pick(SOAK_REVIEW_BODIES_5)
+        : stars === 4
+          ? pick(SOAK_REVIEW_BODIES_4)
+          : pick(SOAK_REVIEW_BODIES_3);
+    const gbpLoc = await ctx.db
+      .query("gbpLocations")
+      .withIndex("by_business", (q) => q.eq("businessId", args.businessId))
+      .first();
+    const reviewId = await ctx.db.insert("reviews", {
+      businessId: args.businessId,
+      gbpLocationId: gbpLoc?._id,
+      platform: "gbp",
+      externalReviewId: `soak-rev-injected-${Date.now()}`,
+      reviewerName: `${pick(SOAK_FIRST_NAMES)} ${pick(SOAK_LAST_NAMES)}`,
+      starRating: stars,
+      body,
+      sentiment: stars >= 4 ? "positive" : "neutral",
+      receivedAt: Date.now(),
+    });
+
+    await ctx.db.insert("mayaTaskQueue", {
+      businessId: args.businessId,
+      kind: "review-arrived",
+      payload: { reviewId, stars },
+      source: "manual",
+      enqueuedAt: Date.now(),
+      attemptCount: 0,
+    });
+
+    return { reviewId };
+  },
+});
+
+/**
+ * Soak snapshot — aggregated telemetry suitable for rolling dashboards.
+ * Reads aiCallLog (cost + latency + token counts), serviceTelemetry
+ * (counts by signal), mayaTaskQueue (work-in-flight), and behavior
+ * outputs (drafted reviews/posts/replies).
+ */
+export const getSoakSnapshot = internalQuery({
+  args: {
+    businessId: v.id("businesses"),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    nowMs: number;
+    business: { mayaFlyAppId: string | null; planTier: string };
+    ai: {
+      calls: number;
+      totalCostUsd: number;
+      totalInputTokens: number;
+      totalOutputTokens: number;
+      latencyP50Ms: number;
+      latencyP95Ms: number;
+      byTaskTag: Record<string, number>;
+    };
+    queue: {
+      enqueued: number;
+      processed: number;
+      failed: number;
+      byKind: Record<string, number>;
+    };
+    telemetry: {
+      total: number;
+      bySignal: Record<string, number>;
+    };
+    behaviors: {
+      reviewsTotal: number;
+      reviewsDrafted: number;
+      reviewsApproved: number;
+      reviewsPosted: number;
+      reviewRequestsTotal: number;
+      reviewRequestsSent: number;
+      gbpPostsTotal: number;
+      gbpPostsDrafted: number;
+    };
+  }> => {
+    const business = await ctx.db.get(args.businessId);
+    if (!business) {
+      throw new Error(`getSoakSnapshot: business ${args.businessId} not found`);
+    }
+
+    // AI call log — keyed by creatorId.
+    const accountId = (business as Doc<"businesses">).accountId;
+    const aiCalls = await ctx.db
+      .query("aiCallLog")
+      .withIndex("by_creator", (q) => q.eq("creatorId", accountId))
+      .collect();
+    const latencies = aiCalls.map((c) => c.latencyMs).sort((a, b) => a - b);
+    const p = (q: number): number => {
+      if (latencies.length === 0) return 0;
+      const i = Math.min(
+        latencies.length - 1,
+        Math.floor(latencies.length * q)
+      );
+      return latencies[i];
+    };
+    const byTaskTag: Record<string, number> = {};
+    for (const c of aiCalls) byTaskTag[c.taskTag] = (byTaskTag[c.taskTag] ?? 0) + 1;
+
+    // Queue.
+    const queueRows = await ctx.db
+      .query("mayaTaskQueue")
+      .withIndex("by_business", (q) => q.eq("businessId", args.businessId))
+      .collect();
+    const byKind: Record<string, number> = {};
+    let processed = 0;
+    let failed = 0;
+    for (const r of queueRows) {
+      byKind[r.kind] = (byKind[r.kind] ?? 0) + 1;
+      if (r.processedAt !== undefined) processed++;
+      if (r.failedAt !== undefined) failed++;
+    }
+
+    // Telemetry.
+    const telemetryRows = await ctx.db
+      .query("serviceTelemetry")
+      .withIndex("by_business", (q) => q.eq("businessId", args.businessId))
+      .collect();
+    const bySignal: Record<string, number> = {};
+    for (const r of telemetryRows) bySignal[r.signal] = (bySignal[r.signal] ?? 0) + 1;
+
+    // Behavior outputs.
+    const reviews = await ctx.db
+      .query("reviews")
+      .withIndex("by_business", (q) => q.eq("businessId", args.businessId))
+      .collect();
+    const reviewRequests = await ctx.db
+      .query("reviewRequests")
+      .withIndex("by_business", (q) => q.eq("businessId", args.businessId))
+      .collect();
+    let gbpPosts: Doc<"gbpPosts">[] = [];
+    try {
+      gbpPosts = await ctx.db
+        .query("gbpPosts")
+        .withIndex("by_business", (q) => q.eq("businessId", args.businessId))
+        .collect();
+    } catch {
+      /* table may not exist in this schema version */
+    }
+
+    return {
+      nowMs: Date.now(),
+      business: {
+        mayaFlyAppId: (business as Doc<"businesses">).mayaFlyAppId ?? null,
+        planTier: (business as Doc<"businesses">).planTier ?? "starter",
+      },
+      ai: {
+        calls: aiCalls.length,
+        totalCostUsd: aiCalls.reduce((s, c) => s + (c.costUsd ?? 0), 0),
+        totalInputTokens: aiCalls.reduce((s, c) => s + c.inputTokens, 0),
+        totalOutputTokens: aiCalls.reduce((s, c) => s + c.outputTokens, 0),
+        latencyP50Ms: p(0.5),
+        latencyP95Ms: p(0.95),
+        byTaskTag,
+      },
+      queue: {
+        enqueued: queueRows.length,
+        processed,
+        failed,
+        byKind,
+      },
+      telemetry: {
+        total: telemetryRows.length,
+        bySignal,
+      },
+      behaviors: {
+        reviewsTotal: reviews.length,
+        reviewsDrafted: reviews.filter((r) => r.replyStatus === "drafted").length,
+        reviewsApproved: reviews.filter((r) => r.replyStatus === "approved").length,
+        reviewsPosted: reviews.filter((r) => r.replyStatus === "posted").length,
+        reviewRequestsTotal: reviewRequests.length,
+        reviewRequestsSent: reviewRequests.filter((r) => r.status === "sent")
+          .length,
+        gbpPostsTotal: gbpPosts.length,
+        gbpPostsDrafted: gbpPosts.filter((p) => p.status === "draft").length,
+      },
     };
   },
 });
