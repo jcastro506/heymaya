@@ -1,16 +1,16 @@
 "use client";
 
+import { useState } from "react";
+import { useAction } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import type { OnboardingDraft } from "../_state";
 import type { Id } from "@/convex/_generated/dataModel";
 
 /**
- * Deploy step — final pre-launch checkout. Wave B ships the visual
- * confirmation; the actual `deployRiley` Convex action lands in Wave C
- * (mirrors `deployServiceMaya` for the riley_growth pack).
- *
- * Until then, "Deploy Riley" marks onboarding complete + lands the
- * operator on the dashboard, which shows a "Riley is queued for
- * deployment" placeholder.
+ * Deploy step — final pre-launch checkout. Calls the real
+ * `runOnboardingDeploy` action, which spins up Riley's per-user Fly
+ * machine using the existing OpenClaw runtime image. Surfaces the
+ * deploy stage on failure so the operator can diagnose.
  */
 export function DeployStep({
   draft,
@@ -23,6 +23,40 @@ export function DeployStep({
   onComplete: () => Promise<void>;
   onBack: () => Promise<void>;
 }) {
+  const runDeploy = useAction(
+    api.onboarding.growth.deployRiley.runOnboardingDeploy
+  );
+  const [deploying, setDeploying] = useState(false);
+  const [deployError, setDeployError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{
+    flyAppId: string;
+    machineId: string;
+    durationMs: number;
+  } | null>(null);
+
+  async function handleDeploy() {
+    setDeployError(null);
+    setDeploying(true);
+    try {
+      const res = await runDeploy({});
+      if (!res.ok) {
+        setDeployError(`stage=${res.stage}: ${res.message}`);
+        return;
+      }
+      setSuccess({
+        flyAppId: res.flyAppId,
+        machineId: res.machineId,
+        durationMs: res.durationMs,
+      });
+      // Server already patched onboardingStep to "complete" — surface the
+      // win here, then move the UI forward.
+      await onComplete();
+    } catch (e) {
+      setDeployError((e as Error).message);
+    } finally {
+      setDeploying(false);
+    }
+  }
   const linkedinSamples = draft.voiceSamples.linkedin.filter((s) =>
     s.trim()
   ).length;
@@ -75,30 +109,52 @@ export function DeployStep({
         <Row label="Agent id" value={agentId ?? "—"} />
       </div>
 
-      <div className="mb-8 rounded-2xl border border-lime/30 bg-lime/5 p-6 text-sm text-paper-dim">
-        <p className="mb-2 font-mono text-xs uppercase tracking-widest text-lime">
-          Wave B note
-        </p>
-        <p>
-          The deploy action ships in Wave C — clicking <em>Deploy Riley</em>{" "}
-          right now marks onboarding complete and lands you on the dashboard,
-          where Riley will appear once her pack generators + Fly deploy land.
-          Everything before this step is real and persisted.
-        </p>
-      </div>
+      {success && (
+        <div className="mb-8 rounded-2xl border border-lime/30 bg-lime/5 p-6 text-sm">
+          <p className="mb-2 font-mono text-xs uppercase tracking-widest text-lime">
+            Riley is live
+          </p>
+          <p className="mb-1 text-paper">
+            <span className="text-paper-faint">Fly app:</span>{" "}
+            <code className="text-paper">{success.flyAppId}</code>
+          </p>
+          <p className="mb-1 text-paper">
+            <span className="text-paper-faint">Machine:</span>{" "}
+            <code className="text-paper">{success.machineId}</code>
+          </p>
+          <p className="text-paper-dim">
+            Boot took {(success.durationMs / 1000).toFixed(1)}s.
+          </p>
+        </div>
+      )}
+
+      {deployError && (
+        <div className="mb-8 rounded-2xl border border-red-400/30 bg-red-400/5 p-6 text-sm">
+          <p className="mb-2 font-mono text-xs uppercase tracking-widest text-red-400">
+            Deploy failed
+          </p>
+          <p className="text-paper-dim">{deployError}</p>
+        </div>
+      )}
 
       <div className="flex justify-between">
         <button
           onClick={onBack}
-          className="rounded-full border border-paper-faint/30 px-7 py-3 text-sm text-paper-dim hover:border-paper hover:text-paper"
+          disabled={deploying}
+          className="rounded-full border border-paper-faint/30 px-7 py-3 text-sm text-paper-dim hover:border-paper hover:text-paper disabled:opacity-50"
         >
           ← Back
         </button>
         <button
-          onClick={onComplete}
-          className="rounded-full bg-lime px-7 py-3 text-sm font-medium text-ink hover:bg-lime/90"
+          onClick={handleDeploy}
+          disabled={deploying || Boolean(success)}
+          className="rounded-full bg-lime px-7 py-3 text-sm font-medium text-ink hover:bg-lime/90 disabled:opacity-50"
         >
-          Deploy Riley →
+          {deploying
+            ? "Deploying…"
+            : success
+              ? "Deployed →"
+              : "Deploy Riley →"}
         </button>
       </div>
     </section>

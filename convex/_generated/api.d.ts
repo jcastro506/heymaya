@@ -113,6 +113,8 @@ import type * as mediaAssets_processCatalogerQueue from "../mediaAssets/processC
 import type * as onboarding_business_deployServiceMaya from "../onboarding/business/deployServiceMaya.js";
 import type * as onboarding_business_pipeline from "../onboarding/business/pipeline.js";
 import type * as onboarding_growth_pipeline from "../onboarding/growth/pipeline.js";
+import type * as onboarding_growth_deployRiley from "../onboarding/growth/deployRiley.js";
+import type * as agents_packs_riley_growth_generators from "../agents/packs/riley_growth/generators.js";
 import type * as onboarding_maya_deployMaya from "../onboarding/maya/deployMaya.js";
 import type * as onboarding_maya_jobs from "../onboarding/maya/jobs.js";
 import type * as onboarding_maya_synthesizeCreatorPicture from "../onboarding/maya/synthesizeCreatorPicture.js";
@@ -259,6 +261,8 @@ declare const fullApi: ApiFromModules<{
   "onboarding/business/deployServiceMaya": typeof onboarding_business_deployServiceMaya;
   "onboarding/business/pipeline": typeof onboarding_business_pipeline;
   "onboarding/growth/pipeline": typeof onboarding_growth_pipeline;
+  "onboarding/growth/deployRiley": typeof onboarding_growth_deployRiley;
+  "agents/packs/riley_growth/generators": typeof agents_packs_riley_growth_generators;
   "onboarding/maya/deployMaya": typeof onboarding_maya_deployMaya;
   "onboarding/maya/jobs": typeof onboarding_maya_jobs;
   "onboarding/maya/synthesizeCreatorPicture": typeof onboarding_maya_synthesizeCreatorPicture;
