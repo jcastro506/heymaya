@@ -13,8 +13,10 @@
 import * as gmailActions from "./gmail";
 import * as stripeActions from "./stripe";
 import * as calendarActions from "./calendar";
+import * as linkedinActions from "./linkedin";
 
-export { gmailActions, stripeActions, calendarActions };
+export { gmailActions, stripeActions, calendarActions, linkedinActions };
 export * from "./gmail";
 export * from "./stripe";
 export * from "./calendar";
+export * from "./linkedin";

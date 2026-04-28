@@ -56,7 +56,13 @@ export interface RunActionOptions<TResponse> {
    * Provider tag. Used only for diagnostics / logging — the action slug
    * already encodes the provider in Composio v3.
    */
-  provider: "gmail" | "stripe" | "calendar" | "apollo" | "hunter";
+  provider:
+    | "gmail"
+    | "stripe"
+    | "calendar"
+    | "apollo"
+    | "hunter"
+    | "linkedin";
   /** Composio action slug, e.g. "GMAIL_SEND_EMAIL". */
   action: string;
   /** Input params for the action. Caller is responsible for shape correctness. */
