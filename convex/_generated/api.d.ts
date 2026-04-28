@@ -43,6 +43,7 @@ import type * as agents_packs_maya_service_standingOrders from "../agents/packs/
 import type * as agents_packs_maya_service_types from "../agents/packs/maya_service/types.js";
 import type * as agents_packs_maya_service_voiceCallConfig from "../agents/packs/maya_service/voiceCallConfig.js";
 import type * as agents_packs_maya_service_wikiInitialPages from "../agents/packs/maya_service/wikiInitialPages.js";
+import type * as agents_packs_riley_growth_generators from "../agents/packs/riley_growth/generators.js";
 import type * as billing_checkout from "../billing/checkout.js";
 import type * as billing_portal from "../billing/portal.js";
 import type * as billing_priceIds from "../billing/priceIds.js";
@@ -59,7 +60,9 @@ import type * as integrations_aggregators_unified_types from "../integrations/ag
 import type * as integrations_composio_actions_calendar from "../integrations/composio/actions/calendar.js";
 import type * as integrations_composio_actions_gmail from "../integrations/composio/actions/gmail.js";
 import type * as integrations_composio_actions_index from "../integrations/composio/actions/index.js";
+import type * as integrations_composio_actions_linkedin from "../integrations/composio/actions/linkedin.js";
 import type * as integrations_composio_actions_stripe from "../integrations/composio/actions/stripe.js";
+import type * as integrations_composio_actions_twitter from "../integrations/composio/actions/twitter.js";
 import type * as integrations_composio_client from "../integrations/composio/client.js";
 import type * as integrations_composio_oauth from "../integrations/composio/oauth.js";
 import type * as integrations_composio_universalRunner from "../integrations/composio/universalRunner.js";
@@ -95,6 +98,7 @@ import type * as integrations_stripe_webhooks from "../integrations/stripe/webho
 import type * as integrations_twilio_client from "../integrations/twilio/client.js";
 import type * as integrations_twilio_configureWebhooks from "../integrations/twilio/configureWebhooks.js";
 import type * as integrations_twilio_provisionNumber from "../integrations/twilio/provisionNumber.js";
+import type * as integrations_unipile_client from "../integrations/unipile/client.js";
 import type * as integrations_videoSynthWorker_client from "../integrations/videoSynthWorker/client.js";
 import type * as integrations_zernio_client from "../integrations/zernio/client.js";
 import type * as integrations_zernio_endpoints from "../integrations/zernio/endpoints.js";
@@ -112,9 +116,8 @@ import type * as mediaAssets_listAssets from "../mediaAssets/listAssets.js";
 import type * as mediaAssets_processCatalogerQueue from "../mediaAssets/processCatalogerQueue.js";
 import type * as onboarding_business_deployServiceMaya from "../onboarding/business/deployServiceMaya.js";
 import type * as onboarding_business_pipeline from "../onboarding/business/pipeline.js";
-import type * as onboarding_growth_pipeline from "../onboarding/growth/pipeline.js";
 import type * as onboarding_growth_deployRiley from "../onboarding/growth/deployRiley.js";
-import type * as agents_packs_riley_growth_generators from "../agents/packs/riley_growth/generators.js";
+import type * as onboarding_growth_pipeline from "../onboarding/growth/pipeline.js";
 import type * as onboarding_maya_deployMaya from "../onboarding/maya/deployMaya.js";
 import type * as onboarding_maya_jobs from "../onboarding/maya/jobs.js";
 import type * as onboarding_maya_synthesizeCreatorPicture from "../onboarding/maya/synthesizeCreatorPicture.js";
@@ -191,6 +194,7 @@ declare const fullApi: ApiFromModules<{
   "agents/packs/maya_service/types": typeof agents_packs_maya_service_types;
   "agents/packs/maya_service/voiceCallConfig": typeof agents_packs_maya_service_voiceCallConfig;
   "agents/packs/maya_service/wikiInitialPages": typeof agents_packs_maya_service_wikiInitialPages;
+  "agents/packs/riley_growth/generators": typeof agents_packs_riley_growth_generators;
   "billing/checkout": typeof billing_checkout;
   "billing/portal": typeof billing_portal;
   "billing/priceIds": typeof billing_priceIds;
@@ -207,7 +211,9 @@ declare const fullApi: ApiFromModules<{
   "integrations/composio/actions/calendar": typeof integrations_composio_actions_calendar;
   "integrations/composio/actions/gmail": typeof integrations_composio_actions_gmail;
   "integrations/composio/actions/index": typeof integrations_composio_actions_index;
+  "integrations/composio/actions/linkedin": typeof integrations_composio_actions_linkedin;
   "integrations/composio/actions/stripe": typeof integrations_composio_actions_stripe;
+  "integrations/composio/actions/twitter": typeof integrations_composio_actions_twitter;
   "integrations/composio/client": typeof integrations_composio_client;
   "integrations/composio/oauth": typeof integrations_composio_oauth;
   "integrations/composio/universalRunner": typeof integrations_composio_universalRunner;
@@ -243,6 +249,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/twilio/client": typeof integrations_twilio_client;
   "integrations/twilio/configureWebhooks": typeof integrations_twilio_configureWebhooks;
   "integrations/twilio/provisionNumber": typeof integrations_twilio_provisionNumber;
+  "integrations/unipile/client": typeof integrations_unipile_client;
   "integrations/videoSynthWorker/client": typeof integrations_videoSynthWorker_client;
   "integrations/zernio/client": typeof integrations_zernio_client;
   "integrations/zernio/endpoints": typeof integrations_zernio_endpoints;
@@ -260,9 +267,8 @@ declare const fullApi: ApiFromModules<{
   "mediaAssets/processCatalogerQueue": typeof mediaAssets_processCatalogerQueue;
   "onboarding/business/deployServiceMaya": typeof onboarding_business_deployServiceMaya;
   "onboarding/business/pipeline": typeof onboarding_business_pipeline;
-  "onboarding/growth/pipeline": typeof onboarding_growth_pipeline;
   "onboarding/growth/deployRiley": typeof onboarding_growth_deployRiley;
-  "agents/packs/riley_growth/generators": typeof agents_packs_riley_growth_generators;
+  "onboarding/growth/pipeline": typeof onboarding_growth_pipeline;
   "onboarding/maya/deployMaya": typeof onboarding_maya_deployMaya;
   "onboarding/maya/jobs": typeof onboarding_maya_jobs;
   "onboarding/maya/synthesizeCreatorPicture": typeof onboarding_maya_synthesizeCreatorPicture;
