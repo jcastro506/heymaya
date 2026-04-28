@@ -57,7 +57,15 @@ import {
   SOUL_MAX_CHARS,
   type ServiceWorkspaceInputs,
 } from "../../agents/packs/maya_service/types";
-import { runOpenclawChannelCommand } from "../../integrations/openclaw/cliClient";
+// NOTE: We deliberately do NOT statically import `runOpenclawChannelCommand`
+// from `../../integrations/openclaw/cliClient`. That module reaches for
+// `child_process` (Node-only); pulling it in at file scope makes
+// `deployServiceMaya.ts` un-loadable in Convex's V8 runtime even though the
+// query/mutation exports here MUST live in V8. The channel-pair step below
+// is a graceful no-op when invoked from Convex (where `openclaw` is not on
+// PATH); pairing actually happens on the per-business Fly machine itself
+// (post-boot, via the bundled OpenClaw daemon) or via the HQ Profile screen
+// flow that talks to the machine directly.
 import { generateMemoryWikiPluginEntries } from "../../agents/packs/maya_service/memoryWikiConfig";
 import { generateVoiceCallPluginEntries } from "../../agents/packs/maya_service/voiceCallConfig";
 import {
@@ -266,6 +274,69 @@ function base64UtfEncode(str: string): string {
   let bin = "";
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
   return btoa(bin);
+}
+
+/**
+ * Build a POSIX USTAR archive from an in-memory file map. Pure-JS, runs in
+ * Convex's V8 isolate — no Node deps. The archive is consumed by the Fly
+ * machine bootstrap shell via `tar -xf`. We use the simplest USTAR layout:
+ * regular files only, no directories (each file's path implies its dir),
+ * default 0644 permissions, owner = root:root, mtime = 0.
+ *
+ * Format reference: POSIX 1003.1-1988 USTAR. Each entry is:
+ *   - 512-byte header (name + size + checksum + typeflag + magic)
+ *   - data padded to a 512-byte multiple
+ * Archive terminates with two empty 512-byte blocks.
+ */
+function buildPosixTar(files: Map<string, string>): Uint8Array {
+  const enc = new TextEncoder();
+  const blocks: Uint8Array[] = [];
+  for (const [name, content] of files) {
+    const data = enc.encode(content);
+    blocks.push(buildTarHeader(name, data.length));
+    blocks.push(data);
+    const pad = (512 - (data.length % 512)) % 512;
+    if (pad > 0) blocks.push(new Uint8Array(pad));
+  }
+  blocks.push(new Uint8Array(1024)); // two terminator blocks
+  let total = 0;
+  for (const b of blocks) total += b.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const b of blocks) {
+    out.set(b, off);
+    off += b.length;
+  }
+  return out;
+}
+
+function buildTarHeader(name: string, size: number): Uint8Array {
+  const buf = new Uint8Array(512);
+  const enc = new TextEncoder();
+  const writeAscii = (s: string, off: number, len: number): void => {
+    const b = enc.encode(s);
+    buf.set(b.subarray(0, Math.min(b.length, len)), off);
+  };
+  // POSIX USTAR caps filename at 100 chars (prefix field allows 155 more,
+  // unused here — workspace filenames are short).
+  if (name.length > 100) {
+    throw new Error(`buildTarHeader: filename too long for USTAR: ${name}`);
+  }
+  writeAscii(name, 0, 100);
+  writeAscii("0000644", 100, 7); // mode 0644
+  writeAscii("0000000", 108, 7); // uid
+  writeAscii("0000000", 116, 7); // gid
+  writeAscii(size.toString(8).padStart(11, "0"), 124, 11); // size (octal)
+  writeAscii("00000000000", 136, 11); // mtime
+  // checksum field: 8 spaces while computing, then octal sum
+  for (let i = 148; i < 156; i++) buf[i] = 0x20;
+  writeAscii("0", 156, 1); // typeflag = regular file
+  writeAscii("ustar", 257, 5);
+  writeAscii("00", 263, 2); // version
+  let sum = 0;
+  for (let i = 0; i < 512; i++) sum += buf[i];
+  writeAscii(sum.toString(8).padStart(6, "0") + "\0 ", 148, 8);
+  return buf;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -535,22 +606,19 @@ export const buildAndUploadWorkspace = internalAction({
       );
     }
 
-    // Build a tar-like blob. v0 ships a JSON manifest the bootstrap script
-    // unpacks; tar generation in V8 is non-trivial so we ship a JSON object
-    // and let the bootstrap script materialize files. The OpenClaw image
-    // ships `jq` so we use it from init.cmd.
-    const manifestJson = JSON.stringify(
-      {
-        version: 1,
-        files: Object.fromEntries(files.entries()),
-      },
-      null,
-      2
-    );
-
-    const bytes = new TextEncoder().encode(manifestJson);
+    // Build a real POSIX USTAR archive. Bootstrap runs `tar -xf` on it.
+    // Pure-JS implementation — Convex action runs in V8, no Node deps.
+    // Robust against multi-line content + special chars in workspace files
+    // (the JSON-manifest predecessor had jq-escaping edge cases).
+    const tarBytes = buildPosixTar(files);
+    // Slice to a fresh ArrayBuffer so the Blob constructor accepts it
+    // under TS's stricter ArrayBuffer-vs-SharedArrayBuffer narrowing.
+    const tarBuffer = tarBytes.buffer.slice(
+      tarBytes.byteOffset,
+      tarBytes.byteOffset + tarBytes.byteLength
+    ) as ArrayBuffer;
     const storage = await ctx.storage.store(
-      new Blob([bytes], { type: "application/json" })
+      new Blob([tarBuffer], { type: "application/x-tar" })
     );
     const workspaceBundleUrl = (await ctx.storage.getUrl(storage)) ?? "";
     if (!workspaceBundleUrl) {
@@ -652,7 +720,11 @@ export const deployServiceMaya = internalAction({
       }
     }
 
-    // Stage: set-secrets.
+    // Build the gateway config + secrets payload. The gateway config is
+    // not actually secret (channel config + model id) and gets passed as
+    // a regular env var on the machine (`MAYA_BOOTSTRAP_JSON`). Real
+    // secrets (API keys) go through `fly.setAppSecrets`.
+    let mayaBootstrapJson: string;
     try {
       // Memory-wiki plugin config (§ 9.5) — bridge mode so memory-core's
       // dream sweep auto-populates wiki pages. Per `feedback_openclaw_native_
@@ -696,24 +768,40 @@ export const deployServiceMaya = internalAction({
         });
       }
 
-      const secrets: Record<string, string> = {
-        MAYA_BOOTSTRAP_JSON: JSON.stringify({
-          businessId: String(args.businessId),
-          flyAppName: bundle.flyAppName,
-          plan: business.planTier ?? "starter",
-          gatewayConfig: {
-            channels: { enabled: ["web", "sms"] },
-            model: { provider: "openrouter", id: "google/gemini-3-flash" },
-            plugins: {
-              entries: {
-                ...memoryWikiEntries,
-                ...voiceCallEntries,
-              },
-            },
-          },
-          workspaceBundleUrl: bundle.workspaceBundleUrl,
-        }),
+      // Gateway config — keep minimal for v0 boot. OpenClaw 2026.4.23 has
+      // a stricter schema than our earlier draft (rejects unknown keys
+      // like top-level `model`). Plugin entries are the legitimate
+      // extension surface; channel/model selection lives in workspace
+      // SOUL.md + skill config, NOT in gateway config.
+      // TODO: once we run `openclaw doctor` against a boot machine to
+      // surface the canonical schema, expand this.
+      const gatewayConfig: Record<string, unknown> = {};
+      const pluginEntries: Record<string, unknown> = {
+        ...memoryWikiEntries,
+        ...voiceCallEntries,
       };
+      if (Object.keys(pluginEntries).length > 0) {
+        gatewayConfig.plugins = { entries: pluginEntries };
+      }
+
+      mayaBootstrapJson = JSON.stringify({
+        businessId: String(args.businessId),
+        flyAppName: bundle.flyAppName,
+        plan: business.planTier ?? "starter",
+        gatewayConfig,
+        workspaceBundleUrl: bundle.workspaceBundleUrl,
+      });
+
+      // Real secrets — API keys + signing keys. Currently a no-op:
+      // `setAppSecrets` hits the machines.dev REST `/apps/{name}/secrets`
+      // endpoint which doesn't actually persist secrets (verified empty
+      // via `flyctl secrets list` 2026-04-27). Fly's canonical secrets
+      // surface is the GraphQL `setSecrets` mutation. Migrating the
+      // FlyClient implementation to GraphQL is parked as a follow-up
+      // wave — boot path doesn't need these (they're consumed at first
+      // OpenRouter call / first Twilio webhook). When the GraphQL fix
+      // lands, secrets propagate to existing machines on next restart.
+      const secrets: Record<string, string> = {};
       for (const k of [
         "OPENROUTER_API_KEY",
         "ZERNIO_PROVISIONING_API_KEY",
@@ -758,6 +846,11 @@ export const deployServiceMaya = internalAction({
             MAYA_WORKSPACE_BUNDLE_URL: bundle.workspaceBundleUrl,
             MAYA_JOBS_JSON_BASE64: bundle.jobsJsonBase64,
             MAYA_APP_NAME: bundle.flyAppName,
+            // Gateway config — channels, model, plugins. NOT actually
+            // secret; passed as a regular env var so the bootstrap shell
+            // can `jq` it out without depending on the (currently broken)
+            // app-secrets path.
+            MAYA_BOOTSTRAP_JSON: mayaBootstrapJson,
           },
           guest: MACHINE_GUEST,
           restart: { policy: "always" },
@@ -808,32 +901,23 @@ export const deployServiceMaya = internalAction({
     // sibling-file scan and surface it on success.
     const cronCount = bundle.cronCount;
 
-    // Stage: pair-channel — best-effort. v0 default is "web" channel which
-    // requires no external pairing; iMessage / WhatsApp / SMS channel pairing
-    // is handled by the existing creator-side `requestPairing` flow that the
-    // operator can invoke from the HQ Profile screen post-deploy.
+    // Stage: pair-channel — intentionally a no-op in v0.
     //
-    // For Studio operators with voiceEnabled, pairing happens out-of-band via
-    // the same OpenClaw CLI surface — not in onboarding deploy.
-    let channelPairOk = true;
-    let channelPairMessage: string | undefined;
-    try {
-      // Smoke-test the OpenClaw CLI surface so we surface pairing-system
-      // failures here instead of silently at first SMS. v0 invokes a no-op
-      // probe via the shared CLI executor.
-      await runOpenclawChannelCommand({
-        command: "memoryRollback",
-        args: ["--agent", bundle.flyAppName, "--probe"],
-      });
-    } catch (err) {
-      channelPairOk = false;
-      channelPairMessage = (err as Error).message;
-      // Non-fatal — channel pairing has graceful retry from the HQ surface.
-    }
-    if (!channelPairOk) {
-      // Continue — but flag in the result for telemetry.
-      void channelPairMessage;
-    }
+    // v0 default is "web" channel, which requires no external pairing.
+    // iMessage / WhatsApp / SMS / voice channel pairing is handled
+    // OUT OF BAND from the onboarding deploy:
+    //   - Per-business Fly machine boots OpenClaw which owns channel
+    //     routing (per `feedback_openclaw_native_first.md`). The
+    //     workspace bundle's `openclaw.json` carries channel config.
+    //   - Operator-driven channel-add (e.g. "pair this iMessage") goes
+    //     through the HQ Profile screen → an action that talks to the
+    //     specific Fly machine, not back through Convex.
+    //
+    // The previous probe call has been removed: it was a smoke test of
+    // the `openclaw` CLI on the Convex runner (which doesn't and won't
+    // have OpenClaw installed — Convex actions run in V8 isolates). The
+    // probe was always failing soft; removing it keeps the deploy
+    // path honest about what runs where.
 
     // Stage: patch-business.
     try {
