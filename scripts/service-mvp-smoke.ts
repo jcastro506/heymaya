@@ -188,37 +188,19 @@ function preflight(flags: Flags): PreflightResult {
     };
   }
 
-  // Live mode — Convex URL + admin key + a businessId to deploy.
+  // Live mode uses `npx convex run` shell-out for internal.* calls — that
+  // route picks up the operator's existing CLI auth from `~/.convex/config.json`
+  // so no `CONVEX_DEPLOY_KEY` is needed. We still surface the convex URL
+  // for log lines.
   const convexUrl =
-    process.env.NEXT_PUBLIC_CONVEX_URL ?? process.env.CONVEX_URL ?? null;
-  if (!convexUrl) {
-    console.error(
-      C.red(
-        "Live mode requires NEXT_PUBLIC_CONVEX_URL (or CONVEX_URL) in env. See .env.local."
-      )
-    );
-    process.exit(1);
-  }
-  const adminKey =
-    process.env.CONVEX_ADMIN_KEY ?? process.env.CONVEX_DEPLOY_KEY ?? null;
-  if (!adminKey) {
-    console.error(
-      C.red(
-        "Live mode requires CONVEX_ADMIN_KEY (or CONVEX_DEPLOY_KEY) so this script can call internal.* actions. Get one from `npx convex dashboard` → Settings → Deploy keys."
-      )
-    );
-    process.exit(1);
-  }
-  // --business-id is now OPTIONAL. If absent, the smoke auto-creates a
-  // fresh fixture business via `internal.smokeFixtures.serviceBusiness.
-  // createServiceFixture` and tears it down on exit. Operators who want
-  // to deploy a specific real business can still pass --business-id; that
-  // path skips fixture creation but still runs auto-teardown of the Fly
-  // app on exit (the `businesses` row is preserved in that case).
+    process.env.NEXT_PUBLIC_CONVEX_URL ?? process.env.CONVEX_URL ?? "(unknown)";
+  // --business-id is OPTIONAL. If absent, the smoke auto-creates a fresh
+  // fixture business via `internal.smokeFixtures.serviceBusiness.
+  // createServiceFixture` and tears it down on exit.
   return {
     fixtureRoot,
     convexUrl,
-    adminKey,
+    adminKey: null,
     businessId: flags.businessId,
   };
 }
@@ -582,29 +564,7 @@ interface DeployServiceMayaResult {
 }
 
 async function runLiveSmoke(pre: PreflightResult): Promise<void> {
-  if (!pre.convexUrl || !pre.adminKey) {
-    fail(
-      "live-preflight",
-      new Error("live mode invariants violated"),
-      "Should be unreachable — preflight should have caught this."
-    );
-  }
-
-  // Lazy import: only pull `convex/browser` when actually running live so
-  // mock-mode + tests never need the runtime client.
-  const { ConvexHttpClient } = await import("convex/browser");
-  const { anyApi } = await import("convex/server");
-
-  const client = new ConvexHttpClient(pre.convexUrl);
-  // setAdminAuth is the documented-internal escape hatch convex-cli uses.
-  // It exists on convex@1.x and is the only way to call internal.* over
-  // HTTP without a Clerk identity. Mirrors the creator-side smoke
-  // (`scripts/mvp-smoke.ts:417`).
-  (client as unknown as { setAdminAuth: (k: string) => void }).setAdminAuth(
-    pre.adminKey
-  );
-
-  pass(`live preflight ok (convex=${shortenUrl(pre.convexUrl)})`);
+  pass(`live preflight ok (convex=${shortenUrl(pre.convexUrl ?? "")})`);
 
   // Step 1 — fixture business. Either the operator passed --business-id
   // pointing at an existing real row, or we auto-create a smoke fixture.
@@ -617,10 +577,11 @@ async function runLiveSmoke(pre: PreflightResult): Promise<void> {
     pass(`reusing operator-supplied business=${businessId}`);
   } else {
     try {
-      const created = (await client.mutation(
-        anyApi.smokeFixtures.serviceBusiness.createServiceFixture,
-        {}
-      )) as { businessId: string; creatorId: string; clerkUserId: string };
+      const created = await convexRun<{
+        businessId: string;
+        creatorId: string;
+        clerkUserId: string;
+      }>("smokeFixtures/serviceBusiness:createServiceFixture", {});
       businessId = created.businessId;
       fixtureCreated = true;
       pass(
@@ -630,26 +591,24 @@ async function runLiveSmoke(pre: PreflightResult): Promise<void> {
       fail(
         "fixture-create",
         err,
-        "Could not call internal.smokeFixtures.serviceBusiness.createServiceFixture. Did you `npx convex dev --once` after the latest commit?"
+        "Could not call smokeFixtures/serviceBusiness:createServiceFixture. Did you `npx convex dev --once` after the latest commit? Is the Convex CLI logged in (~/.convex/config.json)?"
       );
     }
   }
 
-  // Step 2 — call deployServiceMaya. This is the entire end-to-end:
-  //   workspace assembly → bundle upload → Fly app create → secrets →
-  //   machine create → wait-for-state → channel-pair via OpenClaw CLI →
-  //   writeback. Every stage that fails returns
-  //   `{ ok: false, stage, message }` so we can surface the exact gap.
-  // Wrapped in try/finally so teardown always runs.
+  // Step 2 — deploy. Wrapped in try/finally so teardown always runs even
+  // if the deploy throws or returns ok=false.
   let result: DeployServiceMayaResult | null = null;
   let deployError: unknown = null;
   try {
     const t0 = Date.now();
-    result = (await client.action(
-      anyApi.onboarding.business.deployServiceMaya.deployServiceMaya,
+    result = await convexRun<DeployServiceMayaResult>(
+      "onboarding/business/deployServiceMaya:deployServiceMaya",
       { businessId }
-    )) as DeployServiceMayaResult;
-    info(`deployServiceMaya returned in ${(Date.now() - t0) / 1000}s`);
+    );
+    info(
+      `deployServiceMaya returned in ${((Date.now() - t0) / 1000).toFixed(1)}s`
+    );
   } catch (err) {
     deployError = err;
   }
@@ -664,24 +623,22 @@ async function runLiveSmoke(pre: PreflightResult): Promise<void> {
   }
   let teardownReport: TeardownReport | null = null;
   try {
-    teardownReport = (await client.action(
-      anyApi.smokeFixtures.serviceBusiness.destroyServiceFixtureWithFly,
-      {
-        businessId: fixtureCreated ? businessId : undefined,
-        flyAppId: result?.flyAppId,
-      }
-    )) as TeardownReport;
-  } catch (err) {
-    console.error(
-      C.yellow(`! teardown call failed: ${formatError(err)}`)
+    const teardownArgs: Record<string, unknown> = {};
+    if (fixtureCreated) teardownArgs.businessId = businessId;
+    if (result?.flyAppId) teardownArgs.flyAppId = result.flyAppId;
+    teardownReport = await convexRun<TeardownReport>(
+      "smokeFixtures/serviceBusiness:destroyServiceFixtureWithFly",
+      teardownArgs
     );
+  } catch (err) {
+    console.error(C.yellow(`! teardown call failed: ${formatError(err)}`));
   }
 
   if (deployError) {
     fail(
       "deploy-call",
       deployError,
-      "Could not reach Convex. Verify NEXT_PUBLIC_CONVEX_URL + CONVEX_ADMIN_KEY and that `npx convex dev --once` has pushed current functions."
+      "Could not run the deploy via `npx convex run`. Verify Convex CLI is auth'd + functions are pushed."
     );
   }
   if (!result) {
@@ -730,6 +687,69 @@ async function runLiveSmoke(pre: PreflightResult): Promise<void> {
   pass("live smoke complete");
 }
 
+/**
+ * Shell out to `npx convex run <function>` with JSON args + capture the
+ * JSON return value. Uses the operator's CLI auth from
+ * `~/.convex/config.json` so no `CONVEX_DEPLOY_KEY` is needed.
+ *
+ * Throws if the CLI exits non-zero or stdout is not parseable JSON.
+ */
+async function convexRun<T>(
+  functionName: string,
+  args: Record<string, unknown>
+): Promise<T> {
+  const { spawn } = await import("node:child_process");
+  return new Promise<T>((resolve, reject) => {
+    const proc = spawn(
+      "npx",
+      ["convex", "run", functionName, JSON.stringify(args)],
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+    let stdout = "";
+    let stderr = "";
+    proc.stdout.on("data", (d) => {
+      stdout += String(d);
+    });
+    proc.stderr.on("data", (d) => {
+      stderr += String(d);
+    });
+    proc.on("error", reject);
+    proc.on("close", (code) => {
+      if (code !== 0) {
+        reject(
+          new Error(
+            `npx convex run exited code=${code}\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`
+          )
+        );
+        return;
+      }
+      // The CLI prints the JSON-formatted return value as stdout. Strip
+      // any leading info lines (CLI sometimes prefixes a status line).
+      const trimmed = stdout.trim();
+      try {
+        resolve(JSON.parse(trimmed) as T);
+      } catch {
+        // Not pure JSON — find the first '{' or '[' that opens a JSON
+        // value at the start of a line.
+        const m = stdout.match(/(\{[\s\S]*\}|\[[\s\S]*\])\s*$/);
+        if (m) {
+          try {
+            resolve(JSON.parse(m[1]) as T);
+            return;
+          } catch {
+            /* fall through */
+          }
+        }
+        reject(
+          new Error(
+            `npx convex run output was not parseable as JSON:\n--- stdout ---\n${stdout}\n--- stderr ---\n${stderr}`
+          )
+        );
+      }
+    });
+  });
+}
+
 function shortenUrl(u: string): string {
   try {
     const url = new URL(u);
@@ -762,12 +782,13 @@ function printHelp(): void {
       "  --help                  Show this and exit.",
       "",
       "Live-mode env (must be set in .env.local or process env):",
-      "  NEXT_PUBLIC_CONVEX_URL  Convex deployment URL (or CONVEX_URL).",
-      "  CONVEX_ADMIN_KEY        Admin/deploy key (or CONVEX_DEPLOY_KEY) so internal.* actions are callable.",
+      "  NEXT_PUBLIC_CONVEX_URL  Convex deployment URL (or CONVEX_URL). Used for log lines only.",
+      "                          Internal.* calls go via `npx convex run` which uses the",
+      "                          CLI auth at ~/.convex/config.json (no deploy key needed).",
       "",
       "Live-mode preconditions (operator-side, one-time):",
       "  1. npx convex dev --once   # push current schema + functions",
-      "  2. flyctl auth docker && docker push registry.fly.io/heymaya-openclaw:v2026.4.23",
+      "  2. OpenClaw image already published to registry.fly.io/heymaya-openclaw:v2026.4.23",
       "     (see infra/openclaw-runtime/README.md for the full build + push flow)",
       "",
       "Teardown is automatic — Fly app destroyed on exit; auto-created fixture rows swept",
