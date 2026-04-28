@@ -16,15 +16,17 @@ mergeable.
 
 ## What Riley does (priority order — locked v0)
 
-1. **Drafts LinkedIn posts in Josh's voice**, using current Brave-search
-   context for trend awareness. Operator approves the draft via text;
-   first month Josh copy/pastes to LinkedIn manually (hard rule — never
+1. **Drafts LinkedIn + X (Twitter) posts in Josh's voice**, using current
+   Brave-search context for trend awareness. Operator approves the draft
+   via text; first month Josh copy/pastes manually (hard rule — never
    auto-post in week 1; build trust + voice calibration first).
-2. **Builds outreach lists**: searches LinkedIn for profiles matching
+2. **Builds LinkedIn outreach lists**: searches for profiles matching
    criteria ("VPs of Marketing at home-services SaaS, 500+ connections,
    posted in last 30d"), drafts personalized DMs in Josh's voice, presents
-   for approval.
-3. **Tracks waitlist signups** (Convex table) + summarizes weekly: who's
+   for approval. (LinkedIn-only — X DMs are gated + flagged; not in v0.)
+3. **Watches engagement on Josh's posts** (LinkedIn + X): who liked, who
+   commented, what they said. Powers daily summaries + reply suggestions.
+4. **Tracks waitlist signups** (Convex table) + summarizes weekly: who's
    on the list, where they came from, which posts/DMs drove signups.
 
 Nice-to-haves (NOT v0):
@@ -32,6 +34,8 @@ Nice-to-haves (NOT v0):
 - Auto-respond DM drafts in inbox
 - Schedule/publish posts (use Buffer/Late integrations later)
 - Connection requests (account-safety risk; defer)
+- X DMs (gated, flagged)
+- X full-archive search (Enterprise-only historically; expensive PPU)
 
 ## Architecture
 
@@ -39,14 +43,24 @@ Nice-to-haves (NOT v0):
 Josh (text via iMessage)
     ↓
 Riley (OpenClaw on Fly, single agent)
-    ├─ Composio actions (write surface)
+    ├─ Composio actions (write + light read surface)
+    │   LinkedIn:
     │   - LINKEDIN_CREATE_LINKED_IN_POST   (post-publish, when we re-enable)
+    │   - LINKEDIN_CREATE_COMMENT_ON_POST  (operator-approved comments)
     │   - LINKEDIN_GET_SHARE_STATS         (impressions/clicks/likes count)
     │   - LINKEDIN_GET_MY_INFO             (Josh's profile)
     │   - LINKEDIN_LIST_REACTIONS          (who liked a post)
     │   - LINKEDIN_INITIALIZE_IMAGE_UPLOAD (image flow)
-    │   - LINKEDIN_CREATE_COMMENT_ON_POST  (operator-approved comments)
-    ├─ Unipile (read + DM surface — Composio can't do these)
+    │   X / Twitter:
+    │   - TWITTER_CREATE_A_POST            (tweet + reply + quote-tweet)
+    │   - TWITTER_SEARCH_RECENT_TWEETS     (last 7d, trend research)
+    │   - TWITTER_LOOK_UP_POST_BY_ID       (engagement metrics by tweet)
+    │   - TWITTER_LIST_POST_LIKERS         (who liked Josh's tweets)
+    │   - TWITTER_GET_AUTHENTICATED_USER   (Josh's profile)
+    │   - TWITTER_LOOK_UP_USER_BY_USERNAME (research target accounts)
+    │   - TWITTER_LIKE_A_TWEET / TWITTER_RETWEET_POST (operator-approved)
+    │   - TWITTER_GET_USER'S_REVERSE_CHRONOLOGICAL_TIMELINE (home feed)
+    ├─ Unipile (LinkedIn DM + search surface — Composio can't do these)
     │   - profile.search                   (build outreach lists)
     │   - chats.send_message               (DMs after operator approval)
     │   - chats.list / get                 (DM inbox state)
@@ -120,18 +134,29 @@ limits + approval gates keep this safe.
 
 ## Operator-blocked (need to do once)
 
-1. **Create LinkedIn Developer app** at https://developer.linkedin.com →
-   capture client ID + secret. Scopes: `openid profile email
-   w_member_social`. Add `LINKEDIN_CLIENT_ID` + `LINKEDIN_CLIENT_SECRET`
-   to `.env.local` + Convex env.
-2. **Sign up for Unipile** (https://www.unipile.com/) — Pro tier
+1. **Connect LinkedIn through Composio dashboard** — https://app.composio.dev
+   → Apps → LinkedIn → Connect with OAuth. Use Composio's managed OAuth
+   app — no custom LinkedIn dev app needed. Operator confirmed this is
+   the path that worked for LaunchCrew/TradeStart. Capture the resulting
+   `connectedAccountId` for the Convex `connectedAccounts` row.
+2. **Connect X (Twitter) through Composio dashboard** — same flow.
+   Requires a free X developer account at https://developer.x.com so
+   Composio's managed OAuth has somewhere to bill API calls. Pay-per-use
+   pricing as of Apr 20 2026:
+     - owned-reads: $0.001/req
+     - writes: ~$0.010/req
+     - 5 tweets/day + engagement reads ≈ $2-5/mo
+   Top up X dev credits ($10 lasts months at this volume).
+3. **Sign up for Unipile** (https://www.unipile.com/) — Pro tier
    $59-99/mo. Create a LinkedIn-account "session" through their dashboard.
-   Capture `UNIPILE_API_KEY` + `UNIPILE_DSN` to `.env.local` + Convex.
-3. **Decide LinkedIn premium**: Unipile DMs may require LinkedIn Sales
+   Capture `UNIPILE_API_KEY` + `UNIPILE_DSN` + `UNIPILE_LINKEDIN_ACCOUNT_ID`
+   to `.env.local` + Convex env.
+4. **Decide LinkedIn premium**: Unipile DMs may require LinkedIn Sales
    Navigator on Josh's account ($99/mo). Test without first; upgrade if
-   blocked.
-4. **Choose LinkedIn voice samples** — paste 5-10 of Josh's existing
-   posts into Riley's onboarding. Riley fits her voice to those.
+   profile-search returns thin results.
+5. **Choose voice samples** — paste 5-10 of Josh's best posts from BOTH
+   LinkedIn (longer, professional) and X (punchier, conversational) into
+   Riley's onboarding. Riley fits her voice per-platform.
 
 ## Build order (waves)
 

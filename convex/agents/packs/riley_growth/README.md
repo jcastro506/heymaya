@@ -31,9 +31,9 @@ in-tree reminder of where to look + what's here.
 
 ## What's NOT in this pack folder
 
-- Composio LinkedIn action wrappers — those live at
-  `convex/integrations/composio/actions/linkedin.ts` (already there)
-- Unipile client — `convex/integrations/unipile/client.ts` (already there)
+- Composio LinkedIn action wrappers — `convex/integrations/composio/actions/linkedin.ts`
+- Composio X (Twitter) action wrappers — `convex/integrations/composio/actions/twitter.ts`
+- Unipile client (LinkedIn DMs / search) — `convex/integrations/unipile/client.ts`
 - Brave Search tool — uses existing `BRAVE_API_KEY` env, lives at the
   workspace skill layer (`agents/skills/riley-brave-search/` when added)
 - Convex tables for waitlist / posts / outreach — additive in
@@ -63,10 +63,11 @@ turn. Not generated as `jobs.json` (that was the wrong architecture).
 
 | Time | Action | Skill | Tier |
 |---|---|---|---|
-| Mon-Fri 8:30am ET | Brave-research today's HVAC/SaaS founder discourse + draft 1 LinkedIn post | `riley-post-drafter` | always |
-| Mon/Wed/Fri 10am ET | Find 5 net-new outreach targets matching ICP + draft DMs (operator approves before send) | `riley-outreach` | always |
-| Daily 7pm ET | Pull engagement on yesterday's published posts via `LINKEDIN_GET_SHARE_STATS` + `unipile.listPostComments` | `riley-engagement-watch` | always |
-| Sun 9am ET | Weekly summary: what was published, what engaged, what came in via DM, waitlist signups + provenance | `riley-weekly-recap` | always |
+| Mon-Fri 8:30am ET | Brave-research today's HVAC/SaaS founder discourse + draft 1 LinkedIn post + 2-3 X tweets | `riley-post-drafter` | always |
+| Mon/Wed/Fri 10am ET | Find 5 net-new LinkedIn outreach targets matching ICP + draft DMs (operator approves before send) | `riley-outreach` | always |
+| Daily 12pm ET | X home-feed scan: identify 3-5 conversations Josh should jump in on; draft replies | `riley-x-engagement` | always |
+| Daily 7pm ET | Pull engagement on today's published posts: LinkedIn via `LINKEDIN_GET_SHARE_STATS` + Unipile commenter text; X via `TWITTER_LOOK_UP_POST_BY_ID` + `TWITTER_LIST_POST_LIKERS` | `riley-engagement-watch` | always |
+| Sun 9am ET | Weekly summary: what was published per platform, what engaged, what came in via DM, waitlist signups + provenance | `riley-weekly-recap` | always |
 | Daily 3am ET | Dreaming state — promote learnings to memory-wiki, adjust crons if needed | (built-in) | always |
 
 Riley refines this list herself based on Josh's preferences. If Josh

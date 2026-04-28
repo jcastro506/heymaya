@@ -14,9 +14,19 @@ import * as gmailActions from "./gmail";
 import * as stripeActions from "./stripe";
 import * as calendarActions from "./calendar";
 import * as linkedinActions from "./linkedin";
+import * as twitterActions from "./twitter";
 
-export { gmailActions, stripeActions, calendarActions, linkedinActions };
+export {
+  gmailActions,
+  stripeActions,
+  calendarActions,
+  linkedinActions,
+  twitterActions,
+};
 export * from "./gmail";
 export * from "./stripe";
 export * from "./calendar";
 export * from "./linkedin";
+// Twitter exports use namespace-only to avoid name collisions with linkedin
+// (both have `createPost`, `getMyInfo`, `CreatePostParams`, etc.). Import
+// via `twitterActions.createPost(...)` rather than the bare name.

@@ -62,7 +62,8 @@ export interface RunActionOptions<TResponse> {
     | "calendar"
     | "apollo"
     | "hunter"
-    | "linkedin";
+    | "linkedin"
+    | "twitter";
   /** Composio action slug, e.g. "GMAIL_SEND_EMAIL". */
   action: string;
   /** Input params for the action. Caller is responsible for shape correctness. */
