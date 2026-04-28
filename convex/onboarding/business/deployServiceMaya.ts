@@ -826,7 +826,11 @@ export const deployServiceMaya = internalAction({
       );
     }
 
-    // Stage: create-machine.
+    // Stage: create-machine. Idempotent — if a machine with this name
+    // already exists (from a prior partial deploy), reuse it instead of
+    // 409-ing. The new env / config gets picked up on next restart;
+    // workspace bundle URLs are signed + ~1h-valid which covers most
+    // re-run windows.
     let machine;
     try {
       machine = await fly.createMachine({
@@ -846,10 +850,11 @@ export const deployServiceMaya = internalAction({
             MAYA_WORKSPACE_BUNDLE_URL: bundle.workspaceBundleUrl,
             MAYA_JOBS_JSON_BASE64: bundle.jobsJsonBase64,
             MAYA_APP_NAME: bundle.flyAppName,
-            // Gateway config — channels, model, plugins. NOT actually
-            // secret; passed as a regular env var so the bootstrap shell
-            // can `jq` it out without depending on the (currently broken)
-            // app-secrets path.
+            // Gateway config — channels, plugins. NOT actually secret;
+            // passed as a regular env var so the bootstrap shell can
+            // `jq` it out. Real secrets (API keys) flow through
+            // `fly.setAppSecrets` (GraphQL mutation, persisted at app
+            // level, propagated to machines on creation).
             MAYA_BOOTSTRAP_JSON: mayaBootstrapJson,
           },
           guest: MACHINE_GUEST,
@@ -865,12 +870,29 @@ export const deployServiceMaya = internalAction({
         },
       });
     } catch (err) {
-      return failure(
-        "create-machine",
-        (err as Error).message,
-        isRetryable(err),
-        startedAt
-      );
+      // If the machine already exists (409 unique name violation), find
+      // and reuse it. Re-runs against the same fixture should succeed.
+      if (isAlreadyExists(err)) {
+        const existing = await fly.listMachines(bundle.flyAppName);
+        const reuse = existing.find((m) => m.name === bundle.flyAppName);
+        if (reuse) {
+          machine = reuse;
+        } else {
+          return failure(
+            "create-machine",
+            `409 unique-name violation but no machine named ${bundle.flyAppName} found in app`,
+            false,
+            startedAt
+          );
+        }
+      } else {
+        return failure(
+          "create-machine",
+          (err as Error).message,
+          isRetryable(err),
+          startedAt
+        );
+      }
     }
 
     // Stage: wait-for-state.

@@ -150,20 +150,75 @@ export class FlyClient {
   }
 
   /* ---------------------------- Secrets --------------------------------- */
-  // Note: secrets on machines.dev are scoped to the app, not the machine.
-  // Fly's GraphQL API has the most ergonomic secret-set surface, but the REST
-  // /apps/{name}/secrets endpoint exists and is what we use here for v0.
+  // Fly secrets are app-scoped. The machines.dev REST `/apps/{name}/secrets`
+  // path returns 200 but does NOT actually persist (verified empty via
+  // `flyctl secrets list` 2026-04-27). The CANONICAL surface is the GraphQL
+  // mutation `setSecrets` at `https://api.fly.io/graphql`. We use that.
+  //
+  // Behavior: secrets persist immediately + propagate to NEW machines on
+  // creation. Existing machines need a restart to pick up new secret values
+  // (Fly's `setSecrets` mutation can stage a release that bounces them; we
+  // skip that for v0 since deploys create fresh machines anyway).
 
   async setAppSecrets(
     appName: string,
     secrets: Record<string, string>
   ): Promise<void> {
-    const body = { secrets };
-    await this.fetchJson(
-      "POST",
-      `/apps/${encodeURIComponent(appName)}/secrets`,
-      body
-    );
+    if (Object.keys(secrets).length === 0) return;
+    const graphqlEndpoint = "https://api.fly.io/graphql";
+    const mutation = `
+      mutation SetSecrets($input: SetSecretsInput!) {
+        setSecrets(input: $input) {
+          release { id version }
+        }
+      }
+    `;
+    const variables = {
+      input: {
+        appId: appName,
+        secrets: Object.entries(secrets).map(([key, value]) => ({
+          key,
+          value,
+        })),
+      },
+    };
+    const res = await this.fetchImpl(graphqlEndpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${this.apiToken}`,
+      },
+      body: JSON.stringify({ query: mutation, variables }),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new FlyError(
+        `Fly GraphQL setSecrets HTTP ${res.status}: ${text}`,
+        res.status,
+        text,
+        res.status >= 500 || res.status === 429
+      );
+    }
+    let parsed: { data?: unknown; errors?: Array<{ message: string }> };
+    try {
+      parsed = JSON.parse(text) as typeof parsed;
+    } catch {
+      throw new FlyError(
+        `Fly GraphQL setSecrets: response not JSON: ${text}`,
+        res.status,
+        text,
+        false
+      );
+    }
+    if (parsed.errors && parsed.errors.length > 0) {
+      const msg = parsed.errors.map((e) => e.message).join("; ");
+      throw new FlyError(
+        `Fly GraphQL setSecrets returned errors: ${msg}`,
+        res.status,
+        text,
+        false
+      );
+    }
   }
 
   /* --------------------------- Machine lifecycle ------------------------- */
