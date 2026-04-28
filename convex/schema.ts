@@ -2032,7 +2032,27 @@ export default defineSchema({
   // separate by_service_job index for CRM-linkage lookups).
   mediaAssets: defineTable({
     businessId: v.id("businesses"),
-    storageUrl: v.string(),
+    /**
+     * Convex storage id (preferred backend in v0). Production paths populate
+     * this on ingest via `ctx.storage.store()`. Fetch a URL on demand via
+     * `ctx.storage.getUrl(storageId)` — returns a ~1h-valid URL the cataloger
+     * (Gemini Files API) can fetch.
+     *
+     * R2 migration path (parked at `convex/integrations/r2/`): when egress
+     * overage on Convex Pro exceeds ~$50/mo (around 200-300 ops scale), swap
+     * the ingest layer to upload to R2 instead and populate `storageUrl`
+     * with the R2 URL. The schema retains both fields so the migration is
+     * a backend swap, not a schema change.
+     */
+    storageId: v.optional(v.id("_storage")),
+    /**
+     * Legacy R2 URL slot — populated only if a future R2 migration writes
+     * here. v0 production paths leave this empty and use `storageId`. Tests
+     * may pre-populate this directly to skip the storage round-trip.
+     * At least one of `storageId` or `storageUrl` is always present (enforced
+     * at the ingest mutation layer).
+     */
+    storageUrl: v.optional(v.string()),
     storageBytes: v.number(),
     mimeType: v.string(),
     source: v.union(

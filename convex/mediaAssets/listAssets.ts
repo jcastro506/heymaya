@@ -26,6 +26,25 @@ import { v } from "convex/values";
 import { internalQuery, mutation, query } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
+/**
+ * Resolve a mediaAssets row to a fetchable URL. Production v0 paths
+ * populate `storageId` (Convex built-in storage) — `ctx.storage.getUrl`
+ * returns a short-lived signed URL. Legacy/test rows pre-populate
+ * `storageUrl`; we fall back to that. If neither is set the row is
+ * malformed (write-side guard prevents this) — return empty string so
+ * the UI degrades to a broken-image placeholder rather than throwing.
+ */
+export async function resolveAssetUrl(
+  ctx: { storage: { getUrl: (id: Id<"_storage">) => Promise<string | null> } },
+  row: Pick<Doc<"mediaAssets">, "storageId" | "storageUrl">
+): Promise<string> {
+  if (row.storageId) {
+    const url = await ctx.storage.getUrl(row.storageId);
+    if (url) return url;
+  }
+  return row.storageUrl ?? "";
+}
+
 /* -------------------------------------------------------------------------- */
 /* listAssets                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -127,20 +146,22 @@ export const listAssets = query({
         : null;
 
     return {
-      rows: sliced.map((r) => ({
-        _id: r._id,
-        storageUrl: r.storageUrl,
-        storageBytes: r.storageBytes,
-        mimeType: r.mimeType,
-        source: r.source,
-        receivedAt: r.receivedAt,
-        serviceJobId: r.serviceJobId,
-        serviceCustomerId: r.serviceCustomerId,
-        catalog: r.catalog,
-        usageHistory: r.usageHistory,
-        archivedAt: r.archivedAt,
-        contentHash: r.contentHash,
-      })),
+      rows: await Promise.all(
+        sliced.map(async (r) => ({
+          _id: r._id,
+          storageUrl: await resolveAssetUrl(ctx, r),
+          storageBytes: r.storageBytes,
+          mimeType: r.mimeType,
+          source: r.source,
+          receivedAt: r.receivedAt,
+          serviceJobId: r.serviceJobId,
+          serviceCustomerId: r.serviceCustomerId,
+          catalog: r.catalog,
+          usageHistory: r.usageHistory,
+          archivedAt: r.archivedAt,
+          contentHash: r.contentHash,
+        }))
+      ),
       nextCursorMs,
     };
   },
@@ -202,20 +223,22 @@ export const listAssetsInternal = internalQuery({
         : null;
 
     return {
-      rows: sliced.map((r) => ({
-        _id: r._id,
-        storageUrl: r.storageUrl,
-        storageBytes: r.storageBytes,
-        mimeType: r.mimeType,
-        source: r.source,
-        receivedAt: r.receivedAt,
-        serviceJobId: r.serviceJobId,
-        serviceCustomerId: r.serviceCustomerId,
-        catalog: r.catalog,
-        usageHistory: r.usageHistory,
-        archivedAt: r.archivedAt,
-        contentHash: r.contentHash,
-      })),
+      rows: await Promise.all(
+        sliced.map(async (r) => ({
+          _id: r._id,
+          storageUrl: await resolveAssetUrl(ctx, r),
+          storageBytes: r.storageBytes,
+          mimeType: r.mimeType,
+          source: r.source,
+          receivedAt: r.receivedAt,
+          serviceJobId: r.serviceJobId,
+          serviceCustomerId: r.serviceCustomerId,
+          catalog: r.catalog,
+          usageHistory: r.usageHistory,
+          archivedAt: r.archivedAt,
+          contentHash: r.contentHash,
+        }))
+      ),
       nextCursorMs,
     };
   },
@@ -250,7 +273,7 @@ export const getAsset = query({
     if (row.businessId !== args.businessId) return null;
     return {
       _id: row._id,
-      storageUrl: row.storageUrl,
+      storageUrl: await resolveAssetUrl(ctx, row),
       storageBytes: row.storageBytes,
       mimeType: row.mimeType,
       source: row.source,

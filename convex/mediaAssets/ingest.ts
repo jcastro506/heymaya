@@ -7,11 +7,11 @@
  *     to hold whether the photo arrives via web upload, OpenClaw native
  *     iMessage, future BlueBubbles bridge, CRM photo import, or an
  *     operator paste-into-chat. This module is the single write surface
- *     all channels funnel through after they've put bytes in R2.
+ *     all channels funnel through after they've stored bytes.
  *   - Hash-dedupe scoped per-businessId lives here. Channel-specific
- *     bridges call `ingestAsset` AFTER uploading to R2 (or after computing
+ *     bridges call `ingestAsset` AFTER storing bytes (or after computing
  *     the hash and finding nothing in `findByContentHash`, in which case
- *     they can short-circuit the R2 upload entirely).
+ *     they can short-circuit the storage write entirely).
  *
  * The flow:
  *   1. Channel layer receives bytes + sniffs mime.
@@ -19,9 +19,14 @@
  *      to dedupe-check.
  *   3. If found: channel layer reuses the existing row + still optionally
  *      enqueues cataloger (no-op if cataloged).
- *   4. If not found: channel layer uploads to R2 (via
- *      `convex/integrations/r2/endpoints.uploadAsset`) and calls
- *      `ingestAsset` to insert the row + enqueue cataloger.
+ *   4. If not found: channel layer stores bytes via `ctx.storage.store(blob)`
+ *      and calls `ingestAsset` with the returned `storageId` to insert the
+ *      row + enqueue cataloger.
+ *
+ * Storage backend (v0): Convex built-in storage (`ctx.storage.*`). R2 was
+ * the original target — its integration code stays parked at
+ * `convex/integrations/r2/` for the post-beta migration when egress
+ * overage on Convex Pro exceeds ~$50/mo (around 200-300 ops scale).
  *
  * Cross-tenant: `businessId` flows from authenticated context only. The
  * dedupe index is `by_business_and_content_hash` — same hash from a
@@ -85,15 +90,19 @@ export const findByContentHash = internalQuery({
  * (Library tab renders an "Uncataloged (queued)" badge while the
  * processor catches up).
  *
- * The R2 upload happens BEFORE this mutation runs — Convex mutations are
- * deterministic + cannot make HTTP calls, so the channel layer (an action)
- * is responsible for the R2 round-trip and passes us the resulting
- * storageUrl + storageBytes + mimeType + contentHash.
+ * The byte-store happens BEFORE this mutation runs — Convex mutations are
+ * deterministic + cannot make HTTP calls or call `ctx.storage.store()`,
+ * so the channel layer (an action) is responsible for the storage write
+ * and passes us the resulting storageId (v0 Convex backend) and/or
+ * storageUrl (legacy/test or future R2) + storageBytes + mimeType +
+ * contentHash. At least one of `storageId` or `storageUrl` must be
+ * provided; v0 production paths pass `storageId`.
  */
 export const ingestAsset = internalMutation({
   args: {
     businessId: v.id("businesses"),
-    storageUrl: v.string(),
+    storageId: v.optional(v.id("_storage")),
+    storageUrl: v.optional(v.string()),
     storageBytes: v.number(),
     mimeType: v.string(),
     contentHash: v.string(),
@@ -142,10 +151,17 @@ export const ingestAsset = internalMutation({
       };
     }
 
+    if (!args.storageId && !args.storageUrl) {
+      throw new Error(
+        "ingestAsset requires at least one of storageId or storageUrl"
+      );
+    }
+
     const mediaAssetId: Id<"mediaAssets"> = await ctx.db.insert(
       "mediaAssets",
       {
         businessId: args.businessId,
+        storageId: args.storageId,
         storageUrl: args.storageUrl,
         storageBytes: args.storageBytes,
         mimeType: args.mimeType,

@@ -139,7 +139,7 @@ export function generateAgents(inputs: AgentsInputs): string {
   sections.push("## Inbound multi-media handling");
   sections.push("");
   sections.push(
-    "When the operator sends multiple media items in a 60-second window (debounced via the R2 attachment bridge, § 3 stack), I do NOT silently catalog and move on. I ask, in plain language:"
+    "When the operator sends multiple media items in a 60-second window (debounced via the attachment bridge, § 3 stack), I do NOT silently catalog and move on. I ask, in plain language:"
   );
   sections.push("");
   sections.push(

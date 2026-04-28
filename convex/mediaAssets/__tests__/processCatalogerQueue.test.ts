@@ -23,7 +23,7 @@
  *     short-circuits.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
@@ -32,7 +32,6 @@ import type { Id } from "../../_generated/dataModel";
 import {
   _setCatalogerSkillForTests,
 } from "../processCatalogerQueue";
-import { _setR2ClientForTests } from "../../integrations/r2/client";
 import type {
   AssetCatalogerInputs,
   AssetCatalogerOutput,
@@ -87,24 +86,12 @@ async function ingest(
   return { mediaAssetId: r.mediaAssetId, queueRowId: r.queueRowId };
 }
 
-function makeR2Stub(): void {
-  // The processor calls `getSignedUrl` to build a short-lived URL for the
-  // skill. Inject a stub so tests don't need real R2 credentials.
-  _setR2ClientForTests({
-    async putObject() {
-      throw new Error("not used in queue tests");
-    },
-    async getSignedDownloadUrl(input) {
-      return `https://test.r2/signed/${input.key}?exp=${input.expiresInSec}`;
-    },
-    async deleteObject() {
-      // not used
-    },
-    getBucketName() {
-      return "test-bucket";
-    },
-  });
-}
+// R2 stub removed 2026-04-27 — v0 uses Convex built-in storage. The
+// processor calls `ctx.storage.getUrl(asset.storageId)` directly; tests
+// either rely on the legacy `storageUrl` fallback path (set by the
+// `ingest()` helper above) OR seed a real Convex storage blob and use
+// its storageId. The fallback path is fine for cataloger-queue tests
+// which only need a string URL to pass to the injected cataloger stub.
 
 function buildSuccessOutput(
   businessId: string,
@@ -131,13 +118,8 @@ function fixedHash(seed: string): string {
   return base.repeat(8); // 64 chars
 }
 
-beforeEach(() => {
-  makeR2Stub();
-});
-
 afterEach(() => {
   _setCatalogerSkillForTests(null);
-  _setR2ClientForTests(null);
 });
 
 /* -------------------------------------------------------------------------- */
@@ -167,7 +149,10 @@ describe("processCatalogerQueueForBusiness — happy path", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].businessId).toBe(businessId);
     expect(calls[0].mimeType).toBe("image/jpeg");
-    expect(calls[0].assetUrl).toContain("signed");
+    // Cataloger receives a fetchable URL — Convex storage URL in production
+    // (short-lived, signed automatically), legacy `storageUrl` fallback in
+    // tests that pre-populate the field via `ingest()`.
+    expect(calls[0].assetUrl).toMatch(/^https?:\/\//);
 
     const asset = await t.run((ctx) => ctx.db.get(mediaAssetId));
     expect(asset!.catalog.primarySubject).toBe("completed kitchen renovation");

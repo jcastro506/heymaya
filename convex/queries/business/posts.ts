@@ -28,6 +28,7 @@ import { v } from "convex/values";
 import { query } from "../../_generated/server";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { getCurrentBusinessSession } from "./_session";
+import { resolveAssetUrl } from "../../mediaAssets/listAssets";
 import { planFeaturesService } from "../../planService";
 
 const POST_STATUS = v.union(
@@ -194,20 +195,22 @@ export const listAssets = query({
     });
 
     return {
-      rows: filtered.slice(0, limit).map((r) => ({
-        _id: r._id,
-        storageUrl: r.storageUrl,
-        storageBytes: r.storageBytes,
-        mimeType: r.mimeType,
-        source: r.source,
-        receivedAt: r.receivedAt,
-        serviceJobId: r.serviceJobId,
-        serviceCustomerId: r.serviceCustomerId,
-        catalog: r.catalog,
-        usageHistory: r.usageHistory,
-        archivedAt: r.archivedAt,
-        contentHash: r.contentHash,
-      })),
+      rows: await Promise.all(
+        filtered.slice(0, limit).map(async (r) => ({
+          _id: r._id,
+          storageUrl: await resolveAssetUrl(ctx, r),
+          storageBytes: r.storageBytes,
+          mimeType: r.mimeType,
+          source: r.source,
+          receivedAt: r.receivedAt,
+          serviceJobId: r.serviceJobId,
+          serviceCustomerId: r.serviceCustomerId,
+          catalog: r.catalog,
+          usageHistory: r.usageHistory,
+          archivedAt: r.archivedAt,
+          contentHash: r.contentHash,
+        }))
+      ),
       canSeeRejuvenator: features.contentRejuvenation,
     };
   },
@@ -247,20 +250,22 @@ export const getRejuvenatorPicks = query({
       return true;
     });
 
-    return picks.slice(0, limit).map((r) => ({
-      _id: r._id,
-      storageUrl: r.storageUrl,
-      storageBytes: r.storageBytes,
-      mimeType: r.mimeType,
-      source: r.source,
-      receivedAt: r.receivedAt,
-      serviceJobId: r.serviceJobId,
-      serviceCustomerId: r.serviceCustomerId,
-      catalog: r.catalog,
-      usageHistory: r.usageHistory,
-      archivedAt: r.archivedAt,
-      contentHash: r.contentHash,
-    }));
+    return Promise.all(
+      picks.slice(0, limit).map(async (r) => ({
+        _id: r._id,
+        storageUrl: await resolveAssetUrl(ctx, r),
+        storageBytes: r.storageBytes,
+        mimeType: r.mimeType,
+        source: r.source,
+        receivedAt: r.receivedAt,
+        serviceJobId: r.serviceJobId,
+        serviceCustomerId: r.serviceCustomerId,
+        catalog: r.catalog,
+        usageHistory: r.usageHistory,
+        archivedAt: r.archivedAt,
+        contentHash: r.contentHash,
+      }))
+    );
   },
 });
 

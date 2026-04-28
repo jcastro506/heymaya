@@ -93,7 +93,11 @@ async function catalogAsset(
   if (__injectedCataloger) return await __injectedCataloger(inputs);
   return await productionCatalogAsset(inputs, productionVisionCaller);
 }
-import { getSignedUrl } from "../integrations/r2/endpoints";
+// Storage backend for v0: Convex built-in storage (`ctx.storage.getUrl`).
+// R2 integration code stays parked at `convex/integrations/r2/` for the
+// post-beta migration when egress overage on Convex Pro exceeds ~$50/mo.
+// See `docs/spikes/zernio-capability-audit.md` (storage section) for the
+// economics math and migration trigger.
 import { planFeaturesService } from "../planService";
 
 /** Max attempts before giving up + retaining placeholder catalog. */
@@ -310,6 +314,7 @@ export const getMediaAssetForCatalog = internalQuery({
     if (!row) return null;
     return {
       businessId: row.businessId,
+      storageId: row.storageId,
       storageUrl: row.storageUrl,
       mimeType: row.mimeType,
       serviceJobId: row.serviceJobId,
@@ -424,15 +429,27 @@ export const processCatalogerQueueForBusiness = internalAction({
         continue;
       }
 
-      // Build a short-lived signed URL so the cataloger never sees the raw
-      // R2 storage URL (which is private). The cataloger Gemini call uses
-      // this URL via the Files API.
+      // Build a fetchable URL for the cataloger (Gemini Files API).
+      // Convex storage URLs are short-lived (~1h) and signed automatically;
+      // we don't roll our own presign. If the asset doesn't have a
+      // `storageId` (legacy/test rows seeded directly via raw `storageUrl`),
+      // we fall back to that. Production v0 always populates `storageId`.
       let signedUrl: string;
       try {
-        signedUrl = await getSignedUrl({
-          storageKey: extractKeyFromStorageUrl(asset.storageUrl),
-          expiresInSec: 5 * 60,
-        });
+        if (asset.storageId) {
+          const url = await ctx.storage.getUrl(asset.storageId);
+          if (!url) {
+            throw new Error(
+              `ctx.storage.getUrl returned null for storageId=${asset.storageId}`
+            );
+          }
+          signedUrl = url;
+        } else if (asset.storageUrl) {
+          // Legacy / test path — pre-populated URL.
+          signedUrl = asset.storageUrl;
+        } else {
+          throw new Error("asset has neither storageId nor storageUrl");
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         const nextAttempts = row.attemptCount + 1;
@@ -440,7 +457,7 @@ export const processCatalogerQueueForBusiness = internalAction({
           internal.mediaAssets.processCatalogerQueue.markAttemptFailed,
           {
             queueRowId: row._id,
-            error: `presign failed: ${msg}`,
+            error: `storage url fetch failed: ${msg}`,
             terminal: nextAttempts >= MAX_ATTEMPTS,
           }
         );
@@ -542,20 +559,10 @@ function getInjectedGeminiClient(): unknown {
 /* Helpers                                                                     */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Pull the bucket-key portion off a storageUrl. The R2 client builds URLs
- * as `https://{bucket}.{host}/{key}`; we recover the key by stripping
- * `https://{bucket}.{host}/`. If the URL is malformed we throw — the
- * cataloger queue treats this as a retryable error.
- */
-function extractKeyFromStorageUrl(storageUrl: string): string {
-  try {
-    const u = new URL(storageUrl);
-    return u.pathname.replace(/^\/+/, "");
-  } catch {
-    throw new Error(`malformed storageUrl: ${storageUrl}`);
-  }
-}
+// extractKeyFromStorageUrl removed 2026-04-27 — no longer needed once we
+// switched the v0 storage backend from R2 to Convex's built-in storage.
+// The R2-flavored helper would return when/if a future migration switches
+// the backend. Until then, `ctx.storage.getUrl(storageId)` handles signing.
 
 function numericToVisualQuality(
   v: number

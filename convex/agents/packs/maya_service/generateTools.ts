@@ -200,10 +200,10 @@ const TOOL_REGISTRY: ReadonlyArray<ToolEntry> = [
   },
   // Media bridge.
   {
-    name: "media.r2.upload",
+    name: "media.upload",
     surface: "media",
     description:
-      "R2 attachment bridge — operator-sent photos/videos via iMessage/WhatsApp/SMS-MMS land here. Maya consumes public URLs only (sidesteps SSRF guards per R3 § 2).",
+      "Attachment bridge — operator-sent photos/videos via iMessage/WhatsApp/SMS-MMS land here. Stored in Convex's built-in storage (v0); short-lived signed URLs returned via `ctx.storage.getUrl`. Maya consumes the URL only (sidesteps SSRF guards per R3 § 2).",
     tiers: ["starter", "pro", "studio"],
   },
   {
