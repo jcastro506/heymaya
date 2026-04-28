@@ -14,14 +14,16 @@
 
 ---
 
-## TL;DR — two additions to the v0 baseline
+## TL;DR — one addition to the v0 baseline
 
 | Skill | Source | Purpose | Custom skill it supports |
 |---|---|---|---|
-| **`uday390/deepread-ocr`** | ClawHub | OCR (receipts, invoices, forms) → structured JSON | `maya-service-asset-cataloger` for receipts in operator photos |
-| **NemoVideo / CapCut family** (`vcarolxhberger/free-video-generator-capcut` or `nemovideo/nemovideo_skills`) | ClawHub | Cloud video composition | `maya-service-clip-composer` (already locked, awaiting deploy-manifest entry) |
+| **NemoVideo / CapCut family** (`vcarolxhberger/free-video-generator-capcut` or `nemovideo/nemovideo_skills`) | ClawHub | Cloud video composition | `maya-service-clip-composer` (already locked) |
 
-**`pptx` and `xlsx` (Anthropic public) — initially proposed, REJECTED 2026-04-27 same day.** Per operator UX rule (`memory/feedback_basic_ui_for_home_service.md`): home service operators (plumbers, HVAC, electricians) want plain numbers + Maya's reasoning, not slide decks or spreadsheet exports. Sparkline is the visual ceiling. The `maya-service-packet-generator` "quarterly report" framing should itself be re-examined for fit with this audience — likely a plain text summary delivered via iMessage is the right surface, not a PDF/PPTX deliverable. Defer that conversation; for now, no `pptx` / `xlsx` in v0 baseline.
+**Skills initially proposed and rejected this session:**
+
+- **`uday390/deepread-ocr` (REJECTED 2026-04-27).** Recommended in the first pass for asset-cataloger receipt/invoice OCR. Operator's gut flagged "seems sketchy"; verification turned up an unfunded 9-year-old single-team product at deepread.tech (the SKILL.md author wrote `deepread.ai` — minor sketch flag itself). No funding, no review signal, multiple unrelated "DeepRead" branded products in the space. Replaced by **Gemini multimodal via OpenRouter** for any OCR need — we already pay for it, no new vendor surface, no operator data flowing to a thinly-resourced shop. Cost difference is negligible at v0 scale (most operator photos are job-site visuals, not receipts).
+- **Anthropic `pptx` and `xlsx` (REJECTED 2026-04-27).** Per operator UX rule (`memory/feedback_basic_ui_for_home_service.md`): home service operators (plumbers, HVAC, electricians) want plain numbers + Maya's reasoning, not slide decks or spreadsheet exports. Sparkline is the visual ceiling. The `maya-service-packet-generator` "quarterly report" framing should itself be re-examined for fit with this audience — likely a plain text summary delivered via iMessage is the right surface, not a PDF/PPTX deliverable. Defer that conversation; for now, no `pptx` / `xlsx` in v0 baseline.
 
 ---
 
@@ -37,9 +39,8 @@ Already locked in `project_skill_strategy.md`:
 
 No additions. `pptx` and `xlsx` were considered and rejected — see "Basic UI" rule in `feedback_basic_ui_for_home_service.md`.
 
-### ClawHub install-on-deploy (2)
+### ClawHub install-on-deploy (1)
 
-- `uday390/deepread-ocr` v(latest, pin TBD) — receipt/invoice OCR, 97%+ accuracy, free tier 2000 pages/month, async cloud, `DEEPREAD_API_KEY` env var. Supports JPG/PNG/PDF up to 50MB. Output: structured JSON + per-field confidence scores + human-review flags.
 - `vcarolxhberger/free-video-generator-capcut` v(latest, pin TBD) OR `nemovideo/nemovideo_skills` first-party — cloud video composition, 1080p MP4 output, free anonymous tier 100 credits / 7d, register for more.
 
 ### Custom Maya-service skills (18, all already shipped)
@@ -49,7 +50,7 @@ No additions. `pptx` and `xlsx` were considered and rejected — see "Basic UI" 
 Plus the dev-time-only / not-shipped-in-v0 reference:
 - `maya-skill-installer` — kept in repo as a dev-time reference shape, NOT in deploy bundle. Use for our own ClawHub baseline curation passes (this doc is one such pass).
 
-**Total per-Maya skill count:** 4 Anthropic (in bundle) + 2 ClawHub + 18 custom = **24 skills shipped per Maya**. Plus `skill-creator` for our dev-time use.
+**Total per-Maya skill count:** 4 Anthropic (in bundle) + 1 ClawHub + 18 custom = **23 skills shipped per Maya**. Plus `skill-creator` for our dev-time use.
 
 ---
 
@@ -72,7 +73,7 @@ Plus the dev-time-only / not-shipped-in-v0 reference:
 ## Curation method limitations + how to verify
 
 1. **Live ClawHub web/API search returned empty for most queries** from where I'm fetching. The awesome-list at `github.com/VoltAgent/awesome-openclaw-skills` was the only useful index. Operator should manually browse `clawhub.ai` to confirm the picks above are still highly-rated as of any beta launch date — versions and quality can shift fast in this ecosystem.
-2. **No license verification** done for the ClawHub picks. Both `deepread-ocr` and `free-video-generator-capcut` need a license read before locking in. Anthropic public skills are MIT.
+2. **No license verification** done for the ClawHub pick. `free-video-generator-capcut` needs a license read before locking in. Anthropic public skills are MIT.
 3. **Version pinning** not done. The deploy manifest needs explicit version pins on every ClawHub skill so OpenClaw's runtime download is deterministic. Pin to whatever the latest stable is at install time and treat any version bump as an explicit operator-approved change in a future wave.
 
 ---
@@ -85,7 +86,6 @@ The deploy pack at `convex/agents/packs/maya_service/` builds the workspace bund
 2. Add `convex/agents/packs/maya_service/anthropicSkillsManifest.ts` exporting the 5 Anthropic public skill IDs + version pins.
 3. Update `deployServiceMaya.ts` `assembleServiceWorkspace` to write `manifest.json` listing all skills (Anthropic + ClawHub + custom) at the workspace root, so OpenClaw's bootstrap reads it on first boot.
 4. Update operator-action docs:
-   - `docs/operator-actions/beta-cohort-recruitment.md` — note the `DEEPREAD_API_KEY` env var requirement (free tier 2000 pages/mo).
    - `docs/operator-actions/voice-a2p-10dlc.md` — already covers ElevenLabs side; add a note that NemoVideo also runs cloud-side, no Fly install needed.
 5. Update the standing-orders sibling-file scan test to NOT require a 1:1 mapping between standing-orders entries and ClawHub-baseline skills (only between standing-orders and custom maya-service-* skills, which is the existing rule).
 

@@ -76,11 +76,12 @@ describe("service deploy orchestrator — workspace assembly", () => {
     expect(manifest.version).toBe(1);
     expect(manifest.anthropic.skills.length).toBeGreaterThan(0);
     expect(manifest.clawhub.skills.length).toBeGreaterThan(0);
-    // Verify the two ClawHub picks the curation doc landed on are there.
+    // Verify the ClawHub pick the curation doc landed on is there.
+    // (Originally 2 — DeepRead OCR was rejected 2026-04-27 in favor of
+    // Gemini multimodal for OCR; see clawhubManifest.ts header.)
     const clawhubIds = manifest.clawhub.skills.map(
       (s: { id: string }) => s.id
     );
-    expect(clawhubIds).toContain("uday390/deepread-ocr");
     expect(clawhubIds).toContain("vcarolxhberger/free-video-generator-capcut");
   });
 

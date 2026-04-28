@@ -21,10 +21,19 @@
  * Source curation pass: see `docs/spikes/clawhub-baseline-curation.md`.
  *
  * Operator-blocked items the manifest assumes:
- *   - `DEEPREAD_API_KEY` env var (free tier 2000 pages/mo, no credit card)
  *   - NemoVideo anonymous tier (100 free credits / 7d) OR registered
  *     account if we want sustained throughput. Tracked separately as a
  *     Tier-3 unblock — see beta-cohort-recruitment.md.
+ *
+ * What we DON'T install — and why (audit trail):
+ *   - **OCR skill** (DeepRead and similar): considered for receipts /
+ *     invoices in operator job photos. Rejected 2026-04-27 — DeepRead
+ *     is an unfunded 9-year-old single-team product (deepread.tech),
+ *     no review signal. Asset-cataloger uses Gemini multimodal via
+ *     OpenRouter directly for any OCR need. We already pay for that;
+ *     no new vendor, no new env var, no operator data flowing to a
+ *     thinly-resourced shop. Cost difference is negligible at v0
+ *     scale (most operator photos are job-site visuals, not receipts).
  */
 
 export interface ClawHubBaselineSkill {
@@ -43,15 +52,6 @@ export interface ClawHubBaselineSkill {
 }
 
 export const CLAWHUB_BASELINE_SKILLS: ReadonlyArray<ClawHubBaselineSkill> = [
-  {
-    id: "uday390/deepread-ocr",
-    version: "1.0.0",
-    purpose:
-      "OCR for receipts / invoices / forms in operator-uploaded job photos. 97%+ accuracy, structured JSON output with confidence scores + human-review flags. Cloud-rendered (no Fly compute).",
-    delegatedFrom: ["maya-service-asset-cataloger"],
-    requiredEnvVars: ["DEEPREAD_API_KEY"],
-    freeTier: "2000 pages/month, 10 req/min, no credit card required",
-  },
   {
     id: "vcarolxhberger/free-video-generator-capcut",
     version: "1.0.0",

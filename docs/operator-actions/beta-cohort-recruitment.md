@@ -129,7 +129,6 @@ Day 8-30:
 
 Before any beta operator's Maya can boot cleanly, these env vars must be set on the Convex deployment:
 
-- `DEEPREAD_API_KEY` — for the OCR skill (`uday390/deepread-ocr` from ClawHub baseline). Free tier 2000 pages/month, 10 req/min, no credit card. Get from [deepread.ai](https://deepread.ai). Per-operator usage at beta scale (5-10 ops × ~30 receipts/op/mo) sits well under the free cap.
 - `ZERNIO_API_KEY` — for review monitoring + reply + posting. Build tier $19/mo + Inbox addon $10/mo (or scale to Accelerate $49/mo + Inbox $50 + Analytics $50 = ~$149/mo total).
 - `ELEVENLABS_API_KEY` — for Studio voice tier.
 - `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — for billing.
@@ -138,7 +137,7 @@ Before any beta operator's Maya can boot cleanly, these env vars must be set on 
 - `OPENROUTER_API_KEY` — for Maya's Gemini 3 Flash brain.
 - `CLERK_SECRET_KEY` + `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` — for auth.
 
-The full v0 ClawHub + Anthropic baseline skill list lives in `convex/agents/packs/maya_service/{clawhubManifest,anthropicSkillsManifest}.ts`. Every Maya gets the same 24 skills (4 Anthropic public + 2 ClawHub baseline + 18 custom maya-service-*). Variation per operator is `soul.md` + memory-wiki + connected accounts only.
+The full v0 ClawHub + Anthropic baseline skill list lives in `convex/agents/packs/maya_service/{clawhubManifest,anthropicSkillsManifest}.ts`. Every Maya gets the same 23 skills (4 Anthropic public + 1 ClawHub baseline + 18 custom maya-service-*). Variation per operator is `soul.md` + memory-wiki + connected accounts only.
 
 ## Reporting
 
