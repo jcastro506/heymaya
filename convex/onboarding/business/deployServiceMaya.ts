@@ -243,7 +243,12 @@ const OPENCLAW_IMAGE =
 const MACHINE_GUEST: NonNullable<FlyMachineConfig["guest"]> = {
   cpu_kind: "shared",
   cpus: 1,
-  memory_mb: 512,
+  // 512 MB OOM-killed the OpenClaw gateway in the first end-to-end test
+  // (verified via Fly's `oom_killed=true` exit signal 2026-04-28). Bump
+  // to 1024 MB. Per Fly pricing this is ~+$5/mo per business — small
+  // relative to the $99 Starter tier. Revisit if a Studio machine with
+  // voice-call plugin loaded shows further pressure (could need 2048).
+  memory_mb: 1024,
 };
 
 function buildBootstrapShell(): string {
@@ -254,18 +259,25 @@ function buildBootstrapShell(): string {
   // symlink dance — that was the legacy macOS layout. Native-first per
   // `feedback_openclaw_native_first.md`.
   //
-  // The `--bind lan` flag binds OpenClaw's gateway to 0.0.0.0 (required
-  // behind the Fly proxy; loopback is unreachable). `--allow-unconfigured`
-  // lets the gateway start even before its first config-validation pass —
-  // we write `/data/openclaw.json` immediately before exec, but the flag
-  // covers any race or partial-write edge case.
+  // Gateway bind: OpenClaw default loopback 127.0.0.1:18789. We do NOT
+  // pass `--bind lan` because non-loopback binds require explicit
+  // `gateway.controlUi.allowedOrigins` config (validated 2026-04-28
+  // when the previous lan-bind attempt failed startup with that error).
+  // CLI commands from inside the machine (`openclaw agent`, `openclaw
+  // cron list`, etc.) connect via the default ws://127.0.0.1:18789 URL.
+  // When we eventually need external Convex → gateway HTTP push, we'll
+  // add the controlUi config + re-enable lan bind in a follow-up wave.
+  //
+  // `--allow-unconfigured` lets the gateway start even before its first
+  // config-validation pass — we write `/data/openclaw.json` immediately
+  // before exec, but the flag covers any race or partial-write edge case.
   return [
     "mkdir -p /data/workspace /data/cron",
     'curl -fsSL "$MAYA_WORKSPACE_BUNDLE_URL" -o /tmp/workspace.tar',
     "tar -xf /tmp/workspace.tar -C /data/workspace",
     'echo "$MAYA_JOBS_JSON_BASE64" | base64 -d > /data/cron/jobs.json',
     'echo "$MAYA_BOOTSTRAP_JSON" | jq .gatewayConfig > /data/openclaw.json',
-    "exec openclaw gateway --bind lan --port 3000 --allow-unconfigured",
+    "exec openclaw gateway --allow-unconfigured",
   ].join(" && ");
 }
 
