@@ -54,15 +54,27 @@ interface Flags {
   mode: "mock" | "live";
   confirm: boolean;
   help: boolean;
+  /** Required in --live mode: an existing businesses._id to deploy. */
+  businessId: string | null;
 }
 
 function parseFlags(argv: ReadonlyArray<string>): Flags {
-  const flags: Flags = { mode: "mock", confirm: false, help: false };
-  for (const a of argv) {
+  const flags: Flags = {
+    mode: "mock",
+    confirm: false,
+    help: false,
+    businessId: null,
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
     if (a === "--mock") flags.mode = "mock";
     else if (a === "--live") flags.mode = "live";
     else if (a === "--confirm") flags.confirm = true;
     else if (a === "--help" || a === "-h") flags.help = true;
+    else if (a === "--business-id") flags.businessId = argv[++i] ?? null;
+    else if (a.startsWith("--business-id=")) {
+      flags.businessId = a.slice("--business-id=".length);
+    }
   }
   return flags;
 }
@@ -131,13 +143,19 @@ function formatError(err: unknown): string {
 
 interface PreflightResult {
   fixtureRoot: string;
+  /** Live-mode only — null in mock mode. */
+  convexUrl: string | null;
+  /** Live-mode only — null in mock mode. */
+  adminKey: string | null;
+  /** Live-mode only — null in mock mode. */
+  businessId: string | null;
 }
 
 function preflight(flags: Flags): PreflightResult {
   if (flags.mode === "live" && !flags.confirm) {
     console.error(
       C.red(
-        "Refusing --live without --confirm. Live mode replays a CRM webhook fixture against the real Convex deployment. Pass --confirm to acknowledge."
+        "Refusing --live without --confirm. Live mode hits OpenRouter, creates a real Fly app + machine, and consumes the OpenClaw runtime image at registry.fly.io/heymaya-openclaw. Pass --confirm to acknowledge."
       )
     );
     process.exit(1);
@@ -159,7 +177,52 @@ function preflight(flags: Flags): PreflightResult {
     );
     process.exit(1);
   }
-  return { fixtureRoot };
+
+  // Mock mode needs nothing further from env.
+  if (flags.mode !== "live") {
+    return {
+      fixtureRoot,
+      convexUrl: null,
+      adminKey: null,
+      businessId: null,
+    };
+  }
+
+  // Live mode — Convex URL + admin key + a businessId to deploy.
+  const convexUrl =
+    process.env.NEXT_PUBLIC_CONVEX_URL ?? process.env.CONVEX_URL ?? null;
+  if (!convexUrl) {
+    console.error(
+      C.red(
+        "Live mode requires NEXT_PUBLIC_CONVEX_URL (or CONVEX_URL) in env. See .env.local."
+      )
+    );
+    process.exit(1);
+  }
+  const adminKey =
+    process.env.CONVEX_ADMIN_KEY ?? process.env.CONVEX_DEPLOY_KEY ?? null;
+  if (!adminKey) {
+    console.error(
+      C.red(
+        "Live mode requires CONVEX_ADMIN_KEY (or CONVEX_DEPLOY_KEY) so this script can call internal.* actions. Get one from `npx convex dashboard` → Settings → Deploy keys."
+      )
+    );
+    process.exit(1);
+  }
+  if (!flags.businessId) {
+    console.error(
+      C.red(
+        "Live mode requires --business-id <businesses._id>. Create a fixture business first via `npx convex run` or the dashboard, then pass its id here. (Automated fixture creation is a follow-up wave; for the first smoke we want the operator to choose the target explicitly.)"
+      )
+    );
+    process.exit(1);
+  }
+  return {
+    fixtureRoot,
+    convexUrl,
+    adminKey,
+    businessId: flags.businessId,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -508,19 +571,99 @@ export async function runMockSmoke(): Promise<{
 }
 
 /* -------------------------------------------------------------------------- */
-/* Live mode (deferred)                                                       */
+/* Live mode — real Convex + Fly                                              */
 /* -------------------------------------------------------------------------- */
 
-async function runLiveSmoke(): Promise<void> {
-  // Live mode for service smoke is intentionally minimal in v0:
-  //   - No Fly machine create (per-business Fly is a Sprint 6 deliverable).
-  //   - Real Convex internal calls would replay a CRM webhook fixture and
-  //     observe the resulting telemetry rows.
-  // For Wave D we ship the mock walk and reserve live mode for Sprint 7
-  // beta hardening; the stub below surfaces that explicitly.
-  skip("live mode deferred to Sprint 7 beta hardening (no per-business Fly machines yet)");
-  skip("CRM webhook replay deferred — needs CONVEX_ADMIN_KEY + replay fixture loader");
-  pass("live-mode pre-flight clean (real-call surface intentionally empty)");
+interface DeployServiceMayaResult {
+  ok: boolean;
+  stage: string;
+  message?: string;
+  flyAppId?: string;
+  machineId?: string;
+  durationMs: number;
+}
+
+async function runLiveSmoke(pre: PreflightResult): Promise<void> {
+  if (!pre.convexUrl || !pre.adminKey || !pre.businessId) {
+    fail(
+      "live-preflight",
+      new Error("live mode invariants violated"),
+      "Should be unreachable — preflight should have caught this."
+    );
+  }
+
+  // Lazy import: only pull `convex/browser` when actually running live so
+  // mock-mode + tests never need the runtime client.
+  const { ConvexHttpClient } = await import("convex/browser");
+  const { anyApi } = await import("convex/server");
+
+  const client = new ConvexHttpClient(pre.convexUrl);
+  // setAdminAuth is the documented-internal escape hatch convex-cli uses.
+  // It exists on convex@1.x and is the only way to call internal.* over
+  // HTTP without a Clerk identity. Mirrors the creator-side smoke
+  // (`scripts/mvp-smoke.ts:417`).
+  (client as unknown as { setAdminAuth: (k: string) => void }).setAdminAuth(
+    pre.adminKey
+  );
+
+  pass(`live preflight ok (convex=${shortenUrl(pre.convexUrl)}, business=${pre.businessId})`);
+
+  // Step 1 — call deployServiceMaya. This is the entire end-to-end:
+  //   workspace assembly → R2/Convex storage upload → Fly app create →
+  //   secrets → machine create → wait-for-state → channel-pair via
+  //   OpenClaw CLI → writeback. Every stage that fails returns
+  //   `{ ok: false, stage, message }` so we can surface the exact gap.
+  let result: DeployServiceMayaResult;
+  try {
+    const t0 = Date.now();
+    result = (await client.action(
+      anyApi.onboarding.business.deployServiceMaya.deployServiceMaya,
+      { businessId: pre.businessId }
+    )) as DeployServiceMayaResult;
+    info(`deployServiceMaya returned in ${(Date.now() - t0) / 1000}s`);
+  } catch (err) {
+    fail(
+      "deploy-call",
+      err,
+      "Could not reach Convex. Verify NEXT_PUBLIC_CONVEX_URL + CONVEX_ADMIN_KEY and that `npx convex dev --once` has pushed current functions."
+    );
+  }
+
+  if (!result.ok) {
+    const flyHint =
+      result.stage === "create-machine" || result.stage === "wait-for-state"
+        ? " (machine boot — most likely the OpenClaw runtime image at registry.fly.io/heymaya-openclaw is missing or unreachable; build + push per infra/openclaw-runtime/README.md)"
+        : "";
+    fail(
+      `deploy-${result.stage}`,
+      new Error(result.message ?? "(no message)"),
+      `Deploy stage '${result.stage}' returned ok=false${flyHint}.`
+    );
+  }
+
+  pass(
+    `deploy ok (stage=${result.stage}, app=${result.flyAppId ?? "?"}, machine=${result.machineId ?? "?"}, ${(result.durationMs / 1000).toFixed(1)}s)`
+  );
+
+  // Step 2 — surface cleanup instructions (automated teardown is a
+  // follow-up wave; for the first smoke we want the operator to verify
+  // and destroy explicitly).
+  if (result.flyAppId) {
+    info(
+      `to destroy: flyctl apps destroy ${result.flyAppId} --yes ; then delete businesses row ${pre.businessId} via Convex dashboard`
+    );
+  }
+
+  pass("live smoke complete (manual teardown pending)");
+}
+
+function shortenUrl(u: string): string {
+  try {
+    const url = new URL(u);
+    return url.host;
+  } catch {
+    return u;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -533,14 +676,24 @@ function printHelp(): void {
       "HeyMaya Service-product MVP smoke",
       "",
       "Usage:",
-      "  npm run smoke:service                       # mock mode (default, hermetic, <30s)",
-      "  npm run smoke:service -- --live --confirm   # live mode (CRM replay; deferred to Sprint 7)",
+      "  npm run smoke:service                                          # mock mode (default, hermetic, <30s)",
+      "  npm run smoke:service -- --live --confirm --business-id <id>   # live mode (real Convex + Fly + OpenClaw)",
       "",
       "Flags:",
-      "  --mock      Hermetic — fixture-driven, zero external services (default).",
-      "  --live      CRM webhook replay against real Convex deployment (Sprint 7).",
-      "  --confirm   Required with --live.",
-      "  --help      Show this and exit.",
+      "  --mock                  Hermetic — fixture-driven, zero external services (default).",
+      "  --live                  Real deploy: Convex action call → Fly app + machine create → OpenClaw boot.",
+      "  --confirm               Required with --live (creates real cloud resources).",
+      "  --business-id <id>      Required with --live: an existing businesses._id to deploy.",
+      "  --help                  Show this and exit.",
+      "",
+      "Live-mode env (must be set in .env.local or process env):",
+      "  NEXT_PUBLIC_CONVEX_URL  Convex deployment URL (or CONVEX_URL).",
+      "  CONVEX_ADMIN_KEY        Admin/deploy key (or CONVEX_DEPLOY_KEY) so internal.* actions are callable.",
+      "",
+      "Live-mode preconditions (operator-side, one-time):",
+      "  1. npx convex dev --once   # push current schema + functions",
+      "  2. flyctl auth docker && docker buildx build --push (see infra/openclaw-runtime/README.md)",
+      "  3. Create a fixture business + businessPicture row (via dashboard or `npx convex run`).",
       "",
       "Exit codes:",
       "  0 = pass",
@@ -564,7 +717,7 @@ async function main(): Promise<void> {
   console.log(
     `${C.cyan("HeyMaya service smoke")} - mode=${flags.mode}`
   );
-  preflight(flags);
+  const pre = preflight(flags);
 
   if (flags.mode === "mock") {
     try {
@@ -574,7 +727,7 @@ async function main(): Promise<void> {
       fail("mock-walk", err, "Inspect the persona fixture or the smoke walk steps.");
     }
   } else {
-    await runLiveSmoke();
+    await runLiveSmoke(pre);
   }
 
   console.log(

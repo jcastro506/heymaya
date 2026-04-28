@@ -27,15 +27,18 @@ export const MEMORY_WIKI_PLUGIN_KEY = "memory-wiki" as const;
 
 /**
  * Vault path on the Fly machine. Persistent per-business volume mounted at
- * `/data/...` keeps the vault across machine restarts. Keep aligned with
- * `deployServiceMaya.ts`'s `/data/workspace-${MAYA_APP_NAME}` layout.
+ * `/data/...` keeps the vault across machine restarts. Aligned with
+ * `deployServiceMaya.ts`'s native-layout bootstrap (workspace at
+ * `/data/workspace`, OpenClaw state-dir = `/data`). Per-business isolation
+ * is implicit — each business has its own Fly machine with its own `/data`
+ * volume; no `${MAYA_APP_NAME}` interpolation needed.
  */
 export function memoryWikiVaultPath(businessId: Id<"businesses">): string {
   // Sandbox the vault inside the workspace directory so the bundle bootstrap
   // can `tar -xf` initial pages into the same root and the plugin discovers
   // them on first compile.
-  return "/data/workspace-${MAYA_APP_NAME}/.openclaw-wiki/vault";
   void businessId;
+  return "/data/workspace/.openclaw-wiki/vault";
 }
 
 /**

@@ -239,16 +239,25 @@ const MACHINE_GUEST: NonNullable<FlyMachineConfig["guest"]> = {
 };
 
 function buildBootstrapShell(): string {
-  // Mirror creator-side init.cmd. Single-line shell pipeline.
+  // OpenClaw native layout: with `OPENCLAW_STATE_DIR=/data` (set on the
+  // machine env by the deploy below), OpenClaw reads its workspace, cron
+  // jobs, and gateway config directly from `/data/workspace`,
+  // `/data/cron/jobs.json`, and `/data/openclaw.json`. No `$HOME/.openclaw`
+  // symlink dance — that was the legacy macOS layout. Native-first per
+  // `feedback_openclaw_native_first.md`.
+  //
+  // The `--bind lan` flag binds OpenClaw's gateway to 0.0.0.0 (required
+  // behind the Fly proxy; loopback is unreachable). `--allow-unconfigured`
+  // lets the gateway start even before its first config-validation pass —
+  // we write `/data/openclaw.json` immediately before exec, but the flag
+  // covers any race or partial-write edge case.
   return [
-    'mkdir -p "/data/workspace-${MAYA_APP_NAME}" "$HOME/.openclaw/cron" "$HOME/.openclaw"',
+    "mkdir -p /data/workspace /data/cron",
     'curl -fsSL "$MAYA_WORKSPACE_BUNDLE_URL" -o /tmp/workspace.tar',
-    'tar -xf /tmp/workspace.tar -C "/data/workspace-${MAYA_APP_NAME}"',
-    'rm -rf "$HOME/.openclaw/workspace-default"',
-    'ln -s "/data/workspace-${MAYA_APP_NAME}" "$HOME/.openclaw/workspace-default"',
-    'echo "$MAYA_JOBS_JSON_BASE64" | base64 -d > "$HOME/.openclaw/cron/jobs.json"',
+    "tar -xf /tmp/workspace.tar -C /data/workspace",
+    'echo "$MAYA_JOBS_JSON_BASE64" | base64 -d > /data/cron/jobs.json',
     'echo "$MAYA_BOOTSTRAP_JSON" | jq .gatewayConfig > /data/openclaw.json',
-    "exec openclaw gateway start --config /data/openclaw.json",
+    "exec openclaw gateway --bind lan --port 3000 --allow-unconfigured",
   ].join(" && ");
 }
 
@@ -738,6 +747,11 @@ export const deployServiceMaya = internalAction({
         config: {
           image: OPENCLAW_IMAGE,
           env: {
+            // OpenClaw native state-dir: the gateway reads
+            //   workspace/, cron/jobs.json, openclaw.json
+            // out of this root. Pinning it on the deploy keeps the image
+            // layout-agnostic and matches the bootstrap above.
+            OPENCLAW_STATE_DIR: "/data",
             MAYA_PLAN: business.planTier ?? "starter",
             MAYA_TIMEZONE: "America/Los_Angeles",
             MAYA_OPENCLAW_VERSION: "2026.4.23",
