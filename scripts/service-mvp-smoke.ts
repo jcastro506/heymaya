@@ -209,14 +209,12 @@ function preflight(flags: Flags): PreflightResult {
     );
     process.exit(1);
   }
-  if (!flags.businessId) {
-    console.error(
-      C.red(
-        "Live mode requires --business-id <businesses._id>. Create a fixture business first via `npx convex run` or the dashboard, then pass its id here. (Automated fixture creation is a follow-up wave; for the first smoke we want the operator to choose the target explicitly.)"
-      )
-    );
-    process.exit(1);
-  }
+  // --business-id is now OPTIONAL. If absent, the smoke auto-creates a
+  // fresh fixture business via `internal.smokeFixtures.serviceBusiness.
+  // createServiceFixture` and tears it down on exit. Operators who want
+  // to deploy a specific real business can still pass --business-id; that
+  // path skips fixture creation but still runs auto-teardown of the Fly
+  // app on exit (the `businesses` row is preserved in that case).
   return {
     fixtureRoot,
     convexUrl,
@@ -584,7 +582,7 @@ interface DeployServiceMayaResult {
 }
 
 async function runLiveSmoke(pre: PreflightResult): Promise<void> {
-  if (!pre.convexUrl || !pre.adminKey || !pre.businessId) {
+  if (!pre.convexUrl || !pre.adminKey) {
     fail(
       "live-preflight",
       new Error("live mode invariants violated"),
@@ -606,29 +604,89 @@ async function runLiveSmoke(pre: PreflightResult): Promise<void> {
     pre.adminKey
   );
 
-  pass(`live preflight ok (convex=${shortenUrl(pre.convexUrl)}, business=${pre.businessId})`);
+  pass(`live preflight ok (convex=${shortenUrl(pre.convexUrl)})`);
 
-  // Step 1 — call deployServiceMaya. This is the entire end-to-end:
-  //   workspace assembly → R2/Convex storage upload → Fly app create →
-  //   secrets → machine create → wait-for-state → channel-pair via
-  //   OpenClaw CLI → writeback. Every stage that fails returns
+  // Step 1 — fixture business. Either the operator passed --business-id
+  // pointing at an existing real row, or we auto-create a smoke fixture.
+  // Auto-created fixtures are torn down on exit; operator-supplied ids
+  // are preserved (only the Fly app gets cleaned up).
+  let businessId: string;
+  let fixtureCreated = false;
+  if (pre.businessId) {
+    businessId = pre.businessId;
+    pass(`reusing operator-supplied business=${businessId}`);
+  } else {
+    try {
+      const created = (await client.mutation(
+        anyApi.smokeFixtures.serviceBusiness.createServiceFixture,
+        {}
+      )) as { businessId: string; creatorId: string; clerkUserId: string };
+      businessId = created.businessId;
+      fixtureCreated = true;
+      pass(
+        `fixture business created (business=${businessId}, creator=${created.creatorId}, clerk=${created.clerkUserId})`
+      );
+    } catch (err) {
+      fail(
+        "fixture-create",
+        err,
+        "Could not call internal.smokeFixtures.serviceBusiness.createServiceFixture. Did you `npx convex dev --once` after the latest commit?"
+      );
+    }
+  }
+
+  // Step 2 — call deployServiceMaya. This is the entire end-to-end:
+  //   workspace assembly → bundle upload → Fly app create → secrets →
+  //   machine create → wait-for-state → channel-pair via OpenClaw CLI →
+  //   writeback. Every stage that fails returns
   //   `{ ok: false, stage, message }` so we can surface the exact gap.
-  let result: DeployServiceMayaResult;
+  // Wrapped in try/finally so teardown always runs.
+  let result: DeployServiceMayaResult | null = null;
+  let deployError: unknown = null;
   try {
     const t0 = Date.now();
     result = (await client.action(
       anyApi.onboarding.business.deployServiceMaya.deployServiceMaya,
-      { businessId: pre.businessId }
+      { businessId }
     )) as DeployServiceMayaResult;
     info(`deployServiceMaya returned in ${(Date.now() - t0) / 1000}s`);
   } catch (err) {
-    fail(
-      "deploy-call",
-      err,
-      "Could not reach Convex. Verify NEXT_PUBLIC_CONVEX_URL + CONVEX_ADMIN_KEY and that `npx convex dev --once` has pushed current functions."
+    deployError = err;
+  }
+
+  // Step 3 — teardown FIRST, then surface success/failure. We always
+  // tear down the Fly app (it costs $$ to leave running) and the
+  // fixture business (if we created it).
+  interface TeardownReport {
+    flyAppDestroyed: boolean;
+    flyError: string | null;
+    deletedCounts: Record<string, number>;
+  }
+  let teardownReport: TeardownReport | null = null;
+  try {
+    teardownReport = (await client.action(
+      anyApi.smokeFixtures.serviceBusiness.destroyServiceFixtureWithFly,
+      {
+        businessId: fixtureCreated ? businessId : undefined,
+        flyAppId: result?.flyAppId,
+      }
+    )) as TeardownReport;
+  } catch (err) {
+    console.error(
+      C.yellow(`! teardown call failed: ${formatError(err)}`)
     );
   }
 
+  if (deployError) {
+    fail(
+      "deploy-call",
+      deployError,
+      "Could not reach Convex. Verify NEXT_PUBLIC_CONVEX_URL + CONVEX_ADMIN_KEY and that `npx convex dev --once` has pushed current functions."
+    );
+  }
+  if (!result) {
+    fail("deploy-call", new Error("deploy returned null"), "Unreachable.");
+  }
   if (!result.ok) {
     const flyHint =
       result.stage === "create-machine" || result.stage === "wait-for-state"
@@ -645,16 +703,31 @@ async function runLiveSmoke(pre: PreflightResult): Promise<void> {
     `deploy ok (stage=${result.stage}, app=${result.flyAppId ?? "?"}, machine=${result.machineId ?? "?"}, ${(result.durationMs / 1000).toFixed(1)}s)`
   );
 
-  // Step 2 — surface cleanup instructions (automated teardown is a
-  // follow-up wave; for the first smoke we want the operator to verify
-  // and destroy explicitly).
-  if (result.flyAppId) {
-    info(
-      `to destroy: flyctl apps destroy ${result.flyAppId} --yes ; then delete businesses row ${pre.businessId} via Convex dashboard`
+  if (teardownReport) {
+    if (teardownReport.flyAppDestroyed) {
+      pass(`fly app destroyed (${result.flyAppId})`);
+    } else if (teardownReport.flyError) {
+      info(
+        `! fly app destroy failed: ${teardownReport.flyError} — clean up manually: flyctl apps destroy ${result.flyAppId} --yes`
+      );
+    }
+    const totalSwept = Object.values(teardownReport.deletedCounts).reduce(
+      (a, b) => a + b,
+      0
     );
+    if (totalSwept > 0) {
+      pass(
+        `fixture rows swept (${totalSwept} total: ${Object.entries(
+          teardownReport.deletedCounts
+        )
+          .filter(([, n]) => n > 0)
+          .map(([k, n]) => `${k}=${n}`)
+          .join(", ")})`
+      );
+    }
   }
 
-  pass("live smoke complete (manual teardown pending)");
+  pass("live smoke complete");
 }
 
 function shortenUrl(u: string): string {
@@ -676,14 +749,16 @@ function printHelp(): void {
       "HeyMaya Service-product MVP smoke",
       "",
       "Usage:",
-      "  npm run smoke:service                                          # mock mode (default, hermetic, <30s)",
-      "  npm run smoke:service -- --live --confirm --business-id <id>   # live mode (real Convex + Fly + OpenClaw)",
+      "  npm run smoke:service                                # mock mode (default, hermetic, <30s)",
+      "  npm run smoke:service -- --live --confirm           # live mode, auto fixture create + teardown",
+      "  npm run smoke:service -- --live --confirm --business-id <id>   # live mode, target an existing business",
       "",
       "Flags:",
       "  --mock                  Hermetic — fixture-driven, zero external services (default).",
       "  --live                  Real deploy: Convex action call → Fly app + machine create → OpenClaw boot.",
       "  --confirm               Required with --live (creates real cloud resources).",
-      "  --business-id <id>      Required with --live: an existing businesses._id to deploy.",
+      "  --business-id <id>      Optional in --live: target an existing businesses._id. If omitted, the",
+      "                          smoke auto-creates a fresh fixture business and tears it down on exit.",
       "  --help                  Show this and exit.",
       "",
       "Live-mode env (must be set in .env.local or process env):",
@@ -692,8 +767,11 @@ function printHelp(): void {
       "",
       "Live-mode preconditions (operator-side, one-time):",
       "  1. npx convex dev --once   # push current schema + functions",
-      "  2. flyctl auth docker && docker buildx build --push (see infra/openclaw-runtime/README.md)",
-      "  3. Create a fixture business + businessPicture row (via dashboard or `npx convex run`).",
+      "  2. flyctl auth docker && docker push registry.fly.io/heymaya-openclaw:v2026.4.23",
+      "     (see infra/openclaw-runtime/README.md for the full build + push flow)",
+      "",
+      "Teardown is automatic — Fly app destroyed on exit; auto-created fixture rows swept",
+      "via internal.smokeFixtures.serviceBusiness.destroyServiceFixtureWithFly.",
       "",
       "Exit codes:",
       "  0 = pass",

@@ -26,11 +26,20 @@ flyctl apps create heymaya-openclaw --org personal   # one-time, registry namesp
 Then for each version:
 
 ```bash
+# Build only (do NOT pass --push on the first build of a fresh app)
 docker buildx build --platform linux/amd64 \
   --build-arg OPENCLAW_VERSION=2026.4.23 \
   -t registry.fly.io/heymaya-openclaw:v2026.4.23 \
   -t registry.fly.io/heymaya-openclaw:latest \
-  --push infra/openclaw-runtime/
+  infra/openclaw-runtime/
+
+# Refresh registry auth + push directly. The buildx `--push` flag uses a
+# different auth code path that fails with "app repository not found" on
+# fresh apps; the manual `docker push` works against the same registry
+# after a re-auth. (Confirmed quirk 2026-04-27 on first publish.)
+flyctl auth docker
+docker push registry.fly.io/heymaya-openclaw:v2026.4.23
+docker push registry.fly.io/heymaya-openclaw:latest
 ```
 
 Verify:

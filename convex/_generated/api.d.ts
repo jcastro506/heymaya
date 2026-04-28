@@ -134,6 +134,7 @@ import type * as queries_business_posts from "../queries/business/posts.js";
 import type * as queries_business_profile from "../queries/business/profile.js";
 import type * as queries_business_reviews from "../queries/business/reviews.js";
 import type * as queries_business_today from "../queries/business/today.js";
+import type * as smokeFixtures_serviceBusiness from "../smokeFixtures/serviceBusiness.js";
 import type * as today from "../today.js";
 import type * as trends from "../trends.js";
 import type * as voice_pinChallenge from "../voice/pinChallenge.js";
@@ -276,6 +277,7 @@ declare const fullApi: ApiFromModules<{
   "queries/business/profile": typeof queries_business_profile;
   "queries/business/reviews": typeof queries_business_reviews;
   "queries/business/today": typeof queries_business_today;
+  "smokeFixtures/serviceBusiness": typeof smokeFixtures_serviceBusiness;
   today: typeof today;
   trends: typeof trends;
   "voice/pinChallenge": typeof voice_pinChallenge;
