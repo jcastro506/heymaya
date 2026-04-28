@@ -151,11 +151,15 @@ export async function scheduleVerification(
 /* The verifier action                                                         */
 /* -------------------------------------------------------------------------- */
 
+type VerifyResult =
+  | { skipped: string }
+  | { rejected: true };
+
 export const verifyReviewReplyAfter24h = internalAction({
   args: {
     reviewId: v.id("reviews"),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<VerifyResult> => {
     // Re-fetch the review — must still be in "posted" state. If it's
     // anything else (operator deleted, already rejected, in-flight
     // re-edit), short-circuit. This is the idempotency guard that makes
