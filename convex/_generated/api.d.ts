@@ -112,6 +112,7 @@ import type * as mediaAssets_listAssets from "../mediaAssets/listAssets.js";
 import type * as mediaAssets_processCatalogerQueue from "../mediaAssets/processCatalogerQueue.js";
 import type * as onboarding_business_deployServiceMaya from "../onboarding/business/deployServiceMaya.js";
 import type * as onboarding_business_pipeline from "../onboarding/business/pipeline.js";
+import type * as onboarding_growth_pipeline from "../onboarding/growth/pipeline.js";
 import type * as onboarding_maya_deployMaya from "../onboarding/maya/deployMaya.js";
 import type * as onboarding_maya_jobs from "../onboarding/maya/jobs.js";
 import type * as onboarding_maya_synthesizeCreatorPicture from "../onboarding/maya/synthesizeCreatorPicture.js";
@@ -257,6 +258,7 @@ declare const fullApi: ApiFromModules<{
   "mediaAssets/processCatalogerQueue": typeof mediaAssets_processCatalogerQueue;
   "onboarding/business/deployServiceMaya": typeof onboarding_business_deployServiceMaya;
   "onboarding/business/pipeline": typeof onboarding_business_pipeline;
+  "onboarding/growth/pipeline": typeof onboarding_growth_pipeline;
   "onboarding/maya/deployMaya": typeof onboarding_maya_deployMaya;
   "onboarding/maya/jobs": typeof onboarding_maya_jobs;
   "onboarding/maya/synthesizeCreatorPicture": typeof onboarding_maya_synthesizeCreatorPicture;

@@ -55,8 +55,12 @@ describe("Service Sprint 0 — schema-shape sibling-file scan", () => {
     // The accountType field MUST be optional so legacy creator rows without
     // the field still load. Grep the schema source rather than running a
     // convex-test query — this is a static-shape assertion.
+    //
+    // Growth-product (heymaya/growth-v0) added "growth-agent" alongside
+    // "creator" + "service-business". The literal set grew but stays
+    // additive — old rows without `accountType` still load.
     expect(schemaSrc).toMatch(
-      /accountType:\s*v\.optional\(\s*v\.union\(\s*v\.literal\("creator"\),\s*v\.literal\("service-business"\)\s*\)\s*\)/
+      /accountType:\s*v\.optional\(\s*v\.union\(\s*v\.literal\("creator"\),\s*v\.literal\("service-business"\),\s*v\.literal\("growth-agent"\)\s*\)\s*\)/
     );
   });
 

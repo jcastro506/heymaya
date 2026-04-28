@@ -74,7 +74,11 @@ export default defineSchema({
     // the existing convex/lib/planFeatures.ts continues to govern the creator
     // side and the two are intentionally separate matrices.
     accountType: v.optional(
-      v.union(v.literal("creator"), v.literal("service-business"))
+      v.union(
+        v.literal("creator"),
+        v.literal("service-business"),
+        v.literal("growth-agent")
+      )
     ),
     /** Pointer to the operator's business row. Only set when accountType = "service-business". */
     businessId: v.optional(v.id("businesses")),
@@ -2598,4 +2602,131 @@ export default defineSchema({
     .index("by_business_and_ts", ["businessId", "ts"]),
   // ─── end Service product Wave D (beta hardening telemetry) ────────────
   // ─── end Service product Sprint 0 ─────────────────────────────────────
+
+  // ─── Growth product (Riley) — added 2026-04-28 on heymaya/growth-v0 ────
+  // Single-user growth-agent product. One operator (Josh), one Riley
+  // deployed to Fly. Tables here are ADDITIVE to the existing creator +
+  // service tables; growth-agent creators carry `accountType: "growth-agent"`
+  // (additive enum value alongside "creator" + "service-business").
+
+  growthAgents: defineTable({
+    /** Pointer back to the `creators` row that owns this agent. One per creator. */
+    accountId: v.id("creators"),
+    /** Operator-supplied product context — what Riley is building hype for. */
+    productContext: v.optional(
+      v.object({
+        productName: v.string(),
+        oneLiner: v.string(),
+        targetAudience: v.string(),
+        /** Optional URL — landing page, GitHub repo, etc. */
+        primaryUrl: v.optional(v.string()),
+        /** Free-form: what does Riley focus on? Themes, topics, angles. */
+        focus: v.string(),
+      })
+    ),
+    /**
+     * Voice samples — pasted-in posts from the operator's existing
+     * LinkedIn and X accounts. Riley uses these as ground truth for
+     * voice-fitting.
+     */
+    voiceSamples: v.optional(
+      v.object({
+        linkedin: v.array(v.string()),
+        twitter: v.array(v.string()),
+      })
+    ),
+    /**
+     * Composio connected-account ids for LinkedIn + X. Set when the
+     * operator completes the Composio OAuth dashboard flow. We store
+     * the (encrypted) ids here so the deploy can pass them as Fly
+     * secrets. Mirror the `connectedAccounts` table's encryption shape:
+     * `composioAccountId` is encrypted; `*Hash` is sha256 for lookup
+     * uniqueness.
+     */
+    linkedinConnection: v.optional(
+      v.object({
+        composioAccountId: v.string(),
+        composioAccountIdHash: v.string(),
+        connectedAt: v.number(),
+      })
+    ),
+    twitterConnection: v.optional(
+      v.object({
+        composioAccountId: v.string(),
+        composioAccountIdHash: v.string(),
+        connectedAt: v.number(),
+      })
+    ),
+    /** Onboarding flow progress — which step the operator is on. */
+    onboardingStep: v.union(
+      v.literal("connect-linkedin"),
+      v.literal("connect-twitter"),
+      v.literal("product-context"),
+      v.literal("voice-samples"),
+      v.literal("deploy"),
+      v.literal("complete")
+    ),
+    /** Per-operator Fly machine app id (parallel to creators.mayaFlyAppId). */
+    rileyFlyAppId: v.optional(v.string()),
+    /** Last successful deploy timestamp. */
+    deployedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_fly_app", ["rileyFlyAppId"]),
+
+  // Riley's drafted + published posts. Source-of-truth for the dashboard
+  // "pending approval" + "published" surfaces.
+  growthPosts: defineTable({
+    accountId: v.id("creators"),
+    platform: v.union(v.literal("linkedin"), v.literal("twitter")),
+    status: v.union(
+      v.literal("drafted"),
+      v.literal("approved"),
+      v.literal("published"),
+      v.literal("rejected"),
+      v.literal("failed")
+    ),
+    /** Riley's draft body. Per-platform char limits enforced on approve. */
+    body: v.string(),
+    /** Optional Brave-search citations + reasoning Riley used. */
+    citations: v.optional(v.array(v.string())),
+    reasoning: v.optional(v.string()),
+    /** External post id once published (LinkedIn URN or X tweet id). */
+    externalPostId: v.optional(v.string()),
+    publishedAt: v.optional(v.number()),
+    /** Operator's optional edit before approval — what we actually published. */
+    finalBody: v.optional(v.string()),
+    /** Engagement counts polled post-publish via Composio. */
+    engagement: v.optional(
+      v.object({
+        likes: v.optional(v.number()),
+        comments: v.optional(v.number()),
+        impressions: v.optional(v.number()),
+        lastRefreshedAt: v.optional(v.number()),
+      })
+    ),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_status", ["accountId", "status"])
+    .index("by_account_and_platform", ["accountId", "platform"]),
+
+  // Waitlist signups Riley tracks for the operator's product. Provenance
+  // tells the operator which post / outreach drove each signup.
+  growthWaitlist: defineTable({
+    accountId: v.id("creators"),
+    email: v.string(),
+    name: v.optional(v.string()),
+    /** Where the signup came from. Free-form so future channels work. */
+    source: v.string(),
+    /** Optional pointer to the growthPosts row that drove this signup. */
+    sourcePostId: v.optional(v.id("growthPosts")),
+    notes: v.optional(v.string()),
+    signedUpAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_signed_up", ["accountId", "signedUpAt"]),
+  // ─── end Growth product (Riley) ────────────────────────────────────────
 });

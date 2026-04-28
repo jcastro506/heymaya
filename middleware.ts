@@ -48,6 +48,7 @@ const isPublic = createRouteMatcher([
   "/",
   "/creators",
   "/business",
+  "/growth",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/clerk/webhook",
