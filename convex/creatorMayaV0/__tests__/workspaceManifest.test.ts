@@ -109,15 +109,46 @@ describe("Creator Maya v0 OpenClaw workspace manifest", () => {
     const manifest = buildCreatorMayaWorkspaceManifest(input);
     const jobs = JSON.parse(manifest.files["jobs.json"]);
 
-    expect(jobs.timezone).toBe("America/New_York");
+    expect(jobs.jobs).toHaveLength(5);
     expect(jobs.jobs).toEqual(
       expect.arrayContaining([
-        { name: "morning_brief", cron: "0 7 * * *" },
-        { name: "performance_check_2h", cron: "0 8-22/2 * * *" },
-        { name: "trend_scan", cron: "0 11 * * *" },
-        { name: "weekly_plan", cron: "0 16 * * 0" },
-        { name: "weekly_review", cron: "0 21 * * 0" },
+        expect.objectContaining({
+          jobId: "creator-maya-v0-morning_brief",
+          entryId: "morning_brief",
+          schedule: { kind: "cron", expr: "0 7 * * *", tz: "America/New_York" },
+          sessionTarget: "isolated",
+          payload: expect.objectContaining({ kind: "agentTurn" }),
+        }),
+        expect.objectContaining({
+          entryId: "performance_check_2h",
+          schedule: {
+            kind: "cron",
+            expr: "0 8-22/2 * * *",
+            tz: "America/New_York",
+          },
+        }),
+        expect.objectContaining({
+          entryId: "trend_scan",
+          schedule: { kind: "cron", expr: "0 11 * * *", tz: "America/New_York" },
+        }),
+        expect.objectContaining({
+          entryId: "weekly_plan",
+          schedule: { kind: "cron", expr: "0 16 * * 0", tz: "America/New_York" },
+        }),
+        expect.objectContaining({
+          entryId: "weekly_review",
+          schedule: { kind: "cron", expr: "0 21 * * 0", tz: "America/New_York" },
+        }),
       ])
     );
+    for (const job of jobs.jobs) {
+      expect(job.delivery).toEqual(
+        expect.objectContaining({
+          mode: "announce",
+          channel: "last",
+          bestEffort: true,
+        })
+      );
+    }
   });
 });

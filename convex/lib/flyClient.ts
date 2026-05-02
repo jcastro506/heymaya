@@ -52,6 +52,12 @@ export interface FlyMachineConfig {
   /** OCI image, e.g. "registry.fly.io/heymaya-openclaw:v2026.4.23" */
   image: string;
   env?: Record<string, string>;
+  /** Files written into the Machine at create time. raw_value is base64 encoded. */
+  files?: Array<{
+    guest_path: string;
+    raw_value?: string;
+    secret_name?: string;
+  }>;
   /** Fly mounts, optional. v0 uses an ephemeral root volume. */
   mounts?: Array<{
     volume: string;

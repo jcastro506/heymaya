@@ -1519,6 +1519,25 @@ If onboarding analysis cost exceeds target, reduce deep-watch count before reduc
 
 ---
 
+### Deferred Media Generation Task - Seedance 2.0
+
+This is a future OpenClaw runtime skill, not part of onboarding.
+
+- Maya can accept creator-sent reference images over iMessage.
+- Store each reference in R2 as a creator-owned media asset.
+- Maya turns the user's request into a vertical TikTok video brief.
+- Use OpenRouter `bytedance/seedance-2.0` for 9:16 reference-to-video.
+- MVP defaults: 720p, 5 seconds, approval-gated cost quote.
+- Current OpenRouter estimate: 720x1280 for 5 seconds is about $0.76 before
+  margin; 1080x1920 for 5 seconds is about $1.70 before margin.
+- Keep the implementation in a bundled OpenClaw skill named
+  `creator-seedance-video-generator`, not in onboarding UI code.
+- Test gates: mock OpenRouter async job lifecycle, verify R2 object ownership,
+  block cross-tenant media access, require approval before paid generation,
+  enforce 9:16 output constraints, and cover failed-job retry/recovery.
+
+---
+
 ## 14. Definition Of Working
 
 The product works when a first-time TikTok creator can:

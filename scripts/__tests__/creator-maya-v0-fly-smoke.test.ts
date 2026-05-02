@@ -21,6 +21,7 @@ describe("creator-maya-v0-fly-smoke", () => {
     expect(fixture.workspaceFiles["USER.md"]).toContain("Calendar: connected");
     expect(fixture.workspaceFiles["jobs.json"]).toContain("morning_brief");
     expect(fixture.bootCommand).toContain("openclaw gateway --allow-unconfigured");
+    expect(fixture.bootCommand).toContain("test -w /data/cron");
   });
 
   it("maps every workspace file into the expected Fly machine paths", () => {

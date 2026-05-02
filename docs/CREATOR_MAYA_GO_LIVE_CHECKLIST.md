@@ -102,6 +102,10 @@ Existing route: `/onboarding/business`.
   envs are in place.
 - [ ] Calendar write policy needs production copy: Maya only creates/updates
   Maya-owned holds after user approval.
+- [x] Browser onboarding uses Google OAuth as the real calendar connection path.
+  Mobile browsers can show OS-aware copy, but cannot reliably detect whether
+  Google Calendar or Apple Calendar apps are installed. Use app/deep links only
+  as optional affordances with browser OAuth or iPhone handoff fallback.
 
 ## OpenClaw And iMessage
 
@@ -115,8 +119,9 @@ Existing route: `/onboarding/business`.
   phone number and records `first_text_sent`.
 - [ ] If OpenClaw provisioning fails, show a web status error and alert the
   operator instead of leaving the user in a silent pending state.
-- [ ] Live OpenClaw deployment and native iMessage pairing still need a real
-  end-to-end test.
+- [x] Live OpenClaw deployment from signed-in localhost onboarding reached Fly
+  machine started + OpenClaw gateway ready with bundled Creator Maya skills.
+- [ ] Native iMessage pairing still needs a real end-to-end phone test.
 - [ ] Daily iMessage schedule needs production cron/heartbeat verification.
 - [x] iMessage account deletion confirmation path exists:
   - `POST /api/account/delete/request-from-imessage`
@@ -174,6 +179,24 @@ Creator track:
   video composer skill, not per-user drift.
 - [ ] Add tests for missing renderer, poor source footage, prompt injection in
   clip notes, and output duration/aspect constraints.
+- [ ] Plan and build `creator-seedance-video-generator` as a deferred
+  OpenClaw runtime skill:
+  - channel: creator texts Maya one or more approved self/reference images over
+    iMessage
+  - storage: persist originals and generated videos in creator-owned R2 objects
+  - model: OpenRouter `bytedance/seedance-2.0`
+  - default output: 9:16, 720p, 5 seconds; allow 1080p or longer only after
+    explicit approval
+  - inputs: creator-owned image references, prompt, optional first/last frame,
+    creator context, and posting goal
+  - approval gate: Maya quotes estimated cost before a paid generation job
+  - output: Maya texts the generated video back with caption, hook, and posting
+    plan
+  - safety: never use another person's image unless the creator explicitly
+    sends or approves it
+  - test gates: mocked OpenRouter job lifecycle, R2 ownership checks,
+    cross-tenant isolation, approval-required cost guard, 9:16 constraint, and
+    failed-job recovery path
 
 ## ScrapeCreators And Trend Scan
 

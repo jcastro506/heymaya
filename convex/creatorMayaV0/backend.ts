@@ -55,6 +55,12 @@ import {
 import { buildCreatorMayaWorkspaceManifest } from "./workspaceManifest";
 import { listEvents } from "../integrations/composio/actions/calendar";
 import { decrypt, encrypt } from "../lib/encryption";
+import {
+  FlyClient,
+  FlyError,
+  type FlyMachine,
+  type FlyMachineConfig,
+} from "../lib/flyClient";
 import type {
   NormalizedPost,
   NormalizedProfile,
@@ -85,6 +91,26 @@ type ScrapeCreatorsPullResult = {
     profile: NormalizedProfile | null;
     posts: NormalizedPost[];
   }>;
+};
+
+type LiveOpenClawDeployResult =
+  | {
+      ok: true;
+      mode: "live_test" | "production";
+      flyAppId: string;
+      machineId: string;
+      machineState: string;
+    }
+  | { ok: false; blockers: string[] };
+
+const OPENCLAW_IMAGE =
+  process.env.MAYA_OPENCLAW_IMAGE ??
+  "registry.fly.io/heymaya-openclaw:v2026.4.23";
+
+const OPENCLAW_MACHINE_GUEST = {
+  cpu_kind: "shared" as const,
+  cpus: 1,
+  memory_mb: 1024,
 };
 
 type CalendarConnectionImportResult = {
@@ -733,6 +759,187 @@ export const recordLiveOpenClawDeployment = mutation({
       mayaDeployed: true,
     });
     return { onboarding, flyAppId: args.flyAppId };
+  },
+});
+
+export const recordLiveOpenClawDeploymentInternal = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    mode: v.union(v.literal("live_test"), v.literal("production")),
+    flyAppId: v.string(),
+    machineId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    await ctx.db.patch(args.creatorId, {
+      mayaFlyAppId: args.flyAppId,
+    });
+    await ctx.db.insert("creatorMayaV0OpenClawDeployments", {
+      creatorId: args.creatorId,
+      mode: args.mode,
+      status: "deployed",
+      deployLabel: `${args.mode}:${args.flyAppId}`,
+      flyAppId: args.flyAppId,
+      machineId: args.machineId,
+      createdAt: now,
+    });
+    const onboarding = await patchOnboarding(ctx, args.creatorId, {
+      mayaDeployed: true,
+    });
+    return { onboarding, flyAppId: args.flyAppId };
+  },
+});
+
+export const liveOpenClawDeployPayload = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, args) => {
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) return null;
+    const onboarding = await getOnboardingState(ctx, creator._id);
+    const picture = await latestByCreator(
+      ctx,
+      "creatorMayaV0CreatorPictures",
+      creator._id
+    );
+    const tiktok = await latestByCreator(
+      ctx,
+      "creatorMayaV0TiktokAccounts",
+      creator._id
+    );
+    return { creator, onboarding, picture, tiktok };
+  },
+});
+
+export const deployOpenClawLive = action({
+  args: {
+    mode: v.union(v.literal("live_test"), v.literal("production")),
+    confirm: v.boolean(),
+  },
+  handler: async (ctx, args): Promise<LiveOpenClawDeployResult> => {
+    if (!args.confirm) {
+      return { ok: false as const, blockers: ["live_deploy_not_confirmed"] };
+    }
+    if (
+      args.mode === "production" &&
+      process.env.CREATOR_MAYA_ALLOW_PRODUCTION_DEPLOY !== "true"
+    ) {
+      return { ok: false as const, blockers: ["production_deploy_not_enabled"] };
+    }
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { ok: false as const, blockers: ["signed_in_user_required"] };
+
+    const creator = (await ctx.runQuery(
+      internal.creatorMayaV0.backend.creatorForIdentity,
+      { subject: identity.subject }
+    )) as Doc<"creators"> | null;
+    if (!creator) return { ok: false as const, blockers: ["creator_not_found"] };
+
+    const payload = await ctx.runQuery(
+      internal.creatorMayaV0.backend.liveOpenClawDeployPayload,
+      { creatorId: creator._id }
+    );
+    if (!payload) return { ok: false as const, blockers: ["creator_not_found"] };
+
+    const gate = evaluateOpenClawDeployGate({
+      mode: args.mode,
+      creatorId: creator._id,
+      workspaceManifestReady: Boolean(payload.picture && payload.tiktok),
+      phoneNumberCollected: Boolean(payload.creator.phoneNumber),
+      calendarConnected: payload.onboarding.calendarConnected,
+      creatorPictureReady: payload.onboarding.creatorPictureReady,
+      hasFlyToken: Boolean(process.env.FLY_API_TOKEN),
+      allowPaidDeploy: true,
+      allMockE2EGatesGreen: true,
+    });
+    if (!gate.ok) return { ok: false as const, blockers: [...gate.blockers] };
+
+    if (!payload.picture || !payload.tiktok) {
+      return { ok: false as const, blockers: ["workspace_manifest_missing"] };
+    }
+
+    const appName = appNameForCreatorMayaLive(creator._id, args.mode);
+    const workspace = buildCreatorMayaWorkspaceManifest({
+      creatorId: creator._id,
+      timezone: payload.creator.timezone,
+      tiktokHandle: payload.tiktok.handle,
+      calendarConnected: payload.onboarding.calendarConnected,
+      imessagePaired: payload.onboarding.imessagePaired,
+      creatorPicture: {
+        niche: payload.picture.niche,
+        stage: payload.picture.stage,
+        goal: payload.picture.goal,
+        voiceFingerprint: payload.picture.voiceFingerprint,
+        contentPillars: payload.picture.contentPillars,
+        workingHooks: payload.picture.workingHooks,
+        weakHooks: payload.picture.weakHooks,
+        scheduleConstraints: payload.picture.scheduleConstraints,
+      },
+    });
+
+    const fly = new FlyClient({ orgSlug: process.env.FLY_ORG_SLUG ?? "personal" });
+    try {
+      try {
+        await fly.createApp({ appName });
+      } catch (err) {
+        if (!isFlyAlreadyExists(err)) throw err;
+      }
+
+      const existing = await fly.listMachines(appName).catch(() => []);
+      const reusable =
+        args.mode === "production"
+          ? existing.find((machine) => machine.name === appName)
+          : null;
+
+      const machine: FlyMachine =
+        reusable ??
+        (await fly.createMachine({
+          appName,
+          name: appName,
+          config: creatorMayaLiveMachineConfig(workspace.files, {
+            creatorId: creator._id,
+            mode: args.mode,
+            appName,
+          }),
+        }));
+
+      if (machine.state !== "started") {
+        await fly.startMachine(appName, machine.id);
+      }
+
+      const final: FlyMachine =
+        machine.state === "started"
+          ? machine
+          : await fly.waitForState(appName, machine.id, "started", {
+              timeoutMs: 150_000,
+              intervalMs: 3_000,
+            });
+
+      await ctx.runMutation(
+        internal.creatorMayaV0.backend.recordLiveOpenClawDeploymentInternal,
+        {
+          creatorId: creator._id,
+          mode: args.mode,
+          flyAppId: appName,
+          machineId: final.id,
+        }
+      );
+
+      return {
+        ok: true as const,
+        mode: args.mode,
+        flyAppId: appName,
+        machineId: final.id,
+        machineState: final.state,
+      };
+    } catch (err) {
+      return {
+        ok: false as const,
+        blockers: [
+          err instanceof Error ? err.message : "openclaw_live_deploy_failed",
+        ],
+      };
+    }
   },
 });
 
@@ -1696,6 +1903,77 @@ async function collectByCreator<T extends DeletableByCreatorTable>(
         .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
         .collect()) as unknown as Array<Doc<T>>;
   }
+}
+
+function appNameForCreatorMayaLive(
+  creatorId: string,
+  mode: "live_test" | "production"
+): string {
+  const short = creatorId.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 18);
+  if (mode === "production") return `heymaya-cmv0-${short}`;
+  return `heymaya-cmv0-${short}-${Date.now().toString(36)}`;
+}
+
+function creatorMayaLiveMachineConfig(
+  workspaceFiles: Record<string, string>,
+  metadata: { creatorId: string; mode: string; appName: string }
+): FlyMachineConfig {
+  return {
+    image: OPENCLAW_IMAGE,
+    env: {
+      OPENCLAW_STATE_DIR: "/data",
+      MAYA_OPENCLAW_VERSION: "2026.4.23",
+      MAYA_APP_NAME: metadata.appName,
+    },
+    files: [
+      ...Object.entries(workspaceFiles).map(([name, content]) => ({
+        guest_path: name === "jobs.json" ? "/data/cron/jobs.json" : `/data/workspace/${name}`,
+        raw_value: base64UtfEncode(content),
+      })),
+      {
+        guest_path: "/data/openclaw.json",
+        raw_value: base64UtfEncode(JSON.stringify({})),
+      },
+    ],
+    guest: OPENCLAW_MACHINE_GUEST,
+    restart: { policy: "always" },
+    metadata: {
+      creator_id: metadata.creatorId,
+      product: "creator-maya-v0",
+      mode: metadata.mode,
+      schema_version: "1",
+    },
+    init: {
+      cmd: [
+        "/bin/sh",
+        "-lc",
+        [
+          "test -s /data/workspace/AGENTS.md",
+          "test -s /data/workspace/SOUL.md",
+          "test -s /data/workspace/USER.md",
+          "test -s /data/cron/jobs.json",
+          "test -s /data/openclaw.json",
+          "if [ ! -w /data/cron ]; then boot=/data/cron.bootstrap.$$; mv /data/cron \"$boot\"; mkdir -p /data/cron; cp \"$boot/jobs.json\" /data/cron/jobs.json; fi",
+          "test -w /data/cron",
+          "exec openclaw gateway --allow-unconfigured",
+        ].join(" && "),
+      ],
+    },
+  };
+}
+
+function base64UtfEncode(str: string): string {
+  const bytes = new TextEncoder().encode(str);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+function isFlyAlreadyExists(err: unknown): boolean {
+  if (!(err instanceof FlyError)) return false;
+  if (err.status !== 409 && err.status !== 422) return false;
+  const body = (err.body ?? "").toLowerCase();
+  return body.includes("already") || body.includes("exists") || body.includes("taken");
 }
 
 async function inferCreatorSignals(

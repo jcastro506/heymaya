@@ -148,6 +148,8 @@ export function buildCreatorMayaFlySmokeFixture(
       "test -s /data/workspace/USER.md",
       "test -s /data/cron/jobs.json",
       "test -s /data/openclaw.json",
+      "if [ ! -w /data/cron ]; then boot=/data/cron.bootstrap.$$; mv /data/cron \"$boot\"; mkdir -p /data/cron; cp \"$boot/jobs.json\" /data/cron/jobs.json; fi",
+      "test -w /data/cron",
       "exec openclaw gateway --allow-unconfigured",
     ].join(" && "),
   };
@@ -278,6 +280,7 @@ function verifyMachine(appName: string, machineId: string): string {
     "test -s /data/workspace/USER.md",
     "test -s /data/cron/jobs.json",
     "test -s /data/openclaw.json",
+    "test -w /data/cron",
     "(curl -fsS http://127.0.0.1:18789/healthz || curl -fsS http://127.0.0.1:3000/healthz || true)",
   ].join(" && ");
   const shellCommand = `/bin/sh -lc ${quoteShell(command)}`;
@@ -285,6 +288,35 @@ function verifyMachine(appName: string, machineId: string): string {
     ["ssh", "console", "--app", appName, "--machine", machineId, "--command", shellCommand],
     60_000
   );
+}
+
+function waitForGatewayReadyLogs(appName: string, machineId: string): string {
+  const deadline = Date.now() + 120_000;
+  const postReadyDeadlineMs = 20_000;
+  let logs = "";
+  while (Date.now() < deadline) {
+    logs = runFly(["logs", "--app", appName, "--machine", machineId, "--no-tail"], 30_000);
+    if (/cron\].*failed to start|Cannot read properties of undefined/i.test(logs)) {
+      throw new Error(
+        `OpenClaw gateway cron failed during boot for ${appName}/${machineId}.`
+      );
+    }
+    if (/\[gateway\].*ready/i.test(logs)) {
+      const stableUntil = Date.now() + postReadyDeadlineMs;
+      while (Date.now() < stableUntil) {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5_000);
+        logs = runFly(["logs", "--app", appName, "--machine", machineId, "--no-tail"], 30_000);
+        if (/cron\].*failed to start|Cannot read properties of undefined/i.test(logs)) {
+          throw new Error(
+            `OpenClaw gateway cron failed after ready for ${appName}/${machineId}.`
+          );
+        }
+      }
+      return logs;
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5_000);
+  }
+  throw new Error(`Timed out waiting for OpenClaw gateway ready logs for ${appName}.`);
 }
 
 function quoteShell(value: string): string {
@@ -325,11 +357,11 @@ async function runLiveSmoke(flags: Flags): Promise<void> {
     const verifyOutput = verifyMachine(appName, machine.id).trim();
     if (verifyOutput) console.log(verifyOutput);
 
-    const logs = runFly(["logs", "--app", appName, "--machine", machine.id, "--no-tail"], 30_000);
+    const logs = waitForGatewayReadyLogs(appName, machine.id);
     const interesting = logs
       .split(/\r?\n/)
-      .filter((line) => /openclaw|gateway|health|ready|error/i.test(line))
-      .slice(-12)
+      .filter((line) => /openclaw|gateway|cron|health|ready|error|failed/i.test(line))
+      .slice(-20)
       .join("\n");
     if (interesting) console.log(interesting);
 

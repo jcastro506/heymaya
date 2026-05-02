@@ -190,16 +190,69 @@ function memoryMd(input: CreatorMayaWorkspaceInput): string {
 }
 
 function jobsJson(input: CreatorMayaWorkspaceInput): string {
+  const jobs = [
+    {
+      entryId: "morning_brief",
+      name: "Morning brief",
+      cron: "0 7 * * *",
+      message:
+        "Run Creator Maya's morning brief. Read creator picture, recent TikTok signal, calendar availability, and current goals. Send one concise iMessage with today's best content move and any useful schedule hold proposal.",
+    },
+    {
+      entryId: "performance_check_2h",
+      name: "Performance check",
+      cron: "0 8-22/2 * * *",
+      message:
+        "Check recent TikTok performance against this creator's baseline. If there is a meaningful anomaly or a clear next action, send one grounded iMessage. Otherwise write memory and stay quiet.",
+    },
+    {
+      entryId: "trend_scan",
+      name: "Trend scan",
+      cron: "0 11 * * *",
+      message:
+        "Run Creator Maya's TikTok trend scan. Translate broad trend signal into one creator-specific idea only if it fits the creator picture, schedule, and content pillars.",
+    },
+    {
+      entryId: "weekly_plan",
+      name: "Weekly plan",
+      cron: "0 16 * * 0",
+      message:
+        "Build next week's creator plan from calendar availability, content pillars, post performance, and the creator's current goal. Propose filming/editing holds before creating calendar events.",
+    },
+    {
+      entryId: "weekly_review",
+      name: "Weekly review",
+      cron: "0 21 * * 0",
+      message:
+        "Review the creator's week. Save what worked, what missed, what to stop repeating, and the single highest-leverage experiment for next week.",
+    },
+  ].map((job) => ({
+    jobId: `creator-maya-v0-${job.entryId}`,
+    name: job.name,
+    description: `Creator Maya v0 ${job.entryId.replaceAll("_", " ")} loop.`,
+    enabled: true,
+    schedule: {
+      kind: "cron",
+      expr: job.cron,
+      tz: input.timezone,
+    },
+    sessionTarget: "isolated",
+    wakeMode: "next-heartbeat",
+    payload: {
+      kind: "agentTurn",
+      message: job.message,
+    },
+    delivery: {
+      mode: "announce",
+      channel: "last",
+      bestEffort: true,
+    },
+    entryId: job.entryId,
+  }));
+
   return JSON.stringify(
     {
-      timezone: input.timezone,
-      jobs: [
-        { name: "morning_brief", cron: "0 7 * * *" },
-        { name: "performance_check_2h", cron: "0 8-22/2 * * *" },
-        { name: "trend_scan", cron: "0 11 * * *" },
-        { name: "weekly_plan", cron: "0 16 * * 0" },
-        { name: "weekly_review", cron: "0 21 * * 0" },
-      ],
+      jobs,
     },
     null,
     2
