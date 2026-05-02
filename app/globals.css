@@ -1,4 +1,7 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+
+@source "../app";
+@source "../components";
 
 :root {
   /* Maya palette — editorial dark, warm, confident.

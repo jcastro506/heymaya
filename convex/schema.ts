@@ -1177,7 +1177,26 @@ export default defineSchema({
   })
     .index("by_creator", ["creatorId"])
     .index("by_creator_and_channel", ["creatorId", "channel"])
+    .index("by_channel_and_phone", ["channel", "phoneNumber"])
     .index("by_external_pairing_id", ["externalPairingId"]),
+
+  accountDeletionRequests: defineTable({
+    creatorId: v.id("creators"),
+    source: v.union(v.literal("web"), v.literal("imessage")),
+    confirmationPhrase: v.string(),
+    status: v.union(
+      v.literal("requested"),
+      v.literal("confirmed"),
+      v.literal("cancelled"),
+      v.literal("expired")
+    ),
+    requestedAt: v.number(),
+    expiresAt: v.number(),
+    confirmedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_status", ["creatorId", "status"]),
 
   // ────────────────────────────────────────────────────────────────────────
   // Sprint 5 — Composio inbound webhook audit log.
@@ -1371,6 +1390,235 @@ export default defineSchema({
     .index("by_expires_at", ["expiresAt"]),
 
   // ────────────────────────────────────────────────────────────────────────
+  // Creator Maya v0 — TikTok-first, iMessage-only, calendar-aware reset.
+  //
+  // These additive tables intentionally sit beside the older broad creator
+  // manager tables. They give the new MVP a clean data contract without
+  // deleting or rewriting existing product surfaces.
+  // ────────────────────────────────────────────────────────────────────────
+
+  creatorMayaV0Onboarding: defineTable({
+    creatorId: v.id("creators"),
+    tiktokConnected: v.boolean(),
+    metadataPulled: v.boolean(),
+    videoSamplesAnalyzed: v.boolean(),
+    calendarConnected: v.boolean(),
+    interviewComplete: v.boolean(),
+    readbackConfirmed: v.boolean(),
+    creatorPictureReady: v.boolean(),
+    imessagePaired: v.boolean(),
+    mayaDeployed: v.boolean(),
+    currentStep: v.string(),
+    progressPercent: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_step", ["creatorId", "currentStep"]),
+
+  creatorMayaV0TiktokAccounts: defineTable({
+    creatorId: v.id("creators"),
+    handle: v.string(),
+    displayName: v.string(),
+    followerCount: v.number(),
+    bio: v.string(),
+    avatarUrl: v.optional(v.string()),
+    verifiedAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_handle", ["handle"]),
+
+  creatorMayaV0TiktokPosts: defineTable({
+    creatorId: v.id("creators"),
+    tiktokPostId: v.string(),
+    caption: v.string(),
+    thumbnailUrl: v.optional(v.string()),
+    videoUrl: v.optional(v.string()),
+    durationSec: v.optional(v.number()),
+    publishedAt: v.number(),
+    viewCount: v.number(),
+    likeCount: v.number(),
+    commentCount: v.number(),
+    shareCount: v.number(),
+    formatKey: v.optional(v.string()),
+    selectedForAnalysis: v.optional(v.boolean()),
+    watchMode: v.optional(
+      v.union(
+        v.literal("metadata_only"),
+        v.literal("first_3_seconds"),
+        v.literal("sampled_frames"),
+        v.literal("full_video")
+      )
+    ),
+    sampleReasons: v.optional(v.array(v.string())),
+    createdAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_published", ["creatorId", "publishedAt"])
+    .index("by_creator_and_tiktok_post", ["creatorId", "tiktokPostId"]),
+
+  creatorMayaV0CalendarConnections: defineTable({
+    creatorId: v.id("creators"),
+    provider: v.union(v.literal("google"), v.literal("apple"), v.literal("mock")),
+    providerMode: v.optional(
+      v.union(
+        v.literal("google_api"),
+        v.literal("apple_phone_api"),
+        v.literal("mock")
+      )
+    ),
+    externalAccountId: v.optional(v.string()),
+    oauthAccessToken: v.optional(v.string()),
+    oauthRefreshToken: v.optional(v.string()),
+    oauthExpiresAt: v.optional(v.number()),
+    oauthTokenType: v.optional(v.string()),
+    oauthScope: v.optional(v.string()),
+    timezone: v.string(),
+    scopes: v.array(v.string()),
+    canCreateHolds: v.boolean(),
+    connectedAt: v.number(),
+    lastSyncedAt: v.optional(v.number()),
+    lookaheadDays: v.optional(v.number()),
+    status: v.union(
+      v.literal("active"),
+      v.literal("revoked"),
+      v.literal("expired")
+    ),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_provider", ["creatorId", "provider"]),
+
+  creatorMayaV0CalendarEvents: defineTable({
+    creatorId: v.id("creators"),
+    providerEventId: v.string(),
+    title: v.string(),
+    description: v.optional(v.string()),
+    startMs: v.number(),
+    endMs: v.number(),
+    createdBy: v.union(
+      v.literal("maya"),
+      v.literal("creator"),
+      v.literal("external")
+    ),
+    mayaOwnerKey: v.optional(v.string()),
+    idempotencyKey: v.optional(v.string()),
+    classification: v.optional(
+      v.union(
+        v.literal("creator_relevant"),
+        v.literal("creator_shoot"),
+        v.literal("work_meeting"),
+        v.literal("recurring_noise"),
+        v.literal("personal_private")
+      )
+    ),
+    contentArc: v.optional(v.array(v.any())),
+    privacyRedacted: v.optional(v.boolean()),
+    source: v.union(
+      v.literal("availability"),
+      v.literal("context"),
+      v.literal("content_hold"),
+      v.literal("brand_call")
+    ),
+    createdAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_start", ["creatorId", "startMs"])
+    .index("by_creator_and_idempotency", ["creatorId", "idempotencyKey"]),
+
+  creatorMayaV0Intake: defineTable({
+    creatorId: v.id("creators"),
+    answers: v.any(),
+    inferredSignals: v.any(),
+    readback: v.any(),
+    correctedReadback: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"]),
+
+  creatorMayaV0CreatorPictures: defineTable({
+    creatorId: v.id("creators"),
+    stage: v.string(),
+    goal: v.string(),
+    niche: v.string(),
+    audience: v.string(),
+    voiceFingerprint: v.string(),
+    contentPillars: v.array(v.string()),
+    workingHooks: v.array(v.string()),
+    weakHooks: v.array(v.string()),
+    scheduleConstraints: v.array(v.string()),
+    doNotSuggest: v.array(v.string()),
+    confidence: v.number(),
+    sourceCitations: v.array(v.any()),
+    generatedAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"]),
+
+  creatorMayaV0DailyBriefs: defineTable({
+    creatorId: v.id("creators"),
+    localDate: v.string(),
+    shouldSend: v.boolean(),
+    message: v.optional(v.string()),
+    noSendReason: v.optional(v.string()),
+    proposedWorkStartMs: v.optional(v.number()),
+    proposedWorkEndMs: v.optional(v.number()),
+    citations: v.array(v.any()),
+    sentAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_date", ["creatorId", "localDate"])
+    .index("by_creator_and_created", ["creatorId", "createdAt"]),
+
+  creatorMayaV0ActionLog: defineTable({
+    creatorId: v.id("creators"),
+    action: v.string(),
+    status: v.union(v.literal("ok"), v.literal("skipped"), v.literal("failed")),
+    reason: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_created", ["creatorId", "createdAt"]),
+
+  creatorMayaV0OpenClawDeployments: defineTable({
+    creatorId: v.id("creators"),
+    mode: v.union(v.literal("mock"), v.literal("live_test"), v.literal("production")),
+    status: v.union(
+      v.literal("blocked"),
+      v.literal("deployed"),
+      v.literal("failed")
+    ),
+    deployLabel: v.optional(v.string()),
+    flyAppId: v.optional(v.string()),
+    machineId: v.optional(v.string()),
+    blockers: v.optional(v.array(v.string())),
+    workspaceFiles: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_created", ["creatorId", "createdAt"]),
+
+  creatorMayaV0BrandTargets: defineTable({
+    creatorId: v.id("creators"),
+    brandName: v.string(),
+    category: v.string(),
+    score: v.number(),
+    reasons: v.array(v.string()),
+    contactProvenance: v.optional(v.string()),
+    status: v.union(
+      v.literal("researched"),
+      v.literal("queued"),
+      v.literal("approved"),
+      v.literal("sent"),
+      v.literal("suppressed")
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_status", ["creatorId", "status"]),
+
+  // ────────────────────────────────────────────────────────────────────────
   // ─── Service product Sprint 0 (heymaya/service-v0) — added 2026-04-27 ──
   //
   // Service-business-side tables. Per docs/SPRINT_PLAN_SERVICE_V0.md § 8:
@@ -1491,6 +1739,22 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_fly_app", ["mayaFlyAppId"])
     .index("by_stripe_customer", ["stripeCustomerId"]),
+
+  businessMayaV0Intake: defineTable({
+    businessId: v.id("businesses"),
+    businessType: v.string(),
+    offer: v.string(),
+    targetCustomer: v.string(),
+    market: v.optional(v.string()),
+    topMarketingGoal: v.string(),
+    channels: v.array(v.string()),
+    phoneNumber: v.optional(v.string()),
+    timezone: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_business", ["businessId"])
+    .index("by_business_and_updated", ["businessId", "updatedAt"]),
 
   // Parallel to `creatorPicture`. High-thinking synthesis output written
   // once at onboarding (Gemini 3 Flash @ HIGH per § 3 routing matrix).

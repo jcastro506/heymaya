@@ -16,6 +16,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Section } from "@/components/business/Section";
@@ -24,6 +25,7 @@ import { ConnectionsPanel } from "@/components/business/ConnectionsPanel";
 import { ApprovalRulesPanel } from "@/components/business/ApprovalRulesPanel";
 import { BillingPanel } from "@/components/business/BillingPanel";
 import { VoiceSetupPanel } from "@/components/business/VoiceSetupPanel";
+import { Trash2 } from "lucide-react";
 
 type Tab = "overview" | "connections" | "trust" | "billing";
 
@@ -88,11 +90,14 @@ export default function ProfilePage() {
 
       <div className="mx-auto mt-6 max-w-5xl space-y-5 px-5 sm:px-8">
         {tab === "overview" && (
-          <OverviewTab
-            business={profile.business}
-            account={profile.account}
-            plan={profile.features.plan}
-          />
+          <div className="space-y-5">
+            <OverviewTab
+              business={profile.business}
+              account={profile.account}
+              plan={profile.features.plan}
+            />
+            <DeleteAccountPanel />
+          </div>
         )}
 
         {tab === "connections" &&
@@ -178,8 +183,29 @@ function OverviewTab({
       <Field label="Plan tier" value={plan} />
       <p className="text-xs text-paper-faint">
         Editing lands in Wave D. For now, message Maya with what you want
-        changed and she'll route it.
+        changed and she&apos;ll route it.
       </p>
+    </div>
+  );
+}
+
+function DeleteAccountPanel() {
+  return (
+    <div className="rounded-xl border border-rose/40 bg-ink-2/40 px-4 py-4">
+      <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-rose">
+        Account deletion
+      </p>
+      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-paper-dim">
+        Removes the business profile, connected tokens, Maya memory projection,
+        voice/iMessage routing rows, and the owner account.
+      </p>
+      <Link
+        href="/account/delete"
+        className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-rose px-3 text-sm font-medium text-white transition hover:brightness-95"
+      >
+        <Trash2 className="h-4 w-4" />
+        Delete account
+      </Link>
     </div>
   );
 }

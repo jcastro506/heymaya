@@ -9,6 +9,7 @@
  */
 
 import type * as _test_serviceFixtures from "../_test/serviceFixtures.js";
+import type * as accountDeletion from "../accountDeletion.js";
 import type * as agents_modelRouter_logCall from "../agents/modelRouter/logCall.js";
 import type * as agents_modelRouter_maya from "../agents/modelRouter/maya.js";
 import type * as agents_modelRouter_openRouterClient from "../agents/modelRouter/openRouterClient.js";
@@ -43,6 +44,7 @@ import type * as agents_packs_maya_service_standingOrders from "../agents/packs/
 import type * as agents_packs_maya_service_types from "../agents/packs/maya_service/types.js";
 import type * as agents_packs_maya_service_voiceCallConfig from "../agents/packs/maya_service/voiceCallConfig.js";
 import type * as agents_packs_maya_service_wikiInitialPages from "../agents/packs/maya_service/wikiInitialPages.js";
+import type * as agents_packs_riley_growth_clawhubManifest from "../agents/packs/riley_growth/clawhubManifest.js";
 import type * as agents_packs_riley_growth_generators from "../agents/packs/riley_growth/generators.js";
 import type * as billing_checkout from "../billing/checkout.js";
 import type * as billing_portal from "../billing/portal.js";
@@ -50,6 +52,19 @@ import type * as billing_priceIds from "../billing/priceIds.js";
 import type * as billing_stripeClient from "../billing/stripeClient.js";
 import type * as billing_webhook from "../billing/webhook.js";
 import type * as businessReadiness from "../businessReadiness.js";
+import type * as creatorMayaV0_backend from "../creatorMayaV0/backend.js";
+import type * as creatorMayaV0_brandOutreach from "../creatorMayaV0/brandOutreach.js";
+import type * as creatorMayaV0_calendarLookahead from "../creatorMayaV0/calendarLookahead.js";
+import type * as creatorMayaV0_calendarScheduling from "../creatorMayaV0/calendarScheduling.js";
+import type * as creatorMayaV0_dailyBrief from "../creatorMayaV0/dailyBrief.js";
+import type * as creatorMayaV0_onboardingFlow from "../creatorMayaV0/onboardingFlow.js";
+import type * as creatorMayaV0_onboardingIntake from "../creatorMayaV0/onboardingIntake.js";
+import type * as creatorMayaV0_openClawDeployGate from "../creatorMayaV0/openClawDeployGate.js";
+import type * as creatorMayaV0_scope from "../creatorMayaV0/scope.js";
+import type * as creatorMayaV0_tiering from "../creatorMayaV0/tiering.js";
+import type * as creatorMayaV0_trendBenchmark from "../creatorMayaV0/trendBenchmark.js";
+import type * as creatorMayaV0_videoSampling from "../creatorMayaV0/videoSampling.js";
+import type * as creatorMayaV0_workspaceManifest from "../creatorMayaV0/workspaceManifest.js";
 import type * as creators from "../creators.js";
 import type * as dealTriage from "../dealTriage.js";
 import type * as deals from "../deals.js";
@@ -160,6 +175,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "_test/serviceFixtures": typeof _test_serviceFixtures;
+  accountDeletion: typeof accountDeletion;
   "agents/modelRouter/logCall": typeof agents_modelRouter_logCall;
   "agents/modelRouter/maya": typeof agents_modelRouter_maya;
   "agents/modelRouter/openRouterClient": typeof agents_modelRouter_openRouterClient;
@@ -194,6 +210,7 @@ declare const fullApi: ApiFromModules<{
   "agents/packs/maya_service/types": typeof agents_packs_maya_service_types;
   "agents/packs/maya_service/voiceCallConfig": typeof agents_packs_maya_service_voiceCallConfig;
   "agents/packs/maya_service/wikiInitialPages": typeof agents_packs_maya_service_wikiInitialPages;
+  "agents/packs/riley_growth/clawhubManifest": typeof agents_packs_riley_growth_clawhubManifest;
   "agents/packs/riley_growth/generators": typeof agents_packs_riley_growth_generators;
   "billing/checkout": typeof billing_checkout;
   "billing/portal": typeof billing_portal;
@@ -201,6 +218,19 @@ declare const fullApi: ApiFromModules<{
   "billing/stripeClient": typeof billing_stripeClient;
   "billing/webhook": typeof billing_webhook;
   businessReadiness: typeof businessReadiness;
+  "creatorMayaV0/backend": typeof creatorMayaV0_backend;
+  "creatorMayaV0/brandOutreach": typeof creatorMayaV0_brandOutreach;
+  "creatorMayaV0/calendarLookahead": typeof creatorMayaV0_calendarLookahead;
+  "creatorMayaV0/calendarScheduling": typeof creatorMayaV0_calendarScheduling;
+  "creatorMayaV0/dailyBrief": typeof creatorMayaV0_dailyBrief;
+  "creatorMayaV0/onboardingFlow": typeof creatorMayaV0_onboardingFlow;
+  "creatorMayaV0/onboardingIntake": typeof creatorMayaV0_onboardingIntake;
+  "creatorMayaV0/openClawDeployGate": typeof creatorMayaV0_openClawDeployGate;
+  "creatorMayaV0/scope": typeof creatorMayaV0_scope;
+  "creatorMayaV0/tiering": typeof creatorMayaV0_tiering;
+  "creatorMayaV0/trendBenchmark": typeof creatorMayaV0_trendBenchmark;
+  "creatorMayaV0/videoSampling": typeof creatorMayaV0_videoSampling;
+  "creatorMayaV0/workspaceManifest": typeof creatorMayaV0_workspaceManifest;
   creators: typeof creators;
   dealTriage: typeof dealTriage;
   deals: typeof deals;

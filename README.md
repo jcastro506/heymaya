@@ -4,21 +4,34 @@
 
 HeyMaya is a **dual-product** repo: one agent shape, two ICPs.
 
-- **Creator product** — *Maya for creators (5K–500K followers).* Single-agent AI creator manager that lives in iMessage / WhatsApp / SMS / web chat. Plans content, watches posts, drafts brand-deal replies, holds the creator accountable. Grounded in real platform data via ScrapeCreators (27+ networks).
+- **Creator product** — *Creator Maya for TikTok creators (5K–500K followers).* TikTok-first social media manager that lives in iMessage for v0, studies the creator's posts, reads their calendar, schedules approved content work blocks, watches new TikToks, and sends one grounded daily move. Grounded in real platform data via ScrapeCreators.
 - **Service-business product** — *Maya for home-service businesses (1-25 trucks: plumbers, HVAC, roofers, electricians, cleaners, landscapers).* Same single-agent shape. Lives in the operator's text thread + on the phone (Studio voice). Turns every completed job into local marketing: GBP posts, review requests, brand-voice review replies, FB/IG content, lead-response nudges.
 
 Single codebase, two product packs. Account-type fork at the routing layer (`accountType: 'creator' | 'service-business'` enum on the existing accounts table — additive, not a rename).
 
-> **In v0, the creator product is flag-gated off in production.** `NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT` defaults to `false`, which makes `/` the service-business landing and 308-redirects every creator URL (`/creators`, `/onboarding/maya`, creator HQ paths) to its service equivalent. All creator code, tests, schema, and Convex tables remain in the repo. Flip the env var to `true` to restore the dual-track public surface.
+> **Current Creator Maya beta surface:** `/creator-maya-v0` is the focused
+> TikTok-first onboarding app and remains publicly reachable for beta setup.
+> Legacy broad creator surfaces are still controlled by
+> `NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT`: when it is `false`, `/creators`,
+> `/onboarding/maya`, and creator HQ paths redirect to the service equivalent.
+> Flip the env var to `true` only when restoring the broader dual-track site.
 
 ## Status
 
-- **Creator product:** MVP-ready code-side but **suppressed behind `NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT` (default `false`)** for v0. Sprints 0 → 6 done + Wave 6 smoke tests (1371/1371 tests, 0 TS errors). Code preserved in repo; one env flip re-exposes it. Operator-blocked on infra keys (see `CLAUDE.md` § Operator-required).
+- **Creator product:** beta path is `/creator-maya-v0`: iMessage-only,
+  calendar-aware, ScrapeCreators-first, and grounded by post/video/trend
+  evidence. Public go-live work is tracked in
+  `docs/CREATOR_MAYA_GO_LIVE_CHECKLIST.md`.
 - **Service-business product:** Sprint 0 (scaffolding) **complete** on branch **`heymaya/service-v0`** (off `main`). Convex preview `heymaya-service-v0`. See `docs/SPRINT_PLAN_SERVICE_V0.md` for the locked 8-sprint v0 plan. Sprint 1 (Foundation) is next.
 
 ## Plans + working agreement
 
 - `docs/SPRINT_PLAN_V0.md` — locked **creator** product v0 plan (8 sprints).
+- `docs/CREATOR_MAYA_TIKTOK_FIRST_SPRINT_PLAN.md` — current **Creator Maya**
+  reset: TikTok-first, iMessage-only v0 with calendar scheduling and
+  ScrapeCreators trend/source gates.
+- `docs/CREATOR_MAYA_GO_LIVE_CHECKLIST.md` — production checklist for Clerk,
+  Google Calendar OAuth, Vercel domain setup, and beta gates.
 - `docs/SPRINT_PLAN_SERVICE_V0.md` — locked **service-business** product v0 plan (8 sprints, mirrors creator one-for-one for side-by-side compare).
 - `CLAUDE.md` — coding conventions, architecture principles, what's NOT built, both-product status.
 

@@ -22,6 +22,10 @@
  */
 
 import type { Doc } from "../../../_generated/dataModel";
+import {
+  CLAWHUB_BASELINE_SKILLS,
+  CLAWHUB_REGISTRY_URL,
+} from "./clawhubManifest";
 
 export interface PackInputs {
   agent: Doc<"growthAgents">;
@@ -237,41 +241,78 @@ function renderTools({ agent }: PackInputs): string {
   const twReady = Boolean(agent.twitterConnection);
   return `# TOOLS.md
 
-## LinkedIn (via Composio) ${liReady ? "[connected]" : "[NOT connected]"}
+## LinkedIn — two paths
+
+### Reads (via \`arun-8687/linkedin-cli\` ClawHub skill, cookie auth)
+
+This is my primary LinkedIn surface in v0. Cookie env vars come from
+Josh's browser (\`LINKEDIN_LI_AT\`, \`LINKEDIN_JSESSIONID\`). If a request
+fails with auth-revoked, ping Josh: he extracts fresh cookies in 30s.
+
+- \`lk whoami\` — Josh's profile details
+- \`lk search "<query>"\` — find people by keywords (use for outreach lists)
+- \`lk profile <public_id>\` — full profile detail on a target
+- \`lk feed -n 10\` — top N timeline posts
+- \`lk messages\` — recent DM conversations (read-only)
+- \`lk check\` — combined whoami + messages
+
+### Posts + comments (via Composio) ${liReady ? "[connected]" : "[Composio NOT connected]"}
+
+If Composio LinkedIn is connected, I can publish + comment. If it isn't,
+I draft and Josh copy/pastes (locked safety rule #1 — no autonomous
+posting in week 1 anyway).
 
 - \`linkedin.createPost({ text, visibility, imageUrns? })\` — publish to feed
-- \`linkedin.createComment({ postUrn, text })\` — comment on someone else's post
-- \`linkedin.getMyInfo()\` — Josh's profile metadata
+- \`linkedin.createComment({ postUrn, text })\` — comment on someone's post
 - \`linkedin.getShareStats({ postUrn })\` — impressions / clicks / likes / comments
 - \`linkedin.listReactions({ postUrn, count?, start? })\` — who liked a post
 - \`linkedin.initImageUpload({ mimeType? })\` — start the image-attach flow
 
-What I CAN'T do on LinkedIn (partner-gated, not in v0):
-- Send DMs
-- Search profiles
-- Read commenter text on my posts (counts only)
-- Watch a target's posts
-- Send connection requests
+### Voice scaffolding (via \`1kalin/linkedin-writer\` ClawHub skill)
 
-## X / Twitter (via Composio) ${twReady ? "[connected]" : "[NOT connected]"}
+Reference templates for LinkedIn-native formats: Story / Contrarian / List /
+Lesson / Behind-the-Scenes, with 7 hook formulas. **These are the floor,
+not the ceiling.** Memory-wiki overrides any template rule the moment Josh
+edits a draft a different way. Promote his voice rules to \`concepts/voice-rules/\`
+during dreaming.
 
-- \`twitter.createPost({ text, mediaIds?, inReplyToTweetId?, quoteTweetId? })\` — tweet, reply, or quote-tweet
-- \`twitter.searchRecent({ query, maxResults?, startTime?, endTime? })\` — last-7d search
-- \`twitter.lookupTweet({ tweetId })\` — engagement metrics on a specific tweet
-- \`twitter.listLikers({ tweetId, maxResults?, paginationToken? })\` — who liked
-- \`twitter.getMyInfo()\` — Josh's profile + follower counts
-- \`twitter.lookupUser({ username })\` — research a target account
-- \`twitter.likeTweet({ tweetId })\` / \`twitter.retweet({ tweetId })\` — operator-approved engagement
-- \`twitter.getReverseChronoTimeline({ maxResults?, paginationToken? })\` — Josh's home feed
+### What I CAN'T do on LinkedIn (skip in v0)
 
-What I won't do on X (skip in v0):
+- Send DMs as Riley (Unipile deferred; manual via Josh)
+- Send connection requests (account-safety risk)
+- Watch a target's posts on a schedule
+
+## X / Twitter (via \`chuhuilove/bird-twitter\` ClawHub skill, cookie auth)
+
+Cookie-based — \`AUTH_TOKEN\` + \`CT0\` from Josh's browser. Replaces the
+Composio path entirely; the Composio Twitter wrappers stay as fallback
+${twReady ? "[Composio also connected]" : "[Composio NOT connected — bird-twitter is the only path]"}.
+
+- \`bird tweet "<text>"\` / \`bird reply <id> "<text>"\` — post + reply (media: up to 4 images or 1 video)
+- \`bird read <id>\` / \`bird thread <id>\` / \`bird replies <id>\` — read tweets and threads
+- \`bird user-tweets <handle>\` — fetch a user's recent posts
+- \`bird home\` / \`bird mentions\` / \`bird likes\` / \`bird bookmarks\` — my timelines
+- \`bird search "<query>"\` — search tweets
+- \`bird news\` / \`bird trending\` — discovery
+- \`bird whoami\` / \`bird check\` — profile + state
+- \`bird follow <handle>\` / \`bird unfollow <handle>\` — operator-approved
+- \`bird followers\` / \`bird following\` / \`bird lists\` — relationship state
+
+### What I won't do on X (skip in v0)
+
 - DMs (gated, abuse-flagged)
 - Full-archive search (Enterprise-only; expensive PPU)
-- Spaces / Bookmarks / Lists / Mute
 
-## Brave Search (web research)
+## Brave Search (via \`steipete/brave-search\` ClawHub skill)
 
-- \`brave.search({ query, count?, freshness? })\` — web search for trend / market context. Use freshness=\`pd\` (past day) for "what's happening overnight" research.
+Official Brave Search API (\`BRAVE_API_KEY\` already set). Two commands:
+
+- \`brave search "<query>" [--count N] [--content]\` — web search; pass
+  \`--content\` to inline page markdown for the top N results
+- \`brave content <url>\` — fetch any URL and convert to clean markdown
+
+Plus OpenClaw native \`web_search\` / \`web_fetch\` are available as a
+fallback (auto-detects Brave when the key is set).
 
 ## Convex (data layer)
 
@@ -394,14 +435,21 @@ function renderUser({ creator }: PackInputs): string {
 /* -------------------------------------------------------------------------- */
 
 function renderManifest(): string {
-  // V0: only Anthropic public skills get installed at runtime; Riley's
-  // judgment-layer skills (post-drafter, outreach, etc.) ship as code
-  // we'll add in Wave D and bundle into the workspace tar directly.
+  // Anthropic public skills: none in Riley's v0 baseline. The maya_service
+  // pack uses pdf/docx/internal-comms because Maya parses contracts and
+  // ships packets; Riley does neither in v0.
+  //
+  // ClawHub: 4 skills covering LinkedIn reads (cookie), X full surface
+  // (cookie), LinkedIn voice templates, and Brave search. See
+  // `clawhubManifest.ts` for the per-skill rationale + auth notes.
   return JSON.stringify(
     {
       version: 1,
       anthropic: { repo: "anthropics/skills", skills: [] },
-      clawhub: { skills: [] },
+      clawhub: {
+        registry: CLAWHUB_REGISTRY_URL,
+        skills: CLAWHUB_BASELINE_SKILLS,
+      },
     },
     null,
     2

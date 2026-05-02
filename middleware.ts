@@ -47,11 +47,20 @@ const CREATOR_HQ_PREFIXES = [
 const isPublic = createRouteMatcher([
   "/",
   "/creators",
+  "/creator-maya-v0(.*)",
   "/business",
+  "/business-maya-v0(.*)",
   "/growth",
+  "/privacy",
+  "/terms",
+  "/account/delete",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/clerk/webhook",
+  "/api/google-calendar/start",
+  "/api/google-calendar/callback",
+  "/api/account/delete/request-from-imessage",
+  "/api/account/delete/from-imessage",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

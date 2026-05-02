@@ -83,6 +83,17 @@ export interface BulkPullResult {
   apiCallsUsed: number;
 }
 
+const businessMayaV0IntakeValidator = v.object({
+  businessType: v.string(),
+  offer: v.string(),
+  targetCustomer: v.string(),
+  market: v.optional(v.string()),
+  topMarketingGoal: v.string(),
+  channels: v.array(v.string()),
+  phoneNumber: v.optional(v.string()),
+  timezone: v.string(),
+});
+
 /* -------------------------------------------------------------------------- */
 /* Internal mutations + queries                                                */
 /* -------------------------------------------------------------------------- */
@@ -270,6 +281,54 @@ export const persistBusinessPictureRow = internalMutation({
   },
 });
 
+export const saveBusinessMayaV0IntakeInternal = internalMutation({
+  args: {
+    businessId: v.id("businesses"),
+    intake: businessMayaV0IntakeValidator,
+  },
+  handler: async (ctx, args): Promise<Id<"businessMayaV0Intake">> => {
+    const business = await ctx.db.get(args.businessId);
+    if (!business) {
+      throw new Error(
+        `saveBusinessMayaV0IntakeInternal: business ${args.businessId} not found.`
+      );
+    }
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("businessMayaV0Intake")
+      .withIndex("by_business", (q) => q.eq("businessId", args.businessId))
+      .first();
+    const fields = {
+      businessId: args.businessId,
+      businessType: args.intake.businessType,
+      offer: args.intake.offer,
+      targetCustomer: args.intake.targetCustomer,
+      market: args.intake.market,
+      topMarketingGoal: args.intake.topMarketingGoal,
+      channels: args.intake.channels.slice(0, 12),
+      phoneNumber: args.intake.phoneNumber,
+      timezone: args.intake.timezone,
+      updatedAt: now,
+    };
+    await ctx.db.patch(args.businessId, {
+      name: business.name,
+      serviceTypes:
+        business.serviceTypes.length > 0
+          ? business.serviceTypes
+          : [args.intake.businessType],
+      updatedAt: now,
+    });
+    if (existing) {
+      await ctx.db.patch(existing._id, fields);
+      return existing._id;
+    }
+    return await ctx.db.insert("businessMayaV0Intake", {
+      ...fields,
+      createdAt: now,
+    });
+  },
+});
+
 export const getBusinessForPipeline = internalQuery({
   args: { businessId: v.id("businesses") },
   handler: async (ctx, args): Promise<Doc<"businesses"> | null> => {
@@ -365,6 +424,57 @@ export const recordOnboardingStep = action({
   },
 });
 
+export const saveBusinessMayaV0Intake = action({
+  args: businessMayaV0IntakeValidator,
+  handler: async (ctx, args): Promise<{ ok: true; intakeId: Id<"businessMayaV0Intake"> }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("saveBusinessMayaV0Intake: not authenticated.");
+    }
+    const ctxRow = await ctx.runQuery(
+      internal.integrations.zernio.oauth.getMyBusinessForOAuth,
+      { clerkUserId: identity.subject }
+    );
+    if (!ctxRow) {
+      throw new Error(
+        "saveBusinessMayaV0Intake: no service-business row for signed-in user."
+      );
+    }
+    const required = [
+      ["businessType", args.businessType],
+      ["offer", args.offer],
+      ["targetCustomer", args.targetCustomer],
+      ["topMarketingGoal", args.topMarketingGoal],
+      ["timezone", args.timezone],
+    ] as const;
+    for (const [key, value] of required) {
+      if (value.trim().length === 0) {
+        throw new Error(`${key} is required.`);
+      }
+    }
+    const intakeId = await ctx.runMutation(
+      internal.onboarding.business.pipeline.saveBusinessMayaV0IntakeInternal,
+      {
+        businessId: ctxRow.business._id,
+        intake: {
+          businessType: args.businessType.trim(),
+          offer: args.offer.trim(),
+          targetCustomer: args.targetCustomer.trim(),
+          market: args.market?.trim(),
+          topMarketingGoal: args.topMarketingGoal.trim(),
+          channels: args.channels
+            .map((channel) => channel.trim())
+            .filter((channel) => channel.length > 0)
+            .slice(0, 12),
+          phoneNumber: args.phoneNumber?.trim(),
+          timezone: args.timezone.trim(),
+        },
+      }
+    );
+    return { ok: true, intakeId };
+  },
+});
+
 /* -------------------------------------------------------------------------- */
 /* Internal action — triggerBulkPull                                           */
 /* -------------------------------------------------------------------------- */
@@ -400,7 +510,6 @@ export const triggerBulkPull = internalAction({
       { businessId: args.businessId }
     );
     const skipped: string[] = [];
-    let apiCallsUsed = 0;
 
     if (!conn) {
       // No Zernio connection — cannot pull GBP. Surface empty data; downstream
@@ -441,7 +550,6 @@ export const triggerBulkPull = internalAction({
           })),
         }
       );
-      apiCallsUsed += result.apiCallsUsed;
       skipped.push(...result.skippedPlatforms);
     } catch (err) {
       // Zernio outage during bulk pull — graceful skip per § 5 step 6 ("Skip

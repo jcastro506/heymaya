@@ -262,10 +262,30 @@ export const deployRiley = internalAction({
     }
     const { agent } = ctxRow;
 
-    if (!agent.linkedinConnection || !agent.twitterConnection) {
+    // Two valid auth shapes per platform:
+    //   1. Composio managed-OAuth — `linkedinConnection` / `twitterConnection`
+    //      objects with composioAccountId, populated by the onboarding flow.
+    //   2. Cookie-based — env vars set on the Convex deployment, passed
+    //      through to Fly as secrets for the linkedin-cli / bird-twitter
+    //      ClawHub skills (see clawhubManifest.ts).
+    // Riley needs at least one path per platform, otherwise she has no way
+    // to read or write that platform.
+    const liReady =
+      Boolean(agent.linkedinConnection) ||
+      Boolean(process.env.LINKEDIN_LI_AT && process.env.LINKEDIN_JSESSIONID);
+    const twReady =
+      Boolean(agent.twitterConnection) ||
+      Boolean(process.env.AUTH_TOKEN && process.env.CT0);
+    if (!liReady) {
       return fail(
         "load-agent",
-        "Both LinkedIn and X connections must be set before deploy."
+        "LinkedIn unconfigured — set Composio connection or LINKEDIN_LI_AT + LINKEDIN_JSESSIONID."
+      );
+    }
+    if (!twReady) {
+      return fail(
+        "load-agent",
+        "X unconfigured — set Composio connection or AUTH_TOKEN + CT0."
       );
     }
     if (!agent.productContext?.productName) {
@@ -312,20 +332,31 @@ export const deployRiley = internalAction({
         workspaceBundleUrl: bundle.workspaceBundleUrl,
       });
 
-      const secrets: Record<string, string> = {
-        // Composio connection ids — Riley's skills read these from env to
-        // route LinkedIn + X actions through her connected accounts.
-        RILEY_LINKEDIN_CONNECTED_ACCOUNT_ID:
-          agent.linkedinConnection.composioAccountId,
-        RILEY_TWITTER_CONNECTED_ACCOUNT_ID:
-          agent.twitterConnection.composioAccountId,
-      };
+      const secrets: Record<string, string> = {};
+      // Composio connection ids — only set when the operator went through
+      // the Composio dashboard flow. Cookie-only deploys leave these empty
+      // and Riley uses the ClawHub cookie skills instead.
+      if (agent.linkedinConnection) {
+        secrets.RILEY_LINKEDIN_CONNECTED_ACCOUNT_ID =
+          agent.linkedinConnection.composioAccountId;
+      }
+      if (agent.twitterConnection) {
+        secrets.RILEY_TWITTER_CONNECTED_ACCOUNT_ID =
+          agent.twitterConnection.composioAccountId;
+      }
       for (const k of [
         "COMPOSIO_API_KEY",
         "OPENROUTER_API_KEY",
         "ANTHROPIC_API_KEY",
         "BRAVE_API_KEY",
         "ENCRYPTION_KEY",
+        // ClawHub cookie-auth skills — see clawhubManifest.ts.
+        // linkedin-cli reads:
+        "LINKEDIN_LI_AT",
+        "LINKEDIN_JSESSIONID",
+        // bird-twitter (X) full surface:
+        "AUTH_TOKEN",
+        "CT0",
       ]) {
         const v = process.env[k];
         if (v) secrets[k] = v;
@@ -354,6 +385,13 @@ export const deployRiley = internalAction({
             MAYA_OPENCLAW_VERSION: "2026.4.23",
             MAYA_WORKSPACE_BUNDLE_URL: bundle.workspaceBundleUrl,
             MAYA_APP_NAME: bundle.flyAppName,
+            // Pin Riley's brain. Sonnet 4.6 is the right tier for the
+            // single-user volume: capable enough for voice fitting +
+            // outreach judgment, much cheaper than Opus 4.7. Opus 4.7
+            // would be overkill cost for ~100 calls/day. Override-able
+            // via the RILEY_MODEL env var on the Convex deployment.
+            OPENCLAW_MODEL:
+              process.env.RILEY_MODEL ?? "anthropic/claude-sonnet-4-6",
             MAYA_BOOTSTRAP_JSON: JSON.stringify({
               agentId: String(args.agentId),
               flyAppName: bundle.flyAppName,

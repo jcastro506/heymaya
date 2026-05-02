@@ -101,8 +101,14 @@ limits + approval gates keep this safe.
    (or Josh copy/pastes for manual posts in week 1).
 2. **Cap DM volume at <20/day total**, randomize timing (LinkedIn flags
    batch-send patterns).
-3. **Never use a headless browser logged into the same session** as
-   Josh's daily LinkedIn. Unipile gets its own dedicated session token.
+3. **No headless browser automation on Josh's daily LinkedIn / X session.**
+   *CLI cookie-based skills (`arun-8687/linkedin-cli`, `chuhuilove/bird-twitter`)
+   are a carve-out from this rule* — they replay HTTPS API calls using cookies
+   rather than driving a browser, which is a meaningfully lower detection
+   surface. If a cookie gets invalidated, Riley pings Josh to re-paste it
+   from DevTools (30-second operator action). Browser-automation skills
+   (`biostartechnology/linkedin`, `zich-dev/linkedin-automation`) remain
+   excluded.
 4. **Brave Search is read-only.** No publish via search-result links
    without operator review.
 5. **Riley does not send connection requests in v0** — too easy to trip
@@ -134,29 +140,35 @@ limits + approval gates keep this safe.
 
 ## Operator-blocked (need to do once)
 
-1. **Connect LinkedIn through Composio dashboard** — https://app.composio.dev
-   → Apps → LinkedIn → Connect with OAuth. Use Composio's managed OAuth
-   app — no custom LinkedIn dev app needed. Operator confirmed this is
-   the path that worked for LaunchCrew/TradeStart. Capture the resulting
-   `connectedAccountId` for the Convex `connectedAccounts` row.
-2. **Connect X (Twitter) through Composio dashboard** — same flow.
-   Requires a free X developer account at https://developer.x.com so
-   Composio's managed OAuth has somewhere to bill API calls. Pay-per-use
-   pricing as of Apr 20 2026:
-     - owned-reads: $0.001/req
-     - writes: ~$0.010/req
-     - 5 tweets/day + engagement reads ≈ $2-5/mo
-   Top up X dev credits ($10 lasts months at this volume).
-3. **Sign up for Unipile** (https://www.unipile.com/) — Pro tier
-   $59-99/mo. Create a LinkedIn-account "session" through their dashboard.
-   Capture `UNIPILE_API_KEY` + `UNIPILE_DSN` + `UNIPILE_LINKEDIN_ACCOUNT_ID`
-   to `.env.local` + Convex env.
-4. **Decide LinkedIn premium**: Unipile DMs may require LinkedIn Sales
-   Navigator on Josh's account ($99/mo). Test without first; upgrade if
-   profile-search returns thin results.
-5. **Choose voice samples** — paste 5-10 of Josh's best posts from BOTH
+**v0 path (cookie-based, locked 2026-04-29) — this is the active set:**
+
+1. **Extract LinkedIn session cookies** from Josh's logged-in browser.
+   In DevTools → Application → Cookies → `https://www.linkedin.com`,
+   copy:
+     - `li_at` → set as Convex env `LINKEDIN_LI_AT`
+     - `JSESSIONID` → set as Convex env `LINKEDIN_JSESSIONID` (strip
+       any surrounding quotes Chrome may include)
+   Used by `arun-8687/linkedin-cli` for reads (search/profile/feed/messages).
+2. **Extract X (Twitter) session cookies** the same way from
+   `https://x.com`:
+     - `auth_token` → set as Convex env `AUTH_TOKEN`
+     - `ct0` → set as Convex env `CT0`
+   Used by `chuhuilove/bird-twitter` for full posting + reading. **No X
+   developer account or top-up needed** — cookie-auth path bypasses it.
+3. **Choose voice samples** — paste 5-10 of Josh's best posts from BOTH
    LinkedIn (longer, professional) and X (punchier, conversational) into
-   Riley's onboarding. Riley fits her voice per-platform.
+   Riley's onboarding. Riley fits her voice per-platform; memory-wiki
+   refines toward Josh's actual edits over time.
+4. **(Optional) Connect LinkedIn through Composio dashboard** — only
+   needed if we want Riley to publish LinkedIn posts directly instead of
+   Josh copy/pasting. Per locked safety rule #1, week-1 LinkedIn posting
+   is manual anyway — defer this until week 2+ if at all. Path: https://app.composio.dev
+   → Apps → LinkedIn → Connect with OAuth.
+5. **(Deferred) Unipile** for LinkedIn DM *sending* (Wave E). v0 reads
+   come from `linkedin-cli`. Skip until DM-send is on the roadmap.
+   When ready: https://www.unipile.com/ Pro tier $59-99/mo, create a
+   LinkedIn session, capture `UNIPILE_API_KEY` / `UNIPILE_DSN` /
+   `UNIPILE_LINKEDIN_ACCOUNT_ID`.
 
 ## Build order (waves)
 

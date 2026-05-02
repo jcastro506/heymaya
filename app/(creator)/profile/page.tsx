@@ -27,6 +27,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   useAction,
@@ -279,6 +280,7 @@ function ProfileBody() {
       <MemoryResetSection />
       <BillingSection summary={summary} />
       <DataExportSection />
+      <DeleteAccountSection />
     </div>
   );
 }
@@ -953,8 +955,6 @@ function ChannelSection({ summary }: { summary: ProfileSummary }) {
 /* -------------------------------------------------------------------------- */
 
 function AutoSendSection({ summary }: { summary: ProfileSummary }) {
-  // Hide entirely for Starter — server still rejects fail-closed.
-  if (!summary.features.gmailDealDeskEnabled) return null;
   const setThreshold = useMutation(api.profile.setAutoSendThreshold);
   const gmail = summary.accounts.find((a) => a.provider === "gmail");
   const [value, setValue] = useState<number>(
@@ -963,6 +963,9 @@ function AutoSendSection({ summary }: { summary: ProfileSummary }) {
   const [busy, setBusy] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  // Hide entirely for Starter — server still rejects fail-closed.
+  if (!summary.features.gmailDealDeskEnabled) return null;
 
   const onSave = async () => {
     if (!gmail) return;
@@ -1385,6 +1388,26 @@ function DataExportSection() {
   );
 }
 
+function DeleteAccountSection() {
+  return (
+    <Section
+      eyebrow="§09 · Account deletion"
+      title="Delete your account"
+      caption="This removes your Maya data, connected tokens, channel pairing, and Clerk identity. The same flow is available from iMessage after Maya confirms the exact phrase."
+    >
+      <div className="rounded-2xl border border-rose/40 bg-ink-2 p-5 sm:p-6">
+        <Link
+          href="/account/delete"
+          className="inline-flex min-h-11 items-center gap-2 rounded-md bg-rose px-4 text-sm font-medium text-white transition hover:brightness-95"
+        >
+          <Trash2 className="h-4 w-4" />
+          Delete account
+        </Link>
+      </div>
+    </Section>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /* Sub-components                                                              */
 /* -------------------------------------------------------------------------- */
@@ -1497,4 +1520,3 @@ function stripStack(msg: string): string {
   const cleaned = msg.replace(/\[CONVEX[^\]]*\]\s*/g, "").trim();
   return cleaned.replace(/^Server Error:?\s*/i, "");
 }
-

@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "smoke": "tsx scripts/mvp-smoke.ts",
     "smoke:cron": "tsx scripts/cron-smoke.ts",
-    "smoke:service": "tsx scripts/service-mvp-smoke.ts"
+    "smoke:service": "tsx scripts/service-mvp-smoke.ts",
+    "smoke:creator-maya-v0": "tsx scripts/creator-maya-v0-fly-smoke.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.2.7",
@@ -38,5 +39,8 @@
     "tsx": "^4.19.2",
     "typescript": "^5",
     "vitest": "^2.1.9"
+  },
+  "optionalDependencies": {
+    "lightningcss-darwin-x64": "^1.32.0"
   }
 }
