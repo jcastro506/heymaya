@@ -1932,7 +1932,20 @@ function creatorMayaLiveMachineConfig(
       })),
       {
         guest_path: "/data/openclaw.json",
-        raw_value: base64UtfEncode(JSON.stringify({})),
+        raw_value: base64UtfEncode(
+          JSON.stringify({
+            agents: {
+              defaults: {
+                workspace: "/data/workspace",
+              },
+            },
+            skills: {
+              load: {
+                watch: true,
+              },
+            },
+          })
+        ),
       },
     ],
     guest: OPENCLAW_MACHINE_GUEST,
@@ -1953,7 +1966,10 @@ function creatorMayaLiveMachineConfig(
           "test -s /data/workspace/USER.md",
           "test -s /data/cron/jobs.json",
           "test -s /data/openclaw.json",
+          "if [ ! -w /data/workspace ]; then boot=/data/workspace.bootstrap.$$; mv /data/workspace \"$boot\"; mkdir -p /data/workspace; cp -R \"$boot/.\" /data/workspace; fi",
           "if [ ! -w /data/cron ]; then boot=/data/cron.bootstrap.$$; mv /data/cron \"$boot\"; mkdir -p /data/cron; cp \"$boot/jobs.json\" /data/cron/jobs.json; fi",
+          "mkdir -p /data/workspace/state /data/canvas",
+          "test -w /data/workspace",
           "test -w /data/cron",
           "exec openclaw gateway --allow-unconfigured",
         ].join(" && "),

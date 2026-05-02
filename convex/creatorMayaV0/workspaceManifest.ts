@@ -624,10 +624,19 @@ function skillMd(input: {
   tools: string[];
   gates: string[];
 }): string {
+  const skillName = input.title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+
   return [
-    `# ${input.title}`,
+    "---",
+    `name: ${skillName}`,
+    `description: ${yamlDoubleQuote(input.description)}`,
+    "---",
     "",
-    `Description: ${input.description}`,
+    `# ${input.title}`,
     "",
     "Use when:",
     `- ${input.useWhen}`,
@@ -648,4 +657,8 @@ function skillMd(input: {
     "- Return the smallest useful creator-facing next step.",
     "- Persist structured results through Convex tools before messaging.",
   ].join("\n");
+}
+
+function yamlDoubleQuote(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }

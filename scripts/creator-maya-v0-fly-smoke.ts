@@ -55,6 +55,19 @@ export interface CreatorMayaFlySmokeMockResult {
   commandArgs: ReadonlyArray<string>;
 }
 
+const CREATOR_MAYA_OPENCLAW_GATEWAY_CONFIG = {
+  agents: {
+    defaults: {
+      workspace: "/data/workspace",
+    },
+  },
+  skills: {
+    load: {
+      watch: true,
+    },
+  },
+} satisfies Record<string, unknown>;
+
 function parseFlags(argv: ReadonlyArray<string>): Flags {
   const flags: Flags = {
     mode: "mock",
@@ -141,14 +154,17 @@ export function buildCreatorMayaFlySmokeFixture(
     image: OPENCLAW_IMAGE,
     region,
     workspaceFiles: manifest.files,
-    gatewayConfig: {},
+    gatewayConfig: CREATOR_MAYA_OPENCLAW_GATEWAY_CONFIG,
     bootCommand: [
       "test -s /data/workspace/AGENTS.md",
       "test -s /data/workspace/SOUL.md",
       "test -s /data/workspace/USER.md",
       "test -s /data/cron/jobs.json",
       "test -s /data/openclaw.json",
+      "if [ ! -w /data/workspace ]; then boot=/data/workspace.bootstrap.$$; mv /data/workspace \"$boot\"; mkdir -p /data/workspace; cp -R \"$boot/.\" /data/workspace; fi",
       "if [ ! -w /data/cron ]; then boot=/data/cron.bootstrap.$$; mv /data/cron \"$boot\"; mkdir -p /data/cron; cp \"$boot/jobs.json\" /data/cron/jobs.json; fi",
+      "mkdir -p /data/workspace/state /data/canvas",
+      "test -w /data/workspace",
       "test -w /data/cron",
       "exec openclaw gateway --allow-unconfigured",
     ].join(" && "),
@@ -280,7 +296,10 @@ function verifyMachine(appName: string, machineId: string): string {
     "test -s /data/workspace/USER.md",
     "test -s /data/cron/jobs.json",
     "test -s /data/openclaw.json",
+    "test -w /data/workspace",
     "test -w /data/cron",
+    "grep -q '^name: creator-calendar-content-planner$' /data/workspace/skills/creator-calendar-content-planner/SKILL.md",
+    "openclaw skills list | grep -q 'creator-calendar-content-planner'",
     "(curl -fsS http://127.0.0.1:18789/healthz || curl -fsS http://127.0.0.1:3000/healthz || true)",
   ].join(" && ");
   const shellCommand = `/bin/sh -lc ${quoteShell(command)}`;
@@ -296,9 +315,13 @@ function waitForGatewayReadyLogs(appName: string, machineId: string): string {
   let logs = "";
   while (Date.now() < deadline) {
     logs = runFly(["logs", "--app", appName, "--machine", machineId, "--no-tail"], 30_000);
-    if (/cron\].*failed to start|Cannot read properties of undefined/i.test(logs)) {
+    if (
+      /cron\].*failed to start|plugin service failed|EACCES|permission denied|Cannot read properties of undefined/i.test(
+        logs
+      )
+    ) {
       throw new Error(
-        `OpenClaw gateway cron failed during boot for ${appName}/${machineId}.`
+        `OpenClaw gateway failed during boot for ${appName}/${machineId}.`
       );
     }
     if (/\[gateway\].*ready/i.test(logs)) {
@@ -306,9 +329,13 @@ function waitForGatewayReadyLogs(appName: string, machineId: string): string {
       while (Date.now() < stableUntil) {
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5_000);
         logs = runFly(["logs", "--app", appName, "--machine", machineId, "--no-tail"], 30_000);
-        if (/cron\].*failed to start|Cannot read properties of undefined/i.test(logs)) {
+        if (
+          /cron\].*failed to start|plugin service failed|EACCES|permission denied|Cannot read properties of undefined/i.test(
+            logs
+          )
+        ) {
           throw new Error(
-            `OpenClaw gateway cron failed after ready for ${appName}/${machineId}.`
+            `OpenClaw gateway failed after ready for ${appName}/${machineId}.`
           );
         }
       }

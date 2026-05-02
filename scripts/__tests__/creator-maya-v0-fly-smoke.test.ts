@@ -20,6 +20,13 @@ describe("creator-maya-v0-fly-smoke", () => {
     expect(fixture.workspaceFiles["TOOLS.md"]).toContain("fail closed");
     expect(fixture.workspaceFiles["USER.md"]).toContain("Calendar: connected");
     expect(fixture.workspaceFiles["jobs.json"]).toContain("morning_brief");
+    expect(fixture.workspaceFiles["skills/creator-calendar-content-planner/SKILL.md"]).toContain(
+      "name: creator-calendar-content-planner"
+    );
+    expect(fixture.gatewayConfig).toMatchObject({
+      agents: { defaults: { workspace: "/data/workspace" } },
+      skills: { load: { watch: true } },
+    });
     expect(fixture.bootCommand).toContain("openclaw gateway --allow-unconfigured");
     expect(fixture.bootCommand).toContain("test -w /data/cron");
   });

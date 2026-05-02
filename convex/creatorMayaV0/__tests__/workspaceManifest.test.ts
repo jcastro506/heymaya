@@ -44,7 +44,13 @@ describe("Creator Maya v0 OpenClaw workspace manifest", () => {
     const manifest = buildCreatorMayaWorkspaceManifest(input);
 
     for (const slug of CREATOR_MAYA_V0_SKILL_SLUGS) {
-      expect(manifest.files[`skills/${slug}/SKILL.md`]).toBeDefined();
+      const body = manifest.files[`skills/${slug}/SKILL.md`];
+      expect(body).toBeDefined();
+      expect(body).toMatch(
+        new RegExp(
+          `^---\\nname: ${slug}\\ndescription: "[^"\\n]+"\\n---\\n\\n# `
+        )
+      );
     }
     expect(Object.keys(manifest.files)).toEqual(
       expect.arrayContaining([
