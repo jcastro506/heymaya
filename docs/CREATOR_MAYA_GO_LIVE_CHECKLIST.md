@@ -32,7 +32,7 @@ Status key:
 - [x] Google Calendar test OAuth client created for local/staging testing.
 - [x] Vercel project linked to this repo.
 - [x] Staging/preview deployment live:
-  `https://hey-ava-haft2a4pz-jcastro506s-projects.vercel.app`.
+  `https://hey-ava-web-jcastro506-jcastro506s-projects.vercel.app`.
 - [ ] Production deployment live at `https://www.hey-maya.ai`.
 
 ## Creator Onboarding
@@ -227,6 +227,8 @@ Creator track:
 - [x] OAuth client exists for local and production redirect URIs.
 - [x] OAuth test user includes `castrojoshua805@gmail.com`.
 - [x] Public `/privacy` and `/terms` pages exist.
+- [ ] Add/confirm staging redirect URI:
+  - `https://hey-ava-web-jcastro506-jcastro506s-projects.vercel.app/api/google-calendar/callback`
 - [ ] Verify ownership of `hey-maya.ai` in Google.
 - [ ] Add/confirm OAuth app URLs:
   - Homepage: `https://www.hey-maya.ai/`
@@ -309,9 +311,11 @@ Latest local gate results:
 - [x] `npm run build` passed after signed-out delete-account page fix on May 2,
   2026.
 - [x] Preview deployment test passed on May 2, 2026 against
-  `https://hey-ava-haft2a4pz-jcastro506s-projects.vercel.app`:
+  `https://hey-ava-web-jcastro506-jcastro506s-projects.vercel.app`:
   - public pages return `200`
   - Google Calendar start returns auth redirect
+  - Google Calendar callback errors redirect back to setup instead of rendering
+    the callback URL
   - iMessage delete endpoints return `401` without shared secret
 - [ ] Production smoke needs run only after explicit production deployment.
 
