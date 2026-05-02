@@ -338,26 +338,45 @@ Output fields:
 
 If confidence is low, store that. Maya should say "I need more data" rather than inventing certainty.
 
-### 4.10 Onboarding Step 8 - Pair iMessage
+### 4.10 Onboarding Step 8 - Phone Handoff
 
-The product's first "aha" should happen in iMessage.
+The website should not make the user watch infrastructure boot. Once Maya has
+enough context and the user has entered a phone number, the web flow should
+end with a calm handoff screen:
+
+> You're all set. Maya will text you directly.
+
+This is a product boundary, not just copy. The web app captures setup context;
+the relationship starts on the phone.
 
 Flow:
 
 1. User enters phone number.
-2. OpenClaw native iMessage channel pairing starts.
-3. User receives a verification message.
-4. User replies to confirm.
-5. Maya sends the first grounded message.
+2. Convex saves `setup_complete`.
+3. Convex enqueues OpenClaw/Fly provisioning.
+4. Web UI shows the handoff screen and optional setup status.
+5. User can close the browser.
 
-OpenClaw owns native iMessage delivery and pairing. Convex records the active
-`pairedChannels` row, gates plan/channel state, and marks onboarding complete
-only after the native OpenClaw channel is active. The older mock `pairImessage`
-path is a local test harness only.
+State model:
+
+- `setup_complete`: all required web data is saved
+- `maya_provisioning`: OpenClaw workspace and Fly machine are being created
+- `maya_online`: OpenClaw health check passes and native iMessage is ready
+- `first_text_sent`: Maya sent the activation iMessage
+- `provisioning_failed`: operator alert required; user sees a clear status
+
+OpenClaw owns native iMessage delivery. Convex records the active
+`pairedChannels` row once the channel is available, gates plan/channel state,
+and marks Maya active only after the native OpenClaw channel is online. The
+older mock `pairImessage` path is a local test harness only.
 
 First message shape:
 
 > I read your last 30 TikToks and deep-watched the strongest and weakest examples. Your best posts open with the finished result before explaining anything. Your weakest ones start with context. Tomorrow I would film one 18-25 second post that shows the result in frame one. I can draft it now.
+
+Important correction: Maya must not send this message until OpenClaw is online
+and the iMessage send path is confirmed. The web page can say setup is done;
+it cannot claim Maya is active until `first_text_sent` succeeds.
 
 ### 4.11 Onboarding Step 9 - Deploy Maya
 
@@ -375,7 +394,8 @@ Maya boots with:
 - model router endpoint
 - channel config
 
-After deploy, creator lands in a minimal dashboard:
+After deploy, Maya sends the activation iMessage. The creator can still open a
+minimal dashboard, but the dashboard is a receipt/status surface:
 
 - Today's brief
 - next post idea
@@ -1279,9 +1299,11 @@ Build:
 
 Acceptance:
 
-- creator finishes onboarding
-- Maya deploys
-- creator receives first iMessage
+- creator finishes onboarding and immediately sees the "You're all set. Maya
+  will text you directly." handoff screen
+- Maya deploys asynchronously after setup completion
+- creator receives first iMessage only after OpenClaw health check and iMessage
+  readiness pass
 - Maya can schedule an approved filming hold on the connected calendar
 - web dashboard shows deployment status and first receipt
 
@@ -1303,6 +1325,13 @@ Testing gate:
   requested time window.
 - Calendar: Maya can update/delete only events with a matching Maya-created
   marker.
+- Provisioning: setup completion writes `setup_complete` before OpenClaw deploy,
+  then transitions through `maya_provisioning`, `maya_online`, and
+  `first_text_sent`.
+- Provisioning: OpenClaw failure records `provisioning_failed`, shows a web
+  status message, and emits an operator alert.
+- Messaging: activation iMessage cannot be sent before OpenClaw reports healthy
+  and the native iMessage channel is ready.
 - E2E mock: onboarding to deployed state writes `openclawDeployments`,
   channel row, calendar connection row, first daily receipt.
 - Security: no vendor API keys or channel tokens are returned to the browser.

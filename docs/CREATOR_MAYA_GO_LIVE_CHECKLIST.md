@@ -46,12 +46,19 @@ Status key:
 - [x] Phone number capture exists for OpenClaw native iMessage handoff.
 - [x] Calendar disconnect removes stored connection and lookahead events.
 - [x] Debug console remains available at `/creator-maya-v0/debug`.
+- [ ] Add final "You're all set. Maya will text you directly." handoff screen
+  after required data is captured.
+- [ ] Track setup state separately from runtime state:
+  - `setup_complete`: web onboarding data is saved
+  - `maya_provisioning`: OpenClaw/Fly workspace is being created
+  - `maya_online`: OpenClaw is healthy and the iMessage channel is ready
+  - `first_text_sent`: Maya has sent the activation iMessage
 - [ ] Make creator onboarding copy explicitly explain:
   - Maya is your pre-human-manager manager
   - web setup is temporary
   - the real product is iMessage
   - calendar is used for content planning, not surveillance
-- [ ] Add a final beta handoff screen after all required setup items are done.
+- [ ] Add signed-in status page copy for provisioning delays and failures.
 
 ## Business Onboarding
 
@@ -102,6 +109,12 @@ Existing route: `/onboarding/business`.
 - [x] Phone capture exists in onboarding.
 - [x] OpenClaw workspace manifest exists for Creator Maya.
 - [x] Native iMessage pairing gate is represented in backend tests.
+- [ ] Onboarding completion should enqueue OpenClaw provisioning and show the
+  handoff screen immediately, without requiring the user to wait on the page.
+- [ ] When OpenClaw is online, Maya sends the first iMessage to the captured
+  phone number and records `first_text_sent`.
+- [ ] If OpenClaw provisioning fails, show a web status error and alert the
+  operator instead of leaving the user in a silent pending state.
 - [ ] Live OpenClaw deployment and native iMessage pairing still need a real
   end-to-end test.
 - [ ] Daily iMessage schedule needs production cron/heartbeat verification.
@@ -110,7 +123,7 @@ Existing route: `/onboarding/business`.
   - `POST /api/account/delete/from-imessage`
   - exact confirmation phrase: `DELETE MAYA`
 - [ ] Define first-message timing after onboarding:
-  - immediate confirmation text after pairing
+  - immediate activation text only after OpenClaw is online and iMessage can send
   - first morning brief next local morning
   - evening recap only after there is activity or a missed plan
 
