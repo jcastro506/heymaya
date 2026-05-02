@@ -49,14 +49,14 @@ const tracks = [
     title: "A manager before human managers care.",
     body: "If you are not big enough for a real manager yet, Maya helps you act like you have one: content planning, TikTok context, calendar holds, accountability, and brand-readiness.",
     href: "/sign-up?redirect_url=/creator-maya-v0",
-    cta: "Start as creator",
+    cta: "Sign up as creator",
   },
   {
     label: "For businesses",
     title: "A marketing manager before you hire one.",
     body: "For founder-led and local businesses that need consistent marketing but do not have an operator watching reviews, posts, customer moments, and follow-up every day.",
-    href: "/business-maya-v0",
-    cta: "See business Maya",
+    href: "/sign-up?redirect_url=/business-maya-v0",
+    cta: "Sign up as business",
   },
 ];
 
@@ -71,17 +71,20 @@ export default function Home() {
           <span className="font-display text-xl text-paper">HeyMaya</span>
         </Link>
         <nav className="flex items-center gap-4 text-sm text-paper-dim">
-          <Link href="/creator-maya-v0" className="hover:text-paper">
+          <Link href="#tracks" className="hover:text-paper">
             For creators
           </Link>
-          <Link href="/business-maya-v0" className="hover:text-paper">
+          <Link href="#tracks" className="hover:text-paper">
             For businesses
-          </Link>
-          <Link href="/creator-maya-v0" className="hover:text-paper">
-            Start
           </Link>
           <Link href="/sign-in" className="hover:text-paper">
             Sign in
+          </Link>
+          <Link
+            href="/sign-up?redirect_url=/creator-maya-v0"
+            className="inline-flex min-h-10 items-center rounded-md bg-lime px-3 font-medium text-black transition hover:brightness-95"
+          >
+            Sign up
           </Link>
         </nav>
       </header>
@@ -104,14 +107,14 @@ export default function Home() {
               href="/sign-up?redirect_url=/creator-maya-v0"
               className="inline-flex min-h-12 items-center gap-2 rounded-md bg-lime px-5 text-sm font-medium text-black transition hover:brightness-95"
             >
-              Start as creator
+              Sign up
               <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
-              href="/business-maya-v0"
+              href="#tracks"
               className="inline-flex min-h-12 items-center rounded-md border border-[var(--hairline-strong)] px-5 text-sm text-paper-dim transition hover:text-paper"
             >
-              For businesses
+              Compare paths
             </Link>
           </div>
         </div>
@@ -159,7 +162,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-5 py-16 sm:px-8 lg:px-10">
+      <section id="tracks" className="mx-auto max-w-6xl px-5 py-16 sm:px-8 lg:px-10">
         <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">

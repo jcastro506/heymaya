@@ -40,14 +40,16 @@ describe("CreatorMayaV0Onboarding", () => {
 
     expect(html).toContain("Creator Maya · Powered by OpenClaw");
     expect(html).toContain("Set Maya up once. Then manage TikTok from iMessage.");
+    expect(html).toContain("Setup is one screen at a time.");
+    expect(html).toContain("Account");
+    expect(html).toContain("TikTok");
+    expect(html).toContain("Calendar");
     expect(html).toContain("Creator picture");
-    expect(html).toContain("TikTok context");
-    expect(html).toContain("Calendar context");
-    expect(html).toContain("Disconnect");
-    expect(html).toContain("Phone handoff");
+    expect(html).toContain("Phone");
+    expect(html).toContain("Handoff");
+    expect(html).toContain("You&#x27;re all set. Maya will text you directly.");
     expect(html).toContain("What happens after setup");
     expect(html).toContain("Maya starts texting like a real social manager.");
-    expect(html).toContain("solo founder TikTok education");
     expect(html).toContain("Debug console");
   });
 

@@ -72,6 +72,7 @@ export async function GET(req: NextRequest) {
     );
 
     const next = new URL("/creator-maya-v0", req.url);
+    next.searchParams.set("step", "picture");
     next.searchParams.set("googleCalendar", "connected");
     next.searchParams.set("imported", String(result.lookaheadImported));
     const res = NextResponse.redirect(next);
@@ -158,14 +159,19 @@ function calendarTimeToMs(time: { dateTime?: string; date?: string } | undefined
 }
 
 function googleRedirectUri(req: NextRequest): string {
-  return (
-    process.env.GOOGLE_CALENDAR_REDIRECT_URI ??
-    new URL("/api/google-calendar/callback", req.url).toString()
-  );
+  const requestRedirect = new URL("/api/google-calendar/callback", req.url);
+  const configured = process.env.GOOGLE_CALENDAR_REDIRECT_URI;
+  if (!configured) return requestRedirect.toString();
+
+  const configuredUrl = new URL(configured);
+  if (configuredUrl.host === req.nextUrl.host) return configuredUrl.toString();
+
+  return requestRedirect.toString();
 }
 
 function redirectWithError(req: NextRequest, error: string): NextResponse {
   const next = new URL("/creator-maya-v0", req.url);
+  next.searchParams.set("step", "calendar");
   next.searchParams.set("googleCalendar", "error");
   next.searchParams.set("error", error.slice(0, 180));
   return NextResponse.redirect(next);
@@ -175,7 +181,7 @@ function signInUrl(req: NextRequest): URL {
   const url = new URL("/sign-in", req.url);
   url.searchParams.set(
     "redirect_url",
-    `${req.nextUrl.pathname}${req.nextUrl.search}`
+    `/creator-maya-v0?step=calendar`
   );
   return url;
 }

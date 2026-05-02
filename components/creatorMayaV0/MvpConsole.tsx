@@ -39,6 +39,17 @@ const TZ =
     ? Intl.DateTimeFormat().resolvedOptions().timeZone
     : "America/New_York";
 
+type SetupStep = "account" | "tiktok" | "calendar" | "picture" | "phone" | "done";
+
+const SETUP_STEPS: Array<{ key: SetupStep; label: string }> = [
+  { key: "account", label: "Account" },
+  { key: "tiktok", label: "TikTok" },
+  { key: "calendar", label: "Calendar" },
+  { key: "picture", label: "Creator picture" },
+  { key: "phone", label: "Phone" },
+  { key: "done", label: "Handoff" },
+];
+
 export function CreatorMayaV0Onboarding() {
   const { user } = useUser();
   const router = useRouter();
@@ -71,11 +82,35 @@ export function CreatorMayaV0Onboarding() {
   const email = user?.primaryEmailAddress?.emailAddress ?? "creator@example.com";
   const signedIn = Boolean(user);
   const sanitizedHandle = handle.replace(/^@/, "").trim();
-  const onboardingStep = state?.onboarding?.currentStep ?? "not started";
+  const accountReady = Boolean(state?.creator);
+  const tiktokConnected = Boolean(state?.tiktok);
   const calendarConnected = state?.calendar?.status === "active";
   const phoneCollected = Boolean(state?.creator?.phoneNumber);
-  const imessagePaired = state?.onboarding?.imessagePaired === true;
   const pictureReady = Boolean(state?.picture);
+  const calendarEventCount = state?.calendarEvents?.length ?? 0;
+  const setupComplete =
+    accountReady && tiktokConnected && calendarConnected && pictureReady && phoneCollected;
+  const recommendedStep = setupComplete
+    ? "done"
+    : !accountReady
+      ? "account"
+      : !tiktokConnected
+        ? "tiktok"
+        : !calendarConnected
+          ? "calendar"
+          : !pictureReady
+            ? "picture"
+            : !phoneCollected
+              ? "phone"
+              : "done";
+  const requestedStep = searchParams.get("step");
+  const [manualStep, setManualStep] = useState<SetupStep | null>(null);
+  const activeStep =
+    manualStep ??
+    (SETUP_STEPS.some((step) => step.key === requestedStep)
+      ? (requestedStep as SetupStep)
+      : recommendedStep);
+  const activeStepIndex = SETUP_STEPS.findIndex((step) => step.key === activeStep);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -98,8 +133,10 @@ export function CreatorMayaV0Onboarding() {
       if (googleCalendar === "connected") {
         const imported = searchParams.get("imported") ?? "0";
         setNotice(`Google Calendar connected. Maya imported ${imported} lookahead events.`);
+        setManualStep("picture");
       } else if (googleCalendar === "error") {
         setError(stripStack(searchParams.get("error") ?? "Google Calendar failed"));
+        setManualStep("calendar");
       }
       router.replace("/creator-maya-v0");
     }, 0);
@@ -108,6 +145,14 @@ export function CreatorMayaV0Onboarding() {
 
   async function ensureAccount() {
     await getOrCreate({ email, timezone: TZ, tier: "starter" });
+  }
+
+  async function confirmAccount() {
+    await runStep("account", async () => {
+      await ensureAccount();
+      setManualStep("tiktok");
+      setNotice("Account confirmed. Maya can now save setup progress as you go.");
+    });
   }
 
   async function runStep(key: Exclude<BusyKey, null>, fn: () => Promise<void>) {
@@ -139,6 +184,7 @@ export function CreatorMayaV0Onboarding() {
           niche: nicheCorrection || "TikTok creator building a focused audience",
         },
       });
+      setManualStep("phone");
       setNotice("Creator picture saved. Maya now has your goals, niche, constraints, and working context.");
     });
   }
@@ -147,6 +193,7 @@ export function CreatorMayaV0Onboarding() {
     await runStep("tiktok", async () => {
       await ensureAccount();
       await connectTikTokLive({ handle: sanitizedHandle });
+      setManualStep("calendar");
       setNotice(`TikTok connected for @${sanitizedHandle}. Maya will sample useful posts instead of watching everything.`);
     });
   }
@@ -168,6 +215,7 @@ export function CreatorMayaV0Onboarding() {
         lookaheadDays: 14,
         canCreateHolds: true,
       });
+      setManualStep("picture");
       setNotice("Apple Calendar selected. Maya will request phone-native permission after iMessage pairing.");
     });
   }
@@ -175,6 +223,7 @@ export function CreatorMayaV0Onboarding() {
   async function disconnectCalendarAccess() {
     await runStep("calendar", async () => {
       await disconnectCalendar({});
+      setManualStep("calendar");
       setNotice("Calendar disconnected. Maya removed the stored connection and lookahead events.");
     });
   }
@@ -183,8 +232,335 @@ export function CreatorMayaV0Onboarding() {
     await runStep("phone", async () => {
       await ensureAccount();
       await collectPhone({ phoneNumber: phone.trim() });
-      setNotice("Phone saved. The next production step is OpenClaw native iMessage pairing.");
+      setManualStep("done");
+      setNotice("Phone saved. You're all set. Maya will text you directly once OpenClaw is online.");
     });
+  }
+
+  function renderCurrentStep() {
+    if (!signedIn) {
+      return (
+        <SetupPanel
+          number="0"
+          title="Create your account"
+          action={
+            <Link
+              href="/sign-up?redirect_url=/creator-maya-v0"
+              className="inline-flex min-h-10 items-center rounded-md bg-lime px-3 text-sm font-medium text-black transition hover:brightness-95"
+            >
+              Sign up
+            </Link>
+          }
+        >
+          <p className="text-sm leading-relaxed text-paper-dim">
+            The landing page explains Maya. Setup starts after account creation,
+            then Maya saves each step and moves the relationship to iMessage.
+          </p>
+        </SetupPanel>
+      );
+    }
+
+    if (activeStep === "account") {
+      return (
+        <SetupPanel
+          number="1"
+          title="Confirm your account"
+          action={
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={confirmAccount}
+              className="inline-flex min-h-10 items-center gap-2 rounded-md bg-lime px-3 text-sm font-medium text-black disabled:opacity-60"
+            >
+              {busy === "account" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              Save and continue
+            </button>
+          }
+        >
+          <div className="flex items-center gap-4 rounded-md border border-[var(--hairline)] bg-ink p-4">
+            {user?.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={user.imageUrl}
+                alt=""
+                className="h-14 w-14 rounded-full border border-[var(--hairline-strong)] object-cover"
+              />
+            ) : (
+              <span className="grid h-14 w-14 place-items-center rounded-full bg-ink-3 text-lime">
+                <UserRound className="h-6 w-6" />
+              </span>
+            )}
+            <div>
+              <p className="text-sm font-medium text-paper">
+                {user?.fullName ?? user?.username ?? "Creator account"}
+              </p>
+              <p className="mt-1 text-sm text-paper-dim">{email}</p>
+              <p className="mt-2 text-xs text-paper-faint">
+                Maya will use this account to keep your setup, approvals, and
+                deletion path tied to the right user.
+              </p>
+            </div>
+          </div>
+        </SetupPanel>
+      );
+    }
+
+    if (activeStep === "tiktok") {
+      return (
+        <SetupPanel
+          number="2"
+          title="Connect TikTok"
+          action={
+            tiktokConnected ? (
+              <button
+                type="button"
+                onClick={() => setManualStep("calendar")}
+                className="inline-flex min-h-10 items-center rounded-md bg-paper px-3 text-sm font-medium text-ink"
+              >
+                Continue
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={busy !== null || !sanitizedHandle}
+                onClick={connectTikTok}
+                className="inline-flex min-h-10 items-center gap-2 rounded-md bg-lime px-3 text-sm font-medium text-black disabled:opacity-60"
+              >
+                {busy === "tiktok" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                Connect
+              </button>
+            )
+          }
+        >
+          {tiktokConnected ? (
+            <ConnectedProfile
+              avatarUrl={state?.tiktok?.avatarUrl}
+              title={state?.tiktok?.displayName ?? `@${state?.tiktok?.handle}`}
+              subtitle={`@${state?.tiktok?.handle} · ${formatNumber(state?.tiktok?.followerCount ?? 0)} followers`}
+              body="TikTok connected. Maya can use profile context, metadata, and selected samples without pretending she watched every post."
+            />
+          ) : (
+            <>
+              <TextInput label="TikTok handle" value={handle} onChange={setHandle} />
+              <p className="mt-3 text-xs leading-relaxed text-paper-faint">
+                Maya pulls the account, shows you the profile, then samples posts
+                intelligently. Gemini should only deep-watch selected examples.
+              </p>
+            </>
+          )}
+        </SetupPanel>
+      );
+    }
+
+    if (activeStep === "calendar") {
+      return (
+        <SetupPanel
+          number="3"
+          title="Connect your calendar"
+          action={
+            calendarConnected ? (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setManualStep("picture")}
+                  className="inline-flex min-h-10 items-center rounded-md bg-paper px-3 text-sm font-medium text-ink"
+                >
+                  Continue
+                </button>
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={disconnectCalendarAccess}
+                  className="inline-flex min-h-10 items-center rounded-md border border-rose/40 px-3 text-sm text-rose disabled:opacity-60"
+                >
+                  Disconnect
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={connectGoogleCalendar}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md bg-paper px-3 text-sm font-medium text-ink disabled:opacity-60"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Google Calendar
+                </button>
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={connectApplePhoneCalendar}
+                  className="inline-flex min-h-10 items-center rounded-md border border-[var(--hairline-strong)] px-3 text-sm text-paper-dim disabled:opacity-60"
+                >
+                  Apple on iPhone
+                </button>
+              </div>
+            )
+          }
+        >
+          {calendarConnected ? (
+            <div className="rounded-md border border-lime/25 bg-lime/10 p-4">
+              <p className="flex items-center gap-2 text-sm font-medium text-lime">
+                <CheckCircle2 className="h-4 w-4" />
+                Calendar connected
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-paper-dim">
+                Maya imported {calendarEventCount} lookahead events and will use
+                them for planning content windows, launches, travel, and
+                Maya-owned holds after approval.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm leading-relaxed text-paper-dim">
+              Calendar is how Maya knows what is actually coming up. She should
+              suggest content around useful moments and open time, not spy on
+              your life. Google connects here; Apple can be requested on iPhone
+              after iMessage.
+            </p>
+          )}
+        </SetupPanel>
+      );
+    }
+
+    if (activeStep === "picture") {
+      return (
+        <SetupPanel
+          number="4"
+          title="Build your creator picture"
+          action={
+            pictureReady ? (
+              <button
+                type="button"
+                onClick={() => setManualStep("phone")}
+                className="inline-flex min-h-10 items-center rounded-md bg-paper px-3 text-sm font-medium text-ink"
+              >
+                Continue
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={saveCreatorProfile}
+                className="inline-flex min-h-10 items-center gap-2 rounded-md bg-paper px-3 text-sm font-medium text-ink disabled:opacity-60"
+              >
+                {busy === "intake" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                Save picture
+              </button>
+            )
+          }
+        >
+          {pictureReady ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Fact label="Niche" value={state?.picture?.niche} />
+              <Fact label="Goal" value={state?.picture?.goal} />
+              <Fact label="Stage" value={state?.picture?.stage} />
+              <Fact
+                label="Confidence"
+                value={`${Math.round((state?.picture?.confidence ?? 0) * 100)}%`}
+              />
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TextInput label="90-day goal" value={goal} onChange={setGoal} />
+              <TextInput label="Biggest blocker" value={blocker} onChange={setBlocker} />
+              <TextInput label="Niche" value={nicheCorrection} onChange={setNicheCorrection} />
+              <label className="block">
+                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
+                  Weekly creator hours
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={40}
+                  value={weeklyHours}
+                  onChange={(event) => setWeeklyHours(Number(event.target.value))}
+                  className="mt-2 w-full rounded-md border border-[var(--hairline)] bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-paper-dim"
+                />
+              </label>
+            </div>
+          )}
+        </SetupPanel>
+      );
+    }
+
+    if (activeStep === "phone") {
+      return (
+        <SetupPanel
+          number="5"
+          title="Where should Maya text you?"
+          action={
+            phoneCollected ? (
+              <button
+                type="button"
+                onClick={() => setManualStep("done")}
+                className="inline-flex min-h-10 items-center rounded-md bg-paper px-3 text-sm font-medium text-ink"
+              >
+                Finish
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={busy !== null || !phone.trim()}
+                onClick={savePhone}
+                className="inline-flex min-h-10 items-center gap-2 rounded-md bg-paper px-3 text-sm font-medium text-ink disabled:opacity-60"
+              >
+                {busy === "phone" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Smartphone className="h-4 w-4" />}
+                Save phone
+              </button>
+            )
+          }
+        >
+          {phoneCollected ? (
+            <div className="rounded-md border border-lime/25 bg-lime/10 p-4">
+              <p className="flex items-center gap-2 text-sm font-medium text-lime">
+                <CheckCircle2 className="h-4 w-4" />
+                Phone saved
+              </p>
+              <p className="mt-2 font-mono text-sm text-paper">{state?.creator?.phoneNumber}</p>
+              <p className="mt-2 text-sm leading-relaxed text-paper-dim">
+                Beta starts with iMessage. OpenClaw will bring Maya online and
+                Maya will text this number when the runtime is ready.
+              </p>
+            </div>
+          ) : (
+            <>
+              <TextInput label="Phone number" value={phone} onChange={setPhone} />
+              <p className="mt-3 text-xs leading-relaxed text-paper-faint">
+                We are supporting iMessage first. Maya will not start texting
+                until OpenClaw is online and the native send path is ready.
+              </p>
+            </>
+          )}
+        </SetupPanel>
+      );
+    }
+
+    return (
+      <SetupPanel
+        number="6"
+        title="You're all set"
+        action={
+          <Link
+            href="/creator-maya-v0/debug"
+            className="inline-flex min-h-10 items-center rounded-md border border-[var(--hairline-strong)] px-3 text-sm text-paper-dim transition hover:text-paper"
+          >
+            View setup status
+          </Link>
+        }
+      >
+        <div className="rounded-md border border-lime/25 bg-lime/10 p-5">
+          <p className="font-display text-3xl text-paper">
+            You&apos;re all set. Maya will text you directly.
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-paper-dim">
+            We saved your creator context, TikTok account, calendar path, and
+            phone number. Next, OpenClaw provisions Maya in the background. Maya
+            sends the first iMessage only after the runtime is online.
+          </p>
+        </div>
+      </SetupPanel>
+    );
   }
 
   return (
@@ -199,10 +575,9 @@ export function CreatorMayaV0Onboarding() {
               Set Maya up once. Then manage TikTok from iMessage.
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-relaxed text-paper-dim sm:text-base">
-              Maya needs your creator picture, TikTok context, calendar
-              lookahead, and phone number. After that, the product lives in your
-              iMessage thread: daily plans, scheduling suggestions, trend calls,
-              and creator-manager follow-through.
+              Setup is one screen at a time. Confirm your account, connect
+              TikTok, connect calendar, answer a few creator questions, and add
+              your phone. Then Maya moves to iMessage.
             </p>
             <div className="mt-5 flex flex-wrap items-center gap-3">
               {!signedIn ? (
@@ -225,11 +600,11 @@ export function CreatorMayaV0Onboarding() {
                 <button
                   type="button"
                   disabled={busy !== null}
-                  onClick={() => runStep("account", ensureAccount)}
+                  onClick={() => setManualStep(recommendedStep)}
                   className="inline-flex min-h-11 items-center gap-2 rounded-md bg-lime px-4 text-sm font-medium text-black transition hover:brightness-95 disabled:opacity-60"
                 >
-                  {busy === "account" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                  Start setup
+                  <Play className="h-4 w-4" />
+                  Continue setup
                 </button>
               )}
               <Link
@@ -241,164 +616,20 @@ export function CreatorMayaV0Onboarding() {
             </div>
           </header>
 
-          <section className="grid gap-3 sm:grid-cols-2">
-            <StatusTile
-              icon={<Radar className="h-4 w-4" />}
-              label="Onboarding"
-              value={onboardingStep}
-              active={onboardingStep !== "not started"}
-            />
-            <StatusTile
-              icon={<CalendarClock className="h-4 w-4" />}
-              label="Calendar"
-              value={state?.calendar?.providerMode ?? "not connected"}
-              active={calendarConnected}
-            />
-            <StatusTile
-              icon={<MessageSquareText className="h-4 w-4" />}
-              label="Phone"
-              value={imessagePaired ? "iMessage paired" : phoneCollected ? "phone saved" : "needed"}
-              active={phoneCollected || imessagePaired}
-            />
-            <StatusTile
-              icon={<UserRound className="h-4 w-4" />}
-              label="Creator picture"
-              value={pictureReady ? "ready" : "needed"}
-              active={pictureReady}
-            />
+          <section className="grid gap-2 sm:grid-cols-6">
+            {SETUP_STEPS.map((step, index) => (
+              <StepPill
+                key={step.key}
+                label={step.label}
+                index={index + 1}
+                complete={index < activeStepIndex || (step.key === "done" && setupComplete)}
+                active={step.key === activeStep}
+                onClick={() => setManualStep(step.key)}
+              />
+            ))}
           </section>
 
-          {signedIn ? (
-            <section className="space-y-4">
-              <SetupPanel
-                number="1"
-                title="Creator picture"
-                action={
-                  <button
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={saveCreatorProfile}
-                    className="inline-flex min-h-10 items-center rounded-md bg-paper px-3 text-sm font-medium text-ink disabled:opacity-60"
-                  >
-                    Save picture
-                  </button>
-                }
-              >
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <TextInput label="90-day goal" value={goal} onChange={setGoal} />
-                  <TextInput label="Biggest blocker" value={blocker} onChange={setBlocker} />
-                  <TextInput label="Niche" value={nicheCorrection} onChange={setNicheCorrection} />
-                  <label className="block">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
-                      Weekly creator hours
-                    </span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={40}
-                      value={weeklyHours}
-                      onChange={(event) => setWeeklyHours(Number(event.target.value))}
-                      className="mt-2 w-full rounded-md border border-[var(--hairline)] bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-paper-dim"
-                    />
-                  </label>
-                </div>
-              </SetupPanel>
-
-              <SetupPanel
-                number="2"
-                title="TikTok context"
-                action={
-                  <button
-                    type="button"
-                    disabled={busy !== null || !sanitizedHandle}
-                    onClick={connectTikTok}
-                    className="inline-flex min-h-10 items-center rounded-md bg-lime px-3 text-sm font-medium text-black disabled:opacity-60"
-                  >
-                    Connect TikTok
-                  </button>
-                }
-              >
-                <TextInput label="TikTok handle" value={handle} onChange={setHandle} />
-                <p className="mt-3 text-xs leading-relaxed text-paper-faint">
-                  Maya scans metadata and benchmarks, then selects a small post
-                  sample for deeper review. We should not ask Gemini to watch
-                  30 full videos during onboarding.
-                </p>
-              </SetupPanel>
-
-              <SetupPanel
-                number="3"
-                title="Calendar context"
-                action={
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={busy !== null}
-                      onClick={connectGoogleCalendar}
-                      className="inline-flex min-h-10 items-center gap-2 rounded-md bg-paper px-3 text-sm font-medium text-ink disabled:opacity-60"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      Google Calendar
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy !== null}
-                      onClick={connectApplePhoneCalendar}
-                      className="inline-flex min-h-10 items-center rounded-md border border-[var(--hairline-strong)] px-3 text-sm text-paper-dim disabled:opacity-60"
-                    >
-                      Apple on iPhone
-                    </button>
-                    {calendarConnected ? (
-                      <button
-                        type="button"
-                        disabled={busy !== null}
-                        onClick={disconnectCalendarAccess}
-                        className="inline-flex min-h-10 items-center rounded-md border border-rose/40 px-3 text-sm text-rose disabled:opacity-60"
-                      >
-                        Disconnect
-                      </button>
-                    ) : null}
-                  </div>
-                }
-              >
-                <p className="text-sm leading-relaxed text-paper-dim">
-                  Maya uses upcoming trips, launches, meetings, and open blocks
-                  to suggest useful content windows and schedule filming holds.
-                  You can disconnect Calendar here before production testing or
-                  revoke access from your Google Account.
-                </p>
-              </SetupPanel>
-
-              <SetupPanel
-                number="4"
-                title="Phone handoff"
-                action={
-                  <button
-                    type="button"
-                    disabled={busy !== null || !phone.trim()}
-                    onClick={savePhone}
-                    className="inline-flex min-h-10 items-center rounded-md bg-paper px-3 text-sm font-medium text-ink disabled:opacity-60"
-                  >
-                    Save phone
-                  </button>
-                }
-              >
-                <TextInput label="Phone number" value={phone} onChange={setPhone} />
-                <p className="mt-3 text-xs leading-relaxed text-paper-faint">
-                  Beta starts with iMessage only. OpenClaw handles native
-                  pairing and phone-side calendar permission after web setup.
-                </p>
-              </SetupPanel>
-            </section>
-          ) : (
-            <section className="rounded-lg border border-[var(--hairline)] bg-ink-2 p-5">
-              <h2 className="font-display text-2xl text-paper">Create your account to start</h2>
-              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-paper-dim">
-                The website only sets Maya up. The daily product runs from your
-                phone once Maya has enough context to be useful.
-              </p>
-            </section>
-          )}
+          {renderCurrentStep()}
 
           {(notice || error) && (
             <div
@@ -1096,6 +1327,82 @@ function SetupPanel({
   );
 }
 
+function StepPill({
+  label,
+  index,
+  complete,
+  active,
+  onClick,
+}: {
+  label: string;
+  index: number;
+  complete: boolean;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`min-h-14 rounded-md border px-3 text-left transition ${
+        active
+          ? "border-lime/50 bg-lime/10"
+          : complete
+            ? "border-lime/20 bg-ink-2"
+            : "border-[var(--hairline)] bg-ink-2"
+      }`}
+    >
+      <span className="flex items-center gap-2">
+        <span
+          className={`grid h-5 w-5 place-items-center rounded-full text-[10px] ${
+            complete ? "bg-lime text-black" : "bg-ink-3 text-paper-faint"
+          }`}
+        >
+          {complete ? <CheckCircle2 className="h-3 w-3" /> : index}
+        </span>
+        <span className="truncate text-xs font-medium text-paper">{label}</span>
+      </span>
+    </button>
+  );
+}
+
+function ConnectedProfile({
+  avatarUrl,
+  title,
+  subtitle,
+  body,
+}: {
+  avatarUrl?: string;
+  title?: string;
+  subtitle: string;
+  body: string;
+}) {
+  return (
+    <div className="flex items-center gap-4 rounded-md border border-lime/25 bg-lime/10 p-4">
+      {avatarUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={avatarUrl}
+          alt=""
+          className="h-14 w-14 rounded-full border border-lime/30 object-cover"
+        />
+      ) : (
+        <span className="grid h-14 w-14 place-items-center rounded-full bg-ink-3 text-lime">
+          <UserRound className="h-6 w-6" />
+        </span>
+      )}
+      <div>
+        <p className="flex items-center gap-2 text-sm font-medium text-paper">
+          <CheckCircle2 className="h-4 w-4 text-lime" />
+          {title ?? "Connected account"}
+        </p>
+        <p className="mt-1 text-sm text-paper-dim">{subtitle}</p>
+        <p className="mt-2 text-xs leading-relaxed text-paper-faint">{body}</p>
+      </div>
+    </div>
+  );
+}
+
 function TextInput({
   label,
   value,
@@ -1210,4 +1517,8 @@ function MiniMetric({ label, value }: { label: string; value: string }) {
 
 function stripStack(message: string): string {
   return message.split("\n")[0] ?? message;
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat("en", { notation: "compact" }).format(value);
 }

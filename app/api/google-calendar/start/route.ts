@@ -11,7 +11,7 @@ const SCOPES = [
 export async function GET(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
-    return NextResponse.redirect(signInUrl(req, "/creator-maya-v0"));
+    return NextResponse.redirect(signInUrl(req, "/creator-maya-v0?step=calendar"));
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -43,14 +43,22 @@ export async function GET(req: NextRequest) {
 }
 
 function googleRedirectUri(req: NextRequest): string {
-  return (
-    process.env.GOOGLE_CALENDAR_REDIRECT_URI ??
-    new URL("/api/google-calendar/callback", req.url).toString()
-  );
+  const requestRedirect = new URL("/api/google-calendar/callback", req.url);
+  const configured = process.env.GOOGLE_CALENDAR_REDIRECT_URI;
+  if (!configured) return requestRedirect.toString();
+
+  const configuredUrl = new URL(configured);
+  if (configuredUrl.host === req.nextUrl.host) return configuredUrl.toString();
+
+  // OAuth state is stored in a first-party cookie, so callback and start must
+  // use the same host. Falling back prevents staging from silently redirecting
+  // users to the production callback host.
+  return requestRedirect.toString();
 }
 
 function redirectWithError(req: NextRequest, error: string): NextResponse {
   const url = new URL("/creator-maya-v0", req.url);
+  url.searchParams.set("step", "calendar");
   url.searchParams.set("googleCalendar", "error");
   url.searchParams.set("error", error);
   return NextResponse.redirect(url);
