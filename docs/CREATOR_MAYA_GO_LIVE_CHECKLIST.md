@@ -32,7 +32,7 @@ Status key:
 - [x] Google Calendar test OAuth client created for local/staging testing.
 - [x] Vercel project linked to this repo.
 - [x] Staging/preview deployment live:
-  `https://hey-ava-jc5lj4thh-jcastro506s-projects.vercel.app`.
+  `https://hey-ava-haft2a4pz-jcastro506s-projects.vercel.app`.
 - [ ] Production deployment live at `https://www.hey-maya.ai`.
 
 ## Creator Onboarding
@@ -308,7 +308,8 @@ Latest local gate results:
   2026.
 - [x] `npm run build` passed after signed-out delete-account page fix on May 2,
   2026.
-- [x] Preview deployment test passed on May 2, 2026:
+- [x] Preview deployment test passed on May 2, 2026 against
+  `https://hey-ava-haft2a4pz-jcastro506s-projects.vercel.app`:
   - public pages return `200`
   - Google Calendar start returns auth redirect
   - iMessage delete endpoints return `401` without shared secret
