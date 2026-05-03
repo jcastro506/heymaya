@@ -64,6 +64,7 @@ describe("Creator Maya v0 OpenClaw workspace manifest", () => {
         "skills/creator-brand-contact-finder/SKILL.md",
         "skills/creator-pitch-drafter/SKILL.md",
         "skills/creator-brand-followup-manager/SKILL.md",
+        "skills/creator-media-librarian/SKILL.md",
         "skills/creator-clip-composer/SKILL.md",
         "skills/creator-account-deletion-confirmation/SKILL.md",
       ])
@@ -117,6 +118,8 @@ describe("Creator Maya v0 OpenClaw workspace manifest", () => {
     expect(all).toContain("Do not use SMS, WhatsApp, email, or web chat in v0.");
     expect(all).toContain("brand.search_targets");
     expect(all).toContain("Brand tools are installed for every workspace");
+    expect(all).toContain("media.ingest_creator_asset");
+    expect(all).toContain("User photos/videos must be saved");
     expect(all).toContain("media.compose_clip");
     expect(all).toContain("account.confirm_deletion");
     expect(all).toContain("DELETE MAYA");
@@ -149,6 +152,12 @@ describe("Creator Maya v0 OpenClaw workspace manifest", () => {
     expect(
       manifest.files["skills/creator-brand-followup-manager/SKILL.md"]
     ).toContain("usage rights");
+    expect(
+      manifest.files["skills/creator-media-librarian/SKILL.md"]
+    ).toContain("creator-owned Convex media assets");
+    expect(manifest.files["skills/creator-clip-composer/SKILL.md"]).toContain(
+      "creatorMayaV0MediaAssets"
+    );
     expect(manifest.files["skills/creator-clip-composer/SKILL.md"]).toContain(
       "Default to 9:16"
     );

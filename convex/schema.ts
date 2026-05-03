@@ -1618,6 +1618,115 @@ export default defineSchema({
     .index("by_creator", ["creatorId"])
     .index("by_creator_and_status", ["creatorId", "status"]),
 
+  creatorMayaV0MediaAssets: defineTable({
+    creatorId: v.id("creators"),
+    storageId: v.optional(v.id("_storage")),
+    storageUrl: v.optional(v.string()),
+    storageBytes: v.number(),
+    mimeType: v.string(),
+    mediaKind: v.union(
+      v.literal("image"),
+      v.literal("video"),
+      v.literal("audio"),
+      v.literal("other")
+    ),
+    source: v.union(
+      v.literal("imessage"),
+      v.literal("web_upload"),
+      v.literal("openclaw_attachment"),
+      v.literal("rendered_variant"),
+      v.literal("seedance_reference")
+    ),
+    sourceMessageId: v.optional(v.string()),
+    sourceChannel: v.optional(v.string()),
+    sourcePhoneNumber: v.optional(v.string()),
+    filename: v.optional(v.string()),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+    durationMs: v.optional(v.number()),
+    contentHash: v.string(),
+    consent: v.object({
+      usage: v.union(
+        v.literal("unknown"),
+        v.literal("approved_for_this_request"),
+        v.literal("approved_for_reuse"),
+        v.literal("rejected")
+      ),
+      requestedAt: v.optional(v.number()),
+      approvedAt: v.optional(v.number()),
+      text: v.optional(v.string()),
+    }),
+    catalog: v.object({
+      primarySubject: v.string(),
+      visualQuality: v.union(
+        v.literal("unknown"),
+        v.literal("poor"),
+        v.literal("fair"),
+        v.literal("good"),
+        v.literal("excellent")
+      ),
+      creatorRelevance: v.string(),
+      styleNotes: v.optional(v.string()),
+      safetyNotes: v.optional(v.string()),
+      suggestedUses: v.array(v.string()),
+      captionDraft: v.optional(v.string()),
+      catalogedAt: v.number(),
+      catalogModel: v.string(),
+      catalogCostUsd: v.number(),
+    }),
+    derivedFromAssetIds: v.optional(v.array(v.id("creatorMayaV0MediaAssets"))),
+    usageHistory: v.array(
+      v.object({
+        platform: v.union(
+          v.literal("tiktok"),
+          v.literal("instagram"),
+          v.literal("youtube"),
+          v.literal("other")
+        ),
+        postId: v.optional(v.string()),
+        purpose: v.string(),
+        usedAt: v.number(),
+      })
+    ),
+    archivedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_created", ["creatorId", "createdAt"])
+    .index("by_creator_and_content_hash", ["creatorId", "contentHash"])
+    .index("by_creator_and_source", ["creatorId", "source"]),
+
+  creatorMayaV0EditRequests: defineTable({
+    creatorId: v.id("creators"),
+    sourceAssetIds: v.array(v.id("creatorMayaV0MediaAssets")),
+    renderedAssetId: v.optional(v.id("creatorMayaV0MediaAssets")),
+    requestText: v.string(),
+    targetPlatform: v.union(
+      v.literal("tiktok"),
+      v.literal("instagram"),
+      v.literal("youtube"),
+      v.literal("other")
+    ),
+    status: v.union(
+      v.literal("drafting"),
+      v.literal("queued_for_approval"),
+      v.literal("rendering"),
+      v.literal("rendered"),
+      v.literal("approved"),
+      v.literal("rejected"),
+      v.literal("failed")
+    ),
+    editPlan: v.optional(v.any()),
+    approvalMessageId: v.optional(v.string()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_status", ["creatorId", "status"])
+    .index("by_creator_and_created", ["creatorId", "createdAt"]),
+
   // ────────────────────────────────────────────────────────────────────────
   // ─── Service product Sprint 0 (heymaya/service-v0) — added 2026-04-27 ──
   //

@@ -57,6 +57,7 @@ import type * as creatorMayaV0_brandOutreach from "../creatorMayaV0/brandOutreac
 import type * as creatorMayaV0_calendarLookahead from "../creatorMayaV0/calendarLookahead.js";
 import type * as creatorMayaV0_calendarScheduling from "../creatorMayaV0/calendarScheduling.js";
 import type * as creatorMayaV0_dailyBrief from "../creatorMayaV0/dailyBrief.js";
+import type * as creatorMayaV0_mediaAssets from "../creatorMayaV0/mediaAssets.js";
 import type * as creatorMayaV0_onboardingFlow from "../creatorMayaV0/onboardingFlow.js";
 import type * as creatorMayaV0_onboardingIntake from "../creatorMayaV0/onboardingIntake.js";
 import type * as creatorMayaV0_openClawDeployGate from "../creatorMayaV0/openClawDeployGate.js";
@@ -224,6 +225,7 @@ declare const fullApi: ApiFromModules<{
   "creatorMayaV0/calendarLookahead": typeof creatorMayaV0_calendarLookahead;
   "creatorMayaV0/calendarScheduling": typeof creatorMayaV0_calendarScheduling;
   "creatorMayaV0/dailyBrief": typeof creatorMayaV0_dailyBrief;
+  "creatorMayaV0/mediaAssets": typeof creatorMayaV0_mediaAssets;
   "creatorMayaV0/onboardingFlow": typeof creatorMayaV0_onboardingFlow;
   "creatorMayaV0/onboardingIntake": typeof creatorMayaV0_onboardingIntake;
   "creatorMayaV0/openClawDeployGate": typeof creatorMayaV0_openClawDeployGate;

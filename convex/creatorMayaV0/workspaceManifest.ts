@@ -35,6 +35,7 @@ export const CREATOR_MAYA_V0_SKILL_SLUGS = [
   "creator-brand-contact-finder",
   "creator-pitch-drafter",
   "creator-brand-followup-manager",
+  "creator-media-librarian",
   "creator-clip-composer",
   "creator-account-deletion-confirmation",
 ] as const;
@@ -161,6 +162,10 @@ function toolsMd(): string {
     "- brand.send_approved_email",
     "- brand.log_reply",
     "- brand.schedule_brand_call",
+    "- media.ingest_creator_asset",
+    "- media.list_creator_assets",
+    "- media.record_media_consent",
+    "- media.create_edit_request",
     "- media.compose_clip",
     "- media.render_variant",
     "- media.queue_edit_for_approval",
@@ -173,6 +178,7 @@ function toolsMd(): string {
     "",
     "Call Convex-backed tools only. Do not call vendors directly.",
     "Brand tools are installed for every workspace but fail closed unless Convex confirms the user's tier, approval state, and connected provider permissions.",
+    "Creator media tools are installed for every workspace. User photos/videos must be saved as creator-owned Convex media assets before analysis, editing, or reuse.",
     "Media editing tools are installed for every workspace but must route through the pinned deployment skill; do not discover or install FFmpeg, Remotion, or ClawHub skills during a user conversation.",
     "Account deletion tools require explicit confirmation with `DELETE MAYA`; never infer consent from a casual message.",
   ].join("\n");
@@ -602,6 +608,44 @@ function creatorMayaSkills(): Array<{ slug: string; body: string }> {
       }),
     },
     {
+      slug: "creator-media-librarian",
+      body: skillMd({
+        title: "Creator Media Librarian",
+        description:
+          "Ingest and catalog creator-sent photos/videos before Maya reuses or edits them.",
+        useWhen:
+          "Use when the creator texts Maya images, videos, screenshots, b-roll, reference clips, or raw footage.",
+        inputs: [
+          "creator id and active iMessage channel",
+          "attachment storage id or storage URL",
+          "mime type, bytes, hash, filename, dimensions, and duration when available",
+          "source message id and phone number",
+          "creatorPicture",
+          "the creator's stated intent for the media",
+        ],
+        process: [
+          "Save each attachment as creator-owned Convex media assets through media.ingest_creator_asset before any analysis or editing.",
+          "Record consent state separately from the text request; default to unknown unless the creator clearly approved this request or reuse.",
+          "Catalog what the asset is, how it fits the creator picture, visual quality, safety concerns, and likely TikTok uses.",
+          "Prefer creator-specific labels such as b-roll, talking-head, product shot, proof, lifestyle, reference, raw clip, or rendered variant.",
+          "If the creator asks for an edit, create a media.create_edit_request that links source asset ids and the approved goal.",
+        ],
+        tools: [
+          "media.ingest_creator_asset",
+          "media.list_creator_assets",
+          "media.record_media_consent",
+          "media.create_edit_request",
+          "maya.send_imessage",
+        ],
+        gates: [
+          "Never treat a transient iMessage attachment URL as durable storage.",
+          "Never reuse a creator-provided face, body, private location, or personal media without explicit consent for that request.",
+          "Never mix media from two creator ids in one edit request.",
+          "Never send catalog labels or safety notes as facts unless they were produced by a completed media catalog row.",
+        ],
+      }),
+    },
+    {
       slug: "creator-clip-composer",
       body: skillMd({
         title: "Creator Clip Composer",
@@ -610,7 +654,7 @@ function creatorMayaSkills(): Array<{ slug: string; body: string }> {
         useWhen:
           "Use when the creator asks Maya to cut a TikTok/Reel/Short, make a teaser, reframe a clip, or repurpose a top-performing idea.",
         inputs: [
-          "source media ids",
+          "source media ids from creatorMayaV0MediaAssets",
           "source media rights and consent state",
           "creatorPicture",
           "platform target",
@@ -623,9 +667,12 @@ function creatorMayaSkills(): Array<{ slug: string; body: string }> {
           "Default to 9:16 safe-area-aware edits for TikTok unless the creator asks otherwise.",
           "Use the pinned remotion-video-toolkit reference for captions, timing, and render planning; route actual renders through Convex media tools.",
           "Queue the rendered variant for creator approval before posting or scheduling.",
-          "Save edit plan, source ids, and rendered asset id to Convex.",
+          "Save edit plan, source ids, and rendered asset id to creatorMayaV0EditRequests and creatorMayaV0MediaAssets.",
         ],
         tools: [
+          "media.list_creator_assets",
+          "media.record_media_consent",
+          "media.create_edit_request",
           "media.compose_clip",
           "media.render_variant",
           "media.queue_edit_for_approval",
