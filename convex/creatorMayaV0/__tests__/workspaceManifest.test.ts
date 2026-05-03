@@ -66,6 +66,7 @@ describe("Creator Maya v0 OpenClaw workspace manifest", () => {
         "skills/creator-brand-followup-manager/SKILL.md",
         "skills/creator-media-librarian/SKILL.md",
         "skills/creator-clip-composer/SKILL.md",
+        "skills/creator-tiktok-draft-handoff/SKILL.md",
         "skills/creator-account-deletion-confirmation/SKILL.md",
       ])
     );
@@ -119,7 +120,11 @@ describe("Creator Maya v0 OpenClaw workspace manifest", () => {
     expect(all).toContain("brand.search_targets");
     expect(all).toContain("Brand tools are installed for every workspace");
     expect(all).toContain("media.ingest_creator_asset");
+    expect(all).toContain("media.catalog_creator_asset");
+    expect(all).toContain("media.search_creator_assets");
+    expect(all).toContain("media.record_tiktok_draft_handoff");
     expect(all).toContain("User photos/videos must be saved");
+    expect(all).toContain("Maya must not direct-post to TikTok");
     expect(all).toContain("media.compose_clip");
     expect(all).toContain("account.confirm_deletion");
     expect(all).toContain("DELETE MAYA");
@@ -161,6 +166,12 @@ describe("Creator Maya v0 OpenClaw workspace manifest", () => {
     expect(manifest.files["skills/creator-clip-composer/SKILL.md"]).toContain(
       "Default to 9:16"
     );
+    expect(
+      manifest.files["skills/creator-tiktok-draft-handoff/SKILL.md"]
+    ).toContain("upload-to-inbox");
+    expect(
+      manifest.files["skills/creator-tiktok-draft-handoff/SKILL.md"]
+    ).toContain("Never use TikTok Direct Post in v0");
     expect(
       manifest.files["skills/creator-account-deletion-confirmation/SKILL.md"]
     ).toContain("same creator id, phone number");

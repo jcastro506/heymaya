@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../../schema";
-import { api } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 
 function asUser(t: ReturnType<typeof convexTest>, subject: string) {
@@ -173,5 +173,178 @@ describe("Creator Maya v0 media assets", () => {
         targetPlatform: "tiktok",
       })
     ).rejects.toThrow("Creator Maya media asset not found");
+  });
+
+  it("catalogs media once and retrieves it later by searchable asset memory", async () => {
+    const t = convexTest(schema, modules);
+    const { user, account } = await createCreator(t, "creator-media-catalog");
+
+    const asset = await user.mutation(
+      api.creatorMayaV0.mediaAssets.ingestCreatorMediaAsset,
+      {
+        storageUrl: "https://cdn.example.com/cafe-broll.mp4",
+        storageBytes: 12000,
+        mimeType: "video/mp4",
+        mediaKind: "video",
+        source: "imessage",
+        durationMs: 11_000,
+        contentHash: "catalog-hash",
+        nowMs: 100,
+      }
+    );
+
+    await t.mutation(
+      internal.creatorMayaV0.mediaAssets.catalogCreatorMediaAssetInternal,
+      {
+        creatorId: account.creatorId,
+        assetId: asset.mediaAssetId,
+        catalog: {
+          primarySubject: "creator making coffee shop b-roll",
+          visualQuality: "good",
+          creatorRelevance: "Useful as proof-of-work lifestyle b-roll.",
+          sceneSummary:
+            "Vertical clip of the creator opening a laptop beside coffee.",
+          styleNotes: "Warm natural light, slow handheld pan.",
+          detectedText: ["draft sponsor deck"],
+          transcript: "No spoken words.",
+          retrievalTags: ["coffee shop", "laptop", "b-roll", "workday"],
+          musicCue: "low-volume chill instrumental",
+          suggestedUses: ["morning routine hook", "behind-the-scenes cutaway"],
+          captionDraft: "What building before 9am actually looks like.",
+          catalogModel: "gemini-test",
+          catalogCostUsd: 0.002,
+          analysisVersion: "media-catalog-v1",
+        },
+        nowMs: 200,
+      }
+    );
+
+    const search = await t.query(
+      internal.creatorMayaV0.mediaAssets.searchCreatorMediaAssetsInternal,
+      {
+        creatorId: account.creatorId,
+        queryText: "coffee laptop",
+        mediaKind: "video",
+        limit: 5,
+      }
+    );
+    expect(search).toHaveLength(1);
+    expect(search[0].catalog.analysisVersion).toBe("media-catalog-v1");
+    expect(search[0].catalog.retrievalTags).toContain("b-roll");
+
+    const fetched = await t.query(
+      internal.creatorMayaV0.mediaAssets.getCreatorMediaAssetInternal,
+      {
+        creatorId: account.creatorId,
+        assetId: asset.mediaAssetId,
+      }
+    );
+    expect(fetched.storageUrl).toBe("https://cdn.example.com/cafe-broll.mp4");
+  });
+
+  it("records TikTok handoff without auto-posting after an edit is rendered", async () => {
+    const t = convexTest(schema, modules);
+    const { user, account } = await createCreator(t, "creator-media-handoff");
+
+    const source = await user.mutation(
+      api.creatorMayaV0.mediaAssets.ingestCreatorMediaAsset,
+      {
+        storageUrl: "https://cdn.example.com/raw.mp4",
+        storageBytes: 9000,
+        mimeType: "video/mp4",
+        mediaKind: "video",
+        source: "imessage",
+        contentHash: "handoff-source",
+      }
+    );
+    const rendered = await t.mutation(
+      internal.creatorMayaV0.mediaAssets.ingestCreatorMediaAssetInternal,
+      {
+        creatorId: account.creatorId,
+        storageUrl: "https://cdn.example.com/rendered.mp4",
+        storageBytes: 7000,
+        mimeType: "video/mp4",
+        mediaKind: "video",
+        source: "rendered_variant",
+        contentHash: "handoff-rendered",
+      }
+    );
+    const edit = await user.mutation(
+      api.creatorMayaV0.mediaAssets.createEditRequest,
+      {
+        sourceAssetIds: [source.mediaAssetId],
+        requestText: "Make this a TikTok draft.",
+        targetPlatform: "tiktok",
+      }
+    );
+
+    await t.mutation(
+      internal.creatorMayaV0.mediaAssets.updateEditRequestStatusInternal,
+      {
+        creatorId: account.creatorId,
+        editRequestId: edit.editRequestId,
+        status: "rendered",
+        renderedAssetId: rendered.mediaAssetId,
+      }
+    );
+    const handoff = await t.mutation(
+      internal.creatorMayaV0.mediaAssets.recordTikTokDraftHandoffInternal,
+      {
+        creatorId: account.creatorId,
+        editRequestId: edit.editRequestId,
+        mode: "download_link",
+        caption: "Result first, details second.",
+        suggestedMusic: ["Use a currently trending low-volume workday sound."],
+        instructions:
+          "Maya exported this and did not post it. Download, add the suggested sound in TikTok, then post manually.",
+        status: "download_sent",
+        nowMs: 300,
+      }
+    );
+
+    expect(handoff?.status).toBe("sent_to_creator");
+    expect(handoff?.tiktokHandoff?.mode).toBe("download_link");
+    expect(handoff?.tiktokHandoff?.status).toBe("download_sent");
+    expect(handoff?.tiktokHandoff?.instructions).toContain("did not post");
+  });
+
+  it("refuses TikTok handoff before a rendered asset exists", async () => {
+    const t = convexTest(schema, modules);
+    const { user, account } = await createCreator(t, "creator-media-no-render");
+
+    const source = await user.mutation(
+      api.creatorMayaV0.mediaAssets.ingestCreatorMediaAsset,
+      {
+        storageUrl: "https://cdn.example.com/no-render.mp4",
+        storageBytes: 9000,
+        mimeType: "video/mp4",
+        mediaKind: "video",
+        source: "imessage",
+        contentHash: "no-render-source",
+      }
+    );
+    const edit = await user.mutation(
+      api.creatorMayaV0.mediaAssets.createEditRequest,
+      {
+        sourceAssetIds: [source.mediaAssetId],
+        requestText: "Make this a TikTok draft.",
+        targetPlatform: "tiktok",
+      }
+    );
+
+    await expect(
+      t.mutation(
+        internal.creatorMayaV0.mediaAssets.recordTikTokDraftHandoffInternal,
+        {
+          creatorId: account.creatorId,
+          editRequestId: edit.editRequestId,
+          mode: "download_link",
+          caption: "Draft",
+          suggestedMusic: [],
+          instructions: "Do not post.",
+          status: "download_sent",
+        }
+      )
+    ).rejects.toThrow("requires a rendered asset");
   });
 });

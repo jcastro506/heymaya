@@ -1666,13 +1666,19 @@ export default defineSchema({
         v.literal("excellent")
       ),
       creatorRelevance: v.string(),
+      sceneSummary: v.optional(v.string()),
       styleNotes: v.optional(v.string()),
       safetyNotes: v.optional(v.string()),
+      detectedText: v.optional(v.array(v.string())),
+      transcript: v.optional(v.string()),
+      retrievalTags: v.optional(v.array(v.string())),
+      musicCue: v.optional(v.string()),
       suggestedUses: v.array(v.string()),
       captionDraft: v.optional(v.string()),
       catalogedAt: v.number(),
       catalogModel: v.string(),
       catalogCostUsd: v.number(),
+      analysisVersion: v.optional(v.string()),
     }),
     derivedFromAssetIds: v.optional(v.array(v.id("creatorMayaV0MediaAssets"))),
     usageHistory: v.array(
@@ -1713,11 +1719,34 @@ export default defineSchema({
       v.literal("queued_for_approval"),
       v.literal("rendering"),
       v.literal("rendered"),
+      v.literal("ready_for_creator_draft"),
+      v.literal("sent_to_creator"),
       v.literal("approved"),
       v.literal("rejected"),
       v.literal("failed")
     ),
     editPlan: v.optional(v.any()),
+    tiktokHandoff: v.optional(
+      v.object({
+        mode: v.union(
+          v.literal("download_link"),
+          v.literal("tiktok_inbox_upload")
+        ),
+        caption: v.string(),
+        suggestedMusic: v.array(v.string()),
+        instructions: v.string(),
+        tiktokPublishId: v.optional(v.string()),
+        status: v.union(
+          v.literal("not_started"),
+          v.literal("sent_to_tiktok_inbox"),
+          v.literal("download_sent"),
+          v.literal("creator_posted"),
+          v.literal("failed")
+        ),
+        sentAt: v.optional(v.number()),
+        failureReason: v.optional(v.string()),
+      })
+    ),
     approvalMessageId: v.optional(v.string()),
     failureReason: v.optional(v.string()),
     createdAt: v.number(),

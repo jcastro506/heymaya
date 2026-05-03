@@ -14,6 +14,7 @@
 
 import { httpRouter } from "convex/server";
 import { voiceTranscriptHttp } from "./voice/transcriptHttp";
+import { openClawMediaIngestHttp } from "./creatorMayaV0/openClawMediaIngestHttp";
 
 const http = httpRouter();
 
@@ -25,6 +26,15 @@ http.route({
   path: "/voice/transcript",
   method: "POST",
   handler: voiceTranscriptHttp,
+});
+
+// Native iMessage/OpenClaw media bridge. The gateway POSTs transient
+// attachments here so Convex can store durable creator-owned media assets
+// before Maya analyzes, edits, or reuses them.
+http.route({
+  path: "/creator-maya-v0/openclaw/media",
+  method: "POST",
+  handler: openClawMediaIngestHttp,
 });
 
 export default http;

@@ -57,6 +57,8 @@ type CreatorScopedTable =
   | "creatorMayaV0ActionLog"
   | "creatorMayaV0OpenClawDeployments"
   | "creatorMayaV0BrandTargets"
+  | "creatorMayaV0MediaAssets"
+  | "creatorMayaV0EditRequests"
   | "accountDeletionRequests";
 
 type BusinessScopedTable =
@@ -125,6 +127,8 @@ const CREATOR_SCOPED_TABLES: CreatorScopedTable[] = [
   "creatorMayaV0ActionLog",
   "creatorMayaV0OpenClawDeployments",
   "creatorMayaV0BrandTargets",
+  "creatorMayaV0EditRequests",
+  "creatorMayaV0MediaAssets",
   "accountDeletionRequests",
 ];
 
@@ -432,6 +436,20 @@ async function deleteCreatorScopedRows(
 ): Promise<number> {
   let count = 0;
   for (const table of CREATOR_SCOPED_TABLES) {
+    if (table === "creatorMayaV0MediaAssets") {
+      const rows = await ctx.db
+        .query("creatorMayaV0MediaAssets")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect();
+      for (const row of rows) {
+        if (row.storageId) {
+          await ctx.storage.delete(row.storageId);
+        }
+        await ctx.db.delete(row._id);
+        count += 1;
+      }
+      continue;
+    }
     const rows = await queryByIndex(ctx, table, "by_creator", "creatorId", creatorId);
     for (const row of rows) {
       await ctx.db.delete(row._id);

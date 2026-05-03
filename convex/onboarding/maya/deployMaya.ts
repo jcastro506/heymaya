@@ -294,6 +294,7 @@ function buildSecretsBundle(config: MayaConfig): Record<string, string> {
     "OPENROUTER_API_KEY",
     "COMPOSIO_API_KEY",
     "ENCRYPTION_KEY",
+    "MAYA_RUNTIME_SECRET",
   ]) {
     const v = process.env[k];
     if (v) out[k] = v;

@@ -43,8 +43,26 @@ const editStatusValidator = v.union(
   v.literal("queued_for_approval"),
   v.literal("rendering"),
   v.literal("rendered"),
+  v.literal("ready_for_creator_draft"),
+  v.literal("sent_to_creator"),
   v.literal("approved"),
   v.literal("rejected"),
+  v.literal("failed")
+);
+
+const visualQualityValidator = v.union(
+  v.literal("unknown"),
+  v.literal("poor"),
+  v.literal("fair"),
+  v.literal("good"),
+  v.literal("excellent")
+);
+
+const tiktokHandoffStatusValidator = v.union(
+  v.literal("not_started"),
+  v.literal("sent_to_tiktok_inbox"),
+  v.literal("download_sent"),
+  v.literal("creator_posted"),
   v.literal("failed")
 );
 
@@ -167,6 +185,128 @@ export const listCreatorMediaAssetsInternal = internalQuery({
   },
 });
 
+export const searchCreatorMediaAssetsInternal = internalQuery({
+  args: {
+    creatorId: v.id("creators"),
+    queryText: v.optional(v.string()),
+    mediaKind: v.optional(mediaKindValidator),
+    includeArchived: v.optional(v.boolean()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("creatorMayaV0MediaAssets")
+      .withIndex("by_creator_and_created", (q) =>
+        q.eq("creatorId", args.creatorId)
+      )
+      .order("desc")
+      .take(250);
+
+    const terms = (args.queryText ?? "")
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+    const filtered = rows.filter((row) => {
+      if (!args.includeArchived && row.archivedAt !== undefined) return false;
+      if (args.mediaKind && row.mediaKind !== args.mediaKind) return false;
+      if (terms.length === 0) return true;
+      const haystack = searchableAssetText(row);
+      return terms.every((term) => haystack.includes(term));
+    });
+
+    return await Promise.all(
+      filtered.slice(0, clampLimit(args.limit)).map(async (row) => ({
+        ...row,
+        storageUrl: await resolveCreatorAssetUrl(ctx, row),
+      }))
+    );
+  },
+});
+
+export const getCreatorMediaAssetInternal = internalQuery({
+  args: {
+    creatorId: v.id("creators"),
+    assetId: v.id("creatorMayaV0MediaAssets"),
+  },
+  handler: async (ctx, args) => {
+    const row = await requireOwnedAsset(ctx, args.creatorId, args.assetId);
+    return {
+      ...row,
+      storageUrl: await resolveCreatorAssetUrl(ctx, row),
+    };
+  },
+});
+
+export const validateRuntimeMediaIngestInternal = internalQuery({
+  args: {
+    creatorId: v.id("creators"),
+    sourcePhoneNumber: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) {
+      throw new Error("Creator not found.");
+    }
+    if (!args.sourcePhoneNumber) {
+      return { ok: true, creatorId: creator._id };
+    }
+    const sourcePhoneNumber = args.sourcePhoneNumber;
+
+    const activePairs = await ctx.db
+      .query("pairedChannels")
+      .withIndex("by_channel_and_phone", (q) =>
+        q.eq("channel", "imessage").eq("phoneNumber", sourcePhoneNumber)
+      )
+      .collect();
+    const activeForCreator = activePairs.some(
+      (row) => row.creatorId === creator._id && row.status === "active"
+    );
+    if (!activeForCreator && creator.phoneNumber !== sourcePhoneNumber) {
+      throw new Error("Creator phone number is not paired for iMessage.");
+    }
+
+    return { ok: true, creatorId: creator._id };
+  },
+});
+
+export const catalogCreatorMediaAssetInternal = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    assetId: v.id("creatorMayaV0MediaAssets"),
+    catalog: v.object({
+      primarySubject: v.string(),
+      visualQuality: visualQualityValidator,
+      creatorRelevance: v.string(),
+      sceneSummary: v.optional(v.string()),
+      styleNotes: v.optional(v.string()),
+      safetyNotes: v.optional(v.string()),
+      detectedText: v.optional(v.array(v.string())),
+      transcript: v.optional(v.string()),
+      retrievalTags: v.optional(v.array(v.string())),
+      musicCue: v.optional(v.string()),
+      suggestedUses: v.array(v.string()),
+      captionDraft: v.optional(v.string()),
+      catalogModel: v.string(),
+      catalogCostUsd: v.number(),
+      analysisVersion: v.optional(v.string()),
+    }),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const asset = await requireOwnedAsset(ctx, args.creatorId, args.assetId);
+    const now = args.nowMs ?? Date.now();
+    await ctx.db.patch(asset._id, {
+      catalog: {
+        ...args.catalog,
+        catalogedAt: now,
+      },
+      updatedAt: now,
+    });
+    return await ctx.db.get(asset._id);
+  },
+});
+
 export const recordCreatorMediaConsent = mutation({
   args: {
     assetId: v.id("creatorMayaV0MediaAssets"),
@@ -253,6 +393,64 @@ export const updateEditRequestStatusInternal = internalMutation({
       approvalMessageId: args.approvalMessageId,
       failureReason: args.failureReason,
       updatedAt: args.nowMs ?? Date.now(),
+    });
+
+    return await ctx.db.get(row._id);
+  },
+});
+
+export const recordTikTokDraftHandoffInternal = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    editRequestId: v.id("creatorMayaV0EditRequests"),
+    mode: v.union(
+      v.literal("download_link"),
+      v.literal("tiktok_inbox_upload")
+    ),
+    caption: v.string(),
+    suggestedMusic: v.array(v.string()),
+    instructions: v.string(),
+    tiktokPublishId: v.optional(v.string()),
+    status: tiktokHandoffStatusValidator,
+    failureReason: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.editRequestId);
+    if (!row || row.creatorId !== args.creatorId) {
+      throw new Error("Creator Maya edit request not found.");
+    }
+    if (!row.renderedAssetId) {
+      throw new Error("TikTok handoff requires a rendered asset.");
+    }
+    await requireOwnedAsset(ctx, args.creatorId, row.renderedAssetId);
+    const now = args.nowMs ?? Date.now();
+    const nextStatus =
+      args.status === "failed"
+        ? "failed"
+        : args.status === "sent_to_tiktok_inbox" ||
+            args.status === "download_sent"
+          ? "sent_to_creator"
+          : "ready_for_creator_draft";
+
+    await ctx.db.patch(row._id, {
+      status: nextStatus,
+      tiktokHandoff: {
+        mode: args.mode,
+        caption: args.caption,
+        suggestedMusic: args.suggestedMusic,
+        instructions: args.instructions,
+        tiktokPublishId: args.tiktokPublishId,
+        status: args.status,
+        sentAt:
+          args.status === "sent_to_tiktok_inbox" ||
+          args.status === "download_sent"
+            ? now
+            : undefined,
+        failureReason: args.failureReason,
+      },
+      failureReason: args.status === "failed" ? args.failureReason : undefined,
+      updatedAt: now,
     });
 
     return await ctx.db.get(row._id);
@@ -402,4 +600,27 @@ async function resolveCreatorAssetUrl(
 
 function clampLimit(limit: number | undefined): number {
   return Math.max(1, Math.min(limit ?? 50, 100));
+}
+
+function searchableAssetText(row: Doc<"creatorMayaV0MediaAssets">): string {
+  return [
+    row.filename,
+    row.mimeType,
+    row.mediaKind,
+    row.source,
+    row.catalog.primarySubject,
+    row.catalog.creatorRelevance,
+    row.catalog.sceneSummary,
+    row.catalog.styleNotes,
+    row.catalog.safetyNotes,
+    row.catalog.transcript,
+    row.catalog.musicCue,
+    row.catalog.captionDraft,
+    ...(row.catalog.detectedText ?? []),
+    ...(row.catalog.retrievalTags ?? []),
+    ...row.catalog.suggestedUses,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 }
