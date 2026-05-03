@@ -1,3 +1,8 @@
+import {
+  CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK,
+  CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILLS,
+} from "./pinnedClawhubSkills";
+
 export interface CreatorMayaWorkspaceInput {
   creatorId: string;
   timezone: string;
@@ -43,6 +48,11 @@ export function buildCreatorMayaWorkspaceManifest(
 
   const files: Record<string, string> = {
     "AGENTS.md": agentsMd(input),
+    ".clawhub/lock.json": `${JSON.stringify(
+      CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK,
+      null,
+      2
+    )}\n`,
     "SOUL.md": soulMd(input),
     "USER.md": userMd(input),
     "TOOLS.md": toolsMd(),
@@ -54,6 +64,11 @@ export function buildCreatorMayaWorkspaceManifest(
 
   for (const skill of creatorMayaSkills()) {
     files[`skills/${skill.slug}/SKILL.md`] = skill.body;
+  }
+  for (const skill of CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILLS) {
+    for (const [path, body] of Object.entries(skill.files)) {
+      files[`skills/${skill.slug}/${path}`] = body;
+    }
   }
 
   return {
@@ -71,7 +86,7 @@ function agentsMd(input: CreatorMayaWorkspaceInput): string {
     "Never auto-post. Draft, plan, schedule creator work blocks, analyze, and nudge.",
     "Every recommendation must cite creator data, video analysis, trend evidence, calendar availability, or memory.",
     "If there is no grounded next action, write the receipt and stay quiet.",
-    "All custom Creator Maya skills in `/skills/*/SKILL.md` are loaded for every deployment. Convex tier and approval gates decide what can execute.",
+    "All custom Creator Maya skills and pinned ClawHub skills in `/skills/*/SKILL.md` are loaded for every deployment. Convex tier and approval gates decide what can execute.",
     "Brand discovery and outbound pitch work is Studio-gated. Never send a brand email without creator approval and a Convex audit log.",
     "",
     `Creator ID: ${input.creatorId}`,
@@ -151,6 +166,10 @@ function toolsMd(): string {
     "- media.queue_edit_for_approval",
     "- account.request_deletion",
     "- account.confirm_deletion",
+    "",
+    "Pinned ClawHub skills:",
+    "- remotion-video-toolkit@1.4.0: Remotion and caption/rendering reference for approved creator clip plans.",
+    "- tiktok@3.0.0: General TikTok growth reference. Creator Maya memory and Convex evidence override generic advice.",
     "",
     "Call Convex-backed tools only. Do not call vendors directly.",
     "Brand tools are installed for every workspace but fail closed unless Convex confirms the user's tier, approval state, and connected provider permissions.",
@@ -340,16 +359,24 @@ function creatorMayaSkills(): Array<{ slug: string; body: string }> {
           "calendar availability",
           "calendar content arcs",
           "creatorPicture",
+          "recent TikTok post metrics and baseline",
+          "trend candidates from the daily trend scan",
+          "working hooks and weak hooks",
           "posting target",
           "Maya-owned hold history",
         ],
         process: [
           "Classify events as content opportunity, filming window, recurring noise, or private.",
-          "Only propose content around an event when the title/context is allowed and creator-relevant.",
+          "Cross-check each content opportunity against the creator's niche, current goal, working hooks, weak hooks, and recent post performance before recommending it.",
+          "Use trend candidates only when they naturally fit the calendar context and creator picture; do not force unrelated trends into personal events.",
+          "For each recommendation, explain why this timing matters now and which creator-specific pattern or TikTok signal supports it.",
+          "Only propose content around an event when the title/context is allowed, not private, and creator-relevant.",
           "Create or update only Maya-owned holds after the creator approves.",
           "If there is a conflict, revise the plan instead of forcing the hold.",
         ],
         tools: [
+          "tiktok.get_post_metrics",
+          "tiktok.search_trends",
           "calendar.get_availability",
           "calendar.create_hold",
           "calendar.update_hold",

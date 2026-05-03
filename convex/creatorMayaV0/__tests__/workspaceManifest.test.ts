@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS } from "../pinnedClawhubSkills";
 import {
   CREATOR_MAYA_V0_SKILL_SLUGS,
   buildCreatorMayaWorkspaceManifest,
@@ -71,7 +72,31 @@ describe("Creator Maya v0 OpenClaw workspace manifest", () => {
       "Score a brand candidate against the creator's audience"
     );
     expect(manifest.files["AGENTS.md"]).toContain(
-      "All custom Creator Maya skills"
+      "All custom Creator Maya skills and pinned ClawHub skills"
+    );
+  });
+
+  it("vendors pinned ClawHub skills into every OpenClaw workspace", () => {
+    const manifest = buildCreatorMayaWorkspaceManifest(input);
+    const lock = JSON.parse(manifest.files[".clawhub/lock.json"]);
+
+    expect(Object.keys(lock.skills).sort()).toEqual(
+      [...CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS].sort()
+    );
+    expect(lock.skills["remotion-video-toolkit"].version).toBe("1.4.0");
+    expect(lock.skills.tiktok.version).toBe("3.0.0");
+    expect(
+      manifest.files["skills/remotion-video-toolkit/SKILL.md"]
+    ).toContain("name: remotion-video-toolkit");
+    expect(manifest.files["skills/tiktok/SKILL.md"]).toContain("name: tiktok");
+    expect(
+      manifest.files["skills/remotion-video-toolkit/rules/display-captions.md"]
+    ).toContain("TikTok-style");
+    expect(manifest.files["skills/tiktok/references/hooks.md"]).toContain(
+      "Hook"
+    );
+    expect(manifest.files["TOOLS.md"]).toContain(
+      "remotion-video-toolkit@1.4.0"
     );
   });
 
@@ -85,6 +110,10 @@ describe("Creator Maya v0 OpenClaw workspace manifest", () => {
     expect(all).toContain("maya.send_imessage");
     expect(all).toContain("calendar.get_availability");
     expect(all).toContain("calendar.create_hold");
+    expect(all).toContain("trend candidates from the daily trend scan");
+    expect(all).toContain(
+      "Cross-check each content opportunity against the creator's niche"
+    );
     expect(all).toContain("Do not use SMS, WhatsApp, email, or web chat in v0.");
     expect(all).toContain("brand.search_targets");
     expect(all).toContain("Brand tools are installed for every workspace");

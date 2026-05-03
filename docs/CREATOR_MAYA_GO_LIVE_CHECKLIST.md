@@ -142,13 +142,16 @@ Deployment rule:
   workspace.
 - [x] Creator workspace now includes media composition and account-deletion
   confirmation skills in the bundled pack.
-- [ ] External mechanics skills, if any, must be pinned and resolved during
-  deploy/first boot before Maya is marked active. Maya must not discover,
+- [x] External mechanics/reference skills are pinned into the repo and emitted
+  during deploy/first boot before Maya is marked active. Maya must not discover,
   install, or upgrade skills during a user conversation.
-- [ ] Add a deploy gate that fails if a required external skill cannot be
-  resolved before activation.
-- [ ] Add a version lock file for approved external skills so deployments are
-  repeatable.
+  - `remotion-video-toolkit@1.4.0`
+  - `tiktok@3.0.0`
+- [x] Add a deploy gate that fails if a required external skill cannot be
+  resolved before activation. Live Fly smoke now verifies each pinned skill is
+  visible through `openclaw skills list`.
+- [x] Add a version lock file for approved external skills so deployments are
+  repeatable. The Creator Maya workspace emits `.clawhub/lock.json`.
 
 Service/business track:
 

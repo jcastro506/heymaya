@@ -60,6 +60,7 @@ import type * as creatorMayaV0_dailyBrief from "../creatorMayaV0/dailyBrief.js";
 import type * as creatorMayaV0_onboardingFlow from "../creatorMayaV0/onboardingFlow.js";
 import type * as creatorMayaV0_onboardingIntake from "../creatorMayaV0/onboardingIntake.js";
 import type * as creatorMayaV0_openClawDeployGate from "../creatorMayaV0/openClawDeployGate.js";
+import type * as creatorMayaV0_pinnedClawhubSkills from "../creatorMayaV0/pinnedClawhubSkills.js";
 import type * as creatorMayaV0_scope from "../creatorMayaV0/scope.js";
 import type * as creatorMayaV0_tiering from "../creatorMayaV0/tiering.js";
 import type * as creatorMayaV0_trendBenchmark from "../creatorMayaV0/trendBenchmark.js";
@@ -226,6 +227,7 @@ declare const fullApi: ApiFromModules<{
   "creatorMayaV0/onboardingFlow": typeof creatorMayaV0_onboardingFlow;
   "creatorMayaV0/onboardingIntake": typeof creatorMayaV0_onboardingIntake;
   "creatorMayaV0/openClawDeployGate": typeof creatorMayaV0_openClawDeployGate;
+  "creatorMayaV0/pinnedClawhubSkills": typeof creatorMayaV0_pinnedClawhubSkills;
   "creatorMayaV0/scope": typeof creatorMayaV0_scope;
   "creatorMayaV0/tiering": typeof creatorMayaV0_tiering;
   "creatorMayaV0/trendBenchmark": typeof creatorMayaV0_trendBenchmark;

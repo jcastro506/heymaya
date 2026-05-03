@@ -23,6 +23,13 @@ describe("creator-maya-v0-fly-smoke", () => {
     expect(fixture.workspaceFiles["skills/creator-calendar-content-planner/SKILL.md"]).toContain(
       "name: creator-calendar-content-planner"
     );
+    expect(fixture.workspaceFiles[".clawhub/lock.json"]).toContain(
+      "remotion-video-toolkit"
+    );
+    expect(fixture.workspaceFiles["skills/remotion-video-toolkit/SKILL.md"]).toContain(
+      "name: remotion-video-toolkit"
+    );
+    expect(fixture.workspaceFiles["skills/tiktok/SKILL.md"]).toContain("name: tiktok");
     expect(fixture.gatewayConfig).toMatchObject({
       agents: { defaults: { workspace: "/data/workspace" } },
       skills: { load: { watch: true } },
