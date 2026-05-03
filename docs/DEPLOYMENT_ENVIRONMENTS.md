@@ -48,8 +48,12 @@ The local Vercel project link points at:
 - Production URL: `https://www.hey-maya.ai`
 - GitHub repo: `jcastro506/heymaya`
 
-The Vercel project is connected to GitHub. Pushes to non-production branches
-create Preview deployments. Pushes to `main` create Production deployments.
+The Vercel project is connected to GitHub. `vercel.json` limits automatic Git
+deployments to the long-lived release branches:
+
+- Pushes to `staging` create Preview deployments.
+- Pushes to `main` create Production deployments.
+- Pushes to `codex/*` and other scratch branches do not create Vercel builds.
 
 The `staging` branch has branch-scoped Preview public Convex variables pointed
 at Creator Maya staging:
