@@ -1,10 +1,8 @@
-.git
+.env
+.env.*
+!.env.example
+
+node_modules
 .next
 .next-*
-node_modules
 coverage
-playwright-report
-test-results
-soak-runs
-*.log
-.DS_Store
