@@ -1,0 +1,44 @@
+{
+  "input": {
+    "post": {
+      "id": "tt_post_2026_04_24_001",
+      "platform": "tiktok",
+      "caption": "what happened was crazy you wont believe it",
+      "mediaType": "video",
+      "postedAt": 1745524800000,
+      "hookPattern": "story-tease"
+    },
+    "postMetrics": [
+      { "ts": 1745528400000, "viewCount": 6200, "likeCount": 110, "commentCount": 4 }
+    ],
+    "creatorTrailingBaseline": {
+      "medianViews": 22000,
+      "medianEngagementRate": 0.046,
+      "p25Views": 12000,
+      "p75Views": 38000
+    },
+    "creatorPicture": {
+      "bottomHooks": [
+        { "pattern": "story-tease", "examplePostId": "tt_post_2026_04_03_002", "platform": "tiktok" },
+        { "pattern": "talking-head-intro", "examplePostId": "tt_post_2026_03_28_004", "platform": "tiktok" }
+      ],
+      "postingCadence": {
+        "perPlatform": [
+          { "platform": "tiktok", "bestDays": ["tue", "wed", "thu"], "bestHoursLocal": [11, 12, 18, 19, 20] }
+        ]
+      },
+      "audience": { "interestTags": ["fitness", "nutrition", "morning routine"], "topGeos": ["US"] }
+    },
+    "recentPosts": [
+      { "id": "tt_post_2026_04_03_002", "platform": "tiktok", "caption": "what happened next totally shocked me", "mediaType": "video", "postedAt": 1743638400000, "medianEngagementRate": 0.018 }
+    ],
+    "creatorTimezone": "America/Los_Angeles",
+    "creatorId": "kx_creator_demo"
+  },
+  "expectedOutputShape": {
+    "severity": "severe",
+    "primaryCauseHint": "Hook 'story-tease' is in the bottom-hook list; should fire hookFromBottomList=true.",
+    "secondaryCausesHint": "Post landed at ~4am LA local (off-peak vs 11/12/18-20 best hours).",
+    "notes": "Maya forms the judgment in the LLM call; the example documents what a well-formed run should look like, not the deterministic output."
+  }
+}

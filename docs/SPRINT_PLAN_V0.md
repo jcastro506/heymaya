@@ -57,7 +57,7 @@ Thinking budget routes by task complexity, not by model swap:
 Estimated COGS per Maya: **~$10–11/mo at Pro tier ($39.99) — ~74% margin.** Acceptable for v0. Optimization gains (~5pt margin) deferred until post-beta when we have data to do it surgically.
 
 ### Runtime
-- OpenClaw 4.12, single-agent deploy variant (skip multi-employee path entirely)
+- OpenClaw 2026.4.23 (CalVer; upgraded from 4.12 in Wave 5), single-agent deploy variant (skip multi-employee path entirely)
 - One Fly machine per creator, shared Hetzner pool model
 - OpenClaw native: cron, heartbeat, channels, memory, dreaming, memory-wiki
 
@@ -68,7 +68,8 @@ Estimated COGS per Maya: **~$10–11/mo at Pro tier ($39.99) — ~74% margin.** 
   - Estimated usage: ~300 credits/creator/mo (post deltas, comments on top posts, weekly competitor sweep, daily niche scan, creator-initiated lookups)
 
 ### Data layer (write)
-- **Composio v3** — Gmail (brand emails), Stripe (revenue), Calendar (shoots), brand contact lookup (Hunter/Apollo if available), IG/TT business if creator opts in
+- **Composio v3** — Gmail (brand emails), Stripe (revenue), Calendar, brand contact lookup (Hunter/Apollo if available), IG/TT business if creator opts in
+- **Calendar is a content-planning input, not just a shoot tracker.** Maya scans the connected calendar daily to spot life events (weddings, trips, launches, anniversaries, kid milestones, conference talks) 1–14 days out and proactively proposes content arcs around them — build-up posts, day-of capture plan, morning-after recap, evergreen variants. Classified events filter noise (skips dentist appointments, recurring work standups). Pro+ feature; Calendar is not in Starter's `allowedProviders`.
 - Reuse universal runner + action picker from `dev`
 
 ### Channels (OpenClaw native)
@@ -213,7 +214,10 @@ Tasks:
   - Step 3: Multimodal creator-picture synthesis. **Gemini 3 Flash with high thinking** watches the actual video content of the creator's top 5 posts per platform AND processes captions, comments, audience demographics, post-thumbnail images. One-shot grounded synthesis — high thinking justified for the make-or-break first impression. Generates: niche, audience, voice fingerprint, top hook patterns with citations, posting cadence, brand-deal history.
   - Step 4: Maya's first message in chat — specific, cited, grounded. Three Q's framed conversationally: goal / tone / brand-deal floor.
   - Step 5: Phone number capture. Detect device → recommend channel. iPhone → iMessage; Android → WhatsApp recommended (rich media). SMS as fallback with warning ("you won't be able to send me images/videos via SMS").
-  - Step 6: Optional Composio connections (Gmail / Stripe / Calendar) — one-click OAuth, skip available.
+  - Step 6: Composio connections (Gmail / Stripe / Calendar) — one-click OAuth.
+    - Gmail: optional, pitched as "Maya can triage brand emails for you" (Pro+).
+    - Stripe: optional, pitched as "Maya can show you what you actually earned this month."
+    - **Calendar: strongly recommended** (Pro+). Pitch line: "Got a wedding, trip, launch, or big shoot coming up? Maya plans content around your real life — build-up, day-of, recap." This is the highest-value Composio connection because it converts Maya from reactive (post analysis) to anticipatory (life-event-driven content arcs). Skip allowed but the UI nudges twice before letting the creator skip.
   - Step 7: Deploy. `generateMayaSoul()` → assemble soul.md → `deployMaya()` → Maya pings on chosen channel.
 - **Soul generation** — `convex/agents/packs/maya/generateSoul.ts`
   - Inputs: creatorPicture + 3 Q's + connectedAccounts + handle list
@@ -253,8 +257,14 @@ Tasks:
   - § Manager-readiness packet (on-demand or quarterly, high thinking)
   - § Contract scan (event: PDF upload, high thinking)
   - § Rate suggestion (heuristic + LLM)
+  - § Calendar-aware content planning (Pro+, daily 8am scan + folded into Sun weekly plan, high thinking on event-classification + arc-generation)
+    - Reads connected calendar (Composio Google/Microsoft) for events 1–14 days out
+    - Classifies via custom `maya-calendar-classifier` skill: `creator-relevant-life-event` (wedding, trip, launch, milestone, anniversary, birth, graduation), `work-meeting`, `recurring-noise`, `creator-shoot`, `personal-private` (skip)
+    - For relevant events: proposes a content arc — build-up posts (1–7 days before), day-of capture plan, morning-after recap, evergreen variants. Cites the calendar event in every recommendation.
+    - Privacy-protective: surfaces *event title only* to creator if the original event is marked private; drops past events from cache 24h after they pass; never reads attendee email addresses except to dedupe.
+    - Creator can mark any event as "don't plan around this" with a one-tap reply; Maya remembers per-creator.
   - § Free-form chat handling
-  - § Auto-send escalation (creator can grant "send under $X without asking" via Profile)
+  - § Auto-send escalation (creator can grant "send under $X without asking" via Profile) — applies to **brand emails only**, never to social posts (Maya never posts on the creator's behalf — see § "What this product is NOT" in CLAUDE.md)
 - **cron.md** (shared) — out-of-box schedule, all timezone-aware via creator's tz:
   - `0 7 * * *` morning brief
   - `0 10 * * *` accountability nudge (conditional)
@@ -266,23 +276,64 @@ Tasks:
   - `0 9 * * 1` revenue snapshot
   - `0 9 * * *` competitor watch
   - `0 11,17 * * *` comment triage
+  - `0 8 * * *` calendar look-ahead (Pro+, scans 1–14 days out, classifies events, drops content arcs into Today / weekly plan)
   - `0 14 1 */3 *` quarterly readiness packet refresh
-- **skill.md** (shared) — full inventory, with one-line description per skill, of:
-  - ClawHub skills (writing, brainstorming, verification-before-completion, anti-sycophancy patterns, skill-creator)
-  - ScrapeCreators agent skill (full endpoint inventory documented inline so Maya knows what she can do)
-  - Composio (Gmail send/search/draft, Stripe balance, Calendar create/list)
-  - Custom Maya skills (rate-calculator, hook-pattern-extractor, packet-generator, platform-best-practice, contract-redflag-scanner)
-- **Custom Maya skills** — `agents/skills/maya-rate-calculator/`, `maya-packet-generator/`, `maya-platform-best-practice/`, `maya-contract-redflag/`, `maya-hook-extractor/`
-  - Each with SKILL.md + script.ts where applicable
-  - Skill-creator pattern from LaunchCrew handles auto-authoring of any gaps Maya finds
+- **skill.md** (shared) — full inventory of every skill installed on every Maya. References (does not redefine) the skill bundle authored in Sprint 3.5.
 - **Platform skill endpoints** — `convex/http.ts` (extend for Maya namespace `lc_maya_*`):
   - `lc_maya.save_brief`, `get_recent_posts`, `create_deal`, `save_drafts`, `get_deal`, `metrics_summary`, `save_hook`, `get_benchmark`, `get_commitments`, `last_post`, `brief_history`, `metrics_window`, `get_trends`, `deals_paid`, `full_creator_picture`, `parse_contract`, `platform_best_practice`, `record_checkin`, `save_plan`, `log_trend`, `log_competitor_observation`, `log_comment_triage`
 
 **Acceptance:**
-- Maya runs all 12 cron behaviors successfully against a test creator (Tideline-style fixture)
-- Each behavior writes to the correct Convex table
-- Maya uses correct thinking budget per task (verified in `aiCallLog` thinking-token column)
-- Maya can author a new custom skill on the fly when she hits a gap (Wave 14 pattern reused)
+- All 17+ playbook behaviors documented in playbook.md with cron entries in cron.md
+- Sibling-file scan green: every cron entry has a matching playbook entry has a matching skill.md reference
+- Per-creator soul.md generation produces a coherent voice document for each fixture creator
+- All `lc_maya_*` HTTP endpoints implemented + cross-tenant + plan-tier tested
+- Behavioral simulation: 50-creator fixture corpus runs Maya end-to-end without crashes (skill bundle from S3.5 wired in here)
+
+---
+
+### Sprint 3.5 — Maya custom skill bundle (Week 3.5, ~5–7 days)
+
+**Goal:** ship the ~10 Maya-specific custom skills as ClawHub-compatible packages, written once, shared across all Mayas.
+
+**Locked policy on skill sourcing:**
+1. **Anthropic public skills** — install only the universal-utility ones we'd be foolish to rewrite: `pdf` (contract parse, packet render), `docx` (brand-brief parse), `internal-comms` (long-form prose tone), `skill-creator` (so Maya can author skills in beta when she hits a gap).
+2. **Third-party ClawHub skills** — none in v0. Voice consistency, schema integration, and citation-firewall enforcement require custom authoring. We re-evaluate post-beta if a third-party skill is so dominant that NOT installing it leaves margin on the table.
+3. **Custom Maya skills** — everything Maya-specific is written by us, using `skill-creator`'s SKILL.md conventions.
+
+**The 10 custom skills to author:**
+
+| Skill | Purpose | Inputs | Outputs |
+|---|---|---|---|
+| `maya-rate-calculator` | Brand-deal rate suggestion (heuristic + LLM) | follower count, niche, deliverables, prior deal history | suggested rate range + reasoning + comparable creators |
+| `maya-hook-extractor` | Multimodal video → hook patterns | post video URL, captions, top-comments | hook pattern (text), why-it-worked analysis, suggestion to repeat |
+| `maya-platform-best-practice` | Per-platform expert consultant | platform + content type + question | platform-specific best-practice answer with cited examples |
+| `maya-calendar-classifier` | Calendar event → content-arc classification | calendar event (title, date, attendees, description) | classification (life-event / shoot / work / noise / private) + suggested content-arc shape |
+| `maya-citation-firewall` | Pre-send hallucination gate | Maya draft + cited evidence list | pass/fail + flagged unsupported claims |
+| `maya-packet-generator` | Manager-readiness packet (PDF) | creator picture + 90-day metrics + brand-deal log + audience | packet PDF (delegates render to `pdf` skill) |
+| `maya-contract-redflag` | PDF contract red-flag scanner | uploaded contract PDF (parsed via `pdf` skill) | red-flag report (exclusivity, IP grants, payment terms, kill fees, term length, FTC compliance) |
+| `maya-voice-applier` | Apply creator's voice fingerprint to any draft | draft text + soul.md voiceFingerprint section | tone-adjusted draft + diff |
+| `maya-content-arc-planner` | Multi-day content arc generator (build-up / day-of / recap) | seed event or theme + creator picture + platform mix | per-platform per-day post outline with hooks/captions/format |
+| `maya-brand-deal-triager` | Inbound brand-email triage | parsed Gmail thread + brand context | classification (real / cold-pitch / spam / partnership) + 4 reply variants tuned to creator's floor rate |
+
+Each skill ships:
+- `agents/skills/maya-{name}/SKILL.md` — Anthropic skill conventions (frontmatter, description, when-to-use, examples)
+- `agents/skills/maya-{name}/script.ts` if compute is non-trivial
+- `agents/skills/maya-{name}/__tests__/{name}.test.ts` — unit tests against fixture inputs
+- Behavioral test in the fixture corpus run
+
+**Authoring process:**
+1. Each skill scoped from a real `playbook.md` need — no speculative skills
+2. Use Anthropic `skill-creator` skill itself as the authoring guide
+3. Each skill calls `planFeatures(creator)` where plan-tier gating applies (e.g., `maya-brand-deal-triager` only available Pro+)
+4. Each skill enforces `maya-citation-firewall` on its outputs (the firewall skill is itself called by other skills)
+
+**Acceptance:**
+- 10/10 skills authored with SKILL.md + tests passing
+- Each skill plays cleanly with the OpenClaw skill loader (no install errors at deploy time)
+- Each skill is observable in `aiCallLog` with its task tag
+- Cross-tenant test: skills called for Creator A never read Creator B's data
+- Plan-tier test: Starter creator's Maya cannot invoke Pro+-gated skills (e.g., brand-deal-triager)
+- Sibling-file scan: every skill referenced in playbook.md exists; every skill in `agents/skills/maya-*/` is referenced
 
 ---
 
@@ -439,6 +490,39 @@ Tasks (TBD until beta data lands, but plan space for):
 - 8 of 10 beta creators report Maya is "worth it"
 - Public launch decision made with data
 - Public launch executed OR clear gap-list for sprint 9
+
+---
+
+### Sprint 9 — Repo cleanup + hardening (Week 9, post-beta, pre-public-launch or post-launch hotfix window)
+
+**Goal:** make the codebase one a fresh contributor can ramp into in a day. Strip the cruft that 8 sprints of fast iteration accumulate. Tighten the joints before public-launch volume.
+
+**Note on premise:** This is NOT about removing LaunchCrew baggage — HeyMaya was built fresh in `/Users/joshcastro/Desktop/heymaya/`, not branched off TradeStart, so there's no LaunchCrew code in this tree. The cleanup here is about the cruft that accumulates from rapid sprint execution: dead behaviors cut in S8, in-flight code paths from parallel agent work, comment rot, schema fields that didn't pan out, npm deps we stopped using.
+
+Tasks:
+- **Dead code sweep**: `ts-prune` + `knip` to find unreferenced exports/files; delete (don't archive in `_legacy/` — git history is the archive)
+- **Schema audit**: any tables with zero rows in prod? Any fields never read? Drop them (with migration). Audit indexes for unused ones (Convex dashboard exposes per-index hit counts).
+- **Dependency audit**: `npm ls --depth=0` against actual import graph; remove unused. Run `npm audit` and fix high/critical CVEs. License audit on every dep.
+- **TODO/FIXME final sweep**: every remaining `TODO`/`FIXME` either gets resolved, gets a linked GitHub issue, or gets deleted. Zero tolerance at end of sprint.
+- **Comment rot**: scan for "added for X", "TODO when Y", "see ticket Z" — if the original context is dead, delete the comment. The code should explain itself.
+- **Type tightening**: replace any remaining `any` with proper types. `tsc --noEmit --strict` zero-warning gate.
+- **Test consolidation**: identify duplicated test setup, extract to fixtures. Kill flaky tests (or quarantine and file issues). Whole suite must run <60s locally, <5min in CI.
+- **Convex function-cost audit**: any query running >100ms P95 gets reviewed; any unindexed scan flagged.
+- **Convex env var audit**: `npx convex env list` vs grep across `process.env.*` references — drop unused.
+- **Bundle size audit**: Next.js bundle analyzer; flag any route >300KB JS. Lighthouse mobile pass on every shipped screen, target >90.
+- **Security audit**: secret scan (`gitleaks`), dependency CVEs (`npm audit`), Convex auth audit (every `internalAction` confirmed not exposed publicly), rate-limit review on public HTTP endpoints.
+- **Docs pass**: README accuracy, CLAUDE.md accuracy, SPRINT_PLAN_V0.md retro section ("what changed from spec"), inline JSDoc on every public Convex function.
+- **Onboarding-a-dev simulation**: a new dev (could be the operator's friend, could be a contractor, could be a fresh Claude session) clones, runs the bootstrap, and ships a trivial feature within 30 min. Anything they trip over → fix.
+
+**Acceptance:**
+- Zero unjustified `TODO`/`FIXME`/`eslint-disable` in tree
+- Zero `any` outside documented exceptions
+- Zero unreferenced exports / unreferenced files / unused npm deps
+- Zero high/critical CVEs
+- Zero leaked secrets in git history (gitleaks clean)
+- Whole test suite <60s local, <5min CI
+- Lighthouse mobile >90 on all 6 creator screens
+- New-dev onboarding takes <30 min from clone to working dev env
 
 ---
 

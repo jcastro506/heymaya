@@ -1,0 +1,16 @@
+{
+  "input": {
+    "postId": "ig_post_empty",
+    "videoUrl": null,
+    "caption": "",
+    "topComments": [],
+    "platform": "instagram",
+    "plan": "starter"
+  },
+  "expectedOutput": {
+    "hook": { "pattern": "unknown", "firstSeconds": "" },
+    "mode": "caption-only",
+    "whyItWorked": "Insufficient signal to extract a hook pattern from the caption alone.",
+    "notes": "Empty caption + no comments + no video. Maya stays silent on this post per 'grounded or silent'."
+  }
+}

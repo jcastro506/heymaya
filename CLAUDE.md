@@ -8,9 +8,62 @@
 
 This is a fresh consumer SaaS product. Branded HeyMaya. Target customer: creators with 5K–500K followers who want the operational structure of a manager but aren't big enough to attract or afford one.
 
+## Service-business product (parallel track)
+
+**Maya for home-service businesses (1-25 trucks). Plumbers, HVAC, roofers, electricians, cleaners, landscapers.**
+
+> **"Maya turns every completed job into local marketing."**
+
+> **Creator product is suppressed behind `NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT` (default `false`). Code, tests, and Convex tables are preserved — flipping the env var to `true` restores the dual-track surface.** Default new signups during suppression are `accountType: 'service-business'`. Implementation: `middleware.ts` 308-redirects `/creators`, `/onboarding/maya`, and creator HQ paths (`/today`, `/performance`, `/plan`, `/trends`, `/deals`, `/profile`) to their service equivalents; `app/page.tsx` server-renders the business landing in-place at `/` when the flag is off.
+
+The wedge: photos / voice in (from a job site, via text or voice call) → GBP posts + review requests + FB/IG content + brand-voice review replies out, all driven through the operator's text thread or phone. Same single-agent shape as the creator product; different ICP, different stack edges, different pricing.
+
+**Source of truth:** **`docs/SPRINT_PLAN_SERVICE_V0.md`** is the locked v0 plan for the service product. Read it before any service-side work. Sections mirror `SPRINT_PLAN_V0.md` one-for-one for side-by-side comparison.
+
+### Key locked decisions (service product)
+
+- **Pricing:** Starter $99 / Pro $149 / Studio $199 (annual: $999 / $1,499 / $1,999). Voice metered above an inclusion bucket on Studio.
+- **Architecture — dual-model routing.** Service product **deliberately breaks creator-product principle 7** ("one brain, thinking-budget routing"). Gemini 3 Flash for high/medium-stakes work; **Gemini 3.1 Flash Lite** for routine task class (chat, comment triage, niche scans, FB-group classify). Routing decided at the action level — every Convex action carries `modelTarget` + `thinkingBudget` + `routedReason`.
+- **Voice:** ElevenLabs Agents inbound (custom-LLM endpoint, `thinkingBudget: 0` forced) + OpenClaw native `voice-call` plugin for outbound notifications. Studio-only. Twilio per-customer number ($1.15/mo carry baked into all tiers).
+- **Social — third-party-first.** Zernio (Late) MCP primary for FB / IG / TT / LI / YT / X / Pin / TG / Threads posting. **Direct Google Business Profile API** for review-reply (high-stakes; Zernio's GBP review-reply depth unverified). Cloud Pub/Sub for `NEW_REVIEW`/`UPDATED_REVIEW`.
+- **CRM — aggregator-layered.** Jobber + HCP via **Nango** (managed OAuth + token refresh). QBO via **Apideck or Unified.to** — Sprint 4 spike decides. ServiceTitan **direct integration** (Sprint 7+, partner-gated; aggregators don't cover it). HCP customer-side caveat: **MAX plan ($329/mo)** for API+webhooks; non-MAX preflight auto-routes to no-CRM mode.
+- **Third-party-first for everything social, ads, and CRM.** HeyMaya's value-add is the agent orchestration + operator UX + cross-vendor coordination, not platform infrastructure.
+- **Account-type fork at the routing layer; single codebase, two product packs.** Schema is **additive**: `accountType: 'creator' | 'service-business'` enum field on the existing `creators` table (NOT a rename). Service tables (jobs, reviews, gbpPosts, serviceJobs, mediaAssets, voiceChannels, approvalRules, etc.) live in `convex/schema.ts` alongside creator tables.
+- **Beta target:** Mike Hansen — 1-truck HVAC owner, no CRM, GBP only (Persona A). Sprint 7 beta cohort.
+
+### Service-product principles unique to the service track
+
+(Full list in `docs/SPRINT_PLAN_SERVICE_V0.md` § 2; the most load-bearing:)
+
+- **Minimum viable data, always.** Service operators have thin social + limited CRM data. Onboarding pulls bounded by COUNT not date, skips empty platforms, never blocks on data we don't need.
+- **Maya's platform expertise lives in `.md` files (SOUL.md / AGENTS.md / per-skill SKILL.md), NOT hardcoded `if (platform === ...)` branches.** GBP / IG / FB differences are encoded in prompts + skill instructions.
+- **Third-party-first for social / ads / CRM** (see above). No bespoke ad-platform logic, group monitors, or per-CRM OAuth.
+- **CRM-agnostic + GBP-required.** GBP is the always-on data anchor. CRM is a high-value upgrade. The 60% of <10-truck operators with no FSM are still first-class.
+- **Voice-first interface for the truck-bound operator.** Maya answers their phone (Studio); operators save "Maya — +1 555 …" to contacts.
+- **Per-task voice latency lock.** Inbound voice forces `thinkingBudget: 0` for ElevenLabs sub-300ms first-token; the dual-model architecture is what makes this affordable at $99–$199 headline.
+
+### 8-sprint roadmap (one-liner per sprint)
+
+Full detail in `docs/SPRINT_PLAN_SERVICE_V0.md` § 13.
+
+- **Sprint 0** — Service-product scaffolding: branch, dual-onboarding routing, schema additions, `planFeaturesService(business)` stub, OpenClaw 2026.2.26+ pin verification, HCP non-MAX preflight + no-CRM NER grammar specs, README + CLAUDE.md updates.
+- **Sprint 1** — Foundation: GBP API + Pub/Sub, Zernio scaffold (interface-isolated), Composio FB/IG verify, schema, 50-business fixture corpus, full `planFeaturesService` matrix.
+- **Sprint 2** — Onboarding: sub-5-min flow, `businessPicture` synthesis (high thinking), service-side SOUL.md generator, Twilio number provisioning, OpenClaw service deploy variant.
+- **Sprint 3** — `.md` layer + first 5 service skills: shared AGENTS.md / HEARTBEAT.md / jobs.json + review-request, review-reply, GBP-post-optimizer, job-photo-curator, lead-response-nudger.
+- **Sprint 3.5** — Remaining 10 skills + R2 attachment bridge (HEIC→JPEG, debounce) + `mediaAssets` cataloger pipeline (§ 10.5).
+- **Sprint 4** — Jobber via Nango + Today/Jobs HQ screens + no-CRM NER extractor (Persona A's primary path) + Apideck-vs-Unified.to spike for QBO.
+- **Sprint 5** — HCP via Nango + QBO via Apideck/Unified.to + Reviews/Posts (Library tab)/Customers screens + `approvalRules` table + "Trust Maya" Profile UI.
+- **Sprint 6** — Voice: ElevenLabs Agents inbound, custom-LLM bridge, Twilio + Media Streams, A2P 10DLC, OpenClaw outbound notification calls, PIN challenge for sensitive CRM ops, Profile voice setup.
+- **Sprint 7** — Beta hardening: 5-10 operators (HVAC / plumbing / electrical / landscaping / cleaning), telemetry, bug bash, ServiceTitan partner program kickoff, Stripe service-tier products + 14-day Pro trial.
+- **Sprint 8** — Iterate from beta + public launch decision.
+
+### Testing — same five mandatory categories, both products
+
+The 5 mandatory categories (cross-tenant isolation / plan-tier × action / adversarial / sibling-file scan / TODO grep) apply identically to both products. Service-side adds CRM-aggregator-specific tests (HCP MAX detection, Nango token refresh, Zernio outage simulation, GBP `ReviewReplyState` round-trip). Service product has its own 50-business fixture corpus parallel to the creator's 50-creator corpus.
+
 ## Source of truth
 
-**`docs/SPRINT_PLAN_V0.md`** is the locked v0 plan. Read it first. If a future suggestion contradicts something in there, default to the plan unless the operator explicitly revises it.
+**`docs/SPRINT_PLAN_V0.md`** is the locked v0 plan for the **creator product**. **`docs/SPRINT_PLAN_SERVICE_V0.md`** is the locked v0 plan for the **service-business product**. Read the relevant one first. If a future suggestion contradicts either plan, default to the plan unless the operator explicitly revises it.
 
 ## Tech stack
 
@@ -18,7 +71,7 @@ This is a fresh consumer SaaS product. Branded HeyMaya. Target customer: creator
 - **Backend:** Convex (separate project from any prior LaunchCrew Convex)
 - **Auth:** Clerk
 - **Billing:** Stripe (Starter $19.99 / Pro $39.99 / Studio $79.99 + annual variants)
-- **Agent runtime:** OpenClaw 4.12, single-agent solo deploy variant on Fly.io shared multi-tenant
+- **Agent runtime:** OpenClaw 2026.4.23 (CalVer), single-agent solo deploy variant on Fly.io shared multi-tenant
 - **Brain:** Gemini 3 Flash via OpenRouter, single model, configurable thinking budget per task
 - **Read layer:** ScrapeCreators (27+ social platforms, agent skill installed in Maya's workspace)
 - **Write layer:** Composio v3 (Gmail, Stripe-as-data, Calendar, Apollo/Hunter for brand outreach)
@@ -150,11 +203,13 @@ heymaya/
 
 ## Status
 
-**Current sprint:** Sprint 0 — Branch & infra (in progress during repo bootstrap).
+**Creator product:** MVP-ready code-side but **suppressed behind `NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT` (default `false`)** — preserved-but-hidden in v0. Sprints 0 → 6 done plus Wave 6 smoke tests (1371/1371 passing, 0 TS errors). All creator code, tests, Convex tables, and schema fields stay untouched; the flag only controls the public surface (routes + landing). Re-enabling is a one-line env flip. Nine operator-blocked infra items remain (Convex/Clerk/Stripe/Fly/etc. — see `docs/SPRINT_PLAN_V0.md` § 13 and operator memory for the list).
 
-**Next sprint after S0:** Sprint 1 — Foundation. ScrapeCreators integration, model + thinking router, solo OpenClaw deploy variant, schema, fixture corpus.
+**Service-business product:** Sprint 0 (scaffolding) **complete** on branch **`heymaya/service-v0`** (off `main`). Convex preview deployment `heymaya-service-v0`. Schema additions, dual-onboarding routes, marketing landings, and feature-flag suppression of the creator product all in place. Sprint 1 (Foundation: GBP API + Pub/Sub, Zernio scaffold, fixture corpus, full `planFeaturesService`) is next.
 
-**See `docs/SPRINT_PLAN_V0.md` § 5 for the full 8-sprint roadmap and § 10 for testing strategy.**
+**Next sprint after S0 (service):** Sprint 1 — Foundation. GBP API + Pub/Sub, Zernio scaffold (interface-isolated), schema, 50-business fixture corpus, full `planFeaturesService` matrix.
+
+**See `docs/SPRINT_PLAN_V0.md` § 5 for the creator 8-sprint roadmap, `docs/SPRINT_PLAN_SERVICE_V0.md` § 13 for the service 8-sprint roadmap, and § 14 / § 10 of each for testing strategy.**
 
 ## What this product is NOT
 

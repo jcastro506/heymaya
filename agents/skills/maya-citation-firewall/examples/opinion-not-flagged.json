@@ -1,0 +1,12 @@
+{
+  "input": {
+    "draft": "I think you should rest today. Want me to draft a hook for tomorrow instead?",
+    "citations": []
+  },
+  "expectedOutput": {
+    "pass": true,
+    "flaggedClaims": [],
+    "ambiguousAtoms": []
+  },
+  "notes": "Both sentences are opinion / suggestion framed as such — 'I think', 'want me to'. The OPINION_MARKER pattern in script.ts skips claim-extraction inside these spans. No citations needed."
+}

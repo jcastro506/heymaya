@@ -1,0 +1,16 @@
+{
+  "input": {
+    "followerCount": 12000,
+    "niche": "underwater-basket-weaving",
+    "deliverables": [
+      {
+        "format": "yt-long",
+        "count": 1
+      }
+    ]
+  },
+  "expectedOutput": {
+    "confidence": "low",
+    "notes": "Niche not in CPM table → falls back to 'general' ($12 CPM) → confidence drops to 'low'. No prior deals to anchor. Maya should tell the creator this is a gut-check range, not a comparable-anchored one."
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "input": {
+    "draft": {
+      "caption": "5 mistakes I made when I tried to get my first 10k followers",
+      "hookCandidate": "5 mistakes I made when I tried to get my first 10k followers",
+      "plannedFormat": "video",
+      "plannedPlatform": "tiktok",
+      "plannedPostingTimeLocal": "2026-04-27T18:30:00",
+      "mediaPreview": { "videoUrl": "https://example.com/preview.mp4", "durationSec": 47 }
+    },
+    "creatorPicture": {
+      "topHooks": [
+        { "pattern": "specific-number-lead", "examplePostId": "tt_post_2026_04_15_004", "platform": "tiktok", "avgPerformanceLift": 2.3 },
+        { "pattern": "POV", "examplePostId": "tt_post_2026_04_08_002", "platform": "tiktok", "avgPerformanceLift": 1.9 }
+      ],
+      "bottomHooks": [
+        { "pattern": "story-tease", "examplePostId": "tt_post_2026_04_03_001", "platform": "tiktok" }
+      ],
+      "postingCadence": {
+        "perPlatform": [
+          { "platform": "tiktok", "bestDays": ["mon", "tue", "thu"], "bestHoursLocal": [11, 12, 18, 19, 20] }
+        ]
+      },
+      "audience": { "interestTags": ["creator growth", "content tips", "founder content"], "topGeos": ["US"] },
+      "voiceFingerprint": "Direct, em-dashes, lowercase opener, lists with personal stakes."
+    },
+    "recentPosts": [
+      { "id": "tt_post_2026_04_15_004", "platform": "tiktok", "caption": "3 things I wish I knew about my first 1k followers", "mediaType": "video", "postedAt": 1744732800000, "medianEngagementRate": 0.064, "medianViews": 47000 },
+      { "id": "tt_post_2026_04_08_002", "platform": "tiktok", "caption": "POV: you finally figure out the algo", "mediaType": "video", "postedAt": 1744128000000, "medianEngagementRate": 0.058, "medianViews": 38000 }
+    ],
+    "hookLibrary": [
+      { "pattern": "specific-number-lead", "firstSeconds": "5 mistakes I made", "whyItWorked": "specific number sets stakes", "examplePostIds": ["tt_post_2026_04_15_004"] }
+    ],
+    "creatorTimezone": "America/Los_Angeles",
+    "creatorId": "kx_creator_demo"
+  },
+  "expectedOutputShape": {
+    "predictedPerformanceTier": "above-baseline",
+    "goNoGo": "go",
+    "notes": "Hook matches a 2.3× topHook pattern. Posting time inside best-hours window. Audience fit strong. Maya should send a clean 'go' with 0-1 minor recommendations."
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "_comment": "Fitness creator at 30K based in Austin, TX. Daily scout cycle returns 4 opportunities: 2 marketplace listings (Aspire + Creator.co) and 2 local brand searches surfaced via Brave. Local-brand-search items score higher fit due to geographic match.",
+  "input": {
+    "creatorPicture": {
+      "niche": "fitness",
+      "audience": { "topGeos": ["US"], "interestTags": ["strength", "running", "nutrition"] },
+      "followerCount": 30000,
+      "locationSoul": { "city": "Austin", "state": "TX", "country": "US" }
+    },
+    "platforms": ["tiktok", "instagram"],
+    "lookbackHours": 24
+  },
+  "expectedOutput": {
+    "opportunities": [
+      {
+        "source": "local-brand-search",
+        "title": "Austin Strength Co — small Austin gym brand looking for content partners",
+        "brandName": "Austin Strength Co",
+        "fit": 0.85,
+        "suggestedAction": "pitch",
+        "reasoning": "Austin-local brand in your exact niche; 30K creator is well within their typical partner band.",
+        "url": "https://austinstrengthco.com/partners",
+        "estimatedRateRange": { "low": 500, "high": 1500 }
+      },
+      {
+        "source": "local-brand-search",
+        "title": "ATX Run Club gear brand seeking creator content",
+        "brandName": "ATX Run Club",
+        "fit": 0.78,
+        "suggestedAction": "pitch",
+        "reasoning": "Austin running community brand; running interest tag matches; local geo premium.",
+        "url": "https://atxrunclub.com/creators"
+      },
+      {
+        "source": "aspire",
+        "title": "Aspire brief — fitness apparel campaign 25K-50K creators",
+        "brandName": null,
+        "fit": 0.65,
+        "suggestedAction": "apply",
+        "reasoning": "Marketplace-listed brief in fitness apparel; follower band aligns; apply via Aspire flow.",
+        "url": "https://aspire.io/briefs/fitness-apparel-q2"
+      },
+      {
+        "source": "creator-co",
+        "title": "Creator.co brief — wellness brand seeking 20K-40K creators",
+        "brandName": null,
+        "fit": 0.55,
+        "suggestedAction": "apply",
+        "reasoning": "Adjacent niche (wellness rather than fitness-strict); follower band matches; apply via marketplace flow.",
+        "url": "https://creator.co/briefs/wellness-q2-2026"
+      }
+    ],
+    "dedupedAgainst": 6
+  }
+}

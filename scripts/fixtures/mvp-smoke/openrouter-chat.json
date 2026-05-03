@@ -1,0 +1,22 @@
+{
+  "_comment": "Canned OpenRouter chat-completion response shape (Gemini 3 Flash via OpenRouter). Mock mode short-circuits the openRouterClient with this payload so callMaya's full code path executes without a network hop.",
+  "id": "gen-mvp-smoke-canned",
+  "model": "google/gemini-3-flash",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "Smoke ack: Maya online. Replying with low-thinking budget. The rest of the playbook will ground every recommendation in scraped data."
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 42,
+    "completion_tokens": 28,
+    "total_tokens": 70,
+    "completion_tokens_details": { "reasoning_tokens": 0 }
+  }
+}

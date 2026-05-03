@@ -1,0 +1,64 @@
+{
+  "_comment": "Pro creator approves a TikTok and gets IG Reel + YT Shorts + X thread variants.",
+  "input": {
+    "source": {
+      "caption": "Three reasons your morning routine is making your sleep worse.",
+      "mediaUrl": "https://convex-storage.example/abc123.mp4",
+      "mediaType": "video"
+    },
+    "creatorPlatforms": [
+      { "platform": "tiktok", "handle": "fitcreator99" },
+      { "platform": "instagram", "handle": "fitcreator" },
+      { "platform": "youtube", "handle": "@fitcreator" },
+      { "platform": "x", "handle": "fitcreator" }
+    ],
+    "anchorPlatform": "tiktok"
+  },
+  "output": {
+    "variants": [
+      {
+        "platform": "tiktok",
+        "format": "vertical 9:16, ≤60s",
+        "captionRewrite": "3 reasons your morning routine is wrecking your sleep. #2 surprised me.",
+        "aspectRatioGuidance": "9:16 vertical — TikTok native",
+        "hashtags": ["sleep", "morningroutine", "wellness"],
+        "postingTimeLocal": "2026-04-26T18:00:00",
+        "oneTapPublishUrl": "tiktok://share?media=https%3A%2F%2Fconvex-storage.example%2Fabc123.mp4",
+        "fallbackPublishInstruction": "Open TikTok → tap +, import the prepared clip from your camera roll, paste the caption."
+      },
+      {
+        "platform": "instagram",
+        "format": "Reel 9:16, ≤90s",
+        "captionRewrite": "Your morning routine might be the reason you can't fall asleep. Here's the science — and the 3-step fix.",
+        "durationCutSuggestion": "Trim to ≤90s. First frame doubles as the cover thumbnail.",
+        "aspectRatioGuidance": "9:16 vertical — Instagram Reel",
+        "hashtags": ["sleephealth", "morningroutine", "wellness"],
+        "postingTimeLocal": "2026-04-27T07:00:00",
+        "oneTapPublishUrl": "instagram://share?media=https%3A%2F%2Fconvex-storage.example%2Fabc123.mp4",
+        "fallbackPublishInstruction": "Open Instagram → tap +, choose Reel (or Post for carousel), import the prepared media, paste the caption."
+      },
+      {
+        "platform": "youtube",
+        "format": "Shorts 9:16, ≤60s (or Long 16:9 if your source >60s)",
+        "captionRewrite": "3 morning habits that ruin your sleep — backed by sleep research.",
+        "durationCutSuggestion": "If source ≤60s use Shorts vertical. Else re-export 16:9 horizontal as Long.",
+        "aspectRatioGuidance": "9:16 for Shorts; 16:9 horizontal for Long",
+        "hashtags": ["shorts", "sleep", "morningroutine"],
+        "postingTimeLocal": "2026-04-27T19:00:00",
+        "fallbackPublishInstruction": "Open YouTube Studio app → Upload → choose the prepared file, paste title and description."
+      },
+      {
+        "platform": "x",
+        "format": "thread of 3-5 tweets with media in first post",
+        "captionRewrite": "Your morning routine might be wrecking your sleep. Three habits to drop, in a thread.",
+        "aspectRatioGuidance": "16:9 horizontal or 1:1 square works on timeline preview",
+        "durationCutSuggestion": "Trim to ≤2:20 — X autoplay drops off.",
+        "hashtags": [],
+        "postingTimeLocal": "2026-04-26T20:00:00",
+        "oneTapPublishUrl": "https://twitter.com/intent/tweet?text=Your%20morning%20routine%20might%20be%20wrecking%20your%20sleep.%20Three%20habits%20to%20drop%2C%20in%20a%20thread.",
+        "fallbackPublishInstruction": "Open X → New post, attach media (if any), paste the first tweet, then add the rest of the thread as replies."
+      }
+    ],
+    "notes": "Post TikTok first (anchor), then X 2h later, then IG Reel + YT Shorts the next day on a ≥12h gap so the cross-post signature doesn't suppress the visually-similar variants."
+  }
+}

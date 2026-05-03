@@ -1,65 +1,133 @@
-import Image from "next/image";
+import Link from "next/link";
+import type { Metadata } from "next";
+import {
+  ArrowRight,
+  CalendarClock,
+  Handshake,
+  MessageSquareText,
+  Radar,
+  Sparkles,
+  UserRound,
+  Video,
+} from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "HeyMaya — your AI manager in messages",
+  description:
+    "Maya helps creators and businesses plan content, understand what is working, schedule around real life, and follow up from messages.",
+};
+
+const features = [
+  {
+    icon: <UserRound className="h-5 w-5" />,
+    title: "Knows you",
+    body: "Maya learns your niche, goals, voice, constraints, and what you are trying to build.",
+  },
+  {
+    icon: <Radar className="h-5 w-5" />,
+    title: "Watches what matters",
+    body: "She tracks your account, samples content intelligently, and notices patterns worth acting on.",
+  },
+  {
+    icon: <CalendarClock className="h-5 w-5" />,
+    title: "Plans around your calendar",
+    body: "Maya finds useful windows for filming, publishing, launches, events, and follow-up.",
+  },
+  {
+    icon: <MessageSquareText className="h-5 w-5" />,
+    title: "Texts the next move",
+    body: "The daily loop happens in your messages, where you can approve, change, or ask for more.",
+  },
+  {
+    icon: <Sparkles className="h-5 w-5" />,
+    title: "Filters trends",
+    body: "Instead of generic trend chasing, Maya looks for ideas that fit your audience and timing.",
+  },
+  {
+    icon: <Handshake className="h-5 w-5" />,
+    title: "Finds opportunities",
+    body: "For higher tiers, Maya can research brand fits and prepare outreach for your approval.",
+  },
+  {
+    icon: <Video className="h-5 w-5" />,
+    title: "Helps shape posts",
+    body: "Maya can turn a content window into hooks, shot lists, drafts, and edit direction.",
+  },
+  {
+    icon: <ArrowRight className="h-5 w-5" />,
+    title: "Keeps momentum",
+    body: "She remembers what slipped, what worked, and what should happen next.",
+  },
+];
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="min-h-screen bg-ink text-paper">
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8 lg:px-10">
+        <Link href="/" className="font-display text-xl text-paper">
+          HeyMaya
+        </Link>
+        <nav className="flex items-center gap-4 text-sm text-paper-dim">
+          <Link href="/sign-in" className="hover:text-paper">
+            Sign in
+          </Link>
+          <Link
+            href="/sign-up?redirect_url=/creator-maya-v0"
+            className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 font-medium text-black transition hover:brightness-95"
+          >
+            Sign up
+          </Link>
+        </nav>
+      </header>
+
+      <section className="mx-auto max-w-6xl px-5 pb-12 pt-20 sm:px-8 sm:pt-28 lg:px-10">
+        <div className="max-w-4xl">
+          <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
+            Powered by OpenClaw
           </p>
+          <h1 className="mt-5 font-display text-6xl leading-[0.9] text-paper sm:text-8xl lg:text-9xl">
+            Your manager before you have one.
+          </h1>
+          <p className="mt-7 max-w-2xl text-xl leading-relaxed text-paper-dim">
+            Maya helps creators and businesses decide what to post, when to make
+            it, what deserves follow-up, and what the next move should be.
+          </p>
+          <div className="mt-9 flex flex-wrap gap-3">
+            <Link
+              href="/sign-up?redirect_url=/creator-maya-v0"
+              className="inline-flex min-h-12 items-center gap-2 rounded-md bg-lime px-5 text-sm font-medium text-black transition hover:brightness-95"
+            >
+              Sign up
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link
+              href="/sign-in"
+              className="inline-flex min-h-12 items-center rounded-md border border-[var(--hairline-strong)] px-5 text-sm text-paper-dim transition hover:text-paper"
+            >
+              Sign in
+            </Link>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-5 pb-20 sm:px-8 lg:px-10">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {features.map((feature) => (
+            <article
+              key={feature.title}
+              className="rounded-lg border border-[var(--hairline)] bg-ink-2 p-5"
+            >
+              <div className="text-lime">{feature.icon}</div>
+              <h2 className="mt-5 text-base font-semibold text-paper">
+                {feature.title}
+              </h2>
+              <p className="mt-3 text-sm leading-relaxed text-paper-dim">
+                {feature.body}
+              </p>
+            </article>
+          ))}
         </div>
-      </main>
-    </div>
+      </section>
+    </main>
   );
 }

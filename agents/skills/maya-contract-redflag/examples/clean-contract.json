@@ -1,0 +1,15 @@
+{
+  "_comment": "Example parsed-PDF input for a clean contract — the skill emits 'sign' with zero red flags.",
+  "parsed": {
+    "pages": [
+      {
+        "pageNumber": 1,
+        "text": "INFLUENCER AGREEMENT. Creator agrees to deliver one (1) Reel. Payment terms: NET 30. Term: 30 days from publication. Creator grants Brand a 12-month, non-exclusive license to use the content for organic social only. Exclusivity: 14 days post-publish, fitness category only. Brand approval required, with up to 2 rounds of revisions within 5 business days each."
+      },
+      {
+        "pageNumber": 2,
+        "text": "Disclosure: Creator shall include #ad in the post per FTC Endorsement Guides. Termination: either party may terminate with 7 days written notice and a 14-day cure period. Kill fee: 50% of the deal value if Brand cancels within 7 days of shoot date."
+      }
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "heymaya-video-synth-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tiny Fly worker that downloads creator videos via yt-dlp and runs the multimodal creator-picture synthesis through Google's Gemini Files API directly. Replaces the OpenRouter text-only embedding path for the synthesis step.",
+  "main": "dist/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "tsx src/server.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@google/genai": "^0.6.0",
+    "express": "^4.21.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.9"
+  }
+}

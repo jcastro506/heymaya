@@ -1,0 +1,30 @@
+{
+  "_comment": "Starter creator (1 handle): the skill caps to a single tightened variant for their connected platform. No cross-post — that's a Pro+ thing.",
+  "input": {
+    "source": {
+      "caption": "POV: you finally hit your protein goal.",
+      "mediaUrl": "https://convex-storage.example/def456.mp4",
+      "mediaType": "video"
+    },
+    "creatorPlatforms": [
+      { "platform": "tiktok", "handle": "starter_creator" }
+    ],
+    "anchorPlatform": "tiktok"
+  },
+  "output": {
+    "variants": [
+      {
+        "platform": "tiktok",
+        "format": "vertical 9:16, ≤60s",
+        "captionRewrite": "POV: you finally hit your protein goal. The 3 swaps that got me there.",
+        "aspectRatioGuidance": "9:16 vertical — TikTok native",
+        "durationCutSuggestion": "Trim to ≤60s. Keep the hook (first 1.5s) and the payoff.",
+        "hashtags": ["protein", "fitness", "POV"],
+        "postingTimeLocal": "2026-04-26T18:00:00",
+        "oneTapPublishUrl": "tiktok://share?media=https%3A%2F%2Fconvex-storage.example%2Fdef456.mp4",
+        "fallbackPublishInstruction": "Open TikTok → tap +, import the prepared clip from your camera roll, paste the caption."
+      }
+    ],
+    "notes": "Starter plan — one platform connected, so the skill returned a single tightened variant. Upgrade to Pro to cross-post to up to 3 platforms."
+  }
+}

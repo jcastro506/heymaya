@@ -1,0 +1,18 @@
+{
+  "input": {
+    "event": {
+      "title": "Sister's wedding in Vermont",
+      "start": 1715000000000,
+      "end": 1715040000000,
+      "attendees": 12,
+      "description": "Travel up Friday, ceremony Saturday 4pm, brunch Sunday.",
+      "isPrivate": false
+    }
+  },
+  "expectedOutput": {
+    "classification": "creator-relevant-life-event",
+    "contentArcShape": "build-up-day-of-recap",
+    "confidence": 0.85,
+    "notes": "Title matches /wedding/ pattern. Days-until determines arc; if 5+ days out → build-up-day-of-recap. The exact arc shape depends on `now` at test time (test asserts days-until logic separately)."
+  }
+}

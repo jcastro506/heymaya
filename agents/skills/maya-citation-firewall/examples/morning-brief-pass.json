@@ -1,0 +1,28 @@
+{
+  "input": {
+    "draft": "Your Tuesday Reel hit 47k views, 2.1× your trailing average. Save rate is normal — top-of-funnel is the lever today. Want me to draft a follow-up hook from your top-performer?",
+    "citations": [
+      {
+        "kind": "post",
+        "id": "ig_post_2026_04_22_001",
+        "fact": "Tuesday Reel posted 2026-04-22 hit 47000 views"
+      },
+      {
+        "kind": "metric",
+        "id": "ig_post_2026_04_22_001_metrics",
+        "fact": "trailing 30-post average for this handle is 22000 views; this post is 2.1x"
+      },
+      {
+        "kind": "metric",
+        "id": "ig_post_2026_04_22_001_save_rate",
+        "fact": "save rate within normal range for this creator"
+      }
+    ]
+  },
+  "expectedOutput": {
+    "pass": true,
+    "flaggedClaims": [],
+    "ambiguousAtoms": []
+  },
+  "notes": "All three numeric / past-tense claims have matching citations. The 'want me to draft' is a suggestion, not a claim, so it is not flagged."
+}

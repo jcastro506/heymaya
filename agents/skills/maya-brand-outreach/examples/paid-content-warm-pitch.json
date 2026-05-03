@@ -1,0 +1,59 @@
+{
+  "_comment": "30K beauty creator pitching Glossier with prior gifted relationship. pitch-strategy already ran and recommended pitch-paid at $2,250. Auto-send threshold is $3K, so this would auto-send if the firewall passes (it does). Today screen still gets the notification.",
+  "input": {
+    "creatorPicture": {
+      "handle": "@noracosmetics",
+      "niche": "beauty",
+      "followerCountByPlatform": [
+        { "platform": "instagram", "count": 30000 },
+        { "platform": "tiktok", "count": 22000 }
+      ],
+      "voiceFingerprint": "Friendly but no exclamation points; uses 'i' lowercase; specific over generic.",
+      "recentTopPosts": [
+        {
+          "postId": "ig_reel_512",
+          "url": "https://instagram.com/reel/512",
+          "platform": "instagram",
+          "headline": "the boy brow trick that actually fills sparse arches",
+          "metric": "62k views, 2.4k saves",
+          "publishedAt": "2026-04-19"
+        },
+        {
+          "postId": "tt_771",
+          "url": "https://tiktok.com/@noracosmetics/video/771",
+          "platform": "tiktok",
+          "headline": "glossier balm dotcom vs aquaphor — honest take",
+          "metric": "118k views, 5.8k saves",
+          "publishedAt": "2026-04-12"
+        }
+      ],
+      "audience": { "topGeos": ["US", "CA", "UK"], "interestTags": ["clean-beauty", "skincare", "minimal"] }
+    },
+    "brand": {
+      "name": "Glossier",
+      "contactEmail": "creators@glossier.com",
+      "contactName": "Maya Park",
+      "contactRole": "Influencer Partnerships",
+      "recentCampaigns": [
+        "April 2026 'You Look Good' brow campaign with 12 micro-creators",
+        "Q1 2026 Boy Brow re-launch with @lilamua (820k IG)"
+      ]
+    },
+    "pitchAngle": "paid-content",
+    "desiredRateUsd": 2250,
+    "existingRelationship": "warm",
+    "autoSendThreshold": 3000
+  },
+  "expectedOutput": {
+    "subject": "Glossier paid content — @noracosmetics proposal",
+    "tone": "professional",
+    "creatorApprovalRequired": false,
+    "suggestedSendTimeLocal": "Tue 09:30 ET",
+    "bodyDraft_pattern": "Greets Maya Park by name; references the Boy Brow re-launch (in brand.recentCampaigns) and the creator's own ig_reel_512 + tt_771 posts; states $2,250 rate explicitly; lists deliverables; sign-off as 'Nora'.",
+    "followUpCadence": [
+      { "daysAfter": 4, "tone": "gentle" },
+      { "daysAfter": 10, "tone": "firm" },
+      { "daysAfter": 21, "tone": "final" }
+    ]
+  }
+}

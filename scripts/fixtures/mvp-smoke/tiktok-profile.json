@@ -1,0 +1,17 @@
+{
+  "_comment": "Recorded ScrapeCreators TikTok profile fixture for mvp-smoke. Shape mirrors convex/integrations/scrapeCreators/__tests__/fixtures/tiktok.ts so the same Zod parser succeeds. Handle = cookwithjenny — the canonical smoke creator.",
+  "user": {
+    "uniqueId": "cookwithjenny",
+    "nickname": "Cook with Jenny",
+    "signature": "Quick weeknight dinners. New recipe Tues + Fri. Brand inquiries → DM",
+    "verified": false,
+    "bioLink": { "link": "https://linktr.ee/cookwithjenny" },
+    "avatarLarger": "https://p16-sign.tiktokcdn.com/avatar-large-jenny.jpg",
+    "avatarMedium": "https://p16-sign.tiktokcdn.com/avatar-medium-jenny.jpg"
+  },
+  "stats": {
+    "followerCount": 124300,
+    "followingCount": 211,
+    "videoCount": 318
+  }
+}

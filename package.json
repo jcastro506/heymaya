@@ -6,7 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "smoke": "tsx scripts/mvp-smoke.ts",
+    "smoke:cron": "tsx scripts/cron-smoke.ts",
+    "smoke:service": "tsx scripts/service-mvp-smoke.ts",
+    "smoke:creator-maya-v0": "tsx scripts/creator-maya-v0-fly-smoke.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.2.7",
@@ -17,16 +23,24 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "stripe": "^22.1.0",
+    "svix": "^1.92.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^4.0.4",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "convex-test": "^0.0.38",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.19.2",
+    "typescript": "^5",
+    "vitest": "^2.1.9"
+  },
+  "optionalDependencies": {
+    "lightningcss-darwin-x64": "^1.32.0"
   }
 }

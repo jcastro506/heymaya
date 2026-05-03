@@ -1,26 +1,188 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+
+@source "../app";
+@source "../components";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Maya palette — editorial dark, warm, confident.
+     Ink is the primary surface; paper is the type;
+     lime is Maya's single sharp accent (think highlighter on a contract). */
+  --ink: #0c0c0d;
+  --ink-2: #131316;
+  --ink-3: #1a1a1f;
+  --hairline: rgba(255, 255, 255, 0.08);
+  --hairline-strong: rgba(255, 255, 255, 0.16);
+  --paper: #f4f1ea;
+  --paper-dim: #b9b4a8;
+  --paper-faint: #6e6a60;
+  --lime: #d6ff3d;
+  --lime-soft: #e8ff86;
+  --rose: #ff6b6b;
+  --imessage-blue: #1c8cff;
+  --imessage-gray: #2c2c2e;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--ink);
+  --color-foreground: var(--paper);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-paper: var(--paper);
+  --color-paper-dim: var(--paper-dim);
+  --color-paper-faint: var(--paper-faint);
+  --color-lime: var(--lime);
+  --color-lime-soft: var(--lime-soft);
+  --color-rose: var(--rose);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-instrument-serif);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+html,
+body {
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+}
+
+/* Subtle paper-grain noise on the page background — keeps the dark surface
+   from feeling like a flat OLED void. Drawn in CSS, no asset request. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: radial-gradient(
+      circle at 20% 12%,
+      rgba(214, 255, 61, 0.06),
+      transparent 38%
+    ),
+    radial-gradient(
+      circle at 82% 78%,
+      rgba(255, 107, 107, 0.04),
+      transparent 42%
+    );
+}
+
+/* Hairline divider used across the page; keeps section breaks editorial. */
+.hairline {
+  height: 1px;
+  background: var(--hairline);
+}
+
+/* Marquee for the social-proof strip. Pure CSS, respects reduced motion. */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.marquee-track {
+  animation: marquee 40s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Reveal-up used for the iMessage bubbles cascading into view. */
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.reveal-up {
+  animation: reveal-up 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Soft typing-dots for the iMessage mockup. */
+@keyframes typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+.typing-dot {
+  animation: typing 1.2s ease-in-out infinite;
+}
+
+/* Smooth scrolling for the in-page anchor link. */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Selection color — Maya's lime, because of course. */
+::selection {
+  background: var(--lime);
+  color: var(--ink);
+}
+
+/* Buttons — a single shared base. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 3rem;
+  padding: 0 1.25rem;
+  border-radius: 999px;
+  font-weight: 500;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  transition:
+    transform 0.15s ease,
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease;
+  white-space: nowrap;
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn-primary {
+  background: var(--lime);
+  color: var(--ink);
+}
+.btn-primary:hover {
+  background: var(--lime-soft);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--paper);
+  border: 1px solid var(--hairline-strong);
+}
+.btn-ghost:hover {
+  border-color: var(--paper);
+}
+
+/* FAQ open/close marker styling — replaces default disclosure triangle. */
+details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+details[open] .faq-plus {
+  transform: rotate(45deg);
+}
+.faq-plus {
+  transition: transform 0.2s ease;
 }

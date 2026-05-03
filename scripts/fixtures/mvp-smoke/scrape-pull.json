@@ -1,0 +1,63 @@
+{
+  "_comment": "Recorded runFullScrapePull result for the cookwithjenny TikTok handle. Shape matches FullScrapePullResult in convex/integrations/scrapeCreators/runFullScrapePull.ts. Used by mock mode so the smoke never touches the network.",
+  "creatorId": "MOCK_CREATOR_ID",
+  "startedAt": 0,
+  "finishedAt": 3200,
+  "platforms": [
+    {
+      "platform": "tiktok",
+      "handle": "cookwithjenny",
+      "ok": true,
+      "profile": {
+        "platform": "tiktok",
+        "handle": "cookwithjenny",
+        "displayName": "Cook with Jenny",
+        "bio": "Quick weeknight dinners. New recipe Tues + Fri. Brand inquiries → DM",
+        "followerCount": 124300,
+        "followingCount": 211,
+        "postCount": 318,
+        "verified": false,
+        "externalUrl": "https://linktr.ee/cookwithjenny",
+        "avatarUrl": "https://p16-sign.tiktokcdn.com/avatar-large-jenny.jpg",
+        "raw": { "stub": true }
+      },
+      "posts": [
+        {
+          "platform": "tiktok",
+          "postId": "7351111111111111111",
+          "url": null,
+          "caption": "20-min one-pan chicken parm. The trick is the bread crumb shortcut.",
+          "postedAt": 1714600000,
+          "metrics": { "likeCount": 38400, "commentCount": 412, "viewCount": 1240000, "shareCount": 920, "saveCount": 7800 },
+          "mediaType": "video",
+          "thumbnailUrl": "https://p16-sign.tiktokcdn.com/cover-jenny-1.jpg",
+          "videoUrl": "https://v16-webapp.tiktok.com/play-jenny-1.mp4",
+          "raw": { "stub": true }
+        },
+        {
+          "platform": "tiktok",
+          "postId": "7351111111111111112",
+          "url": null,
+          "caption": "Sheet pan gnocchi with crispy edges. Stop boiling them first.",
+          "postedAt": 1714400000,
+          "metrics": { "likeCount": 21100, "commentCount": 188, "viewCount": 612000, "shareCount": 410, "saveCount": 3200 },
+          "mediaType": "video",
+          "thumbnailUrl": "https://p16-sign.tiktokcdn.com/cover-jenny-2.jpg",
+          "videoUrl": "https://v16-webapp.tiktok.com/play-jenny-2.mp4",
+          "raw": { "stub": true }
+        }
+      ],
+      "topPostExtras": [
+        {
+          "postId": "7351111111111111111",
+          "transcript": "Twenty minute one pan chicken parm. The trick is the bread crumb shortcut...",
+          "topComments": [
+            { "text": "made this tonight, husband cried", "likeCount": 312 },
+            { "text": "what brand of pan are you using?", "likeCount": 88 }
+          ]
+        }
+      ],
+      "errors": []
+    }
+  ]
+}

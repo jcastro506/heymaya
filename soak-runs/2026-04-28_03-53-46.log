@@ -1,0 +1,22 @@
+[2m2026-04-28T03:53:52Z[0m runner[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m]Pulling container image registry.fly.io/heymaya-openclaw@sha256:2bf0891971f21c792bb9b0b328124695974680c3e463804e59e95316fd5a1c6e
+[2m2026-04-28T03:54:07Z[0m runner[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m]Configuring firecracker
+[2m2026-04-28T03:54:08Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m]2026-04-28T03:54:08.240789687 [01KQ93HMK52MRRG0R26TY8DDTP:main] Running Firecracker v1.14.2
+[2m2026-04-28T03:54:08Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m]2026-04-28T03:54:08.240984569 [01KQ93HMK52MRRG0R26TY8DDTP:main] Listening on API socket ("/fc.sock").
+[2m2026-04-28T03:54:16Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m][90m2026-04-28T03:54:16.749+00:00[39m [36m[gateway][39m [36mloading configuration…[39m
+[2m2026-04-28T03:54:16Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m][90m2026-04-28T03:54:16.781+00:00[39m [36m[gateway][39m [36mresolving authentication…[39m
+[2m2026-04-28T03:54:16Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m][90m2026-04-28T03:54:16.784+00:00[39m [36m[gateway][39m [36mstarting...[39m
+[2m2026-04-28T03:54:24Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m]2026-04-28T03:54:24.865+00:00 Config overwrite: /data/openclaw.json (sha256 043d2bcecba447ba84727bd675b4da152421825823e64ecdcfe0d8695f39389b -> 8bdea2264b07d3bc7f04ed542e91ee2e225e68f8b0ba6317e88b22bea0feb435, backup=/data/openclaw.json.bak)
+[2m2026-04-28T03:54:24Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m]2026-04-28T03:54:24.873+00:00 Config write anomaly: /data/openclaw.json (missing-meta-before-write)
+[2m2026-04-28T03:54:24Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m][90m2026-04-28T03:54:24.903+00:00[39m [36m[gateway][39m [36mauth token was missing. Generated a new token and saved it to config (gateway.auth.token).[39m
+[2m2026-04-28T03:54:30Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m][90m2026-04-28T03:54:30.803+00:00[39m [35m[plugins][39m [36macpx installed bundled runtime deps: acpx@0.5.3[39m
+[2m2026-04-28T03:55:36Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m][   87.645830] Out of memory: Killed process 661 (openclaw-gatewa) total-vm:1775028kB, anon-rss:295828kB, file-rss:132kB, shmem-rss:0kB, UID:1000 pgtables:8368kB oom_score_adj:0
+[2m2026-04-28T03:55:39Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m][32m INFO[0m Main child exited normally with code: 1
+[2m2026-04-28T03:55:39Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m][32m INFO[0m Starting clean up.
+[2m2026-04-28T03:55:39Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m][   91.643302] reboot: Restarting system
+[2m2026-04-28T03:55:41Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m]2026-04-28T03:55:41.028359171 [01KQ93HMK52MRRG0R26TY8DDTP:main] Running Firecracker v1.14.2
+[2m2026-04-28T03:55:41Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m]2026-04-28T03:55:41.028530852 [01KQ93HMK52MRRG0R26TY8DDTP:main] Listening on API socket ("/fc.sock").
+[2m2026-04-28T03:55:42Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m][32m INFO[0m Starting init (commit: 3040ac0)...
+[2m2026-04-28T03:55:43Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m][32m INFO[0m Preparing to run: `docker-entrypoint.sh /bin/sh -c mkdir -p /data/workspace /data/cron && curl -fsSL "$MAYA_WORKSPACE_BUNDLE_URL" -o /tmp/workspace.tar && tar -xf /tmp/workspace.tar -C /data/workspace && echo "$MAYA_JOBS_JSON_BASE64" | base64 -d > /data/cron/jobs.json && echo "$MAYA_BOOTSTRAP_JSON" | jq .gatewayConfig > /data/openclaw.json && exec openclaw gateway --bind lan --port 3000 --allow-unconfigured` as node
+[2m2026-04-28T03:55:43Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m][32m INFO[0m [fly api proxy] listening at /.fly/api
+[2m2026-04-28T03:55:43Z[0m runner[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m]Machine started in 2.817s
+[2m2026-04-28T03:55:51Z[0m app[1854d0dc4ed5d8] [32miad[0m [[34minfo[0m]2026/04/28 03:55:51 INFO SSH listening listen_address=[fdaa:48:58c9:a7b:81d:8af8:db3e:2]:22

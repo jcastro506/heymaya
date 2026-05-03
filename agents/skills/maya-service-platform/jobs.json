@@ -1,0 +1,163 @@
+{
+  "comment": "Service-side cron + event-driven program manifest. Source of truth: convex/agents/packs/maya-service/standingOrders.ts. Per-business jobs.json is rendered at deploy time by buildJobsJson() with the operator's timezone interpolated into `tz`. This file is the un-interpolated catalog — `tz` is `OP_TZ` placeholder; the deploy pipeline replaces it. Sibling-file scan: every `entryId` here MUST have a matching standing-order block in AGENTS.md AND a matching skill folder under agents/skills/maya-service-*/. Plan-tier filtering is applied at deploy time per `business.plan`.",
+  "jobs": [
+    {
+      "name": "Competitor watch",
+      "cron": "0 9 * * 0",
+      "tz": "OP_TZ",
+      "session": "isolated",
+      "message": "Run competitor watch: ScrapeCreators sweep of named competitor GBPs, call `maya-service-competitor-watcher` for digest, fold into Monday morning brief.",
+      "entryId": "competitor_watch",
+      "skill": "maya-service-competitor-watcher",
+      "tier": "pro+",
+      "description": "Sundays 9am: weekly digest of named competitor GBP changes."
+    },
+    {
+      "name": "Content rejuvenation",
+      "cron": "0 14 * * 0",
+      "tz": "OP_TZ",
+      "session": "isolated",
+      "message": "Run content rejuvenation: scan `mediaAssets` + recent job photos, call `maya-service-content-rejuvenator` for 3 repurposing ideas, push to `gbpPosts.suggestions[]`.",
+      "entryId": "content_rejuvenation",
+      "skill": "maya-service-content-rejuvenator",
+      "tier": "pro+",
+      "description": "Sundays 2pm, surface 3 repurposing ideas from the operator content library."
+    },
+    {
+      "name": "Daily content check",
+      "cron": "0 8 * * 1-6",
+      "tz": "OP_TZ",
+      "session": "isolated",
+      "message": "Run daily content check: scan `mediaAssets` last 48h; if empty, soft check-in via primary channel. Skip on Sundays.",
+      "entryId": "daily_content_check",
+      "skill": "maya-service-asset-cataloger",
+      "tier": "all",
+      "description": "Mon-Sat 8am: if no fresh photos in 48h, soft check-in via primary channel."
+    },
+    {
+      "name": "Engagement watch",
+      "cron": "0 8,10,12,14,16,18,20,22 * * *",
+      "tz": "OP_TZ",
+      "session": "isolated",
+      "message": "Run engagement watch: pull GBP + FB + IG inbound, identify operator-unanswered > 2h, draft reply via `maya-service-lead-response-nudger`, ping for approval.",
+      "entryId": "engagement_watch",
+      "skill": "maya-service-lead-response-nudger",
+      "tier": "pro+",
+      "description": "Every 2h waking hours: GBP/FB/IG inbound DMs unanswered > 2h get a draft reply."
+    },
+    {
+      "name": "GBP cadence watch",
+      "cron": "0 10 */3 * *",
+      "tz": "OP_TZ",
+      "session": "isolated",
+      "message": "Run GBP cadence watch: if last `gbpPosts` post > 5 days, draft via `maya-service-gbp-post-optimizer` (recent job photo OR service-tip seed), write with `status='pending_approval'`.",
+      "entryId": "gbp_cadence_watch",
+      "skill": "maya-service-gbp-post-optimizer",
+      "tier": "all",
+      "description": "Every 3 days at 10am, ensure last GBP post isn't > 5 days old; draft if it is."
+    },
+    {
+      "name": "Lead response alarm",
+      "cron": "*/30 * * * *",
+      "tz": "OP_TZ",
+      "session": "main",
+      "message": "Run lead response alarm: scan `inboundLeads` aged > 2h with no operator response, send single SMS nudge via `maya-service-lead-response-nudger` (max 4/day total across all unsolicited outbound).",
+      "entryId": "lead_response_alarm",
+      "skill": "maya-service-lead-response-nudger",
+      "tier": "all",
+      "description": "Every 30 min 24/7: missed leads > 2h with no operator response → 1 SMS nudge."
+    },
+    {
+      "name": "Local event watch",
+      "cron": "0 18 * * *",
+      "tz": "OP_TZ",
+      "session": "isolated",
+      "message": "Run local event watch: pull local events + weather + sports scores for served neighborhoods, surface 1-2 high-fit hooks. Fold into evening recap.",
+      "entryId": "local_event_watch",
+      "skill": "maya-service-content-arc-planner",
+      "tier": "pro+",
+      "description": "6pm daily: surface 1-2 local hooks (events, weather, sports) for tomorrow's content."
+    },
+    {
+      "name": "Manager-readiness packet",
+      "cron": "0 14 1 */3 *",
+      "tz": "OP_TZ",
+      "session": "isolated",
+      "message": "Run quarterly manager-readiness packet: assemble businessPicture + 90d metrics + brand-voice + reviews + content cadence, call `maya-service-packet-generator`, render PDF, push link.",
+      "entryId": "manager_readiness_packet",
+      "skill": "maya-service-packet-generator",
+      "tier": "studio",
+      "description": "Quarterly auto + on-demand: full packet for hiring a real marketing manager."
+    },
+    {
+      "name": "Morning brief",
+      "cron": "0 7 * * *",
+      "tz": "OP_TZ",
+      "session": "isolated",
+      "message": "Run morning brief: pull today's schedule + overnight reviews + fresh leads, draft brief with one cited insight + one action + pending approvals, write `dailyBriefs`, push to primary channel. Stay under 200 words.",
+      "entryId": "morning_brief",
+      "skill": "maya-service-revenue-snapshot-renderer",
+      "tier": "all",
+      "description": "Daily 7am push: today's schedule + overnight reviews + fresh leads, cited."
+    },
+    {
+      "name": "Revenue snapshot",
+      "cron": "0 9 * * 1",
+      "tz": "OP_TZ",
+      "session": "isolated",
+      "message": "Run revenue snapshot: CRM pull last 7d completed jobs + paid invoices + outstanding, call `maya-service-revenue-snapshot-renderer`, push to `revenueSnapshots`.",
+      "entryId": "revenue_snapshot",
+      "skill": "maya-service-revenue-snapshot-renderer",
+      "tier": "pro+",
+      "description": "Mondays 9am: prior-week revenue snapshot from CRM jobs + invoices (CRM-required)."
+    },
+    {
+      "name": "Review followup",
+      "cron": "0 11 * * *",
+      "tz": "OP_TZ",
+      "session": "isolated",
+      "message": "Run review followup: scan `reviewRequests` aged 3d or 7d with no matching review, draft softer followup via `maya-service-review-request-drafter`, append to `reviewRequests.followups[]`.",
+      "entryId": "review_followup",
+      "skill": "maya-service-review-request-drafter",
+      "tier": "starter-manual-pro+-auto",
+      "description": "Day-3 + day-7 review-followup nudges to customers who haven't reviewed yet."
+    },
+    {
+      "name": "Seasonal nudge",
+      "cron": "0 9 * * 1",
+      "tz": "OP_TZ",
+      "session": "isolated",
+      "message": "Run seasonal nudge: read serviceType + current month + 90d job-mix, call `maya-service-content-arc-planner` for 2-3 season-relevant angles. Cite historical demand where available.",
+      "entryId": "seasonal_nudge",
+      "skill": "maya-service-content-arc-planner",
+      "tier": "pro+",
+      "description": "Mondays 9am: 2-3 season-relevant content angles for this service type."
+    }
+  ],
+  "events": [
+    {
+      "name": "Job-completion review request",
+      "event": "crm.job.completed",
+      "entryId": "job_completion_review_request",
+      "skill": "maya-service-review-request-drafter",
+      "tier": "starter-manual-pro+-auto",
+      "description": "On CRM `job.completed`, draft + queue (Starter) or send 24h after (Pro+) a review request."
+    },
+    {
+      "name": "Review reply (drafted, NEVER auto-posted)",
+      "event": "gbp.new_review",
+      "entryId": "review_reply",
+      "skill": "maya-service-review-reply-drafter",
+      "tier": "all",
+      "description": "On a new GBP/FB review, draft a reply within 30 min and ping operator for approval."
+    },
+    {
+      "name": "Weather-triggered promo",
+      "event": "weather.alert",
+      "entryId": "weather_triggered_promo",
+      "skill": "maya-service-gbp-post-optimizer",
+      "tier": "pro+",
+      "description": "On NWS storm/heat-wave/freeze alert in service area, draft urgency post for approval."
+    }
+  ]
+}

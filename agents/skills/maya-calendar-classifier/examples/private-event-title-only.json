@@ -1,0 +1,18 @@
+{
+  "input": {
+    "event": {
+      "title": "Therapy",
+      "start": 1714000000000,
+      "end": 1714003600000,
+      "attendees": 0,
+      "description": "",
+      "isPrivate": true
+    }
+  },
+  "expectedOutput": {
+    "classification": "personal-private",
+    "contentArcShape": "none",
+    "confidence": 0.95,
+    "notes": "Private + 1-word title + blanked description + zero attendees = fast-path personal-private. Maya never proposes content around this event."
+  }
+}

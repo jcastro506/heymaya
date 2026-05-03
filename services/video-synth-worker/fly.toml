@@ -1,0 +1,64 @@
+# heymaya-video-synth-worker — Fly app config.
+#
+# Single shared multi-tenant machine (per project_openclaw_alignment.md the
+# WORKER is shared, the per-creator agent runtimes are separate). Auto-stops
+# when idle so the cost when nobody is onboarding is ~$0.
+#
+# Region pinned to iad to match the rest of the HeyMaya footprint
+# (FLY_REGION=iad in .env.local; Maya's solo deploy variant defaults there
+# too — see convex/lib/flyClient.ts:125). One region keeps Gemini upload
+# latency from creators-everywhere flat, since Gemini's Files API is
+# region-agnostic and the bottleneck is the worker's own egress, not us-east
+# vs eu-west.
+#
+# 1 CPU / 1GB RAM is plenty for v0:
+#   • Each video download is bandwidth-bound, not CPU-bound (yt-dlp shells
+#     to ffmpeg only briefly).
+#   • Concurrent downloads cap at 5 inside src/synthesize.ts so we never have
+#     more than ~5 concurrent ffmpeg subprocesses in flight.
+#   • Gemini upload + generateContent is network-bound, idle CPU.
+# When real onboarding load lands, the lever is `vm_size` here AND
+# `concurrency.hard_limit` below.
+
+app = "heymaya-video-synth"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  NODE_ENV = "production"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Auto-stop saves money when nobody is onboarding. Cold start is ~5s
+  # (Node + deps load); the synthesis flow already spins on Gemini for ~30s
+  # so cold start is in the noise.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  # Single-machine v0; revisit when real beta load lands.
+  processes = ["app"]
+
+  # Hard concurrency limits — one synthesis call at a time per machine in v0
+  # (the per-call cost is concentrated and we'd rather queue than OOM).
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 4
+    soft_limit = 2
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "30s"
+    method = "get"
+    path = "/health"
+    protocol = "http"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1

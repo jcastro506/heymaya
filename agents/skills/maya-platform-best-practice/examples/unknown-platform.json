@@ -1,0 +1,12 @@
+{
+  "input": {
+    "platform": "snapchat",
+    "contentType": "short-form-video",
+    "question": "How do I grow on Snapchat?"
+  },
+  "expectedOutput": {
+    "confidenceLevel": "low",
+    "citedExamples": [],
+    "notes": "Snapchat is not in v0's supported platform set. Skill returns a low-confidence answer that says so explicitly. Maya should NOT fabricate."
+  }
+}
