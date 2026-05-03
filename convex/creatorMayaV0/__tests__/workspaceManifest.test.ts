@@ -122,6 +122,41 @@ describe("Creator Maya v0 OpenClaw workspace manifest", () => {
     expect(all).toContain("DELETE MAYA");
   });
 
+  it("keeps the custom creator skills specific enough for beta use cases", () => {
+    const manifest = buildCreatorMayaWorkspaceManifest(input);
+
+    expect(
+      manifest.files["skills/creator-tiktok-postmortem/SKILL.md"]
+    ).toContain("hook, retention path, visual pacing");
+    expect(
+      manifest.files["skills/creator-trend-interpreter/SKILL.md"]
+    ).toContain("format, sound, edit pattern");
+    expect(
+      manifest.files["skills/creator-calendar-content-planner/SKILL.md"]
+    ).toContain("what to film, when to film");
+    expect(manifest.files["skills/creator-hook-memory/SKILL.md"]).toContain(
+      "evidence strength"
+    );
+    expect(
+      manifest.files["skills/creator-brand-fit-scorer/SKILL.md"]
+    ).toContain("collaboration angle");
+    expect(
+      manifest.files["skills/creator-brand-contact-finder/SKILL.md"]
+    ).toContain("partnership, influencer, PR");
+    expect(manifest.files["skills/creator-pitch-drafter/SKILL.md"]).toContain(
+      "No fabricated metrics"
+    );
+    expect(
+      manifest.files["skills/creator-brand-followup-manager/SKILL.md"]
+    ).toContain("usage rights");
+    expect(manifest.files["skills/creator-clip-composer/SKILL.md"]).toContain(
+      "Default to 9:16"
+    );
+    expect(
+      manifest.files["skills/creator-account-deletion-confirmation/SKILL.md"]
+    ).toContain("same creator id, phone number");
+  });
+
   it("refuses to deploy before calendar is connected", () => {
     expect(() =>
       buildCreatorMayaWorkspaceManifest({ ...input, calendarConnected: false })
