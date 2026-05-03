@@ -46,16 +46,18 @@ The local Vercel project link points at:
 
 - Project: `hey-ava-web`
 - Production URL: `https://www.hey-maya.ai`
+- GitHub repo: `jcastro506/heymaya`
 
-The project is not currently connected to a Git repository in Vercel, so branch
-scoped Preview environment variables are unavailable. Manual Preview deploys
-use the Preview environment. Its public Convex variables have been pointed at
-Creator Maya staging:
+The Vercel project is connected to GitHub. Pushes to non-production branches
+create Preview deployments. Pushes to `main` create Production deployments.
+
+The `staging` branch has branch-scoped Preview public Convex variables pointed
+at Creator Maya staging:
 
 - `NEXT_PUBLIC_CONVEX_URL=https://precise-canary-781.convex.cloud`
 - `NEXT_PUBLIC_CONVEX_SITE_URL=https://precise-canary-781.convex.site`
 
-Deploy the current branch to a Vercel Preview:
+Manual Preview deploys still work when needed:
 
 ```bash
 npx vercel --target preview
@@ -73,11 +75,12 @@ npx vercel --prod
 2. Run local tests and `npx convex dev --once` against personal dev.
 3. Merge or fast-forward into `staging`.
 4. Deploy Convex staging.
-5. Deploy Vercel Preview from `staging`.
+5. Push `staging`; Vercel creates a Preview deployment using staging Convex.
 6. Run live E2E: signup, onboarding, Google Calendar, iMessage pairing,
    OpenClaw deployment, daily brief, media ingest/edit request, account delete.
 7. Merge `staging` to `main`.
-8. Deploy Convex production and Vercel production.
+8. Deploy Convex production and push `main`; Vercel creates a Production
+   deployment for `https://www.hey-maya.ai`.
 
 ## Production Guardrail
 
