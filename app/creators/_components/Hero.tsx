@@ -47,6 +47,9 @@ export function Hero() {
                 No card. Cancel anytime.
               </span>
             </div>
+            <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
+              TikTok creators today · more platforms soon
+            </p>
           </div>
 
           {/* Quote / receipt column */}

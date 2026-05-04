@@ -9,7 +9,11 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Does Maya post for me?",
-    a: "No. Maya prepares everything — hook, script, caption, suggested time, per-platform variant — for you to post in one tap. We've kept the moment-of-publishing in your hands deliberately. Your account, your voice, your call.",
+    a: "No. Maya prepares everything — hook, script, caption, suggested time — for you to post in one tap. We've kept the moment-of-publishing in your hands deliberately. Your account, your voice, your call.",
+  },
+  {
+    q: "Which platforms does she support?",
+    a: "TikTok today. Instagram, YouTube, LinkedIn, and X are next on the roadmap. If you're TikTok-first (or TikTok-only), Maya is built for you right now. If your main platform is somewhere else, watch this space — and email hi@heymaya.app if you want to be first in line when yours lands.",
   },
   {
     q: "Can Maya email a brand without asking me?",

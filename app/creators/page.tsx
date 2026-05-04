@@ -261,7 +261,7 @@ function FeatureRail() {
         subhead={
           <>
             Sunday at 4pm, Maya drops next week&rsquo;s content arc — three
-            pieces, per-platform variants, posting times that fit your real
+            TikToks, hook variants for each, posting times that fit your real
             calendar. You start Monday already aimed at something.
           </>
         }
