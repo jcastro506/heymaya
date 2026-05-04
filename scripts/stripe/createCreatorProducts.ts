@@ -57,7 +57,7 @@ const CREATOR_TIERS: ReadonlyArray<TierConfig> = [
     productName: "HeyMaya Coach",
     statementDescriptor: "HEYMAYA COACH",
     description:
-      "Maya as your AI creator coach. Daily proactive guidance across iMessage / WhatsApp / SMS / Telegram / web. Limited cron set, capped chat, cost-bounded thinking budget. The post-trial default.",
+      "Maya as your AI creator coach. Daily proactive guidance across iMessage. Limited cron set, capped chat, cost-bounded thinking budget. The post-trial default.",
     monthlyCents: 1999, // $19.99
     annualCents: 19900, // $199.00
     metadataLookupKey: {

@@ -93,7 +93,7 @@ async function insertCreator(
       channelPreference: "web",
       timezone: TZ,
       status: "onboarding",
-      plan: "starter",
+      plan: "coach",
       createdAt: NOW,
     })
   );
@@ -435,7 +435,7 @@ describe("submitOnboarding — cross-tenant isolation", () => {
 });
 
 describe("submitOnboarding — plan-tier (universal access)", () => {
-  it.each(["starter", "pro", "studio"] as const)(
+  it.each(["coach", "manager"] as const)(
     "%s plan can submit onboarding (no gate)",
     async (plan) => {
       const t = convexTest(schema, modules);
