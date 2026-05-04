@@ -59,7 +59,7 @@ import { ChannelPairingCard } from "@/components/creator/ChannelPairingCard";
 /* Constants                                                                   */
 /* -------------------------------------------------------------------------- */
 
-type Plan = "starter" | "pro" | "studio";
+type Plan = "coach" | "manager";
 type Channel = "imessage" | "whatsapp" | "sms" | "web";
 type Provider = "gmail" | "stripe" | "calendar" | "apollo" | "hunter";
 type Tone = "supportive" | "strategic" | "tough-love";
@@ -132,31 +132,31 @@ const PROVIDER_META: Record<
     label: "Gmail",
     icon: Mail,
     pitch: "Brand-email triage + 4-variant reply drafts.",
-    tier: "starter",
+    tier: "coach",
   },
   calendar: {
     label: "Calendar",
     icon: CalendarIcon,
     pitch: "Maya plans content arcs around weddings, trips, launches.",
-    tier: "starter",
+    tier: "coach",
   },
   stripe: {
     label: "Stripe",
     icon: CreditCard,
     pitch: "Read-only revenue snapshot (Mon 9am).",
-    tier: "starter",
+    tier: "coach",
   },
   apollo: {
     label: "Apollo",
     icon: Search,
     pitch: "Brand contact discovery for outbound pitches (paid lookups).",
-    tier: "studio",
+    tier: "manager",
   },
   hunter: {
     label: "Hunter",
     icon: Search,
     pitch: "Email lookup for cold pitches (paid lookups).",
-    tier: "studio",
+    tier: "manager",
   },
 };
 
@@ -1179,43 +1179,33 @@ const PLAN_TABLE: ReadonlyArray<{
   features: ReadonlyArray<string>;
 }> = [
   {
-    id: "starter",
-    price: "$19.99/mo",
-    annual: "$199/yr",
-    headline: "1 platform · all 4 channels · low thinking",
+    id: "coach",
+    price: "$29/mo",
+    annual: "$249/yr",
+    headline: "Advisory only — Maya advises, you decide.",
     features: [
-      "Gmail deal desk + 4-variant drafts",
-      "Brand outreach (creator-supplied contacts)",
-      "Opportunity scout + monetization advisor",
-      "Collab matchmaker + 2-peer competitor watch",
-      "Morning + evening + weekly review",
-      "200 chat turns / mo",
+      "All read/advisory cron behaviors (morning brief, evening recap, weekly plan, niche scan, performance check, hook library, comment triage, calendar lookahead)",
+      "Pre-post review + rate suggestions + contract red-flag scan",
+      "Brand email triage — Maya drafts, you approve and send",
+      "Manager-readiness packet (quarterly)",
+      "Up to 5 platforms · all 5 channels · 5-peer competitor watch",
+      "NO auto-send · NO cold pitching · NO Apollo/Hunter discovery",
     ],
   },
   {
-    id: "pro",
-    price: "$39.99/mo",
-    annual: "$399/yr",
-    headline: "3 platforms · all thinking · full proactive cron",
+    id: "manager",
+    price: "$99/mo",
+    annual: "$899/yr",
+    headline: "Coach + autonomous brand-deal back-and-forth.",
     features: [
-      "Unlimited chat turns",
-      "Full proactive cron (2h performance check, daily intel, etc.)",
-      "Faster post-publish reactions (<10min)",
-      "5-peer competitor watch",
-      "Quarterly readiness packet",
-    ],
-  },
-  {
-    id: "studio",
-    price: "$79.99/mo",
-    annual: "$799/yr",
-    headline: "5 platforms · brand discovery · multi-account",
-    features: [
-      "Brand contact discovery (Apollo + Hunter — paid lookups)",
-      "Faster post-publish reactions (<5min)",
-      "10-peer competitor watch",
-      "On-demand readiness packet",
-      "Up to 3 creator personas on one billing relationship",
+      "Everything in Coach",
+      "Brand email auto-send under your threshold",
+      "Brand outreach via Apollo + Hunter (paid contact discovery)",
+      "Brand pitching — Maya drafts and sends cold pitches",
+      "Brand-deal negotiation back-and-forth",
+      "Faster post-publish reactions (<5 min) · 10-peer competitor watch",
+      "On-demand manager-readiness packet",
+      "14-day free trial; auto-downgrades to Coach if you don't continue",
     ],
   },
 ];

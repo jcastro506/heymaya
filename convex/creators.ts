@@ -48,7 +48,7 @@ export const createFromClerk = internalMutation({
       channelPreference: "web",
       timezone: args.timezone ?? "America/Los_Angeles",
       status: "onboarding",
-      plan: "starter",
+      plan: "coach",
       accountType: args.accountType,
       createdAt: Date.now(),
     });
@@ -98,7 +98,7 @@ export const createFromClerkPublic = mutation({
       channelPreference: "web",
       timezone: args.timezone ?? "America/Los_Angeles",
       status: "onboarding",
-      plan: "starter",
+      plan: "coach",
       accountType: args.accountType,
       createdAt: Date.now(),
     });

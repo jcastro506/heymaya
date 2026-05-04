@@ -147,9 +147,8 @@ const toneValidator = v.union(
 );
 
 const tierValidator = v.union(
-  v.literal("starter"),
-  v.literal("pro"),
-  v.literal("studio")
+  v.literal("coach"),
+  v.literal("manager")
 );
 
 const tiktokPostInputValidator = v.object({
@@ -208,7 +207,7 @@ export const getOrCreateAccount = mutation({
         channelPreference: "imessage",
         timezone: args.timezone,
         status: "onboarding",
-        plan: args.tier ?? "starter",
+        plan: args.tier ?? "coach",
         accountType: "creator",
         createdAt: now,
       }));

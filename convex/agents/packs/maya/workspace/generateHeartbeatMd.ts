@@ -30,16 +30,18 @@ export function generateHeartbeatMd(inputs: HeartbeatMdInputs): string {
     "If a creator-initiated message in `chatMessages` is unread, prioritize the reply over any cron-driven push.",
     "Note anything worth surfacing in the next evening recap — quiet ticks are fine; no padding.",
   ];
-  if (plan !== "starter") {
+  // Both tiers run the brand-triage + competitor checks. The Manager-vs-Coach
+  // boundary is whether Maya AUTO-SENDS off these triggers; the heartbeat
+  // checklist itself is identical.
+  items.push(
+    "Check `brandDeals` for new threads needing triage; if `connectedAccounts.autoSendThreshold` is set AND tier is Manager, verify Gmail OAuth is still active before auto-sending. Coach tier: stop at draft."
+  );
+  items.push(
+    "Skim `competitorObservations` from the last 24h — fold notable peer moves into tomorrow's morning brief, not into a separate ping."
+  );
+  if (plan === "coach") {
     items.push(
-      "Check `brandDeals` for new threads needing triage; if `connectedAccounts.autoSendThreshold` is set, verify Gmail OAuth is still active before drafting."
-    );
-    items.push(
-      "Skim `competitorObservations` from the last 24h — fold notable peer moves into tomorrow's morning brief, not into a separate ping."
-    );
-  } else {
-    items.push(
-      "Starter tier: skip brand-email + competitor checks (Pro+ only). Focus on brief / recap / contract uploads."
+      "Coach tier reminder: Maya advises only — never auto-send brand emails, never pitch brands cold, never call Apollo/Hunter. Stop at draft + creator approval."
     );
   }
 

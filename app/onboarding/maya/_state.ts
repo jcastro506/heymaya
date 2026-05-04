@@ -427,7 +427,7 @@ export interface ComposioState {
   calendarSkipNudgeShown: boolean;
 }
 
-export type Plan = "starter" | "pro" | "studio";
+export type Plan = "coach" | "manager";
 
 /**
  * Wave 3 (2026-04-26) — opaque-string id for the `onboardingJobs` rows
@@ -500,7 +500,7 @@ export const DEFAULT_COMPOSIO: ComposioState = {
   calendarSkipNudgeShown: false,
 };
 
-export function initialState(plan: Plan = "starter"): OnboardingState {
+export function initialState(plan: Plan = "coach"): OnboardingState {
   return {
     step: "handles",
     plan,
@@ -556,21 +556,25 @@ export function setSynthJobId(
  * by hand — the fixture corpus tests in Sprint 1 cover the server values.
  */
 export const PLAN_MAX_HANDLES: Record<Plan, number> = {
-  starter: 1,
-  pro: 3,
-  studio: 5,
+  // Both tiers reach all 5 platforms post-coach/manager migration.
+  coach: 5,
+  manager: 5,
 };
 
 export const PLAN_ALLOWED_PROVIDERS: Record<Plan, ReadonlySet<Provider>> = {
-  starter: new Set<Provider>(["stripe"]),
-  pro: new Set<Provider>(["calendar", "gmail", "stripe"]),
-  studio: new Set<Provider>(["calendar", "gmail", "stripe"]),
+  // gmail / calendar / stripe ungated; Apollo + Hunter (Manager-only) live
+  // server-side and are not part of this UI-side connection prompt.
+  coach: new Set<Provider>(["calendar", "gmail", "stripe"]),
+  manager: new Set<Provider>(["calendar", "gmail", "stripe"]),
 };
 
 export const PLAN_ALLOWED_CHANNELS: Record<Plan, ReadonlySet<Channel>> = {
-  starter: new Set<Channel>(["web", "sms"]),
-  pro: new Set<Channel>(["web", "sms", "imessage", "whatsapp"]),
-  studio: new Set<Channel>(["web", "sms", "imessage", "whatsapp"]),
+  // Channels are OpenClaw-native; ungated on both tiers. (Telegram is added
+  // server-side only — the local Channel type intentionally excludes it
+  // because the onboarding flow only routes to web/sms/imessage/whatsapp; the
+  // telegram pairing happens post-onboarding via the Profile screen.)
+  coach: new Set<Channel>(["web", "sms", "imessage", "whatsapp"]),
+  manager: new Set<Channel>(["web", "sms", "imessage", "whatsapp"]),
 };
 
 /* -------------------------------------------------------------------------- */

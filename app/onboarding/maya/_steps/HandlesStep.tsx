@@ -292,23 +292,24 @@ export function HandlesStep({ state, setState, onAdvance }: HandlesStepProps) {
         </ul>
       )}
 
-      {/* Plan-tier upgrade nudge for Starter once they hit the cap. */}
-      {atCap && state.plan === "starter" && (
+      {/* Plan-tier upgrade nudge for Coach once they hit the cap. */}
+      {atCap && state.plan === "coach" && (
         <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-[var(--hairline-strong)] bg-ink-3 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="font-mono text-[11px] uppercase tracking-widest text-paper-faint">
-              Starter plan · 1 platform
+              Coach plan
             </div>
             <p className="mt-1 text-paper-dim">
-              Want Maya watching your full footprint? Pro adds up to 3
-              platforms, every channel, and the full Gmail deal desk.
+              Want Maya negotiating brand deals on your behalf? Manager adds
+              auto-send, Apollo/Hunter brand discovery, and the full back-and-
+              forth.
             </p>
           </div>
           <Link
-            href="/sign-up?plan=pro&trial=true"
+            href="/sign-up?plan=manager&trial=true"
             className="btn btn-ghost shrink-0"
           >
-            Start Pro trial
+            Start Manager trial
           </Link>
         </div>
       )}

@@ -1,47 +1,55 @@
 import { Doc } from "../_generated/dataModel";
 
 /**
- * Plan-tier feature matrix — REVISED 2026-04-26.
+ * Plan-tier feature matrix — REVISED 2026-05-04 (coach / manager migration).
  *
- * Tier philosophy:
- *   1. Channels (iMessage / WhatsApp / SMS / Telegram / web) are OpenClaw-
- *      NATIVE. They cost us nothing per creator (the org configures them once,
- *      OpenClaw handles routing). Therefore: **every tier gets every channel.**
- *      No paywall on where Maya pings the creator.
- *   2. Composio Gmail is per-call cost, but small, and the brand-triage value
- *      is the headline reason creators sign up. Therefore: **every tier gets
- *      the Gmail deal desk** (`gmailDealDeskEnabled = true` for all).
- *   3. Apollo / Hunter ARE per-query paid lookups (real $$ per call). They
- *      only matter for outbound brand-contact DISCOVERY (finding emails for
- *      brands the creator doesn't already have a contact at). Therefore:
- *      **brandContactDiscoveryEnabled = Studio only**. Outbound pitching
- *      itself (`brandOutreachEnabled`) is universal — Maya can pitch from any
- *      tier; the difference is just whether she can DISCOVER contacts via
- *      paid lookups vs work from creator-supplied / opportunity-scout-surfaced
- *      addresses.
- *   4. Differentiation moves to where ACTUAL scaling cost lives:
- *        - `chatTurnsPerMonth`            — bounds inference cost per user
- *        - `maxThinkingBudget`            — bounds per-call cost (Starter "low")
- *        - `multiAccountSlots`            — bounds Fly + storage cost
- *        - `maxHandles`                   — bounds ScrapeCreators cost / creator
- *        - `postPublishReactionLatencySec` — bounds proactive cron volume
- *        - `allowedProviders` (apollo, hunter) — Studio-only paid lookups
- *        - `brandContactDiscoveryEnabled` — Studio-only paid lookups
+ * The creator product moved from a 3-tier (starter / pro / studio) shape to a
+ * 2-tier (coach / manager) shape. The tier boundary is now AUTONOMY ON THE
+ * CREATOR'S BEHALF, not breadth. Both tiers see every read/advisory behavior;
+ * Coach is advisory-only and Manager is the same brain plus the autonomous
+ * brand-deal back-and-forth.
  *
- * Note on `proactiveCronAll`: `false` for Starter does NOT mean "no cron."
- * It means "limited cron set." The actual cron-set definition lives in
- * `convex/agents/packs/maya/workspace/buildCronJobsJson.ts` and gets wired
- * per-tier when assembling the OpenClaw `jobs.json`. For Starter the limited
- * set is roughly: morning brief (7am), evening recap (7pm), weekly review
- * (Sun 9pm), post-publish reaction (at the slower 1800s latency — see
- * `postPublishReactionLatencySec`), and the daily niche scan. Pro/Studio get
- * the full set including the 2h performance check, brand email triage,
- * competitor watch, accountability nudge, hook library auto-build, comment
- * triage, weekly content plan, manager-readiness packet, contract red-flag
- * scan, revenue snapshot.
+ *   - **Coach** ($29/mo / $249/yr) — advisory only. Maya NEVER auto-sends
+ *     emails, NEVER pitches brands cold, NEVER reaches out via Apollo/Hunter.
+ *     She still triages inbound brand emails into a draft for the creator and
+ *     does every read/advisory cron behavior (morning brief, evening recap,
+ *     weekly plan, niche scan, performance check, hook library, comment
+ *     triage, calendar lookahead, manager-readiness packet, etc).
+ *   - **Manager** ($99/mo / $899/yr) — everything in Coach + brand email
+ *     auto-send under threshold + brand outreach (Apollo/Hunter discovery) +
+ *     brand pitching (cold drafts) + brand-deal negotiation back-and-forth.
+ *
+ * 14-day free Manager trial → expires to Coach (preserve the existing trial
+ * mechanic; only the tier names changed).
+ *
+ * What did NOT survive the rewrite:
+ *   - No more `maxThinkingBudget` per-tier clamp. Both tiers get full thinking
+ *     budgets — the boundary is autonomy, not compute.
+ *   - No more platform-count gating (`maxHandles`). Coach + Manager both reach
+ *     all 5 platforms (TikTok / IG / YouTube / LinkedIn / X).
+ *   - No more `proactiveCronAll = false` for the lower tier. Both tiers run
+ *     the same proactive cron set; the difference is whether the brand-deal
+ *     follow-ups in that cron set fire send actions on the creator's behalf
+ *     or stop at draft.
+ *   - No more `multiAccountSlots > 1`. Multi-account (manage multiple
+ *     creators) is OFF for both tiers in v0.
+ *
+ * What remains as a cost lever:
+ *   - `chatTurnsPerMonth` — bounds inference cost per user; Coach is capped,
+ *     Manager unlimited (a separate ratchet from autonomy).
+ *
+ * The `canAutoSendBrandEmails` / `canDoBrandOutreach` / `canPitchBrands` flags
+ * are the load-bearing gate signals callers should consult when checking
+ * autonomy boundaries — they map 1:1 to product-locked autonomy semantics.
+ *
+ * Gate-helper semantics (`PlanGateError`, `requireFeature`, `providerAllowed`,
+ * `channelAllowed`, `clampThinkingBudget`, `thinkingBudgetAllowed`) are
+ * preserved verbatim so call sites compile unchanged. `clampThinkingBudget`
+ * is a no-op on both tiers (both allow `high`); the helper is kept for
+ * forward-compat if a future cost-lever wants to clamp again.
  */
 
-export type Plan = "starter" | "pro" | "studio";
+export type Plan = "coach" | "manager";
 export type ThinkingBudget = "none" | "low" | "medium" | "high";
 export type Channel = "imessage" | "whatsapp" | "sms" | "telegram" | "web";
 export type Provider = "gmail" | "stripe" | "calendar" | "apollo" | "hunter";
@@ -50,17 +58,16 @@ export interface PlanFeatures {
   plan: Plan;
   /** Max distinct social handles ScrapeCreators is asked to track per creator. */
   maxHandles: number;
-  /** Channels Maya can route outbound to. UNGATED — all 4 on every tier. */
+  /** Channels Maya can route outbound to. UNGATED — all 5 on every tier. */
   allowedChannels: ReadonlyArray<Channel>;
-  /** Hard cap on per-call thinking budget. Starter clamped to 'low' for cost. */
+  /** Hard cap on per-call thinking budget. Both tiers = 'high' in v0. */
   maxThinkingBudget: ThinkingBudget;
   allowedThinkingBudgets: ReadonlyArray<ThinkingBudget>;
-  /** Conversational chat-turn cap. Starter capped, Pro/Studio unlimited. */
+  /** Conversational chat-turn cap. Coach capped, Manager unlimited. */
   chatTurnsPerMonth: number | "unlimited";
   /**
-   * `true` = run the FULL proactive cron set; `false` = limited cron set
-   * (morning brief, evening recap, weekly review, slower post-publish
-   * reaction, daily niche scan). The actual job composition lives in
+   * `true` = run the FULL proactive cron set; both tiers = true now (the old
+   * "limited cron set" tier is gone). The actual job composition lives in
    * `buildCronJobsJson.ts`.
    */
   proactiveCronAll: boolean;
@@ -71,31 +78,49 @@ export interface PlanFeatures {
   /** Manager-readiness packet — none / quarterly cron / on-demand. */
   readinessPacketCadence: "none" | "quarterly" | "on-demand";
   /**
-   * UNGATED. Maya can compose + send brand pitch emails via Gmail at every
-   * tier (she pitches stage-appropriately — small/local for early creators).
-   * Subject to the per-account auto-send threshold.
+   * Coach: false. Manager: true. Maya may auto-send firm-decline / accept
+   * variants under the per-account `autoSendThreshold` only on Manager.
+   * Coach always stops at draft.
+   */
+  canAutoSendBrandEmails: boolean;
+  /**
+   * Coach: false. Manager: true. Apollo/Hunter discovery + cold pitch drafts
+   * are Manager-only autonomy.
+   */
+  canDoBrandOutreach: boolean;
+  /**
+   * Coach: false. Manager: true. Maya drafts + sends cold pitches on Manager.
+   * Coach can suggest brands for the creator to pitch but won't draft + send.
+   */
+  canPitchBrands: boolean;
+  /**
+   * Maya can compose brand pitch emails. Coach = false (advisory only),
+   * Manager = true. Distinct from `canPitchBrands` only in name; we keep
+   * both for back-compat with existing call sites that read this field.
    */
   brandOutreachEnabled: boolean;
   /**
-   * Studio-only. Maya uses Apollo/Hunter (paid per-query lookups) to discover
-   * brand contacts before pitching. Pro/Starter still pitch — to creator-
-   * supplied addresses or addresses surfaced by the opportunity scout.
+   * Manager-only. Apollo/Hunter paid per-query lookups for brand contact
+   * discovery. Coach never reaches out, so this is irrelevant to Coach.
    */
   brandContactDiscoveryEnabled: boolean;
-  /** UNGATED. UGC-board + local brand search via Brave. */
+  /** UNGATED. UGC-board + local brand search via Brave (read-only). */
   opportunityScoutEnabled: boolean;
-  /** UNGATED. Monetization diversification milestone advisor. */
+  /** UNGATED. Monetization diversification milestone advisor (read-only). */
   monetizationAdvisorEnabled: boolean;
-  /** UNGATED. Collab matchmaker proposes peer creators for collabs. */
+  /** UNGATED. Collab matchmaker proposes peer creators (read-only). */
   collabMatchEnabled: boolean;
-  /** Distinct creator personas / accounts on one billing relationship. */
+  /**
+   * Multi-account (manage multiple creators on one billing). v0: BOTH tiers
+   * cap at 1. The product spec defers multi-account to a later release.
+   */
   multiAccountSlots: number;
-  /** Bounds proactive cron volume — tighter latency = more cost. */
+  /** Bounds proactive cron volume — same on both tiers in v0. */
   postPublishReactionLatencySec: number;
   /**
    * Composio providers the creator may OAuth-connect. Apollo + Hunter are
-   * Studio-only because they're per-query paid lookups; everyone gets gmail
-   * + calendar + stripe.
+   * Manager-only because they're per-query paid lookups + only used when
+   * autonomous outreach fires; everyone gets gmail + calendar + stripe.
    */
   allowedProviders: ReadonlyArray<Provider>;
 }
@@ -108,63 +133,46 @@ const ALL_CHANNELS: ReadonlyArray<Channel> = [
   "telegram",
 ];
 
-const STARTER: PlanFeatures = {
-  plan: "starter",
-  maxHandles: 1,
+const COACH: PlanFeatures = {
+  plan: "coach",
+  // Same platform reach as Manager — boundary is autonomy, not breadth.
+  maxHandles: 5,
   // UNGATED — channels are OpenClaw-native, no per-tier cost.
   allowedChannels: ALL_CHANNELS,
-  // Cost lever STAYS — Starter clamped to 'low' to bound per-call cost.
-  maxThinkingBudget: "low",
-  allowedThinkingBudgets: ["none", "low"],
-  // Cost lever STAYS — Starter capped at 200 chat turns / month.
-  chatTurnsPerMonth: 200,
-  // Limited cron set (morning/evening/weekly + slower post-publish reaction +
-  // daily niche scan). NOT "no cron" — see the file header for the full list.
-  proactiveCronAll: false,
-  // UNGATED — Gmail deal desk is the headline value prop.
-  gmailDealDeskEnabled: true,
-  // Small slot count, not zero. Maya watches 2 named peers on Starter.
-  competitorWatchSlots: 2,
-  readinessPacketCadence: "none",
-  // UNGATED — Maya pitches from any tier. Stage-appropriately.
-  brandOutreachEnabled: true,
-  // Studio only — paid per-query Apollo/Hunter lookups.
-  brandContactDiscoveryEnabled: false,
-  opportunityScoutEnabled: true,
-  monetizationAdvisorEnabled: true,
-  collabMatchEnabled: true,
-  // Cost lever STAYS — single account on Starter/Pro.
-  multiAccountSlots: 1,
-  // Cost lever STAYS — slower latency on Starter to bound proactive volume.
-  postPublishReactionLatencySec: 1800,
-  // No apollo / hunter on Starter (paid per-query). gmail + calendar + stripe.
-  allowedProviders: ["gmail", "calendar", "stripe"],
-};
-
-const PRO: PlanFeatures = {
-  plan: "pro",
-  maxHandles: 3,
-  allowedChannels: ALL_CHANNELS,
+  // Both tiers get full thinking budgets — boundary is autonomy, not compute.
   maxThinkingBudget: "high",
   allowedThinkingBudgets: ["none", "low", "medium", "high"],
-  chatTurnsPerMonth: "unlimited",
+  // Coach is the entry tier — cap inbound chat to bound inference cost.
+  chatTurnsPerMonth: 400,
+  // Same proactive cron set as Manager — Coach runs every read/advisory job;
+  // the difference is what those jobs DO at the autonomy edge (draft vs send).
   proactiveCronAll: true,
+  // UNGATED — Coach DOES triage inbound brand emails (just doesn't auto-send).
   gmailDealDeskEnabled: true,
+  // 5 named peers on Coach (vs 10 on Manager — manager = more aggressive
+  // outbound posture, larger watch set is part of that).
   competitorWatchSlots: 5,
+  // Quarterly cron-cadence packet on Coach. Manager gets it on-demand.
   readinessPacketCadence: "quarterly",
-  brandOutreachEnabled: true,
-  // Pro can pitch — but Apollo/Hunter discovery is Studio-only.
+  // ─── Autonomy gates — the load-bearing tier boundary ─────────────────────
+  canAutoSendBrandEmails: false,
+  canDoBrandOutreach: false,
+  canPitchBrands: false,
+  // brandOutreachEnabled is kept as a back-compat alias of canPitchBrands.
+  brandOutreachEnabled: false,
   brandContactDiscoveryEnabled: false,
+  // ─── End autonomy gates ──────────────────────────────────────────────────
   opportunityScoutEnabled: true,
   monetizationAdvisorEnabled: true,
   collabMatchEnabled: true,
   multiAccountSlots: 1,
   postPublishReactionLatencySec: 600,
+  // No apollo / hunter on Coach (no autonomous outreach).
   allowedProviders: ["gmail", "calendar", "stripe"],
 };
 
-const STUDIO: PlanFeatures = {
-  plan: "studio",
+const MANAGER: PlanFeatures = {
+  plan: "manager",
   maxHandles: 5,
   allowedChannels: ALL_CHANNELS,
   maxThinkingBudget: "high",
@@ -174,21 +182,24 @@ const STUDIO: PlanFeatures = {
   gmailDealDeskEnabled: true,
   competitorWatchSlots: 10,
   readinessPacketCadence: "on-demand",
+  // ─── Autonomy gates — Manager is the autonomous tier ─────────────────────
+  canAutoSendBrandEmails: true,
+  canDoBrandOutreach: true,
+  canPitchBrands: true,
   brandOutreachEnabled: true,
-  // Studio only — the real cost lever: paid per-query Apollo + Hunter lookups.
   brandContactDiscoveryEnabled: true,
+  // ─── End autonomy gates ──────────────────────────────────────────────────
   opportunityScoutEnabled: true,
   monetizationAdvisorEnabled: true,
   collabMatchEnabled: true,
-  multiAccountSlots: 3,
+  multiAccountSlots: 1,
   postPublishReactionLatencySec: 300,
   allowedProviders: ["gmail", "calendar", "stripe", "apollo", "hunter"],
 };
 
 const FEATURES_BY_PLAN: Record<Plan, PlanFeatures> = {
-  starter: STARTER,
-  pro: PRO,
-  studio: STUDIO,
+  coach: COACH,
+  manager: MANAGER,
 };
 
 export function planFeatures(creator: Pick<Doc<"creators">, "plan">): PlanFeatures {
@@ -199,7 +210,7 @@ export function planFeatures(creator: Pick<Doc<"creators">, "plan">): PlanFeatur
     throw new PlanGateError(
       creator.plan as Plan,
       "planFeatures:unknown-plan",
-      "starter"
+      "coach"
     );
   }
   return f;

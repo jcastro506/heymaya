@@ -1,4 +1,24 @@
-export type CreatorMayaTier = "starter" | "pro" | "studio";
+/**
+ * Creator Maya v0 tier feature matrix — REVISED 2026-05-04 (coach / manager).
+ *
+ * Sibling of `convex/lib/planFeatures.ts`. This file is the v0 OpenClaw-side
+ * shape used by the deployment / brand-outreach flow; the wider feature
+ * matrix in planFeatures.ts is the source of truth for HQ + cron gates.
+ *
+ * Tier semantics align with the locked product spec:
+ *   - **Coach**: every read/advisory behavior, NO autonomous brand outreach.
+ *   - **Manager**: Coach + autonomous brand-deal back-and-forth (draft +
+ *     send + Apollo/Hunter discovery + cold pitch + negotiation).
+ *
+ * `BrandAutonomyLevel` mapping:
+ *   - 0 = Maya advises, creator does the work (Coach max).
+ *   - 1 = Maya drafts, creator approves+sends (Manager: in-bounds).
+ *   - 2 = Maya drafts + sends with creator-set thresholds (Manager max v0).
+ *   - 3+ = reserved for future "Studio-class" autonomy. NOT enabled on
+ *     Manager v0 — kept as an explicit fail-closed boundary.
+ */
+
+export type CreatorMayaTier = "coach" | "manager";
 export type BrandAutonomyLevel = 0 | 1 | 2 | 3 | 4;
 
 export interface CreatorMayaTierFeatures {
@@ -20,18 +40,21 @@ export interface CreatorMayaTierFeatures {
   maxBrandAutonomyLevel: BrandAutonomyLevel;
 }
 
-const STARTER: CreatorMayaTierFeatures = {
-  tier: "starter",
+const COACH: CreatorMayaTierFeatures = {
+  tier: "coach",
+  // Read/advisory features — Coach gets the full set.
   calendarRead: true,
   calendarContentHolds: true,
   dailyImessageBrief: true,
   weeklyContentPlan: true,
   postWatcher: true,
   trendScan: true,
-  commentMining: false,
-  peerWatch: false,
-  mediaKitDraft: false,
-  inboundBrandTriage: false,
+  commentMining: true,
+  peerWatch: true,
+  mediaKitDraft: true,
+  // Inbound brand triage — Coach reads + drafts but never auto-sends.
+  inboundBrandTriage: true,
+  // Outbound brand work — Coach DOES NOT do any of this.
   outboundBrandDiscovery: false,
   contactEnrichment: false,
   brandPitchCampaigns: false,
@@ -39,30 +62,22 @@ const STARTER: CreatorMayaTierFeatures = {
   maxBrandAutonomyLevel: 0,
 };
 
-const PRO: CreatorMayaTierFeatures = {
-  ...STARTER,
-  tier: "pro",
-  commentMining: true,
-  peerWatch: true,
-  mediaKitDraft: true,
-  inboundBrandTriage: true,
-  maxBrandAutonomyLevel: 1,
-};
-
-const STUDIO: CreatorMayaTierFeatures = {
-  ...PRO,
-  tier: "studio",
+const MANAGER: CreatorMayaTierFeatures = {
+  ...COACH,
+  tier: "manager",
+  // Manager unlocks all autonomous brand-deal work.
   outboundBrandDiscovery: true,
   contactEnrichment: true,
   brandPitchCampaigns: true,
   brandCallScheduling: true,
+  // v0 caps Manager autonomy at level 2 (draft + threshold-gated send).
+  // Level 3+ reserved for a future tier; explicit fail-closed boundary.
   maxBrandAutonomyLevel: 2,
 };
 
 const FEATURES: Record<CreatorMayaTier, CreatorMayaTierFeatures> = {
-  starter: STARTER,
-  pro: PRO,
-  studio: STUDIO,
+  coach: COACH,
+  manager: MANAGER,
 };
 
 export class CreatorMayaTierGateError extends Error {

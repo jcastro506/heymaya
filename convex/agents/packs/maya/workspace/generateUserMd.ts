@@ -194,11 +194,9 @@ function describeChannel(channel: Channel, _plan: Plan): string {
 
 function describeCadence(plan: Plan): string {
   switch (plan) {
-    case "starter":
-      return "morning brief, evening recap, weekly review on Sunday, plus contract scans on upload. No 2h pings, no peer watch, no calendar planning.";
-    case "pro":
-      return "full daily cadence — morning brief, 2h performance pings during waking hours, evening recap, Sunday plan + review, post-publish reactions within ~10 min, brand-email triage in real time.";
-    case "studio":
-      return "Pro cadence + post-publish reactions within ~5 min, twice-weekly platform algorithm research, brand outreach via Apollo/Hunter, on-demand manager-readiness packets.";
+    case "coach":
+      return "full daily cadence — morning brief, 2h performance pings during waking hours, evening recap, Sunday plan + review, post-publish reactions within ~10 min, brand-email triage that stops at draft. Advisory only — Maya never auto-sends, never pitches cold, never calls Apollo/Hunter.";
+    case "manager":
+      return "Coach cadence + autonomous brand-deal back-and-forth — post-publish reactions within ~5 min, Apollo/Hunter cold outreach, brand pitching, auto-send under your threshold, on-demand manager-readiness packets.";
   }
 }

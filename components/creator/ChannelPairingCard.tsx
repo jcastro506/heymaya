@@ -429,7 +429,7 @@ export function ChannelPairingCard(
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- plan kept for forward-compat / API symmetry
 function allowedChannelsForPlan(
-  plan: "starter" | "pro" | "studio"
+  plan: "coach" | "manager"
 ): ReadonlyArray<PairableChannelLocal> {
   return ["imessage", "whatsapp", "sms", "telegram"];
 }

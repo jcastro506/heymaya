@@ -121,7 +121,7 @@ export const findOrCreateAccountAndBusiness = internalMutation({
         channelPreference: "web",
         timezone: args.timezone ?? "America/Los_Angeles",
         status: "onboarding",
-        plan: "starter",
+        plan: "coach",
         accountType: "service-business",
         createdAt: Date.now(),
       });

@@ -71,9 +71,11 @@ export const createServiceFixture = internalMutation({
       channelPreference: "sms",
       timezone: "America/Los_Angeles",
       status: "onboarding",
-      // creator-side `plan` field is required; mirror the service tier for
-      // consistency. The two enums share the same string values.
-      plan: planTier,
+      // creator-side `plan` field is required (creator-side is the
+      // coach/manager 2-tier model post-2026-05-04 migration). For
+      // service-business smoke fixtures we hard-code `coach` since service
+      // routing only consults `businesses.planTier`.
+      plan: "coach",
       accountType: "service-business",
       createdAt: now,
     });

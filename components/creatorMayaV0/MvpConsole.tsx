@@ -217,7 +217,7 @@ export function CreatorMayaV0Onboarding() {
   }, [searchParams, router]);
 
   async function ensureAccount() {
-    await getOrCreate({ email, timezone: TZ, tier: "starter" });
+    await getOrCreate({ email, timezone: TZ, tier: "coach" });
   }
 
   async function confirmAccount() {
@@ -883,7 +883,7 @@ export function CreatorMayaV0DebugConsole() {
   }, [searchParams, router]);
 
   async function ensureAccount() {
-    await getOrCreate({ email, timezone: TZ, tier: "starter" });
+    await getOrCreate({ email, timezone: TZ, tier: "coach" });
   }
 
   async function runStep(key: Exclude<BusyKey, null>, fn: () => Promise<void>) {
@@ -1064,7 +1064,7 @@ export function CreatorMayaV0DebugConsole() {
 
   async function testStudioBrandGate() {
     await runStep("brand", async () => {
-      await getOrCreate({ email, timezone: TZ, tier: "studio" });
+      await getOrCreate({ email, timezone: TZ, tier: "manager" });
       await queueBrand({
         brandName: "DeskKit",
         category: "workspace gear",

@@ -124,16 +124,18 @@ export function buildCronJobsJson(inputs: BuildCronJobsJsonInputs): JobsJson {
 function isPlanAllowed(
   tier: StandingOrderProgram["tier"],
   plan: Plan,
-  proactiveCronAll: boolean
+  _proactiveCronAll: boolean
 ): boolean {
   if (tier === "all") return true;
-  // tier === "pro+"
-  if (plan === "starter") {
-    // Pro+ programs are gated by `proactiveCronAll` — Starter is false, so
-    // they're skipped. The defense-in-depth: even if planFeatures changed
-    // and Starter unlocked proactiveCronAll, we'd let it run. The cron.md
-    // doc is the authoritative tier matrix; planFeatures is the helper.
-    return proactiveCronAll;
-  }
+  // tier === "manager" (post-coach/manager migration; was "pro+" pre-migration).
+  // Coach skips Manager-only entries.
+  //
+  // NOTE: per the locked product spec, many currently-Manager-tagged programs
+  // are actually advisory and should be tier="all" with autonomy-checks moved
+  // into the skill prose. The skill-audit agent will reclassify; until then
+  // this gating is a strict superset of what's permitted on Coach
+  // (false-positive denials for Coach are safer than false-positive grants
+  // on the autonomy boundary).
+  if (plan === "coach") return false;
   return true;
 }

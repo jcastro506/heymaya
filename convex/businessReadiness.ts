@@ -728,7 +728,7 @@ export const convertOpportunityToPitch = mutation({
     const me = await requireCurrentCreator(ctx);
     const features = planFeatures(me);
     if (!features.brandOutreachEnabled) {
-      throw new PlanGateError(me.plan, "brandOutreach", "pro");
+      throw new PlanGateError(me.plan, "brandOutreach", "manager");
     }
     const opp = await ctx.db.get(args.opportunityId);
     if (!opp) throw new Error("Opportunity not found.");
@@ -849,7 +849,7 @@ export const skillRecordOpportunity = mutation({
     const creator = await ctx.db.get(args.creatorId);
     if (!creator) throw new Error("Creator not found.");
     if (!planFeatures(creator).opportunityScoutEnabled) {
-      throw new PlanGateError(creator.plan, "opportunityScout", "pro");
+      throw new PlanGateError(creator.plan, "opportunityScout", "manager");
     }
     if (args.fit < 0 || args.fit > 1 || !Number.isFinite(args.fit)) {
       throw new Error("fit must be in [0, 1].");
@@ -912,7 +912,7 @@ export const skillRecordCollabMatch = mutation({
     const creator = await ctx.db.get(args.creatorId);
     if (!creator) throw new Error("Creator not found.");
     if (!planFeatures(creator).collabMatchEnabled) {
-      throw new PlanGateError(creator.plan, "collabMatch", "pro");
+      throw new PlanGateError(creator.plan, "collabMatch", "manager");
     }
     return await ctx.db.insert("collabMatchLog", {
       creatorId: args.creatorId,
@@ -1039,7 +1039,7 @@ export const skillRecordCompetitor = mutation({
     const creator = await ctx.db.get(args.creatorId);
     if (!creator) throw new Error("Creator not found.");
     if (planFeatures(creator).competitorWatchSlots === 0) {
-      throw new PlanGateError(creator.plan, "competitorWatch", "pro");
+      throw new PlanGateError(creator.plan, "competitorWatch", "manager");
     }
     return await ctx.db.insert("competitorObservations", {
       creatorId: args.creatorId,
@@ -1089,7 +1089,7 @@ export const skillRecordTrend = mutation({
       args.source !== "niche-scan" &&
       !planFeatures(creator).proactiveCronAll
     ) {
-      throw new PlanGateError(creator.plan, `trend:${args.source}`, "pro");
+      throw new PlanGateError(creator.plan, `trend:${args.source}`, "manager");
     }
     if (
       !Number.isFinite(args.relevanceScore) ||
@@ -1125,7 +1125,7 @@ export const skillRecordMonetization = mutation({
     const creator = await ctx.db.get(args.creatorId);
     if (!creator) throw new Error("Creator not found.");
     if (!planFeatures(creator).monetizationAdvisorEnabled) {
-      throw new PlanGateError(creator.plan, "monetizationAdvisor", "pro");
+      throw new PlanGateError(creator.plan, "monetizationAdvisor", "manager");
     }
     return await ctx.db.insert("monetizationProposalLog", {
       creatorId: args.creatorId,
@@ -1161,7 +1161,7 @@ export const skillCreatePitchDraft = mutation({
     const creator = await ctx.db.get(args.creatorId);
     if (!creator) throw new Error("Creator not found.");
     if (!planFeatures(creator).brandOutreachEnabled) {
-      throw new PlanGateError(creator.plan, "brandOutreach", "pro");
+      throw new PlanGateError(creator.plan, "brandOutreach", "manager");
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(args.contactEmail)) {
       throw new Error("contactEmail must be a valid email address.");

@@ -22,9 +22,8 @@ export default defineSchema({
       v.literal("churned")
     ),
     plan: v.union(
-      v.literal("starter"),
-      v.literal("pro"),
-      v.literal("studio")
+      v.literal("coach"),
+      v.literal("manager")
     ),
     trialEndsAt: v.optional(v.number()),
     mayaFlyAppId: v.optional(v.string()),

@@ -132,6 +132,7 @@ import type * as mediaAssets_enqueueCatalog from "../mediaAssets/enqueueCatalog.
 import type * as mediaAssets_ingest from "../mediaAssets/ingest.js";
 import type * as mediaAssets_listAssets from "../mediaAssets/listAssets.js";
 import type * as mediaAssets_processCatalogerQueue from "../mediaAssets/processCatalogerQueue.js";
+import type * as migrations_coachManagerPlanRename from "../migrations/coachManagerPlanRename.js";
 import type * as onboarding_business_deployServiceMaya from "../onboarding/business/deployServiceMaya.js";
 import type * as onboarding_business_pipeline from "../onboarding/business/pipeline.js";
 import type * as onboarding_growth_deployRiley from "../onboarding/growth/deployRiley.js";
@@ -301,6 +302,7 @@ declare const fullApi: ApiFromModules<{
   "mediaAssets/ingest": typeof mediaAssets_ingest;
   "mediaAssets/listAssets": typeof mediaAssets_listAssets;
   "mediaAssets/processCatalogerQueue": typeof mediaAssets_processCatalogerQueue;
+  "migrations/coachManagerPlanRename": typeof migrations_coachManagerPlanRename;
   "onboarding/business/deployServiceMaya": typeof onboarding_business_deployServiceMaya;
   "onboarding/business/pipeline": typeof onboarding_business_pipeline;
   "onboarding/growth/deployRiley": typeof onboarding_growth_deployRiley;

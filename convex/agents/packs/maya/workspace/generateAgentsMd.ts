@@ -68,11 +68,9 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
     : "_(no handles connected yet)_";
 
   const planTierLine =
-    plan === "starter"
-      ? "Starter — limited cron set, single platform, capped chat."
-      : plan === "pro"
-        ? "Pro — full proactive cron, all 4 channels, full Gmail deal desk."
-        : "Studio — Pro plus Apollo/Hunter brand outreach + priority routing.";
+    plan === "coach"
+      ? "Coach — advisory only. Full proactive cron, all 5 channels, brand-email triage stops at draft. NO auto-send, NO cold pitching, NO Apollo/Hunter discovery."
+      : "Manager — Coach plus autonomous brand-deal back-and-forth: auto-send under threshold, Apollo/Hunter cold outreach, brand pitching, deal negotiation.";
 
   const sections: string[] = [];
 

@@ -11,11 +11,14 @@
  * never drift between "what AGENTS.md tells Maya to do" and "what the
  * scheduler actually fires."
  *
- * Tier semantics:
- *   - "all"     — every plan runs this program.
- *   - "starter" — Starter additionally enabled (informational; "all" already
- *                 includes Starter).
- *   - "pro+"    — Pro and Studio only (Starter skipped).
+ * Tier semantics (post-coach/manager migration):
+ *   - "all"     — every plan runs this program (both Coach and Manager).
+ *   - "manager" — Manager-only autonomous behavior (Coach skipped).
+ *
+ * NOTE: pre-migration "pro+" was equivalent to "Pro and Studio only";
+ * post-migration "manager" is equivalent to "Manager only" (Coach is the
+ * entry tier now). The conversion is mechanical — every old "pro+" program
+ * becomes "manager" because the dropped behaviors are autonomy-driven.
  *
  * Kind semantics:
  *   - "cron"        — runs on a schedule. `cronEntryId` and `defaultCron`
@@ -29,7 +32,7 @@
 
 import type { Plan } from "../../../../lib/planFeatures";
 
-export type StandingOrderTier = "all" | "pro+";
+export type StandingOrderTier = "all" | "manager";
 export type StandingOrderKind = "cron" | "event" | "on-demand" | "folded";
 
 /**
@@ -47,7 +50,7 @@ export interface StandingOrderProgram {
   id: string;
   /** H3 program title rendered in AGENTS.md. */
   title: string;
-  /** Tier gating. "pro+" excludes Starter; "all" includes everyone. */
+  /** Tier gating. "manager" excludes Coach; "all" includes everyone. */
   tier: StandingOrderTier;
   kind: StandingOrderKind;
   /** Matches `entryId` in `agents/skills/maya-platform/cron.md` § 2. */
@@ -116,7 +119,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     triggers: "Cron `weekly_review` Sunday 9:00pm local.",
     approvalGates: "None — creator consumes; they don't approve.",
     escalation:
-      "Pass aggressively through citation firewall — highest-stakes weekly output. Drop unsupported claims rather than ship them. Starter receives a stripped-down low-thinking version.",
+      "Pass aggressively through citation firewall — highest-stakes weekly output. Drop unsupported claims rather than ship them. Coach receives a stripped-down low-thinking version.",
     cronMessage:
       "Run weekly review: synthesize 7 days — top posts, what worked, what didn't, one hypothesis + one experiment. Write `weeklyReviews`, push 3-line summary.",
   },
@@ -129,13 +132,13 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     defaultCron: "0 16 * * 0",
     session: "isolated",
     scope:
-      "Generate 7-day per-platform plan via `maya-content-arc-planner`. Fold Pro+ calendar arcs. Write `contentPlans`; push 'review your Sunday plan'.",
+      "Generate 7-day per-platform plan via `maya-content-arc-planner`. Fold Manager calendar arcs. Write `contentPlans`; push 'review your Sunday plan'.",
     triggers: "Cron `weekly_content_plan` Sunday 4:00pm local.",
     approvalGates: "Creator approves each idea card in the Plan screen before it leaves draft. Maya never auto-publishes.",
     escalation:
-      "Starter is single-platform (maxHandles=1). If `creatorPicture` missing, fall back to handles-only plan and surface the gap.",
+      "Both tiers reach all 5 platforms; if maxHandles cap is hit. If `creatorPicture` missing, fall back to handles-only plan and surface the gap.",
     cronMessage:
-      "Run weekly content plan: read 30d metrics + hookLibrary + trends + Pro+ calendar arcs, call `maya-content-arc-planner` per theme, write `contentPlans`, push review message.",
+      "Run weekly content plan: read 30d metrics + hookLibrary + trends + Manager calendar arcs, call `maya-content-arc-planner` per theme, write `contentPlans`, push review message.",
   },
   {
     id: "performance_check_2h",
@@ -228,8 +231,8 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     tier: "all",
     kind: "event",
     scope:
-      "On a new post, run `maya-hook-extractor` (multimodal Pro+ / caption-only Starter), write `posts.mayaAnnotation`, append novel patterns to `hookLibrary`, ping with one-sentence hook read + one suggestion.",
-    triggers: "Event: ScrapeCreators delta. Latency cap by tier (Starter 1800s, Pro 600s, Studio 300s).",
+      "On a new post, run `maya-hook-extractor` (multimodal both tiers), write `posts.mayaAnnotation`, append novel patterns to `hookLibrary`, ping with one-sentence hook read + one suggestion.",
+    triggers: "Event: ScrapeCreators delta. Latency cap by tier (Coach 600s, Manager 300s).",
     approvalGates: "None — first-impression read is a push.",
     escalation:
       "If platform-fetch fails twice, drop to caption-only rather than skip. Hold judgment for the 2h check — early metrics are noise.",
@@ -237,7 +240,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "brand_email_triage",
     title: "Brand email triage",
-    tier: "pro+",
+    tier: "manager",
     kind: "event",
     scope:
       "Triage inbound brand email via `maya-brand-deal-triager`: classify, extract offer, run `maya-rate-calculator`, draft 4 reply variants tuned to floor rate. Write `brandDeals`; ping with summary.",
@@ -275,7 +278,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "hook_library_build",
     title: "Hook library auto-build",
-    tier: "pro+",
+    tier: "manager",
     kind: "event",
     scope:
       "On an outlier post (>2× baseline), run `maya-hook-extractor`; append to `hookLibrary` with citation + repeat-it suggestion.",
@@ -288,7 +291,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "competitor_watch",
     title: "Competitor watch",
-    tier: "pro+",
+    tier: "manager",
     kind: "cron",
     cronEntryId: "competitor_watch",
     defaultCron: "0 9 * * *",
@@ -296,16 +299,16 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     scope:
       "Pull each named peer's last 24h posts + metric deltas; write `competitorObservations`; surface to Trends.",
     triggers:
-      "Cron 9:00am local. Conditional — silent no-op if `creators.namedPeers` empty. Pro caps at 5 peers; Studio at 10.",
+      "Cron 9:00am local. Conditional — silent no-op if `creators.namedPeers` empty. Coach caps at 5 peers; Manager at 10.",
     approvalGates: "None — read surface.",
     escalation: "Do not editorialize about whether to copy a peer's move. Cite the post; the creator decides.",
     cronMessage:
-      "Run competitor watch: pull last 24h posts + deltas for each named peer (Pro: 5, Studio: 10), write `competitorObservations`, surface to Trends.",
+      "Run competitor watch: pull last 24h posts + deltas for each named peer (Coach: 5, Manager: 10), write `competitorObservations`, surface to Trends.",
   },
   {
     id: "calendar_lookahead",
     title: "Calendar-aware content planning",
-    tier: "pro+",
+    tier: "manager",
     kind: "cron",
     cronEntryId: "calendar_lookahead",
     defaultCron: "0 8 * * *",
@@ -322,14 +325,14 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "manager_readiness_packet_quarterly",
     title: "Manager-readiness packet (quarterly)",
-    tier: "pro+",
+    tier: "manager",
     kind: "cron",
     cronEntryId: "manager_readiness_packet_quarterly",
     defaultCron: "0 14 1 */3 *",
     session: "isolated",
     scope:
       "Run `maya-packet-generator` against full creatorPicture + 90d metrics + brandDeals + audience + top hooks. Render PDF via `pdf` skill. Write `packetGenerations`; push 'your packet is ready' with link.",
-    triggers: "Cron 1st of every quarter 2:00pm local. Studio additionally permits on-demand.",
+    triggers: "Cron 1st of every quarter 2:00pm local. Manager additionally permits on-demand.",
     approvalGates: "None — creator consumes the artifact.",
     escalation:
       "Pass content through citation firewall before render. Render failures retry once; second failure surfaces to operator.",
@@ -339,7 +342,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "revenue_snapshot",
     title: "Revenue snapshot",
-    tier: "pro+",
+    tier: "manager",
     kind: "cron",
     cronEntryId: "revenue_snapshot",
     defaultCron: "0 9 * * 1",
@@ -357,7 +360,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "industry_intel_daily",
     title: "Industry intel",
-    tier: "pro+",
+    tier: "manager",
     kind: "cron",
     cronEntryId: "industry_intel_daily",
     defaultCron: "30 7 * * *",
@@ -373,14 +376,14 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "algo_research_tiktok",
     title: "Platform algorithm research — TikTok",
-    tier: "pro+",
+    tier: "manager",
     kind: "cron",
     cronEntryId: "algo_research_tiktok",
     defaultCron: "0 4 * * 1",
     session: "isolated",
     scope:
       "Call `maya-platform-algo-researcher` for TikTok via Brave Search across allowlisted creator-economy publications. Update global `platformAlgoCache`.",
-    triggers: "Cron Monday 4:00am local. Studio gets a second weekly run Thursday 4am.",
+    triggers: "Cron Monday 4:00am local. Manager gets a second weekly run Thursday 4am.",
     approvalGates: "None — cache write.",
     escalation: "If Brave returns 0 results, retain prior cache; log to `mayaActionLog`.",
     cronMessage:
@@ -389,7 +392,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "algo_research_instagram",
     title: "Platform algorithm research — Instagram",
-    tier: "pro+",
+    tier: "manager",
     kind: "cron",
     cronEntryId: "algo_research_instagram",
     defaultCron: "15 4 * * 1",
@@ -403,7 +406,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "algo_research_youtube",
     title: "Platform algorithm research — YouTube",
-    tier: "pro+",
+    tier: "manager",
     kind: "cron",
     cronEntryId: "algo_research_youtube",
     defaultCron: "30 4 * * 1",
@@ -417,7 +420,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "algo_research_linkedin",
     title: "Platform algorithm research — LinkedIn",
-    tier: "pro+",
+    tier: "manager",
     kind: "cron",
     cronEntryId: "algo_research_linkedin",
     defaultCron: "45 4 * * 1",
@@ -431,7 +434,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "algo_research_x",
     title: "Platform algorithm research — X",
-    tier: "pro+",
+    tier: "manager",
     kind: "cron",
     cronEntryId: "algo_research_x",
     defaultCron: "0 5 * * 1",
@@ -445,14 +448,14 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "growth_coach",
     title: "Growth coaching",
-    tier: "pro+",
+    tier: "manager",
     kind: "folded",
     scope:
       "Call `maya-growth-coach` (creatorPicture + last-30-post metrics + soul goals + optional currentStruggle). Output prioritized moves with cited evidence + anti-patterns.",
     triggers: "Folded into morning brief daily; on-demand from chat.",
     approvalGates: "None — coaching is suggestion.",
     escalation:
-      "Strict citation discipline. Never invent expectedOutcome — be explicit about uncertainty. Pro+ only; Starter gets lighter coaching in evening recap.",
+      "Strict citation discipline. Never invent expectedOutcome — be explicit about uncertainty. Manager only; Coach gets lighter coaching in evening recap.",
   },
   {
     id: "cross_post_distribution",
@@ -464,7 +467,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     triggers: "On-demand: creator approves a piece, OR auto-folded into weekly content plan.",
     approvalGates: "Maya never auto-publishes. Variants are prepared for the creator to publish.",
     escalation:
-      "Starter limited to 1-platform by handle cap. If deep-link scheme unavailable, fall back to 'open composer with caption pre-filled.'",
+      "Both tiers reach all 5 platforms. If deep-link scheme unavailable, fall back to 'open composer with caption pre-filled.'",
   },
   {
     id: "underperformance_diagnosis",
@@ -476,7 +479,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     triggers: "Folded into evening recap when posts underperformed; on-demand from chat ('why did [post] flop?').",
     approvalGates: "None — diagnosis is informational.",
     escalation:
-      "Pro+ benefits from richer hook-pattern data in `posts.mayaAnnotation`; Starter falls back to first-line-of-caption as opener proxy.",
+      "Manager benefits from richer hook-pattern data in `posts.mayaAnnotation`; Coach falls back to first-line-of-caption as opener proxy.",
   },
   {
     id: "pre_post_review",
@@ -493,11 +496,11 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
 
 /**
  * Returns standing orders enabled for the given plan tier.
- * Starter excludes "pro+" entries; Pro and Studio include all.
+ * Coach excludes "manager" entries; Manager includes all.
  */
 export function standingOrdersForPlan(plan: Plan): ReadonlyArray<StandingOrderProgram> {
-  if (plan === "starter") {
-    return STANDING_ORDERS.filter((p) => p.tier !== "pro+");
+  if (plan === "coach") {
+    return STANDING_ORDERS.filter((p) => p.tier !== "manager");
   }
   return STANDING_ORDERS;
 }
