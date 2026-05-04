@@ -3,130 +3,178 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
-  ArrowUpRight,
+  Brain,
   Calendar,
-  Inbox,
+  ClipboardCheck,
+  FileText,
+  Handshake,
   LineChart,
-  Plus,
+  Megaphone,
+  MessageSquareText,
+  Search,
   ShieldCheck,
   Sparkles,
+  Trophy,
 } from "lucide-react";
 
 type Billing = "monthly" | "annual";
 
-type Tier = {
-  name: string;
-  monthly: number;
-  annual: number;
-  headline: string;
-  bullets: string[];
-  recommended?: boolean;
-};
+const FEATURES: Array<{
+  icon: typeof Sparkles;
+  title: string;
+  body: string;
+}> = [
+  {
+    icon: Search,
+    title: "She finds what's trending — for you",
+    body: "Maya watches your niche daily. Hashtags, sounds, formats, competitors. She surfaces only the trends that fit what's already working for your audience — not the algorithm-of-the-week.",
+  },
+  {
+    icon: Sparkles,
+    title: "She thinks through ideas with you",
+    body: "Send her a half-baked thought and she sharpens it into a hook, a script, a caption — anchored in your top-performing patterns and your voice.",
+  },
+  {
+    icon: Calendar,
+    title: "She plans your week",
+    body: "Sunday at 4pm: next week's content arc, per-platform variants, posting times built around your real calendar. Filming windows held against your schedule so it actually fits your life.",
+  },
+  {
+    icon: LineChart,
+    title: "She reads your performance",
+    body: "Every two hours during the day, every post you publish, every metric shift. She tells you why the Tuesday Reel hit 2.3× and the Thursday one stalled — and what to do about both.",
+  },
+  {
+    icon: MessageSquareText,
+    title: "She lives in your messages",
+    body: "Morning brief at 7am. Performance pings during the day. Evening recap at 7pm. Sunday plan. Weekly review. All on iMessage, no app to open, no inbox to check.",
+  },
+  {
+    icon: Trophy,
+    title: "She holds you accountable",
+    body: "You said three TikToks this week. You posted one. Friday at 10am she texts. No nag — a specific, grounded nudge with the exact unblock to move you forward.",
+  },
+  {
+    icon: Handshake,
+    title: "She responds to brand DMs for you",
+    body: "Reads every brand message that lands in your inbox, drafts the reply in your voice, surfaces the deal value, anchors on your floor rate. Sends under your auto-send threshold or hands it back for approval.",
+  },
+  {
+    icon: Megaphone,
+    title: "She reaches out to brands for you",
+    body: "Spots a brand fit you'd be perfect for, finds the right person, drafts the cold pitch in your voice, sends it. You see the outbound thread before she replies again — every time.",
+  },
+  {
+    icon: FileText,
+    title: "She reads contracts for you",
+    body: "Drop a brand-deal PDF in chat. She flags red-flags in plain language: exclusivity, IP grants, payment terms, kill fees, FTC compliance. Tells you what to push back on. Never tells you a clause is fine — only 'no flag detected here.'",
+  },
+  {
+    icon: ClipboardCheck,
+    title: "She drafts your manager packet",
+    body: "Quarterly, or on-demand: a polished PDF a real manager could read in 5 minutes. Audience demographics, top hooks, brand history, growth trajectory. For when a real manager is calling.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "She remembers everything",
+    body: "Your goals, your tone, your floor rate, the brands you've worked with, the hooks that hit, the ones that didn't. The longer you have her, the more she sounds like she knows you — because she does.",
+  },
+  {
+    icon: Brain,
+    title: "She tells you the truth",
+    body: "Anti-sycophancy is non-negotiable. She never says 'amazing post.' If a post underperforms, she says so plainly — with the data — and proposes what's next. The grounded read you can't get anywhere else.",
+  },
+];
 
-const TIERS: Tier[] = [
+const SHOWCASE: Array<{
+  label: string;
+  bubbles: string[];
+}> = [
   {
-    name: "Starter",
-    monthly: 19.99,
-    annual: 199,
-    headline: "1 platform, web + SMS, manual deal entry. Maya's daily core.",
-    bullets: [
-      "1 connected platform",
-      "Web chat + SMS",
-      "Morning brief, evening recap, weekly review",
-      "200 chat turns / mo",
+    label: "Monday · 7:00 AM · Morning brief",
+    bubbles: [
+      "Yesterday's 4am Reel is at 47k — 5.2× your trailing 30. Three of your top five all-time use the constraint hook. Pattern's earning its keep.",
+      "Today: ride it. Sequel — same hook shape, different exercise. Earlier is better; your audience's engagement window on this account is 4am–8am.",
     ],
   },
   {
-    name: "Pro",
-    monthly: 39.99,
-    annual: 399,
-    headline:
-      "Up to 3 platforms, every channel, full Gmail deal desk. The default.",
-    bullets: [
-      "Up to 3 platforms",
-      "iMessage, WhatsApp, SMS, web",
-      "All 17 proactive behaviors",
-      "Full Gmail brand-deal triage",
-      "Calendar-aware content arcs",
-      "5 named competitors watched",
-      "Unlimited chat",
+    label: "Friday · 10:14 AM · Accountability",
+    bubbles: [
+      "You said three TikToks this week. Posted one. Today is Friday.",
+      "Your 'dumbbell move for back pain' hook is in your top set, and you haven't reused it in six weeks. Could film it in 20 min.",
     ],
-    recommended: true,
   },
   {
-    name: "Studio",
-    monthly: 79.99,
-    annual: 799,
-    headline:
-      "Up to 5 platforms, brand outreach, multi-account. For the full-time creator.",
-    bullets: [
-      "Up to 5 platforms",
-      "Priority routing & faster cadence",
-      "Brand outreach via Apollo / Hunter",
-      "10 named competitors watched",
-      "Up to 3 personas",
-      "On-demand readiness packets",
+    label: "Tuesday · 2:33 PM · Brand DM",
+    bubbles: [
+      "Glossier reached out four days ago via your IG inbox. You missed it.",
+      "$1.2K, dad-fitness recovery launch, real account, real person.",
+      "Want me to draft a reply? I'd anchor on your morning routine angle since your audience over-indexes there.",
     ],
   },
 ];
 
 const FAQ: { q: string; a: string }[] = [
   {
+    q: "What does Maya actually text me?",
+    a: "Specific, grounded things. 'Your 4am Reel is at 47k — 5.2× your trailing.' 'You said three posts this week, you've posted one — what's blocking the second?' 'Glossier reached out four days ago, want me to draft a reply?' Never platitudes, never 'great post,' never generic.",
+  },
+  {
     q: "Does Maya post for me?",
-    a: "No. Maya prepares everything — hook, script, caption, suggested time, per-platform variant — for you to post in one tap. We've kept the moment-of-publishing in your hands deliberately. Your account, your voice, your call.",
+    a: "No. Maya prepares everything — hook, caption, cut, time, per-platform variant — and hands it back to you to publish in one tap. The moment of publishing stays your call. Your account, your voice.",
   },
   {
-    q: "How does the 14-day Pro trial work?",
-    a: "No card required. You get full Pro for 14 days. On day 12, Maya nudges you to add a card. If you don't, the account quietly downgrades to Starter limits — you keep your data, you keep your Maya, you just lose the Pro-only behaviors.",
+    q: "Can Maya email a brand without asking me?",
+    a: "Only if you turn on auto-send and set a threshold. Below your threshold, Maya drafts, voice-checks, cite-checks, and sends through your Gmail. Above your threshold, or on cold outreach to a new brand, she always asks first. You can leave auto-send off and Maya stays draft-only — same Maya, just slower outbound.",
   },
   {
-    q: "Which messengers does Maya live in?",
-    a: "iMessage (recommended for iPhone), WhatsApp (recommended for Android), SMS as a fallback, and web chat from your dashboard. You pick at onboarding, you can change it any time. Maya routes outbound messages to whatever you've set.",
+    q: "How does the 14-day trial work?",
+    a: "No card required. You get the full thing — outreach, brand replies, contracts, planning, the works — for 14 days. On day 12, Maya nudges you. On day 14 you choose your level or do nothing and quietly downgrade. You keep your data and your Maya either way.",
   },
   {
-    q: "What does Maya actually see about my accounts?",
-    a: "Public post data, public audience demographics, your own comments, and whatever you explicitly connect — Gmail, Stripe, Calendar. She never logs in as you. She reads through ScrapeCreators (a public-data layer), and writes only through OAuth scopes you grant per provider.",
+    q: "Which channels does she watch?",
+    a: "TikTok, Instagram, YouTube, LinkedIn, X. She's platform-aware — what works on TikTok rarely works on LinkedIn, and Maya treats them differently. Connect by handle at onboarding. She never logs in as you.",
   },
   {
-    q: "Will Maya sound like a robot pretending to be me?",
-    a: "She isn't trying to be you. She's trying to manage you. Maya has her own voice — direct, grounded, not flattering — and references your work specifically. You set the tone (supportive / strategic / tough-love) at onboarding and can re-tune any time from Profile.",
+    q: "What data does she actually read?",
+    a: "Public post data, public audience demographics, your own comments and DMs, plus whatever you explicitly connect — Gmail, Stripe, Google Calendar. She reads through ScrapeCreators (a public-data layer) and writes only through OAuth scopes you grant per provider.",
   },
   {
-    q: "What happens if I cancel?",
-    a: "Maya stops at the end of the period. Your data export is one click — posts, plans, deals, briefs, all of it. We don't hold creator data hostage; you can take Maya's full memory of your career with you.",
+    q: "What if I don't like her advice?",
+    a: "Reply 'no' or 'ignore' and she remembers. Maya isn't a generic recommender — she learns your account over weeks. The longer you have her, the more she sounds like she knows you, because she actually does.",
   },
 ];
 
-export default function Home() {
+export default function CreatorsLanding() {
   const [billing, setBilling] = useState<Billing>("monthly");
 
   return (
     <div className="relative isolate flex min-h-screen flex-col">
       <Nav />
-      <main className="relative z-10 flex-1">
+      <main className="relative z-10 flex-1 pb-24 sm:pb-0">
         <Hero />
-        <Marquee />
         <Features />
-        <ConversationShowcase />
+        <Showcase />
         <Pricing billing={billing} setBilling={setBilling} />
         <Faq />
       </main>
       <Footer />
+      <MobileStickyCta />
     </div>
   );
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*                                  NAV                                       */
+/*                              NAV  +  TOGGLE                                 */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 function Nav() {
   return (
-    <header className="relative z-20 px-6 pt-6 sm:px-10 sm:pt-8">
-      <div className="mx-auto flex max-w-7xl items-center justify-between">
+    <header className="relative z-20 px-5 pt-[max(env(safe-area-inset-top),1rem)] sm:px-10 sm:pt-8">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
         <Link
           href="/"
-          className="group inline-flex items-center gap-2"
+          className="inline-flex items-center gap-2 flex-none"
           aria-label="HeyMaya home"
         >
           <Logo />
@@ -134,451 +182,154 @@ function Nav() {
             HeyMaya
           </span>
         </Link>
-        <nav className="hidden items-center gap-8 text-sm text-paper-dim md:flex">
-          <a href="#how" className="transition-colors hover:text-paper">
-            How she works
-          </a>
-          <a href="#showcase" className="transition-colors hover:text-paper">
-            Conversation
-          </a>
-          <a href="#pricing" className="transition-colors hover:text-paper">
-            Pricing
-          </a>
-          <a href="#faq" className="transition-colors hover:text-paper">
-            FAQ
-          </a>
-        </nav>
-        <div className="flex items-center gap-2">
+
+        <AudienceToggle current="creators" />
+
+        <div className="flex items-center gap-3 flex-none">
           <Link
             href="/sign-in"
             className="hidden text-sm text-paper-dim transition-colors hover:text-paper sm:inline"
           >
             Sign in
           </Link>
-          <Link href="/sign-up?plan=pro&trial=true" className="btn btn-primary h-10 px-4 text-sm">
-            Hire Maya
+          <Link
+            href="/sign-up?trial=true"
+            className="btn btn-primary !min-h-11 !px-4 !text-sm"
+          >
+            Start trial
           </Link>
         </div>
       </div>
+
+      <nav className="mx-auto mt-6 hidden max-w-7xl items-center justify-center gap-8 text-sm text-paper-dim md:flex">
+        <a href="#features" className="transition-colors hover:text-paper">
+          What she does
+        </a>
+        <a href="#showcase" className="transition-colors hover:text-paper">
+          How she shows up
+        </a>
+        <a href="#pricing" className="transition-colors hover:text-paper">
+          Pricing
+        </a>
+        <a href="#faq" className="transition-colors hover:text-paper">
+          FAQ
+        </a>
+      </nav>
     </header>
+  );
+}
+
+function AudienceToggle({ current }: { current: "creators" | "business" }) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Audience"
+      className="flex items-center rounded-full border border-[var(--hairline)] bg-ink-2 p-1"
+    >
+      <Link
+        href="/creators"
+        role="tab"
+        aria-selected={current === "creators"}
+        className={`rounded-full px-4 text-sm transition-colors min-h-10 inline-flex items-center ${
+          current === "creators"
+            ? "bg-paper text-ink"
+            : "text-paper-dim hover:text-paper"
+        }`}
+      >
+        For creators
+      </Link>
+      <Link
+        href="/business"
+        role="tab"
+        aria-selected={current === "business"}
+        className={`rounded-full px-4 text-sm transition-colors min-h-10 inline-flex items-center ${
+          current === "business"
+            ? "bg-paper text-ink"
+            : "text-paper-dim hover:text-paper"
+        }`}
+      >
+        For businesses
+      </Link>
+    </div>
   );
 }
 
 function Logo() {
   return (
     <span
-      aria-hidden
+      aria-hidden="true"
       className="grid h-8 w-8 place-items-center rounded-full bg-lime text-ink"
-      style={{ boxShadow: "0 0 0 1px rgba(214,255,61,0.3), 0 6px 24px -6px rgba(214,255,61,0.5)" }}
     >
-      <span className="font-display text-lg leading-none">m</span>
+      <span className="font-display text-base">M</span>
     </span>
   );
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*                                  HERO                                      */
+/*                                  HERO                                       */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 function Hero() {
   return (
-    <section className="relative px-6 pt-16 sm:px-10 sm:pt-24 lg:pt-32">
-      <div className="mx-auto max-w-7xl">
-        <div className="grid grid-cols-1 gap-14 lg:grid-cols-12 lg:gap-10">
-          {/* Headline column */}
-          <div className="lg:col-span-7">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--hairline-strong)] px-3 py-1 text-xs uppercase tracking-[0.18em] text-paper-dim">
-              <span className="h-1.5 w-1.5 rounded-full bg-lime" />
-              Now in beta — 5K to 500K creators
-            </div>
-            <h1 className="mt-6 font-display text-[clamp(2.75rem,7vw,5.75rem)] leading-[1.02] tracking-[-0.02em] text-paper">
-              Your AI creator
-              <br />
-              manager.{" "}
-              <span className="italic text-paper-dim">
-                Hire her in 4 minutes.
-              </span>
-            </h1>
-            <p className="mt-7 max-w-xl text-lg leading-relaxed text-paper-dim">
-              Maya plans your week, watches your performance, triages your brand
-              emails, and tells you what to post next — every day, in your
-              messages. Not an app you open. A manager you reply to.
-            </p>
-            <div className="mt-9 flex flex-wrap items-center gap-3">
-              <Link
-                href="/sign-up?plan=pro&trial=true"
-                className="btn btn-primary group"
-              >
-                Hire Maya
-                <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-[1px] group-hover:translate-x-[1px]" />
-              </Link>
-              <a href="#how" className="btn btn-ghost">
-                How she works
-              </a>
-              <span className="ml-1 text-sm text-paper-faint">
-                14-day Pro trial · no card required
-              </span>
-            </div>
+    <section className="px-5 pt-16 sm:px-10 sm:pt-24">
+      <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.15fr_1fr] lg:gap-16">
+        <div>
+          <h1 className="font-display text-5xl leading-[1.02] tracking-tight text-paper sm:text-6xl lg:text-7xl">
+            Maya. Your social
+            <br />
+            media manager.
+          </h1>
+          <p className="mt-6 max-w-xl text-lg leading-relaxed text-paper-dim sm:text-xl">
+            She watches every post you make, plans your week, holds you
+            accountable, drafts your brand replies, and lives in your messages.
+            She runs the parts of your career you don't have time for.
+          </p>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <Link href="/sign-up?trial=true" className="btn btn-primary">
+              Start your 14-day trial
+            </Link>
+            <a href="#features" className="btn btn-ghost">
+              See what she does
+            </a>
           </div>
-
-          {/* Quote / receipt column */}
-          <aside className="lg:col-span-5">
-            <div className="relative">
-              {/* The little manila tag at the corner */}
-              <div className="absolute -top-3 right-6 z-10 rounded-sm bg-lime px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest text-ink">
-                Brief · 07:02
-              </div>
-              <div className="relative overflow-hidden rounded-2xl border border-[var(--hairline-strong)] bg-ink-2 p-7 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.6)]">
-                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-paper-faint">
-                  <Sparkles className="h-3.5 w-3.5 text-lime" />
-                  Maya · this morning
-                </div>
-                <p className="mt-5 font-display text-2xl italic leading-snug text-paper">
-                  &ldquo;Your &lsquo;POV: I tried…&rsquo; hook on Monday hit
-                  340K. Wednesday&rsquo;s &lsquo;Day in my life&rsquo; flatlined
-                  at 8K. I drafted three new POV openers for Thursday — want to
-                  see them?&rdquo;
-                </p>
-                <div className="mt-6 flex items-center justify-between border-t border-[var(--hairline)] pt-5 text-xs font-mono text-paper-faint">
-                  <span>cited · @yourhandle/posts/9382, /9407</span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-lime" />
-                    grounded
-                  </span>
-                </div>
-              </div>
-              {/* shadow-tile behind, rotated, for editorial feel */}
-              <div
-                aria-hidden
-                className="absolute -bottom-4 -right-4 -z-10 h-full w-full rounded-2xl border border-[var(--hairline)] bg-ink-3"
-                style={{ transform: "rotate(2.5deg)" }}
-              />
-            </div>
-          </aside>
+          <p className="mt-4 text-sm italic text-paper-faint">
+            No card required · cancel anytime
+          </p>
         </div>
+        <HeroIMessage />
       </div>
     </section>
   );
 }
 
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                              MARQUEE STRIP                                 */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-function Marquee() {
-  const items = [
-    "TikTok",
-    "Instagram",
-    "YouTube",
-    "LinkedIn",
-    "X",
-    "Threads",
-    "Pinterest",
-    "Reddit",
-    "Snapchat",
-    "Twitch",
-    "Bluesky",
-    "Substack",
-  ];
-  // Doubled list so the loop is seamless.
-  const loop = [...items, ...items];
-
+function HeroIMessage() {
   return (
-    <section
-      aria-label="Supported platforms"
-      className="mt-24 border-y border-[var(--hairline)] bg-ink-2/40 py-5 sm:mt-32"
-    >
-      <div className="flex items-center gap-8">
-        <span className="ml-6 hidden shrink-0 font-mono text-[11px] uppercase tracking-widest text-paper-faint sm:inline">
-          Reads · 27 platforms
-        </span>
-        <div className="relative flex-1 overflow-hidden">
-          <div className="marquee-track flex w-max gap-12">
-            {loop.map((item, i) => (
-              <span
-                key={`${item}-${i}`}
-                className="font-display text-2xl tracking-tight text-paper-dim"
-              >
-                {item}{" "}
-                <span className="text-paper-faint">·</span>
-              </span>
-            ))}
-          </div>
-          {/* edge fades */}
-          <div className="pointer-events-none absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-[var(--ink)] to-transparent" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-[var(--ink)] to-transparent" />
+    <div className="relative">
+      <div className="rounded-3xl border border-[var(--hairline)] bg-ink-2 p-5 shadow-2xl sm:p-6">
+        <div className="mb-4 flex items-center gap-2 text-xs text-paper-faint">
+          <span className="grid h-7 w-7 place-items-center rounded-full bg-lime text-ink font-display text-xs">
+            M
+          </span>
+          <span className="font-medium text-paper">Maya</span>
+          <span>· Tuesday, 4:02 AM</span>
+        </div>
+        <div className="space-y-2.5">
+          <Bubble side="them">
+            Your 4am POV reel hit 47k overnight — 5.2× your trailing.
+          </Bubble>
+          <Bubble side="them">
+            Same hook shape as the dumbbell-back post that did 38k last
+            Tuesday. You've got a 4am pattern.
+          </Bubble>
+          <Bubble side="them">
+            Locking it as your morning slot. Want me to plan three more
+            constraint hooks for this week?
+          </Bubble>
+          <Bubble side="me">yeah do it</Bubble>
+          <Bubble side="them">on it. drafts in the plan tab by 10am.</Bubble>
         </div>
       </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                                FEATURES                                    */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-const FEATURES = [
-  {
-    no: "01",
-    icon: Calendar,
-    title: "Content strategy",
-    body: "She watches your top 30 posts, finds your hooks that worked, and plans next week around them. Calendar-aware: got a wedding, trip, or launch coming up? Maya plans content arcs around your real life — build-up, day-of, recap.",
-    tag: "Plans, doesn't post",
-  },
-  {
-    no: "02",
-    icon: Inbox,
-    title: "Deal desk",
-    body: "Brand emails come in, Maya drafts 4 reply variants tuned to your floor rate, flags red-flag contracts, and books shoots in your calendar. You approve, she sends.",
-    tag: "Drafts, you approve",
-  },
-  {
-    no: "03",
-    icon: LineChart,
-    title: "Accountability",
-    body: "Morning brief at 7am, evening recap at 7pm, Sunday weekly review. She tells you what's working, what's not, and what to fix — honestly, not flatteringly.",
-    tag: "Honest, not flattering",
-  },
-] as const;
-
-function Features() {
-  return (
-    <section
-      id="how"
-      className="px-6 pt-28 sm:px-10 sm:pt-36 lg:pt-44"
-    >
-      <div className="mx-auto max-w-7xl">
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
-          <div className="lg:col-span-4">
-            <span className="font-mono text-xs uppercase tracking-[0.22em] text-paper-faint">
-              §01 · What she does
-            </span>
-            <h2 className="mt-4 font-display text-4xl leading-[1.05] tracking-tight text-paper sm:text-5xl">
-              The operational layer of a creator career — handled by someone
-              who&rsquo;s{" "}
-              <span className="italic text-paper-dim">always paying attention.</span>
-            </h2>
-          </div>
-          <div className="lg:col-span-8">
-            <ul className="grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-[var(--hairline-strong)] bg-[var(--hairline)] sm:grid-cols-1">
-              {FEATURES.map((f) => {
-                const Icon = f.icon;
-                return (
-                  <li
-                    key={f.no}
-                    className="group relative flex flex-col gap-5 bg-ink-2 p-7 transition-colors hover:bg-ink-3 sm:flex-row sm:items-start sm:gap-7 sm:p-9"
-                  >
-                    <div className="flex shrink-0 items-center gap-4 sm:flex-col sm:items-start sm:gap-3">
-                      <span className="font-mono text-xs text-paper-faint">
-                        {f.no}
-                      </span>
-                      <span className="grid h-10 w-10 place-items-center rounded-full border border-[var(--hairline-strong)] text-lime">
-                        <Icon className="h-4 w-4" strokeWidth={1.75} />
-                      </span>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-baseline justify-between gap-3">
-                        <h3 className="font-display text-2xl text-paper sm:text-3xl">
-                          {f.title}
-                        </h3>
-                        <span className="rounded-full border border-[var(--hairline-strong)] px-2.5 py-0.5 text-[11px] font-mono uppercase tracking-wider text-paper-dim">
-                          {f.tag}
-                        </span>
-                      </div>
-                      <p className="mt-3 max-w-2xl text-base leading-relaxed text-paper-dim">
-                        {f.body}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                       CONVERSATION SHOWCASE (CENTERPIECE)                  */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-function ConversationShowcase() {
-  return (
-    <section
-      id="showcase"
-      className="px-6 pt-28 sm:px-10 sm:pt-36 lg:pt-44"
-    >
-      <div className="mx-auto max-w-7xl">
-        <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12 lg:gap-16">
-          <div className="lg:col-span-5 lg:sticky lg:top-24">
-            <span className="font-mono text-xs uppercase tracking-[0.22em] text-paper-faint">
-              §02 · How Maya talks to you
-            </span>
-            <h2 className="mt-4 font-display text-4xl leading-[1.05] tracking-tight text-paper sm:text-5xl">
-              Not an app you open. A{" "}
-              <span className="italic text-paper-dim">manager you reply to.</span>
-            </h2>
-            <p className="mt-6 text-lg leading-relaxed text-paper-dim">
-              Maya pushes the things that matter to your phone the moment they
-              matter. Specific. Cited. Grounded in what she actually saw on your
-              accounts.
-            </p>
-            <ul className="mt-8 space-y-4 text-paper-dim">
-              <li className="flex items-start gap-3">
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
-                <span>
-                  <strong className="text-paper">Push, don&rsquo;t pull.</strong>{" "}
-                  She tells you. You don&rsquo;t check a dashboard.
-                </span>
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
-                <span>
-                  <strong className="text-paper">Grounded or silent.</strong>{" "}
-                  Every claim cites the post, the metric, the email.
-                </span>
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
-                <span>
-                  <strong className="text-paper">You publish.</strong> Maya
-                  prepares; you press post. Always.
-                </span>
-              </li>
-            </ul>
-          </div>
-
-          <div className="lg:col-span-7">
-            <Phone />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Phone() {
-  return (
-    <div className="relative mx-auto w-full max-w-sm">
-      {/* Decorative date stamp */}
-      <div className="absolute -left-6 top-10 hidden -rotate-90 origin-left font-mono text-[10px] uppercase tracking-[0.3em] text-paper-faint lg:block">
-        Mon · 7:02 am · iMessage
-      </div>
-
-      {/* Device frame */}
-      <div
-        className="relative rounded-[42px] border border-[var(--hairline-strong)] bg-black p-2 shadow-[0_50px_120px_-30px_rgba(0,0,0,0.8),inset_0_0_0_1px_rgba(255,255,255,0.04)]"
-        style={{ aspectRatio: "9 / 19" }}
-      >
-        {/* Dynamic Island */}
-        <div className="pointer-events-none absolute left-1/2 top-3 z-30 h-7 w-28 -translate-x-1/2 rounded-full bg-black" />
-
-        {/* Screen */}
-        <div className="relative h-full w-full overflow-hidden rounded-[34px] bg-[#000]">
-          {/* iMessage status / chat-header bar */}
-          <div className="flex items-center justify-between px-5 pb-3 pt-12 text-[11px] text-white/70">
-            <span className="font-medium">9:41</span>
-            <div className="flex items-center gap-1">
-              <SignalIcon />
-              <WifiIcon />
-              <BatteryIcon />
-            </div>
-          </div>
-          <div className="flex flex-col items-center border-b border-white/[0.06] px-5 pb-3">
-            <div className="grid h-12 w-12 place-items-center rounded-full bg-lime text-ink">
-              <span className="font-display text-xl leading-none">m</span>
-            </div>
-            <div className="mt-1 flex items-center gap-1 text-[11px] text-white/60">
-              <span className="font-medium text-white">Maya</span>
-              <ArrowUpRight className="h-3 w-3" />
-            </div>
-          </div>
-
-          {/* Message stream */}
-          <div className="flex flex-col gap-2.5 overflow-hidden px-3 py-4">
-            <TimeStamp>Today · 7:02 AM</TimeStamp>
-
-            <Bubble side="left" delay={0}>
-              Morning. Quick read on the weekend before today gets weird.
-            </Bubble>
-
-            <Bubble side="left" delay={120}>
-              Your &ldquo;POV: I tried…&rdquo; on Monday hit{" "}
-              <strong className="font-semibold">340K</strong>. The
-              &ldquo;Day in my life&rdquo; on Wed plateaued at{" "}
-              <strong className="font-semibold">8K</strong>. Same niche, same
-              length — different opener.
-            </Bubble>
-
-            <Bubble side="left" delay={240}>
-              Saves on the 340K post are{" "}
-              <strong className="font-semibold">9.4%</strong>. That&rsquo;s
-              algorithm fuel for the next 72h. Lean into POV format Thurs &amp; Fri.
-            </Bubble>
-
-            <Bubble side="left" delay={360}>
-              <span className="block">Drafted 3 POV openers for Thursday:</span>
-              <span className="mt-2 block rounded-2xl bg-black/40 px-3 py-2 text-[12px] leading-relaxed text-white/90">
-                1. &ldquo;POV: my therapist said one sentence and broke me&rdquo;
-                <br />
-                2. &ldquo;POV: you finally booked the trip&rdquo;
-                <br />
-                3. &ldquo;POV: 31 and starting over&rdquo;
-              </span>
-            </Bubble>
-
-            <Bubble side="left" delay={480}>
-              Want me to write the scripts? Also — Glossier&rsquo;s reply is
-              sitting in Gmail, $4K offer, below your floor. I drafted a
-              counter.
-            </Bubble>
-
-            <div className="reveal-up" style={{ animationDelay: "640ms" }}>
-              <div className="ml-auto mt-1 flex max-w-[78%] justify-end">
-                <div className="rounded-[20px] rounded-br-[6px] bg-[var(--imessage-blue)] px-3.5 py-2 text-[14px] leading-snug text-white shadow-[0_1px_0_rgba(0,0,0,0.2)]">
-                  yes scripts. send the counter.
-                </div>
-              </div>
-            </div>
-
-            <div className="reveal-up flex items-center gap-1 px-2" style={{ animationDelay: "820ms" }}>
-              <Dot />
-              <Dot delay={150} />
-              <Dot delay={300} />
-              <span className="ml-1 text-[10px] text-white/40">Maya</span>
-            </div>
-          </div>
-
-          {/* Chat input bar */}
-          <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 border-t border-white/[0.06] bg-black/80 px-3 py-2.5 backdrop-blur">
-            <button
-              aria-label="Add"
-              className="grid h-7 w-7 place-items-center rounded-full bg-white/10 text-white/70"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-            <div className="flex h-8 flex-1 items-center rounded-full border border-white/10 bg-white/[0.04] px-3 text-[12px] text-white/40">
-              iMessage
-            </div>
-            <button
-              aria-label="Send"
-              className="grid h-7 w-7 place-items-center rounded-full bg-[var(--imessage-blue)] text-white"
-            >
-              <ArrowUpRight className="h-4 w-4 -rotate-45" />
-            </button>
-          </div>
-
-          {/* Home indicator */}
-          <div className="absolute bottom-1 left-1/2 h-1 w-28 -translate-x-1/2 rounded-full bg-white/40" />
-        </div>
-      </div>
-
-      {/* Small caption under device */}
-      <p className="mt-6 text-center font-mono text-[11px] uppercase tracking-[0.2em] text-paper-faint">
-        Real conversation shape · iMessage shown · WhatsApp / SMS / web also
-      </p>
+      <div className="pointer-events-none absolute -bottom-6 -right-6 hidden h-32 w-32 rounded-full bg-lime/10 blur-3xl sm:block" />
     </div>
   );
 }
@@ -586,23 +337,18 @@ function Phone() {
 function Bubble({
   children,
   side,
-  delay,
 }: {
   children: React.ReactNode;
-  side: "left" | "right";
-  delay: number;
+  side: "me" | "them";
 }) {
-  const isLeft = side === "left";
+  const isMe = side === "me";
   return (
-    <div
-      className={`reveal-up flex ${isLeft ? "justify-start" : "justify-end"}`}
-      style={{ animationDelay: `${delay}ms` }}
-    >
+    <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[82%] rounded-[20px] px-3.5 py-2 text-[14px] leading-snug shadow-[0_1px_0_rgba(0,0,0,0.2)] ${
-          isLeft
-            ? "rounded-bl-[6px] bg-[var(--imessage-gray)] text-white"
-            : "rounded-br-[6px] bg-[var(--imessage-blue)] text-white"
+        className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-snug ${
+          isMe
+            ? "rounded-br-md bg-[var(--imessage-blue)] text-white"
+            : "rounded-bl-md bg-[var(--imessage-gray)] text-white"
         }`}
       >
         {children}
@@ -611,53 +357,128 @@ function Bubble({
   );
 }
 
-function Dot({ delay = 0 }: { delay?: number }) {
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*                                  FEATURES                                   */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+function Features() {
   return (
-    <span
-      className="typing-dot inline-block h-1.5 w-1.5 rounded-full bg-white/60"
-      style={{ animationDelay: `${delay}ms` }}
-    />
+    <section id="features" className="px-5 pt-28 sm:px-10 sm:pt-36">
+      <div className="mx-auto max-w-7xl">
+        <div className="max-w-2xl">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-paper-faint">
+            What she does
+          </p>
+          <h2 className="mt-4 font-display text-4xl leading-tight tracking-tight text-paper sm:text-5xl">
+            All the parts of being a creator that aren't filming.
+          </h2>
+          <p className="mt-5 text-base leading-relaxed text-paper-dim sm:text-lg">
+            Maya is one social media manager. She does all of this. Pick the
+            level of help you want at the bottom — autonomy is the only
+            difference.
+          </p>
+        </div>
+        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((feature) => (
+            <FeatureCard key={feature.title} {...feature} />
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
-function TimeStamp({ children }: { children: React.ReactNode }) {
+function FeatureCard({
+  icon: Icon,
+  title,
+  body,
+}: {
+  icon: typeof Sparkles;
+  title: string;
+  body: string;
+}) {
   return (
-    <div className="text-center text-[10px] font-medium uppercase tracking-wider text-white/40">
-      {children}
-    </div>
-  );
-}
-
-function SignalIcon() {
-  return (
-    <svg width="14" height="10" viewBox="0 0 14 10" fill="currentColor" aria-hidden>
-      <rect x="0" y="7" width="2" height="3" rx="0.5" />
-      <rect x="4" y="5" width="2" height="5" rx="0.5" />
-      <rect x="8" y="3" width="2" height="7" rx="0.5" />
-      <rect x="12" y="0" width="2" height="10" rx="0.5" />
-    </svg>
-  );
-}
-function WifiIcon() {
-  return (
-    <svg width="14" height="10" viewBox="0 0 14 10" fill="currentColor" aria-hidden>
-      <path d="M7 9.5a1 1 0 100-2 1 1 0 000 2zm0-4.2c1.4 0 2.7.5 3.6 1.5l1.1-1.1A6.6 6.6 0 007 4.2a6.6 6.6 0 00-4.7 1.6L3.4 6.8A4.6 4.6 0 017 5.3zm0-3.5c2.4 0 4.6.9 6.3 2.4L14.4 3a8.6 8.6 0 00-14.8 0l1 1.1A8.6 8.6 0 017 1.8z" />
-    </svg>
-  );
-}
-function BatteryIcon() {
-  return (
-    <svg width="22" height="10" viewBox="0 0 22 10" fill="none" aria-hidden>
-      <rect x="0.5" y="0.5" width="18" height="9" rx="2" stroke="currentColor" opacity="0.5" />
-      <rect x="2" y="2" width="14" height="6" rx="1" fill="currentColor" />
-      <rect x="20" y="3" width="2" height="4" rx="0.5" fill="currentColor" opacity="0.5" />
-    </svg>
+    <article className="rounded-3xl border border-[var(--hairline)] bg-ink-2 p-6 sm:p-7">
+      <div className="grid h-10 w-10 place-items-center rounded-2xl bg-lime/10 text-lime">
+        <Icon className="h-5 w-5" />
+      </div>
+      <h3 className="mt-4 font-display text-xl tracking-tight text-paper">
+        {title}
+      </h3>
+      <p className="mt-2 text-sm leading-relaxed text-paper-dim">{body}</p>
+    </article>
   );
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*                                  PRICING                                   */
+/*                                  SHOWCASE                                   */
 /* ─────────────────────────────────────────────────────────────────────────── */
+
+function Showcase() {
+  return (
+    <section id="showcase" className="px-5 pt-28 sm:px-10 sm:pt-36">
+      <div className="mx-auto max-w-7xl">
+        <div className="max-w-2xl">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-paper-faint">
+            How she shows up
+          </p>
+          <h2 className="mt-4 font-display text-4xl leading-tight tracking-tight text-paper sm:text-5xl">
+            She lives in your messages. Not in another app you'll forget to
+            open.
+          </h2>
+        </div>
+        <div className="mt-12 grid gap-6 lg:grid-cols-3">
+          {SHOWCASE.map((item) => (
+            <article
+              key={item.label}
+              className="rounded-3xl border border-[var(--hairline)] bg-ink-2 p-6"
+            >
+              <span className="font-mono text-xs uppercase tracking-widest text-paper-faint">
+                {item.label}
+              </span>
+              <div className="mt-4 space-y-2.5">
+                {item.bubbles.map((b, i) => (
+                  <Bubble key={i} side="them">
+                    {b}
+                  </Bubble>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*                                  PRICING                                    */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+const TIER_DATA = [
+  {
+    key: "coach" as const,
+    name: "Coach",
+    monthly: 29,
+    annual: 249,
+    headline: "She tells you. You do it.",
+    description:
+      "Daily direction, planning, performance reads, accountability, idea sharpening, draft feedback, contract scans, brand-DM drafts. Every advisory thing on the list above. Coach hands you the move; you make it.",
+    excludes:
+      "Coach doesn't auto-send brand replies and doesn't reach out to brands cold. If you want her to do those for you — that's Manager.",
+  },
+  {
+    key: "manager" as const,
+    name: "Manager",
+    monthly: 99,
+    annual: 899,
+    headline: "She does it. You approve.",
+    description:
+      "Everything in Coach, plus: drafts and sends brand replies under your auto-send threshold, finds new brand opportunities, drafts and sends cold pitches, runs the brand back-and-forth. The full thing.",
+    excludes: null,
+    recommended: true,
+  },
+];
 
 function Pricing({
   billing,
@@ -667,31 +488,30 @@ function Pricing({
   setBilling: (b: Billing) => void;
 }) {
   return (
-    <section id="pricing" className="px-6 pt-28 sm:px-10 sm:pt-36 lg:pt-44">
+    <section id="pricing" className="px-5 pt-28 sm:px-10 sm:pt-36">
       <div className="mx-auto max-w-7xl">
-        <div className="flex flex-col items-start justify-between gap-8 md:flex-row md:items-end">
+        <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">
           <div className="max-w-2xl">
-            <span className="font-mono text-xs uppercase tracking-[0.22em] text-paper-faint">
-              §03 · Pricing
-            </span>
-            <h2 className="mt-4 font-display text-4xl leading-[1.05] tracking-tight text-paper sm:text-5xl">
-              Flat tiers. No credits.{" "}
-              <span className="italic text-paper-dim">No metering theatre.</span>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-paper-faint">
+              Pricing
+            </p>
+            <h2 className="mt-4 font-display text-4xl leading-tight tracking-tight text-paper sm:text-5xl">
+              Pick your level of help.
             </h2>
+            <p className="mt-4 max-w-xl text-base leading-relaxed text-paper-dim sm:text-lg">
+              Same Maya. The only difference between Coach and Manager is
+              autonomy — does she just tell you the move, or does she also do
+              the parts you'd rather not? Everyone starts on a 14-day trial
+              with full Manager autonomy.
+            </p>
           </div>
           <BillingToggle billing={billing} setBilling={setBilling} />
         </div>
-
-        <div className="mt-12 grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-[var(--hairline-strong)] bg-[var(--hairline)] lg:grid-cols-3">
-          {TIERS.map((t) => (
-            <PricingCard key={t.name} tier={t} billing={billing} />
+        <div className="mt-10 grid gap-5 sm:gap-6 lg:grid-cols-2">
+          {TIER_DATA.map((tier) => (
+            <PricingCard key={tier.key} tier={tier} billing={billing} />
           ))}
         </div>
-
-        <p className="mt-6 flex items-center gap-2 text-sm text-paper-faint">
-          <ShieldCheck className="h-4 w-4 text-lime" />
-          Plan changes prorate. Cancel anytime. Your data exports in one click.
-        </p>
       </div>
     </section>
   );
@@ -705,165 +525,114 @@ function BillingToggle({
   setBilling: (b: Billing) => void;
 }) {
   return (
-    <div
-      role="tablist"
-      aria-label="Billing period"
-      className="inline-flex items-center gap-1 rounded-full border border-[var(--hairline-strong)] bg-ink-2 p-1 text-sm"
-    >
-      <button
-        role="tab"
-        aria-selected={billing === "monthly"}
-        onClick={() => setBilling("monthly")}
-        className={`rounded-full px-4 py-1.5 transition-colors ${
-          billing === "monthly"
-            ? "bg-paper text-ink"
-            : "text-paper-dim hover:text-paper"
-        }`}
-      >
-        Monthly
-      </button>
-      <button
-        role="tab"
-        aria-selected={billing === "annual"}
-        onClick={() => setBilling("annual")}
-        className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 transition-colors ${
-          billing === "annual"
-            ? "bg-paper text-ink"
-            : "text-paper-dim hover:text-paper"
-        }`}
-      >
-        Annual
-        <span
-          className={`rounded-full px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider ${
-            billing === "annual"
-              ? "bg-ink text-lime"
-              : "bg-[var(--hairline-strong)] text-lime"
+    <div className="flex w-full items-center rounded-full border border-[var(--hairline)] bg-ink-2 p-1 sm:w-auto">
+      {(["monthly", "annual"] as const).map((option) => (
+        <button
+          key={option}
+          onClick={() => setBilling(option)}
+          className={`flex-1 rounded-full px-4 text-sm transition-colors min-h-11 sm:flex-initial ${
+            billing === option
+              ? "bg-paper text-ink"
+              : "text-paper-dim hover:text-paper"
           }`}
         >
-          −17%
-        </span>
-      </button>
+          {option === "monthly" ? "Monthly" : "Annual · save ~25%"}
+        </button>
+      ))}
     </div>
   );
 }
 
-function PricingCard({ tier, billing }: { tier: Tier; billing: Billing }) {
-  const price = billing === "monthly" ? tier.monthly : tier.annual / 12;
-  const totalAnnual = tier.annual;
-  const formattedPrice =
-    billing === "monthly"
-      ? `$${tier.monthly.toFixed(2)}`
-      : `$${price.toFixed(2)}`;
+function PricingCard({
+  tier,
+  billing,
+}: {
+  tier: (typeof TIER_DATA)[number];
+  billing: Billing;
+}) {
+  const price = billing === "monthly" ? tier.monthly : tier.annual;
+  const cadence = billing === "monthly" ? "/ month" : "/ year";
+  const annualEquiv =
+    billing === "annual" ? `$${(tier.annual / 12).toFixed(0)}/mo equiv` : null;
 
   return (
-    <div
-      className={`relative flex flex-col gap-6 p-7 sm:p-9 ${
-        tier.recommended ? "bg-ink-3" : "bg-ink-2"
+    <article
+      className={`relative flex flex-col rounded-3xl border bg-ink-2 p-7 sm:p-9 ${
+        tier.recommended
+          ? "border-lime/40 shadow-[0_0_0_1px_rgba(214,255,61,0.1)]"
+          : "border-[var(--hairline)]"
       }`}
     >
       {tier.recommended && (
-        <div className="absolute right-7 top-7 rounded-full bg-lime px-2.5 py-0.5 text-[11px] font-mono uppercase tracking-wider text-ink">
-          14-day free trial
-        </div>
-      )}
-      <div>
-        <div className="flex items-center gap-3">
-          <h3 className="font-display text-3xl text-paper">{tier.name}</h3>
-          {tier.recommended && (
-            <span className="font-mono text-[10px] uppercase tracking-widest text-lime">
-              Most chosen
-            </span>
-          )}
-        </div>
-        <p className="mt-3 max-w-xs text-sm leading-relaxed text-paper-dim">
-          {tier.headline}
-        </p>
-      </div>
-
-      <div className="flex items-end gap-2">
-        <span className="font-display text-5xl leading-none tracking-tight text-paper">
-          {formattedPrice}
+        <span className="absolute -top-3 left-7 rounded-full bg-lime px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-ink">
+          14-day trial · default
         </span>
-        <span className="pb-1 text-sm text-paper-dim">/ mo</span>
+      )}
+      <h3 className="font-display text-3xl tracking-tight text-paper">
+        {tier.name}
+      </h3>
+      <p className="mt-2 text-base text-paper-dim">{tier.headline}</p>
+      <div className="mt-6 flex items-baseline gap-2">
+        <span className="font-display text-5xl tracking-tight text-paper">
+          ${price}
+        </span>
+        <span className="text-sm text-paper-dim">{cadence}</span>
       </div>
-      <div className="-mt-3 text-xs text-paper-faint">
-        {billing === "annual"
-          ? `billed $${totalAnnual} / year · no card for trial`
-          : "no card required for trial"}
-      </div>
-
-      <ul className="mt-2 space-y-2.5 text-sm text-paper-dim">
-        {tier.bullets.map((b) => (
-          <li key={b} className="flex items-start gap-3">
-            <span className="mt-2 h-1 w-3 shrink-0 bg-lime" />
-            <span>{b}</span>
-          </li>
-        ))}
-      </ul>
-
+      {annualEquiv && (
+        <p className="mt-1 text-xs text-paper-faint">{annualEquiv}</p>
+      )}
+      <p className="mt-6 text-sm leading-relaxed text-paper-dim">
+        {tier.description}
+      </p>
+      {tier.excludes && (
+        <p className="mt-4 rounded-xl border-l-2 border-paper-faint/40 bg-ink/40 px-4 py-3 text-sm italic leading-relaxed text-paper-faint">
+          {tier.excludes}
+        </p>
+      )}
       <Link
-        href={`/sign-up?plan=${tier.name.toLowerCase()}${
-          tier.recommended ? "&trial=true" : ""
-        }`}
-        className={`btn mt-auto w-full ${
-          tier.recommended ? "btn-primary" : "btn-ghost"
-        }`}
+        href={
+          tier.recommended
+            ? "/sign-up?plan=manager&trial=true"
+            : "/sign-up?plan=coach"
+        }
+        className={`mt-8 ${tier.recommended ? "btn btn-primary" : "btn btn-ghost"}`}
       >
-        {tier.recommended ? "Start with Pro free" : `Choose ${tier.name}`}
+        {tier.recommended ? "Start your trial" : `Start with ${tier.name}`}
       </Link>
-    </div>
+    </article>
   );
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*                                    FAQ                                     */
+/*                                    FAQ                                      */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 function Faq() {
   return (
-    <section id="faq" className="px-6 pt-28 sm:px-10 sm:pt-36 lg:pt-44">
-      <div className="mx-auto max-w-7xl">
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
-          <div className="lg:col-span-4">
-            <span className="font-mono text-xs uppercase tracking-[0.22em] text-paper-faint">
-              §04 · FAQ
-            </span>
-            <h2 className="mt-4 font-display text-4xl leading-[1.05] tracking-tight text-paper sm:text-5xl">
-              Common questions,{" "}
-              <span className="italic text-paper-dim">straight answers.</span>
-            </h2>
-            <p className="mt-6 text-paper-dim">
-              Anti-sycophancy is non-negotiable. That goes for our marketing
-              copy too — if it&rsquo;s not honest, it&rsquo;s not on this page.
-            </p>
-          </div>
-          <div className="lg:col-span-8">
-            <div className="overflow-hidden rounded-2xl border border-[var(--hairline-strong)]">
-              {FAQ.map((item, i) => (
-                <details
-                  key={item.q}
-                  className={`group bg-ink-2 ${
-                    i !== FAQ.length - 1 ? "border-b border-[var(--hairline)]" : ""
-                  }`}
-                >
-                  <summary className="flex items-start justify-between gap-6 p-6 sm:p-7">
-                    <span className="font-display text-xl leading-snug text-paper sm:text-2xl">
-                      {item.q}
-                    </span>
-                    <span
-                      aria-hidden
-                      className="faq-plus mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[var(--hairline-strong)] text-paper-dim"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </span>
-                  </summary>
-                  <div className="px-6 pb-7 pr-14 text-paper-dim sm:px-7">
-                    {item.a}
-                  </div>
-                </details>
-              ))}
-            </div>
-          </div>
+    <section id="faq" className="px-5 pt-28 sm:px-10 sm:pt-36">
+      <div className="mx-auto max-w-3xl">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-paper-faint">
+          Questions
+        </p>
+        <h2 className="mt-4 font-display text-4xl leading-tight tracking-tight text-paper sm:text-5xl">
+          Things creators ask first.
+        </h2>
+        <div className="mt-10 divide-y divide-[var(--hairline)] border-y border-[var(--hairline)]">
+          {FAQ.map(({ q, a }, i) => (
+            <details key={i} className="group">
+              <summary className="flex min-h-12 cursor-pointer items-center justify-between gap-4 py-5 text-left">
+                <span className="font-display text-lg tracking-tight text-paper">
+                  {q}
+                </span>
+                <span className="faq-plus inline-block text-2xl font-light leading-none text-paper-dim">
+                  +
+                </span>
+              </summary>
+              <p className="pb-5 text-base leading-relaxed text-paper-dim">
+                {a}
+              </p>
+            </details>
+          ))}
         </div>
       </div>
     </section>
@@ -871,115 +640,68 @@ function Faq() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*                                  FOOTER                                    */
+/*                                   FOOTER                                    */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 function Footer() {
   return (
-    <footer className="relative z-10 mt-32 border-t border-[var(--hairline)] px-6 pb-10 pt-16 sm:px-10">
+    <footer className="mt-32 border-t border-[var(--hairline)] px-5 pb-[max(env(safe-area-inset-bottom),2.5rem)] pt-14 sm:px-10">
       <div className="mx-auto max-w-7xl">
-        {/* Giant wordmark — editorial closer */}
-        <div className="overflow-hidden">
-          <h3 className="font-display text-[clamp(4rem,18vw,18rem)] leading-[0.9] tracking-[-0.04em] text-paper">
-            Hey<span className="italic text-paper-dim">Maya</span>.
-          </h3>
-        </div>
-
-        <div className="mt-12 grid grid-cols-2 gap-10 border-t border-[var(--hairline)] pt-10 text-sm sm:grid-cols-4">
-          <div className="col-span-2 sm:col-span-1">
-            <p className="text-paper-dim">
-              Your AI creator manager before you can afford a human one.
-            </p>
-            <p className="mt-4 font-mono text-xs uppercase tracking-widest text-paper-faint">
-              © {new Date().getFullYear()} HeyMaya
+        <div className="flex flex-col items-start justify-between gap-10 sm:flex-row">
+          <div className="max-w-md">
+            <Link href="/" className="inline-flex items-center gap-2">
+              <Logo />
+              <span className="font-display text-xl tracking-tight text-paper">
+                HeyMaya
+              </span>
+            </Link>
+            <p className="mt-5 text-sm leading-relaxed text-paper-dim">
+              Your social media manager. Live in your messages, watching your
+              work, telling you the truth.
             </p>
           </div>
-          <div>
-            <h4 className="font-mono text-[11px] uppercase tracking-widest text-paper-faint">
-              Product
-            </h4>
-            <ul className="mt-3 space-y-2 text-paper-dim">
-              <li>
-                <a className="hover:text-paper" href="#how">
-                  How she works
-                </a>
-              </li>
-              <li>
-                <a className="hover:text-paper" href="#pricing">
-                  Pricing
-                </a>
-              </li>
-              <li>
-                <a className="hover:text-paper" href="#faq">
-                  FAQ
-                </a>
-              </li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-mono text-[11px] uppercase tracking-widest text-paper-faint">
-              Company
-            </h4>
-            <ul className="mt-3 space-y-2 text-paper-dim">
-              <li>
-                <a className="hover:text-paper" href="/terms">
-                  Terms
-                </a>
-              </li>
-              <li>
-                <a className="hover:text-paper" href="/privacy">
-                  Privacy
-                </a>
-              </li>
-              <li>
-                <a
-                  className="hover:text-paper"
-                  href="mailto:hi@heymaya.app"
-                >
-                  hi@heymaya.app
-                </a>
-              </li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-mono text-[11px] uppercase tracking-widest text-paper-faint">
-              Elsewhere
-            </h4>
-            <ul className="mt-3 space-y-2 text-paper-dim">
-              <li>
-                <a
-                  className="inline-flex items-center gap-1 hover:text-paper"
-                  href="https://x.com/heymaya"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  X / Twitter <ArrowUpRight className="h-3 w-3" />
-                </a>
-              </li>
-              <li>
-                <a
-                  className="inline-flex items-center gap-1 hover:text-paper"
-                  href="https://tiktok.com/@heymaya"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  TikTok <ArrowUpRight className="h-3 w-3" />
-                </a>
-              </li>
-              <li>
-                <a
-                  className="inline-flex items-center gap-1 hover:text-paper"
-                  href="https://instagram.com/heymaya"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Instagram <ArrowUpRight className="h-3 w-3" />
-                </a>
-              </li>
-            </ul>
+          <div className="grid grid-cols-2 gap-x-12 gap-y-3 text-sm text-paper-dim sm:grid-cols-3">
+            <Link href="/business" className="transition-colors hover:text-paper">
+              For businesses
+            </Link>
+            <a href="#features" className="transition-colors hover:text-paper">
+              What she does
+            </a>
+            <a href="#pricing" className="transition-colors hover:text-paper">
+              Pricing
+            </a>
+            <Link href="/sign-in" className="transition-colors hover:text-paper">
+              Sign in
+            </Link>
+            <Link href="/privacy" className="transition-colors hover:text-paper">
+              Privacy
+            </Link>
+            <Link href="/terms" className="transition-colors hover:text-paper">
+              Terms
+            </Link>
           </div>
         </div>
+        <p className="mt-12 font-mono text-xs uppercase tracking-widest text-paper-faint">
+          © {new Date().getFullYear()} HeyMaya
+        </p>
       </div>
     </footer>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*                            MOBILE STICKY CTA                                */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+function MobileStickyCta() {
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-30 flex border-t border-[var(--hairline)] bg-[var(--ink)]/95 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur supports-[backdrop-filter]:bg-[var(--ink)]/70 sm:hidden">
+      <Link
+        href="/sign-up?trial=true"
+        className="btn btn-primary flex-1 !min-h-12"
+      >
+        Start your 14-day trial
+      </Link>
+    </div>
   );
 }
