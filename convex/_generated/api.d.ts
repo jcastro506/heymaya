@@ -141,6 +141,7 @@ import type * as onboarding_growth_deployRiley from "../onboarding/growth/deploy
 import type * as onboarding_growth_pipeline from "../onboarding/growth/pipeline.js";
 import type * as onboarding_maya_deployMaya from "../onboarding/maya/deployMaya.js";
 import type * as onboarding_maya_jobs from "../onboarding/maya/jobs.js";
+import type * as onboarding_maya_submitOnboarding from "../onboarding/maya/submitOnboarding.js";
 import type * as onboarding_maya_synthesizeCreatorPicture from "../onboarding/maya/synthesizeCreatorPicture.js";
 import type * as onboarding_maya_videoBatching from "../onboarding/maya/videoBatching.js";
 import type * as outcomes_attribution from "../outcomes/attribution.js";
@@ -314,6 +315,7 @@ declare const fullApi: ApiFromModules<{
   "onboarding/growth/pipeline": typeof onboarding_growth_pipeline;
   "onboarding/maya/deployMaya": typeof onboarding_maya_deployMaya;
   "onboarding/maya/jobs": typeof onboarding_maya_jobs;
+  "onboarding/maya/submitOnboarding": typeof onboarding_maya_submitOnboarding;
   "onboarding/maya/synthesizeCreatorPicture": typeof onboarding_maya_synthesizeCreatorPicture;
   "onboarding/maya/videoBatching": typeof onboarding_maya_videoBatching;
   "outcomes/attribution": typeof outcomes_attribution;

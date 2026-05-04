@@ -6,6 +6,14 @@ export default defineSchema({
     clerkUserId: v.string(),
     email: v.string(),
     primaryHandle: v.optional(v.string()),
+    /**
+     * Coach/Manager rewrite (2026-05-04) — display name captured during the
+     * single-screen onboarding (step 2 of 3: handle, name, phone). Pre-filled
+     * from the ScrapeCreators verify response for the creator's handle and
+     * editable by the creator before submit. Used downstream by the soul.md
+     * generator and Maya's introductory iMessage.
+     */
+    displayName: v.optional(v.string()),
     phoneNumber: v.optional(v.string()),
     channelPreference: v.union(
       v.literal("imessage"),
