@@ -166,9 +166,12 @@ export function ChannelStep({ state, setChannel, onAdvance }: ChannelStepProps) 
             Starter
           </span>
           <p className="flex-1">
-            iMessage and WhatsApp are Pro features.{" "}
-            <Link href="/sign-up?plan=pro&trial=true" className="text-lime underline-offset-2 hover:underline">
-              Start a 14-day Pro trial
+            iMessage and WhatsApp are Manager features.{" "}
+            <Link
+              href="/checkout?tier=manager&interval=monthly"
+              className="text-lime underline-offset-2 hover:underline"
+            >
+              Start a 7-day Manager trial
             </Link>
             {" "}— no card required.
           </p>

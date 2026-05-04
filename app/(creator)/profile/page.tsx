@@ -1180,8 +1180,8 @@ const PLAN_TABLE: ReadonlyArray<{
 }> = [
   {
     id: "coach",
-    price: "$29/mo",
-    annual: "$249/yr",
+    price: "$19.99/mo",
+    annual: "$199/yr",
     headline: "Advisory only — Maya advises, you decide.",
     features: [
       "All read/advisory cron behaviors (morning brief, evening recap, weekly plan, niche scan, performance check, hook library, comment triage, calendar lookahead)",
@@ -1194,8 +1194,8 @@ const PLAN_TABLE: ReadonlyArray<{
   },
   {
     id: "manager",
-    price: "$99/mo",
-    annual: "$899/yr",
+    price: "$49.99/mo",
+    annual: "$499/yr",
     headline: "Coach + autonomous brand-deal back-and-forth.",
     features: [
       "Everything in Coach",
@@ -1205,7 +1205,7 @@ const PLAN_TABLE: ReadonlyArray<{
       "Brand-deal negotiation back-and-forth",
       "Faster post-publish reactions (<5 min) · 10-peer competitor watch",
       "On-demand manager-readiness packet",
-      "14-day free trial; auto-downgrades to Coach if you don't continue",
+      "7-day free trial on first subscription",
     ],
   },
 ];
@@ -1239,7 +1239,7 @@ function BillingSection({ summary }: { summary: ProfileSummary }) {
     <Section
       eyebrow="§07 · Billing"
       title="Plan + subscription"
-      caption="14-day Pro trial, no card required. Upgrade or downgrade anytime; effective immediately at the next billing boundary."
+      caption="7-day free trial on first subscription, no card required. Upgrade or downgrade anytime; effective immediately at the next billing boundary."
     >
       <div className="grid gap-4 lg:grid-cols-3">
         {PLAN_TABLE.map((p) => {

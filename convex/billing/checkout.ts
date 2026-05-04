@@ -1,31 +1,25 @@
 /**
  * Stripe Checkout flow — Coach + Manager 2-tier model.
  *
- * Public action `createCheckoutSession` is invoked by the Profile screen's
- * billing tab when a creator picks Coach or Manager (monthly or annual).
+ * Public action `createCheckoutSession` is invoked by the landing page CTAs
+ * AND by the Profile screen's billing tab when a creator picks Coach or
+ * Manager (monthly or annual).
  *
  * Behavior:
  *   1. Re-resolve creator from Clerk identity. The frontend NEVER passes a
  *      `creatorId` — anti-tenant-bleed.
  *   2. If no `stripeCustomerId` exists on the creator row, create one via
  *      Stripe and patch the row via an internal mutation.
- *   3. Build a Stripe Checkout session in `subscription` mode. 14-day trial
- *      ONLY for Manager AND only on the creator's FIRST subscription.
- *      Coach is billed immediately (no trial).
+ *   3. Build a Stripe Checkout session in `subscription` mode. 7-day free
+ *      trial on BOTH Coach and Manager — but only on the creator's FIRST
+ *      subscription. Re-subscribers (post-cancel) are billed immediately.
  *   4. Stamp `metadata.{creatorId,tier,interval}` so the webhook handler can
  *      patch the right row even if our reverse-price-id table loses an entry.
  *   5. Return the hosted Checkout URL.
  *
  * Plan-tier note: both Coach and Manager are sellable via Checkout (Coach
- * is the $29 paid floor — creators land there post-trial-expiry or via
- * direct selection, NOT as a free fallback).
- *
- * Trial-expiry handoff: when the 14-day Manager trial ends, Stripe needs to
- * auto-downgrade the subscription's price to Coach. That requires a
- * `subscription_schedule` to be attached at checkout (or wired post-checkout
- * via webhook). v0 of this checkout flow attaches the trial only — operator
- * must wire the auto-downgrade schedule (TODO: subscription_schedule on
- * trial_end → swap price to Coach monthly).
+ * is the $19.99 paid floor — creators land there post-cancel via the cancel
+ * webhook handler, NOT as a free fallback).
  */
 
 import { v } from "convex/values";
@@ -41,8 +35,8 @@ const INTERVAL_VALIDATOR = v.union(
   v.literal("annual")
 );
 
-/** 14-day trial — applied only on first-time Manager subscriptions. */
-const MANAGER_TRIAL_DAYS = 14;
+/** 7-day free trial — applied on first subscription only, both tiers. */
+const FIRST_SUBSCRIPTION_TRIAL_DAYS = 7;
 
 /* -------------------------------------------------------------------------- */
 /* Internal helpers                                                            */
@@ -150,12 +144,12 @@ export const createCheckoutSession = action({
       });
     }
 
-    // 2. Trial gating. ONLY first-time Manager subscriptions get the 14-day
-    //    trial — re-subscribing to Manager after a cancel does NOT
-    //    re-trigger. Coach is billed immediately at every checkout.
+    // 2. Trial gating. BOTH Coach and Manager get a 7-day free trial — but
+    //    only on the creator's FIRST subscription. Re-subscribing after a
+    //    cancel does NOT re-trigger the trial.
     const isFirstSubscription = !me.stripeSubscriptionId;
-    const enableTrial = args.tier === "manager" && isFirstSubscription;
-    const trialDays = enableTrial ? MANAGER_TRIAL_DAYS : undefined;
+    const enableTrial = isFirstSubscription;
+    const trialDays = enableTrial ? FIRST_SUBSCRIPTION_TRIAL_DAYS : undefined;
 
     // 3. Build Checkout session params.
     const session = await stripe.checkout.sessions.create({

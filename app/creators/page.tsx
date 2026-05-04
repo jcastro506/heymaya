@@ -128,8 +128,8 @@ const FAQ: { q: string; a: string }[] = [
     a: "Only if you turn on auto-send and set a threshold. Below your threshold, Maya drafts, voice-checks, cite-checks, and sends through your Gmail. Above your threshold, or on cold outreach to a new brand, she always asks first. You can leave auto-send off and Maya stays draft-only — same Maya, just slower outbound.",
   },
   {
-    q: "How does the 14-day trial work?",
-    a: "No card required. You get the full thing — outreach, brand replies, contracts, planning, the works — for 14 days. On day 12, Maya nudges you. On day 14 you choose your level or do nothing and quietly downgrade. You keep your data and your Maya either way.",
+    q: "How does the 7-day trial work?",
+    a: "No card required up front. You get the full Manager — outreach, brand replies, contracts, planning, the works — for 7 days. On day 5, Maya nudges you. On day 7 you choose your level (Coach or Manager) or cancel; if you cancel after the trial we drop you to Coach so you keep daily direction at the lowest paid floor. You keep your data and your Maya either way.",
   },
   {
     q: "Which channels does she watch?",
@@ -193,7 +193,7 @@ function Nav() {
             Sign in
           </Link>
           <Link
-            href="/sign-up?trial=true"
+            href="/checkout?tier=manager&interval=monthly"
             className="btn btn-primary !min-h-11 !px-4 !text-sm"
           >
             Start trial
@@ -285,8 +285,11 @@ function Hero() {
             She runs the parts of your career you don't have time for.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <Link href="/sign-up?trial=true" className="btn btn-primary">
-              Start your 14-day trial
+            <Link
+              href="/checkout?tier=manager&interval=monthly"
+              className="btn btn-primary"
+            >
+              Start your 7-day trial
             </Link>
             <a href="#features" className="btn btn-ghost">
               See what she does
@@ -459,8 +462,8 @@ const TIER_DATA = [
   {
     key: "coach" as const,
     name: "Coach",
-    monthly: 29,
-    annual: 249,
+    monthly: 19.99,
+    annual: 199,
     headline: "She tells you. You do it.",
     description:
       "Daily direction, planning, performance reads, accountability, idea sharpening, draft feedback, contract scans, brand-DM drafts. Every advisory thing on the list above. Coach hands you the move; you make it.",
@@ -470,8 +473,8 @@ const TIER_DATA = [
   {
     key: "manager" as const,
     name: "Manager",
-    monthly: 99,
-    annual: 899,
+    monthly: 49.99,
+    annual: 499,
     headline: "She does it. You approve.",
     description:
       "Everything in Coach, plus: drafts and sends brand replies under your auto-send threshold, finds new brand opportunities, drafts and sends cold pitches, runs the brand back-and-forth. The full thing.",
@@ -501,8 +504,8 @@ function Pricing({
             <p className="mt-4 max-w-xl text-base leading-relaxed text-paper-dim sm:text-lg">
               Same Maya. The only difference between Coach and Manager is
               autonomy — does she just tell you the move, or does she also do
-              the parts you'd rather not? Everyone starts on a 14-day trial
-              with full Manager autonomy.
+              the parts you'd rather not? Both tiers start with 7 days free on
+              your first subscription.
             </p>
           </div>
           <BillingToggle billing={billing} setBilling={setBilling} />
@@ -551,9 +554,22 @@ function PricingCard({
   billing: Billing;
 }) {
   const price = billing === "monthly" ? tier.monthly : tier.annual;
+  const priceLabel =
+    billing === "monthly"
+      ? `$${price.toFixed(2).replace(/\.00$/, "")}`
+      : `$${price}`;
   const cadence = billing === "monthly" ? "/ month" : "/ year";
   const annualEquiv =
-    billing === "annual" ? `$${(tier.annual / 12).toFixed(0)}/mo equiv` : null;
+    billing === "annual"
+      ? `$${(tier.annual / 12).toFixed(2).replace(/\.00$/, "")}/mo equiv`
+      : null;
+
+  // Both tiers get a 7-day free trial on first subscription. Headline copy
+  // mirrors the Stripe Checkout-side trial gating in convex/billing/checkout.ts.
+  const trialCopy =
+    billing === "monthly"
+      ? `7 days free, then ${priceLabel} / month`
+      : `7 days free, then ${priceLabel} / year`;
 
   return (
     <article
@@ -565,7 +581,7 @@ function PricingCard({
     >
       {tier.recommended && (
         <span className="absolute -top-3 left-7 rounded-full bg-lime px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-ink">
-          14-day trial · default
+          7-day trial · default
         </span>
       )}
       <h3 className="font-display text-3xl tracking-tight text-paper">
@@ -574,13 +590,16 @@ function PricingCard({
       <p className="mt-2 text-base text-paper-dim">{tier.headline}</p>
       <div className="mt-6 flex items-baseline gap-2">
         <span className="font-display text-5xl tracking-tight text-paper">
-          ${price}
+          {priceLabel}
         </span>
         <span className="text-sm text-paper-dim">{cadence}</span>
       </div>
       {annualEquiv && (
         <p className="mt-1 text-xs text-paper-faint">{annualEquiv}</p>
       )}
+      <p className="mt-2 text-xs font-mono uppercase tracking-widest text-lime">
+        {trialCopy}
+      </p>
       <p className="mt-6 text-sm leading-relaxed text-paper-dim">
         {tier.description}
       </p>
@@ -590,14 +609,12 @@ function PricingCard({
         </p>
       )}
       <Link
-        href={
-          tier.recommended
-            ? "/sign-up?plan=manager&trial=true"
-            : "/sign-up?plan=coach"
-        }
+        href={`/checkout?tier=${tier.key}&interval=${billing}`}
         className={`mt-8 ${tier.recommended ? "btn btn-primary" : "btn btn-ghost"}`}
       >
-        {tier.recommended ? "Start your trial" : `Start with ${tier.name}`}
+        {tier.recommended
+          ? "Start 7-day Manager trial"
+          : `Start with ${tier.name}`}
       </Link>
     </article>
   );
@@ -697,10 +714,10 @@ function MobileStickyCta() {
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 flex border-t border-[var(--hairline)] bg-[var(--ink)]/95 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur supports-[backdrop-filter]:bg-[var(--ink)]/70 sm:hidden">
       <Link
-        href="/sign-up?trial=true"
+        href="/checkout?tier=manager&interval=monthly"
         className="btn btn-primary flex-1 !min-h-12"
       >
-        Start your 14-day trial
+        Start your 7-day trial
       </Link>
     </div>
   );

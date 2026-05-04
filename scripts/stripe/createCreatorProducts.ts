@@ -9,10 +9,10 @@
  * existing rows on rerun rather than blindly creating duplicates.
  *
  * Pricing (locked):
- *   - Coach   — $29/mo,  $249/yr
- *   - Manager — $99/mo,  $899/yr
+ *   - Coach   — $19.99/mo, $199/yr
+ *   - Manager — $49.99/mo, $499/yr
  *
- * Trial: 14 days of Manager for new sign-ups → expires to Coach.
+ * Trial: 7 days free on BOTH tiers for new sign-ups (first subscription only).
  *   Trials are applied at SUBSCRIPTION creation time (not on the price), so
  *   this script does NOT encode the trial — see
  *   `convex/billing/checkout.ts` for the trial gating.
@@ -58,8 +58,8 @@ const CREATOR_TIERS: ReadonlyArray<TierConfig> = [
     statementDescriptor: "HEYMAYA COACH",
     description:
       "Maya as your AI creator coach. Daily proactive guidance across iMessage / WhatsApp / SMS / Telegram / web. Limited cron set, capped chat, cost-bounded thinking budget. The post-trial default.",
-    monthlyCents: 2900, // $29.00
-    annualCents: 24900, // $249.00
+    monthlyCents: 1999, // $19.99
+    annualCents: 19900, // $199.00
     metadataLookupKey: {
       monthly: "heymaya_creator_coach_monthly",
       annual: "heymaya_creator_coach_annual",
@@ -70,9 +70,9 @@ const CREATOR_TIERS: ReadonlyArray<TierConfig> = [
     productName: "HeyMaya Manager",
     statementDescriptor: "HEYMAYA MANAGER",
     description:
-      "Maya as your full-time AI creator manager. Full proactive cron set, unlimited chat, all thinking budgets, full Gmail deal desk, brand-contact discovery via Apollo/Hunter. New sign-ups get 14 days free.",
-    monthlyCents: 9900, // $99.00
-    annualCents: 89900, // $899.00
+      "Maya as your full-time AI creator manager. Full proactive cron set, unlimited chat, all thinking budgets, full Gmail deal desk, brand-contact discovery via Apollo/Hunter. New sign-ups get 7 days free.",
+    monthlyCents: 4999, // $49.99
+    annualCents: 49900, // $499.00
     metadataLookupKey: {
       monthly: "heymaya_creator_manager_monthly",
       annual: "heymaya_creator_manager_annual",
@@ -172,7 +172,7 @@ async function ensureRecurringPrice(
     recurring: { interval },
     lookup_key: lookupKey,
     // Caller adds tax — `exclusive` is the correct setting for B2C SaaS where
-    // we surface the headline price ($29 / $99) and Stripe Tax computes
+    // we surface the headline price ($19.99 / $49.99) and Stripe Tax computes
     // sales tax on top.
     tax_behavior: "exclusive",
     metadata: {
@@ -252,11 +252,11 @@ async function main(): Promise<void> {
     tiers: tierResults,
     envVarsNeeded: envVars,
     trialReminder: [
-      "14-day Manager trial is applied at SUBSCRIPTION creation time.",
+      "7-day free trial applies to BOTH Coach and Manager on first subscription.",
       "It is NOT encoded on the Stripe price — see convex/billing/checkout.ts",
-      "for the gating logic. On trial expiry the subscription auto-downgrades",
-      "to Coach via the same checkout flow's subscription_schedule (operator",
-      "may need to wire this if not already in place).",
+      "for the gating logic. On Manager trial expiry the subscription should",
+      "either continue at the chosen tier (if card on file) or be canceled by",
+      "Stripe; cancel handler downgrades to Coach (the post-cancel floor).",
     ].join("\n"),
   };
 
