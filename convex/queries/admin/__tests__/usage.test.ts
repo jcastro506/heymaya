@@ -29,7 +29,7 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 async function insertCreator(
   t: ReturnType<typeof convexTest>,
   suffix: string,
-  opts?: { plan?: "starter" | "pro" | "studio"; primaryHandle?: string }
+  opts?: { plan?: "coach" | "manager"; primaryHandle?: string }
 ): Promise<Id<"creators">> {
   return await t.run((ctx) =>
     ctx.db.insert("creators", {
@@ -38,7 +38,7 @@ async function insertCreator(
       channelPreference: "web",
       timezone: "UTC",
       status: "active",
-      plan: opts?.plan ?? "pro",
+      plan: opts?.plan ?? "manager",
       primaryHandle: opts?.primaryHandle,
       createdAt: NOW,
     })

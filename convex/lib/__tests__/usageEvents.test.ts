@@ -49,7 +49,7 @@ async function insertCreator(
       channelPreference: "web",
       timezone: "UTC",
       status: "active",
-      plan: "pro",
+      plan: "manager",
       createdAt: NOW,
     })
   );
