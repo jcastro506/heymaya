@@ -12,7 +12,8 @@
     "smoke": "tsx scripts/mvp-smoke.ts",
     "smoke:cron": "tsx scripts/cron-smoke.ts",
     "smoke:service": "tsx scripts/service-mvp-smoke.ts",
-    "smoke:creator-maya-v0": "tsx scripts/creator-maya-v0-fly-smoke.ts"
+    "smoke:creator-maya-v0": "tsx scripts/creator-maya-v0-fly-smoke.ts",
+    "stripe:create-creator-products": "tsx scripts/stripe/createCreatorProducts.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.2.7",

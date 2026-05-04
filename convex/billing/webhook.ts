@@ -28,9 +28,8 @@ import type { MutationCtx } from "../_generated/server";
 import { assertWebhookSecret } from "../lib/webhookSecret";
 
 const TIER_VALIDATOR = v.union(
-  v.literal("starter"),
-  v.literal("pro"),
-  v.literal("studio")
+  v.literal("coach"),
+  v.literal("manager")
 );
 const INTERVAL_VALIDATOR = v.union(
   v.literal("monthly"),
@@ -236,15 +235,25 @@ export const handleSubscriptionUpdated = internalMutation({
 
 /**
  * Subscription cancelled (creator-initiated via portal OR Stripe-initiated
- * after dunning failure). Downgrade to Starter. Critically:
- *   - we do NOT touch `connectedAccounts` — the creator can resubscribe and
- *     keep their Gmail / Calendar / Stripe / Apollo / Hunter connections
- *     intact. Plan-tier gates upstream will silently no-op those rows
- *     while plan=starter.
- *   - we clear billing-related fields so the Profile screen doesn't show
- *     stale "renews on YYYY-MM-DD" text after cancellation.
+ * after dunning failure). Coach + Manager 2-tier model has NO free tier —
+ * Coach is the $29 floor. On cancel:
+ *   - Clear `plan` (set to undefined). `planFeatures` fail-closes for an
+ *     undefined plan field, so downstream gates auto-treat a canceled
+ *     creator as "no paid features unlocked." Profile UI surfaces the
+ *     "your subscription is canceled — reactivate" CTA.
+ *   - Clear billing-related fields so Profile doesn't show stale
+ *     "renews on YYYY-MM-DD" text after cancellation.
+ *   - We do NOT touch `connectedAccounts` — the creator can resubscribe
+ *     and keep their Gmail / Calendar / Stripe / Apollo / Hunter
+ *     connections intact. Plan-tier gates upstream silently no-op those
+ *     rows while plan is undefined.
  *   - `stripeCustomerId` stays — same customer, just unsubscribed. A
  *     resubscribe via Checkout reuses the existing customer.
+ *
+ * Trial-expiry → Coach is handled separately via the Stripe
+ * subscription_schedule wired in `createCheckoutSession`; that fires a
+ * `customer.subscription.updated` event with the Coach price, NOT a
+ * `.deleted` event.
  */
 export const handleSubscriptionDeleted = internalMutation({
   args: {
@@ -262,7 +271,8 @@ export const handleSubscriptionDeleted = internalMutation({
       return { patched: false, reason: "no_creator" };
     }
     await ctx.db.patch(creator._id, {
-      plan: "starter",
+      // Cancellation downgrades to Coach (the post-trial / post-cancel floor).
+      plan: "coach",
       stripeSubscriptionId: undefined,
       currentPlanPeriodEnd: undefined,
       trialEndsAt: undefined,
@@ -481,7 +491,8 @@ export const handleSubscriptionDeletedPublic = mutation({
     );
     if (!creator) return { patched: false, reason: "no_creator" };
     await ctx.db.patch(creator._id, {
-      plan: "starter",
+      // Cancellation downgrades to Coach (the post-trial / post-cancel floor).
+      plan: "coach",
       stripeSubscriptionId: undefined,
       currentPlanPeriodEnd: undefined,
       trialEndsAt: undefined,

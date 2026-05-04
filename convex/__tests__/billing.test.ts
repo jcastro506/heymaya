@@ -41,7 +41,7 @@ async function insertCreator(
   t: ReturnType<typeof convexTest>,
   opts: {
     suffix: string;
-    plan: "starter" | "pro" | "studio";
+    plan: "coach" | "manager";
     stripeCustomerId?: string;
   }
 ): Promise<Id<"creators">> {
@@ -142,12 +142,10 @@ function buildFakeStripeClient(): {
  */
 function withPriceIds(): () => void {
   const KEYS: Array<[string, string]> = [
-    ["STRIPE_PRICE_PRO_MONTHLY", "price_pro_m"],
-    ["STRIPE_PRICE_PRO_ANNUAL", "price_pro_a"],
-    ["STRIPE_PRICE_STUDIO_MONTHLY", "price_studio_m"],
-    ["STRIPE_PRICE_STUDIO_ANNUAL", "price_studio_a"],
-    ["STRIPE_PRICE_STARTER_MONTHLY", "price_starter_m"],
-    ["STRIPE_PRICE_STARTER_ANNUAL", "price_starter_a"],
+    ["STRIPE_PRICE_COACH_MONTHLY", "price_coach_m"],
+    ["STRIPE_PRICE_COACH_ANNUAL", "price_coach_a"],
+    ["STRIPE_PRICE_MANAGER_MONTHLY", "price_manager_m"],
+    ["STRIPE_PRICE_MANAGER_ANNUAL", "price_manager_a"],
     ["APP_URL", "https://heymaya.test"],
   ];
   const prior: Record<string, string | undefined> = {};
@@ -174,11 +172,11 @@ describe("billing.checkout.createCheckoutSession", () => {
     _setStripeClientForTests(fake.client);
     try {
       const t = convexTest(schema, modules);
-      const c = await insertCreator(t, { suffix: "fresh", plan: "starter" });
+      const c = await insertCreator(t, { suffix: "fresh", plan: "coach" });
 
       const out = await asUser(t, "fresh").action(
         api.billing.checkout.createCheckoutSession,
-        { tier: "pro", interval: "monthly" }
+        { tier: "manager", interval: "monthly" }
       );
       expect(out.url).toMatch(/checkout\.stripe\.test/);
 
@@ -195,12 +193,12 @@ describe("billing.checkout.createCheckoutSession", () => {
       const sess = fake.checkoutSessionsCreated[0];
       expect(sess.mode).toBe("subscription");
       expect(sess.customer).toBe("cus_1");
-      expect(sess.line_items?.[0].price).toBe("price_pro_m");
+      expect(sess.line_items?.[0].price).toBe("price_manager_m");
       // Pro = 14-day trial
       expect(sess.subscription_data?.trial_period_days).toBe(14);
       // Metadata stamped on both the session and the subscription
       expect(sess.metadata?.creatorId).toBe(String(c));
-      expect(sess.metadata?.tier).toBe("pro");
+      expect(sess.metadata?.tier).toBe("manager");
       expect(sess.metadata?.interval).toBe("monthly");
       expect(sess.subscription_data?.metadata?.creatorId).toBe(String(c));
       expect(sess.success_url).toContain("/profile?billing=success");
@@ -216,22 +214,27 @@ describe("billing.checkout.createCheckoutSession", () => {
     }
   });
 
-  it("Studio is no-trial — no trial_period_days on subscription_data", async () => {
+  it("Resubscribing creator (already has stripeSubscriptionId) is no-trial — Manager trial only on first sub", async () => {
     const teardown = withPriceIds();
     const fake = buildFakeStripeClient();
     _setStripeClientForTests(fake.client);
     try {
       const t = convexTest(schema, modules);
-      await insertCreator(t, { suffix: "studio", plan: "starter" });
-      await asUser(t, "studio").action(
+      const c = await insertCreator(t, { suffix: "resub", plan: "coach" });
+      // Resub: creator previously had a subscription (now cancelled). Re-checkout
+      // bypasses the 14-day Manager trial.
+      await t.run((ctx) =>
+        ctx.db.patch(c, { stripeSubscriptionId: "sub_prev_cancelled" })
+      );
+      await asUser(t, "resub").action(
         api.billing.checkout.createCheckoutSession,
-        { tier: "studio", interval: "annual" }
+        { tier: "manager", interval: "annual" }
       );
       expect(fake.checkoutSessionsCreated).toHaveLength(1);
       const sess = fake.checkoutSessionsCreated[0];
-      expect(sess.line_items?.[0].price).toBe("price_studio_a");
+      expect(sess.line_items?.[0].price).toBe("price_manager_a");
       expect(sess.subscription_data?.trial_period_days).toBeUndefined();
-      expect(sess.metadata?.tier).toBe("studio");
+      expect(sess.metadata?.tier).toBe("manager");
       expect(sess.metadata?.interval).toBe("annual");
     } finally {
       _setStripeClientForTests(null);
@@ -247,12 +250,12 @@ describe("billing.checkout.createCheckoutSession", () => {
       const t = convexTest(schema, modules);
       await insertCreator(t, {
         suffix: "existing",
-        plan: "starter",
+        plan: "coach",
         stripeCustomerId: "cus_already_there",
       });
       await asUser(t, "existing").action(
         api.billing.checkout.createCheckoutSession,
-        { tier: "pro", interval: "monthly" }
+        { tier: "manager", interval: "monthly" }
       );
       expect(fake.customersCreated).toHaveLength(0);
       expect(fake.checkoutSessionsCreated[0].customer).toBe("cus_already_there");
@@ -271,7 +274,7 @@ describe("billing.checkout.createCheckoutSession", () => {
       // No `withIdentity` wrapper
       await expect(
         t.action(api.billing.checkout.createCheckoutSession, {
-          tier: "pro",
+          tier: "manager",
           interval: "monthly",
         })
       ).rejects.toThrow(/not authenticated/i);
@@ -291,7 +294,7 @@ describe("billing.checkout.createCheckoutSession", () => {
         t
           .withIdentity({ subject: "u_no_row" })
           .action(api.billing.checkout.createCheckoutSession, {
-            tier: "pro",
+            tier: "manager",
             interval: "monthly",
           })
       ).rejects.toThrow(/creator row not found/i);
@@ -303,19 +306,19 @@ describe("billing.checkout.createCheckoutSession", () => {
 
   it("ADVERSARIAL — missing price-id env var rejects with clear error", async () => {
     const teardown = withPriceIds();
-    // Knock out the Pro monthly price after withPriceIds set it
-    delete process.env.STRIPE_PRICE_PRO_MONTHLY;
+    // Knock out the Manager monthly price after withPriceIds set it
+    delete process.env.STRIPE_PRICE_MANAGER_MONTHLY;
     const fake = buildFakeStripeClient();
     _setStripeClientForTests(fake.client);
     try {
       const t = convexTest(schema, modules);
-      await insertCreator(t, { suffix: "missing", plan: "starter" });
+      await insertCreator(t, { suffix: "missing", plan: "coach" });
       await expect(
         asUser(t, "missing").action(
           api.billing.checkout.createCheckoutSession,
-          { tier: "pro", interval: "monthly" }
+          { tier: "manager", interval: "monthly" }
         )
-      ).rejects.toThrow(/STRIPE_PRICE_PRO_MONTHLY/);
+      ).rejects.toThrow(/STRIPE_PRICE_MANAGER_MONTHLY/);
     } finally {
       _setStripeClientForTests(null);
       teardown();
@@ -336,7 +339,7 @@ describe("billing.portal.openCustomerPortal", () => {
       const t = convexTest(schema, modules);
       await insertCreator(t, {
         suffix: "subbed",
-        plan: "pro",
+        plan: "manager",
         stripeCustomerId: "cus_subbed",
       });
       const out = await asUser(t, "subbed").action(
@@ -361,7 +364,7 @@ describe("billing.portal.openCustomerPortal", () => {
     _setStripeClientForTests(fake.client);
     try {
       const t = convexTest(schema, modules);
-      await insertCreator(t, { suffix: "unsub", plan: "starter" });
+      await insertCreator(t, { suffix: "unsub", plan: "coach" });
       await expect(
         asUser(t, "unsub").action(api.billing.portal.openCustomerPortal, {})
       ).rejects.toThrow(/subscribe first/i);
@@ -396,7 +399,7 @@ describe("billing.webhook.handleCheckoutCompleted", () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "pro_trial",
-      plan: "starter",
+      plan: "coach",
       stripeCustomerId: "cus_pro_trial",
     });
     const trialEnd = NOW + 14 * 86_400_000;
@@ -407,7 +410,7 @@ describe("billing.webhook.handleCheckoutCompleted", () => {
         stripeCustomerId: "cus_pro_trial",
         subscriptionId: "sub_xyz",
         creatorId: c,
-        tier: "pro",
+        tier: "manager",
         interval: "monthly",
         currentPeriodEnd: periodEnd,
         trialEnd,
@@ -416,7 +419,7 @@ describe("billing.webhook.handleCheckoutCompleted", () => {
     expect(result.patched).toBe(true);
 
     const after = await t.run((ctx) => ctx.db.get(c));
-    expect(after?.plan).toBe("pro");
+    expect(after?.plan).toBe("manager");
     expect(after?.stripeSubscriptionId).toBe("sub_xyz");
     expect(after?.currentPlanPeriodEnd).toBe(periodEnd);
     expect(after?.trialEndsAt).toBe(trialEnd);
@@ -427,7 +430,7 @@ describe("billing.webhook.handleCheckoutCompleted", () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "studio_paid",
-      plan: "starter",
+      plan: "coach",
       stripeCustomerId: "cus_studio_paid",
     });
     const periodEnd = NOW + 365 * 86_400_000;
@@ -435,13 +438,13 @@ describe("billing.webhook.handleCheckoutCompleted", () => {
       stripeCustomerId: "cus_studio_paid",
       subscriptionId: "sub_studio",
       creatorId: c,
-      tier: "studio",
+      tier: "manager",
       interval: "annual",
       currentPeriodEnd: periodEnd,
       // trialEnd intentionally omitted — Studio is no-trial
     });
     const after = await t.run((ctx) => ctx.db.get(c));
-    expect(after?.plan).toBe("studio");
+    expect(after?.plan).toBe("manager");
     expect(after?.billingInterval).toBe("annual");
     expect(after?.trialEndsAt).toBeUndefined();
   });
@@ -450,38 +453,38 @@ describe("billing.webhook.handleCheckoutCompleted", () => {
     const t = convexTest(schema, modules);
     const a = await insertCreator(t, {
       suffix: "tenant_a",
-      plan: "starter",
+      plan: "coach",
       stripeCustomerId: "cus_a",
     });
     const b = await insertCreator(t, {
       suffix: "tenant_b",
-      plan: "starter",
+      plan: "coach",
       stripeCustomerId: "cus_b",
     });
     // Webhook for Customer A → only Creator A patched
     await t.mutation(internal.billing.webhook.handleCheckoutCompleted, {
       stripeCustomerId: "cus_a",
       subscriptionId: "sub_a",
-      tier: "pro",
+      tier: "manager",
       interval: "monthly",
       currentPeriodEnd: NOW + 86_400_000,
     });
     const aAfter = await t.run((ctx) => ctx.db.get(a));
     const bAfter = await t.run((ctx) => ctx.db.get(b));
-    expect(aAfter?.plan).toBe("pro");
-    expect(bAfter?.plan).toBe("starter"); // untouched
+    expect(aAfter?.plan).toBe("manager");
+    expect(bAfter?.plan).toBe("coach"); // untouched
   });
 
   it("CROSS-TENANT: metadata.creatorId mismatch refuses the patch (anti-tenant-bleed)", async () => {
     const t = convexTest(schema, modules);
     const a = await insertCreator(t, {
       suffix: "bleed_a",
-      plan: "starter",
+      plan: "coach",
       stripeCustomerId: "cus_bleed_a",
     });
     const b = await insertCreator(t, {
       suffix: "bleed_b",
-      plan: "starter",
+      plan: "coach",
       stripeCustomerId: "cus_bleed_b",
     });
     // Forged webhook: claims to be for cus_bleed_a but metadata says creatorId=B
@@ -491,7 +494,7 @@ describe("billing.webhook.handleCheckoutCompleted", () => {
         stripeCustomerId: "cus_bleed_a",
         subscriptionId: "sub_forged",
         creatorId: b, // wrong creator
-        tier: "studio",
+        tier: "manager",
         interval: "monthly",
       }
     );
@@ -500,8 +503,8 @@ describe("billing.webhook.handleCheckoutCompleted", () => {
 
     const aAfter = await t.run((ctx) => ctx.db.get(a));
     const bAfter = await t.run((ctx) => ctx.db.get(b));
-    expect(aAfter?.plan).toBe("starter");
-    expect(bAfter?.plan).toBe("starter");
+    expect(aAfter?.plan).toBe("coach");
+    expect(bAfter?.plan).toBe("coach");
   });
 
   it("ADVERSARIAL: unknown stripeCustomerId returns no_creator (no row inserted/patched)", async () => {
@@ -511,7 +514,7 @@ describe("billing.webhook.handleCheckoutCompleted", () => {
       {
         stripeCustomerId: "cus_orphan",
         subscriptionId: "sub_orphan",
-        tier: "pro",
+        tier: "manager",
         interval: "monthly",
       }
     );
@@ -525,18 +528,18 @@ describe("billing.webhook.handleSubscriptionUpdated", () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "upgrade",
-      plan: "pro",
+      plan: "manager",
       stripeCustomerId: "cus_upgrade",
     });
     await t.mutation(internal.billing.webhook.handleSubscriptionUpdated, {
       stripeCustomerId: "cus_upgrade",
       subscriptionId: "sub_up",
-      tier: "studio",
+      tier: "manager",
       interval: "monthly",
       currentPeriodEnd: NOW + 30 * 86_400_000,
     });
     const after = await t.run((ctx) => ctx.db.get(c));
-    expect(after?.plan).toBe("studio");
+    expect(after?.plan).toBe("manager");
     expect(after?.stripeSubscriptionId).toBe("sub_up");
   });
 
@@ -544,22 +547,22 @@ describe("billing.webhook.handleSubscriptionUpdated", () => {
     const t = convexTest(schema, modules);
     await insertCreator(t, {
       suffix: "upd_a",
-      plan: "starter",
+      plan: "coach",
       stripeCustomerId: "cus_upd_a",
     });
     const b = await insertCreator(t, {
       suffix: "upd_b",
-      plan: "starter",
+      plan: "coach",
       stripeCustomerId: "cus_upd_b",
     });
     await t.mutation(internal.billing.webhook.handleSubscriptionUpdated, {
       stripeCustomerId: "cus_upd_a",
       subscriptionId: "sub_a",
-      tier: "studio",
+      tier: "manager",
       interval: "monthly",
     });
     const bAfter = await t.run((ctx) => ctx.db.get(b));
-    expect(bAfter?.plan).toBe("starter");
+    expect(bAfter?.plan).toBe("coach");
   });
 });
 
@@ -568,7 +571,7 @@ describe("billing.webhook.handleSubscriptionDeleted", () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "cancel",
-      plan: "studio",
+      plan: "manager",
       stripeCustomerId: "cus_cancel",
     });
     await t.run((ctx) =>
@@ -585,7 +588,7 @@ describe("billing.webhook.handleSubscriptionDeleted", () => {
     });
 
     const after = await t.run((ctx) => ctx.db.get(c));
-    expect(after?.plan).toBe("starter");
+    expect(after?.plan).toBe("coach");
     expect(after?.stripeSubscriptionId).toBeUndefined();
     expect(after?.currentPlanPeriodEnd).toBeUndefined();
     expect(after?.trialEndsAt).toBeUndefined();
@@ -598,7 +601,7 @@ describe("billing.webhook.handleSubscriptionDeleted", () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "preserve",
-      plan: "pro",
+      plan: "manager",
       stripeCustomerId: "cus_preserve",
     });
     const gmailAccount = await t.run((ctx) =>
@@ -619,7 +622,7 @@ describe("billing.webhook.handleSubscriptionDeleted", () => {
 
     // Plan downgraded but Gmail row untouched
     const after = await t.run((ctx) => ctx.db.get(c));
-    expect(after?.plan).toBe("starter");
+    expect(after?.plan).toBe("coach");
     const gmailAfter = await t.run((ctx) => ctx.db.get(gmailAccount));
     expect(gmailAfter).not.toBeNull();
     expect(gmailAfter?.scopeStatus).toBe("active");
@@ -632,7 +635,7 @@ describe("billing.webhook.handleTrialWillEnd", () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "trial_warn",
-      plan: "pro",
+      plan: "manager",
       stripeCustomerId: "cus_trial_warn",
     });
     await t.mutation(internal.billing.webhook.handleTrialWillEnd, {
@@ -747,28 +750,20 @@ describe("billing.priceIds.priceIdToPlanTuple", () => {
   it("recovers (tier, interval) for every configured SKU", () => {
     const teardown = withPriceIds();
     try {
-      expect(priceIdToPlanTuple("price_pro_m")).toEqual({
-        tier: "pro",
+      expect(priceIdToPlanTuple("price_coach_m")).toEqual({
+        tier: "coach",
         interval: "monthly",
       });
-      expect(priceIdToPlanTuple("price_pro_a")).toEqual({
-        tier: "pro",
+      expect(priceIdToPlanTuple("price_coach_a")).toEqual({
+        tier: "coach",
         interval: "annual",
       });
-      expect(priceIdToPlanTuple("price_studio_m")).toEqual({
-        tier: "studio",
+      expect(priceIdToPlanTuple("price_manager_m")).toEqual({
+        tier: "manager",
         interval: "monthly",
       });
-      expect(priceIdToPlanTuple("price_studio_a")).toEqual({
-        tier: "studio",
-        interval: "annual",
-      });
-      expect(priceIdToPlanTuple("price_starter_m")).toEqual({
-        tier: "starter",
-        interval: "monthly",
-      });
-      expect(priceIdToPlanTuple("price_starter_a")).toEqual({
-        tier: "starter",
+      expect(priceIdToPlanTuple("price_manager_a")).toEqual({
+        tier: "manager",
         interval: "annual",
       });
     } finally {

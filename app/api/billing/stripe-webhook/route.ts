@@ -35,11 +35,11 @@ function bridgeSecret(): string {
   return s;
 }
 
-type Plan = "starter" | "pro" | "studio";
+type Plan = "coach" | "manager";
 type Interval = "monthly" | "annual";
 
 function isPlan(s: unknown): s is Plan {
-  return s === "starter" || s === "pro" || s === "studio";
+  return s === "coach" || s === "manager";
 }
 function isInterval(s: unknown): s is Interval {
   return s === "monthly" || s === "annual";
