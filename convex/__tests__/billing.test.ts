@@ -6,7 +6,7 @@
  *      Creator B; metadata.creatorId mismatch refuses the patch.
  *   2. Plan-tier × action matrix: webhook updates `plan` correctly for each
  *      tier; downgrade preserves connectedAccounts; trial sets trialEndsAt
- *      for Pro but not for Studio.
+ *      on first-time subscriptions for both Coach and Manager.
  *   3. Adversarial: invalid `tier` rejects in createCheckoutSession; replay
  *      eventId returns alreadySeen + does not re-patch; missing creatorId
  *      metadata still resolves via stripeCustomerId fallback.
@@ -166,7 +166,7 @@ function withPriceIds(): () => void {
 /* -------------------------------------------------------------------------- */
 
 describe("billing.checkout.createCheckoutSession", () => {
-  it("creates a Stripe customer + checkout session for a fresh creator (Pro monthly with 14-day trial)", async () => {
+  it("creates a Stripe customer + checkout session for a fresh creator (Manager monthly with 7-day trial)", async () => {
     const teardown = withPriceIds();
     const fake = buildFakeStripeClient();
     _setStripeClientForTests(fake.client);
@@ -188,14 +188,14 @@ describe("billing.checkout.createCheckoutSession", () => {
         | undefined;
       expect(customerMd?.creatorId).toBe(String(c));
 
-      // Checkout session should reference the customer + Pro monthly price
+      // Checkout session should reference the customer + Manager monthly price
       expect(fake.checkoutSessionsCreated).toHaveLength(1);
       const sess = fake.checkoutSessionsCreated[0];
       expect(sess.mode).toBe("subscription");
       expect(sess.customer).toBe("cus_1");
       expect(sess.line_items?.[0].price).toBe("price_manager_m");
-      // Pro = 14-day trial
-      expect(sess.subscription_data?.trial_period_days).toBe(14);
+      // Manager first-sub = 7-day trial
+      expect(sess.subscription_data?.trial_period_days).toBe(7);
       // Metadata stamped on both the session and the subscription
       expect(sess.metadata?.creatorId).toBe(String(c));
       expect(sess.metadata?.tier).toBe("manager");
@@ -214,7 +214,30 @@ describe("billing.checkout.createCheckoutSession", () => {
     }
   });
 
-  it("Resubscribing creator (already has stripeSubscriptionId) is no-trial — Manager trial only on first sub", async () => {
+  it("First-time Coach checkout ALSO gets the 7-day free trial (both tiers, first-sub-only)", async () => {
+    const teardown = withPriceIds();
+    const fake = buildFakeStripeClient();
+    _setStripeClientForTests(fake.client);
+    try {
+      const t = convexTest(schema, modules);
+      await insertCreator(t, { suffix: "coach_first", plan: "coach" });
+      await asUser(t, "coach_first").action(
+        api.billing.checkout.createCheckoutSession,
+        { tier: "coach", interval: "monthly" }
+      );
+      expect(fake.checkoutSessionsCreated).toHaveLength(1);
+      const sess = fake.checkoutSessionsCreated[0];
+      expect(sess.line_items?.[0].price).toBe("price_coach_m");
+      // Both tiers get the 7-day trial on first subscription
+      expect(sess.subscription_data?.trial_period_days).toBe(7);
+      expect(sess.metadata?.tier).toBe("coach");
+    } finally {
+      _setStripeClientForTests(null);
+      teardown();
+    }
+  });
+
+  it("Resubscribing creator (already has stripeSubscriptionId) is no-trial — trial is first-sub-only on BOTH tiers", async () => {
     const teardown = withPriceIds();
     const fake = buildFakeStripeClient();
     _setStripeClientForTests(fake.client);
@@ -222,7 +245,7 @@ describe("billing.checkout.createCheckoutSession", () => {
       const t = convexTest(schema, modules);
       const c = await insertCreator(t, { suffix: "resub", plan: "coach" });
       // Resub: creator previously had a subscription (now cancelled). Re-checkout
-      // bypasses the 14-day Manager trial.
+      // bypasses the 7-day trial regardless of tier.
       await t.run((ctx) =>
         ctx.db.patch(c, { stripeSubscriptionId: "sub_prev_cancelled" })
       );
@@ -395,19 +418,19 @@ describe("billing.portal.openCustomerPortal", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("billing.webhook.handleCheckoutCompleted", () => {
-  it("patches plan / stripeSubscriptionId / period / trialEnds for a Pro monthly trial", async () => {
+  it("patches plan / stripeSubscriptionId / period / trialEnds for a Manager monthly 7-day trial", async () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
-      suffix: "pro_trial",
+      suffix: "manager_trial",
       plan: "coach",
-      stripeCustomerId: "cus_pro_trial",
+      stripeCustomerId: "cus_manager_trial",
     });
-    const trialEnd = NOW + 14 * 86_400_000;
+    const trialEnd = NOW + 7 * 86_400_000;
     const periodEnd = trialEnd; // before first billing cycle, period_end == trial_end
     const result = await t.mutation(
       internal.billing.webhook.handleCheckoutCompleted,
       {
-        stripeCustomerId: "cus_pro_trial",
+        stripeCustomerId: "cus_manager_trial",
         subscriptionId: "sub_xyz",
         creatorId: c,
         tier: "manager",
@@ -426,22 +449,22 @@ describe("billing.webhook.handleCheckoutCompleted", () => {
     expect(after?.billingInterval).toBe("monthly");
   });
 
-  it("Studio checkout sets billingInterval=annual and NO trialEndsAt when trialEnd absent", async () => {
+  it("Manager annual no-trial path (resubscribe) sets billingInterval=annual and NO trialEndsAt when trialEnd absent", async () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
-      suffix: "studio_paid",
+      suffix: "manager_annual_resub",
       plan: "coach",
-      stripeCustomerId: "cus_studio_paid",
+      stripeCustomerId: "cus_manager_annual_resub",
     });
     const periodEnd = NOW + 365 * 86_400_000;
     await t.mutation(internal.billing.webhook.handleCheckoutCompleted, {
-      stripeCustomerId: "cus_studio_paid",
-      subscriptionId: "sub_studio",
+      stripeCustomerId: "cus_manager_annual_resub",
+      subscriptionId: "sub_manager_annual",
       creatorId: c,
       tier: "manager",
       interval: "annual",
       currentPeriodEnd: periodEnd,
-      // trialEnd intentionally omitted — Studio is no-trial
+      // trialEnd intentionally omitted — resubscribers don't get the 7-day trial
     });
     const after = await t.run((ctx) => ctx.db.get(c));
     expect(after?.plan).toBe("manager");
@@ -567,7 +590,7 @@ describe("billing.webhook.handleSubscriptionUpdated", () => {
 });
 
 describe("billing.webhook.handleSubscriptionDeleted", () => {
-  it("PLAN-TIER × ACTION: cancellation downgrades creator to starter and clears billing fields", async () => {
+  it("PLAN-TIER × ACTION: cancellation downgrades creator to coach and clears billing fields", async () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "cancel",

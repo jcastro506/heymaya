@@ -11,12 +11,13 @@
  *     the (tier, interval) pair from this table.
  *
  * Sellable tiers:
- *   - Coach   — $29/mo,  $249/yr
- *   - Manager — $99/mo,  $899/yr (14-day trial for first-time sign-ups,
- *               then auto-downgrades to Coach)
+ *   - Coach   — $19.99/mo, $199/yr
+ *   - Manager — $49.99/mo, $499/yr
  *
- * Both tiers are sellable via Checkout. There is no free post-downgrade
- * tier in this model — Coach is the floor.
+ * Both tiers are sellable via Checkout, and BOTH get a 7-day free trial
+ * on the creator's first subscription only (re-subscribers post-cancel are
+ * billed immediately). There is no free post-downgrade tier in this model —
+ * Coach is the floor; the cancel webhook handler downgrades to Coach.
  *
  * The lookup tables are built at module-load time from env vars. If an env
  * var is absent (e.g. operator hasn't created the annual SKU yet), that
@@ -40,8 +41,7 @@ export type CreatorTier = "coach" | "manager";
 export type BillingInterval = "monthly" | "annual";
 
 /** Plans Stripe can sell. Both Coach and Manager are sellable in the v1
- *  2-tier model — Manager via 14-day trial, Coach as the post-trial
- *  default + standalone subscription option. */
+ *  2-tier model — both with a 7-day free trial on first subscription. */
 export type SellablePlan = CreatorTier;
 
 /** Pairs the operator must create in Stripe + ship in env. */

@@ -9,18 +9,19 @@ import { Doc } from "../_generated/dataModel";
  * Coach is advisory-only and Manager is the same brain plus the autonomous
  * brand-deal back-and-forth.
  *
- *   - **Coach** ($29/mo / $249/yr) — advisory only. Maya NEVER auto-sends
+ *   - **Coach** ($19.99/mo / $199/yr) — advisory only. Maya NEVER auto-sends
  *     emails, NEVER pitches brands cold, NEVER reaches out via Apollo/Hunter.
  *     She still triages inbound brand emails into a draft for the creator and
  *     does every read/advisory cron behavior (morning brief, evening recap,
  *     weekly plan, niche scan, performance check, hook library, comment
  *     triage, calendar lookahead, manager-readiness packet, etc).
- *   - **Manager** ($99/mo / $899/yr) — everything in Coach + brand email
+ *   - **Manager** ($49.99/mo / $499/yr) — everything in Coach + brand email
  *     auto-send under threshold + brand outreach (Apollo/Hunter discovery) +
  *     brand pitching (cold drafts) + brand-deal negotiation back-and-forth.
  *
- * 14-day free Manager trial → expires to Coach (preserve the existing trial
- * mechanic; only the tier names changed).
+ * 7-day free trial on BOTH tiers — first subscription only. Cancel after the
+ * trial drops the creator to Coach via the cancel webhook handler (the
+ * post-cancel floor).
  *
  * What did NOT survive the rewrite:
  *   - No more `maxThinkingBudget` per-tier clamp. Both tiers get full thinking
