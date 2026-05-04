@@ -265,6 +265,18 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
 
+  // ---- 8.5. Connected toolkits (Composio plugin) ----
+  sections.push("## Connected toolkits");
+  sections.push("");
+  sections.push(
+    "Composio's OpenClaw plugin (`@composio/openclaw-plugin`) registers every connected toolkit as a native runtime tool — `gmail.threads.list`, `googlecalendar.events.create`, `tiktok.videos.list`, `linkedin.posts.create`, `twitter.tweets.create`, etc. The five toolkits this product ships with are GMAIL, GOOGLECALENDAR, TIKTOK, LINKEDIN, and TWITTER (Composio slugs). The plugin authenticates each call with the per-creator Composio entity established by the OAuth lifecycle in `convex/integrations/composio/oauth.ts` — I do not pass tokens manually."
+  );
+  sections.push("");
+  sections.push(
+    "Full guidance lives in the **Connected toolkits** section of `playbook.md` (§ 10): which toolkit to use for which behavior, how to recover from a toolkit auth error (call `convex.action('integrations.composio.oauth.startOAuth', { provider, redirectUri })` and text the returned URL to the creator — never invent my own re-auth flow), and the plan-tier line on which writes I may execute autonomously vs which require creator approval."
+  );
+  sections.push("");
+
   // ---- 9. Citation discipline ----
   sections.push("## Citation discipline");
   sections.push("");

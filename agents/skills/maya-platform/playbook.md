@@ -347,6 +347,26 @@ When in doubt, cite. Citations are cheap; a hallucinated claim is expensive.
 
 ---
 
+## 10. Connected toolkits (Composio)
+
+Composio's OpenClaw plugin (`@composio/openclaw-plugin`) is installed at deploy boot when `COMPOSIO_CONSUMER_KEY` is set on the deploy. Once the plugin connects to `https://connect.composio.dev/mcp`, every toolkit attached to the operator's Composio workspace registers as a native OpenClaw tool. You can call them by name — no MCP search/execute round-trip. Tool authentication is per-creator: the plugin authenticates with the same Composio entity that `convex/integrations/composio/oauth.ts` populated when the creator connected the account, looked up by user id at runtime.
+
+**The five toolkits this product ships with** (Composio slugs in caps; v3 dashboard naming):
+
+- **`GMAIL`** — read brand emails, list threads, fetch attachments. Use for Brand email triage (§ 4) and Contract red-flag scan (§ 4) when the contract arrived as a Gmail attachment. Auto-send is governed by § 6 — the toolkit can send mail, but you only do so when `autoSendThreshold` permits.
+- **`GOOGLECALENDAR`** — read events, write events, set reminders. Use for Calendar-aware content planning (§ 4) and to block filming windows the creator commits to. Privacy rules from § 4 stand: drop private events 24h after they pass; never surface attendee identities.
+- **`TIKTOK`** — authenticated analytics on the creator's own posts (richer than ScrapeCreators' public-scrape view). Use for 2h performance check (§ 4) and Hook library auto-build (§ 4) when authenticated metrics are needed (e.g. completion rate, audience retention curve, sound-attribution lifts).
+- **`LINKEDIN`** — read post performance, draft a post (creator publishes — never auto-publish, see § 1). Use for the LinkedIn slot of the Weekly content plan (§ 4) and Cross-platform content distribution (§ 4).
+- **`TWITTER`** — read post performance + thread metrics, draft a thread or single post (creator publishes). Use for the X slot of Cross-platform content distribution (§ 4) and Trend watcher (§ 4) where X-native real-time signal is the source.
+
+**Calling pattern.** The plugin exposes each toolkit's actions as named tools — e.g. `gmail.threads.list`, `googlecalendar.events.create`, `tiktok.videos.list`. You don't search for tools or pass auth manually; the plugin handles both. If you don't see a tool you expect (e.g. you tried to call a YouTube tool but YouTube isn't in the operator's Composio workspace), fall back gracefully and tell the creator what's missing — don't fabricate the call.
+
+**Auth-error recovery.** If a tool call returns an auth error (account revoked, token expired, scope missing), do NOT retry in a loop. Generate a fresh connect link via Convex's existing OAuth lifecycle — the action is `convex.action('integrations.composio.oauth.startOAuth', { provider, redirectUri })` and returns `{ redirectUrl, state }`. Text the redirect URL to the creator on their primary channel: "Looks like your $PROVIDER access dropped — tap here to reconnect: $URL." Do not invent your own re-auth flow; that lifecycle is owned by Convex.
+
+**Plan-tier note.** Coach and Manager both get every toolkit at the *read* layer — analytics, calendar reads, email triage all work on Coach. The autonomy boundary in § 7 governs which *writes* you may execute on the creator's behalf: brand-email auto-send (Manager-only via § 6), cold pitch outbound (Manager-only), Apollo/Hunter discovery (Manager-only). When a Coach creator asks for a Manager-only autonomous write, you do not pretend — see § 7.
+
+---
+
 ## Sibling files
 
 - `cron.md` — schedule for every cron-triggered behavior in § 4. Co-located in `agents/skills/maya-platform/cron.md`.

@@ -1948,6 +1948,20 @@ export function creatorMayaLiveMachineConfig(
   // the plugin's channel handler. See
   // node_modules/@emotion-machine/claw-messenger/README.md for the schema.
   const clawApiKey = process.env.CLAW_MESSENGER_API_KEY;
+  // Composio's OpenClaw plugin (`@composio/openclaw-plugin`) registers every
+  // toolkit attached to the consumer's Composio workspace as native OpenClaw
+  // tools at runtime — Maya can call e.g. `gmail.threads.list` or
+  // `tiktok.videos.list` by name, no MCP search/execute round-trip. The
+  // OAuth lifecycle (generate connect link, persist composioAccountId) lives
+  // in `convex/integrations/composio/oauth.ts`; the plugin authenticates each
+  // tool call with the same Composio entity, looked up by user_id at runtime.
+  // The plugin only takes a consumerKey — it does NOT support a toolkit
+  // allowlist (verified against the README at
+  // https://github.com/ComposioHQ/openclaw-composio-plugin), so we cannot
+  // prune the surface from this side. Toolkit shape is decided in the
+  // Composio dashboard. We omit the install when COMPOSIO_CONSUMER_KEY is
+  // missing so dev / test deploys without a key still boot.
+  const composioConsumerKey = process.env.COMPOSIO_CONSUMER_KEY;
   const channels: Record<string, unknown> = {
     // Telegram channel — auto-detects token from TELEGRAM_BOT_TOKEN env.
     // OpenClaw long-polls by default; webhook setup is opt-in. Per
@@ -2043,6 +2057,23 @@ export function creatorMayaLiveMachineConfig(
           // doesn't block gateway start; the channels block above only takes
           // effect if the plugin actually registered.
           "openclaw plugins install @emotion-machine/claw-messenger || true",
+          // Install Composio's OpenClaw plugin so Maya gets every connected
+          // toolkit (TikTok analytics, Gmail, Google Calendar, LinkedIn,
+          // X/Twitter) as native tools at runtime. Idempotent install + set
+          // consumerKey + restart gateway. Skipped entirely when
+          // COMPOSIO_CONSUMER_KEY is missing so dev / test deploys still
+          // boot. Per
+          // https://github.com/ComposioHQ/openclaw-composio-plugin the plugin
+          // exposes only `consumerKey` / `enabled` / `mcpUrl` — there is no
+          // toolkit allowlist, so toolkit shape lives in the Composio
+          // dashboard, not here.
+          ...(composioConsumerKey
+            ? [
+                "openclaw plugins install @composio/openclaw-plugin || true",
+                `openclaw config set plugins.entries.composio.config.consumerKey ${shellEscape(composioConsumerKey)} || true`,
+                "openclaw gateway restart || true",
+              ]
+            : []),
           "exec openclaw gateway --allow-unconfigured",
         ].join(" && "),
       ],
@@ -2055,6 +2086,17 @@ function base64UtfEncode(str: string): string {
   let bin = "";
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
   return btoa(bin);
+}
+
+/**
+ * Escape a string for safe use as a single argument inside the boot shell
+ * `sh -lc "..."` command. We wrap in single quotes (which neutralise every
+ * shell metacharacter) and then handle the only interior threat: a literal
+ * `'` is closed-then-escaped-then-reopened. Used for the Composio
+ * consumerKey injected into `openclaw config set`.
+ */
+function shellEscape(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 function isFlyAlreadyExists(err: unknown): boolean {

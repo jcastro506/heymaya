@@ -87,7 +87,7 @@ describe("generateAgentsMd", () => {
     expect(md).toContain("`standing-orders.md`");
   });
 
-  it("renders all 9 doc sections (operating instructions, tone, platform, standing orders, chat, auto-send, plan-tier, failure modes, citation)", () => {
+  it("renders all 10 doc sections (operating instructions, tone, platform, standing orders, chat, auto-send, plan-tier, failure modes, connected toolkits, citation)", () => {
     const md = generateAgentsMd({
       ...BASE_INPUTS,
       plan: "manager",
@@ -102,11 +102,32 @@ describe("generateAgentsMd", () => {
       "## Auto-send escalation (brand emails only)",
       "## Plan-tier behavior matrix",
       "## Failure modes & graceful degradation",
+      "## Connected toolkits",
       "## Citation discipline",
     ];
     for (const heading of expected) {
       expect(md).toContain(heading);
     }
+  });
+
+  it("Connected toolkits section names every shipping toolkit slug + points back to playbook § 10 + cites the OAuth start action", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // Composio toolkit slugs (uppercase, v3 dashboard naming)
+    expect(md).toContain("GMAIL");
+    expect(md).toContain("GOOGLECALENDAR");
+    expect(md).toContain("TIKTOK");
+    expect(md).toContain("LINKEDIN");
+    expect(md).toContain("TWITTER");
+    // Plugin name + per-creator entity authentication line
+    expect(md).toContain("@composio/openclaw-plugin");
+    // Pointer back to the playbook section that owns the full guidance
+    expect(md).toContain("playbook.md");
+    // Auth-error recovery: existing OAuth lifecycle, NOT a new ad-hoc flow
+    expect(md).toContain("integrations.composio.oauth.startOAuth");
   });
 
   it("weaves creator-specific identifiers (display name, plan, handles) into the header", () => {
