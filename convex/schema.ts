@@ -1415,6 +1415,12 @@ export default defineSchema({
     creatorPictureReady: v.boolean(),
     imessagePaired: v.boolean(),
     mayaDeployed: v.boolean(),
+    // Tracks whether Maya has sent her first activation iMessage/Telegram
+    // after OpenClaw came online. Optional because pre-bridge rows don't
+    // have it, and the post-deploy activation pipeline (which writes it)
+    // lives in the operator's stashed in-flight work on
+    // codex/openclaw-weekly-calendar-brand-research.
+    firstTextSent: v.optional(v.boolean()),
     currentStep: v.string(),
     progressPercent: v.number(),
     updatedAt: v.number(),
@@ -1600,6 +1606,19 @@ export default defineSchema({
     machineId: v.optional(v.string()),
     blockers: v.optional(v.array(v.string())),
     workspaceFiles: v.optional(v.any()),
+    // Activation pipeline state — set after the Fly machine boots and the
+    // OpenClaw gateway reports ready. Tracks the first-text-sent → online
+    // transition described in CREATOR_MAYA_GO_LIVE_CHECKLIST.md. Optional
+    // because pre-bridge rows (and mock-mode rows) don't have it. The
+    // matching mutations live in the operator's stashed in-flight work.
+    activationStatus: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("activating"),
+        v.literal("online"),
+        v.literal("failed")
+      )
+    ),
     createdAt: v.number(),
   })
     .index("by_creator", ["creatorId"])

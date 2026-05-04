@@ -885,6 +885,29 @@ export const deployOpenClawLive = action({
         if (!isFlyAlreadyExists(err)) throw err;
       }
 
+      // Push provider + channel secrets BEFORE machine create so the runtime
+      // sees them on first boot. Only the keys we have at deploy time get
+      // forwarded — operator can add more later via `fly secrets set`. The
+      // OPENROUTER_API_KEY is non-negotiable: without it OpenClaw falls back
+      // to its bundled `codex` provider and every model call fails with
+      // "No API key found for provider 'openai'" (root cause documented in
+      // /memory/session_handoff_telegram_channel_2026_05_03.md). Telegram
+      // secrets are conditional on telegram being a routed channel — stub
+      // forwards both unconditionally because reads are cheap and OpenClaw
+      // only enables a channel when its config block is present.
+      const machineSecrets: Record<string, string> = {};
+      for (const k of [
+        "OPENROUTER_API_KEY",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_BOT_USERNAME",
+      ]) {
+        const v = process.env[k];
+        if (v) machineSecrets[k] = v;
+      }
+      if (Object.keys(machineSecrets).length > 0) {
+        await fly.setAppSecrets(appName, machineSecrets);
+      }
+
       const existing = await fly.listMachines(appName).catch(() => []);
       const reusable =
         args.mode === "production"
@@ -1937,11 +1960,28 @@ function creatorMayaLiveMachineConfig(
             agents: {
               defaults: {
                 workspace: "/data/workspace",
+                // Without this, OpenClaw 2026.4.23 falls back to its bundled
+                // `codex` provider (gpt-5.5) and every call fails with no
+                // OpenAI key. The `openrouter/...` prefix routes through the
+                // configured OpenRouter provider, which reads OPENROUTER_API_KEY
+                // from env (set as a Fly secret above). See
+                // https://docs.openclaw.ai/providers/openrouter.md
+                model: {
+                  primary: "openrouter/google/gemini-3-flash-preview",
+                },
               },
             },
             skills: {
               load: {
                 watch: true,
+              },
+            },
+            channels: {
+              // Telegram channel — auto-detects token from TELEGRAM_BOT_TOKEN
+              // env. OpenClaw long-polls by default; webhook setup is opt-in.
+              // Per https://docs.openclaw.ai/channels/telegram (2026-05-03).
+              telegram: {
+                enabled: true,
               },
             },
           })
