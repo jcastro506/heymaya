@@ -90,6 +90,29 @@ export function generateUserMd(inputs: UserMdInputs): string {
   const toneNote =
     "Tone slider lives in SOUL.md. Default to `strategic` until soul ships.";
 
+  const phoneLine = creator.phoneNumber
+    ? creator.phoneNumber
+    : NOT_YET_PROVIDED;
+  const primaryHandleLine = creator.primaryHandle
+    ? creator.primaryHandle
+    : sortedHandles.length > 0
+      ? `${sortedHandles[0].handle} (${sortedHandles[0].platform})`
+      : NOT_YET_PROVIDED;
+
+  // First-boot cursor — controls whether `first_boot_introduction` runs at
+  // session start. Maya reads `creators.firstBootCompletedAt` from server
+  // state on every boot; this line surfaces the current value into USER.md
+  // so the agent doesn't have to query for it before deciding whether to
+  // run the introduction. Three sub-cursors track sequence progress:
+  //   - openingAnswersAt: stamped after the 3 questions are answered
+  //   - firstWeeklyPlanSentAt: stamped after the chained first-weekly-plan
+  //   - firstBootCompletedAt: stamped after the whole arc lands
+  const firstBootStatus = creator.firstBootCompletedAt
+    ? `completed ${new Date(creator.firstBootCompletedAt).toISOString()}`
+    : creator.openingAnswersAt
+      ? `in-progress: opening answers received, awaiting OAuth links + first weekly plan`
+      : "not yet started — run `first_boot_introduction` standing order on session start";
+
   return [
     `# USER.md — ${displayName}`,
     "",
@@ -100,8 +123,14 @@ export function generateUserMd(inputs: UserMdInputs): string {
     `- **Display name:** ${displayName}`,
     `- **Preferred address:** ${displayName} (first name).`,
     `- **Email:** ${creator.email}`,
+    `- **Phone:** ${phoneLine}`,
+    `- **Primary handle:** ${primaryHandleLine}`,
     `- **Timezone:** ${creator.timezone}`,
     `- **Plan:** ${plan}`,
+    "",
+    "## First-boot status",
+    "",
+    `- **State:** ${firstBootStatus}`,
     "",
     "## Handles",
     "",

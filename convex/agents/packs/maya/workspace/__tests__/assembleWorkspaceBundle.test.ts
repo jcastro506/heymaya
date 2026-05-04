@@ -234,6 +234,95 @@ describe("assembleWorkspaceBundle", () => {
     }
   });
 
+  it("first-boot standing orders are present in AGENTS.md / standing-orders catalog and gated `all` (both Coach and Manager)", async () => {
+    // The first-boot introduction + first weekly plan programs are non-
+    // negotiable for both tiers — every Maya runs them on the very first
+    // session. Verify the catalog entries exist and that the rendered
+    // standing-orders prose (split-form, low cap) carries them in BOTH
+    // plans. This is the sibling-file-scan guard for the new programs.
+    const { STANDING_ORDERS } = await import("../standingOrders");
+    const firstBoot = STANDING_ORDERS.find((p) => p.id === "first_boot_introduction");
+    const firstPlan = STANDING_ORDERS.find((p) => p.id === "first_weekly_plan");
+    expect(firstBoot, "missing first_boot_introduction").toBeDefined();
+    expect(firstPlan, "missing first_weekly_plan").toBeDefined();
+    expect(firstBoot?.tier).toBe("all");
+    expect(firstPlan?.tier).toBe("all");
+    expect(firstBoot?.kind).toBe("event");
+    expect(firstPlan?.kind).toBe("event");
+
+    for (const plan of ["coach", "manager"] as const) {
+      const inputs = baseInputs({ plan });
+      inputs.creator = { ...inputs.creator, plan };
+      // Force split-form so we can read the standalone catalog without
+      // worrying about the embedded-form character cap drift.
+      const bundle = assembleWorkspaceBundle(inputs, { bootstrapMaxChars: 500 });
+      expect(bundle.standingOrdersSplit).toBe(true);
+      const catalog = bundle.files.get("standing-orders.md")!;
+      expect(catalog).toContain("### First-boot introduction");
+      expect(catalog).toContain("### First weekly plan (immediate)");
+      // The intro entry must reference the OAuth action — sibling file
+      // scan: AGENTS.md / standing-orders.md must reach the action name
+      // so Maya knows what to invoke.
+      expect(catalog).toContain("composio.oauth.startOAuth");
+    }
+  });
+
+  it("AGENTS.md instructs Maya to run the first-boot introduction on session start", () => {
+    // The "first-boot check" instruction in AGENTS.md is what makes Maya
+    // notice she's on her first session and run the introduction
+    // standing order BEFORE anything else. Verify the prose is present
+    // in both the embedded form (production 28K cap) and the split form
+    // (low cap fallback).
+    const PROD_CAP = 28_000;
+    for (const plan of ["coach", "manager"] as const) {
+      const inputs = baseInputs({ plan });
+      inputs.creator = { ...inputs.creator, plan };
+      const bundle = assembleWorkspaceBundle(inputs, { bootstrapMaxChars: PROD_CAP });
+      const agentsMd = bundle.files.get("AGENTS.md")!;
+      expect(agentsMd).toContain("First-boot check");
+      expect(agentsMd).toContain("first_boot_introduction");
+      expect(agentsMd).toContain("first_weekly_plan");
+    }
+  });
+
+  it("USER.md surfaces the creator phone number + first-boot status so Maya can address them", () => {
+    const inputs = baseInputs();
+    inputs.creator = {
+      ...inputs.creator,
+      phoneNumber: "+15551234567",
+      primaryHandle: "@a",
+    };
+    const bundle = assembleWorkspaceBundle(inputs);
+    const userMd = bundle.files.get("USER.md")!;
+    expect(userMd).toContain("+15551234567");
+    expect(userMd).toContain("@a");
+    // First-boot status defaults to "not yet started" when the cursor is
+    // undefined.
+    expect(userMd).toContain("not yet started");
+    expect(userMd).toContain("first_boot_introduction");
+  });
+
+  it("USER.md first-boot status reflects in-progress + completed states", () => {
+    // openingAnswersAt set but firstBootCompletedAt unset → in-progress.
+    const inputs1 = baseInputs();
+    inputs1.creator = {
+      ...inputs1.creator,
+      openingAnswersAt: 1_700_000_500_000,
+    };
+    const userMd1 = assembleWorkspaceBundle(inputs1).files.get("USER.md")!;
+    expect(userMd1).toContain("in-progress");
+    expect(userMd1).toContain("opening answers received");
+
+    // firstBootCompletedAt set → completed.
+    const inputs2 = baseInputs();
+    inputs2.creator = {
+      ...inputs2.creator,
+      firstBootCompletedAt: 1_700_001_000_000,
+    };
+    const userMd2 = assembleWorkspaceBundle(inputs2).files.get("USER.md")!;
+    expect(userMd2).toContain("completed");
+  });
+
   it("Wave 5 (OpenClaw 2026.4.23): at production 28K cap, standing orders embed inline (no separate file)", () => {
     // Per https://docs.openclaw.ai/automation/standing-orders only the
     // canonical root files (AGENTS / SOUL / USER / HEARTBEAT / TOOLS / MEMORY /

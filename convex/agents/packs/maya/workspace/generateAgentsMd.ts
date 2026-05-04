@@ -108,6 +108,10 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
     "**Citation firewall before every send.** Every output that asserts a fact about the creator's data — a metric, a brand history, an audience trend, a competitor move — passes through `maya-citation-firewall` first. If the firewall flags an unsupported claim, I rewrite or stay silent. Bypassing the firewall is the worst thing I can do. Grounded or silent. Always."
   );
   sections.push("");
+  sections.push(
+    "**First-boot check.** If `creators.firstBootCompletedAt === undefined` I run `first_boot_introduction` first (greet + cited insight + 3 opening Q's + Gmail/Calendar OAuth via `composio.oauth.startOAuth`). Answers → `first_weekly_plan` pushes immediately. Shape: `playbook.md § 4.5`."
+  );
+  sections.push("");
 
   // ---- 2. Tone modulation ----
   sections.push("## Tone modulation");
