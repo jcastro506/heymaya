@@ -284,6 +284,12 @@ function buildBootstrapShell(): string {
  * (composio account ids) ride inside MAYA_BOOTSTRAP_JSON, decrypted at
  * config-generation time. We add MAYA_BOOTSTRAP_JSON itself as a secret here
  * so it never leaks into Fly's plain env (which is observable via the API).
+ *
+ * TELEGRAM_BOT_TOKEN + TELEGRAM_BOT_USERNAME (2026-05-03): only forwarded if
+ * the creator's gatewayConfig.channels.enabled includes "telegram". OpenClaw
+ * reads TELEGRAM_BOT_TOKEN from process.env at gateway start — the bot is
+ * configured at the OpenClaw org level, not per-creator. We keep the secret
+ * scoped to the Fly machine, never echo it back, never log it.
  */
 function buildSecretsBundle(config: MayaConfig): Record<string, string> {
   const out: Record<string, string> = {
@@ -298,6 +304,16 @@ function buildSecretsBundle(config: MayaConfig): Record<string, string> {
   ]) {
     const v = process.env[k];
     if (v) out[k] = v;
+  }
+  // Telegram secrets — only forwarded when the gateway has telegram enabled.
+  // Avoids leaking the bot token onto machines that don't need it.
+  const enabledChannels: ReadonlyArray<string> =
+    config.gatewayConfig?.channels?.enabled ?? [];
+  if (enabledChannels.includes("telegram")) {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const username = process.env.TELEGRAM_BOT_USERNAME;
+    if (token) out.TELEGRAM_BOT_TOKEN = token;
+    if (username) out.TELEGRAM_BOT_USERNAME = username;
   }
   return out;
 }

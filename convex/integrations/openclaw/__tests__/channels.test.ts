@@ -711,3 +711,254 @@ describe("openclaw.channels — internal helpers", () => {
     ).rejects.toThrow(/E\.164/);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Telegram channel — added 2026-05-03                                         */
+/* -------------------------------------------------------------------------- */
+
+function mockTelegramHappyCli(): OpenclawCliExecutor {
+  return vi.fn(async (req) => {
+    if (req.command === "pair") {
+      const channel = argFor(req.args, "--channel") ?? "imessage";
+      if (channel === "telegram") {
+        return {
+          ok: true,
+          data: {
+            pairingId: `pair_telegram_${Math.floor(Math.random() * 1e9)}`,
+            telegramPairCode: "ABC123",
+            telegramBotUsername: "mayatesstteest_bot",
+            expiresAt: NOW + 60_000,
+          },
+        };
+      }
+      return {
+        ok: true,
+        data: {
+          pairingId: `pair_${channel}_${Math.floor(Math.random() * 1e9)}`,
+          qrCodeDataUrl: "data:image/png;base64,iVBORw0KGgo=",
+          expiresAt: NOW + 60_000,
+        },
+      };
+    }
+    if (req.command === "confirm") {
+      // Telegram returns the chat_id as externalIdentifier
+      const isTelegram = req.args[0] === "telegram";
+      return {
+        ok: true,
+        data: {
+          externalIdentifier: isTelegram ? "8376373926" : "ext_thread_123",
+        },
+      };
+    }
+    if (req.command === "unpair") {
+      return { ok: true };
+    }
+    return { ok: false, stderr: "unknown command" };
+  });
+}
+
+describe("openclaw.channels — telegram pair flow", () => {
+  beforeEach(() => {
+    _setOpenclawCliForTests(mockTelegramHappyCli());
+  });
+  afterEach(() => {
+    _setOpenclawCliForTests(null);
+  });
+
+  it("requestPairing(telegram) requires no phone number; returns deep-link", async () => {
+    const t = convexTest(schema, modules);
+    await insertCreator(t, { suffix: "tg", plan: "pro" });
+    const res = await asUser(t, "tg").action(
+      api.integrations.openclaw.channels.requestPairing,
+      { channel: "telegram" } // no phoneNumber
+    );
+    expect(res.pairingId).toMatch(/^pair_telegram_/);
+    expect(res.telegramPairCode).toBe("ABC123");
+    expect(res.telegramBotUsername).toBe("mayatesstteest_bot");
+    expect(res.telegramDeepLink).toBe(
+      "https://t.me/mayatesstteest_bot?start=ABC123"
+    );
+    // No QR / SMS code on the telegram path.
+    expect(res.qrCodeDataUrl).toBeUndefined();
+    expect(res.smsConfirmationCode).toBeUndefined();
+  });
+
+  it("PLAN-TIER: telegram pair allowed on starter, pro, AND studio (ungated)", async () => {
+    for (const plan of ["starter", "pro", "studio"] as const) {
+      const t = convexTest(schema, modules);
+      await insertCreator(t, { suffix: plan, plan });
+      const res = await asUser(t, plan).action(
+        api.integrations.openclaw.channels.requestPairing,
+        { channel: "telegram" }
+      );
+      expect(res.pairingId).toBeTruthy();
+    }
+  });
+
+  it("persists tg:pending placeholder in pairedChannels.phoneNumber on request", async () => {
+    const t = convexTest(schema, modules);
+    const c = await insertCreator(t, { suffix: "tg2", plan: "pro" });
+    await asUser(t, "tg2").action(
+      api.integrations.openclaw.channels.requestPairing,
+      { channel: "telegram" }
+    );
+    const rows = await t.run((ctx) =>
+      ctx.db
+        .query("pairedChannels")
+        .withIndex("by_creator", (q) => q.eq("creatorId", c))
+        .collect()
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].channel).toBe("telegram");
+    expect(rows[0].phoneNumber).toBe("tg:pending");
+    expect(rows[0].status).toBe("pending");
+  });
+
+  it("confirmPairing(telegram) updates pairedChannels.phoneNumber to tg:<chat_id>", async () => {
+    const t = convexTest(schema, modules);
+    const c = await insertCreator(t, { suffix: "tg3", plan: "pro" });
+    const pair = await asUser(t, "tg3").action(
+      api.integrations.openclaw.channels.requestPairing,
+      { channel: "telegram" }
+    );
+    await asUser(t, "tg3").action(
+      api.integrations.openclaw.channels.confirmPairing,
+      { pairingId: pair.pairingId, confirmationCode: "ABC123" }
+    );
+    const rows = await t.run((ctx) =>
+      ctx.db
+        .query("pairedChannels")
+        .withIndex("by_creator", (q) => q.eq("creatorId", c))
+        .collect()
+    );
+    expect(rows[0].status).toBe("active");
+    expect(rows[0].phoneNumber).toBe("tg:8376373926");
+    expect(rows[0].externalIdentifier).toBe("8376373926");
+  });
+
+  it("ADVERSARIAL: telegram confirm rejects malformed pair codes", async () => {
+    const t = convexTest(schema, modules);
+    await insertCreator(t, { suffix: "tg4", plan: "pro" });
+    const pair = await asUser(t, "tg4").action(
+      api.integrations.openclaw.channels.requestPairing,
+      { channel: "telegram" }
+    );
+    for (const badCode of [
+      "abc", // too short
+      "TOOLONG12345678", // too long
+      "ABC-123", // contains dash
+      "ABC 123", // contains space
+      "<script>", // junk
+    ]) {
+      await expect(
+        asUser(t, "tg4").action(
+          api.integrations.openclaw.channels.confirmPairing,
+          { pairingId: pair.pairingId, confirmationCode: badCode }
+        )
+      ).rejects.toThrow(/telegram pair code/);
+    }
+  });
+
+  it("ADVERSARIAL: telegram confirm rejects empty/missing code", async () => {
+    const t = convexTest(schema, modules);
+    await insertCreator(t, { suffix: "tg5", plan: "pro" });
+    const pair = await asUser(t, "tg5").action(
+      api.integrations.openclaw.channels.requestPairing,
+      { channel: "telegram" }
+    );
+    await expect(
+      asUser(t, "tg5").action(
+        api.integrations.openclaw.channels.confirmPairing,
+        { pairingId: pair.pairingId } // no confirmationCode
+      )
+    ).rejects.toThrow(/required for Telegram/);
+  });
+
+  it("CROSS-TENANT: Creator B cannot confirm Creator A's telegram pair", async () => {
+    const t = convexTest(schema, modules);
+    await insertCreator(t, { suffix: "alice", plan: "pro" });
+    await insertCreator(t, { suffix: "bob", plan: "pro" });
+    const aPair = await asUser(t, "alice").action(
+      api.integrations.openclaw.channels.requestPairing,
+      { channel: "telegram" }
+    );
+    await expect(
+      asUser(t, "bob").action(
+        api.integrations.openclaw.channels.confirmPairing,
+        { pairingId: aPair.pairingId, confirmationCode: "ABC123" }
+      )
+    ).rejects.toThrow(/not found for this creator/);
+    // Alice's row is still pending; Bob's confirm did not flip it.
+    const rows = await t.run((ctx) =>
+      ctx.db.query("pairedChannels").collect()
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("pending");
+  });
+
+  it("recordPairingRequest accepts tg:pending and tg:<id> shapes; rejects E.164 prefix mix", async () => {
+    const t = convexTest(schema, modules);
+    const a = await insertCreator(t, { suffix: "tg6", plan: "pro" });
+    const { internal } = await import("../../../_generated/api");
+    // Valid: pending placeholder.
+    await expect(
+      t.mutation(
+        internal.integrations.openclaw.channels.recordPairingRequest,
+        {
+          creatorId: a,
+          channel: "telegram",
+          phoneNumber: "tg:pending",
+          externalPairingId: "pair_tg_a",
+        }
+      )
+    ).resolves.toBeTruthy();
+    // Valid: numeric chat id.
+    await expect(
+      t.mutation(
+        internal.integrations.openclaw.channels.recordPairingRequest,
+        {
+          creatorId: a,
+          channel: "telegram",
+          phoneNumber: "tg:8376373926",
+          externalPairingId: "pair_tg_b",
+        }
+      )
+    ).resolves.toBeTruthy();
+    // Valid: @username form.
+    await expect(
+      t.mutation(
+        internal.integrations.openclaw.channels.recordPairingRequest,
+        {
+          creatorId: a,
+          channel: "telegram",
+          phoneNumber: "tg:@joshcastro",
+          externalPairingId: "pair_tg_c",
+        }
+      )
+    ).resolves.toBeTruthy();
+    // Invalid: bare E.164 used as telegram identifier.
+    await expect(
+      t.mutation(
+        internal.integrations.openclaw.channels.recordPairingRequest,
+        {
+          creatorId: a,
+          channel: "telegram",
+          phoneNumber: "+14155551234",
+          externalPairingId: "pair_tg_d",
+        }
+      )
+    ).rejects.toThrow(/telegram identifier/);
+    // Invalid: telegram prefix without anything after.
+    await expect(
+      t.mutation(
+        internal.integrations.openclaw.channels.recordPairingRequest,
+        {
+          creatorId: a,
+          channel: "telegram",
+          phoneNumber: "tg:",
+          externalPairingId: "pair_tg_e",
+        }
+      )
+    ).rejects.toThrow(/telegram identifier/);
+  });
+});
