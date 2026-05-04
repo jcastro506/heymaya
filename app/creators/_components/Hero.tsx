@@ -24,7 +24,7 @@ export function Hero() {
               <br />
               manager.{" "}
               <span className="italic text-paper-dim">
-                Lives in your messages.
+                Lives in your iMessages.
               </span>
             </h1>
             <p className="mt-7 max-w-xl text-lg leading-relaxed text-paper-dim">
@@ -68,7 +68,7 @@ export function Hero() {
                   see them?&rdquo;
                 </p>
                 <div className="mt-6 flex items-center justify-between border-t border-[var(--hairline)] pt-5 font-mono text-xs text-paper-faint">
-                  <span>cited · @yourhandle/posts/9382, /9407</span>
+                  <span>from your last week of posts</span>
                   <span className="inline-flex items-center gap-1">
                     <span className="h-1.5 w-1.5 rounded-full bg-lime" />
                     grounded

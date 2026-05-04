@@ -13,7 +13,7 @@ import type { ReactNode } from "react";
  * Each card carries:
  *  - a timestamp tag (e.g., "Sun · 4:14 PM")
  *  - 1-3 message bubbles ("from-maya" or "from-you")
- *  - an optional caption beneath ("cited · @yourhandle/posts/...")
+ *  - an optional plain-language caption beneath
  */
 export type Bubble = {
   side: "left" | "right";

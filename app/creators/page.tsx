@@ -125,7 +125,7 @@ function ValueProp() {
         <p className="font-display text-3xl leading-[1.1] tracking-tight text-paper sm:text-5xl">
           Maya is your social media manager.{" "}
           <span className="italic text-paper-dim">
-            Lives in your messages. Replaces eight tools and a manager you
+            Lives in your iMessages. Replaces eight tools and a manager you
             can&rsquo;t afford yet.
           </span>
         </p>
@@ -159,10 +159,10 @@ function FeatureRail() {
         }
         subhead={
           <>
-            Maya runs a daily niche scan and only surfaces trends that match
-            what already works for you. No generic &ldquo;TikTok trends today&rdquo;
-            list. The three openings she thinks fit your last 30 posts, with
-            why.
+            Maya watches your niche every day and only brings up trends that
+            match what already works for you. No generic &ldquo;TikTok trends
+            today&rdquo; list. The three openings she thinks fit your last 30
+            posts, with why.
           </>
         }
         visual={
@@ -189,7 +189,7 @@ function FeatureRail() {
                 ),
               },
             ]}
-            caption="cited · 34 peer posts scanned"
+            caption="seen across 34 of your peers"
           />
         }
       />
@@ -243,7 +243,7 @@ function FeatureRail() {
                 ),
               },
             ]}
-            caption="cited · saves data · last 30d"
+            caption="from the last 30 days of your saves"
           />
         }
       />
@@ -293,7 +293,7 @@ function FeatureRail() {
                 ),
               },
             ]}
-            caption="cited · your calendar · your top hours"
+            caption="matched against your calendar"
           />
         }
       />
@@ -341,12 +341,12 @@ function FeatureRail() {
                 ),
               },
             ]}
-            caption="cited · 30-post baseline · 2h read"
+            caption="against your last 30 posts, every two hours"
           />
         }
       />
 
-      {/* 05 — Lives in your messages */}
+      {/* 05 — Lives in your iMessages */}
       <FeatureSection
         eyebrow="Tool fatigue"
         Icon={MessageSquareText}
@@ -439,7 +439,7 @@ function FeatureRail() {
                 ),
               },
             ]}
-            caption="cited · your calendar · your commitments"
+            caption="matched against what you said you'd do"
           />
         }
       />
@@ -458,10 +458,10 @@ function FeatureRail() {
         }
         subhead={
           <>
-            Maya reads every brand email in Gmail, drafts replies in your voice,
-            and anchors on your floor rate. Above your auto-send threshold she
-            hands the draft back. Below it, she sends and tells you what
-            happened.
+            Maya reads every brand email in Gmail, drafts the reply in your
+            voice, and anchors on your minimum rate. If the deal is at or above
+            the rate you&rsquo;ve trusted her with, she sends and tells you what
+            she said. If she&rsquo;s not sure, you get the draft.
           </>
         }
         visual={
@@ -488,7 +488,7 @@ function FeatureRail() {
                 ),
               },
             ]}
-            caption="cited · floor $6K · last Glossier post"
+            caption="anchored on your $6K minimum"
           />
         }
       />
@@ -507,10 +507,10 @@ function FeatureRail() {
         }
         subhead={
           <>
-            Maya spots fits via Apollo and Hunter, finds the right person, and
-            drafts the cold pitch in your voice. You see it before she hits
-            send. The pipeline you&rsquo;d build if you had time, running while
-            you film.
+            Maya spots brands you&rsquo;d be a fit for, tracks down the right
+            person at each, and drafts the cold pitch in your voice. You see it
+            before she hits send. The pipeline you&rsquo;d build if you had
+            time, running while you film.
           </>
         }
         visual={
@@ -537,7 +537,7 @@ function FeatureRail() {
                 ),
               },
             ]}
-            caption="cited · Apollo · audience overlap data"
+            caption="matched on audience overlap"
           />
         }
       />
@@ -556,9 +556,10 @@ function FeatureRail() {
         }
         subhead={
           <>
-            Drop the PDF in chat. Maya flags exclusivity, IP grants, payment
-            terms, kill fees, FTC compliance — in plain language. The clauses
-            you should push back on, and the words to push back with.
+            Drop the PDF in chat. Maya flags the things that get creators in
+            trouble — exclusivity, who owns the content, when you actually get
+            paid, kill fees, the disclosure rules. In plain language. The
+            clauses you should push back on, and the words to push back with.
           </>
         }
         visual={
@@ -587,7 +588,7 @@ function FeatureRail() {
                 ),
               },
             ]}
-            caption="cited · clauses 4.2, 7.1, 9.3"
+            caption="three clauses to push back on"
           />
         }
       />
@@ -661,9 +662,10 @@ function FeatureRail() {
         subhead={
           <>
             Maya is built from your last 30 posts and 500 comments before she
-            sends a single message. She remembers goals, tone, floor rate,
-            brand history, hooks that hit, hooks that didn&rsquo;t. The longer
-            you have her, the more she sounds like she knows you.
+            sends a single message. She remembers your goals, your tone, your
+            minimum rate, your brand history, the hooks that hit and the ones
+            that didn&rsquo;t. The longer you have her, the more she sounds
+            like she knows you.
           </>
         }
         visual={
@@ -691,7 +693,7 @@ function FeatureRail() {
                 ),
               },
             ]}
-            caption="cited · your March email · your floor"
+            caption="from your March email and your minimum"
           />
         }
       />

@@ -110,7 +110,7 @@ export function ChannelStep({ state, setChannel, onAdvance }: ChannelStepProps) 
     <StepShell
       eyebrow="§04 · Channel"
       title="Where should Maya text you?"
-      caption="The whole point is she lives in your messages. Pick where that is — you can change it later from Profile."
+      caption="The whole point is she lives in your iMessages. Pick where that is — you can change it later from Profile."
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {CHANNEL_CARDS.map((card) => {

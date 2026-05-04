@@ -13,7 +13,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Can Maya email a brand without asking me?",
-    a: "Only on Manager, only under thresholds you set, and only on the action types you approve (replies, follow-ups, cold pitches). Everything she sends, you see. Anything above your auto-send threshold lands as a draft for your tap.",
+    a: "Only on Manager, only on the kinds of replies you've said yes to, and only when the deal value is at or above the rate you've trusted her with. Everything she sends, you see in your iMessage thread. Anything she's not sure about lands as a draft for your tap.",
   },
   {
     q: "How does the 7-day trial work?",
