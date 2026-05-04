@@ -97,6 +97,8 @@ documented here for sibling-scan completeness:
 
 | entryId | trigger | description | thinking | tier | conditions | playbook § |
 |---|---|---|---|---|---|---|
+| `first_boot_introduction` | event: session start when `creators.firstBootCompletedAt === undefined` | Maya's first-message-on-boot sequence: greet + cited insight from `creatorPicture` + 3 opening questions (goal / tone / brand-deal floor) + Gmail OAuth deep-link via `integrations.composio.oauth.startOAuth({ provider: "gmail" })` + Calendar OAuth deep-link via the same action with `provider: "calendar"`. Fires once per creator. Stamps `creators.firstBootCompletedAt` on completion. | medium | all | runs once; idempotency-guarded by `firstBootCompletedAt`; partial completion re-enters at the next live point in the sequence rather than re-greeting | `playbook.md § First message handler — the introduction` |
+| `first_weekly_plan` | event: `creators.openingAnswersAt` is set AND `creators.firstWeeklyPlanSentAt === undefined` | First weekly content plan, generated immediately after the creator answers the three opening questions. Same `maya-content-arc-planner` chain as the Sunday `weekly_content_plan` cron; same `contentPlans` persistence. Stamps `creators.firstWeeklyPlanSentAt` on completion. Connection state is NOT gating — Calendar enrichment lands in the next Sunday cycle if Calendar isn't yet connected. | medium | all | chained off `first_boot_introduction`; runs once per creator | `playbook.md § First weekly plan — chained off the introduction` |
 | `hook_library_build` | event: ScrapeCreators delta detects a new post crossing the outlier threshold | Multimodal hook extraction from a high-performing post. Watches the video, parses captions + top comments, writes a hook entry to `hookLibrary` with citations. | medium | manager | Manager-only — folded into the autonomous post-reaction loop. Wait at least 6h after `posts.postedAt` for engagement to settle, then check that the post sits in the top 25% performance vs the creator's prior 30 posts on the same platform | `playbook.md § Hook library auto-build` |
 | `post_publish_reaction` | event: ScrapeCreators delta detects new post for any verified handle | Push to creator within latency cap with first-impression read on the post. Latency cap is plan-tier-bound: Coach 600s, Manager 300s — matches `planFeatures.postPublishReactionLatencySec` exactly. | medium | all | latency budget per plan tier; if the platform-fetch fails twice, drop to caption-only analysis rather than skip entirely | `playbook.md § Post-publish reaction` |
 | `brand_email_triage` | event: Gmail webhook (Composio) delivers a new inbound thread classified as brand-deal | Triage the thread, draft 4 reply variants tuned to the creator's floor rate, write to `brandDeals`. Surfaces to Deals screen + Today notification. Both tiers triage; Manager additionally permits auto-send under `autoSendThreshold`. | high | all | only if Composio Gmail connected; if revoked mid-task, fall back to polling once per 15 min for up to 2h, then surface a reconnect prompt on Today (this prompt is the **one** non-silent connection alert — brand emails are time-sensitive enough to warrant it) | `playbook.md § Brand email triage` |
@@ -163,6 +165,8 @@ auto-build (folded into the autonomous post-reaction loop).
 | `algo_research_x` | Y | Y⁵ |
 | `opportunity_scout_daily` | Y⁶ | Y⁶ |
 | `collab_matchmaker_weekly` | Y⁷ | Y⁷ |
+| `first_boot_introduction` (event) | Y | Y |
+| `first_weekly_plan` (event) | Y | Y |
 | `hook_library_build` (event) | — | Y |
 | `post_publish_reaction` (event) | Y⁸ | Y⁸ |
 | `brand_email_triage` (event) | Y⁹ | Y⁹ |
@@ -312,6 +316,8 @@ alphabetical by `entryId` so diff review is mechanical.
 | `cross_post_distribution` | `playbook.md § Cross-platform content distribution` | (no per-task key — uses `weekly_content_plan` budget) | event/on-demand |
 | `daily_niche_scan` | `playbook.md § Daily niche scan` | `PER_TASK_DEFAULT_BUDGET.niche_scan` | cron |
 | `evening_recap` | `playbook.md § Evening recap` | `PER_TASK_DEFAULT_BUDGET.evening_recap` | cron |
+| `first_boot_introduction` | `playbook.md § First message handler — the introduction` | (no per-task key — uses `chat_reply` budget for the intro messages; OAuth-link generation is a Convex action, no LLM) | event |
+| `first_weekly_plan` | `playbook.md § First weekly plan — chained off the introduction` | `PER_TASK_DEFAULT_BUDGET.weekly_content_plan` (same chain as Sunday cron) | event |
 | `growth_coach` | `playbook.md § Growth coaching` | (no per-task key — folded into `morning_brief` budget) | folded/on-demand |
 | `hook_library_build` | `playbook.md § Hook library auto-build` | `PER_TASK_DEFAULT_BUDGET.hook_library_build` | event |
 | `industry_intel_daily` | `playbook.md § Industry intel` | (no per-task key — uses `niche_scan` budget) | cron |

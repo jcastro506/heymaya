@@ -96,6 +96,31 @@ export default defineSchema({
     /** Most-fired cron/event label across the last 7 days. */
     topSkillLast7d: v.optional(v.string()),
     // ─── end Creator usage analytics ──────────────────────────────────────
+    // ─── First-boot introduction — added 2026-05-04 ───────────────────────
+    // Sprint-coach/manager-tiers: Maya's first-message-on-boot sequence.
+    // The introduction flow is: greet + cited insight (from `creatorPicture`)
+    // → 3 opening questions (goal / tone / brand-deal floor) → drop Gmail
+    // OAuth deep-link → drop Google Calendar OAuth deep-link → swing into
+    // action with the first weekly content plan once answers + connections
+    // settle. Three flags below gate the sequence so it fires exactly once
+    // per creator:
+    //   - `firstBootCompletedAt`  — set when Maya finishes the intro arc
+    //     (greet + cited insight + 3 questions sent). Standing-order
+    //     `first_boot_introduction` guards on `firstBootCompletedAt ===
+    //     undefined`.
+    //   - `openingAnswersAt`      — set when the creator's reply with all
+    //     three answers is parsed + persisted to `creatorPicture`.
+    //   - `firstWeeklyPlanSentAt` — set after the first proactive weekly
+    //     content plan ships (independent of the Sun 4pm cron). Standing
+    //     order `first_weekly_plan` fires once when `openingAnswersAt` is
+    //     set AND `firstWeeklyPlanSentAt === undefined`.
+    // All three are optional so creator rows created before this migration
+    // (i.e. existing fixtures + tests) keep working — undefined means "not
+    // yet" for the corresponding step.
+    firstBootCompletedAt: v.optional(v.number()),
+    openingAnswersAt: v.optional(v.number()),
+    firstWeeklyPlanSentAt: v.optional(v.number()),
+    // ─── end First-boot introduction ──────────────────────────────────────
     createdAt: v.number(),
     // Sprint 3.7 — partial onboarding answer cursor + payload so a refresh
     // mid-flow doesn't lose progress. The full answer set is persisted to

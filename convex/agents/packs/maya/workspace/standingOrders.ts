@@ -90,6 +90,28 @@ export interface StandingOrderProgram {
 
 export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
+    id: "first_boot_introduction",
+    title: "First-boot introduction",
+    tier: "all",
+    kind: "event",
+    scope:
+      "ONCE: greet + cited insight + 3 opening Q's + Gmail + Calendar OAuth via `composio.oauth.startOAuth({provider})`. Stamp `openingAnswersAt` + `firstBootCompletedAt`. See `playbook.md § 4.5`.",
+    triggers: "Session start, `firstBootCompletedAt === undefined`. Partial completion resumes.",
+    approvalGates: "None. Tap-skipping OAuth is fine; never nag.",
+    escalation: "Skip cited beat if picture incomplete. Composio 5xx → defer + retry next heartbeat.",
+  },
+  {
+    id: "first_weekly_plan",
+    title: "First weekly plan (immediate)",
+    tier: "all",
+    kind: "event",
+    scope:
+      "`maya-content-arc-planner` immediately after the 3 Q's land. Persist + push + stamp `firstWeeklyPlanSentAt`.",
+    triggers: "`openingAnswersAt` set, `firstWeeklyPlanSentAt === undefined`. Calendar not gating.",
+    approvalGates: "Creator approves each idea card in Plan. No auto-publish.",
+    escalation: "Picture missing → handles-only plan; 'v2 Sunday has full picture.' Don't defer.",
+  },
+  {
     id: "morning_brief",
     title: "Morning brief",
     tier: "all",
