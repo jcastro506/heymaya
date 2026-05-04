@@ -372,17 +372,23 @@ describe("Wave 5 — per-tier cron set (Starter limited / Pro+ full)", () => {
     expect(ids).toContain("weekly_review");
   });
 
-  it("Starter MUST NOT run industry_intel_daily, competitor_watch, calendar_lookahead, manager_readiness_packet_quarterly, revenue_snapshot", () => {
+  it("Coach MUST run advisory programs (industry_intel_daily, competitor_watch, calendar_lookahead, manager_readiness_packet_quarterly, revenue_snapshot) — boundary is autonomy, not breadth", () => {
     const { jobs } = buildCronJobsJson({ creator: fakeCreator("coach") });
     const ids = new Set(jobs.map((j) => j.entryId));
-    for (const blocked of [
+    // Post-coach/manager migration: every read/advisory program is
+    // tier:"all" because the cost ceiling is small per-creator and the
+    // advisory value compounds. Manager-only entries are ones that
+    // require autonomous OUTBOUND action on the creator's behalf
+    // (auto-send, cold pitch, Apollo/Hunter discovery, hook-library
+    // auto-build folded into the autonomous post-reaction loop).
+    for (const advisory of [
       "industry_intel_daily",
       "competitor_watch",
       "calendar_lookahead",
       "manager_readiness_packet_quarterly",
       "revenue_snapshot",
     ]) {
-      expect(ids.has(blocked), `Starter: must NOT run '${blocked}'`).toBe(false);
+      expect(ids.has(advisory), `Coach: must run advisory '${advisory}'`).toBe(true);
     }
   });
 });

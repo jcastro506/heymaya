@@ -243,13 +243,19 @@ describe("buildMayaConfig — workspace bundle + jobsJson (replaces cronEnableme
     expect(workspaceBundleBytes).toBeInstanceOf(Uint8Array);
   });
 
-  it("Pro creator's jobsJson contains many entries; Starter's contains a small subset", () => {
-    const pro = buildMayaConfig(emptyInputs("manager"), NOW);
-    const starter = buildMayaConfig(emptyInputs("coach"), NOW);
-    expect(pro.config.jobsJson.jobs.length).toBeGreaterThan(
-      starter.config.jobsJson.jobs.length
+  it("Coach's jobsJson is non-empty; Manager's is at least as large (boundary is autonomy, not cron breadth)", () => {
+    const manager = buildMayaConfig(emptyInputs("manager"), NOW);
+    const coach = buildMayaConfig(emptyInputs("coach"), NOW);
+    // Post-coach/manager migration: both tiers run the same proactive
+    // cron set. Manager's exclusive autonomy (auto-send, cold pitch,
+    // hook-library auto-build) lives on event/folded triggers, not
+    // cron entries — so Coach and Manager often have identical
+    // jobsJson. The invariant that survives: Coach must be non-empty
+    // and Manager must be at least as large.
+    expect(coach.config.jobsJson.jobs.length).toBeGreaterThan(0);
+    expect(manager.config.jobsJson.jobs.length).toBeGreaterThanOrEqual(
+      coach.config.jobsJson.jobs.length
     );
-    expect(starter.config.jobsJson.jobs.length).toBeGreaterThan(0);
   });
 
   it("jobsJson is sorted by name (deterministic for diff-stability)", () => {
