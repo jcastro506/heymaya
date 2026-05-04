@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentType, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 /**
  * A single pain-led feature section. Reused 12x in /creators with alternating
@@ -8,24 +8,18 @@ import type { ComponentType, ReactNode } from "react";
  * stamped-out feature grid.
  *
  * Structure (every section):
- *  - eyebrow tag (small uppercase category)
- *  - icon (lucide)
+ *  - optional autonomy badge (e.g., "Manager tier")
  *  - headline (pain-first or solution-first)
  *  - subhead (1-2 sentences with concrete mechanic)
  *  - visual (typically <IMessageCard /> showing a sample Maya message)
- *  - optional autonomy badge (e.g., "Manager tier")
  */
 export function FeatureSection({
-  eyebrow,
-  Icon,
   headline,
   subhead,
   visual,
   reverse = false,
   badge,
 }: {
-  eyebrow: string;
-  Icon: ComponentType<{ className?: string; strokeWidth?: number }>;
   headline: ReactNode;
   subhead: ReactNode;
   visual: ReactNode;
@@ -42,21 +36,14 @@ export function FeatureSection({
         >
           {/* Copy column */}
           <div className="lg:col-span-6">
-            <div className="flex items-center gap-3">
-              <span className="h-px flex-1 max-w-12 bg-[var(--hairline-strong)]" />
-              <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
-                {eyebrow}
-              </span>
-              {badge ? (
-                <span className="rounded-full bg-lime px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-ink">
+            {badge ? (
+              <div className="mb-5">
+                <span className="rounded-full bg-lime px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-ink">
                   {badge}
                 </span>
-              ) : null}
-            </div>
-            <div className="mt-5 inline-flex h-11 w-11 items-center justify-center rounded-full border border-[var(--hairline-strong)] text-lime">
-              <Icon className="h-4 w-4" strokeWidth={1.75} />
-            </div>
-            <h3 className="mt-5 font-display text-3xl leading-[1.08] tracking-tight text-paper sm:text-4xl lg:text-[2.625rem]">
+              </div>
+            ) : null}
+            <h3 className="font-display text-3xl leading-[1.08] tracking-tight text-paper sm:text-4xl lg:text-[2.625rem]">
               {headline}
             </h3>
             <div className="mt-5 max-w-xl text-base leading-relaxed text-paper-dim sm:text-[17px]">

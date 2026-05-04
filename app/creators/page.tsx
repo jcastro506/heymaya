@@ -2,21 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import {
-  ArrowUpRight,
-  Brain,
-  Calendar,
-  ClipboardCheck,
-  FileText,
-  Handshake,
-  LineChart,
-  Megaphone,
-  MessageSquareText,
-  Search,
-  ShieldCheck,
-  Sparkles,
-  Trophy,
-} from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 
 import { AudienceToggle } from "./_components/AudienceToggle";
 import { Faq } from "./_components/Faq";
@@ -149,8 +135,6 @@ function FeatureRail() {
     <div id="features" className="pt-12">
       {/* 01 — Trends */}
       <FeatureSection
-        eyebrow="Algorithm anxiety"
-        Icon={Search}
         headline={
           <>
             The algorithm changes every week.{" "}
@@ -196,8 +180,6 @@ function FeatureRail() {
 
       {/* 02 — Idea sparring */}
       <FeatureSection
-        eyebrow="Solo isolation"
-        Icon={Sparkles}
         reverse
         headline={
           <>
@@ -250,8 +232,6 @@ function FeatureRail() {
 
       {/* 03 — Weekly plan */}
       <FeatureSection
-        eyebrow="Planning paralysis"
-        Icon={Calendar}
         headline={
           <>
             Sunday hits and the week is{" "}
@@ -300,8 +280,6 @@ function FeatureRail() {
 
       {/* 04 — Performance reading */}
       <FeatureSection
-        eyebrow="Data illiteracy"
-        Icon={LineChart}
         reverse
         headline={
           <>
@@ -348,8 +326,6 @@ function FeatureRail() {
 
       {/* 05 — Lives in your iMessages */}
       <FeatureSection
-        eyebrow="Tool fatigue"
-        Icon={MessageSquareText}
         headline={
           <>
             Eight tools. Seven dashboards.{" "}
@@ -400,8 +376,6 @@ function FeatureRail() {
 
       {/* 06 — Accountability */}
       <FeatureSection
-        eyebrow="Consistency"
-        Icon={Trophy}
         reverse
         headline={
           <>
@@ -446,8 +420,6 @@ function FeatureRail() {
 
       {/* 07 — Brand DM triage */}
       <FeatureSection
-        eyebrow="Monetization fragility"
-        Icon={Handshake}
         headline={
           <>
             Brand emails sit unanswered. You undercharge.{" "}
@@ -495,8 +467,6 @@ function FeatureRail() {
 
       {/* 08 — Brand outreach (Manager only) */}
       <FeatureSection
-        eyebrow="Cold-pitch fatigue"
-        Icon={Megaphone}
         reverse
         badge="Manager tier"
         headline={
@@ -544,8 +514,6 @@ function FeatureRail() {
 
       {/* 09 — Contracts */}
       <FeatureSection
-        eyebrow="Legal blind spots"
-        Icon={FileText}
         headline={
           <>
             A 14-page contract. You skim. You sign.{" "}
@@ -568,7 +536,7 @@ function FeatureRail() {
             bubbles={[
               {
                 side: "right",
-                body: <>just got the contract — 14 pages 😩</>,
+                body: <>just got the contract — 14 pages</>,
               },
               {
                 side: "left",
@@ -595,8 +563,6 @@ function FeatureRail() {
 
       {/* 10 — Manager packet */}
       <FeatureSection
-        eyebrow="The in-between stage"
-        Icon={ClipboardCheck}
         reverse
         headline={
           <>
@@ -649,8 +615,6 @@ function FeatureRail() {
 
       {/* 11 — Memory + voice mirror */}
       <FeatureSection
-        eyebrow="Voice drift"
-        Icon={Brain}
         headline={
           <>
             VAs and agencies dilute your voice.{" "}
@@ -700,8 +664,6 @@ function FeatureRail() {
 
       {/* 12 — Tells the truth */}
       <FeatureSection
-        eyebrow="Anti-sycophancy"
-        Icon={ShieldCheck}
         reverse
         headline={
           <>
