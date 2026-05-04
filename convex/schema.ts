@@ -11,6 +11,7 @@ export default defineSchema({
       v.literal("imessage"),
       v.literal("whatsapp"),
       v.literal("sms"),
+      v.literal("telegram"),
       v.literal("web")
     ),
     timezone: v.string(),
@@ -1160,11 +1161,17 @@ export default defineSchema({
     channel: v.union(
       v.literal("imessage"),
       v.literal("whatsapp"),
-      v.literal("sms")
+      v.literal("sms"),
+      v.literal("telegram")
     ),
-    phoneNumber: v.string(), // E.164
+    // Channel-native identifier as a string. For imessage/whatsapp/sms this is
+    // E.164 phone (e.g. "+15551234567"). For telegram it's "tg:<chat_id>" or
+    // "tg:pending" while the pair is in flight (chat_id is only known after
+    // the user DMs the bot and OpenClaw approves the pair). Field name kept
+    // for backward compatibility with existing rows; semantics widened.
+    phoneNumber: v.string(),
     externalPairingId: v.string(), // OpenClaw-side pair request id
-    externalIdentifier: v.optional(v.string()), // OpenClaw final channel id
+    externalIdentifier: v.optional(v.string()), // OpenClaw final channel id (telegram chat_id or @username)
     status: v.union(
       v.literal("pending"),
       v.literal("active"),

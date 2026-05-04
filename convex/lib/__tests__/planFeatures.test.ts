@@ -63,15 +63,15 @@ describe("planFeatures matrix — REVISED 2026-04-26", () => {
     });
   });
 
-  describe("allowedChannels — UNGATED (channels are OpenClaw-native)", () => {
-    const ALL: ReadonlyArray<Channel> = ["web", "sms", "imessage", "whatsapp"];
+  describe("allowedChannels — UNGATED (channels are OpenClaw-native; telegram added 2026-05-03)", () => {
+    const ALL: ReadonlyArray<Channel> = ["web", "sms", "imessage", "whatsapp", "telegram"];
     for (const plan of PLANS) {
-      it(`${plan} includes all 4 channels`, () => {
+      it(`${plan} includes all 5 channels`, () => {
         const f = planFeatures({ plan });
         for (const ch of ALL) {
           expect(f.allowedChannels).toContain(ch);
         }
-        expect(f.allowedChannels.length).toBe(4);
+        expect(f.allowedChannels.length).toBe(5);
       });
     }
   });

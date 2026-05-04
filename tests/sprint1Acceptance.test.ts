@@ -45,7 +45,7 @@ const APP_DIR = join(REPO_ROOT, "app");
 describe("Sprint 1 acceptance — plan-tier × action matrix", () => {
   const PLANS: ReadonlyArray<Plan> = ["starter", "pro", "studio"];
   const BUDGETS: ReadonlyArray<ThinkingBudget> = ["none", "low", "medium", "high"];
-  const CHANNELS: ReadonlyArray<Channel> = ["web", "sms", "imessage", "whatsapp"];
+  const CHANNELS: ReadonlyArray<Channel> = ["web", "sms", "imessage", "whatsapp", "telegram"];
   const PROVIDERS: ReadonlyArray<Provider> = ["gmail", "stripe", "calendar", "apollo", "hunter"];
 
   describe("thinking budget clamp", () => {
@@ -63,11 +63,11 @@ describe("Sprint 1 acceptance — plan-tier × action matrix", () => {
     }
   });
 
-  describe("channel allowlist (REVISED 2026-04-26: channels are OpenClaw-native, ungated)", () => {
+  describe("channel allowlist (REVISED 2026-04-26: channels are OpenClaw-native, ungated; telegram added 2026-05-03)", () => {
     const expected: Record<Plan, Record<Channel, boolean>> = {
-      starter: { web: true, sms: true, imessage: true, whatsapp: true },
-      pro: { web: true, sms: true, imessage: true, whatsapp: true },
-      studio: { web: true, sms: true, imessage: true, whatsapp: true },
+      starter: { web: true, sms: true, imessage: true, whatsapp: true, telegram: true },
+      pro: { web: true, sms: true, imessage: true, whatsapp: true, telegram: true },
+      studio: { web: true, sms: true, imessage: true, whatsapp: true, telegram: true },
     };
     for (const plan of PLANS) {
       for (const channel of CHANNELS) {
@@ -272,11 +272,19 @@ describe("Sprint 1 acceptance — sibling-file scan", () => {
   });
 
   it("no orphan imports — every relative import in convex/ resolves to a real file", () => {
+    // Files that embed skill markdown / docstring code samples containing
+    // example `from '../foo'` strings inside template literals — these are
+    // not real imports and the regex below cannot distinguish them. Whitelist
+    // explicitly so the scan stays meaningful for real source files.
+    const STRING_LITERAL_DOC_FILES = new Set([
+      "pinnedClawhubSkills.ts",
+    ]);
     const tsFiles = walk(CONVEX_DIR).filter(
       (f) =>
         f.endsWith(".ts") &&
         !f.includes("/_generated/") &&
-        !f.endsWith(".d.ts")
+        !f.endsWith(".d.ts") &&
+        !STRING_LITERAL_DOC_FILES.has(f.split("/").pop() ?? "")
     );
 
     const importPattern = /from\s+["'](\.\.?\/[^"']+)["']/g;

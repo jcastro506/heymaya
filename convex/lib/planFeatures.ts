@@ -4,10 +4,10 @@ import { Doc } from "../_generated/dataModel";
  * Plan-tier feature matrix — REVISED 2026-04-26.
  *
  * Tier philosophy:
- *   1. Channels (iMessage / WhatsApp / SMS / web) are OpenClaw-NATIVE. They
- *      cost us nothing per creator (the org configures them once, OpenClaw
- *      handles routing). Therefore: **every tier gets every channel.** No
- *      paywall on where Maya pings the creator.
+ *   1. Channels (iMessage / WhatsApp / SMS / Telegram / web) are OpenClaw-
+ *      NATIVE. They cost us nothing per creator (the org configures them once,
+ *      OpenClaw handles routing). Therefore: **every tier gets every channel.**
+ *      No paywall on where Maya pings the creator.
  *   2. Composio Gmail is per-call cost, but small, and the brand-triage value
  *      is the headline reason creators sign up. Therefore: **every tier gets
  *      the Gmail deal desk** (`gmailDealDeskEnabled = true` for all).
@@ -43,7 +43,7 @@ import { Doc } from "../_generated/dataModel";
 
 export type Plan = "starter" | "pro" | "studio";
 export type ThinkingBudget = "none" | "low" | "medium" | "high";
-export type Channel = "imessage" | "whatsapp" | "sms" | "web";
+export type Channel = "imessage" | "whatsapp" | "sms" | "telegram" | "web";
 export type Provider = "gmail" | "stripe" | "calendar" | "apollo" | "hunter";
 
 export interface PlanFeatures {
@@ -105,6 +105,7 @@ const ALL_CHANNELS: ReadonlyArray<Channel> = [
   "sms",
   "imessage",
   "whatsapp",
+  "telegram",
 ];
 
 const STARTER: PlanFeatures = {

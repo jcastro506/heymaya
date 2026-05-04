@@ -1,16 +1,20 @@
 /**
- * ChannelPairingCard — Sprint 6C.
+ * ChannelPairingCard — Sprint 6C + Telegram extension (2026-05-03).
  *
  * Self-contained card the Profile screen drops in. Reads its own data from
  * Convex (via `useQuery(api.creators.me)` + `useQuery(api.integrations.openclaw.channels.listPairedChannels)`)
- * and exposes pair / confirm / unpair flows for iMessage, WhatsApp, and SMS.
+ * and exposes pair / confirm / unpair flows for iMessage, WhatsApp, SMS, and
+ * Telegram.
  *
  * Responsibilities (project_openclaw_alignment.md):
  *   - This component is the orchestration UI ONLY. OpenClaw owns all message
  *     routing, inbound handling, and outbound delivery natively. We render the
- *     plan-tier gate, collect the E.164 phone number, fire `requestPairing`,
- *     show the QR code (iMessage/WhatsApp) or SMS code-entry form (SMS), and
- *     fire `confirmPairing`. After that, OpenClaw takes over.
+ *     plan-tier gate, collect the channel-native identifier (E.164 phone for
+ *     phone channels; nothing for telegram — chat_id flows in via OpenClaw
+ *     after the user DMs the bot), fire `requestPairing`, show the QR code
+ *     (iMessage/WhatsApp), SMS code-entry form (SMS), or deep-link + code
+ *     entry (Telegram), and fire `confirmPairing`. After that, OpenClaw takes
+ *     over.
  *
  * Props:
  *   - variant: "default" (full pairing UI) | "compact" (status badges only).
@@ -28,16 +32,20 @@ export interface ChannelPairingCardProps {
   variant?: "default" | "compact";
 }
 
-const PAIRABLE: ReadonlyArray<"imessage" | "whatsapp" | "sms"> = [
+type PairableChannelLocal = "imessage" | "whatsapp" | "sms" | "telegram";
+
+const PAIRABLE: ReadonlyArray<PairableChannelLocal> = [
   "imessage",
   "whatsapp",
   "sms",
+  "telegram",
 ];
 
-const CHANNEL_LABEL: Record<"imessage" | "whatsapp" | "sms", string> = {
+const CHANNEL_LABEL: Record<PairableChannelLocal, string> = {
   imessage: "iMessage",
   whatsapp: "WhatsApp",
   sms: "SMS",
+  telegram: "Telegram",
 };
 
 export function ChannelPairingCard(
@@ -63,10 +71,13 @@ export function ChannelPairingCard(
   // most recent error string. Intentionally not lifted: the entire flow is
   // ephemeral; refreshing the page should reset to "neutral".
   const [activePair, setActivePair] = useState<{
-    channel: "imessage" | "whatsapp" | "sms";
+    channel: PairableChannelLocal;
     pairingId?: string;
     qrCodeDataUrl?: string;
     smsConfirmationCodeRequested?: boolean;
+    telegramPairCode?: string;
+    telegramBotUsername?: string;
+    telegramDeepLink?: string;
   } | null>(null);
   const [phoneInput, setPhoneInput] = useState("");
   const [codeInput, setCodeInput] = useState("");
@@ -111,9 +122,11 @@ export function ChannelPairingCard(
     );
   }
 
-  const onPair = async (channel: "imessage" | "whatsapp" | "sms") => {
+  const onPair = async (channel: PairableChannelLocal) => {
     setErrorMsg(null);
-    if (!phoneInput.trim()) {
+    // Telegram needs no up-front input — chat_id is captured via the bot's
+    // /start payload. Phone channels still require E.164 entry.
+    if (channel !== "telegram" && !phoneInput.trim()) {
       setErrorMsg("Enter your phone number first (E.164, e.g. +14155551234).");
       return;
     }
@@ -121,13 +134,16 @@ export function ChannelPairingCard(
     try {
       const res = await requestPairing({
         channel,
-        phoneNumber: phoneInput.trim(),
+        phoneNumber: channel === "telegram" ? undefined : phoneInput.trim(),
       });
       setActivePair({
         channel,
         pairingId: res.pairingId,
         qrCodeDataUrl: res.qrCodeDataUrl,
         smsConfirmationCodeRequested: channel === "sms",
+        telegramPairCode: res.telegramPairCode,
+        telegramBotUsername: res.telegramBotUsername,
+        telegramDeepLink: res.telegramDeepLink,
       });
       setCodeInput("");
     } catch (err) {
@@ -145,7 +161,9 @@ export function ChannelPairingCard(
       await confirmPairing({
         pairingId: activePair.pairingId,
         confirmationCode:
-          activePair.channel === "sms" ? codeInput.trim() : undefined,
+          activePair.channel === "sms" || activePair.channel === "telegram"
+            ? codeInput.trim()
+            : undefined,
       });
       setActivePair(null);
       setPhoneInput("");
@@ -157,7 +175,7 @@ export function ChannelPairingCard(
     }
   };
 
-  const onUnpair = async (channel: "imessage" | "whatsapp" | "sms") => {
+  const onUnpair = async (channel: PairableChannelLocal) => {
     setErrorMsg(null);
     setBusy(true);
     try {
@@ -234,6 +252,38 @@ export function ChannelPairingCard(
               />
             </div>
           )}
+          {activePair.channel === "telegram" && activePair.telegramDeepLink && (
+            <div className="mb-3 space-y-3">
+              <p className="text-sm text-paper-dim">
+                Open Telegram, tap Start in the chat with{" "}
+                <span className="font-mono text-paper">
+                  @{activePair.telegramBotUsername}
+                </span>
+                , then paste the code the bot replies with below.
+              </p>
+              <a
+                href={activePair.telegramDeepLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center rounded-full bg-paper px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink hover:opacity-90"
+                data-testid="channel-pairing-telegram-deeplink"
+              >
+                Open Telegram
+              </a>
+              <input
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                value={codeInput}
+                onChange={(e) =>
+                  setCodeInput(e.target.value.toUpperCase().slice(0, 12))
+                }
+                placeholder="ABC123"
+                className="w-full rounded border border-[var(--hairline)] bg-ink-2 px-3 py-2 font-mono text-sm text-paper outline-none focus:border-paper-dim"
+                data-testid="channel-pairing-telegram-code-input"
+              />
+            </div>
+          )}
           <div className="mt-3 flex gap-2">
             <button
               type="button"
@@ -259,14 +309,16 @@ export function ChannelPairingCard(
         </div>
       )}
 
-      {/* Phone number input + pair buttons */}
+      {/* Phone number input + pair buttons. Telegram is the only pairable
+          channel that doesn't need the phone input — it stays visible so
+          phone-channel pairing works the same as before. */}
       {!activePair && (
         <div className="mb-5">
           <label
             htmlFor="channel-pair-phone"
             className="mb-1 block font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint"
           >
-            Phone (E.164)
+            Phone (E.164) — required for iMessage / WhatsApp / SMS, ignored for Telegram
           </label>
           <input
             id="channel-pair-phone"
@@ -378,6 +430,6 @@ export function ChannelPairingCard(
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- plan kept for forward-compat / API symmetry
 function allowedChannelsForPlan(
   plan: "starter" | "pro" | "studio"
-): ReadonlyArray<"imessage" | "whatsapp" | "sms"> {
-  return ["imessage", "whatsapp", "sms"];
+): ReadonlyArray<PairableChannelLocal> {
+  return ["imessage", "whatsapp", "sms", "telegram"];
 }

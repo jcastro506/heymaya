@@ -329,7 +329,7 @@ describe("deployMaya — plan-tier enforcement (CRITICAL)", () => {
       recorded.setAppSecrets[0].secrets.MAYA_BOOTSTRAP_JSON
     );
     expect([...bootstrap.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "web", "whatsapp"]
+      ["imessage", "sms", "telegram", "web", "whatsapp"]
     );
   });
 

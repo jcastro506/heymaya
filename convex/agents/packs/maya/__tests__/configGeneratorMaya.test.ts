@@ -202,21 +202,21 @@ describe("buildMayaConfig — gateway config (OpenClaw-native channels + bootstr
     inputs.creator.channelPreference = "imessage";
     const { config } = buildMayaConfig(inputs, NOW);
     expect([...config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "web", "whatsapp"]
+      ["imessage", "sms", "telegram", "web", "whatsapp"]
     );
   });
 
   it("Pro gateway enables all four channels", () => {
     const { config } = buildMayaConfig(emptyInputs("pro"), NOW);
     expect([...config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "web", "whatsapp"]
+      ["imessage", "sms", "telegram", "web", "whatsapp"]
     );
   });
 
   it("Studio gateway enables all four channels", () => {
     const { config } = buildMayaConfig(emptyInputs("studio"), NOW);
     expect([...config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "web", "whatsapp"]
+      ["imessage", "sms", "telegram", "web", "whatsapp"]
     );
   });
 
@@ -384,7 +384,7 @@ describe("generateMayaConfig — Convex action surface", () => {
     );
     // Pro gets all four channels.
     expect([...bundle.config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "web", "whatsapp"]
+      ["imessage", "sms", "telegram", "web", "whatsapp"]
     );
     expect(bundle.version).toMatch(/^[0-9a-f]{32}$/);
     // The action uploads the workspace tarball internally and patches the
@@ -467,7 +467,7 @@ describe("generateMayaConfig — Convex action surface", () => {
       { creatorId: c, nowOverride: NOW }
     );
     expect([...bundle.config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "web", "whatsapp"]
+      ["imessage", "sms", "telegram", "web", "whatsapp"]
     );
     expect(bundle.config.composioAccounts.map((a) => a.provider).sort()).toEqual(
       ["gmail", "stripe"]

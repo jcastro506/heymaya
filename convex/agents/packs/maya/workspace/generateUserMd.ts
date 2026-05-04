@@ -185,6 +185,8 @@ function describeChannel(channel: Channel, _plan: Plan): string {
       return "WhatsApp";
     case "sms":
       return "SMS";
+    case "telegram":
+      return "Telegram (rich media + inline buttons)";
     case "web":
       return "web chat (Creator HQ)";
   }
