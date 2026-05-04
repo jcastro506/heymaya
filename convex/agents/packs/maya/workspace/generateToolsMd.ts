@@ -48,7 +48,7 @@ export function generateToolsMd(): string {
     "",
     "Read layer for 27+ social platforms — TikTok, Instagram, YouTube, LinkedIn, X, Threads, Reddit, Pinterest, Facebook, Snapchat, Twitch, Kick, Truth Social, Bluesky, plus ad libraries (Meta, TikTok) and link aggregators (Linktree, Komi, Pillar).",
     "",
-    "The skill is loaded into the workspace at deploy. Manifest at `/data/skills/scrapecreators/manifest.json`; install notes at `/data/skills/scrapecreators/install.md`. Each endpoint contract (inputs, outputs, rate limits) is documented in the manifest.",
+    "The skill is loaded into the workspace at deploy as `skills/scrapecreators-api/SKILL.md` (the official package from `github.com/scrapecreators/agent-skills`). It documents 110 endpoints across all 27+ platforms with intent-routing tables. The skill's frontmatter declares the env requirement (`SCRAPECREATORS_API_KEY`) and OpenClaw metadata; the loader auto-discovers it under the workspace `skills/` tree.",
     "",
     "Common invocations:",
     "",

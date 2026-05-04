@@ -157,9 +157,13 @@ export const runFullScrapePull = internalAction({
             .slice(0, TIKTOK_DEEP_DIVE_TOP_N);
           const extrasSettled = await Promise.allSettled(
             topPosts.map(async (p) => {
+              // The v1/v2 single-video endpoints key on the public share URL,
+              // not the bare aweme id (production-bug fix landed alongside the
+              // official scrapecreators-api skill install). Build the URL from
+              // the loop's handle + the aweme id from `posts[i].postId`.
               const [tx, cm] = await Promise.allSettled([
-                tiktok.transcript(p.postId, deps),
-                tiktok.comments(p.postId, deps),
+                tiktok.transcript(h.handle, p.postId, deps),
+                tiktok.comments(h.handle, p.postId, deps),
               ]);
               const transcript =
                 tx.status === "fulfilled" ? tx.value.transcript : null;
