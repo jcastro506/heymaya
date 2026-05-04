@@ -353,20 +353,37 @@ describe("billing.checkout.createCheckoutSession", () => {
     }
   });
 
-  it("ADVERSARIAL — Clerk subject without a creators row rejects", async () => {
+  it("ROBUSTNESS — Clerk subject without a creators row lazily creates one and proceeds", async () => {
+    // Production reality: Clerk's user.created webhook is the canonical
+    // creator-row writer, but it can race with checkout (slow webhook,
+    // local-dev with no public webhook URL, transient failure). Checkout
+    // lazy-creates the row from the authenticated Clerk identity rather
+    // than dead-ending the user. The insert is idempotent by clerkUserId.
     const teardown = withPriceIds();
     const fake = buildFakeStripeClient();
     _setStripeClientForTests(fake.client);
     try {
       const t = convexTest(schema, modules);
-      await expect(
-        t
-          .withIdentity({ subject: "u_no_row" })
-          .action(api.billing.checkout.createCheckoutSession, {
-            tier: "manager",
-            interval: "monthly",
-          })
-      ).rejects.toThrow(/creator row not found/i);
+      const out = await t
+        .withIdentity({ subject: "u_no_row" })
+        .action(api.billing.checkout.createCheckoutSession, {
+          tier: "manager",
+          interval: "monthly",
+        });
+      expect(out.url).toMatch(/checkout\.stripe\.test/);
+
+      // Creator row was lazy-created with clerkUserId === subject.
+      const created = await t.run(async (ctx) =>
+        ctx.db
+          .query("creators")
+          .withIndex("by_clerk_user", (q) =>
+            q.eq("clerkUserId", "u_no_row")
+          )
+          .first()
+      );
+      expect(created).not.toBeNull();
+      expect(created?.plan).toBe("coach");
+      expect(created?.status).toBe("onboarding");
     } finally {
       _setStripeClientForTests(null);
       teardown();

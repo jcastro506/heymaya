@@ -101,14 +101,32 @@ export const createCheckoutSession = action({
       throw new Error("createCheckoutSession: not authenticated.");
     }
 
-    const me = await ctx.runQuery(
+    let me = await ctx.runQuery(
       internal.billing.checkout.getMeForCheckout,
       { clerkUserId: identity.subject }
     );
     if (!me) {
-      throw new Error(
-        "createCheckoutSession: creator row not found for signed-in user."
+      // The Clerk → Convex `user.created` webhook is the canonical path that
+      // populates the creators row. In local dev (and any prod hiccup where
+      // the webhook missed), the row may not exist yet by the time the user
+      // clicks Start trial. Lazy-create it from the authenticated Clerk
+      // identity so checkout never dead-ends. The row insert is idempotent
+      // by clerkUserId.
+      const fallbackEmail =
+        (identity.email as string | undefined) ?? `${identity.subject}@unknown`;
+      await ctx.runMutation(internal.creators.createFromClerk, {
+        clerkUserId: identity.subject,
+        email: fallbackEmail,
+      });
+      me = await ctx.runQuery(
+        internal.billing.checkout.getMeForCheckout,
+        { clerkUserId: identity.subject }
       );
+      if (!me) {
+        throw new Error(
+          "createCheckoutSession: failed to create creator row from Clerk identity."
+        );
+      }
     }
 
     // Argument shape is enforced by validators above, but we double-check
