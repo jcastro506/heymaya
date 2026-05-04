@@ -180,7 +180,7 @@ function formatUsd(n: number): string {
 function describeChannel(channel: Channel, _plan: Plan): string {
   switch (channel) {
     case "imessage":
-      return "iMessage";
+      return "iMessage (rich media + tapback reactions, via Claw Messenger relay)";
     case "whatsapp":
       return "WhatsApp";
     case "sms":

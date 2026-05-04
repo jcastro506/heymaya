@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.2.7",
+    "@emotion-machine/claw-messenger": "^0.1.8",
     "convex": "^1.36.1",
     "lucide-react": "^1.11.0",
     "next": "16.2.4",
@@ -24,6 +25,7 @@
     "react-dom": "19.2.4",
     "stripe": "^22.1.0",
     "svix": "^1.92.2",
+    "ws": "^8.20.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -32,6 +34,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.1",
     "convex-test": "^0.0.38",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",

@@ -891,15 +891,16 @@ export const deployOpenClawLive = action({
       // OPENROUTER_API_KEY is non-negotiable: without it OpenClaw falls back
       // to its bundled `codex` provider and every model call fails with
       // "No API key found for provider 'openai'" (root cause documented in
-      // /memory/session_handoff_telegram_channel_2026_05_03.md). Telegram
-      // secrets are conditional on telegram being a routed channel — stub
-      // forwards both unconditionally because reads are cheap and OpenClaw
-      // only enables a channel when its config block is present.
+      // /memory/session_handoff_telegram_channel_2026_05_03.md). Channel
+      // secrets are conditional on the channel being routed — we forward
+      // unconditionally because reads are cheap and OpenClaw only enables a
+      // channel when its config block is present.
       const machineSecrets: Record<string, string> = {};
       for (const k of [
         "OPENROUTER_API_KEY",
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_BOT_USERNAME",
+        "CLAW_MESSENGER_API_KEY",
       ]) {
         const v = process.env[k];
         if (v) machineSecrets[k] = v;
@@ -1937,16 +1938,49 @@ function appNameForCreatorMayaLive(
   return `heymaya-cmv0-${short}-${Date.now().toString(36)}`;
 }
 
-function creatorMayaLiveMachineConfig(
+export function creatorMayaLiveMachineConfig(
   workspaceFiles: Record<string, string>,
   metadata: { creatorId: string; mode: string; appName: string }
 ): FlyMachineConfig {
+  // Resolve claw-messenger config from deploy-time env. The plugin's config
+  // schema requires an `apiKey` literal (auto-detect-from-env isn't supported
+  // the way the telegram plugin auto-reads TELEGRAM_BOT_TOKEN). When the key
+  // isn't set we omit the channel block entirely — OpenClaw just won't load
+  // the plugin's channel handler. See
+  // node_modules/@emotion-machine/claw-messenger/README.md for the schema.
+  const clawApiKey = process.env.CLAW_MESSENGER_API_KEY;
+  const channels: Record<string, unknown> = {
+    // Telegram channel — auto-detects token from TELEGRAM_BOT_TOKEN env.
+    // OpenClaw long-polls by default; webhook setup is opt-in. Per
+    // https://docs.openclaw.ai/channels/telegram (2026-05-03).
+    telegram: {
+      enabled: true,
+    },
+  };
+  if (clawApiKey) {
+    channels["claw-messenger"] = {
+      enabled: true,
+      apiKey: clawApiKey,
+      serverUrl: "wss://claw-messenger.onrender.com",
+      preferredService: "iMessage",
+      // dmPolicy: "open" for the operator-test creator. Multi-tenant pair
+      // gating moves to "pairing" or "allowlist" once we wire the per-creator
+      // pair flow through channels.ts. See README at
+      // node_modules/@emotion-machine/claw-messenger/README.md.
+      dmPolicy: "open",
+    };
+  }
   return {
     image: OPENCLAW_IMAGE,
     env: {
       OPENCLAW_STATE_DIR: "/data",
       MAYA_OPENCLAW_VERSION: "2026.4.23",
       MAYA_APP_NAME: metadata.appName,
+      // Force IPv4-first DNS so outbound calls to OpenRouter / LiteLLM /
+      // Telegram / Claw Messenger relays don't time out on Fly's IPv6-default
+      // egress. Documented root cause in
+      // /memory/session_handoff_telegram_channel_2026_05_03.md late update.
+      NODE_OPTIONS: "--dns-result-order=ipv4first",
     },
     files: [
       ...Object.entries(workspaceFiles).map(([name, content]) => ({
@@ -1976,14 +2010,7 @@ function creatorMayaLiveMachineConfig(
                 watch: true,
               },
             },
-            channels: {
-              // Telegram channel — auto-detects token from TELEGRAM_BOT_TOKEN
-              // env. OpenClaw long-polls by default; webhook setup is opt-in.
-              // Per https://docs.openclaw.ai/channels/telegram (2026-05-03).
-              telegram: {
-                enabled: true,
-              },
-            },
+            channels,
           })
         ),
       },
@@ -2011,6 +2038,12 @@ function creatorMayaLiveMachineConfig(
           "mkdir -p /data/workspace/state /data/canvas",
           "test -w /data/workspace",
           "test -w /data/cron",
+          // Install claw-messenger plugin if it isn't already on the image.
+          // Idempotent — re-running on every boot keeps the runtime self-
+          // healing across image rebuilds. `|| true` so a registry hiccup
+          // doesn't block gateway start; the channels block above only takes
+          // effect if the plugin actually registered.
+          "openclaw plugins install @emotion-machine/claw-messenger || true",
           "exec openclaw gateway --allow-unconfigured",
         ].join(" && "),
       ],
