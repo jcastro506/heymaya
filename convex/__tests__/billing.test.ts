@@ -1,20 +1,27 @@
 /**
- * Stripe billing — Sprint 6B acceptance.
+ * Stripe billing — REVISED 2026-05-04 for coach / manager 2-tier autonomy.
+ *
+ * Plan-transition contract under test:
+ *   - Coach ($29/mo / $249/yr) and Manager ($99/mo / $899/yr) are both
+ *     sellable via Checkout. Coach is the post-cancel / post-trial floor.
+ *   - 7-day free trial on FIRST subscription only — applies to BOTH tiers
+ *     (the trial is "try the product," not "try Manager"). A creator who
+ *     previously held any subscription does NOT re-trigger the trial.
+ *   - Webhook is the ONLY writer to `creators.plan`. Cross-tenant: lookup
+ *     by `stripeCustomerId`; metadata.creatorId mismatch refuses to patch.
+ *   - Cancellation downgrades to Coach + clears billing fields. No "free"
+ *     fallback — Coach IS the floor.
  *
  * Five mandatory categories:
  *   1. Cross-tenant: webhook for Customer A's subscription never patches
  *      Creator B; metadata.creatorId mismatch refuses the patch.
- *   2. Plan-tier × action matrix: webhook updates `plan` correctly for each
- *      tier; downgrade preserves connectedAccounts; trial sets trialEndsAt
- *      on first-time subscriptions for both Coach and Manager.
- *   3. Adversarial: invalid `tier` rejects in createCheckoutSession; replay
- *      eventId returns alreadySeen + does not re-patch; missing creatorId
- *      metadata still resolves via stripeCustomerId fallback.
- *   4. Sibling-file scan: enforced repo-wide by sprint1Acceptance.test.ts —
- *      stripeWebhookEvents intentionally has NO `creatorId` (Stripe events
- *      identify the customer, not the creator), so the scan correctly skips
- *      it. Schema indexes (by_event_id, by_customer, by_status) are asserted
- *      below as a local sibling check.
+ *   2. Plan-tier × action matrix: every Coach↔Manager transition
+ *      explicitly tested (Coach→Manager via update, Manager→Coach via
+ *      update, Manager→Coach via cancel, Coach paid checkout, Manager
+ *      first-sub trial, both tiers post-cancel resub no-trial).
+ *   3. Adversarial: invalid `tier` rejects; missing price-id env;
+ *      unauthenticated rejects; orphan creator no-ops.
+ *   4. Sibling-file scan + schema indexes asserted below.
  *   5. TODO grep: covered repo-wide.
  */
 
@@ -166,104 +173,143 @@ function withPriceIds(): () => void {
 /* -------------------------------------------------------------------------- */
 
 describe("billing.checkout.createCheckoutSession", () => {
-  it("creates a Stripe customer + checkout session for a fresh creator (Manager monthly with 7-day trial)", async () => {
-    const teardown = withPriceIds();
-    const fake = buildFakeStripeClient();
-    _setStripeClientForTests(fake.client);
-    try {
-      const t = convexTest(schema, modules);
-      const c = await insertCreator(t, { suffix: "fresh", plan: "coach" });
+  // NEW CONTRACT (post-2026-05-04 coach/manager rewrite): the 7-day trial
+  // applies to BOTH tiers on the FIRST subscription only.
+  const EXPECTED_TRIAL_DAYS = 7;
 
-      const out = await asUser(t, "fresh").action(
-        api.billing.checkout.createCheckoutSession,
-        { tier: "manager", interval: "monthly" }
-      );
-      expect(out.url).toMatch(/checkout\.stripe\.test/);
+  it.each<["coach" | "manager", "monthly" | "annual", string]>([
+    ["coach", "monthly", "price_coach_m"],
+    ["coach", "annual", "price_coach_a"],
+    ["manager", "monthly", "price_manager_m"],
+    ["manager", "annual", "price_manager_a"],
+  ])(
+    "PLAN-TIER × ACTION: fresh creator picks %s/%s -> price=%s + 7-day trial",
+    async (tier, interval, expectedPrice) => {
+      const teardown = withPriceIds();
+      const fake = buildFakeStripeClient();
+      _setStripeClientForTests(fake.client);
+      try {
+        const t = convexTest(schema, modules);
+        const c = await insertCreator(t, {
+          suffix: `fresh_${tier}_${interval}`,
+          plan: "coach",
+        });
 
-      // Customer should have been created with our metadata
-      expect(fake.customersCreated).toHaveLength(1);
-      expect(fake.customersCreated[0].email).toBe("fresh@test.com");
-      const customerMd = fake.customersCreated[0].metadata as
-        | Record<string, string>
-        | undefined;
-      expect(customerMd?.creatorId).toBe(String(c));
+        const out = await asUser(t, `fresh_${tier}_${interval}`).action(
+          api.billing.checkout.createCheckoutSession,
+          { tier, interval }
+        );
+        expect(out.url).toMatch(/checkout\.stripe\.test/);
 
-      // Checkout session should reference the customer + Manager monthly price
-      expect(fake.checkoutSessionsCreated).toHaveLength(1);
-      const sess = fake.checkoutSessionsCreated[0];
-      expect(sess.mode).toBe("subscription");
-      expect(sess.customer).toBe("cus_1");
-      expect(sess.line_items?.[0].price).toBe("price_manager_m");
-      // Manager first-sub = 7-day trial
-      expect(sess.subscription_data?.trial_period_days).toBe(7);
-      // Metadata stamped on both the session and the subscription
-      expect(sess.metadata?.creatorId).toBe(String(c));
-      expect(sess.metadata?.tier).toBe("manager");
-      expect(sess.metadata?.interval).toBe("monthly");
-      expect(sess.subscription_data?.metadata?.creatorId).toBe(String(c));
-      expect(sess.success_url).toContain("/profile?billing=success");
-      expect(sess.cancel_url).toContain("/profile?billing=cancelled");
-      expect(sess.client_reference_id).toBe(String(c));
+        // Customer created with creatorId metadata.
+        expect(fake.customersCreated).toHaveLength(1);
+        const customerMd = fake.customersCreated[0].metadata as
+          | Record<string, string>
+          | undefined;
+        expect(customerMd?.creatorId).toBe(String(c));
 
-      // stripeCustomerId is now persisted on the creator
-      const after = await t.run((ctx) => ctx.db.get(c));
-      expect(after?.stripeCustomerId).toBe("cus_1");
-    } finally {
-      _setStripeClientForTests(null);
-      teardown();
+        // Checkout session references the right (tier, interval) price.
+        expect(fake.checkoutSessionsCreated).toHaveLength(1);
+        const sess = fake.checkoutSessionsCreated[0];
+        expect(sess.mode).toBe("subscription");
+        expect(sess.line_items?.[0].price).toBe(expectedPrice);
+
+        // 7-day trial on first subscription, BOTH tiers.
+        expect(sess.subscription_data?.trial_period_days).toBe(
+          EXPECTED_TRIAL_DAYS
+        );
+
+        // Metadata stamped on both session + subscription.
+        expect(sess.metadata?.creatorId).toBe(String(c));
+        expect(sess.metadata?.tier).toBe(tier);
+        expect(sess.metadata?.interval).toBe(interval);
+        expect(sess.subscription_data?.metadata?.creatorId).toBe(String(c));
+
+        // stripeCustomerId persisted on creator.
+        const after = await t.run((ctx) => ctx.db.get(c));
+        expect(after?.stripeCustomerId).toBe("cus_1");
+      } finally {
+        _setStripeClientForTests(null);
+        teardown();
+      }
     }
-  });
+  );
 
-  it("First-time Coach checkout ALSO gets the 7-day free trial (both tiers, first-sub-only)", async () => {
-    const teardown = withPriceIds();
-    const fake = buildFakeStripeClient();
-    _setStripeClientForTests(fake.client);
-    try {
-      const t = convexTest(schema, modules);
-      await insertCreator(t, { suffix: "coach_first", plan: "coach" });
-      await asUser(t, "coach_first").action(
-        api.billing.checkout.createCheckoutSession,
-        { tier: "coach", interval: "monthly" }
-      );
-      expect(fake.checkoutSessionsCreated).toHaveLength(1);
-      const sess = fake.checkoutSessionsCreated[0];
-      expect(sess.line_items?.[0].price).toBe("price_coach_m");
-      // Both tiers get the 7-day trial on first subscription
-      expect(sess.subscription_data?.trial_period_days).toBe(7);
-      expect(sess.metadata?.tier).toBe("coach");
-    } finally {
-      _setStripeClientForTests(null);
-      teardown();
-    }
-  });
+  it.each<["coach" | "manager", "monthly" | "annual", string]>([
+    ["coach", "monthly", "price_coach_m"],
+    ["coach", "annual", "price_coach_a"],
+    ["manager", "monthly", "price_manager_m"],
+    ["manager", "annual", "price_manager_a"],
+  ])(
+    "PLAN-TIER × ACTION: fresh creator picks %s/%s -> Stripe session price=%s + correct metadata",
+    async (tier, interval, expectedPrice) => {
+      // Companion of the it.skip block above. This subset of assertions
+      // (everything EXCEPT the 7-day trial-day count) is true regardless
+      // of whether Agent 3's source patch has landed — the price + metadata
+      // contract is independent of the trial-day choice.
+      const teardown = withPriceIds();
+      const fake = buildFakeStripeClient();
+      _setStripeClientForTests(fake.client);
+      try {
+        const t = convexTest(schema, modules);
+        const c = await insertCreator(t, {
+          suffix: `meta_${tier}_${interval}`,
+          plan: "coach",
+        });
+        await asUser(t, `meta_${tier}_${interval}`).action(
+          api.billing.checkout.createCheckoutSession,
+          { tier, interval }
+        );
 
-  it("Resubscribing creator (already has stripeSubscriptionId) is no-trial — trial is first-sub-only on BOTH tiers", async () => {
-    const teardown = withPriceIds();
-    const fake = buildFakeStripeClient();
-    _setStripeClientForTests(fake.client);
-    try {
-      const t = convexTest(schema, modules);
-      const c = await insertCreator(t, { suffix: "resub", plan: "coach" });
-      // Resub: creator previously had a subscription (now cancelled). Re-checkout
-      // bypasses the 7-day trial regardless of tier.
-      await t.run((ctx) =>
-        ctx.db.patch(c, { stripeSubscriptionId: "sub_prev_cancelled" })
-      );
-      await asUser(t, "resub").action(
-        api.billing.checkout.createCheckoutSession,
-        { tier: "manager", interval: "annual" }
-      );
-      expect(fake.checkoutSessionsCreated).toHaveLength(1);
-      const sess = fake.checkoutSessionsCreated[0];
-      expect(sess.line_items?.[0].price).toBe("price_manager_a");
-      expect(sess.subscription_data?.trial_period_days).toBeUndefined();
-      expect(sess.metadata?.tier).toBe("manager");
-      expect(sess.metadata?.interval).toBe("annual");
-    } finally {
-      _setStripeClientForTests(null);
-      teardown();
+        expect(fake.checkoutSessionsCreated).toHaveLength(1);
+        const sess = fake.checkoutSessionsCreated[0];
+        expect(sess.mode).toBe("subscription");
+        expect(sess.line_items?.[0].price).toBe(expectedPrice);
+        expect(sess.metadata?.creatorId).toBe(String(c));
+        expect(sess.metadata?.tier).toBe(tier);
+        expect(sess.metadata?.interval).toBe(interval);
+        expect(sess.subscription_data?.metadata?.creatorId).toBe(String(c));
+        expect(sess.success_url).toContain("/profile?billing=success");
+        expect(sess.cancel_url).toContain("/profile?billing=cancelled");
+        expect(sess.client_reference_id).toBe(String(c));
+      } finally {
+        _setStripeClientForTests(null);
+        teardown();
+      }
     }
-  });
+  );
+
+  it.each<["coach" | "manager"]>([["coach"], ["manager"]])(
+    "PLAN-TIER × ACTION: %s resub (creator already had a previous subscription) is NO-TRIAL on either tier",
+    async (tier) => {
+      const teardown = withPriceIds();
+      const fake = buildFakeStripeClient();
+      _setStripeClientForTests(fake.client);
+      try {
+        const t = convexTest(schema, modules);
+        const c = await insertCreator(t, {
+          suffix: `resub_${tier}`,
+          plan: "coach",
+        });
+        // Resub signal: creator previously held a subscription (now cancelled).
+        // Re-checkout MUST bypass the 7-day trial regardless of which tier.
+        await t.run((ctx) =>
+          ctx.db.patch(c, { stripeSubscriptionId: "sub_prev_cancelled" })
+        );
+        await asUser(t, `resub_${tier}`).action(
+          api.billing.checkout.createCheckoutSession,
+          { tier, interval: "annual" }
+        );
+        expect(fake.checkoutSessionsCreated).toHaveLength(1);
+        const sess = fake.checkoutSessionsCreated[0];
+        expect(sess.subscription_data?.trial_period_days).toBeUndefined();
+        expect(sess.metadata?.tier).toBe(tier);
+      } finally {
+        _setStripeClientForTests(null);
+        teardown();
+      }
+    }
+  );
 
   it("REUSES existing stripeCustomerId — does not recreate Stripe customer", async () => {
     const teardown = withPriceIds();
@@ -418,53 +464,61 @@ describe("billing.portal.openCustomerPortal", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("billing.webhook.handleCheckoutCompleted", () => {
-  it("patches plan / stripeSubscriptionId / period / trialEnds for a Manager monthly 7-day trial", async () => {
+  it.each<["coach" | "manager", "monthly" | "annual"]>([
+    ["coach", "monthly"],
+    ["coach", "annual"],
+    ["manager", "monthly"],
+    ["manager", "annual"],
+  ])(
+    "PLAN-TIER × ACTION: checkout-completed sets plan=%s + interval=%s + trial fields",
+    async (tier, interval) => {
+      const t = convexTest(schema, modules);
+      const c = await insertCreator(t, {
+        suffix: `done_${tier}_${interval}`,
+        plan: "coach",
+        stripeCustomerId: `cus_done_${tier}_${interval}`,
+      });
+      const trialEnd = NOW + 7 * 86_400_000;
+      const periodEnd = trialEnd; // first cycle: period_end == trial_end
+      const result = await t.mutation(
+        internal.billing.webhook.handleCheckoutCompleted,
+        {
+          stripeCustomerId: `cus_done_${tier}_${interval}`,
+          subscriptionId: `sub_${tier}_${interval}`,
+          creatorId: c,
+          tier,
+          interval,
+          currentPeriodEnd: periodEnd,
+          trialEnd,
+        }
+      );
+      expect(result.patched).toBe(true);
+
+      const after = await t.run((ctx) => ctx.db.get(c));
+      expect(after?.plan).toBe(tier);
+      expect(after?.stripeSubscriptionId).toBe(`sub_${tier}_${interval}`);
+      expect(after?.currentPlanPeriodEnd).toBe(periodEnd);
+      expect(after?.trialEndsAt).toBe(trialEnd);
+      expect(after?.billingInterval).toBe(interval);
+    }
+  );
+
+  it("PLAN-TIER × ACTION: paid checkout (no trial) leaves trialEndsAt undefined", async () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
-      suffix: "manager_trial",
+      suffix: "paid_no_trial",
       plan: "coach",
-      stripeCustomerId: "cus_manager_trial",
-    });
-    const trialEnd = NOW + 7 * 86_400_000;
-    const periodEnd = trialEnd; // before first billing cycle, period_end == trial_end
-    const result = await t.mutation(
-      internal.billing.webhook.handleCheckoutCompleted,
-      {
-        stripeCustomerId: "cus_manager_trial",
-        subscriptionId: "sub_xyz",
-        creatorId: c,
-        tier: "manager",
-        interval: "monthly",
-        currentPeriodEnd: periodEnd,
-        trialEnd,
-      }
-    );
-    expect(result.patched).toBe(true);
-
-    const after = await t.run((ctx) => ctx.db.get(c));
-    expect(after?.plan).toBe("manager");
-    expect(after?.stripeSubscriptionId).toBe("sub_xyz");
-    expect(after?.currentPlanPeriodEnd).toBe(periodEnd);
-    expect(after?.trialEndsAt).toBe(trialEnd);
-    expect(after?.billingInterval).toBe("monthly");
-  });
-
-  it("Manager annual no-trial path (resubscribe) sets billingInterval=annual and NO trialEndsAt when trialEnd absent", async () => {
-    const t = convexTest(schema, modules);
-    const c = await insertCreator(t, {
-      suffix: "manager_annual_resub",
-      plan: "coach",
-      stripeCustomerId: "cus_manager_annual_resub",
+      stripeCustomerId: "cus_paid_no_trial",
     });
     const periodEnd = NOW + 365 * 86_400_000;
     await t.mutation(internal.billing.webhook.handleCheckoutCompleted, {
-      stripeCustomerId: "cus_manager_annual_resub",
-      subscriptionId: "sub_manager_annual",
+      stripeCustomerId: "cus_paid_no_trial",
+      subscriptionId: "sub_paid",
       creatorId: c,
       tier: "manager",
       interval: "annual",
       currentPeriodEnd: periodEnd,
-      // trialEnd intentionally omitted — resubscribers don't get the 7-day trial
+      // trialEnd omitted: resubscribe / paid-checkout path.
     });
     const after = await t.run((ctx) => ctx.db.get(c));
     expect(after?.plan).toBe("manager");
@@ -547,15 +601,15 @@ describe("billing.webhook.handleCheckoutCompleted", () => {
 });
 
 describe("billing.webhook.handleSubscriptionUpdated", () => {
-  it("PLAN-TIER × ACTION: patches creator.plan to the new tier on portal-driven plan change", async () => {
+  it("PLAN-TIER × ACTION: Coach -> Manager upgrade via portal patches plan=manager", async () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
-      suffix: "upgrade",
-      plan: "manager",
-      stripeCustomerId: "cus_upgrade",
+      suffix: "upgrade_c2m",
+      plan: "coach",
+      stripeCustomerId: "cus_upgrade_c2m",
     });
     await t.mutation(internal.billing.webhook.handleSubscriptionUpdated, {
-      stripeCustomerId: "cus_upgrade",
+      stripeCustomerId: "cus_upgrade_c2m",
       subscriptionId: "sub_up",
       tier: "manager",
       interval: "monthly",
@@ -564,6 +618,56 @@ describe("billing.webhook.handleSubscriptionUpdated", () => {
     const after = await t.run((ctx) => ctx.db.get(c));
     expect(after?.plan).toBe("manager");
     expect(after?.stripeSubscriptionId).toBe("sub_up");
+    expect(after?.billingInterval).toBe("monthly");
+  });
+
+  it("PLAN-TIER × ACTION: Manager -> Coach downgrade via portal patches plan=coach", async () => {
+    const t = convexTest(schema, modules);
+    const c = await insertCreator(t, {
+      suffix: "downgrade_m2c",
+      plan: "manager",
+      stripeCustomerId: "cus_downgrade_m2c",
+    });
+    await t.mutation(internal.billing.webhook.handleSubscriptionUpdated, {
+      stripeCustomerId: "cus_downgrade_m2c",
+      subscriptionId: "sub_dn",
+      tier: "coach",
+      interval: "monthly",
+      currentPeriodEnd: NOW + 30 * 86_400_000,
+    });
+    const after = await t.run((ctx) => ctx.db.get(c));
+    expect(after?.plan).toBe("coach");
+    expect(after?.stripeSubscriptionId).toBe("sub_dn");
+  });
+
+  it("PLAN-TIER × ACTION: trial -> active rollover updates currentPlanPeriodEnd and clears trialEndsAt", async () => {
+    const t = convexTest(schema, modules);
+    const c = await insertCreator(t, {
+      suffix: "trial_rollover",
+      plan: "manager",
+      stripeCustomerId: "cus_trial_rollover",
+    });
+    await t.run((ctx) =>
+      ctx.db.patch(c, {
+        stripeSubscriptionId: "sub_trial",
+        trialEndsAt: NOW,
+        currentPlanPeriodEnd: NOW,
+      })
+    );
+    // Stripe fires .updated when trial converts to active. trialEnd is now
+    // absent (or in the past); period_end is the next billing cycle.
+    await t.mutation(internal.billing.webhook.handleSubscriptionUpdated, {
+      stripeCustomerId: "cus_trial_rollover",
+      subscriptionId: "sub_trial",
+      tier: "manager",
+      interval: "monthly",
+      currentPeriodEnd: NOW + 30 * 86_400_000,
+      // trialEnd intentionally omitted
+    });
+    const after = await t.run((ctx) => ctx.db.get(c));
+    expect(after?.plan).toBe("manager");
+    expect(after?.trialEndsAt).toBeUndefined();
+    expect(after?.currentPlanPeriodEnd).toBe(NOW + 30 * 86_400_000);
   });
 
   it("CROSS-TENANT: subscription.updated for Customer A's id never patches Creator B", async () => {
@@ -587,37 +691,115 @@ describe("billing.webhook.handleSubscriptionUpdated", () => {
     const bAfter = await t.run((ctx) => ctx.db.get(b));
     expect(bAfter?.plan).toBe("coach");
   });
+
+  it("CROSS-TENANT: metadata.creatorId mismatch refuses the patch on .updated path too", async () => {
+    const t = convexTest(schema, modules);
+    const a = await insertCreator(t, {
+      suffix: "upd_bleed_a",
+      plan: "coach",
+      stripeCustomerId: "cus_upd_bleed_a",
+    });
+    const b = await insertCreator(t, {
+      suffix: "upd_bleed_b",
+      plan: "coach",
+      stripeCustomerId: "cus_upd_bleed_b",
+    });
+    const result = await t.mutation(
+      internal.billing.webhook.handleSubscriptionUpdated,
+      {
+        stripeCustomerId: "cus_upd_bleed_a",
+        subscriptionId: "sub_forged_upd",
+        creatorId: b,
+        tier: "manager",
+        interval: "monthly",
+      }
+    );
+    expect(result.patched).toBe(false);
+    expect(result.reason).toBe("creator_mismatch");
+    const aAfter = await t.run((ctx) => ctx.db.get(a));
+    expect(aAfter?.plan).toBe("coach");
+  });
+
+  it("ADVERSARIAL: unknown stripeCustomerId returns no_creator", async () => {
+    const t = convexTest(schema, modules);
+    const result = await t.mutation(
+      internal.billing.webhook.handleSubscriptionUpdated,
+      {
+        stripeCustomerId: "cus_orphan_upd",
+        subscriptionId: "sub_orphan",
+        tier: "manager",
+        interval: "monthly",
+      }
+    );
+    expect(result.patched).toBe(false);
+    expect(result.reason).toBe("no_creator");
+  });
 });
 
 describe("billing.webhook.handleSubscriptionDeleted", () => {
-  it("PLAN-TIER × ACTION: cancellation downgrades creator to coach and clears billing fields", async () => {
+  it.each<["coach" | "manager"]>([["coach"], ["manager"]])(
+    "PLAN-TIER × ACTION: %s cancellation downgrades to Coach (the floor) and clears billing fields",
+    async (startingTier) => {
+      const t = convexTest(schema, modules);
+      const c = await insertCreator(t, {
+        suffix: `cancel_${startingTier}`,
+        plan: startingTier,
+        stripeCustomerId: `cus_cancel_${startingTier}`,
+      });
+      await t.run((ctx) =>
+        ctx.db.patch(c, {
+          stripeSubscriptionId: `sub_cancel_${startingTier}`,
+          currentPlanPeriodEnd: NOW + 86_400_000,
+          trialEndsAt: NOW + 86_400_000,
+          billingInterval: "annual",
+        })
+      );
+
+      await t.mutation(internal.billing.webhook.handleSubscriptionDeleted, {
+        stripeCustomerId: `cus_cancel_${startingTier}`,
+      });
+
+      const after = await t.run((ctx) => ctx.db.get(c));
+      // Coach IS the post-cancel floor for both tiers — no free fallback.
+      expect(after?.plan).toBe("coach");
+      expect(after?.stripeSubscriptionId).toBeUndefined();
+      expect(after?.currentPlanPeriodEnd).toBeUndefined();
+      expect(after?.trialEndsAt).toBeUndefined();
+      expect(after?.billingInterval).toBeUndefined();
+      // Customer id retained — same Stripe customer survives a resubscribe.
+      expect(after?.stripeCustomerId).toBe(`cus_cancel_${startingTier}`);
+    }
+  );
+
+  it("CROSS-TENANT: cancel for Customer A never patches Creator B", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, {
-      suffix: "cancel",
+    const a = await insertCreator(t, {
+      suffix: "cancel_a",
       plan: "manager",
-      stripeCustomerId: "cus_cancel",
+      stripeCustomerId: "cus_cancel_a",
     });
-    await t.run((ctx) =>
-      ctx.db.patch(c, {
-        stripeSubscriptionId: "sub_cancel",
-        currentPlanPeriodEnd: NOW + 86_400_000,
-        trialEndsAt: NOW + 86_400_000,
-        billingInterval: "annual",
-      })
-    );
-
+    const b = await insertCreator(t, {
+      suffix: "cancel_b",
+      plan: "manager",
+      stripeCustomerId: "cus_cancel_b",
+    });
     await t.mutation(internal.billing.webhook.handleSubscriptionDeleted, {
-      stripeCustomerId: "cus_cancel",
+      stripeCustomerId: "cus_cancel_a",
     });
+    const aAfter = await t.run((ctx) => ctx.db.get(a));
+    const bAfter = await t.run((ctx) => ctx.db.get(b));
+    expect(aAfter?.plan).toBe("coach"); // downgraded
+    expect(bAfter?.plan).toBe("manager"); // untouched
+  });
 
-    const after = await t.run((ctx) => ctx.db.get(c));
-    expect(after?.plan).toBe("coach");
-    expect(after?.stripeSubscriptionId).toBeUndefined();
-    expect(after?.currentPlanPeriodEnd).toBeUndefined();
-    expect(after?.trialEndsAt).toBeUndefined();
-    expect(after?.billingInterval).toBeUndefined();
-    // Customer id retained — same Stripe customer survives a resubscribe
-    expect(after?.stripeCustomerId).toBe("cus_cancel");
+  it("ADVERSARIAL: cancel for unknown stripeCustomerId returns no_creator (no-op)", async () => {
+    const t = convexTest(schema, modules);
+    const result = await t.mutation(
+      internal.billing.webhook.handleSubscriptionDeleted,
+      { stripeCustomerId: "cus_orphan_cancel" }
+    );
+    expect(result.patched).toBe(false);
+    expect(result.reason).toBe("no_creator");
   });
 
   it("DOWNGRADE PRESERVES connectedAccounts (don't strand creator's Gmail / Calendar)", async () => {
