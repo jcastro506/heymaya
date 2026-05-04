@@ -83,6 +83,19 @@ export default defineSchema({
     /** Pointer to the operator's business row. Only set when accountType = "service-business". */
     businessId: v.optional(v.id("businesses")),
     // ─── end Service product Sprint 0 ─────────────────────────────────────
+    // ─── Creator usage analytics — added 2026-05-04 ───────────────────────
+    // Denormalized scoreboard columns maintained by `convex/lib/usageEvents.ts`.
+    // Updated on every `logUsageEvent` write so the operator can sort the
+    // top-creators-by-engagement query without scanning the full usageEvents
+    // table. All three are optional — creators with no events yet have
+    // undefined values and the queries treat that as "no data".
+    /** Last creator-driven activity (chat_turn_in / reaction_received / explicit_feedback / action_taken). Maya-driven kinds do NOT bump this. */
+    lastEngagedAt: v.optional(v.number()),
+    /** 0-100 derived rollup over the last 7 days. See `recomputeScoreboard` in convex/lib/usageEvents.ts. */
+    engagementScore7d: v.optional(v.number()),
+    /** Most-fired cron/event label across the last 7 days. */
+    topSkillLast7d: v.optional(v.string()),
+    // ─── end Creator usage analytics ──────────────────────────────────────
     createdAt: v.number(),
     // Sprint 3.7 — partial onboarding answer cursor + payload so a refresh
     // mid-flow doesn't lose progress. The full answer set is persisted to
@@ -3131,4 +3144,69 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_account_and_signed_up", ["accountId", "signedUpAt"]),
   // ─── end Growth product (Riley) ────────────────────────────────────────
+
+  // ─── Creator usage analytics — added 2026-05-04 ─────────────────────────
+  // Per-creator usage event log. Single source of truth for "how creators
+  // use Maya, what they use most, and whether they like it." Internal-only;
+  // no public HTTP surface, no client-side queries — operator runs admin
+  // queries via `npx convex run queries:admin:usage:*`.
+  //
+  // Cross-tenant isolation: every row carries `creatorId`; every query +
+  // mutation that reads `usageEvents` filters by creatorId or scans by
+  // (label, ts) / (kind, ts) for global rollups (which carry no creator
+  // data leak risk because aggregates are by label/kind only).
+  //
+  // Idempotency: the helper inserts unconditionally — duplicate writes are
+  // treated as separate events on purpose (a real retry IS a real second
+  // attempt to deliver to the creator). Avoid double-firing at the call-site,
+  // not in this helper.
+  //
+  // The 8 `kind` values encode the four flow directions:
+  //   - cron_fired / event_fired       — Maya did something proactively
+  //   - chat_turn_in / chat_turn_out   — message exchange
+  //   - reaction_received / explicit_feedback — creator reacted to Maya
+  //   - action_taken / action_ignored  — creator did/didn't act on a draft
+  usageEvents: defineTable({
+    creatorId: v.id("creators"),
+    /**
+     * What kind of interaction this was. See `convex/lib/usageEvents.ts`
+     * for the directionality matrix (which kinds are creator-driven for
+     * `lastEngagedAt` purposes).
+     */
+    kind: v.union(
+      v.literal("cron_fired"),
+      v.literal("event_fired"),
+      v.literal("chat_turn_in"),
+      v.literal("chat_turn_out"),
+      v.literal("reaction_received"),
+      v.literal("explicit_feedback"),
+      v.literal("action_taken"),
+      v.literal("action_ignored")
+    ),
+    /**
+     * Skill/program/behavior label, e.g. "morning_brief",
+     * "brand_email_triage", "trends_watcher", "content_arc_planner". For
+     * chat turns the inferred topic from a small LLM classifier (or
+     * "unclassified" if not classified yet — TODO(s7): wire the classifier).
+     */
+    label: v.optional(v.string()),
+    /**
+     * Sentiment / reaction signal. Polymorphic by `kind`:
+     *   - reaction_received: "love" | "like" | "dislike" | "laugh" | "emphasize" | "question"
+     *   - explicit_feedback: "approve" | "reject" | "ignore" | "stop"
+     *   - action_taken / action_ignored: action type ("draft_posted", "reply_sent", ...)
+     * Free-form string keeps the schema permissive while the catalog stabilizes.
+     */
+    signal: v.optional(v.string()),
+    /** Free-form metadata: latency_ms, message_id, draft_id, etc. */
+    meta: v.optional(v.any()),
+    /** Unix ms when the event happened. Defaulted to Date.now() in the helper. */
+    ts: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_ts", ["creatorId", "ts"])
+    .index("by_kind_and_ts", ["kind", "ts"])
+    .index("by_label_and_ts", ["label", "ts"])
+    .index("by_creator_and_kind_and_ts", ["creatorId", "kind", "ts"]),
+  // ─── end Creator usage analytics ────────────────────────────────────────
 });
