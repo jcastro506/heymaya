@@ -161,16 +161,39 @@ describe("assembleWorkspaceBundle", () => {
     expect(hb.length).toBeLessThanOrEqual(2_000);
   });
 
-  it("starter bundle's jobsJson does not include any pro+ entries", () => {
+  it("coach bundle's jobsJson includes advisory programs (revenue, competitor, calendar, packet, intel) — boundary is autonomy, not breadth", () => {
     const inputs = baseInputs({ plan: "coach" });
     inputs.creator = { ...inputs.creator, plan: "coach" };
     const bundle = assembleWorkspaceBundle(inputs);
     const ids = bundle.jobsJson.jobs.map((j) => j.entryId);
-    expect(ids).not.toContain("revenue_snapshot");
-    expect(ids).not.toContain("competitor_watch");
-    expect(ids).not.toContain("calendar_lookahead");
-    expect(ids).not.toContain("manager_readiness_packet_quarterly");
-    expect(ids).not.toContain("industry_intel_daily");
+    // Advisory programs reclassified to tier:"all" — Coach receives them.
+    expect(ids).toContain("revenue_snapshot");
+    expect(ids).toContain("competitor_watch");
+    expect(ids).toContain("calendar_lookahead");
+    expect(ids).toContain("manager_readiness_packet_quarterly");
+    expect(ids).toContain("industry_intel_daily");
+    expect(ids).toContain("algo_research_tiktok");
+    expect(ids).toContain("opportunity_scout_daily");
+    expect(ids).toContain("collab_matchmaker_weekly");
+  });
+
+  it("coach bundle's jobsJson excludes Manager-only autonomy crons (none today; brand_outreach is event-driven not cron)", async () => {
+    const inputs = baseInputs({ plan: "coach" });
+    inputs.creator = { ...inputs.creator, plan: "coach" };
+    const bundle = assembleWorkspaceBundle(inputs);
+    const ids = bundle.jobsJson.jobs.map((j) => j.entryId);
+    // No Manager-only cron entries exist as of this revision — autonomy
+    // gates fire on event/folded triggers (brand_outreach, pitch_strategy,
+    // hook_library_build). This assertion locks the invariant: Coach's cron
+    // set should never include an entryId whose standing-order tier is
+    // "manager".
+    const { STANDING_ORDERS } = await import("../standingOrders");
+    const managerOnlyCronIds = STANDING_ORDERS.filter(
+      (p) => p.tier === "manager" && p.kind === "cron"
+    ).map((p) => p.cronEntryId!);
+    for (const id of managerOnlyCronIds) {
+      expect(ids).not.toContain(id);
+    }
   });
 
   it("Wave 5 (OpenClaw 2026.4.23): at production 28K cap, standing orders embed inline (no separate file)", () => {

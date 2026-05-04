@@ -15,10 +15,27 @@
  *   - "all"     — every plan runs this program (both Coach and Manager).
  *   - "manager" — Manager-only autonomous behavior (Coach skipped).
  *
- * NOTE: pre-migration "pro+" was equivalent to "Pro and Studio only";
- * post-migration "manager" is equivalent to "Manager only" (Coach is the
- * entry tier now). The conversion is mechanical — every old "pro+" program
- * becomes "manager" because the dropped behaviors are autonomy-driven.
+ * The boundary is **autonomy on the creator's behalf**, not breadth or
+ * compute. A program is `tier:"manager"` only when running it requires Maya
+ * to take an autonomous action OUTBOUND on behalf of the creator (auto-send
+ * a brand email, draft a cold outreach pitch, fire Apollo/Hunter discovery,
+ * negotiate a deal back-and-forth). Every read/advisory program — even when
+ * it consumes paid third-party APIs (Brave, Composio Stripe/Calendar pulls)
+ * — is `tier:"all"` because the ceiling on cost is tiny per-creator and the
+ * advisory value compounds over the relationship.
+ *
+ * NOTE: pre-migration "pro+" was a breadth gate (more platforms, more
+ * thinking budget, more proactive crons). Post-migration the only behaviors
+ * tagged `manager` are autonomy gates — `brand_email_triage` (auto-send
+ * arm), `hook_library_build` (folded into the autonomous post-reaction
+ * loop), and the autonomous-outbound programs that ship in subsequent
+ * patches (`brand_outreach`, `pitch_strategy`). Read/advisory programs that
+ * were briefly tagged `manager` during the mechanical pro+→manager rename —
+ * `competitor_watch`, `manager_readiness_packet_quarterly`,
+ * `revenue_snapshot`, `calendar_lookahead`, `industry_intel_daily`, and the
+ * `algo_research_*` family — have since been corrected back to `all`. They
+ * are pure cost-optimization gates (Brave / Composio per-query reads), not
+ * autonomy gates, and the cost ceiling is well within both tiers' margin.
  *
  * Kind semantics:
  *   - "cron"        — runs on a schedule. `cronEntryId` and `defaultCron`
@@ -291,7 +308,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "competitor_watch",
     title: "Competitor watch",
-    tier: "manager",
+    tier: "all",
     kind: "cron",
     cronEntryId: "competitor_watch",
     defaultCron: "0 9 * * *",
@@ -308,7 +325,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "calendar_lookahead",
     title: "Calendar-aware content planning",
-    tier: "manager",
+    tier: "all",
     kind: "cron",
     cronEntryId: "calendar_lookahead",
     defaultCron: "0 8 * * *",
@@ -325,7 +342,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "manager_readiness_packet_quarterly",
     title: "Manager-readiness packet (quarterly)",
-    tier: "manager",
+    tier: "all",
     kind: "cron",
     cronEntryId: "manager_readiness_packet_quarterly",
     defaultCron: "0 14 1 */3 *",
@@ -342,7 +359,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "revenue_snapshot",
     title: "Revenue snapshot",
-    tier: "manager",
+    tier: "all",
     kind: "cron",
     cronEntryId: "revenue_snapshot",
     defaultCron: "0 9 * * 1",
@@ -360,7 +377,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "industry_intel_daily",
     title: "Industry intel",
-    tier: "manager",
+    tier: "all",
     kind: "cron",
     cronEntryId: "industry_intel_daily",
     defaultCron: "30 7 * * *",
@@ -376,7 +393,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "algo_research_tiktok",
     title: "Platform algorithm research — TikTok",
-    tier: "manager",
+    tier: "all",
     kind: "cron",
     cronEntryId: "algo_research_tiktok",
     defaultCron: "0 4 * * 1",
@@ -392,7 +409,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "algo_research_instagram",
     title: "Platform algorithm research — Instagram",
-    tier: "manager",
+    tier: "all",
     kind: "cron",
     cronEntryId: "algo_research_instagram",
     defaultCron: "15 4 * * 1",
@@ -406,7 +423,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "algo_research_youtube",
     title: "Platform algorithm research — YouTube",
-    tier: "manager",
+    tier: "all",
     kind: "cron",
     cronEntryId: "algo_research_youtube",
     defaultCron: "30 4 * * 1",
@@ -420,7 +437,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "algo_research_linkedin",
     title: "Platform algorithm research — LinkedIn",
-    tier: "manager",
+    tier: "all",
     kind: "cron",
     cronEntryId: "algo_research_linkedin",
     defaultCron: "45 4 * * 1",
@@ -434,7 +451,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   {
     id: "algo_research_x",
     title: "Platform algorithm research — X",
-    tier: "manager",
+    tier: "all",
     kind: "cron",
     cronEntryId: "algo_research_x",
     defaultCron: "0 5 * * 1",
@@ -491,6 +508,71 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     triggers: "Event: 'Maya score this' in chat OR future `/draft` route. Wrapper at `convex/prePostReview.ts:scoreDraft`.",
     approvalGates: "None — scoring is a read; creator decides whether to post. Honesty over flattery.",
     escalation: "Read-only — does NOT persist. Recommendations failing citation firewall are dropped.",
+  },
+  {
+    id: "opportunity_scout_daily",
+    title: "Opportunity scout",
+    tier: "all",
+    kind: "cron",
+    cronEntryId: "opportunity_scout_daily",
+    defaultCron: "0 6 * * *",
+    session: "isolated",
+    scope:
+      "Call `maya-opportunity-scout`: scan UGC marketplaces + X creator-call hashtags + local-brand Brave search per niche/location. Dedupe via `opportunityScoutSeen`. Surface top 3 to morning brief; full list to Today.",
+    triggers: "Cron 6:00am local — runs before morning brief so the top-3 fold in. Manager also permits on-demand from chat.",
+    approvalGates: "None on the scan. Creator marks 'pursue' before it flows to `pitch_strategy` + `brand_outreach`.",
+    escalation: "Manager unlocks larger `maxResults` + Apollo/Hunter discovery on confirmed opportunities; Coach stops at 'creator decides'.",
+    cronMessage:
+      "Run opportunity scout: scan UGC marketplaces + creator-call hashtags + local brands per niche/location, dedupe, surface top 3 to brief + full list to Today.",
+  },
+  {
+    id: "collab_matchmaker_weekly",
+    title: "Collab matchmaker",
+    tier: "all",
+    kind: "cron",
+    cronEntryId: "collab_matchmaker_weekly",
+    defaultCron: "0 17 * * 0",
+    session: "isolated",
+    scope:
+      "Call `maya-collab-matchmaker`: expand `soul.md` namedPeers via ScrapeCreators creator-search, score audience overlap, propose per-match format + first-message DM via `maya-voice-applier`. Exclude direct competitors (overlap > 0.85) + recent same-format collabs.",
+    triggers: "Cron Sunday 5:00pm local — pairs with weekly content plan + review. On-demand from chat.",
+    approvalGates: "Maya never DMs. Surfaced as tap-to-DM cards on Today.",
+    escalation: "Manager unlocks larger `maxMatches` + richer overlap scoring. Writes `collabMatchLog` with `creatorActedOn=pending`.",
+    cronMessage:
+      "Run weekly collab matchmaker: expand namedPeers + niche-search, score overlap, propose format + first-message DM per match.",
+  },
+  {
+    id: "monetization_diversifier",
+    title: "Monetization diversifier",
+    tier: "all",
+    kind: "folded",
+    scope:
+      "Call `maya-monetization-diversifier`: per-niche playbook of stream proposals (affiliate / merch / courses / subs / ad-rev / email-list / live-events / consulting). Fold into morning brief on milestone hits (10K/50K/100K/500K); into evening recap on `revenue-flat-90d`.",
+    triggers: "Three triggers — milestone events, revenue-flat-90d, on-demand chat. No standalone cron.",
+    approvalGates: "None — advisory.",
+    escalation: "Manager pulls cross-creator anchors when peer benchmarks opt-in. Email-list recommendation is universal across niches.",
+  },
+  {
+    id: "pitch_strategy",
+    title: "Pitch strategy",
+    tier: "manager",
+    kind: "folded",
+    scope:
+      "Call `maya-pitch-strategy`: free / gifted / paid / decline decision + suggested rate. Pure-logic engine on creator size + revenue + prior deals. Feeds `brand_outreach` and `maya-rate-calculator`.",
+    triggers: "Folded BEFORE every outbound pitch and BEFORE replying to inbound emails with no proposed dollars.",
+    approvalGates: "None on the decision. Downstream `brand_outreach` enforces the creator-approval gate.",
+    escalation: "Manager-only — Coach skips entirely (Coach's pitch path stops at 'consider these brands').",
+  },
+  {
+    id: "brand_outreach",
+    title: "Brand outreach",
+    tier: "manager",
+    kind: "event",
+    scope:
+      "Call `maya-brand-outreach`: compose cold-pitch subject + body + follow-up cadence (gentle/firm/final) tuned to creator voice + pitch angle (partnership/gifted/paid-content/ambassador/event-coverage). Pre-pitch `maya-pitch-strategy` set angle + rate. Always firewalled + voice-applied.",
+    triggers: "Event — creator-confirmed opportunity from `opportunity_scout_daily`, or creator manually adds a brand.",
+    approvalGates: "Creator-approved by default. Auto-send only when `autoSendThreshold` set + ask under threshold + firewall pass. Manager unlocks Apollo/Hunter discovery via `brandContactDiscoveryEnabled`.",
+    escalation: "Manager-only — Coach never composes cold outbound. Gmail revoke → 15-min-poll-for-2h fallback like `brand_email_triage`.",
   },
 ];
 

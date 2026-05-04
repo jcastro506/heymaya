@@ -23,16 +23,22 @@ function creator(plan: "coach" | "manager", tz = "America/Los_Angeles") {
 }
 
 describe("buildCronJobsJson", () => {
-  it("starter receives only 'all'-tier cron programs (no Pro+ entries)", () => {
+  it("coach excludes any Manager-only cron programs (autonomy gating)", () => {
     const { jobs } = buildCronJobsJson({ creator: creator("coach") });
     const ids = jobs.map((j) => j.entryId);
-    const proOnlyCronIds = STANDING_ORDERS.filter(
+    const managerOnlyCronIds = STANDING_ORDERS.filter(
       (p) => p.tier === "manager" && p.kind === "cron"
     )
       .map((p) => p.cronEntryId!)
       .filter(Boolean);
-    expect(proOnlyCronIds.length).toBeGreaterThan(0);
-    for (const id of proOnlyCronIds) {
+    // After the advisory-program reclassification (revenue_snapshot,
+    // competitor_watch, calendar_lookahead, manager_readiness_packet,
+    // industry_intel, algo_research_*) → tier:"all", there may be ZERO
+    // Manager-only cron programs (autonomy gates land on event / folded
+    // triggers like brand_outreach, pitch_strategy, hook_library_build).
+    // The invariant we're asserting: NONE of any Manager-only crons that
+    // do exist may appear in Coach's cron set.
+    for (const id of managerOnlyCronIds) {
       expect(ids).not.toContain(id);
     }
   });
