@@ -13,9 +13,14 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { assembleWorkspaceBundle } from "../assembleWorkspaceBundle";
+import { BUNDLED_SKILLS } from "../skillsRegistry";
 import type { Doc } from "../../../../../_generated/dataModel";
 import type { WorkspaceInputs } from "../types";
+
+const REPO_ROOT = join(__dirname, "..", "..", "..", "..", "..", "..");
 
 function baseInputs(over: Partial<WorkspaceInputs> = {}): WorkspaceInputs {
   const creator: Doc<"creators"> = {
@@ -159,6 +164,43 @@ describe("assembleWorkspaceBundle", () => {
     const bundle = assembleWorkspaceBundle(baseInputs());
     const hb = bundle.files.get("HEARTBEAT.md")!;
     expect(hb.length).toBeLessThanOrEqual(2_000);
+  });
+
+  it("bundles every registered skill at `skills/<slug>/SKILL.md`", () => {
+    const bundle = assembleWorkspaceBundle(baseInputs());
+    expect(BUNDLED_SKILLS.length).toBeGreaterThan(0);
+    for (const skill of BUNDLED_SKILLS) {
+      const path = `skills/${skill.slug}/SKILL.md`;
+      expect(bundle.files.has(path), `missing ${path}`).toBe(true);
+      expect(bundle.files.get(path)).toBe(skill.content);
+    }
+  });
+
+  it("scrapecreators-api skill is bundled with the corrected v3 TikTok paths from the official package", () => {
+    const bundle = assembleWorkspaceBundle(baseInputs());
+    const skill = bundle.files.get("skills/scrapecreators-api/SKILL.md");
+    expect(skill).toBeDefined();
+    // Frontmatter signals — the official agent skill from
+    // github.com/scrapecreators/agent-skills.
+    expect(skill).toContain("name: scrapecreators-api");
+    expect(skill).toContain("SCRAPECREATORS_API_KEY");
+    // Routing tables include the corrected v3 / v2 TikTok paths the hand-rolled
+    // wrapper used to call as v1 (production-bug fix landed alongside this).
+    expect(skill).toContain("/v3/tiktok/profile/videos");
+    expect(skill).toContain("/v2/tiktok/video");
+    expect(skill).toContain("/v1/tiktok/video/comments");
+    expect(skill).toContain("/v1/tiktok/video/transcript");
+  });
+
+  it("each bundled skill matches the on-disk SKILL.md byte-for-byte (sync-bundled-skills guard)", () => {
+    for (const skill of BUNDLED_SKILLS) {
+      const path = join(REPO_ROOT, "agents", "skills", skill.slug, "SKILL.md");
+      const onDisk = readFileSync(path, "utf8");
+      expect(
+        skill.content,
+        `${skill.slug}: registry drifted from on-disk SKILL.md — re-run \`npx tsx scripts/sync-bundled-skills.ts\``
+      ).toBe(onDisk);
+    }
   });
 
   it("starter bundle's jobsJson does not include any pro+ entries", () => {

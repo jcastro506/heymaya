@@ -267,10 +267,15 @@ function makeScrapeFetch(opts: {
         headers: { "content-type": "application/json" },
       });
 
+    // Endpoint paths follow the official scrapecreators-api skill (v3/v2 for
+    // TikTok single-video and feed endpoints). The v1 paths the wrapper used
+    // to call were 404ing in production — the migration is documented in the
+    // SKILL.md routing tables. `/v1/tiktok/video/*` must be checked before
+    // the bare `/v1/tiktok/profile` pattern.
     if (url.includes("/v1/tiktok/profile")) return json(ttProfile);
-    if (url.includes("/v1/tiktok/user/posts")) return json(ttPosts);
-    if (url.includes("/v1/tiktok/comments")) return json(ttComments);
-    if (url.includes("/v1/tiktok/transcript")) return json(ttTranscript);
+    if (url.includes("/v3/tiktok/profile/videos")) return json(ttPosts);
+    if (url.includes("/v1/tiktok/video/comments")) return json(ttComments);
+    if (url.includes("/v1/tiktok/video/transcript")) return json(ttTranscript);
     if (url.includes("/v1/instagram/profile")) return json(igProfile);
     if (url.includes("/v1/instagram/user/posts")) return json(igPosts);
 

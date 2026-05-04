@@ -47,10 +47,13 @@ function makeRouter(): ReturnType<typeof vi.fn> {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url =
       typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+    // Paths follow the official ScrapeCreators agent skill (v3/v2 for TikTok
+    // single-video and feed endpoints). Order matters: the `/v1/tiktok/video/*`
+    // patterns must be checked before the bare `/v1/tiktok/profile` pattern.
     if (url.includes("/v1/tiktok/profile")) return jsonResp(tiktokProfileFixture);
-    if (url.includes("/v1/tiktok/user/posts")) return jsonResp(tiktokPostsFixture);
-    if (url.includes("/v1/tiktok/comments")) return jsonResp(tiktokCommentsFixture);
-    if (url.includes("/v1/tiktok/transcript")) return jsonResp(tiktokTranscriptFixture);
+    if (url.includes("/v3/tiktok/profile/videos")) return jsonResp(tiktokPostsFixture);
+    if (url.includes("/v1/tiktok/video/comments")) return jsonResp(tiktokCommentsFixture);
+    if (url.includes("/v1/tiktok/video/transcript")) return jsonResp(tiktokTranscriptFixture);
     if (url.includes("/v1/instagram/profile")) return jsonResp(igProfileFixture);
     if (url.includes("/v1/instagram/user/posts")) return jsonResp(igPostsFixture);
     if (url.includes("/v1/youtube/channel/videos")) return jsonResp(ytVideosFixture);

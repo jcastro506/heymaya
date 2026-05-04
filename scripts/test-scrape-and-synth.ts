@@ -202,7 +202,8 @@ if (profile.user?.signature) {
 }
 
 const postsRes = await phase("scrape: last-30 posts", async () =>
-  scGet<PostsResponse>("/v1/tiktok/user/posts", { handle, limit: "30" })
+  // v3 endpoint per the official scrapecreators-api skill — the v1 path 404s.
+  scGet<PostsResponse>("/v3/tiktok/profile/videos", { handle })
 );
 if (!postsRes.ok) {
   log("Cannot continue without posts.");
@@ -259,17 +260,27 @@ const commentsByPost: Record<
 if (topPosts.length > 0) {
   log("");
   log(`scrape: deep-dive top ${topPosts.length} (transcript + comments parallel)...`);
+  // v1/v2 single-video endpoints per the official scrapecreators-api skill
+  // expect a public-share URL, not a bare aweme id. Build it from handle +
+  // post id: https://www.tiktok.com/@<handle>/video/<aweme_id>.
+  const cleanHandle = handle.replace(/^@/, "");
+  const tiktokVideoUrl = (postId: string): string =>
+    `https://www.tiktok.com/@${cleanHandle}/video/${postId}`;
   const deepDive = await Promise.allSettled(
     topPosts.flatMap((p) => [
       phase(`scrape: transcript[${p.postId}]`, async () =>
-        scGet<TranscriptResponse>("/v1/tiktok/transcript", { id: p.postId })
+        scGet<TranscriptResponse>("/v1/tiktok/video/transcript", {
+          url: tiktokVideoUrl(p.postId),
+        })
       ).then((r) => ({
         kind: "transcript" as const,
         postId: p.postId,
         result: r,
       })),
       phase(`scrape: comments[${p.postId}]`, async () =>
-        scGet<CommentsResponse>("/v1/tiktok/comments", { id: p.postId })
+        scGet<CommentsResponse>("/v1/tiktok/video/comments", {
+          url: tiktokVideoUrl(p.postId),
+        })
       ).then((r) => ({
         kind: "comments" as const,
         postId: p.postId,
