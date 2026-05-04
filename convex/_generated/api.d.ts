@@ -25,6 +25,7 @@ import type * as agents_packs_maya_workspace_generateHeartbeatMd from "../agents
 import type * as agents_packs_maya_workspace_generateMemoryMdSeed from "../agents/packs/maya/workspace/generateMemoryMdSeed.js";
 import type * as agents_packs_maya_workspace_generateToolsMd from "../agents/packs/maya/workspace/generateToolsMd.js";
 import type * as agents_packs_maya_workspace_generateUserMd from "../agents/packs/maya/workspace/generateUserMd.js";
+import type * as agents_packs_maya_workspace_skillsRegistry from "../agents/packs/maya/workspace/skillsRegistry.js";
 import type * as agents_packs_maya_workspace_standingOrders from "../agents/packs/maya/workspace/standingOrders.js";
 import type * as agents_packs_maya_workspace_types from "../agents/packs/maya/workspace/types.js";
 import type * as agents_packs_maya_service_anthropicSkillsManifest from "../agents/packs/maya_service/anthropicSkillsManifest.js";
@@ -195,6 +196,7 @@ declare const fullApi: ApiFromModules<{
   "agents/packs/maya/workspace/generateMemoryMdSeed": typeof agents_packs_maya_workspace_generateMemoryMdSeed;
   "agents/packs/maya/workspace/generateToolsMd": typeof agents_packs_maya_workspace_generateToolsMd;
   "agents/packs/maya/workspace/generateUserMd": typeof agents_packs_maya_workspace_generateUserMd;
+  "agents/packs/maya/workspace/skillsRegistry": typeof agents_packs_maya_workspace_skillsRegistry;
   "agents/packs/maya/workspace/standingOrders": typeof agents_packs_maya_workspace_standingOrders;
   "agents/packs/maya/workspace/types": typeof agents_packs_maya_workspace_types;
   "agents/packs/maya_service/anthropicSkillsManifest": typeof agents_packs_maya_service_anthropicSkillsManifest;
