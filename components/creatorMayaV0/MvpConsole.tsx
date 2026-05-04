@@ -579,23 +579,41 @@ export function CreatorMayaV0Onboarding() {
               />
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <TextInput label="90-day goal" value={goal} onChange={setGoal} />
-              <TextInput label="Biggest blocker" value={blocker} onChange={setBlocker} />
-              <TextInput label="Niche" value={nicheCorrection} onChange={setNicheCorrection} />
-              <label className="block">
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
-                  Weekly creator hours
-                </span>
-                <input
-                  type="number"
-                  min={1}
-                  max={40}
-                  value={weeklyHours}
-                  onChange={(event) => setWeeklyHours(Number(event.target.value))}
-                  className="mt-2 w-full rounded-md border border-[var(--hairline)] bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-paper-dim"
-                />
-              </label>
+            <div className="grid gap-5">
+              <ChipGroup
+                label="90-day goal"
+                options={GOAL_CHIPS}
+                value={goal as (typeof GOAL_CHIPS)[number]["value"] | undefined}
+                onChange={(v) => setGoal(v)}
+              />
+              <ChipGroup
+                label="Biggest blocker"
+                options={BLOCKER_CHIPS}
+                value={
+                  blocker as (typeof BLOCKER_CHIPS)[number]["value"] | undefined
+                }
+                onChange={(v) => setBlocker(v)}
+              />
+              <ChipGroup
+                label="Weekly creator hours"
+                options={WEEKLY_HOURS_CHIPS}
+                value={
+                  weeklyHours as
+                    | (typeof WEEKLY_HOURS_CHIPS)[number]["value"]
+                    | undefined
+                }
+                onChange={(v) => setWeeklyHours(v)}
+              />
+              {/* Niche stays as text — this is the SCRAPE-CORRECTION field;
+                  if the operator wants to override what ScrapeCreators inferred,
+                  free text is the right shape. The shown placeholder primes
+                  with the auto-derived value when present. */}
+              <TextInput
+                label="Niche (override scraped value)"
+                value={nicheCorrection}
+                onChange={setNicheCorrection}
+                placeholder={state?.picture?.niche ?? "e.g. fitness for new dads"}
+              />
             </div>
           )}
         </SetupPanel>
@@ -643,7 +661,15 @@ export function CreatorMayaV0Onboarding() {
             </div>
           ) : (
             <>
-              <TextInput label="Phone number" value={phone} onChange={setPhone} />
+              <TextInput
+                label="Phone number"
+                value={phone}
+                onChange={setPhone}
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="+1 (415) 555-0123"
+              />
               <p className="mt-3 text-xs leading-relaxed text-paper-faint">
                 iMessage only for beta.
               </p>
@@ -1278,23 +1304,43 @@ export function CreatorMayaV0DebugConsole() {
                   </button>
                 }
               >
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <TextInput label="90-day goal" value={goal} onChange={setGoal} />
-                  <TextInput label="Biggest blocker" value={blocker} onChange={setBlocker} />
-                  <TextInput label="Niche correction" value={nicheCorrection} onChange={setNicheCorrection} />
-                  <label className="block">
-                    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
-                      Weekly hours
-                    </span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={40}
-                      value={weeklyHours}
-                      onChange={(event) => setWeeklyHours(Number(event.target.value))}
-                      className="mt-2 w-full rounded-md border border-[var(--hairline)] bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-paper-dim"
-                    />
-                  </label>
+                <div className="grid gap-5">
+                  <ChipGroup
+                    label="90-day goal"
+                    options={GOAL_CHIPS}
+                    value={
+                      goal as
+                        | (typeof GOAL_CHIPS)[number]["value"]
+                        | undefined
+                    }
+                    onChange={(v) => setGoal(v)}
+                  />
+                  <ChipGroup
+                    label="Biggest blocker"
+                    options={BLOCKER_CHIPS}
+                    value={
+                      blocker as
+                        | (typeof BLOCKER_CHIPS)[number]["value"]
+                        | undefined
+                    }
+                    onChange={(v) => setBlocker(v)}
+                  />
+                  <ChipGroup
+                    label="Weekly hours"
+                    options={WEEKLY_HOURS_CHIPS}
+                    value={
+                      weeklyHours as
+                        | (typeof WEEKLY_HOURS_CHIPS)[number]["value"]
+                        | undefined
+                    }
+                    onChange={(v) => setWeeklyHours(v)}
+                  />
+                  <TextInput
+                    label="Niche (override scraped value)"
+                    value={nicheCorrection}
+                    onChange={setNicheCorrection}
+                    placeholder={state?.picture?.niche ?? "e.g. fitness for new dads"}
+                  />
                 </div>
               </SetupPanel>
 
@@ -1322,7 +1368,14 @@ export function CreatorMayaV0DebugConsole() {
                   </div>
                 }
               >
-                <TextInput label="Phone in E.164" value={phone} onChange={setPhone} />
+                <TextInput
+                  label="Phone in E.164"
+                  value={phone}
+                  onChange={setPhone}
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                />
                 <p className="mt-3 text-xs leading-relaxed text-paper-faint">
                   Live iMessage pairing requires a real OpenClaw/Fly app id on
                   the creator row. Mock deploy validates the workspace manifest;
@@ -1473,10 +1526,18 @@ function TextInput({
   label,
   value,
   onChange,
+  type,
+  inputMode,
+  autoComplete,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  type?: "text" | "tel" | "email" | "url";
+  inputMode?: "text" | "tel" | "email" | "url" | "numeric" | "decimal";
+  autoComplete?: string;
+  placeholder?: string;
 }) {
   return (
     <label className="block">
@@ -1484,13 +1545,85 @@ function TextInput({
         {label}
       </span>
       <input
+        type={type ?? "text"}
+        inputMode={inputMode}
+        autoComplete={autoComplete}
+        placeholder={placeholder}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-2 w-full rounded-md border border-[var(--hairline)] bg-ink px-3 py-2 text-sm text-paper outline-none focus:border-paper-dim"
+        className="mt-2 w-full rounded-md border border-[var(--hairline)] bg-ink px-3 py-3 text-base text-paper outline-none focus:border-paper-dim sm:text-sm sm:py-2"
       />
     </label>
   );
 }
+
+/**
+ * Mobile-friendly chip selector — flat row, thumb-friendly tap target,
+ * single-select. Use for bounded answer spaces (goal, weekly hours, etc.).
+ */
+function ChipGroup<T extends string | number>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: ReadonlyArray<{ value: T; label: string }>;
+  value: T | null | undefined;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div>
+      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
+        {label}
+      </span>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {options.map((opt) => {
+          const selected = value === opt.value;
+          return (
+            <button
+              key={String(opt.value)}
+              type="button"
+              onClick={() => onChange(opt.value)}
+              aria-pressed={selected}
+              className={`min-h-11 rounded-full border px-4 text-sm transition ${
+                selected
+                  ? "border-lime/60 bg-lime/15 text-lime"
+                  : "border-[var(--hairline)] bg-ink-2 text-paper-dim hover:border-paper-dim hover:text-paper"
+              }`}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const GOAL_CHIPS = [
+  { value: "Grow followers", label: "Grow followers" },
+  { value: "Land brand deals", label: "Land brand deals" },
+  { value: "Monetize", label: "Monetize" },
+  { value: "Consistency", label: "Consistency" },
+  { value: "Specific milestone", label: "Specific milestone" },
+] as const;
+
+const BLOCKER_CHIPS = [
+  { value: "Time", label: "Time" },
+  { value: "Ideas", label: "Ideas" },
+  { value: "Editing", label: "Editing" },
+  { value: "Posting cadence", label: "Cadence" },
+  { value: "Confidence on camera", label: "On-camera" },
+  { value: "Niche clarity", label: "Niche clarity" },
+] as const;
+
+const WEEKLY_HOURS_CHIPS = [
+  { value: 5, label: "3–5 hrs" },
+  { value: 8, label: "5–10 hrs" },
+  { value: 15, label: "10–20 hrs" },
+  { value: 25, label: "20+ hrs" },
+] as const;
 
 function FlowStep({
   icon,

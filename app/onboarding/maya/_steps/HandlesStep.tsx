@@ -351,7 +351,9 @@ interface StepShellProps {
 
 export function StepShell({ eyebrow, title, caption, children }: StepShellProps) {
   return (
-    <section className="mx-auto w-full max-w-2xl px-5 pb-16 pt-8 sm:px-8 sm:pt-14">
+    <section
+      className="mx-auto w-full max-w-2xl px-5 pt-[max(env(safe-area-inset-top),2rem)] pb-[max(env(safe-area-inset-bottom),4rem)] sm:px-8 sm:pt-14 sm:pb-16"
+    >
       <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
         {eyebrow}
       </span>
@@ -383,7 +385,17 @@ export function StepFooter({
   secondary,
 }: StepFooterProps) {
   return (
-    <div className="mt-10 flex flex-col-reverse items-stretch justify-between gap-4 border-t border-[var(--hairline)] pt-6 sm:flex-row sm:items-center">
+    <div
+      className="
+        sticky bottom-0 -mx-5 mt-10
+        flex flex-col-reverse items-stretch justify-between gap-4
+        border-t border-[var(--hairline)]
+        bg-[var(--ink)]/95 px-5 pt-4
+        pb-[max(env(safe-area-inset-bottom),0.75rem)]
+        backdrop-blur supports-[backdrop-filter]:bg-[var(--ink)]/70
+        sm:static sm:mx-0 sm:flex-row sm:items-center sm:bg-transparent sm:px-0 sm:pt-6 sm:pb-0 sm:backdrop-blur-none
+      "
+    >
       <span className="font-mono text-xs uppercase tracking-widest text-paper-faint">
         {leftMeta ?? ""}
       </span>
@@ -392,7 +404,7 @@ export function StepFooter({
           <button
             type="button"
             onClick={secondary.onClick}
-            className="btn btn-ghost h-12 px-5 text-sm"
+            className="btn btn-ghost min-h-12 px-5 text-sm"
           >
             {secondary.label}
           </button>
@@ -401,7 +413,7 @@ export function StepFooter({
           type="button"
           onClick={onAdvance}
           disabled={!canAdvance}
-          className="btn btn-primary h-12 px-6 text-sm disabled:opacity-40"
+          className="btn btn-primary min-h-12 px-6 text-sm disabled:opacity-40"
         >
           {advanceLabel}
         </button>

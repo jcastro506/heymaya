@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -43,6 +43,21 @@ export const metadata: Metadata = CREATOR_PRODUCT_ENABLED
         "Maya turns every completed job into local marketing. GBP posts, review requests, brand-voice replies — drafted and queued for one-tap approval.",
     };
 
+/**
+ * Mobile-first viewport. `viewportFit: "cover"` lets us paint behind the
+ * iPhone notch / Dynamic Island and Android edge-to-edge bars; pages then
+ * use `env(safe-area-inset-*)` to keep tap targets out from under the
+ * home-indicator. `themeColor` matches the dark-paper background so the
+ * iOS status bar tints correctly. `userScalable: true` preserved on
+ * purpose — never disable pinch-zoom for accessibility.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0B0C0E",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -54,6 +69,16 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        {/* iOS PWA + status-bar styling. Safari respects these tags
+            independently of Next's `viewport` export. */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta
+          name="apple-mobile-web-app-status-bar-style"
+          content="black-translucent"
+        />
+        <meta name="format-detection" content="telephone=no" />
+      </head>
       <body className="min-h-full flex flex-col bg-[var(--ink)] text-[var(--paper)]">
         <Providers>{children}</Providers>
       </body>
