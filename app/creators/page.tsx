@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  ArrowUpRight,
   Brain,
   Calendar,
   ClipboardCheck,
@@ -17,146 +18,38 @@ import {
   Trophy,
 } from "lucide-react";
 
-type Billing = "monthly" | "annual";
+import { AudienceToggle } from "./_components/AudienceToggle";
+import { Faq } from "./_components/Faq";
+import { FeatureSection } from "./_components/FeatureSection";
+import { Hero } from "./_components/Hero";
+import { IMessageCard } from "./_components/IMessageCard";
+import { MobileStickyCta } from "./_components/MobileStickyCta";
+import { Pricing, type Billing } from "./_components/Pricing";
 
-const FEATURES: Array<{
-  icon: typeof Sparkles;
-  title: string;
-  body: string;
-}> = [
-  {
-    icon: Search,
-    title: "She finds what's trending — for you",
-    body: "Maya watches your niche daily. Hashtags, sounds, formats, competitors. She surfaces only the trends that fit what's already working for your audience — not the algorithm-of-the-week.",
-  },
-  {
-    icon: Sparkles,
-    title: "She thinks through ideas with you",
-    body: "Send her a half-baked thought and she sharpens it into a hook, a script, a caption — anchored in your top-performing patterns and your voice.",
-  },
-  {
-    icon: Calendar,
-    title: "She plans your week",
-    body: "Sunday at 4pm: next week's content arc, per-platform variants, posting times built around your real calendar. Filming windows held against your schedule so it actually fits your life.",
-  },
-  {
-    icon: LineChart,
-    title: "She reads your performance",
-    body: "Every two hours during the day, every post you publish, every metric shift. She tells you why the Tuesday Reel hit 2.3× and the Thursday one stalled — and what to do about both.",
-  },
-  {
-    icon: MessageSquareText,
-    title: "She lives in your messages",
-    body: "Morning brief at 7am. Performance pings during the day. Evening recap at 7pm. Sunday plan. Weekly review. All on iMessage, no app to open, no inbox to check.",
-  },
-  {
-    icon: Trophy,
-    title: "She holds you accountable",
-    body: "You said three TikToks this week. You posted one. Friday at 10am she texts. No nag — a specific, grounded nudge with the exact unblock to move you forward.",
-  },
-  {
-    icon: Handshake,
-    title: "She responds to brand DMs for you",
-    body: "Reads every brand message that lands in your inbox, drafts the reply in your voice, surfaces the deal value, anchors on your floor rate. Sends under your auto-send threshold or hands it back for approval.",
-  },
-  {
-    icon: Megaphone,
-    title: "She reaches out to brands for you",
-    body: "Spots a brand fit you'd be perfect for, finds the right person, drafts the cold pitch in your voice, sends it. You see the outbound thread before she replies again — every time.",
-  },
-  {
-    icon: FileText,
-    title: "She reads contracts for you",
-    body: "Drop a brand-deal PDF in chat. She flags red-flags in plain language: exclusivity, IP grants, payment terms, kill fees, FTC compliance. Tells you what to push back on. Never tells you a clause is fine — only 'no flag detected here.'",
-  },
-  {
-    icon: ClipboardCheck,
-    title: "She drafts your manager packet",
-    body: "Quarterly, or on-demand: a polished PDF a real manager could read in 5 minutes. Audience demographics, top hooks, brand history, growth trajectory. For when a real manager is calling.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "She remembers everything",
-    body: "Your goals, your tone, your floor rate, the brands you've worked with, the hooks that hit, the ones that didn't. The longer you have her, the more she sounds like she knows you — because she does.",
-  },
-  {
-    icon: Brain,
-    title: "She tells you the truth",
-    body: "Anti-sycophancy is non-negotiable. She never says 'amazing post.' If a post underperforms, she says so plainly — with the data — and proposes what's next. The grounded read you can't get anywhere else.",
-  },
-];
-
-const SHOWCASE: Array<{
-  label: string;
-  bubbles: string[];
-}> = [
-  {
-    label: "Monday · 7:00 AM · Morning brief",
-    bubbles: [
-      "Yesterday's 4am Reel is at 47k — 5.2× your trailing 30. Three of your top five all-time use the constraint hook. Pattern's earning its keep.",
-      "Today: ride it. Sequel — same hook shape, different exercise. Earlier is better; your audience's engagement window on this account is 4am–8am.",
-    ],
-  },
-  {
-    label: "Friday · 10:14 AM · Accountability",
-    bubbles: [
-      "You said three TikToks this week. Posted one. Today is Friday.",
-      "Your 'dumbbell move for back pain' hook is in your top set, and you haven't reused it in six weeks. Could film it in 20 min.",
-    ],
-  },
-  {
-    label: "Tuesday · 2:33 PM · Brand DM",
-    bubbles: [
-      "Glossier reached out four days ago via your IG inbox. You missed it.",
-      "$1.2K, dad-fitness recovery launch, real account, real person.",
-      "Want me to draft a reply? I'd anchor on your morning routine angle since your audience over-indexes there.",
-    ],
-  },
-];
-
-const FAQ: { q: string; a: string }[] = [
-  {
-    q: "What does Maya actually text me?",
-    a: "Specific, grounded things. 'Your 4am Reel is at 47k — 5.2× your trailing.' 'You said three posts this week, you've posted one — what's blocking the second?' 'Glossier reached out four days ago, want me to draft a reply?' Never platitudes, never 'great post,' never generic.",
-  },
-  {
-    q: "Does Maya post for me?",
-    a: "No. Maya prepares everything — hook, caption, cut, time, per-platform variant — and hands it back to you to publish in one tap. The moment of publishing stays your call. Your account, your voice.",
-  },
-  {
-    q: "Can Maya email a brand without asking me?",
-    a: "Only if you turn on auto-send and set a threshold. Below your threshold, Maya drafts, voice-checks, cite-checks, and sends through your Gmail. Above your threshold, or on cold outreach to a new brand, she always asks first. You can leave auto-send off and Maya stays draft-only — same Maya, just slower outbound.",
-  },
-  {
-    q: "How does the 7-day trial work?",
-    a: "No card required up front. You get the full Manager — outreach, brand replies, contracts, planning, the works — for 7 days. On day 5, Maya nudges you. On day 7 you choose your level (Coach or Manager) or cancel; if you cancel after the trial we drop you to Coach so you keep daily direction at the lowest paid floor. You keep your data and your Maya either way.",
-  },
-  {
-    q: "Which channels does she watch?",
-    a: "TikTok, Instagram, YouTube, LinkedIn, X. She's platform-aware — what works on TikTok rarely works on LinkedIn, and Maya treats them differently. Connect by handle at onboarding. She never logs in as you.",
-  },
-  {
-    q: "What data does she actually read?",
-    a: "Public post data, public audience demographics, your own comments and DMs, plus whatever you explicitly connect — Gmail, Stripe, Google Calendar. She reads through ScrapeCreators (a public-data layer) and writes only through OAuth scopes you grant per provider.",
-  },
-  {
-    q: "What if I don't like her advice?",
-    a: "Reply 'no' or 'ignore' and she remembers. Maya isn't a generic recommender — she learns your account over weeks. The longer you have her, the more she sounds like she knows you, because she actually does.",
-  },
-];
-
-export default function CreatorsLanding() {
+/**
+ * /creators — the consumer creator product landing page.
+ *
+ * Conversion framework (lovable.dev): hero with single primary CTA → value
+ * proposition → per-feature pain-led sections → pricing → FAQ → final CTA.
+ *
+ * Constraint: zero "AI" mentions in rendered copy. Maya is "your social media
+ * manager" / "your content coach." Coach and Manager are autonomy-level
+ * pricing tiers of one product, never two products.
+ */
+export default function CreatorLanding() {
   const [billing, setBilling] = useState<Billing>("monthly");
 
   return (
-    <div className="relative isolate flex min-h-screen flex-col">
+    <div className="relative isolate flex min-h-screen flex-col pb-24 md:pb-0">
       <Nav />
-      <main className="relative z-10 flex-1 pb-24 sm:pb-0">
+      <main className="relative z-10 flex-1">
         <Hero />
-        <Features />
-        <Showcase />
+        <ValueProp />
+        <SocialProofPlaceholder />
+        <FeatureRail />
         <Pricing billing={billing} setBilling={setBilling} />
         <Faq />
+        <FinalCta />
       </main>
       <Footer />
       <MobileStickyCta />
@@ -165,16 +58,16 @@ export default function CreatorsLanding() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*                              NAV  +  TOGGLE                                 */
+/*                                  NAV                                       */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 function Nav() {
   return (
-    <header className="relative z-20 px-5 pt-[max(env(safe-area-inset-top),1rem)] sm:px-10 sm:pt-8">
+    <header className="relative z-20 px-6 pt-6 sm:px-10 sm:pt-8">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 flex-none"
+          className="group inline-flex items-center gap-2"
           aria-label="HeyMaya home"
         >
           <Logo />
@@ -182,10 +75,10 @@ function Nav() {
             HeyMaya
           </span>
         </Link>
-
-        <AudienceToggle current="creators" />
-
-        <div className="flex items-center gap-3 flex-none">
+        <div className="hidden md:block">
+          <AudienceToggle />
+        </div>
+        <div className="flex items-center gap-2">
           <Link
             href="/sign-in"
             className="hidden text-sm text-paper-dim transition-colors hover:text-paper sm:inline"
@@ -194,260 +87,757 @@ function Nav() {
           </Link>
           <Link
             href="/checkout?tier=manager&interval=monthly"
-            className="btn btn-primary !min-h-11 !px-4 !text-sm"
+            className="btn btn-primary h-10 px-4 text-sm"
           >
-            Start trial
+            Start 7 days free
           </Link>
         </div>
       </div>
-
-      <nav className="mx-auto mt-6 hidden max-w-7xl items-center justify-center gap-8 text-sm text-paper-dim md:flex">
-        <a href="#features" className="transition-colors hover:text-paper">
-          What she does
-        </a>
-        <a href="#showcase" className="transition-colors hover:text-paper">
-          How she shows up
-        </a>
-        <a href="#pricing" className="transition-colors hover:text-paper">
-          Pricing
-        </a>
-        <a href="#faq" className="transition-colors hover:text-paper">
-          FAQ
-        </a>
-      </nav>
+      <div className="mx-auto mt-4 flex max-w-7xl justify-center md:hidden">
+        <AudienceToggle />
+      </div>
     </header>
-  );
-}
-
-function AudienceToggle({ current }: { current: "creators" | "business" }) {
-  return (
-    <div
-      role="tablist"
-      aria-label="Audience"
-      className="flex items-center rounded-full border border-[var(--hairline)] bg-ink-2 p-1"
-    >
-      <Link
-        href="/creators"
-        role="tab"
-        aria-selected={current === "creators"}
-        className={`rounded-full px-4 text-sm transition-colors min-h-10 inline-flex items-center ${
-          current === "creators"
-            ? "bg-paper text-ink"
-            : "text-paper-dim hover:text-paper"
-        }`}
-      >
-        For creators
-      </Link>
-      <Link
-        href="/business"
-        role="tab"
-        aria-selected={current === "business"}
-        className={`rounded-full px-4 text-sm transition-colors min-h-10 inline-flex items-center ${
-          current === "business"
-            ? "bg-paper text-ink"
-            : "text-paper-dim hover:text-paper"
-        }`}
-      >
-        For businesses
-      </Link>
-    </div>
   );
 }
 
 function Logo() {
   return (
     <span
-      aria-hidden="true"
+      aria-hidden
       className="grid h-8 w-8 place-items-center rounded-full bg-lime text-ink"
+      style={{
+        boxShadow:
+          "0 0 0 1px rgba(214,255,61,0.3), 0 6px 24px -6px rgba(214,255,61,0.5)",
+      }}
     >
-      <span className="font-display text-base">M</span>
+      <span className="font-display text-lg leading-none">m</span>
     </span>
   );
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*                                  HERO                                       */
+/*                              VALUE PROPOSITION                             */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
-function Hero() {
+function ValueProp() {
   return (
-    <section className="px-5 pt-16 sm:px-10 sm:pt-24">
-      <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.15fr_1fr] lg:gap-16">
-        <div>
-          <h1 className="font-display text-5xl leading-[1.02] tracking-tight text-paper sm:text-6xl lg:text-7xl">
-            Maya. Your social
-            <br />
-            media manager.
-          </h1>
-          <p className="mt-6 max-w-xl text-lg leading-relaxed text-paper-dim sm:text-xl">
-            She watches every post you make, plans your week, holds you
-            accountable, drafts your brand replies, and lives in your messages.
-            She runs the parts of your career you don't have time for.
+    <section className="px-6 pt-24 sm:px-10 sm:pt-32">
+      <div className="mx-auto max-w-5xl text-center">
+        <p className="font-display text-3xl leading-[1.1] tracking-tight text-paper sm:text-5xl">
+          Maya is your social media manager.{" "}
+          <span className="italic text-paper-dim">
+            Lives in your messages. Replaces eight tools and a manager you
+            can&rsquo;t afford yet.
+          </span>
+        </p>
+        <div className="mx-auto mt-10 grid max-w-3xl grid-cols-1 gap-6 sm:grid-cols-3">
+          <ValueStat label="Reads" value="27 platforms" />
+          <ValueStat label="Speaks" value="iMessage · WhatsApp · SMS" />
+          <ValueStat label="Costs" value="From $19.99 / mo" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ValueStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-[var(--hairline)] bg-ink-2 p-5 text-left">
+      <div className="font-mono text-[10px] uppercase tracking-widest text-paper-faint">
+        {label}
+      </div>
+      <div className="mt-2 font-display text-lg text-paper">{value}</div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*                          SOCIAL PROOF PLACEHOLDER                          */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+function SocialProofPlaceholder() {
+  /* TODO: testimonials when we have them — do NOT fabricate quotes */
+  return (
+    <section
+      aria-label="Social proof"
+      className="mt-20 border-y border-[var(--hairline)] bg-ink-2/40 px-6 py-6 sm:mt-28 sm:px-10"
+    >
+      <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 text-center sm:flex-row sm:text-left">
+        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
+          Built with creators in Austin, LA, NYC, Toronto · Beta open now
+        </p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
+          5K – 500K followers · Multi-platform from day one
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*                               FEATURE RAIL                                 */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * 12 feature sections, each anchored to a creator pain point. Order is
+ * deliberate — algorithm anxiety up top (most universal), tier-restricted
+ * outreach mid-way (Manager value), anti-sycophancy as the closer (the
+ * personality differentiator).
+ */
+function FeatureRail() {
+  return (
+    <div id="features" className="pt-12">
+      {/* 01 — Trends */}
+      <FeatureSection
+        index={1}
+        eyebrow="Algorithm anxiety"
+        Icon={Search}
+        headline={
+          <>
+            The algorithm changes every week.{" "}
+            <span className="italic text-paper-dim">You can&rsquo;t catch up.</span>
+          </>
+        }
+        subhead={
+          <>
+            Maya runs a daily niche scan and only surfaces trends that match
+            what already works for you. No generic &ldquo;TikTok trends today&rdquo;
+            list. The three openings she thinks fit your last 30 posts, with
+            why.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Tue · 9:14 AM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Caught a new POV format moving in beauty TikTok this week.
+                    34 of your peers used it, the top 3 averaged{" "}
+                    <strong>5.7×</strong> baseline.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    It fits your &ldquo;tried it for a week&rdquo; voice. Drafted
+                    one for the candle launch — want to see?
+                  </>
+                ),
+              },
+            ]}
+            caption="cited · 34 peer posts scanned"
+          />
+        }
+      />
+
+      {/* 02 — Idea sparring */}
+      <FeatureSection
+        index={2}
+        eyebrow="Solo isolation"
+        Icon={Sparkles}
+        reverse
+        headline={
+          <>
+            You&rsquo;re working alone.{" "}
+            <span className="italic text-paper-dim">
+              Half-baked ideas die in your notes app.
+            </span>
+          </>
+        }
+        subhead={
+          <>
+            Send a half-thought via iMessage. Maya sharpens it into a hook, a
+            shot list, a caption — in your voice, with three variants to pick
+            from. The notes-app graveyard becomes a working draft folder.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Wed · 11:42 PM"
+            bubbles={[
+              {
+                side: "right",
+                body: <>quick thought: skincare routine for a flight??</>,
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Yeah — pre-flight prep is a saved-post category for your
+                    audience (12% of saves last month).
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    3 hooks: <em>&ldquo;The 4 things I do before a 9-hour
+                    flight&rdquo;</em>, <em>&ldquo;Skincare won&rsquo;t save you
+                    on this flight&rdquo;</em>, <em>&ldquo;Airport bathroom
+                    routine, ranked&rdquo;</em>. Want scripts?
+                  </>
+                ),
+              },
+            ]}
+            caption="cited · saves data · last 30d"
+          />
+        }
+      />
+
+      {/* 03 — Weekly plan */}
+      <FeatureSection
+        index={3}
+        eyebrow="Planning paralysis"
+        Icon={Calendar}
+        headline={
+          <>
+            Sunday hits and the week is{" "}
+            <span className="italic text-paper-dim">a blank wall.</span>
+          </>
+        }
+        subhead={
+          <>
+            Sunday at 4pm, Maya drops next week&rsquo;s content arc — three
+            pieces, per-platform variants, posting times that fit your real
+            calendar. You start Monday already aimed at something.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Sun · 4:14 PM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Plan for week of Mar 18. You&rsquo;ve got the dentist Tue
+                    morning and a wedding Sat — built around it.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    <strong>Mon 7pm</strong> · POV opener (Reel + TT)
+                    <br />
+                    <strong>Wed 6pm</strong> · process video, batch w/ Mon
+                    leftovers
+                    <br />
+                    <strong>Fri 11am</strong> · wedding-prep get-ready (build-up
+                    arc into Sat)
+                  </>
+                ),
+              },
+            ]}
+            caption="cited · your calendar · your top hours"
+          />
+        }
+      />
+
+      {/* 04 — Performance reading */}
+      <FeatureSection
+        index={4}
+        eyebrow="Data illiteracy"
+        Icon={LineChart}
+        reverse
+        headline={
+          <>
+            A post hits. Another flops.{" "}
+            <span className="italic text-paper-dim">You don&rsquo;t know why.</span>
+          </>
+        }
+        subhead={
+          <>
+            Every two hours during waking hours, Maya reads what just published
+            against your last 30. She tells you why Tuesday&rsquo;s Reel hit
+            2.3× and Thursday&rsquo;s stalled — opener, length, audio, posting
+            window. Then what to do next.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Thu · 5:08 PM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Tue&rsquo;s POV is at <strong>2.3×</strong> your 30-post
+                    median. Thu is at <strong>0.4×</strong>.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Same length, same niche. Tue opened on a question, Thu
+                    opened on a wide shot. Saves on the Tue post say POV-
+                    question is the lever — keep it for Sun.
+                  </>
+                ),
+              },
+            ]}
+            caption="cited · 30-post baseline · 2h read"
+          />
+        }
+      />
+
+      {/* 05 — Lives in your messages */}
+      <FeatureSection
+        index={5}
+        eyebrow="Tool fatigue"
+        Icon={MessageSquareText}
+        headline={
+          <>
+            Eight tools. Seven dashboards.{" "}
+            <span className="italic text-paper-dim">
+              Your phone is a graveyard of $9.99 subscriptions.
+            </span>
+          </>
+        }
+        subhead={
+          <>
+            Morning brief at 7am. Evening recap at 7pm. Sunday plan. Weekly
+            review. All on iMessage, where you already are. No app to open,
+            no dashboard to remember the password for.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Mon · 7:02 AM"
+            bubbles={[
+              {
+                side: "left",
+                body: <>Morning. Quick read on the weekend before today gets weird.</>,
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Saturday&rsquo;s Reel is at <strong>180K</strong>, saves
+                    9.4%. Algorithm fuel for the next 72h. Lean into POV format
+                    Wed.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Glossier replied Sat night. $4K, below your floor. Drafted a
+                    counter — want to see?
+                  </>
+                ),
+              },
+            ]}
+            caption="iMessage · also WhatsApp / SMS / web"
+          />
+        }
+      />
+
+      {/* 06 — Accountability */}
+      <FeatureSection
+        index={6}
+        eyebrow="Consistency"
+        Icon={Trophy}
+        reverse
+        headline={
+          <>
+            You said three TikToks.{" "}
+            <span className="italic text-paper-dim">You posted one.</span>
+          </>
+        }
+        subhead={
+          <>
+            Friday at 10am, if you&rsquo;re behind on what you committed to,
+            Maya tells you — specifically, with the exact unblock. Not nagging.
+            Not flattery. The thing a real manager would say at the standup.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Fri · 10:00 AM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    You committed to 3 TikToks this week. You&rsquo;re at 1.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    The two unfilmed are the POV ones we drafted Tue. Both are
+                    under 90 sec. You have 6:30-7:00pm tonight clear. That&rsquo;s
+                    enough for one — want me to bump the third to next Tue?
+                  </>
+                ),
+              },
+            ]}
+            caption="cited · your calendar · your commitments"
+          />
+        }
+      />
+
+      {/* 07 — Brand DM triage */}
+      <FeatureSection
+        index={7}
+        eyebrow="Monetization fragility"
+        Icon={Handshake}
+        headline={
+          <>
+            Brand emails sit unanswered. You undercharge.{" "}
+            <span className="italic text-paper-dim">
+              You get ghosted on a rate that was probably too low.
+            </span>
+          </>
+        }
+        subhead={
+          <>
+            Maya reads every brand email in Gmail, drafts replies in your voice,
+            and anchors on your floor rate. Above your auto-send threshold she
+            hands the draft back. Below it, she sends and tells you what
+            happened.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Mon · 2:38 PM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Glossier — Q2 launch, 1 Reel + 3 stories, $4,000.
+                    That&rsquo;s 33% under your floor for that scope.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Drafted counter at $6,500 with 30-day exclusivity carved
+                    out, citing your last Glossier post (412K, 11% saves).
+                    Sending unless you say otherwise in 2h.
+                  </>
+                ),
+              },
+            ]}
+            caption="cited · floor $6K · last Glossier post"
+          />
+        }
+      />
+
+      {/* 08 — Brand outreach (Manager only) */}
+      <FeatureSection
+        index={8}
+        eyebrow="Cold-pitch fatigue"
+        Icon={Megaphone}
+        reverse
+        badge="Manager tier"
+        headline={
+          <>
+            The brands you&rsquo;d be perfect for{" "}
+            <span className="italic text-paper-dim">don&rsquo;t know you exist.</span>
+          </>
+        }
+        subhead={
+          <>
+            Maya spots fits via Apollo and Hunter, finds the right person, and
+            drafts the cold pitch in your voice. You see it before she hits
+            send. The pipeline you&rsquo;d build if you had time, running while
+            you film.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Wed · 11:02 AM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Spotted 3 brand fits this week: Topicals (skincare, your
+                    audience overlap is 41%), Caraway (cookware, you keep
+                    mentioning yours), Lemme (vitamins, low CPC, easy yes).
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Drafted pitches to all three, addressed to the right brand
+                    lead at each. Want to read before I send?
+                  </>
+                ),
+              },
+            ]}
+            caption="cited · Apollo · audience overlap data"
+          />
+        }
+      />
+
+      {/* 09 — Contracts */}
+      <FeatureSection
+        index={9}
+        eyebrow="Legal blind spots"
+        Icon={FileText}
+        headline={
+          <>
+            A 14-page contract. You skim. You sign.{" "}
+            <span className="italic text-paper-dim">
+              Three months later, you find out you signed away exclusivity.
+            </span>
+          </>
+        }
+        subhead={
+          <>
+            Drop the PDF in chat. Maya flags exclusivity, IP grants, payment
+            terms, kill fees, FTC compliance — in plain language. The clauses
+            you should push back on, and the words to push back with.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Thu · 6:11 PM"
+            bubbles={[
+              {
+                side: "right",
+                body: <>just got the contract — 14 pages 😩</>,
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Read it. Three flags:
+                    <br />
+                    1. <strong>90-day exclusivity</strong> across the entire
+                    skincare category (industry standard for this rate is 30d
+                    same-brand).
+                    <br />
+                    2. <strong>IP grant is perpetual</strong> — they keep your
+                    footage forever.
+                    <br />
+                    3. <strong>Net-60 payment</strong>. Push to net-30.
+                  </>
+                ),
+              },
+            ]}
+            caption="cited · clauses 4.2, 7.1, 9.3"
+          />
+        }
+      />
+
+      {/* 10 — Manager packet */}
+      <FeatureSection
+        index={10}
+        eyebrow="The in-between stage"
+        Icon={ClipboardCheck}
+        reverse
+        headline={
+          <>
+            A real manager is sniffing around. They want a deck.{" "}
+            <span className="italic text-paper-dim">
+              Your follower count alone won&rsquo;t sell you.
+            </span>
+          </>
+        }
+        subhead={
+          <>
+            Quarterly, or on-demand, Maya generates a polished PDF a real
+            manager could read in five minutes. Audience, performance, brand
+            history, rate card, what&rsquo;s next. The packet you&rsquo;d hire
+            someone to build.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Q2 · on demand"
+            bubbles={[
+              {
+                side: "right",
+                body: <>UTA wants a deck. can you?</>,
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Yes. Pulled Q1 data — 14% follower growth, 3 brand deals
+                    closed, $34K revenue, top-saved post is the candle launch
+                    series. Generating now.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Packet ready: <strong>14 pages</strong>, brand-history
+                    timeline, rate card with rationale. Sent to your inbox.
+                  </>
+                ),
+              },
+            ]}
+            caption="generated · 6 min ago"
+          />
+        }
+      />
+
+      {/* 11 — Memory + voice mirror */}
+      <FeatureSection
+        index={11}
+        eyebrow="Voice drift"
+        Icon={Brain}
+        headline={
+          <>
+            VAs and agencies dilute your voice.{" "}
+            <span className="italic text-paper-dim">
+              You felt the magic drain before your audience did.
+            </span>
+          </>
+        }
+        subhead={
+          <>
+            Maya is built from your last 30 posts and 500 comments before she
+            sends a single message. She remembers goals, tone, floor rate,
+            brand history, hooks that hit, hooks that didn&rsquo;t. The longer
+            you have her, the more she sounds like she knows you.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="6 weeks in"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Caraway is back. They asked about a holiday push. You said
+                    in March you&rsquo;d only do them again at $8K and with
+                    creative approval — they came in at $9K and said yes to
+                    approval up front.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Drafted a yes, with the disclosure language you used last
+                    time. Send?
+                  </>
+                ),
+              },
+            ]}
+            caption="cited · your March email · your floor"
+          />
+        }
+      />
+
+      {/* 12 — Tells the truth */}
+      <FeatureSection
+        index={12}
+        eyebrow="Anti-sycophancy"
+        Icon={ShieldCheck}
+        reverse
+        headline={
+          <>
+            Cheerleading is{" "}
+            <span className="italic text-paper-dim">a betrayal of the job.</span>
+          </>
+        }
+        subhead={
+          <>
+            Maya never says &ldquo;amazing post.&rdquo; If a piece underperforms,
+            she tells you plainly — with the data and what comes next. The
+            tone is tunable (supportive, strategic, tough-love). The honesty
+            isn&rsquo;t.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Sat · 8:47 PM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Friday&rsquo;s post underperformed. <strong>0.3×</strong>{" "}
+                    your median, lowest watch-time of the last 30.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Opener was a 2.4-sec wide pan. Your top 5 all open on a
+                    face or a question by 0.8 sec. Don&rsquo;t boost this one —
+                    save the spend for Sunday&rsquo;s.
+                  </>
+                ),
+              },
+            ]}
+            caption="grounded · told you the truth"
+          />
+        }
+      />
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*                                FINAL CTA                                   */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+function FinalCta() {
+  return (
+    <section className="px-6 pt-32 sm:px-10 sm:pt-40">
+      <div className="mx-auto max-w-5xl">
+        <div className="relative overflow-hidden rounded-3xl border border-[var(--hairline-strong)] bg-ink-2 px-8 py-16 text-center sm:px-16 sm:py-24">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 opacity-30"
+            style={{
+              background:
+                "radial-gradient(60% 80% at 50% 0%, rgba(214,255,61,0.18), transparent 70%)",
+            }}
+          />
+          <h2 className="relative font-display text-4xl leading-[1.05] tracking-tight text-paper sm:text-6xl">
+            Try Maya for 7 days.{" "}
+            <span className="italic text-paper-dim">
+              See if she earns the desk.
+            </span>
+          </h2>
+          <p className="relative mx-auto mt-6 max-w-xl text-paper-dim">
+            No card. Cancel anytime. If she isn&rsquo;t the manager you&rsquo;d
+            hire, walk away on day 6 with your data exported.
           </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <div className="relative mt-9 flex flex-wrap items-center justify-center gap-3">
             <Link
               href="/checkout?tier=manager&interval=monthly"
-              className="btn btn-primary"
+              className="btn btn-primary group"
             >
-              Start your 7-day trial
+              Start 7 days free
+              <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-[1px] group-hover:translate-x-[1px]" />
             </Link>
-            <a href="#features" className="btn btn-ghost">
-              See what she does
+            <a href="#pricing" className="btn btn-ghost">
+              See pricing
             </a>
           </div>
-          <p className="mt-4 text-sm italic text-paper-faint">
-            No card required · cancel anytime
-          </p>
-        </div>
-        <HeroIMessage />
-      </div>
-    </section>
-  );
-}
-
-function HeroIMessage() {
-  return (
-    <div className="relative">
-      <div className="rounded-3xl border border-[var(--hairline)] bg-ink-2 p-5 shadow-2xl sm:p-6">
-        <div className="mb-4 flex items-center gap-2 text-xs text-paper-faint">
-          <span className="grid h-7 w-7 place-items-center rounded-full bg-lime text-ink font-display text-xs">
-            M
-          </span>
-          <span className="font-medium text-paper">Maya</span>
-          <span>· Tuesday, 4:02 AM</span>
-        </div>
-        <div className="space-y-2.5">
-          <Bubble side="them">
-            Your 4am POV reel hit 47k overnight — 5.2× your trailing.
-          </Bubble>
-          <Bubble side="them">
-            Same hook shape as the dumbbell-back post that did 38k last
-            Tuesday. You've got a 4am pattern.
-          </Bubble>
-          <Bubble side="them">
-            Locking it as your morning slot. Want me to plan three more
-            constraint hooks for this week?
-          </Bubble>
-          <Bubble side="me">yeah do it</Bubble>
-          <Bubble side="them">on it. drafts in the plan tab by 10am.</Bubble>
-        </div>
-      </div>
-      <div className="pointer-events-none absolute -bottom-6 -right-6 hidden h-32 w-32 rounded-full bg-lime/10 blur-3xl sm:block" />
-    </div>
-  );
-}
-
-function Bubble({
-  children,
-  side,
-}: {
-  children: React.ReactNode;
-  side: "me" | "them";
-}) {
-  const isMe = side === "me";
-  return (
-    <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-snug ${
-          isMe
-            ? "rounded-br-md bg-[var(--imessage-blue)] text-white"
-            : "rounded-bl-md bg-[var(--imessage-gray)] text-white"
-        }`}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                                  FEATURES                                   */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-function Features() {
-  return (
-    <section id="features" className="px-5 pt-28 sm:px-10 sm:pt-36">
-      <div className="mx-auto max-w-7xl">
-        <div className="max-w-2xl">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-paper-faint">
-            What she does
-          </p>
-          <h2 className="mt-4 font-display text-4xl leading-tight tracking-tight text-paper sm:text-5xl">
-            All the parts of being a creator that aren't filming.
-          </h2>
-          <p className="mt-5 text-base leading-relaxed text-paper-dim sm:text-lg">
-            Maya is one social media manager. She does all of this. Pick the
-            level of help you want at the bottom — autonomy is the only
-            difference.
-          </p>
-        </div>
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((feature) => (
-            <FeatureCard key={feature.title} {...feature} />
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function FeatureCard({
-  icon: Icon,
-  title,
-  body,
-}: {
-  icon: typeof Sparkles;
-  title: string;
-  body: string;
-}) {
-  return (
-    <article className="rounded-3xl border border-[var(--hairline)] bg-ink-2 p-6 sm:p-7">
-      <div className="grid h-10 w-10 place-items-center rounded-2xl bg-lime/10 text-lime">
-        <Icon className="h-5 w-5" />
-      </div>
-      <h3 className="mt-4 font-display text-xl tracking-tight text-paper">
-        {title}
-      </h3>
-      <p className="mt-2 text-sm leading-relaxed text-paper-dim">{body}</p>
-    </article>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                                  SHOWCASE                                   */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-function Showcase() {
-  return (
-    <section id="showcase" className="px-5 pt-28 sm:px-10 sm:pt-36">
-      <div className="mx-auto max-w-7xl">
-        <div className="max-w-2xl">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-paper-faint">
-            How she shows up
-          </p>
-          <h2 className="mt-4 font-display text-4xl leading-tight tracking-tight text-paper sm:text-5xl">
-            She lives in your messages. Not in another app you'll forget to
-            open.
-          </h2>
-        </div>
-        <div className="mt-12 grid gap-6 lg:grid-cols-3">
-          {SHOWCASE.map((item) => (
-            <article
-              key={item.label}
-              className="rounded-3xl border border-[var(--hairline)] bg-ink-2 p-6"
-            >
-              <span className="font-mono text-xs uppercase tracking-widest text-paper-faint">
-                {item.label}
-              </span>
-              <div className="mt-4 space-y-2.5">
-                {item.bubbles.map((b, i) => (
-                  <Bubble key={i} side="them">
-                    {b}
-                  </Bubble>
-                ))}
-              </div>
-            </article>
-          ))}
         </div>
       </div>
     </section>
@@ -455,270 +845,112 @@ function Showcase() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*                                  PRICING                                    */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-const TIER_DATA = [
-  {
-    key: "coach" as const,
-    name: "Coach",
-    monthly: 19.99,
-    annual: 199,
-    headline: "She tells you. You do it.",
-    description:
-      "Daily direction, planning, performance reads, accountability, idea sharpening, draft feedback, contract scans, brand-DM drafts. Every advisory thing on the list above. Coach hands you the move; you make it.",
-    excludes:
-      "Coach doesn't auto-send brand replies and doesn't reach out to brands cold. If you want her to do those for you — that's Manager.",
-  },
-  {
-    key: "manager" as const,
-    name: "Manager",
-    monthly: 49.99,
-    annual: 499,
-    headline: "She does it. You approve.",
-    description:
-      "Everything in Coach, plus: drafts and sends brand replies under your auto-send threshold, finds new brand opportunities, drafts and sends cold pitches, runs the brand back-and-forth. The full thing.",
-    excludes: null,
-    recommended: true,
-  },
-];
-
-function Pricing({
-  billing,
-  setBilling,
-}: {
-  billing: Billing;
-  setBilling: (b: Billing) => void;
-}) {
-  return (
-    <section id="pricing" className="px-5 pt-28 sm:px-10 sm:pt-36">
-      <div className="mx-auto max-w-7xl">
-        <div className="flex flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">
-          <div className="max-w-2xl">
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-paper-faint">
-              Pricing
-            </p>
-            <h2 className="mt-4 font-display text-4xl leading-tight tracking-tight text-paper sm:text-5xl">
-              Pick your level of help.
-            </h2>
-            <p className="mt-4 max-w-xl text-base leading-relaxed text-paper-dim sm:text-lg">
-              Same Maya. The only difference between Coach and Manager is
-              autonomy — does she just tell you the move, or does she also do
-              the parts you'd rather not? Both tiers start with 7 days free on
-              your first subscription.
-            </p>
-          </div>
-          <BillingToggle billing={billing} setBilling={setBilling} />
-        </div>
-        <div className="mt-10 grid gap-5 sm:gap-6 lg:grid-cols-2">
-          {TIER_DATA.map((tier) => (
-            <PricingCard key={tier.key} tier={tier} billing={billing} />
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function BillingToggle({
-  billing,
-  setBilling,
-}: {
-  billing: Billing;
-  setBilling: (b: Billing) => void;
-}) {
-  return (
-    <div className="flex w-full items-center rounded-full border border-[var(--hairline)] bg-ink-2 p-1 sm:w-auto">
-      {(["monthly", "annual"] as const).map((option) => (
-        <button
-          key={option}
-          onClick={() => setBilling(option)}
-          className={`flex-1 rounded-full px-4 text-sm transition-colors min-h-11 sm:flex-initial ${
-            billing === option
-              ? "bg-paper text-ink"
-              : "text-paper-dim hover:text-paper"
-          }`}
-        >
-          {option === "monthly" ? "Monthly" : "Annual · save ~25%"}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function PricingCard({
-  tier,
-  billing,
-}: {
-  tier: (typeof TIER_DATA)[number];
-  billing: Billing;
-}) {
-  const price = billing === "monthly" ? tier.monthly : tier.annual;
-  const priceLabel =
-    billing === "monthly"
-      ? `$${price.toFixed(2).replace(/\.00$/, "")}`
-      : `$${price}`;
-  const cadence = billing === "monthly" ? "/ month" : "/ year";
-  const annualEquiv =
-    billing === "annual"
-      ? `$${(tier.annual / 12).toFixed(2).replace(/\.00$/, "")}/mo equiv`
-      : null;
-
-  // Both tiers get a 7-day free trial on first subscription. Headline copy
-  // mirrors the Stripe Checkout-side trial gating in convex/billing/checkout.ts.
-  const trialCopy =
-    billing === "monthly"
-      ? `7 days free, then ${priceLabel} / month`
-      : `7 days free, then ${priceLabel} / year`;
-
-  return (
-    <article
-      className={`relative flex flex-col rounded-3xl border bg-ink-2 p-7 sm:p-9 ${
-        tier.recommended
-          ? "border-lime/40 shadow-[0_0_0_1px_rgba(214,255,61,0.1)]"
-          : "border-[var(--hairline)]"
-      }`}
-    >
-      {tier.recommended && (
-        <span className="absolute -top-3 left-7 rounded-full bg-lime px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-ink">
-          7-day trial · default
-        </span>
-      )}
-      <h3 className="font-display text-3xl tracking-tight text-paper">
-        {tier.name}
-      </h3>
-      <p className="mt-2 text-base text-paper-dim">{tier.headline}</p>
-      <div className="mt-6 flex items-baseline gap-2">
-        <span className="font-display text-5xl tracking-tight text-paper">
-          {priceLabel}
-        </span>
-        <span className="text-sm text-paper-dim">{cadence}</span>
-      </div>
-      {annualEquiv && (
-        <p className="mt-1 text-xs text-paper-faint">{annualEquiv}</p>
-      )}
-      <p className="mt-2 text-xs font-mono uppercase tracking-widest text-lime">
-        {trialCopy}
-      </p>
-      <p className="mt-6 text-sm leading-relaxed text-paper-dim">
-        {tier.description}
-      </p>
-      {tier.excludes && (
-        <p className="mt-4 rounded-xl border-l-2 border-paper-faint/40 bg-ink/40 px-4 py-3 text-sm italic leading-relaxed text-paper-faint">
-          {tier.excludes}
-        </p>
-      )}
-      <Link
-        href={`/checkout?tier=${tier.key}&interval=${billing}`}
-        className={`mt-8 ${tier.recommended ? "btn btn-primary" : "btn btn-ghost"}`}
-      >
-        {tier.recommended
-          ? "Start 7-day Manager trial"
-          : `Start with ${tier.name}`}
-      </Link>
-    </article>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                                    FAQ                                      */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-function Faq() {
-  return (
-    <section id="faq" className="px-5 pt-28 sm:px-10 sm:pt-36">
-      <div className="mx-auto max-w-3xl">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-paper-faint">
-          Questions
-        </p>
-        <h2 className="mt-4 font-display text-4xl leading-tight tracking-tight text-paper sm:text-5xl">
-          Things creators ask first.
-        </h2>
-        <div className="mt-10 divide-y divide-[var(--hairline)] border-y border-[var(--hairline)]">
-          {FAQ.map(({ q, a }, i) => (
-            <details key={i} className="group">
-              <summary className="flex min-h-12 cursor-pointer items-center justify-between gap-4 py-5 text-left">
-                <span className="font-display text-lg tracking-tight text-paper">
-                  {q}
-                </span>
-                <span className="faq-plus inline-block text-2xl font-light leading-none text-paper-dim">
-                  +
-                </span>
-              </summary>
-              <p className="pb-5 text-base leading-relaxed text-paper-dim">
-                {a}
-              </p>
-            </details>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                                   FOOTER                                    */
+/*                                  FOOTER                                    */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 function Footer() {
   return (
-    <footer className="mt-32 border-t border-[var(--hairline)] px-5 pb-[max(env(safe-area-inset-bottom),2.5rem)] pt-14 sm:px-10">
+    <footer className="relative z-10 mt-32 border-t border-[var(--hairline)] px-6 pb-10 pt-16 sm:px-10">
       <div className="mx-auto max-w-7xl">
-        <div className="flex flex-col items-start justify-between gap-10 sm:flex-row">
-          <div className="max-w-md">
-            <Link href="/" className="inline-flex items-center gap-2">
-              <Logo />
-              <span className="font-display text-xl tracking-tight text-paper">
-                HeyMaya
-              </span>
-            </Link>
-            <p className="mt-5 text-sm leading-relaxed text-paper-dim">
-              Your social media manager. Live in your messages, watching your
-              work, telling you the truth.
+        {/* Giant wordmark — editorial closer */}
+        <div className="overflow-hidden">
+          <h3 className="font-display text-[clamp(4rem,18vw,18rem)] leading-[0.9] tracking-[-0.04em] text-paper">
+            Hey<span className="italic text-paper-dim">Maya</span>.
+          </h3>
+        </div>
+
+        <div className="mt-12 grid grid-cols-2 gap-10 border-t border-[var(--hairline)] pt-10 text-sm sm:grid-cols-4">
+          <div className="col-span-2 sm:col-span-1">
+            <p className="text-paper-dim">
+              Your social media manager before you can afford a human one.
+            </p>
+            <p className="mt-4 font-mono text-xs uppercase tracking-widest text-paper-faint">
+              © {new Date().getFullYear()} HeyMaya
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-x-12 gap-y-3 text-sm text-paper-dim sm:grid-cols-3">
-            <Link href="/business" className="transition-colors hover:text-paper">
-              For businesses
-            </Link>
-            <a href="#features" className="transition-colors hover:text-paper">
-              What she does
-            </a>
-            <a href="#pricing" className="transition-colors hover:text-paper">
-              Pricing
-            </a>
-            <Link href="/sign-in" className="transition-colors hover:text-paper">
-              Sign in
-            </Link>
-            <Link href="/privacy" className="transition-colors hover:text-paper">
-              Privacy
-            </Link>
-            <Link href="/terms" className="transition-colors hover:text-paper">
-              Terms
-            </Link>
+          <div>
+            <h4 className="font-mono text-[11px] uppercase tracking-widest text-paper-faint">
+              Product
+            </h4>
+            <ul className="mt-3 space-y-2 text-paper-dim">
+              <li>
+                <a className="hover:text-paper" href="#features">
+                  How she works
+                </a>
+              </li>
+              <li>
+                <a className="hover:text-paper" href="#pricing">
+                  Pricing
+                </a>
+              </li>
+              <li>
+                <a className="hover:text-paper" href="#faq">
+                  FAQ
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-mono text-[11px] uppercase tracking-widest text-paper-faint">
+              Company
+            </h4>
+            <ul className="mt-3 space-y-2 text-paper-dim">
+              <li>
+                <a className="hover:text-paper" href="/terms">
+                  Terms
+                </a>
+              </li>
+              <li>
+                <a className="hover:text-paper" href="/privacy">
+                  Privacy
+                </a>
+              </li>
+              <li>
+                <a className="hover:text-paper" href="mailto:hi@heymaya.app">
+                  hi@heymaya.app
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-mono text-[11px] uppercase tracking-widest text-paper-faint">
+              Elsewhere
+            </h4>
+            <ul className="mt-3 space-y-2 text-paper-dim">
+              <li>
+                <a
+                  className="inline-flex items-center gap-1 hover:text-paper"
+                  href="https://x.com/heymaya"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  X / Twitter <ArrowUpRight className="h-3 w-3" />
+                </a>
+              </li>
+              <li>
+                <a
+                  className="inline-flex items-center gap-1 hover:text-paper"
+                  href="https://tiktok.com/@heymaya"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  TikTok <ArrowUpRight className="h-3 w-3" />
+                </a>
+              </li>
+              <li>
+                <a
+                  className="inline-flex items-center gap-1 hover:text-paper"
+                  href="https://instagram.com/heymaya"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Instagram <ArrowUpRight className="h-3 w-3" />
+                </a>
+              </li>
+            </ul>
           </div>
         </div>
-        <p className="mt-12 font-mono text-xs uppercase tracking-widest text-paper-faint">
-          © {new Date().getFullYear()} HeyMaya
-        </p>
       </div>
     </footer>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                            MOBILE STICKY CTA                                */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-function MobileStickyCta() {
-  return (
-    <div className="fixed inset-x-0 bottom-0 z-30 flex border-t border-[var(--hairline)] bg-[var(--ink)]/95 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur supports-[backdrop-filter]:bg-[var(--ink)]/70 sm:hidden">
-      <Link
-        href="/checkout?tier=manager&interval=monthly"
-        className="btn btn-primary flex-1 !min-h-12"
-      >
-        Start your 7-day trial
-      </Link>
-    </div>
   );
 }
