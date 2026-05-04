@@ -1,0 +1,21 @@
+{
+  "generatedAt": "2026-05-04T21:58:44.537Z",
+  "tiers": {
+    "coach": {
+      "productId": "prod_USPKbRvTLVs94T",
+      "monthlyPriceId": "price_1TTUVlHaqGrlBgRnIe5W2wzq",
+      "annualPriceId": "price_1TTUVlHaqGrlBgRn9bxhpEJR"
+    },
+    "manager": {
+      "productId": "prod_USPKZSSJDaasUF",
+      "monthlyPriceId": "price_1TTUVmHaqGrlBgRnBoS6W35t",
+      "annualPriceId": "price_1TTUVmHaqGrlBgRnvZreBgT2"
+    }
+  },
+  "envVarsNeeded": [
+    "STRIPE_PRICE_COACH_MONTHLY=price_1TTUVlHaqGrlBgRnIe5W2wzq",
+    "STRIPE_PRICE_COACH_ANNUAL=price_1TTUVlHaqGrlBgRn9bxhpEJR",
+    "STRIPE_PRICE_MANAGER_MONTHLY=price_1TTUVmHaqGrlBgRnBoS6W35t",
+    "STRIPE_PRICE_MANAGER_ANNUAL=price_1TTUVmHaqGrlBgRnvZreBgT2"
+  ]
+}

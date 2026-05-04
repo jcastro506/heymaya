@@ -1,0 +1,23 @@
+{
+  "generatedAt": "2026-05-04T21:48:35.566Z",
+  "stripeApiVersion": "2026-04-22.dahlia",
+  "tiers": {
+    "coach": {
+      "productId": "prod_USPA9A3Q9FaKS2",
+      "monthlyPriceId": "price_1TTULuQbBBmG0KdAkPnUqLVH",
+      "annualPriceId": "price_1TTULuQbBBmG0KdAWo1L8Ix2"
+    },
+    "manager": {
+      "productId": "prod_USPAeac8309ti3",
+      "monthlyPriceId": "price_1TTULvQbBBmG0KdAWiW3rXik",
+      "annualPriceId": "price_1TTULvQbBBmG0KdAENGrkPQt"
+    }
+  },
+  "envVarsNeeded": [
+    "STRIPE_PRICE_COACH_MONTHLY=price_1TTULuQbBBmG0KdAkPnUqLVH",
+    "STRIPE_PRICE_COACH_ANNUAL=price_1TTULuQbBBmG0KdAWo1L8Ix2",
+    "STRIPE_PRICE_MANAGER_MONTHLY=price_1TTULvQbBBmG0KdAWiW3rXik",
+    "STRIPE_PRICE_MANAGER_ANNUAL=price_1TTULvQbBBmG0KdAENGrkPQt"
+  ],
+  "trialReminder": "7-day free trial applies to BOTH Coach and Manager on first subscription.\nIt is NOT encoded on the Stripe price — see convex/billing/checkout.ts\nfor the gating logic. On Manager trial expiry the subscription should\neither continue at the chosen tier (if card on file) or be canceled by\nStripe; cancel handler downgrades to Coach (the post-cancel floor)."
+}
