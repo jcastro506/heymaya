@@ -470,6 +470,18 @@ export const triageInboundEmail = internalAction({
       detail: `class=${result.classification} variants=${result.replyVariants.length} autoSent=${autoSent}`,
     });
 
+    // Creator usage analytics — event_fired wire-in (path c).
+    await ctx.runMutation(internal.lib.usageEvents.logUsageEvent, {
+      creatorId: args.creatorId,
+      kind: "event_fired",
+      label: "brand_email_triage",
+      meta: {
+        classification: result.classification,
+        autoSent,
+        variants: result.replyVariants.length,
+      },
+    });
+
     return {
       brandDealId,
       autoSent,
