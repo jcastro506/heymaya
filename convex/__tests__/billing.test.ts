@@ -269,8 +269,8 @@ describe("billing.checkout.createCheckoutSession", () => {
         expect(sess.metadata?.tier).toBe(tier);
         expect(sess.metadata?.interval).toBe(interval);
         expect(sess.subscription_data?.metadata?.creatorId).toBe(String(c));
-        expect(sess.success_url).toContain("/profile?billing=success");
-        expect(sess.cancel_url).toContain("/profile?billing=cancelled");
+        expect(sess.success_url).toContain("/onboarding/maya?billing=success");
+        expect(sess.cancel_url).toContain("/creators?billing=cancelled");
         expect(sess.client_reference_id).toBe(String(c));
       } finally {
         _setStripeClientForTests(null);

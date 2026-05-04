@@ -174,8 +174,14 @@ export const createCheckoutSession = action({
       mode: "subscription",
       customer: stripeCustomerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${baseUrl}/profile?billing=success`,
-      cancel_url: `${baseUrl}/profile?billing=cancelled`,
+      // Post-checkout: route every paying creator into onboarding. The
+      // /onboarding/maya page bounces creators with status:"active" through
+      // to /today, so returning subscribers don't see the new-user flow.
+      // Net-new creators land in onboarding to enter handles + phone +
+      // channel pairing. Without this, a fresh signup paid for a Maya they
+      // never finished setting up.
+      success_url: `${baseUrl}/onboarding/maya?billing=success`,
+      cancel_url: `${baseUrl}/creators?billing=cancelled`,
       client_reference_id: String(me._id),
       metadata: {
         creatorId: String(me._id),
