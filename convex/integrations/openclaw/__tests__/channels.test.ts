@@ -34,7 +34,7 @@ async function insertCreator(
   t: ReturnType<typeof convexTest>,
   opts: {
     suffix: string;
-    plan: "starter" | "pro" | "studio";
+    plan: "coach" | "manager";
     deployed?: boolean;
   }
 ): Promise<Id<"creators">> {
@@ -117,7 +117,7 @@ describe("openclaw.channels — requestPairing", () => {
 
   it("rejects when creator has no Maya deployed", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro", deployed: false });
+    await insertCreator(t, { suffix: "a", plan: "manager", deployed: false });
     await expect(
       asUser(t, "a").action(
         api.integrations.openclaw.channels.requestPairing,
@@ -128,7 +128,7 @@ describe("openclaw.channels — requestPairing", () => {
 
   it("PLAN-TIER (REVISED): Starter allowed imessage + whatsapp + sms — channels are ungated", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "starter", plan: "starter" });
+    await insertCreator(t, { suffix: "starter", plan: "coach" });
     for (const channel of ["imessage", "whatsapp", "sms"] as const) {
       const res = await asUser(t, "starter").action(
         api.integrations.openclaw.channels.requestPairing,
@@ -140,7 +140,7 @@ describe("openclaw.channels — requestPairing", () => {
 
   it("PLAN-TIER: Pro allowed imessage + whatsapp + sms", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "pro", plan: "pro" });
+    await insertCreator(t, { suffix: "pro", plan: "manager" });
     for (const channel of ["imessage", "whatsapp", "sms"] as const) {
       const res = await asUser(t, "pro").action(
         api.integrations.openclaw.channels.requestPairing,
@@ -152,7 +152,7 @@ describe("openclaw.channels — requestPairing", () => {
 
   it("PLAN-TIER: Studio allowed imessage + whatsapp + sms", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "studio", plan: "studio" });
+    await insertCreator(t, { suffix: "studio", plan: "manager" });
     for (const channel of ["imessage", "whatsapp", "sms"] as const) {
       const res = await asUser(t, "studio").action(
         api.integrations.openclaw.channels.requestPairing,
@@ -175,7 +175,7 @@ describe("openclaw.channels — requestPairing", () => {
     "ADVERSARIAL: rejects malformed phone number %s (%s)",
     async (phoneNumber) => {
       const t = convexTest(schema, modules);
-      await insertCreator(t, { suffix: "pro", plan: "pro" });
+      await insertCreator(t, { suffix: "pro", plan: "manager" });
       await expect(
         asUser(t, "pro").action(
           api.integrations.openclaw.channels.requestPairing,
@@ -187,7 +187,7 @@ describe("openclaw.channels — requestPairing", () => {
 
   it("persists a pairedChannels row in pending state on success", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await asUser(t, "a").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "imessage", phoneNumber: "+14155551234" }
@@ -211,7 +211,7 @@ describe("openclaw.channels — requestPairing", () => {
       stderr: "openclaw: device limit reached",
     }));
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").action(
         api.integrations.openclaw.channels.requestPairing,
@@ -226,7 +226,7 @@ describe("openclaw.channels — requestPairing", () => {
       stderr: "openclaw: command timed out after 15000ms",
     }));
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").action(
         api.integrations.openclaw.channels.requestPairing,
@@ -241,7 +241,7 @@ describe("openclaw.channels — requestPairing", () => {
       data: { qrCodeDataUrl: "data:image/png;base64,xxx" },
     }));
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").action(
         api.integrations.openclaw.channels.requestPairing,
@@ -270,7 +270,7 @@ describe("openclaw.channels — confirmPairing", () => {
 
   it("rejects unknown pairingId", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").action(
         api.integrations.openclaw.channels.confirmPairing,
@@ -281,8 +281,8 @@ describe("openclaw.channels — confirmPairing", () => {
 
   it("CROSS-TENANT: Creator A cannot confirm Creator B's pairing", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    await insertCreator(t, { suffix: "b", plan: "manager" });
     // B initiates
     const bRes = await asUser(t, "b").action(
       api.integrations.openclaw.channels.requestPairing,
@@ -309,7 +309,7 @@ describe("openclaw.channels — confirmPairing", () => {
 
   it("ADVERSARIAL: SMS pairing requires a confirmationCode", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const res = await asUser(t, "a").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "sms", phoneNumber: "+14155551234" }
@@ -324,7 +324,7 @@ describe("openclaw.channels — confirmPairing", () => {
 
   it("ADVERSARIAL: SMS rejects malformed confirmationCode", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const res = await asUser(t, "a").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "sms", phoneNumber: "+14155551234" }
@@ -348,7 +348,7 @@ describe("openclaw.channels — confirmPairing", () => {
 
   it("happy path: confirms iMessage pairing, marks active, promotes channel preference", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const reqRes = await asUser(t, "a").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "imessage", phoneNumber: "+14155551234" }
@@ -379,7 +379,7 @@ describe("openclaw.channels — confirmPairing", () => {
 
   it("happy path: confirms SMS pairing with valid code", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "starter" });
+    await insertCreator(t, { suffix: "a", plan: "coach" });
     const reqRes = await asUser(t, "a").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "sms", phoneNumber: "+14155551234" }
@@ -393,7 +393,7 @@ describe("openclaw.channels — confirmPairing", () => {
 
   it("rejects confirming an already-active pairing", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const reqRes = await asUser(t, "a").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "imessage", phoneNumber: "+14155551234" }
@@ -430,7 +430,7 @@ describe("openclaw.channels — confirmPairing", () => {
       return { ok: false };
     });
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const reqRes = await asUser(t, "a").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "imessage", phoneNumber: "+14155551234" }
@@ -464,7 +464,7 @@ describe("openclaw.channels — unpairChannel", () => {
 
   it("rejects unpair when no active pairing exists", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").action(
         api.integrations.openclaw.channels.unpairChannel,
@@ -475,8 +475,8 @@ describe("openclaw.channels — unpairChannel", () => {
 
   it("CROSS-TENANT: A cannot unpair B's channel via channel-name route", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    await insertCreator(t, { suffix: "b", plan: "manager" });
     // B pairs imessage
     const bReq = await asUser(t, "b").action(
       api.integrations.openclaw.channels.requestPairing,
@@ -507,7 +507,7 @@ describe("openclaw.channels — unpairChannel", () => {
 
   it("happy path: unpairs an active channel and falls back channelPreference to web", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const reqRes = await asUser(t, "a").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "imessage", phoneNumber: "+14155551234" }
@@ -563,7 +563,7 @@ describe("openclaw.channels — unpairChannel", () => {
       return { ok: false };
     });
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const reqRes = await asUser(t, "a").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "imessage", phoneNumber: "+14155551234" }
@@ -601,7 +601,7 @@ describe("openclaw.channels — listPairedChannels", () => {
 
   it("returns [] when creator has no pairings", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const r = await asUser(t, "a").query(
       api.integrations.openclaw.channels.listPairedChannels,
       {}
@@ -611,8 +611,8 @@ describe("openclaw.channels — listPairedChannels", () => {
 
   it("CROSS-TENANT: A only sees own pairings", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    await insertCreator(t, { suffix: "b", plan: "manager" });
     const aReq = await asUser(t, "a").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "imessage", phoneNumber: "+14155550001" }
@@ -639,16 +639,16 @@ describe("openclaw.channels — listPairedChannels", () => {
 
   it("PLAN-TIER (REVISED): allowedByPlan flag is true on every tier — channels are ungated", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     // Pair imessage on Pro
     const reqRes = await asUser(t, "a").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "imessage", phoneNumber: "+14155551234" }
     );
     expect(reqRes.pairingId).toBeTruthy();
-    // Downgrade to Starter and re-list. Channels are universally allowed now,
+    // Downgrade to Coach and re-list. Channels are universally allowed now,
     // so the flag stays true.
-    await t.run((ctx) => ctx.db.patch(a, { plan: "starter" }));
+    await t.run((ctx) => ctx.db.patch(a, { plan: "coach" }));
     const list = await asUser(t, "a").query(
       api.integrations.openclaw.channels.listPairedChannels,
       {}
@@ -660,7 +660,7 @@ describe("openclaw.channels — listPairedChannels", () => {
 
   it("orders rows newest-first", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     // Insert two rows directly with controlled timestamps.
     await t.run((ctx) =>
       ctx.db.insert("pairedChannels", {
@@ -696,7 +696,7 @@ describe("openclaw.channels — listPairedChannels", () => {
 describe("openclaw.channels — internal helpers", () => {
   it("recordPairingRequest defense-in-depth: rejects non-E.164 inserts", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const { internal } = await import("../../../_generated/api");
     await expect(
       t.mutation(
@@ -767,7 +767,7 @@ describe("openclaw.channels — telegram pair flow", () => {
 
   it("requestPairing(telegram) requires no phone number; returns deep-link", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "tg", plan: "pro" });
+    await insertCreator(t, { suffix: "tg", plan: "manager" });
     const res = await asUser(t, "tg").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "telegram" } // no phoneNumber
@@ -783,8 +783,8 @@ describe("openclaw.channels — telegram pair flow", () => {
     expect(res.smsConfirmationCode).toBeUndefined();
   });
 
-  it("PLAN-TIER: telegram pair allowed on starter, pro, AND studio (ungated)", async () => {
-    for (const plan of ["starter", "pro", "studio"] as const) {
+  it("PLAN-TIER: telegram pair allowed on coach AND manager (ungated)", async () => {
+    for (const plan of ["coach", "manager"] as const) {
       const t = convexTest(schema, modules);
       await insertCreator(t, { suffix: plan, plan });
       const res = await asUser(t, plan).action(
@@ -797,7 +797,7 @@ describe("openclaw.channels — telegram pair flow", () => {
 
   it("persists tg:pending placeholder in pairedChannels.phoneNumber on request", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "tg2", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "tg2", plan: "manager" });
     await asUser(t, "tg2").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "telegram" }
@@ -816,7 +816,7 @@ describe("openclaw.channels — telegram pair flow", () => {
 
   it("confirmPairing(telegram) updates pairedChannels.phoneNumber to tg:<chat_id>", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "tg3", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "tg3", plan: "manager" });
     const pair = await asUser(t, "tg3").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "telegram" }
@@ -838,7 +838,7 @@ describe("openclaw.channels — telegram pair flow", () => {
 
   it("ADVERSARIAL: telegram confirm rejects malformed pair codes", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "tg4", plan: "pro" });
+    await insertCreator(t, { suffix: "tg4", plan: "manager" });
     const pair = await asUser(t, "tg4").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "telegram" }
@@ -861,7 +861,7 @@ describe("openclaw.channels — telegram pair flow", () => {
 
   it("ADVERSARIAL: telegram confirm rejects empty/missing code", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "tg5", plan: "pro" });
+    await insertCreator(t, { suffix: "tg5", plan: "manager" });
     const pair = await asUser(t, "tg5").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "telegram" }
@@ -876,8 +876,8 @@ describe("openclaw.channels — telegram pair flow", () => {
 
   it("CROSS-TENANT: Creator B cannot confirm Creator A's telegram pair", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "alice", plan: "pro" });
-    await insertCreator(t, { suffix: "bob", plan: "pro" });
+    await insertCreator(t, { suffix: "alice", plan: "manager" });
+    await insertCreator(t, { suffix: "bob", plan: "manager" });
     const aPair = await asUser(t, "alice").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "telegram" }
@@ -898,7 +898,7 @@ describe("openclaw.channels — telegram pair flow", () => {
 
   it("recordPairingRequest accepts tg:pending and tg:<id> shapes; rejects E.164 prefix mix", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "tg6", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "tg6", plan: "manager" });
     const { internal } = await import("../../../_generated/api");
     // Valid: pending placeholder.
     await expect(

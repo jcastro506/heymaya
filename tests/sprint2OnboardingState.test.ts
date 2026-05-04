@@ -66,6 +66,14 @@ const HANDLE_LINKEDIN: VerifiedHandle = {
   avatarUrl: null,
 };
 
+const HANDLE_X: VerifiedHandle = {
+  platform: "x",
+  handle: "joshc",
+  displayName: "Josh C.",
+  followerCount: 6_000,
+  avatarUrl: null,
+};
+
 function withPlan(plan: Plan): OnboardingState {
   return { ...initialState(plan), plan };
 }
@@ -105,7 +113,7 @@ describe("STEP_ORDER", () => {
   });
 
   it("setStep replaces step and clears any banner error", () => {
-    const s = { ...initialState("pro"), error: "boom" };
+    const s = { ...initialState("manager"), error: "boom" };
     expect(setStep(s, "channel")).toMatchObject({ step: "channel", error: null });
   });
 });
@@ -115,40 +123,32 @@ describe("STEP_ORDER", () => {
 // ────────────────────────────────────────────────────────────────────────
 
 describe("addHandle", () => {
-  it("Starter caps at exactly 1 handle (matches PLAN_MAX_HANDLES)", () => {
-    expect(PLAN_MAX_HANDLES.starter).toBe(1);
-    let state = withPlan("starter");
-    const r1 = addHandle(state, HANDLE_TT);
-    expect(r1.ok).toBe(true);
-    if (!r1.ok) throw new Error("unreachable");
-    state = r1.state;
-    const r2 = addHandle(state, HANDLE_IG);
-    expect(r2.ok).toBe(false);
-    if (r2.ok) throw new Error("unreachable");
-    expect(r2.reason).toBe("plan-cap");
+  it("Coach allows up to PLAN_MAX_HANDLES (5 in v0)", () => {
+    expect(PLAN_MAX_HANDLES.coach).toBe(5);
+    let state = withPlan("coach");
+    for (const h of [HANDLE_TT, HANDLE_IG, HANDLE_YT, HANDLE_LINKEDIN, HANDLE_X]) {
+      const r = addHandle(state, h);
+      expect(r.ok).toBe(true);
+      if (!r.ok) throw new Error("unreachable");
+      state = r.state;
+    }
+    expect(state.handles.length).toBe(5);
   });
 
-  it("Pro caps at 3, Studio at 5", () => {
-    expect(PLAN_MAX_HANDLES.pro).toBe(3);
-    expect(PLAN_MAX_HANDLES.studio).toBe(5);
-    let pro = withPlan("pro");
-    const r1 = addHandle(pro, HANDLE_TT);
-    if (!r1.ok) throw new Error("unreachable");
-    pro = r1.state;
-    const r2 = addHandle(pro, HANDLE_IG);
-    if (!r2.ok) throw new Error("unreachable");
-    pro = r2.state;
-    const r3 = addHandle(pro, HANDLE_YT);
-    if (!r3.ok) throw new Error("unreachable");
-    pro = r3.state;
-    const r4 = addHandle(pro, HANDLE_LINKEDIN);
-    expect(r4.ok).toBe(false);
-    if (r4.ok) throw new Error("unreachable");
-    expect(r4.reason).toBe("plan-cap");
+  it("Manager allows up to PLAN_MAX_HANDLES (5 in v0)", () => {
+    expect(PLAN_MAX_HANDLES.manager).toBe(5);
+    let mgr = withPlan("manager");
+    for (const h of [HANDLE_TT, HANDLE_IG, HANDLE_YT, HANDLE_LINKEDIN, HANDLE_X]) {
+      const r = addHandle(mgr, h);
+      expect(r.ok).toBe(true);
+      if (!r.ok) throw new Error("unreachable");
+      mgr = r.state;
+    }
+    expect(mgr.handles.length).toBe(5);
   });
 
   it("rejects a duplicate platform regardless of plan", () => {
-    let pro = withPlan("pro");
+    let pro = withPlan("manager");
     const r1 = addHandle(pro, HANDLE_TT);
     if (!r1.ok) throw new Error("unreachable");
     pro = r1.state;
@@ -159,7 +159,7 @@ describe("addHandle", () => {
   });
 
   it("removeHandle drops the matching platform and is idempotent", () => {
-    let pro = withPlan("pro");
+    let pro = withPlan("manager");
     const r1 = addHandle(pro, HANDLE_TT);
     if (!r1.ok) throw new Error("unreachable");
     pro = r1.state;
@@ -177,7 +177,7 @@ describe("addHandle", () => {
 
 describe("canAdvance", () => {
   it("handles step requires at least one handle", () => {
-    const empty = withPlan("pro");
+    const empty = withPlan("manager");
     expect(canAdvance(empty)).toBe(false);
     const r = addHandle(empty, HANDLE_TT);
     if (!r.ok) throw new Error("unreachable");
@@ -185,7 +185,7 @@ describe("canAdvance", () => {
   });
 
   it("pulling step requires scrapeComplete=true", () => {
-    const s: OnboardingState = { ...withPlan("pro"), step: "pulling" };
+    const s: OnboardingState = { ...withPlan("manager"), step: "pulling" };
     expect(canAdvance(s)).toBe(false);
     expect(canAdvance({ ...s, scrapeComplete: true })).toBe(true);
   });
@@ -195,7 +195,7 @@ describe("canAdvance", () => {
     // optional gating). The exhaustive matrix lives in
     // `tests/sprint37OnboardingState.test.ts`; here we just sanity-check that
     // an empty answer payload is still rejected.
-    const s: OnboardingState = { ...withPlan("pro"), step: "questions" };
+    const s: OnboardingState = { ...withPlan("manager"), step: "questions" };
     expect(canAdvance(s)).toBe(false);
     expect(
       canAdvance({ ...s, answers: { ...s.answers, goal: "   " } })
@@ -203,7 +203,7 @@ describe("canAdvance", () => {
   });
 
   it("channel step accepts web with no phone, requires a valid phone otherwise", () => {
-    const base: OnboardingState = { ...withPlan("pro"), step: "channel" };
+    const base: OnboardingState = { ...withPlan("manager"), step: "channel" };
     // web → always advances
     expect(canAdvance(base)).toBe(true);
     // imessage with empty phone → blocked
@@ -229,12 +229,12 @@ describe("canAdvance", () => {
   });
 
   it("composio step always advances (all providers optional)", () => {
-    const s: OnboardingState = { ...withPlan("pro"), step: "composio" };
+    const s: OnboardingState = { ...withPlan("manager"), step: "composio" };
     expect(canAdvance(s)).toBe(true);
   });
 
   it("deploy step never advances (terminal)", () => {
-    const s: OnboardingState = { ...withPlan("pro"), step: "deploy" };
+    const s: OnboardingState = { ...withPlan("manager"), step: "deploy" };
     expect(canAdvance(s)).toBe(false);
   });
 });
@@ -245,7 +245,7 @@ describe("canAdvance", () => {
 
 describe("composio reducers", () => {
   it("recordProviderConnection writes a connected record", () => {
-    const s = withPlan("pro");
+    const s = withPlan("manager");
     const next = recordProviderConnection(s, "calendar", "ca_123");
     expect(next.composio.providers.calendar).toEqual({
       status: "connected",
@@ -254,7 +254,7 @@ describe("composio reducers", () => {
   });
 
   it("recordProviderSkip writes a skipped record with no account id", () => {
-    const s = withPlan("pro");
+    const s = withPlan("manager");
     const next = recordProviderSkip(s, "calendar");
     expect(next.composio.providers.calendar).toEqual({
       status: "skipped",
@@ -263,7 +263,7 @@ describe("composio reducers", () => {
   });
 
   it("markCalendarSkipNudgeShown flips the flag idempotently", () => {
-    const s = withPlan("pro");
+    const s = withPlan("manager");
     expect(s.composio.calendarSkipNudgeShown).toBe(false);
     const a = markCalendarSkipNudgeShown(s);
     expect(a.composio.calendarSkipNudgeShown).toBe(true);

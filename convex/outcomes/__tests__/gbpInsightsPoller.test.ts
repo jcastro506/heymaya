@@ -36,7 +36,7 @@ async function seedBusinessAndPost(
       channelPreference: "sms",
       timezone: "America/Los_Angeles",
       status: "active",
-      plan: "pro",
+      plan: "coach",
       accountType: "service-business",
       createdAt: NOW,
     });

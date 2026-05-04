@@ -34,7 +34,7 @@ async function insertCreator(
   t: ReturnType<typeof convexTest>,
   opts: {
     suffix: string;
-    plan: "starter" | "pro" | "studio";
+    plan: "coach" | "manager";
   }
 ): Promise<Id<"creators">> {
   return await t.run((ctx) =>
@@ -68,8 +68,8 @@ afterEach(() => {
 describe("businessReadiness.latestActionLog", () => {
   it("returns recent ran/failed entries for the signed-in creator only", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("mayaActionLog", {
         creatorId: a,
@@ -110,7 +110,7 @@ describe("businessReadiness.latestActionLog", () => {
 describe("businessReadiness.gmailWatchStatus", () => {
   it("not connected for fresh Pro creator", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const out = await asUser(t, "a").query(
       api.businessReadiness.gmailWatchStatus,
       {}
@@ -124,7 +124,7 @@ describe("businessReadiness.gmailWatchStatus", () => {
 
   it("PLAN-TIER (REVISED): Starter shows planEnabled=true — Gmail deal desk is universal", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "starter" });
+    await insertCreator(t, { suffix: "a", plan: "coach" });
     const out = await asUser(t, "a").query(
       api.businessReadiness.gmailWatchStatus,
       {}
@@ -134,8 +134,8 @@ describe("businessReadiness.gmailWatchStatus", () => {
 
   it("connected returns latest webhook tick from own creator only", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("connectedAccounts", {
         creatorId: a,
@@ -176,7 +176,7 @@ describe("businessReadiness.gmailWatchStatus", () => {
 describe("businessReadiness.pendingItemsExtended", () => {
   it("surfaces approved-but-unposted from latest plan", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run((ctx) =>
       ctx.db.insert("contentPlans", {
         creatorId: a,
@@ -223,9 +223,9 @@ describe("businessReadiness.pendingItemsExtended", () => {
     expect(approved[0].title).toContain("tiktok");
   });
 
-  it("PLAN-TIER (REVISED): Starter sees pitch followups — brand-outreach is universal", async () => {
+  it("PLAN-TIER (coach/manager): Manager sees pitch followups (brand-outreach gated to Manager)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run((ctx) =>
       ctx.db.insert("pitchOutreach", {
         creatorId: a,
@@ -251,7 +251,7 @@ describe("businessReadiness.pendingItemsExtended", () => {
 describe("businessReadiness.markDayPosted", () => {
   it("approved → posted transition + action log", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const planId = await t.run((ctx) =>
       ctx.db.insert("contentPlans", {
         creatorId: a,
@@ -290,7 +290,7 @@ describe("businessReadiness.markDayPosted", () => {
 
   it("refuses transition from draft (anti-footgun)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const planId = await t.run((ctx) =>
       ctx.db.insert("contentPlans", {
         creatorId: a,
@@ -320,8 +320,8 @@ describe("businessReadiness.markDayPosted", () => {
 
   it("cross-tenant: B cannot mark A's plan posted", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    await insertCreator(t, { suffix: "b", plan: "manager" });
     const planId = await t.run((ctx) =>
       ctx.db.insert("contentPlans", {
         creatorId: a,
@@ -353,7 +353,7 @@ describe("businessReadiness.markDayPosted", () => {
 describe("businessReadiness.voiceFingerprint", () => {
   it("returns null when no picture", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const out = await asUser(t, "a").query(
       api.businessReadiness.voiceFingerprint,
       {}
@@ -363,7 +363,7 @@ describe("businessReadiness.voiceFingerprint", () => {
 
   it("returns picture voice + top hooks", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run((ctx) =>
       ctx.db.insert("creatorPicture", {
         creatorId: a,
@@ -402,7 +402,7 @@ describe("businessReadiness.voiceFingerprint", () => {
 describe("businessReadiness.createBrandDealManually", () => {
   it("creates a deal in 'new' status with action log", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "starter" });
+    await insertCreator(t, { suffix: "a", plan: "coach" });
     const id = await asUser(t, "a").mutation(
       api.businessReadiness.createBrandDealManually,
       {
@@ -419,7 +419,7 @@ describe("businessReadiness.createBrandDealManually", () => {
 
   it("rejects empty brand", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").mutation(
         api.businessReadiness.createBrandDealManually,
@@ -430,7 +430,7 @@ describe("businessReadiness.createBrandDealManually", () => {
 
   it("rejects negative offer", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").mutation(
         api.businessReadiness.createBrandDealManually,
@@ -453,7 +453,7 @@ describe("businessReadiness.createBrandDealManually", () => {
 describe("businessReadiness.markDealPaid", () => {
   it("marks paid + records revenue + action log", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const dealId = await t.run((ctx) =>
       ctx.db.insert("brandDeals", {
         creatorId: a,
@@ -477,7 +477,7 @@ describe("businessReadiness.markDealPaid", () => {
 
   it("idempotent on already-paid", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const dealId = await t.run((ctx) =>
       ctx.db.insert("brandDeals", {
         creatorId: a,
@@ -503,8 +503,8 @@ describe("businessReadiness.markDealPaid", () => {
 
   it("cross-tenant: B cannot mark A's deal paid", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    await insertCreator(t, { suffix: "b", plan: "manager" });
     const dealId = await t.run((ctx) =>
       ctx.db.insert("brandDeals", {
         creatorId: a,
@@ -529,7 +529,7 @@ describe("businessReadiness.markDealPaid", () => {
 describe("businessReadiness.attachContractToDeal", () => {
   it("attaches PDF id + clears report", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const dealId = await t.run((ctx) =>
       ctx.db.insert("brandDeals", {
         creatorId: a,
@@ -556,7 +556,7 @@ describe("businessReadiness.attachContractToDeal", () => {
 describe("businessReadiness.opportunityMatchesV2", () => {
   it("PLAN-TIER (REVISED): Starter sees opportunities — opportunity-scout is universal", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     await t.run((ctx) =>
       ctx.db.insert("opportunitySurface", {
         creatorId: a,
@@ -581,7 +581,7 @@ describe("businessReadiness.opportunityMatchesV2", () => {
 
   it("Pro sees pending only — not dismissed/pitched", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("opportunitySurface", {
         creatorId: a,
@@ -618,8 +618,8 @@ describe("businessReadiness.opportunityMatchesV2", () => {
 
   it("cross-tenant: A's opportunities never surface for B", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    await insertCreator(t, { suffix: "b", plan: "manager" });
     await t.run((ctx) =>
       ctx.db.insert("opportunitySurface", {
         creatorId: a,
@@ -645,7 +645,7 @@ describe("businessReadiness.opportunityMatchesV2", () => {
 describe("businessReadiness.dismissOpportunity", () => {
   it("flips creatorActedOn to dismissed", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const oid = await t.run((ctx) =>
       ctx.db.insert("opportunitySurface", {
         creatorId: a,
@@ -670,8 +670,8 @@ describe("businessReadiness.dismissOpportunity", () => {
 
   it("cross-tenant refusal", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    await insertCreator(t, { suffix: "b", plan: "manager" });
     const oid = await t.run((ctx) =>
       ctx.db.insert("opportunitySurface", {
         creatorId: a,
@@ -698,7 +698,7 @@ describe("businessReadiness.dismissOpportunity", () => {
 describe("businessReadiness.convertOpportunityToPitch", () => {
   it("creates pitchOutreach in drafted + flips opportunity to pitched", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const oid = await t.run((ctx) =>
       ctx.db.insert("opportunitySurface", {
         creatorId: a,
@@ -730,9 +730,9 @@ describe("businessReadiness.convertOpportunityToPitch", () => {
     expect(opp?.creatorActedOn).toBe("pitched");
   });
 
-  it("PLAN-TIER (REVISED): Starter can convert opportunities to pitches — brand-outreach is universal", async () => {
+  it("PLAN-TIER (coach/manager): Manager can convert opportunities to pitches", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const oid = await t.run((ctx) =>
       ctx.db.insert("opportunitySurface", {
         creatorId: a,
@@ -763,7 +763,7 @@ describe("businessReadiness.convertOpportunityToPitch", () => {
 
   it("rejects malformed email (adversarial)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const oid = await t.run((ctx) =>
       ctx.db.insert("opportunitySurface", {
         creatorId: a,
@@ -798,7 +798,7 @@ describe("businessReadiness.convertOpportunityToPitch", () => {
 describe("businessReadiness.skillRecordOpportunity", () => {
   it("writes a row + idempotent on (creatorId, urlHash)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const id1 = await t.mutation(
       api.businessReadiness.skillRecordOpportunity,
       {
@@ -835,7 +835,7 @@ describe("businessReadiness.skillRecordOpportunity", () => {
 
   it("PLAN-TIER (REVISED): Starter can record opportunities — opportunity-scout is universal", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     const id = await t.mutation(api.businessReadiness.skillRecordOpportunity, {
       mayaSecret: RUNTIME_SECRET,
       creatorId: a,
@@ -853,7 +853,7 @@ describe("businessReadiness.skillRecordOpportunity", () => {
 
   it("missing secret refuses (fail-closed)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       t.mutation(api.businessReadiness.skillRecordOpportunity, {
         mayaSecret: "wrong",
@@ -872,7 +872,7 @@ describe("businessReadiness.skillRecordOpportunity", () => {
   it("env unset → all writes refused even with empty secret", async () => {
     vi.unstubAllEnvs();
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       t.mutation(api.businessReadiness.skillRecordOpportunity, {
         mayaSecret: "",
@@ -892,7 +892,7 @@ describe("businessReadiness.skillRecordOpportunity", () => {
 
   it("rejects out-of-range fit (adversarial)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       t.mutation(api.businessReadiness.skillRecordOpportunity, {
         mayaSecret: RUNTIME_SECRET,
@@ -912,8 +912,8 @@ describe("businessReadiness.skillRecordOpportunity", () => {
 describe("businessReadiness.skillRecordPostmortem", () => {
   it("rejects post belonging to a different creator (tenant-bleed guard)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     const postId = await t.run((ctx) =>
       ctx.db.insert("posts", {
         creatorId: b,
@@ -943,8 +943,8 @@ describe("businessReadiness.skillRecordPostmortem", () => {
 describe("businessReadiness.skillRecordHook", () => {
   it("rejects example posts not belonging to the creator", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     const fooPost = await t.run((ctx) =>
       ctx.db.insert("posts", {
         creatorId: b,
@@ -970,7 +970,7 @@ describe("businessReadiness.skillRecordHook", () => {
 
   it("happy path inserts hook row", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     const myPost = await t.run((ctx) =>
       ctx.db.insert("posts", {
         creatorId: a,
@@ -998,7 +998,7 @@ describe("businessReadiness.skillRecordHook", () => {
 describe("businessReadiness.skillRecordCompetitor", () => {
   it("PLAN-TIER (REVISED): Starter can record competitor observations (slots=2, not 0)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     const id = await t.mutation(api.businessReadiness.skillRecordCompetitor, {
       mayaSecret: RUNTIME_SECRET,
       creatorId: a,
@@ -1013,7 +1013,7 @@ describe("businessReadiness.skillRecordCompetitor", () => {
 
   it("Pro accepts; @ stripped", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const id = await t.mutation(
       api.businessReadiness.skillRecordCompetitor,
       {
@@ -1033,11 +1033,13 @@ describe("businessReadiness.skillRecordCompetitor", () => {
 });
 
 describe("businessReadiness.skillRecordTrend", () => {
-  it("niche-scan accepted on Starter; industry-intel still blocked (proactiveCronAll=false)", async () => {
-    // proactiveCronAll remains a Starter cost lever — industry-intel runs on
-    // the FULL cron set, not the limited Starter set, so the gate stays.
+  it("niche-scan + industry-intel both accepted on Coach (both tiers run the full proactive cron set post-coach/manager migration)", async () => {
+    // Post-coach/manager migration both tiers have proactiveCronAll=true, so
+    // industry-intel is no longer gated. The skill-audit pass may reintroduce
+    // a per-source gate; until then, this test asserts the universal-access
+    // shape that matches the live matrix.
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     await t.mutation(api.businessReadiness.skillRecordTrend, {
       mayaSecret: RUNTIME_SECRET,
       creatorId: a,
@@ -1046,21 +1048,19 @@ describe("businessReadiness.skillRecordTrend", () => {
       evidence: [],
       relevanceScore: 0.6,
     });
-    await expect(
-      t.mutation(api.businessReadiness.skillRecordTrend, {
-        mayaSecret: RUNTIME_SECRET,
-        creatorId: a,
-        source: "industry-intel",
-        observation: "x",
-        evidence: [],
-        relevanceScore: 0.6,
-      })
-    ).rejects.toThrow(/trend:industry-intel/);
+    await t.mutation(api.businessReadiness.skillRecordTrend, {
+      mayaSecret: RUNTIME_SECRET,
+      creatorId: a,
+      source: "industry-intel",
+      observation: "x",
+      evidence: [],
+      relevanceScore: 0.6,
+    });
   });
 
   it("rejects out-of-range relevance (adversarial)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       t.mutation(api.businessReadiness.skillRecordTrend, {
         mayaSecret: RUNTIME_SECRET,
@@ -1077,7 +1077,7 @@ describe("businessReadiness.skillRecordTrend", () => {
 describe("businessReadiness.skillCreatePitchDraft", () => {
   it("Pro accepts + lowercases email", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const id = await t.mutation(
       api.businessReadiness.skillCreatePitchDraft,
       {
@@ -1093,9 +1093,9 @@ describe("businessReadiness.skillCreatePitchDraft", () => {
     expect(row?.status).toBe("drafted");
   });
 
-  it("PLAN-TIER (REVISED): Starter can create pitch drafts — brand-outreach is universal", async () => {
+  it("PLAN-TIER (coach/manager): Manager can create pitch drafts", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const id = await t.mutation(api.businessReadiness.skillCreatePitchDraft, {
       mayaSecret: RUNTIME_SECRET,
       creatorId: a,
@@ -1112,7 +1112,7 @@ describe("businessReadiness.skillCreatePitchDraft", () => {
 describe("businessReadiness.skillRecordCollabMatch", () => {
   it("PLAN-TIER (REVISED): Starter and Pro both write collab-match rows — collabMatch is universal", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     const aId = await t.mutation(
       api.businessReadiness.skillRecordCollabMatch,
       {
@@ -1125,7 +1125,7 @@ describe("businessReadiness.skillRecordCollabMatch", () => {
     const aRow = await t.run((ctx) => ctx.db.get(aId));
     expect(aRow?.peerHandle).toBe("warm");
 
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     const id = await t.mutation(
       api.businessReadiness.skillRecordCollabMatch,
       {
@@ -1143,7 +1143,7 @@ describe("businessReadiness.skillRecordCollabMatch", () => {
 describe("businessReadiness.skillRecordMonetization", () => {
   it("PLAN-TIER (REVISED): Starter and Pro both write monetization proposals — monetizationAdvisor is universal", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     const aId = await t.mutation(
       api.businessReadiness.skillRecordMonetization,
       {
@@ -1156,7 +1156,7 @@ describe("businessReadiness.skillRecordMonetization", () => {
     const aRow = await t.run((ctx) => ctx.db.get(aId));
     expect(aRow?.creatorId).toBe(a);
 
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     const id = await t.mutation(
       api.businessReadiness.skillRecordMonetization,
       {
@@ -1184,7 +1184,7 @@ describe("businessReadiness.creatorStage", () => {
 
   it("infers just-starting when no picture + no handles + no followers", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "starter" });
+    await insertCreator(t, { suffix: "a", plan: "coach" });
     const out = await asUser(t, "a").query(
       api.businessReadiness.creatorStage,
       {}
@@ -1198,7 +1198,7 @@ describe("businessReadiness.creatorStage", () => {
 
   it("infers building from 25K followers when picture absent", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorHandles", {
         creatorId: a,
@@ -1220,7 +1220,7 @@ describe("businessReadiness.creatorStage", () => {
 
   it("picks max follower count across multiple handles", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorHandles", {
         creatorId: a,
@@ -1247,7 +1247,7 @@ describe("businessReadiness.creatorStage", () => {
 
   it("creatorPicture.careerStage overrides follower-inferred stage", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       // Followers say monetizing (120K), but picture says scaling.
       await ctx.db.insert("creatorHandles", {
@@ -1282,7 +1282,7 @@ describe("businessReadiness.creatorStage", () => {
 
   it("growthPlan.nextMilestone overrides synthetic milestone", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorHandles", {
         creatorId: a,
@@ -1320,7 +1320,7 @@ describe("businessReadiness.creatorStage", () => {
 
   it("synthetic milestone for >1M creator falls back gracefully", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "studio" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorHandles", {
         creatorId: a,
@@ -1340,8 +1340,8 @@ describe("businessReadiness.creatorStage", () => {
 
   it("cross-tenant: A's stage never reflects B's handles or picture", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorHandles", {
         creatorId: b,
@@ -1381,7 +1381,7 @@ describe("businessReadiness.creatorStage", () => {
 describe("businessReadiness.creatorStage — stage-aware extensions", () => {
   it("surfaces gentleNudge when reconciliation.matches=false", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorPicture", {
         creatorId: a,
@@ -1421,7 +1421,7 @@ describe("businessReadiness.creatorStage — stage-aware extensions", () => {
 
   it("returns gentleNudge=null when reconciliation.matches=true", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorPicture", {
         creatorId: a,
@@ -1455,7 +1455,7 @@ describe("businessReadiness.creatorStage — stage-aware extensions", () => {
 
   it("hasInferredPicture=false when picture is missing or marker model 'awaiting-synthesis'", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     // Insert the placeholder row submitOnboardingAnswers writes pre-synth.
     await t.run(async (ctx) =>
       ctx.db.insert("creatorPicture", {
@@ -1483,7 +1483,7 @@ describe("businessReadiness.creatorStage — stage-aware extensions", () => {
 
   it("hasInferredPicture=false when there is no creatorPicture row at all", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const out = await asUser(t, "a").query(
       api.businessReadiness.creatorStage,
       {}
@@ -1495,7 +1495,7 @@ describe("businessReadiness.creatorStage — stage-aware extensions", () => {
 
   it("surfaces richGrowthPlan with focusAreas / antiPatterns / horizon when synth populates them", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorPicture", {
         creatorId: a,
@@ -1537,8 +1537,8 @@ describe("businessReadiness.creatorStage — stage-aware extensions", () => {
 
   it("cross-tenant: A's gentleNudge / richGrowthPlan never reflect B's picture", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorPicture", {
         creatorId: b,
@@ -1588,7 +1588,7 @@ describe("businessReadiness.creatorStage — stage-aware extensions", () => {
 describe("businessReadiness.skillRecordActionLog", () => {
   it("inserts a log row gated by secret", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.mutation(api.businessReadiness.skillRecordActionLog, {
       mayaSecret: RUNTIME_SECRET,
       creatorId: a,

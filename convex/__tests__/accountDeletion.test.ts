@@ -134,7 +134,7 @@ async function seedFullAccount(t: ReturnType<typeof convexTest>): Promise<{
       channelPreference: "imessage",
       timezone: "America/New_York",
       status: "active",
-      plan: "studio",
+      plan: "manager",
       stripeCustomerId: "cus_creator",
       accountType: "service-business",
       createdAt: NOW,

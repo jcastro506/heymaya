@@ -50,7 +50,7 @@ async function insertServiceBusiness(
       channelPreference: "web",
       timezone: "America/Los_Angeles",
       status: "active",
-      plan: "starter", // creator-side default — irrelevant to service flow
+      plan: "coach", // creator-side default — irrelevant to service flow
       accountType: "service-business",
       createdAt: NOW,
     });
@@ -324,7 +324,7 @@ describe("integrations.stripe.checkout.createServiceCheckoutSession", () => {
           channelPreference: "web",
           timezone: "UTC",
           status: "active",
-          plan: "pro",
+          plan: "manager",
           accountType: "creator", // <-- not service-business
           createdAt: NOW,
         })

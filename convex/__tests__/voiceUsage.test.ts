@@ -41,7 +41,7 @@ async function insertBusiness(
       channelPreference: "web",
       timezone: "UTC",
       status: "active",
-      plan: "starter",
+      plan: "coach",
       accountType: "service-business",
       createdAt: NOW,
     });

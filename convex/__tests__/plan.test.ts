@@ -22,7 +22,7 @@ const NOW = 1_700_000_000_000;
 
 async function insertCreator(
   t: ReturnType<typeof convexTest>,
-  opts: { suffix: string; plan: "starter" | "pro" | "studio" }
+  opts: { suffix: string; plan: "coach" | "manager" }
 ): Promise<Id<"creators">> {
   return await t.run((ctx) =>
     ctx.db.insert("creators", {
@@ -79,14 +79,14 @@ describe("plan.currentPlan", () => {
 
   it("returns null when no plans exist (ADVERSARIAL: empty data)", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const r = await asUser(t, "a").query(api.plan.currentPlan, {});
     expect(r).toBeNull();
   });
 
   it("returns the most recently created plan", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertPlan(t, a, "2026-04-13", NOW - 7 * 86_400_000);
     await insertPlan(t, a, "2026-04-20", NOW);
     const r = await asUser(t, "a").query(api.plan.currentPlan, {});
@@ -96,8 +96,8 @@ describe("plan.currentPlan", () => {
 
   it("CROSS-TENANT: A never sees B's plan", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await insertPlan(t, b, "2026-04-20");
     const r = await asUser(t, "a").query(api.plan.currentPlan, {});
     expect(r).toBeNull();
@@ -105,7 +105,7 @@ describe("plan.currentPlan", () => {
 
   it("PLAN-TIER: Starter sees their own plan (read is unrestricted)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     await insertPlan(t, a, "2026-04-20");
     const r = await asUser(t, "a").query(api.plan.currentPlan, {});
     expect(r).not.toBeNull();
@@ -123,7 +123,7 @@ describe("plan.planHistory", () => {
 
   it("skips the most-recent (current) plan from the first page", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertPlan(t, a, "2026-04-13", NOW - 7 * 86_400_000);
     await insertPlan(t, a, "2026-04-20", NOW);
     const r = await asUser(t, "a").query(api.plan.planHistory, {
@@ -135,8 +135,8 @@ describe("plan.planHistory", () => {
 
   it("CROSS-TENANT: B's history is invisible to A", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await insertPlan(t, b, "2026-04-13");
     await insertPlan(t, b, "2026-04-20");
     const r = await asUser(t, "a").query(api.plan.planHistory, {
@@ -149,7 +149,7 @@ describe("plan.planHistory", () => {
 describe("plan.replanDay / approveDay", () => {
   it("approveDay marks the matching dayOffset as approved", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const planId = await insertPlan(t, a, "2026-04-20", NOW, [
       { dayOffset: 0, status: "draft" },
       { dayOffset: 1, status: "draft" },
@@ -165,7 +165,7 @@ describe("plan.replanDay / approveDay", () => {
 
   it("replanDay resets a previously-approved day back to draft", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const planId = await insertPlan(t, a, "2026-04-20", NOW, [
       { dayOffset: 0, status: "approved" },
     ]);
@@ -179,8 +179,8 @@ describe("plan.replanDay / approveDay", () => {
 
   it("CROSS-TENANT: A cannot approve B's plan", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     const bPlan = await insertPlan(t, b, "2026-04-20");
     await expect(
       asUser(t, "a").mutation(api.plan.approveDay, {
@@ -192,7 +192,7 @@ describe("plan.replanDay / approveDay", () => {
 
   it("ADVERSARIAL: replanDay on a deleted plan throws cleanly", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const planId = await insertPlan(t, a, "2026-04-20");
     await t.run((ctx) => ctx.db.delete(planId));
     await expect(
@@ -205,7 +205,7 @@ describe("plan.replanDay / approveDay", () => {
 
   it("ADVERSARIAL: unauthenticated mutation throws", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const planId = await insertPlan(t, a, "2026-04-20");
     await expect(
       t.mutation(api.plan.approveDay, { planId, dayOffset: 0 })

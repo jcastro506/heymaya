@@ -26,7 +26,7 @@ function baseInputs(over: Partial<WorkspaceInputs> = {}): WorkspaceInputs {
     channelPreference: "imessage",
     timezone: "America/Los_Angeles",
     status: "active",
-    plan: "pro",
+    plan: "manager",
     createdAt: 1_700_000_000_000,
   };
   return {
@@ -44,7 +44,7 @@ function baseInputs(over: Partial<WorkspaceInputs> = {}): WorkspaceInputs {
       },
     ],
     connectedAccounts: [],
-    plan: "pro",
+    plan: "manager",
     now: 1_700_000_000_000,
     ...over,
   };
@@ -63,7 +63,7 @@ const ALWAYS_FILES = [
 
 describe("assembleWorkspaceBundle", () => {
   it("emits the canonical always-files for every plan", () => {
-    for (const plan of ["starter", "pro", "studio"] as const) {
+    for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       // Apply plan to creator too so jobsJson sees the right tier.
       inputs.creator = { ...inputs.creator, plan };
@@ -142,7 +142,7 @@ describe("assembleWorkspaceBundle", () => {
     // workspace root are not guaranteed to load). The override lives in the
     // gateway config emitted by configGeneratorMaya (phase C).
     const CAP = 28_000;
-    for (const plan of ["starter", "pro", "studio"] as const) {
+    for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
       const bundle = assembleWorkspaceBundle(inputs, { bootstrapMaxChars: CAP });
@@ -162,8 +162,8 @@ describe("assembleWorkspaceBundle", () => {
   });
 
   it("starter bundle's jobsJson does not include any pro+ entries", () => {
-    const inputs = baseInputs({ plan: "starter" });
-    inputs.creator = { ...inputs.creator, plan: "starter" };
+    const inputs = baseInputs({ plan: "coach" });
+    inputs.creator = { ...inputs.creator, plan: "coach" };
     const bundle = assembleWorkspaceBundle(inputs);
     const ids = bundle.jobsJson.jobs.map((j) => j.entryId);
     expect(ids).not.toContain("revenue_snapshot");
@@ -181,7 +181,7 @@ describe("assembleWorkspaceBundle", () => {
     // bumps the cap to 28K (MAYA_BOOTSTRAP_MAX_CHARS) and embeds standing
     // orders inline. Verify that the production cap path actually fits.
     const PROD_CAP = 28_000;
-    for (const plan of ["starter", "pro", "studio"] as const) {
+    for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
       const bundle = assembleWorkspaceBundle(inputs, {

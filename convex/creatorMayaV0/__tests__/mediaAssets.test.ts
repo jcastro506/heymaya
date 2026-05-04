@@ -19,7 +19,7 @@ async function createCreator(
     {
       email,
       timezone: "America/New_York",
-      tier: "starter",
+      tier: "coach",
     }
   );
   return { user, account };

@@ -47,7 +47,7 @@ async function setupTwoBusinesses(
       channelPreference: "web",
       timezone: "America/Los_Angeles",
       status: "active",
-      plan: "starter",
+      plan: "coach",
       accountType: "service-business",
       createdAt: NOW,
     })
@@ -59,7 +59,7 @@ async function setupTwoBusinesses(
       channelPreference: "web",
       timezone: "America/Los_Angeles",
       status: "active",
-      plan: "starter",
+      plan: "coach",
       accountType: "service-business",
       createdAt: NOW,
     })
@@ -730,7 +730,7 @@ describe("Service Sprint 0 — accountType is additive, doesn't break creator qu
         channelPreference: "imessage",
         timezone: "America/Los_Angeles",
         status: "active",
-        plan: "pro",
+        plan: "manager",
         createdAt: NOW,
         // accountType intentionally omitted — pre-migration creator row.
       })
@@ -756,7 +756,7 @@ describe("Service Sprint 0 — accountType is additive, doesn't break creator qu
         channelPreference: "sms",
         timezone: "America/Los_Angeles",
         status: "active",
-        plan: "starter",
+        plan: "coach",
         accountType: "service-business",
         createdAt: NOW,
       })

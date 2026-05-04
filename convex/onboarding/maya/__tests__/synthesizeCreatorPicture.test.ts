@@ -61,7 +61,7 @@ afterEach(() => {
 
 interface SeedOptions {
   suffix: string;
-  plan: "starter" | "pro" | "studio";
+  plan: "coach" | "manager";
   /** Number of TikTok posts to seed in the cache. */
   ttPostsCount?: number;
   /** Total cap (after platform-cap) the prompt will see; default 30. */
@@ -543,7 +543,7 @@ function makeMockFetch(opts: MockFetchOptions): {
 describe("synthesizeCreatorPicture — happy path", () => {
   it("inserts a fully-populated creatorPicture row when none exists", async () => {
     const t = convexTest(schema, modules);
-    const c = await seedCreatorWithScrapedData(t, { suffix: "h1", plan: "pro" });
+    const c = await seedCreatorWithScrapedData(t, { suffix: "h1", plan: "manager" });
 
     const { fetchSpy } = makeMockFetch({
       responses: [makeValidSynthesisJson()],
@@ -580,7 +580,7 @@ describe("synthesizeCreatorPicture — happy path", () => {
 
   it("writes ONE aiCallLog row tagged creator_picture_synthesis with thinkingBudget=high", async () => {
     const t = convexTest(schema, modules);
-    const c = await seedCreatorWithScrapedData(t, { suffix: "log1", plan: "pro" });
+    const c = await seedCreatorWithScrapedData(t, { suffix: "log1", plan: "manager" });
 
     const { fetchSpy } = makeMockFetch({
       responses: [makeValidSynthesisJson()],
@@ -613,7 +613,7 @@ describe("synthesizeCreatorPicture — happy path", () => {
 
   it("the request body sent to OpenRouter encodes reasoning effort = high", async () => {
     const t = convexTest(schema, modules);
-    const c = await seedCreatorWithScrapedData(t, { suffix: "req1", plan: "starter" });
+    const c = await seedCreatorWithScrapedData(t, { suffix: "req1", plan: "coach" });
 
     const { fetchSpy, callBodies } = makeMockFetch({
       responses: [makeValidSynthesisJson()],
@@ -638,7 +638,7 @@ describe("synthesizeCreatorPicture — happy path", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("synthesizeCreatorPicture — plan-tier", () => {
-  const PLANS = ["starter", "pro", "studio"] as const;
+  const PLANS = ["coach", "manager"] as const;
 
   for (const plan of PLANS) {
     it(`${plan} creator gets HIGH thinking on synthesis (no clamp)`, async () => {
@@ -683,8 +683,8 @@ describe("synthesizeCreatorPicture — plan-tier", () => {
 describe("synthesizeCreatorPicture — cross-tenant isolation", () => {
   it("synthesis for creator A never patches creator B's row", async () => {
     const t = convexTest(schema, modules);
-    const a = await seedCreatorWithScrapedData(t, { suffix: "ctA", plan: "pro" });
-    const b = await seedCreatorWithScrapedData(t, { suffix: "ctB", plan: "pro" });
+    const a = await seedCreatorWithScrapedData(t, { suffix: "ctA", plan: "manager" });
+    const b = await seedCreatorWithScrapedData(t, { suffix: "ctB", plan: "manager" });
 
     // Pre-seed a known picture for B so we can detect any leak.
     await t.run(async (ctx) =>
@@ -759,7 +759,7 @@ describe("synthesizeCreatorPicture — cross-tenant isolation", () => {
 describe("synthesizeCreatorPicture — adversarial", () => {
   it("missing creator → structured failure, never throws", async () => {
     const t = convexTest(schema, modules);
-    const c = await seedCreatorWithScrapedData(t, { suffix: "missing", plan: "pro" });
+    const c = await seedCreatorWithScrapedData(t, { suffix: "missing", plan: "manager" });
     await t.run(async (ctx) => ctx.db.delete(c));
 
     const result = await t.action(
@@ -777,7 +777,7 @@ describe("synthesizeCreatorPicture — adversarial", () => {
     // Seed creator + handle but no posts cache.
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "noposts",
-      plan: "pro",
+      plan: "manager",
       noPosts: true,
     });
 
@@ -796,7 +796,7 @@ describe("synthesizeCreatorPicture — adversarial", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "noh",
-      plan: "pro",
+      plan: "manager",
       noHandles: true,
     });
 
@@ -812,7 +812,7 @@ describe("synthesizeCreatorPicture — adversarial", () => {
 
   it("malformed JSON on first attempt → retried with stricter reminder, succeeds on second", async () => {
     const t = convexTest(schema, modules);
-    const c = await seedCreatorWithScrapedData(t, { suffix: "retry", plan: "pro" });
+    const c = await seedCreatorWithScrapedData(t, { suffix: "retry", plan: "manager" });
 
     const { fetchSpy, callBodies } = makeMockFetch({
       responses: [
@@ -842,7 +842,7 @@ describe("synthesizeCreatorPicture — adversarial", () => {
 
   it("malformed JSON on BOTH attempts → structured failure (model-malformed)", async () => {
     const t = convexTest(schema, modules);
-    const c = await seedCreatorWithScrapedData(t, { suffix: "retryfail", plan: "pro" });
+    const c = await seedCreatorWithScrapedData(t, { suffix: "retryfail", plan: "manager" });
 
     const { fetchSpy } = makeMockFetch({
       responses: ["{ broken", "{ still broken"],
@@ -875,7 +875,7 @@ describe("synthesizeCreatorPicture — adversarial", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "huge",
-      plan: "pro",
+      plan: "manager",
       ttPostsCount: 1_000, // way beyond cap
     });
 
@@ -967,7 +967,7 @@ describe("synthesizeCreatorPicture — adversarial", () => {
 
   it("OpenRouter 5xx error → structured failure at model-call stage, retryable=true", async () => {
     const t = convexTest(schema, modules);
-    const c = await seedCreatorWithScrapedData(t, { suffix: "or5xx", plan: "pro" });
+    const c = await seedCreatorWithScrapedData(t, { suffix: "or5xx", plan: "manager" });
 
     // Fail every attempt the openRouter client tries (it itself retries 3x).
     const { fetchSpy } = makeMockFetch({
@@ -1014,7 +1014,7 @@ describe("synthesizeCreatorPicture — patch ordering", () => {
     };
 
     // ---- Order 1: synth first, then answers ----
-    const c1 = await seedCreatorWithScrapedData(t1, { suffix: "ord1", plan: "pro" });
+    const c1 = await seedCreatorWithScrapedData(t1, { suffix: "ord1", plan: "manager" });
     {
       const { fetchSpy } = makeMockFetch({ responses: [makeValidSynthesisJson()] });
       _setSynthFetchForTests(fetchSpy);
@@ -1039,7 +1039,7 @@ describe("synthesizeCreatorPicture — patch ordering", () => {
     );
 
     // ---- Order 2: answers first, then synth ----
-    const c2 = await seedCreatorWithScrapedData(t2, { suffix: "ord2", plan: "pro" });
+    const c2 = await seedCreatorWithScrapedData(t2, { suffix: "ord2", plan: "manager" });
     await t2
       .withIdentity({ subject: "u_ord2" })
       .mutation(api.creators.submitOnboardingAnswers, {
@@ -1121,7 +1121,7 @@ describe("synthesizeCreatorPicture — patch ordering", () => {
 describe("synthesizeCreatorPicture — schema validation", () => {
   it("the upserted row passes Convex's creatorPicture validator (insert succeeded)", async () => {
     const t = convexTest(schema, modules);
-    const c = await seedCreatorWithScrapedData(t, { suffix: "schema", plan: "pro" });
+    const c = await seedCreatorWithScrapedData(t, { suffix: "schema", plan: "manager" });
 
     const { fetchSpy } = makeMockFetch({ responses: [makeValidSynthesisJson()] });
     _setSynthFetchForTests(fetchSpy);
@@ -1156,7 +1156,7 @@ describe("synthesizeCreatorPicture — schema validation", () => {
 
   it("every populated field has at least one source citation", async () => {
     const t = convexTest(schema, modules);
-    const c = await seedCreatorWithScrapedData(t, { suffix: "cit", plan: "pro" });
+    const c = await seedCreatorWithScrapedData(t, { suffix: "cit", plan: "manager" });
 
     const { fetchSpy } = makeMockFetch({ responses: [makeValidSynthesisJson()] });
     _setSynthFetchForTests(fetchSpy);
@@ -1196,7 +1196,7 @@ describe("synthesizeCreatorPicture — deploy pipeline integration", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "trunc",
-      plan: "pro",
+      plan: "manager",
       ttPostsCount: 1_000,
     });
     const inputs = await t.query(
@@ -1250,7 +1250,7 @@ describe("synthesizeCreatorPicture — stage-aware adaptive product", () => {
       const t = convexTest(schema, modules);
       const c = await seedCreatorWithScrapedData(t, {
         suffix: `stage_${stage.replace("-", "")}`,
-        plan: "pro",
+        plan: "manager",
       });
 
       const { fetchSpy } = makeMockFetch({
@@ -1321,7 +1321,7 @@ describe("synthesizeCreatorPicture — stage-aware adaptive product", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "reconc1",
-      plan: "pro",
+      plan: "manager",
     });
     // Pre-seed the answer so loadSynthInputs surfaces selfReportedCareerStage.
     await t.run(async (ctx) => {
@@ -1383,7 +1383,7 @@ describe("synthesizeCreatorPicture — stage-aware adaptive product", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "reconcMatches",
-      plan: "pro",
+      plan: "manager",
     });
     await t.run(async (ctx) => {
       await ctx.db.patch(c, {
@@ -1721,7 +1721,7 @@ describe("synthesizeCreatorPicture — stage-aware adaptive product", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "loadself",
-      plan: "pro",
+      plan: "manager",
     });
     await t.run(async (ctx) => {
       await ctx.db.patch(c, {
@@ -1743,7 +1743,7 @@ describe("synthesizeCreatorPicture — stage-aware adaptive product", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "loadpic",
-      plan: "pro",
+      plan: "manager",
     });
     // Pre-seed the picture as the answer-submit path would have.
     await t.run(async (ctx) =>
@@ -1771,8 +1771,8 @@ describe("synthesizeCreatorPicture — stage-aware adaptive product", () => {
 
   it("cross-tenant: synthesis for A doesn't write growthPlan onto B's picture", async () => {
     const t = convexTest(schema, modules);
-    const a = await seedCreatorWithScrapedData(t, { suffix: "ctXa", plan: "pro" });
-    const b = await seedCreatorWithScrapedData(t, { suffix: "ctXb", plan: "pro" });
+    const a = await seedCreatorWithScrapedData(t, { suffix: "ctXa", plan: "manager" });
+    const b = await seedCreatorWithScrapedData(t, { suffix: "ctXb", plan: "manager" });
 
     await t.run(async (ctx) =>
       ctx.db.insert("creatorPicture", {
@@ -1842,7 +1842,7 @@ describe("synthesizeCreatorPicture — multimodal video batching", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "tagged",
-      plan: "pro",
+      plan: "manager",
       ttPostsCount: 5,
     });
     const inputs = await t.query(
@@ -1871,7 +1871,7 @@ describe("synthesizeCreatorPicture — multimodal video batching", () => {
         channelPreference: "web",
         timezone: TZ,
         status: "onboarding",
-        plan: "pro",
+        plan: "manager",
         createdAt: NOW,
       })
     );
@@ -1963,7 +1963,7 @@ describe("synthesizeCreatorPicture — multimodal video batching", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "diag",
-      plan: "pro",
+      plan: "manager",
       ttPostsCount: 30,
     });
     const inputs = await t.query(
@@ -1993,7 +1993,7 @@ describe("synthesizeCreatorPicture — multimodal video batching", () => {
         channelPreference: "web",
         timezone: TZ,
         status: "onboarding",
-        plan: "pro",
+        plan: "manager",
         createdAt: NOW,
       })
     );
@@ -2073,7 +2073,7 @@ describe("synthesizeCreatorPicture — Wave 2 smartAlternatives", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "wave2_happy",
-      plan: "pro",
+      plan: "manager",
     });
 
     const { fetchSpy } = makeMockFetch({
@@ -2215,11 +2215,11 @@ describe("synthesizeCreatorPicture — Wave 2 smartAlternatives", () => {
     const t = convexTest(schema, modules);
     const a = await seedCreatorWithScrapedData(t, {
       suffix: "wave2_ctA",
-      plan: "pro",
+      plan: "manager",
     });
     const b = await seedCreatorWithScrapedData(t, {
       suffix: "wave2_ctB",
-      plan: "pro",
+      plan: "manager",
     });
     expect(a).toBeDefined();
     expect(b).toBeDefined();
@@ -2322,7 +2322,7 @@ describe("synthesizeCreatorPicture — Wave 4 worker routing", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "w4_on",
-      plan: "pro",
+      plan: "manager",
     });
 
     const workerSpy = vi.fn(async () => fakeWorkerOk());
@@ -2350,7 +2350,7 @@ describe("synthesizeCreatorPicture — Wave 4 worker routing", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "w4_off",
-      plan: "pro",
+      plan: "manager",
     });
 
     const workerSpy = vi.fn(async () => fakeWorkerOk());
@@ -2376,7 +2376,7 @@ describe("synthesizeCreatorPicture — Wave 4 worker routing", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "w4_false",
-      plan: "pro",
+      plan: "manager",
     });
 
     const workerSpy = vi.fn(async () => fakeWorkerOk());
@@ -2401,7 +2401,7 @@ describe("synthesizeCreatorPicture — Wave 4 worker routing", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "w4_body",
-      plan: "starter", // even Starter gets HIGH thinking on synthesis
+      plan: "coach", // even Starter gets HIGH thinking on synthesis
       ttPostsCount: 8,
     });
 
@@ -2434,7 +2434,7 @@ describe("synthesizeCreatorPicture — Wave 4 worker routing", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "w4_authfail",
-      plan: "pro",
+      plan: "manager",
     });
 
     const workerSpy = vi.fn(async () => {
@@ -2466,7 +2466,7 @@ describe("synthesizeCreatorPicture — Wave 4 worker routing", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "w4_5xx",
-      plan: "pro",
+      plan: "manager",
     });
 
     _setVideoSynthClientForTests(async () => {
@@ -2494,7 +2494,7 @@ describe("synthesizeCreatorPicture — Wave 4 worker routing", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "w4_retry",
-      plan: "pro",
+      plan: "manager",
     });
 
     const calls: SynthesizeWorkerRequest[] = [];
@@ -2525,7 +2525,7 @@ describe("synthesizeCreatorPicture — Wave 4 worker routing", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "w4_log",
-      plan: "pro",
+      plan: "manager",
     });
 
     _setVideoSynthClientForTests(async () => ({
@@ -2558,7 +2558,7 @@ describe("synthesizeCreatorPicture — Wave 4 worker routing", () => {
 
   it("buildWorkerPosts forwards (postId, platform, videoUrl, kind) only — no caption/transcript", () => {
     const payload = {
-      creator: { timezone: "UTC", plan: "pro" },
+      creator: { timezone: "UTC", plan: "manager" },
       perPlatform: [
         {
           platform: "tiktok",
@@ -2649,7 +2649,7 @@ describe("synthesizeCreatorPicture — Wave 4 worker routing", () => {
 
   it("buildWorkerUserPayloadJson serializes the PromptPayload as the user-message body", () => {
     const payload = {
-      creator: { timezone: "America/Los_Angeles", plan: "pro" },
+      creator: { timezone: "America/Los_Angeles", plan: "manager" },
       perPlatform: [],
       batchingDiagnostics: {
         totalPostsConsidered: 0,
@@ -2674,11 +2674,11 @@ describe("synthesizeCreatorPicture — Wave 4 worker routing", () => {
     const t = convexTest(schema, modules);
     const a = await seedCreatorWithScrapedData(t, {
       suffix: "w4_ctA",
-      plan: "pro",
+      plan: "manager",
     });
     const b = await seedCreatorWithScrapedData(t, {
       suffix: "w4_ctB",
-      plan: "pro",
+      plan: "manager",
     });
 
     // Pre-seed B's row.
@@ -2725,7 +2725,7 @@ describe("synthesizeCreatorPicture — Wave 4 worker routing", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithScrapedData(t, {
       suffix: "w4_flag_off",
-      plan: "pro",
+      plan: "manager",
     });
 
     const workerSpy = vi.fn(async () => fakeWorkerOk());

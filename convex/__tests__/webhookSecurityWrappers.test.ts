@@ -38,7 +38,7 @@ async function insertCreator(
   t: ReturnType<typeof convexTest>,
   opts: {
     suffix: string;
-    plan: "starter" | "pro" | "studio";
+    plan: "coach" | "manager";
     stripeCustomerId?: string;
   }
 ): Promise<Id<"creators">> {
@@ -206,7 +206,7 @@ describe("dealTriage.findCreatorByComposioAccountPublic", () => {
 
   it("returns the resolved creator only when the secret is valid", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertConnectedAccount(t, {
       creatorId: a,
       composioAccountIdHash: "h_a_1",
@@ -226,13 +226,13 @@ describe("dealTriage.findCreatorByComposioAccountPublic", () => {
       composioAccountIdHash: "h_a_1",
     });
     expect(ok?.creatorId).toBe(a);
-    expect(ok?.plan).toBe("pro");
+    expect(ok?.plan).toBe("manager");
   });
 
   it("CROSS-TENANT: A's hash never resolves to B's creators row", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await insertConnectedAccount(t, {
       creatorId: a,
       composioAccountIdHash: "h_a_2",
@@ -281,7 +281,7 @@ describe("billing.webhook public wrappers", () => {
     const t = convexTest(schema, modules);
     const a = await insertCreator(t, {
       suffix: "a",
-      plan: "starter",
+      plan: "coach",
       stripeCustomerId: "cus_a",
     });
     const res = await t.mutation(
@@ -290,25 +290,25 @@ describe("billing.webhook public wrappers", () => {
         secret: TEST_SECRET,
         stripeCustomerId: "cus_a",
         subscriptionId: "sub_a",
-        tier: "pro",
+        tier: "manager",
         interval: "monthly",
       }
     );
     expect(res.patched).toBe(true);
     const row = await t.run((ctx) => ctx.db.get(a));
-    expect(row?.plan).toBe("pro");
+    expect(row?.plan).toBe("manager");
   });
 
   it("handleCheckoutCompletedPublic: CROSS-TENANT — metadata.creatorId mismatch refuses the patch", async () => {
     const t = convexTest(schema, modules);
     const a = await insertCreator(t, {
       suffix: "a",
-      plan: "starter",
+      plan: "coach",
       stripeCustomerId: "cus_a",
     });
     const b = await insertCreator(t, {
       suffix: "b",
-      plan: "starter",
+      plan: "coach",
     });
     const res = await t.mutation(
       api.billing.webhook.handleCheckoutCompletedPublic,
@@ -317,7 +317,7 @@ describe("billing.webhook public wrappers", () => {
         stripeCustomerId: "cus_a",
         subscriptionId: "sub_a",
         creatorId: b, // mismatch — Customer A's webhook claiming Creator B
-        tier: "pro",
+        tier: "manager",
         interval: "monthly",
       }
     );
@@ -326,15 +326,15 @@ describe("billing.webhook public wrappers", () => {
     // Neither creator was patched.
     const aRow = await t.run((ctx) => ctx.db.get(a));
     const bRow = await t.run((ctx) => ctx.db.get(b));
-    expect(aRow?.plan).toBe("starter");
-    expect(bRow?.plan).toBe("starter");
+    expect(aRow?.plan).toBe("coach");
+    expect(bRow?.plan).toBe("coach");
   });
 
   it("handleSubscriptionDeletedPublic: downgrades to starter and clears billing fields", async () => {
     const t = convexTest(schema, modules);
     const a = await insertCreator(t, {
       suffix: "a",
-      plan: "pro",
+      plan: "manager",
       stripeCustomerId: "cus_a",
     });
     await t.run((ctx) =>
@@ -350,7 +350,7 @@ describe("billing.webhook public wrappers", () => {
     );
     expect(res.patched).toBe(true);
     const row = await t.run((ctx) => ctx.db.get(a));
-    expect(row?.plan).toBe("starter");
+    expect(row?.plan).toBe("coach");
     expect(row?.stripeSubscriptionId).toBeUndefined();
     expect(row?.currentPlanPeriodEnd).toBeUndefined();
     // Customer ID stays so resubscribe via Checkout reuses the existing
@@ -362,7 +362,7 @@ describe("billing.webhook public wrappers", () => {
     const t = convexTest(schema, modules);
     const a = await insertCreator(t, {
       suffix: "a",
-      plan: "pro",
+      plan: "manager",
       stripeCustomerId: "cus_a",
     });
     const res = await t.mutation(api.billing.webhook.handleTrialWillEndPublic, {

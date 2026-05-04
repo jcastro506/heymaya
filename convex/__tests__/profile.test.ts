@@ -39,7 +39,7 @@ async function insertCreator(
   t: ReturnType<typeof convexTest>,
   opts: {
     suffix: string;
-    plan: "starter" | "pro" | "studio";
+    plan: "coach" | "manager";
     channel?: "imessage" | "whatsapp" | "sms" | "web";
     mayaFlyAppId?: string;
   }
@@ -92,14 +92,14 @@ async function insertConnectedAccount(
 describe("profile.getProfileSummary", () => {
   it("returns null when unauthenticated", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const res = await t.query(api.profile.getProfileSummary, {});
     expect(res).toBeNull();
   });
 
   it("returns the signed-in creator's bundle, scrubs composio account ids", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertConnectedAccount(t, { creatorId: a, provider: "gmail" });
     const res = await asUser(t, "a").query(api.profile.getProfileSummary, {});
     expect(res).not.toBeNull();
@@ -113,8 +113,8 @@ describe("profile.getProfileSummary", () => {
 
   it("CROSS-TENANT: returns A's accounts only, never B's", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await insertConnectedAccount(t, { creatorId: a, provider: "gmail" });
     await insertConnectedAccount(t, { creatorId: b, provider: "calendar" });
     const aRes = await asUser(t, "a").query(api.profile.getProfileSummary, {});
@@ -131,7 +131,7 @@ describe("profile.getProfileSummary", () => {
 describe("profile.updateCreatorPicture", () => {
   it("creates a stub creatorPicture when none exists, with the patched fields", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await asUser(t, "a").mutation(api.profile.updateCreatorPicture, {
       careerStage: "monetizing",
       locationSoul: { city: "Brooklyn", state: "NY", country: "US" },
@@ -157,7 +157,7 @@ describe("profile.updateCreatorPicture", () => {
 
   it("patches an existing creatorPicture in place, preserves synth-owned fields", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const seedId = await t.run((ctx) =>
       ctx.db.insert("creatorPicture", {
         creatorId: a,
@@ -190,8 +190,8 @@ describe("profile.updateCreatorPicture", () => {
 
   it("CROSS-TENANT: A cannot mutate B's picture even though args carry no creatorId", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await asUser(t, "a").mutation(api.profile.updateCreatorPicture, {
       monthlyRevenueUsd: 9999,
       tonePreference: "tough-love",
@@ -213,7 +213,7 @@ describe("profile.updateCreatorPicture", () => {
 
   it("ADVERSARIAL: rejects negative monthlyRevenueUsd", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").mutation(api.profile.updateCreatorPicture, {
         monthlyRevenueUsd: -42,
@@ -223,7 +223,7 @@ describe("profile.updateCreatorPicture", () => {
 
   it("ADVERSARIAL: rejects NaN monthlyRevenueUsd", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").mutation(api.profile.updateCreatorPicture, {
         monthlyRevenueUsd: Number.NaN,
@@ -233,7 +233,7 @@ describe("profile.updateCreatorPicture", () => {
 
   it("ADVERSARIAL: rejects long oneYear goal (>= 5000 chars)", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const longStr = "x".repeat(5_001);
     await expect(
       asUser(t, "a").mutation(api.profile.updateCreatorPicture, {
@@ -244,7 +244,7 @@ describe("profile.updateCreatorPicture", () => {
 
   it("ADVERSARIAL: rejects long fiveYear goal (>= 5000 chars)", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const longStr = "y".repeat(5_001);
     await expect(
       asUser(t, "a").mutation(api.profile.updateCreatorPicture, {
@@ -255,7 +255,7 @@ describe("profile.updateCreatorPicture", () => {
 
   it("ADVERSARIAL: rejects long city string (>= 5000 chars)", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").mutation(api.profile.updateCreatorPicture, {
         locationSoul: { city: "z".repeat(5_001) },
@@ -264,7 +264,7 @@ describe("profile.updateCreatorPicture", () => {
   });
 
   it("PLAN-TIER: every tier can edit their picture (no gate)", async () => {
-    for (const plan of ["starter", "pro", "studio"] as const) {
+    for (const plan of ["coach", "manager"] as const) {
       const t = convexTest(schema, modules);
       await insertCreator(t, { suffix: plan, plan });
       await expect(
@@ -284,7 +284,7 @@ describe("profile.updateCreatorPicture", () => {
 describe("profile.addCreatorHandle", () => {
   it("inserts a new handle row", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const id = await asUser(t, "a").mutation(api.profile.addCreatorHandle, {
       platform: "tiktok",
       handle: "@joshcastro",
@@ -298,7 +298,7 @@ describe("profile.addCreatorHandle", () => {
 
   it("upserts when the same platform handle is added again (per-platform unique)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const id1 = await asUser(t, "a").mutation(api.profile.addCreatorHandle, {
       platform: "tiktok",
       handle: "old",
@@ -320,47 +320,55 @@ describe("profile.addCreatorHandle", () => {
     expect(all[0].followerCount).toBe(1000);
   });
 
-  it("PLAN-TIER: starter capped at 1 handle, second platform rejected", async () => {
+  it("PLAN-TIER (coach): allows up to maxHandles (5) and rejects the 6th", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "s", plan: "starter" });
-    await asUser(t, "s").mutation(api.profile.addCreatorHandle, {
-      platform: "tiktok",
-      handle: "first",
-    });
+    await insertCreator(t, { suffix: "s", plan: "coach" });
+    for (const [platform, handle] of [
+      ["tiktok", "a"],
+      ["instagram", "b"],
+      ["youtube", "c"],
+      ["linkedin", "d"],
+      ["x", "e"],
+    ] as const) {
+      await asUser(t, "s").mutation(api.profile.addCreatorHandle, {
+        platform,
+        handle,
+      });
+    }
     await expect(
       asUser(t, "s").mutation(api.profile.addCreatorHandle, {
-        platform: "instagram",
-        handle: "second",
+        platform: "threads",
+        handle: "f",
       })
-    ).rejects.toThrow(/Plan.*starter/i);
+    ).rejects.toThrow(/Plan.*coach/i);
   });
 
-  it("PLAN-TIER: pro can add up to 3, fourth rejected", async () => {
+  it("PLAN-TIER (manager): allows up to maxHandles (5) and rejects the 6th", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "p", plan: "pro" });
-    await asUser(t, "p").mutation(api.profile.addCreatorHandle, {
-      platform: "tiktok",
-      handle: "a",
-    });
-    await asUser(t, "p").mutation(api.profile.addCreatorHandle, {
-      platform: "instagram",
-      handle: "b",
-    });
-    await asUser(t, "p").mutation(api.profile.addCreatorHandle, {
-      platform: "youtube",
-      handle: "c",
-    });
+    await insertCreator(t, { suffix: "p", plan: "manager" });
+    for (const [platform, handle] of [
+      ["tiktok", "a"],
+      ["instagram", "b"],
+      ["youtube", "c"],
+      ["linkedin", "d"],
+      ["x", "e"],
+    ] as const) {
+      await asUser(t, "p").mutation(api.profile.addCreatorHandle, {
+        platform,
+        handle,
+      });
+    }
     await expect(
       asUser(t, "p").mutation(api.profile.addCreatorHandle, {
-        platform: "linkedin",
-        handle: "d",
+        platform: "threads",
+        handle: "f",
       })
-    ).rejects.toThrow(/Plan.*pro/i);
+    ).rejects.toThrow(/Plan.*manager/i);
   });
 
   it("ADVERSARIAL: rejects empty handle", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").mutation(api.profile.addCreatorHandle, {
         platform: "tiktok",
@@ -373,8 +381,8 @@ describe("profile.addCreatorHandle", () => {
 describe("profile.removeCreatorHandle", () => {
   it("CROSS-TENANT: A cannot delete B's handle", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     expect(a).toBeDefined();
     const bHandle = await t.run((ctx) =>
       ctx.db.insert("creatorHandles", {
@@ -396,7 +404,7 @@ describe("profile.removeCreatorHandle", () => {
 
   it("idempotent: deleting an already-gone handle is a no-op", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     // Insert + delete to get a real-shape Id pointing at nothing.
     const id = await t.run((ctx) =>
       ctx.db.insert("creatorHandles", {
@@ -424,7 +432,7 @@ describe("profile.removeCreatorHandle", () => {
 describe("profile.disconnectProvider", () => {
   it("flips an active gmail account to revoked, logs to mayaActionLog", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const accId = await insertConnectedAccount(t, {
       creatorId: a,
       provider: "gmail",
@@ -447,7 +455,7 @@ describe("profile.disconnectProvider", () => {
 
   it("idempotent: calling twice does not error", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertConnectedAccount(t, { creatorId: a, provider: "gmail" });
     const r1 = await asUser(t, "a").mutation(
       api.profile.disconnectProvider,
@@ -464,7 +472,7 @@ describe("profile.disconnectProvider", () => {
 
   it("returns reason=not-connected when there's no row to begin with", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const r = await asUser(t, "a").mutation(api.profile.disconnectProvider, {
       provider: "gmail",
     });
@@ -474,8 +482,8 @@ describe("profile.disconnectProvider", () => {
 
   it("CROSS-TENANT: A's disconnect call does not touch B's account", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     expect(a).toBeDefined();
     const bAcc = await insertConnectedAccount(t, {
       creatorId: b,
@@ -498,7 +506,7 @@ describe("profile.disconnectProvider", () => {
 describe("profile.updateChannelPreference", () => {
   it("PLAN-TIER (REVISED): starter accepts all 4 channels — channels are OpenClaw-native, ungated", async () => {
     const t = convexTest(schema, modules);
-    const s = await insertCreator(t, { suffix: "s", plan: "starter" });
+    const s = await insertCreator(t, { suffix: "s", plan: "coach" });
     for (const ch of ["web", "sms", "imessage", "whatsapp"] as const) {
       await asUser(t, "s").mutation(api.profile.updateChannelPreference, {
         channel: ch,
@@ -510,7 +518,7 @@ describe("profile.updateChannelPreference", () => {
 
   it("PLAN-TIER: pro accepts all 4 channels", async () => {
     const t = convexTest(schema, modules);
-    const p = await insertCreator(t, { suffix: "p", plan: "pro" });
+    const p = await insertCreator(t, { suffix: "p", plan: "manager" });
     for (const ch of ["web", "sms", "imessage", "whatsapp"] as const) {
       await asUser(t, "p").mutation(api.profile.updateChannelPreference, {
         channel: ch,
@@ -522,7 +530,7 @@ describe("profile.updateChannelPreference", () => {
 
   it("PLAN-TIER: studio accepts all 4 channels", async () => {
     const t = convexTest(schema, modules);
-    const s = await insertCreator(t, { suffix: "s2", plan: "studio" });
+    const s = await insertCreator(t, { suffix: "s2", plan: "manager" });
     for (const ch of ["web", "sms", "imessage", "whatsapp"] as const) {
       await asUser(t, "s2").mutation(api.profile.updateChannelPreference, {
         channel: ch,
@@ -534,8 +542,8 @@ describe("profile.updateChannelPreference", () => {
 
   it("CROSS-TENANT: A's channel update writes to A only, B's row untouched", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro", channel: "web" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro", channel: "web" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager", channel: "web" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager", channel: "web" });
     await asUser(t, "a").mutation(api.profile.updateChannelPreference, {
       channel: "imessage",
     });
@@ -553,7 +561,7 @@ describe("profile.updateChannelPreference", () => {
 describe("profile.setAutoSendThreshold", () => {
   it("PLAN-TIER (REVISED): starter can set gmail threshold — deal desk is universal", async () => {
     const t = convexTest(schema, modules);
-    const s = await insertCreator(t, { suffix: "s", plan: "starter" });
+    const s = await insertCreator(t, { suffix: "s", plan: "coach" });
     await insertConnectedAccount(t, { creatorId: s, provider: "gmail" });
     await asUser(t, "s").mutation(api.profile.setAutoSendThreshold, {
       provider: "gmail",
@@ -572,7 +580,7 @@ describe("profile.setAutoSendThreshold", () => {
 
   it("PLAN-TIER: pro can set gmail threshold", async () => {
     const t = convexTest(schema, modules);
-    const p = await insertCreator(t, { suffix: "p", plan: "pro" });
+    const p = await insertCreator(t, { suffix: "p", plan: "manager" });
     await insertConnectedAccount(t, { creatorId: p, provider: "gmail" });
     await asUser(t, "p").mutation(api.profile.setAutoSendThreshold, {
       provider: "gmail",
@@ -589,22 +597,22 @@ describe("profile.setAutoSendThreshold", () => {
     expect(row?.autoSendThreshold).toBe(250);
   });
 
-  it("PLAN-TIER: pro blocked from apollo / hunter thresholds (Studio-only providers)", async () => {
+  it("PLAN-TIER (coach): blocked from apollo / hunter thresholds (Manager-only providers)", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "p", plan: "pro" });
+    await insertCreator(t, { suffix: "p", plan: "coach" });
     for (const provider of ["apollo", "hunter"] as const) {
       await expect(
         asUser(t, "p").mutation(api.profile.setAutoSendThreshold, {
           provider,
           thresholdUsd: 100,
         })
-      ).rejects.toThrow(/Plan.*pro/i);
+      ).rejects.toThrow(/Plan.*coach/i);
     }
   });
 
   it("ADVERSARIAL: rejects negative threshold", async () => {
     const t = convexTest(schema, modules);
-    const p = await insertCreator(t, { suffix: "p", plan: "pro" });
+    const p = await insertCreator(t, { suffix: "p", plan: "manager" });
     await insertConnectedAccount(t, { creatorId: p, provider: "gmail" });
     await expect(
       asUser(t, "p").mutation(api.profile.setAutoSendThreshold, {
@@ -616,7 +624,7 @@ describe("profile.setAutoSendThreshold", () => {
 
   it("ADVERSARIAL: rejects threshold > 50000", async () => {
     const t = convexTest(schema, modules);
-    const p = await insertCreator(t, { suffix: "p", plan: "pro" });
+    const p = await insertCreator(t, { suffix: "p", plan: "manager" });
     await insertConnectedAccount(t, { creatorId: p, provider: "gmail" });
     await expect(
       asUser(t, "p").mutation(api.profile.setAutoSendThreshold, {
@@ -628,7 +636,7 @@ describe("profile.setAutoSendThreshold", () => {
 
   it("rejects setting threshold for an unconnected provider", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "p", plan: "pro" });
+    await insertCreator(t, { suffix: "p", plan: "manager" });
     await expect(
       asUser(t, "p").mutation(api.profile.setAutoSendThreshold, {
         provider: "gmail",
@@ -639,8 +647,8 @@ describe("profile.setAutoSendThreshold", () => {
 
   it("CROSS-TENANT: A's threshold update never touches B's row", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await insertConnectedAccount(t, {
       creatorId: a,
       provider: "gmail",
@@ -671,7 +679,7 @@ describe("profile.resetMayaMemory", () => {
 
   it("requires the literal confirm='RESET' token", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     for (const bad of ["reset", "Reset", "RESET ", " RESET", "yes", ""]) {
       await expect(
         asUser(t, "a").action(api.profile.resetMayaMemory, { confirm: bad })
@@ -683,7 +691,7 @@ describe("profile.resetMayaMemory", () => {
     // No mayaFlyAppId on the creator — we refuse to issue any CLI call and
     // record the request as skipped so the operator dashboard surfaces it.
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const cli: OpenclawCliExecutor = vi.fn(async () => ({ ok: true }));
     _setOpenclawCliForTests(cli);
 
@@ -712,7 +720,7 @@ describe("profile.resetMayaMemory", () => {
     const t = convexTest(schema, modules);
     const a = await insertCreator(t, {
       suffix: "a",
-      plan: "pro",
+      plan: "manager",
       mayaFlyAppId: "maya-creator-a",
     });
     const calls: Array<{ command: string; args: ReadonlyArray<string> }> = [];
@@ -761,7 +769,7 @@ describe("profile.resetMayaMemory", () => {
     const t = convexTest(schema, modules);
     const a = await insertCreator(t, {
       suffix: "a",
-      plan: "pro",
+      plan: "manager",
       mayaFlyAppId: "maya-creator-a",
     });
     const seen: string[] = [];
@@ -796,12 +804,12 @@ describe("profile.resetMayaMemory", () => {
     const t = convexTest(schema, modules);
     const a = await insertCreator(t, {
       suffix: "a",
-      plan: "pro",
+      plan: "manager",
       mayaFlyAppId: "maya-creator-a",
     });
     const b = await insertCreator(t, {
       suffix: "b",
-      plan: "pro",
+      plan: "manager",
       mayaFlyAppId: "maya-creator-b",
     });
     const seenAgents: string[] = [];
@@ -851,7 +859,7 @@ describe("profile.resetMayaMemory", () => {
 describe("profile.exportCreatorData", () => {
   it("returns a URL that resolves to a JSON blob containing the creator's data without composio account ids", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertConnectedAccount(t, { creatorId: a, provider: "gmail" });
     await t.run((ctx) =>
       ctx.db.insert("creatorHandles", {
@@ -889,8 +897,8 @@ describe("profile.exportCreatorData", () => {
 
   it("CROSS-TENANT: export only contains A's data, not B's", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await t.run((ctx) =>
       ctx.db.insert("creatorHandles", {
         creatorId: a,

@@ -28,7 +28,7 @@ async function insertCreator(
   t: ReturnType<typeof convexTest>,
   opts: {
     suffix: string;
-    plan: "starter" | "pro" | "studio";
+    plan: "coach" | "manager";
     timezone?: string;
     onboardingAnswers?: {
       goal?: string;
@@ -138,14 +138,14 @@ function richPictureBase() {
 describe("today.goalsFocusContext — auth + base shape", () => {
   it("returns null when unauthenticated", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const out = await t.query(api.today.goalsFocusContext, {});
     expect(out).toBeNull();
   });
 
   it("returns base shape with all-null goals when creator has no answers + no picture", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const out = await asUser(t, "a").query(api.today.goalsFocusContext, {});
     expect(out).not.toBeNull();
     expect(out!.goals.free).toBeNull();
@@ -166,7 +166,7 @@ describe("today.goalsFocusContext — goals column", () => {
     const t = convexTest(schema, modules);
     await insertCreator(t, {
       suffix: "a",
-      plan: "pro",
+      plan: "manager",
       onboardingAnswers: {
         goal: "Quit my day job",
         careerStage: "building",
@@ -187,7 +187,7 @@ describe("today.goalsFocusContext — goals column", () => {
     const t = convexTest(schema, modules);
     const a = await insertCreator(t, {
       suffix: "a",
-      plan: "pro",
+      plan: "manager",
       onboardingAnswers: {
         goal: "x",
         careerStage: "monetizing",
@@ -208,7 +208,7 @@ describe("today.goalsFocusContext — goals column", () => {
     const t = convexTest(schema, modules);
     const a = await insertCreator(t, {
       suffix: "a",
-      plan: "pro",
+      plan: "manager",
     });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorPicture", {
@@ -229,7 +229,7 @@ describe("today.goalsFocusContext — goals column", () => {
 describe("today.goalsFocusContext — focus column", () => {
   it("returns rich growthPlan when present (nextMilestoneText + focusAreas + horizonWeeks)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorPicture", {
         ...richPictureBase(),
@@ -255,7 +255,7 @@ describe("today.goalsFocusContext — focus column", () => {
 
   it("falls back to legacy narrow shape (nextMilestone.label + focusArea) when rich fields absent", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorPicture", {
         ...richPictureBase(),
@@ -277,7 +277,7 @@ describe("today.goalsFocusContext — focus column", () => {
 describe("today.goalsFocusContext — Maya activity column", () => {
   it("returns up to 3 most recent ran rows in the last 24h", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       // Five ran rows in the last 24h, oldest to newest
       for (let i = 0; i < 5; i++) {
@@ -299,7 +299,7 @@ describe("today.goalsFocusContext — Maya activity column", () => {
 
   it("excludes failed / skipped outcomes (only `ran` rows surface)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("mayaActionLog", {
         creatorId: a,
@@ -327,7 +327,7 @@ describe("today.goalsFocusContext — Maya activity column", () => {
 
   it("excludes ran rows older than 24h", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       // 25h ago (outside window)
       await ctx.db.insert("mayaActionLog", {
@@ -353,7 +353,7 @@ describe("today.goalsFocusContext — Maya activity column", () => {
     const t = convexTest(schema, modules);
     await insertCreator(t, {
       suffix: "a",
-      plan: "pro",
+      plan: "manager",
       timezone: "America/Los_Angeles",
     });
     const out = await asUser(t, "a").query(api.today.goalsFocusContext, {});
@@ -369,14 +369,14 @@ describe("today.goalsFocusContext — Maya activity column", () => {
 describe("today.goalsFocusContext — hasInferredPicture", () => {
   it("hasInferredPicture=false when no creatorPicture row exists", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const out = await asUser(t, "a").query(api.today.goalsFocusContext, {});
     expect(out!.hasInferredPicture).toBe(false);
   });
 
   it("hasInferredPicture=false when picture model is 'awaiting-synthesis'", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorPicture", {
         ...richPictureBase(),
@@ -390,7 +390,7 @@ describe("today.goalsFocusContext — hasInferredPicture", () => {
 
   it("hasInferredPicture=false when picture model is 'manual-seed'", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorPicture", {
         ...richPictureBase(),
@@ -404,7 +404,7 @@ describe("today.goalsFocusContext — hasInferredPicture", () => {
 
   it("hasInferredPicture=true when picture model is a real model id", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorPicture", {
         ...richPictureBase(),
@@ -419,10 +419,10 @@ describe("today.goalsFocusContext — hasInferredPicture", () => {
 describe("today.goalsFocusContext — cross-tenant isolation", () => {
   it("CROSS-TENANT: A's goals never reflect B's onboardingProgress.answers", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertCreator(t, {
       suffix: "b",
-      plan: "pro",
+      plan: "manager",
       onboardingAnswers: {
         goal: "B's secret goal",
         careerStage: "scaling",
@@ -437,8 +437,8 @@ describe("today.goalsFocusContext — cross-tenant isolation", () => {
 
   it("CROSS-TENANT: A's focus never reflects B's growthPlan", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("creatorPicture", {
         ...richPictureBase(),
@@ -461,8 +461,8 @@ describe("today.goalsFocusContext — cross-tenant isolation", () => {
 
   it("CROSS-TENANT: A's recentMayaActions excludes B's mayaActionLog rows", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await t.run(async (ctx) => {
       await ctx.db.insert("mayaActionLog", {
         creatorId: b,
@@ -480,7 +480,7 @@ describe("today.goalsFocusContext — plan-tier × action matrix (universal)", (
   // The strip is universal — every tier sees it. We assert that all three
   // plans produce a non-null context with a well-formed shape (no plan-tier
   // branching anywhere in the query handler).
-  for (const plan of ["starter", "pro", "studio"] as const) {
+  for (const plan of ["coach", "manager"] as const) {
     it(`PLAN-TIER (${plan}): returns a populated strip with the same shape`, async () => {
       const t = convexTest(schema, modules);
       const a = await insertCreator(t, {
@@ -527,7 +527,7 @@ describe("today.goalsFocusContext — adversarial", () => {
     const t = convexTest(schema, modules);
     await insertCreator(t, {
       suffix: "a",
-      plan: "pro",
+      plan: "manager",
       timezone: "Not/A_Real_Timezone",
     });
     const out = await asUser(t, "a").query(api.today.goalsFocusContext, {});
@@ -543,7 +543,7 @@ describe("today.goalsFocusContext — adversarial", () => {
         channelPreference: "web",
         timezone: "America/Los_Angeles",
         status: "active",
-        plan: "pro",
+        plan: "manager",
         createdAt: NOW,
         onboardingProgress: {
           currentQuestionIdx: 0,
@@ -562,14 +562,14 @@ describe("today.goalsFocusContext — adversarial", () => {
 
   it("ADVERSARIAL: creator with empty mayaActionLog returns empty array (not null)", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const out = await asUser(t, "a").query(api.today.goalsFocusContext, {});
     expect(out!.recentMayaActions).toEqual([]);
   });
 
   it("ADVERSARIAL: returns the well-formed shape even with no creator data at all", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "starter" });
+    await insertCreator(t, { suffix: "a", plan: "coach" });
     const out = await asUser(t, "a").query(api.today.goalsFocusContext, {});
     // Smoke check — shape is contract; tests above prove individual fields.
     expect(out).toMatchObject({

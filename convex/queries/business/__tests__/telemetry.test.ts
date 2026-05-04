@@ -37,7 +37,7 @@ async function seedAccount(
       channelPreference: "web",
       timezone: "America/Los_Angeles",
       status: "active",
-      plan: opts.plan ?? "pro",
+      plan: "coach",
       accountType: opts.accountType ?? "service-business",
       createdAt: NOW,
     })

@@ -22,7 +22,7 @@ const ONE_DAY_MS = 86_400_000;
 
 async function insertCreator(
   t: ReturnType<typeof convexTest>,
-  opts: { suffix: string; plan: "starter" | "pro" | "studio" }
+  opts: { suffix: string; plan: "coach" | "manager" }
 ): Promise<Id<"creators">> {
   return await t.run((ctx) =>
     ctx.db.insert("creators", {
@@ -89,7 +89,7 @@ describe("trends.nicheRadar", () => {
 
   it("returns only niche-scan rows, newest first", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertTrend(t, a, "niche-scan", "old", NOW - ONE_DAY_MS);
     await insertTrend(t, a, "niche-scan", "new", NOW);
     await insertTrend(t, a, "industry-intel", "intel — should not appear", NOW);
@@ -99,8 +99,8 @@ describe("trends.nicheRadar", () => {
 
   it("CROSS-TENANT: A's niche radar excludes B's observations", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await insertTrend(t, b, "niche-scan", "B-only");
     const r = await asUser(t, "a").query(api.trends.nicheRadar, {});
     expect(r).toEqual([]);
@@ -108,7 +108,7 @@ describe("trends.nicheRadar", () => {
 
   it("PLAN-TIER: nicheRadar is universal — Starter sees their own", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     await insertTrend(t, a, "niche-scan", "starter-visible");
     const r = await asUser(t, "a").query(api.trends.nicheRadar, {});
     expect(r).toHaveLength(1);
@@ -118,7 +118,7 @@ describe("trends.nicheRadar", () => {
 describe("trends.competitorWatch", () => {
   it("PLAN-TIER (REVISED): Starter sees competitor rows — competitorWatchSlots is now 2 (not 0)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     await insertCompetitorObs(t, a, "@peer", "they posted X");
     const r = await asUser(t, "a").query(api.trends.competitorWatch, {});
     expect(r).toHaveLength(1);
@@ -127,7 +127,7 @@ describe("trends.competitorWatch", () => {
 
   it("PLAN-TIER: Pro returns competitor observations", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertCompetitorObs(t, a, "@peer", "they posted X");
     const r = await asUser(t, "a").query(api.trends.competitorWatch, {});
     expect(r).toHaveLength(1);
@@ -136,8 +136,8 @@ describe("trends.competitorWatch", () => {
 
   it("CROSS-TENANT: A never sees B's competitor rows", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await insertCompetitorObs(t, b, "@peerB", "B's intel");
     const r = await asUser(t, "a").query(api.trends.competitorWatch, {});
     expect(r).toEqual([]);
@@ -147,7 +147,7 @@ describe("trends.competitorWatch", () => {
 describe("trends.collabMatches", () => {
   it("PLAN-TIER (REVISED): Starter sees collab matches — collabMatchEnabled is universal", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     await t.run((ctx) =>
       ctx.db.insert("collabMatchLog", {
         creatorId: a,
@@ -163,7 +163,7 @@ describe("trends.collabMatches", () => {
 
   it("PLAN-TIER: Pro sees pending or unactioned matches; dismissed are filtered", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run((ctx) =>
       ctx.db.insert("collabMatchLog", {
         creatorId: a,
@@ -189,7 +189,7 @@ describe("trends.collabMatches", () => {
 describe("trends.industryIntel", () => {
   it("PLAN-TIER: Starter returns []", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     await insertTrend(t, a, "industry-intel", "TikTok algo update");
     const r = await asUser(t, "a").query(api.trends.industryIntel, {});
     expect(r).toEqual([]);
@@ -197,7 +197,7 @@ describe("trends.industryIntel", () => {
 
   it("PLAN-TIER: Pro returns last-14d industry-intel rows", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     // Use Date.now() for the 14d cutoff (the query uses Date.now()).
     const realNow = Date.now();
     await insertTrend(t, a, "industry-intel", "fresh", realNow - ONE_DAY_MS);
@@ -209,7 +209,7 @@ describe("trends.industryIntel", () => {
 
   it("ADVERSARIAL: empty corpus → []", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const r = await asUser(t, "a").query(api.trends.industryIntel, {});
     expect(r).toEqual([]);
   });

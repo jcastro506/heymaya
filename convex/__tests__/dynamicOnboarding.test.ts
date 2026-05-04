@@ -34,7 +34,7 @@ const NOW = 1_700_000_000_000;
 
 async function insertCreator(
   t: ReturnType<typeof convexTest>,
-  opts: { suffix: string; plan: "starter" | "pro" | "studio" }
+  opts: { suffix: string; plan: "coach" | "manager" }
 ): Promise<Id<"creators">> {
   return await t.run((ctx) =>
     ctx.db.insert("creators", {
@@ -126,7 +126,7 @@ describe("Wave 2 — getQuestionPath state helper", () => {
 describe("submitOnboardingAnswers — Wave 2 dynamic fields", () => {
   it("foundational creator: persists primaryGoals, biggestBlockers, etc. onto creatorPicture", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "found_a", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "found_a", plan: "manager" });
     const pictureId = await asUser(t, "found_a").mutation(
       api.creators.submitOnboardingAnswers,
       { creatorId: c, answers: FOUNDATIONAL_ANSWERS }
@@ -151,7 +151,7 @@ describe("submitOnboardingAnswers — Wave 2 dynamic fields", () => {
 
   it("senior creator: persists sixToTwelveMonthChanges, deprioritizingPlatforms, hiringReadiness", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "sen_a", plan: "studio" });
+    const c = await insertCreator(t, { suffix: "sen_a", plan: "manager" });
     const pictureId = await asUser(t, "sen_a").mutation(
       api.creators.submitOnboardingAnswers,
       { creatorId: c, answers: SENIOR_ANSWERS }
@@ -169,7 +169,7 @@ describe("submitOnboardingAnswers — Wave 2 dynamic fields", () => {
 
   it("partial Wave 2 fields are persisted (skipped optional Q's stay undefined)", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "partial_a", plan: "starter" });
+    const c = await insertCreator(t, { suffix: "partial_a", plan: "coach" });
     const minimal = {
       goal: "100K by EOY",
       tone: "supportive" as const,
@@ -192,8 +192,8 @@ describe("submitOnboardingAnswers — Wave 2 dynamic fields", () => {
 
   it("CROSS-TENANT (CRITICAL): A cannot submit Wave 2 answers for B's creatorId", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "ct_a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "ct_b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "ct_a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "ct_b", plan: "manager" });
     expect(a).toBeDefined();
     await expect(
       asUser(t, "ct_a").mutation(api.creators.submitOnboardingAnswers, {
@@ -211,7 +211,7 @@ describe("submitOnboardingAnswers — Wave 2 dynamic fields", () => {
   });
 
   it("PLAN-TIER: every plan can submit Wave 2 answers (no gate)", async () => {
-    for (const plan of ["starter", "pro", "studio"] as const) {
+    for (const plan of ["coach", "manager"] as const) {
       const t = convexTest(schema, modules);
       const c = await insertCreator(t, { suffix: plan, plan });
       await expect(
@@ -225,7 +225,7 @@ describe("submitOnboardingAnswers — Wave 2 dynamic fields", () => {
 
   it("ADVERSARIAL: rejects negative weeklyHoursAvailable", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "adv_neg", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "adv_neg", plan: "manager" });
     await expect(
       asUser(t, "adv_neg").mutation(api.creators.submitOnboardingAnswers, {
         creatorId: c,
@@ -236,7 +236,7 @@ describe("submitOnboardingAnswers — Wave 2 dynamic fields", () => {
 
   it("ADVERSARIAL: rejects weeklyHoursAvailable > 168 (hours/week ceiling)", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "adv_huge", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "adv_huge", plan: "manager" });
     await expect(
       asUser(t, "adv_huge").mutation(api.creators.submitOnboardingAnswers, {
         creatorId: c,
@@ -247,7 +247,7 @@ describe("submitOnboardingAnswers — Wave 2 dynamic fields", () => {
 
   it("ADVERSARIAL: weeklyHoursAvailable=0 is valid (creator who's just-watching)", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "adv_zero", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "adv_zero", plan: "manager" });
     const pictureId = await asUser(t, "adv_zero").mutation(
       api.creators.submitOnboardingAnswers,
       { creatorId: c, answers: { ...FOUNDATIONAL_ANSWERS, weeklyHoursAvailable: 0 } }
@@ -258,7 +258,7 @@ describe("submitOnboardingAnswers — Wave 2 dynamic fields", () => {
 
   it("Wave 2 fields submitted twice (re-submit) PATCH the existing picture", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "patch_a", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "patch_a", plan: "manager" });
     const firstId = await asUser(t, "patch_a").mutation(
       api.creators.submitOnboardingAnswers,
       { creatorId: c, answers: FOUNDATIONAL_ANSWERS }
@@ -289,7 +289,7 @@ describe("submitOnboardingAnswers — Wave 2 dynamic fields", () => {
 describe("saveOnboardingProgress — Wave 2 fields in resume buffer", () => {
   it("persists primaryGoals + biggestBlockers + ninetyDayPriority on the resume buffer", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "buf_a", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "buf_a", plan: "manager" });
     await asUser(t, "buf_a").mutation(api.creators.saveOnboardingProgress, {
       creatorId: c,
       currentQuestionIdx: 9,
@@ -318,7 +318,7 @@ describe("saveOnboardingProgress — Wave 2 fields in resume buffer", () => {
 
   it("persists senior-tail fields on the resume buffer", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "buf_b", plan: "studio" });
+    const c = await insertCreator(t, { suffix: "buf_b", plan: "manager" });
     await asUser(t, "buf_b").mutation(api.creators.saveOnboardingProgress, {
       creatorId: c,
       currentQuestionIdx: 11,
@@ -342,8 +342,8 @@ describe("saveOnboardingProgress — Wave 2 fields in resume buffer", () => {
 
   it("CROSS-TENANT: A cannot save Wave 2 progress for B", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "buf_ct_a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "buf_ct_b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "buf_ct_a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "buf_ct_b", plan: "manager" });
     expect(a).toBeDefined();
     await expect(
       asUser(t, "buf_ct_a").mutation(api.creators.saveOnboardingProgress, {
@@ -361,7 +361,7 @@ describe("saveOnboardingProgress — Wave 2 fields in resume buffer", () => {
 
   it("submitOnboardingAnswers clears the Wave 2 resume buffer", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "clr_a", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "clr_a", plan: "manager" });
     await asUser(t, "clr_a").mutation(api.creators.saveOnboardingProgress, {
       creatorId: c,
       currentQuestionIdx: 5,

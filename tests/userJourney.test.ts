@@ -495,7 +495,7 @@ describe("1K creator (just-starting path)", () => {
     );
     const creator0 = await t.run((ctx) => ctx.db.get(creatorId));
     expect(creator0, "STEP 1: creator row should exist").not.toBeNull();
-    expect(creator0!.plan, "STEP 1: plan defaults to starter").toBe("starter");
+    expect(creator0!.plan, "STEP 1: plan defaults to coach").toBe("coach");
     expect(creator0!.status, "STEP 1: status starts at onboarding").toBe(
       "onboarding"
     );
@@ -938,14 +938,14 @@ describe("400K creator (scaling path)", () => {
         timezone: TZ,
       }
     );
-    // Promote creator to studio plan (subscription-side outcome — for test
+    // Promote creator to manager plan (subscription-side outcome — for test
     // purposes we patch directly to mirror what the Stripe checkout webhook
     // would do once they pay).
-    await t.run((ctx) => ctx.db.patch(creatorId, { plan: "studio" }));
+    await t.run((ctx) => ctx.db.patch(creatorId, { plan: "manager" }));
 
     const creator0 = await t.run((ctx) => ctx.db.get(creatorId));
-    expect(creator0!.plan, "STEP 1: plan=studio (post-checkout)").toBe(
-      "studio"
+    expect(creator0!.plan, "STEP 1: plan=manager (post-checkout)").toBe(
+      "manager"
     );
     expect(creator0!.status).toBe("onboarding");
 

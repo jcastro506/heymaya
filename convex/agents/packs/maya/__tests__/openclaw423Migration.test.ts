@@ -53,7 +53,7 @@ const REPO_ROOT = join(__dirname, "..", "..", "..", "..", "..");
 const NOW = 1_700_000_000_000;
 const TZ = "America/Los_Angeles";
 
-function fakeCreator(plan: "starter" | "pro" | "studio"): Doc<"creators"> {
+function fakeCreator(plan: "coach" | "manager"): Doc<"creators"> {
   return {
     _id: "fake_creator_wave5_id" as unknown as Id<"creators">,
     _creationTime: NOW,
@@ -67,7 +67,7 @@ function fakeCreator(plan: "starter" | "pro" | "studio"): Doc<"creators"> {
   };
 }
 
-function inputsFor(plan: "starter" | "pro" | "studio"): BuildInputs {
+function inputsFor(plan: "coach" | "manager"): BuildInputs {
   return {
     creator: fakeCreator(plan),
     picture: null,
@@ -104,7 +104,7 @@ describe("Wave 5 — image tag (OpenClaw 4.12 → 2026.4.23)", () => {
   });
 
   it("MayaConfig.openclawVersion is the literal '2026.4.23' (CalVer)", () => {
-    const { config } = buildMayaConfig(inputsFor("pro"), NOW);
+    const { config } = buildMayaConfig(inputsFor("manager"), NOW);
     expect(config.openclawVersion).toBe("2026.4.23");
   });
 });
@@ -119,7 +119,7 @@ describe("Wave 5 — jobs.json determinism (jobs.json must stay stable for git)"
     // in Wave 5): "If you track cron definitions in git, track jobs.json and
     // gitignore jobs-state.json." Our generator must not mutate jobs.json on
     // re-runs — only OpenClaw's runtime touches jobs-state.json.
-    for (const plan of ["starter", "pro", "studio"] as const) {
+    for (const plan of ["coach", "manager"] as const) {
       const a = buildCronJobsJson({ creator: fakeCreator(plan) });
       const b = buildCronJobsJson({ creator: fakeCreator(plan) });
       expect(JSON.stringify(a)).toBe(JSON.stringify(b));
@@ -127,14 +127,14 @@ describe("Wave 5 — jobs.json determinism (jobs.json must stay stable for git)"
   });
 
   it("jobs.json from configGeneratorMaya is identical across two builds (no Date.now drift)", () => {
-    const a = buildMayaConfig(inputsFor("pro"), NOW);
-    const b = buildMayaConfig(inputsFor("pro"), NOW + 9_999_999); // different now
+    const a = buildMayaConfig(inputsFor("manager"), NOW);
+    const b = buildMayaConfig(inputsFor("manager"), NOW + 9_999_999); // different now
     // jobs.json must not embed `now` — generator is pure on (creator, catalog).
     expect(JSON.stringify(a.config.jobsJson)).toBe(JSON.stringify(b.config.jobsJson));
   });
 
   it("every jobs.json entry has the canonical 4.23 field set: name, cron, tz, session, message, entryId", () => {
-    const { jobs } = buildCronJobsJson({ creator: fakeCreator("pro") });
+    const { jobs } = buildCronJobsJson({ creator: fakeCreator("manager") });
     expect(jobs.length).toBeGreaterThan(0);
     for (const j of jobs) {
       expect(typeof j.name).toBe("string");
@@ -192,7 +192,7 @@ describe("Wave 5 — standing orders embed inline in AGENTS.md (OpenClaw 4.23 co
     // (AGENTS / SOUL / USER / HEARTBEAT / TOOLS / MEMORY / BOOTSTRAP /
     // IDENTITY) are auto-injected; arbitrary .md files in the workspace
     // root are NOT guaranteed to load.
-    for (const plan of ["starter", "pro", "studio"] as const) {
+    for (const plan of ["coach", "manager"] as const) {
       const { config } = buildMayaConfig(inputsFor(plan), NOW);
       const cap = config.gatewayConfig.agents.defaults.bootstrapMaxChars;
       const bundle = assembleWorkspaceBundle(
@@ -225,7 +225,7 @@ describe("Wave 5 — standing orders embed inline in AGENTS.md (OpenClaw 4.23 co
   });
 
   it("AGENTS.md actually fits under the 28K cap for every plan (defense-in-depth)", () => {
-    for (const plan of ["starter", "pro", "studio"] as const) {
+    for (const plan of ["coach", "manager"] as const) {
       const { config } = buildMayaConfig(inputsFor(plan), NOW);
       const cap = config.gatewayConfig.agents.defaults.bootstrapMaxChars;
       const bundle = assembleWorkspaceBundle(
@@ -326,11 +326,11 @@ describe("Wave 5 — per-tier cron set (Starter limited / Pro+ full)", () => {
     (p) => p.tier === "all" && p.kind === "cron"
   ).map((p) => p.cronEntryId!);
   const PRO_PLUS_IDS = STANDING_ORDERS.filter(
-    (p) => p.tier === "pro+" && p.kind === "cron"
+    (p) => p.tier === "manager" && p.kind === "cron"
   ).map((p) => p.cronEntryId!);
 
   it("Starter cron set — includes every all-tier program", () => {
-    const { jobs } = buildCronJobsJson({ creator: fakeCreator("starter") });
+    const { jobs } = buildCronJobsJson({ creator: fakeCreator("coach") });
     const ids = new Set(jobs.map((j) => j.entryId));
     for (const id of ALL_TIER_IDS) {
       expect(ids.has(id), `Starter: missing all-tier program '${id}'`).toBe(true);
@@ -338,7 +338,7 @@ describe("Wave 5 — per-tier cron set (Starter limited / Pro+ full)", () => {
   });
 
   it("Starter cron set — EXCLUDES every pro+ program (proactiveCronAll false)", () => {
-    const { jobs } = buildCronJobsJson({ creator: fakeCreator("starter") });
+    const { jobs } = buildCronJobsJson({ creator: fakeCreator("coach") });
     const ids = new Set(jobs.map((j) => j.entryId));
     for (const id of PRO_PLUS_IDS) {
       expect(ids.has(id), `Starter: must NOT include pro+ program '${id}'`).toBe(
@@ -348,7 +348,7 @@ describe("Wave 5 — per-tier cron set (Starter limited / Pro+ full)", () => {
   });
 
   it("Pro cron set — includes every program (all-tier + pro+)", () => {
-    const { jobs } = buildCronJobsJson({ creator: fakeCreator("pro") });
+    const { jobs } = buildCronJobsJson({ creator: fakeCreator("manager") });
     const ids = new Set(jobs.map((j) => j.entryId));
     for (const id of ALL_TIER_IDS) {
       expect(ids.has(id), `Pro: missing all-tier '${id}'`).toBe(true);
@@ -359,13 +359,13 @@ describe("Wave 5 — per-tier cron set (Starter limited / Pro+ full)", () => {
   });
 
   it("Studio cron set — identical to Pro for v0 (Studio differentiation lives in skill behavior, not cron presence)", () => {
-    const pro = buildCronJobsJson({ creator: fakeCreator("pro") });
-    const studio = buildCronJobsJson({ creator: fakeCreator("studio") });
+    const pro = buildCronJobsJson({ creator: fakeCreator("manager") });
+    const studio = buildCronJobsJson({ creator: fakeCreator("manager") });
     expect(JSON.stringify(studio)).toBe(JSON.stringify(pro));
   });
 
   it("Starter MUST run morning_brief, evening_recap, weekly_review (the three creator-facing baselines)", () => {
-    const { jobs } = buildCronJobsJson({ creator: fakeCreator("starter") });
+    const { jobs } = buildCronJobsJson({ creator: fakeCreator("coach") });
     const ids = jobs.map((j) => j.entryId);
     expect(ids).toContain("morning_brief");
     expect(ids).toContain("evening_recap");
@@ -373,7 +373,7 @@ describe("Wave 5 — per-tier cron set (Starter limited / Pro+ full)", () => {
   });
 
   it("Starter MUST NOT run industry_intel_daily, competitor_watch, calendar_lookahead, manager_readiness_packet_quarterly, revenue_snapshot", () => {
-    const { jobs } = buildCronJobsJson({ creator: fakeCreator("starter") });
+    const { jobs } = buildCronJobsJson({ creator: fakeCreator("coach") });
     const ids = new Set(jobs.map((j) => j.entryId));
     for (const blocked of [
       "industry_intel_daily",

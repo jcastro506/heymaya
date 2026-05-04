@@ -165,7 +165,7 @@ async function insertCreator(
   t: ReturnType<typeof convexTest>,
   opts: {
     suffix: string;
-    plan: "starter" | "pro" | "studio";
+    plan: "coach" | "manager";
     channelPreference?: "imessage" | "whatsapp" | "sms" | "web";
   }
 ): Promise<Id<"creators">> {
@@ -213,7 +213,7 @@ describe("deployMaya — happy path", () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "happy",
-      plan: "pro",
+      plan: "manager",
       channelPreference: "imessage",
     });
     const { client, recorded } = makeMockFly();
@@ -271,7 +271,7 @@ describe("deployMaya — happy path", () => {
 
   it("createApp 'already exists' is treated as success (idempotent re-deploy)", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "redeploy", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "redeploy", plan: "manager" });
     const { client, recorded } = makeMockFly({ appAlreadyExists: true });
     __setDeployMayaFlyClient(client);
 
@@ -285,7 +285,7 @@ describe("deployMaya — happy path", () => {
 
   it("workspace bundle URL is set on the config BEFORE the machine env is built", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "url1", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "url1", plan: "manager" });
     const { client, recorded } = makeMockFly();
     __setDeployMayaFlyClient(client);
 
@@ -314,7 +314,7 @@ describe("deployMaya — plan-tier enforcement (CRITICAL)", () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "starter1",
-      plan: "starter",
+      plan: "coach",
       channelPreference: "imessage",
     });
     const { client, recorded } = makeMockFly();
@@ -335,7 +335,7 @@ describe("deployMaya — plan-tier enforcement (CRITICAL)", () => {
 
   it("PLAN-TIER (REVISED): Starter Gmail composio row IS included — Gmail deal desk is universal", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "starter2", plan: "starter" });
+    const c = await insertCreator(t, { suffix: "starter2", plan: "coach" });
     await insertGmail(t, c);
 
     const { client, recorded } = makeMockFly();
@@ -358,7 +358,7 @@ describe("deployMaya — plan-tier enforcement (CRITICAL)", () => {
 
   it("Pro creator with Gmail: composio account makes it into secret, decrypted", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "pro1", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "pro1", plan: "manager" });
     await insertGmail(t, c);
 
     const { client, recorded } = makeMockFly();
@@ -388,7 +388,7 @@ describe("deployMaya — plan-tier enforcement (CRITICAL)", () => {
 describe("deployMaya — failure handling", () => {
   it("Fly createMachine 5xx → returns structured failure, retryable=true", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "f1", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "f1", plan: "manager" });
     const { client } = makeMockFly({ failOnStage: "create-machine" });
     __setDeployMayaFlyClient(client);
 
@@ -408,7 +408,7 @@ describe("deployMaya — failure handling", () => {
 
   it("waitForState timeout → returns structured failure, retryable=true", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "f2", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "f2", plan: "manager" });
     const { client } = makeMockFly({ failOnStage: "wait-for-state" });
     __setDeployMayaFlyClient(client);
 
@@ -426,7 +426,7 @@ describe("deployMaya — failure handling", () => {
 
   it("missing creator → structured failure at generate-config, never throws", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "ghost", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "ghost", plan: "manager" });
     await t.run(async (ctx) => ctx.db.delete(c));
     const { client } = makeMockFly();
     __setDeployMayaFlyClient(client);
@@ -448,8 +448,8 @@ describe("deployMaya — failure handling", () => {
 describe("deployMaya — cross-tenant isolation", () => {
   it("deploying creator A never touches creator B's row", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "A", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "B", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "A", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "B", plan: "manager" });
     const beforeB = await getCreator(t, b);
 
     const { client, recorded } = makeMockFly();
@@ -490,7 +490,7 @@ describe("deployMaya — cross-tenant isolation", () => {
  */
 async function seedCreatorWithCachedScrape(
   t: ReturnType<typeof convexTest>,
-  opts: { suffix: string; plan: "starter" | "pro" | "studio" }
+  opts: { suffix: string; plan: "coach" | "manager" }
 ): Promise<Id<"creators">> {
   const c = await insertCreator(t, opts);
   await t.run(async (ctx) => {
@@ -637,7 +637,7 @@ describe("deployMaya — synthesis stage integration", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithCachedScrape(t, {
       suffix: "synthok",
-      plan: "pro",
+      plan: "manager",
     });
 
     _setSynthFetchForTests(makeSynthOkFetch());
@@ -675,7 +675,7 @@ describe("deployMaya — synthesis stage integration", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithCachedScrape(t, {
       suffix: "synthfail",
-      plan: "pro",
+      plan: "manager",
     });
 
     const garbageFetch = vi.fn(async () => {
@@ -717,7 +717,7 @@ describe("deployMaya — synthesis stage integration", () => {
 
   it("creator with no handles skips synth+scrape silently and deploy still proceeds", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "nohandle", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "nohandle", plan: "manager" });
     // No handles seeded — listScrapableHandles returns [].
     const { client, recorded } = makeMockFly();
     __setDeployMayaFlyClient(client);
@@ -751,7 +751,7 @@ describe("deployMaya — synthesis stage integration", () => {
  */
 async function seedPreDoneBulkPull(
   t: ReturnType<typeof convexTest>,
-  opts: { suffix: string; plan: "starter" | "pro" | "studio" }
+  opts: { suffix: string; plan: "coach" | "manager" }
 ): Promise<Id<"creators">> {
   const c = await seedCreatorWithCachedScrape(t, opts);
   await t.run(async (ctx) => {
@@ -803,7 +803,7 @@ async function seedPreDoneSynth(
 describe("deployMaya — Wave 3 pre-fired job skip behavior", () => {
   it("pre-done bulk-pull → deploy SKIPS the inline scrape stage (cached cache used)", async () => {
     const t = convexTest(schema, modules);
-    const c = await seedPreDoneBulkPull(t, { suffix: "skip-bp", plan: "pro" });
+    const c = await seedPreDoneBulkPull(t, { suffix: "skip-bp", plan: "manager" });
     _setSynthFetchForTests(makeSynthOkFetch());
     const { client, recorded } = makeMockFly();
     __setDeployMayaFlyClient(client);
@@ -830,7 +830,7 @@ describe("deployMaya — Wave 3 pre-fired job skip behavior", () => {
 
   it("pre-done synth-picture → deploy SKIPS the inline synth stage (cached creatorPicture used)", async () => {
     const t = convexTest(schema, modules);
-    const c = await seedPreDoneBulkPull(t, { suffix: "skip-syn", plan: "pro" });
+    const c = await seedPreDoneBulkPull(t, { suffix: "skip-syn", plan: "manager" });
     await seedPreDoneSynth(t, c);
     // Don't install a synth fetch stub — if synth runs, it'll throw because
     // the OpenRouter call has no fixture to consume. Skip means the call
@@ -879,7 +879,7 @@ describe("deployMaya — Wave 3 pre-fired job skip behavior", () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithCachedScrape(t, {
       suffix: "fallback",
-      plan: "pro",
+      plan: "manager",
     });
     _setSynthFetchForTests(makeSynthOkFetch());
     const { client, recorded } = makeMockFly();
@@ -905,7 +905,7 @@ describe("deployMaya — Wave 3 pre-fired job skip behavior", () => {
 
   it("FAILED pre-fired synth job → deploy retries inline (fallback path)", async () => {
     const t = convexTest(schema, modules);
-    const c = await seedPreDoneBulkPull(t, { suffix: "retry-syn", plan: "pro" });
+    const c = await seedPreDoneBulkPull(t, { suffix: "retry-syn", plan: "manager" });
     // Pre-fired synth job FAILED — deploy should retry inline.
     await t.run(async (ctx) => {
       await ctx.db.insert("onboardingJobs", {
@@ -944,7 +944,7 @@ describe("deployMaya — Wave 3 pre-fired job skip behavior", () => {
     // with — runFullScrapePull is idempotent w.r.t. fresh cache).
     const c = await seedCreatorWithCachedScrape(t, {
       suffix: "retry-bp",
-      plan: "pro",
+      plan: "manager",
     });
     await t.run(async (ctx) => {
       await ctx.db.insert("onboardingJobs", {
@@ -981,7 +981,7 @@ describe("machineConfigFor", () => {
       appName: "maya-abc12345",
       creatorId: "fakecreator" as unknown as Id<"creators">,
       creatorEmail: "x@y.com",
-      plan: "pro" as const,
+      plan: "manager" as const,
       timezone: "UTC",
       gatewayConfig: {
         agents: { defaults: { bootstrapMaxChars: 20_000 } },
@@ -999,7 +999,7 @@ describe("machineConfigFor", () => {
     };
     const out = machineConfigFor(cfg, "ZmFrZS1qb2JzanNvbg==");
     expect(out.image).toMatch(/openclaw/);
-    expect(out.env?.MAYA_PLAN).toBe("pro");
+    expect(out.env?.MAYA_PLAN).toBe("manager");
     expect(out.env?.MAYA_OPENCLAW_VERSION).toBe("2026.4.23");
     expect(out.env?.MAYA_CONVEX_HTTP_BASE).toBe("https://x.convex.cloud");
     expect(out.env?.MAYA_WORKSPACE_BUNDLE_URL).toBe("https://convex.cloud/storage/abc123");

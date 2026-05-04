@@ -53,7 +53,7 @@ import type { Id } from "../convex/_generated/dataModel";
 const NOW = 1_700_000_000_000;
 const RUNTIME_SECRET = "test-runtime-secret-cron-simulator";
 
-type Plan = "starter" | "pro" | "studio";
+type Plan = "coach" | "manager";
 
 async function plantCreator(
   t: ReturnType<typeof convexTest>,
@@ -92,7 +92,7 @@ async function plantCreator(
       model: "test-fixture",
       sourceCitations: [],
       careerStage:
-        opts.plan === "starter" ? "just-starting" : "building",
+        opts.plan === "coach" ? "just-starting" : "building",
     })
   );
   // Plant one connected handle so cron entries gated on followers
@@ -104,7 +104,7 @@ async function plantCreator(
       handle: `${opts.suffix}_tt`,
       verified: true,
       scrapedAt: NOW,
-      followerCount: opts.followers ?? (opts.plan === "starter" ? 2_500 : 50_000),
+      followerCount: opts.followers ?? (opts.plan === "coach" ? 2_500 : 50_000),
     })
   );
   return creatorId;
@@ -271,7 +271,7 @@ describe("cron simulator — inventory", () => {
 describe("cron simulator — universal heartbeat (skillRecordActionLog)", () => {
   it("Pro creator: all 19 crons can emit a heartbeat → latestActionLog reflects them", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await plantCreator(t, { suffix: "pro1", plan: "pro" });
+    const creatorId = await plantCreator(t, { suffix: "pro1", plan: "manager" });
 
     for (const cron of CRON_INVENTORY) {
       await t.mutation(api.businessReadiness.skillRecordActionLog, {
@@ -308,7 +308,7 @@ describe("cron simulator — universal heartbeat (skillRecordActionLog)", () => 
     // handler (skillRecordCompetitor checks competitorWatchSlots > 0). The
     // log itself is universal so we never lose telemetry.
     const t = convexTest(schema, modules);
-    const creatorId = await plantCreator(t, { suffix: "starter1", plan: "starter" });
+    const creatorId = await plantCreator(t, { suffix: "starter1", plan: "coach" });
 
     for (const cron of CRON_INVENTORY) {
       await t.mutation(api.businessReadiness.skillRecordActionLog, {
@@ -334,7 +334,7 @@ describe("cron simulator — universal heartbeat (skillRecordActionLog)", () => 
 describe("cron simulator — domain mutations reflect in HQ queries", () => {
   it("daily_niche_scan / trend_watcher → skillRecordTrend → trends.nicheRadar", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await plantCreator(t, { suffix: "p", plan: "pro" });
+    const creatorId = await plantCreator(t, { suffix: "p", plan: "manager" });
 
     await t.mutation(api.businessReadiness.skillRecordTrend, {
       mayaSecret: RUNTIME_SECRET,
@@ -355,7 +355,7 @@ describe("cron simulator — domain mutations reflect in HQ queries", () => {
 
   it("industry_intel_daily → skillRecordTrend(industry-intel) → trends.industryIntel (Pro only)", async () => {
     const t = convexTest(schema, modules);
-    const pro = await plantCreator(t, { suffix: "p", plan: "pro" });
+    const pro = await plantCreator(t, { suffix: "p", plan: "manager" });
 
     await t.mutation(api.businessReadiness.skillRecordTrend, {
       mayaSecret: RUNTIME_SECRET,
@@ -371,24 +371,22 @@ describe("cron simulator — domain mutations reflect in HQ queries", () => {
     expect(intel.length).toBe(1);
   });
 
-  it("PLAN-TIER: industry_intel_daily blocked on Starter (proactiveCronAll=false)", async () => {
+  it("PLAN-TIER: industry_intel_daily accepted on Coach (proactiveCronAll=true on both tiers post-migration)", async () => {
     const t = convexTest(schema, modules);
-    const starter = await plantCreator(t, { suffix: "s", plan: "starter" });
-    await expect(
-      t.mutation(api.businessReadiness.skillRecordTrend, {
-        mayaSecret: RUNTIME_SECRET,
-        creatorId: starter,
-        source: "industry-intel",
-        observation: "blocked",
-        evidence: [],
-        relevanceScore: 0.5,
-      })
-    ).rejects.toThrow(/trend:industry-intel/);
+    const coach = await plantCreator(t, { suffix: "s", plan: "coach" });
+    await t.mutation(api.businessReadiness.skillRecordTrend, {
+      mayaSecret: RUNTIME_SECRET,
+      creatorId: coach,
+      source: "industry-intel",
+      observation: "no longer blocked",
+      evidence: [],
+      relevanceScore: 0.5,
+    });
   });
 
   it("competitor_watch → skillRecordCompetitor → trends.competitorWatch (Pro)", async () => {
     const t = convexTest(schema, modules);
-    const pro = await plantCreator(t, { suffix: "p", plan: "pro" });
+    const pro = await plantCreator(t, { suffix: "p", plan: "manager" });
 
     await t.mutation(api.businessReadiness.skillRecordCompetitor, {
       mayaSecret: RUNTIME_SECRET,
@@ -413,7 +411,7 @@ describe("cron simulator — domain mutations reflect in HQ queries", () => {
     // STILL fail-closes if slots=0 (defense in depth) but with slots=2 the
     // Starter creator should see its competitor observations.
     const t = convexTest(schema, modules);
-    const starter = await plantCreator(t, { suffix: "s", plan: "starter" });
+    const starter = await plantCreator(t, { suffix: "s", plan: "coach" });
     await t.mutation(api.businessReadiness.skillRecordCompetitor, {
       mayaSecret: RUNTIME_SECRET,
       creatorId: starter,
@@ -431,7 +429,7 @@ describe("cron simulator — domain mutations reflect in HQ queries", () => {
     // but uses the same skill-mutation surface. Including it because the
     // simulator should prove the path works end-to-end.
     const t = convexTest(schema, modules);
-    const pro = await plantCreator(t, { suffix: "p", plan: "pro" });
+    const pro = await plantCreator(t, { suffix: "p", plan: "manager" });
     const postId = await t.run((ctx) =>
       ctx.db.insert("posts", {
         creatorId: pro,
@@ -463,7 +461,7 @@ describe("cron simulator — domain mutations reflect in HQ queries", () => {
     // skill mutation must succeed. We assert the row landed in the table
     // by reading via t.run.
     const t = convexTest(schema, modules);
-    const pro = await plantCreator(t, { suffix: "p", plan: "pro" });
+    const pro = await plantCreator(t, { suffix: "p", plan: "manager" });
     const postId = await t.run((ctx) =>
       ctx.db.insert("posts", {
         creatorId: pro,
@@ -491,7 +489,7 @@ describe("cron simulator — domain mutations reflect in HQ queries", () => {
 
   it("brand_email_triage event → skillCreatePitchDraft → outreachByStatus", async () => {
     const t = convexTest(schema, modules);
-    const pro = await plantCreator(t, { suffix: "p", plan: "pro" });
+    const pro = await plantCreator(t, { suffix: "p", plan: "manager" });
     await t.mutation(api.businessReadiness.skillCreatePitchDraft, {
       mayaSecret: RUNTIME_SECRET,
       creatorId: pro,
@@ -506,7 +504,7 @@ describe("cron simulator — domain mutations reflect in HQ queries", () => {
 
   it("opportunity_scout (event-cron) → skillRecordOpportunity → opportunityMatchesV2", async () => {
     const t = convexTest(schema, modules);
-    const pro = await plantCreator(t, { suffix: "p", plan: "pro" });
+    const pro = await plantCreator(t, { suffix: "p", plan: "manager" });
     await t.mutation(api.businessReadiness.skillRecordOpportunity, {
       mayaSecret: RUNTIME_SECRET,
       creatorId: pro,
@@ -532,7 +530,7 @@ describe("cron simulator — domain mutations reflect in HQ queries", () => {
     // Revenue snapshot reads the brandDeals table; nothing to write via a
     // skillRecord*. We simulate a paid deal and assert the widget surfaces it.
     const t = convexTest(schema, modules);
-    const pro = await plantCreator(t, { suffix: "p", plan: "pro" });
+    const pro = await plantCreator(t, { suffix: "p", plan: "manager" });
     const now = Date.now();
     await t.run((ctx) =>
       ctx.db.insert("brandDeals", {
@@ -568,7 +566,7 @@ describe("cron simulator — domain mutations reflect in HQ queries", () => {
 
   it("morning_brief / evening_recap → dailyBriefs → today.latestBrief", async () => {
     const t = convexTest(schema, modules);
-    const pro = await plantCreator(t, { suffix: "p", plan: "pro" });
+    const pro = await plantCreator(t, { suffix: "p", plan: "manager" });
     // Plant a daily brief directly (Maya's runtime writes via internal
     // mutation that's out-of-scope for this simulator) + heartbeat.
     await t.run((ctx) =>
@@ -594,7 +592,7 @@ describe("cron simulator — domain mutations reflect in HQ queries", () => {
 
   it("weekly_content_plan → contentPlans → plan.currentPlan", async () => {
     const t = convexTest(schema, modules);
-    const pro = await plantCreator(t, { suffix: "p", plan: "pro" });
+    const pro = await plantCreator(t, { suffix: "p", plan: "manager" });
     await t.run((ctx) =>
       ctx.db.insert("contentPlans", {
         creatorId: pro,
@@ -630,39 +628,35 @@ describe("cron simulator — domain mutations reflect in HQ queries", () => {
 /* ------------------------------------------------------------------------- */
 
 describe("cron simulator — plan-tier × cron matrix", () => {
-  it("Starter rejected on industry-intel skill mutation (proactiveCronAll Pro+ gate)", async () => {
+  it("Coach accepted on industry-intel skill mutation (proactiveCronAll=true on both tiers post-migration)", async () => {
     const t = convexTest(schema, modules);
-    const starter = await plantCreator(t, { suffix: "s", plan: "starter" });
-    await expect(
-      t.mutation(api.businessReadiness.skillRecordTrend, {
-        mayaSecret: RUNTIME_SECRET,
-        creatorId: starter,
-        source: "industry-intel",
-        observation: "x",
-        evidence: [],
-        relevanceScore: 0.5,
-      })
-    ).rejects.toThrow(/PlanGateError|trend:industry-intel/);
+    const coach = await plantCreator(t, { suffix: "s", plan: "coach" });
+    await t.mutation(api.businessReadiness.skillRecordTrend, {
+      mayaSecret: RUNTIME_SECRET,
+      creatorId: coach,
+      source: "industry-intel",
+      observation: "x",
+      evidence: [],
+      relevanceScore: 0.5,
+    });
   });
 
-  it("Starter rejected on competitor-watch trend source (proactiveCronAll gate)", async () => {
+  it("Coach accepted on competitor-watch trend source (proactiveCronAll=true on both tiers post-migration)", async () => {
     const t = convexTest(schema, modules);
-    const starter = await plantCreator(t, { suffix: "s", plan: "starter" });
-    await expect(
-      t.mutation(api.businessReadiness.skillRecordTrend, {
-        mayaSecret: RUNTIME_SECRET,
-        creatorId: starter,
-        source: "competitor-watch",
-        observation: "x",
-        evidence: [],
-        relevanceScore: 0.5,
-      })
-    ).rejects.toThrow(/PlanGateError|trend:competitor-watch/);
+    const coach = await plantCreator(t, { suffix: "s", plan: "coach" });
+    await t.mutation(api.businessReadiness.skillRecordTrend, {
+      mayaSecret: RUNTIME_SECRET,
+      creatorId: coach,
+      source: "competitor-watch",
+      observation: "x",
+      evidence: [],
+      relevanceScore: 0.5,
+    });
   });
 
   it("Studio passes everything Pro passes (parity)", async () => {
     const t = convexTest(schema, modules);
-    const studio = await plantCreator(t, { suffix: "studio1", plan: "studio" });
+    const studio = await plantCreator(t, { suffix: "studio1", plan: "manager" });
 
     // Industry intel
     await t.mutation(api.businessReadiness.skillRecordTrend, {
@@ -725,8 +719,8 @@ describe("cron simulator — plan-tier × cron matrix", () => {
 describe("cron simulator — cross-tenant isolation", () => {
   it("A's competitor observation never appears in B's competitorWatch read", async () => {
     const t = convexTest(schema, modules);
-    const a = await plantCreator(t, { suffix: "a", plan: "pro" });
-    await plantCreator(t, { suffix: "b", plan: "pro" });
+    const a = await plantCreator(t, { suffix: "a", plan: "manager" });
+    await plantCreator(t, { suffix: "b", plan: "manager" });
     await t.mutation(api.businessReadiness.skillRecordCompetitor, {
       mayaSecret: RUNTIME_SECRET,
       creatorId: a,
@@ -741,8 +735,8 @@ describe("cron simulator — cross-tenant isolation", () => {
 
   it("A's niche-scan trend never appears in B's nicheRadar read", async () => {
     const t = convexTest(schema, modules);
-    const a = await plantCreator(t, { suffix: "a", plan: "pro" });
-    await plantCreator(t, { suffix: "b", plan: "pro" });
+    const a = await plantCreator(t, { suffix: "a", plan: "manager" });
+    await plantCreator(t, { suffix: "b", plan: "manager" });
     await t.mutation(api.businessReadiness.skillRecordTrend, {
       mayaSecret: RUNTIME_SECRET,
       creatorId: a,
@@ -757,8 +751,8 @@ describe("cron simulator — cross-tenant isolation", () => {
 
   it("A's actionLog heartbeat never appears in B's latestActionLog", async () => {
     const t = convexTest(schema, modules);
-    const a = await plantCreator(t, { suffix: "a", plan: "pro" });
-    await plantCreator(t, { suffix: "b", plan: "pro" });
+    const a = await plantCreator(t, { suffix: "a", plan: "manager" });
+    await plantCreator(t, { suffix: "b", plan: "manager" });
     await t.mutation(api.businessReadiness.skillRecordActionLog, {
       mayaSecret: RUNTIME_SECRET,
       creatorId: a,
@@ -774,8 +768,8 @@ describe("cron simulator — cross-tenant isolation", () => {
 
   it("A's opportunity surfacing never appears in B's opportunityMatchesV2", async () => {
     const t = convexTest(schema, modules);
-    const a = await plantCreator(t, { suffix: "a", plan: "pro" });
-    await plantCreator(t, { suffix: "b", plan: "pro" });
+    const a = await plantCreator(t, { suffix: "a", plan: "manager" });
+    await plantCreator(t, { suffix: "b", plan: "manager" });
     await t.mutation(api.businessReadiness.skillRecordOpportunity, {
       mayaSecret: RUNTIME_SECRET,
       creatorId: a,
@@ -803,7 +797,7 @@ describe("cron simulator — adversarial inputs", () => {
   it("missing MAYA_RUNTIME_SECRET env → all writes refused", async () => {
     vi.unstubAllEnvs();
     const t = convexTest(schema, modules);
-    const c = await plantCreator(t, { suffix: "x", plan: "pro" });
+    const c = await plantCreator(t, { suffix: "x", plan: "manager" });
     await expect(
       t.mutation(api.businessReadiness.skillRecordActionLog, {
         mayaSecret: "anything",
@@ -817,7 +811,7 @@ describe("cron simulator — adversarial inputs", () => {
 
   it("wrong secret → refused", async () => {
     const t = convexTest(schema, modules);
-    const c = await plantCreator(t, { suffix: "x", plan: "pro" });
+    const c = await plantCreator(t, { suffix: "x", plan: "manager" });
     await expect(
       t.mutation(api.businessReadiness.skillRecordActionLog, {
         mayaSecret: "wrong-secret",
@@ -830,7 +824,7 @@ describe("cron simulator — adversarial inputs", () => {
 
   it("missing required field (entryId) → validator throws", async () => {
     const t = convexTest(schema, modules);
-    const c = await plantCreator(t, { suffix: "x", plan: "pro" });
+    const c = await plantCreator(t, { suffix: "x", plan: "manager" });
     await expect(
       // @ts-expect-error — deliberately omitting entryId to prove the
       // validator rejects it before the handler runs.
@@ -844,7 +838,7 @@ describe("cron simulator — adversarial inputs", () => {
 
   it("idempotency on opportunity scout: replayed identical urlHash → single row, refreshed in place", async () => {
     const t = convexTest(schema, modules);
-    const c = await plantCreator(t, { suffix: "x", plan: "pro" });
+    const c = await plantCreator(t, { suffix: "x", plan: "manager" });
 
     const id1 = await t.mutation(api.businessReadiness.skillRecordOpportunity, {
       mayaSecret: RUNTIME_SECRET,
@@ -883,7 +877,7 @@ describe("cron simulator — adversarial inputs", () => {
 
   it("out-of-range relevanceScore → rejected", async () => {
     const t = convexTest(schema, modules);
-    const c = await plantCreator(t, { suffix: "x", plan: "pro" });
+    const c = await plantCreator(t, { suffix: "x", plan: "manager" });
     await expect(
       t.mutation(api.businessReadiness.skillRecordTrend, {
         mayaSecret: RUNTIME_SECRET,
@@ -898,7 +892,7 @@ describe("cron simulator — adversarial inputs", () => {
 
   it("out-of-range opportunity fit → rejected", async () => {
     const t = convexTest(schema, modules);
-    const c = await plantCreator(t, { suffix: "x", plan: "pro" });
+    const c = await plantCreator(t, { suffix: "x", plan: "manager" });
     await expect(
       t.mutation(api.businessReadiness.skillRecordOpportunity, {
         mayaSecret: RUNTIME_SECRET,
@@ -918,7 +912,7 @@ describe("cron simulator — adversarial inputs", () => {
     const t = convexTest(schema, modules);
     // Insert one creator so we can derive a valid id shape, then delete it
     // to manufacture a "creator not found" condition.
-    const c = await plantCreator(t, { suffix: "x", plan: "pro" });
+    const c = await plantCreator(t, { suffix: "x", plan: "manager" });
     await t.run((ctx) => ctx.db.delete(c));
     await expect(
       t.mutation(api.businessReadiness.skillRecordActionLog, {

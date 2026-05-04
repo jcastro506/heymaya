@@ -12,7 +12,7 @@ import { assembleWorkspaceBundle } from "../assembleWorkspaceBundle";
 import type { Doc } from "../../../../../_generated/dataModel";
 import type { WorkspaceInputs } from "../types";
 
-function inputs(plan: "starter" | "pro" | "studio"): WorkspaceInputs {
+function inputs(plan: "coach" | "manager"): WorkspaceInputs {
   const creator: Doc<"creators"> = {
     _id: "k_creator_size" as unknown as Doc<"creators">["_id"],
     _creationTime: 1_700_000_000_000,
@@ -40,7 +40,7 @@ describe("workspace size report (informational)", () => {
     // orders inline per OpenClaw 2026.4.23 convention). Print under that cap so
     // the table matches what real Mayas ship.
     const PROD_CAP = 28_000;
-    for (const plan of ["starter", "pro", "studio"] as const) {
+    for (const plan of ["coach", "manager"] as const) {
       const bundle = assembleWorkspaceBundle(inputs(plan), {
         bootstrapMaxChars: PROD_CAP,
       });

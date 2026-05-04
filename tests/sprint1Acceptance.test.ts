@@ -42,17 +42,16 @@ const APP_DIR = join(REPO_ROOT, "app");
 // Category 2 — Plan-tier × action matrix
 // ────────────────────────────────────────────────────────────────────────
 
-describe("Sprint 1 acceptance — plan-tier × action matrix", () => {
-  const PLANS: ReadonlyArray<Plan> = ["starter", "pro", "studio"];
+describe("Sprint 1 acceptance — plan-tier × action matrix (coach / manager)", () => {
+  const PLANS: ReadonlyArray<Plan> = ["coach", "manager"];
   const BUDGETS: ReadonlyArray<ThinkingBudget> = ["none", "low", "medium", "high"];
   const CHANNELS: ReadonlyArray<Channel> = ["web", "sms", "imessage", "whatsapp", "telegram"];
   const PROVIDERS: ReadonlyArray<Provider> = ["gmail", "stripe", "calendar", "apollo", "hunter"];
 
-  describe("thinking budget clamp", () => {
+  describe("thinking budget clamp — UNGATED (boundary is autonomy, not compute)", () => {
     const expected: Record<Plan, Record<ThinkingBudget, ThinkingBudget>> = {
-      starter: { none: "none", low: "low", medium: "low", high: "low" },
-      pro: { none: "none", low: "low", medium: "medium", high: "high" },
-      studio: { none: "none", low: "low", medium: "medium", high: "high" },
+      coach: { none: "none", low: "low", medium: "medium", high: "high" },
+      manager: { none: "none", low: "low", medium: "medium", high: "high" },
     };
     for (const plan of PLANS) {
       for (const budget of BUDGETS) {
@@ -65,9 +64,8 @@ describe("Sprint 1 acceptance — plan-tier × action matrix", () => {
 
   describe("channel allowlist (REVISED 2026-04-26: channels are OpenClaw-native, ungated; telegram added 2026-05-03)", () => {
     const expected: Record<Plan, Record<Channel, boolean>> = {
-      starter: { web: true, sms: true, imessage: true, whatsapp: true, telegram: true },
-      pro: { web: true, sms: true, imessage: true, whatsapp: true, telegram: true },
-      studio: { web: true, sms: true, imessage: true, whatsapp: true, telegram: true },
+      coach: { web: true, sms: true, imessage: true, whatsapp: true, telegram: true },
+      manager: { web: true, sms: true, imessage: true, whatsapp: true, telegram: true },
     };
     for (const plan of PLANS) {
       for (const channel of CHANNELS) {
@@ -78,11 +76,10 @@ describe("Sprint 1 acceptance — plan-tier × action matrix", () => {
     }
   });
 
-  describe("composio provider allowlist (REVISED 2026-04-26: gmail+calendar ungated; apollo/hunter Studio-only)", () => {
+  describe("composio provider allowlist (gmail+calendar+stripe ungated; apollo/hunter Manager-only)", () => {
     const expected: Record<Plan, Record<Provider, boolean>> = {
-      starter: { gmail: true, stripe: true, calendar: true, apollo: false, hunter: false },
-      pro: { gmail: true, stripe: true, calendar: true, apollo: false, hunter: false },
-      studio: { gmail: true, stripe: true, calendar: true, apollo: true, hunter: true },
+      coach: { gmail: true, stripe: true, calendar: true, apollo: false, hunter: false },
+      manager: { gmail: true, stripe: true, calendar: true, apollo: true, hunter: true },
     };
     for (const plan of PLANS) {
       for (const provider of PROVIDERS) {
@@ -93,18 +90,15 @@ describe("Sprint 1 acceptance — plan-tier × action matrix", () => {
     }
   });
 
-  it("plan caps don't widen accidentally — starter handles must stay at 1", () => {
-    expect(planFeatures({ plan: "starter" }).maxHandles).toBe(1);
-    expect(planFeatures({ plan: "pro" }).maxHandles).toBe(3);
-    expect(planFeatures({ plan: "studio" }).maxHandles).toBe(5);
+  it("plan caps stay aligned — both tiers reach all 5 platforms in v0", () => {
+    expect(planFeatures({ plan: "coach" }).maxHandles).toBe(5);
+    expect(planFeatures({ plan: "manager" }).maxHandles).toBe(5);
   });
 
-  it("post-publish reaction latency tightens with tier", () => {
-    const s = planFeatures({ plan: "starter" }).postPublishReactionLatencySec;
-    const p = planFeatures({ plan: "pro" }).postPublishReactionLatencySec;
-    const st = planFeatures({ plan: "studio" }).postPublishReactionLatencySec;
-    expect(s).toBeGreaterThan(p);
-    expect(p).toBeGreaterThan(st);
+  it("post-publish reaction latency tightens on Manager", () => {
+    const c = planFeatures({ plan: "coach" }).postPublishReactionLatencySec;
+    const m = planFeatures({ plan: "manager" }).postPublishReactionLatencySec;
+    expect(c).toBeGreaterThan(m);
   });
 });
 
@@ -122,7 +116,7 @@ describe("Sprint 1 acceptance — cross-tenant isolation smoke", () => {
         channelPreference: "web",
         timezone: "UTC",
         status: "active",
-        plan: "starter",
+        plan: "coach",
         createdAt: 0,
       })
     );
@@ -133,7 +127,7 @@ describe("Sprint 1 acceptance — cross-tenant isolation smoke", () => {
         channelPreference: "web",
         timezone: "UTC",
         status: "active",
-        plan: "starter",
+        plan: "coach",
         createdAt: 0,
       })
     );
@@ -189,7 +183,7 @@ describe("Sprint 1 acceptance — cross-tenant isolation smoke", () => {
         channelPreference: "web",
         timezone: "UTC",
         status: "active",
-        plan: "starter",
+        plan: "coach",
         createdAt: 0,
       })
     );
@@ -200,7 +194,7 @@ describe("Sprint 1 acceptance — cross-tenant isolation smoke", () => {
         channelPreference: "web",
         timezone: "UTC",
         status: "active",
-        plan: "pro",
+        plan: "manager",
         createdAt: 0,
       })
     );

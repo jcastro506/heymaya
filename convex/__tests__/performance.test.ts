@@ -27,7 +27,7 @@ const NOW = 1_700_000_000_000;
 
 async function insertCreator(
   t: ReturnType<typeof convexTest>,
-  opts: { suffix: string; plan: "starter" | "pro" | "studio" }
+  opts: { suffix: string; plan: "coach" | "manager" }
 ): Promise<Id<"creators">> {
   return await t.run((ctx) =>
     ctx.db.insert("creators", {
@@ -91,8 +91,8 @@ describe("performance.postsList", () => {
 
   it("returns posts for the signed-in creator only", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await insertPost(t, a, { caption: "A post" });
     await insertPost(t, a, { caption: "A post 2" });
     await insertPost(t, b, { caption: "B post — should never leak" });
@@ -105,7 +105,7 @@ describe("performance.postsList", () => {
 
   it("filters by platform server-side", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertPost(t, a, { platform: "tiktok", caption: "tt" });
     await insertPost(t, a, { platform: "instagram", caption: "ig" });
     await insertPost(t, a, { platform: "youtube", caption: "yt" });
@@ -119,7 +119,7 @@ describe("performance.postsList", () => {
 
   it("filters by mediaType server-side", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertPost(t, a, { mediaType: "video" });
     await insertPost(t, a, { mediaType: "carousel" });
     const r = await asUser(t, "a").query(api.performance.postsList, {
@@ -132,7 +132,7 @@ describe("performance.postsList", () => {
 
   it("orders by postedAt desc by default", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertPost(t, a, { caption: "old", postedAt: NOW - 10_000 });
     await insertPost(t, a, { caption: "new", postedAt: NOW });
     const r = await asUser(t, "a").query(api.performance.postsList, {
@@ -146,7 +146,7 @@ describe("performance.postsList", () => {
 describe("performance.postDetail", () => {
   it("returns null when unauthenticated", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const post = await insertPost(t, a);
     const detail = await t.query(api.performance.postDetail, { postId: post });
     expect(detail).toBeNull();
@@ -154,7 +154,7 @@ describe("performance.postDetail", () => {
 
   it("ADVERSARIAL: missing post id returns null cleanly", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const post = await insertPost(t, a);
     await t.run((ctx) => ctx.db.delete(post));
     const detail = await asUser(t, "a").query(api.performance.postDetail, {
@@ -165,8 +165,8 @@ describe("performance.postDetail", () => {
 
   it("CROSS-TENANT: A cannot fetch B's post detail by id", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     const bPost = await insertPost(t, b, { caption: "B-only" });
     const detail = await asUser(t, "a").query(api.performance.postDetail, {
       postId: bPost,
@@ -176,7 +176,7 @@ describe("performance.postDetail", () => {
 
   it("returns post + metrics + comparable posts with the same hook", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const post = await insertPost(t, a, {
       annotation: { hookPattern: "POV", whyItWorked: "fresh" },
     });
@@ -206,7 +206,7 @@ describe("performance.postDetail", () => {
 
   it("returns empty comparable when post has no annotation", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const post = await insertPost(t, a);
     const detail = await asUser(t, "a").query(api.performance.postDetail, {
       postId: post,
@@ -226,8 +226,8 @@ describe("performance.hookLibrary", () => {
 
   it("CROSS-TENANT: A only sees A's hooks", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await t.run((ctx) =>
       ctx.db.insert("hookLibrary", {
         creatorId: a,
@@ -257,7 +257,7 @@ describe("performance.hookLibrary", () => {
 
   it("PLAN-TIER: read is allowed for Starter (writes are gated, not reads)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     await t.run((ctx) =>
       ctx.db.insert("hookLibrary", {
         creatorId: a,

@@ -141,7 +141,7 @@ describe("QUESTION_ORDER + cursor", () => {
   });
 
   it("starts cursor at 0 and surfaces the first question (goal)", () => {
-    const s = withPlan("pro");
+    const s = withPlan("manager");
     expect(s.currentQuestionIdx).toBe(0);
     expect(currentQuestion(s)).toBe("goal");
   });
@@ -155,7 +155,7 @@ describe("answerQuestion", () => {
   it("advances the cursor through the BASE 8 Q's (canonical Wave 2 order)", () => {
     // Wave 2 reorder: goal → careerStage → tone → location → monthlyRevenue →
     // revenueStreams → longTermGoals → brandDealFloor → (dynamic tail).
-    let s = withPlan("pro");
+    let s = withPlan("manager");
     s = answerQuestion(s, "goal", "100K on IG by year end");
     expect(currentQuestion(s)).toBe("careerStage");
     // "monetizing" routes the dynamic tail to the SENIOR path.
@@ -177,14 +177,14 @@ describe("answerQuestion", () => {
   });
 
   it("builds a fully-answered payload that passes canAdvance", () => {
-    let s = withPlan("pro");
+    let s = withPlan("manager");
     s = answerAllRequired(s);
     expect(allRequiredAnswered(s.answers)).toBe(true);
     expect(canAdvance(s)).toBe(true);
   });
 
   it("answering out-of-order still re-finds the next unanswered Q", () => {
-    let s = withPlan("pro");
+    let s = withPlan("manager");
     // Answer a later Q first (e.g. creator clicked the careerStage chip first).
     s = answerQuestion(s, "careerStage", "building");
     // Cursor should land on the FIRST unanswered Q (goal), not advance past it.
@@ -195,7 +195,7 @@ describe("answerQuestion", () => {
     // Annotate explicitly so the spread doesn't narrow `error` to the
     // literal "boom" — `answerQuestion` returns `OnboardingState` with
     // `error: string | null`, and the reassignment must round-trip.
-    let s: OnboardingState = { ...withPlan("pro"), error: "boom" };
+    let s: OnboardingState = { ...withPlan("manager"), error: "boom" };
     s = answerQuestion(s, "goal", "anything");
     expect(s.error).toBeNull();
   });
@@ -207,7 +207,7 @@ describe("answerQuestion", () => {
 
 describe("markQuestionSkipped", () => {
   it("skipping an OPTIONAL Q advances the cursor and records the skip", () => {
-    let s = withPlan("pro");
+    let s = withPlan("manager");
     s = answerAllRequired(s); // cursor parks at end (length)
     s = markQuestionSkipped(s, "monthlyRevenue");
     expect(s.skippedQuestions.has("monthlyRevenue")).toBe(true);
@@ -216,7 +216,7 @@ describe("markQuestionSkipped", () => {
   });
 
   it("skipping a REQUIRED Q is rejected with an error banner (no cursor mutation)", () => {
-    let s = withPlan("pro");
+    let s = withPlan("manager");
     const beforeIdx = s.currentQuestionIdx;
     s = markQuestionSkipped(s, "location");
     expect(s.error).toMatch(/cannot skip/i);
@@ -225,7 +225,7 @@ describe("markQuestionSkipped", () => {
   });
 
   it("skipping both optional Q's still allows advance once requireds are filled", () => {
-    let s = withPlan("pro");
+    let s = withPlan("manager");
     s = answerAllRequired(s);
     s = markQuestionSkipped(s, "monthlyRevenue");
     s = markQuestionSkipped(s, "longTermGoals");
@@ -240,7 +240,7 @@ describe("markQuestionSkipped", () => {
 
 describe("canAdvance(questions)", () => {
   it("blocks on every empty required Q", () => {
-    let s = withPlan("pro");
+    let s = withPlan("manager");
     expect(canAdvance(s)).toBe(false);
     s = answerQuestion(s, "goal", "100K");
     expect(canAdvance(s)).toBe(false);
@@ -257,21 +257,21 @@ describe("canAdvance(questions)", () => {
   });
 
   it("ADVERSARIAL: an empty location object does not pass the gate", () => {
-    let s = withPlan("pro");
+    let s = withPlan("manager");
     s = answerAllRequired(s);
     s = answerQuestion(s, "location", { city: "", state: "", country: "" });
     expect(canAdvance(s)).toBe(false);
   });
 
   it("ADVERSARIAL: empty revenueStreams array fails the gate", () => {
-    let s = withPlan("pro");
+    let s = withPlan("manager");
     s = answerAllRequired(s);
     s = answerQuestion(s, "revenueStreams", []);
     expect(canAdvance(s)).toBe(false);
   });
 
   it("optional Q's never block advance even when null", () => {
-    const s = answerAllRequired(withPlan("pro"));
+    const s = answerAllRequired(withPlan("manager"));
     expect(s.answers.monthlyRevenueBucket).toBeNull();
     expect(s.answers.longTermGoals).toBeNull();
     expect(canAdvance(s)).toBe(true);
@@ -308,7 +308,7 @@ describe("inferCareerStage", () => {
 
   it("applyCareerStageInference seeds the answer when null and is a no-op once set", () => {
     const baseHandles: VerifiedHandle[] = [HANDLE(12_000)];
-    const s = { ...withPlan("pro"), handles: baseHandles };
+    const s = { ...withPlan("manager"), handles: baseHandles };
     const seeded = applyCareerStageInference(s, totalFollowerCount(baseHandles));
     expect(seeded.answers.careerStage).toBe("building");
     // Override path: creator picks "scaling" — re-applying inference does NOT clobber.
@@ -527,7 +527,7 @@ describe("Wave 2 — questionAppliesToPath", () => {
 
 describe("Wave 2 — nextUnansweredIdx skips out-of-path Q's", () => {
   it("foundational creator: cursor lands on foundational tail Q's, never on senior tail", () => {
-    let s = withPlan("pro");
+    let s = withPlan("manager");
     s = answerQuestion(s, "goal", "100K by EOY");
     s = answerQuestion(s, "careerStage", "just-starting");
     s = answerQuestion(s, "tone", "strategic");
@@ -555,7 +555,7 @@ describe("Wave 2 — nextUnansweredIdx skips out-of-path Q's", () => {
   });
 
   it("senior creator: cursor lands on senior tail Q's, never on foundational tail", () => {
-    let s = withPlan("pro");
+    let s = withPlan("manager");
     s = answerQuestion(s, "goal", "$15K MRR by EOY");
     s = answerQuestion(s, "careerStage", "scaling");
     s = answerQuestion(s, "tone", "strategic");
@@ -577,7 +577,7 @@ describe("Wave 2 — nextUnansweredIdx skips out-of-path Q's", () => {
   });
 
   it("path flips when careerStage changes mid-flow (tail Q's recompute)", () => {
-    let s = withPlan("pro");
+    let s = withPlan("manager");
     s = answerQuestion(s, "goal", "build a personal brand");
     // Start as foundational
     s = answerQuestion(s, "careerStage", "just-starting");
@@ -595,7 +595,7 @@ describe("Wave 2 — nextUnansweredIdx skips out-of-path Q's", () => {
   });
 
   it("foundational tail Q's are all OPTIONAL — none block canAdvance", () => {
-    let s = withPlan("pro");
+    let s = withPlan("manager");
     s = answerQuestion(s, "goal", "100K by EOY");
     s = answerQuestion(s, "careerStage", "just-starting");
     s = answerQuestion(s, "tone", "strategic");

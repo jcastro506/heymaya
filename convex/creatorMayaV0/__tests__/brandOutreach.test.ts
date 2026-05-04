@@ -19,9 +19,9 @@ describe("Creator Maya v0 brand outreach architecture", () => {
     expect(fit.needsContactResearch).toBe(false);
   });
 
-  it("requires Studio, approval, contact provenance, and suppression checks before send", () => {
+  it("requires Manager, approval, contact provenance, and suppression checks before send", () => {
     const allowed = {
-      tier: "studio" as const,
+      tier: "manager" as const,
       requestedAutonomyLevel: 2 as const,
       creatorApproved: true,
       contactHasProvenance: true,
@@ -41,10 +41,10 @@ describe("Creator Maya v0 brand outreach architecture", () => {
     );
   });
 
-  it("blocks outbound brand sends below Studio", () => {
+  it("blocks outbound brand sends below Manager", () => {
     expect(() =>
       canSendBrandOutreach({
-        tier: "pro",
+        tier: "coach",
         requestedAutonomyLevel: 1,
         creatorApproved: true,
         contactHasProvenance: true,

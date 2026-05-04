@@ -43,7 +43,7 @@ async function insertBusiness(
       channelPreference: "web",
       timezone: "America/Los_Angeles",
       status: "active",
-      plan: "starter",
+      plan: "coach",
       accountType: opts.accountType ?? "service-business",
       createdAt: NOW,
     })
@@ -277,7 +277,7 @@ describe("getMyBusinessForOAuth — Clerk identity → business resolution", () 
         channelPreference: "web",
         timezone: "UTC",
         status: "active",
-        plan: "starter",
+        plan: "coach",
         accountType: "creator",
         createdAt: NOW,
       })
@@ -298,7 +298,7 @@ describe("getMyBusinessForOAuth — Clerk identity → business resolution", () 
         channelPreference: "web",
         timezone: "UTC",
         status: "active",
-        plan: "starter",
+        plan: "coach",
         accountType: "service-business",
         createdAt: NOW,
       })
