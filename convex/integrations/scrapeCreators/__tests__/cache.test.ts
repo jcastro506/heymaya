@@ -33,7 +33,7 @@ async function makeCreator(t: ReturnType<typeof convexTest>, suffix: string) {
       channelPreference: "web",
       timezone: "America/Los_Angeles",
       status: "active",
-      plan: "pro",
+      plan: "manager",
       createdAt: NOW,
     })
   );

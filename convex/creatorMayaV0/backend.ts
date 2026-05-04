@@ -147,9 +147,8 @@ const toneValidator = v.union(
 );
 
 const tierValidator = v.union(
-  v.literal("starter"),
-  v.literal("pro"),
-  v.literal("studio")
+  v.literal("coach"),
+  v.literal("manager")
 );
 
 const tiktokPostInputValidator = v.object({
@@ -208,7 +207,7 @@ export const getOrCreateAccount = mutation({
         channelPreference: "imessage",
         timezone: args.timezone,
         status: "onboarding",
-        plan: args.tier ?? "starter",
+        plan: args.tier ?? "coach",
         accountType: "creator",
         createdAt: now,
       }));
@@ -883,6 +882,30 @@ export const deployOpenClawLive = action({
         await fly.createApp({ appName });
       } catch (err) {
         if (!isFlyAlreadyExists(err)) throw err;
+      }
+
+      // Push provider + channel secrets BEFORE machine create so the runtime
+      // sees them on first boot. Only the keys we have at deploy time get
+      // forwarded — operator can add more later via `fly secrets set`. The
+      // OPENROUTER_API_KEY is non-negotiable: without it OpenClaw falls back
+      // to its bundled `codex` provider and every model call fails with
+      // "No API key found for provider 'openai'" (root cause documented in
+      // /memory/session_handoff_telegram_channel_2026_05_03.md). Channel
+      // secrets are conditional on the channel being routed — we forward
+      // unconditionally because reads are cheap and OpenClaw only enables a
+      // channel when its config block is present.
+      const machineSecrets: Record<string, string> = {};
+      for (const k of [
+        "OPENROUTER_API_KEY",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_BOT_USERNAME",
+        "CLAW_MESSENGER_API_KEY",
+      ]) {
+        const v = process.env[k];
+        if (v) machineSecrets[k] = v;
+      }
+      if (Object.keys(machineSecrets).length > 0) {
+        await fly.setAppSecrets(appName, machineSecrets);
       }
 
       const existing = await fly.listMachines(appName).catch(() => []);
@@ -1914,16 +1937,63 @@ function appNameForCreatorMayaLive(
   return `heymaya-cmv0-${short}-${Date.now().toString(36)}`;
 }
 
-function creatorMayaLiveMachineConfig(
+export function creatorMayaLiveMachineConfig(
   workspaceFiles: Record<string, string>,
   metadata: { creatorId: string; mode: string; appName: string }
 ): FlyMachineConfig {
+  // Resolve claw-messenger config from deploy-time env. The plugin's config
+  // schema requires an `apiKey` literal (auto-detect-from-env isn't supported
+  // the way the telegram plugin auto-reads TELEGRAM_BOT_TOKEN). When the key
+  // isn't set we omit the channel block entirely — OpenClaw just won't load
+  // the plugin's channel handler. See
+  // node_modules/@emotion-machine/claw-messenger/README.md for the schema.
+  const clawApiKey = process.env.CLAW_MESSENGER_API_KEY;
+  // Composio's OpenClaw plugin (`@composio/openclaw-plugin`) registers every
+  // toolkit attached to the consumer's Composio workspace as native OpenClaw
+  // tools at runtime — Maya can call e.g. `gmail.threads.list` or
+  // `tiktok.videos.list` by name, no MCP search/execute round-trip. The
+  // OAuth lifecycle (generate connect link, persist composioAccountId) lives
+  // in `convex/integrations/composio/oauth.ts`; the plugin authenticates each
+  // tool call with the same Composio entity, looked up by user_id at runtime.
+  // The plugin only takes a consumerKey — it does NOT support a toolkit
+  // allowlist (verified against the README at
+  // https://github.com/ComposioHQ/openclaw-composio-plugin), so we cannot
+  // prune the surface from this side. Toolkit shape is decided in the
+  // Composio dashboard. We omit the install when COMPOSIO_CONSUMER_KEY is
+  // missing so dev / test deploys without a key still boot.
+  const composioConsumerKey = process.env.COMPOSIO_CONSUMER_KEY;
+  const channels: Record<string, unknown> = {
+    // Telegram channel — auto-detects token from TELEGRAM_BOT_TOKEN env.
+    // OpenClaw long-polls by default; webhook setup is opt-in. Per
+    // https://docs.openclaw.ai/channels/telegram (2026-05-03).
+    telegram: {
+      enabled: true,
+    },
+  };
+  if (clawApiKey) {
+    channels["claw-messenger"] = {
+      enabled: true,
+      apiKey: clawApiKey,
+      serverUrl: "wss://claw-messenger.onrender.com",
+      preferredService: "iMessage",
+      // dmPolicy: "open" for the operator-test creator. Multi-tenant pair
+      // gating moves to "pairing" or "allowlist" once we wire the per-creator
+      // pair flow through channels.ts. See README at
+      // node_modules/@emotion-machine/claw-messenger/README.md.
+      dmPolicy: "open",
+    };
+  }
   return {
     image: OPENCLAW_IMAGE,
     env: {
       OPENCLAW_STATE_DIR: "/data",
       MAYA_OPENCLAW_VERSION: "2026.4.23",
       MAYA_APP_NAME: metadata.appName,
+      // Force IPv4-first DNS so outbound calls to OpenRouter / LiteLLM /
+      // Telegram / Claw Messenger relays don't time out on Fly's IPv6-default
+      // egress. Documented root cause in
+      // /memory/session_handoff_telegram_channel_2026_05_03.md late update.
+      NODE_OPTIONS: "--dns-result-order=ipv4first",
     },
     files: [
       ...Object.entries(workspaceFiles).map(([name, content]) => ({
@@ -1937,6 +2007,15 @@ function creatorMayaLiveMachineConfig(
             agents: {
               defaults: {
                 workspace: "/data/workspace",
+                // Without this, OpenClaw 2026.4.23 falls back to its bundled
+                // `codex` provider (gpt-5.5) and every call fails with no
+                // OpenAI key. The `openrouter/...` prefix routes through the
+                // configured OpenRouter provider, which reads OPENROUTER_API_KEY
+                // from env (set as a Fly secret above). See
+                // https://docs.openclaw.ai/providers/openrouter.md
+                model: {
+                  primary: "openrouter/google/gemini-3-flash-preview",
+                },
               },
             },
             skills: {
@@ -1944,6 +2023,7 @@ function creatorMayaLiveMachineConfig(
                 watch: true,
               },
             },
+            channels,
           })
         ),
       },
@@ -1971,6 +2051,29 @@ function creatorMayaLiveMachineConfig(
           "mkdir -p /data/workspace/state /data/canvas",
           "test -w /data/workspace",
           "test -w /data/cron",
+          // Install claw-messenger plugin if it isn't already on the image.
+          // Idempotent — re-running on every boot keeps the runtime self-
+          // healing across image rebuilds. `|| true` so a registry hiccup
+          // doesn't block gateway start; the channels block above only takes
+          // effect if the plugin actually registered.
+          "openclaw plugins install @emotion-machine/claw-messenger || true",
+          // Install Composio's OpenClaw plugin so Maya gets every connected
+          // toolkit (TikTok analytics, Gmail, Google Calendar, LinkedIn,
+          // X/Twitter) as native tools at runtime. Idempotent install + set
+          // consumerKey + restart gateway. Skipped entirely when
+          // COMPOSIO_CONSUMER_KEY is missing so dev / test deploys still
+          // boot. Per
+          // https://github.com/ComposioHQ/openclaw-composio-plugin the plugin
+          // exposes only `consumerKey` / `enabled` / `mcpUrl` — there is no
+          // toolkit allowlist, so toolkit shape lives in the Composio
+          // dashboard, not here.
+          ...(composioConsumerKey
+            ? [
+                "openclaw plugins install @composio/openclaw-plugin || true",
+                `openclaw config set plugins.entries.composio.config.consumerKey ${shellEscape(composioConsumerKey)} || true`,
+                "openclaw gateway restart || true",
+              ]
+            : []),
           "exec openclaw gateway --allow-unconfigured",
         ].join(" && "),
       ],
@@ -1983,6 +2086,17 @@ function base64UtfEncode(str: string): string {
   let bin = "";
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
   return btoa(bin);
+}
+
+/**
+ * Escape a string for safe use as a single argument inside the boot shell
+ * `sh -lc "..."` command. We wrap in single quotes (which neutralise every
+ * shell metacharacter) and then handle the only interior threat: a literal
+ * `'` is closed-then-escaped-then-reopened. Used for the Composio
+ * consumerKey injected into `openclaw config set`.
+ */
+function shellEscape(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 function isFlyAlreadyExists(err: unknown): boolean {

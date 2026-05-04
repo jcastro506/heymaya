@@ -379,7 +379,7 @@ export const addCreatorHandle = mutation({
       throw new PlanGateError(
         creator.plan,
         `addHandle:cap=${features.maxHandles}`,
-        creator.plan === "starter" ? "pro" : "studio"
+        "manager"
       );
     }
 
@@ -477,7 +477,7 @@ export const updateChannelPreference = mutation({
       throw new PlanGateError(
         creator.plan,
         `channel:${args.channel}`,
-        "pro"
+        "manager"
       );
     }
     await ctx.db.patch(creator._id, { channelPreference: args.channel });
@@ -511,16 +511,14 @@ export const setAutoSendThreshold = mutation({
       throw new PlanGateError(
         creator.plan,
         "autoSendThreshold",
-        "pro"
+        "manager"
       );
     }
     if (!features.allowedProviders.includes(args.provider)) {
       throw new PlanGateError(
         creator.plan,
         `autoSendThreshold:${args.provider}`,
-        args.provider === "apollo" || args.provider === "hunter"
-          ? "studio"
-          : "pro"
+        "manager"
       );
     }
     if (

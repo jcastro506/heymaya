@@ -2,116 +2,42 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import {
-  ArrowUpRight,
-  Calendar,
-  Inbox,
-  LineChart,
-  Plus,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 
-type Billing = "monthly" | "annual";
+import { AudienceToggle } from "./_components/AudienceToggle";
+import { Faq } from "./_components/Faq";
+import { FeatureSection } from "./_components/FeatureSection";
+import { Hero } from "./_components/Hero";
+import { IMessageCard } from "./_components/IMessageCard";
+import { MobileStickyCta } from "./_components/MobileStickyCta";
+import { Pricing, type Billing } from "./_components/Pricing";
 
-type Tier = {
-  name: string;
-  monthly: number;
-  annual: number;
-  headline: string;
-  bullets: string[];
-  recommended?: boolean;
-};
-
-const TIERS: Tier[] = [
-  {
-    name: "Starter",
-    monthly: 19.99,
-    annual: 199,
-    headline: "1 platform, web + SMS, manual deal entry. Maya's daily core.",
-    bullets: [
-      "1 connected platform",
-      "Web chat + SMS",
-      "Morning brief, evening recap, weekly review",
-      "200 chat turns / mo",
-    ],
-  },
-  {
-    name: "Pro",
-    monthly: 39.99,
-    annual: 399,
-    headline:
-      "Up to 3 platforms, every channel, full Gmail deal desk. The default.",
-    bullets: [
-      "Up to 3 platforms",
-      "iMessage, WhatsApp, SMS, web",
-      "All 17 proactive behaviors",
-      "Full Gmail brand-deal triage",
-      "Calendar-aware content arcs",
-      "5 named competitors watched",
-      "Unlimited chat",
-    ],
-    recommended: true,
-  },
-  {
-    name: "Studio",
-    monthly: 79.99,
-    annual: 799,
-    headline:
-      "Up to 5 platforms, brand outreach, multi-account. For the full-time creator.",
-    bullets: [
-      "Up to 5 platforms",
-      "Priority routing & faster cadence",
-      "Brand outreach via Apollo / Hunter",
-      "10 named competitors watched",
-      "Up to 3 personas",
-      "On-demand readiness packets",
-    ],
-  },
-];
-
-const FAQ: { q: string; a: string }[] = [
-  {
-    q: "Does Maya post for me?",
-    a: "No. Maya prepares everything — hook, script, caption, suggested time, per-platform variant — for you to post in one tap. We've kept the moment-of-publishing in your hands deliberately. Your account, your voice, your call.",
-  },
-  {
-    q: "How does the 14-day Pro trial work?",
-    a: "No card required. You get full Pro for 14 days. On day 12, Maya nudges you to add a card. If you don't, the account quietly downgrades to Starter limits — you keep your data, you keep your Maya, you just lose the Pro-only behaviors.",
-  },
-  {
-    q: "Which messengers does Maya live in?",
-    a: "iMessage (recommended for iPhone), WhatsApp (recommended for Android), SMS as a fallback, and web chat from your dashboard. You pick at onboarding, you can change it any time. Maya routes outbound messages to whatever you've set.",
-  },
-  {
-    q: "What does Maya actually see about my accounts?",
-    a: "Public post data, public audience demographics, your own comments, and whatever you explicitly connect — Gmail, Stripe, Calendar. She never logs in as you. She reads through ScrapeCreators (a public-data layer), and writes only through OAuth scopes you grant per provider.",
-  },
-  {
-    q: "Will Maya sound like a robot pretending to be me?",
-    a: "She isn't trying to be you. She's trying to manage you. Maya has her own voice — direct, grounded, not flattering — and references your work specifically. You set the tone (supportive / strategic / tough-love) at onboarding and can re-tune any time from Profile.",
-  },
-  {
-    q: "What happens if I cancel?",
-    a: "Maya stops at the end of the period. Your data export is one click — posts, plans, deals, briefs, all of it. We don't hold creator data hostage; you can take Maya's full memory of your career with you.",
-  },
-];
-
-export default function Home() {
+/**
+ * /creators — the consumer creator product landing page.
+ *
+ * Conversion framework (lovable.dev): hero with single primary CTA → value
+ * proposition → per-feature pain-led sections → pricing → FAQ → final CTA.
+ *
+ * Constraint: zero "AI" mentions in rendered copy. Maya is "your social media
+ * manager" / "your content coach." Coach and Manager are autonomy-level
+ * pricing tiers of one product, never two products.
+ */
+export default function CreatorLanding() {
   const [billing, setBilling] = useState<Billing>("monthly");
 
   return (
-    <div className="relative isolate flex min-h-screen flex-col">
+    <div className="relative isolate flex min-h-screen flex-col pb-24 md:pb-0">
       <Nav />
       <main className="relative z-10 flex-1">
         <Hero />
-        <Marquee />
-        <Features />
-        <ConversationShowcase />
+        <ValueProp />
+        <FeatureRail />
         <Pricing billing={billing} setBilling={setBilling} />
         <Faq />
+        <FinalCta />
       </main>
       <Footer />
+      <MobileStickyCta />
     </div>
   );
 }
@@ -123,7 +49,7 @@ export default function Home() {
 function Nav() {
   return (
     <header className="relative z-20 px-6 pt-6 sm:px-10 sm:pt-8">
-      <div className="mx-auto flex max-w-7xl items-center justify-between">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
         <Link
           href="/"
           className="group inline-flex items-center gap-2"
@@ -134,20 +60,9 @@ function Nav() {
             HeyMaya
           </span>
         </Link>
-        <nav className="hidden items-center gap-8 text-sm text-paper-dim md:flex">
-          <a href="#how" className="transition-colors hover:text-paper">
-            How she works
-          </a>
-          <a href="#showcase" className="transition-colors hover:text-paper">
-            Conversation
-          </a>
-          <a href="#pricing" className="transition-colors hover:text-paper">
-            Pricing
-          </a>
-          <a href="#faq" className="transition-colors hover:text-paper">
-            FAQ
-          </a>
-        </nav>
+        <div className="hidden md:block">
+          <AudienceToggle />
+        </div>
         <div className="flex items-center gap-2">
           <Link
             href="/sign-in"
@@ -155,10 +70,16 @@ function Nav() {
           >
             Sign in
           </Link>
-          <Link href="/sign-up?plan=pro&trial=true" className="btn btn-primary h-10 px-4 text-sm">
-            Hire Maya
+          <Link
+            href="/checkout?tier=manager&interval=monthly"
+            className="btn btn-primary h-10 px-4 text-sm"
+          >
+            Start 7 days free
           </Link>
         </div>
+      </div>
+      <div className="mx-auto mt-4 flex max-w-7xl justify-center md:hidden">
+        <AudienceToggle />
       </div>
     </header>
   );
@@ -169,7 +90,10 @@ function Logo() {
     <span
       aria-hidden
       className="grid h-8 w-8 place-items-center rounded-full bg-lime text-ink"
-      style={{ boxShadow: "0 0 0 1px rgba(214,255,61,0.3), 0 6px 24px -6px rgba(214,255,61,0.5)" }}
+      style={{
+        boxShadow:
+          "0 0 0 1px rgba(214,255,61,0.3), 0 6px 24px -6px rgba(214,255,61,0.5)",
+      }}
     >
       <span className="font-display text-lg leading-none">m</span>
     </span>
@@ -177,692 +101,654 @@ function Logo() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*                                  HERO                                      */
+/*                              VALUE PROPOSITION                             */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
-function Hero() {
+function ValueProp() {
   return (
-    <section className="relative px-6 pt-16 sm:px-10 sm:pt-24 lg:pt-32">
-      <div className="mx-auto max-w-7xl">
-        <div className="grid grid-cols-1 gap-14 lg:grid-cols-12 lg:gap-10">
-          {/* Headline column */}
-          <div className="lg:col-span-7">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--hairline-strong)] px-3 py-1 text-xs uppercase tracking-[0.18em] text-paper-dim">
-              <span className="h-1.5 w-1.5 rounded-full bg-lime" />
-              Now in beta — 5K to 500K creators
-            </div>
-            <h1 className="mt-6 font-display text-[clamp(2.75rem,7vw,5.75rem)] leading-[1.02] tracking-[-0.02em] text-paper">
-              Your AI creator
-              <br />
-              manager.{" "}
-              <span className="italic text-paper-dim">
-                Hire her in 4 minutes.
-              </span>
-            </h1>
-            <p className="mt-7 max-w-xl text-lg leading-relaxed text-paper-dim">
-              Maya plans your week, watches your performance, triages your brand
-              emails, and tells you what to post next — every day, in your
-              messages. Not an app you open. A manager you reply to.
-            </p>
-            <div className="mt-9 flex flex-wrap items-center gap-3">
-              <Link
-                href="/sign-up?plan=pro&trial=true"
-                className="btn btn-primary group"
-              >
-                Hire Maya
-                <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-[1px] group-hover:translate-x-[1px]" />
-              </Link>
-              <a href="#how" className="btn btn-ghost">
-                How she works
-              </a>
-              <span className="ml-1 text-sm text-paper-faint">
-                14-day Pro trial · no card required
-              </span>
-            </div>
-          </div>
-
-          {/* Quote / receipt column */}
-          <aside className="lg:col-span-5">
-            <div className="relative">
-              {/* The little manila tag at the corner */}
-              <div className="absolute -top-3 right-6 z-10 rounded-sm bg-lime px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest text-ink">
-                Brief · 07:02
-              </div>
-              <div className="relative overflow-hidden rounded-2xl border border-[var(--hairline-strong)] bg-ink-2 p-7 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.6)]">
-                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-paper-faint">
-                  <Sparkles className="h-3.5 w-3.5 text-lime" />
-                  Maya · this morning
-                </div>
-                <p className="mt-5 font-display text-2xl italic leading-snug text-paper">
-                  &ldquo;Your &lsquo;POV: I tried…&rsquo; hook on Monday hit
-                  340K. Wednesday&rsquo;s &lsquo;Day in my life&rsquo; flatlined
-                  at 8K. I drafted three new POV openers for Thursday — want to
-                  see them?&rdquo;
-                </p>
-                <div className="mt-6 flex items-center justify-between border-t border-[var(--hairline)] pt-5 text-xs font-mono text-paper-faint">
-                  <span>cited · @yourhandle/posts/9382, /9407</span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-lime" />
-                    grounded
-                  </span>
-                </div>
-              </div>
-              {/* shadow-tile behind, rotated, for editorial feel */}
-              <div
-                aria-hidden
-                className="absolute -bottom-4 -right-4 -z-10 h-full w-full rounded-2xl border border-[var(--hairline)] bg-ink-3"
-                style={{ transform: "rotate(2.5deg)" }}
-              />
-            </div>
-          </aside>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                              MARQUEE STRIP                                 */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-function Marquee() {
-  const items = [
-    "TikTok",
-    "Instagram",
-    "YouTube",
-    "LinkedIn",
-    "X",
-    "Threads",
-    "Pinterest",
-    "Reddit",
-    "Snapchat",
-    "Twitch",
-    "Bluesky",
-    "Substack",
-  ];
-  // Doubled list so the loop is seamless.
-  const loop = [...items, ...items];
-
-  return (
-    <section
-      aria-label="Supported platforms"
-      className="mt-24 border-y border-[var(--hairline)] bg-ink-2/40 py-5 sm:mt-32"
-    >
-      <div className="flex items-center gap-8">
-        <span className="ml-6 hidden shrink-0 font-mono text-[11px] uppercase tracking-widest text-paper-faint sm:inline">
-          Reads · 27 platforms
-        </span>
-        <div className="relative flex-1 overflow-hidden">
-          <div className="marquee-track flex w-max gap-12">
-            {loop.map((item, i) => (
-              <span
-                key={`${item}-${i}`}
-                className="font-display text-2xl tracking-tight text-paper-dim"
-              >
-                {item}{" "}
-                <span className="text-paper-faint">·</span>
-              </span>
-            ))}
-          </div>
-          {/* edge fades */}
-          <div className="pointer-events-none absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-[var(--ink)] to-transparent" />
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-[var(--ink)] to-transparent" />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                                FEATURES                                    */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-const FEATURES = [
-  {
-    no: "01",
-    icon: Calendar,
-    title: "Content strategy",
-    body: "She watches your top 30 posts, finds your hooks that worked, and plans next week around them. Calendar-aware: got a wedding, trip, or launch coming up? Maya plans content arcs around your real life — build-up, day-of, recap.",
-    tag: "Plans, doesn't post",
-  },
-  {
-    no: "02",
-    icon: Inbox,
-    title: "Deal desk",
-    body: "Brand emails come in, Maya drafts 4 reply variants tuned to your floor rate, flags red-flag contracts, and books shoots in your calendar. You approve, she sends.",
-    tag: "Drafts, you approve",
-  },
-  {
-    no: "03",
-    icon: LineChart,
-    title: "Accountability",
-    body: "Morning brief at 7am, evening recap at 7pm, Sunday weekly review. She tells you what's working, what's not, and what to fix — honestly, not flatteringly.",
-    tag: "Honest, not flattering",
-  },
-] as const;
-
-function Features() {
-  return (
-    <section
-      id="how"
-      className="px-6 pt-28 sm:px-10 sm:pt-36 lg:pt-44"
-    >
-      <div className="mx-auto max-w-7xl">
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
-          <div className="lg:col-span-4">
-            <span className="font-mono text-xs uppercase tracking-[0.22em] text-paper-faint">
-              §01 · What she does
-            </span>
-            <h2 className="mt-4 font-display text-4xl leading-[1.05] tracking-tight text-paper sm:text-5xl">
-              The operational layer of a creator career — handled by someone
-              who&rsquo;s{" "}
-              <span className="italic text-paper-dim">always paying attention.</span>
-            </h2>
-          </div>
-          <div className="lg:col-span-8">
-            <ul className="grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-[var(--hairline-strong)] bg-[var(--hairline)] sm:grid-cols-1">
-              {FEATURES.map((f) => {
-                const Icon = f.icon;
-                return (
-                  <li
-                    key={f.no}
-                    className="group relative flex flex-col gap-5 bg-ink-2 p-7 transition-colors hover:bg-ink-3 sm:flex-row sm:items-start sm:gap-7 sm:p-9"
-                  >
-                    <div className="flex shrink-0 items-center gap-4 sm:flex-col sm:items-start sm:gap-3">
-                      <span className="font-mono text-xs text-paper-faint">
-                        {f.no}
-                      </span>
-                      <span className="grid h-10 w-10 place-items-center rounded-full border border-[var(--hairline-strong)] text-lime">
-                        <Icon className="h-4 w-4" strokeWidth={1.75} />
-                      </span>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-baseline justify-between gap-3">
-                        <h3 className="font-display text-2xl text-paper sm:text-3xl">
-                          {f.title}
-                        </h3>
-                        <span className="rounded-full border border-[var(--hairline-strong)] px-2.5 py-0.5 text-[11px] font-mono uppercase tracking-wider text-paper-dim">
-                          {f.tag}
-                        </span>
-                      </div>
-                      <p className="mt-3 max-w-2xl text-base leading-relaxed text-paper-dim">
-                        {f.body}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                       CONVERSATION SHOWCASE (CENTERPIECE)                  */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-function ConversationShowcase() {
-  return (
-    <section
-      id="showcase"
-      className="px-6 pt-28 sm:px-10 sm:pt-36 lg:pt-44"
-    >
-      <div className="mx-auto max-w-7xl">
-        <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12 lg:gap-16">
-          <div className="lg:col-span-5 lg:sticky lg:top-24">
-            <span className="font-mono text-xs uppercase tracking-[0.22em] text-paper-faint">
-              §02 · How Maya talks to you
-            </span>
-            <h2 className="mt-4 font-display text-4xl leading-[1.05] tracking-tight text-paper sm:text-5xl">
-              Not an app you open. A{" "}
-              <span className="italic text-paper-dim">manager you reply to.</span>
-            </h2>
-            <p className="mt-6 text-lg leading-relaxed text-paper-dim">
-              Maya pushes the things that matter to your phone the moment they
-              matter. Specific. Cited. Grounded in what she actually saw on your
-              accounts.
-            </p>
-            <ul className="mt-8 space-y-4 text-paper-dim">
-              <li className="flex items-start gap-3">
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
-                <span>
-                  <strong className="text-paper">Push, don&rsquo;t pull.</strong>{" "}
-                  She tells you. You don&rsquo;t check a dashboard.
-                </span>
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
-                <span>
-                  <strong className="text-paper">Grounded or silent.</strong>{" "}
-                  Every claim cites the post, the metric, the email.
-                </span>
-              </li>
-              <li className="flex items-start gap-3">
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-lime" />
-                <span>
-                  <strong className="text-paper">You publish.</strong> Maya
-                  prepares; you press post. Always.
-                </span>
-              </li>
-            </ul>
-          </div>
-
-          <div className="lg:col-span-7">
-            <Phone />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Phone() {
-  return (
-    <div className="relative mx-auto w-full max-w-sm">
-      {/* Decorative date stamp */}
-      <div className="absolute -left-6 top-10 hidden -rotate-90 origin-left font-mono text-[10px] uppercase tracking-[0.3em] text-paper-faint lg:block">
-        Mon · 7:02 am · iMessage
-      </div>
-
-      {/* Device frame */}
-      <div
-        className="relative rounded-[42px] border border-[var(--hairline-strong)] bg-black p-2 shadow-[0_50px_120px_-30px_rgba(0,0,0,0.8),inset_0_0_0_1px_rgba(255,255,255,0.04)]"
-        style={{ aspectRatio: "9 / 19" }}
-      >
-        {/* Dynamic Island */}
-        <div className="pointer-events-none absolute left-1/2 top-3 z-30 h-7 w-28 -translate-x-1/2 rounded-full bg-black" />
-
-        {/* Screen */}
-        <div className="relative h-full w-full overflow-hidden rounded-[34px] bg-[#000]">
-          {/* iMessage status / chat-header bar */}
-          <div className="flex items-center justify-between px-5 pb-3 pt-12 text-[11px] text-white/70">
-            <span className="font-medium">9:41</span>
-            <div className="flex items-center gap-1">
-              <SignalIcon />
-              <WifiIcon />
-              <BatteryIcon />
-            </div>
-          </div>
-          <div className="flex flex-col items-center border-b border-white/[0.06] px-5 pb-3">
-            <div className="grid h-12 w-12 place-items-center rounded-full bg-lime text-ink">
-              <span className="font-display text-xl leading-none">m</span>
-            </div>
-            <div className="mt-1 flex items-center gap-1 text-[11px] text-white/60">
-              <span className="font-medium text-white">Maya</span>
-              <ArrowUpRight className="h-3 w-3" />
-            </div>
-          </div>
-
-          {/* Message stream */}
-          <div className="flex flex-col gap-2.5 overflow-hidden px-3 py-4">
-            <TimeStamp>Today · 7:02 AM</TimeStamp>
-
-            <Bubble side="left" delay={0}>
-              Morning. Quick read on the weekend before today gets weird.
-            </Bubble>
-
-            <Bubble side="left" delay={120}>
-              Your &ldquo;POV: I tried…&rdquo; on Monday hit{" "}
-              <strong className="font-semibold">340K</strong>. The
-              &ldquo;Day in my life&rdquo; on Wed plateaued at{" "}
-              <strong className="font-semibold">8K</strong>. Same niche, same
-              length — different opener.
-            </Bubble>
-
-            <Bubble side="left" delay={240}>
-              Saves on the 340K post are{" "}
-              <strong className="font-semibold">9.4%</strong>. That&rsquo;s
-              algorithm fuel for the next 72h. Lean into POV format Thurs &amp; Fri.
-            </Bubble>
-
-            <Bubble side="left" delay={360}>
-              <span className="block">Drafted 3 POV openers for Thursday:</span>
-              <span className="mt-2 block rounded-2xl bg-black/40 px-3 py-2 text-[12px] leading-relaxed text-white/90">
-                1. &ldquo;POV: my therapist said one sentence and broke me&rdquo;
-                <br />
-                2. &ldquo;POV: you finally booked the trip&rdquo;
-                <br />
-                3. &ldquo;POV: 31 and starting over&rdquo;
-              </span>
-            </Bubble>
-
-            <Bubble side="left" delay={480}>
-              Want me to write the scripts? Also — Glossier&rsquo;s reply is
-              sitting in Gmail, $4K offer, below your floor. I drafted a
-              counter.
-            </Bubble>
-
-            <div className="reveal-up" style={{ animationDelay: "640ms" }}>
-              <div className="ml-auto mt-1 flex max-w-[78%] justify-end">
-                <div className="rounded-[20px] rounded-br-[6px] bg-[var(--imessage-blue)] px-3.5 py-2 text-[14px] leading-snug text-white shadow-[0_1px_0_rgba(0,0,0,0.2)]">
-                  yes scripts. send the counter.
-                </div>
-              </div>
-            </div>
-
-            <div className="reveal-up flex items-center gap-1 px-2" style={{ animationDelay: "820ms" }}>
-              <Dot />
-              <Dot delay={150} />
-              <Dot delay={300} />
-              <span className="ml-1 text-[10px] text-white/40">Maya</span>
-            </div>
-          </div>
-
-          {/* Chat input bar */}
-          <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 border-t border-white/[0.06] bg-black/80 px-3 py-2.5 backdrop-blur">
-            <button
-              aria-label="Add"
-              className="grid h-7 w-7 place-items-center rounded-full bg-white/10 text-white/70"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-            <div className="flex h-8 flex-1 items-center rounded-full border border-white/10 bg-white/[0.04] px-3 text-[12px] text-white/40">
-              iMessage
-            </div>
-            <button
-              aria-label="Send"
-              className="grid h-7 w-7 place-items-center rounded-full bg-[var(--imessage-blue)] text-white"
-            >
-              <ArrowUpRight className="h-4 w-4 -rotate-45" />
-            </button>
-          </div>
-
-          {/* Home indicator */}
-          <div className="absolute bottom-1 left-1/2 h-1 w-28 -translate-x-1/2 rounded-full bg-white/40" />
-        </div>
-      </div>
-
-      {/* Small caption under device */}
-      <p className="mt-6 text-center font-mono text-[11px] uppercase tracking-[0.2em] text-paper-faint">
-        Real conversation shape · iMessage shown · WhatsApp / SMS / web also
-      </p>
-    </div>
-  );
-}
-
-function Bubble({
-  children,
-  side,
-  delay,
-}: {
-  children: React.ReactNode;
-  side: "left" | "right";
-  delay: number;
-}) {
-  const isLeft = side === "left";
-  return (
-    <div
-      className={`reveal-up flex ${isLeft ? "justify-start" : "justify-end"}`}
-      style={{ animationDelay: `${delay}ms` }}
-    >
-      <div
-        className={`max-w-[82%] rounded-[20px] px-3.5 py-2 text-[14px] leading-snug shadow-[0_1px_0_rgba(0,0,0,0.2)] ${
-          isLeft
-            ? "rounded-bl-[6px] bg-[var(--imessage-gray)] text-white"
-            : "rounded-br-[6px] bg-[var(--imessage-blue)] text-white"
-        }`}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function Dot({ delay = 0 }: { delay?: number }) {
-  return (
-    <span
-      className="typing-dot inline-block h-1.5 w-1.5 rounded-full bg-white/60"
-      style={{ animationDelay: `${delay}ms` }}
-    />
-  );
-}
-
-function TimeStamp({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-center text-[10px] font-medium uppercase tracking-wider text-white/40">
-      {children}
-    </div>
-  );
-}
-
-function SignalIcon() {
-  return (
-    <svg width="14" height="10" viewBox="0 0 14 10" fill="currentColor" aria-hidden>
-      <rect x="0" y="7" width="2" height="3" rx="0.5" />
-      <rect x="4" y="5" width="2" height="5" rx="0.5" />
-      <rect x="8" y="3" width="2" height="7" rx="0.5" />
-      <rect x="12" y="0" width="2" height="10" rx="0.5" />
-    </svg>
-  );
-}
-function WifiIcon() {
-  return (
-    <svg width="14" height="10" viewBox="0 0 14 10" fill="currentColor" aria-hidden>
-      <path d="M7 9.5a1 1 0 100-2 1 1 0 000 2zm0-4.2c1.4 0 2.7.5 3.6 1.5l1.1-1.1A6.6 6.6 0 007 4.2a6.6 6.6 0 00-4.7 1.6L3.4 6.8A4.6 4.6 0 017 5.3zm0-3.5c2.4 0 4.6.9 6.3 2.4L14.4 3a8.6 8.6 0 00-14.8 0l1 1.1A8.6 8.6 0 017 1.8z" />
-    </svg>
-  );
-}
-function BatteryIcon() {
-  return (
-    <svg width="22" height="10" viewBox="0 0 22 10" fill="none" aria-hidden>
-      <rect x="0.5" y="0.5" width="18" height="9" rx="2" stroke="currentColor" opacity="0.5" />
-      <rect x="2" y="2" width="14" height="6" rx="1" fill="currentColor" />
-      <rect x="20" y="3" width="2" height="4" rx="0.5" fill="currentColor" opacity="0.5" />
-    </svg>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                                  PRICING                                   */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-function Pricing({
-  billing,
-  setBilling,
-}: {
-  billing: Billing;
-  setBilling: (b: Billing) => void;
-}) {
-  return (
-    <section id="pricing" className="px-6 pt-28 sm:px-10 sm:pt-36 lg:pt-44">
-      <div className="mx-auto max-w-7xl">
-        <div className="flex flex-col items-start justify-between gap-8 md:flex-row md:items-end">
-          <div className="max-w-2xl">
-            <span className="font-mono text-xs uppercase tracking-[0.22em] text-paper-faint">
-              §03 · Pricing
-            </span>
-            <h2 className="mt-4 font-display text-4xl leading-[1.05] tracking-tight text-paper sm:text-5xl">
-              Flat tiers. No credits.{" "}
-              <span className="italic text-paper-dim">No metering theatre.</span>
-            </h2>
-          </div>
-          <BillingToggle billing={billing} setBilling={setBilling} />
-        </div>
-
-        <div className="mt-12 grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-[var(--hairline-strong)] bg-[var(--hairline)] lg:grid-cols-3">
-          {TIERS.map((t) => (
-            <PricingCard key={t.name} tier={t} billing={billing} />
-          ))}
-        </div>
-
-        <p className="mt-6 flex items-center gap-2 text-sm text-paper-faint">
-          <ShieldCheck className="h-4 w-4 text-lime" />
-          Plan changes prorate. Cancel anytime. Your data exports in one click.
+    <section className="px-6 pt-24 sm:px-10 sm:pt-32">
+      <div className="mx-auto max-w-5xl text-center">
+        <p className="font-display text-3xl leading-[1.1] tracking-tight text-paper sm:text-5xl">
+          Maya is your social media manager.{" "}
+          <span className="italic text-paper-dim">
+            Lives in your iMessages. Replaces eight tools and a manager you
+            can&rsquo;t afford yet.
+          </span>
         </p>
       </div>
     </section>
   );
 }
 
-function BillingToggle({
-  billing,
-  setBilling,
-}: {
-  billing: Billing;
-  setBilling: (b: Billing) => void;
-}) {
-  return (
-    <div
-      role="tablist"
-      aria-label="Billing period"
-      className="inline-flex items-center gap-1 rounded-full border border-[var(--hairline-strong)] bg-ink-2 p-1 text-sm"
-    >
-      <button
-        role="tab"
-        aria-selected={billing === "monthly"}
-        onClick={() => setBilling("monthly")}
-        className={`rounded-full px-4 py-1.5 transition-colors ${
-          billing === "monthly"
-            ? "bg-paper text-ink"
-            : "text-paper-dim hover:text-paper"
-        }`}
-      >
-        Monthly
-      </button>
-      <button
-        role="tab"
-        aria-selected={billing === "annual"}
-        onClick={() => setBilling("annual")}
-        className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 transition-colors ${
-          billing === "annual"
-            ? "bg-paper text-ink"
-            : "text-paper-dim hover:text-paper"
-        }`}
-      >
-        Annual
-        <span
-          className={`rounded-full px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider ${
-            billing === "annual"
-              ? "bg-ink text-lime"
-              : "bg-[var(--hairline-strong)] text-lime"
-          }`}
-        >
-          −17%
-        </span>
-      </button>
-    </div>
-  );
-}
+/* ─────────────────────────────────────────────────────────────────────────── */
+/*                               FEATURE RAIL                                 */
+/* ─────────────────────────────────────────────────────────────────────────── */
 
-function PricingCard({ tier, billing }: { tier: Tier; billing: Billing }) {
-  const price = billing === "monthly" ? tier.monthly : tier.annual / 12;
-  const totalAnnual = tier.annual;
-  const formattedPrice =
-    billing === "monthly"
-      ? `$${tier.monthly.toFixed(2)}`
-      : `$${price.toFixed(2)}`;
-
+/**
+ * 12 feature sections, each anchored to a creator pain point. Order is
+ * deliberate — algorithm anxiety up top (most universal), tier-restricted
+ * outreach mid-way (Manager value), anti-sycophancy as the closer (the
+ * personality differentiator).
+ */
+function FeatureRail() {
   return (
-    <div
-      className={`relative flex flex-col gap-6 p-7 sm:p-9 ${
-        tier.recommended ? "bg-ink-3" : "bg-ink-2"
-      }`}
-    >
-      {tier.recommended && (
-        <div className="absolute right-7 top-7 rounded-full bg-lime px-2.5 py-0.5 text-[11px] font-mono uppercase tracking-wider text-ink">
-          14-day free trial
-        </div>
-      )}
-      <div>
-        <div className="flex items-center gap-3">
-          <h3 className="font-display text-3xl text-paper">{tier.name}</h3>
-          {tier.recommended && (
-            <span className="font-mono text-[10px] uppercase tracking-widest text-lime">
-              Most chosen
+    <div id="features" className="pt-12">
+      {/* 01 — Trends */}
+      <FeatureSection
+        headline={
+          <>
+            The algorithm changes every week.{" "}
+            <span className="italic text-paper-dim">You can&rsquo;t catch up.</span>
+          </>
+        }
+        subhead={
+          <>
+            Maya watches your niche every day and only brings up trends that
+            match what already works for you. No generic &ldquo;TikTok trends
+            today&rdquo; list. The three openings she thinks fit your last 30
+            posts, with why.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Tue · 9:14 AM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Caught a new POV format moving in beauty TikTok this week.
+                    34 of your peers used it, the top 3 averaged{" "}
+                    <strong>5.7×</strong> baseline.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    It fits your &ldquo;tried it for a week&rdquo; voice. Drafted
+                    one for the candle launch — want to see?
+                  </>
+                ),
+              },
+            ]}
+            caption="seen across 34 of your peers"
+          />
+        }
+      />
+
+      {/* 02 — Idea sparring */}
+      <FeatureSection
+        reverse
+        headline={
+          <>
+            You&rsquo;re working alone.{" "}
+            <span className="italic text-paper-dim">
+              Half-baked ideas die in your notes app.
             </span>
-          )}
-        </div>
-        <p className="mt-3 max-w-xs text-sm leading-relaxed text-paper-dim">
-          {tier.headline}
-        </p>
-      </div>
+          </>
+        }
+        subhead={
+          <>
+            Send a half-thought via iMessage. Maya sharpens it into a hook, a
+            shot list, a caption — in your voice, with three variants to pick
+            from. The notes-app graveyard becomes a working draft folder.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Wed · 11:42 PM"
+            bubbles={[
+              {
+                side: "right",
+                body: <>quick thought: skincare routine for a flight??</>,
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Yeah — pre-flight prep is a saved-post category for your
+                    audience (12% of saves last month).
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    3 hooks: <em>&ldquo;The 4 things I do before a 9-hour
+                    flight&rdquo;</em>, <em>&ldquo;Skincare won&rsquo;t save you
+                    on this flight&rdquo;</em>, <em>&ldquo;Airport bathroom
+                    routine, ranked&rdquo;</em>. Want scripts?
+                  </>
+                ),
+              },
+            ]}
+            caption="from the last 30 days of your saves"
+          />
+        }
+      />
 
-      <div className="flex items-end gap-2">
-        <span className="font-display text-5xl leading-none tracking-tight text-paper">
-          {formattedPrice}
-        </span>
-        <span className="pb-1 text-sm text-paper-dim">/ mo</span>
-      </div>
-      <div className="-mt-3 text-xs text-paper-faint">
-        {billing === "annual"
-          ? `billed $${totalAnnual} / year · no card for trial`
-          : "no card required for trial"}
-      </div>
+      {/* 03 — Weekly plan */}
+      <FeatureSection
+        headline={
+          <>
+            Sunday hits and the week is{" "}
+            <span className="italic text-paper-dim">a blank wall.</span>
+          </>
+        }
+        subhead={
+          <>
+            Sunday at 4pm, Maya drops next week&rsquo;s content arc — three
+            TikToks, hook variants for each, posting times that fit your real
+            calendar. You start Monday already aimed at something.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Sun · 4:14 PM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Plan for week of Mar 18. You&rsquo;ve got the dentist Tue
+                    morning and a wedding Sat — built around it.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    <strong>Mon 7pm</strong> · POV opener (Reel + TT)
+                    <br />
+                    <strong>Wed 6pm</strong> · process video, batch w/ Mon
+                    leftovers
+                    <br />
+                    <strong>Fri 11am</strong> · wedding-prep get-ready (build-up
+                    arc into Sat)
+                  </>
+                ),
+              },
+            ]}
+            caption="matched against your calendar"
+          />
+        }
+      />
 
-      <ul className="mt-2 space-y-2.5 text-sm text-paper-dim">
-        {tier.bullets.map((b) => (
-          <li key={b} className="flex items-start gap-3">
-            <span className="mt-2 h-1 w-3 shrink-0 bg-lime" />
-            <span>{b}</span>
-          </li>
-        ))}
-      </ul>
+      {/* 04 — Performance reading */}
+      <FeatureSection
+        reverse
+        headline={
+          <>
+            A post hits. Another flops.{" "}
+            <span className="italic text-paper-dim">You don&rsquo;t know why.</span>
+          </>
+        }
+        subhead={
+          <>
+            Every two hours during waking hours, Maya reads what just published
+            against your last 30. She tells you why Tuesday&rsquo;s Reel hit
+            2.3× and Thursday&rsquo;s stalled — opener, length, audio, posting
+            window. Then what to do next.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Thu · 5:08 PM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Tue&rsquo;s POV is at <strong>2.3×</strong> your 30-post
+                    median. Thu is at <strong>0.4×</strong>.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Same length, same niche. Tue opened on a question, Thu
+                    opened on a wide shot. Saves on the Tue post say POV-
+                    question is the lever — keep it for Sun.
+                  </>
+                ),
+              },
+            ]}
+            caption="against your last 30 posts, every two hours"
+          />
+        }
+      />
 
-      <Link
-        href={`/sign-up?plan=${tier.name.toLowerCase()}${
-          tier.recommended ? "&trial=true" : ""
-        }`}
-        className={`btn mt-auto w-full ${
-          tier.recommended ? "btn-primary" : "btn-ghost"
-        }`}
-      >
-        {tier.recommended ? "Start with Pro free" : `Choose ${tier.name}`}
-      </Link>
+      {/* 05 — Lives in your iMessages */}
+      <FeatureSection
+        headline={
+          <>
+            Eight tools. Seven dashboards.{" "}
+            <span className="italic text-paper-dim">
+              Your phone is a graveyard of $9.99 subscriptions.
+            </span>
+          </>
+        }
+        subhead={
+          <>
+            Morning brief at 7am. Evening recap at 7pm. Sunday plan. Weekly
+            review. All on iMessage, where you already are. No app to open,
+            no dashboard to remember the password for.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Mon · 7:02 AM"
+            bubbles={[
+              {
+                side: "left",
+                body: <>Morning. Quick read on the weekend before today gets weird.</>,
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Saturday&rsquo;s Reel is at <strong>180K</strong>, saves
+                    9.4%. Algorithm fuel for the next 72h. Lean into POV format
+                    Wed.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Glossier replied Sat night. $4K, below your floor. Drafted a
+                    counter — want to see?
+                  </>
+                ),
+              },
+            ]}
+            caption="iMessage"
+          />
+        }
+      />
+
+      {/* 06 — Accountability */}
+      <FeatureSection
+        reverse
+        headline={
+          <>
+            You said three TikToks.{" "}
+            <span className="italic text-paper-dim">You posted one.</span>
+          </>
+        }
+        subhead={
+          <>
+            Friday at 10am, if you&rsquo;re behind on what you committed to,
+            Maya tells you — specifically, with the exact unblock. Not nagging.
+            Not flattery. The thing a real manager would say at the standup.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Fri · 10:00 AM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    You committed to 3 TikToks this week. You&rsquo;re at 1.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    The two unfilmed are the POV ones we drafted Tue. Both are
+                    under 90 sec. You have 6:30-7:00pm tonight clear. That&rsquo;s
+                    enough for one — want me to bump the third to next Tue?
+                  </>
+                ),
+              },
+            ]}
+            caption="matched against what you said you'd do"
+          />
+        }
+      />
+
+      {/* 07 — Brand DM triage */}
+      <FeatureSection
+        headline={
+          <>
+            Brand emails sit unanswered. You undercharge.{" "}
+            <span className="italic text-paper-dim">
+              You get ghosted on a rate that was probably too low.
+            </span>
+          </>
+        }
+        subhead={
+          <>
+            Maya reads every brand email in Gmail, drafts the reply in your
+            voice, and anchors on your minimum rate. If the deal is at or above
+            the rate you&rsquo;ve trusted her with, she sends and tells you what
+            she said. If she&rsquo;s not sure, you get the draft.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Mon · 2:38 PM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Glossier — Q2 launch, 1 Reel + 3 stories, $4,000.
+                    That&rsquo;s 33% under your floor for that scope.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Drafted counter at $6,500 with 30-day exclusivity carved
+                    out, citing your last Glossier post (412K, 11% saves).
+                    Sending unless you say otherwise in 2h.
+                  </>
+                ),
+              },
+            ]}
+            caption="anchored on your $6K minimum"
+          />
+        }
+      />
+
+      {/* 08 — Brand outreach (Manager only) */}
+      <FeatureSection
+        reverse
+        badge="Manager tier"
+        headline={
+          <>
+            The brands you&rsquo;d be perfect for{" "}
+            <span className="italic text-paper-dim">don&rsquo;t know you exist.</span>
+          </>
+        }
+        subhead={
+          <>
+            Maya spots brands you&rsquo;d be a fit for, tracks down the right
+            person at each, and drafts the cold pitch in your voice. You see it
+            before she hits send. The pipeline you&rsquo;d build if you had
+            time, running while you film.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Wed · 11:02 AM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Spotted 3 brand fits this week: Topicals (skincare, your
+                    audience overlap is 41%), Caraway (cookware, you keep
+                    mentioning yours), Lemme (vitamins, low CPC, easy yes).
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Drafted pitches to all three, addressed to the right brand
+                    lead at each. Want to read before I send?
+                  </>
+                ),
+              },
+            ]}
+            caption="matched on audience overlap"
+          />
+        }
+      />
+
+      {/* 09 — Contracts */}
+      <FeatureSection
+        headline={
+          <>
+            A 14-page contract. You skim. You sign.{" "}
+            <span className="italic text-paper-dim">
+              Three months later, you find out you signed away exclusivity.
+            </span>
+          </>
+        }
+        subhead={
+          <>
+            Drop the PDF in chat. Maya flags the things that get creators in
+            trouble — exclusivity, who owns the content, when you actually get
+            paid, kill fees, the disclosure rules. In plain language. The
+            clauses you should push back on, and the words to push back with.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Thu · 6:11 PM"
+            bubbles={[
+              {
+                side: "right",
+                body: <>just got the contract — 14 pages</>,
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Read it. Three flags:
+                    <br />
+                    1. <strong>90-day exclusivity</strong> across the entire
+                    skincare category (industry standard for this rate is 30d
+                    same-brand).
+                    <br />
+                    2. <strong>IP grant is perpetual</strong> — they keep your
+                    footage forever.
+                    <br />
+                    3. <strong>Net-60 payment</strong>. Push to net-30.
+                  </>
+                ),
+              },
+            ]}
+            caption="three clauses to push back on"
+          />
+        }
+      />
+
+      {/* 10 — Manager packet */}
+      <FeatureSection
+        reverse
+        headline={
+          <>
+            A real manager is sniffing around. They want a deck.{" "}
+            <span className="italic text-paper-dim">
+              Your follower count alone won&rsquo;t sell you.
+            </span>
+          </>
+        }
+        subhead={
+          <>
+            Quarterly, or on-demand, Maya generates a polished PDF a real
+            manager could read in five minutes. Audience, performance, brand
+            history, rate card, what&rsquo;s next. The packet you&rsquo;d hire
+            someone to build.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Q2 · on demand"
+            bubbles={[
+              {
+                side: "right",
+                body: <>UTA wants a deck. can you?</>,
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Yes. Pulled Q1 data — 14% follower growth, 3 brand deals
+                    closed, $34K revenue, top-saved post is the candle launch
+                    series. Generating now.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Packet ready: <strong>14 pages</strong>, brand-history
+                    timeline, rate card with rationale. Sent to your inbox.
+                  </>
+                ),
+              },
+            ]}
+            caption="generated · 6 min ago"
+          />
+        }
+      />
+
+      {/* 11 — Memory + voice mirror */}
+      <FeatureSection
+        headline={
+          <>
+            VAs and agencies dilute your voice.{" "}
+            <span className="italic text-paper-dim">
+              You felt the magic drain before your audience did.
+            </span>
+          </>
+        }
+        subhead={
+          <>
+            Maya is built from your last 30 posts and 500 comments before she
+            sends a single message. She remembers your goals, your tone, your
+            minimum rate, your brand history, the hooks that hit and the ones
+            that didn&rsquo;t. The longer you have her, the more she sounds
+            like she knows you.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="6 weeks in"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Caraway is back. They asked about a holiday push. You said
+                    in March you&rsquo;d only do them again at $8K and with
+                    creative approval — they came in at $9K and said yes to
+                    approval up front.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Drafted a yes, with the disclosure language you used last
+                    time. Send?
+                  </>
+                ),
+              },
+            ]}
+            caption="from your March email and your minimum"
+          />
+        }
+      />
+
+      {/* 12 — Tells the truth */}
+      <FeatureSection
+        reverse
+        headline={
+          <>
+            Cheerleading is{" "}
+            <span className="italic text-paper-dim">a betrayal of the job.</span>
+          </>
+        }
+        subhead={
+          <>
+            Maya never says &ldquo;amazing post.&rdquo; If a piece underperforms,
+            she tells you plainly — with the data and what comes next. The
+            tone is tunable (supportive, strategic, tough-love). The honesty
+            isn&rsquo;t.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Sat · 8:47 PM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Friday&rsquo;s post underperformed. <strong>0.3×</strong>{" "}
+                    your median, lowest watch-time of the last 30.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Opener was a 2.4-sec wide pan. Your top 5 all open on a
+                    face or a question by 0.8 sec. Don&rsquo;t boost this one —
+                    save the spend for Sunday&rsquo;s.
+                  </>
+                ),
+              },
+            ]}
+            caption="grounded · told you the truth"
+          />
+        }
+      />
     </div>
   );
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*                                    FAQ                                     */
+/*                                FINAL CTA                                   */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
-function Faq() {
+function FinalCta() {
   return (
-    <section id="faq" className="px-6 pt-28 sm:px-10 sm:pt-36 lg:pt-44">
-      <div className="mx-auto max-w-7xl">
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
-          <div className="lg:col-span-4">
-            <span className="font-mono text-xs uppercase tracking-[0.22em] text-paper-faint">
-              §04 · FAQ
+    <section className="px-6 pt-32 sm:px-10 sm:pt-40">
+      <div className="mx-auto max-w-5xl">
+        <div className="relative overflow-hidden rounded-3xl border border-[var(--hairline-strong)] bg-ink-2 px-8 py-16 text-center sm:px-16 sm:py-24">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 opacity-30"
+            style={{
+              background:
+                "radial-gradient(60% 80% at 50% 0%, rgba(214,255,61,0.18), transparent 70%)",
+            }}
+          />
+          <h2 className="relative font-display text-4xl leading-[1.05] tracking-tight text-paper sm:text-6xl">
+            Try Maya for 7 days.{" "}
+            <span className="italic text-paper-dim">
+              See if she earns the desk.
             </span>
-            <h2 className="mt-4 font-display text-4xl leading-[1.05] tracking-tight text-paper sm:text-5xl">
-              Common questions,{" "}
-              <span className="italic text-paper-dim">straight answers.</span>
-            </h2>
-            <p className="mt-6 text-paper-dim">
-              Anti-sycophancy is non-negotiable. That goes for our marketing
-              copy too — if it&rsquo;s not honest, it&rsquo;s not on this page.
-            </p>
-          </div>
-          <div className="lg:col-span-8">
-            <div className="overflow-hidden rounded-2xl border border-[var(--hairline-strong)]">
-              {FAQ.map((item, i) => (
-                <details
-                  key={item.q}
-                  className={`group bg-ink-2 ${
-                    i !== FAQ.length - 1 ? "border-b border-[var(--hairline)]" : ""
-                  }`}
-                >
-                  <summary className="flex items-start justify-between gap-6 p-6 sm:p-7">
-                    <span className="font-display text-xl leading-snug text-paper sm:text-2xl">
-                      {item.q}
-                    </span>
-                    <span
-                      aria-hidden
-                      className="faq-plus mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[var(--hairline-strong)] text-paper-dim"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </span>
-                  </summary>
-                  <div className="px-6 pb-7 pr-14 text-paper-dim sm:px-7">
-                    {item.a}
-                  </div>
-                </details>
-              ))}
-            </div>
+          </h2>
+          <p className="relative mx-auto mt-6 max-w-xl text-paper-dim">
+            No card. Cancel anytime. If she isn&rsquo;t the manager you&rsquo;d
+            hire, walk away on day 6 with your data exported.
+          </p>
+          <div className="relative mt-9 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href="/checkout?tier=manager&interval=monthly"
+              className="btn btn-primary group"
+            >
+              Start 7 days free
+              <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-[1px] group-hover:translate-x-[1px]" />
+            </Link>
+            <a href="#pricing" className="btn btn-ghost">
+              See pricing
+            </a>
           </div>
         </div>
       </div>
@@ -888,7 +774,7 @@ function Footer() {
         <div className="mt-12 grid grid-cols-2 gap-10 border-t border-[var(--hairline)] pt-10 text-sm sm:grid-cols-4">
           <div className="col-span-2 sm:col-span-1">
             <p className="text-paper-dim">
-              Your AI creator manager before you can afford a human one.
+              Your social media manager before you can afford a human one.
             </p>
             <p className="mt-4 font-mono text-xs uppercase tracking-widest text-paper-faint">
               © {new Date().getFullYear()} HeyMaya
@@ -900,7 +786,7 @@ function Footer() {
             </h4>
             <ul className="mt-3 space-y-2 text-paper-dim">
               <li>
-                <a className="hover:text-paper" href="#how">
+                <a className="hover:text-paper" href="#features">
                   How she works
                 </a>
               </li>
@@ -932,10 +818,7 @@ function Footer() {
                 </a>
               </li>
               <li>
-                <a
-                  className="hover:text-paper"
-                  href="mailto:hi@heymaya.app"
-                >
+                <a className="hover:text-paper" href="mailto:hi@heymaya.app">
                   hi@heymaya.app
                 </a>
               </li>

@@ -72,20 +72,22 @@ you add or rename an entry here, you must update both.
 | `performance_check_2h` | `0 8,10,12,14,16,18,20,22 * * *` | 2h window during waking hours. Pulls fresh metrics on today's posts; flags outliers; queues a post-publish reaction if a new metric crossed an alert threshold. | low | all | only if `posts.postedAt` within last 24h for any handle (skip silently otherwise) | `playbook.md § Post-performance check` |
 | `daily_niche_scan` | `0 18 * * *` | Daily 6pm scan of niche-wide trending hashtags / sounds / formats via ScrapeCreators. Writes `trendObservations`. | low | all | none | `playbook.md § Daily niche scan` |
 | `evening_recap` | `0 19 * * *` | Daily 7pm recap: what posted today, how it performed, what tomorrow looks like. Two-paragraph prose, no bullet dump. | low | all | none — runs even on no-post days (the recap then is "rest day, here's what's queued for tomorrow") | `playbook.md § Evening recap` |
-| `weekly_content_plan` | `0 16 * * 0` | Sunday 4pm next-week plan. For Pro+, folds in `calendar_lookahead` results from the prior week. For Starter, plan is single-platform only. | medium | all | none | `playbook.md § Weekly content plan` |
-| `weekly_review` | `0 21 * * 0` | Sunday 9pm synthesis of the week: top posts cited, what worked, what didn't, one tactical change for next week. Pro+ uses `high` thinking for the synth pass; Starter gets a stripped-down `low`-thinking version (no synthesis, no comparable-creator references). | high (Pro+) / low (Starter) | all | none | `playbook.md § Weekly review` |
-| `revenue_snapshot` | `0 9 * * 1` | Monday 9am revenue snapshot: MTD vs prior month, by source, with anomaly callouts. | low | Pro+ | only if Composio Stripe is connected (`connectedAccounts` row with `provider="stripe"`, `scopeStatus="active"`); skip silently otherwise — never alert about a missing connection on a recurring cron | `playbook.md § Revenue snapshot` |
-| `competitor_watch` | `0 9 * * *` | Daily 9am sweep of named-peers: their new posts, their performance, their formats. Writes `competitorObservations`. | low | Pro+ | only if `creators.namedPeers` has 1+ entries (Pro = up to 5, Studio = up to 10 per `planFeatures.competitorWatchSlots`) | `playbook.md § Competitor watch` |
+| `weekly_content_plan` | `0 16 * * 0` | Sunday 4pm next-week plan. Folds in `calendar_lookahead` results from the prior week (when Calendar connected). Plan reaches all 5 platforms on both tiers. | medium | all | none | `playbook.md § Weekly content plan` |
+| `weekly_review` | `0 21 * * 0` | Sunday 9pm synthesis of the week: top posts cited, what worked, what didn't, one tactical change for next week. Both tiers run the full `high`-thinking synth pass — boundary is autonomy, not compute. | high | all | none | `playbook.md § Weekly review` |
+| `revenue_snapshot` | `0 9 * * 1` | Monday 9am revenue snapshot: MTD vs prior month, by source, with anomaly callouts. | low | all | only if Composio Stripe is connected (`connectedAccounts` row with `provider="stripe"`, `scopeStatus="active"`); skip silently otherwise — never alert about a missing connection on a recurring cron | `playbook.md § Revenue snapshot` |
+| `competitor_watch` | `0 9 * * *` | Daily 9am sweep of named-peers: their new posts, their performance, their formats. Writes `competitorObservations`. | low | all | only if `creators.namedPeers` has 1+ entries (Coach = up to 5, Manager = up to 10 per `planFeatures.competitorWatchSlots`) | `playbook.md § Competitor watch` |
 | `comment_triage` | `0 11,17 * * *` | 2× daily comment sweep on most recent posts. Buckets into reply-now / save-for-batch / ignore. Writes `commentTriage`. | low | all | none | `playbook.md § Comment triage` |
-| `calendar_lookahead` | `0 8 * * *` | Daily 8am 1–14 day calendar look-ahead. Classifies events via `maya-calendar-classifier` skill; proposes content arcs for life-events. Folds into the next `weekly_content_plan` and surfaces relevant arcs to Today. | high | Pro+ | only if Composio Calendar connected (`connectedAccounts` row with `provider="calendar"`, `scopeStatus="active"`); skip silently otherwise | `playbook.md § Calendar-aware content planning` |
-| `manager_readiness_packet_quarterly` | `0 14 1 */3 *` | Quarterly (Jan 1, Apr 1, Jul 1, Oct 1 at 2pm local) refresh of the manager-readiness packet PDF. | high | Pro+ | none beyond tier — Studio additionally permits on-demand generation outside this schedule | `playbook.md § Manager-readiness packet` |
+| `calendar_lookahead` | `0 8 * * *` | Daily 8am 1–14 day calendar look-ahead. Classifies events via `maya-calendar-classifier` skill; proposes content arcs for life-events. Folds into the next `weekly_content_plan` and surfaces relevant arcs to Today. | high | all | only if Composio Calendar connected (`connectedAccounts` row with `provider="calendar"`, `scopeStatus="active"`); skip silently otherwise | `playbook.md § Calendar-aware content planning` |
+| `manager_readiness_packet_quarterly` | `0 14 1 */3 *` | Quarterly (Jan 1, Apr 1, Jul 1, Oct 1 at 2pm local) refresh of the manager-readiness packet PDF. | high | all | none beyond tier — Manager additionally permits on-demand generation outside this schedule | `playbook.md § Manager-readiness packet` |
 | `trend_watcher` | `5 9 * * *` | Daily 9:05am broader trend watcher (cross-niche). Offset 5 min from `competitor_watch` to spread ScrapeCreators load. | low | all | none | `playbook.md § Trend watcher` |
-| `industry_intel_daily` | `30 7 * * *` | Daily 7:30am creator-economy news sweep — calls `maya-industry-intel` skill, dedupes via `industryIntelSeen`, ranks by relevance to creator's niche/platforms, inlines high-relevance items into morning brief. | medium | Pro+ | none beyond tier | `playbook.md § Industry intel` |
-| `algo_research_tiktok` | `0 4 * * 1` | Weekly Mon 4am TikTok algorithm signals research — calls `maya-platform-algo-researcher`, updates global `platformAlgoCache`. Studio gets a second weekly run (`0 4 * * 4` Thu 4am). | low | Pro+ | global cron, runs once per platform regardless of creator count; uses BRAVE_API_KEY | `playbook.md § Platform algorithm research` |
-| `algo_research_instagram` | `15 4 * * 1` | Weekly Mon 4:15am Instagram algorithm research. +Thu 4:15am for Studio. Offset 15 min from TikTok to spread Brave Search load. | low | Pro+ | same as `algo_research_tiktok` | `playbook.md § Platform algorithm research` |
-| `algo_research_youtube` | `30 4 * * 1` | Weekly Mon 4:30am YouTube algorithm research. +Thu 4:30am for Studio. | low | Pro+ | same as `algo_research_tiktok` | `playbook.md § Platform algorithm research` |
-| `algo_research_linkedin` | `45 4 * * 1` | Weekly Mon 4:45am LinkedIn algorithm research. +Thu 4:45am for Studio. | low | Pro+ | same as `algo_research_tiktok` | `playbook.md § Platform algorithm research` |
-| `algo_research_x` | `0 5 * * 1` | Weekly Mon 5:00am X algorithm research. +Thu 5:00am for Studio. | low | Pro+ | same as `algo_research_tiktok` | `playbook.md § Platform algorithm research` |
+| `industry_intel_daily` | `30 7 * * *` | Daily 7:30am creator-economy news sweep — calls `maya-industry-intel` skill, dedupes via `industryIntelSeen`, ranks by relevance to creator's niche/platforms, inlines high-relevance items into morning brief. | medium | all | none beyond tier | `playbook.md § Industry intel` |
+| `algo_research_tiktok` | `0 4 * * 1` | Weekly Mon 4am TikTok algorithm signals research — calls `maya-platform-algo-researcher`, updates global `platformAlgoCache`. Manager gets a second weekly run (`0 4 * * 4` Thu 4am). | low | all | global cron, runs once per platform regardless of creator count; uses BRAVE_API_KEY | `playbook.md § Platform algorithm research` |
+| `algo_research_instagram` | `15 4 * * 1` | Weekly Mon 4:15am Instagram algorithm research. +Thu 4:15am for Manager. Offset 15 min from TikTok to spread Brave Search load. | low | all | same as `algo_research_tiktok` | `playbook.md § Platform algorithm research` |
+| `algo_research_youtube` | `30 4 * * 1` | Weekly Mon 4:30am YouTube algorithm research. +Thu 4:30am for Manager. | low | all | same as `algo_research_tiktok` | `playbook.md § Platform algorithm research` |
+| `algo_research_linkedin` | `45 4 * * 1` | Weekly Mon 4:45am LinkedIn algorithm research. +Thu 4:45am for Manager. | low | all | same as `algo_research_tiktok` | `playbook.md § Platform algorithm research` |
+| `algo_research_x` | `0 5 * * 1` | Weekly Mon 5:00am X algorithm research. +Thu 5:00am for Manager. | low | all | same as `algo_research_tiktok` | `playbook.md § Platform algorithm research` |
+| `opportunity_scout_daily` | `0 6 * * *` | Daily 6am scan of UGC marketplaces (Aspire / GRIN / Creator.co / Modash / Backstage / Mavrck), X creator-call hashtags, and operator-requested local brand search via Brave. Dedupes via `opportunityScoutSeen`, surfaces top 3 to morning brief and full list to Today. | medium | all | uses BRAVE_API_KEY; Manager unlocks larger `maxResults` and Apollo/Hunter contact discovery on confirmed opportunities | `playbook.md § Opportunity scout` |
+| `collab_matchmaker_weekly` | `0 17 * * 0` | Sunday 5pm weekly collab shortlist — expands `soul.md` namedPeers via ScrapeCreators creator-search, scores audience overlap, proposes per-match format + first-message DM. Surfaces as tap-to-DM cards on Today. | medium | all | excludes direct competitors (overlap > 0.85) and recent same-format collabs; writes `collabMatchLog` with `creatorActedOn=pending` | `playbook.md § Collab matchmaker` |
 
 ### 2.1. Why some entries are not on the table
 
@@ -95,83 +97,109 @@ documented here for sibling-scan completeness:
 
 | entryId | trigger | description | thinking | tier | conditions | playbook § |
 |---|---|---|---|---|---|---|
-| `hook_library_build` | event: ScrapeCreators delta detects a new post crossing the outlier threshold | Multimodal hook extraction from a high-performing post. Watches the video, parses captions + top comments, writes a hook entry to `hookLibrary` with citations. | medium | Pro+ | wait at least 6h after `posts.postedAt` for engagement to settle, then check that the post sits in the top 25% performance vs the creator's prior 30 posts on the same platform | `playbook.md § Hook library auto-build` |
-| `post_publish_reaction` | event: ScrapeCreators delta detects new post for any verified handle | Push to creator within latency cap with first-impression read on the post. Latency cap is plan-tier-bound: Starter 1800s, Pro 600s, Studio 300s — matches `planFeatures.postPublishReactionLatencySec` exactly. | medium | all | latency budget per plan tier; if the platform-fetch fails twice, drop to caption-only analysis rather than skip entirely | `playbook.md § Post-publish reaction` |
-| `brand_email_triage` | event: Gmail webhook (Composio) delivers a new inbound thread classified as brand-deal | Triage the thread, draft 4 reply variants tuned to the creator's floor rate, write to `brandDeals`. Surfaces to Deals screen + Today notification. | high | Pro+ | only if Composio Gmail connected; if revoked mid-task, fall back to polling once per 15 min for up to 2h, then surface a reconnect prompt on Today (this prompt is the **one** non-silent connection alert — brand emails are time-sensitive enough to warrant it) | `playbook.md § Brand email triage` |
-| `contract_redflag_scan` | event: PDF upload to Deals screen | Parse contract via `pdf` skill, scan via `maya-contract-redflag` skill, write a red-flag report to `dealContracts`. Push summary to creator. | high | all | none — Starter gets this too because contract liability is independent of plan tier | `playbook.md § Contract scan` |
+| `first_boot_introduction` | event: session start when `creators.firstBootCompletedAt === undefined` | Maya's first-message-on-boot sequence: greet + cited insight from `creatorPicture` + 3 opening questions (goal / tone / brand-deal floor) + Gmail OAuth deep-link via `integrations.composio.oauth.startOAuth({ provider: "gmail" })` + Calendar OAuth deep-link via the same action with `provider: "calendar"`. Fires once per creator. Stamps `creators.firstBootCompletedAt` on completion. | medium | all | runs once; idempotency-guarded by `firstBootCompletedAt`; partial completion re-enters at the next live point in the sequence rather than re-greeting | `playbook.md § First message handler — the introduction` |
+| `first_weekly_plan` | event: `creators.openingAnswersAt` is set AND `creators.firstWeeklyPlanSentAt === undefined` | First weekly content plan, generated immediately after the creator answers the three opening questions. Same `maya-content-arc-planner` chain as the Sunday `weekly_content_plan` cron; same `contentPlans` persistence. Stamps `creators.firstWeeklyPlanSentAt` on completion. Connection state is NOT gating — Calendar enrichment lands in the next Sunday cycle if Calendar isn't yet connected. | medium | all | chained off `first_boot_introduction`; runs once per creator | `playbook.md § First weekly plan — chained off the introduction` |
+| `hook_library_build` | event: ScrapeCreators delta detects a new post crossing the outlier threshold | Multimodal hook extraction from a high-performing post. Watches the video, parses captions + top comments, writes a hook entry to `hookLibrary` with citations. | medium | manager | Manager-only — folded into the autonomous post-reaction loop. Wait at least 6h after `posts.postedAt` for engagement to settle, then check that the post sits in the top 25% performance vs the creator's prior 30 posts on the same platform | `playbook.md § Hook library auto-build` |
+| `post_publish_reaction` | event: ScrapeCreators delta detects new post for any verified handle | Push to creator within latency cap with first-impression read on the post. Latency cap is plan-tier-bound: Coach 600s, Manager 300s — matches `planFeatures.postPublishReactionLatencySec` exactly. | medium | all | latency budget per plan tier; if the platform-fetch fails twice, drop to caption-only analysis rather than skip entirely | `playbook.md § Post-publish reaction` |
+| `brand_email_triage` | event: Gmail webhook (Composio) delivers a new inbound thread classified as brand-deal | Triage the thread, draft 4 reply variants tuned to the creator's floor rate, write to `brandDeals`. Surfaces to Deals screen + Today notification. Both tiers triage; Manager additionally permits auto-send under `autoSendThreshold`. | high | all | only if Composio Gmail connected; if revoked mid-task, fall back to polling once per 15 min for up to 2h, then surface a reconnect prompt on Today (this prompt is the **one** non-silent connection alert — brand emails are time-sensitive enough to warrant it) | `playbook.md § Brand email triage` |
+| `contract_redflag_scan` | event: PDF upload to Deals screen | Parse contract via `pdf` skill, scan via `maya-contract-redflag` skill, write a red-flag report to `dealContracts`. Push summary to creator. | high | all | none — both tiers get this; contract liability is independent of plan tier | `playbook.md § Contract scan` |
 | `rate_suggestion` | on-demand: chat-initiated, or auto-folded into `brand_email_triage` | Heuristic + LLM rate suggestion via `maya-rate-calculator` skill. | medium | all | none | `playbook.md § Rate suggestion` |
+| `monetization_diversifier` | folded: milestone events (10K/50K/100K/500K → morning brief), revenue-flat-90d (→ evening recap), or on-demand chat | Per-niche playbook of revenue-stream proposals (affiliate / merch / courses / subs / ad-rev / email-list / live-events / consulting) via `maya-monetization-diversifier` skill. | high | all | no standalone cron — always folded into an existing surface | `playbook.md § Monetization diversifier` |
+| `pitch_strategy` | folded: BEFORE every outbound pitch (scout-confirmed or creator-added) and BEFORE replying to inbound emails with no proposed dollars | Pure-logic free / gifted / paid / decline decision via `maya-pitch-strategy` skill. Output anchors `brand_outreach` tone + asked rate, and `maya-rate-calculator` ranges when no offer dollars attached. | none | manager | Manager-only — Coach skips this program entirely (Coach never composes cold outbound, so the pre-pitch decision is moot) | `playbook.md § Pitch strategy` |
+| `brand_outreach` | event: creator-confirmed opportunity from `opportunity_scout_daily` ready to pitch, OR creator manually adds a brand to their target list | Cold-pitch composer via `maya-brand-outreach` skill: subject + body + follow-up cadence (gentle / firm / final). Pre-pitch `pitch_strategy` decided angle + rate; this composes the email. | high | manager | Manager-only — Coach never composes cold outbound. Creator-approved by default; auto-send only fires when `autoSendThreshold` is set, ask is below it, AND citation firewall passes. Manager additionally permits Apollo/Hunter contact discovery via `brandContactDiscoveryEnabled` when `brand.contactEmail` is null | `playbook.md § Brand outreach` |
 
 > **Note on entry count.** The CLAUDE.md and playbook reference "17
-> behaviors" historically. Counting strictly: 13 cron entries above + 5
-> event/on-demand entries = **18 total proactive behaviors**. The drift is
-> because `rate_suggestion` was originally folded into `brand_email_triage`
-> in early planning; we now schedule it as its own entry because it's also
-> chat-initiated independently. Keep this count in sync with `playbook.md §
-> Index` and `skill.md § Coverage matrix`.
+> behaviors" historically. Counting strictly post-orphan-skill wire-up:
+> 21 cron entries above + 8 event/on-demand entries = **29 total
+> proactive behaviors**. The drift is because (a) `rate_suggestion` was
+> originally folded into `brand_email_triage` in early planning; we now
+> schedule it as its own entry because it's also chat-initiated
+> independently, and (b) the Sprint 3.5b orphan skills
+> (`opportunity_scout_daily`, `collab_matchmaker_weekly`,
+> `monetization_diversifier`, `pitch_strategy`, `brand_outreach`) now
+> have first-class cron / event / folded entries. Keep this count in
+> sync with `playbook.md § Index` and `skill.md § Coverage matrix`.
 
 ---
 
 ## 3. Plan-tier cron-enablement matrix
 
 This table is the **runtime authority** that OpenClaw consults at boot. It
-mirrors `planFeatures(creator)` in `convex/lib/planFeatures.ts` and
-`STARTER_CRON_ALLOWLIST` in `convex/agents/packs/maya/configGeneratorMaya.ts`.
-If you change one, you must change all three. The Sprint 3 acceptance gate
-diffs this table against the `cronEnablement` array produced by
-`buildMayaConfig()` for a Starter / Pro / Studio fixture creator.
+mirrors `planFeatures(creator)` in `convex/lib/planFeatures.ts` and the
+tier gating in `convex/agents/packs/maya/workspace/standingOrders.ts`. If
+you change one, you must change all three. The acceptance gate diffs this
+table against the `cronEnablement` array produced by `buildMayaConfig()`
+for a Coach / Manager fixture creator.
+
+**Tier semantics post-coach/manager migration:** the boundary is **autonomy
+on the creator's behalf**, NOT breadth. Both tiers see every read/advisory
+program — including programs that consume paid third-party APIs (Brave,
+Composio Stripe/Calendar reads). Manager-only programs are ones that
+require Maya to take an autonomous action OUTBOUND: auto-send a brand
+email, draft a cold pitch, fire Apollo/Hunter discovery, hook-library
+auto-build (folded into the autonomous post-reaction loop).
 
 `Y` = enabled, `—` = disabled (the Maya for that tier never schedules it),
 `*` = enabled with degraded behavior (see footnotes).
 
-| entryId | Starter | Pro | Studio |
-|---|:---:|:---:|:---:|
-| `morning_brief` | Y | Y | Y |
-| `accountability_nudge` | Y | Y | Y |
-| `performance_check_2h` | Y | Y | Y |
-| `daily_niche_scan` | Y | Y | Y |
-| `evening_recap` | Y | Y | Y |
-| `weekly_content_plan` | Y¹ | Y | Y |
-| `weekly_review` | Y² | Y | Y |
-| `revenue_snapshot` | — | Y³ | Y³ |
-| `competitor_watch` | — | Y⁴ | Y⁴ |
-| `comment_triage` | Y | Y | Y |
-| `calendar_lookahead` | — | Y⁵ | Y⁵ |
-| `manager_readiness_packet_quarterly` | — | Y | Y⁶ |
-| `trend_watcher` | Y | Y | Y |
-| `hook_library_build` (event) | — | Y | Y |
-| `post_publish_reaction` (event) | Y⁷ | Y⁷ | Y⁷ |
-| `brand_email_triage` (event) | — | Y | Y |
-| `contract_redflag_scan` (event) | Y | Y | Y |
-| `rate_suggestion` (on-demand) | Y | Y | Y |
+| entryId | Coach | Manager |
+|---|:---:|:---:|
+| `morning_brief` | Y | Y |
+| `accountability_nudge` | Y | Y |
+| `performance_check_2h` | Y | Y |
+| `daily_niche_scan` | Y | Y |
+| `evening_recap` | Y | Y |
+| `weekly_content_plan` | Y | Y |
+| `weekly_review` | Y | Y |
+| `revenue_snapshot` | Y¹ | Y¹ |
+| `competitor_watch` | Y² | Y² |
+| `comment_triage` | Y | Y |
+| `calendar_lookahead` | Y³ | Y³ |
+| `manager_readiness_packet_quarterly` | Y | Y⁴ |
+| `trend_watcher` | Y | Y |
+| `industry_intel_daily` | Y | Y |
+| `algo_research_tiktok` | Y | Y⁵ |
+| `algo_research_instagram` | Y | Y⁵ |
+| `algo_research_youtube` | Y | Y⁵ |
+| `algo_research_linkedin` | Y | Y⁵ |
+| `algo_research_x` | Y | Y⁵ |
+| `opportunity_scout_daily` | Y⁶ | Y⁶ |
+| `collab_matchmaker_weekly` | Y⁷ | Y⁷ |
+| `first_boot_introduction` (event) | Y | Y |
+| `first_weekly_plan` (event) | Y | Y |
+| `hook_library_build` (event) | — | Y |
+| `post_publish_reaction` (event) | Y⁸ | Y⁸ |
+| `brand_email_triage` (event) | Y⁹ | Y⁹ |
+| `contract_redflag_scan` (event) | Y | Y |
+| `rate_suggestion` (on-demand) | Y | Y |
+| `monetization_diversifier` (folded) | Y | Y |
+| `pitch_strategy` (folded) | — | Y |
+| `brand_outreach` (event) | — | Y |
 
 **Footnotes:**
 
-1. Starter weekly content plan is single-platform (capped by
-   `planFeatures.maxHandles = 1`). No cross-platform variant generation.
-2. Starter weekly review is the stripped-down version: `low` thinking, no
-   competitor synthesis, no comparable-creator citations. The headline
-   structure (top posts, what worked, one change) is preserved.
-3. Conditional on Composio Stripe connected — see § 4.
-4. Conditional on `creators.namedPeers.length >= 1` — see § 4. Pro caps at
-   5 peers; Studio caps at 10 (per `planFeatures.competitorWatchSlots`).
-5. Conditional on Composio Calendar connected — see § 4.
-6. Studio additionally permits **on-demand** packet generation between
+1. Conditional on Composio Stripe connected — see § 4.
+2. Conditional on `creators.namedPeers.length >= 1` — see § 4. Coach caps
+   at 5 peers; Manager caps at 10 (per `planFeatures.competitorWatchSlots`).
+3. Conditional on Composio Calendar connected — see § 4.
+4. Manager additionally permits **on-demand** packet generation between
    quarterly refreshes (per `planFeatures.readinessPacketCadence =
    "on-demand"`). The cron entry behavior is unchanged.
-7. Latency cap differs by tier: Starter 1800s, Pro 600s, Studio 300s.
-
-> **Cross-reference enforcement:** the `STARTER_CRON_ALLOWLIST` set in
-> `configGeneratorMaya.ts` currently contains: `morning_brief`,
-> `evening_recap`, `weekly_review`, `revenue_snapshot`. This document
-> overrides that allowlist for Sprint 3 — Starter additionally enables
-> `accountability_nudge`, `performance_check_2h`, `daily_niche_scan`,
-> `weekly_content_plan`, `comment_triage`, `trend_watcher`,
-> `post_publish_reaction`, `contract_redflag_scan`, `rate_suggestion`,
-> and removes `revenue_snapshot` (Pro+). The Sprint 3 ticket includes a
-> code change to expand `STARTER_CRON_ALLOWLIST` to match this table.
-> Until that lands, the runtime is the more conservative subset and Maya
-> for a Starter creator will silently skip the new entries — fail closed
-> rather than fail open.
+5. Manager gets a second weekly run (Thursday at the same per-platform
+   offset) for fresher cache. Coach's algo-research cache is one
+   weekly tick; Maya's `maya-platform-best-practice` consultant reads
+   from the same global cache regardless of tier.
+6. Manager unlocks larger `maxResults` and Apollo/Hunter contact discovery
+   on confirmed opportunities (gated by `brandContactDiscoveryEnabled`).
+   Coach surfaces the listings but stops at "creator decides whether to
+   pitch" — no autonomous outbound.
+7. Manager unlocks larger `maxMatches` and richer audience-overlap
+   scoring. Coach gets the same shortlist on a smaller `maxMatches`.
+8. Latency cap differs by tier: Coach 600s, Manager 300s (per
+   `planFeatures.postPublishReactionLatencySec`).
+9. Coach triages inbound brand email into a draft; auto-send under
+   `autoSendThreshold` is **Manager-only** (per
+   `planFeatures.canAutoSendBrandEmails`).
 
 ---
 
@@ -279,25 +307,32 @@ alphabetical by `entryId` so diff review is mechanical.
 | `algo_research_x` | `playbook.md § Platform algorithm research` | (no per-task key — `low` thinking) | cron |
 | `algo_research_youtube` | `playbook.md § Platform algorithm research` | (no per-task key — `low` thinking) | cron |
 | `brand_email_triage` | `playbook.md § Brand email triage` | `PER_TASK_DEFAULT_BUDGET.brand_email_draft` | event |
+| `brand_outreach` | `playbook.md § Brand outreach` | (no per-task key — `high` thinking, follows brand_email budget) | event |
 | `calendar_lookahead` | `playbook.md § Calendar-aware content planning` | (no per-task key — uses `weekly_content_plan` budget) | cron |
+| `collab_matchmaker_weekly` | `playbook.md § Collab matchmaker` | (no per-task key — uses `niche_scan` budget) | cron |
 | `comment_triage` | `playbook.md § Comment triage` | `PER_TASK_DEFAULT_BUDGET.comment_triage` | cron |
 | `competitor_watch` | `playbook.md § Competitor watch` | (no per-task key — uses `niche_scan` budget) | cron |
 | `contract_redflag_scan` | `playbook.md § Contract scan` | `PER_TASK_DEFAULT_BUDGET.contract_redflag_scan` | event |
 | `cross_post_distribution` | `playbook.md § Cross-platform content distribution` | (no per-task key — uses `weekly_content_plan` budget) | event/on-demand |
 | `daily_niche_scan` | `playbook.md § Daily niche scan` | `PER_TASK_DEFAULT_BUDGET.niche_scan` | cron |
 | `evening_recap` | `playbook.md § Evening recap` | `PER_TASK_DEFAULT_BUDGET.evening_recap` | cron |
+| `first_boot_introduction` | `playbook.md § First message handler — the introduction` | (no per-task key — uses `chat_reply` budget for the intro messages; OAuth-link generation is a Convex action, no LLM) | event |
+| `first_weekly_plan` | `playbook.md § First weekly plan — chained off the introduction` | `PER_TASK_DEFAULT_BUDGET.weekly_content_plan` (same chain as Sunday cron) | event |
 | `growth_coach` | `playbook.md § Growth coaching` | (no per-task key — folded into `morning_brief` budget) | folded/on-demand |
 | `hook_library_build` | `playbook.md § Hook library auto-build` | `PER_TASK_DEFAULT_BUDGET.hook_library_build` | event |
 | `industry_intel_daily` | `playbook.md § Industry intel` | (no per-task key — uses `niche_scan` budget) | cron |
 | `manager_readiness_packet_quarterly` | `playbook.md § Manager-readiness packet` | `PER_TASK_DEFAULT_BUDGET.manager_readiness_packet` | cron |
+| `monetization_diversifier` | `playbook.md § Monetization diversifier` | (no per-task key — folded into `morning_brief` / `evening_recap` / `chat_reply` budgets) | folded/on-demand |
 | `morning_brief` | `playbook.md § Morning brief` | `PER_TASK_DEFAULT_BUDGET.morning_brief` | cron |
+| `opportunity_scout_daily` | `playbook.md § Opportunity scout` | (no per-task key — uses `niche_scan` budget) | cron |
 | `performance_check_2h` | `playbook.md § Post-performance check` | (no per-task key — uses `chat_reply` budget for read-only metric pull) | cron |
+| `pitch_strategy` | `playbook.md § Pitch strategy` | (no per-task key — pure decision logic, `none` thinking) | folded |
 | `post_publish_reaction` | `playbook.md § Post-publish reaction` | `PER_TASK_DEFAULT_BUDGET.post_publish_reaction` | event |
 | `rate_suggestion` | `playbook.md § Rate suggestion` | `PER_TASK_DEFAULT_BUDGET.rate_suggestion` | on-demand |
 | `revenue_snapshot` | `playbook.md § Revenue snapshot` | (no per-task key — pure data-pull, `none` thinking) | cron |
 | `trend_watcher` | `playbook.md § Trend watcher` | (no per-task key — uses `niche_scan` budget) | cron |
 | `weekly_content_plan` | `playbook.md § Weekly content plan` | `PER_TASK_DEFAULT_BUDGET.weekly_content_plan` | cron |
-| `weekly_review` | `playbook.md § Weekly review` | `PER_TASK_DEFAULT_BUDGET.weekly_review_synth` (Pro+); `evening_recap` budget for Starter degraded version | cron |
+| `weekly_review` | `playbook.md § Weekly review` | `PER_TASK_DEFAULT_BUDGET.weekly_review_synth` | cron |
 
 Entries flagged "no per-task key" above intentionally do not need a unique
 budget — they reuse a related task tag's budget and write to
@@ -315,14 +350,18 @@ If you need to add, remove, rename, or reschedule an entry:
 2. Edit the matching section in `playbook.md`. If the entry is new, add a
    section; if removed, delete it.
 3. Edit `skill.md` if the change affects which skills the entry depends on.
-4. Edit `convex/agents/packs/maya/configGeneratorMaya.ts`:
+4. Edit `convex/agents/packs/maya/workspace/standingOrders.ts` — every
+   program lives there as the single source of truth for tier + cron
+   metadata. The workspace-bundle generators (`generateAgentsMd.ts`,
+   `buildCronJobsJson.ts`) consult that catalog directly, so updating
+   the program's `tier` / `defaultCron` / `cronEntryId` flows through.
+5. Edit `convex/agents/packs/maya/configGeneratorMaya.ts`:
    - `PER_TASK_DEFAULT_BUDGET` if the thinking budget changed
    - `ALL_CRON_ENTRIES` if the entryId changed
-   - `STARTER_CRON_ALLOWLIST` if the Starter enablement changed
-5. Update the plan-tier matrix in § 3 and the sibling-scan map in § 6.
-6. Run the sibling-file scan locally (`npm run test:sibling-scan` —
+6. Update the plan-tier matrix in § 3 and the sibling-scan map in § 6.
+7. Run the sibling-file scan locally (`npm run test:sibling-scan` —
    ships in Sprint 3 acceptance).
-7. Add a fixture-corpus behavioral test for the new entry if cron;
+8. Add a fixture-corpus behavioral test for the new entry if cron;
    skip if event/on-demand and already covered by the event harness.
 
 The sibling-scan failure message is intentionally loud and points at every

@@ -220,7 +220,7 @@ export interface BuildInputs {
  * The 28K cap is our override; OpenClaw still respects whatever we declare
  * in `gatewayConfig.agents.defaults.bootstrapMaxChars`.
  */
-export const MAYA_BOOTSTRAP_MAX_CHARS = 28_000;
+export const MAYA_BOOTSTRAP_MAX_CHARS = 32_000;
 
 /**
  * Build the OpenClaw config + workspace bundle for one creator. Pure function

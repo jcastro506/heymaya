@@ -30,7 +30,12 @@ import {
   clampThinkingBudget,
   type ThinkingBudget,
 } from "../../lib/planFeatures";
-import { defaultThinkingBudget, isTaskTag } from "./taskTags";
+import {
+  defaultThinkingBudget,
+  isTaskTag,
+  taskTagFiringKind,
+  type TaskTag,
+} from "./taskTags";
 import {
   callOpenRouter,
   OpenRouterError,
@@ -184,6 +189,27 @@ export const callMaya = internalAction({
       latencyMs,
       ts: Date.now(),
     });
+
+    // Creator usage analytics — cron_fired / event_fired wire-in (paths a, b,
+    // and the LLM-call layer for c). The `callMaya` action is the single
+    // chokepoint every Maya behavior eventually flows through; emitting from
+    // here gives us "Maya ran X" for free across morning_brief, evening_recap,
+    // niche_scan, weekly_review_synth, brand_email_draft, etc. Tags whose
+    // firing kind is `null` (e.g. chat_reply) are handled at the chat-turn
+    // wire-in instead so we don't double-count.
+    const firingKind = taskTagFiringKind(args.taskTag as TaskTag);
+    if (firingKind !== null) {
+      await ctx.runMutation(internal.lib.usageEvents.logUsageEvent, {
+        creatorId: args.creatorId as Id<"creators">,
+        kind: firingKind,
+        label: args.taskTag,
+        meta: {
+          thinkingBudget: thinkingBudgetUsed,
+          latencyMs,
+          costUsd,
+        },
+      });
+    }
 
     return {
       content: result.content,

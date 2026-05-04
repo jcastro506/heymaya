@@ -26,7 +26,7 @@ async function seed(
       channelPreference: "web",
       timezone: "America/Los_Angeles",
       status: "active",
-      plan: opts.plan,
+      plan: "coach",
       accountType: "service-business",
       createdAt: NOW,
     })

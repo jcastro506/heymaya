@@ -68,6 +68,17 @@ export default clerkMiddleware(async (auth, req) => {
   // creator URLs get redirected to /business (a public route) instead of
   // /sign-in (which would land them in a flow that ultimately routes to
   // creator HQ once Clerk completes).
+  if (CREATOR_PRODUCT_ENABLED) {
+    // When the creator product is the active surface, the bare root URL
+    // is the creator landing. /business stays available for visitors who
+    // explicitly came for the service product. Future: `/` becomes a
+    // proper split-router with both products visible side-by-side; for
+    // now we route to the creator landing because that's the active focus.
+    if (req.nextUrl.pathname === "/") {
+      const dest = new URL("/creators", req.url);
+      return NextResponse.redirect(dest, 307);
+    }
+  }
   if (!CREATOR_PRODUCT_ENABLED) {
     const { pathname, search } = req.nextUrl;
 

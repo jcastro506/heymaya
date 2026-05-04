@@ -47,7 +47,7 @@ async function insertServiceBusiness(
       channelPreference: "web",
       timezone: "America/Los_Angeles",
       status: "active",
-      plan: "starter",
+      plan: "coach",
       accountType: "service-business",
       createdAt: NOW,
     });
@@ -507,7 +507,7 @@ describe("integrations.stripe.voiceMetering — cross-tenant + adversarial", () 
           channelPreference: "web",
           timezone: "UTC",
           status: "active",
-          plan: "starter",
+          plan: "coach",
           accountType: "service-business",
           createdAt: NOW,
         });

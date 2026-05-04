@@ -34,12 +34,12 @@ describe("generateAgentsMd", () => {
   it("is deterministic for identical inputs", () => {
     const a = generateAgentsMd({
       ...BASE_INPUTS,
-      plan: "pro",
+      plan: "manager",
       embedStandingOrders: false,
     });
     const b = generateAgentsMd({
       ...BASE_INPUTS,
-      plan: "pro",
+      plan: "manager",
       embedStandingOrders: false,
     });
     expect(a).toBe(b);
@@ -48,10 +48,10 @@ describe("generateAgentsMd", () => {
   it("starter plan excludes every pro+ standing-order title", () => {
     const md = generateAgentsMd({
       ...BASE_INPUTS,
-      plan: "starter",
+      plan: "coach",
       embedStandingOrders: true,
     });
-    const proOnly = STANDING_ORDERS.filter((p) => p.tier === "pro+");
+    const proOnly = STANDING_ORDERS.filter((p) => p.tier === "manager");
     expect(proOnly.length).toBeGreaterThan(0);
     for (const p of proOnly) {
       expect(md).not.toContain(`### ${p.title}`);
@@ -61,7 +61,7 @@ describe("generateAgentsMd", () => {
   it("pro plan includes every standing-order program inline when embedded", () => {
     const md = generateAgentsMd({
       ...BASE_INPUTS,
-      plan: "pro",
+      plan: "manager",
       embedStandingOrders: true,
     });
     for (const p of STANDING_ORDERS) {
@@ -72,7 +72,7 @@ describe("generateAgentsMd", () => {
   it("non-embedded form fits under default bootstrap cap", () => {
     const md = generateAgentsMd({
       ...BASE_INPUTS,
-      plan: "pro",
+      plan: "manager",
       embedStandingOrders: false,
     });
     expect(md.length).toBeLessThanOrEqual(DEFAULT_BOOTSTRAP_MAX_CHARS);
@@ -81,16 +81,16 @@ describe("generateAgentsMd", () => {
   it("non-embedded form references standing-orders.md", () => {
     const md = generateAgentsMd({
       ...BASE_INPUTS,
-      plan: "pro",
+      plan: "manager",
       embedStandingOrders: false,
     });
     expect(md).toContain("`standing-orders.md`");
   });
 
-  it("renders all 9 doc sections (operating instructions, tone, platform, standing orders, chat, auto-send, plan-tier, failure modes, citation)", () => {
+  it("renders all 10 doc sections (operating instructions, tone, platform, standing orders, chat, auto-send, plan-tier, failure modes, connected toolkits, citation)", () => {
     const md = generateAgentsMd({
       ...BASE_INPUTS,
-      plan: "pro",
+      plan: "manager",
       embedStandingOrders: false,
     });
     const expected = [
@@ -102,6 +102,7 @@ describe("generateAgentsMd", () => {
       "## Auto-send escalation (brand emails only)",
       "## Plan-tier behavior matrix",
       "## Failure modes & graceful degradation",
+      "## Connected toolkits",
       "## Citation discipline",
     ];
     for (const heading of expected) {
@@ -109,22 +110,42 @@ describe("generateAgentsMd", () => {
     }
   });
 
+  it("Connected toolkits section names every shipping toolkit slug + points back to playbook § 10 + cites the OAuth start action", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // Composio toolkit slugs (uppercase, v3 dashboard naming)
+    expect(md).toContain("GMAIL");
+    expect(md).toContain("GOOGLECALENDAR");
+    expect(md).toContain("TIKTOK");
+    expect(md).toContain("LINKEDIN");
+    expect(md).toContain("TWITTER");
+    // Plugin name + per-creator entity authentication line
+    expect(md).toContain("@composio/openclaw-plugin");
+    // Pointer back to the playbook section that owns the full guidance
+    expect(md).toContain("playbook.md");
+    // Auth-error recovery: existing OAuth lifecycle, NOT a new ad-hoc flow
+    expect(md).toContain("integrations.composio.oauth.startOAuth");
+  });
+
   it("weaves creator-specific identifiers (display name, plan, handles) into the header", () => {
     const md = generateAgentsMd({
       creatorDisplayName: "Jane Doe",
-      plan: "studio",
+      plan: "manager",
       handles: [{ platform: "youtube", handle: "@janedoe" }],
       embedStandingOrders: false,
     });
     expect(md).toContain("Jane Doe");
-    expect(md).toContain("Studio");
+    expect(md).toContain("Manager");
     expect(md).toContain("youtube: @janedoe");
   });
 
   it("falls back gracefully when no handles are provided", () => {
     const md = generateAgentsMd({
       creatorDisplayName: "Jane Doe",
-      plan: "starter",
+      plan: "coach",
       handles: [],
       embedStandingOrders: false,
     });
@@ -134,21 +155,21 @@ describe("generateAgentsMd", () => {
 
 describe("renderStandingOrdersDocument", () => {
   it("emits one program per tier-allowed standing order", () => {
-    const doc = renderStandingOrdersDocument("starter");
-    const allowed = standingOrdersForPlan("starter");
+    const doc = renderStandingOrdersDocument("coach");
+    const allowed = standingOrdersForPlan("coach");
     for (const p of allowed) {
       expect(doc).toContain(`### ${p.title}`);
     }
     // Pro-only programs do not appear in the Starter document.
-    const proOnly = STANDING_ORDERS.filter((p) => p.tier === "pro+");
+    const proOnly = STANDING_ORDERS.filter((p) => p.tier === "manager");
     for (const p of proOnly) {
       expect(doc).not.toContain(`### ${p.title}`);
     }
   });
 
   it("every program in the document has all 4 canonical labels", () => {
-    const doc = renderStandingOrdersDocument("studio");
-    const programs = standingOrdersForPlan("studio");
+    const doc = renderStandingOrdersDocument("manager");
+    const programs = standingOrdersForPlan("manager");
     for (const p of programs) {
       // After the program title, the next 4 bold labels must appear in
       // canonical order. We assert each substring is present somewhere
@@ -164,8 +185,8 @@ describe("renderStandingOrdersDocument", () => {
   });
 
   it("is deterministic for the same plan", () => {
-    const a = renderStandingOrdersDocument("pro");
-    const b = renderStandingOrdersDocument("pro");
+    const a = renderStandingOrdersDocument("manager");
+    const b = renderStandingOrdersDocument("manager");
     expect(a).toBe(b);
   });
 });

@@ -172,6 +172,52 @@ html {
   border-color: var(--paper);
 }
 
+/* Inputs — mobile-first, thumb-friendly. min-height 3rem (48px) hits Apple's
+   44pt minimum tap target. text-size-adjust prevents iOS Safari from
+   re-zooming on focus. The 16px font-size on small viewports prevents iOS
+   from auto-zooming when the field gains focus (Safari only zooms when font
+   is <16px). Border + bg mirror .btn-ghost so inputs and ghost buttons sit
+   in the same visual register. */
+.input {
+  display: block;
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--hairline);
+  border-radius: 0.5rem;
+  background: var(--ink-2);
+  color: var(--paper);
+  font-size: 1rem; /* 16px — prevents iOS focus-zoom */
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  -webkit-text-size-adjust: 100%;
+}
+.input::placeholder {
+  color: var(--paper-faint);
+}
+.input:focus {
+  border-color: var(--paper-dim);
+  background: var(--ink);
+}
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* Safari autofill paints inputs yellow by default; force the dark theme. */
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--paper);
+  -webkit-box-shadow: 0 0 0 1000px var(--ink-2) inset;
+  caret-color: var(--paper);
+}
+textarea.input {
+  min-height: 6rem;
+  resize: vertical;
+  font-family: inherit;
+}
+
 /* FAQ open/close marker styling — replaces default disclosure triangle. */
 details > summary {
   list-style: none;

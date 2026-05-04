@@ -28,7 +28,7 @@ function makeCreator(over: Partial<Doc<"creators">> = {}): Doc<"creators"> {
     channelPreference: "imessage",
     timezone: "America/Los_Angeles",
     status: "active",
-    plan: "pro",
+    plan: "manager",
     createdAt: 1_700_000_000_000,
     ...over,
   };
@@ -63,7 +63,7 @@ describe("generateUserMd", () => {
       creator: makeCreator(),
       picture: null,
       handles: makeHandles(),
-      plan: "pro" as const,
+      plan: "manager" as const,
     };
     const a = generateUserMd(inputs);
     const b = generateUserMd(inputs);
@@ -75,7 +75,7 @@ describe("generateUserMd", () => {
       creator: makeCreator(),
       picture: null,
       handles: makeHandles(),
-      plan: "pro",
+      plan: "manager",
     });
     expect(md).toContain("**Career stage:** not yet provided");
     expect(md).toContain("**Geographic location:** not yet provided");
@@ -116,7 +116,7 @@ describe("generateUserMd", () => {
       creator: makeCreator(),
       picture: futurePicture,
       handles: makeHandles(),
-      plan: "pro",
+      plan: "manager",
     });
     expect(md).toContain("**Career stage:** monetizing");
     expect(md).toContain("**Geographic location:** Austin, TX, US");
@@ -130,7 +130,7 @@ describe("generateUserMd", () => {
       creator: makeCreator(),
       picture: null,
       handles: makeHandles(),
-      plan: "pro",
+      plan: "manager",
     });
     // 47321 -> 47.3K, 8900 -> 8.9K
     expect(md).toMatch(/47\.3K followers/);
@@ -142,26 +142,28 @@ describe("generateUserMd", () => {
       creator: makeCreator(),
       picture: null,
       handles: makeHandles(),
-      plan: "pro",
+      plan: "manager",
     });
     expect(md).toContain("(unverified)");
   });
 
   it("describes per-plan cadence", () => {
-    const starter = generateUserMd({
-      creator: makeCreator({ plan: "starter" }),
+    const coach = generateUserMd({
+      creator: makeCreator({ plan: "coach" }),
       picture: null,
       handles: makeHandles(),
-      plan: "starter",
+      plan: "coach",
     });
-    const studio = generateUserMd({
-      creator: makeCreator({ plan: "studio" }),
+    const manager = generateUserMd({
+      creator: makeCreator({ plan: "manager" }),
       picture: null,
       handles: makeHandles(),
-      plan: "studio",
+      plan: "manager",
     });
-    expect(starter).toContain("No 2h pings");
-    expect(studio).toContain("Apollo/Hunter");
+    // Coach mentions "advisory only" / no auto-send.
+    expect(coach).toMatch(/advisory only|never auto-sends/i);
+    // Manager mentions Apollo/Hunter discovery.
+    expect(manager).toContain("Apollo/Hunter");
   });
 });
 

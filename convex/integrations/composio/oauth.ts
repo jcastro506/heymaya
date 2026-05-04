@@ -161,7 +161,7 @@ export const startOAuth = action({
       throw new PlanGateError(
         me.plan,
         `oauth:${args.provider}`,
-        args.provider === "gmail" || args.provider === "calendar" ? "pro" : "studio"
+        "manager"
       );
     }
 
@@ -229,7 +229,7 @@ export const completeOAuth = action({
       throw new PlanGateError(
         me.plan,
         `oauth:${args.provider}`,
-        args.provider === "gmail" || args.provider === "calendar" ? "pro" : "studio"
+        "manager"
       );
     }
 

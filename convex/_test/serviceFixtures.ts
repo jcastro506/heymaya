@@ -93,7 +93,10 @@ export async function loadFixture(
       channelPreference: fixture.channelPreference,
       timezone: fixture.timezone,
       status: "active",
-      plan: fixture.plan,
+      // creators.plan is the creator-side enum (coach/manager). Service
+      // fixtures hard-code "coach" here because service routing only
+      // consults businesses.planTier (which is `fixture.plan` below).
+      plan: "coach",
       accountType: "service-business",
       createdAt: NOW,
     })) as Id<"creators">;

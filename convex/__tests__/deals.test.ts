@@ -24,7 +24,7 @@ const NOW = 1_700_000_000_000;
 
 async function insertCreator(
   t: ReturnType<typeof convexTest>,
-  opts: { suffix: string; plan: "starter" | "pro" | "studio" }
+  opts: { suffix: string; plan: "coach" | "manager" }
 ): Promise<Id<"creators">> {
   return await t.run((ctx) =>
     ctx.db.insert("creators", {
@@ -99,7 +99,7 @@ describe("deals.dealsByStatus", () => {
 
   it("groups deals by status, keeping all status keys present", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertDeal(t, a, "Glossier", "new");
     await insertDeal(t, a, "Nike", "signed");
     await insertDeal(t, a, "Whoop", "paid");
@@ -112,8 +112,8 @@ describe("deals.dealsByStatus", () => {
 
   it("CROSS-TENANT: A's pipeline excludes B's deals", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await insertDeal(t, b, "B's brand", "new");
     const r = await asUser(t, "a").query(api.deals.dealsByStatus, {});
     expect(r.new).toEqual([]);
@@ -121,7 +121,7 @@ describe("deals.dealsByStatus", () => {
 
   it("PLAN-TIER: Starter sees their own deals (read is unrestricted)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     await insertDeal(t, a, "Manual entry", "new");
     const r = await asUser(t, "a").query(api.deals.dealsByStatus, {});
     expect(r.new).toHaveLength(1);
@@ -129,9 +129,9 @@ describe("deals.dealsByStatus", () => {
 });
 
 describe("deals.outreachByStatus", () => {
-  it("PLAN-TIER (REVISED): Starter sees their pitches grouped by status — brand-outreach is ungated", async () => {
+  it("PLAN-TIER (coach/manager): Manager sees their pitches grouped by status (brand-outreach gated to Manager)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertPitch(t, a, "Brand", "drafted");
     const r = await asUser(t, "a").query(api.deals.outreachByStatus, {});
     expect(r.drafted).toHaveLength(1);
@@ -139,7 +139,7 @@ describe("deals.outreachByStatus", () => {
 
   it("PLAN-TIER: Pro sees their pitches grouped by status", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertPitch(t, a, "X", "drafted");
     await insertPitch(t, a, "Y", "sent");
     const r = await asUser(t, "a").query(api.deals.outreachByStatus, {});
@@ -149,8 +149,8 @@ describe("deals.outreachByStatus", () => {
 
   it("CROSS-TENANT: A never sees B's pitches", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await insertPitch(t, b, "B-brand", "drafted");
     const r = await asUser(t, "a").query(api.deals.outreachByStatus, {});
     expect(r.drafted).toEqual([]);
@@ -160,7 +160,7 @@ describe("deals.outreachByStatus", () => {
 describe("deals.opportunityMatches", () => {
   it("PLAN-TIER (REVISED): Starter returns an array (opportunity-scout is ungated; live wiring TODO(s5))", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "starter" });
+    await insertCreator(t, { suffix: "a", plan: "coach" });
     const r = await asUser(t, "a").query(api.deals.opportunityMatches, {});
     // Under the revised matrix Starter is no longer fail-closed here — the
     // reader runs and returns an array (currently empty until S5 wires the
@@ -170,7 +170,7 @@ describe("deals.opportunityMatches", () => {
 
   it("PLAN-TIER: Pro returns [] until live wiring lands (TODO(s5))", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const r = await asUser(t, "a").query(api.deals.opportunityMatches, {});
     // Sprint 5 wires the live table; this test acts as the canary that the
     // shape stays an array until then.
@@ -181,7 +181,7 @@ describe("deals.opportunityMatches", () => {
 describe("deals.dealDetail", () => {
   it("returns null when unauthenticated", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const dealId = await insertDeal(t, a, "X", "new");
     const r = await t.query(api.deals.dealDetail, { dealId });
     expect(r).toBeNull();
@@ -189,8 +189,8 @@ describe("deals.dealDetail", () => {
 
   it("CROSS-TENANT: A cannot fetch B's deal by id", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     const bDeal = await insertDeal(t, b, "B-only", "new");
     const r = await asUser(t, "a").query(api.deals.dealDetail, { dealId: bDeal });
     expect(r).toBeNull();
@@ -198,7 +198,7 @@ describe("deals.dealDetail", () => {
 
   it("ADVERSARIAL: deleted deal returns null cleanly", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const dealId = await insertDeal(t, a, "X", "new");
     await t.run((ctx) => ctx.db.delete(dealId));
     const r = await asUser(t, "a").query(api.deals.dealDetail, { dealId });
@@ -207,7 +207,7 @@ describe("deals.dealDetail", () => {
 
   it("returns deal + reply variants for the owning creator", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const dealId = await t.run((ctx) =>
       ctx.db.insert("brandDeals", {
         creatorId: a,
@@ -227,9 +227,9 @@ describe("deals.dealDetail", () => {
 });
 
 describe("deals.outreachDetail", () => {
-  it("PLAN-TIER (REVISED): Starter receives their own pitch detail — brand-outreach is ungated", async () => {
+  it("PLAN-TIER (coach/manager): Manager receives their own pitch detail (brand-outreach gated to Manager)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const pid = await insertPitch(t, a, "X", "drafted");
     const r = await asUser(t, "a").query(api.deals.outreachDetail, {
       pitchId: pid,
@@ -239,8 +239,8 @@ describe("deals.outreachDetail", () => {
 
   it("CROSS-TENANT: A cannot fetch B's pitch", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     const bPid = await insertPitch(t, b, "B-only", "sent");
     const r = await asUser(t, "a").query(api.deals.outreachDetail, {
       pitchId: bPid,
@@ -250,7 +250,7 @@ describe("deals.outreachDetail", () => {
 
   it("returns the pitch for the owning Pro creator", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const pid = await insertPitch(t, a, "X", "drafted");
     const r = await asUser(t, "a").query(api.deals.outreachDetail, {
       pitchId: pid,

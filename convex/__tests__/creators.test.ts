@@ -25,7 +25,7 @@ async function insertCreator(
   t: ReturnType<typeof convexTest>,
   opts: {
     suffix: string;
-    plan: "starter" | "pro" | "studio";
+    plan: "coach" | "manager";
   }
 ): Promise<Id<"creators">> {
   return await t.run((ctx) =>
@@ -63,7 +63,7 @@ const FULL_ANSWERS = {
 describe("creators.submitOnboardingAnswers", () => {
   it("inserts a stub creatorPicture row when none exists, with the new fields", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const pictureId = await asUser(t, "a").mutation(
       api.creators.submitOnboardingAnswers,
       { creatorId: a, answers: FULL_ANSWERS }
@@ -82,7 +82,7 @@ describe("creators.submitOnboardingAnswers", () => {
 
   it("patches an existing creatorPicture row instead of duplicating it", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     // Pre-seed the picture (e.g. multimodal synth ran first).
     const seedId = await t.run((ctx) =>
       ctx.db.insert("creatorPicture", {
@@ -118,8 +118,8 @@ describe("creators.submitOnboardingAnswers", () => {
 
   it("CROSS-TENANT (CRITICAL): Creator A cannot write Creator B's picture even if they spoof creatorId", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     expect(a).toBeDefined();
     await expect(
       asUser(t, "a").mutation(api.creators.submitOnboardingAnswers, {
@@ -140,7 +140,7 @@ describe("creators.submitOnboardingAnswers", () => {
 
   it("rejects unauthenticated calls", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       t.mutation(api.creators.submitOnboardingAnswers, {
         creatorId: a,
@@ -151,7 +151,7 @@ describe("creators.submitOnboardingAnswers", () => {
 
   it("ADVERSARIAL: rejects an empty goal", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").mutation(api.creators.submitOnboardingAnswers, {
         creatorId: a,
@@ -162,7 +162,7 @@ describe("creators.submitOnboardingAnswers", () => {
 
   it("ADVERSARIAL: rejects missing careerStage", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").mutation(api.creators.submitOnboardingAnswers, {
         creatorId: a,
@@ -173,7 +173,7 @@ describe("creators.submitOnboardingAnswers", () => {
 
   it("ADVERSARIAL: rejects negative monthlyRevenueUsd", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").mutation(api.creators.submitOnboardingAnswers, {
         creatorId: a,
@@ -184,7 +184,7 @@ describe("creators.submitOnboardingAnswers", () => {
 
   it("ADVERSARIAL: rejects empty revenueStreams array", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").mutation(api.creators.submitOnboardingAnswers, {
         creatorId: a,
@@ -195,7 +195,7 @@ describe("creators.submitOnboardingAnswers", () => {
 
   it("ADVERSARIAL: rejects missing location.city/state", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await expect(
       asUser(t, "a").mutation(api.creators.submitOnboardingAnswers, {
         creatorId: a,
@@ -206,7 +206,7 @@ describe("creators.submitOnboardingAnswers", () => {
 
   it("monthlyRevenueUsd + longTermGoals are optional (skipped path)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const minimal = {
       goal: "100K by EOY",
       tone: "supportive" as const,
@@ -226,7 +226,7 @@ describe("creators.submitOnboardingAnswers", () => {
   });
 
   it("PLAN-TIER: every plan tier can submit answers (no gate)", async () => {
-    for (const plan of ["starter", "pro", "studio"] as const) {
+    for (const plan of ["coach", "manager"] as const) {
       const t = convexTest(schema, modules);
       const c = await insertCreator(t, { suffix: plan, plan });
       await expect(
@@ -246,7 +246,7 @@ describe("creators.submitOnboardingAnswers", () => {
 describe("creators.saveOnboardingProgress", () => {
   it("persists a partial answer slice + cursor on creators.onboardingProgress", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await asUser(t, "a").mutation(api.creators.saveOnboardingProgress, {
       creatorId: a,
       currentQuestionIdx: 3,
@@ -263,8 +263,8 @@ describe("creators.saveOnboardingProgress", () => {
 
   it("CROSS-TENANT: A cannot save progress for B", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     expect(a).toBeDefined();
     await expect(
       asUser(t, "a").mutation(api.creators.saveOnboardingProgress, {
@@ -279,7 +279,7 @@ describe("creators.saveOnboardingProgress", () => {
 
   it("submitOnboardingAnswers clears the resume buffer once the picture row lands", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await asUser(t, "a").mutation(api.creators.saveOnboardingProgress, {
       creatorId: a,
       currentQuestionIdx: 5,

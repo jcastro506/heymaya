@@ -62,7 +62,7 @@ async function insertBusinessWithVoiceChannel(
       channelPreference: "web",
       timezone: "America/Los_Angeles",
       status: "active",
-      plan: "starter",
+      plan: "coach",
       accountType: "service-business",
       createdAt: NOW,
     })
@@ -171,7 +171,7 @@ describe("setPinForBusinessInternal / clearPinForBusinessInternal", () => {
         channelPreference: "web",
         timezone: "America/Los_Angeles",
         status: "active",
-        plan: "starter",
+        plan: "coach",
         accountType: "service-business",
         createdAt: NOW,
       })

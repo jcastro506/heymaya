@@ -52,7 +52,7 @@ afterEach(() => {
 });
 
 describe("callMaya — plan-tier clamping (non-negotiable)", () => {
-  it("Starter creator + morning_brief (default medium) → clamped to low; aiCallLog records `low`", async () => {
+  it("Coach creator + morning_brief (default medium) → no clamp post-coach/manager migration", async () => {
     const t = convexTest(schema, modules);
 
     const creatorId = await t.run(async (ctx) => {
@@ -62,7 +62,7 @@ describe("callMaya — plan-tier clamping (non-negotiable)", () => {
         channelPreference: "web",
         timezone: TZ,
         status: "active",
-        plan: "starter",
+        plan: "coach",
         createdAt: NOW,
       });
     });
@@ -83,13 +83,13 @@ describe("callMaya — plan-tier clamping (non-negotiable)", () => {
       messages: [{ role: "user", content: "what's the brief?" }],
     });
 
-    expect(result.thinkingBudgetUsed).toBe("low");
+    // Both tiers allow medium+; no clamp.
+    expect(result.thinkingBudgetUsed).toBe("medium");
 
-    // Inspect the request body sent to OpenRouter — must reflect clamped budget.
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const init = (fetchSpy.mock.calls[0] as unknown as [string, RequestInit])[1];
     const sent = JSON.parse(init.body as string);
-    expect(sent.reasoning).toEqual({ effort: "low" });
+    expect(sent.reasoning).toEqual({ effort: "medium" });
 
     const logs = await t.run(async (ctx) =>
       await ctx.db
@@ -98,12 +98,12 @@ describe("callMaya — plan-tier clamping (non-negotiable)", () => {
         .collect()
     );
     expect(logs).toHaveLength(1);
-    expect(logs[0].thinkingBudget).toBe("low");
+    expect(logs[0].thinkingBudget).toBe("medium");
     expect(logs[0].taskTag).toBe("morning_brief");
     expect(logs[0].model).toBe("google/gemini-3-flash");
   });
 
-  it("Starter creator cannot use `high` thinking even when explicitly requested", async () => {
+  it("Coach creator can use `high` thinking — boundary is autonomy, not compute", async () => {
     const t = convexTest(schema, modules);
     const creatorId = await t.run(async (ctx) =>
       ctx.db.insert("creators", {
@@ -112,7 +112,7 @@ describe("callMaya — plan-tier clamping (non-negotiable)", () => {
         channelPreference: "web",
         timezone: TZ,
         status: "active",
-        plan: "starter",
+        plan: "coach",
         createdAt: NOW,
       })
     );
@@ -125,18 +125,18 @@ describe("callMaya — plan-tier clamping (non-negotiable)", () => {
     const result = await t.action(internal.agents.modelRouter.maya.callMaya, {
       creatorId,
       taskTag: "brand_email_draft", // default high
-      requestedBudget: "high", // also explicitly requested
+      requestedBudget: "high",
       messages: [{ role: "user", content: "draft this" }],
     });
 
-    expect(result.thinkingBudgetUsed).toBe("low");
+    expect(result.thinkingBudgetUsed).toBe("high");
     const logs = await t.run(async (ctx) =>
       ctx.db
         .query("aiCallLog")
         .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
         .collect()
     );
-    expect(logs[0].thinkingBudget).toBe("low");
+    expect(logs[0].thinkingBudget).toBe("high");
   });
 
   it("Pro creator + brand_email_draft (default high) → high, no clamp", async () => {
@@ -148,7 +148,7 @@ describe("callMaya — plan-tier clamping (non-negotiable)", () => {
         channelPreference: "imessage",
         timezone: TZ,
         status: "active",
-        plan: "pro",
+        plan: "manager",
         createdAt: NOW,
       })
     );
@@ -214,7 +214,7 @@ describe("callMaya — cost math", () => {
         channelPreference: "web",
         timezone: TZ,
         status: "active",
-        plan: "pro",
+        plan: "manager",
         createdAt: NOW,
       })
     );
@@ -267,7 +267,7 @@ describe("callMaya — cross-tenant isolation", () => {
         channelPreference: "web",
         timezone: TZ,
         status: "active",
-        plan: "pro",
+        plan: "manager",
         createdAt: NOW,
       })
     );
@@ -278,7 +278,7 @@ describe("callMaya — cross-tenant isolation", () => {
         channelPreference: "web",
         timezone: TZ,
         status: "active",
-        plan: "pro",
+        plan: "manager",
         createdAt: NOW,
       })
     );
@@ -335,7 +335,7 @@ describe("callMaya — input validation", () => {
         channelPreference: "web",
         timezone: TZ,
         status: "active",
-        plan: "pro",
+        plan: "manager",
         createdAt: NOW,
       })
     );
@@ -359,7 +359,7 @@ describe("callMaya — input validation", () => {
         channelPreference: "web",
         timezone: TZ,
         status: "active",
-        plan: "pro",
+        plan: "manager",
         createdAt: NOW,
       })
     );
@@ -384,7 +384,7 @@ describe("callMaya — input validation", () => {
         channelPreference: "web",
         timezone: TZ,
         status: "active",
-        plan: "pro",
+        plan: "manager",
         createdAt: NOW,
       })
     );

@@ -1,17 +1,22 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
-import { CreatorMayaV0Onboarding } from "@/components/creatorMayaV0/MvpConsole";
+import { notFound } from "next/navigation";
 
 export const metadata: Metadata = {
-  title: "Creator Maya v0 · Powered by OpenClaw",
+  title: "Creator Maya v0 (deprecated)",
   description:
-    "TikTok-first Creator Maya onboarding for account setup, calendar-aware planning, native iMessage handoff, and OpenClaw-powered daily management.",
+    "Legacy creator-maya-v0 demo console — deprecated by the single-screen onboarding rewrite.",
 };
 
+/**
+ * TODO(coach-manager-rewrite 2026-05-04): the legacy `CreatorMayaV0Onboarding`
+ * console (formerly imported from `@/components/creatorMayaV0/MvpConsole`)
+ * was deleted as part of the single-screen onboarding rewrite. This route
+ * previously rendered a 6-step demo console. The route is suppressed behind
+ * `NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT` middleware; we render a 404 here as a
+ * defense-in-depth so a flag flip doesn't accidentally re-expose a broken
+ * surface. If we want a working creator-maya-v0 demo again, replace this
+ * with whatever the new product surface looks like.
+ */
 export default function CreatorMayaV0Page() {
-  return (
-    <Suspense fallback={null}>
-      <CreatorMayaV0Onboarding />
-    </Suspense>
-  );
+  notFound();
 }

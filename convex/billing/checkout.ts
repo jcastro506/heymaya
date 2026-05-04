@@ -1,23 +1,25 @@
 /**
- * Stripe Checkout flow — Sprint 6B.
+ * Stripe Checkout flow — Coach + Manager 2-tier model.
  *
- * Public action `createCheckoutSession` is invoked by the Profile screen's
- * billing tab when a creator picks Pro or Studio (monthly or annual).
+ * Public action `createCheckoutSession` is invoked by the landing page CTAs
+ * AND by the Profile screen's billing tab when a creator picks Coach or
+ * Manager (monthly or annual).
  *
  * Behavior:
  *   1. Re-resolve creator from Clerk identity. The frontend NEVER passes a
  *      `creatorId` — anti-tenant-bleed.
  *   2. If no `stripeCustomerId` exists on the creator row, create one via
  *      Stripe and patch the row via an internal mutation.
- *   3. Build a Stripe Checkout session in `subscription` mode, with a 14-day
- *      trial ONLY for Pro (Studio is billed immediately).
+ *   3. Build a Stripe Checkout session in `subscription` mode. 7-day free
+ *      trial on BOTH Coach and Manager — but only on the creator's FIRST
+ *      subscription. Re-subscribers (post-cancel) are billed immediately.
  *   4. Stamp `metadata.{creatorId,tier,interval}` so the webhook handler can
  *      patch the right row even if our reverse-price-id table loses an entry.
  *   5. Return the hosted Checkout URL.
  *
- * Plan-tier note: anyone can checkout to ANY sellable tier (this is HOW
- * upgrades happen). Starter is rejected because Starter is the post-downgrade
- * default — creators reach it via trial-expiry / cancel, never via Checkout.
+ * Plan-tier note: both Coach and Manager are sellable via Checkout (Coach
+ * is the $19.99 paid floor — creators land there post-cancel via the cancel
+ * webhook handler, NOT as a free fallback).
  */
 
 import { v } from "convex/values";
@@ -27,17 +29,14 @@ import { internal } from "../_generated/api";
 import { getStripeClient } from "./stripeClient";
 import { priceIdFor } from "./priceIds";
 
-const TIER_VALIDATOR = v.union(v.literal("pro"), v.literal("studio"));
+const TIER_VALIDATOR = v.union(v.literal("coach"), v.literal("manager"));
 const INTERVAL_VALIDATOR = v.union(
   v.literal("monthly"),
   v.literal("annual")
 );
 
-/** Trial gating: Pro only. Studio bills day-1. */
-const TRIAL_DAYS_BY_TIER: Record<"pro" | "studio", number | undefined> = {
-  pro: 14,
-  studio: undefined,
-};
+/** 7-day free trial — applied on first subscription only, both tiers. */
+const FIRST_SUBSCRIPTION_TRIAL_DAYS = 7;
 
 /* -------------------------------------------------------------------------- */
 /* Internal helpers                                                            */
@@ -50,7 +49,7 @@ export const getMeForCheckout = internalQuery({
     args
   ): Promise<Pick<
     Doc<"creators">,
-    "_id" | "email" | "plan" | "stripeCustomerId"
+    "_id" | "email" | "plan" | "stripeCustomerId" | "stripeSubscriptionId"
   > | null> => {
     const c = await ctx.db
       .query("creators")
@@ -62,6 +61,7 @@ export const getMeForCheckout = internalQuery({
       email: c.email,
       plan: c.plan,
       stripeCustomerId: c.stripeCustomerId,
+      stripeSubscriptionId: c.stripeSubscriptionId,
     };
   },
 });
@@ -101,14 +101,32 @@ export const createCheckoutSession = action({
       throw new Error("createCheckoutSession: not authenticated.");
     }
 
-    const me = await ctx.runQuery(
+    let me = await ctx.runQuery(
       internal.billing.checkout.getMeForCheckout,
       { clerkUserId: identity.subject }
     );
     if (!me) {
-      throw new Error(
-        "createCheckoutSession: creator row not found for signed-in user."
+      // The Clerk → Convex `user.created` webhook is the canonical path that
+      // populates the creators row. In local dev (and any prod hiccup where
+      // the webhook missed), the row may not exist yet by the time the user
+      // clicks Start trial. Lazy-create it from the authenticated Clerk
+      // identity so checkout never dead-ends. The row insert is idempotent
+      // by clerkUserId.
+      const fallbackEmail =
+        (identity.email as string | undefined) ?? `${identity.subject}@unknown`;
+      await ctx.runMutation(internal.creators.createFromClerk, {
+        clerkUserId: identity.subject,
+        email: fallbackEmail,
+      });
+      me = await ctx.runQuery(
+        internal.billing.checkout.getMeForCheckout,
+        { clerkUserId: identity.subject }
       );
+      if (!me) {
+        throw new Error(
+          "createCheckoutSession: failed to create creator row from Clerk identity."
+        );
+      }
     }
 
     // Argument shape is enforced by validators above, but we double-check
@@ -144,20 +162,26 @@ export const createCheckoutSession = action({
       });
     }
 
-    // 2. Build Checkout session params.
-    const trialDays = TRIAL_DAYS_BY_TIER[args.tier];
+    // 2. Trial gating. BOTH Coach and Manager get a 7-day free trial — but
+    //    only on the creator's FIRST subscription. Re-subscribing after a
+    //    cancel does NOT re-trigger the trial.
+    const isFirstSubscription = !me.stripeSubscriptionId;
+    const enableTrial = isFirstSubscription;
+    const trialDays = enableTrial ? FIRST_SUBSCRIPTION_TRIAL_DAYS : undefined;
+
+    // 3. Build Checkout session params.
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: stripeCustomerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      // Pro = 14-day trial, Studio = immediate. Trial gating lives here, not
-      // on the Stripe price object, so the operator can flip it without
-      // re-creating the SKU.
-      ...(trialDays !== undefined
-        ? { subscription_data: { trial_period_days: trialDays } }
-        : {}),
-      success_url: `${baseUrl}/profile?billing=success`,
-      cancel_url: `${baseUrl}/profile?billing=cancelled`,
+      // Post-checkout: route every paying creator into onboarding. The
+      // /onboarding/maya page bounces creators with status:"active" through
+      // to /today, so returning subscribers don't see the new-user flow.
+      // Net-new creators land in onboarding to enter handles + phone +
+      // channel pairing. Without this, a fresh signup paid for a Maya they
+      // never finished setting up.
+      success_url: `${baseUrl}/onboarding/maya?billing=success`,
+      cancel_url: `${baseUrl}/creators?billing=cancelled`,
       client_reference_id: String(me._id),
       metadata: {
         creatorId: String(me._id),
@@ -166,7 +190,8 @@ export const createCheckoutSession = action({
       },
       // Mirror metadata onto the subscription so future webhook events
       // (subscription.updated/deleted) can resolve the (tier, interval)
-      // pair without re-reading the Checkout session.
+      // pair without re-reading the Checkout session. Trial days, when set,
+      // are applied here (not at the price level — see file-level docstring).
       subscription_data: {
         ...(trialDays !== undefined
           ? { trial_period_days: trialDays }

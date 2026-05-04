@@ -20,7 +20,7 @@ describe("Creator Maya v0 Convex MVP flow", () => {
     await user.mutation(api.creatorMayaV0.backend.getOrCreateAccount, {
       email: "creator-a@example.com",
       timezone: TZ,
-      tier: "starter",
+      tier: "coach",
     });
 
     const tiktok = await user.mutation(api.creatorMayaV0.backend.connectTikTokMock, {
@@ -104,7 +104,7 @@ describe("Creator Maya v0 Convex MVP flow", () => {
     const account = await user.mutation(api.creatorMayaV0.backend.getOrCreateAccount, {
       email: "native@example.com",
       timezone: TZ,
-      tier: "starter",
+      tier: "coach",
     });
 
     const calendar = await user.mutation(
@@ -175,7 +175,7 @@ describe("Creator Maya v0 Convex MVP flow", () => {
     await user.mutation(api.creatorMayaV0.backend.getOrCreateAccount, {
       email: "calendar-revoke@example.com",
       timezone: TZ,
-      tier: "starter",
+      tier: "coach",
     });
 
     await user.mutation(api.creatorMayaV0.backend.connectCalendarProvider, {
@@ -211,7 +211,7 @@ describe("Creator Maya v0 Convex MVP flow", () => {
     await starter.mutation(api.creatorMayaV0.backend.getOrCreateAccount, {
       email: "starter@example.com",
       timezone: TZ,
-      tier: "starter",
+      tier: "coach",
     });
 
     await expect(
@@ -233,7 +233,7 @@ describe("Creator Maya v0 Convex MVP flow", () => {
     await studio.mutation(api.creatorMayaV0.backend.getOrCreateAccount, {
       email: "studio@example.com",
       timezone: TZ,
-      tier: "studio",
+      tier: "manager",
     });
     const queued = await studio.mutation(api.creatorMayaV0.backend.queueBrandTarget, {
       brandName: "DeskKit",

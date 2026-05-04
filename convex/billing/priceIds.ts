@@ -1,5 +1,5 @@
 /**
- * Stripe price-id ↔ (tier, interval) mapping — Sprint 6B.
+ * Stripe price-id ↔ (tier, interval) mapping — Coach + Manager 2-tier model.
  *
  * Pure function used by:
  *   - `convex/billing/checkout.ts` to resolve the `line_items[0].price` for a
@@ -10,6 +10,15 @@
  *     falls back to looking up the subscription's price id and recovering
  *     the (tier, interval) pair from this table.
  *
+ * Sellable tiers:
+ *   - Coach   — $19.99/mo, $199/yr
+ *   - Manager — $49.99/mo, $499/yr
+ *
+ * Both tiers are sellable via Checkout, and BOTH get a 7-day free trial
+ * on the creator's first subscription only (re-subscribers post-cancel are
+ * billed immediately). There is no free post-downgrade tier in this model —
+ * Coach is the floor; the cancel webhook handler downgrades to Coach.
+ *
  * The lookup tables are built at module-load time from env vars. If an env
  * var is absent (e.g. operator hasn't created the annual SKU yet), that
  * (tier, interval) pair simply won't appear in the table — the consumer
@@ -17,14 +26,23 @@
  * truth.
  */
 
-import type { Plan } from "../lib/planFeatures";
-
+/**
+ * Creator tier names for billing — Coach + Manager 2-tier model.
+ *
+ * Defined locally rather than imported from `../lib/planFeatures` so this
+ * module is self-contained at the type level and can be edited
+ * independently of the plan-features matrix. The canonical `Plan` type
+ * in `convex/lib/planFeatures.ts` should be kept in sync with these
+ * literals (`"coach" | "manager"`); when the plan-features matrix is
+ * updated to the new tier names, downstream callers can re-anchor on
+ * `Plan` directly.
+ */
+export type CreatorTier = "coach" | "manager";
 export type BillingInterval = "monthly" | "annual";
 
-/** Plans Stripe can sell. Starter is the post-downgrade default and is
- *  intentionally NOT a checkout target (creators land on Starter via
- *  trial-expiry / cancel — never via a Stripe Checkout flow). */
-export type SellablePlan = Exclude<Plan, "starter">;
+/** Plans Stripe can sell. Both Coach and Manager are sellable in the v1
+ *  2-tier model — both with a 7-day free trial on first subscription. */
+export type SellablePlan = CreatorTier;
 
 /** Pairs the operator must create in Stripe + ship in env. */
 export const SELLABLE_PRICE_ENV_VARS: ReadonlyArray<{
@@ -32,22 +50,10 @@ export const SELLABLE_PRICE_ENV_VARS: ReadonlyArray<{
   interval: BillingInterval;
   envVar: string;
 }> = [
-  { tier: "pro", interval: "monthly", envVar: "STRIPE_PRICE_PRO_MONTHLY" },
-  { tier: "pro", interval: "annual", envVar: "STRIPE_PRICE_PRO_ANNUAL" },
-  { tier: "studio", interval: "monthly", envVar: "STRIPE_PRICE_STUDIO_MONTHLY" },
-  { tier: "studio", interval: "annual", envVar: "STRIPE_PRICE_STUDIO_ANNUAL" },
-];
-
-/** Starter price ids are tracked too — only used by the reverse lookup so a
- *  legacy "downgraded to starter via portal" subscription update can still
- *  be recovered without metadata. */
-export const STARTER_PRICE_ENV_VARS: ReadonlyArray<{
-  tier: "starter";
-  interval: BillingInterval;
-  envVar: string;
-}> = [
-  { tier: "starter", interval: "monthly", envVar: "STRIPE_PRICE_STARTER_MONTHLY" },
-  { tier: "starter", interval: "annual", envVar: "STRIPE_PRICE_STARTER_ANNUAL" },
+  { tier: "coach", interval: "monthly", envVar: "STRIPE_PRICE_COACH_MONTHLY" },
+  { tier: "coach", interval: "annual", envVar: "STRIPE_PRICE_COACH_ANNUAL" },
+  { tier: "manager", interval: "monthly", envVar: "STRIPE_PRICE_MANAGER_MONTHLY" },
+  { tier: "manager", interval: "annual", envVar: "STRIPE_PRICE_MANAGER_ANNUAL" },
 ];
 
 /**
@@ -75,14 +81,9 @@ export function priceIdFor(
  */
 export function priceIdToPlanTuple(
   priceId: string
-): { tier: Plan; interval: BillingInterval } | null {
+): { tier: CreatorTier; interval: BillingInterval } | null {
   if (!priceId) return null;
   for (const entry of SELLABLE_PRICE_ENV_VARS) {
-    if (process.env[entry.envVar] === priceId) {
-      return { tier: entry.tier, interval: entry.interval };
-    }
-  }
-  for (const entry of STARTER_PRICE_ENV_VARS) {
     if (process.env[entry.envVar] === priceId) {
       return { tier: entry.tier, interval: entry.interval };
     }

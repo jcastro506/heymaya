@@ -83,7 +83,7 @@ async function insertCreator(
   t: ReturnType<typeof convexTest>,
   opts: {
     suffix: string;
-    plan: "starter" | "pro" | "studio";
+    plan: "coach" | "manager";
   }
 ): Promise<Id<"creators">> {
   return await t.run((ctx) =>
@@ -145,7 +145,7 @@ describe("kickoffBulkPullJob", () => {
 
   it("inserts a pending job row and returns jobId immediately", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "k1", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "k1", plan: "manager" });
     const result = await asUser(t, "k1").action(
       api.onboarding.maya.jobs.kickoffBulkPullJob,
       {}
@@ -169,7 +169,7 @@ describe("kickoffBulkPullJob", () => {
 
   it("ADVERSARIAL: idempotent — second kickoff returns the existing in-flight jobId", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "k2", plan: "pro" });
+    await insertCreator(t, { suffix: "k2", plan: "manager" });
     const first = await asUser(t, "k2").action(
       api.onboarding.maya.jobs.kickoffBulkPullJob,
       {}
@@ -193,7 +193,7 @@ describe("kickoffBulkPullJob", () => {
 
   it("schedules the internal worker action via ctx.scheduler.runAfter(0)", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "k3", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "k3", plan: "manager" });
     await asUser(t, "k3").action(
       api.onboarding.maya.jobs.kickoffBulkPullJob,
       {}
@@ -222,7 +222,7 @@ describe("kickoffBulkPullJob", () => {
 describe("runBulkPullJob", () => {
   it("creator with NO handles → marks job done with empty result", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "wb1", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "wb1", plan: "manager" });
     const jobId = await t.run((ctx) =>
       ctx.db.insert("onboardingJobs", {
         creatorId: c,
@@ -240,7 +240,7 @@ describe("runBulkPullJob", () => {
 
   it("idempotent — re-firing on an already-done job is a no-op", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "wb2", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "wb2", plan: "manager" });
     const jobId = await insertDoneJob(t, c, "bulk-pull");
     const before = await t.run((ctx) => ctx.db.get(jobId));
     await t.action(internal.onboarding.maya.jobs.runBulkPullJob, { jobId });
@@ -259,7 +259,7 @@ describe("runBulkPullJob", () => {
     delete process.env.SCRAPE_CREATORS_API_KEY;
     try {
       const t = convexTest(schema, modules);
-      const c = await insertCreator(t, { suffix: "wb3", plan: "pro" });
+      const c = await insertCreator(t, { suffix: "wb3", plan: "manager" });
       await t.run((ctx) =>
         ctx.db.insert("creatorHandles", {
           creatorId: c,
@@ -298,7 +298,7 @@ describe("runBulkPullJob", () => {
 describe("kickoffSynthJob", () => {
   it("rejects when no bulk-pull job exists for the creator", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "ks1", plan: "pro" });
+    await insertCreator(t, { suffix: "ks1", plan: "manager" });
     const result = await asUser(t, "ks1").action(
       api.onboarding.maya.jobs.kickoffSynthJob,
       {}
@@ -309,7 +309,7 @@ describe("kickoffSynthJob", () => {
 
   it("rejects when bulk-pull job exists but isn't done yet", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "ks2", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "ks2", plan: "manager" });
     await t.run((ctx) =>
       ctx.db.insert("onboardingJobs", {
         creatorId: c,
@@ -328,7 +328,7 @@ describe("kickoffSynthJob", () => {
 
   it("creates synth job when bulk-pull is done", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "ks3", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "ks3", plan: "manager" });
     await insertDoneJob(t, c, "bulk-pull");
     // Stub fetch: synth's worker would call OpenRouter on drain. Make
     // it 4xx so the worker fails-fast inside its own try/catch and
@@ -357,7 +357,7 @@ describe("kickoffSynthJob", () => {
 
   it("ADVERSARIAL: idempotent — second synth kickoff returns existing in-flight jobId", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "ks4", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "ks4", plan: "manager" });
     await insertDoneJob(t, c, "bulk-pull");
     vi.stubGlobal(
       "fetch",
@@ -414,7 +414,7 @@ describe("getJobStatus", () => {
 
   it("returns null when no jobs of that type exist", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "g1", plan: "pro" });
+    await insertCreator(t, { suffix: "g1", plan: "manager" });
     const res = await asUser(t, "g1").query(
       api.onboarding.maya.jobs.getJobStatus,
       { jobType: "bulk-pull" }
@@ -424,7 +424,7 @@ describe("getJobStatus", () => {
 
   it("returns the latest job row for the signed-in creator", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "g2", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "g2", plan: "manager" });
     const oldJobId = await t.run((ctx) =>
       ctx.db.insert("onboardingJobs", {
         creatorId: c,
@@ -456,8 +456,8 @@ describe("getJobStatus", () => {
 
   it("CROSS-TENANT: filters to signed-in creator only", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "ga", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "gb", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "ga", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "gb", plan: "manager" });
     await insertDoneJob(t, a, "bulk-pull");
     await insertDoneJob(t, b, "bulk-pull");
 
@@ -488,7 +488,7 @@ describe("getJobStatus", () => {
 describe("cancelJob", () => {
   it("ADVERSARIAL: no-op (returns cancelled=false) when no job exists", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "c1", plan: "pro" });
+    await insertCreator(t, { suffix: "c1", plan: "manager" });
     const res = await asUser(t, "c1").mutation(
       api.onboarding.maya.jobs.cancelJob,
       { jobType: "bulk-pull" }
@@ -498,7 +498,7 @@ describe("cancelJob", () => {
 
   it("no-op (returns cancelled=false) when job is already done/failed", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "c2", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "c2", plan: "manager" });
     await insertDoneJob(t, c, "bulk-pull");
     const res = await asUser(t, "c2").mutation(
       api.onboarding.maya.jobs.cancelJob,
@@ -509,7 +509,7 @@ describe("cancelJob", () => {
 
   it("marks pending/running jobs as failed with cancelled-by-user marker", async () => {
     const t = convexTest(schema, modules);
-    const c = await insertCreator(t, { suffix: "c3", plan: "pro" });
+    const c = await insertCreator(t, { suffix: "c3", plan: "manager" });
     const jobId = await t.run((ctx) =>
       ctx.db.insert("onboardingJobs", {
         creatorId: c,
@@ -538,8 +538,8 @@ describe("cancelJob", () => {
 
   it("CROSS-TENANT: cannot cancel another creator's job", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "ca", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "cb", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "ca", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "cb", plan: "manager" });
     const aJob = await t.run((ctx) =>
       ctx.db.insert("onboardingJobs", {
         creatorId: a,
@@ -574,7 +574,7 @@ describe("cancelJob", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("Plan-tier × action matrix", () => {
-  for (const plan of ["starter", "pro", "studio"] as const) {
+  for (const plan of ["coach", "manager"] as const) {
     it(`${plan}: kickoffBulkPullJob succeeds (onboarding is universal)`, async () => {
       const t = convexTest(schema, modules);
       await insertCreator(t, { suffix: `pt-${plan}`, plan });
@@ -607,8 +607,8 @@ describe("Plan-tier × action matrix", () => {
 describe("Cross-tenant isolation — kickoff actions re-resolve from Clerk", () => {
   it("creator A's kickoff never inserts a job for creator B", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "xa", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "xb", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "xa", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "xb", plan: "manager" });
 
     await asUser(t, "xa").action(api.onboarding.maya.jobs.kickoffBulkPullJob, {});
 

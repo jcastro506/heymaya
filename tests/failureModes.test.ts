@@ -52,7 +52,7 @@ async function insertCreator(
   t: ReturnType<typeof convexTest>,
   opts: {
     suffix: string;
-    plan: "starter" | "pro" | "studio";
+    plan: "coach" | "manager";
     deployed?: boolean;
     stripeCustomerId?: string;
     status?: "onboarding" | "active";
@@ -305,12 +305,12 @@ describe("stripe webhook handlers — graceful failure paths", () => {
     const t = convexTest(schema, modules);
     const a = await insertCreator(t, {
       suffix: "fail_a",
-      plan: "starter",
+      plan: "coach",
       stripeCustomerId: "cus_fail_a",
     });
     const b = await insertCreator(t, {
       suffix: "fail_b",
-      plan: "starter",
+      plan: "coach",
       stripeCustomerId: "cus_fail_b",
     });
     // Forged: webhook claims to be for cus_fail_a but metadata says creator B.
@@ -321,7 +321,7 @@ describe("stripe webhook handlers — graceful failure paths", () => {
         stripeCustomerId: "cus_fail_a",
         subscriptionId: "sub_forged",
         creatorId: b,
-        tier: "studio",
+        tier: "manager",
         interval: "monthly",
       }
     );
@@ -329,8 +329,8 @@ describe("stripe webhook handlers — graceful failure paths", () => {
     expect(res.reason).toBe("creator_mismatch");
     const aAfter = await t.run((ctx) => ctx.db.get(a));
     const bAfter = await t.run((ctx) => ctx.db.get(b));
-    expect(aAfter?.plan).toBe("starter");
-    expect(bAfter?.plan).toBe("starter");
+    expect(aAfter?.plan).toBe("coach");
+    expect(bAfter?.plan).toBe("coach");
   });
 
   it("REPLAY: same Stripe eventId → second returns alreadySeen=true with status='replay_dropped'", async () => {
@@ -366,7 +366,7 @@ describe("stripe webhook handlers — graceful failure paths", () => {
         secret: TEST_SECRET,
         stripeCustomerId: "cus_orphan_x",
         subscriptionId: "sub_orphan_x",
-        tier: "pro",
+        tier: "manager",
         interval: "monthly",
       }
     );
@@ -423,7 +423,7 @@ describe("channel pairing — failure modes", () => {
     "ADVERSARIAL phone %s (%s): rejected at the E.164 regex, no pairedChannels row",
     async (phoneNumber) => {
       const t = convexTest(schema, modules);
-      const a = await insertCreator(t, { suffix: "phone_adv", plan: "pro" });
+      const a = await insertCreator(t, { suffix: "phone_adv", plan: "manager" });
       await expect(
         asUser(t, "phone_adv").action(
           api.integrations.openclaw.channels.requestPairing,
@@ -442,8 +442,8 @@ describe("channel pairing — failure modes", () => {
 
   it("CROSS-TENANT: confirmPairing with another creator's pairingId rejected, B's row untouched", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "ct_a", plan: "pro" });
-    await insertCreator(t, { suffix: "ct_b", plan: "pro" });
+    await insertCreator(t, { suffix: "ct_a", plan: "manager" });
+    await insertCreator(t, { suffix: "ct_b", plan: "manager" });
     const bReq = await asUser(t, "ct_b").action(
       api.integrations.openclaw.channels.requestPairing,
       { channel: "imessage", phoneNumber: "+14155550101" }
@@ -470,7 +470,7 @@ describe("channel pairing — failure modes", () => {
     // throws "no active pairing" — current behavior verified here so a
     // future change to either side is caught explicitly.
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "unpair_none", plan: "pro" });
+    await insertCreator(t, { suffix: "unpair_none", plan: "manager" });
     await expect(
       asUser(t, "unpair_none").action(
         api.integrations.openclaw.channels.unpairChannel,
@@ -501,7 +501,7 @@ async function seedCreatorMinimal(
       channelPreference: "web",
       timezone: TZ,
       status: "onboarding",
-      plan: "pro",
+      plan: "manager",
       createdAt: NOW,
     })
   );
@@ -601,7 +601,7 @@ describe("synthesis pipeline — graceful failure paths", () => {
         channelPreference: "web" as const,
         timezone: TZ,
         status: "onboarding" as const,
-        plan: "pro" as const,
+        plan: "manager" as const,
         createdAt: NOW,
       })
     );
@@ -630,7 +630,7 @@ describe("synthesis pipeline — graceful failure paths", () => {
         channelPreference: "web" as const,
         timezone: TZ,
         status: "onboarding" as const,
-        plan: "pro" as const,
+        plan: "manager" as const,
         createdAt: NOW,
       })
     );
@@ -722,7 +722,7 @@ describe("deploy pipeline — graceful failure paths", () => {
     // contract. Drive it directly.
     const c = await insertCreator(t, {
       suffix: "revert",
-      plan: "pro",
+      plan: "manager",
       status: "active",
     });
     await t.mutation(
@@ -737,7 +737,7 @@ describe("deploy pipeline — graceful failure paths", () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "revert_idem",
-      plan: "pro",
+      plan: "manager",
       status: "active",
     });
     await t.mutation(
@@ -756,7 +756,7 @@ describe("deploy pipeline — graceful failure paths", () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "revert_ghost",
-      plan: "pro",
+      plan: "manager",
       status: "active",
     });
     await t.run((ctx) => ctx.db.delete(c));
@@ -807,7 +807,7 @@ describe("plan-tier × action matrix — graceful gate failures", () => {
 
   it("STARTER: cannot start OAuth for apollo (PlanGateError thrown server-side)", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "starter_apollo", plan: "starter" });
+    await insertCreator(t, { suffix: "starter_apollo", plan: "coach" });
     await expect(
       asUser(t, "starter_apollo").action(
         api.integrations.composio.oauth.startOAuth,
@@ -819,11 +819,11 @@ describe("plan-tier × action matrix — graceful gate failures", () => {
     ).rejects.toThrow(/Plan/i);
   });
 
-  it("PRO: cannot start OAuth for apollo either (Studio-only)", async () => {
+  it("COACH: cannot start OAuth for apollo (Manager-only)", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "pro_apollo", plan: "pro" });
+    await insertCreator(t, { suffix: "coach_apollo", plan: "coach" });
     await expect(
-      asUser(t, "pro_apollo").action(
+      asUser(t, "coach_apollo").action(
         api.integrations.composio.oauth.startOAuth,
         {
           provider: "apollo",
@@ -839,7 +839,7 @@ describe("plan-tier × action matrix — graceful gate failures", () => {
       const t = convexTest(schema, modules);
       const c = await insertCreator(t, {
         suffix: "studio_down",
-        plan: "studio",
+        plan: "manager",
         stripeCustomerId: "cus_studio_down",
       });
       // Seed apollo + hunter connectedAccounts (Studio-only providers).
@@ -873,7 +873,7 @@ describe("plan-tier × action matrix — graceful gate failures", () => {
       expect(res.patched).toBe(true);
       // Plan reverted.
       const after = await t.run((ctx) => ctx.db.get(c));
-      expect(after?.plan).toBe("starter");
+      expect(after?.plan).toBe("coach");
       expect(after?.stripeSubscriptionId).toBeUndefined();
       // The Studio-only rows ARE STILL THERE — never silently stranded.
       const apolloRow = await t.run((ctx) => ctx.db.get(apolloRowId));
@@ -913,7 +913,7 @@ describe("onboarding parallelism — Wave 3 jobs failure modes", () => {
 
   it("kickoffBulkPullJob TWICE: second call returns existing in-flight jobId (no double-schedule)", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "twice", plan: "pro" });
+    await insertCreator(t, { suffix: "twice", plan: "manager" });
     const first = await asUser(t, "twice").action(
       api.onboarding.maya.jobs.kickoffBulkPullJob,
       {}
@@ -936,7 +936,7 @@ describe("onboarding parallelism — Wave 3 jobs failure modes", () => {
 
   it("kickoffSynthJob BEFORE bulk-pull done: returns ok=false with explicit reason (DOCUMENTED behavior)", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "synth_early", plan: "pro" });
+    await insertCreator(t, { suffix: "synth_early", plan: "manager" });
     const res = await asUser(t, "synth_early").action(
       api.onboarding.maya.jobs.kickoffSynthJob,
       {}
@@ -949,7 +949,7 @@ describe("onboarding parallelism — Wave 3 jobs failure modes", () => {
 
   it("cancelJob nonexistent: no-op (returns cancelled=false), no error thrown", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "cancel_none", plan: "pro" });
+    await insertCreator(t, { suffix: "cancel_none", plan: "manager" });
     const res = await asUser(t, "cancel_none").mutation(
       api.onboarding.maya.jobs.cancelJob,
       { jobType: "bulk-pull" }
@@ -959,8 +959,8 @@ describe("onboarding parallelism — Wave 3 jobs failure modes", () => {
 
   it("cancelJob CROSS-TENANT: A cannot cancel B's job (no row mutation)", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "cross_a", plan: "pro" });
-    await insertCreator(t, { suffix: "cross_b", plan: "pro" });
+    await insertCreator(t, { suffix: "cross_a", plan: "manager" });
+    await insertCreator(t, { suffix: "cross_b", plan: "manager" });
     // B starts a job
     const bKick = await asUser(t, "cross_b").action(
       api.onboarding.maya.jobs.kickoffBulkPullJob,

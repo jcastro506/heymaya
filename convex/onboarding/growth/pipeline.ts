@@ -122,7 +122,7 @@ export const findOrCreateGrowthAgent = internalMutation({
         channelPreference: "imessage",
         timezone: "America/New_York",
         status: "active",
-        plan: "starter",
+        plan: "coach",
         accountType: "growth-agent",
         createdAt: now,
       });

@@ -87,14 +87,22 @@ describe("endpoints — TikTok", () => {
   });
 
   it("parses comments + transcript", async () => {
+    // Post-migration call shape: `(handle, awemeId)` — the wrapper builds the
+    // public-share URL the v1/v2 single-video endpoints expect.
     const { client: c1 } = clientReturning(tiktokCommentsFixture);
-    const cmts = await tiktok.comments("7341111111111111111", { client: c1 });
+    const cmts = await tiktok.comments("fitcreator99", "7341111111111111111", {
+      client: c1,
+    });
     expect(cmts).toHaveLength(2);
     expect(cmts[0].text).toContain("helpful");
     expect(cmts[0].likeCount).toBe(421);
 
     const { client: c2 } = clientReturning(tiktokTranscriptFixture);
-    const tx = await tiktok.transcript("7341111111111111111", { client: c2 });
+    const tx = await tiktok.transcript(
+      "fitcreator99",
+      "7341111111111111111",
+      { client: c2 }
+    );
     expect(tx.transcript).toContain("Five high-protein");
   });
 
@@ -105,8 +113,41 @@ describe("endpoints — TikTok", () => {
         { text: "Part two.", startSec: 1, endSec: 2 },
       ],
     });
-    const tx = await tiktok.transcript("p", { client });
+    const tx = await tiktok.transcript("creator", "p", { client });
     expect(tx.transcript).toBe("Part one. Part two.");
+  });
+
+  it("comments + transcript wrappers send a public-share URL (v1/v2 single-video endpoints)", async () => {
+    const { client: c1, fetchImpl: f1 } = clientReturning(
+      tiktokCommentsFixture
+    );
+    await tiktok.comments("@fitcreator99", "73411111", { client: c1 });
+    const url1 = f1.mock.calls[0][0] as URL | string;
+    const sent1 = url1 instanceof URL ? url1.toString() : String(url1);
+    expect(sent1).toContain("/v1/tiktok/video/comments");
+    expect(sent1).toContain(
+      encodeURIComponent("https://www.tiktok.com/@fitcreator99/video/73411111")
+    );
+
+    const { client: c2, fetchImpl: f2 } = clientReturning(
+      tiktokTranscriptFixture
+    );
+    await tiktok.transcript("fitcreator99", "73411111", { client: c2 });
+    const url2 = f2.mock.calls[0][0] as URL | string;
+    const sent2 = url2 instanceof URL ? url2.toString() : String(url2);
+    expect(sent2).toContain("/v1/tiktok/video/transcript");
+  });
+
+  it("lastPosts hits the v3 profile/videos endpoint (no `limit` query param)", async () => {
+    const { client, fetchImpl } = clientReturning(tiktokPostsFixture);
+    await tiktok.lastPosts("fitcreator99", 30, { client });
+    const url = fetchImpl.mock.calls[0][0] as URL | string;
+    const sent = url instanceof URL ? url.toString() : String(url);
+    expect(sent).toContain("/v3/tiktok/profile/videos");
+    expect(sent).toContain("handle=fitcreator99");
+    // The v3 endpoint doesn't accept `limit` — page size is fixed; ensure the
+    // wrapper drops it so we don't get a 4xx for unexpected param.
+    expect(sent).not.toContain("limit=");
   });
 
   it("throws on garbage profile shape", async () => {

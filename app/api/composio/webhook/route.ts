@@ -233,9 +233,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: true, skipped: "unknown-account" });
   }
 
-  // Plan-tier gate. Starter creators get silently dropped here. Defense in
-  // depth: the triage action gates again on `gmailDealDeskEnabled`.
-  if (owner.plan === "starter") {
+  // Plan-tier gate. Both Coach and Manager get the deal desk
+  // (`gmailDealDeskEnabled` is universal post-coach/manager migration). This
+  // branch is preserved as a kill-switch in case a future tier needs to be
+  // dropped silently here. Defense in depth: the triage action gates again on
+  // `gmailDealDeskEnabled` and on the autonomy flags before auto-sending.
+  if (false as boolean) {
     await convex.mutation(api.dealTriage.recordWebhookEventPublic, {
       secret: bridge,
       eventId,

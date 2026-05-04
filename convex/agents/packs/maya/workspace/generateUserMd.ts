@@ -90,6 +90,29 @@ export function generateUserMd(inputs: UserMdInputs): string {
   const toneNote =
     "Tone slider lives in SOUL.md. Default to `strategic` until soul ships.";
 
+  const phoneLine = creator.phoneNumber
+    ? creator.phoneNumber
+    : NOT_YET_PROVIDED;
+  const primaryHandleLine = creator.primaryHandle
+    ? creator.primaryHandle
+    : sortedHandles.length > 0
+      ? `${sortedHandles[0].handle} (${sortedHandles[0].platform})`
+      : NOT_YET_PROVIDED;
+
+  // First-boot cursor — controls whether `first_boot_introduction` runs at
+  // session start. Maya reads `creators.firstBootCompletedAt` from server
+  // state on every boot; this line surfaces the current value into USER.md
+  // so the agent doesn't have to query for it before deciding whether to
+  // run the introduction. Three sub-cursors track sequence progress:
+  //   - openingAnswersAt: stamped after the 3 questions are answered
+  //   - firstWeeklyPlanSentAt: stamped after the chained first-weekly-plan
+  //   - firstBootCompletedAt: stamped after the whole arc lands
+  const firstBootStatus = creator.firstBootCompletedAt
+    ? `completed ${new Date(creator.firstBootCompletedAt).toISOString()}`
+    : creator.openingAnswersAt
+      ? `in-progress: opening answers received, awaiting OAuth links + first weekly plan`
+      : "not yet started — run `first_boot_introduction` standing order on session start";
+
   return [
     `# USER.md — ${displayName}`,
     "",
@@ -100,8 +123,14 @@ export function generateUserMd(inputs: UserMdInputs): string {
     `- **Display name:** ${displayName}`,
     `- **Preferred address:** ${displayName} (first name).`,
     `- **Email:** ${creator.email}`,
+    `- **Phone:** ${phoneLine}`,
+    `- **Primary handle:** ${primaryHandleLine}`,
     `- **Timezone:** ${creator.timezone}`,
     `- **Plan:** ${plan}`,
+    "",
+    "## First-boot status",
+    "",
+    `- **State:** ${firstBootStatus}`,
     "",
     "## Handles",
     "",
@@ -180,11 +209,13 @@ function formatUsd(n: number): string {
 function describeChannel(channel: Channel, _plan: Plan): string {
   switch (channel) {
     case "imessage":
-      return "iMessage";
+      return "iMessage (rich media + tapback reactions, via Claw Messenger relay)";
     case "whatsapp":
       return "WhatsApp";
     case "sms":
       return "SMS";
+    case "telegram":
+      return "Telegram (rich media + inline buttons)";
     case "web":
       return "web chat (Creator HQ)";
   }
@@ -192,11 +223,9 @@ function describeChannel(channel: Channel, _plan: Plan): string {
 
 function describeCadence(plan: Plan): string {
   switch (plan) {
-    case "starter":
-      return "morning brief, evening recap, weekly review on Sunday, plus contract scans on upload. No 2h pings, no peer watch, no calendar planning.";
-    case "pro":
-      return "full daily cadence — morning brief, 2h performance pings during waking hours, evening recap, Sunday plan + review, post-publish reactions within ~10 min, brand-email triage in real time.";
-    case "studio":
-      return "Pro cadence + post-publish reactions within ~5 min, twice-weekly platform algorithm research, brand outreach via Apollo/Hunter, on-demand manager-readiness packets.";
+    case "coach":
+      return "full daily cadence — morning brief, 2h performance pings during waking hours, evening recap, Sunday plan + review, post-publish reactions within ~10 min, brand-email triage that stops at draft. Advisory only — Maya never auto-sends, never pitches cold, never calls Apollo/Hunter.";
+    case "manager":
+      return "Coach cadence + autonomous brand-deal back-and-forth — post-publish reactions within ~5 min, Apollo/Hunter cold outreach, brand pitching, auto-send under your threshold, on-demand manager-readiness packets.";
   }
 }

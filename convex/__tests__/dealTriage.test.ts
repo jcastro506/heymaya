@@ -23,7 +23,7 @@ const NOW = 1_700_000_000_000;
 
 async function insertCreator(
   t: ReturnType<typeof convexTest>,
-  opts: { suffix: string; plan: "starter" | "pro" | "studio" }
+  opts: { suffix: string; plan: "coach" | "manager" }
 ): Promise<Id<"creators">> {
   return await t.run((ctx) =>
     ctx.db.insert("creators", {
@@ -118,7 +118,7 @@ describe("dealTriage.triageInboundEmail", () => {
   it("happy path: real deal → brandDeals row + 4 reply variants", async () => {
     await withEncryptionKey(async () => {
       const t = convexTest(schema, modules);
-      const creator = await insertCreator(t, { suffix: "pro1", plan: "pro" });
+      const creator = await insertCreator(t, { suffix: "pro1", plan: "manager" });
       // Encrypt a placeholder account id
       const enc = await import("../lib/encryption");
       const cipher = await enc.encrypt("composio_acc_real");
@@ -155,7 +155,7 @@ describe("dealTriage.triageInboundEmail", () => {
     // configurations where gmailDealDeskEnabled might be flipped off again.
     await withEncryptionKey(async () => {
       const t = convexTest(schema, modules);
-      const creator = await insertCreator(t, { suffix: "starter1", plan: "starter" });
+      const creator = await insertCreator(t, { suffix: "starter1", plan: "coach" });
       const enc = await import("../lib/encryption");
       const cipher = await enc.encrypt("composio_acc_starter");
       await attachGmailAccount(t, {
@@ -194,8 +194,8 @@ describe("dealTriage.triageInboundEmail", () => {
   it("CROSS-TENANT: Creator A's triage never writes a row on Creator B", async () => {
     await withEncryptionKey(async () => {
       const t = convexTest(schema, modules);
-      const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-      const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+      const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+      const b = await insertCreator(t, { suffix: "b", plan: "manager" });
       const enc = await import("../lib/encryption");
       await attachGmailAccount(t, {
         creatorId: a,
@@ -232,7 +232,7 @@ describe("dealTriage.triageInboundEmail", () => {
   it("ADVERSARIAL — auto-send fires when offer < threshold AND firm variant present", async () => {
     await withEncryptionKey(async () => {
       const t = convexTest(schema, modules);
-      const creator = await insertCreator(t, { suffix: "pro_auto", plan: "pro" });
+      const creator = await insertCreator(t, { suffix: "pro_auto", plan: "manager" });
       const enc = await import("../lib/encryption");
       const cipher = await enc.encrypt("composio_acc_autosend");
       await attachGmailAccount(t, {
@@ -304,7 +304,7 @@ describe("dealTriage.triageInboundEmail", () => {
   it("ADVERSARIAL — auto-send does NOT fire when offer is ABOVE threshold", async () => {
     await withEncryptionKey(async () => {
       const t = convexTest(schema, modules);
-      const creator = await insertCreator(t, { suffix: "pro_above", plan: "pro" });
+      const creator = await insertCreator(t, { suffix: "pro_above", plan: "manager" });
       const enc = await import("../lib/encryption");
       const cipher = await enc.encrypt("composio_acc_above");
       await attachGmailAccount(t, {
@@ -338,7 +338,7 @@ describe("dealTriage.triageInboundEmail", () => {
     // NOT auto-send. Anti-footgun.
     await withEncryptionKey(async () => {
       const t = convexTest(schema, modules);
-      const creator = await insertCreator(t, { suffix: "pro_pressfire", plan: "pro" });
+      const creator = await insertCreator(t, { suffix: "pro_pressfire", plan: "manager" });
       const enc = await import("../lib/encryption");
       const cipher = await enc.encrypt("composio_acc_press");
       await attachGmailAccount(t, {
@@ -378,7 +378,7 @@ describe("dealTriage.triageInboundEmail", () => {
   it("auto-send is SKIPPED when no autoSendThreshold is set", async () => {
     await withEncryptionKey(async () => {
       const t = convexTest(schema, modules);
-      const creator = await insertCreator(t, { suffix: "no_thresh", plan: "pro" });
+      const creator = await insertCreator(t, { suffix: "no_thresh", plan: "manager" });
       const enc = await import("../lib/encryption");
       await attachGmailAccount(t, {
         creatorId: creator,
@@ -401,7 +401,7 @@ describe("dealTriage.triageInboundEmail", () => {
 describe("dealTriage.recordWebhookEvent", () => {
   it("idempotent on eventId — second insert lands as replay_dropped", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const first = await t.mutation(internal.dealTriage.recordWebhookEvent, {
       eventId: "evt_1",
       eventType: "gmail.message.received",
@@ -442,8 +442,8 @@ describe("dealTriage.recordWebhookEvent", () => {
 describe("dealTriage.findCreatorByComposioAccount", () => {
   it("CROSS-TENANT: hash for Creator A's account never resolves to Creator B", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await attachGmailAccount(t, {
       creatorId: a,
       encryptedComposioAccountId: "enc_acc_a",

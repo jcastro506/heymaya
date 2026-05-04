@@ -744,8 +744,24 @@ function clientOf(deps?: EndpointDeps): ScrapeCreatorsClient {
 
 /* ---- TikTok ---- */
 
+/**
+ * Build the canonical TikTok video URL from `(handle, awemeId)`. The v2/v1
+ * single-video endpoints (`/v2/tiktok/video`, `/v1/tiktok/video/comments`,
+ * `/v1/tiktok/video/transcript`) all key on the URL rather than the bare id.
+ *
+ * We strip a leading `@` so callers can pass either form. The URL pattern is
+ * the public-share form ScrapeCreators documents in their SKILL.md routing
+ * tables.
+ */
+export function tiktokVideoUrl(handle: string, awemeId: string): string {
+  const cleanHandle = handle.replace(/^@/, "");
+  return `https://www.tiktok.com/@${cleanHandle}/video/${awemeId}`;
+}
+
 export const tiktok = {
   async profile(handle: string, deps?: EndpointDeps): Promise<NormalizedProfile> {
+    // Endpoint unchanged: `/v1/tiktok/profile?handle=H` is still current per
+    // the official ScrapeCreators agent skill.
     const raw = await clientOf(deps).request<unknown>("/v1/tiktok/profile", {
       query: { handle },
     });
@@ -753,31 +769,45 @@ export const tiktok = {
   },
   async lastPosts(
     handle: string,
-    limit: number,
+    _limit: number,
     deps?: EndpointDeps
   ): Promise<NormalizedPost[]> {
-    const raw = await clientOf(deps).request<unknown>("/v1/tiktok/user/posts", {
-      query: { handle, limit },
-    });
+    // Bug fix (production): the v1 path `/v1/tiktok/user/posts` 404s today.
+    // The current path is `/v3/tiktok/profile/videos?handle=H` (no `limit`
+    // param — the upstream returns one cursor-paginated page; the caller
+    // truncates if it needs fewer than the page size).
+    const raw = await clientOf(deps).request<unknown>(
+      "/v3/tiktok/profile/videos",
+      {
+        query: { handle },
+      }
+    );
     return normalizeTikTokPosts(raw);
   },
   async post(
-    postId: string,
+    handle: string,
+    awemeId: string,
     deps?: EndpointDeps
   ): Promise<NormalizedPost | null> {
-    const raw = await clientOf(deps).request<unknown>("/v1/tiktok/post", {
-      query: { id: postId },
+    // Bug fix: `/v1/tiktok/post?id=I` → `/v2/tiktok/video?url=U`.
+    const raw = await clientOf(deps).request<unknown>("/v2/tiktok/video", {
+      query: { url: tiktokVideoUrl(handle, awemeId) },
     });
     const list = normalizeTikTokPosts({ aweme_list: [raw] });
     return list[0] ?? null;
   },
   async comments(
-    postId: string,
+    handle: string,
+    awemeId: string,
     deps?: EndpointDeps
   ): Promise<NormalizedComment[]> {
-    const raw = await clientOf(deps).request<unknown>("/v1/tiktok/comments", {
-      query: { id: postId },
-    });
+    // Bug fix: `/v1/tiktok/comments?id=I` → `/v1/tiktok/video/comments?url=U`.
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/video/comments",
+      {
+        query: { url: tiktokVideoUrl(handle, awemeId) },
+      }
+    );
     const parsed = TikTokCommentsResponseSchema.parse(raw);
     return (parsed.comments ?? []).map((c) =>
       NormalizedCommentSchema.parse({
@@ -790,12 +820,17 @@ export const tiktok = {
     );
   },
   async transcript(
-    postId: string,
+    handle: string,
+    awemeId: string,
     deps?: EndpointDeps
   ): Promise<{ transcript: string | null }> {
-    const raw = await clientOf(deps).request<unknown>("/v1/tiktok/transcript", {
-      query: { id: postId },
-    });
+    // Bug fix: `/v1/tiktok/transcript?id=I` → `/v1/tiktok/video/transcript?url=U`.
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/video/transcript",
+      {
+        query: { url: tiktokVideoUrl(handle, awemeId) },
+      }
+    );
     const parsed = TikTokTranscriptResponseSchema.parse(raw);
     if (parsed.transcript) {
       return { transcript: parsed.transcript };

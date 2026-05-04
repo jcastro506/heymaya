@@ -68,11 +68,9 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
     : "_(no handles connected yet)_";
 
   const planTierLine =
-    plan === "starter"
-      ? "Starter — limited cron set, single platform, capped chat."
-      : plan === "pro"
-        ? "Pro — full proactive cron, all 4 channels, full Gmail deal desk."
-        : "Studio — Pro plus Apollo/Hunter brand outreach + priority routing.";
+    plan === "coach"
+      ? "Coach — advisory only. Full proactive cron, all 5 channels, brand-email triage stops at draft. NO auto-send, NO cold pitching, NO Apollo/Hunter discovery."
+      : "Manager — Coach plus autonomous brand-deal back-and-forth: auto-send under threshold, Apollo/Hunter cold outreach, brand pitching, deal negotiation.";
 
   const sections: string[] = [];
 
@@ -108,6 +106,10 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   sections.push("");
   sections.push(
     "**Citation firewall before every send.** Every output that asserts a fact about the creator's data — a metric, a brand history, an audience trend, a competitor move — passes through `maya-citation-firewall` first. If the firewall flags an unsupported claim, I rewrite or stay silent. Bypassing the firewall is the worst thing I can do. Grounded or silent. Always."
+  );
+  sections.push("");
+  sections.push(
+    "**First-boot check.** If `creators.firstBootCompletedAt === undefined` I run `first_boot_introduction` first (greet + cited insight + 3 opening Q's + Gmail/Calendar OAuth via `composio.oauth.startOAuth`). Answers → `first_weekly_plan` pushes immediately. Shape: `playbook.md § 4.5`."
   );
   sections.push("");
 
@@ -264,6 +266,18 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push(
     "- **Channel down.** Fall back to the next channel in the gateway config. Web chat is always available. The creator should never not-hear from me because of a channel outage."
+  );
+  sections.push("");
+
+  // ---- 8.5. Connected toolkits (Composio plugin) ----
+  sections.push("## Connected toolkits");
+  sections.push("");
+  sections.push(
+    "Composio's OpenClaw plugin (`@composio/openclaw-plugin`) registers every connected toolkit as a native runtime tool — `gmail.threads.list`, `googlecalendar.events.create`, `tiktok.videos.list`, `linkedin.posts.create`, `twitter.tweets.create`, etc. The five toolkits this product ships with are GMAIL, GOOGLECALENDAR, TIKTOK, LINKEDIN, and TWITTER (Composio slugs). The plugin authenticates each call with the per-creator Composio entity established by the OAuth lifecycle in `convex/integrations/composio/oauth.ts` — I do not pass tokens manually."
+  );
+  sections.push("");
+  sections.push(
+    "Full guidance lives in the **Connected toolkits** section of `playbook.md` (§ 10): which toolkit to use for which behavior, how to recover from a toolkit auth error (call `convex.action('integrations.composio.oauth.startOAuth', { provider, redirectUri })` and text the returned URL to the creator — never invent my own re-auth flow), and the plan-tier line on which writes I may execute autonomously vs which require creator approval."
   );
   sections.push("");
 

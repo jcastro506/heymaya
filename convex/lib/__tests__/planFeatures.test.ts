@@ -1,21 +1,9 @@
 /**
- * planFeatures matrix — REVISED 2026-04-26.
+ * planFeatures matrix — REVISED 2026-05-04 (coach / manager migration).
  *
- * This file is the documentation of the locked plan-tier matrix. It reads
- * top-to-bottom as a per-field × per-tier assertion grid; if anyone changes
- * `convex/lib/planFeatures.ts` and forgets to update this file, the diff is
- * the audit trail.
- *
- * Tier philosophy (kept verbatim with the source-of-truth header):
- *   1. Channels are OpenClaw-native — no per-tier cost. Every plan gets
- *      every channel.
- *   2. Composio Gmail is a small per-call cost but the headline value prop —
- *      every plan gets the deal desk.
- *   3. Apollo / Hunter ARE real per-query paid lookups — Studio-only.
- *   4. Differentiation moves to where actual scaling cost lives:
- *      thinking budget, chat-turn cap, multi-account slots, max handles,
- *      post-publish reaction latency, allowedProviders (apollo/hunter),
- *      brandContactDiscoveryEnabled.
+ * The creator product moved from a 3-tier (starter / pro / studio) model to a
+ * 2-tier (coach / manager) model. Tier boundary is AUTONOMY ON THE CREATOR'S
+ * BEHALF, not breadth — Coach is advisory-only, Manager is autonomous.
  *
  * Five mandatory test categories (see
  * /Users/joshcastro/.claude/projects/.../memory/feedback_validation_gap_prevention.md):
@@ -46,84 +34,75 @@ import {
   type PlanFeatures,
 } from "../planFeatures";
 
-const PLANS: ReadonlyArray<Plan> = ["starter", "pro", "studio"];
+const PLANS: ReadonlyArray<Plan> = ["coach", "manager"];
 
 /* -------------------------------------------------------------------------- */
 /* Per-field × per-tier matrix                                                 */
 /* -------------------------------------------------------------------------- */
 
-describe("planFeatures matrix — REVISED 2026-04-26", () => {
-  describe("maxHandles", () => {
+describe("planFeatures matrix — coach / manager", () => {
+  describe("maxHandles — UNGATED (both tiers reach all 5 platforms)", () => {
     it.each<[Plan, number]>([
-      ["starter", 1],
-      ["pro", 3],
-      ["studio", 5],
+      ["coach", 5],
+      ["manager", 5],
     ])("%s = %d", (plan, expected) => {
       expect(planFeatures({ plan }).maxHandles).toBe(expected);
     });
   });
 
   describe("allowedChannels — UNGATED (channels are OpenClaw-native)", () => {
-    const ALL: ReadonlyArray<Channel> = ["web", "sms", "imessage", "whatsapp"];
+    const ALL: ReadonlyArray<Channel> = ["web", "sms", "imessage", "whatsapp", "telegram"];
     for (const plan of PLANS) {
-      it(`${plan} includes all 4 channels`, () => {
+      it(`${plan} includes all 5 channels`, () => {
         const f = planFeatures({ plan });
         for (const ch of ALL) {
           expect(f.allowedChannels).toContain(ch);
         }
-        expect(f.allowedChannels.length).toBe(4);
+        expect(f.allowedChannels.length).toBe(5);
       });
     }
   });
 
-  describe("maxThinkingBudget — cost lever STAYS (Starter clamped to low)", () => {
+  describe("maxThinkingBudget — UNGATED (boundary is autonomy, not compute)", () => {
     it.each<[Plan, ThinkingBudget]>([
-      ["starter", "low"],
-      ["pro", "high"],
-      ["studio", "high"],
+      ["coach", "high"],
+      ["manager", "high"],
     ])("%s = %s", (plan, expected) => {
       expect(planFeatures({ plan }).maxThinkingBudget).toBe(expected);
     });
   });
 
-  describe("allowedThinkingBudgets", () => {
-    it("starter = none, low only", () => {
-      expect(planFeatures({ plan: "starter" }).allowedThinkingBudgets).toEqual([
-        "none",
-        "low",
-      ]);
-    });
-    it.each<Plan>(["pro", "studio"])("%s = all four", (plan) => {
-      expect(planFeatures({ plan }).allowedThinkingBudgets).toEqual([
-        "none",
-        "low",
-        "medium",
-        "high",
-      ]);
-    });
+  describe("allowedThinkingBudgets — UNGATED (both tiers get all four)", () => {
+    for (const plan of PLANS) {
+      it(`${plan} = all four`, () => {
+        expect(planFeatures({ plan }).allowedThinkingBudgets).toEqual([
+          "none",
+          "low",
+          "medium",
+          "high",
+        ]);
+      });
+    }
   });
 
-  describe("chatTurnsPerMonth — cost lever STAYS", () => {
+  describe("chatTurnsPerMonth — Coach capped, Manager unlimited", () => {
     it.each<[Plan, number | "unlimited"]>([
-      ["starter", 200],
-      ["pro", "unlimited"],
-      ["studio", "unlimited"],
+      ["coach", 400],
+      ["manager", "unlimited"],
     ])("%s = %s", (plan, expected) => {
       expect(planFeatures({ plan }).chatTurnsPerMonth).toBe(expected);
     });
   });
 
-  describe("proactiveCronAll — Starter limited cron, Pro/Studio full set", () => {
-    it.each<[Plan, boolean]>([
-      ["starter", false],
-      ["pro", true],
-      ["studio", true],
-    ])("%s = %s", (plan, expected) => {
-      expect(planFeatures({ plan }).proactiveCronAll).toBe(expected);
-    });
+  describe("proactiveCronAll — both tiers run the full set", () => {
+    for (const plan of PLANS) {
+      it(`${plan} = true`, () => {
+        expect(planFeatures({ plan }).proactiveCronAll).toBe(true);
+      });
+    }
   });
 
-  describe("gmailDealDeskEnabled — UNGATED (universal)", () => {
+  describe("gmailDealDeskEnabled — UNGATED (Coach drafts; Manager auto-sends)", () => {
     for (const plan of PLANS) {
       it(`${plan} = true`, () => {
         expect(planFeatures({ plan }).gmailDealDeskEnabled).toBe(true);
@@ -131,11 +110,10 @@ describe("planFeatures matrix — REVISED 2026-04-26", () => {
     }
   });
 
-  describe("competitorWatchSlots — Starter gets a small slot count, not zero", () => {
+  describe("competitorWatchSlots — Coach: 5, Manager: 10", () => {
     it.each<[Plan, number]>([
-      ["starter", 2],
-      ["pro", 5],
-      ["studio", 10],
+      ["coach", 5],
+      ["manager", 10],
     ])("%s = %d", (plan, expected) => {
       expect(planFeatures({ plan }).competitorWatchSlots).toBe(expected);
     });
@@ -143,33 +121,61 @@ describe("planFeatures matrix — REVISED 2026-04-26", () => {
 
   describe("readinessPacketCadence", () => {
     it.each<[Plan, "none" | "quarterly" | "on-demand"]>([
-      ["starter", "none"],
-      ["pro", "quarterly"],
-      ["studio", "on-demand"],
+      ["coach", "quarterly"],
+      ["manager", "on-demand"],
     ])("%s = %s", (plan, expected) => {
       expect(planFeatures({ plan }).readinessPacketCadence).toBe(expected);
     });
   });
 
-  describe("brandOutreachEnabled — UNGATED (Maya pitches at every tier)", () => {
-    for (const plan of PLANS) {
-      it(`${plan} = true`, () => {
-        expect(planFeatures({ plan }).brandOutreachEnabled).toBe(true);
+  describe("autonomy gates — the load-bearing tier boundary", () => {
+    describe("canAutoSendBrandEmails", () => {
+      it("coach = false", () => {
+        expect(planFeatures({ plan: "coach" }).canAutoSendBrandEmails).toBe(false);
       });
-    }
-  });
+      it("manager = true", () => {
+        expect(planFeatures({ plan: "manager" }).canAutoSendBrandEmails).toBe(true);
+      });
+    });
 
-  describe("brandContactDiscoveryEnabled — Studio only (paid Apollo/Hunter lookups)", () => {
-    it.each<[Plan, boolean]>([
-      ["starter", false],
-      ["pro", false],
-      ["studio", true],
-    ])("%s = %s", (plan, expected) => {
-      expect(planFeatures({ plan }).brandContactDiscoveryEnabled).toBe(expected);
+    describe("canDoBrandOutreach", () => {
+      it("coach = false", () => {
+        expect(planFeatures({ plan: "coach" }).canDoBrandOutreach).toBe(false);
+      });
+      it("manager = true", () => {
+        expect(planFeatures({ plan: "manager" }).canDoBrandOutreach).toBe(true);
+      });
+    });
+
+    describe("canPitchBrands", () => {
+      it("coach = false", () => {
+        expect(planFeatures({ plan: "coach" }).canPitchBrands).toBe(false);
+      });
+      it("manager = true", () => {
+        expect(planFeatures({ plan: "manager" }).canPitchBrands).toBe(true);
+      });
+    });
+
+    describe("brandOutreachEnabled (back-compat alias of canPitchBrands)", () => {
+      it("coach = false", () => {
+        expect(planFeatures({ plan: "coach" }).brandOutreachEnabled).toBe(false);
+      });
+      it("manager = true", () => {
+        expect(planFeatures({ plan: "manager" }).brandOutreachEnabled).toBe(true);
+      });
+    });
+
+    describe("brandContactDiscoveryEnabled (Apollo/Hunter)", () => {
+      it("coach = false", () => {
+        expect(planFeatures({ plan: "coach" }).brandContactDiscoveryEnabled).toBe(false);
+      });
+      it("manager = true", () => {
+        expect(planFeatures({ plan: "manager" }).brandContactDiscoveryEnabled).toBe(true);
+      });
     });
   });
 
-  describe("opportunityScoutEnabled — UNGATED", () => {
+  describe("opportunityScoutEnabled — UNGATED (read-only)", () => {
     for (const plan of PLANS) {
       it(`${plan} = true`, () => {
         expect(planFeatures({ plan }).opportunityScoutEnabled).toBe(true);
@@ -177,7 +183,7 @@ describe("planFeatures matrix — REVISED 2026-04-26", () => {
     }
   });
 
-  describe("monetizationAdvisorEnabled — UNGATED", () => {
+  describe("monetizationAdvisorEnabled — UNGATED (read-only)", () => {
     for (const plan of PLANS) {
       it(`${plan} = true`, () => {
         expect(planFeatures({ plan }).monetizationAdvisorEnabled).toBe(true);
@@ -185,7 +191,7 @@ describe("planFeatures matrix — REVISED 2026-04-26", () => {
     }
   });
 
-  describe("collabMatchEnabled — UNGATED", () => {
+  describe("collabMatchEnabled — UNGATED (read-only)", () => {
     for (const plan of PLANS) {
       it(`${plan} = true`, () => {
         expect(planFeatures({ plan }).collabMatchEnabled).toBe(true);
@@ -193,39 +199,34 @@ describe("planFeatures matrix — REVISED 2026-04-26", () => {
     }
   });
 
-  describe("multiAccountSlots — cost lever STAYS (Starter/Pro 1, Studio 3)", () => {
+  describe("multiAccountSlots — both tiers cap at 1 (multi-account deferred to a later release)", () => {
     it.each<[Plan, number]>([
-      ["starter", 1],
-      ["pro", 1],
-      ["studio", 3],
+      ["coach", 1],
+      ["manager", 1],
     ])("%s = %d", (plan, expected) => {
       expect(planFeatures({ plan }).multiAccountSlots).toBe(expected);
     });
   });
 
-  describe("postPublishReactionLatencySec — cost lever STAYS (tightens with tier)", () => {
+  describe("postPublishReactionLatencySec — tighter on Manager", () => {
     it.each<[Plan, number]>([
-      ["starter", 1800],
-      ["pro", 600],
-      ["studio", 300],
+      ["coach", 600],
+      ["manager", 300],
     ])("%s = %d", (plan, expected) => {
       expect(planFeatures({ plan }).postPublishReactionLatencySec).toBe(expected);
     });
 
     it("monotonically tightens with tier", () => {
-      const s = planFeatures({ plan: "starter" }).postPublishReactionLatencySec;
-      const p = planFeatures({ plan: "pro" }).postPublishReactionLatencySec;
-      const st = planFeatures({ plan: "studio" }).postPublishReactionLatencySec;
-      expect(s).toBeGreaterThan(p);
-      expect(p).toBeGreaterThan(st);
+      const c = planFeatures({ plan: "coach" }).postPublishReactionLatencySec;
+      const m = planFeatures({ plan: "manager" }).postPublishReactionLatencySec;
+      expect(c).toBeGreaterThan(m);
     });
   });
 
-  describe("allowedProviders — gmail/calendar/stripe UNGATED; apollo/hunter Studio-only", () => {
+  describe("allowedProviders — gmail/calendar/stripe UNGATED; apollo/hunter Manager-only", () => {
     const expected: Record<Plan, Record<Provider, boolean>> = {
-      starter: { gmail: true, calendar: true, stripe: true, apollo: false, hunter: false },
-      pro:     { gmail: true, calendar: true, stripe: true, apollo: false, hunter: false },
-      studio:  { gmail: true, calendar: true, stripe: true, apollo: true,  hunter: true  },
+      coach:   { gmail: true, calendar: true, stripe: true, apollo: false, hunter: false },
+      manager: { gmail: true, calendar: true, stripe: true, apollo: true,  hunter: true  },
     };
     const ALL_PROVIDERS: ReadonlyArray<Provider> = [
       "gmail",
@@ -252,10 +253,11 @@ describe("planFeatures matrix — REVISED 2026-04-26", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("thinkingBudgetAllowed", () => {
+  // Both tiers allow every budget post-migration (boundary is autonomy, not
+  // compute). The helper is preserved for forward-compat.
   const cases: Record<Plan, Record<ThinkingBudget, boolean>> = {
-    starter: { none: true, low: true, medium: false, high: false },
-    pro:     { none: true, low: true, medium: true,  high: true  },
-    studio:  { none: true, low: true, medium: true,  high: true  },
+    coach:   { none: true, low: true, medium: true, high: true },
+    manager: { none: true, low: true, medium: true, high: true },
   };
   for (const plan of PLANS) {
     for (const budget of ["none", "low", "medium", "high"] as const) {
@@ -268,10 +270,10 @@ describe("thinkingBudgetAllowed", () => {
 });
 
 describe("clampThinkingBudget", () => {
+  // Both tiers allow every budget — clamp is a no-op v0.
   const cases: Record<Plan, Record<ThinkingBudget, ThinkingBudget>> = {
-    starter: { none: "none", low: "low", medium: "low",    high: "low"    },
-    pro:     { none: "none", low: "low", medium: "medium", high: "high"   },
-    studio:  { none: "none", low: "low", medium: "medium", high: "high"   },
+    coach:   { none: "none", low: "low", medium: "medium", high: "high" },
+    manager: { none: "none", low: "low", medium: "medium", high: "high" },
   };
   for (const plan of PLANS) {
     for (const budget of ["none", "low", "medium", "high"] as const) {
@@ -286,7 +288,7 @@ describe("clampThinkingBudget", () => {
 describe("channelAllowed", () => {
   // Channels are universally allowed under the revised matrix.
   for (const plan of PLANS) {
-    for (const ch of ["web", "sms", "imessage", "whatsapp"] as const) {
+    for (const ch of ["web", "sms", "imessage", "whatsapp", "telegram"] as const) {
       it(`${plan}/${ch} = true`, () => {
         expect(channelAllowed({ plan }, ch)).toBe(true);
       });
@@ -295,17 +297,14 @@ describe("channelAllowed", () => {
 });
 
 describe("providerAllowed", () => {
-  it("starter + pro: apollo and hunter rejected", () => {
-    for (const plan of ["starter", "pro"] as const) {
-      expect(providerAllowed({ plan }, "apollo")).toBe(false);
-      expect(providerAllowed({ plan }, "hunter")).toBe(false);
-      // gmail / calendar / stripe accepted on every tier
-      expect(providerAllowed({ plan }, "gmail")).toBe(true);
-      expect(providerAllowed({ plan }, "calendar")).toBe(true);
-      expect(providerAllowed({ plan }, "stripe")).toBe(true);
-    }
+  it("coach: apollo and hunter rejected; gmail/calendar/stripe accepted", () => {
+    expect(providerAllowed({ plan: "coach" }, "apollo")).toBe(false);
+    expect(providerAllowed({ plan: "coach" }, "hunter")).toBe(false);
+    expect(providerAllowed({ plan: "coach" }, "gmail")).toBe(true);
+    expect(providerAllowed({ plan: "coach" }, "calendar")).toBe(true);
+    expect(providerAllowed({ plan: "coach" }, "stripe")).toBe(true);
   });
-  it("studio: every provider accepted", () => {
+  it("manager: every provider accepted", () => {
     for (const provider of [
       "gmail",
       "calendar",
@@ -313,7 +312,7 @@ describe("providerAllowed", () => {
       "apollo",
       "hunter",
     ] as const) {
-      expect(providerAllowed({ plan: "studio" }, provider)).toBe(true);
+      expect(providerAllowed({ plan: "manager" }, provider)).toBe(true);
     }
   });
 });
@@ -326,10 +325,10 @@ describe("requireFeature", () => {
   it("does NOT throw when predicate passes", () => {
     expect(() =>
       requireFeature(
-        { plan: "starter" },
+        { plan: "coach" },
         (f) => f.gmailDealDeskEnabled,
         "gmail-dealdesk",
-        "starter"
+        "coach"
       )
     ).not.toThrow();
   });
@@ -337,10 +336,10 @@ describe("requireFeature", () => {
   it("throws PlanGateError when predicate fails", () => {
     expect(() =>
       requireFeature(
-        { plan: "starter" },
+        { plan: "coach" },
         (f) => f.brandContactDiscoveryEnabled,
         "brand-contact-discovery",
-        "studio"
+        "manager"
       )
     ).toThrow(PlanGateError);
   });
@@ -349,22 +348,22 @@ describe("requireFeature", () => {
     let caught: PlanGateError | null = null;
     try {
       requireFeature(
-        { plan: "starter" },
+        { plan: "coach" },
         (f) => f.brandContactDiscoveryEnabled,
         "apollo-lookup",
-        "studio"
+        "manager"
       );
     } catch (err) {
       caught = err as PlanGateError;
     }
     expect(caught).toBeInstanceOf(PlanGateError);
-    expect(caught?.plan).toBe("starter");
+    expect(caught?.plan).toBe("coach");
     expect(caught?.attemptedFeature).toBe("apollo-lookup");
-    expect(caught?.requiredPlan).toBe("studio");
+    expect(caught?.requiredPlan).toBe("manager");
     // Message is descriptive
-    expect(caught?.message).toMatch(/starter/);
+    expect(caught?.message).toMatch(/coach/);
     expect(caught?.message).toMatch(/apollo-lookup/);
-    expect(caught?.message).toMatch(/studio/);
+    expect(caught?.message).toMatch(/manager/);
   });
 });
 
@@ -377,6 +376,9 @@ describe("planFeatures — adversarial inputs", () => {
     // The Doc<creators>.plan column is a typed union, but defense-in-depth:
     // if a row is corrupted (or a future migration adds a new tier), the
     // helper must NOT silently fall through to "no gate."
+    expect(() =>
+      planFeatures({ plan: "starter" as unknown as Plan })
+    ).toThrow(PlanGateError);
     expect(() =>
       planFeatures({ plan: "enterprise" as unknown as Plan })
     ).toThrow(PlanGateError);
@@ -415,6 +417,9 @@ describe("PlanFeatures shape — sibling-file safety", () => {
     "gmailDealDeskEnabled",
     "competitorWatchSlots",
     "readinessPacketCadence",
+    "canAutoSendBrandEmails",
+    "canDoBrandOutreach",
+    "canPitchBrands",
     "brandOutreachEnabled",
     "brandContactDiscoveryEnabled",
     "opportunityScoutEnabled",

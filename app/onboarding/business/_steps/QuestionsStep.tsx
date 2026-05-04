@@ -25,6 +25,7 @@
 import { useState } from "react";
 import {
   BUSINESS_SIZE_LABELS,
+  BUSINESS_SIZE_OPTIONS_V0,
   RESPONSE_SPEED_LABELS,
   SERVICE_TYPE_LABELS,
   TICKET_SIZE_LABELS,
@@ -131,7 +132,7 @@ export function QuestionsStep({ state, setState, onAdvance }: Props) {
     return (
       <Q title="How big is the team?" subtitle="">
         <Radio<BusinessSizeBucket>
-          options={Object.keys(BUSINESS_SIZE_LABELS) as BusinessSizeBucket[]}
+          options={BUSINESS_SIZE_OPTIONS_V0}
           selected={a.businessSize}
           labels={BUSINESS_SIZE_LABELS}
           onPick={(id) => {
@@ -410,23 +411,26 @@ function Radio<T extends string>({
   labels: Record<T, string>;
   onPick: (id: T) => void;
 }) {
+  // Single-select chip row — same visual register as `Chips`. Stacked-card
+  // radios crammed 5+ rows on a 380px phone; chips wrap inline. min-h-11
+  // hits the Apple HIG 44pt minimum tap target.
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <div className="flex flex-wrap gap-2">
       {options.map((id) => {
         const on = selected === id;
         return (
           <button
             key={id}
+            type="button"
             onClick={() => onPick(id)}
-            className={`rounded-2xl border p-4 text-left transition-colors ${
+            aria-pressed={on}
+            className={`min-h-11 rounded-full border px-4 text-sm transition active:scale-[0.98] ${
               on
-                ? "border-lime bg-ink-2"
-                : "border-ink-2 hover:border-paper-faint"
+                ? "border-lime bg-lime text-ink"
+                : "border-ink-2 bg-ink-2 text-paper-dim hover:border-paper-faint hover:text-paper"
             }`}
           >
-            <span className="font-display text-base text-paper">
-              {labels[id]}
-            </span>
+            {labels[id]}
           </button>
         );
       })}

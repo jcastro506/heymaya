@@ -27,7 +27,7 @@ async function insertCreator(
   t: ReturnType<typeof convexTest>,
   opts: {
     suffix: string;
-    plan: "starter" | "pro" | "studio";
+    plan: "coach" | "manager";
   }
 ): Promise<Id<"creators">> {
   return await t.run((ctx) =>
@@ -50,21 +50,21 @@ function asUser(t: ReturnType<typeof convexTest>, suffix: string) {
 describe("today.latestBrief", () => {
   it("returns null when unauthenticated", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const brief = await t.query(api.today.latestBrief, {});
     expect(brief).toBeNull();
   });
 
   it("returns null when the creator has no brief yet (today not written)", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const brief = await asUser(t, "a").query(api.today.latestBrief, {});
     expect(brief).toBeNull();
   });
 
   it("returns the most recent brief by creation time", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await t.run((ctx) =>
       ctx.db.insert("dailyBriefs", {
         creatorId: a,
@@ -94,8 +94,8 @@ describe("today.latestBrief", () => {
 
   it("CROSS-TENANT: creator A never sees creator B's brief", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await t.run((ctx) =>
       ctx.db.insert("dailyBriefs", {
         creatorId: b,
@@ -123,7 +123,7 @@ describe("today.pendingItems", () => {
 
   it("surfaces draft arc entries + active brand deals, sorted by kind priority", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     // a content plan with one draft + one approved entry
     await t.run((ctx) =>
       ctx.db.insert("contentPlans", {
@@ -207,8 +207,8 @@ describe("today.pendingItems", () => {
 
   it("CROSS-TENANT: creator A's pending list excludes creator B's deals", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     await t.run((ctx) =>
       ctx.db.insert("brandDeals", {
         creatorId: b,
@@ -231,7 +231,7 @@ describe("today.pendingItems", () => {
 describe("today.revenueWidget", () => {
   it("returns mtdUsd=0 + zeroed 30-day trend when no paid deals", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const r = await asUser(t, "a").query(api.today.revenueWidget, {});
     expect(r).not.toBeNull();
     expect(r?.mtdUsd).toBe(0);
@@ -241,8 +241,8 @@ describe("today.revenueWidget", () => {
 
   it("CROSS-TENANT: B's paid deals do not contribute to A's MTD", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     expect(a).toBeDefined();
     await t.run((ctx) =>
       ctx.db.insert("brandDeals", {
@@ -264,16 +264,16 @@ describe("today.revenueWidget", () => {
 });
 
 describe("today.outlierPosts", () => {
-  it("PLAN-TIER (CRITICAL): Starter returns [] even if brief has outlier ids", async () => {
+  it("PLAN-TIER (coach/manager): both tiers surface outlier posts (proactiveCronAll=true on both post-migration)", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "starter" });
+    const a = await insertCreator(t, { suffix: "a", plan: "coach" });
     const post = await t.run((ctx) =>
       ctx.db.insert("posts", {
         creatorId: a,
         platform: "tiktok",
         platformPostId: "p1",
         url: "https://tt/x",
-        caption: "should not surface",
+        caption: "should surface",
         mediaType: "video",
         postedAt: NOW,
       })
@@ -290,12 +290,12 @@ describe("today.outlierPosts", () => {
       })
     );
     const out = await asUser(t, "a").query(api.today.outlierPosts, {});
-    expect(out).toEqual([]);
+    expect(out).toHaveLength(1);
   });
 
   it("PLAN-TIER: Pro returns the outlier posts referenced by the latest brief", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     const post = await t.run((ctx) =>
       ctx.db.insert("posts", {
         creatorId: a,
@@ -325,8 +325,8 @@ describe("today.outlierPosts", () => {
 
   it("CROSS-TENANT: defensive filter drops outlier ids that point to another creator's post", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "a", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "b", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "a", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "b", plan: "manager" });
     const bPost = await t.run((ctx) =>
       ctx.db.insert("posts", {
         creatorId: b,
@@ -356,7 +356,7 @@ describe("today.outlierPosts", () => {
 
   it("ADVERSARIAL: returns [] when no brief exists", async () => {
     const t = convexTest(schema, modules);
-    await insertCreator(t, { suffix: "a", plan: "pro" });
+    await insertCreator(t, { suffix: "a", plan: "manager" });
     const out = await asUser(t, "a").query(api.today.outlierPosts, {});
     expect(out).toEqual([]);
   });

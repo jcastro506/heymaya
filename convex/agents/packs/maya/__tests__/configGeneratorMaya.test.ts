@@ -56,7 +56,7 @@ afterEach(() => {
 /* Test helpers                                                                */
 /* -------------------------------------------------------------------------- */
 
-type Plan = "starter" | "pro" | "studio";
+type Plan = "coach" | "manager";
 
 async function insertCreator(
   t: ReturnType<typeof convexTest>,
@@ -160,8 +160,8 @@ function emptyInputs(plan: Plan): BuildInputs {
 
 describe("buildMayaConfig — determinism", () => {
   it("same inputs at same `now` → bit-identical config + version", () => {
-    const a = buildMayaConfig(emptyInputs("pro"), NOW);
-    const b = buildMayaConfig(emptyInputs("pro"), NOW);
+    const a = buildMayaConfig(emptyInputs("manager"), NOW);
+    const b = buildMayaConfig(emptyInputs("manager"), NOW);
     expect(a.version).toBe(b.version);
     expect(JSON.stringify(a.config)).toBe(JSON.stringify(b.config));
     // Workspace bundle bytes deterministic for same input set.
@@ -169,8 +169,8 @@ describe("buildMayaConfig — determinism", () => {
   });
 
   it("different `now` → same version (generatedAt + workspaceBundleUrl excluded from hash)", () => {
-    const a = buildMayaConfig(emptyInputs("pro"), NOW);
-    const b = buildMayaConfig(emptyInputs("pro"), NOW + 5000);
+    const a = buildMayaConfig(emptyInputs("manager"), NOW);
+    const b = buildMayaConfig(emptyInputs("manager"), NOW + 5000);
     expect(a.version).toBe(b.version);
     expect(a.config.generatedAt).not.toBe(b.config.generatedAt);
   });
@@ -182,53 +182,53 @@ describe("buildMayaConfig — determinism", () => {
     // stored on `creators.mayaConfigVersion` — so the storage URL must be
     // excluded from the hash, otherwise re-uploads would churn the version
     // even when no creator-facing config changed.
-    const a = buildMayaConfig(emptyInputs("pro"), NOW);
-    const b = buildMayaConfig(emptyInputs("pro"), NOW);
+    const a = buildMayaConfig(emptyInputs("manager"), NOW);
+    const b = buildMayaConfig(emptyInputs("manager"), NOW);
     expect(a.config.workspaceBundleUrl).toBe("");
     expect(b.config.workspaceBundleUrl).toBe("");
     expect(a.version).toBe(b.version);
   });
 
   it("different plan → different version", () => {
-    const starter = buildMayaConfig(emptyInputs("starter"), NOW);
-    const pro = buildMayaConfig(emptyInputs("pro"), NOW);
+    const starter = buildMayaConfig(emptyInputs("coach"), NOW);
+    const pro = buildMayaConfig(emptyInputs("manager"), NOW);
     expect(starter.version).not.toBe(pro.version);
   });
 });
 
 describe("buildMayaConfig — gateway config (OpenClaw-native channels + bootstrap cap)", () => {
   it("Starter gateway enables all four channels (REVISED 2026-04-26: channels ungated)", () => {
-    const inputs = emptyInputs("starter");
+    const inputs = emptyInputs("coach");
     inputs.creator.channelPreference = "imessage";
     const { config } = buildMayaConfig(inputs, NOW);
     expect([...config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "web", "whatsapp"]
+      ["imessage", "sms", "telegram", "web", "whatsapp"]
     );
   });
 
   it("Pro gateway enables all four channels", () => {
-    const { config } = buildMayaConfig(emptyInputs("pro"), NOW);
+    const { config } = buildMayaConfig(emptyInputs("manager"), NOW);
     expect([...config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "web", "whatsapp"]
+      ["imessage", "sms", "telegram", "web", "whatsapp"]
     );
   });
 
   it("Studio gateway enables all four channels", () => {
-    const { config } = buildMayaConfig(emptyInputs("studio"), NOW);
+    const { config } = buildMayaConfig(emptyInputs("manager"), NOW);
     expect([...config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "web", "whatsapp"]
+      ["imessage", "sms", "telegram", "web", "whatsapp"]
     );
   });
 
   it("bootstrapMaxChars is the Maya 28K override (Wave 5: 20K → 28K so standing orders embed inline per OpenClaw 2026.4.23)", () => {
-    const { config } = buildMayaConfig(emptyInputs("pro"), NOW);
-    expect(config.gatewayConfig.agents.defaults.bootstrapMaxChars).toBe(28_000);
-    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(28_000);
+    const { config } = buildMayaConfig(emptyInputs("manager"), NOW);
+    expect(config.gatewayConfig.agents.defaults.bootstrapMaxChars).toBe(32_000);
+    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(32_000);
   });
 
   it("model.provider is openrouter; id pulls from OPENROUTER_DEFAULT_MODEL with fallback", () => {
     process.env.OPENROUTER_DEFAULT_MODEL = "google/gemini-3-flash-preview-test";
-    const { config } = buildMayaConfig(emptyInputs("pro"), NOW);
+    const { config } = buildMayaConfig(emptyInputs("manager"), NOW);
     expect(config.gatewayConfig.model.provider).toBe("openrouter");
     expect(config.gatewayConfig.model.id).toBe("google/gemini-3-flash-preview-test");
     delete process.env.OPENROUTER_DEFAULT_MODEL;
@@ -237,37 +237,43 @@ describe("buildMayaConfig — gateway config (OpenClaw-native channels + bootstr
 
 describe("buildMayaConfig — workspace bundle + jobsJson (replaces cronEnablement)", () => {
   it("returns a non-empty workspace bundle (tarball bytes)", () => {
-    const { workspaceBundleBytes } = buildMayaConfig(emptyInputs("pro"), NOW);
+    const { workspaceBundleBytes } = buildMayaConfig(emptyInputs("manager"), NOW);
     // Two zero blocks at minimum (1024 bytes), plus header+content for each file.
     expect(workspaceBundleBytes.length).toBeGreaterThan(2048);
     expect(workspaceBundleBytes).toBeInstanceOf(Uint8Array);
   });
 
-  it("Pro creator's jobsJson contains many entries; Starter's contains a small subset", () => {
-    const pro = buildMayaConfig(emptyInputs("pro"), NOW);
-    const starter = buildMayaConfig(emptyInputs("starter"), NOW);
-    expect(pro.config.jobsJson.jobs.length).toBeGreaterThan(
-      starter.config.jobsJson.jobs.length
+  it("Coach's jobsJson is non-empty; Manager's is at least as large (boundary is autonomy, not cron breadth)", () => {
+    const manager = buildMayaConfig(emptyInputs("manager"), NOW);
+    const coach = buildMayaConfig(emptyInputs("coach"), NOW);
+    // Post-coach/manager migration: both tiers run the same proactive
+    // cron set. Manager's exclusive autonomy (auto-send, cold pitch,
+    // hook-library auto-build) lives on event/folded triggers, not
+    // cron entries — so Coach and Manager often have identical
+    // jobsJson. The invariant that survives: Coach must be non-empty
+    // and Manager must be at least as large.
+    expect(coach.config.jobsJson.jobs.length).toBeGreaterThan(0);
+    expect(manager.config.jobsJson.jobs.length).toBeGreaterThanOrEqual(
+      coach.config.jobsJson.jobs.length
     );
-    expect(starter.config.jobsJson.jobs.length).toBeGreaterThan(0);
   });
 
   it("jobsJson is sorted by name (deterministic for diff-stability)", () => {
-    const { config } = buildMayaConfig(emptyInputs("pro"), NOW);
+    const { config } = buildMayaConfig(emptyInputs("manager"), NOW);
     const names = config.jobsJson.jobs.map((j) => j.name);
     const sortedNames = [...names].sort();
     expect(names).toEqual(sortedNames);
   });
 
   it("workspaceBundleUrl is empty on initial build (deployMaya patches it post-upload)", () => {
-    const { config } = buildMayaConfig(emptyInputs("pro"), NOW);
+    const { config } = buildMayaConfig(emptyInputs("manager"), NOW);
     expect(config.workspaceBundleUrl).toBe("");
   });
 });
 
 describe("buildMayaConfig — handles (multi-platform)", () => {
   it("creator with 3 handles → 3 handles flow through to workspace assembly (Pro)", () => {
-    const inputs = emptyInputs("pro");
+    const inputs = emptyInputs("manager");
     inputs.handles = [
       mkHandleDoc("youtube", "@code", 100),
       mkHandleDoc("tiktok", "@dance", 200),
@@ -285,27 +291,26 @@ describe("buildMayaConfig — handles (multi-platform)", () => {
     expect(userMd).toContain("@food");
   });
 
-  it("Starter creator with 3 handles → only 1 lands in workspace (capped to plan max)", () => {
-    const inputs = emptyInputs("starter");
+  it("Coach creator with 3 handles → all 3 land in workspace (maxHandles=5 post-migration)", () => {
+    const inputs = emptyInputs("coach");
     inputs.handles = [
       mkHandleDoc("youtube", "@a", 1),
       mkHandleDoc("tiktok", "@b", 1),
       mkHandleDoc("instagram", "@c", 1),
     ];
     const { workspaceBundleBytes } = buildMayaConfig(inputs, NOW);
-    // Decode tarball + check USER.md content.
     const userMd = extractFileFromTar(workspaceBundleBytes, "USER.md");
     expect(userMd).toBeTruthy();
-    // Should contain only one handle — first by sort = instagram.
+    // All three handles should be present — no clamp at 3 (Coach=5).
+    expect(userMd).toContain("@a");
+    expect(userMd).toContain("@b");
     expect(userMd).toContain("@c");
-    expect(userMd).not.toContain("@a");
-    expect(userMd).not.toContain("@b");
   });
 });
 
 describe("buildMayaConfig — composio account gating", () => {
   it("PLAN-TIER (REVISED): Starter includes Gmail + Calendar + Stripe (Apollo/Hunter still Studio-only)", () => {
-    const inputs = emptyInputs("starter");
+    const inputs = emptyInputs("coach");
     const idGmail = "ca_gmail" as unknown as Id<"connectedAccounts">;
     const idCalendar = "ca_calendar" as unknown as Id<"connectedAccounts">;
     const idStripe = "ca_stripe" as unknown as Id<"connectedAccounts">;
@@ -330,7 +335,7 @@ describe("buildMayaConfig — composio account gating", () => {
   });
 
   it("revoked / expired accounts are dropped even on Pro tier", () => {
-    const inputs = emptyInputs("pro");
+    const inputs = emptyInputs("manager");
     const idA = "ca_a" as unknown as Id<"connectedAccounts">;
     const idB = "ca_b" as unknown as Id<"connectedAccounts">;
     inputs.connectedAccounts = [
@@ -346,7 +351,7 @@ describe("buildMayaConfig — composio account gating", () => {
   });
 
   it("composio composioAccountId in config is the DECRYPTED plaintext", () => {
-    const inputs = emptyInputs("pro");
+    const inputs = emptyInputs("manager");
     const id = "ca_x" as unknown as Id<"connectedAccounts">;
     inputs.connectedAccounts = [mkAccountDoc(id, "gmail")];
     inputs.decryptedComposioAccounts = new Map([[id, "PLAIN-COMPOSIO-ID"]]);
@@ -364,7 +369,7 @@ describe("generateMayaConfig — Convex action surface", () => {
     const t = convexTest(schema, modules);
     const creatorId = await insertCreator(t, {
       suffix: "happy",
-      plan: "pro",
+      plan: "manager",
       channelPreference: "imessage",
       primaryHandle: "@happy",
     });
@@ -377,14 +382,14 @@ describe("generateMayaConfig — Convex action surface", () => {
       { creatorId, nowOverride: NOW }
     );
     expect(bundle.config.creatorId).toBe(creatorId);
-    expect(bundle.config.plan).toBe("pro");
+    expect(bundle.config.plan).toBe("manager");
     expect(bundle.config.composioAccounts).toHaveLength(1);
     expect(bundle.config.composioAccounts[0].composioAccountId).toBe(
       "real-composio-id-xyz"
     );
     // Pro gets all four channels.
     expect([...bundle.config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "web", "whatsapp"]
+      ["imessage", "sms", "telegram", "web", "whatsapp"]
     );
     expect(bundle.version).toMatch(/^[0-9a-f]{32}$/);
     // The action uploads the workspace tarball internally and patches the
@@ -401,7 +406,7 @@ describe("generateMayaConfig — Convex action surface", () => {
 
   it("missing creator → throws clear error", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await insertCreator(t, { suffix: "ghost", plan: "pro" });
+    const creatorId = await insertCreator(t, { suffix: "ghost", plan: "manager" });
     await t.run(async (ctx) => ctx.db.delete(creatorId));
 
     await expect(
@@ -414,8 +419,8 @@ describe("generateMayaConfig — Convex action surface", () => {
 
   it("cross-tenant: generating for creator A never reads creator B's handles", async () => {
     const t = convexTest(schema, modules);
-    const a = await insertCreator(t, { suffix: "A", plan: "pro" });
-    const b = await insertCreator(t, { suffix: "B", plan: "pro" });
+    const a = await insertCreator(t, { suffix: "A", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "B", plan: "manager" });
     await insertHandle(t, a, "tiktok", "@a_only", 1);
     await insertHandle(t, b, "tiktok", "@b_only", 2);
     await insertHandle(t, b, "instagram", "@b_ig", 3);
@@ -455,7 +460,7 @@ describe("generateMayaConfig — Convex action surface", () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "starter1",
-      plan: "starter",
+      plan: "coach",
       channelPreference: "imessage",
     });
     await insertHandle(t, c, "tiktok", "@s", 5_000);
@@ -467,7 +472,7 @@ describe("generateMayaConfig — Convex action surface", () => {
       { creatorId: c, nowOverride: NOW }
     );
     expect([...bundle.config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "web", "whatsapp"]
+      ["imessage", "sms", "telegram", "web", "whatsapp"]
     );
     expect(bundle.config.composioAccounts.map((a) => a.provider).sort()).toEqual(
       ["gmail", "stripe"]

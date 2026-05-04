@@ -267,10 +267,15 @@ function makeScrapeFetch(opts: {
         headers: { "content-type": "application/json" },
       });
 
+    // Endpoint paths follow the official scrapecreators-api skill (v3/v2 for
+    // TikTok single-video and feed endpoints). The v1 paths the wrapper used
+    // to call were 404ing in production — the migration is documented in the
+    // SKILL.md routing tables. `/v1/tiktok/video/*` must be checked before
+    // the bare `/v1/tiktok/profile` pattern.
     if (url.includes("/v1/tiktok/profile")) return json(ttProfile);
-    if (url.includes("/v1/tiktok/user/posts")) return json(ttPosts);
-    if (url.includes("/v1/tiktok/comments")) return json(ttComments);
-    if (url.includes("/v1/tiktok/transcript")) return json(ttTranscript);
+    if (url.includes("/v3/tiktok/profile/videos")) return json(ttPosts);
+    if (url.includes("/v1/tiktok/video/comments")) return json(ttComments);
+    if (url.includes("/v1/tiktok/video/transcript")) return json(ttTranscript);
     if (url.includes("/v1/instagram/profile")) return json(igProfile);
     if (url.includes("/v1/instagram/user/posts")) return json(igPosts);
 
@@ -495,7 +500,7 @@ describe("1K creator (just-starting path)", () => {
     );
     const creator0 = await t.run((ctx) => ctx.db.get(creatorId));
     expect(creator0, "STEP 1: creator row should exist").not.toBeNull();
-    expect(creator0!.plan, "STEP 1: plan defaults to starter").toBe("starter");
+    expect(creator0!.plan, "STEP 1: plan defaults to coach").toBe("coach");
     expect(creator0!.status, "STEP 1: status starts at onboarding").toBe(
       "onboarding"
     );
@@ -938,14 +943,14 @@ describe("400K creator (scaling path)", () => {
         timezone: TZ,
       }
     );
-    // Promote creator to studio plan (subscription-side outcome — for test
+    // Promote creator to manager plan (subscription-side outcome — for test
     // purposes we patch directly to mirror what the Stripe checkout webhook
     // would do once they pay).
-    await t.run((ctx) => ctx.db.patch(creatorId, { plan: "studio" }));
+    await t.run((ctx) => ctx.db.patch(creatorId, { plan: "manager" }));
 
     const creator0 = await t.run((ctx) => ctx.db.get(creatorId));
-    expect(creator0!.plan, "STEP 1: plan=studio (post-checkout)").toBe(
-      "studio"
+    expect(creator0!.plan, "STEP 1: plan=manager (post-checkout)").toBe(
+      "manager"
     );
     expect(creator0!.status).toBe("onboarding");
 

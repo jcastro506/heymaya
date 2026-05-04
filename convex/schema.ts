@@ -6,11 +6,20 @@ export default defineSchema({
     clerkUserId: v.string(),
     email: v.string(),
     primaryHandle: v.optional(v.string()),
+    /**
+     * Coach/Manager rewrite (2026-05-04) — display name captured during the
+     * single-screen onboarding (step 2 of 3: handle, name, phone). Pre-filled
+     * from the ScrapeCreators verify response for the creator's handle and
+     * editable by the creator before submit. Used downstream by the soul.md
+     * generator and Maya's introductory iMessage.
+     */
+    displayName: v.optional(v.string()),
     phoneNumber: v.optional(v.string()),
     channelPreference: v.union(
       v.literal("imessage"),
       v.literal("whatsapp"),
       v.literal("sms"),
+      v.literal("telegram"),
       v.literal("web")
     ),
     timezone: v.string(),
@@ -21,9 +30,8 @@ export default defineSchema({
       v.literal("churned")
     ),
     plan: v.union(
-      v.literal("starter"),
-      v.literal("pro"),
-      v.literal("studio")
+      v.literal("coach"),
+      v.literal("manager")
     ),
     trialEndsAt: v.optional(v.number()),
     mayaFlyAppId: v.optional(v.string()),
@@ -83,6 +91,44 @@ export default defineSchema({
     /** Pointer to the operator's business row. Only set when accountType = "service-business". */
     businessId: v.optional(v.id("businesses")),
     // ─── end Service product Sprint 0 ─────────────────────────────────────
+    // ─── Creator usage analytics — added 2026-05-04 ───────────────────────
+    // Denormalized scoreboard columns maintained by `convex/lib/usageEvents.ts`.
+    // Updated on every `logUsageEvent` write so the operator can sort the
+    // top-creators-by-engagement query without scanning the full usageEvents
+    // table. All three are optional — creators with no events yet have
+    // undefined values and the queries treat that as "no data".
+    /** Last creator-driven activity (chat_turn_in / reaction_received / explicit_feedback / action_taken). Maya-driven kinds do NOT bump this. */
+    lastEngagedAt: v.optional(v.number()),
+    /** 0-100 derived rollup over the last 7 days. See `recomputeScoreboard` in convex/lib/usageEvents.ts. */
+    engagementScore7d: v.optional(v.number()),
+    /** Most-fired cron/event label across the last 7 days. */
+    topSkillLast7d: v.optional(v.string()),
+    // ─── end Creator usage analytics ──────────────────────────────────────
+    // ─── First-boot introduction — added 2026-05-04 ───────────────────────
+    // Sprint-coach/manager-tiers: Maya's first-message-on-boot sequence.
+    // The introduction flow is: greet + cited insight (from `creatorPicture`)
+    // → 3 opening questions (goal / tone / brand-deal floor) → drop Gmail
+    // OAuth deep-link → drop Google Calendar OAuth deep-link → swing into
+    // action with the first weekly content plan once answers + connections
+    // settle. Three flags below gate the sequence so it fires exactly once
+    // per creator:
+    //   - `firstBootCompletedAt`  — set when Maya finishes the intro arc
+    //     (greet + cited insight + 3 questions sent). Standing-order
+    //     `first_boot_introduction` guards on `firstBootCompletedAt ===
+    //     undefined`.
+    //   - `openingAnswersAt`      — set when the creator's reply with all
+    //     three answers is parsed + persisted to `creatorPicture`.
+    //   - `firstWeeklyPlanSentAt` — set after the first proactive weekly
+    //     content plan ships (independent of the Sun 4pm cron). Standing
+    //     order `first_weekly_plan` fires once when `openingAnswersAt` is
+    //     set AND `firstWeeklyPlanSentAt === undefined`.
+    // All three are optional so creator rows created before this migration
+    // (i.e. existing fixtures + tests) keep working — undefined means "not
+    // yet" for the corresponding step.
+    firstBootCompletedAt: v.optional(v.number()),
+    openingAnswersAt: v.optional(v.number()),
+    firstWeeklyPlanSentAt: v.optional(v.number()),
+    // ─── end First-boot introduction ──────────────────────────────────────
     createdAt: v.number(),
     // Sprint 3.7 — partial onboarding answer cursor + payload so a refresh
     // mid-flow doesn't lose progress. The full answer set is persisted to
@@ -1160,11 +1206,17 @@ export default defineSchema({
     channel: v.union(
       v.literal("imessage"),
       v.literal("whatsapp"),
-      v.literal("sms")
+      v.literal("sms"),
+      v.literal("telegram")
     ),
-    phoneNumber: v.string(), // E.164
+    // Channel-native identifier as a string. For imessage/whatsapp/sms this is
+    // E.164 phone (e.g. "+15551234567"). For telegram it's "tg:<chat_id>" or
+    // "tg:pending" while the pair is in flight (chat_id is only known after
+    // the user DMs the bot and OpenClaw approves the pair). Field name kept
+    // for backward compatibility with existing rows; semantics widened.
+    phoneNumber: v.string(),
     externalPairingId: v.string(), // OpenClaw-side pair request id
-    externalIdentifier: v.optional(v.string()), // OpenClaw final channel id
+    externalIdentifier: v.optional(v.string()), // OpenClaw final channel id (telegram chat_id or @username)
     status: v.union(
       v.literal("pending"),
       v.literal("active"),
@@ -1408,6 +1460,12 @@ export default defineSchema({
     creatorPictureReady: v.boolean(),
     imessagePaired: v.boolean(),
     mayaDeployed: v.boolean(),
+    // Tracks whether Maya has sent her first activation iMessage/Telegram
+    // after OpenClaw came online. Optional because pre-bridge rows don't
+    // have it, and the post-deploy activation pipeline (which writes it)
+    // lives in the operator's stashed in-flight work on
+    // codex/openclaw-weekly-calendar-brand-research.
+    firstTextSent: v.optional(v.boolean()),
     currentStep: v.string(),
     progressPercent: v.number(),
     updatedAt: v.number(),
@@ -1593,6 +1651,19 @@ export default defineSchema({
     machineId: v.optional(v.string()),
     blockers: v.optional(v.array(v.string())),
     workspaceFiles: v.optional(v.any()),
+    // Activation pipeline state — set after the Fly machine boots and the
+    // OpenClaw gateway reports ready. Tracks the first-text-sent → online
+    // transition described in CREATOR_MAYA_GO_LIVE_CHECKLIST.md. Optional
+    // because pre-bridge rows (and mock-mode rows) don't have it. The
+    // matching mutations live in the operator's stashed in-flight work.
+    activationStatus: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("activating"),
+        v.literal("online"),
+        v.literal("failed")
+      )
+    ),
     createdAt: v.number(),
   })
     .index("by_creator", ["creatorId"])
@@ -3131,4 +3202,69 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_account_and_signed_up", ["accountId", "signedUpAt"]),
   // ─── end Growth product (Riley) ────────────────────────────────────────
+
+  // ─── Creator usage analytics — added 2026-05-04 ─────────────────────────
+  // Per-creator usage event log. Single source of truth for "how creators
+  // use Maya, what they use most, and whether they like it." Internal-only;
+  // no public HTTP surface, no client-side queries — operator runs admin
+  // queries via `npx convex run queries:admin:usage:*`.
+  //
+  // Cross-tenant isolation: every row carries `creatorId`; every query +
+  // mutation that reads `usageEvents` filters by creatorId or scans by
+  // (label, ts) / (kind, ts) for global rollups (which carry no creator
+  // data leak risk because aggregates are by label/kind only).
+  //
+  // Idempotency: the helper inserts unconditionally — duplicate writes are
+  // treated as separate events on purpose (a real retry IS a real second
+  // attempt to deliver to the creator). Avoid double-firing at the call-site,
+  // not in this helper.
+  //
+  // The 8 `kind` values encode the four flow directions:
+  //   - cron_fired / event_fired       — Maya did something proactively
+  //   - chat_turn_in / chat_turn_out   — message exchange
+  //   - reaction_received / explicit_feedback — creator reacted to Maya
+  //   - action_taken / action_ignored  — creator did/didn't act on a draft
+  usageEvents: defineTable({
+    creatorId: v.id("creators"),
+    /**
+     * What kind of interaction this was. See `convex/lib/usageEvents.ts`
+     * for the directionality matrix (which kinds are creator-driven for
+     * `lastEngagedAt` purposes).
+     */
+    kind: v.union(
+      v.literal("cron_fired"),
+      v.literal("event_fired"),
+      v.literal("chat_turn_in"),
+      v.literal("chat_turn_out"),
+      v.literal("reaction_received"),
+      v.literal("explicit_feedback"),
+      v.literal("action_taken"),
+      v.literal("action_ignored")
+    ),
+    /**
+     * Skill/program/behavior label, e.g. "morning_brief",
+     * "brand_email_triage", "trends_watcher", "content_arc_planner". For
+     * chat turns the inferred topic from a small LLM classifier (or
+     * "unclassified" if not classified yet — TODO(s7): wire the classifier).
+     */
+    label: v.optional(v.string()),
+    /**
+     * Sentiment / reaction signal. Polymorphic by `kind`:
+     *   - reaction_received: "love" | "like" | "dislike" | "laugh" | "emphasize" | "question"
+     *   - explicit_feedback: "approve" | "reject" | "ignore" | "stop"
+     *   - action_taken / action_ignored: action type ("draft_posted", "reply_sent", ...)
+     * Free-form string keeps the schema permissive while the catalog stabilizes.
+     */
+    signal: v.optional(v.string()),
+    /** Free-form metadata: latency_ms, message_id, draft_id, etc. */
+    meta: v.optional(v.any()),
+    /** Unix ms when the event happened. Defaulted to Date.now() in the helper. */
+    ts: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_ts", ["creatorId", "ts"])
+    .index("by_kind_and_ts", ["kind", "ts"])
+    .index("by_label_and_ts", ["label", "ts"])
+    .index("by_creator_and_kind_and_ts", ["creatorId", "kind", "ts"]),
+  // ─── end Creator usage analytics ────────────────────────────────────────
 });

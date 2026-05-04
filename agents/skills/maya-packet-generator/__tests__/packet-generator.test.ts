@@ -22,67 +22,63 @@ import type { PlanFeatures } from "../../../../convex/lib/planFeatures";
 
 const NOW = 1_700_000_000_000;
 
-// Plan-tier matrix mirror — REVISED 2026-04-26.
+// Plan-tier matrix mirror — REVISED 2026-05-04 (coach / manager migration).
 // Channels are OpenClaw-native (ungated). Gmail deal desk is universal.
-// Brand outreach + opportunity scout + collab match + monetization advisor
-// are universal. Apollo/Hunter (brandContactDiscovery + allowedProviders)
-// remains Studio-only. readinessPacketCadence stays tiered (none → quarterly
-// cron → on-demand) because that's the actual gating axis for THIS skill.
-const STARTER_FEATURES: PlanFeatures = {
-  plan: "starter",
-  maxHandles: 1,
-  allowedChannels: ["web", "sms", "imessage", "whatsapp"],
-  maxThinkingBudget: "low",
-  allowedThinkingBudgets: ["none", "low"],
-  chatTurnsPerMonth: 200,
-  proactiveCronAll: false,
+// readinessPacketCadence is the per-skill gating axis (none → quarterly
+// cron → on-demand) — Coach is `quarterly` here, Manager is `on-demand`.
+// `STARTER_FEATURES` is preserved as a "no readiness packet at all" fixture
+// because it exercises the firewall path; rebadged as `COACH_NO_PACKET`.
+const COACH_NO_PACKET: PlanFeatures = {
+  plan: "coach",
+  maxHandles: 5,
+  allowedChannels: ["web", "sms", "imessage", "whatsapp", "telegram"],
+  maxThinkingBudget: "high",
+  allowedThinkingBudgets: ["none", "low", "medium", "high"],
+  chatTurnsPerMonth: 400,
+  proactiveCronAll: true,
   gmailDealDeskEnabled: true,
-  competitorWatchSlots: 2,
+  competitorWatchSlots: 5,
+  // 'none' cadence is exercised by the gating tests below; production Coach
+  // is 'quarterly' — see COACH_FEATURES for the production-shape fixture.
   readinessPacketCadence: "none",
-  brandOutreachEnabled: true,
+  canAutoSendBrandEmails: false,
+  canDoBrandOutreach: false,
+  canPitchBrands: false,
+  brandOutreachEnabled: false,
   brandContactDiscoveryEnabled: false,
   opportunityScoutEnabled: true,
   monetizationAdvisorEnabled: true,
   collabMatchEnabled: true,
   multiAccountSlots: 1,
-  postPublishReactionLatencySec: 1800,
+  postPublishReactionLatencySec: 600,
   allowedProviders: ["gmail", "calendar", "stripe"],
 };
 
-// Per-test variant: bumps readinessPacketCadence to 'quarterly' so the gate
-// in this skill (which is the only thing this fixture exercises) can be
-// asserted against cron-triggered runs. Production Starter is 'none' for
-// readinessPacketCadence — that's a per-skill gating axis, not a tier-wide
-// cost lever.
-const STARTER_CRON_ONLY: PlanFeatures = {
-  ...STARTER_FEATURES,
+// Production-shape Coach features — readinessPacketCadence: 'quarterly'.
+const COACH_FEATURES: PlanFeatures = {
+  ...COACH_NO_PACKET,
   readinessPacketCadence: "quarterly",
 };
 
-const PRO_FEATURES: PlanFeatures = {
-  ...STARTER_FEATURES,
-  plan: "pro",
-  maxHandles: 3,
-  maxThinkingBudget: "high",
-  allowedThinkingBudgets: ["none", "low", "medium", "high"],
-  chatTurnsPerMonth: "unlimited",
-  proactiveCronAll: true,
-  competitorWatchSlots: 5,
-  readinessPacketCadence: "quarterly",
-  postPublishReactionLatencySec: 600,
-};
-
-const STUDIO_FEATURES: PlanFeatures = {
-  ...PRO_FEATURES,
-  plan: "studio",
-  maxHandles: 5,
+const MANAGER_FEATURES: PlanFeatures = {
+  ...COACH_FEATURES,
+  plan: "manager",
   competitorWatchSlots: 10,
   readinessPacketCadence: "on-demand",
+  canAutoSendBrandEmails: true,
+  canDoBrandOutreach: true,
+  canPitchBrands: true,
+  brandOutreachEnabled: true,
   brandContactDiscoveryEnabled: true,
-  multiAccountSlots: 3,
   postPublishReactionLatencySec: 300,
   allowedProviders: ["gmail", "calendar", "stripe", "apollo", "hunter"],
 };
+
+// Back-compat aliases for existing tests below.
+const STARTER_FEATURES = COACH_NO_PACKET;
+const STARTER_CRON_ONLY = COACH_FEATURES;
+const PRO_FEATURES = COACH_FEATURES;
+const STUDIO_FEATURES = MANAGER_FEATURES;
 
 function fixtureData(): PacketData {
   return {
