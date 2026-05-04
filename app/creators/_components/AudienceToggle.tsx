@@ -2,14 +2,12 @@
 
 import Link from "next/link";
 
-/**
- * Top-of-page audience switcher. "For creators" is the selected state on this
- * route; "For businesses" 308-redirects via /business.
- *
- * Design: pill-shaped segmented control matching the BillingToggle visual DNA.
- * Selected state uses paper-on-ink, unselected uses paper-dim.
- */
+const BUSINESS_PRODUCT_ENABLED =
+  process.env.NEXT_PUBLIC_ENABLE_BUSINESS_PRODUCT === "true";
+
 export function AudienceToggle() {
+  if (!BUSINESS_PRODUCT_ENABLED) return null;
+
   return (
     <div
       role="tablist"

@@ -20,8 +20,8 @@ const FAQ: { q: string; a: string }[] = [
     a: "No card required. Pick a tier, get 7 days free. On day 5, Maya nudges you to add a card. If you don't, the account quietly stops at the end of day 7 — you keep your data, you keep your memory of Maya, you can come back any time.",
   },
   {
-    q: "Which channels does she watch?",
-    a: "She reads from TikTok, Instagram, YouTube, LinkedIn, X, and 22 other platforms. She talks to you on iMessage, WhatsApp, SMS, or web — you pick at onboarding and can change any time.",
+    q: "How does she talk to me?",
+    a: "iMessage. That's it. The morning brief, the performance pings, the brand-deal triage, the Sunday plan — all land as iMessage from one number you save as Maya. No app. No new inbox. No web dashboard you have to remember to open.",
   },
   {
     q: "What if I don't like her advice?",

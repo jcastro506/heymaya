@@ -16,7 +16,6 @@ import type { ComponentType, ReactNode } from "react";
  *  - optional autonomy badge (e.g., "Manager tier")
  */
 export function FeatureSection({
-  index,
   eyebrow,
   Icon,
   headline,
@@ -25,7 +24,6 @@ export function FeatureSection({
   reverse = false,
   badge,
 }: {
-  index: number;
   eyebrow: string;
   Icon: ComponentType<{ className?: string; strokeWidth?: number }>;
   headline: ReactNode;
@@ -34,8 +32,6 @@ export function FeatureSection({
   reverse?: boolean;
   badge?: string;
 }) {
-  const numberLabel = String(index).padStart(2, "0");
-
   return (
     <section className="px-6 pt-24 sm:px-10 sm:pt-32">
       <div className="mx-auto max-w-7xl">
@@ -47,9 +43,6 @@ export function FeatureSection({
           {/* Copy column */}
           <div className="lg:col-span-6">
             <div className="flex items-center gap-3">
-              <span className="font-mono text-[11px] text-paper-faint">
-                {numberLabel}
-              </span>
               <span className="h-px flex-1 max-w-12 bg-[var(--hairline-strong)]" />
               <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
                 {eyebrow}

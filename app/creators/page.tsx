@@ -45,7 +45,6 @@ export default function CreatorLanding() {
       <main className="relative z-10 flex-1">
         <Hero />
         <ValueProp />
-        <SocialProofPlaceholder />
         <FeatureRail />
         <Pricing billing={billing} setBilling={setBilling} />
         <Faq />
@@ -130,45 +129,6 @@ function ValueProp() {
             can&rsquo;t afford yet.
           </span>
         </p>
-        <div className="mx-auto mt-10 grid max-w-3xl grid-cols-1 gap-6 sm:grid-cols-3">
-          <ValueStat label="Reads" value="27 platforms" />
-          <ValueStat label="Speaks" value="iMessage · WhatsApp · SMS" />
-          <ValueStat label="Costs" value="From $19.99 / mo" />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ValueStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-[var(--hairline)] bg-ink-2 p-5 text-left">
-      <div className="font-mono text-[10px] uppercase tracking-widest text-paper-faint">
-        {label}
-      </div>
-      <div className="mt-2 font-display text-lg text-paper">{value}</div>
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                          SOCIAL PROOF PLACEHOLDER                          */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-function SocialProofPlaceholder() {
-  /* TODO: testimonials when we have them — do NOT fabricate quotes */
-  return (
-    <section
-      aria-label="Social proof"
-      className="mt-20 border-y border-[var(--hairline)] bg-ink-2/40 px-6 py-6 sm:mt-28 sm:px-10"
-    >
-      <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 text-center sm:flex-row sm:text-left">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
-          Built with creators in Austin, LA, NYC, Toronto · Beta open now
-        </p>
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
-          5K – 500K followers · Multi-platform from day one
-        </p>
       </div>
     </section>
   );
@@ -189,7 +149,6 @@ function FeatureRail() {
     <div id="features" className="pt-12">
       {/* 01 — Trends */}
       <FeatureSection
-        index={1}
         eyebrow="Algorithm anxiety"
         Icon={Search}
         headline={
@@ -237,7 +196,6 @@ function FeatureRail() {
 
       {/* 02 — Idea sparring */}
       <FeatureSection
-        index={2}
         eyebrow="Solo isolation"
         Icon={Sparkles}
         reverse
@@ -292,7 +250,6 @@ function FeatureRail() {
 
       {/* 03 — Weekly plan */}
       <FeatureSection
-        index={3}
         eyebrow="Planning paralysis"
         Icon={Calendar}
         headline={
@@ -343,7 +300,6 @@ function FeatureRail() {
 
       {/* 04 — Performance reading */}
       <FeatureSection
-        index={4}
         eyebrow="Data illiteracy"
         Icon={LineChart}
         reverse
@@ -392,7 +348,6 @@ function FeatureRail() {
 
       {/* 05 — Lives in your messages */}
       <FeatureSection
-        index={5}
         eyebrow="Tool fatigue"
         Icon={MessageSquareText}
         headline={
@@ -438,14 +393,13 @@ function FeatureRail() {
                 ),
               },
             ]}
-            caption="iMessage · also WhatsApp / SMS / web"
+            caption="iMessage"
           />
         }
       />
 
       {/* 06 — Accountability */}
       <FeatureSection
-        index={6}
         eyebrow="Consistency"
         Icon={Trophy}
         reverse
@@ -492,7 +446,6 @@ function FeatureRail() {
 
       {/* 07 — Brand DM triage */}
       <FeatureSection
-        index={7}
         eyebrow="Monetization fragility"
         Icon={Handshake}
         headline={
@@ -542,7 +495,6 @@ function FeatureRail() {
 
       {/* 08 — Brand outreach (Manager only) */}
       <FeatureSection
-        index={8}
         eyebrow="Cold-pitch fatigue"
         Icon={Megaphone}
         reverse
@@ -592,7 +544,6 @@ function FeatureRail() {
 
       {/* 09 — Contracts */}
       <FeatureSection
-        index={9}
         eyebrow="Legal blind spots"
         Icon={FileText}
         headline={
@@ -643,7 +594,6 @@ function FeatureRail() {
 
       {/* 10 — Manager packet */}
       <FeatureSection
-        index={10}
         eyebrow="The in-between stage"
         Icon={ClipboardCheck}
         reverse
@@ -698,7 +648,6 @@ function FeatureRail() {
 
       {/* 11 — Memory + voice mirror */}
       <FeatureSection
-        index={11}
         eyebrow="Voice drift"
         Icon={Brain}
         headline={
@@ -749,7 +698,6 @@ function FeatureRail() {
 
       {/* 12 — Tells the truth */}
       <FeatureSection
-        index={12}
         eyebrow="Anti-sycophancy"
         Icon={ShieldCheck}
         reverse

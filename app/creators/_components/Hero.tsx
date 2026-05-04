@@ -19,11 +19,7 @@ export function Hero() {
         <div className="grid grid-cols-1 gap-14 lg:grid-cols-12 lg:gap-10">
           {/* Headline column */}
           <div className="lg:col-span-7">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--hairline-strong)] px-3 py-1 text-xs uppercase tracking-[0.18em] text-paper-dim">
-              <span className="h-1.5 w-1.5 rounded-full bg-lime" />
-              For creators with 5K-500K followers
-            </div>
-            <h1 className="mt-6 font-display text-[clamp(2.5rem,7vw,5.5rem)] leading-[1.02] tracking-[-0.02em] text-paper">
+            <h1 className="font-display text-[clamp(2.5rem,7vw,5.5rem)] leading-[1.02] tracking-[-0.02em] text-paper">
               Your social media
               <br />
               manager.{" "}
@@ -49,15 +45,6 @@ export function Hero() {
               </a>
               <span className="ml-1 text-sm text-paper-faint">
                 No card. Cancel anytime.
-              </span>
-            </div>
-            <div className="mt-10 flex items-center gap-6 border-t border-[var(--hairline)] pt-6 text-[13px] text-paper-faint">
-              <span className="font-mono uppercase tracking-[0.18em]">
-                Reads 27 platforms
-              </span>
-              <span className="hidden h-3 w-px bg-[var(--hairline-strong)] sm:inline-block" />
-              <span className="hidden font-mono uppercase tracking-[0.18em] sm:inline">
-                iMessage · WhatsApp · SMS · Web
               </span>
             </div>
           </div>
