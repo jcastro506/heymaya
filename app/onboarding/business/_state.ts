@@ -263,12 +263,27 @@ export const TICKET_SIZE_LABELS: Record<TicketSizeBucket, string> = {
 };
 
 export const BUSINESS_SIZE_LABELS: Record<BusinessSizeBucket, string> = {
-  solo: "Solo / 1 truck",
+  solo: "Just me (1 truck)",
   "2-5": "2 – 5 trucks",
   "6-15": "6 – 15 trucks",
   "16-50": "16 – 50 trucks",
   "50-plus": "50+ trucks",
 };
+
+/**
+ * v0 ICP per CLAUDE.md is 1–25 trucks. We render only the buckets covering
+ * that range; larger operators self-route through support. Schema keeps the
+ * full enum so we never lose data on a customer who later grows past 15
+ * trucks — they'll see the larger buckets when we expand the ICP. Don't
+ * remove the larger labels from `BUSINESS_SIZE_LABELS` (keeps the type
+ * coverage exhaustive); just gate the display options on the questions
+ * step to this list.
+ */
+export const BUSINESS_SIZE_OPTIONS_V0: ReadonlyArray<BusinessSizeBucket> = [
+  "solo",
+  "2-5",
+  "6-15",
+];
 
 export const TONE_LABELS: Record<ServiceTone, string> = {
   "friendly-neighborhood": "Friendly neighborhood pro",
