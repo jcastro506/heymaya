@@ -16,9 +16,14 @@
  * — that auto-triggers the action regardless of which auth flow brought them
  * here (sign-in or sign-up). Inlining the action call on `/creators` would
  * require URL-state sniffing every page render.
+ *
+ * The body of this page calls `useSearchParams()` which forces a CSR bailout
+ * during static prerender — Next.js requires the consuming component to be
+ * wrapped in <Suspense> so the static shell can render without it. The bridge
+ * itself is split into `<CheckoutBridge />` and the default export wraps it.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
@@ -36,7 +41,7 @@ function isInterval(s: string | null): s is Interval {
   return s === "monthly" || s === "annual";
 }
 
-export default function CheckoutBridgePage() {
+function CheckoutBridge() {
   const router = useRouter();
   const params = useSearchParams();
   const { user, isLoaded } = useUser();
@@ -92,37 +97,56 @@ export default function CheckoutBridgePage() {
   }, [isLoaded, user, tier, interval, router, startCheckout]);
 
   return (
+    <div className="rounded-3xl border border-[var(--hairline)] bg-ink-2 p-8 text-center max-w-md">
+      {error ? (
+        <>
+          <h1 className="font-display text-2xl tracking-tight text-paper">
+            Couldn&apos;t start checkout
+          </h1>
+          <p className="mt-3 text-sm leading-relaxed text-paper-dim">
+            {error}
+          </p>
+          <Link
+            href="/creators#pricing"
+            className="btn btn-primary mt-6 inline-flex"
+          >
+            Back to pricing
+          </Link>
+        </>
+      ) : (
+        <>
+          <Loader2 className="mx-auto h-6 w-6 animate-spin text-lime" />
+          <h1 className="mt-4 font-display text-2xl tracking-tight text-paper">
+            Opening Stripe Checkout…
+          </h1>
+          <p className="mt-2 text-sm text-paper-dim">
+            {tier && interval
+              ? `${tier === "coach" ? "Coach" : "Manager"} · ${interval === "monthly" ? "monthly" : "annual"}`
+              : "Preparing your plan…"}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function CheckoutFallback() {
+  return (
+    <div className="rounded-3xl border border-[var(--hairline)] bg-ink-2 p-8 text-center max-w-md">
+      <Loader2 className="mx-auto h-6 w-6 animate-spin text-lime" />
+      <h1 className="mt-4 font-display text-2xl tracking-tight text-paper">
+        Opening Stripe Checkout…
+      </h1>
+    </div>
+  );
+}
+
+export default function CheckoutBridgePage() {
+  return (
     <main className="flex min-h-screen flex-col items-center justify-center px-6 py-16 bg-[var(--ink)]">
-      <div className="rounded-3xl border border-[var(--hairline)] bg-ink-2 p-8 text-center max-w-md">
-        {error ? (
-          <>
-            <h1 className="font-display text-2xl tracking-tight text-paper">
-              Couldn&apos;t start checkout
-            </h1>
-            <p className="mt-3 text-sm leading-relaxed text-paper-dim">
-              {error}
-            </p>
-            <Link
-              href="/creators#pricing"
-              className="btn btn-primary mt-6 inline-flex"
-            >
-              Back to pricing
-            </Link>
-          </>
-        ) : (
-          <>
-            <Loader2 className="mx-auto h-6 w-6 animate-spin text-lime" />
-            <h1 className="mt-4 font-display text-2xl tracking-tight text-paper">
-              Opening Stripe Checkout…
-            </h1>
-            <p className="mt-2 text-sm text-paper-dim">
-              {tier && interval
-                ? `${tier === "coach" ? "Coach" : "Manager"} · ${interval === "monthly" ? "monthly" : "annual"}`
-                : "Preparing your plan…"}
-            </p>
-          </>
-        )}
-      </div>
+      <Suspense fallback={<CheckoutFallback />}>
+        <CheckoutBridge />
+      </Suspense>
     </main>
   );
 }
