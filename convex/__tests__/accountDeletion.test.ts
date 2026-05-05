@@ -37,6 +37,14 @@ describe("account deletion", () => {
     });
 
     expect(result.deleted).toBe(true);
+    expect(result.flyAppIds).toEqual(
+      expect.arrayContaining([
+        "maya-delete-creator",
+        "maya-delete-business",
+        "maya-delete-growth",
+        "maya-delete-deployment",
+      ])
+    );
     await t.run(async (ctx) => {
       expect(await ctx.db.get(creatorId)).toBeNull();
       expect(await ctx.db.get(businessId)).toBeNull();
@@ -136,6 +144,7 @@ async function seedFullAccount(t: ReturnType<typeof convexTest>): Promise<{
       status: "active",
       plan: "manager",
       stripeCustomerId: "cus_creator",
+      mayaFlyAppId: "maya-delete-creator",
       accountType: "service-business",
       createdAt: NOW,
     });
@@ -145,6 +154,7 @@ async function seedFullAccount(t: ReturnType<typeof convexTest>): Promise<{
       serviceTypes: ["marketing"],
       planTier: "pro",
       stripeCustomerId: "cus_business",
+      mayaFlyAppId: "maya-delete-business",
       createdAt: NOW,
       updatedAt: NOW,
     });
@@ -179,8 +189,17 @@ async function seedFullAccount(t: ReturnType<typeof convexTest>): Promise<{
     await ctx.db.insert("growthAgents", {
       accountId: creatorId,
       onboardingStep: "complete",
+      rileyFlyAppId: "maya-delete-growth",
       createdAt: NOW,
       updatedAt: NOW,
+    });
+    await ctx.db.insert("creatorMayaV0OpenClawDeployments", {
+      creatorId,
+      mode: "production",
+      status: "deployed",
+      flyAppId: "maya-delete-deployment",
+      machineId: "machine-delete",
+      createdAt: NOW,
     });
     await ctx.db.insert("stripeWebhookEvents", {
       eventId: "evt_creator",

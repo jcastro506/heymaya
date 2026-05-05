@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
+import { FlyClient, FlyError } from "@/convex/lib/flyClient";
 
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
@@ -37,6 +38,8 @@ export async function POST(req: NextRequest) {
     source: "web",
   });
 
+  const flyCleanup = await destroyMayaFlyApps(purge.flyAppIds ?? []);
+
   const clerk = await clerkClient();
   await clerk.users.deleteUser(userId);
 
@@ -44,5 +47,48 @@ export async function POST(req: NextRequest) {
     ok: true,
     deleted: true,
     convexDeleted: purge.deleted,
+    flyCleanup,
   });
+}
+
+async function destroyMayaFlyApps(flyAppIds: readonly string[]) {
+  const uniqueAppIds = [...new Set(flyAppIds.filter(Boolean))];
+  if (uniqueAppIds.length === 0) {
+    return { attempted: 0, destroyed: 0, skipped: 0, errors: [] };
+  }
+  if (!process.env.FLY_API_TOKEN) {
+    return {
+      attempted: 0,
+      destroyed: 0,
+      skipped: uniqueAppIds.length,
+      errors: uniqueAppIds.map((appId) => ({
+        appId,
+        message: "FLY_API_TOKEN is not configured.",
+      })),
+    };
+  }
+
+  const fly = new FlyClient();
+  const errors: Array<{ appId: string; message: string }> = [];
+  let destroyed = 0;
+  for (const appId of uniqueAppIds) {
+    try {
+      await fly.destroyApp(appId);
+      destroyed += 1;
+    } catch (error) {
+      if (error instanceof FlyError && error.status === 404) {
+        continue;
+      }
+      errors.push({
+        appId,
+        message: error instanceof Error ? error.message : "Fly cleanup failed.",
+      });
+    }
+  }
+  return {
+    attempted: uniqueAppIds.length,
+    destroyed,
+    skipped: 0,
+    errors,
+  };
 }

@@ -298,6 +298,7 @@ export const purgeByClerkUserIdPublic = mutation({
         deleted: false,
         clerkUserId: args.clerkUserId,
         reason: "creator-not-found",
+        flyAppIds: [],
       } as const;
     }
     const result = await purgeCreatorAccount(ctx, creator, args.source);
@@ -378,12 +379,12 @@ async function purgeCreatorAccount(
   source: "web" | "imessage"
 ) {
   const businessIds = await businessIdsForAccount(ctx, creator._id);
+  const businesses = await Promise.all(businessIds.map((id) => ctx.db.get(id)));
   const stripeCustomerIds = [
     creator.stripeCustomerId,
-    ...(await Promise.all(businessIds.map((id) => ctx.db.get(id)))).map(
-      (business) => business?.stripeCustomerId
-    ),
+    ...businesses.map((business) => business?.stripeCustomerId),
   ].filter((id): id is string => typeof id === "string" && id.length > 0);
+  const flyAppIds = await flyAppIdsForAccount(ctx, creator, businesses);
 
   const creatorDeleted = await deleteCreatorScopedRows(ctx, creator._id);
   const accountDeleted = await deleteAccountScopedRows(ctx, creator._id);
@@ -411,7 +412,35 @@ async function purgeCreatorAccount(
       businessScoped: businessDeleted,
       creator: 1,
     },
+    flyAppIds,
   };
+}
+
+async function flyAppIdsForAccount(
+  ctx: QueryCtx | MutationCtx,
+  creator: Doc<"creators">,
+  businesses: Array<Doc<"businesses"> | null>
+): Promise<string[]> {
+  const ids = new Set<string>();
+  if (creator.mayaFlyAppId) ids.add(creator.mayaFlyAppId);
+  for (const business of businesses) {
+    if (business?.mayaFlyAppId) ids.add(business.mayaFlyAppId);
+  }
+  const deployments = await ctx.db
+    .query("creatorMayaV0OpenClawDeployments")
+    .withIndex("by_creator", (q) => q.eq("creatorId", creator._id))
+    .collect();
+  for (const deployment of deployments) {
+    if (deployment.flyAppId) ids.add(deployment.flyAppId);
+  }
+  const growthAgents = await ctx.db
+    .query("growthAgents")
+    .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+    .collect();
+  for (const agent of growthAgents) {
+    if (agent.rileyFlyAppId) ids.add(agent.rileyFlyAppId);
+  }
+  return [...ids];
 }
 
 async function businessIdsForAccount(

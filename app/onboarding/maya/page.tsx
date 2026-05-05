@@ -32,7 +32,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAction, useQuery } from "convex/react";
-import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import { CheckCircle2, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 
 const submitOnboardingRef = api.onboarding.maya.submitOnboarding.submitOnboarding;
@@ -359,6 +359,8 @@ function PreparingView() {
       <p className="mt-10 text-sm text-paper-faint">
         You can close this tab. Maya keeps working.
       </p>
+
+      <StuckDeleteLink />
     </section>
   );
 }
@@ -386,6 +388,26 @@ function ReadyView() {
       >
         Open Messages
       </a>
+
+      <StuckDeleteLink />
+    </section>
+  );
+}
+
+function StuckDeleteLink() {
+  return (
+    <section className="mt-8 rounded-xl border border-rose/30 bg-rose/10 p-4">
+      <p className="text-sm leading-relaxed text-paper-dim">
+        If this test account is stuck or Maya did not deploy correctly, delete
+        the account and Maya instance so you can start over clean.
+      </p>
+      <Link
+        href="/account/delete"
+        className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-rose/45 bg-paper px-4 text-sm font-semibold text-ink transition hover:bg-white"
+      >
+        <Trash2 className="h-4 w-4" />
+        Delete account and Maya instance
+      </Link>
     </section>
   );
 }
