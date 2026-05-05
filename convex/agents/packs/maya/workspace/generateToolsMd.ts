@@ -28,6 +28,8 @@ export function generateToolsMd(): string {
     "",
     "| Method | Path | When to use |",
     "|---|---|---|",
+    "| POST | `/lc_maya/submit_opening_answers` | First-boot only. POST the 3 parsed opening answers (`goal`, `tone`, `brandDealFloorUsd?`) so they land on `creatorPicture.openingAnswers` and stamp `creators.openingAnswersAt`. Webhook-secret-gated. |",
+    "| POST | `/lc_maya/start_oauth` | Generate a hosted Composio OAuth deep-link for `gmail` / `googlecalendar` / `tiktok` / `linkedin` / `twitter`. Returns `{ redirectUrl, state }` — text the URL to the creator. Plan-tier gated server-side; webhook-secret-gated. |",
     "| POST | `lc_maya.save_brief` | Persist morning / evening brief markdown + recommendations + cited evidence. |",
     "| POST | `lc_maya.save_hook` | Append to `hookLibrary` after `maya-hook-extractor` returns a novel pattern. |",
     "| POST | `lc_maya.save_plan` | Persist Sunday weekly content plan to `contentPlans`. |",

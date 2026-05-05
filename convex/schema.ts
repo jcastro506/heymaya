@@ -83,6 +83,17 @@ export default defineSchema({
     /** Pointer to the operator's business row. Only set when accountType = "service-business". */
     businessId: v.optional(v.id("businesses")),
     // ─── end Service product Sprint 0 ─────────────────────────────────────
+    /**
+     * Stamped when Maya's first-boot iMessage flow lands the 3 opening
+     * answers via `POST /lc_maya/submit_opening_answers` (see
+     * `convex/lcMaya/lcMayaHttp.ts`). The actual answer payload lives on
+     * `creatorPicture.openingAnswers`; this top-level timestamp is what
+     * downstream cron / standing-order logic (e.g. `first_weekly_plan`)
+     * keys off to know "Maya has the basics — fire the first weekly plan."
+     * Optional + unindexed: pre-existing creator rows from before the
+     * iMessage first-boot flow are unaffected.
+     */
+    openingAnswersAt: v.optional(v.number()),
     createdAt: v.number(),
     // Sprint 3.7 — partial onboarding answer cursor + payload so a refresh
     // mid-flow doesn't lose progress. The full answer set is persisted to
@@ -402,6 +413,35 @@ export default defineSchema({
       v.object({
         oneYear: v.optional(v.string()),
         fiveYear: v.optional(v.string()),
+      })
+    ),
+    /**
+     * The 3 opening answers Maya parses out of the creator's first reply in
+     * iMessage — captured by `POST /lc_maya/submit_opening_answers` (see
+     * `convex/lcMaya/lcMayaHttp.ts`). This is the lightweight first-boot
+     * variant of `submitOnboardingAnswers`: Maya only asks goal / tone /
+     * brand-deal floor over text. The full Wave-2 dynamic onboarding
+     * (careerStage, location, revenue streams, etc.) runs in the web flow
+     * and writes the same picture row via `submitOnboardingAnswers`.
+     *
+     * Cross-product note: when both flows have run, the values can diverge
+     * (web flow typically more complete). Synthesis treats this slot as
+     * the conversational source — leans on `tone` to seed the soul.md
+     * tone slider when no `tonePreference` is set on the `creators` row.
+     *
+     * Optional. Top-level `creators.openingAnswersAt` is the canonical
+     * "has Maya gotten the answers" timestamp; this slot is the payload.
+     */
+    openingAnswers: v.optional(
+      v.object({
+        goal: v.string(),
+        tone: v.union(
+          v.literal("supportive"),
+          v.literal("strategic"),
+          v.literal("tough-love")
+        ),
+        brandDealFloorUsd: v.optional(v.number()),
+        submittedAt: v.number(),
       })
     ),
     // ─── Creator HQ business-readiness audit — added 2026-04-26 ───────────
