@@ -72,12 +72,14 @@ export type SubmitOnboardingResult =
 /* -------------------------------------------------------------------------- */
 
 /**
- * Strip leading `@`s + whitespace. Mirrors the same normalization the
- * ScrapeCreators verifier uses, so the value the user sees in the UI matches
- * what we round-trip through verification.
+ * Strip leading `@`s, whitespace, and anything from the first remaining `@`
+ * onwards. Mirrors the ScrapeCreators verifier so the value the user sees
+ * in the UI matches what we round-trip through verification, and so a user
+ * pasting their email into the handle field still resolves to the leading
+ * username segment.
  */
 export function normalizeHandleInput(input: string): string {
-  return input.trim().replace(/^@+/, "");
+  return input.trim().replace(/^@+/, "").split("@")[0];
 }
 
 /**

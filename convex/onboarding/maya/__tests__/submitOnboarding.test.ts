@@ -130,6 +130,15 @@ describe("normalizeHandleInput", () => {
     expect(normalizeHandleInput("yourhandle")).toBe("yourhandle");
     expect(normalizeHandleInput("")).toBe("");
   });
+  it("drops everything from the first mid-string @ onwards (email-paste guard)", () => {
+    expect(normalizeHandleInput("kevin.castro@chatgpt.com")).toBe(
+      "kevin.castro"
+    );
+    expect(normalizeHandleInput("kevin.castro@c")).toBe("kevin.castro");
+    expect(normalizeHandleInput("@kevin.castro@chatgpt.com")).toBe(
+      "kevin.castro"
+    );
+  });
 });
 
 describe("isValidE164", () => {

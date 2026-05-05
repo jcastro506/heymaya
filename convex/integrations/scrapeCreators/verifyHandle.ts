@@ -59,12 +59,16 @@ export class HandleNotFoundError extends Error {
 }
 
 /**
- * Strip leading `@` and surrounding whitespace. ScrapeCreators endpoints accept
- * the bare handle for every platform we support; passing `@` through can
- * trigger 404s on stricter normalizers.
+ * Strip leading `@`, surrounding whitespace, and anything from the first
+ * remaining `@` onwards. ScrapeCreators rejects ANY `@` in the handle
+ * (returns HTTP 400 "We just need the text, so no @ please :)"), and the
+ * handle field also catches the common email-paste case where a user starts
+ * typing their email instead of their handle. Splitting on `@` and taking
+ * the leading segment turns "kevin.castro@chatgpt.com" into "kevin.castro"
+ * and "@yourhandle" into "yourhandle".
  */
 export function normalizeHandle(input: string): string {
-  return input.trim().replace(/^@+/, "");
+  return input.trim().replace(/^@+/, "").split("@")[0];
 }
 
 const VERIFY_TIMEOUT_MS = 12_000;

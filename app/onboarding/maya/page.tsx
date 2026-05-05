@@ -37,7 +37,6 @@ import { api } from "@/convex/_generated/api";
 
 const submitOnboardingRef = api.onboarding.maya.submitOnboarding.submitOnboarding;
 const meRef = api.creators.me;
-const bulkPullStatusRef = api.onboarding.maya.jobs.getJobStatus;
 
 type ViewState = "loading" | "form" | "preparing" | "ready";
 
@@ -160,9 +159,12 @@ function FormView({
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
   // Debounce handle verification by 600ms. We only verify when the trimmed
-  // handle is non-empty + differs from what we already verified.
+  // handle is non-empty + differs from what we already verified. We also drop
+  // anything from the first mid-string `@` onwards so a user mid-typing their
+  // email ("kevin.castro@chatgpt.com") still resolves to "kevin.castro" —
+  // ScrapeCreators rejects any `@` in the handle.
   useEffect(() => {
-    const trimmed = handle.trim().replace(/^@+/, "");
+    const trimmed = handle.trim().replace(/^@+/, "").split("@")[0];
     if (trimmed.length === 0) {
       setVerified(null);
       setVerifyError(null);
@@ -221,7 +223,7 @@ function FormView({
           <div className="flex h-14 items-center rounded-2xl border border-[var(--hairline-strong)] bg-ink-2 px-4">
             <span className="font-mono text-sm text-paper-faint">@</span>
             <input
-              value={handle.replace(/^@+/, "")}
+              value={handle.replace(/^@+/, "").split("@")[0]}
               onChange={(e) => setHandle(e.target.value)}
               placeholder="yourhandle"
               autoCapitalize="off"
@@ -342,99 +344,22 @@ function Field({
 /* -------------------------------------------------------------------------- */
 
 function PreparingView() {
-  const bulkPull = useQuery(bulkPullStatusRef, { jobType: "bulk-pull" });
-  const synth = useQuery(bulkPullStatusRef, { jobType: "synth-picture" });
-  const me = useQuery(meRef);
-
-  // Map live job state to one of three high-level milestones. The text is
-  // grounded in real progress (not faked with setTimeout per the spec).
-  const milestone: "reading" | "building" | "first-message" = useMemo(() => {
-    // If creator is active, we shouldn't render this view — but be defensive.
-    if (me?.status === "active") return "first-message";
-    // Synth running / done → building Maya.
-    if (synth?.status === "running" || synth?.status === "done") {
-      return "building";
-    }
-    // Bulk-pull done → likely between bulk-pull and synth-kick → still building.
-    if (bulkPull?.status === "done") return "building";
-    // Anything earlier → still reading.
-    return "reading";
-  }, [bulkPull, synth, me]);
-
   return (
     <section className="mx-auto w-full max-w-xl px-5 pb-12 pt-6 sm:px-8 sm:pt-12">
       <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
         §02 · Maya is working
       </span>
       <h1 className="mt-4 font-display text-3xl leading-[1.05] tracking-tight text-paper sm:text-4xl">
-        Maya's taking a look at your profile right now.
+        Maya's gonna text you when she's ready.
       </h1>
       <p className="mt-3 max-w-md text-base leading-relaxed text-paper-dim">
-        She'll text you when she's done. Keep your phone handy.
+        Keep an eye on your phone.
       </p>
 
-      <ol className="mt-8 space-y-3">
-        <Milestone
-          done={
-            milestone === "building" || milestone === "first-message"
-          }
-          active={milestone === "reading"}
-          label="Reading your last 30 posts"
-        />
-        <Milestone
-          done={milestone === "first-message"}
-          active={milestone === "building"}
-          label="Building your Maya"
-        />
-        <Milestone
-          done={false}
-          active={milestone === "first-message"}
-          label="Sending you your first message"
-        />
-      </ol>
-
-      <p className="mt-10 text-center text-sm text-paper-faint">
+      <p className="mt-10 text-sm text-paper-faint">
         You can close this tab. Maya keeps working.
       </p>
     </section>
-  );
-}
-
-function Milestone({
-  done,
-  active,
-  label,
-}: {
-  done: boolean;
-  active: boolean;
-  label: string;
-}) {
-  return (
-    <li className="flex items-center gap-3 rounded-2xl border border-[var(--hairline)] bg-ink-2 px-4 py-3">
-      <span
-        className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${
-          done
-            ? "bg-lime text-ink"
-            : active
-              ? "bg-ink-3 text-lime"
-              : "bg-ink-3 text-paper-faint"
-        }`}
-        aria-hidden
-      >
-        {done ? (
-          <CheckCircle2 className="h-4 w-4" />
-        ) : active ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <span className="h-1.5 w-1.5 rounded-full bg-paper-faint" />
-        )}
-      </span>
-      <span
-        className={`text-sm ${done || active ? "text-paper" : "text-paper-faint"}`}
-      >
-        {label}
-      </span>
-    </li>
   );
 }
 
