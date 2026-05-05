@@ -53,6 +53,7 @@ const isPublic = createRouteMatcher([
   "/growth",
   "/privacy",
   "/terms",
+  "/tiktok9iwZOtsyHO9kZG4DFCD2AMpXjKs4jtyO.txt",
   "/account/delete",
   "/sign-in(.*)",
   "/sign-up(.*)",
