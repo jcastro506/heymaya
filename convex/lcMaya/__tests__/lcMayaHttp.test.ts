@@ -39,7 +39,7 @@ async function insertCreator(
   t: ReturnType<typeof convexTest>,
   opts: {
     suffix: string;
-    plan: "starter" | "pro" | "studio";
+    plan: "coach" | "manager";
   }
 ): Promise<Id<"creators">> {
   return await t.run((ctx) =>
@@ -95,7 +95,7 @@ describe("POST /lc_maya/submit_opening_answers", () => {
 
   it("HAPPY: stamps openingAnswersAt + writes openingAnswers onto creatorPicture", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await insertCreator(t, { suffix: "a", plan: "pro" });
+    const creatorId = await insertCreator(t, { suffix: "a", plan: "manager" });
 
     const res = await t.fetch("/lc_maya/submit_opening_answers", {
       method: "POST",
@@ -131,7 +131,7 @@ describe("POST /lc_maya/submit_opening_answers", () => {
 
   it("HAPPY: brandDealFloorUsd is optional (omitted ↦ undefined on stored row)", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await insertCreator(t, { suffix: "b", plan: "starter" });
+    const creatorId = await insertCreator(t, { suffix: "b", plan: "manager" });
 
     const res = await t.fetch("/lc_maya/submit_opening_answers", {
       method: "POST",
@@ -157,7 +157,7 @@ describe("POST /lc_maya/submit_opening_answers", () => {
 
   it("HAPPY: when picture row already exists, patches it instead of inserting a second", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await insertCreator(t, { suffix: "c", plan: "pro" });
+    const creatorId = await insertCreator(t, { suffix: "c", plan: "manager" });
     // Pre-existing picture row from synthesis
     await t.run((ctx) =>
       ctx.db.insert("creatorPicture", {
@@ -201,7 +201,7 @@ describe("POST /lc_maya/submit_opening_answers", () => {
 
   it("ADVERSARIAL: missing / empty / wrong secret returns 401", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await insertCreator(t, { suffix: "d", plan: "pro" });
+    const creatorId = await insertCreator(t, { suffix: "d", plan: "manager" });
 
     for (const bad of ["", "wrong", `${TEST_SECRET}x`]) {
       const res = await t.fetch("/lc_maya/submit_opening_answers", {
@@ -220,7 +220,7 @@ describe("POST /lc_maya/submit_opening_answers", () => {
 
   it("ADVERSARIAL: malformed body returns 400 (missing fields, wrong tone, negative floor)", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await insertCreator(t, { suffix: "e", plan: "pro" });
+    const creatorId = await insertCreator(t, { suffix: "e", plan: "manager" });
 
     const cases = [
       { body: "not-json-at-all" as const, label: "non-json" },
@@ -272,7 +272,7 @@ describe("POST /lc_maya/submit_opening_answers", () => {
     const t = convexTest(schema, modules);
     // A real-but-non-existent creator id. Use a creator we then delete so the
     // id format passes Convex's parser but the row is gone.
-    const creatorId = await insertCreator(t, { suffix: "f", plan: "pro" });
+    const creatorId = await insertCreator(t, { suffix: "f", plan: "manager" });
     await t.run((ctx) => ctx.db.delete(creatorId));
 
     const res = await t.fetch("/lc_maya/submit_opening_answers", {
@@ -290,8 +290,8 @@ describe("POST /lc_maya/submit_opening_answers", () => {
 
   it("CROSS-TENANT: posting for creator A does not touch creator B's row or picture", async () => {
     const t = convexTest(schema, modules);
-    const creatorA = await insertCreator(t, { suffix: "x", plan: "pro" });
-    const creatorB = await insertCreator(t, { suffix: "y", plan: "pro" });
+    const creatorA = await insertCreator(t, { suffix: "x", plan: "manager" });
+    const creatorB = await insertCreator(t, { suffix: "y", plan: "manager" });
 
     const res = await t.fetch("/lc_maya/submit_opening_answers", {
       method: "POST",
@@ -342,7 +342,7 @@ describe("POST /lc_maya/start_oauth", () => {
 
   it("HAPPY: pro creator → gmail OAuth link returned (200, with redirectUrl + state)", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await insertCreator(t, { suffix: "p", plan: "pro" });
+    const creatorId = await insertCreator(t, { suffix: "p", plan: "manager" });
 
     _setComposioClientForTests(
       buildFakeComposioClient(() => ({
@@ -370,7 +370,7 @@ describe("POST /lc_maya/start_oauth", () => {
 
   it("HAPPY: googlecalendar maps to the calendar provider on Pro", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await insertCreator(t, { suffix: "p2", plan: "pro" });
+    const creatorId = await insertCreator(t, { suffix: "p2", plan: "manager" });
 
     _setComposioClientForTests(
       buildFakeComposioClient(() => ({
@@ -398,7 +398,7 @@ describe("POST /lc_maya/start_oauth", () => {
 
   it("ADVERSARIAL: missing / wrong secret returns 401", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await insertCreator(t, { suffix: "q", plan: "pro" });
+    const creatorId = await insertCreator(t, { suffix: "q", plan: "manager" });
 
     for (const bad of ["", "wrong", `${TEST_SECRET}x`]) {
       const res = await t.fetch("/lc_maya/start_oauth", {
@@ -417,7 +417,7 @@ describe("POST /lc_maya/start_oauth", () => {
 
   it("ADVERSARIAL: malformed body returns 400", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await insertCreator(t, { suffix: "r", plan: "pro" });
+    const creatorId = await insertCreator(t, { suffix: "r", plan: "manager" });
 
     const cases = [
       { body: "{}", label: "empty-object" },
@@ -461,7 +461,7 @@ describe("POST /lc_maya/start_oauth", () => {
 
   it("ADVERSARIAL: creator-not-found returns 404", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await insertCreator(t, { suffix: "s", plan: "pro" });
+    const creatorId = await insertCreator(t, { suffix: "s", plan: "manager" });
     await t.run((ctx) => ctx.db.delete(creatorId));
 
     const res = await t.fetch("/lc_maya/start_oauth", {
@@ -484,7 +484,7 @@ describe("POST /lc_maya/start_oauth", () => {
     // allowed surface, so we test the closest in-surface gate via the
     // unsupported-provider 403 path below. This test pins the assumption.
     const t = convexTest(schema, modules);
-    const creatorId = await insertCreator(t, { suffix: "t", plan: "starter" });
+    const creatorId = await insertCreator(t, { suffix: "t", plan: "manager" });
 
     _setComposioClientForTests(
       buildFakeComposioClient(() => ({
@@ -508,7 +508,7 @@ describe("POST /lc_maya/start_oauth", () => {
 
   it("PLAN-GATE: provider not yet wired (tiktok / linkedin / twitter) returns 403 'provider-not-supported'", async () => {
     const t = convexTest(schema, modules);
-    const creatorId = await insertCreator(t, { suffix: "u", plan: "studio" });
+    const creatorId = await insertCreator(t, { suffix: "u", plan: "manager" });
 
     for (const provider of ["tiktok", "linkedin", "twitter"]) {
       const res = await t.fetch("/lc_maya/start_oauth", {
@@ -530,8 +530,8 @@ describe("POST /lc_maya/start_oauth", () => {
 
   it("CROSS-TENANT: secret holder cannot OAuth Creator A's account by passing Creator B's id (entityId follows the body's creatorId)", async () => {
     const t = convexTest(schema, modules);
-    const creatorA = await insertCreator(t, { suffix: "ca", plan: "pro" });
-    const creatorB = await insertCreator(t, { suffix: "cb", plan: "pro" });
+    const creatorA = await insertCreator(t, { suffix: "ca", plan: "manager" });
+    const creatorB = await insertCreator(t, { suffix: "cb", plan: "manager" });
 
     let observedEntityId: unknown = null;
     const fetchSpy = vi.fn().mockImplementation(async (_url, init) => {
