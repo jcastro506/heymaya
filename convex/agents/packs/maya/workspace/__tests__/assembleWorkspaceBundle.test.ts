@@ -204,7 +204,7 @@ describe("assembleWorkspaceBundle", () => {
     const inputs = baseInputs({ plan: "coach" });
     inputs.creator = { ...inputs.creator, plan: "coach" };
     const bundle = assembleWorkspaceBundle(inputs);
-    const ids = bundle.jobsJson.jobs.map((j) => j.entryId);
+    const ids = bundle.jobsJson.jobs.map((j) => j.id);
     // Advisory programs reclassified to tier:"all" — Coach receives them.
     expect(ids).toContain("revenue_snapshot");
     expect(ids).toContain("competitor_watch");
@@ -220,7 +220,7 @@ describe("assembleWorkspaceBundle", () => {
     const inputs = baseInputs({ plan: "coach" });
     inputs.creator = { ...inputs.creator, plan: "coach" };
     const bundle = assembleWorkspaceBundle(inputs);
-    const ids = bundle.jobsJson.jobs.map((j) => j.entryId);
+    const ids = bundle.jobsJson.jobs.map((j) => j.id);
     // No Manager-only cron entries exist as of this revision — autonomy
     // gates fire on event/folded triggers (brand_outreach, pitch_strategy,
     // hook_library_build). This assertion locks the invariant: Coach's cron

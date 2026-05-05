@@ -9,7 +9,7 @@
  *   - Session assignment: accountability_nudge uses "main"; everything
  *     else uses "isolated".
  *   - Determinism: same inputs twice → identical output (sort by name).
- *   - Each emitted job carries a stable `entryId` matching cron.md.
+ *   - Each emitted job carries a stable `id` matching cron.md.
  */
 
 import { describe, it, expect } from "vitest";
@@ -25,7 +25,7 @@ function creator(plan: "coach" | "manager", tz = "America/Los_Angeles") {
 describe("buildCronJobsJson", () => {
   it("coach excludes any Manager-only cron programs (autonomy gating)", () => {
     const { jobs } = buildCronJobsJson({ creator: creator("coach") });
-    const ids = jobs.map((j) => j.entryId);
+    const ids = jobs.map((j) => j.id);
     const managerOnlyCronIds = STANDING_ORDERS.filter(
       (p) => p.tier === "manager" && p.kind === "cron"
     )
@@ -45,7 +45,7 @@ describe("buildCronJobsJson", () => {
 
   it("pro receives the full cron set", () => {
     const { jobs } = buildCronJobsJson({ creator: creator("manager") });
-    const ids = jobs.map((j) => j.entryId);
+    const ids = jobs.map((j) => j.id);
     const allCronIds = STANDING_ORDERS.filter((p) => p.kind === "cron").map(
       (p) => p.cronEntryId!
     );
@@ -57,15 +57,16 @@ describe("buildCronJobsJson", () => {
   it("studio receives the same set as pro (cron coverage is identical; cadence differences are out of scope here)", () => {
     const pro = buildCronJobsJson({ creator: creator("manager") }).jobs;
     const studio = buildCronJobsJson({ creator: creator("manager") }).jobs;
-    expect(studio.map((j) => j.entryId).sort()).toEqual(
-      pro.map((j) => j.entryId).sort()
+    expect(studio.map((j) => j.id).sort()).toEqual(
+      pro.map((j) => j.id).sort()
     );
   });
 
   it("every emitted job has a valid 5-field cron expression", () => {
     const { jobs } = buildCronJobsJson({ creator: creator("manager") });
     for (const j of jobs) {
-      expect(FIVE_FIELD_CRON.test(j.cron)).toBe(true);
+      expect(j.schedule.kind).toBe("cron");
+      expect(FIVE_FIELD_CRON.test(j.schedule.expr)).toBe(true);
     }
   });
 
@@ -74,7 +75,7 @@ describe("buildCronJobsJson", () => {
       creator: creator("manager", "Asia/Tokyo"),
     });
     for (const j of jobs) {
-      expect(j.tz).toBe("Asia/Tokyo");
+      expect(j.schedule.tz).toBe("Asia/Tokyo");
     }
   });
 
@@ -86,11 +87,14 @@ describe("buildCronJobsJson", () => {
 
   it("accountability_nudge uses session='main'; other entries use 'isolated'", () => {
     const { jobs } = buildCronJobsJson({ creator: creator("manager") });
-    const nudge = jobs.find((j) => j.entryId === "accountability_nudge");
-    expect(nudge?.session).toBe("main");
-    const others = jobs.filter((j) => j.entryId !== "accountability_nudge");
+    const nudge = jobs.find((j) => j.id === "accountability_nudge");
+    expect(nudge?.sessionTarget).toBe("main");
+    expect(nudge?.payload.kind).toBe("systemEvent");
+    const others = jobs.filter((j) => j.id !== "accountability_nudge");
     for (const j of others) {
-      expect(j.session).toBe("isolated");
+      expect(j.sessionTarget).toBe("isolated");
+      expect(j.payload.kind).toBe("agentTurn");
+      expect(j.delivery?.mode).toBe("announce");
     }
   });
 
@@ -110,17 +114,36 @@ describe("buildCronJobsJson", () => {
   it("each emitted job has a non-empty message", () => {
     const { jobs } = buildCronJobsJson({ creator: creator("manager") });
     for (const j of jobs) {
-      expect(j.message.length).toBeGreaterThan(0);
+      const message =
+        j.payload.kind === "agentTurn" ? j.payload.message : j.payload.text;
+      expect(message.length).toBeGreaterThan(0);
     }
   });
 
   it("starter emits the morning_brief, evening_recap, weekly_review entries", () => {
     const { jobs } = buildCronJobsJson({ creator: creator("coach") });
-    const ids = jobs.map((j) => j.entryId);
+    const ids = jobs.map((j) => j.id);
     expect(ids).toContain("morning_brief");
     expect(ids).toContain("evening_recap");
     expect(ids).toContain("weekly_review");
     expect(ids).toContain("weekly_content_plan");
     expect(ids).toContain("performance_check_2h");
+  });
+
+  it("emits OpenClaw 2026 normalized job objects", () => {
+    const { jobs } = buildCronJobsJson({ creator: creator("manager") });
+    for (const job of jobs) {
+      expect(job.id).toMatch(/^[a-z0-9_]+$/);
+      expect(job.enabled).toBe(true);
+      expect(job.createdAtMs).toBe(0);
+      expect(job.updatedAtMs).toBe(0);
+      expect(job.wakeMode).toBe("now");
+      expect(job.schedule.kind).toBe("cron");
+      expect(job.payload.kind).toMatch(/^(agentTurn|systemEvent)$/);
+      expect("cron" in job).toBe(false);
+      expect("session" in job).toBe(false);
+      expect("message" in job).toBe(false);
+      expect("entryId" in job).toBe(false);
+    }
   });
 });

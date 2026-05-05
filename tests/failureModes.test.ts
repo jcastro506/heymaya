@@ -572,7 +572,7 @@ describe("synthesis pipeline — graceful failure paths", () => {
     _setSynthFetchForTests(null);
   });
 
-  it("NO SCRAPED POSTS: returns structured failure without burning a Gemini call", async () => {
+  it("NO SCRAPED POSTS: uses profile-only fallback without burning a Gemini call", async () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorMinimal(t, "empty_posts", { posts: 0 });
     const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
@@ -583,10 +583,9 @@ describe("synthesis pipeline — graceful failure paths", () => {
         .synthesizeCreatorPicture,
       { creatorId: c }
     );
-    expect(res.ok).toBe(false);
-    if (res.ok) return;
-    expect(res.stage).toBe("no-scraped-data");
-    expect(res.message).toMatch(/no scraped posts/i);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.model).toBe("profile-only-fallback");
     // Critical: no Gemini call was made (no $0.40 spend on an empty input).
     expect(fetchSpy).not.toHaveBeenCalled();
   });

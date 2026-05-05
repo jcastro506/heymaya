@@ -191,7 +191,7 @@ const OPENCLAW_IMAGE =
 const MACHINE_GUEST: NonNullable<FlyMachineConfig["guest"]> = {
   cpu_kind: "shared",
   cpus: 1,
-  memory_mb: 512,
+  memory_mb: 1024,
 };
 
 /**
@@ -274,8 +274,9 @@ function buildBootstrapShell(): string {
     'echo "$MAYA_JOBS_JSON_BASE64" | base64 -d > "$HOME/.openclaw/cron/jobs.json"',
     // 5. Materialize the gateway config from MAYA_BOOTSTRAP_JSON.
     'echo "$MAYA_BOOTSTRAP_JSON" | jq .gatewayConfig > /data/openclaw.json',
-    // 6. Start the gateway.
-    'exec openclaw gateway start --config /data/openclaw.json',
+    // 6. Start the gateway. OpenClaw 2026.4.23 reads config from its state
+    // dir; the gateway subcommand no longer accepts `start --config`.
+    "exec openclaw gateway --allow-unconfigured",
   ].join(" && ");
 }
 

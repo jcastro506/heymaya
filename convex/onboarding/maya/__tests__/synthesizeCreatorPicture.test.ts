@@ -772,7 +772,7 @@ describe("synthesizeCreatorPicture — adversarial", () => {
     expect(result.stage).toBe("load-inputs");
   });
 
-  it("no scraped posts → structured failure with retryable=true (NOT a crash)", async () => {
+  it("no scraped posts → profile-only fallback picture so sparse creators can deploy", async () => {
     const t = convexTest(schema, modules);
     // Seed creator + handle but no posts cache.
     const c = await seedCreatorWithScrapedData(t, {
@@ -781,15 +781,31 @@ describe("synthesizeCreatorPicture — adversarial", () => {
       noPosts: true,
     });
 
+    const fetchSpy = vi.fn();
+    _setSynthFetchForTests(fetchSpy);
+
     const result = await t.action(
       internal.onboarding.maya.synthesizeCreatorPicture
         .synthesizeCreatorPicture,
       { creatorId: c }
     );
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.stage).toBe("no-scraped-data");
-    expect(result.retryable).toBe(true);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.model).toBe("profile-only-fallback");
+    expect(result.costUsd).toBe(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    const picture = await t.run((ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", c))
+        .first()
+    );
+    expect(picture?.model).toBe("profile-only-fallback");
+    expect(picture?.sourceCitations[0]?.postId).toMatch(/^profile:/);
+    expect(picture?.growthPlan?.antiPatterns).toContain(
+      "Inferring winning hooks from profile data only"
+    );
   });
 
   it("no handles → structured failure, NOT a crash", async () => {
@@ -900,9 +916,8 @@ describe("synthesizeCreatorPicture — adversarial", () => {
     expect(postOccurrences).toBeLessThanOrEqual(30);
   });
 
-  it("citation missing for examplePostId → SynthValidationError on parse", () => {
-    // Hand-craft an output where topHooks references an uncited postId.
-    const broken = JSON.stringify({
+  it("repairs missing source citation for a hook examplePostId", () => {
+    const json = JSON.stringify({
       niche: "x",
       voiceFingerprint: "y",
       audience: { ageRanges: [], topGeos: [], interestTags: [] },
@@ -922,9 +937,34 @@ describe("synthesizeCreatorPicture — adversarial", () => {
         { platform: "tiktok", postId: "different_post", usedFor: "voiceFingerprint" },
         { platform: "tiktok", postId: "different_post", usedFor: "audience" },
       ],
+      careerStage: "building",
+      careerStageReasoning: "reasoning",
+      careerStageReconciliation: {
+        selfReported: "building",
+        inferred: "building",
+        matches: true,
+        evidence: "aligned",
+        gentleNudge: null,
+      },
+      growthPlan: {
+        currentStage: "building",
+        nextMilestone: "milestone",
+        focusAreas: ["a", "b"],
+        antiPatterns: ["c", "d"],
+        smartAlternatives: [
+          { antiPattern: "c", insteadDoThis: "alt c", exampleAction: "Maya does c", reasoning: "calibrated c" },
+          { antiPattern: "d", insteadDoThis: "alt d", exampleAction: "Maya does d", reasoning: "calibrated d" },
+        ],
+        horizonWeeks: 6,
+        citations: [{ platform: "tiktok", postId: "different_post", usedFor: "focusAreas[0]" }],
+      },
     });
-    expect(() => parseAndValidatePicture(broken)).toThrow(SynthValidationError);
-    expect(() => parseAndValidatePicture(broken)).toThrow(/uncited_post/);
+    const parsed = parseAndValidatePicture(json);
+    expect(parsed.sourceCitations).toContainEqual({
+      platform: "tiktok",
+      postId: "uncited_post",
+      usedFor: "topHooks[0]",
+    });
   });
 
   it("source citation with empty postId is rejected", () => {
@@ -1206,6 +1246,83 @@ describe("synthesizeCreatorPicture — deploy pipeline integration", () => {
     const { payload, postsCount } = buildPromptPayload(inputs);
     expect(postsCount).toBeLessThanOrEqual(30);
     expect(payload.perPlatform[0].posts.length).toBeLessThanOrEqual(30);
+  });
+
+  it("buildPromptPayload reads real ScrapeCreators v3 TikTok posts", async () => {
+    const t = convexTest(schema, modules);
+    const c = await seedCreatorWithScrapedData(t, {
+      suffix: "realv3",
+      plan: "manager",
+      noPosts: true,
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.insert("scrapeCreatorsCache", {
+        creatorId: c,
+        cacheKey: cacheKey("tiktok", "profile", "realv3_tt"),
+        payload: {
+          userInfo: {
+            user: {
+              uniqueId: "realv3_tt",
+              nickname: "Real V3",
+              signature: "Travel and gym creator.",
+            },
+            stats: { followerCount: 2 },
+          },
+        },
+        fetchedAt: NOW,
+        ttlSec: 21_600,
+      });
+      await ctx.db.insert("scrapeCreatorsCache", {
+        creatorId: c,
+        cacheKey: cacheKey("tiktok", "posts", "realv3_tt"),
+        payload: [
+          {
+            aweme_id: "7606569072632925453",
+            desc: "I have no words ",
+            create_time: 1771042386,
+            statistics: {
+              digg_count: 11,
+              comment_count: 2,
+              play_count: 258,
+              share_count: 1,
+              collect_count: 4,
+            },
+            video: {
+              cover: {
+                url_list: ["https://p16-sign.tiktokcdn-us.com/cover.jpeg"],
+              },
+              play_addr: {
+                url_list: ["https://v16-webapp-prime.us.tiktok.com/video.mp4"],
+              },
+              duration: 13514,
+            },
+          },
+        ],
+        fetchedAt: NOW,
+        ttlSec: 1_800,
+      });
+    });
+
+    const inputs = await t.query(
+      internal.onboarding.maya.synthesizeCreatorPicture.loadSynthInputs,
+      { creatorId: c }
+    );
+    const { payload, postsCount } = buildPromptPayload(inputs);
+
+    expect(postsCount).toBe(1);
+    expect(payload.perPlatform[0].posts[0]).toMatchObject({
+      postId: "7606569072632925453",
+      caption: "I have no words ",
+      postedAtIso: "2026-02-14T04:13:06.000Z",
+      viewCount: 258,
+      likeCount: 11,
+      commentCount: 2,
+      shareCount: 1,
+      saveCount: 4,
+      thumbnailUrl: "https://p16-sign.tiktokcdn-us.com/cover.jpeg",
+      videoUrl: "https://v16-webapp-prime.us.tiktok.com/video.mp4",
+      videoDurationSec: 14,
+    });
   });
 
   it("system prompt includes the citation discipline section", () => {
@@ -1674,10 +1791,8 @@ describe("synthesizeCreatorPicture — stage-aware adaptive product", () => {
     );
   });
 
-  it("validator rejects missing careerStage citation in sourceCitations[]", () => {
-    // Same broken object as the previous test, but sourceCitations is missing
-    // the 'careerStage' usedFor entry.
-    const broken = JSON.stringify({
+  it("repairs missing careerStage source citation from growthPlan citations", () => {
+    const json = JSON.stringify({
       niche: "x",
       voiceFingerprint: "y",
       audience: { ageRanges: [], topGeos: [], interestTags: [] },
@@ -1713,8 +1828,12 @@ describe("synthesizeCreatorPicture — stage-aware adaptive product", () => {
         citations: [{ platform: "tt", postId: "p1", usedFor: "focusAreas[0]" }],
       },
     });
-    expect(() => parseAndValidatePicture(broken)).toThrow(SynthValidationError);
-    expect(() => parseAndValidatePicture(broken)).toThrow(/careerStage/);
+    const parsed = parseAndValidatePicture(json);
+    expect(parsed.sourceCitations).toContainEqual({
+      platform: "tt",
+      postId: "p1",
+      usedFor: "careerStage",
+    });
   });
 
   it("loadSynthInputs surfaces selfReportedCareerStage from onboardingProgress.answers", async () => {

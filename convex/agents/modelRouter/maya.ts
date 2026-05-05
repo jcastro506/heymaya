@@ -136,7 +136,7 @@ export const callMaya = internalAction({
       );
     }
     const model =
-      process.env.OPENROUTER_DEFAULT_MODEL ?? "google/gemini-3-flash";
+      process.env.OPENROUTER_DEFAULT_MODEL ?? "google/gemini-3-flash-preview";
 
     const creator: Pick<Doc<"creators">, "_id" | "plan"> | null =
       await ctx.runQuery(internal.agents.modelRouter.maya.getCreatorForRouter, {

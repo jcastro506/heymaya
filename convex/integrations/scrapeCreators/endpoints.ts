@@ -154,25 +154,66 @@ const TikTokProfileResponseSchema = z
 const TikTokVideoStatsSchema = z
   .object({
     diggCount: NumberLike.optional(),
+    digg_count: NumberLike.optional(),
     commentCount: NumberLike.optional(),
+    comment_count: NumberLike.optional(),
     playCount: NumberLike.optional(),
+    play_count: NumberLike.optional(),
     shareCount: NumberLike.optional(),
+    share_count: NumberLike.optional(),
     collectCount: NumberLike.optional(),
+    collect_count: NumberLike.optional(),
+    aweme_id: z.string().optional(),
   })
   .passthrough();
 
+const TikTokUrlListSchema = z
+  .object({
+    url_list: z.array(z.string()).optional(),
+    urlList: z.array(z.string()).optional(),
+    url: z.string().optional(),
+    uri: z.string().optional(),
+  })
+  .passthrough();
+
+const TikTokMediaUrlSchema = z.union([z.string(), TikTokUrlListSchema]);
+
 const TikTokVideoSchema = z
   .object({
-    id: z.string(),
+    id: z.string().optional(),
+    aweme_id: z.string().optional(),
+    group_id: z.string().optional(),
+    video_id: z.string().optional(),
     desc: z.string().optional(),
+    title: z.string().optional(),
+    share_url: z.string().optional(),
+    shareUrl: z.string().optional(),
+    shareInfo: z
+      .object({
+        shareUrl: z.string().optional(),
+        share_url: z.string().optional(),
+      })
+      .partial()
+      .passthrough()
+      .optional(),
     createTime: NumberLike.optional(),
+    create_time: NumberLike.optional(),
     stats: TikTokVideoStatsSchema.optional(),
     statsV2: TikTokVideoStatsSchema.optional(),
+    statistics: TikTokVideoStatsSchema.optional(),
     video: z
       .object({
-        cover: z.string().optional(),
-        playAddr: z.string().optional(),
-        downloadAddr: z.string().optional(),
+        cover: TikTokMediaUrlSchema.optional(),
+        originCover: TikTokMediaUrlSchema.optional(),
+        origin_cover: TikTokMediaUrlSchema.optional(),
+        dynamicCover: TikTokMediaUrlSchema.optional(),
+        dynamic_cover: TikTokMediaUrlSchema.optional(),
+        playAddr: TikTokMediaUrlSchema.optional(),
+        play_addr: TikTokMediaUrlSchema.optional(),
+        downloadAddr: TikTokMediaUrlSchema.optional(),
+        download_addr: TikTokMediaUrlSchema.optional(),
+        downloadNoWatermarkAddr: TikTokMediaUrlSchema.optional(),
+        download_no_watermark_addr: TikTokMediaUrlSchema.optional(),
         // Duration in seconds (some endpoints) or duration_ms in ms.
         duration: NumberLike.optional(),
         durationSec: NumberLike.optional(),
@@ -473,6 +514,38 @@ function str(v: unknown): string | null {
   return null;
 }
 
+function mediaUrl(v: unknown): string | null {
+  if (typeof v === "string" && v.length > 0) return v;
+  if (!v || typeof v !== "object") return null;
+  const maybe = v as {
+    url_list?: unknown;
+    urlList?: unknown;
+    url?: unknown;
+    uri?: unknown;
+  };
+  const list = Array.isArray(maybe.url_list)
+    ? maybe.url_list
+    : Array.isArray(maybe.urlList)
+      ? maybe.urlList
+      : null;
+  const first = list?.find((url): url is string => typeof url === "string" && url.length > 0);
+  return first ?? str(maybe.url) ?? str(maybe.uri);
+}
+
+function firstNum(...values: unknown[]): number | null {
+  for (const value of values) {
+    const n = num(value);
+    if (n !== null) return n;
+  }
+  return null;
+}
+
+function normalizeVideoDurationSec(...values: unknown[]): number | null {
+  const duration = firstNum(...values);
+  if (duration === null) return null;
+  return duration > 1000 ? Math.round(duration / 1000) : duration;
+}
+
 function normalizeTikTokProfile(handle: string, raw: unknown): NormalizedProfile {
   const parsed = TikTokProfileResponseSchema.parse(raw);
   const user = parsed.userInfo?.user ?? parsed.user;
@@ -496,29 +569,50 @@ function normalizeTikTokPosts(raw: unknown): NormalizedPost[] {
   const parsed = TikTokPostsResponseSchema.parse(raw);
   const list = parsed.aweme_list ?? parsed.itemList ?? parsed.items ?? [];
   return list.map((v) => {
-    const stats = v.statsV2 ?? v.stats;
-    const durationSec =
-      num(v.video?.duration) ??
-      num(v.video?.durationSec) ??
-      (typeof v.video?.duration_ms === "number"
-        ? Math.round(v.video.duration_ms / 1000)
-        : null);
+    const stats = v.statsV2 ?? v.stats ?? v.statistics;
+    const postId =
+      str(v.id) ??
+      str(v.aweme_id) ??
+      str(v.group_id) ??
+      str(v.video_id) ??
+      str(stats?.aweme_id) ??
+      "";
+    const durationSec = normalizeVideoDurationSec(
+      v.video?.durationSec,
+      v.video?.duration,
+      v.video?.duration_ms
+    );
     return NormalizedPostSchema.parse({
       platform: "tiktok",
-      postId: v.id,
-      url: null,
-      caption: str(v.desc),
-      postedAt: num(v.createTime),
+      postId,
+      url:
+        str(v.share_url) ??
+        str(v.shareUrl) ??
+        str(v.shareInfo?.shareUrl) ??
+        str(v.shareInfo?.share_url),
+      caption: str(v.desc ?? v.title),
+      postedAt: firstNum(v.createTime, v.create_time),
       metrics: {
-        likeCount: num(stats?.diggCount),
-        commentCount: num(stats?.commentCount),
-        viewCount: num(stats?.playCount),
-        shareCount: num(stats?.shareCount),
-        saveCount: num(stats?.collectCount),
+        likeCount: firstNum(stats?.diggCount, stats?.digg_count),
+        commentCount: firstNum(stats?.commentCount, stats?.comment_count),
+        viewCount: firstNum(stats?.playCount, stats?.play_count),
+        shareCount: firstNum(stats?.shareCount, stats?.share_count),
+        saveCount: firstNum(stats?.collectCount, stats?.collect_count),
       },
       mediaType: "video",
-      thumbnailUrl: str(v.video?.cover),
-      videoUrl: str(v.video?.playAddr ?? v.video?.downloadAddr),
+      thumbnailUrl:
+        mediaUrl(v.video?.cover) ??
+        mediaUrl(v.video?.originCover) ??
+        mediaUrl(v.video?.origin_cover) ??
+        mediaUrl(v.video?.dynamicCover) ??
+        mediaUrl(v.video?.dynamic_cover),
+      videoUrl:
+        mediaUrl(v.video?.playAddr) ??
+        mediaUrl(v.video?.play_addr) ??
+        mediaUrl(v.video?.downloadNoWatermarkAddr) ??
+        mediaUrl(v.video?.download_no_watermark_addr) ??
+        mediaUrl(v.video?.downloadAddr) ??
+        mediaUrl(v.video?.download_addr),
       videoDurationSec: durationSec,
       raw: v,
     });

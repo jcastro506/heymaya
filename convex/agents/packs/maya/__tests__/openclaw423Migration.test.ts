@@ -133,21 +133,28 @@ describe("Wave 5 — jobs.json determinism (jobs.json must stay stable for git)"
     expect(JSON.stringify(a.config.jobsJson)).toBe(JSON.stringify(b.config.jobsJson));
   });
 
-  it("every jobs.json entry has the canonical 4.23 field set: name, cron, tz, session, message, entryId", () => {
+  it("every jobs.json entry has the normalized 4.23 field set", () => {
     const { jobs } = buildCronJobsJson({ creator: fakeCreator("manager") });
     expect(jobs.length).toBeGreaterThan(0);
     for (const j of jobs) {
+      expect(typeof j.id).toBe("string");
+      expect(j.id.length).toBeGreaterThan(0);
       expect(typeof j.name).toBe("string");
       expect(j.name.length).toBeGreaterThan(0);
-      expect(typeof j.cron).toBe("string");
-      expect(j.cron).toMatch(/^\S+\s+\S+\s+\S+\s+\S+\s+\S+$/); // 5-field POSIX
-      expect(typeof j.tz).toBe("string");
-      expect(j.tz).toBe(TZ);
-      expect(["isolated", "main"]).toContain(j.session);
-      expect(typeof j.message).toBe("string");
-      expect(j.message.length).toBeGreaterThan(0);
-      expect(typeof j.entryId).toBe("string");
-      expect(j.entryId.length).toBeGreaterThan(0);
+      expect(j.enabled).toBe(true);
+      expect(j.schedule.kind).toBe("cron");
+      expect(j.schedule.expr).toMatch(/^\S+\s+\S+\s+\S+\s+\S+\s+\S+$/); // 5-field POSIX
+      expect(j.schedule.tz).toBe(TZ);
+      expect(["isolated", "main"]).toContain(j.sessionTarget);
+      expect(j.wakeMode).toBe("now");
+      expect(["agentTurn", "systemEvent"]).toContain(j.payload.kind);
+      const message =
+        j.payload.kind === "agentTurn" ? j.payload.message : j.payload.text;
+      expect(message.length).toBeGreaterThan(0);
+      expect("cron" in j).toBe(false);
+      expect("session" in j).toBe(false);
+      expect("message" in j).toBe(false);
+      expect("entryId" in j).toBe(false);
     }
   });
 });
@@ -331,7 +338,7 @@ describe("Wave 5 — per-tier cron set (Starter limited / Pro+ full)", () => {
 
   it("Starter cron set — includes every all-tier program", () => {
     const { jobs } = buildCronJobsJson({ creator: fakeCreator("coach") });
-    const ids = new Set(jobs.map((j) => j.entryId));
+    const ids = new Set(jobs.map((j) => j.id));
     for (const id of ALL_TIER_IDS) {
       expect(ids.has(id), `Starter: missing all-tier program '${id}'`).toBe(true);
     }
@@ -339,7 +346,7 @@ describe("Wave 5 — per-tier cron set (Starter limited / Pro+ full)", () => {
 
   it("Starter cron set — EXCLUDES every pro+ program (proactiveCronAll false)", () => {
     const { jobs } = buildCronJobsJson({ creator: fakeCreator("coach") });
-    const ids = new Set(jobs.map((j) => j.entryId));
+    const ids = new Set(jobs.map((j) => j.id));
     for (const id of PRO_PLUS_IDS) {
       expect(ids.has(id), `Starter: must NOT include pro+ program '${id}'`).toBe(
         false
@@ -349,7 +356,7 @@ describe("Wave 5 — per-tier cron set (Starter limited / Pro+ full)", () => {
 
   it("Pro cron set — includes every program (all-tier + pro+)", () => {
     const { jobs } = buildCronJobsJson({ creator: fakeCreator("manager") });
-    const ids = new Set(jobs.map((j) => j.entryId));
+    const ids = new Set(jobs.map((j) => j.id));
     for (const id of ALL_TIER_IDS) {
       expect(ids.has(id), `Pro: missing all-tier '${id}'`).toBe(true);
     }
@@ -366,7 +373,7 @@ describe("Wave 5 — per-tier cron set (Starter limited / Pro+ full)", () => {
 
   it("Starter MUST run morning_brief, evening_recap, weekly_review (the three creator-facing baselines)", () => {
     const { jobs } = buildCronJobsJson({ creator: fakeCreator("coach") });
-    const ids = jobs.map((j) => j.entryId);
+    const ids = jobs.map((j) => j.id);
     expect(ids).toContain("morning_brief");
     expect(ids).toContain("evening_recap");
     expect(ids).toContain("weekly_review");
@@ -374,7 +381,7 @@ describe("Wave 5 — per-tier cron set (Starter limited / Pro+ full)", () => {
 
   it("Coach MUST run advisory programs (industry_intel_daily, competitor_watch, calendar_lookahead, manager_readiness_packet_quarterly, revenue_snapshot) — boundary is autonomy, not breadth", () => {
     const { jobs } = buildCronJobsJson({ creator: fakeCreator("coach") });
-    const ids = new Set(jobs.map((j) => j.entryId));
+    const ids = new Set(jobs.map((j) => j.id));
     // Post-coach/manager migration: every read/advisory program is
     // tier:"all" because the cost ceiling is small per-creator and the
     // advisory value compounds. Manager-only entries are ones that

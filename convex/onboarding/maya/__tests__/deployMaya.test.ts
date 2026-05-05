@@ -261,7 +261,7 @@ describe("deployMaya — happy path", () => {
     expect(initShell).toContain("curl -fsSL");
     expect(initShell).toContain("tar -xf");
     expect(initShell).toContain(".openclaw/cron/jobs.json");
-    expect(initShell).toContain("openclaw gateway start");
+    expect(initShell).toContain("openclaw gateway --allow-unconfigured");
 
     const after = await getCreator(t, c);
     expect(after?.status).toBe("active");
@@ -1008,12 +1008,13 @@ describe("machineConfigFor", () => {
     // MAYA_BOOTSTRAP_JSON must NOT be in plain env (it's a Fly secret).
     expect(out.env?.MAYA_BOOTSTRAP_JSON).toBeUndefined();
     expect(out.guest?.cpu_kind).toBe("shared");
+    expect(out.guest?.memory_mb).toBe(1024);
     expect(out.metadata?.creator_id).toBe("fakecreator");
     expect(out.init?.cmd).toBeDefined();
     const initShell = out.init!.cmd!.join(" ");
     expect(initShell).toContain("curl -fsSL");
     expect(initShell).toContain("tar -xf");
     expect(initShell).toContain("base64 -d");
-    expect(initShell).toContain("openclaw gateway start --config /data/openclaw.json");
+    expect(initShell).toContain("openclaw gateway --allow-unconfigured");
   });
 });

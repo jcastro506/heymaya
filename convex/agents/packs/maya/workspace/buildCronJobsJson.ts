@@ -23,32 +23,44 @@ import {
 } from "./standingOrders";
 
 /**
- * One entry of `~/.openclaw/cron/jobs.json` per the OpenClaw spec.
- * Field reference:
- *   - `name`        — human-readable; we use the program's title.
- *   - `cron`        — 5-field POSIX cron expression.
- *   - `tz`          — IANA timezone string (creator's `creators.timezone`).
- *   - `session`     — "isolated" (fresh transcript per run) or "main"
- *                     (enqueue system event into main session).
- *   - `message`     — prompt text Maya executes for this tick.
- *   - `entryId`     — internal cross-reference back to standingOrders.ts +
- *                     `agents/skills/maya-platform/cron.md`. Not required
- *                     by OpenClaw, but lets the deploy pipeline tag jobs
- *                     with stable ids for observability.
+ * One entry of `~/.openclaw/cron/jobs.json` for OpenClaw 2026.4.23.
  *
- * Optional fields the OpenClaw CLI accepts but we don't emit by default:
- *   - `at`, `every`, `wake`, `model`, `thinking`, `announce`,
- *     `delete-after-run`, `delivery.failureDestination`. Per our
- *     architecture lock (`project_openclaw_alignment.md`), thinking-budget
- *     overrides go via standing-order prose, not via job-level overrides.
+ * OpenClaw used to tolerate the legacy top-level shape
+ * `{ cron, tz, session, message }`. The 2026.4.23 scheduler expects the
+ * normalized runtime shape used by `openclaw cron add`: `schedule.kind`,
+ * `sessionTarget`, `wakeMode`, and `payload.kind`. Emitting the normalized
+ * shape prevents boot-time scheduler crashes before `openclaw doctor --fix`
+ * has a chance to migrate legacy rows.
  */
 export interface JobSpec {
+  id: string;
   name: string;
-  cron: string;
-  tz: string;
-  session: CronSession;
-  message: string;
-  entryId: string;
+  description?: string;
+  enabled: boolean;
+  createdAtMs: number;
+  updatedAtMs: number;
+  schedule: {
+    kind: "cron";
+    expr: string;
+    tz: string;
+  };
+  sessionTarget: CronSession;
+  wakeMode: "now";
+  payload:
+    | {
+        kind: "systemEvent";
+        text: string;
+      }
+    | {
+        kind: "agentTurn";
+        message: string;
+        lightContext: true;
+      };
+  delivery?: {
+    mode: "announce";
+    channel: "last";
+    bestEffort: true;
+  };
 }
 
 export interface JobsJson {
@@ -102,15 +114,44 @@ export function buildCronJobsJson(inputs: BuildCronJobsJsonInputs): JobsJson {
         `buildCronJobsJson: invalid IANA timezone '${creator.timezone}'.`
       );
     }
+    const message =
+      program.cronMessage ??
+      `Run program '${program.title}'. See AGENTS.md / standing-orders.md for the full Scope / Triggers / Approval gates / Escalation rules.`;
+    const payload =
+      program.session === "main"
+        ? ({
+            kind: "systemEvent",
+            text: message,
+          } as const)
+        : ({
+            kind: "agentTurn",
+            message,
+            lightContext: true,
+          } as const);
     jobs.push({
+      id: program.cronEntryId,
       name: program.title,
-      cron: program.defaultCron,
-      tz: creator.timezone,
-      session: program.session,
-      message:
-        program.cronMessage ??
-        `Run program '${program.title}'. See AGENTS.md / standing-orders.md for the full Scope / Triggers / Approval gates / Escalation rules.`,
-      entryId: program.cronEntryId,
+      description: `Standing order: ${program.id}`,
+      enabled: true,
+      createdAtMs: 0,
+      updatedAtMs: 0,
+      schedule: {
+        kind: "cron",
+        expr: program.defaultCron,
+        tz: creator.timezone,
+      },
+      sessionTarget: program.session,
+      wakeMode: "now",
+      payload,
+      ...(program.session === "isolated"
+        ? ({
+            delivery: {
+              mode: "announce",
+              channel: "last",
+              bestEffort: true,
+            },
+          } as const)
+        : {}),
     });
   }
 

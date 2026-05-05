@@ -61,6 +61,46 @@ export const tiktokPostsFixture = {
   hasMore: true,
 };
 
+export const tiktokV3ProfileVideosFixture = {
+  success: true,
+  status_code: 200,
+  max_cursor: 0,
+  has_more: false,
+  aweme_list: [
+    {
+      aweme_id: "7606569072632925453",
+      group_id: "7606569072632925453",
+      desc: "I have no words",
+      create_time: 1771042386,
+      share_url:
+        "https://www.tiktok.com/@kevin.castro9996/video/7606569072632925453",
+      statistics: {
+        aweme_id: "7606569072632925453",
+        comment_count: 2,
+        digg_count: 11,
+        play_count: 258,
+        share_count: 1,
+        collect_count: 4,
+      },
+      video: {
+        cover: {
+          url_list: ["https://p16-sign.tiktokcdn-us.com/tos-useast5/cover.jpeg"],
+        },
+        play_addr: {
+          url_list: ["https://v16-webapp-prime.us.tiktok.com/video.mp4"],
+        },
+        download_no_watermark_addr: {
+          url_list: ["https://v16-webapp-prime.us.tiktok.com/no-watermark.mp4"],
+        },
+        duration: 13514,
+      },
+      author: {
+        unique_id: "kevin.castro9996",
+      },
+    },
+  ],
+};
+
 export const tiktokCommentsFixture = {
   comments: [
     {

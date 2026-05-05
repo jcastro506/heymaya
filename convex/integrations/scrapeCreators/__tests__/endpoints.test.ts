@@ -24,6 +24,7 @@ import {
 import {
   tiktokProfileFixture,
   tiktokPostsFixture,
+  tiktokV3ProfileVideosFixture,
   tiktokCommentsFixture,
   tiktokTranscriptFixture,
 } from "./fixtures/tiktok";
@@ -84,6 +85,30 @@ describe("endpoints — TikTok", () => {
     expect(posts[0].metrics.viewCount).toBe(1840000);
     expect(posts[0].mediaType).toBe("video");
     expect(posts[0].thumbnailUrl).toContain("cover-1.jpg");
+  });
+
+  it("parses real v3 profile/videos shape with aweme_id and url_list media", async () => {
+    const { client } = clientReturning(tiktokV3ProfileVideosFixture);
+    const posts = await tiktok.lastPosts("kevin.castro9996", 30, { client });
+
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({
+      postId: "7606569072632925453",
+      url: "https://www.tiktok.com/@kevin.castro9996/video/7606569072632925453",
+      caption: "I have no words",
+      postedAt: 1771042386,
+      metrics: {
+        likeCount: 11,
+        commentCount: 2,
+        viewCount: 258,
+        shareCount: 1,
+        saveCount: 4,
+      },
+      mediaType: "video",
+      thumbnailUrl: "https://p16-sign.tiktokcdn-us.com/tos-useast5/cover.jpeg",
+      videoUrl: "https://v16-webapp-prime.us.tiktok.com/video.mp4",
+      videoDurationSec: 14,
+    });
   });
 
   it("parses comments + transcript", async () => {
