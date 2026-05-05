@@ -110,7 +110,7 @@ describe("generateAgentsMd", () => {
     }
   });
 
-  it("Connected toolkits section names every shipping toolkit slug + points back to playbook § 10 + cites the OAuth start action", () => {
+  it("Connected toolkits section names shipping Composio slugs + keeps TikTok on ScrapeCreators", () => {
     const md = generateAgentsMd({
       ...BASE_INPUTS,
       plan: "manager",
@@ -119,15 +119,27 @@ describe("generateAgentsMd", () => {
     // Composio toolkit slugs (uppercase, v3 dashboard naming)
     expect(md).toContain("GMAIL");
     expect(md).toContain("GOOGLECALENDAR");
-    expect(md).toContain("TIKTOK");
     expect(md).toContain("LINKEDIN");
     expect(md).toContain("TWITTER");
+    expect(md).toContain("Creator TikTok uses ScrapeCreators public data");
     // Plugin name + per-creator entity authentication line
     expect(md).toContain("@composio/openclaw-plugin");
     // Pointer back to the playbook section that owns the full guidance
     expect(md).toContain("playbook.md");
     // Auth-error recovery: existing OAuth lifecycle, NOT a new ad-hoc flow
     expect(md).toContain("integrations.composio.oauth.startOAuth");
+  });
+
+  it("requires stored ScrapeCreators metrics before performance claims", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    expect(md).toContain("Convex is the durable record");
+    expect(md).toContain("stored `posts` + `postMetrics` first");
+    expect(md).toContain("I never estimate views");
+    expect(md).toContain("ScrapeCreators refresh");
   });
 
   it("weaves creator-specific identifiers (display name, plan, handles) into the header", () => {

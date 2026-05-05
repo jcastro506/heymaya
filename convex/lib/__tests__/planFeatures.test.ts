@@ -223,10 +223,26 @@ describe("planFeatures matrix — coach / manager", () => {
     });
   });
 
-  describe("allowedProviders — gmail/calendar/stripe UNGATED; apollo/hunter Manager-only", () => {
+  describe("allowedProviders — gmail/calendar/stripe ungated; paid/action providers Manager-only", () => {
     const expected: Record<Plan, Record<Provider, boolean>> = {
-      coach:   { gmail: true, calendar: true, stripe: true, apollo: false, hunter: false },
-      manager: { gmail: true, calendar: true, stripe: true, apollo: true,  hunter: true  },
+      coach: {
+        gmail: true,
+        calendar: true,
+        stripe: true,
+        apollo: false,
+        hunter: false,
+        linkedin: false,
+        twitter: false,
+      },
+      manager: {
+        gmail: true,
+        calendar: true,
+        stripe: true,
+        apollo: true,
+        hunter: true,
+        linkedin: true,
+        twitter: true,
+      },
     };
     const ALL_PROVIDERS: ReadonlyArray<Provider> = [
       "gmail",
@@ -234,6 +250,8 @@ describe("planFeatures matrix — coach / manager", () => {
       "stripe",
       "apollo",
       "hunter",
+      "linkedin",
+      "twitter",
     ];
     for (const plan of PLANS) {
       for (const provider of ALL_PROVIDERS) {

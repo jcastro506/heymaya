@@ -150,6 +150,82 @@ describe("endpoints — TikTok", () => {
     expect(sent).not.toContain("limit=");
   });
 
+  it("research wrappers hit current TikTok trend/search endpoints and normalize video metrics", async () => {
+    const cases: Array<{
+      label: string;
+      run: (client: ScrapeCreatorsClient) => Promise<unknown>;
+      path: string;
+      query?: string;
+    }> = [
+      {
+        label: "hashtag",
+        run: (client) => tiktok.searchHashtag("#mealprep", { client }),
+        path: "/v1/tiktok/search/hashtag",
+        query: "hashtag=mealprep",
+      },
+      {
+        label: "keyword",
+        run: (client) => tiktok.searchKeyword("high protein", { client }),
+        path: "/v1/tiktok/search/keyword",
+        query: "query=high+protein",
+      },
+      {
+        label: "top",
+        run: (client) => tiktok.searchTop("fitness creator", { client }),
+        path: "/v1/tiktok/search/top",
+        query: "query=fitness+creator",
+      },
+      {
+        label: "trending",
+        run: (client) => tiktok.trendingFeed("US", { client }),
+        path: "/v1/tiktok/get-trending-feed",
+        query: "region=US",
+      },
+      {
+        label: "popular videos",
+        run: (client) => tiktok.popularVideos({ client }),
+        path: "/v1/tiktok/videos/popular",
+      },
+      {
+        label: "song videos",
+        run: (client) => tiktok.songVideos("7439295283975702544", { client }),
+        path: "/v1/tiktok/song/videos",
+        query: "clipId=7439295283975702544",
+      },
+    ];
+
+    for (const c of cases) {
+      const { client, fetchImpl } = clientReturning(tiktokPostsFixture);
+      const result = await c.run(client);
+      const sent = String(fetchImpl.mock.calls[0][0]);
+      expect(sent, c.label).toContain(c.path);
+      if (c.query) expect(sent, c.label).toContain(c.query);
+      expect(result).toHaveProperty("posts");
+      const posts = (result as { posts: Array<{ postId: string; metrics: unknown }> })
+        .posts;
+      expect(posts[0]).toMatchObject({
+        postId: "7341111111111111111",
+        metrics: { viewCount: 1840000, likeCount: 41200 },
+      });
+    }
+  });
+
+  it("raw TikTok research wrappers preserve raw payloads for high-variance endpoints", async () => {
+    const payload = { creators: [{ handle: "fitcreator99" }] };
+    const { client, fetchImpl } = clientReturning(payload);
+
+    const out = await tiktok.popularCreators({ client });
+
+    expect(String(fetchImpl.mock.calls[0][0])).toContain(
+      "/v1/tiktok/creators/popular"
+    );
+    expect(out).toEqual({
+      source: "tiktok_popular_creators",
+      query: {},
+      raw: payload,
+    });
+  });
+
   it("throws on garbage profile shape", async () => {
     const { client } = clientReturning({ totally: "wrong shape", stats: "not-an-object" });
     await expect(tiktok.profile("x", { client })).rejects.toThrow();

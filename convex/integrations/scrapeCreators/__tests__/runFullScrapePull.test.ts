@@ -137,6 +137,38 @@ describe("runFullScrapePull — happy path", () => {
     expect(cacheRows.length).toBeGreaterThanOrEqual(6);
     expect(cacheRows.some((r) => r.cacheKey.startsWith("sc:tiktok:profile:"))).toBe(true);
     expect(cacheRows.some((r) => r.cacheKey.startsWith("sc:instagram:posts:"))).toBe(true);
+
+    const posts = await t.run(async (ctx) =>
+      ctx.db
+        .query("posts")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    expect(posts.length).toBeGreaterThanOrEqual(6);
+    const firstTikTok = posts.find(
+      (p) => p.platform === "tiktok" && p.platformPostId === "7341111111111111111"
+    );
+    expect(firstTikTok?.url).toBe(
+      "https://www.tiktok.com/@fitcreator99/video/7341111111111111111"
+    );
+
+    const metrics = await t.run(async (ctx) =>
+      ctx.db
+        .query("postMetrics")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    expect(metrics.length).toBe(posts.length);
+    const firstTikTokMetrics = metrics.find(
+      (m) => m.postId === firstTikTok?._id
+    );
+    expect(firstTikTokMetrics).toMatchObject({
+      viewCount: 1840000,
+      likeCount: 41200,
+      commentCount: 312,
+      shareCount: 1280,
+      saveCount: 8800,
+    });
   });
 
   it("TikTok deep-dive: produces topPostExtras with transcript + topComments", async () => {
@@ -269,5 +301,21 @@ describe("runFullScrapePull — adversarial", () => {
     );
     expect(handles).toHaveLength(1);
     expect(handles[0].platform).toBe("tiktok");
+
+    const posts = await t.run(async (ctx) =>
+      ctx.db
+        .query("posts")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    expect(posts).toHaveLength(2);
+
+    const metrics = await t.run(async (ctx) =>
+      ctx.db
+        .query("postMetrics")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    expect(metrics).toHaveLength(4);
   });
 });

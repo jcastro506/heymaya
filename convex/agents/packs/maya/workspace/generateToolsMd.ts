@@ -10,7 +10,7 @@
  * This file documents three surfaces Maya talks to:
  *   1. Our `lc_maya_*` HTTP endpoints (the Convex HTTP action surface).
  *   2. The ScrapeCreators agent skill (read 27+ social platforms).
- *   3. The Composio universal runner (Gmail / Stripe / Calendar / Apollo / Hunter).
+ *   3. The Composio universal runner (Gmail / Stripe / Calendar / Apollo / Hunter / LinkedIn / X).
  *
  * Same content for every creator — no per-creator parameterization. Pure
  * function so the call signature mirrors the other generators.
@@ -29,7 +29,7 @@ export function generateToolsMd(): string {
     "| Method | Path | When to use |",
     "|---|---|---|",
     "| POST | `/lc_maya/submit_opening_answers` | First-boot only. POST the 3 parsed opening answers (`goal`, `tone`, `brandDealFloorUsd?`) so they land on `creatorPicture.openingAnswers` and stamp `creators.openingAnswersAt`. Webhook-secret-gated. |",
-    "| POST | `/lc_maya/start_oauth` | Generate a hosted Composio OAuth deep-link for `gmail` / `googlecalendar` / `tiktok` / `linkedin` / `twitter`. Returns `{ redirectUrl, state }` — text the URL to the creator. Plan-tier gated server-side; webhook-secret-gated. |",
+    "| POST | `/lc_maya/start_oauth` | Generate a hosted Composio OAuth deep-link for `gmail` / `calendar` / `linkedin` / `twitter`. Returns `{ redirectUrl, state }` — text the URL to the user. Creator TikTok uses ScrapeCreators public data, not Composio OAuth. Plan-tier gated server-side; webhook-secret-gated. |",
     "| POST | `lc_maya.save_brief` | Persist morning / evening brief markdown + recommendations + cited evidence. |",
     "| POST | `lc_maya.save_hook` | Append to `hookLibrary` after `maya-hook-extractor` returns a novel pattern. |",
     "| POST | `lc_maya.save_plan` | Persist Sunday weekly content plan to `contentPlans`. |",
@@ -50,7 +50,7 @@ export function generateToolsMd(): string {
     "",
     "Read layer for 27+ social platforms — TikTok, Instagram, YouTube, LinkedIn, X, Threads, Reddit, Pinterest, Facebook, Snapchat, Twitch, Kick, Truth Social, Bluesky, plus ad libraries (Meta, TikTok) and link aggregators (Linktree, Komi, Pillar).",
     "",
-    "The skill is loaded into the workspace at deploy as `skills/scrapecreators-api/SKILL.md` (the official package from `github.com/scrapecreators/agent-skills`). It documents 110 endpoints across all 27+ platforms with intent-routing tables. The skill's frontmatter declares the env requirement (`SCRAPECREATORS_API_KEY`) and OpenClaw metadata; the loader auto-discovers it under the workspace `skills/` tree.",
+    "The skill is loaded into the workspace at deploy as `skills/scrapecreators-api/SKILL.md` (the official package from `github.com/scrapecreators/agent-skills`). It documents 110 endpoints across all 27+ platforms with intent-routing tables. The skill's frontmatter declares the env requirement (`SCRAPE_CREATORS_API_KEY`) and OpenClaw metadata; the loader auto-discovers it under the workspace `skills/` tree.",
     "",
     "Common invocations:",
     "",
@@ -71,7 +71,7 @@ export function generateToolsMd(): string {
     "",
     "- **Starter:** `stripe` only (Stripe is data-only — Maya reads, never writes).",
     "- **Pro:** `gmail`, `stripe`, `calendar`.",
-    "- **Studio:** Pro plus `apollo`, `hunter` for brand contact discovery.",
+    "- **Manager:** Pro plus `apollo`, `hunter`, `linkedin`, `twitter` for brand contact discovery and Builder distribution.",
     "",
     "Common per-provider actions:",
     "",

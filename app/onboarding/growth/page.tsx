@@ -1,22 +1,22 @@
 "use client";
 
 /**
- * Growth-product onboarding flow — `/onboarding/growth`.
+ * Builder onboarding flow — `/onboarding/growth`.
  *
  * Five steps:
  *   1. Connect LinkedIn (Composio dashboard → paste connectedAccountId)
  *   2. Connect X / Twitter (same flow)
- *   3. Product context — what's Riley building hype for?
+ *   3. Product context — what is Maya building distribution for?
  *   4. Voice samples — paste 5-10 of your existing posts per platform
- *   5. Deploy — spin up Riley on Fly
+ *   5. Deploy — spin up Maya on Fly
  *
  * Single client component holds the draft + renders the active step. The
  * server-side `growthAgents.onboardingStep` is the source of truth for
  * which step we're on; this component mirrors it.
  */
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { ConnectLinkedinStep } from "./_steps/ConnectLinkedinStep";
@@ -27,10 +27,31 @@ import { DeployStep } from "./_steps/DeployStep";
 import { STEPS, emptyDraft, nextStep, prevStep, type OnboardingDraft, type StepId } from "./_state";
 
 export default function GrowthOnboardingPage() {
+  return (
+    <Suspense
+      fallback={
+        <Shell>
+          <p className="text-paper-faint">Loading...</p>
+        </Shell>
+      }
+    >
+      <GrowthOnboardingBody />
+    </Suspense>
+  );
+}
+
+function GrowthOnboardingBody() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const me = useQuery(api.onboarding.growth.pipeline.getMyGrowthAgent);
   const startOnboarding = useAction(
     api.onboarding.growth.pipeline.startGrowthOnboarding
+  );
+  const completeOAuth = useAction(
+    api.integrations.composio.oauth.completeOAuth
+  );
+  const markOAuthConnected = useMutation(
+    api.onboarding.growth.pipeline.markPlatformConnectedFromConnectedAccount
   );
   const setStep = useMutation(
     api.onboarding.growth.pipeline.setOnboardingStep
@@ -38,6 +59,7 @@ export default function GrowthOnboardingPage() {
 
   const [bootError, setBootError] = useState<string | null>(null);
   const [draft, setDraft] = useState<OnboardingDraft>(() => emptyDraft());
+  const oauthHandled = useRef(false);
 
   // Boot — idempotent. Creates the row if missing.
   useEffect(() => {
@@ -72,12 +94,36 @@ export default function GrowthOnboardingPage() {
           ? me.agent.voiceSamples.twitter
           : d.voiceSamples.twitter,
       },
-      linkedinComposioId:
-        me.agent?.linkedinConnection?.composioAccountId ?? d.linkedinComposioId,
-      twitterComposioId:
-        me.agent?.twitterConnection?.composioAccountId ?? d.twitterComposioId,
     }));
   }, [me]);
+
+  useEffect(() => {
+    if (oauthHandled.current || !me?.agent) return;
+    if (searchParams.get("oauth") !== "callback") return;
+    const provider = searchParams.get("provider");
+    const code = searchParams.get("code");
+    const state = searchParams.get("state");
+    if ((provider !== "linkedin" && provider !== "twitter") || !code || !state) {
+      return;
+    }
+    oauthHandled.current = true;
+    void (async () => {
+      try {
+        const res = await completeOAuth({ provider, code, state });
+        await markOAuthConnected({
+          platform: provider,
+          connectedAccountId: res.connectedAccountIdLocal,
+        });
+        await setStep({
+          step: provider === "linkedin" ? "connect-twitter" : "product-context",
+        });
+      } catch (err) {
+        setBootError((err as Error).message);
+      } finally {
+        router.replace("/onboarding/growth");
+      }
+    })();
+  }, [searchParams, me?.agent, completeOAuth, markOAuthConnected, setStep, router]);
 
   const currentStep: StepId = me?.agent?.onboardingStep ?? "connect-linkedin";
 
@@ -92,7 +138,7 @@ export default function GrowthOnboardingPage() {
     return (
       <Shell>
         <p className="text-paper">
-          Sign in to start. <a href="/sign-in" className="text-lime underline">Sign in</a>.
+          Sign in to start. <a href="/sign-in" className="text-paper underline">Sign in</a>.
         </p>
       </Shell>
     );
@@ -110,7 +156,7 @@ export default function GrowthOnboardingPage() {
     router.push("/growth/dashboard");
     return (
       <Shell>
-        <p className="text-paper-faint">Redirecting to your Riley dashboard…</p>
+        <p className="text-paper-faint">Redirecting to your builder dashboard...</p>
       </Shell>
     );
   }
@@ -191,8 +237,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     <main className="min-h-screen bg-ink text-paper">
       <div className="mx-auto max-w-3xl px-6 py-16">
         <header className="mb-8 flex items-center justify-between">
-          <span className="font-mono text-xs uppercase tracking-widest text-lime">
-            Riley · onboarding
+          <span className="font-mono text-xs uppercase tracking-widest text-paper-faint">
+            Maya for Builders · onboarding
           </span>
           <a href="/" className="text-sm text-paper-faint hover:text-paper">
             ← exit
@@ -213,7 +259,7 @@ function Breadcrumbs({ current }: { current: StepId }) {
           <span
             className={
               i === idx
-                ? "font-mono uppercase tracking-widest text-lime"
+                ? "font-mono uppercase tracking-widest text-paper"
                 : i < idx
                   ? "font-mono uppercase tracking-widest text-paper-dim"
                   : "font-mono uppercase tracking-widest text-paper-faint"

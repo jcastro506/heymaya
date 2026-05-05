@@ -30,7 +30,7 @@ export function MobileStickyCta() {
         </div>
         <Link
           href="/checkout?tier=manager&interval=monthly"
-          className="btn btn-primary h-12 px-4 text-sm"
+          className="btn btn-primary h-12 px-4 text-sm !bg-paper !text-ink hover:!bg-white"
         >
           Start free
           <ArrowUpRight className="h-4 w-4" />

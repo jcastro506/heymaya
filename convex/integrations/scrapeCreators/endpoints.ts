@@ -91,6 +91,23 @@ export const NormalizedCommentSchema = z.object({
 });
 export type NormalizedComment = z.infer<typeof NormalizedCommentSchema>;
 
+export const TikTokResearchResultSchema = z.object({
+  source: z.string(),
+  query: z.record(z.string(), z.unknown()),
+  posts: z.array(NormalizedPostSchema),
+  raw: z.unknown(),
+});
+export type TikTokResearchResult = z.infer<typeof TikTokResearchResultSchema>;
+
+export const RawScrapeCreatorsResultSchema = z.object({
+  source: z.string(),
+  query: z.record(z.string(), z.unknown()),
+  raw: z.unknown(),
+});
+export type RawScrapeCreatorsResult = z.infer<
+  typeof RawScrapeCreatorsResultSchema
+>;
+
 /* -------------------------------------------------------------------------- */
 /* Upstream parsers — narrow Zod schemas per platform                         */
 /* -------------------------------------------------------------------------- */
@@ -508,6 +525,47 @@ function normalizeTikTokPosts(raw: unknown): NormalizedPost[] {
   });
 }
 
+function normalizeTikTokResearchPosts(raw: unknown): NormalizedPost[] {
+  if (Array.isArray(raw)) return normalizeTikTokPosts({ aweme_list: raw });
+  const parsed = z
+    .object({
+      aweme_list: z.array(TikTokVideoSchema).optional(),
+      itemList: z.array(TikTokVideoSchema).optional(),
+      items: z.array(TikTokVideoSchema).optional(),
+      videos: z.array(TikTokVideoSchema).optional(),
+      data: z
+        .union([
+          z.array(TikTokVideoSchema),
+          z
+            .object({
+              aweme_list: z.array(TikTokVideoSchema).optional(),
+              itemList: z.array(TikTokVideoSchema).optional(),
+              items: z.array(TikTokVideoSchema).optional(),
+              videos: z.array(TikTokVideoSchema).optional(),
+            })
+            .passthrough(),
+        ])
+        .optional(),
+    })
+    .passthrough()
+    .parse(raw);
+  const dataList = Array.isArray(parsed.data)
+    ? parsed.data
+    : parsed.data?.aweme_list ??
+      parsed.data?.itemList ??
+      parsed.data?.items ??
+      parsed.data?.videos;
+  return normalizeTikTokPosts({
+    aweme_list:
+      parsed.aweme_list ??
+      parsed.itemList ??
+      parsed.items ??
+      parsed.videos ??
+      dataList ??
+      [],
+  });
+}
+
 function normalizeIgProfile(handle: string, raw: unknown): NormalizedProfile {
   const parsed = IgProfileResponseSchema.parse(raw);
   const u = parsed.user ?? parsed.data?.user;
@@ -742,6 +800,27 @@ function clientOf(deps?: EndpointDeps): ScrapeCreatorsClient {
   return deps?.client ?? getDefaultClient();
 }
 
+function rawResult(
+  source: string,
+  query: Record<string, unknown>,
+  raw: unknown
+): RawScrapeCreatorsResult {
+  return RawScrapeCreatorsResultSchema.parse({ source, query, raw });
+}
+
+function tiktokResearchResult(
+  source: string,
+  query: Record<string, unknown>,
+  raw: unknown
+): TikTokResearchResult {
+  return TikTokResearchResultSchema.parse({
+    source,
+    query,
+    posts: normalizeTikTokResearchPosts(raw),
+    raw,
+  });
+}
+
 /* ---- TikTok ---- */
 
 /**
@@ -839,6 +918,116 @@ export const tiktok = {
       return { transcript: parsed.segments.map((s) => s.text).join(" ") };
     }
     return { transcript: null };
+  },
+  async audience(
+    handle: string,
+    deps?: EndpointDeps
+  ): Promise<RawScrapeCreatorsResult> {
+    const query = { handle };
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/user/audience",
+      { query }
+    );
+    return rawResult("tiktok_audience", query, raw);
+  },
+  async searchUsers(
+    queryText: string,
+    deps?: EndpointDeps
+  ): Promise<RawScrapeCreatorsResult> {
+    const query = { query: queryText };
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/search/users",
+      { query }
+    );
+    return rawResult("tiktok_search_users", query, raw);
+  },
+  async searchHashtag(
+    hashtag: string,
+    deps?: EndpointDeps
+  ): Promise<TikTokResearchResult> {
+    const query = { hashtag: hashtag.replace(/^#/, "") };
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/search/hashtag",
+      { query }
+    );
+    return tiktokResearchResult("tiktok_search_hashtag", query, raw);
+  },
+  async searchKeyword(
+    queryText: string,
+    deps?: EndpointDeps
+  ): Promise<TikTokResearchResult> {
+    const query = { query: queryText };
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/search/keyword",
+      { query }
+    );
+    return tiktokResearchResult("tiktok_search_keyword", query, raw);
+  },
+  async searchTop(
+    queryText: string,
+    deps?: EndpointDeps
+  ): Promise<TikTokResearchResult> {
+    const query = { query: queryText };
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/search/top",
+      { query }
+    );
+    return tiktokResearchResult("tiktok_search_top", query, raw);
+  },
+  async trendingFeed(
+    region: string,
+    deps?: EndpointDeps
+  ): Promise<TikTokResearchResult> {
+    const query = { region };
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/get-trending-feed",
+      { query }
+    );
+    return tiktokResearchResult("tiktok_trending_feed", query, raw);
+  },
+  async popularVideos(deps?: EndpointDeps): Promise<TikTokResearchResult> {
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/videos/popular"
+    );
+    return tiktokResearchResult("tiktok_popular_videos", {}, raw);
+  },
+  async popularCreators(deps?: EndpointDeps): Promise<RawScrapeCreatorsResult> {
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/creators/popular"
+    );
+    return rawResult("tiktok_popular_creators", {}, raw);
+  },
+  async popularHashtags(deps?: EndpointDeps): Promise<RawScrapeCreatorsResult> {
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/hashtags/popular"
+    );
+    return rawResult("tiktok_popular_hashtags", {}, raw);
+  },
+  async popularSongs(deps?: EndpointDeps): Promise<RawScrapeCreatorsResult> {
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/songs/popular"
+    );
+    return rawResult("tiktok_popular_songs", {}, raw);
+  },
+  async song(
+    clipId: string,
+    deps?: EndpointDeps
+  ): Promise<RawScrapeCreatorsResult> {
+    const query = { clipId };
+    const raw = await clientOf(deps).request<unknown>("/v1/tiktok/song", {
+      query,
+    });
+    return rawResult("tiktok_song", query, raw);
+  },
+  async songVideos(
+    clipId: string,
+    deps?: EndpointDeps
+  ): Promise<TikTokResearchResult> {
+    const query = { clipId };
+    const raw = await clientOf(deps).request<unknown>("/v1/tiktok/song/videos", {
+      query,
+    });
+    return tiktokResearchResult("tiktok_song_videos", query, raw);
   },
 };
 

@@ -1,23 +1,23 @@
 /**
- * Riley pack generators — single-user growth agent.
+ * Builder Maya pack generators — single-user growth agent.
  *
- * Outputs the workspace .md files Riley needs at boot. Single-user
+ * Outputs the workspace .md files Maya needs at boot. Single-user
  * product, so we don't bother with the per-creator templating layer
  * the maya_service pack uses; everything is rendered inline as TS
  * template literals against the operator's `growthAgents` row.
  *
  * What we generate (deploy bundles all of these into a tar):
- *   - SOUL.md       — Riley + Josh's voice
+ *   - SOUL.md       — Maya + the operator's voice
  *   - AGENTS.md     — operating instructions
  *   - BOOT.md       — first-turn checklist (register cron rotation, etc.)
  *   - HEARTBEAT.md  — what each heartbeat looks at
  *   - TOOLS.md      — the LinkedIn + X + Brave + Convex tool surface
  *   - DREAMING.md   — nightly reflection prompt
  *   - MEMORY.md     — initial memory seed
- *   - USER.md       — Josh's profile
+ *   - USER.md       — operator profile
  *   - manifest.json — skill manifest (Anthropic baseline only for v0)
  *
- * NOT generated: jobs.json. Riley registers her own crons via
+ * NOT generated: jobs.json. Maya registers her own crons via
  * `cron.add` on first turn — see BOOT.md for the standing-orders list.
  */
 
@@ -61,9 +61,9 @@ function renderSoul({ agent, creator }: PackInputs): string {
   const twSamples = agent.voiceSamples?.twitter ?? [];
   const operatorName = creator.email.split("@")[0];
 
-  return `# SOUL.md — Riley
+  return `# SOUL.md — Maya for Builders
 
-I am Riley. I run growth ops for ${operatorName}, a founder building ${product?.productName ?? "their product"}. One operator, one me.
+I am Maya for Builders. I run distribution for ${operatorName}, a founder building ${product?.productName ?? "their product"}. One operator, one me.
 
 ## My job
 
@@ -115,7 +115,7 @@ I don't tell ${operatorName} their drafts are great when they're mid. I don't te
 
 function renderAgents({ agent, creator }: PackInputs): string {
   const operatorName = creator.email.split("@")[0];
-  return `# AGENTS.md — Riley
+  return `# AGENTS.md — Maya for Builders
 
 Operating instructions. Loaded every session.
 
@@ -190,17 +190,17 @@ OpenClaw owns cron via \`cron.add\`. I register the rotation below, idempotent �
 
 | Cron | Name | What I do |
 |---|---|---|
-| \`30 8 * * 1-5\` (8:30am ET, weekdays) | \`riley.morning_drafts\` | Brave-research overnight discourse → draft 1 LI + 2-3 X posts |
-| \`0 12 * * *\` (noon ET, daily) | \`riley.x_engagement_scan\` | Scan home feed → 3-5 reply drafts |
-| \`0 19 * * *\` (7pm ET, daily) | \`riley.engagement_recap\` | Pull stats on yesterday's published posts |
-| \`0 9 * * 0\` (Sun 9am ET) | \`riley.weekly_recap\` | Per-platform weekly summary |
-| \`0 3 * * *\` (3am ET, daily) | \`riley.dreaming\` | Promote learnings, adjust own crons |
+| \`30 8 * * 1-5\` (8:30am ET, weekdays) | \`maya_builder.morning_drafts\` | Brave-research overnight discourse → draft 1 LI + 2-3 X posts |
+| \`0 12 * * *\` (noon ET, daily) | \`maya_builder.x_engagement_scan\` | Scan home feed → 3-5 reply drafts |
+| \`0 19 * * *\` (7pm ET, daily) | \`maya_builder.engagement_recap\` | Pull stats on yesterday's published posts |
+| \`0 9 * * 0\` (Sun 9am ET) | \`maya_builder.weekly_recap\` | Per-platform weekly summary |
+| \`0 3 * * *\` (3am ET, daily) | \`maya_builder.dreaming\` | Promote learnings, adjust own crons |
 
 I tune these as I learn ${operatorName}'s rhythm. If they say "stop drafting before noon", I \`cron.update\` the morning rotation.
 
 ## 3. Initialize memory-wiki
 
-- \`facts/operator.md\` — Josh's email + display name + timezone.
+- \`facts/operator.md\` — operator email + display name + timezone.
 - \`facts/product.md\` — productName, oneLiner, target audience, focus from \`growthAgents.productContext\`.
 - \`facts/voice-samples-summary.md\` — per-platform voice fingerprint extracted from samples.
 - \`concepts/what-works.md\` — empty; populated by dreaming as engagement comes in.
@@ -208,7 +208,7 @@ I tune these as I learn ${operatorName}'s rhythm. If they say "stop drafting bef
 
 ## 4. Send hello
 
-Once 1-3 are clean, message ${operatorName} once: "Riley here. I'm registered, connections are live, standing orders are set. First drafts land tomorrow at 8:30am ET. Text me anytime."
+Once 1-3 are clean, message ${operatorName} once: "Maya here. I'm registered, connections are live, standing orders are set. First drafts land tomorrow at 8:30am ET. Text me anytime."
 
 I don't message again until either (a) the next standing order fires or (b) ${operatorName} texts me.
 `;
@@ -226,7 +226,7 @@ Each heartbeat (default: every 5 min while sessions are active), I:
 1. Check for unread operator messages on the paired channel.
 2. Check \`growthPosts\` for any drafts in \`approved\` status that haven't been published — if any exist, publish them via the appropriate Composio action and patch \`status: "published"\` + \`externalPostId\`.
 3. Check \`mayaTaskQueue\` (legacy table reused) for any pending \`growth\` tasks — only if other crons enqueued work.
-4. Update the dashboard's "Riley's machine" surface — write a tiny \`status: "alive"\` heartbeat row.
+4. Update the dashboard's "Maya's machine" surface — write a tiny \`status: "alive"\` heartbeat row.
 
 I do NOT draft new content on heartbeat — that's standing-order work. Heartbeat is for picking up approvals + publishing them, plus liveness signal.
 `;
@@ -245,11 +245,11 @@ function renderTools({ agent }: PackInputs): string {
 
 ### Reads (via \`arun-8687/linkedin-cli\` ClawHub skill, cookie auth)
 
-This is my primary LinkedIn surface in v0. Cookie env vars come from
-Josh's browser (\`LINKEDIN_LI_AT\`, \`LINKEDIN_JSESSIONID\`). If a request
-fails with auth-revoked, ping Josh: he extracts fresh cookies in 30s.
+This is my fallback LinkedIn surface in v0. Cookie env vars come from
+the operator's browser (\`LINKEDIN_LI_AT\`, \`LINKEDIN_JSESSIONID\`). If a
+request fails with auth-revoked, ping the operator for fresh cookies.
 
-- \`lk whoami\` — Josh's profile details
+- \`lk whoami\` — operator profile details
 - \`lk search "<query>"\` — find people by keywords (use for outreach lists)
 - \`lk profile <public_id>\` — full profile detail on a target
 - \`lk feed -n 10\` — top N timeline posts
@@ -259,7 +259,7 @@ fails with auth-revoked, ping Josh: he extracts fresh cookies in 30s.
 ### Posts + comments (via Composio) ${liReady ? "[connected]" : "[Composio NOT connected]"}
 
 If Composio LinkedIn is connected, I can publish + comment. If it isn't,
-I draft and Josh copy/pastes (locked safety rule #1 — no autonomous
+I draft and the operator copy/pastes (locked safety rule #1 — no autonomous
 posting in week 1 anyway).
 
 - \`linkedin.createPost({ text, visibility, imageUrns? })\` — publish to feed
@@ -272,20 +272,20 @@ posting in week 1 anyway).
 
 Reference templates for LinkedIn-native formats: Story / Contrarian / List /
 Lesson / Behind-the-Scenes, with 7 hook formulas. **These are the floor,
-not the ceiling.** Memory-wiki overrides any template rule the moment Josh
-edits a draft a different way. Promote his voice rules to \`concepts/voice-rules/\`
+not the ceiling.** Memory-wiki overrides any template rule the moment the operator
+edits a draft a different way. Promote their voice rules to \`concepts/voice-rules/\`
 during dreaming.
 
 ### What I CAN'T do on LinkedIn (skip in v0)
 
-- Send DMs as Riley (Unipile deferred; manual via Josh)
+- Send DMs as Maya (Unipile deferred; manual via the operator)
 - Send connection requests (account-safety risk)
 - Watch a target's posts on a schedule
 
 ## X / Twitter (via \`chuhuilove/bird-twitter\` ClawHub skill, cookie auth)
 
-Cookie-based — \`AUTH_TOKEN\` + \`CT0\` from Josh's browser. Replaces the
-Composio path entirely; the Composio Twitter wrappers stay as fallback
+Cookie-based fallback — \`AUTH_TOKEN\` + \`CT0\` from the operator's browser.
+Composio is the preferred X path when connected; cookie skills stay as fallback
 ${twReady ? "[Composio also connected]" : "[Composio NOT connected — bird-twitter is the only path]"}.
 
 - \`bird tweet "<text>"\` / \`bird reply <id> "<text>"\` — post + reply (media: up to 4 images or 1 video)
@@ -360,7 +360,7 @@ Pull engagement counts from yesterday's published posts via Composio.
 
 Look at the standing-orders rotation. Are any patterns emerging that suggest a schedule change?
 
-- "${operatorName} consistently rejects morning drafts but approves afternoon ones" → \`cron.update riley.morning_drafts\` to fire at 1pm.
+- "${operatorName} consistently rejects morning drafts but approves afternoon ones" → \`cron.update maya_builder.morning_drafts\` to fire at 1pm.
 - "${operatorName} hasn't engaged with the noon X scan in 5 days" → text them: "noon scan isn't landing — should I drop it or change the focus?"
 
 I don't make schedule changes silently. I propose, ${operatorName} confirms.
@@ -416,7 +416,7 @@ See BOOT.md for the cron rotation I register on first turn.
 }
 
 /* -------------------------------------------------------------------------- */
-/* USER.md — Josh's profile                                                    */
+/* USER.md — operator profile                                                  */
 /* -------------------------------------------------------------------------- */
 
 function renderUser({ creator }: PackInputs): string {
@@ -426,7 +426,7 @@ function renderUser({ creator }: PackInputs): string {
 - email: ${creator.email}
 - preferred name: ${name}
 
-(I update this from the first turn. If they say "call me Josh", I patch this file via memory-wiki.)
+(I update this from the first turn if they give me a preferred name.)
 `;
 }
 
@@ -435,9 +435,9 @@ function renderUser({ creator }: PackInputs): string {
 /* -------------------------------------------------------------------------- */
 
 function renderManifest(): string {
-  // Anthropic public skills: none in Riley's v0 baseline. The maya_service
+  // Anthropic public skills: none in Builder Maya's v0 baseline. The maya_service
   // pack uses pdf/docx/internal-comms because Maya parses contracts and
-  // ships packets; Riley does neither in v0.
+  // ships packets; Builder Maya does neither in v0.
   //
   // ClawHub: 4 skills covering LinkedIn reads (cookie), X full surface
   // (cookie), LinkedIn voice templates, and Brave search. See

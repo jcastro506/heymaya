@@ -53,7 +53,14 @@ import { Doc } from "../_generated/dataModel";
 export type Plan = "coach" | "manager";
 export type ThinkingBudget = "none" | "low" | "medium" | "high";
 export type Channel = "imessage" | "whatsapp" | "sms" | "telegram" | "web";
-export type Provider = "gmail" | "stripe" | "calendar" | "apollo" | "hunter";
+export type Provider =
+  | "gmail"
+  | "stripe"
+  | "calendar"
+  | "apollo"
+  | "hunter"
+  | "linkedin"
+  | "twitter";
 
 export interface PlanFeatures {
   plan: Plan;
@@ -120,8 +127,8 @@ export interface PlanFeatures {
   postPublishReactionLatencySec: number;
   /**
    * Composio providers the creator may OAuth-connect. Apollo + Hunter are
-   * Manager-only because they're per-query paid lookups + only used when
-   * autonomous outreach fires; everyone gets gmail + calendar + stripe.
+   * Manager-only because they're per-query paid lookups or public social
+   * action channels; everyone gets gmail + calendar + stripe.
    */
   allowedProviders: ReadonlyArray<Provider>;
 }
@@ -195,7 +202,15 @@ const MANAGER: PlanFeatures = {
   collabMatchEnabled: true,
   multiAccountSlots: 1,
   postPublishReactionLatencySec: 300,
-  allowedProviders: ["gmail", "calendar", "stripe", "apollo", "hunter"],
+  allowedProviders: [
+    "gmail",
+    "calendar",
+    "stripe",
+    "apollo",
+    "hunter",
+    "linkedin",
+    "twitter",
+  ],
 };
 
 const FEATURES_BY_PLAN: Record<Plan, PlanFeatures> = {

@@ -43,6 +43,7 @@ import {
   type NormalizedProfile,
   type Platform,
   tiktok,
+  tiktokVideoUrl,
 } from "./endpoints";
 import {
   cacheKey,
@@ -140,6 +141,17 @@ export const runFullScrapePull = internalAction({
               key: cacheKey(h.platform, "posts", h.handle),
               payload: posts.map((p) => p.raw),
               ttlSec: TTL_POSTS_SEC,
+            }
+          );
+          await ctx.runMutation(
+            internal.integrations.scrapeCreators.runFullScrapePull
+              .upsertPostsAndMetricSnapshots,
+            {
+              creatorId: args.creatorId,
+              platform: h.platform,
+              handle: h.handle,
+              posts,
+              ts: startedAt,
             }
           );
         } else {
@@ -285,6 +297,94 @@ export const upsertHandle = internalMutation({
       scrapedAt: now,
       followerCount: args.followerCount,
     });
+  },
+});
+
+export const upsertPostsAndMetricSnapshots = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    platform: PlatformValidator,
+    handle: v.string(),
+    posts: v.array(v.any()),
+    ts: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const posts = args.posts as NormalizedPost[];
+    const ids: Id<"posts">[] = [];
+
+    for (const post of posts) {
+      const platformPostId = post.postId;
+      if (!platformPostId) continue;
+
+      const existing = (
+        await ctx.db
+          .query("posts")
+          .withIndex("by_platform_and_post_id", (q) =>
+            q.eq("platform", args.platform).eq("platformPostId", platformPostId)
+          )
+          .filter((q) => q.eq(q.field("creatorId"), args.creatorId))
+          .collect()
+      )[0];
+      const mediaType =
+        post.mediaType === "unknown" ? "text" : post.mediaType;
+      const url =
+        post.url ??
+        (args.platform === "tiktok"
+          ? tiktokVideoUrl(args.handle, platformPostId)
+          : "");
+      const postedAt = post.postedAt ?? args.ts;
+      const postPatch = {
+        caption: post.caption ?? "",
+        url,
+        mediaType,
+        thumbnailUrl: post.thumbnailUrl ?? undefined,
+        videoUrl: post.videoUrl ?? undefined,
+        videoDurationSec: post.videoDurationSec ?? undefined,
+        postedAt,
+      };
+
+      const postId =
+        existing?._id ??
+        (await ctx.db.insert("posts", {
+          creatorId: args.creatorId,
+          platform: args.platform,
+          platformPostId,
+          ...postPatch,
+        }));
+
+      if (existing) {
+        await ctx.db.patch(existing._id, postPatch);
+      }
+
+      const viewCount = post.metrics.viewCount ?? undefined;
+      const likeCount = post.metrics.likeCount ?? undefined;
+      const commentCount = post.metrics.commentCount ?? undefined;
+      const shareCount = post.metrics.shareCount ?? undefined;
+      const saveCount = post.metrics.saveCount ?? undefined;
+      const engagementTotal =
+        (likeCount ?? 0) +
+        (commentCount ?? 0) +
+        (shareCount ?? 0) +
+        (saveCount ?? 0);
+
+      await ctx.db.insert("postMetrics", {
+        creatorId: args.creatorId,
+        postId,
+        ts: args.ts,
+        viewCount,
+        likeCount,
+        commentCount,
+        shareCount,
+        saveCount,
+        engagementRate:
+          typeof viewCount === "number" && viewCount > 0
+            ? engagementTotal / viewCount
+            : undefined,
+      });
+      ids.push(postId);
+    }
+
+    return { upserted: ids.length, postIds: ids };
   },
 });
 

@@ -73,7 +73,7 @@ export default function Home() {
           </Link>
           <Link
             href="/sign-up?redirect_url=/creator-maya-v0"
-            className="inline-flex min-h-10 items-center rounded-md bg-lime px-4 font-medium text-black transition hover:brightness-95"
+            className="inline-flex min-h-10 items-center rounded-md bg-paper px-4 font-medium text-black transition hover:bg-white"
           >
             Sign up
           </Link>
@@ -95,7 +95,7 @@ export default function Home() {
           <div className="mt-9 flex flex-wrap gap-3">
             <Link
               href="/sign-up?redirect_url=/creator-maya-v0"
-              className="inline-flex min-h-12 items-center gap-2 rounded-md bg-lime px-5 text-sm font-medium text-black transition hover:brightness-95"
+              className="inline-flex min-h-12 items-center gap-2 rounded-md bg-paper px-5 text-sm font-medium text-black transition hover:bg-white"
             >
               Sign up
               <ArrowRight className="h-4 w-4" />
@@ -117,7 +117,7 @@ export default function Home() {
               key={feature.title}
               className="rounded-lg border border-[var(--hairline)] bg-ink-2 p-5"
             >
-              <div className="text-lime">{feature.icon}</div>
+              <div className="text-paper-dim">{feature.icon}</div>
               <h2 className="mt-5 text-base font-semibold text-paper">
                 {feature.title}
               </h2>

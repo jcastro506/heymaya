@@ -18,9 +18,9 @@ export type StepId =
 export const STEPS: ReadonlyArray<{ id: StepId; label: string }> = [
   { id: "connect-linkedin", label: "Connect LinkedIn" },
   { id: "connect-twitter", label: "Connect X / Twitter" },
-  { id: "product-context", label: "Tell Riley your product" },
+  { id: "product-context", label: "Tell Maya your product" },
   { id: "voice-samples", label: "Voice samples" },
-  { id: "deploy", label: "Deploy Riley" },
+  { id: "deploy", label: "Deploy Maya" },
 ];
 
 export interface OnboardingDraft {

@@ -58,9 +58,9 @@ export function ProductContextStep({
 
   return (
     <section>
-      <h1 className="mb-3 font-serif text-3xl">What is Riley building hype for?</h1>
+      <h1 className="mb-3 font-serif text-3xl">What is Maya building distribution for?</h1>
       <p className="mb-8 max-w-xl text-paper-dim">
-        Tell Riley what you&rsquo;re launching, who it&rsquo;s for, and what angles
+        Tell Maya what you&rsquo;re launching, who it&rsquo;s for, and what angles
         you want her to focus on. This goes straight into her SOUL.md.
       </p>
 
@@ -90,7 +90,7 @@ export function ProductContextStep({
           onChange={(v) => set("primaryUrl", v)}
         />
         <Field
-          label="What should Riley focus on?"
+          label="What should Maya focus on?"
           placeholder="Pre-launch waitlist building. Themes: anti-sycophancy AI, single-agent designs, founder-as-the-product. Avoid: rebuttals to specific competitors, generic AI hot takes."
           value={ctx.focus}
           onChange={(v) => set("focus", v)}
@@ -110,7 +110,7 @@ export function ProductContextStep({
         <button
           onClick={handleSubmit}
           disabled={submitting}
-          className="rounded-full bg-lime px-7 py-3 text-sm font-medium text-ink hover:bg-lime/90 disabled:opacity-50"
+          className="rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink hover:bg-white disabled:opacity-50"
         >
           {submitting ? "Saving…" : "Continue →"}
         </button>
@@ -143,7 +143,7 @@ function Field({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           rows={5}
-          className="w-full rounded-xl border border-paper-faint/30 bg-ink-2 px-4 py-3 text-paper placeholder:text-paper-faint focus:border-lime focus:outline-none"
+          className="w-full rounded-xl border border-paper-faint/30 bg-ink-2 px-4 py-3 text-paper placeholder:text-paper-faint focus:border-paper-dim focus:outline-none"
         />
       ) : (
         <input
@@ -151,7 +151,7 @@ function Field({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full rounded-xl border border-paper-faint/30 bg-ink-2 px-4 py-3 text-paper placeholder:text-paper-faint focus:border-lime focus:outline-none"
+          className="w-full rounded-xl border border-paper-faint/30 bg-ink-2 px-4 py-3 text-paper placeholder:text-paper-faint focus:border-paper-dim focus:outline-none"
         />
       )}
     </div>

@@ -83,19 +83,18 @@ type TrendEvidenceKind = (typeof TREND_EVIDENCE_KIND_LITERALS)[number];
  * `googlecalendar` slug because Maya's playbook references multiple
  * possible OAuth providers; map to the underlying composio slug here.
  *
- * `tiktok`, `linkedin`, `twitter` are NOT yet present in the
- * `convex/lib/planFeatures.ts` `Provider` union — they'll be wired when
- * the corresponding read-layer / brand-DM integrations land. For now any
- * such request rejects at the plan-gate as `unsupported`. We surface a
- * specific error code so Maya can text "I can't connect that yet" rather
- * than a generic 500.
+ * Creator TikTok is intentionally not a Composio OAuth provider; it uses
+ * ScrapeCreators public data. Builder LinkedIn and X/Twitter do use
+ * Composio OAuth.
  */
 const PROVIDER_TO_PLAN_FEATURES_KEY: Partial<
-  Record<LcMayaProvider, "gmail" | "calendar">
+  Record<LcMayaProvider, "gmail" | "calendar" | "linkedin" | "twitter">
 > = {
   gmail: "gmail",
   googlecalendar: "calendar",
-  // tiktok / linkedin / twitter intentionally absent — see comment above.
+  linkedin: "linkedin",
+  twitter: "twitter",
+  // tiktok intentionally absent — see comment above.
 };
 
 /* -------------------------------------------------------------------------- */

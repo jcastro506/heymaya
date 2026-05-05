@@ -157,11 +157,11 @@ html {
   transform: translateY(1px);
 }
 .btn-primary {
-  background: var(--lime);
+  background: var(--paper);
   color: var(--ink);
 }
 .btn-primary:hover {
-  background: var(--lime-soft);
+  background: #ffffff;
 }
 .btn-ghost {
   background: transparent;

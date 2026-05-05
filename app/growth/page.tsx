@@ -1,16 +1,16 @@
 /**
- * Growth-product marketing landing — `/growth`.
+ * Builder marketing landing — `/growth`.
  *
- * Pre-launch hype-builder pitch. Single CTA → Clerk sign-up → onboarding.
+ * Founder distribution pitch. Single CTA -> Clerk sign-up -> onboarding.
  * Aesthetic: dark, minimal, founder-focused.
  */
 
 import Link from "next/link";
 
 export const metadata = {
-  title: "Riley — your AI growth ops",
+  title: "HeyMaya For Builders — X + LinkedIn distribution",
   description:
-    "An AI agent that drafts your LinkedIn + X posts, finds your audience, and builds pre-launch hype while you ship the product.",
+    "Maya drafts your LinkedIn and X posts, finds your audience, and builds distribution while you ship the product.",
 };
 
 export default function GrowthLandingPage() {
@@ -30,25 +30,25 @@ export default function GrowthLandingPage() {
         </header>
 
         <section className="mb-20">
-          <p className="mb-6 font-mono text-xs uppercase tracking-widest text-lime">
-            Riley · pre-launch growth ops
+          <p className="mb-6 font-mono text-xs uppercase tracking-widest text-paper-faint">
+            For Builders · X + LinkedIn distribution
           </p>
           <h1 className="mb-8 font-serif text-5xl leading-tight sm:text-6xl">
-            Your AI marketing intern, drafting on LinkedIn and X{" "}
-            <span className="text-lime">while you ship.</span>
+            Your AI marketing manager, drafting on LinkedIn and X{" "}
+            <span className="text-paper-dim">while you ship.</span>
           </h1>
           <p className="mb-10 max-w-2xl text-lg text-paper-dim">
-            Riley is a single agent who lives in your messages. She drafts
+            Maya is a single agent who lives in your messages. She drafts
             posts in your voice, finds the people who care about what
             you&rsquo;re building, and writes outreach you would have
             written&mdash;if you had the time. You approve every send.
           </p>
           <div className="flex flex-wrap gap-3">
             <Link
-              href="/sign-up?next=/onboarding/growth"
-              className="rounded-full bg-lime px-7 py-3 text-sm font-medium text-ink hover:bg-lime/90"
+              href="/sign-up?redirect_url=/onboarding/growth"
+              className="rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink hover:bg-white"
             >
-              Get Riley running
+              Get Maya running
             </Link>
             <Link
               href="#how"
@@ -68,18 +68,18 @@ export default function GrowthLandingPage() {
           <Step
             n="2"
             title="Calibrate"
-            body="Paste 5 posts that sound like you. Tell Riley what you're building. She fits her voice to yours."
+            body="Paste 5 posts that sound like you. Tell Maya what you're building. She fits her voice to yours."
           />
           <Step
             n="3"
             title="Deploy"
-            body="Riley spins up on her own machine. She drafts each morning, watches engagement each evening, asks before she sends anything."
+            body="Maya spins up on her own machine. She drafts each morning, watches engagement each evening, asks before she sends anything."
           />
         </section>
 
         <section className="mb-20 rounded-2xl border border-paper-faint/15 bg-ink-2 p-8">
           <h2 className="mb-4 font-serif text-2xl">
-            What Riley actually does, day one
+            What Maya actually does, day one
           </h2>
           <ul className="space-y-3 text-paper-dim">
             <li>· Drafts 1 LinkedIn post + 2&ndash;3 X drafts each morning, with research citations.</li>
@@ -91,7 +91,7 @@ export default function GrowthLandingPage() {
         </section>
 
         <section className="mb-20">
-          <h2 className="mb-4 font-serif text-2xl">What Riley doesn&rsquo;t do</h2>
+          <h2 className="mb-4 font-serif text-2xl">What Maya doesn&rsquo;t do</h2>
           <ul className="space-y-2 text-paper-faint">
             <li>· Auto-publish anything in week 1. You copy/paste while she calibrates.</li>
             <li>· Send DMs without your text approval. Ever.</li>
@@ -101,7 +101,7 @@ export default function GrowthLandingPage() {
         </section>
 
         <footer className="border-t border-paper-faint/15 pt-8 text-xs text-paper-faint">
-          Riley is a HeyMaya product. Currently in single-user beta.
+          For Builders is a HeyMaya product. Currently in single-user beta.
         </footer>
       </div>
     </main>
@@ -111,7 +111,7 @@ export default function GrowthLandingPage() {
 function Step({ n, title, body }: { n: string; title: string; body: string }) {
   return (
     <div>
-      <p className="mb-3 font-mono text-xs text-lime">step {n}</p>
+      <p className="mb-3 font-mono text-xs text-paper-faint">step {n}</p>
       <h3 className="mb-2 font-serif text-xl">{title}</h3>
       <p className="text-sm text-paper-dim">{body}</p>
     </div>

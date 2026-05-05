@@ -46,7 +46,15 @@ describe("Sprint 1 acceptance — plan-tier × action matrix (coach / manager)",
   const PLANS: ReadonlyArray<Plan> = ["coach", "manager"];
   const BUDGETS: ReadonlyArray<ThinkingBudget> = ["none", "low", "medium", "high"];
   const CHANNELS: ReadonlyArray<Channel> = ["web", "sms", "imessage", "whatsapp", "telegram"];
-  const PROVIDERS: ReadonlyArray<Provider> = ["gmail", "stripe", "calendar", "apollo", "hunter"];
+  const PROVIDERS: ReadonlyArray<Provider> = [
+    "gmail",
+    "stripe",
+    "calendar",
+    "apollo",
+    "hunter",
+    "linkedin",
+    "twitter",
+  ];
 
   describe("thinking budget clamp — UNGATED (boundary is autonomy, not compute)", () => {
     const expected: Record<Plan, Record<ThinkingBudget, ThinkingBudget>> = {
@@ -76,10 +84,26 @@ describe("Sprint 1 acceptance — plan-tier × action matrix (coach / manager)",
     }
   });
 
-  describe("composio provider allowlist (gmail+calendar+stripe ungated; apollo/hunter Manager-only)", () => {
+  describe("composio provider allowlist (gmail+calendar+stripe ungated; paid/action providers Manager-only)", () => {
     const expected: Record<Plan, Record<Provider, boolean>> = {
-      coach: { gmail: true, stripe: true, calendar: true, apollo: false, hunter: false },
-      manager: { gmail: true, stripe: true, calendar: true, apollo: true, hunter: true },
+      coach: {
+        gmail: true,
+        stripe: true,
+        calendar: true,
+        apollo: false,
+        hunter: false,
+        linkedin: false,
+        twitter: false,
+      },
+      manager: {
+        gmail: true,
+        stripe: true,
+        calendar: true,
+        apollo: true,
+        hunter: true,
+        linkedin: true,
+        twitter: true,
+      },
     };
     for (const plan of PLANS) {
       for (const provider of PROVIDERS) {

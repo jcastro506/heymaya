@@ -27,6 +27,7 @@ import {
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { FlyClient, FlyError, type FlyMachineConfig } from "../../lib/flyClient";
+import { decrypt } from "../../lib/encryption";
 import { buildRileyWorkspace } from "../../agents/packs/riley_growth/generators";
 
 /* -------------------------------------------------------------------------- */
@@ -132,6 +133,16 @@ function buildBootstrapShell(): string {
     'echo "$MAYA_BOOTSTRAP_JSON" | jq .gatewayConfig > /data/openclaw.json',
     "exec openclaw gateway --allow-unconfigured",
   ].join(" && ");
+}
+
+async function decryptComposioAccountId(value: string): Promise<string> {
+  try {
+    return await decrypt(value);
+  } catch {
+    // Legacy single-user rows briefly stored the plaintext id directly.
+    // Preserve deploy compatibility; all new writes are encrypted.
+    return value;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -338,11 +349,11 @@ export const deployRiley = internalAction({
       // and Riley uses the ClawHub cookie skills instead.
       if (agent.linkedinConnection) {
         secrets.RILEY_LINKEDIN_CONNECTED_ACCOUNT_ID =
-          agent.linkedinConnection.composioAccountId;
+          await decryptComposioAccountId(agent.linkedinConnection.composioAccountId);
       }
       if (agent.twitterConnection) {
         secrets.RILEY_TWITTER_CONNECTED_ACCOUNT_ID =
-          agent.twitterConnection.composioAccountId;
+          await decryptComposioAccountId(agent.twitterConnection.composioAccountId);
       }
       for (const k of [
         "COMPOSIO_API_KEY",

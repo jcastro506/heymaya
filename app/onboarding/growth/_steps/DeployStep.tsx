@@ -8,7 +8,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 
 /**
  * Deploy step — final pre-launch checkout. Calls the real
- * `runOnboardingDeploy` action, which spins up Riley's per-user Fly
+ * `runOnboardingDeploy` action, which spins up Maya's per-user Fly
  * machine using the existing OpenClaw runtime image. Surfaces the
  * deploy stage on failure so the operator can diagnose.
  */
@@ -66,7 +66,7 @@ export function DeployStep({
 
   return (
     <section>
-      <h1 className="mb-3 font-serif text-3xl">Deploy Riley</h1>
+      <h1 className="mb-3 font-serif text-3xl">Deploy Maya</h1>
       <p className="mb-8 max-w-xl text-paper-dim">
         She gets her own machine. From here she drafts in your voice, watches
         engagement, and asks before she sends anything.
@@ -110,9 +110,9 @@ export function DeployStep({
       </div>
 
       {success && (
-        <div className="mb-8 rounded-2xl border border-lime/30 bg-lime/5 p-6 text-sm">
-          <p className="mb-2 font-mono text-xs uppercase tracking-widest text-lime">
-            Riley is live
+        <div className="mb-8 rounded-2xl border border-paper-faint/30 bg-paper/5 p-6 text-sm">
+          <p className="mb-2 font-mono text-xs uppercase tracking-widest text-paper">
+            Maya is live
           </p>
           <p className="mb-1 text-paper">
             <span className="text-paper-faint">Fly app:</span>{" "}
@@ -148,13 +148,13 @@ export function DeployStep({
         <button
           onClick={handleDeploy}
           disabled={deploying || Boolean(success)}
-          className="rounded-full bg-lime px-7 py-3 text-sm font-medium text-ink hover:bg-lime/90 disabled:opacity-50"
+          className="rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink hover:bg-white disabled:opacity-50"
         >
           {deploying
             ? "Deploying…"
             : success
               ? "Deployed →"
-              : "Deploy Riley →"}
+              : "Deploy Maya →"}
         </button>
       </div>
     </section>
@@ -180,7 +180,7 @@ function Row({
           good === undefined
             ? "text-paper"
             : good
-              ? "text-lime"
+              ? "text-paper"
               : "text-red-400"
         }
       >

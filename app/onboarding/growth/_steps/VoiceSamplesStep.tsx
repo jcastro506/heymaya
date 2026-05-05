@@ -38,7 +38,7 @@ export function VoiceSamplesStep({
     const tw = draft.voiceSamples.twitter.map((s) => s.trim()).filter(Boolean);
     if (li.length === 0 && tw.length === 0) {
       setError(
-        "Paste at least one sample. Riley needs voice ground-truth or she'll sound generic."
+        "Paste at least one sample. Maya needs voice ground-truth or she'll sound generic."
       );
       return;
     }
@@ -60,7 +60,7 @@ export function VoiceSamplesStep({
       <h1 className="mb-3 font-serif text-3xl">Voice samples</h1>
       <p className="mb-8 max-w-xl text-paper-dim">
         Paste 5&ndash;10 of your strongest posts per platform. These are what
-        Riley fits her voice to. The hardest part of her job is sounding
+        Maya fits her voice to. The hardest part of her job is sounding
         like you.
       </p>
 
@@ -87,7 +87,7 @@ export function VoiceSamplesStep({
         <button
           onClick={handleSubmit}
           disabled={submitting}
-          className="rounded-full bg-lime px-7 py-3 text-sm font-medium text-ink hover:bg-lime/90 disabled:opacity-50"
+          className="rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink hover:bg-white disabled:opacity-50"
         >
           {submitting ? "Saving…" : "Continue →"}
         </button>
@@ -124,7 +124,7 @@ function SampleList({
               onChange={(e) => update(i, e.target.value)}
               placeholder={`Paste a ${platform} post you wrote that you're proud of`}
               rows={4}
-              className="flex-1 rounded-xl border border-paper-faint/30 bg-ink-2 px-4 py-3 text-paper placeholder:text-paper-faint focus:border-lime focus:outline-none"
+              className="flex-1 rounded-xl border border-paper-faint/30 bg-ink-2 px-4 py-3 text-paper placeholder:text-paper-faint focus:border-paper-dim focus:outline-none"
             />
             {samples.length > 1 && (
               <button
@@ -140,7 +140,7 @@ function SampleList({
       </div>
       <button
         onClick={add}
-        className="mt-3 text-xs font-mono uppercase tracking-widest text-paper-faint hover:text-lime"
+        className="mt-3 text-xs font-mono uppercase tracking-widest text-paper-faint hover:text-paper"
       >
         + Add another
       </button>

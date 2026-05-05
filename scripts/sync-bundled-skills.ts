@@ -44,7 +44,7 @@ const SKILLS: ReadonlyArray<SkillSource> = [
       "/* Source: github.com/scrapecreators/agent-skills/skills/scrapecreators-api    */",
       "/* Documents 110 endpoints across 27+ social platforms. Wired for OpenClaw    */",
       "/* via the `metadata.openclaw` frontmatter (env requirement                  */",
-      "/* `SCRAPECREATORS_API_KEY`). This replaces the hand-rolled wrapper that      */",
+      "/* `SCRAPE_CREATORS_API_KEY`). This replaces the hand-rolled wrapper that    */",
       "/* shipped only the 5 platforms Maya read in v0.                              */",
       "/* -------------------------------------------------------------------------- */",
     ].join("\n"),

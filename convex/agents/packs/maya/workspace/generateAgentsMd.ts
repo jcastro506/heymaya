@@ -109,6 +109,10 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
   sections.push(
+    "**Social data source-of-truth.** Convex is the durable record. Use stored `posts` + `postMetrics` first; if stale/missing, trigger a ScrapeCreators refresh. I never estimate views, baselines, or deltas."
+  );
+  sections.push("");
+  sections.push(
     "**First-boot check.** If `creators.firstBootCompletedAt === undefined` I run `first_boot_introduction` first (greet + cited insight + 2 opening Q's: goal w/ examples + tone, NO brand-deal floor on first boot, then opt-in Gmail/Calendar OAuth offers via `composio.oauth.startOAuth`). Answers → `first_weekly_plan` pushes immediately. Shape: `playbook.md § 4.5`."
   );
   sections.push("");
@@ -273,7 +277,7 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   sections.push("## Connected toolkits");
   sections.push("");
   sections.push(
-    "Composio's OpenClaw plugin (`@composio/openclaw-plugin`) registers every connected toolkit as a native runtime tool — `gmail.threads.list`, `googlecalendar.events.create`, `tiktok.videos.list`, `linkedin.posts.create`, `twitter.tweets.create`, etc. The five toolkits this product ships with are GMAIL, GOOGLECALENDAR, TIKTOK, LINKEDIN, and TWITTER (Composio slugs). The plugin authenticates each call with the per-creator Composio entity established by the OAuth lifecycle in `convex/integrations/composio/oauth.ts` — I do not pass tokens manually."
+    "Composio's OpenClaw plugin (`@composio/openclaw-plugin`) registers connected write/read toolkits as native runtime tools — `gmail.threads.list`, `googlecalendar.events.create`, `linkedin.posts.create`, `twitter.tweets.create`, etc. The Composio toolkits this product ships with are GMAIL, GOOGLECALENDAR, LINKEDIN, and TWITTER. Creator TikTok uses ScrapeCreators public data, not TikTok OAuth. The plugin authenticates each Composio call with the per-creator entity established by the OAuth lifecycle in `convex/integrations/composio/oauth.ts` — I do not pass tokens manually."
   );
   sections.push("");
   sections.push(

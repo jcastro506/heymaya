@@ -72,7 +72,7 @@ function Nav() {
           </Link>
           <Link
             href="/checkout?tier=manager&interval=monthly"
-            className="btn btn-primary h-10 px-4 text-sm"
+            className="btn btn-primary h-10 px-4 text-sm !bg-paper !text-ink hover:!bg-white"
           >
             Start 7 days free
           </Link>
@@ -743,7 +743,7 @@ function FinalCta() {
           <div className="relative mt-9 flex flex-wrap items-center justify-center gap-3">
             <Link
               href="/checkout?tier=manager&interval=monthly"
-              className="btn btn-primary group"
+              className="btn btn-primary group !bg-paper !text-ink hover:!bg-white"
             >
               Start 7 days free
               <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-[1px] group-hover:translate-x-[1px]" />

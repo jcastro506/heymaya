@@ -144,7 +144,7 @@ export function BusinessMayaV0Onboarding() {
                 <>
                   <Link
                     href="/sign-up?redirect_url=/business-maya-v0"
-                    className="inline-flex min-h-11 items-center gap-2 rounded-md bg-lime px-4 text-sm font-medium text-black transition hover:brightness-95"
+                    className="inline-flex min-h-11 items-center gap-2 rounded-md bg-paper px-4 text-sm font-medium text-black transition hover:bg-white"
                   >
                     Create account
                     <ArrowRight className="h-4 w-4" />
@@ -161,7 +161,7 @@ export function BusinessMayaV0Onboarding() {
                   type="button"
                   disabled={busy || !ready}
                   onClick={saveSetup}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-md bg-lime px-4 text-sm font-medium text-black transition hover:brightness-95 disabled:opacity-60"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-md bg-paper px-4 text-sm font-medium text-black transition hover:bg-white disabled:opacity-60"
                 >
                   {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                   Save business setup

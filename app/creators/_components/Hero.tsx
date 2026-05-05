@@ -35,7 +35,7 @@ export function Hero() {
             <div className="mt-9 flex flex-wrap items-center gap-3">
               <Link
                 href="/checkout?tier=manager&interval=monthly"
-                className="btn btn-primary group"
+                className="btn btn-primary group !bg-paper !text-ink hover:!bg-white"
               >
                 Start 7 days free
                 <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-[1px] group-hover:translate-x-[1px]" />

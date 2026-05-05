@@ -330,6 +330,8 @@ describe("POST /lc_maya/start_oauth", () => {
     _setWebhookSecretForTests(TEST_SECRET);
     process.env.COMPOSIO_AUTH_CONFIG_GMAIL = "ac_gmail";
     process.env.COMPOSIO_AUTH_CONFIG_CALENDAR = "ac_calendar";
+    process.env.COMPOSIO_AUTH_CONFIG_LINKEDIN = "ac_linkedin";
+    process.env.COMPOSIO_AUTH_CONFIG_TWITTER = "ac_twitter";
     process.env.COMPOSIO_API_KEY = "test-key";
   });
   afterEach(() => {
@@ -337,6 +339,8 @@ describe("POST /lc_maya/start_oauth", () => {
     _setComposioClientForTests(null);
     delete process.env.COMPOSIO_AUTH_CONFIG_GMAIL;
     delete process.env.COMPOSIO_AUTH_CONFIG_CALENDAR;
+    delete process.env.COMPOSIO_AUTH_CONFIG_LINKEDIN;
+    delete process.env.COMPOSIO_AUTH_CONFIG_TWITTER;
     delete process.env.COMPOSIO_API_KEY;
   });
 
@@ -506,11 +510,17 @@ describe("POST /lc_maya/start_oauth", () => {
     expect(res.status).toBe(200);
   });
 
-  it("PLAN-GATE: provider not yet wired (tiktok / linkedin / twitter) returns 403 'provider-not-supported'", async () => {
+  it("HAPPY: manager creator can request Builder LinkedIn and X OAuth links", async () => {
     const t = convexTest(schema, modules);
     const creatorId = await insertCreator(t, { suffix: "u", plan: "manager" });
 
-    for (const provider of ["tiktok", "linkedin", "twitter"]) {
+    for (const provider of ["linkedin", "twitter"] as const) {
+      _setComposioClientForTests(
+        buildFakeComposioClient(() => ({
+          redirectUrl: `https://composio.test/oauth/${provider}`,
+          state: `state_${provider}`,
+        }))
+      );
       const res = await t.fetch("/lc_maya/start_oauth", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -521,11 +531,31 @@ describe("POST /lc_maya/start_oauth", () => {
           redirectUri: "https://heymaya.test/cb",
         }),
       });
-      expect(res.status, `provider=${provider}`).toBe(403);
+      expect(res.status, `provider=${provider}`).toBe(200);
       const json = await res.json();
-      expect(json.error).toBe("provider-not-supported");
-      expect(json.provider).toBe(provider);
+      expect(json.redirectUrl).toBe(`https://composio.test/oauth/${provider}`);
+      expect(json.state).toBe(`state_${provider}`);
     }
+  });
+
+  it("PLAN-GATE: tiktok OAuth returns 403 because creators use ScrapeCreators instead", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "u2", plan: "manager" });
+
+    const res = await t.fetch("/lc_maya/start_oauth", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        provider: "tiktok",
+        redirectUri: "https://heymaya.test/cb",
+      }),
+    });
+    expect(res.status).toBe(403);
+    const json = await res.json();
+    expect(json.error).toBe("provider-not-supported");
+    expect(json.provider).toBe("tiktok");
   });
 
   it("CROSS-TENANT: secret holder cannot OAuth Creator A's account by passing Creator B's id (entityId follows the body's creatorId)", async () => {

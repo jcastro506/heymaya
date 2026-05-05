@@ -181,7 +181,8 @@ describe("assembleWorkspaceBundle", () => {
     const skill = bundle.files.get("skills/scrapecreators-api/SKILL.md");
     expect(skill).toBeDefined();
     expect(skill).toContain("name: scrapecreators-api");
-    expect(skill).toContain("SCRAPECREATORS_API_KEY");
+    expect(skill).toContain("SCRAPE_CREATORS_API_KEY");
+    expect(skill).not.toContain("primaryEnv: SCRAPECREATORS_API_KEY");
     expect(skill).toContain("/v3/tiktok/profile/videos");
     expect(skill).toContain("/v2/tiktok/video");
     expect(skill).toContain("/v1/tiktok/video/comments");

@@ -201,7 +201,9 @@ function PricingCard({ tier, billing }: { tier: Tier; billing: Billing }) {
       <Link
         href={`/checkout?tier=${tier.id}&interval=${billing}`}
         className={`btn mt-auto w-full ${
-          tier.recommended ? "btn-primary" : "btn-ghost"
+          tier.recommended
+            ? "btn-primary !bg-paper !text-ink hover:!bg-white"
+            : "btn-ghost"
         }`}
       >
         Start 7 days free

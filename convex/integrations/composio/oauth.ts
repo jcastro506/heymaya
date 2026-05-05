@@ -56,7 +56,9 @@ const PROVIDER_VALIDATOR = v.union(
   v.literal("stripe"),
   v.literal("calendar"),
   v.literal("apollo"),
-  v.literal("hunter")
+  v.literal("hunter"),
+  v.literal("linkedin"),
+  v.literal("twitter")
 );
 
 /**

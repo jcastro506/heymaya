@@ -1,5 +1,5 @@
 /**
- * Growth-product onboarding pipeline (Riley).
+ * Builder onboarding pipeline.
  *
  * Single-user product (Josh personally), but the flow is shaped like a real
  * onboarding for two reasons:
@@ -9,11 +9,11 @@
  *      product like a customer would.
  *
  * Steps mirror `app/onboarding/growth/`:
- *   1. connect-linkedin   — operator connects LinkedIn via Composio dashboard
+ *   1. connect-linkedin   — operator connects LinkedIn via Composio OAuth
  *   2. connect-twitter    — same for X (Twitter)
- *   3. product-context    — what is Riley building hype for?
+ *   3. product-context    — what is Maya building distribution for?
  *   4. voice-samples      — paste 5-10 LinkedIn posts + 5-10 tweets
- *   5. deploy             — operator clicks "deploy Riley" → spawns Fly machine
+ *   5. deploy             — operator clicks "deploy Maya" -> spawns Fly machine
  *   6. complete           — agent is running; UI redirects to dashboard
  *
  * Cross-tenant: every entry point is Clerk-identity-scoped via
@@ -24,14 +24,16 @@
 import { v } from "convex/values";
 import {
   action,
-  mutation,
-  query,
   internalMutation,
   internalQuery,
+  mutation,
+  query,
   type MutationCtx,
 } from "../../_generated/server";
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
+import { encrypt } from "../../lib/encryption";
+import { sha256Hex } from "../../integrations/composio/oauth";
 
 /* -------------------------------------------------------------------------- */
 /* Validators                                                                  */
@@ -255,14 +257,9 @@ export const setVoiceSamples = mutation({
 });
 
 /**
- * Manually mark a Composio connection as complete. The UI calls this after
- * the operator has connected via the Composio dashboard and pasted the
- * resulting `connectedAccountId` into our form.
- *
- * NOTE: Wave C will replace this with a real OAuth round-trip via Composio's
- * /api/connections endpoints. For Wave B (this commit), the manual paste
- * pattern is fine for a single-user product where the operator IS the
- * developer.
+ * Manually mark a Composio connection as complete. Kept as a fallback for
+ * ops/debugging if the hosted OAuth flow fails; normal onboarding uses
+ * `markPlatformConnectedFromConnectedAccount` below.
  */
 export const markPlatformConnected = mutation({
   args: {
@@ -274,14 +271,55 @@ export const markPlatformConnected = mutation({
     if (!identity) throw new Error("markPlatformConnected: signed-in required.");
     const agent = await resolveGrowthAgent(ctx, identity.subject);
     if (!agent) throw new Error("markPlatformConnected: no growth-agent row.");
-    // We don't encrypt here — the per-creator encryption seam lives in
-    // `convex/lib/encryption.ts` and is a deploy concern. For this single-
-    // user product the connectedAccountId flows directly. When we
-    // multi-tenant this later, replace with the encrypted shape used by
-    // `connectedAccounts` rows (composioAccountId + composioAccountIdHash).
     const stored = {
-      composioAccountId: args.composioAccountId,
-      composioAccountIdHash: args.composioAccountId, // placeholder
+      composioAccountId: await encrypt(args.composioAccountId),
+      composioAccountIdHash: await sha256Hex(args.composioAccountId),
+      connectedAt: Date.now(),
+    };
+    if (args.platform === "linkedin") {
+      await ctx.db.patch(agent._id, {
+        linkedinConnection: stored,
+        updatedAt: Date.now(),
+      });
+    } else {
+      await ctx.db.patch(agent._id, {
+        twitterConnection: stored,
+        updatedAt: Date.now(),
+      });
+    }
+  },
+});
+
+export const markPlatformConnectedFromConnectedAccount = mutation({
+  args: {
+    platform: v.union(v.literal("linkedin"), v.literal("twitter")),
+    connectedAccountId: v.id("connectedAccounts"),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error(
+        "markPlatformConnectedFromConnectedAccount: signed-in required."
+      );
+    }
+    const agent = await resolveGrowthAgent(ctx, identity.subject);
+    if (!agent) {
+      throw new Error(
+        "markPlatformConnectedFromConnectedAccount: no growth-agent row."
+      );
+    }
+    const account = await ctx.db.get(args.connectedAccountId);
+    if (!account || account.creatorId !== agent.accountId) {
+      throw new Error("Composio connection does not belong to this user.");
+    }
+    if (account.provider !== args.platform) {
+      throw new Error(
+        `Expected ${args.platform} connection, got ${account.provider}.`
+      );
+    }
+    const stored = {
+      composioAccountId: account.composioAccountId,
+      composioAccountIdHash: account.composioAccountIdHash ?? "",
       connectedAt: Date.now(),
     };
     if (args.platform === "linkedin") {

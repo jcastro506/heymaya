@@ -26,7 +26,7 @@ export default function GrowthDashboardPage() {
       <Shell>
         <p className="text-paper">
           Sign in first.{" "}
-          <Link href="/sign-in" className="text-lime underline">
+          <Link href="/sign-in" className="text-paper underline">
             Sign in
           </Link>
           .
@@ -37,10 +37,10 @@ export default function GrowthDashboardPage() {
   if (!me.agent) {
     return (
       <Shell>
-        <p className="mb-4 text-paper">No Riley yet — let&rsquo;s set her up.</p>
+        <p className="mb-4 text-paper">No Builder Maya yet. Let&rsquo;s set her up.</p>
         <Link
           href="/onboarding/growth"
-          className="rounded-full bg-lime px-7 py-3 text-sm font-medium text-ink hover:bg-lime/90"
+          className="rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink hover:bg-white"
         >
           Start onboarding →
         </Link>
@@ -60,19 +60,19 @@ export default function GrowthDashboardPage() {
   return (
     <Shell>
       <div className="mb-10">
-        <p className="mb-2 font-mono text-xs uppercase tracking-widest text-lime">
-          Riley
+        <p className="mb-2 font-mono text-xs uppercase tracking-widest text-paper-faint">
+          Maya for Builders
         </p>
         <h1 className="font-serif text-4xl">
           {agent.productContext?.productName
             ? `Building hype for ${agent.productContext.productName}.`
-            : "Your AI growth ops."}
+            : "Your AI distribution manager."}
         </h1>
       </div>
 
       {!onboardingDone && (
-        <div className="mb-10 rounded-2xl border border-lime/30 bg-lime/5 p-6">
-          <p className="mb-2 font-mono text-xs uppercase tracking-widest text-lime">
+        <div className="mb-10 rounded-2xl border border-paper-faint/30 bg-paper/5 p-6">
+          <p className="mb-2 font-mono text-xs uppercase tracking-widest text-paper">
             Onboarding incomplete
           </p>
           <p className="mb-4 text-paper-dim">
@@ -81,7 +81,7 @@ export default function GrowthDashboardPage() {
           </p>
           <Link
             href="/onboarding/growth"
-            className="rounded-full bg-lime px-6 py-2 text-xs font-medium text-ink hover:bg-lime/90"
+            className="rounded-full bg-paper px-6 py-2 text-xs font-medium text-ink hover:bg-white"
           >
             Resume onboarding →
           </Link>
@@ -114,13 +114,13 @@ export default function GrowthDashboardPage() {
         <h2 className="mb-2 font-serif text-xl">Drafts pending approval</h2>
         <p className="text-sm text-paper-faint">
           {agent.rileyFlyAppId
-            ? "No drafts pending — Riley will surface them here when ready."
-            : "Riley isn't deployed yet. Once she's running, her drafts land here for your approval."}
+            ? "No drafts pending. Maya will surface them here when ready."
+            : "Maya isn't deployed yet. Once she's running, her drafts land here for your approval."}
         </p>
       </section>
 
       <section className="mb-10 rounded-2xl border border-paper-faint/15 bg-ink-2 p-6">
-        <h2 className="mb-2 font-serif text-xl">Riley&rsquo;s machine</h2>
+        <h2 className="mb-2 font-serif text-xl">Maya&rsquo;s machine</h2>
         {agent.rileyFlyAppId ? (
           <div className="text-sm text-paper-dim">
             <p className="mb-1">
@@ -139,7 +139,7 @@ export default function GrowthDashboardPage() {
         ) : (
           <p className="text-sm text-paper-faint">
             Not deployed. Wave C wires the deploy pipeline; until then,
-            Riley sits patiently waiting for her runtime.
+            Maya is waiting for her runtime.
           </p>
         )}
       </section>
@@ -178,7 +178,7 @@ function Card({
 
 function Status({ ok, label }: { ok: boolean; label: string }) {
   return (
-    <p className={ok ? "text-lime" : "text-red-400"}>
+    <p className={ok ? "text-paper" : "text-red-400"}>
       <span className="mr-2">{ok ? "✓" : "·"}</span>
       {label}
     </p>

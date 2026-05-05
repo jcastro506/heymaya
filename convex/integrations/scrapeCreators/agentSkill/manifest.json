@@ -20,34 +20,177 @@
     },
     {
       "name": "tiktok_user_posts",
-      "description": "Fetch a TikTok creator's most recent posts.",
+      "description": "Fetch a TikTok creator's most recent videos with public metrics.",
       "method": "GET",
-      "path": "/v1/tiktok/user/posts",
+      "path": "/v3/tiktok/profile/videos",
       "params": [
         { "name": "handle", "in": "query", "required": true, "type": "string" },
-        { "name": "limit", "in": "query", "required": false, "type": "number" }
+        { "name": "max_cursor", "in": "query", "required": false, "type": "string" },
+        { "name": "trim", "in": "query", "required": false, "type": "boolean" }
       ]
     },
     {
       "name": "tiktok_post",
       "description": "Fetch a single TikTok post's metadata + metrics.",
       "method": "GET",
-      "path": "/v1/tiktok/post",
-      "params": [{ "name": "id", "in": "query", "required": true, "type": "string" }]
+      "path": "/v2/tiktok/video",
+      "params": [
+        { "name": "url", "in": "query", "required": true, "type": "string" },
+        { "name": "get_transcript", "in": "query", "required": false, "type": "boolean" },
+        { "name": "trim", "in": "query", "required": false, "type": "boolean" }
+      ]
     },
     {
       "name": "tiktok_comments",
       "description": "Fetch comments on a TikTok post (sorted by API default).",
       "method": "GET",
-      "path": "/v1/tiktok/comments",
-      "params": [{ "name": "id", "in": "query", "required": true, "type": "string" }]
+      "path": "/v1/tiktok/video/comments",
+      "params": [
+        { "name": "url", "in": "query", "required": true, "type": "string" },
+        { "name": "cursor", "in": "query", "required": false, "type": "string" }
+      ]
     },
     {
       "name": "tiktok_transcript",
       "description": "Fetch the auto-generated transcript of a TikTok video.",
       "method": "GET",
-      "path": "/v1/tiktok/transcript",
-      "params": [{ "name": "id", "in": "query", "required": true, "type": "string" }]
+      "path": "/v1/tiktok/video/transcript",
+      "params": [
+        { "name": "url", "in": "query", "required": true, "type": "string" },
+        { "name": "lang", "in": "query", "required": false, "type": "string" },
+        { "name": "use_ai_as_fallback", "in": "query", "required": false, "type": "boolean" }
+      ]
+    },
+    {
+      "name": "tiktok_comment_replies",
+      "description": "Fetch replies to a TikTok comment.",
+      "method": "GET",
+      "path": "/v1/tiktok/comment/replies",
+      "params": [
+        { "name": "url", "in": "query", "required": true, "type": "string" },
+        { "name": "comment_id", "in": "query", "required": true, "type": "string" },
+        { "name": "cursor", "in": "query", "required": false, "type": "string" }
+      ]
+    },
+    {
+      "name": "tiktok_audience",
+      "description": "Fetch TikTok audience demographics for a public creator. Expensive endpoint; warn before use.",
+      "method": "GET",
+      "path": "/v1/tiktok/user/audience",
+      "params": [{ "name": "handle", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "tiktok_live",
+      "description": "Fetch current TikTok live stream data for a public creator.",
+      "method": "GET",
+      "path": "/v1/tiktok/user/live",
+      "params": [{ "name": "handle", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "tiktok_following",
+      "description": "Fetch public TikTok accounts followed by a creator.",
+      "method": "GET",
+      "path": "/v1/tiktok/user/following",
+      "params": [
+        { "name": "handle", "in": "query", "required": true, "type": "string" },
+        { "name": "min_time", "in": "query", "required": false, "type": "string" }
+      ]
+    },
+    {
+      "name": "tiktok_followers",
+      "description": "Fetch public TikTok followers for a creator.",
+      "method": "GET",
+      "path": "/v1/tiktok/user/followers",
+      "params": [
+        { "name": "handle", "in": "query", "required": true, "type": "string" },
+        { "name": "min_time", "in": "query", "required": false, "type": "string" }
+      ]
+    },
+    {
+      "name": "tiktok_search_users",
+      "description": "Search TikTok users by keyword.",
+      "method": "GET",
+      "path": "/v1/tiktok/search/users",
+      "params": [{ "name": "query", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "tiktok_search_hashtag",
+      "description": "Search TikTok videos by hashtag.",
+      "method": "GET",
+      "path": "/v1/tiktok/search/hashtag",
+      "params": [
+        { "name": "hashtag", "in": "query", "required": true, "type": "string" },
+        { "name": "cursor", "in": "query", "required": false, "type": "string" }
+      ]
+    },
+    {
+      "name": "tiktok_search_keyword",
+      "description": "Search TikTok videos by keyword.",
+      "method": "GET",
+      "path": "/v1/tiktok/search/keyword",
+      "params": [
+        { "name": "query", "in": "query", "required": true, "type": "string" },
+        { "name": "cursor", "in": "query", "required": false, "type": "string" }
+      ]
+    },
+    {
+      "name": "tiktok_search_top",
+      "description": "Search TikTok top results across videos and photo posts.",
+      "method": "GET",
+      "path": "/v1/tiktok/search/top",
+      "params": [{ "name": "query", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "tiktok_trending_feed",
+      "description": "Fetch TikTok trending feed for a region.",
+      "method": "GET",
+      "path": "/v1/tiktok/get-trending-feed",
+      "params": [{ "name": "region", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "tiktok_popular_videos",
+      "description": "Fetch popular TikTok videos.",
+      "method": "GET",
+      "path": "/v1/tiktok/videos/popular",
+      "params": []
+    },
+    {
+      "name": "tiktok_popular_creators",
+      "description": "Fetch popular TikTok creators.",
+      "method": "GET",
+      "path": "/v1/tiktok/creators/popular",
+      "params": []
+    },
+    {
+      "name": "tiktok_popular_hashtags",
+      "description": "Fetch popular TikTok hashtags.",
+      "method": "GET",
+      "path": "/v1/tiktok/hashtags/popular",
+      "params": []
+    },
+    {
+      "name": "tiktok_popular_songs",
+      "description": "Fetch popular TikTok songs.",
+      "method": "GET",
+      "path": "/v1/tiktok/songs/popular",
+      "params": []
+    },
+    {
+      "name": "tiktok_song",
+      "description": "Fetch TikTok song details by clip id.",
+      "method": "GET",
+      "path": "/v1/tiktok/song",
+      "params": [{ "name": "clipId", "in": "query", "required": true, "type": "string" }]
+    },
+    {
+      "name": "tiktok_song_videos",
+      "description": "Fetch TikTok videos using a song by clip id.",
+      "method": "GET",
+      "path": "/v1/tiktok/song/videos",
+      "params": [
+        { "name": "clipId", "in": "query", "required": true, "type": "string" },
+        { "name": "cursor", "in": "query", "required": false, "type": "string" }
+      ]
     },
     {
       "name": "instagram_profile",
