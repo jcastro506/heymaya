@@ -272,11 +272,11 @@ function FormView({
           <input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="+14155551234"
+            placeholder="415-555-1234"
             inputMode="tel"
             autoComplete="tel"
             className="h-14 w-full rounded-2xl border border-[var(--hairline-strong)] bg-ink-2 px-4 font-mono text-base text-paper outline-none placeholder:text-paper-faint"
-            aria-label="Your phone number in E.164 format"
+            aria-label="Your phone number"
             disabled={submitting}
           />
         </Field>

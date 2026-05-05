@@ -96,6 +96,16 @@ export function isValidE164(phone: string): boolean {
   return true;
 }
 
+export function normalizePhoneNumberForOnboarding(input: string): string | null {
+  const trimmed = input.trim();
+  if (isValidE164(trimmed)) return trimmed;
+
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return null;
+}
+
 /**
  * Display-name validation. Must be 1-80 chars after trim, no control chars.
  * The 80-char cap mirrors typical platform display-name caps and gives Maya
@@ -235,12 +245,12 @@ export const submitOnboarding = action({
       };
     }
 
-    const phoneNumber = args.phoneNumber.trim();
-    if (!isValidE164(phoneNumber)) {
+    const phoneNumber = normalizePhoneNumberForOnboarding(args.phoneNumber);
+    if (!phoneNumber) {
       return {
         ok: false,
         reason: "invalid-phone",
-        message: "Phone must be E.164 format (e.g. +14155551234).",
+        message: "Enter a 10-digit US phone number, like 415-555-1234.",
       };
     }
 

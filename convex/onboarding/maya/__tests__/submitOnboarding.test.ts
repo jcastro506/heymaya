@@ -35,6 +35,7 @@ import type { Id } from "../../../_generated/dataModel";
 import {
   isValidDisplayName,
   isValidE164,
+  normalizePhoneNumberForOnboarding,
   normalizeHandleInput,
 } from "../submitOnboarding";
 import { tiktokProfileFixture } from "../../../integrations/scrapeCreators/__tests__/fixtures/tiktok";
@@ -156,6 +157,32 @@ describe("isValidE164", () => {
   });
 });
 
+describe("normalizePhoneNumberForOnboarding", () => {
+  it("accepts E.164, 10-digit US, and US numbers with punctuation", () => {
+    expect(normalizePhoneNumberForOnboarding("+14155551234")).toBe(
+      "+14155551234"
+    );
+    expect(normalizePhoneNumberForOnboarding("4155551234")).toBe(
+      "+14155551234"
+    );
+    expect(normalizePhoneNumberForOnboarding("415-555-1234")).toBe(
+      "+14155551234"
+    );
+    expect(normalizePhoneNumberForOnboarding("(415) 555-1234")).toBe(
+      "+14155551234"
+    );
+    expect(normalizePhoneNumberForOnboarding("1 415 555 1234")).toBe(
+      "+14155551234"
+    );
+  });
+
+  it("rejects local 7-digit numbers and malformed values", () => {
+    expect(normalizePhoneNumberForOnboarding("555-1234")).toBeNull();
+    expect(normalizePhoneNumberForOnboarding("abc")).toBeNull();
+    expect(normalizePhoneNumberForOnboarding("")).toBeNull();
+  });
+});
+
 describe("isValidDisplayName", () => {
   it("accepts 1-80 char names with normal punctuation", () => {
     expect(isValidDisplayName("First Last")).toBe(true);
@@ -185,7 +212,7 @@ describe("submitOnboarding — happy path", () => {
       {
         handle: "@fitcreator99",
         displayName: "Fit Creator",
-        phoneNumber: "+14155551234",
+        phoneNumber: "(415) 555-1234",
       }
     );
 
@@ -348,12 +375,15 @@ describe("submitOnboarding — adversarial", () => {
       {
         handle: "fitcreator99",
         displayName: "Fit Creator",
-        phoneNumber: "415-555-1234",
+        phoneNumber: "555-1234",
       }
     );
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected !ok");
     expect(result.reason).toBe("invalid-phone");
+    expect(result.message).toBe(
+      "Enter a 10-digit US phone number, like 415-555-1234."
+    );
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
