@@ -404,6 +404,7 @@ function FeatureRail() {
               },
               {
                 side: "left",
+                reaction: "question",
                 body: (
                   <>
                     The two unfilmed are the POV ones we drafted Tue. Both are
@@ -638,6 +639,7 @@ function FeatureRail() {
             bubbles={[
               {
                 side: "left",
+                reaction: "love",
                 body: (
                   <>
                     Caraway is back. They asked about a holiday push. You said
