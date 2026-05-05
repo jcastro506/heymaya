@@ -30,7 +30,13 @@
  */
 
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery } from "../../_generated/server";
+import {
+  action,
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "../../_generated/server";
+import type { ActionCtx } from "../../_generated/server";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { internal } from "../../_generated/api";
 import {
@@ -127,7 +133,118 @@ export const upsertConnectedAccount = internalMutation({
 });
 
 /* -------------------------------------------------------------------------- */
-/* startOAuth — public action                                                  */
+/* OAuth-initiate core — shared by the Clerk-gated and webhook-secret-gated   */
+/* surfaces. Both surfaces resolve a `creatorId` first (from identity vs.     */
+/* request body), then funnel into this single core so the Composio HTTP     */
+/* call + plan-tier gate live in exactly one place.                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Fetch + plan-gate before calling Composio. Internal action because the
+ * Composio call is an external HTTP request — actions are the only Convex
+ * surface that may make those.
+ *
+ * Test seam: pass `clientOverride` (only used by tests) to inject a
+ * stubbed `ComposioClient`. Production callers omit it and the function
+ * falls back to `getDefaultComposioClient()`.
+ */
+async function initiateOAuthForCreatorCore(
+  ctx: ActionCtx,
+  args: {
+    creatorId: Id<"creators">;
+    provider: Provider;
+    redirectUri: string;
+  },
+  clientOverride?: ComposioClient
+): Promise<{ redirectUrl: string; state: string }> {
+  const me: Pick<Doc<"creators">, "_id" | "plan"> | null = await ctx.runQuery(
+    internal.integrations.composio.oauth.getCreatorByIdForOAuth,
+    { creatorId: args.creatorId }
+  );
+  if (!me) {
+    throw new Error("OAuth: creator not found.");
+  }
+
+  const features = planFeatures(me);
+  if (!features.allowedProviders.includes(args.provider)) {
+    throw new PlanGateError(
+      me.plan,
+      `oauth:${args.provider}`,
+      "manager"
+    );
+  }
+
+  const authConfigId = authConfigIdForProvider(args.provider);
+  const client = clientOverride ?? resolveComposioClient();
+
+  // Composio v3 initiate endpoint — returns hosted URL + session id (state).
+  const initRes = await client.request<{
+    redirectUrl?: string;
+    authUrl?: string;
+    url?: string;
+    state?: string;
+    sessionId?: string;
+    id?: string;
+  }>("/api/v3/connectedAccounts/initiate", {
+    method: "POST",
+    body: {
+      authConfigId,
+      entityId: me._id, // per-creator scoping for Composio's entity model
+      callbackUrl: args.redirectUri,
+    },
+  });
+
+  const redirectUrl = initRes.redirectUrl ?? initRes.authUrl ?? initRes.url;
+  const state = initRes.state ?? initRes.sessionId ?? initRes.id;
+  if (!redirectUrl || !state) {
+    throw new ComposioError(
+      "startOAuth: Composio did not return a redirect URL + state."
+    );
+  }
+
+  return { redirectUrl, state };
+}
+
+/**
+ * Internal-only query that resolves a creators row by id (vs. by Clerk
+ * subject). Used by the webhook-secret-gated httpAction surface where the
+ * caller is Maya's runtime, not the browser.
+ */
+export const getCreatorByIdForOAuth = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<Pick<Doc<"creators">, "_id" | "plan"> | null> => {
+    const c = await ctx.db.get(args.creatorId);
+    if (!c) return null;
+    return { _id: c._id, plan: c.plan };
+  },
+});
+
+/**
+ * Internal action wrapper around the shared core. Exposed via
+ * `internal.integrations.composio.oauth.initiateOAuthForCreator` so the
+ * webhook-secret-gated httpAction can call it through `ctx.runAction`
+ * (httpActions can't run actions inline, but they can dispatch to internal
+ * actions). Both the Clerk surface and Maya's surface end up here.
+ */
+export const initiateOAuthForCreator = internalAction({
+  args: {
+    creatorId: v.id("creators"),
+    provider: PROVIDER_VALIDATOR,
+    redirectUri: v.string(),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ redirectUrl: string; state: string }> => {
+    return await initiateOAuthForCreatorCore(ctx, args);
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* startOAuth — public action (Clerk identity → creatorId)                     */
 /* -------------------------------------------------------------------------- */
 
 export const startOAuth = action({
@@ -155,45 +272,11 @@ export const startOAuth = action({
     if (!me) {
       throw new Error("OAuth: creator row not found for signed-in user.");
     }
-
-    const features = planFeatures(me);
-    if (!features.allowedProviders.includes(args.provider)) {
-      throw new PlanGateError(
-        me.plan,
-        `oauth:${args.provider}`,
-        "manager"
-      );
-    }
-
-    const authConfigId = authConfigIdForProvider(args.provider);
-    const client = getDefaultComposioClient();
-
-    // Composio v3 initiate endpoint — returns hosted URL + session id (state).
-    const initRes = await client.request<{
-      redirectUrl?: string;
-      authUrl?: string;
-      url?: string;
-      state?: string;
-      sessionId?: string;
-      id?: string;
-    }>("/api/v3/connectedAccounts/initiate", {
-      method: "POST",
-      body: {
-        authConfigId,
-        entityId: me._id, // per-creator scoping for Composio's entity model
-        callbackUrl: args.redirectUri,
-      },
+    return await initiateOAuthForCreatorCore(ctx, {
+      creatorId: me._id,
+      provider: args.provider,
+      redirectUri: args.redirectUri,
     });
-
-    const redirectUrl = initRes.redirectUrl ?? initRes.authUrl ?? initRes.url;
-    const state = initRes.state ?? initRes.sessionId ?? initRes.id;
-    if (!redirectUrl || !state) {
-      throw new ComposioError(
-        "startOAuth: Composio did not return a redirect URL + state."
-      );
-    }
-
-    return { redirectUrl, state };
   },
 });
 
@@ -282,12 +365,25 @@ export const completeOAuth = action({
 /* an injected client (so we don't HTTP-call Composio in tests).              */
 /* -------------------------------------------------------------------------- */
 
-/** Exported only for tests. Do not call from production code. */
-export function _setComposioClientForTests(_client: ComposioClient | null): void {
-  // ComposioClient construction is lazy in the singleton; tests can override
-  // by setting COMPOSIO_API_KEY + COMPOSIO_BASE_URL in env via vi.stubEnv,
-  // then resetting the singleton via resetDefaultComposioClient(). Kept as a
-  // function so future test seams have a parking spot.
+let __injectedClient: ComposioClient | null = null;
+
+/**
+ * Exported only for tests. Inject a stubbed ComposioClient that the
+ * `initiateOAuthForCreator` internal action will use in place of
+ * `getDefaultComposioClient()`. ALWAYS reset to `null` in `afterEach`.
+ *
+ * The override applies to the shared core (which both `startOAuth` and
+ * `initiateOAuthForCreator` call) so tests cover both surfaces with one
+ * stub.
+ */
+export function _setComposioClientForTests(
+  client: ComposioClient | null
+): void {
+  __injectedClient = client;
+}
+
+function resolveComposioClient(): ComposioClient {
+  return __injectedClient ?? getDefaultComposioClient();
 }
 
 /**

@@ -99,36 +99,23 @@ export default defineSchema({
     // undefined values and the queries treat that as "no data".
     /** Last creator-driven activity (chat_turn_in / reaction_received / explicit_feedback / action_taken). Maya-driven kinds do NOT bump this. */
     lastEngagedAt: v.optional(v.number()),
-    /** 0-100 derived rollup over the last 7 days. See `recomputeScoreboard` in convex/lib/usageEvents.ts. */
+    /** 0-100 derived rollup over the last 7 days. */
     engagementScore7d: v.optional(v.number()),
     /** Most-fired cron/event label across the last 7 days. */
     topSkillLast7d: v.optional(v.string()),
-    // ─── end Creator usage analytics ──────────────────────────────────────
-    // ─── First-boot introduction — added 2026-05-04 ───────────────────────
-    // Sprint-coach/manager-tiers: Maya's first-message-on-boot sequence.
-    // The introduction flow is: greet + cited insight (from `creatorPicture`)
-    // → 3 opening questions (goal / tone / brand-deal floor) → drop Gmail
-    // OAuth deep-link → drop Google Calendar OAuth deep-link → swing into
-    // action with the first weekly content plan once answers + connections
-    // settle. Three flags below gate the sequence so it fires exactly once
-    // per creator:
-    //   - `firstBootCompletedAt`  — set when Maya finishes the intro arc
-    //     (greet + cited insight + 3 questions sent). Standing-order
-    //     `first_boot_introduction` guards on `firstBootCompletedAt ===
-    //     undefined`.
-    //   - `openingAnswersAt`      — set when the creator's reply with all
-    //     three answers is parsed + persisted to `creatorPicture`.
-    //   - `firstWeeklyPlanSentAt` — set after the first proactive weekly
-    //     content plan ships (independent of the Sun 4pm cron). Standing
-    //     order `first_weekly_plan` fires once when `openingAnswersAt` is
-    //     set AND `firstWeeklyPlanSentAt === undefined`.
-    // All three are optional so creator rows created before this migration
-    // (i.e. existing fixtures + tests) keep working — undefined means "not
-    // yet" for the corresponding step.
+    // ─── First-boot introduction ──────────────────────────────────────────
+    // Maya's first-message-on-boot sequence: greet + cited insight → 3
+    // opening questions → Gmail/Calendar OAuth deep-links → first weekly
+    // plan. Three flags gate the sequence so it fires exactly once.
+    //   - `firstBootCompletedAt`  — set when Maya finishes the intro arc.
+    //   - `openingAnswersAt`      — stamped by `POST /lc_maya/submit_opening_answers`
+    //     when the creator's 3 answers are parsed + persisted to
+    //     `creatorPicture.openingAnswers`. The `first_weekly_plan` standing
+    //     order keys off this.
+    //   - `firstWeeklyPlanSentAt` — set after the first proactive weekly plan ships.
     firstBootCompletedAt: v.optional(v.number()),
     openingAnswersAt: v.optional(v.number()),
     firstWeeklyPlanSentAt: v.optional(v.number()),
-    // ─── end First-boot introduction ──────────────────────────────────────
     createdAt: v.number(),
     // Sprint 3.7 — partial onboarding answer cursor + payload so a refresh
     // mid-flow doesn't lose progress. The full answer set is persisted to
@@ -448,6 +435,35 @@ export default defineSchema({
       v.object({
         oneYear: v.optional(v.string()),
         fiveYear: v.optional(v.string()),
+      })
+    ),
+    /**
+     * The 3 opening answers Maya parses out of the creator's first reply in
+     * iMessage — captured by `POST /lc_maya/submit_opening_answers` (see
+     * `convex/lcMaya/lcMayaHttp.ts`). This is the lightweight first-boot
+     * variant of `submitOnboardingAnswers`: Maya only asks goal / tone /
+     * brand-deal floor over text. The full Wave-2 dynamic onboarding
+     * (careerStage, location, revenue streams, etc.) runs in the web flow
+     * and writes the same picture row via `submitOnboardingAnswers`.
+     *
+     * Cross-product note: when both flows have run, the values can diverge
+     * (web flow typically more complete). Synthesis treats this slot as
+     * the conversational source — leans on `tone` to seed the soul.md
+     * tone slider when no `tonePreference` is set on the `creators` row.
+     *
+     * Optional. Top-level `creators.openingAnswersAt` is the canonical
+     * "has Maya gotten the answers" timestamp; this slot is the payload.
+     */
+    openingAnswers: v.optional(
+      v.object({
+        goal: v.string(),
+        tone: v.union(
+          v.literal("supportive"),
+          v.literal("strategic"),
+          v.literal("tough-love")
+        ),
+        brandDealFloorUsd: v.optional(v.number()),
+        submittedAt: v.number(),
       })
     ),
     // ─── Creator HQ business-readiness audit — added 2026-04-26 ───────────

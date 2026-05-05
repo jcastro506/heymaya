@@ -15,6 +15,10 @@
 import { httpRouter } from "convex/server";
 import { voiceTranscriptHttp } from "./voice/transcriptHttp";
 import { openClawMediaIngestHttp } from "./creatorMayaV0/openClawMediaIngestHttp";
+import {
+  submitOpeningAnswersHttp,
+  startOAuthHttp,
+} from "./lcMaya/lcMayaHttp";
 
 const http = httpRouter();
 
@@ -35,6 +39,22 @@ http.route({
   path: "/creator-maya-v0/openclaw/media",
   method: "POST",
   handler: openClawMediaIngestHttp,
+});
+
+// `lc_maya.*` first-boot iMessage flow — see `convex/lcMaya/lcMayaHttp.ts`.
+// Both endpoints are gated by `WEBHOOK_INTERNAL_SECRET` (constant-time
+// compare in `convex/lib/webhookSecret.ts`). Maya posts to these from the
+// OpenClaw runtime; the bodies carry the secret, the creatorId, and the
+// task-specific payload.
+http.route({
+  path: "/lc_maya/submit_opening_answers",
+  method: "POST",
+  handler: submitOpeningAnswersHttp,
+});
+http.route({
+  path: "/lc_maya/start_oauth",
+  method: "POST",
+  handler: startOAuthHttp,
 });
 
 export default http;
