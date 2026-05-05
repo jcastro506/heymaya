@@ -647,12 +647,21 @@ Tests:
 - OpenClaw bootstrap JSON includes the skill registry entry.
 - Fly machine secret set includes ScrapeCreators API key.
 - A simulated OpenClaw prompt "check latest TikTok" routes to stored data or refresh action.
+- Real Fly.io OpenClaw smoke:
+  - create or reuse a disposable test creator/growth agent
+  - deploy a real Fly app and machine with the current OpenClaw image
+  - confirm the machine reaches `started`
+  - confirm the workspace tarball extracts on the machine
+  - confirm `AGENTS.md`, `TOOLS.md`, `skills/scrapecreators-api/SKILL.md`, and runtime config files exist in the OpenClaw workspace
+  - confirm `SCRAPE_CREATORS_API_KEY` is available as a Fly secret without printing it
+  - run one non-destructive OpenClaw prompt against fake or public test data and verify the agent chooses stored metrics or a ScrapeCreators refresh instead of hallucinating
 
 Acceptance:
 
 - Maya has both instructions and tools.
 - Runtime cannot accidentally use stale endpoint paths.
 - Read-only social data calls are auditable.
+- At least one real Fly.io OpenClaw machine has been deployed, inspected, prompted, and cleaned up or explicitly marked as the reusable staging machine.
 
 ## Sprint 5: Creator End-To-End Platform
 
@@ -1072,6 +1081,18 @@ Deployment path:
 3. Smoke public routes, auth routes, Creator onboarding, Builder onboarding, and protected dashboard.
 4. Promote or merge to main only after staging is correct.
 5. Smoke production once after promotion.
+
+Real OpenClaw/Fly path:
+
+1. Use a disposable test creator or builder account with fake onboarding data and public handles only.
+2. Trigger the actual Convex deploy action that provisions the OpenClaw Fly app/machine.
+3. Confirm Fly app creation, machine creation/reuse, machine `started`, and persisted agent row fields.
+4. Inspect logs for bootstrap success, workspace download, tar extraction, runtime start, and no missing-secret errors.
+5. Verify the generated workspace contains the expected Maya files and ScrapeCreators skill.
+6. Send one real OpenClaw prompt through the non-UI path, such as "check the latest TikTok metrics for this test handle."
+7. Confirm the response includes a real source, post URL/id, metric timestamp, and no invented numbers.
+8. Repeat the same lifecycle for Builder Maya once X/LinkedIn Composio auth configs are present, using draft-only mode unless explicit live-post approval is given.
+9. Clean up disposable Fly apps/machines or record the staging machine id if it is intentionally reused.
 
 ## Risks
 
