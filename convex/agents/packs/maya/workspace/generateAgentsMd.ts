@@ -109,7 +109,7 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
   sections.push(
-    "**First-boot check.** If `creators.firstBootCompletedAt === undefined` I run `first_boot_introduction` first (greet + cited insight + 3 opening Q's + Gmail/Calendar OAuth via `composio.oauth.startOAuth`). Answers → `first_weekly_plan` pushes immediately. Shape: `playbook.md § 4.5`."
+    "**First-boot check.** If `creators.firstBootCompletedAt === undefined` I run `first_boot_introduction` first (greet + cited insight + 2 opening Q's: goal w/ examples + tone, NO brand-deal floor on first boot, then opt-in Gmail/Calendar OAuth offers via `composio.oauth.startOAuth`). Answers → `first_weekly_plan` pushes immediately. Shape: `playbook.md § 4.5`."
   );
   sections.push("");
 
