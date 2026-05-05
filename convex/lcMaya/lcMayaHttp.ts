@@ -59,6 +59,24 @@ const PROVIDER_LITERALS = [
 
 type LcMayaProvider = (typeof PROVIDER_LITERALS)[number];
 
+const TREND_SOURCE_LITERALS = [
+  "niche-scan",
+  "platform-wide",
+  "industry-intel",
+  "competitor-watch",
+] as const;
+
+const TREND_EVIDENCE_KIND_LITERALS = [
+  "post",
+  "hashtag",
+  "sound",
+  "article",
+  "metric",
+] as const;
+
+type TrendSource = (typeof TREND_SOURCE_LITERALS)[number];
+type TrendEvidenceKind = (typeof TREND_EVIDENCE_KIND_LITERALS)[number];
+
 /**
  * Composio internally distinguishes "calendar" (Google Calendar) from any
  * other calendar variant. The `lc_maya.*` surface uses the more explicit
@@ -366,6 +384,180 @@ export const startOAuthHttp = httpAction(async (ctx, request) => {
         },
         403
       );
+    }
+    return jsonResponse({ error: msg }, 500);
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/* Endpoint 3 — log_trend                                                      */
+/* -------------------------------------------------------------------------- */
+
+interface LogTrendPayload {
+  secret: string;
+  creatorId: string;
+  source: TrendSource;
+  observation: string;
+  evidence: Array<{
+    kind: TrendEvidenceKind;
+    ref: string;
+    fact: string;
+  }>;
+  relevanceScore: number;
+}
+
+function isTrendSource(value: unknown): value is TrendSource {
+  return (
+    typeof value === "string" &&
+    (TREND_SOURCE_LITERALS as readonly string[]).includes(value)
+  );
+}
+
+function isTrendEvidenceKind(value: unknown): value is TrendEvidenceKind {
+  return (
+    typeof value === "string" &&
+    (TREND_EVIDENCE_KIND_LITERALS as readonly string[]).includes(value)
+  );
+}
+
+function parseLogTrendPayload(raw: unknown): LogTrendPayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") {
+    throw new Error("secret must be a string.");
+  }
+  if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+    throw new Error("creatorId is required.");
+  }
+  if (!isTrendSource(obj.source)) {
+    throw new Error(
+      `source must be one of ${TREND_SOURCE_LITERALS.join(" | ")}.`
+    );
+  }
+  if (typeof obj.observation !== "string" || obj.observation.trim().length === 0) {
+    throw new Error("observation must be a non-empty string.");
+  }
+  if (!Array.isArray(obj.evidence)) {
+    throw new Error("evidence must be an array.");
+  }
+  const evidence = obj.evidence.map((item, index) => {
+    if (!item || typeof item !== "object") {
+      throw new Error(`evidence[${index}] must be an object.`);
+    }
+    const evidenceItem = item as Record<string, unknown>;
+    if (!isTrendEvidenceKind(evidenceItem.kind)) {
+      throw new Error(
+        `evidence[${index}].kind must be one of ${TREND_EVIDENCE_KIND_LITERALS.join(" | ")}.`
+      );
+    }
+    if (typeof evidenceItem.ref !== "string" || evidenceItem.ref.trim().length === 0) {
+      throw new Error(`evidence[${index}].ref must be a non-empty string.`);
+    }
+    if (
+      typeof evidenceItem.fact !== "string" ||
+      evidenceItem.fact.trim().length === 0
+    ) {
+      throw new Error(`evidence[${index}].fact must be a non-empty string.`);
+    }
+    return {
+      kind: evidenceItem.kind,
+      ref: evidenceItem.ref,
+      fact: evidenceItem.fact,
+    };
+  });
+  if (
+    typeof obj.relevanceScore !== "number" ||
+    !Number.isFinite(obj.relevanceScore) ||
+    obj.relevanceScore < 0 ||
+    obj.relevanceScore > 1
+  ) {
+    throw new Error("relevanceScore must be in [0, 1].");
+  }
+  return {
+    secret: obj.secret,
+    creatorId: obj.creatorId,
+    source: obj.source,
+    observation: obj.observation,
+    evidence,
+    relevanceScore: obj.relevanceScore,
+  };
+}
+
+export const logTrendInternal = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    source: v.union(
+      v.literal("niche-scan"),
+      v.literal("platform-wide"),
+      v.literal("industry-intel"),
+      v.literal("competitor-watch")
+    ),
+    observation: v.string(),
+    evidence: v.array(
+      v.object({
+        kind: v.union(
+          v.literal("post"),
+          v.literal("hashtag"),
+          v.literal("sound"),
+          v.literal("article"),
+          v.literal("metric")
+        ),
+        ref: v.string(),
+        fact: v.string(),
+      })
+    ),
+    relevanceScore: v.number(),
+    observedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) {
+      throw new Error("creator-not-found");
+    }
+    return await ctx.db.insert("trendObservations", {
+      creatorId: args.creatorId,
+      source: args.source,
+      observation: args.observation,
+      evidence: args.evidence,
+      relevanceScore: args.relevanceScore,
+      observedAt: args.observedAt,
+    });
+  },
+});
+
+export const logTrendHttp = httpAction(async (ctx, request) => {
+  let payload: LogTrendPayload;
+  try {
+    payload = parseLogTrendPayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+
+  try {
+    const trendObservationId = await ctx.runMutation(
+      internal.lcMaya.lcMayaHttp.logTrendInternal,
+      {
+        creatorId: payload.creatorId as Id<"creators">,
+        source: payload.source,
+        observation: payload.observation,
+        evidence: payload.evidence,
+        relevanceScore: payload.relevanceScore,
+        observedAt: Date.now(),
+      }
+    );
+    return jsonResponse({ ok: true, trendObservationId }, 200);
+  } catch (err) {
+    const msg = (err as Error).message ?? "internal-error";
+    if (msg === "creator-not-found") {
+      return jsonResponse({ error: "creator-not-found" }, 404);
     }
     return jsonResponse({ error: msg }, 500);
   }

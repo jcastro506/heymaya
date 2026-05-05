@@ -16,6 +16,7 @@ import { httpRouter } from "convex/server";
 import { voiceTranscriptHttp } from "./voice/transcriptHttp";
 import { openClawMediaIngestHttp } from "./creatorMayaV0/openClawMediaIngestHttp";
 import {
+  logTrendHttp,
   submitOpeningAnswersHttp,
   startOAuthHttp,
 } from "./lcMaya/lcMayaHttp";
@@ -55,6 +56,11 @@ http.route({
   path: "/lc_maya/start_oauth",
   method: "POST",
   handler: startOAuthHttp,
+});
+http.route({
+  path: "/lc_maya/log_trend",
+  method: "POST",
+  handler: logTrendHttp,
 });
 
 export default http;

@@ -55,7 +55,7 @@
 
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { planFeatures, PlanGateError } from "./lib/planFeatures";
 
@@ -1062,6 +1062,7 @@ export const skillRecordTrend = mutation({
     creatorId: v.id("creators"),
     source: v.union(
       v.literal("niche-scan"),
+      v.literal("platform-wide"),
       v.literal("industry-intel"),
       v.literal("competitor-watch")
     ),

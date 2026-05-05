@@ -1150,6 +1150,7 @@ export default defineSchema({
     creatorId: v.id("creators"),
     source: v.union(
       v.literal("niche-scan"),
+      v.literal("platform-wide"),
       v.literal("industry-intel"),
       v.literal("competitor-watch")
     ),

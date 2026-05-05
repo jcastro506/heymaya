@@ -6,7 +6,7 @@
  *   2. Plan-tier: competitorWatch + collabMatches + industryIntel are
  *      Pro+ behaviors; Starter sees []. nicheRadar is universal.
  *   3. Adversarial: unauth → []; empty data → []; observations from
- *      other sources don't leak into the wrong tab.
+ *      unrelated sources don't leak into the wrong tab.
  *   4. Sibling-file scan + 5. TODO grep: covered repo-wide.
  */
 
@@ -44,7 +44,7 @@ function asUser(t: ReturnType<typeof convexTest>, suffix: string) {
 async function insertTrend(
   t: ReturnType<typeof convexTest>,
   creatorId: Id<"creators">,
-  source: "niche-scan" | "industry-intel" | "competitor-watch",
+  source: "niche-scan" | "platform-wide" | "industry-intel" | "competitor-watch",
   observation: string,
   observedAt: number = NOW,
   relevanceScore: number = 0.6
@@ -87,14 +87,14 @@ describe("trends.nicheRadar", () => {
     expect(r).toEqual([]);
   });
 
-  it("returns only niche-scan rows, newest first", async () => {
+  it("returns niche-scan + platform-wide rows, newest first", async () => {
     const t = convexTest(schema, modules);
     const a = await insertCreator(t, { suffix: "a", plan: "manager" });
     await insertTrend(t, a, "niche-scan", "old", NOW - ONE_DAY_MS);
-    await insertTrend(t, a, "niche-scan", "new", NOW);
+    await insertTrend(t, a, "platform-wide", "new platform trend", NOW);
     await insertTrend(t, a, "industry-intel", "intel — should not appear", NOW);
     const r = await asUser(t, "a").query(api.trends.nicheRadar, {});
-    expect(r.map((x) => x.observation)).toEqual(["new", "old"]);
+    expect(r.map((x) => x.observation)).toEqual(["new platform trend", "old"]);
   });
 
   it("CROSS-TENANT: A's niche radar excludes B's observations", async () => {

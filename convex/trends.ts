@@ -4,6 +4,7 @@
  * The Trends screen at `app/(creator)/trends/page.tsx` surfaces what Maya
  * picked up from her three intel-gathering crons:
  *   - 6pm daily niche scan        → trendObservations (source='niche-scan')
+ *   - 9:05am trend watcher        → trendObservations (source='platform-wide')
  *   - 9am daily competitor watch  → competitorObservations
  *   - 9am daily collab matchmaker → collabMatchLog
  *   - 7:30am industry intel       → trendObservations (source='industry-intel')
@@ -36,25 +37,29 @@ async function getCurrentCreator(
 }
 
 /**
- * Niche radar — last 30 niche-scan observations, newest first. Available
- * on every plan because the daily niche scan runs on every Maya (low
- * thinking, cheap to keep on Starter).
+ * Niche radar — last 30 niche-scan + platform-wide observations, newest
+ * first. Available on every plan because the daily trend scans run on every
+ * Maya (low thinking, cheap to keep on Coach).
  *
- * Uses the `by_creator_and_source` index so we never over-fetch the cross-
- * source mix and discard rows in memory.
+ * Uses `by_creator_and_observedAt` because this is an OR over two sources.
  */
 export const nicheRadar = query({
   args: {},
   handler: async (ctx) => {
     const creator = await getCurrentCreator(ctx);
     if (!creator) return [];
-    return await ctx.db
+    const rows = await ctx.db
       .query("trendObservations")
-      .withIndex("by_creator_and_source", (q) =>
-        q.eq("creatorId", creator._id).eq("source", "niche-scan")
+      .withIndex("by_creator_and_observedAt", (q) =>
+        q.eq("creatorId", creator._id)
       )
       .order("desc")
-      .take(NICHE_RADAR_LIMIT);
+      .take(NICHE_RADAR_LIMIT * 2);
+    return rows
+      .filter(
+        (row) => row.source === "niche-scan" || row.source === "platform-wide"
+      )
+      .slice(0, NICHE_RADAR_LIMIT);
   },
 });
 

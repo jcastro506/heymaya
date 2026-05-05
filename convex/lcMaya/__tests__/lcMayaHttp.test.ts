@@ -572,3 +572,200 @@ describe("POST /lc_maya/start_oauth", () => {
     expect(observedEntityId).not.toBe(creatorB);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Endpoint 3 — log_trend                                                      */
+/* -------------------------------------------------------------------------- */
+
+describe("POST /lc_maya/log_trend", () => {
+  beforeEach(() => {
+    _setWebhookSecretForTests(TEST_SECRET);
+  });
+  afterEach(() => {
+    _setWebhookSecretForTests(null);
+  });
+
+  it("HAPPY: writes a niche-scan trend observation with evidence", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "trend", plan: "manager" });
+
+    const res = await t.fetch("/lc_maya/log_trend", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        source: "niche-scan",
+        observation: "Creators in this bracket are reusing pantry-reset hooks.",
+        evidence: [
+          {
+            kind: "hashtag",
+            ref: "#pantryreset",
+            fact: "Repeated in three high-fit posts from the scan.",
+          },
+        ],
+        relevanceScore: 0.82,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.ok).toBe(true);
+
+    const row = await t.run((ctx) =>
+      ctx.db
+        .query("trendObservations")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .first()
+    );
+    expect(row?.creatorId).toBe(creatorId);
+    expect(row?.source).toBe("niche-scan");
+    expect(row?.evidence[0]).toMatchObject({
+      kind: "hashtag",
+      ref: "#pantryreset",
+    });
+  });
+
+  it("HAPPY: accepts platform-wide source for trend_watcher", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "wide", plan: "manager" });
+
+    const res = await t.fetch("/lc_maya/log_trend", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        source: "platform-wide",
+        observation: "A sound is rising outside the creator's immediate niche.",
+        evidence: [
+          {
+            kind: "sound",
+            ref: "7439295283975702544",
+            fact: "Sound appears in multiple popular videos.",
+          },
+        ],
+        relevanceScore: 0.71,
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const row = await t.run((ctx) =>
+      ctx.db.query("trendObservations").withIndex("by_creator", (q) =>
+        q.eq("creatorId", creatorId)
+      ).first()
+    );
+    expect(row?.source).toBe("platform-wide");
+  });
+
+  it("ADVERSARIAL: missing / wrong secret returns 401", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "bad", plan: "manager" });
+
+    for (const bad of ["", "wrong", `${TEST_SECRET}x`]) {
+      const res = await t.fetch("/lc_maya/log_trend", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          secret: bad,
+          creatorId,
+          source: "niche-scan",
+          observation: "x",
+          evidence: [],
+          relevanceScore: 0.5,
+        }),
+      });
+      expect(res.status).toBe(401);
+    }
+  });
+
+  it("ADVERSARIAL: malformed body returns 400", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, {
+      suffix: "malformed",
+      plan: "manager",
+    });
+
+    const cases = [
+      { body: "not-json", label: "non-json" },
+      {
+        body: JSON.stringify({ secret: TEST_SECRET }),
+        label: "missing-fields",
+      },
+      {
+        body: JSON.stringify({
+          secret: TEST_SECRET,
+          creatorId,
+          source: "unknown",
+          observation: "x",
+          evidence: [],
+          relevanceScore: 0.5,
+        }),
+        label: "bad-source",
+      },
+      {
+        body: JSON.stringify({
+          secret: TEST_SECRET,
+          creatorId,
+          source: "niche-scan",
+          observation: "",
+          evidence: [],
+          relevanceScore: 0.5,
+        }),
+        label: "empty-observation",
+      },
+      {
+        body: JSON.stringify({
+          secret: TEST_SECRET,
+          creatorId,
+          source: "niche-scan",
+          observation: "x",
+          evidence: [{ kind: "post", ref: "", fact: "x" }],
+          relevanceScore: 0.5,
+        }),
+        label: "bad-evidence",
+      },
+      {
+        body: JSON.stringify({
+          secret: TEST_SECRET,
+          creatorId,
+          source: "niche-scan",
+          observation: "x",
+          evidence: [],
+          relevanceScore: 1.2,
+        }),
+        label: "bad-score",
+      },
+    ];
+
+    for (const { body, label } of cases) {
+      const res = await t.fetch("/lc_maya/log_trend", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      });
+      expect(res.status, `case=${label}`).toBe(400);
+    }
+  });
+
+  it("ADVERSARIAL: creator-not-found returns 404", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "missing", plan: "manager" });
+    await t.run((ctx) => ctx.db.delete(creatorId));
+
+    const res = await t.fetch("/lc_maya/log_trend", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        source: "niche-scan",
+        observation: "x",
+        evidence: [],
+        relevanceScore: 0.5,
+      }),
+    });
+
+    expect(res.status).toBe(404);
+  });
+});

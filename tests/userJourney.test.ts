@@ -49,12 +49,14 @@ import {
   type CreateMachineInput,
 } from "../convex/lib/flyClient";
 import { _resetEncryptionKeyCache } from "../convex/lib/encryption";
+import { _setWebhookSecretForTests } from "../convex/lib/webhookSecret";
 import { todaySectionsFor } from "../components/creator/stage";
 import type { Id } from "../convex/_generated/dataModel";
 
 const NOW = 1_700_000_000_000;
 const TZ = "America/Los_Angeles";
 const TEST_ENCRYPTION_KEY = btoa("\0".repeat(32));
+const TEST_WEBHOOK_SECRET = "journey-webhook-secret";
 
 /* -------------------------------------------------------------------------- */
 /* Env + setup                                                                */
@@ -71,6 +73,7 @@ beforeEach(() => {
   process.env.FLY_ORG_SLUG = "heymaya";
   process.env.FLY_REGION = "iad";
   process.env.COMPOSIO_API_KEY = "co-test";
+  _setWebhookSecretForTests(TEST_WEBHOOK_SECRET);
   // Wave 4 worker stays OFF — the synth path uses OpenRouter, intercepted
   // via _setSynthFetchForTests.
   delete process.env.USE_VIDEO_SYNTH_WORKER;
@@ -85,6 +88,7 @@ beforeEach(() => {
 afterEach(() => {
   _setSynthFetchForTests(null);
   __setDeployMayaFlyClient(null);
+  _setWebhookSecretForTests(null);
   vi.unstubAllGlobals();
   vi.useRealTimers();
   _resetEncryptionKeyCache();
@@ -476,6 +480,107 @@ function asUserEmail(suffix: string): string {
   return `${suffix}@journey-test.com`;
 }
 
+async function exercisePostDeployMayaTextLoop(opts: {
+  t: ReturnType<typeof convexTest>;
+  suffix: string;
+  creatorId: Id<"creators">;
+  goal: string;
+  tone: "supportive" | "strategic" | "tough-love";
+  brandDealFloorUsd: number;
+  expectedTrendObservation: string;
+}) {
+  const {
+    t,
+    suffix,
+    creatorId,
+    goal,
+    tone,
+    brandDealFloorUsd,
+    expectedTrendObservation,
+  } = opts;
+
+  const openingAnswersRes = await t.fetch("/lc_maya/submit_opening_answers", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      secret: TEST_WEBHOOK_SECRET,
+      creatorId,
+      goal,
+      tone,
+      brandDealFloorUsd,
+    }),
+  });
+  expect(
+    openingAnswersRes.status,
+    "STEP 6b: deployed Maya can submit opening answers over HTTP"
+  ).toBe(200);
+  await expect(openingAnswersRes.json()).resolves.toEqual({ ok: true });
+
+  const creatorAfterMayaText = await t.run((ctx) => ctx.db.get(creatorId));
+  expect(
+    creatorAfterMayaText?.openingAnswersAt,
+    "STEP 6b: creator row stamped after Maya text loop"
+  ).toBeGreaterThan(0);
+
+  const pictureAfterMayaText = await t.run(async (ctx) =>
+    ctx.db
+      .query("creatorPicture")
+      .collect()
+      .then((rows) => rows.find((row) => row.creatorId === creatorId) ?? null)
+  );
+  expect(pictureAfterMayaText?.openingAnswers?.goal).toBe(goal);
+  expect(pictureAfterMayaText?.openingAnswers?.tone).toBe(tone);
+  expect(pictureAfterMayaText?.openingAnswers?.brandDealFloorUsd).toBe(
+    brandDealFloorUsd
+  );
+
+  const trendRes = await t.fetch("/lc_maya/log_trend", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      secret: TEST_WEBHOOK_SECRET,
+      creatorId,
+      source: "platform-wide",
+      observation: expectedTrendObservation,
+      evidence: [
+        {
+          kind: "hashtag",
+          ref: "#budgethomegym",
+          fact: "Search volume is clustering around short garage-gym setup clips.",
+        },
+        {
+          kind: "post",
+          ref: "https://www.tiktok.com/@fixture/video/123",
+          fact: "Top example uses a cost-reveal hook and fast before/after cut.",
+        },
+      ],
+      relevanceScore: 0.87,
+    }),
+  });
+  expect(
+    trendRes.status,
+    "STEP 6c: deployed Maya can log trend watcher output over HTTP"
+  ).toBe(200);
+  const trendBody = (await trendRes.json()) as {
+    ok: boolean;
+    trendObservationId: Id<"trendObservations">;
+  };
+  expect(trendBody.ok).toBe(true);
+
+  const trendRow = await t.run((ctx) =>
+    ctx.db.get(trendBody.trendObservationId)
+  );
+  expect(trendRow?.source).toBe("platform-wide");
+  expect(trendRow?.observation).toBe(expectedTrendObservation);
+  expect(trendRow?.evidence.length).toBe(2);
+
+  const radar = await asUser(t, suffix).query(api.trends.nicheRadar, {});
+  expect(
+    radar.some((row) => row.observation === expectedTrendObservation),
+    "STEP 6c: platform-wide trend is visible in the creator Trends surface"
+  ).toBe(true);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Journey 1 — 1K creator (just-starting path)                                 */
 /* -------------------------------------------------------------------------- */
@@ -811,6 +916,18 @@ describe("1K creator (just-starting path)", () => {
       creatorAfterDeploy?.mayaConfigVersion,
       "STEP 6: mayaConfigVersion set"
     ).toBeDefined();
+
+    // ─── Step 6b/6c — Deployed Maya text loop + trend watcher writeback ───
+    await exercisePostDeployMayaTextLoop({
+      t,
+      suffix: SUFFIX,
+      creatorId,
+      goal: "Text me one realistic filming move each morning.",
+      tone: "supportive",
+      brandDealFloorUsd: 250,
+      expectedTrendObservation:
+        "Budget home-gym cost reveals are crossing into beginner fitness feeds.",
+    });
 
     // ─── Step 7 — Open HQ ──────────────────────────────────────────────────
     // 7a. goalsFocusContext + creatorStage
@@ -1157,6 +1274,18 @@ describe("400K creator (scaling path)", () => {
     expect(creatorAfterDeploy?.status).toBe("active");
     expect(creatorAfterDeploy?.mayaFlyAppId).toBeDefined();
     expect(creatorAfterDeploy?.mayaConfigVersion).toBeDefined();
+
+    // ─── Step 6b/6c — Deployed Maya text loop + trend watcher writeback ───
+    await exercisePostDeployMayaTextLoop({
+      t,
+      suffix: SUFFIX,
+      creatorId,
+      goal: "Text me only strategic moves that protect my time and rate.",
+      tone: "strategic",
+      brandDealFloorUsd: 5_500,
+      expectedTrendObservation:
+        "Premium setup-tour posts are converting best when the creator anchors on rate and time savings.",
+    });
 
     // ─── Step 7 — Open HQ ──────────────────────────────────────────────────
     const goalsCtx = await asUser(t, SUFFIX).query(

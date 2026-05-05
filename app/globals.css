@@ -232,3 +232,56 @@ details[open] .faq-plus {
 .faq-plus {
   transition: transform 0.2s ease;
 }
+
+/* Clerk auth surfaces sit on HeyMaya's dark background, but the auth card
+   itself needs strong light-mode contrast for OAuth and form controls. */
+.cl-card,
+.cl-cardBox {
+  background: #fbf7ee !important;
+  color: var(--ink) !important;
+}
+.cl-headerTitle,
+.cl-formFieldLabel,
+.cl-socialButtonsBlockButton,
+.cl-socialButtonsBlockButton *,
+.cl-socialButtonsBlockButtonText,
+.cl-identityPreviewText {
+  color: var(--ink) !important;
+}
+.cl-headerSubtitle,
+.cl-footerActionText,
+.cl-dividerText {
+  color: #514c43 !important;
+}
+.cl-socialButtonsBlockButton {
+  background: #ffffff !important;
+  border-color: #d8d0c3 !important;
+  color: var(--ink) !important;
+}
+[class*="cl-footerActionLink"],
+[class*="cl-footerActionLink"] *,
+[class*="cl-formButtonPrimary"],
+[class*="cl-formButtonPrimary"] * {
+  color: var(--ink) !important;
+}
+[class*="cl-formButtonPrimary"] {
+  background: #ffffff !important;
+  border: 1px solid #cfc7b8 !important;
+  color: var(--ink) !important;
+}
+[class*="cl-formButtonPrimary"]:hover {
+  background: #f4f1ea !important;
+}
+.heymaya-clerk-primary,
+.heymaya-clerk-primary * {
+  background: #ffffff !important;
+  border-color: #cfc7b8 !important;
+  color: var(--ink) !important;
+}
+.heymaya-clerk-primary:hover {
+  background: #f4f1ea !important;
+}
+.heymaya-clerk-link,
+.heymaya-clerk-link * {
+  color: var(--ink) !important;
+}

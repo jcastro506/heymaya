@@ -18,7 +18,7 @@
  *                      pre-deploy gating + sprint-close verification. <90s.
  *
  * Steps walked (whether mock or live):
- *   1. Create fresh test creator (plan=pro for full surface coverage).
+ *   1. Create fresh test creator (plan=manager for full surface coverage).
  *   2. Add a TikTok handle (verifyHandle in live, recorded fixture in mock).
  *   3. Run runFullScrapePull (live or canned).
  *   4. Synthesize creator picture (placeholder until S2 lands the real one).
@@ -105,10 +105,6 @@ function skip(msg: string): void {
   const line = `${C.yellow("○")} ${msg} ${C.dim("[SKIPPED]")}`;
   stepReports.push(line);
   console.log(line);
-}
-
-function info(msg: string): void {
-  console.log(C.dim(`  ${msg}`));
 }
 
 function fail(stage: string, err: unknown, hint?: string): never {
@@ -242,7 +238,7 @@ interface MockCreatorRow {
   channelPreference: "imessage" | "whatsapp" | "sms" | "web";
   timezone: string;
   status: "onboarding" | "active" | "paused" | "churned";
-  plan: "starter" | "pro" | "studio";
+  plan: "coach" | "manager";
   trialEndsAt?: number;
   mayaFlyAppId?: string;
   mayaConfigVersion?: number;
@@ -272,7 +268,7 @@ async function runMockMode(): Promise<void> {
       channelPreference: "web",
       timezone: "America/Los_Angeles",
       status: "onboarding",
-      plan: "pro",
+      plan: "manager",
       createdAt: Date.now(),
     };
     pass(`creator created (${creator._id})`);
@@ -433,7 +429,7 @@ async function runLiveMode(pre: PreflightResult): Promise<void> {
       timezone: "America/Los_Angeles",
     });
     creatorId = String(id);
-    // createFromClerk inserts at plan=starter; the smoke wants pro for full
+    // createFromClerk inserts at the default plan; the smoke wants Manager for full
     // surface coverage. The operator needs a `setCreatorPlanForSmoke`
     // internal mutation to flip this — see "Open questions" in the report.
     // For now we accept the starter default and surface that in the output.
