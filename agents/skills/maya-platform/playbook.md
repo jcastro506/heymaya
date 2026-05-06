@@ -252,6 +252,38 @@ The `first_weekly_plan` standing-order entry fires AS SOON AS `creators.openingA
 
 Why this matters: the operator's framing is "swing into action immediately." The first weekly plan is the proof. Without it, Maya's onboarding ends on "ask for permissions and wait until Sunday" — which feels like another product asking for OAuth and giving nothing back. Generating the plan immediately closes the loop.
 
+### 4.5.2. Day 1 first-proactive-ping (event, medium thinking, both tiers)
+
+**Trigger:** event — fires exactly once, 15-30 min after `creators.pictureLockedAt` is stamped (Sprint 6's verification gate — the moment `creatorPicture` synthesis completes AND any `needsVerification[]` items have cleared). Convex-side scheduler owns the jitter window — Maya the agent does NOT count down on her own. Idempotency cursor: `creators.firstProactivePingSentAt`. A re-stamp of `pictureLockedAt` does NOT re-fire the ping. The implementation lives in `convex/lcMaya/firstProactivePing.ts:firePictureLockedEvent` (caller mutation) + `runFirstProactivePing` (post-jitter action).
+
+**Inputs:** the top-1 highest-fit `trendObservations` row for this creator (highest `relevanceScore`, ties broken by recency) and the top-1 grounded idea — at minimum `creatorPicture.topHooks[0]` plus ≥2 entries from `creatorPicture.sourceCitations` (the citation firewall bar). When `maya-trend-watcher` and `maya-idea-generator` skills are running upstream they pass their picks in directly; otherwise the Convex helpers (`pickTopTrendForCreator` / `pickTopIdeaForCreator`) read straight from `trendObservations` + `creatorPicture` as a fallback.
+
+**Output:** the composer (`composeFirstPing`) writes a `firstProactivePings` row with the assembled multi-line iMessage body, the precedence trace (see below), the citation set, and `status: "queued"` (or `"skipped"` per the precedence rule). Maya the agent picks the row up on her next heartbeat, pushes via the `claw-messenger` channel to the creator's primary channel (defaults to iMessage per the channel preference set during onboarding), and patches the row to `status: "sent"` + `sentAt`. The Convex side stamps `creators.firstProactivePingSentAt` at compose time so the event cannot re-fire even if the agent is slow to read the row.
+
+**Empty-input precedence (LOCKED):** the operator's voice rule is "silent no-op > bad first impression." So:
+- BOTH trend and idea present → ship the full ping (`precedence: "trend+idea"`).
+- ONLY trend present (idea generator empty OR `creatorPicture.sourceCitations.length < 2`) → ship the trend-only ping (`precedence: "trend-only"`).
+- ONLY idea present (no `trendObservations` rows yet OR top trend lacks evidence URL) → ship the idea-only ping (`precedence: "idea-only"`).
+- BOTH empty → write a `skipped` row with empty body and stamp the cursor anyway (`precedence: "skip-empty"`). The event MUST NOT re-fire on the next heartbeat.
+
+**Shape (operator-locked):** single iMessage, multi-line, mobile-first. ≤8 short lines including blank separators. Anti-sycophancy non-negotiable — no "Hey [name]!", no emoji clusters, no "happy to help," no listicle. Voice rules from `generateAgentsMd.ts` apply (the BANNED_PHRASES list in `firstProactivePing.ts` enforces the floor; the voice-applier skill is the ceiling). The literal template the composer renders:
+
+```
+First read on your account.
+
+Trend: <one-line trend description, cited with URL or hashtag id>
+Idea: <one-line idea, anchored to top-hook, cited to ≥2 post-ids>
+
+Connect Gmail to handle brand emails: <gmail oauth url>
+Connect Calendar so I can see what's coming: <calendar oauth url>
+
+Reply when something lands.
+```
+
+OAuth URLs come from the existing `lc_maya/start_oauth` endpoint shape (Slice A for Gmail / Slice B for Calendar). Maya does NOT compose the URLs by hand at runtime — she requests them from Convex and embeds the returned strings. If a provider is already connected at fire time, OMIT the corresponding line rather than offering a duplicate connect flow.
+
+**Why this matters:** this is the make-or-break moment for whether the creator opens iMessage tomorrow. A first ping that gushes, asks a question without grounding, or feels like a chatbot poisons the relationship for weeks. A silent no-op (when the data is genuinely thin) is recoverable — the morning brief at 7am tomorrow is the second chance. A bad first ping is not.
+
 ---
 
 ## 5. Free-form chat handling

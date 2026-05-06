@@ -62,6 +62,41 @@ export type StandingOrderKind = "cron" | "event" | "on-demand" | "folded";
  */
 export type CronSession = "isolated" | "main";
 
+/**
+ * Thinking-budget hint for the runtime model router. Optional; default
+ * routing keys off the program's task class via `PER_TASK_DEFAULT_BUDGET`.
+ * Use this only when a specific program needs an explicit override (Sprint
+ * 7 Slice D's `first_proactive_ping` is the first such program — voice-
+ * critical first-impression content needs `medium` regardless of the
+ * generic chat default).
+ */
+export type StandingOrderThinkingBudget = "none" | "low" | "medium" | "high";
+
+/**
+ * Structured metadata for `kind: "event"` programs whose firing is driven
+ * by a Convex-side cursor flip (vs Maya the agent self-detecting state).
+ * `eventTrigger` names the cursor; `delayMs` describes a uniform-random
+ * jitter window applied at schedule time. The Convex scheduler honors
+ * these — Maya the agent does not consult them at heartbeat time.
+ */
+export interface EventScheduleSpec {
+  /**
+   * Name of the Convex-side cursor that fires this event. Stable string,
+   * cross-referenced by `convex/lcMaya/firstProactivePing.ts:fire*Event`
+   * helpers + the playbook prose.
+   */
+  eventTrigger: string;
+  /**
+   * Inclusive lower bound on the post-trigger delay, in ms.
+   */
+  minDelayMs: number;
+  /**
+   * Inclusive upper bound on the post-trigger delay, in ms. Must be >=
+   * `minDelayMs`.
+   */
+  maxDelayMs: number;
+}
+
 export interface StandingOrderProgram {
   /** Program id — used as a stable handle in tests + cross-references. */
   id: string;
@@ -86,6 +121,18 @@ export interface StandingOrderProgram {
   escalation: string;
   /** Message body Maya executes for cron-driven programs. */
   cronMessage?: string;
+  /**
+   * Optional explicit thinking-budget override. Most programs leave this
+   * undefined and let the per-task default budget apply.
+   */
+  thinkingBudget?: StandingOrderThinkingBudget;
+  /**
+   * Optional event-schedule metadata. Required for `kind: "event"` programs
+   * that are fired by a Convex-side cursor stamp + jitter (vs `kind:
+   * "event"` programs that Maya self-detects on heartbeat). Sprint 7 Slice
+   * D's `first_proactive_ping` is the canonical example.
+   */
+  eventSchedule?: EventScheduleSpec;
 }
 
 export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
@@ -110,6 +157,26 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     triggers: "`openingAnswersAt` set, `firstWeeklyPlanSentAt === undefined`. Calendar not gating.",
     approvalGates: "Creator approves each idea card in Plan. No auto-publish.",
     escalation: "Picture missing → handles-only plan; 'v2 Sunday has full picture.' Don't defer.",
+  },
+  {
+    id: "first_proactive_ping",
+    title: "Day 1 first-touch",
+    tier: "all",
+    kind: "event",
+    thinkingBudget: "medium",
+    eventSchedule: {
+      eventTrigger: "pictureLockedAt",
+      minDelayMs: 15 * 60 * 1000,
+      maxDelayMs: 30 * 60 * 1000,
+    },
+    scope:
+      "Within 15-30 min of `pictureLockedAt`, push 1 cited trend + 1 grounded idea + connect offers (Gmail + Calendar) to the creator's primary channel. Voice-critical first-impression content — medium thinking budget. The composer (`convex/lcMaya/firstProactivePing.ts:runFirstProactivePing`) picks the top-1 trend from `trendObservations` and the top-1 idea grounded in `creatorPicture` + recent posts; result lands in `firstProactivePings` for the agent heartbeat to send via claw-messenger. Stamp `firstProactivePingSentAt`. Empty-input precedence: BOTH empty → silent no-op (status='skipped'); ONE empty → ping with the leg that worked. Trend has URL citation; idea has ≥2 post-id citations from `creatorPicture.sourceCitations`.",
+    triggers:
+      "Event: `creators.pictureLockedAt` is stamped (Sprint 6 verification gate) AND `firstProactivePingSentAt === undefined`. The Convex scheduler fires `runFirstProactivePing` at `pictureLockedAt + uniformRandom(15min, 30min)`.",
+    approvalGates:
+      "None — first-touch is the action. Connect offers are tap-to-OAuth, never auto-grant.",
+    escalation:
+      "If `trendObservations` and `creatorPicture` are BOTH thin (no top trend AND no idea citations), write `firstProactivePings` row with status='skipped' and stamp `firstProactivePingSentAt` so the event doesn't re-fire. Silent no-op > bad first impression. If ONE leg fails, ship with the other (prose precedence rule documented in the row).",
   },
   {
     id: "morning_brief",
