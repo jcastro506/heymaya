@@ -555,7 +555,46 @@ End-to-end: Gmail connect via iMessage → brand email arrives → reply drafted
 
 ---
 
-## Sprint 8 — Hardcoded prose deletion + memory-wiki adoption
+## Sprint 8 — Hardcoded prose deletion + memory-wiki adoption — DONE
+
+**Status:** Merged to `staging`. 3218/3218 tests, tsc clean, regression smoke green on real Fly. **Operator-blockers remaining:** memory-wiki dreaming verification on a live deployed machine (`ls /data/memory-wiki/` after 7 days of test creator activity) — requires a live test creator running for a week.
+
+**Outcome (3 parallel slices, +112 tests):**
+
+- **Slice A — hardcoded prose deletion + Sprint 7 carry-forwards:**
+  - `convex/dealTriage.ts:269-273` deleted; replies now route through new `buildVariantPrompt(...)` in `maya-brand-deal-triager/script.ts`. Orchestrator wires a `variantPromptAdapter` to `internal.agents.modelRouter.maya.callMaya` at `brand_email_draft` task tag (high thinking). Empty-model-output graceful skip.
+  - `convex/creatorMayaV0/dailyBrief.ts:160-167` deleted; `renderMorningMessage` now emits a structured envelope `{ intent, signal, hook, whyItFits, scheduledLocalTime, approveTokens, placeholder: true }` for the morning-brief skill (Sprint 9 follow-on) to consume + voice-apply.
+  - `agents/skills/maya-platform/playbook.md` lines 229/233/235-237/245/340 + 2 generator files (`generateAgentsMd.ts:238`, `generateAgents.ts:227`) — locked-prompt scaffolds replaced with prose of shape "Maya generates this in voice via `maya-voice-applier` calling on her current `voiceFingerprint` + `picture` — intent: ...".
+  - **Sprint 7 carry-forward — auto-send fix:** `convex/dealTriage.ts:425-464` — defense-in-depth. MVP path (default, `MVP_ALLOW_AUTO_SEND` unset) calls `gmailActions.createDraft`; operator-gated path (`MVP_ALLOW_AUTO_SEND=true`) retains legacy `sendEmail` for explicit opt-in. `connectedAccounts.autoSendThreshold` preserved as pre-draft trigger.
+  - **Sprint 7 carry-forward — `boundaries.banned_topics` schema:** added to `creatorPicture.boundaries` as optional. Synth output threads it end-to-end: validator, `ParsedPicture` type, parser, prompt instructions, upsert mutation. Old picture rows keep loading; skills must null-coalesce.
+  - Grep before/after: 8 hits → 3 hits (all in anti-pattern documentation comments, none in user-facing prose paths).
+
+- **Slice B — memory-wiki adoption:**
+  - 5 high-frequency learning skills rewrote to emit `wiki_apply` calls instead of writing to specialized Convex tables: `maya-platform-algo-researcher`, `maya-pre-post-scorer`, `maya-collab-matchmaker`, `maya-industry-intel`, `maya-opportunity-scout`. (The 6th — `maya-trend-watcher` — is not a skill folder; it's a cron behavior in `playbook.md` + `standingOrders.ts` prose. Updated those instead.)
+  - **Topic schema convention:** `platform/<platform>/algo-signal`, `creator/<creatorId>/hook-pattern`, `creator/<creatorId>/format-fit/<platform>`, `creator/<creatorId>/voice-fingerprint`, `creator/<creatorId>/audience-fit`, `creator/<creatorId>/collab-pattern/<format>`, `creator/<creatorId>/collab-anti-pattern`, `niche/<niche>/trend-pattern`, `platform/<platform>/trend-pattern`, `competitor/<creatorId>/<peerHandle>/observation`, `creator/<creatorId>/industry-intel/<topic-slug>`, `creator/<creatorId>/opportunity-pattern/<source>`.
+  - **Convex table fate (all downgraded, none deleted):** `trendObservations`, `competitorObservations`, `weeklyLearnings` — all kept as **read-only projections** of memory-wiki because each has live HQ readers (Trends screen, Growth tab, GBP health audit, heartbeat skim). Each gained a `mirroredAt: v.optional(v.number())` field marking the dreaming-pass mirror sync. Mirror sync itself is a Sprint 8.5 follow-on (queue documented; not implemented this sprint).
+  - Sibling drift fixed: `playbook.md` lines 100/104/108 + `cron.md` lines 73/78 now document `wiki_apply` as durable surface + Convex table as read-only projection.
+  - 44 new tests covering wiki_apply call-shape per skill.
+
+- **Slice C — voice fixture extension:**
+  - 35-entry fixture corpus at `tests/fixtures/mayaVoiceFixture.ts` covering 4 degradation modes: 5 AI-self-reference leaks + 5 length blowups + 5 sycophancy + 5 chatbot scaffolding (= 20 fail-mode) + 15 realistic-pass entries (morning brief, 2h check, brand-deal triage, picture-verifier, heartbeat tick, evening recap, accountability nudge, trend, comment triage, plan-tier refusal, Day 1 first-touch, opinion-as-opinion, contract red-flag).
+  - `tests/lib/mayaVoiceValidator.ts` — `validateOutput(output, kind)` composing 4 checks: `bannedTermsCheck` (~30 phrases including new ones: "two quick things", "happy to walk you through", "let me know if I can help", "great question", "amazing", "crushing it", "feel free to ask", "ring of truth", etc.) + `lengthCheck` (280 words / 2000 chars) + `disclaimerPatternCheck` ("just to be clear", "I should mention", "in my humble opinion", etc.) + `citationCheck` (numeric-claim regex requires post ID / URL / weekday / time anchor / reference-context token; conversational outputs <25 words exempt).
+  - 83 voice tests (37 validator unit + 46 fixture-driven + generator-output regression). 3218 total passing.
+
+**Post-merge fix:** `DEFAULT_BOOTSTRAP_MAX_CHARS` in `generateAgentsMd.ts` bumped 12K → 13K. Slice A's voice-applier prose substitutions grew the non-embedded AGENTS.md ~55 chars over the old 12K cap. Production overrides to 28K via gateway config; the 13K default exists only for local dev / smoke without the override.
+
+**Real-world bar (operator-blocker, deferred):**
+- 7-day live test creator activity → `ls /data/memory-wiki/` shows ≥10 compiled claims; dreaming Light/Deep/REM passes observed in gateway log at 3am local; `cat /data/memory-wiki/<topic>.md` shows compiled claim with provenance.
+- Convex query confirms `trendObservations` / `competitorObservations` / `weeklyLearnings` no new rows from skill direct writes (only mirror writes from Sprint 8.5 sync, when implemented).
+
+**Carry-forward into Sprint 9 (final beta sprint):**
+- **Sprint 8.5 mirror sync** — implement the dreaming-pass cron that mirrors compiled `wiki_apply` claims into the 3 read-only Convex projections so HQ surfaces keep working.
+- **Anti-pattern doc grep hits** — 3 remaining hits are in anti-pattern docs (comments + service-product BOOT.md). Operator can decide whether to keep as anti-pattern markers (current state) or scrub.
+- **Operator OAuth registration** + **Operator e2e walkthrough** (carried from Sprint 7 — still blocked).
+
+---
+
+## Sprint 8 — Hardcoded prose deletion + memory-wiki adoption (original spec, kept for reference)
 
 **Goal:** Zero hardcoded user-facing prose. Memory-wiki feeds dreaming. The "learns YOUR creator" moat is structurally live.
 
