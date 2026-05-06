@@ -459,7 +459,34 @@ Operator personally walks through the onboarding flow on his real account, pictu
 
 ---
 
-## Sprint 7 — Email + Calendar integrations + Day 1 value
+## Sprint 7 — Email + Calendar integrations + Day 1 value — DONE (code-side)
+
+**Status:** Merged to `staging`. 3106/3106 tests, tsc clean, regression smoke green on real Fly. **Operator-blockers remaining:** OAuth + iMessage e2e on Kevin.Castro9996 (web→email→reply, web→calendar→event-write, video→clip-edit, +30 min Day 1 ping). The harness can't simulate iMessage replies + OAuth taps.
+
+**Outcome (4 parallel slices, +206 tests):**
+
+- **Slice A — email skills (`maya-gmail-read` + `maya-gmail-draft`):** 52 tests. Read skill: `buildSearchQuery` (intent-aware Gmail-search-syntax composer), `summarizeThread` (deterministic, no model), `extractDealSignals` (heuristic phrase scan returning evidence, NOT a verdict — that lives in `maya-brand-deal-triager`), `citationFirewall` (numeric / quoted / named-entity match-or-reject with k-shorthand expansion). Draft skill: `buildDraftPrompt` (anti-sycophancy + voice-anchor citation + ≤120-word first-contact + no-auto-send-hint), `buildAllFourVariants` (soft-accept / hold-for-info / decline-politely / ask-for-deck — parallel), `validateDraft` (5 guards), `runtimeGuard(intent: "draft" | "send")` (throws on `"send"`). **Pre-existing MVP-rule violation flagged in `convex/dealTriage.ts` lines 425-464** — auto-send branch bypasses the new skill; needs to be replaced with `createDraft` or feature-flagged off (carry-forward).
+- **Slice B — calendar skills + iMessage-tap OAuth (`maya-calendar-read` + `maya-calendar-write` + `start_google_calendar_oauth` + `complete_google_calendar_oauth`):** 51 tests. New `oauthStateTokens` table (15-min TTL, lazy cleanup). New `app/api/google-calendar/callback-imessage/route.ts` route. New `createGoogleCalendarEvent` + `storeGoogleCalendarOAuthConnectionForCreator` helpers in `backend.ts`. Calendar-write skill parses NL intent ("block 3pm Tuesday for filming"), guards against past start times + 8h duration cap + banned-topic title.
+- **Slice C — delegated edit skills (`maya-clip-editor` + `maya-thumbnail-maker` + `maya-caption-generator`):** 77 tests. Clip-editor delegates to capcut@1.0.0 (10-min source cap, faster-whisper for caption generation). Thumbnail-maker delegates to instagram-photo-text-overlay@1.0.0 (10-word overlay cap + banned-topic guard). Caption-generator composes with `maya-voice-applier` + per-platform length+hashtag caps (TT/IG 2200/30, YT 5000/15, LI 3000/5, X 280/5). `INTENT_CONFIDENCE_THRESHOLD = 0.5`.
+- **Slice D — Day 1 first-proactive-ping:** 25 tests. New `firstProactivePings` queue table + `creators.firstProactivePingSentAt` cursor. `firePictureLockedEvent` (internal mutation) computes `pickJitterMs(15min, 30min)` and Convex-schedules `runFirstProactivePing`. Empty-input precedence: `trend+idea` / `trend-only` / `idea-only` / `skip-empty` (silent no-op > bad first impression). New `first_proactive_ping` standing-order entry (kind: "event", trigger: `pictureLockedAt`).
+
+**Registry:** `BUNDLED_SKILLS` synced — now ships 35 skills (was 28 → +7 from this sprint).
+
+**Real-world bar (operator-blocker, deferred):**
+- Email: connect Gmail via iMessage → external brand emails Maya → Composio webhook fires → triager runs → 4 drafts land in Gmail → operator approves one in iMessage → manual send.
+- Calendar: connect Google Cal via iMessage → "block 3pm Tuesday for filming" → event in Google Cal → fold into morning brief.
+- Clip-edit: send video in iMessage → "trim to 30s and add captions" → Maya returns rendered MP4.
+- Day 1 ping: within 30 min of `pictureLockedAt`, Maya texts trend + idea + connect offers; reads natural, not corny.
+
+**Carry-forward into Sprint 8:**
+- **`convex/dealTriage.ts:425-464` MVP-rule violation** (Slice A flagged) — auto-send branch bypasses new draft skill. Replace with `createDraft` or feature-flag off.
+- **`creatorPicture.boundaries.banned_topics` field doesn't exist in schema** (Slice C flagged) — thumbnail-maker validator gracefully handles missing, but the field is referenced in 3 skills. Decide: add to schema or extract from soul.md at consume time.
+- **Operator OAuth registration** — register `…/api/google-calendar/callback-imessage` in GCP OAuth client + add `GOOGLE_CALENDAR_IMESSAGE_REDIRECT_URI` to Vercel + Convex envs.
+- **Operator e2e walkthrough** — see "real-world bar" above. All 4 flows touch on Sprint 8's hardcoded-prose-deletion + memory-wiki adoption work, so the manual e2e naturally pairs with that.
+
+---
+
+## Sprint 7 — Email + Calendar integrations + Day 1 value (original spec, kept for reference)
 
 **Goal:** Maya can read/draft Gmail + read/write Google Calendar over iMessage. Day 1 first-proactive-ping fires with trend + idea + connect offer. Delegated clip-edit works.
 
