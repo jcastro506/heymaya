@@ -52,7 +52,12 @@ export interface AgentsMdInputs {
   bootstrapMaxChars?: number;
 }
 
-export const DEFAULT_BOOTSTRAP_MAX_CHARS = 12_000;
+// OpenClaw's documented default is 12K. After Sprint 8 Slice A's voice-applier
+// prose substitutions (replacing locked scaffolds with voice-applier directives)
+// the non-embedded AGENTS.md grew to ~12.05K. Bumped to 13K — production overrides
+// to 28K via gateway config (see `configGeneratorMaya.ts`); this default exists
+// only for local dev / smoke without the override.
+export const DEFAULT_BOOTSTRAP_MAX_CHARS = 13_000;
 
 /**
  * Render the per-creator AGENTS.md. Output is markdown, deterministic.

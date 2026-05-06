@@ -287,6 +287,11 @@ export function buildScoringPrompt(input: ScorerInput): string {
   lines.push("- voiceConsistency is a forgiving signal — never make voice drift the verdict-driver.");
   lines.push("- Confidence: be honest. If you have <3 same-format posts in recentPosts, your confidence ceiling is ~0.4.");
   lines.push("- If creatorPicture is empty / new-creator, return tier='baseline' confidence 0.2 and a single recommendation noting the data gap.");
+  lines.push("");
+  lines.push("Memory-wiki side-effect — AFTER the JSON, for each material signal that fired with a citation, ALSO emit one `wiki_apply` tool call:");
+  lines.push(`  { "topic": "creator/${input.creatorId}/<facet>", "claim": "<observation grounded in citations>", "provenance": { "source": "maya-pre-post-scorer", "ts": <ms-now>, "citations": ["<postId-1>", ...] } }`);
+  lines.push("Facet keys: hook-pattern (top/bottom hook match), format-fit/<platform> (n≥3), posting-cadence/<platform> (when decisive), voice-fingerprint (drift detected), audience-fit (only when 'weak').");
+  lines.push("Do NOT emit wiki_apply for ungrounded signals or for empty / new-creator returns. Anti-fabrication rule applies same as citation firewall.");
   return lines.join("\n");
 }
 

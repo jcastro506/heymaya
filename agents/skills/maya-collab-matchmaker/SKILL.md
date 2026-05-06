@@ -193,6 +193,40 @@ ensures the peer's name + the cited post reference are not mutated.
   momentum creator gets matches with the `prioritize-rising-peers`
   anti-pattern surfaced as a guidance hint
 
+## Memory-wiki integration (Sprint 8 Slice B)
+
+The matchmaker emits `wiki_apply` calls alongside the structured match
+output so each surfaced peer becomes a long-lived, dream-compiled wiki
+entry. The "who collabs well with this creator" picture compounds across
+weeks instead of resetting.
+
+The `wiki_apply` happens in Maya's turn from the runtime's native
+memory-wiki tool — NOT from a Convex mutation.
+
+### Topic schema
+
+For each match Maya proposes, emit one call shaped:
+
+```json
+{
+  "topic": "creator/<creatorId>/collab-pattern/<format>",
+  "claim": "@<peerHandle> at <followers> on <platform> overlaps <overlapScore> with this creator; suggested format <format>; momentum <momentum>",
+  "provenance": {
+    "source": "maya-collab-matchmaker",
+    "ts": <ms-since-epoch>,
+    "citations": ["peer-<handle-lower>", "creator-niche", "creator-followers"]
+  }
+}
+```
+
+For each anti-pattern that fired during filtering, emit one
+`creator/<creatorId>/collab-anti-pattern` claim citing the dropped peer
+count + reason. These accumulate so dreaming can promote durable
+"collabs that don't work for this creator" claims (e.g. "creators >5x
+size never reply" after 4 cycles of dropped-size-mismatch).
+
+NEVER emit `wiki_apply` for matches that failed the citation firewall.
+
 ## Sibling-file references
 
 - Invoked from `agents/skills/maya-platform/playbook.md` § Collab
@@ -201,4 +235,7 @@ ensures the peer's name + the cited post reference are not mutated.
 - Listed in `agents/skills/maya-platform/SKILL.md` § Custom Maya skills.
 - Reads input from: `creatorPicture.namedPeers` (soul.md), ScrapeCreators
   creator-search (action layer).
-- Writes to: `collabMatchLog` (request schema add — see report).
+- Writes to: `collabMatchLog` (Convex projection — for Today
+  tap-to-DM cards). Side-effect: Maya emits `wiki_apply` calls into
+  OpenClaw's native memory-wiki for compounding collab-pattern
+  learning (see § Memory-wiki integration).

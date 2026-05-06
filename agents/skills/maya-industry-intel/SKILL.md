@@ -108,7 +108,49 @@ import `ALLOWED_SOURCE_DOMAINS` from there to keep the policy in one place.
    `maya-citation-firewall` with a citation `{ kind: 'event', id: url, fact: headline + publishedAt + relevanceToCreator }`. Items that fail the firewall (e.g. relevance text references creator data not in the input) are dropped.
 6. **Write dedupe.** For every surfaced item (post-firewall), insert into
    `industryIntelSeen` so the next cycle skips it.
-7. **Return.** The morning-brief assembly consumes this output as a section.
+7. **Emit `wiki_apply` calls.** For each high-relevance item (≥ 70), emit
+   a `wiki_apply` tool call (see § Memory-wiki integration below) so the
+   industry-intel claim accumulates in OpenClaw's native memory-wiki.
+   Dreaming compiles cross-cycle patterns ("brand-deal market shifting
+   to long-form") into durable `creator/<creatorId>/industry-intel`
+   claims that the morning-brief assembly + content-arc-planner can
+   query via `wiki_get`.
+8. **Return.** The morning-brief assembly consumes this output as a section.
+
+## Memory-wiki integration (Sprint 8 Slice B)
+
+The industry-intel skill writes to two surfaces: `industryIntelSeen`
+(dedupe cache, prevents repeats) and the OpenClaw native memory-wiki
+(compounding cross-cycle pattern surface). The wiki write happens in
+Maya's turn output, NOT from a Convex mutation — `wiki_apply` is an
+agent tool the runtime registers.
+
+### Topic schema
+
+For each surfaced item with `relevanceScore >= 70`, emit one
+`wiki_apply` call shaped:
+
+```json
+{
+  "topic": "creator/<creatorId>/industry-intel/<topic-slug>",
+  "claim": "<headline + 1-sentence relevance to this creator>",
+  "provenance": {
+    "source": "maya-industry-intel",
+    "ts": <ms-since-epoch>,
+    "citations": ["<sourceUrl>"]
+  }
+}
+```
+
+The `<topic-slug>` is derived from the headline / source — the model
+picks something stable and short so claims about the same trend
+("subscriptions-rollout", "brand-deal-rate-survey") accumulate to the
+same wiki page over time.
+
+Relevance threshold of 70 (vs the surface-threshold of 50) is
+deliberate: the wiki is the long-lived moat, so we only persist
+materially-actionable items. The lower-relevance daily surface still
+helps the creator without polluting the wiki with noise.
 
 ## Plan-tier gating (server-side, fail-closed)
 

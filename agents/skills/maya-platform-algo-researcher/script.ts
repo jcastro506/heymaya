@@ -219,5 +219,9 @@ export function synthesisPrompt(
     "3. `dateLearned` is the ISO date of the source's publishedAt (or today if unknown).",
     "4. `sourcesUsed` is the deduplicated list of URLs you actually cited.",
     "5. If passages do not support any signal, return algoSignals: [] and say so in whatsHotNow / whatsCoolingOff.",
+    "",
+    "Memory-wiki side-effect — for EACH signal you emit, also issue a `wiki_apply` tool call shaped:",
+    `  { "topic": "platform/${platform}/algo-signal", "claim": "<the signal text>", "provenance": { "source": "maya-platform-algo-researcher", "ts": <ms-now>, "citations": ["<url-1>", ...] } }`,
+    "Wiki claims compound across cycles via dreaming and feed `wiki_get` from other skills. No `wiki_apply` for an empty algoSignals array.",
   ].join("\n");
 }
