@@ -188,7 +188,7 @@ describe("buildCronJobsJson", () => {
 
   it("Sprint 3 Slice 1: each of the 6 kept slugs is present in the emitted cron set", () => {
     const { jobs } = buildCronJobsJson({ creator: creator("manager") });
-    const ids = jobs.map((j) => j.entryId);
+    const ids = jobs.map((j) => j.id);
     for (const slug of SPRINT_3_CRON_SET) {
       expect(ids, `missing required cron slug: ${slug}`).toContain(slug);
     }
@@ -196,7 +196,7 @@ describe("buildCronJobsJson", () => {
 
   it("Sprint 3 Slice 1: emitted cron set is EXACTLY the 6 kept slugs (no extras)", () => {
     const { jobs } = buildCronJobsJson({ creator: creator("manager") });
-    const emitted = new Set(jobs.map((j) => j.entryId));
+    const emitted = new Set(jobs.map((j) => j.id));
     const expected = new Set(SPRINT_3_CRON_SET);
     expect(emitted).toEqual(expected);
   });
@@ -214,7 +214,7 @@ describe("buildCronJobsJson", () => {
 
   it("Sprint 3 Slice 1: moved-to-heartbeat slugs do NOT appear in jobsJson", () => {
     const { jobs } = buildCronJobsJson({ creator: creator("manager") });
-    const ids = new Set(jobs.map((j) => j.entryId));
+    const ids = new Set(jobs.map((j) => j.id));
     for (const slug of SPRINT_3_HEARTBEAT_SET) {
       expect(
         ids.has(slug),
