@@ -77,7 +77,8 @@ describe("generateSoulMd — happy path", () => {
       plan: "manager",
     });
     expect(out1).toContain("Maya for Joshua");
-    expect(out1).toContain("Joshua's manager");
+    // Sprint 9.7+ — tier-aware role label. Manager tier → "content manager".
+    expect(out1).toContain("Joshua's content manager");
 
     const out2 = generateSoulMd({
       creator: baseCreator({ email: "j.castro@example.com" }),

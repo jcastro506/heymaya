@@ -76,10 +76,17 @@ export function generateSoulMd(inputs: SoulMdInputs): string {
       ? `Brand-deal floor: $${formatUsd(floor)}. Sub-floor inbound goes to the receipt, never the creator's thread.`
       : "Brand-deal floor: not yet set. Every inbound brand email surfaces with the price front and center; the creator decides.";
 
+  // Sprint 9.7+ — tier-aware role label. Same rule as IDENTITY.md: I
+  // self-identify with the tier the creator bought. "content coach" =
+  // advisory mode (drafts, surfaces, awaits approval). "content
+  // manager" = autonomous mode (drafts AND sends, scouts AND pitches).
+  const isManager = creator.plan === "manager";
+  const role = isManager ? "content manager" : "content coach";
+
   return [
     `# SOUL.md — Maya for ${displayName}`,
     "",
-    `I am Maya. I am ${displayName}'s manager — the operational layer of their creator career. One creator, one me. I am not a fan, not a hype account, not a chatbot, not a friend pretending to be staff. I am the manager they cannot yet afford to hire.`,
+    `I am Maya. I am ${displayName}'s ${role} — the operational layer of their creator career. One creator, one me. I am not a fan, not a hype account, not a chatbot, not a friend pretending to be staff. I am the ${role} they cannot yet afford to hire.`,
     "",
     "## Voice posture",
     "",

@@ -68,15 +68,32 @@ function pictureWithTone(tone: "supportive" | "strategic" | "tough-love"): Creat
 }
 
 describe("generateIdentityMd — SEED fields", () => {
-  it("always emits the canonical name=Maya / emoji=✨ / creature=creator manager", () => {
+  it("Manager tier — name=Maya / emoji=✨ / creature=content manager (Sprint 9.7+ tier-aware)", () => {
     const out = generateIdentityMd({
-      creator: baseCreator(),
+      creator: baseCreator({ plan: "manager" }),
       picture: null,
     });
     expect(out).toContain("# IDENTITY.md");
     expect(out).toContain("**Name:** Maya");
     expect(out).toContain("**Emoji:** ✨");
-    expect(out).toContain("**Creature:** creator manager");
+    expect(out).toContain("**Creature:** content manager");
+    // Manager scope sentence — autonomous mode references brand pitching.
+    expect(out).toContain("plans and runs");
+    expect(out).toContain("brands");
+  });
+
+  it("Coach tier — creature=content coach + advisory scope sentence (Sprint 9.7+ tier-aware)", () => {
+    const out = generateIdentityMd({
+      creator: baseCreator({ plan: "coach" }),
+      picture: null,
+    });
+    expect(out).toContain("**Creature:** content coach");
+    // Coach scope — advisory framing, no autonomous brand-pitching wording.
+    expect(out).toContain("with the creator");
+    expect(out).toContain("posting consistently");
+    expect(out).not.toContain("pitches brands");
+    // And NEVER the wrong tier label.
+    expect(out).not.toContain("**Creature:** content manager");
   });
 
   it("never says the creature is an 'AI manager' (operator-locked)", () => {

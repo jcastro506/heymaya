@@ -30,7 +30,9 @@ describe("creator-maya-v0-fly-smoke", () => {
     // Canonical IDENTITY.md (Sprint 2 slice A — generated from
     // generateIdentityMd.ts) — small + stable cosmetic identity.
     expect(fixture.workspaceFiles["IDENTITY.md"]).toContain("**Name:** Maya");
-    expect(fixture.workspaceFiles["IDENTITY.md"]).toContain("**Creature:** creator manager");
+    // Sprint 9.7+ — tier-aware role label. Smoke fixture uses Manager tier
+    // by default → expect "content manager". Coach tier would emit "content coach".
+    expect(fixture.workspaceFiles["IDENTITY.md"]).toMatch(/\*\*Creature:\*\* content (manager|coach)/);
     // Cron jobs.json includes the morning_brief entry from the canonical
     // standing-orders catalog.
     expect(fixture.workspaceFiles["jobs.json"]).toContain("morning_brief");

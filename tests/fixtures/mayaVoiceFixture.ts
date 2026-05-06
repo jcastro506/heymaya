@@ -597,8 +597,21 @@ const realisticPasses: VoiceFixtureEntry[] = [
   // ≤400 chars (the new per-message cap) and uses the plain-human phrasing
   // SOUL.md "Human language only" prescribes.
   {
-    scenario: "pass/16 — first-boot greet (Send 1 of 3, ≤80 chars)",
-    output: "Hey Kevin. I'm Maya, your manager.",
+    // Sprint 9.7+ — Manager-tier greet with role + scope. Includes the
+    // tier-matching "content manager" label + autonomous-scope sentence
+    // ("plan and run", "find + pitch brands"). Operator-locked phrasing.
+    scenario: "pass/16a — first-boot greet, Manager tier (role + scope, ≤200 chars)",
+    output:
+      "Hey Kevin. I'm Maya, your content manager. I plan and run your content calendar, track what's trending, and find + pitch brands I think fit you so you can focus on filming.",
+    expectedToPass: true,
+  },
+  {
+    // Sprint 9.7+ — Coach-tier greet variant. "content coach" label +
+    // advisory-scope sentence ("with you", "keep you posting") — never
+    // mentions autonomous brand pitching (that's a Manager-only power).
+    scenario: "pass/16b — first-boot greet, Coach tier (advisory scope, ≤200 chars)",
+    output:
+      "Hey Kevin. I'm Maya, your content coach. I track what's trending in your niche, plan your content calendar with you, and keep you posting consistently so you grow.",
     expectedToPass: true,
   },
   {
