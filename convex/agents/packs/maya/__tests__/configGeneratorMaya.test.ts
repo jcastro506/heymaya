@@ -4,7 +4,7 @@
  * Sprint 3.7 phase C reshape — `MayaConfig` no longer carries channels.primary,
  * heartbeat.intervalSec, cronEnablement, or thinkingBudget.perTaskTag (those
  * are owned by OpenClaw natively now). The plan-tier matrix moved into
- * `gatewayConfig.channels.enabled` + the embedded `jobsJson`.
+ * `gatewayConfig.channels` + the embedded `jobsJson`.
  *
  * Five mandatory categories:
  *   1. Cross-tenant: creator A's config never references creator B's data.
@@ -50,6 +50,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   _resetEncryptionKeyCache();
   delete process.env.OPENROUTER_DEFAULT_MODEL;
+  delete process.env.CLAW_MESSENGER_API_KEY;
 });
 
 /* -------------------------------------------------------------------------- */
@@ -197,27 +198,54 @@ describe("buildMayaConfig — determinism", () => {
 });
 
 describe("buildMayaConfig — gateway config (OpenClaw-native channels + bootstrap cap)", () => {
-  it("Starter gateway enables all four channels (REVISED 2026-04-26: channels ungated)", () => {
+  it("gateway leaves channels empty unless Claw Messenger is configured", () => {
     const inputs = emptyInputs("coach");
     inputs.creator.channelPreference = "imessage";
     const { config } = buildMayaConfig(inputs, NOW);
-    expect([...config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "telegram", "web", "whatsapp"]
-    );
+    expect(config.gatewayConfig.channels).toEqual({});
+    expect(config.gatewayConfig.channels["claw-messenger"]).toBeUndefined();
   });
 
-  it("Pro gateway enables all four channels", () => {
+  it("gateway emits Claw Messenger iMessage config when CLAW_MESSENGER_API_KEY is present", () => {
+    process.env.CLAW_MESSENGER_API_KEY = "cm_live_TEST_KEY";
     const { config } = buildMayaConfig(emptyInputs("manager"), NOW);
-    expect([...config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "telegram", "web", "whatsapp"]
-    );
+    expect(config.gatewayConfig.channels["claw-messenger"]).toEqual({
+      enabled: true,
+      apiKey: "cm_live_TEST_KEY",
+      serverUrl: "wss://claw-messenger.onrender.com",
+      preferredService: "iMessage",
+      dmPolicy: "open",
+    });
+    expect(config.gatewayConfig.plugins).toEqual({
+      allow: ["claw-messenger"],
+      load: { paths: ["/data/extensions/claw-messenger"] },
+      entries: {
+        "claw-messenger": { enabled: true },
+        acpx: { enabled: false },
+        browser: { enabled: false },
+        "device-pair": { enabled: false },
+        "phone-control": { enabled: false },
+        "talk-voice": { enabled: false },
+      },
+    });
+    expect(config.gatewayConfig.browser).toEqual({ enabled: false });
+    expect(config.gatewayConfig.discovery).toEqual({ mdns: { mode: "off" } });
+    expect(config.gatewayConfig.agents.defaults.memorySearch).toEqual({
+      sync: {
+        onSessionStart: false,
+        onSearch: false,
+        watch: false,
+      },
+    });
   });
 
-  it("Studio gateway enables all four channels", () => {
+  it("uses the configured OpenClaw gateway token instead of letting the gateway mutate config", () => {
+    process.env.OPENCLAW_GATEWAY_TOKEN = "gateway-token-test";
     const { config } = buildMayaConfig(emptyInputs("manager"), NOW);
-    expect([...config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "telegram", "web", "whatsapp"]
-    );
+    expect(config.gatewayConfig.gateway.auth).toEqual({
+      mode: "token",
+      token: "gateway-token-test",
+    });
   });
 
   it("bootstrapMaxChars is the Maya 28K override (Wave 5: 20K → 28K so standing orders embed inline per OpenClaw 2026.4.23)", () => {
@@ -226,12 +254,21 @@ describe("buildMayaConfig — gateway config (OpenClaw-native channels + bootstr
     expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(32_000);
   });
 
-  it("model.provider is openrouter; id pulls from OPENROUTER_DEFAULT_MODEL with fallback", () => {
+  it("agents.defaults.model.primary is an OpenRouter model ref", () => {
     process.env.OPENROUTER_DEFAULT_MODEL = "google/gemini-3-flash-preview-test";
     const { config } = buildMayaConfig(emptyInputs("manager"), NOW);
-    expect(config.gatewayConfig.model.provider).toBe("openrouter");
-    expect(config.gatewayConfig.model.id).toBe("google/gemini-3-flash-preview-test");
+    expect(config.gatewayConfig.agents.defaults.model.primary).toBe(
+      "openrouter/google/gemini-3-flash-preview-test"
+    );
     delete process.env.OPENROUTER_DEFAULT_MODEL;
+  });
+
+  it("does not double-prefix OpenRouter model refs", () => {
+    process.env.OPENROUTER_DEFAULT_MODEL = "openrouter/google/gemini-3-flash-preview";
+    const { config } = buildMayaConfig(emptyInputs("manager"), NOW);
+    expect(config.gatewayConfig.agents.defaults.model.primary).toBe(
+      "openrouter/google/gemini-3-flash-preview"
+    );
   });
 });
 
@@ -387,10 +424,7 @@ describe("generateMayaConfig — Convex action surface", () => {
     expect(bundle.config.composioAccounts[0].composioAccountId).toBe(
       "real-composio-id-xyz"
     );
-    // Pro gets all four channels.
-    expect([...bundle.config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "telegram", "web", "whatsapp"]
-    );
+    expect(bundle.config.gatewayConfig.channels.telegram).toBeUndefined();
     expect(bundle.version).toMatch(/^[0-9a-f]{32}$/);
     // The action uploads the workspace tarball internally and patches the
     // URL onto the config — bytes never cross the action boundary (Convex's
@@ -454,9 +488,9 @@ describe("generateMayaConfig — Convex action surface", () => {
     expect(userMd).not.toContain("@b_ig");
   });
 
-  it("Starter via Convex (REVISED): gateway enables all 4 channels + Gmail/Stripe in composio", async () => {
-    // Tier philosophy revised 2026-04-26: channels are OpenClaw-native +
-    // Gmail deal desk universal. Apollo/Hunter remains Studio-only.
+  it("Starter via Convex: gateway does not enable unused channels, Gmail/Stripe remain in composio", async () => {
+    // Creator Maya uses Claw Messenger for iMessage. Telegram is intentionally
+    // not enabled because readiness should reflect the channel this flow uses.
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "starter1",
@@ -471,9 +505,7 @@ describe("generateMayaConfig — Convex action surface", () => {
       internal.agents.packs.maya.configGeneratorMaya.generateMayaConfig,
       { creatorId: c, nowOverride: NOW }
     );
-    expect([...bundle.config.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "telegram", "web", "whatsapp"]
-    );
+    expect(bundle.config.gatewayConfig.channels.telegram).toBeUndefined();
     expect(bundle.config.composioAccounts.map((a) => a.provider).sort()).toEqual(
       ["gmail", "stripe"]
     );

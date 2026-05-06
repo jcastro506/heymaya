@@ -255,13 +255,21 @@ describe("deployMaya — happy path", () => {
     const machineCfg = recorded.createMachine[0].config;
     expect(machineCfg.env?.MAYA_WORKSPACE_BUNDLE_URL).toBe(bootstrap.workspaceBundleUrl);
     expect(machineCfg.env?.MAYA_JOBS_JSON_BASE64).toBeDefined();
+    expect(machineCfg.env?.OPENCLAW_STATE_DIR).toBe("/data");
+    expect(machineCfg.env?.OPENCLAW_CONFIG_PATH).toBe("/data/openclaw.json");
+    expect(machineCfg.env?.OPENCLAW_SKIP_CRON).toBe("1");
+    expect(machineCfg.env?.NODE_OPTIONS).toBe(
+      "--max-old-space-size=1536 --dns-result-order=ipv4first"
+    );
     expect(machineCfg.init?.cmd).toBeDefined();
     const initShell = machineCfg.init!.cmd!.join(" ");
     // Sanity: the bootstrap pipeline performs the canonical 6 steps.
     expect(initShell).toContain("curl -fsSL");
     expect(initShell).toContain("tar -xf");
-    expect(initShell).toContain(".openclaw/cron/jobs.json");
-    expect(initShell).toContain("openclaw gateway --allow-unconfigured");
+    expect(initShell).toContain("/data/cron/jobs.json");
+    expect(initShell).toContain("/data/openclaw.json");
+    expect(initShell).toContain("openclaw gateway --bind lan --tailscale off --port 3000");
+    expect(initShell).not.toContain("--allow-unconfigured");
 
     const after = await getCreator(t, c);
     expect(after?.status).toBe("active");
@@ -310,7 +318,7 @@ describe("deployMaya — happy path", () => {
 /* -------------------------------------------------------------------------- */
 
 describe("deployMaya — plan-tier enforcement (CRITICAL)", () => {
-  it("PLAN-TIER (REVISED): Starter gateway includes all 4 channels — channels are OpenClaw-native, ungated", async () => {
+  it("Starter gateway does not enable Telegram for the creator iMessage flow", async () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "starter1",
@@ -328,9 +336,7 @@ describe("deployMaya — plan-tier enforcement (CRITICAL)", () => {
     const bootstrap = JSON.parse(
       recorded.setAppSecrets[0].secrets.MAYA_BOOTSTRAP_JSON
     );
-    expect([...bootstrap.gatewayConfig.channels.enabled].sort()).toEqual(
-      ["imessage", "sms", "telegram", "web", "whatsapp"]
-    );
+    expect(bootstrap.gatewayConfig.channels.telegram).toBeUndefined();
   });
 
   it("PLAN-TIER (REVISED): Starter Gmail composio row IS included — Gmail deal desk is universal", async () => {
@@ -984,9 +990,16 @@ describe("machineConfigFor", () => {
       plan: "manager" as const,
       timezone: "UTC",
       gatewayConfig: {
-        agents: { defaults: { bootstrapMaxChars: 20_000 } },
-        channels: { enabled: ["web", "sms", "imessage", "whatsapp"] as const },
-        model: { provider: "openrouter" as const, id: "google/gemini-3-flash-preview" },
+        agents: {
+          defaults: {
+            bootstrapMaxChars: 20_000,
+            workspace: "/data/workspace",
+            model: { primary: "openrouter/google/gemini-3-flash-preview" },
+          },
+        },
+        channels: {},
+        gateway: { mode: "local" as const, bind: "auto" as const },
+        meta: {},
       },
       composioAccounts: [],
       workspaceBundleUrl: "https://convex.cloud/storage/abc123",
@@ -1001,6 +1014,12 @@ describe("machineConfigFor", () => {
     expect(out.image).toMatch(/openclaw/);
     expect(out.env?.MAYA_PLAN).toBe("manager");
     expect(out.env?.MAYA_OPENCLAW_VERSION).toBe("2026.4.23");
+    expect(out.env?.OPENCLAW_STATE_DIR).toBe("/data");
+    expect(out.env?.OPENCLAW_CONFIG_PATH).toBe("/data/openclaw.json");
+    expect(out.env?.OPENCLAW_SKIP_CRON).toBe("1");
+    expect(out.env?.NODE_OPTIONS).toBe(
+      "--max-old-space-size=1536 --dns-result-order=ipv4first"
+    );
     expect(out.env?.MAYA_CONVEX_HTTP_BASE).toBe("https://x.convex.cloud");
     expect(out.env?.MAYA_WORKSPACE_BUNDLE_URL).toBe("https://convex.cloud/storage/abc123");
     expect(out.env?.MAYA_JOBS_JSON_BASE64).toBe("ZmFrZS1qb2JzanNvbg==");
@@ -1008,13 +1027,18 @@ describe("machineConfigFor", () => {
     // MAYA_BOOTSTRAP_JSON must NOT be in plain env (it's a Fly secret).
     expect(out.env?.MAYA_BOOTSTRAP_JSON).toBeUndefined();
     expect(out.guest?.cpu_kind).toBe("shared");
-    expect(out.guest?.memory_mb).toBe(1024);
+    expect(out.guest?.cpus).toBe(2);
+    expect(out.guest?.memory_mb).toBe(2048);
     expect(out.metadata?.creator_id).toBe("fakecreator");
     expect(out.init?.cmd).toBeDefined();
     const initShell = out.init!.cmd!.join(" ");
     expect(initShell).toContain("curl -fsSL");
     expect(initShell).toContain("tar -xf");
     expect(initShell).toContain("base64 -d");
-    expect(initShell).toContain("openclaw gateway --allow-unconfigured");
+    expect(initShell).toContain("/data/openclaw.json");
+    expect(initShell).toContain("OPENCLAW_GATEWAY_TOKEN");
+    expect(initShell).toContain(".gateway.auth");
+    expect(initShell).toContain("openclaw gateway --bind lan --tailscale off --port 3000");
+    expect(initShell).not.toContain("--allow-unconfigured");
   });
 });

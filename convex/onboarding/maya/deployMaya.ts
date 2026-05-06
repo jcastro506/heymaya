@@ -54,6 +54,7 @@ import type {
   MayaConfigDeployBundle,
 } from "../../agents/packs/maya/configGeneratorMaya";
 import { planFeatures } from "../../lib/planFeatures";
+import type { Channel } from "../../lib/planFeatures";
 
 /* -------------------------------------------------------------------------- */
 /* Public types                                                                */
@@ -186,12 +187,12 @@ export const patchCreatorOnFailure = internalMutation({
 
 const OPENCLAW_IMAGE =
   process.env.MAYA_OPENCLAW_IMAGE ??
-  "registry.fly.io/heymaya-openclaw:v2026.4.23";
+  "registry.fly.io/heymaya-openclaw@sha256:fc3cf7390174c94ae8aea2f31d24a5a6c2458d7226d05196adc35df47d990057";
 
 const MACHINE_GUEST: NonNullable<FlyMachineConfig["guest"]> = {
   cpu_kind: "shared",
-  cpus: 1,
-  memory_mb: 1024,
+  cpus: 2,
+  memory_mb: 2048,
 };
 
 /**
@@ -225,6 +226,13 @@ export function machineConfigFor(
   jobsJsonBase64: string
 ): FlyMachineConfig {
   const env: Record<string, string> = {
+    OPENCLAW_DISABLE_BONJOUR: "1",
+    OPENCLAW_CONFIG_PATH: "/data/openclaw.json",
+    OPENCLAW_PREFER_PNPM: "1",
+    OPENCLAW_PLUGIN_STAGE_DIR: "/opt/openclaw-runtime-preseed/plugin-runtime-deps",
+    OPENCLAW_SKIP_CRON: "1",
+    OPENCLAW_STATE_DIR: "/data",
+    NODE_OPTIONS: "--max-old-space-size=1536 --dns-result-order=ipv4first",
     MAYA_PLAN: config.plan,
     MAYA_TIMEZONE: config.timezone,
     MAYA_OPENCLAW_VERSION: config.openclawVersion,
@@ -262,21 +270,31 @@ export function machineConfigFor(
  */
 function buildBootstrapShell(): string {
   return [
-    // 1. Make data + workspace + cron dirs.
-    'mkdir -p "/data/workspace-${MAYA_APP_NAME}" "$HOME/.openclaw/cron" "$HOME/.openclaw"',
-    // 2. Download + extract the workspace tarball.
+    // 0. Ignore stale app-level Telegram secrets on redeployed creator apps.
+    // Creator Maya is iMessage-only for this flow; OpenClaw auto-enables
+    // Telegram when these env vars exist.
+    "unset TELEGRAM_BOT_TOKEN TELEGRAM_BOT_USERNAME",
+    // 1. Make persistent state, workspace, plugin, and cron dirs.
+    "mkdir -p /data/workspace /data/extensions /data/cron /data/identity",
+    // 2. Seed image-bundled channel plugins onto the mounted volume.
+    "if [ -d /opt/openclaw-seed/extensions/claw-messenger ]; then rm -rf /data/extensions/claw-messenger && cp -a /opt/openclaw-seed/extensions/claw-messenger /data/extensions/claw-messenger; fi",
+    // 2a. Provider runtime deps are preseeded in the image and read via
+    // OPENCLAW_PLUGIN_STAGE_DIR, so boot avoids a large persistent-volume copy.
+    // 2b. Compatibility fallback for @emotion-machine/claw-messenger 0.1.8
+    // on OpenClaw 2026.4.23. The runtime image already applies this patch;
+    // this guard keeps existing machines correct until every image is rebuilt.
+    'node -e \'const fs=require("fs");const p="/data/extensions/claw-messenger/dist/channel.js";if(fs.existsSync(p)){let s=fs.readFileSync(p,"utf8");s=s.replace("import { buildChannelConfigSchema, DEFAULT_ACCOUNT_ID, formatPairingApproveHint, PAIRING_APPROVED_MESSAGE, } from \\"openclaw/plugin-sdk\\";","import { buildChannelConfigSchema, formatPairingApproveHint, PAIRING_APPROVED_MESSAGE, } from \\"openclaw/plugin-sdk\\";\\nconst DEFAULT_ACCOUNT_ID = \\"default\\";").replace("            const resolvedAccountId = account.accountId;","            const resolvedAccountId = account.accountId ?? DEFAULT_ACCOUNT_ID;\\n            account.accountId = resolvedAccountId;");fs.writeFileSync(p,s);}\'',
+    // 3. Download + extract the workspace tarball.
     'curl -fsSL "$MAYA_WORKSPACE_BUNDLE_URL" -o /tmp/workspace.tar',
-    'tar -xf /tmp/workspace.tar -C "/data/workspace-${MAYA_APP_NAME}"',
-    // 3. Symlink to OpenClaw's expected workspace path.
-    'rm -rf "$HOME/.openclaw/workspace-default"',
-    'ln -s "/data/workspace-${MAYA_APP_NAME}" "$HOME/.openclaw/workspace-default"',
+    "tar -xf /tmp/workspace.tar -C /data/workspace",
     // 4. Install cron jobs from base64-encoded env.
-    'echo "$MAYA_JOBS_JSON_BASE64" | base64 -d > "$HOME/.openclaw/cron/jobs.json"',
+    'echo "$MAYA_JOBS_JSON_BASE64" | base64 -d > /data/cron/jobs.json',
     // 5. Materialize the gateway config from MAYA_BOOTSTRAP_JSON.
     'echo "$MAYA_BOOTSTRAP_JSON" | jq .gatewayConfig > /data/openclaw.json',
-    // 6. Start the gateway. OpenClaw 2026.4.23 reads config from its state
-    // dir; the gateway subcommand no longer accepts `start --config`.
-    "exec openclaw gateway --allow-unconfigured",
+    // 6. Add runtime-only gateway auth from Fly secrets when configured.
+    'if [ -n "${OPENCLAW_GATEWAY_TOKEN:-${MAYA_RUNTIME_SECRET:-}}" ]; then token="${OPENCLAW_GATEWAY_TOKEN:-$MAYA_RUNTIME_SECRET}"; jq --arg token "$token" \'.gateway.auth = { mode: "token", token: $token }\' /data/openclaw.json > /tmp/openclaw.json && mv /tmp/openclaw.json /data/openclaw.json; fi',
+    // 7. Start the gateway from our generated config and isolated state dir.
+    "exec openclaw gateway --bind lan --tailscale off --port 3000",
   ].join(" && ");
 }
 
@@ -286,11 +304,9 @@ function buildBootstrapShell(): string {
  * config-generation time. We add MAYA_BOOTSTRAP_JSON itself as a secret here
  * so it never leaks into Fly's plain env (which is observable via the API).
  *
- * TELEGRAM_BOT_TOKEN + TELEGRAM_BOT_USERNAME (2026-05-03): only forwarded if
- * the creator's gatewayConfig.channels.enabled includes "telegram". OpenClaw
- * reads TELEGRAM_BOT_TOKEN from process.env at gateway start — the bot is
- * configured at the OpenClaw org level, not per-creator. We keep the secret
- * scoped to the Fly machine, never echo it back, never log it.
+ * Channel-specific credentials are only forwarded when that channel is enabled
+ * in the generated gateway config. Creator Maya currently uses Claw Messenger
+ * for iMessage; Telegram is intentionally not enabled for this flow.
  */
 function buildSecretsBundle(config: MayaConfig): Record<string, string> {
   const out: Record<string, string> = {
@@ -302,19 +318,14 @@ function buildSecretsBundle(config: MayaConfig): Record<string, string> {
     "COMPOSIO_API_KEY",
     "ENCRYPTION_KEY",
     "MAYA_RUNTIME_SECRET",
+    "CLAW_MESSENGER_API_KEY",
+    "OPENCLAW_GATEWAY_TOKEN",
   ]) {
     const v = process.env[k];
     if (v) out[k] = v;
   }
-  // Telegram secrets — only forwarded when the gateway has telegram enabled.
-  // Avoids leaking the bot token onto machines that don't need it.
-  const enabledChannels: ReadonlyArray<string> =
-    config.gatewayConfig?.channels?.enabled ?? [];
-  if (enabledChannels.includes("telegram")) {
-    const token = process.env.TELEGRAM_BOT_TOKEN;
-    const username = process.env.TELEGRAM_BOT_USERNAME;
-    if (token) out.TELEGRAM_BOT_TOKEN = token;
-    if (username) out.TELEGRAM_BOT_USERNAME = username;
+  if (!out.OPENCLAW_GATEWAY_TOKEN && process.env.MAYA_RUNTIME_SECRET) {
+    out.OPENCLAW_GATEWAY_TOKEN = process.env.MAYA_RUNTIME_SECRET;
   }
   return out;
 }
@@ -334,7 +345,7 @@ function base64UtfEncode(str: string): string {
 /* Main action                                                                 */
 /* -------------------------------------------------------------------------- */
 
-const WAIT_TIMEOUT_MS = 60_000;
+const WAIT_TIMEOUT_MS = 120_000;
 const WAIT_INTERVAL_MS = 1_500;
 
 export const deployMaya = internalAction({
@@ -499,7 +510,12 @@ export const deployMaya = internalAction({
     // generator already enforces this; if a future refactor broke it, we'd
     // ship a Maya whose gateway thinks she has WhatsApp. Fail-closed.
     {
-      const enabled = bundle.config.gatewayConfig.channels.enabled;
+      const enabled = Object.entries(bundle.config.gatewayConfig.channels)
+        .filter(([, cfg]) => cfg?.enabled)
+        .map((entry): Channel => {
+          const [channel] = entry;
+          return channel === "claw-messenger" ? "imessage" : (channel as Channel);
+        });
       const allowed = new Set(
         planFeatures({ plan: bundle.config.plan }).allowedChannels
       );

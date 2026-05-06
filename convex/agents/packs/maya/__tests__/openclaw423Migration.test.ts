@@ -78,14 +78,14 @@ function inputsFor(plan: "coach" | "manager"): BuildInputs {
 }
 
 /* -------------------------------------------------------------------------- */
-/* 1. Image tag bumped to v2026.4.23                                            */
+/* 1. Image pin bumped to OpenClaw 2026.4.23 runtime                            */
 /* -------------------------------------------------------------------------- */
 
-describe("Wave 5 — image tag (OpenClaw 4.12 → 2026.4.23)", () => {
-  it("deployMaya.ts default OPENCLAW_IMAGE references registry.fly.io/heymaya-openclaw:v2026.4.23", () => {
+describe("Wave 5 — image pin (OpenClaw 4.12 → 2026.4.23)", () => {
+  it("deployMaya.ts default OPENCLAW_IMAGE references the Fly OpenClaw image by immutable digest", () => {
     const path = join(REPO_ROOT, "convex/onboarding/maya/deployMaya.ts");
     const src = readFileSync(path, "utf8");
-    expect(src).toContain('"registry.fly.io/heymaya-openclaw:v2026.4.23"');
+    expect(src).toContain('"registry.fly.io/heymaya-openclaw@sha256:');
     expect(src).not.toContain('"registry.fly.io/heymaya-openclaw:v4.12.0"');
   });
 

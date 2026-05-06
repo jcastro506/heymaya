@@ -29,12 +29,49 @@ FROM --platform=linux/amd64 node:24-bookworm-slim
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-       ca-certificates curl tar jq coreutils procps git openssl \
+       ca-certificates curl tar jq coreutils procps git openssl python3 \
     && rm -rf /var/lib/apt/lists/*
 
 ARG OPENCLAW_VERSION=2026.4.23
 RUN npm install -g openclaw@${OPENCLAW_VERSION} \
     && openclaw --version
+
+# Resolve external channel plugins at image build time, not during a creator's
+# Fly boot. The machine bootstrap copies these files onto the persistent
+# /data volume before writing openclaw.json, then the config loads them through
+# plugins.load.paths.
+RUN mkdir -p /opt/openclaw-seed \
+    && OPENCLAW_STATE_DIR=/opt/openclaw-seed HOME=/tmp/openclaw-seed-home \
+       openclaw plugins install @emotion-machine/claw-messenger --force \
+    && rm -rf /opt/openclaw-seed/.npm /opt/openclaw-seed/logs /tmp/openclaw-seed-home \
+    && chown -R node:node /opt/openclaw-seed
+
+COPY patch-claw-messenger-plugin.mjs /usr/local/bin/patch-claw-messenger-plugin.mjs
+RUN node /usr/local/bin/patch-claw-messenger-plugin.mjs
+
+# OpenClaw auto-enables the provider plugin that owns the configured primary
+# model, then installs bundled runtime deps into OPENCLAW_STATE_DIR on first
+# boot. Creator machines use fresh /data volumes, so pre-seed the exact cache
+# shape and let the deploy bootstrap copy it into /data before gateway start.
+RUN RUNTIME_ROOT="$(node -e 'const fs=require("node:fs");const path=require("node:path");const crypto=require("node:crypto");const packageRoot="/usr/local/lib/node_modules/openclaw";const version=JSON.parse(fs.readFileSync(path.join(packageRoot,"package.json"),"utf8")).version;const hash=crypto.createHash("sha256").update(path.resolve(packageRoot)).digest("hex").slice(0,12);process.stdout.write(`/opt/openclaw-runtime-preseed/plugin-runtime-deps/openclaw-${version}-${hash}`);')" \
+    && mkdir -p "$RUNTIME_ROOT" \
+    && printf '%s\n' '{"name":"openclaw-runtime-deps-install","private":true}' > "$RUNTIME_ROOT/package.json" \
+    && npm install --prefix "$RUNTIME_ROOT" --ignore-scripts --legacy-peer-deps --package-lock=false --save=false \
+       @anthropic-ai/sdk@0.90.0 \
+       @aws-sdk/client-bedrock-runtime@3.1033.0 \
+       @aws-sdk/client-bedrock@3.1033.0 \
+       @aws-sdk/credential-provider-node@3.972.33 \
+       @aws/bedrock-token-generator@^1.1.0 \
+       @clack/prompts@^1.2.0 \
+       @mariozechner/pi-ai@0.70.0 \
+       @mariozechner/pi-coding-agent@0.70.0 \
+       ajv@^8.18.0 \
+       typebox@1.1.28 \
+       ws@^8.20.0 \
+       zod@^4.3.6 \
+    && node -e 'const fs=require("node:fs");const root=process.argv[1];const specs=["@anthropic-ai/sdk@0.90.0","@aws-sdk/client-bedrock-runtime@3.1033.0","@aws-sdk/client-bedrock@3.1033.0","@aws-sdk/credential-provider-node@3.972.33","@aws/bedrock-token-generator@^1.1.0","@clack/prompts@^1.2.0","@mariozechner/pi-ai@0.70.0","@mariozechner/pi-coding-agent@0.70.0","ajv@^8.18.0","typebox@1.1.28","ws@^8.20.0","zod@^4.3.6"].sort();fs.writeFileSync(`${root}/.openclaw-runtime-deps.json`,`${JSON.stringify({specs},null,2)}\n`);' "$RUNTIME_ROOT" \
+    && rm -rf "$RUNTIME_ROOT"/.npm \
+    && chown -R node:node /opt/openclaw-runtime-preseed
 
 ENV NODE_ENV=production \
     HOME=/data \

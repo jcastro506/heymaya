@@ -16,9 +16,9 @@
  *   - composio:        decrypted account credentials, kept as-is
  *   - model router:    Convex HTTP base so Maya proxies model calls back
  *
- * Channels:        OpenClaw gateway routes by `gatewayConfig.channels.enabled`;
- *                  no `channels.primary/fallbacks` — the gateway picks the
- *                  preferred channel from the enabled set per-message.
+ * Channels:        OpenClaw gateway starts each configured
+ *                  `gatewayConfig.channels.<provider>` block. There is no
+ *                  top-level `channels.enabled` array in OpenClaw 2026.4.23.
  * Heartbeat:       Cadence prose lives in `HEARTBEAT.md`. OpenClaw owns the
  *                  tick. We don't ship `intervalSec`.
  * Cron enablement: Replaced by `jobsJson` from `buildCronJobsJson`. The Fly
@@ -58,7 +58,6 @@ import { internal } from "../../../_generated/api";
 import type { Doc, Id } from "../../../_generated/dataModel";
 import {
   planFeatures,
-  type Channel,
   type Plan,
   type Provider,
 } from "../../../lib/planFeatures";
@@ -103,17 +102,81 @@ export interface GatewayConfig {
        * for the size-cap proof.
        */
       bootstrapMaxChars: number;
+      /**
+       * OpenClaw's default model selector. Must be a provider-qualified ref,
+       * e.g. `openrouter/google/gemini-3-flash-preview`.
+       */
+      model: {
+        primary: string;
+      };
+      /** Explicit workspace avoids the image's fallback default workspace. */
+      workspace: string;
+      /**
+       * Creator Maya gets all long-term context from the generated workspace
+       * bundle and Convex-backed tools. Disable OpenClaw's memory index boot
+       * sync so first contact is not blocked on optional memory providers.
+       */
+      memorySearch: {
+        sync: {
+          onSessionStart: false;
+          onSearch: false;
+          watch: false;
+        };
+      };
+    };
+  };
+  plugins?: {
+    allow: ["claw-messenger"];
+    load: {
+      paths: string[];
+    };
+    entries: {
+      "claw-messenger": {
+        enabled: true;
+      };
+      acpx: {
+        enabled: false;
+      };
+      browser: {
+        enabled: false;
+      };
+      "device-pair": {
+        enabled: false;
+      };
+      "phone-control": {
+        enabled: false;
+      };
+      "talk-voice": {
+        enabled: false;
+      };
+    };
+  };
+  browser: {
+    enabled: false;
+  };
+  discovery: {
+    mdns: {
+      mode: "off";
     };
   };
   channels: {
-    /** Channel adapters the gateway should boot. Plan-tier-gated upstream. */
-    enabled: ReadonlyArray<Channel>;
+    "claw-messenger"?: {
+      enabled: true;
+      apiKey: string;
+      serverUrl: string;
+      preferredService: "iMessage";
+      dmPolicy: "open" | "pairing" | "allowlist";
+    };
   };
-  model: {
-    provider: "openrouter";
-    /** Model id the gateway uses for default-thinking calls. */
-    id: string;
+  gateway: {
+    mode: "local";
+    bind: "auto";
+    auth?: {
+      mode: "token";
+      token: string;
+    };
   };
+  meta: Record<string, never>;
 }
 
 export interface MayaConfig {
@@ -257,20 +320,74 @@ export function buildMayaConfig(inputs: BuildInputs, now: number): MayaConfigBun
     });
   }
 
-  // ---- gateway config: bootstrapMaxChars override + plan-tier channel allowlist ----
+  // ---- gateway config: bootstrap + model + channel adapters ----
+  const channels: GatewayConfig["channels"] = {};
+  let plugins: GatewayConfig["plugins"] | undefined;
+  const clawMessengerApiKey = process.env.CLAW_MESSENGER_API_KEY;
+  if (clawMessengerApiKey) {
+    plugins = {
+      allow: ["claw-messenger"],
+      load: { paths: ["/data/extensions/claw-messenger"] },
+      entries: {
+        "claw-messenger": { enabled: true },
+        acpx: { enabled: false },
+        browser: { enabled: false },
+        "device-pair": { enabled: false },
+        "phone-control": { enabled: false },
+        "talk-voice": { enabled: false },
+      },
+    };
+    channels["claw-messenger"] = {
+      enabled: true,
+      apiKey: clawMessengerApiKey,
+      serverUrl: "wss://claw-messenger.onrender.com",
+      preferredService: "iMessage",
+      // Keep smoke deployments open until the pair/allowlist flow can stamp
+      // per-creator peer IDs into config. This matches creatorMayaV0's live
+      // test path and lets us prove outbound delivery.
+      dmPolicy: "open",
+    };
+  }
+
+  const runtimeSecret = process.env.OPENCLAW_GATEWAY_TOKEN ?? process.env.MAYA_RUNTIME_SECRET;
   const gatewayConfig: GatewayConfig = {
     agents: {
       defaults: {
         bootstrapMaxChars: MAYA_BOOTSTRAP_MAX_CHARS,
+        workspace: "/data/workspace",
+        memorySearch: {
+          sync: {
+            onSessionStart: false,
+            onSearch: false,
+            watch: false,
+          },
+        },
+        model: {
+          primary: toOpenClawOpenRouterModel(
+            process.env.OPENROUTER_DEFAULT_MODEL ??
+              "google/gemini-3-flash-preview"
+          ),
+        },
       },
     },
-    channels: {
-      enabled: [...features.allowedChannels].sort() as ReadonlyArray<Channel>,
+    ...(plugins ? { plugins } : {}),
+    channels,
+    browser: {
+      enabled: false,
     },
-    model: {
-      provider: "openrouter",
-      id: process.env.OPENROUTER_DEFAULT_MODEL ?? "google/gemini-3-flash-preview",
+    discovery: {
+      mdns: {
+        mode: "off",
+      },
     },
+    gateway: {
+      mode: "local",
+      bind: "auto",
+      ...(runtimeSecret
+        ? { auth: { mode: "token" as const, token: runtimeSecret } }
+        : {}),
+    },
+    meta: {},
   };
 
   // ---- workspace bundle: AGENTS.md / USER.md / HEARTBEAT.md / ... + jobs.json ----
@@ -330,6 +447,11 @@ function handleSort(a: Doc<"creatorHandles">, b: Doc<"creatorHandles">): number 
 function accountSort(a: Doc<"connectedAccounts">, b: Doc<"connectedAccounts">): number {
   if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
   return a._id.localeCompare(b._id);
+}
+
+export function toOpenClawOpenRouterModel(model: string): string {
+  if (model.startsWith("openrouter/")) return model;
+  return `openrouter/${model}`;
 }
 
 /** First 8 chars of the doc id — stable, URL-safe, low collision for our scale. */

@@ -51,6 +51,18 @@ docker run --rm registry.fly.io/heymaya-openclaw:v2026.4.23 openclaw --version
 # expect: 2026.4.23
 ```
 
+If direct `docker push` fails with `app repository not found`, use Fly's
+remote builder:
+
+```bash
+flyctl deploy --config infra/openclaw-runtime/fly.toml --remote-only --strategy immediate
+```
+
+Then update `OPENCLAW_IMAGE` in
+`convex/onboarding/maya/deployMaya.ts` to the immutable digest printed by the
+deploy, e.g. `registry.fly.io/heymaya-openclaw@sha256:<digest>`. This keeps
+creator machines pinned to the exact image that was built and verified.
+
 ## Why this layout (and what NOT to add)
 
 **Native-first.** `feedback_openclaw_native_first.md` is the locked rule:
@@ -58,6 +70,9 @@ OpenClaw owns cron, heartbeat, memory, memory-wiki, bootstrap, channels,
 skill loading. This image only provides:
 
 - A working `openclaw` CLI on PATH.
+- A pre-installed `@emotion-machine/claw-messenger` external channel under
+  `/opt/openclaw-seed/extensions/claw-messenger`, with a narrow compatibility
+  patch for OpenClaw `2026.4.23` message-action discovery.
 - The shell tools the bootstrap shell needs (`bash`, `curl`, `tar`, `jq`,
   `base64`, `mkdir`).
 - `HOME=/data` so any path that defaults to `~/...` lands on the persistent
