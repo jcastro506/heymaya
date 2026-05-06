@@ -328,6 +328,36 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     expect(kickstart.payload.lightContext).toBe(true);
   });
 
+  it("kickstart payload contains no raw control characters (jobs.json + bootstrap shell are JSON-fragile)", () => {
+    // Sprint 9.7+ — regression guard. A literal \n in payload.message
+    // produced 'parse error: Invalid string: control characters from
+    // U+0000 through U+001F must be escaped' in the deploy v6 boot
+    // pipeline, crash-looping the Fly machine. Convex serializes the
+    // workspace bundle through `JSON.stringify` which DOES escape control
+    // chars, but several stages downstream (`echo $MAYA_BOOTSTRAP_JSON
+    // | jq`, `cat /data/openclaw.json`) re-parse the strings as raw text,
+    // and any unescaped 0x00-0x1F char trips the parser. Single-line
+    // prose only — line breaks in instructional payloads are forbidden.
+    const { jobs } = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    for (const job of jobs) {
+      const text =
+        job.payload.kind === "agentTurn" ? job.payload.message : job.payload.text;
+      // Match any control char in the U+0000-U+001F range except tab
+      // (0x09 is allowed inside JSON strings without escape and rarely
+      // breaks parsers; in practice we don't need it but excluding it
+      // keeps the rule from over-flagging).
+      // eslint-disable-next-line no-control-regex
+      const hit = text.match(/[\x00-\x08\x0A-\x1F]/);
+      expect(
+        hit,
+        `${job.id} payload contains control char U+${hit?.[0]?.charCodeAt(0).toString(16).padStart(4, "0")} — JSON-fragile, will break the bootstrap shell`
+      ).toBeNull();
+    }
+  });
+
   it("kickstart payload (Sprint 9.7) instructs THREE separate sends + anti-fabrication + no-jargon", () => {
     // Sprint 9.7 — after the live-test failure where Maya bundled greet +
     // identity + insight + Q1 into one 700-char marketing-pitch novel with
