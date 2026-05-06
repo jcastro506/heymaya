@@ -375,7 +375,29 @@ For each new skill:
 
 ---
 
-## Sprint 6 — Onboarding flow redesign
+## Sprint 6 — Onboarding flow redesign — DONE (code-side)
+
+**Status:** Merged to `staging`. 2900/2900 tests, tsc clean, regression smoke green on real Fly. **Operator-blocker remaining:** manual e2e walkthrough on Kevin.Castro9996 + +1 631-335-7603 (web form → 6 anchor Qs over iMessage → answer → synth → verify → lock) — the harness can't simulate iMessage replies.
+
+**Outcome:**
+- **Schema additions** (additive, all optional): `creators.pictureLockedAt`, plus 10 new `openingAnswers` fields (`locationCity`, `locationState`, `locationCountry`, `timezone`, `nicheInOwnWords`, `goals3Mo`, `jobStatus`, `dealsInterest`, `dealsFloorUsd`, `antiNiches`), plus `creatorPicture.needsVerification: Array<{ field, selfReported, observedSignal, evidence, question, severity: "blocker"|"soft" }>`.
+- **HTTP endpoints:** extended `submit_opening_answers` to accept all 10 new fields; new `POST /lc_maya/lock_picture` (corrections + stamps `pictureLockedAt`); provider validator forked `googlecalendar-direct` vs `googlecalendar-composio` (direct path is MVP).
+- **Constraint-aware synth:** `synthesizeCreatorPicture.ts` reads `openingAnswers` BEFORE the model call, injects as system-prompt anchors. New `reconcileAnchorVsObserved<T>(opts)` helper generalizes the existing `careerStageReconciliation` pattern (kept verbatim for 4 existing callers; additive).
+- **Defense-in-depth on the London bug:** TWO guards — (1) the LLM path (model surfaces divergence in `needsVerification`), AND (2) deterministic `checkAnchorInvariant()` runtime check that fail-closes if the synth produces an unanchored claim, **auto-injecting** a `severity: "blocker"` entry when the model forgets to flag the divergence. The lock cannot fire silently.
+- **Playbook rewrite** (`agents/skills/maya-platform/playbook.md` § 4.5/4.5.1/4.5.2/4.5.3): 6-question script (location → niche → goals → job-status → deals → anti-patterns), one Q per message, parse answers as they arrive. Drop meta-tone-question + listicle scaffolding. New post-synth verify section: Maya posts picture summary + 1-3 verification Qs, waits for confirmation, then calls `POST /lc_maya/lock_picture`.
+- **Web form:** 4-field minimal UI in `app/onboarding/maya/page.tsx`. Hardcoded `channelPreference: "imessage"` dropped from `submitOnboarding.ts:158`; uses salvaged `recommendChannel` userAgent helper for radio default.
+- **Standing-order re-key:** `first_weekly_plan` now triggers off `creators.pictureLockedAt` (not `openingAnswersAt`) — was firing with unverified picture data before.
+- 28 new tests across `synthesizeCreatorPicture.test.ts` (16) and `lcMayaHttp.test.ts` (12). 2 explicit London-bug regression tests: well-behaved-model path + auto-injection-on-buggy-model path.
+
+**Real-world bar (operator-blocker, deferred):** The manual e2e on Kevin.Castro9996 + +1 631-335-7603 is the operator's verification step. CODE delivery is what this sprint shipped. Run live `creator-maya-v0-fly-smoke` confirmed deploy still boots, cron initializes, voice grep clean — structural breaks would have shown up.
+
+**Carry-forward into Sprint 7:**
+- Operator e2e walkthrough on Kevin.Castro9996 (above) — should happen alongside Sprint 7's first-proactive-ping work since both depend on the lcMayaHttp endpoints.
+- Pre-existing `deployMaya.test.ts` synthesis tests (4 tests, ~20s each at 30s timeout) — unrelated to this sprint, queued for cleanup if they keep flaking.
+
+---
+
+## Sprint 6 — Onboarding flow redesign (original spec, kept for reference)
 
 **Goal:** Sub-3-min web → deploy → 6 anchor questions over iMessage → constraint-aware synth → verify round-trip → picture lock.
 
