@@ -10,6 +10,10 @@
  *     else uses "isolated".
  *   - Determinism: same inputs twice → identical output (sort by name).
  *   - Each emitted job carries a stable `entryId` matching cron.md.
+ *   - Sprint 3 Slice 1: cron set collapsed to exactly 6 precise-timing
+ *     entries (morning_brief, evening_recap, weekly_content_plan,
+ *     weekly_review, accountability_nudge, revenue_snapshot). Other 9
+ *     standing-orders moved to kind="heartbeat"; 6 deleted for MVP.
  */
 
 import { describe, it, expect } from "vitest";
@@ -121,6 +125,105 @@ describe("buildCronJobsJson", () => {
     expect(ids).toContain("evening_recap");
     expect(ids).toContain("weekly_review");
     expect(ids).toContain("weekly_content_plan");
-    expect(ids).toContain("performance_check_2h");
+  });
+
+  /* ----- Sprint 3 Slice 1: cron count locked at exactly 6 ----- */
+
+  // The six precise-timing entries Maya runs as real cron jobs. Everything
+  // else fires off heartbeat ticks during waking hours, where the LLM
+  // decides whether the trigger condition is met. Adding a cron without
+  // moving the corresponding cron.md prose + agent UX line is a bug; this
+  // assertion is the trip wire.
+  const SPRINT_3_CRON_SET: ReadonlyArray<string> = [
+    "morning_brief",
+    "evening_recap",
+    "weekly_content_plan",
+    "weekly_review",
+    "accountability_nudge",
+    "revenue_snapshot",
+  ];
+
+  // Standing orders that USED to be cron and are now heartbeat-driven.
+  // They MUST still exist in the catalog (Slice 2 reads them for
+  // generateHeartbeatMd.ts) but MUST NOT appear in jobsJson.
+  const SPRINT_3_HEARTBEAT_SET: ReadonlyArray<string> = [
+    "performance_check_2h",
+    "daily_niche_scan",
+    "trend_watcher",
+    "comment_triage",
+    "competitor_watch",
+    "calendar_lookahead",
+    "industry_intel_daily",
+    "opportunity_scout_daily",
+    "collab_matchmaker_weekly",
+  ];
+
+  // Standing orders deleted entirely for MVP. They MUST NOT exist in
+  // STANDING_ORDERS at all. If a future sprint reintroduces any of them,
+  // delete the corresponding line here.
+  const SPRINT_3_DELETED_SET: ReadonlyArray<string> = [
+    "manager_readiness_packet_quarterly",
+    "algo_research_tiktok",
+    "algo_research_instagram",
+    "algo_research_youtube",
+    "algo_research_linkedin",
+    "algo_research_x",
+  ];
+
+  it("Sprint 3 Slice 1: emits exactly 6 cron entries (Manager) — collapsed from 21", () => {
+    const { jobs } = buildCronJobsJson({ creator: creator("manager") });
+    expect(jobs.length).toBe(6);
+  });
+
+  it("Sprint 3 Slice 1: emits exactly 6 cron entries (Coach) — same 6, all tier='all'", () => {
+    const { jobs } = buildCronJobsJson({ creator: creator("coach") });
+    expect(jobs.length).toBe(6);
+  });
+
+  it("Sprint 3 Slice 1: each of the 6 kept slugs is present in the emitted cron set", () => {
+    const { jobs } = buildCronJobsJson({ creator: creator("manager") });
+    const ids = jobs.map((j) => j.entryId);
+    for (const slug of SPRINT_3_CRON_SET) {
+      expect(ids, `missing required cron slug: ${slug}`).toContain(slug);
+    }
+  });
+
+  it("Sprint 3 Slice 1: emitted cron set is EXACTLY the 6 kept slugs (no extras)", () => {
+    const { jobs } = buildCronJobsJson({ creator: creator("manager") });
+    const emitted = new Set(jobs.map((j) => j.entryId));
+    const expected = new Set(SPRINT_3_CRON_SET);
+    expect(emitted).toEqual(expected);
+  });
+
+  it("Sprint 3 Slice 1: moved-to-heartbeat slugs still exist in STANDING_ORDERS with kind='heartbeat'", () => {
+    for (const slug of SPRINT_3_HEARTBEAT_SET) {
+      const program = STANDING_ORDERS.find((p) => p.id === slug);
+      expect(program, `heartbeat slug missing from catalog: ${slug}`).toBeDefined();
+      expect(
+        program!.kind,
+        `slug '${slug}' should be kind='heartbeat' but is '${program!.kind}'`
+      ).toBe("heartbeat");
+    }
+  });
+
+  it("Sprint 3 Slice 1: moved-to-heartbeat slugs do NOT appear in jobsJson", () => {
+    const { jobs } = buildCronJobsJson({ creator: creator("manager") });
+    const ids = new Set(jobs.map((j) => j.entryId));
+    for (const slug of SPRINT_3_HEARTBEAT_SET) {
+      expect(
+        ids.has(slug),
+        `slug '${slug}' is heartbeat-kind and must NOT be in jobsJson`
+      ).toBe(false);
+    }
+  });
+
+  it("Sprint 3 Slice 1: deleted slugs are NOT in STANDING_ORDERS at all", () => {
+    const ids = new Set(STANDING_ORDERS.map((p) => p.id));
+    for (const slug of SPRINT_3_DELETED_SET) {
+      expect(
+        ids.has(slug),
+        `slug '${slug}' should be deleted but is still in catalog`
+      ).toBe(false);
+    }
   });
 });

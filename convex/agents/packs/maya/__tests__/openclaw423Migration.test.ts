@@ -372,23 +372,29 @@ describe("Wave 5 — per-tier cron set (Starter limited / Pro+ full)", () => {
     expect(ids).toContain("weekly_review");
   });
 
-  it("Coach MUST run advisory programs (industry_intel_daily, competitor_watch, calendar_lookahead, manager_readiness_packet_quarterly, revenue_snapshot) — boundary is autonomy, not breadth", () => {
+  it("Coach MUST run revenue_snapshot — the only advisory cron remaining after Sprint 3 Slice 1's collapse", () => {
+    // Sprint 3 Slice 1: cron set collapsed from 21 → 6. The former advisory
+    // crons (industry_intel_daily, competitor_watch, calendar_lookahead) all
+    // became kind="heartbeat" — they retain their AGENTS.md prose but
+    // generateHeartbeatMd.ts (Slice 2) drives them off the heartbeat tick.
+    // manager_readiness_packet_quarterly was deleted entirely for MVP.
+    // revenue_snapshot stays as cron because Mon 9am pairs with Stripe's
+    // weekly close — precise timing matters here.
     const { jobs } = buildCronJobsJson({ creator: fakeCreator("coach") });
     const ids = new Set(jobs.map((j) => j.entryId));
-    // Post-coach/manager migration: every read/advisory program is
-    // tier:"all" because the cost ceiling is small per-creator and the
-    // advisory value compounds. Manager-only entries are ones that
-    // require autonomous OUTBOUND action on the creator's behalf
-    // (auto-send, cold pitch, Apollo/Hunter discovery, hook-library
-    // auto-build folded into the autonomous post-reaction loop).
-    for (const advisory of [
+    expect(ids.has("revenue_snapshot"), "Coach: must run advisory 'revenue_snapshot'").toBe(true);
+    // The other 4 must NOT be in cron after Slice 1. They live in
+    // generateHeartbeatMd.ts and AGENTS.md prose.
+    for (const movedOrDeleted of [
       "industry_intel_daily",
       "competitor_watch",
       "calendar_lookahead",
       "manager_readiness_packet_quarterly",
-      "revenue_snapshot",
     ]) {
-      expect(ids.has(advisory), `Coach: must run advisory '${advisory}'`).toBe(true);
+      expect(
+        ids.has(movedOrDeleted),
+        `'${movedOrDeleted}' moved/deleted in Slice 1 — must NOT be in jobsJson`
+      ).toBe(false);
     }
   });
 });
