@@ -301,7 +301,7 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     expect(kickstart!.delivery?.channel).toBe("claw-messenger");
     if (kickstart!.delivery?.channel !== "claw-messenger")
       throw new Error("type-narrow guard");
-    expect(kickstart!.delivery.target).toBe("+15551234567");
+    expect(kickstart!.delivery.to).toBe("+15551234567");
   });
 
   it("places the kickstart entry at index 0 (lexical-first slot in jobs.json)", () => {

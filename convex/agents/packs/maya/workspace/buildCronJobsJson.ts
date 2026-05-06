@@ -87,11 +87,15 @@ export interface JobSpec {
         // The "last" channel doesn't resolve on first deploy because the
         // creator hasn't messaged in yet; claw-messenger errors with
         // "Delivering to Claw Messenger requires target +1XXXXXXXXXX".
-        // Pin the target to the creator's primary phone number for the
+        // Pin the recipient to the creator's primary phone number for the
         // kickstart; ongoing crons keep using "last".
+        //
+        // Field name `to` (NOT `target`) — verified against OpenClaw 2026.4.23
+        // `resolveCronDeliveryPlan` in `server-plugin-bootstrap-*.js`. The
+        // resolver reads `delivery.to` and ignores any `target` key.
         mode: "announce";
         channel: "claw-messenger";
-        target: string;
+        to: string;
         bestEffort: true;
       };
 }
@@ -313,7 +317,7 @@ function buildFirstBootKickstartJob(opts: {
     delivery: {
       mode: "announce",
       channel: "claw-messenger",
-      target: opts.creator.phoneNumber,
+      to: opts.creator.phoneNumber,
       bestEffort: true,
     },
   };
