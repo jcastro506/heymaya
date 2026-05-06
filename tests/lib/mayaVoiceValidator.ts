@@ -212,6 +212,44 @@ const JARGON_PHRASES: ReadonlyArray<string> = [
 ];
 
 /**
+ * Internal data-structure / workspace-file names. These are dev-side
+ * documentation Maya reads — but if she echoes them to the creator, the
+ * human voice shatters. Only banned in `kind: "model-output"` mode;
+ * workspace-file mode tolerates them since the workspace files literally
+ * have these in their H1 headers and cross-references.
+ *
+ * Sprint 9.7+ — split out from JARGON_PHRASES after a real-world test
+ * surfaced "[source: creatorPicture]" leaking into a creator-facing
+ * iMessage. The validator was correctly catching it as banned-jargon, but
+ * the workspace generators (AGENTS.md, USER.md, etc.) tripped the same
+ * check on their own headers. Scoping these to model-output-only fixes
+ * both — creator messages stay clean, generator outputs validate.
+ */
+const INTERNAL_NAME_PHRASES: ReadonlyArray<string> = [
+  "[source:",
+  "creatorpicture",
+  "memory.md",
+  "soul.md",
+  "user.md",
+  "agents.md",
+  "identity.md",
+  "heartbeat.md",
+  "boot.md",
+  "tools.md",
+  "dreaming.md",
+  "standing-orders.md",
+  "voicefingerprint",
+  "audience.topgeos",
+  "audience.ageranges",
+  "boundaries.banned_topics",
+  "needsverification",
+  "openinganswers",
+  "creatorhandles",
+  "postmetrics",
+  "dailybriefs",
+];
+
+/**
  * Hedging / ring-of-truth disclaimer prefixes. The model uses these when
  * its confidence dips below the firewall threshold but it sends anyway.
  * Per CLAUDE.md principle 3 ("grounded or silent") the right move is to
@@ -634,6 +672,23 @@ export function jargonCheck(
       reason: "banned-jargon",
       detail: `creator-jargon / corporate-speak: "${phrase}" (matched at index ${idx})`,
     });
+  }
+
+  // Sprint 9.7+ — internal data-structure / workspace-file names are
+  // banned in creator-facing model output ONLY. Workspace files (AGENTS.md,
+  // SOUL.md, etc.) legitimately contain these in their headers and
+  // cross-references; flagging them there would break every generator.
+  if (!allowQuotedAsBad) {
+    for (const phrase of INTERNAL_NAME_PHRASES) {
+      const idx = lower.indexOf(phrase);
+      if (idx < 0) continue;
+      if (seen.has(phrase)) continue;
+      seen.add(phrase);
+      hits.push({
+        reason: "banned-jargon",
+        detail: `internal data-structure / workspace-file name leaked into creator-facing output: "${phrase}" (matched at index ${idx})`,
+      });
+    }
   }
 
   return hits;

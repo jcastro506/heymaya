@@ -419,6 +419,37 @@ const jargonFailures: VoiceFixtureEntry[] = [
     failureReasonIfNot:
       "'strategic alignment' + 'metric-driven' — consultant-speak.",
   },
+  {
+    // Sprint 9.7+ regression — Maya leaked a Convex schema name into a
+    // creator-facing iMessage on the v5 live deploy. The citation rule
+    // wants evidence cited, but in HUMAN terms ("from your last 30 posts"),
+    // not by referencing internal documentation files.
+    scenario: "jargon/07 — '[source: creatorPicture]' internal-name leak (v5 regression)",
+    output:
+      "you've got a solid start on tiktok with focus on london landmarks and beginner fitness. your audience is currently mostly UK, with the US second. [source: creatorPicture]",
+    expectedToPass: false,
+    expectedReasons: ["banned-jargon"],
+    failureReasonIfNot:
+      "'[source: creatorPicture]' references the Convex table name — Maya should cite human-verifiable evidence, not dev internals.",
+  },
+  {
+    scenario: "jargon/08 — referencing MEMORY.md / SOUL.md by name",
+    output:
+      "i checked MEMORY.md § Voice anchors — your hooks land best when you lead with a specific dollar figure.",
+    expectedToPass: false,
+    expectedReasons: ["banned-jargon"],
+    failureReasonIfNot:
+      "'MEMORY.md' is an internal workspace file — the creator shouldn't see it referenced.",
+  },
+  {
+    scenario: "jargon/09 — referencing voiceFingerprint by code name",
+    output:
+      "based on your voiceFingerprint, i'd lead with the constraint hook over the soft open.",
+    expectedToPass: false,
+    expectedReasons: ["banned-jargon"],
+    failureReasonIfNot:
+      "'voiceFingerprint' is a Convex field name — say 'your voice' or 'how you write'.",
+  },
 ];
 
 /* -------------------------------------------------------------------------- */
