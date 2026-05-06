@@ -1354,6 +1354,48 @@ export const storeGoogleCalendarConnectionForCreator = internalMutation({
   },
 });
 
+/**
+ * Sprint 7 Slice B — iMessage-tap OAuth completion.
+ *
+ * Mirror of `storeGoogleCalendarOAuthConnection` (which is the
+ * Clerk-session mutation) but takes the creatorId directly because the
+ * iMessage callback resolved it via the `oauthStateTokens` handoff.
+ * Tokens are encrypted at rest the same way the session-side helper
+ * does.
+ */
+export const storeGoogleCalendarOAuthConnectionForCreator = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    timezone: v.string(),
+    accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
+    expiresAt: v.optional(v.number()),
+    tokenType: v.optional(v.string()),
+    scope: v.optional(v.string()),
+    externalAccountId: v.optional(v.string()),
+    lookaheadEvents: v.array(calendarLookaheadEventValidator),
+  },
+  handler: async (ctx, args): Promise<CalendarConnectionImportResult> => {
+    const accessToken = await encrypt(args.accessToken);
+    const refreshToken = args.refreshToken
+      ? await encrypt(args.refreshToken)
+      : undefined;
+    const normalized = normalizeCalendarLookaheadEvents(args.lookaheadEvents);
+    return await storeDirectGoogleCalendarConnection(ctx, {
+      creatorId: args.creatorId,
+      timezone: args.timezone,
+      scopes: googleCalendarScopesFromOAuthScope(args.scope),
+      encryptedAccessToken: accessToken,
+      encryptedRefreshToken: refreshToken,
+      expiresAt: args.expiresAt,
+      tokenType: args.tokenType,
+      oauthScope: args.scope,
+      externalAccountId: args.externalAccountId,
+      events: normalized,
+    });
+  },
+});
+
 export const refreshGoogleCalendarAccessTokenForCreator = internalMutation({
   args: {
     connectionId: v.id("creatorMayaV0CalendarConnections"),
@@ -1780,6 +1822,64 @@ async function fetchGoogleCalendarEvents(
     )}/events?${params.toString()}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
+}
+
+/**
+ * Sprint 7 Slice B — Google Calendar v3 events.insert.
+ *
+ * Mirrors the read helper above: takes a *resolved* access token (the
+ * caller is responsible for token refresh, the same way
+ * `listGoogleCalendarEventsWithStoredToken` is responsible). Returns the
+ * created event's id + htmlLink so Maya can text the operator a confirm.
+ *
+ * Inputs intentionally narrow: the only fields we surface today are the
+ * ones a creator can request via natural-language ("block 3pm Tuesday for
+ * filming"). If/when we need attendees, conferencing, recurrence, etc.,
+ * extend `GoogleCalendarEventCreate` rather than passing a raw record —
+ * defense-in-depth against accidentally leaking arbitrary payloads to
+ * Google.
+ */
+export interface GoogleCalendarEventCreate {
+  /** `summary` on the Google API. */
+  summary: string;
+  description?: string;
+  location?: string;
+  /** ISO 8601 with timezone (e.g. "2026-05-12T15:00:00-07:00"). */
+  start: { dateTime: string; timeZone?: string };
+  end: { dateTime: string; timeZone?: string };
+}
+
+export async function createGoogleCalendarEvent(
+  accessToken: string,
+  calendarId: string,
+  payload: GoogleCalendarEventCreate
+): Promise<{ id: string; htmlLink: string }> {
+  const response = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+      calendarId
+    )}/events`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    }
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `Google Calendar create failed: ${response.status} ${text.slice(0, 240)}`
+    );
+  }
+  const body = (await response.json()) as { id?: string; htmlLink?: string };
+  if (!body.id || !body.htmlLink) {
+    throw new Error(
+      "Google Calendar create returned without id or htmlLink — refusing to surface partial result."
+    );
+  }
+  return { id: body.id, htmlLink: body.htmlLink };
 }
 
 function calendarTimeToMs(

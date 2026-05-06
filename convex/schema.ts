@@ -3464,4 +3464,38 @@ export default defineSchema({
     .index("by_creator_and_firedAt", ["creatorId", "firedAt"])
     .index("by_jobName_and_firedAt", ["jobName", "firedAt"]),
   // ─── end Cron heartbeat ─────────────────────────────────────────────────
+
+  // ─── Sprint 7 Slice B — iMessage-tap OAuth state tokens ─────────────────
+  // Single-use, short-TTL (15 min) handoff tokens for the iMessage Calendar
+  // OAuth flow. Maya texts a creator a connect link; the operator taps it on
+  // their phone — there's no Clerk session in that browser. The state token
+  // is the only way the callback re-resolves which creator just authorized.
+  //
+  // Cleanup: lazy on lookup (the callback deletes the row after consuming
+  // it; expired rows are filtered out and rejected). No background cron is
+  // needed — the table churns at the rate of human OAuth taps, which is
+  // tiny. If volume ever forces it, a daily sweep mutation can be added.
+  oauthStateTokens: defineTable({
+    /** Random UUID — unguessable handoff identifier. */
+    stateToken: v.string(),
+    creatorId: v.id("creators"),
+    /**
+     * Which OAuth flow this token belongs to. Today only `google_calendar`
+     * needs this surface (the iMessage path was greenlit in Sprint 6 for
+     * Calendar; Gmail/etc. use Composio's hosted callback). Keeping the
+     * field as a literal-union makes future providers explicit.
+     */
+    provider: v.union(v.literal("google_calendar")),
+    /** Unix ms — issued time. */
+    createdAtMs: v.number(),
+    /**
+     * Unix ms — `createdAtMs + ttlMs`. The callback rejects rows where
+     * `Date.now() > expiresAtMs`. Stored materialized so the lookup query
+     * doesn't need to read TTL config.
+     */
+    expiresAtMs: v.number(),
+  })
+    .index("by_state_token", ["stateToken"])
+    .index("by_creator", ["creatorId"]),
+  // ─── end OAuth state tokens ─────────────────────────────────────────────
 });

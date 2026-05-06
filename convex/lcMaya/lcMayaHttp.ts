@@ -43,7 +43,11 @@
  * end-to-end on the OAuth side too.
  */
 
-import { httpAction, internalMutation } from "../_generated/server";
+import {
+  httpAction,
+  internalMutation,
+  internalQuery,
+} from "../_generated/server";
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
@@ -1046,15 +1050,13 @@ export const cronHeartbeatHttp = httpAction(async (ctx, request) => {
   } catch (err) {
     return jsonResponse({ error: (err as Error).message }, 400);
   }
-
   try {
     assertWebhookSecret(payload.secret);
   } catch {
     return jsonResponse({ error: "unauthorized" }, 401);
   }
-
   try {
-    const heartbeatId = await ctx.runMutation(
+    const id = await ctx.runMutation(
       internal.lcMaya.lcMayaHttp.recordCronHeartbeatInternal,
       {
         creatorId: payload.creatorId as Id<"creators">,
@@ -1062,7 +1064,283 @@ export const cronHeartbeatHttp = httpAction(async (ctx, request) => {
         firedAt: payload.firedAt ?? Date.now(),
       }
     );
-    return jsonResponse({ ok: true, heartbeatId }, 200);
+    return jsonResponse({ ok: true, id }, 200);
+  } catch (err) {
+    const msg = (err as Error).message;
+    if (msg === "creator-not-found") {
+      return jsonResponse({ error: "creator-not-found" }, 404);
+    }
+    return jsonResponse({ error: msg }, 500);
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/* Endpoint 5 — start_google_calendar_oauth (Sprint 7 Slice B iMessage path)   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Sprint 7 Slice B. Maya texts the creator a Google Calendar connect
+ * link. The creator taps the link on their phone — there's NO Clerk
+ * session in that browser. To re-resolve which creator just authorized,
+ * we generate a single-use UUID state token here and store it in
+ * `oauthStateTokens` with a 15-minute TTL. The Next.js callback at
+ * `app/api/google-calendar/callback-imessage/route.ts` reads the state
+ * back and patches the creator's `connectedAccounts` row.
+ *
+ * Why a separate endpoint from `start_oauth`:
+ *   - `start_oauth` returns a Composio-hosted URL; the iMessage path
+ *     uses *direct* Google OAuth (no Composio for Calendar — Sprint 6
+ *     decision, see `convex/creatorMayaV0/backend.ts` token helpers).
+ *   - `start_oauth` assumes the creator returns to the Clerk-session
+ *     web app; the iMessage path's callback has no session.
+ *
+ * TTL strategy: lazy. The callback enforces `Date.now() <= expiresAtMs`
+ * on lookup. There's no background sweep — at the rate of human OAuth
+ * taps, the table churn is tiny. If this surface ever grows hot, a
+ * daily sweep mutation can be added later (deferred for v0).
+ */
+
+const OAUTH_STATE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+interface StartGoogleCalendarOAuthPayload {
+  secret: string;
+  creatorId: string;
+}
+
+function parseStartGoogleCalendarOAuthPayload(
+  raw: unknown
+): StartGoogleCalendarOAuthPayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") {
+    throw new Error("secret must be a string.");
+  }
+  if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+    throw new Error("creatorId is required.");
+  }
+  return { secret: obj.secret, creatorId: obj.creatorId };
+}
+
+const GOOGLE_CALENDAR_SCOPES = [
+  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
+];
+
+const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+
+export const issueGoogleCalendarStateTokenForCreator = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args): Promise<{ stateToken: string }> => {
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) {
+      throw new Error("creator-not-found");
+    }
+    // Reuse `crypto.randomUUID` — Convex runtime exposes it.
+    const stateToken = crypto.randomUUID();
+    await ctx.db.insert("oauthStateTokens", {
+      stateToken,
+      creatorId: args.creatorId,
+      provider: "google_calendar",
+      createdAtMs: args.nowMs,
+      expiresAtMs: args.nowMs + OAUTH_STATE_TTL_MS,
+    });
+    return { stateToken };
+  },
+});
+
+/**
+ * Lookup helper used by the Next.js iMessage callback. Lazy TTL
+ * enforcement: returns null if the row is gone OR expired. The callback
+ * deletes the row after consuming it (single-use), and expired rows are
+ * cleared inline so a stale token never hangs around long.
+ */
+export const consumeGoogleCalendarStateToken = internalMutation({
+  args: {
+    stateToken: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: true; creatorId: Id<"creators"> } | { ok: false }> => {
+    const row = await ctx.db
+      .query("oauthStateTokens")
+      .withIndex("by_state_token", (q) => q.eq("stateToken", args.stateToken))
+      .first();
+    if (!row) return { ok: false };
+    // Single-use: always delete the row, even if expired.
+    await ctx.db.delete(row._id);
+    if (row.expiresAtMs < args.nowMs) return { ok: false };
+    if (row.provider !== "google_calendar") return { ok: false };
+    return { ok: true, creatorId: row.creatorId };
+  },
+});
+
+/**
+ * Internal query for tests / observability. The httpAction does not need
+ * this — it's only used to verify a state token landed in the table.
+ */
+export const peekStateTokenForTests = internalQuery({
+  args: { stateToken: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("oauthStateTokens")
+      .withIndex("by_state_token", (q) => q.eq("stateToken", args.stateToken))
+      .first();
+  },
+});
+
+/**
+ * iMessage callback completion endpoint. The Next.js route at
+ * `app/api/google-calendar/callback-imessage/route.ts` cannot call
+ * internal mutations directly through `ConvexHttpClient` (Convex
+ * enforces public-vs-internal at the HTTP boundary). The callback
+ * POSTs the entire OAuth result here in one shot — state token + tokens
+ * + lookahead events — and this endpoint atomically consumes the state
+ * (single-use) and writes the connection. If consume fails (expired /
+ * unknown), nothing is written.
+ */
+interface CompleteGoogleCalendarOAuthPayload {
+  secret: string;
+  stateToken: string;
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt?: number;
+  tokenType?: string;
+  scope?: string;
+  externalAccountId?: string;
+  lookaheadEvents: ReadonlyArray<{
+    providerEventId: string;
+    title: string;
+    description?: string;
+    startMs: number;
+    endMs: number;
+    location?: string;
+    recurring?: boolean;
+  }>;
+  timezone?: string;
+}
+
+function parseCompleteGoogleCalendarOAuthPayload(
+  raw: unknown
+): CompleteGoogleCalendarOAuthPayload {
+  if (!raw || typeof raw !== "object") throw new Error("Body must be a JSON object.");
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") throw new Error("secret must be a string.");
+  if (typeof obj.stateToken !== "string" || obj.stateToken.length === 0) {
+    throw new Error("stateToken is required.");
+  }
+  if (typeof obj.accessToken !== "string" || obj.accessToken.length === 0) {
+    throw new Error("accessToken is required.");
+  }
+  if (!Array.isArray(obj.lookaheadEvents)) {
+    throw new Error("lookaheadEvents must be an array.");
+  }
+  return {
+    secret: obj.secret,
+    stateToken: obj.stateToken,
+    accessToken: obj.accessToken,
+    refreshToken: typeof obj.refreshToken === "string" ? obj.refreshToken : undefined,
+    expiresAt: typeof obj.expiresAt === "number" ? obj.expiresAt : undefined,
+    tokenType: typeof obj.tokenType === "string" ? obj.tokenType : undefined,
+    scope: typeof obj.scope === "string" ? obj.scope : undefined,
+    externalAccountId:
+      typeof obj.externalAccountId === "string" ? obj.externalAccountId : undefined,
+    timezone: typeof obj.timezone === "string" ? obj.timezone : undefined,
+    lookaheadEvents: obj.lookaheadEvents as CompleteGoogleCalendarOAuthPayload["lookaheadEvents"],
+  };
+}
+
+export const completeGoogleCalendarOAuthHttp = httpAction(async (ctx, request) => {
+  let payload: CompleteGoogleCalendarOAuthPayload;
+  try {
+    payload = parseCompleteGoogleCalendarOAuthPayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+
+  // Resolve state → creatorId (single-use, lazy TTL).
+  const consumed = await ctx.runMutation(
+    internal.lcMaya.lcMayaHttp.consumeGoogleCalendarStateToken,
+    { stateToken: payload.stateToken, nowMs: Date.now() }
+  );
+  if (!consumed.ok) {
+    return jsonResponse({ error: "state-token-expired-or-unknown" }, 410);
+  }
+
+  try {
+    await ctx.runMutation(
+      internal.creatorMayaV0.backend.storeGoogleCalendarOAuthConnectionForCreator,
+      {
+        creatorId: consumed.creatorId,
+        timezone: payload.timezone ?? "UTC",
+        accessToken: payload.accessToken,
+        refreshToken: payload.refreshToken,
+        expiresAt: payload.expiresAt,
+        tokenType: payload.tokenType,
+        scope: payload.scope,
+        externalAccountId: payload.externalAccountId,
+        lookaheadEvents: payload.lookaheadEvents.map((e) => ({
+          providerEventId: e.providerEventId,
+          title: e.title,
+          description: e.description,
+          startMs: e.startMs,
+          endMs: e.endMs,
+          location: e.location,
+          recurring: e.recurring ?? false,
+        })),
+      }
+    );
+    return jsonResponse({ ok: true }, 200);
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message ?? "internal-error" }, 500);
+  }
+});
+
+export const startGoogleCalendarOAuthHttp = httpAction(async (ctx, request) => {
+  let payload: StartGoogleCalendarOAuthPayload;
+  try {
+    payload = parseStartGoogleCalendarOAuthPayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const redirectUri = process.env.GOOGLE_CALENDAR_IMESSAGE_REDIRECT_URI;
+  if (!clientId) {
+    return jsonResponse({ error: "missing-google-client-id" }, 500);
+  }
+  if (!redirectUri) {
+    return jsonResponse({ error: "missing-redirect-uri" }, 500);
+  }
+
+  let stateToken: string;
+  try {
+    const result = await ctx.runMutation(
+      internal.lcMaya.lcMayaHttp.issueGoogleCalendarStateTokenForCreator,
+      {
+        creatorId: payload.creatorId as Id<"creators">,
+        nowMs: Date.now(),
+      }
+    );
+    stateToken = result.stateToken;
   } catch (err) {
     const msg = (err as Error).message ?? "internal-error";
     if (msg === "creator-not-found") {
@@ -1070,6 +1348,22 @@ export const cronHeartbeatHttp = httpAction(async (ctx, request) => {
     }
     return jsonResponse({ error: msg }, 500);
   }
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: GOOGLE_CALENDAR_SCOPES.join(" "),
+    access_type: "offline",
+    prompt: "consent",
+    include_granted_scopes: "true",
+    state: stateToken,
+  });
+
+  return jsonResponse(
+    { ok: true, oauthUrl: `${GOOGLE_AUTH_URL}?${params.toString()}` },
+    200
+  );
 });
 
 /* -------------------------------------------------------------------------- */
