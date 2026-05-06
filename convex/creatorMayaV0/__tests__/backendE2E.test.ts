@@ -69,8 +69,12 @@ describe("Creator Maya v0 Convex MVP flow", () => {
     });
     expect(brief.shouldSend).toBe(true);
     if (!brief.shouldSend) return;
-    expect(brief.dailyBrief.message).toContain("Reply \"draft\"");
-    expect(brief.dailyBrief.message).toContain("\"schedule\"");
+    // Sprint 8 Slice A: morning brief now emits a structured JSON envelope
+    // (Maya's runtime applies voice via maya-voice-applier — Sprint 9 wires
+    // the maya-morning-brief skill end-to-end). Assert on the envelope shape.
+    const envelope = JSON.parse(brief.dailyBrief.message);
+    expect(envelope.intent).toBe("morning_brief");
+    expect(envelope.approveTokens).toEqual(["draft", "schedule"]);
 
     const firstHold = await user.mutation(
       api.creatorMayaV0.backend.scheduleLatestBriefHold,

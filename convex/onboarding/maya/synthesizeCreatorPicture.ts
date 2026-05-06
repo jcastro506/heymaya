@@ -329,6 +329,18 @@ const synthGrowthPlanValidator = v.object({
   generatedAt: v.number(),
 });
 
+/**
+ * Sprint 8 Slice A — synth output validator for boundaries.banned_topics.
+ * The synthesis pass surfaces the creator's anti-niches answer (and any
+ * model-detected banned topics from observed posts) here so downstream
+ * skills can refuse generation against listed topics. Optional — old
+ * pictures that haven't been re-synthed don't have it; skills must
+ * null-coalesce.
+ */
+const boundariesValidator = v.object({
+  banned_topics: v.optional(v.array(v.string())),
+});
+
 export const upsertSynthesizedPicture = internalMutation({
   args: {
     creatorId: v.id("creators"),
@@ -348,6 +360,8 @@ export const upsertSynthesizedPicture = internalMutation({
     careerStageReasoning: v.optional(v.string()),
     careerStageReconciliation: v.optional(careerStageReconciliationValidator),
     growthPlan: v.optional(synthGrowthPlanValidator),
+    // ─── Sprint 8 Slice A — boundary anchors ─────────────────────────────
+    boundaries: v.optional(boundariesValidator),
   },
   handler: async (ctx, args): Promise<Id<"creatorPicture">> => {
     const existing = await ctx.db
@@ -386,6 +400,12 @@ export const upsertSynthesizedPicture = internalMutation({
     // old or partial synthesis result doesn't wipe a known answer.
     if (args.inferredCareerStage !== undefined) {
       synthFields.careerStage = args.inferredCareerStage;
+    }
+    // Sprint 8 Slice A — boundary anchors. Synthesis owns this, but we only
+    // patch when the synthesis actually emitted a value so old rows don't
+    // get clobbered with empty arrays.
+    if (args.boundaries !== undefined) {
+      synthFields.boundaries = args.boundaries;
     }
 
     if (existing) {
@@ -1023,7 +1043,10 @@ Required output schema (JSON):
       "postId": string
       "usedFor": string  // the schema field this post supports
     }
-  ]  // at least one per populated field above
+  ],  // at least one per populated field above
+  "boundaries": {
+    "banned_topics": string[]  // OPTIONAL. Topics the creator has explicitly stated they avoid (anti-niches answer in onboarding) OR observed in posts as deliberately-avoided categories. Empty array if none. Skills consume this to refuse generation against listed topics. Be specific — "weight-loss-before-after" not "fitness".
+  } | null,
 }
 
 Citation discipline:
@@ -1280,6 +1303,11 @@ interface ParsedPicture {
   careerStageReasoning: string;
   careerStageReconciliation: ParsedReconciliation;
   growthPlan: ParsedGrowthPlan;
+  // ─── Sprint 8 Slice A — boundary anchors ────────────────────────────────
+  // Optional. Synthesis emits when the creator's anti-niches answer or
+  // observed posts surface explicit "do-not-go-there" topics; otherwise the
+  // model omits the field and skills null-coalesce.
+  boundaries?: { banned_topics?: string[] };
 }
 
 export class SynthValidationError extends Error {
@@ -1428,6 +1456,42 @@ export function parseAndValidatePicture(raw: string): ParsedPicture {
     );
   }
 
+  // ─── Sprint 8 Slice A — boundary anchors (optional) ───────────────────────
+  // The model emits `boundaries: { banned_topics: string[] }` when the
+  // creator's anti-niches answer or observed posts surface explicit "do-not-
+  // go-there" topics. Optional — absence is fine; skills null-coalesce.
+  let boundaries: { banned_topics?: string[] } | undefined;
+  if (obj.boundaries !== undefined && obj.boundaries !== null) {
+    if (
+      typeof obj.boundaries !== "object" ||
+      Array.isArray(obj.boundaries)
+    ) {
+      throw new SynthValidationError(
+        "boundaries must be an object when present."
+      );
+    }
+    const bobj = obj.boundaries as Record<string, unknown>;
+    const parsedBounded: { banned_topics?: string[] } = {};
+    if (bobj.banned_topics !== undefined && bobj.banned_topics !== null) {
+      if (!Array.isArray(bobj.banned_topics)) {
+        throw new SynthValidationError(
+          "boundaries.banned_topics must be an array of strings when present."
+        );
+      }
+      const list: string[] = [];
+      for (const item of bobj.banned_topics) {
+        if (typeof item !== "string" || item.trim().length === 0) {
+          throw new SynthValidationError(
+            "boundaries.banned_topics must be non-empty strings."
+          );
+        }
+        list.push(item.trim());
+      }
+      parsedBounded.banned_topics = list;
+    }
+    boundaries = parsedBounded;
+  }
+
   return {
     niche,
     audience,
@@ -1441,6 +1505,7 @@ export function parseAndValidatePicture(raw: string): ParsedPicture {
     careerStageReasoning,
     careerStageReconciliation,
     growthPlan,
+    ...(boundaries !== undefined ? { boundaries } : {}),
   };
 }
 
@@ -2136,6 +2201,12 @@ export const synthesizeCreatorPicture = internalAction({
             focusArea: derivedFocusArea,
             generatedAt: generatedAtTs,
           },
+          // Sprint 8 Slice A — boundary anchors. Forward when the synthesis
+          // emitted them (otherwise leave undefined so old picture rows
+          // don't get clobbered).
+          ...(parsed.boundaries !== undefined
+            ? { boundaries: parsed.boundaries }
+            : {}),
         }
       );
     } catch (err) {
