@@ -130,12 +130,17 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   },
   {
     id: "first_weekly_plan",
-    title: "First weekly plan (immediate)",
+    title: "First weekly plan (immediate, after picture lock)",
     tier: "all",
     kind: "event",
     scope:
-      "`maya-content-arc-planner` immediately after the 2 Q's land. Persist + push + stamp `firstWeeklyPlanSentAt`.",
-    triggers: "`openingAnswersAt` set, `firstWeeklyPlanSentAt === undefined`. Calendar not gating.",
+      "`maya-content-arc-planner` immediately AFTER `pictureLockedAt` is stamped. Persist + push + stamp `firstWeeklyPlanSentAt`.",
+    // Sprint 6 — re-keyed from `openingAnswersAt` to `pictureLockedAt`.
+    // The original trigger was premature: it fired before the picture
+    // was verified against openingAnswers anchors, so the plan could read
+    // unverified data (e.g. London-bug location). Lock first, plan second.
+    triggers:
+      "`pictureLockedAt` set, `firstWeeklyPlanSentAt === undefined`. Calendar not gating.",
     approvalGates: "Creator approves each idea card in Plan. No auto-publish.",
     escalation: "Picture missing → handles-only plan; 'v2 Sunday has full picture.' Don't defer.",
   },

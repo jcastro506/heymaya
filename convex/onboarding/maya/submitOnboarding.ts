@@ -128,8 +128,11 @@ export function isValidDisplayName(name: string): boolean {
  * TikTok handle row. All writes happen in one mutation so a partial failure
  * doesn't leave the creators row half-patched.
  *
- * `channelPreference` is forced to `imessage` — the TikTok-only v0 product
- * is iMessage-only delivery (per the rewrite spec).
+ * `channelPreference` is now operator-selectable on the form (Sprint 6).
+ * MVP supports `imessage` + `sms`; the form defaults via the salvaged
+ * `recommendChannel(userAgent)` helper. The deploy pipeline downstream
+ * already validates the channel before pairing, so an invalid value
+ * here never reaches the messenger relay.
  */
 export const persistOnboardingSubmission = internalMutation({
   args: {
@@ -138,6 +141,10 @@ export const persistOnboardingSubmission = internalMutation({
     phoneNumber: v.string(),
     handle: v.string(),
     followerCount: v.optional(v.number()),
+    channelPreference: v.union(
+      v.literal("imessage"),
+      v.literal("sms")
+    ),
   },
   handler: async (ctx, args): Promise<void> => {
     const creator = await ctx.db.get(args.creatorId);
@@ -154,7 +161,7 @@ export const persistOnboardingSubmission = internalMutation({
       displayName: args.displayName,
       phoneNumber: args.phoneNumber,
       primaryHandle: args.handle,
-      channelPreference: "imessage",
+      channelPreference: args.channelPreference,
     });
 
     // Upsert the TikTok handle row. Per-creator+platform uniqueness is
@@ -204,6 +211,13 @@ export const submitOnboarding = action({
     handle: v.string(),
     displayName: v.string(),
     phoneNumber: v.string(),
+    // Sprint 6 — channel preference is now a real form field. Default
+    // is operator-selectable via the salvaged `recommendChannel(userAgent)`
+    // helper on the form. Optional in args for back-compat with any
+    // pre-Sprint-6 callers; the action coerces to "imessage" if missing.
+    channelPreference: v.optional(
+      v.union(v.literal("imessage"), v.literal("sms"))
+    ),
   },
   handler: async (ctx, args): Promise<SubmitOnboardingResult> => {
     const identity = await ctx.auth.getUserIdentity();
@@ -276,7 +290,7 @@ export const submitOnboarding = action({
       };
     }
 
-    // Persist the three submission fields in one mutation. Idempotent.
+    // Persist the four submission fields in one mutation. Idempotent.
     await ctx.runMutation(
       internal.onboarding.maya.submitOnboarding.persistOnboardingSubmission,
       {
@@ -285,6 +299,9 @@ export const submitOnboarding = action({
         phoneNumber,
         handle: verified.handle,
         followerCount: verified.followerCount,
+        // Sprint 6 — channel preference is now operator-selectable.
+        // Default to "imessage" for back-compat when callers omit it.
+        channelPreference: args.channelPreference ?? "imessage",
       }
     );
 

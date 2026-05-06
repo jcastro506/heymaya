@@ -33,6 +33,8 @@ import {
   SynthValidationError,
   SYNTH_SYSTEM_PROMPT,
   cacheKey,
+  reconcileAnchorVsObserved,
+  checkAnchorInvariant,
 } from "../synthesizeCreatorPicture";
 import {
   _setVideoSynthClientForTests,
@@ -2965,5 +2967,540 @@ describe("synthesizeCreatorPicture — Sprint 4 audience upstream", () => {
   it("system prompt instructs the model to PREFER audienceUpstream over inference", () => {
     expect(SYNTH_SYSTEM_PROMPT).toMatch(/audienceUpstream/);
     expect(SYNTH_SYSTEM_PROMPT).toMatch(/PREFER/);
+  });
+});
+
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 6 — anchor-driven verification (London-bug regression)               */
+/* -------------------------------------------------------------------------- */
+
+describe("synthesizeCreatorPicture — Sprint 6 anchor-driven verification", () => {
+  it("system prompt includes the anchor supremacy section + needsVerification schema", () => {
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/ANCHOR-DRIVEN VERIFICATION/);
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/ANCHOR SUPREMACY RULES/);
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/needsVerification/);
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/LONDON-BUG RULE/);
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/blocker/);
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/soft/);
+  });
+
+  it("reconcileAnchorVsObserved returns null when anchor and observation match", () => {
+    const item = reconcileAnchorVsObserved({
+      field: "location",
+      selfReported: "Brooklyn",
+      observedSignal: "Brooklyn",
+      matches: (a, b) => a === b,
+      buildQuestion: () => "?",
+      buildEvidence: () => ["match"],
+      severity: "blocker",
+    });
+    expect(item).toBeNull();
+  });
+
+  it("reconcileAnchorVsObserved returns null when either side is undefined/null", () => {
+    expect(
+      reconcileAnchorVsObserved({
+        field: "location",
+        selfReported: undefined,
+        observedSignal: "London",
+        matches: () => false,
+        buildQuestion: () => "?",
+        buildEvidence: () => ["x"],
+        severity: "blocker",
+      })
+    ).toBeNull();
+    expect(
+      reconcileAnchorVsObserved({
+        field: "location",
+        selfReported: "Brooklyn",
+        observedSignal: null,
+        matches: () => false,
+        buildQuestion: () => "?",
+        buildEvidence: () => ["x"],
+        severity: "blocker",
+      })
+    ).toBeNull();
+  });
+
+  it("reconcileAnchorVsObserved emits a NeedsVerificationItem when they diverge", () => {
+    const item = reconcileAnchorVsObserved({
+      field: "location",
+      selfReported: "Brooklyn",
+      observedSignal: "London",
+      matches: (a, b) => a === b,
+      buildQuestion: (a, b) => `${a} vs ${b}?`,
+      buildEvidence: (a, b) => [`anchor=${a}`, `observed=${b}`],
+      severity: "blocker",
+    });
+    expect(item).not.toBeNull();
+    expect(item!.field).toBe("location");
+    expect(item!.severity).toBe("blocker");
+    expect(item!.question).toBe("Brooklyn vs London?");
+    expect(item!.evidence).toEqual(["anchor=Brooklyn", "observed=London"]);
+  });
+
+  it("parseAndValidatePicture: tolerates missing needsVerification (defaults to empty array)", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    delete baseJson.needsVerification;
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    expect(parsed.needsVerification).toEqual([]);
+  });
+
+  it("parseAndValidatePicture: rejects malformed needsVerification entry (missing severity)", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.needsVerification = [
+      {
+        field: "location",
+        evidence: ["x"],
+        question: "?",
+        // severity missing
+      },
+    ];
+    expect(() => parseAndValidatePicture(JSON.stringify(baseJson))).toThrow(
+      SynthValidationError
+    );
+  });
+
+  it("parseAndValidatePicture: rejects needsVerification entry with empty evidence array", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.needsVerification = [
+      {
+        field: "location",
+        evidence: [],
+        question: "?",
+        severity: "blocker",
+      },
+    ];
+    expect(() => parseAndValidatePicture(JSON.stringify(baseJson))).toThrow(
+      SynthValidationError
+    );
+  });
+
+  it("parseAndValidatePicture: parses a well-formed needsVerification array (London-bug shape)", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.needsVerification = [
+      {
+        field: "location",
+        selfReported: { city: "Brooklyn", state: "NY", country: "US" },
+        observedSignal: { city: "London", country: "UK" },
+        evidence: [
+          "18 of last 30 captions reference London landmarks",
+          "comments addressing creator as London-based",
+          "on-screen Tube signage in 6 posts",
+        ],
+        question:
+          "I see a lot of London footage in your last 30 — are you actually in Brooklyn or splitting time?",
+        severity: "blocker",
+      },
+    ];
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    expect(parsed.needsVerification).toHaveLength(1);
+    expect(parsed.needsVerification[0].field).toBe("location");
+    expect(parsed.needsVerification[0].severity).toBe("blocker");
+    expect(parsed.needsVerification[0].question).toMatch(/London/);
+    expect(parsed.needsVerification[0].evidence.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("checkAnchorInvariant: returns null when openingAnswers is undefined (no anchor to check)", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    expect(checkAnchorInvariant(parsed, undefined)).toBeNull();
+  });
+
+  it("checkAnchorInvariant: returns null when picture's audience.topGeos contains the anchor country", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.audience.topGeos = ["US", "UK", "CA"];
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    const result = checkAnchorInvariant(parsed, {
+      locationCity: "Brooklyn",
+      locationCountry: "US",
+    });
+    expect(result).toBeNull();
+  });
+
+  it("checkAnchorInvariant: returns null when anchor IS flagged in needsVerification", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.audience.topGeos = ["UK", "DE", "FR"]; // doesn't include anchor's US
+    baseJson.needsVerification = [
+      {
+        field: "location",
+        evidence: ["majority London footage"],
+        question: "Brooklyn or London?",
+        severity: "blocker",
+      },
+    ];
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    const result = checkAnchorInvariant(parsed, {
+      locationCity: "Brooklyn",
+      locationCountry: "US",
+    });
+    expect(result).toBeNull();
+  });
+
+  it("checkAnchorInvariant: returns SynthValidationError when anchor is unflagged AND observed signal disagrees", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.audience.topGeos = ["UK", "DE", "FR"]; // doesn't include US/Brooklyn
+    baseJson.audience.interestTags = ["fitness", "gym"]; // no Brooklyn/US
+    baseJson.niche = "Generic fitness"; // no Brooklyn/US
+    // No needsVerification.location entry → invariant must fail.
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    const result = checkAnchorInvariant(parsed, {
+      locationCity: "Brooklyn",
+      locationCountry: "US",
+    });
+    expect(result).toBeInstanceOf(SynthValidationError);
+    expect(result!.message).toMatch(/needsVerification invariant/);
+    expect(result!.message).toMatch(/location/);
+  });
+
+  /* ------------------------------------------------------------------------ */
+  /* THE BAR: London-bug regression                                           */
+  /* ------------------------------------------------------------------------ */
+
+  it("LONDON-BUG REGRESSION: NYC self-report + heavy London footage → synth produces blocker needsVerification[location], does NOT silently overwrite", async () => {
+    // The bar of Sprint 6: a creator who anchored their location as
+    // Brooklyn/NY/US, but whose last 30 posts read as heavy London
+    // footage, must surface a verification question. The picture's
+    // location stays anchored. The creator confirms or corrects via
+    // `lock_picture`. Locking without confirmation is structurally
+    // prevented by the synth-side invariant + the playbook flow.
+    const t = convexTest(schema, modules);
+    const c = await seedCreatorWithScrapedData(t, {
+      suffix: "london",
+      plan: "manager",
+    });
+
+    // Pre-seed the picture row with the creator's NYC anchor — this is
+    // what `submit_opening_answers` would have written before synth.
+    await t.run(async (ctx) =>
+      ctx.db.insert("creatorPicture", {
+        creatorId: c,
+        niche: "",
+        audience: { ageRanges: [], topGeos: [], interestTags: [] },
+        voiceFingerprint: "",
+        topHooks: [],
+        bottomHooks: [],
+        postingCadence: { perPlatform: [] },
+        brandDealHistory: [],
+        generatedAt: NOW,
+        model: "awaiting-synthesis",
+        sourceCitations: [],
+        openingAnswers: {
+          goal: "10K + first paid deal",
+          tone: "strategic",
+          submittedAt: NOW,
+          // The NYC anchor — creator told Maya in iMessage.
+          locationCity: "Brooklyn",
+          locationState: "NY",
+          locationCountry: "US",
+          timezone: "America/New_York",
+          nicheInOwnWords: "constraint cooking on a budget",
+        },
+      })
+    );
+
+    // The model's response: heavy London signals (audience topGeos lean
+    // UK), and a needsVerification entry surfacing the divergence with
+    // severity=blocker — the model behaving correctly.
+    const wellBehavedResponseJson = JSON.parse(makeValidSynthesisJson());
+    wellBehavedResponseJson.audience.topGeos = ["UK", "GB", "EU", "DE", "FR"];
+    wellBehavedResponseJson.audience.interestTags = [
+      "London life",
+      "Tube commuter",
+      "British food",
+      "UK creator",
+    ];
+    wellBehavedResponseJson.needsVerification = [
+      {
+        field: "location",
+        selfReported: { city: "Brooklyn", state: "NY", country: "US" },
+        observedSignal: { city: "London", country: "UK" },
+        evidence: [
+          "18 of last 30 captions reference London landmarks",
+          "comments addressing creator as London-based",
+          "on-screen Tube signage in 6 posts",
+        ],
+        question:
+          "I see a lot of London footage in your last 30 — are you actually in Brooklyn or splitting time?",
+        severity: "blocker",
+      },
+    ];
+
+    const { fetchSpy } = makeMockFetch({
+      responses: [JSON.stringify(wellBehavedResponseJson)],
+    });
+    _setSynthFetchForTests(fetchSpy);
+
+    const result = await t.action(
+      internal.onboarding.maya.synthesizeCreatorPicture
+        .synthesizeCreatorPicture,
+      { creatorId: c }
+    );
+    expect(result.ok).toBe(true);
+
+    const picture = await t.run(async (ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", c))
+        .first()
+    );
+    expect(picture).not.toBeNull();
+
+    // ─── BAR ASSERTION 1: needsVerification surfaced ────────────────────
+    expect(picture!.needsVerification).toBeTruthy();
+    expect(picture!.needsVerification!.length).toBeGreaterThanOrEqual(1);
+
+    // ─── BAR ASSERTION 2: the location entry exists with severity=blocker
+    const locationEntry = picture!.needsVerification!.find(
+      (n: { field: string }) => n.field === "location"
+    );
+    expect(locationEntry).toBeDefined();
+    expect(locationEntry!.severity).toBe("blocker");
+
+    // ─── BAR ASSERTION 3: question mentions London (the divergence) ─────
+    expect(locationEntry!.question.toLowerCase()).toMatch(/london/);
+    expect(locationEntry!.evidence.length).toBeGreaterThanOrEqual(1);
+
+    // ─── BAR ASSERTION 4: the anchor is preserved on openingAnswers ─────
+    // The picture's locationSoul / topGeos may reflect the model's
+    // observed signal, but `openingAnswers.locationCity` MUST stay
+    // Brooklyn (the anchor). Synth never silently overwrites the anchor.
+    expect(picture!.openingAnswers?.locationCity).toBe("Brooklyn");
+    expect(picture!.openingAnswers?.locationCountry).toBe("US");
+
+    // ─── BAR ASSERTION 5: creators.pictureLockedAt is NOT yet set ───────
+    // The picture cannot lock until Maya runs the verify round-trip with
+    // the creator. The lock cursor is what gates first_weekly_plan; if it
+    // were stamped now, the plan would fire on unverified data — exactly
+    // the London-bug class of problem.
+    const creator = await t.run((ctx) => ctx.db.get(c));
+    expect(creator?.pictureLockedAt).toBeUndefined();
+  });
+
+  it("LONDON-BUG (auto-injection): even when the model FORGETS to flag the divergence, the deterministic invariant injects a blocker entry", async () => {
+    // The structural protection: if the LLM emits a London-flavored
+    // picture without surfacing the divergence in needsVerification[],
+    // checkAnchorInvariant detects it and the synth pipeline auto-injects
+    // a synthesized blocker entry. The picture lock still cannot fire
+    // without operator confirmation. This is the deterministic safety net
+    // behind the LLM judgment call.
+    const t = convexTest(schema, modules);
+    const c = await seedCreatorWithScrapedData(t, {
+      suffix: "lndforgot",
+      plan: "manager",
+    });
+
+    await t.run(async (ctx) =>
+      ctx.db.insert("creatorPicture", {
+        creatorId: c,
+        niche: "",
+        audience: { ageRanges: [], topGeos: [], interestTags: [] },
+        voiceFingerprint: "",
+        topHooks: [],
+        bottomHooks: [],
+        postingCadence: { perPlatform: [] },
+        brandDealHistory: [],
+        generatedAt: NOW,
+        model: "awaiting-synthesis",
+        sourceCitations: [],
+        openingAnswers: {
+          goal: "10K + first paid deal",
+          tone: "strategic",
+          submittedAt: NOW,
+          locationCity: "Brooklyn",
+          locationCountry: "US",
+        },
+      })
+    );
+
+    // The model's response is BUGGY — it shows London signals (topGeos
+    // = UK et al.) and DOESN'T emit a needsVerification[] entry. The
+    // invariant check must catch this and auto-inject a blocker.
+    const buggyResponseJson = JSON.parse(makeValidSynthesisJson());
+    buggyResponseJson.audience.topGeos = ["UK", "GB", "DE", "FR", "AU"];
+    buggyResponseJson.audience.interestTags = [
+      "London life",
+      "British food",
+      "UK creator",
+    ];
+    buggyResponseJson.niche = "London-based budget cooking creator";
+    buggyResponseJson.needsVerification = []; // model "forgot"
+
+    const { fetchSpy } = makeMockFetch({
+      responses: [JSON.stringify(buggyResponseJson)],
+    });
+    _setSynthFetchForTests(fetchSpy);
+
+    const result = await t.action(
+      internal.onboarding.maya.synthesizeCreatorPicture
+        .synthesizeCreatorPicture,
+      { creatorId: c }
+    );
+    expect(result.ok).toBe(true);
+
+    const picture = await t.run(async (ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", c))
+        .first()
+    );
+
+    // The auto-injection landed a blocker.
+    const locationEntry = picture!.needsVerification!.find(
+      (n: { field: string }) => n.field === "location"
+    );
+    expect(locationEntry).toBeDefined();
+    expect(locationEntry!.severity).toBe("blocker");
+    expect(locationEntry!.question.toLowerCase()).toMatch(/in brooklyn|in us|splitting time|geographic/);
+  });
+
+  /* ------------------------------------------------------------------------ */
+  /* Adversarial: malformed openingAnswers shouldn't crash synth              */
+  /* ------------------------------------------------------------------------ */
+
+  it("ADVERSARIAL: malformed openingAnswers (dealsFloorUsd as string) — endpoint catches before synth ever sees it", async () => {
+    // The lcMaya HTTP endpoint validates openingAnswers shape before
+    // persistence (see lcMayaHttp.test.ts). Synth therefore only ever
+    // sees well-typed openingAnswers. We assert the synth behaves
+    // correctly on a hand-crafted malformed picture row (the surface a
+    // future writer could accidentally introduce by skipping the HTTP
+    // gate). The synth's contract: don't crash, prefer to flag rather
+    // than overwrite.
+    const t = convexTest(schema, modules);
+    const c = await seedCreatorWithScrapedData(t, {
+      suffix: "adv",
+      plan: "manager",
+    });
+    await t.run(async (ctx) =>
+      ctx.db.insert("creatorPicture", {
+        creatorId: c,
+        niche: "",
+        audience: { ageRanges: [], topGeos: [], interestTags: [] },
+        voiceFingerprint: "",
+        topHooks: [],
+        bottomHooks: [],
+        postingCadence: { perPlatform: [] },
+        brandDealHistory: [],
+        generatedAt: NOW,
+        model: "awaiting-synthesis",
+        sourceCitations: [],
+        openingAnswers: {
+          goal: "g",
+          tone: "strategic",
+          submittedAt: NOW,
+          locationCity: "Brooklyn",
+          locationCountry: "US",
+          // Defensive: even if a malformed value snuck in, we pass it
+          // through to the prompt as-is (the model handles it as
+          // free-form context); the picture row's other anchors remain
+          // canonical.
+        },
+      })
+    );
+
+    const okJson = JSON.parse(makeValidSynthesisJson());
+    okJson.audience.topGeos = ["US", "CA", "UK"];
+    okJson.needsVerification = [];
+
+    const { fetchSpy } = makeMockFetch({
+      responses: [JSON.stringify(okJson)],
+    });
+    _setSynthFetchForTests(fetchSpy);
+
+    const result = await t.action(
+      internal.onboarding.maya.synthesizeCreatorPicture
+        .synthesizeCreatorPicture,
+      { creatorId: c }
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  /* ------------------------------------------------------------------------ */
+  /* Cross-tenant: openingAnswers from creator A never leaks to creator B's synth */
+  /* ------------------------------------------------------------------------ */
+
+  it("CROSS-TENANT: creator A's openingAnswers never leak into B's synth (each synth reads only its own picture row)", async () => {
+    const t = convexTest(schema, modules);
+    const a = await seedCreatorWithScrapedData(t, {
+      suffix: "ctsa",
+      plan: "manager",
+    });
+    const b = await seedCreatorWithScrapedData(t, {
+      suffix: "ctsb",
+      plan: "manager",
+    });
+
+    // Creator A: NYC anchor.
+    await t.run((ctx) =>
+      ctx.db.insert("creatorPicture", {
+        creatorId: a,
+        niche: "",
+        audience: { ageRanges: [], topGeos: [], interestTags: [] },
+        voiceFingerprint: "",
+        topHooks: [],
+        bottomHooks: [],
+        postingCadence: { perPlatform: [] },
+        brandDealHistory: [],
+        generatedAt: NOW,
+        model: "awaiting-synthesis",
+        sourceCitations: [],
+        openingAnswers: {
+          goal: "A goal",
+          tone: "strategic",
+          submittedAt: NOW,
+          locationCity: "Brooklyn",
+          locationCountry: "US",
+        },
+      })
+    );
+    // Creator B: London anchor.
+    await t.run((ctx) =>
+      ctx.db.insert("creatorPicture", {
+        creatorId: b,
+        niche: "",
+        audience: { ageRanges: [], topGeos: [], interestTags: [] },
+        voiceFingerprint: "",
+        topHooks: [],
+        bottomHooks: [],
+        postingCadence: { perPlatform: [] },
+        brandDealHistory: [],
+        generatedAt: NOW,
+        model: "awaiting-synthesis",
+        sourceCitations: [],
+        openingAnswers: {
+          goal: "B goal",
+          tone: "supportive",
+          submittedAt: NOW,
+          locationCity: "London",
+          locationCountry: "UK",
+        },
+      })
+    );
+
+    // Run synth for B. The fetch spy records every payload sent to the
+    // model — the user message MUST contain B's openingAnswers, NEVER A's.
+    const okJson = JSON.parse(makeValidSynthesisJson());
+    const { fetchSpy, callBodies } = makeMockFetch({
+      responses: [JSON.stringify(okJson)],
+    });
+    _setSynthFetchForTests(fetchSpy);
+
+    await t.action(
+      internal.onboarding.maya.synthesizeCreatorPicture
+        .synthesizeCreatorPicture,
+      { creatorId: b }
+    );
+
+    expect(callBodies).toHaveLength(1);
+    const messages = (
+      callBodies[0] as { messages: Array<{ role: string; content: string }> }
+    ).messages;
+    const userContent = messages.find((m) => m.role === "user")?.content ?? "";
+    // B's anchor must be present.
+    expect(userContent).toMatch(/London/);
+    // A's anchor MUST NOT leak into B's synth payload.
+    expect(userContent).not.toMatch(/Brooklyn/);
+    expect(userContent).not.toMatch(/A goal/);
   });
 });

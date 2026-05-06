@@ -799,3 +799,427 @@ describe("POST /lc_maya/log_trend", () => {
     expect(res.status).toBe(404);
   });
 });
+
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 6 — submit_opening_answers extended fields                           */
+/* -------------------------------------------------------------------------- */
+
+describe("POST /lc_maya/submit_opening_answers — Sprint 6 anchor questions", () => {
+  beforeEach(() => {
+    _setWebhookSecretForTests(TEST_SECRET);
+  });
+  afterEach(() => {
+    _setWebhookSecretForTests(null);
+  });
+
+  it("HAPPY: persists all six anchor fields onto creatorPicture.openingAnswers", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "s6a", plan: "manager" });
+    const res = await t.fetch("/lc_maya/submit_opening_answers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        goal: "10K + first paid deal by Q3",
+        tone: "strategic",
+        // Sprint 6 anchors:
+        locationCity: "Brooklyn",
+        locationState: "NY",
+        locationCountry: "US",
+        timezone: "America/New_York",
+        nicheInOwnWords: "constraint cooking on a budget",
+        goals3Mo: "land first paid deal + grow to 10K",
+        jobStatus: "transitioning-full-time",
+        dealsInterest: "yes",
+        dealsFloorUsd: 1500,
+        antiNiches: ["no skincare", "no dance trends"],
+      }),
+    });
+    expect(res.status).toBe(200);
+
+    const picture = await t.run((ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .first()
+    );
+    expect(picture?.openingAnswers).toMatchObject({
+      goal: "10K + first paid deal by Q3",
+      tone: "strategic",
+      locationCity: "Brooklyn",
+      locationState: "NY",
+      locationCountry: "US",
+      timezone: "America/New_York",
+      nicheInOwnWords: "constraint cooking on a budget",
+      goals3Mo: "land first paid deal + grow to 10K",
+      jobStatus: "transitioning-full-time",
+      dealsInterest: "yes",
+      dealsFloorUsd: 1500,
+      antiNiches: ["no skincare", "no dance trends"],
+    });
+  });
+
+  it("HAPPY: partial answers merge across rounds (POST 1 of 6, then POST 2 of 6) without losing prior fields", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "s6m", plan: "manager" });
+    // Round 1 — first three anchors only.
+    await t.fetch("/lc_maya/submit_opening_answers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        goal: "grow + monetize",
+        tone: "strategic",
+        locationCity: "Brooklyn",
+        locationCountry: "US",
+        nicheInOwnWords: "budget cooking",
+      }),
+    });
+    // Round 2 — last three anchors. The endpoint must merge, not overwrite.
+    await t.fetch("/lc_maya/submit_opening_answers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        goal: "grow + monetize",
+        tone: "strategic",
+        jobStatus: "side-hustle",
+        dealsInterest: "maybe",
+        antiNiches: ["no MLMs"],
+      }),
+    });
+    const picture = await t.run((ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .first()
+    );
+    expect(picture?.openingAnswers).toMatchObject({
+      locationCity: "Brooklyn",
+      locationCountry: "US",
+      nicheInOwnWords: "budget cooking",
+      jobStatus: "side-hustle",
+      dealsInterest: "maybe",
+      antiNiches: ["no MLMs"],
+    });
+  });
+
+  it("ADVERSARIAL: malformed Sprint 6 fields return 400 (string-typed where number expected; bad enum)", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "s6b", plan: "manager" });
+    const cases = [
+      // dealsFloorUsd as a string ("thirty thousand") — must 400.
+      {
+        body: {
+          secret: TEST_SECRET,
+          creatorId,
+          goal: "g",
+          tone: "strategic",
+          dealsFloorUsd: "thirty thousand",
+        },
+        label: "string-floor",
+      },
+      // dealsInterest as an unknown literal — must 400.
+      {
+        body: {
+          secret: TEST_SECRET,
+          creatorId,
+          goal: "g",
+          tone: "strategic",
+          dealsInterest: "absolutely-yes",
+        },
+        label: "bad-deals-interest",
+      },
+      // jobStatus as an unknown literal — must 400.
+      {
+        body: {
+          secret: TEST_SECRET,
+          creatorId,
+          goal: "g",
+          tone: "strategic",
+          jobStatus: "freelancer",
+        },
+        label: "bad-job-status",
+      },
+      // antiNiches with non-string entry — must 400.
+      {
+        body: {
+          secret: TEST_SECRET,
+          creatorId,
+          goal: "g",
+          tone: "strategic",
+          antiNiches: ["ok", 42],
+        },
+        label: "non-string-anti",
+      },
+    ];
+    for (const c of cases) {
+      const res = await t.fetch("/lc_maya/submit_opening_answers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(c.body),
+      });
+      expect(res.status, c.label).toBe(400);
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 6 — POST /lc_maya/lock_picture                                       */
+/* -------------------------------------------------------------------------- */
+
+describe("POST /lc_maya/lock_picture", () => {
+  beforeEach(() => {
+    _setWebhookSecretForTests(TEST_SECRET);
+  });
+  afterEach(() => {
+    _setWebhookSecretForTests(null);
+  });
+
+  it("HAPPY: stamps creators.pictureLockedAt with no corrections", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "lp1", plan: "manager" });
+    const res = await t.fetch("/lc_maya/lock_picture", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: TEST_SECRET, creatorId }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; lockedAt: number };
+    expect(body.ok).toBe(true);
+    expect(body.lockedAt).toBeTypeOf("number");
+
+    const creator = await t.run((ctx) => ctx.db.get(creatorId));
+    expect(creator?.pictureLockedAt).toBe(body.lockedAt);
+  });
+
+  it("HAPPY: applies a location correction to the picture's openingAnswers and stamps lockedAt", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "lp2", plan: "manager" });
+    // Seed picture with anchor + a (different) self-reported value.
+    await t.run((ctx) =>
+      ctx.db.insert("creatorPicture", {
+        creatorId,
+        niche: "constraint cooking",
+        audience: { ageRanges: [], topGeos: ["UK"], interestTags: [] },
+        voiceFingerprint: "fp",
+        topHooks: [],
+        bottomHooks: [],
+        postingCadence: { perPlatform: [] },
+        brandDealHistory: [],
+        generatedAt: NOW,
+        model: "gemini-3-flash",
+        sourceCitations: [],
+        openingAnswers: {
+          goal: "g",
+          tone: "strategic",
+          submittedAt: NOW,
+          locationCity: "London", // wrong anchor; creator corrects to Brooklyn
+          locationCountry: "UK",
+        },
+      })
+    );
+    const res = await t.fetch("/lc_maya/lock_picture", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        corrections: [
+          {
+            field: "location",
+            correctedValue: {
+              city: "Brooklyn",
+              state: "NY",
+              country: "US",
+              timezone: "America/New_York",
+            },
+          },
+        ],
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      lockedAt: number;
+      appliedCorrections: number;
+    };
+    expect(body.appliedCorrections).toBe(1);
+
+    const picture = await t.run((ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .first()
+    );
+    expect(picture?.openingAnswers?.locationCity).toBe("Brooklyn");
+    expect(picture?.openingAnswers?.locationState).toBe("NY");
+    expect(picture?.openingAnswers?.locationCountry).toBe("US");
+    expect(picture?.openingAnswers?.timezone).toBe("America/New_York");
+    const creator = await t.run((ctx) => ctx.db.get(creatorId));
+    expect(creator?.pictureLockedAt).toBe(body.lockedAt);
+  });
+
+  it("ADVERSARIAL: missing / wrong secret returns 401", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "lp3", plan: "manager" });
+    for (const bad of ["", "wrong", `${TEST_SECRET}x`]) {
+      const res = await t.fetch("/lc_maya/lock_picture", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ secret: bad, creatorId }),
+      });
+      expect(res.status).toBe(401);
+    }
+  });
+
+  it("ADVERSARIAL: malformed body returns 400 (corrections not an array; missing creatorId)", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "lp4", plan: "manager" });
+    const cases = [
+      // corrections is a string, not an array.
+      {
+        body: JSON.stringify({
+          secret: TEST_SECRET,
+          creatorId,
+          corrections: "nope",
+        }),
+        label: "corrections-not-array",
+      },
+      // a corrections entry missing field.
+      {
+        body: JSON.stringify({
+          secret: TEST_SECRET,
+          creatorId,
+          corrections: [{ correctedValue: "x" }],
+        }),
+        label: "missing-field",
+      },
+      // missing creatorId.
+      {
+        body: JSON.stringify({ secret: TEST_SECRET }),
+        label: "missing-creatorId",
+      },
+    ];
+    for (const c of cases) {
+      const res = await t.fetch("/lc_maya/lock_picture", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: c.body,
+      });
+      expect(res.status, c.label).toBe(400);
+    }
+  });
+
+  it("ADVERSARIAL: creator-not-found returns 404", async () => {
+    const t = convexTest(schema, modules);
+    // Insert + delete a creator so we have a syntactically valid id pointing
+    // at nothing.
+    const creatorId = await insertCreator(t, { suffix: "lp5", plan: "manager" });
+    await t.run((ctx) => ctx.db.delete(creatorId));
+    const res = await t.fetch("/lc_maya/lock_picture", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: TEST_SECRET, creatorId }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("CROSS-TENANT: locking creator A never stamps creator B's pictureLockedAt", async () => {
+    const t = convexTest(schema, modules);
+    const a = await insertCreator(t, { suffix: "lpA", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "lpB", plan: "manager" });
+    const res = await t.fetch("/lc_maya/lock_picture", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: TEST_SECRET, creatorId: a }),
+    });
+    expect(res.status).toBe(200);
+    const ca = await t.run((ctx) => ctx.db.get(a));
+    const cb = await t.run((ctx) => ctx.db.get(b));
+    expect(ca?.pictureLockedAt).toBeTypeOf("number");
+    expect(cb?.pictureLockedAt).toBeUndefined();
+  });
+
+  it("PLAN-TIER: any authenticated creator can lock their own picture (coach + manager both succeed)", async () => {
+    // The endpoint is webhook-secret-gated, not Clerk-auth-gated — Maya
+    // (the agent) holds the secret and posts on behalf of a creator. The
+    // plan-tier guard is moot for the lock itself; the gating happens at
+    // the downstream consumers (first_weekly_plan etc.). We assert both
+    // plans succeed at the lock to lock down that contract.
+    for (const plan of ["coach", "manager"] as const) {
+      const t = convexTest(schema, modules);
+      const creatorId = await insertCreator(t, { suffix: `lp_${plan}`, plan });
+      const res = await t.fetch("/lc_maya/lock_picture", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ secret: TEST_SECRET, creatorId }),
+      });
+      expect(res.status, plan).toBe(200);
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 6 — provider fork (googlecalendar-direct vs googlecalendar-composio)*/
+/* -------------------------------------------------------------------------- */
+
+describe("POST /lc_maya/start_oauth — Sprint 6 calendar provider fork", () => {
+  beforeEach(() => {
+    _setWebhookSecretForTests(TEST_SECRET);
+    process.env.COMPOSIO_AUTH_CONFIG_GMAIL = "ac_gmail";
+    process.env.COMPOSIO_AUTH_CONFIG_CALENDAR = "ac_calendar";
+    process.env.COMPOSIO_API_KEY = "test-key";
+    _setComposioClientForTests(
+      buildFakeComposioClient(() => ({
+        redirectUrl: "https://composio.test/connect",
+        state: "abc",
+      }))
+    );
+  });
+  afterEach(() => {
+    _setWebhookSecretForTests(null);
+    _setComposioClientForTests(null);
+    delete process.env.COMPOSIO_AUTH_CONFIG_GMAIL;
+    delete process.env.COMPOSIO_AUTH_CONFIG_CALENDAR;
+    delete process.env.COMPOSIO_API_KEY;
+  });
+
+  it("HAPPY: googlecalendar-direct routes to the calendar plan-features key", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "calD", plan: "manager" });
+    const res = await t.fetch("/lc_maya/start_oauth", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        provider: "googlecalendar-direct",
+        redirectUri: "https://app.test/cb",
+      }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("REJECT: googlecalendar-composio is deprecated and returns 403 provider-not-supported", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "calC", plan: "manager" });
+    const res = await t.fetch("/lc_maya/start_oauth", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        provider: "googlecalendar-composio",
+        redirectUri: "https://app.test/cb",
+      }),
+    });
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("provider-not-supported");
+  });
+});

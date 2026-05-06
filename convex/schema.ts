@@ -116,6 +116,12 @@ export default defineSchema({
     firstBootCompletedAt: v.optional(v.number()),
     openingAnswersAt: v.optional(v.number()),
     firstWeeklyPlanSentAt: v.optional(v.number()),
+    // Sprint 6 — onboarding flow redesign. Stamped by
+    // `POST /lc_maya/lock_picture` after the creator confirms (or corrects)
+    // the synthesized picture against any `needsVerification[]` items.
+    // Standing-order `first_weekly_plan` triggers off this — NOT
+    // `openingAnswersAt` — so the plan never reads unverified picture data.
+    pictureLockedAt: v.optional(v.number()),
     createdAt: v.number(),
     // Sprint 3.7 — partial onboarding answer cursor + payload so a refresh
     // mid-flow doesn't lose progress. The full answer set is persisted to
@@ -466,7 +472,72 @@ export default defineSchema({
         ),
         brandDealFloorUsd: v.optional(v.number()),
         submittedAt: v.number(),
+        // ─── Sprint 6 — six anchor questions (onboarding redesign) ──────────
+        // All optional so partial answers never break boot. The 6-question
+        // playbook (`agents/skills/maya-platform/playbook.md § 4.5`) collects
+        // these one at a time over iMessage; Maya POSTs whichever subset she
+        // has via `submit_opening_answers`. The synthesis pipeline reads
+        // these BEFORE the model call and injects them as constraints — see
+        // `convex/onboarding/maya/synthesizeCreatorPicture.ts` ANCHOR_REMINDER.
+        //
+        // 1. Where based? — fixes the London-bug (NYC self-report + heavy
+        //    London footage in last 30 posts must surface a verification
+        //    question, not silently overwrite).
+        locationCity: v.optional(v.string()),
+        locationState: v.optional(v.string()),
+        locationCountry: v.optional(v.string()),
+        timezone: v.optional(v.string()),
+        // 2. Niche in your own words? ("I don't know yet" valid → empty/short)
+        nicheInOwnWords: v.optional(v.string()),
+        // 3. 3-month goals — free-form so the model can interpret
+        //    (e.g. "10K followers + first paid deal").
+        goals3Mo: v.optional(v.string()),
+        // 4. Full-time / day job?
+        jobStatus: v.optional(
+          v.union(
+            v.literal("full-time-creator"),
+            v.literal("transitioning-full-time"),
+            v.literal("side-hustle"),
+            v.literal("hobby")
+          )
+        ),
+        // 5. Brand deals — interested + rough floor?
+        dealsInterest: v.optional(
+          v.union(
+            v.literal("yes"),
+            v.literal("maybe"),
+            v.literal("no")
+          )
+        ),
+        dealsFloorUsd: v.optional(v.number()),
+        // 6. Anti-patterns — anything tried that didn't work, or shouldn't push toward.
+        antiNiches: v.optional(v.array(v.string())),
       })
+    ),
+    /**
+     * Sprint 6 — synth-emitted reconciliation queue. Generalized from
+     * `careerStageReconciliation` (which stays for back-compat). Each entry
+     * is a claim where the creator's self-reported anchor (`openingAnswers`)
+     * diverges from the observed signal in the last 30 posts. The synth
+     * does NOT silently overwrite anchors — it surfaces the divergence here
+     * so Maya can ask the creator before locking via `lock_picture`.
+     *
+     * Severities:
+     *   - `blocker` — picture cannot be locked without explicit confirmation
+     *     or correction (e.g. London-bug location mismatch).
+     *   - `soft`    — Maya asks, but the creator can wave it through.
+     */
+    needsVerification: v.optional(
+      v.array(
+        v.object({
+          field: v.string(),
+          selfReported: v.optional(v.any()),
+          observedSignal: v.optional(v.any()),
+          evidence: v.array(v.string()),
+          question: v.string(),
+          severity: v.union(v.literal("blocker"), v.literal("soft")),
+        })
+      )
     ),
     // ─── Creator HQ business-readiness audit — added 2026-04-26 ───────────
     // growthPlan: Sprint 2 multimodal-synth populates this once the data-
