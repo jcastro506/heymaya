@@ -251,7 +251,28 @@ Carryover: **Live Fly cron smoke is still red.** Goes in Sprint 1.
 
 ---
 
-## Sprint 4 — Bulk pull expansion (audience + following + follower trend)
+## Sprint 4 — Bulk pull expansion (audience + following + follower trend) — DONE
+
+**Status:** Merged to `staging`. 2740/2740 tests, tsc clean, regression smoke green on real Fly.
+
+**Outcome:**
+- `tiktok.audience` rewritten to return `NormalizedAudience` (was raw passthrough); new `tiktok.following` endpoint returning `NormalizedFollowing`. Both live in `convex/integrations/scrapeCreators/endpoints.ts` with defensive parsers (handle multiple upstream key shapes per region/account).
+- `runFullScrapePull.ts` parallelizes audience + following alongside profile/posts/comments via `Promise.allSettled`. **TikTok-only** (skips silently on IG/YouTube/LinkedIn/X).
+- **Credit gating:** `TIKTOK_AUDIENCE_MIN_FOLLOWERS = 5_000`. The audience endpoint costs 26 credits/call; follower-gated to protect budget. Both Coach and Manager tiers gate at the same threshold (it's a budget concern, not a tier feature).
+- **Schema additions (additive, both new tables):**
+  - `creatorFollowerSnapshots` — append-only follower-count history; lets future windows (7d/90d) compute deltas without churn. 30-day delta computed at USER.md render time.
+  - `scrapeCreatorsCreditAudit` — per-call audit of credit-expensive endpoints. Records `called=true` rows when audience/following fire, `called=false` for skipped-by-gate (credits=0) and errored attempts. Indices: `by_creator`, `by_creator_and_ts`, `by_kind`. Kept separate from `mayaActionLog` because action-log has fixed `entryId`/`outcome` enums tied to skill runs.
+- `synthesizeCreatorPicture.ts` — new `audienceUpstream` field on `PromptPayload` + `renormalizeAudienceFromCache` helper. System prompt directs the model to PREFER upstream audience signal over inferred-from-comments fallback.
+- `generateUserMd.ts` — emits real audience block (ageRanges + topGeos + gender split) when present; placeholder fallback retained only when there's no signal. New 30-day follower-trend line with 7-day floor (avoid trend noise on brand-new snapshots).
+- 23 new tests (cross-tenant isolation, credit gating, adversarial audience payload, fixture coverage). 2740/2740 total.
+
+**Real-world bar choice:** Option (b) — live verification deferred to Sprint 6 onboarding redesign. The smoke harness doesn't drive `submitOnboarding`; the new wiring fires only on real onboarding. Convex-test + mocked fetch covered the data flow + gating + cross-tenant + adversarial cases at unit level. Regression smoke (Sprint 1+2+3 cron init + voice grep) ran clean on Fly to confirm nothing in the deploy path broke.
+
+**Carry-forward into Sprint 5:** When Sprint 6 lights up the live onboarding, run a manual end-to-end with `Kevin.Castro9996` and SSH-verify `cat /data/workspace/USER.md` shows real age ranges + top geos (not "not yet provided"), `creatorFollowerSnapshots` has a row for the handle, and `scrapeCreatorsCreditAudit` shows `called=true` for `tiktok.audience` (since Kevin >5K).
+
+---
+
+## Sprint 4 — Bulk pull expansion (original spec, kept for reference)
 
 **Goal:** Picture has real audience demographics + named-peer signal, no more "not yet provided."
 
