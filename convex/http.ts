@@ -16,8 +16,10 @@ import { httpRouter } from "convex/server";
 import { voiceTranscriptHttp } from "./voice/transcriptHttp";
 import { openClawMediaIngestHttp } from "./creatorMayaV0/openClawMediaIngestHttp";
 import {
+  completeGoogleCalendarOAuthHttp,
   logTrendHttp,
   submitOpeningAnswersHttp,
+  startGoogleCalendarOAuthHttp,
   startOAuthHttp,
 } from "./lcMaya/lcMayaHttp";
 
@@ -61,6 +63,28 @@ http.route({
   path: "/lc_maya/log_trend",
   method: "POST",
   handler: logTrendHttp,
+});
+
+// Sprint 7 Slice B — iMessage-tap Google Calendar OAuth handoff.
+// Maya texts the creator a connect link, the operator taps it on their
+// phone (no Clerk session in that browser). This endpoint mints a UUID
+// state token that the iMessage callback uses to re-resolve which
+// creator just authorized.
+http.route({
+  path: "/lc_maya/start_google_calendar_oauth",
+  method: "POST",
+  handler: startGoogleCalendarOAuthHttp,
+});
+
+// Sprint 7 Slice B — completion sister-endpoint of
+// `/lc_maya/start_google_calendar_oauth`. The Next.js iMessage callback
+// POSTs the resolved tokens + lookahead events here; we atomically
+// consume the single-use state token (lazy TTL check) and write the
+// connection to the creator's row.
+http.route({
+  path: "/lc_maya/complete_google_calendar_oauth",
+  method: "POST",
+  handler: completeGoogleCalendarOAuthHttp,
 });
 
 export default http;

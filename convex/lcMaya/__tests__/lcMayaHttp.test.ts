@@ -24,6 +24,7 @@ import type { Id } from "../../_generated/dataModel";
 import { _setWebhookSecretForTests } from "../../lib/webhookSecret";
 import { _setComposioClientForTests } from "../../integrations/composio/oauth";
 import { ComposioClient as RealComposioClient } from "../../integrations/composio/client";
+import { internal } from "../../_generated/api";
 
 // Local alias for clarity in test fixtures.
 type ComposioClient = RealComposioClient;
@@ -767,5 +768,233 @@ describe("POST /lc_maya/log_trend", () => {
     });
 
     expect(res.status).toBe(404);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Endpoint 4 — start_google_calendar_oauth (iMessage-tap path)                */
+/* -------------------------------------------------------------------------- */
+
+describe("POST /lc_maya/start_google_calendar_oauth", () => {
+  beforeEach(() => {
+    _setWebhookSecretForTests(TEST_SECRET);
+    process.env.GOOGLE_CLIENT_ID = "test-google-client-id";
+    process.env.GOOGLE_CALENDAR_IMESSAGE_REDIRECT_URI =
+      "https://heymaya.test/api/google-calendar/callback-imessage";
+  });
+  afterEach(() => {
+    _setWebhookSecretForTests(null);
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CALENDAR_IMESSAGE_REDIRECT_URI;
+  });
+
+  it("HAPPY: returns oauthUrl with state token, persists row in oauthStateTokens", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, {
+      suffix: "gcal_a",
+      plan: "manager",
+    });
+
+    const res = await t.fetch("/lc_maya/start_google_calendar_oauth", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: TEST_SECRET, creatorId }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(typeof body.oauthUrl).toBe("string");
+
+    // The URL points at Google's OAuth endpoint and carries our client
+    // id + redirect uri + state.
+    const url = new URL(body.oauthUrl);
+    expect(url.hostname).toBe("accounts.google.com");
+    expect(url.searchParams.get("client_id")).toBe("test-google-client-id");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://heymaya.test/api/google-calendar/callback-imessage"
+    );
+    const stateToken = url.searchParams.get("state");
+    expect(stateToken && stateToken.length).toBeGreaterThan(8);
+
+    // Row landed in `oauthStateTokens` with the right creator + provider.
+    const row = await t.run((ctx) =>
+      ctx.db
+        .query("oauthStateTokens")
+        .withIndex("by_state_token", (q) =>
+          q.eq("stateToken", stateToken as string)
+        )
+        .first()
+    );
+    expect(row).not.toBeNull();
+    expect(row?.creatorId).toBe(creatorId);
+    expect(row?.provider).toBe("google_calendar");
+    // Materialized expiry; ~15 minutes in the future.
+    const ttlDelta = (row?.expiresAtMs ?? 0) - (row?.createdAtMs ?? 0);
+    expect(ttlDelta).toBe(15 * 60 * 1000);
+  });
+
+  it("ADVERSARIAL: missing / wrong secret returns 401", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, {
+      suffix: "gcal_b",
+      plan: "manager",
+    });
+    for (const bad of ["", "wrong", `${TEST_SECRET}x`]) {
+      const res = await t.fetch("/lc_maya/start_google_calendar_oauth", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ secret: bad, creatorId }),
+      });
+      expect(res.status).toBe(401);
+    }
+  });
+
+  it("ADVERSARIAL: malformed body returns 400", async () => {
+    const t = convexTest(schema, modules);
+    for (const body of [
+      "not-json",
+      JSON.stringify({ secret: TEST_SECRET }),
+      JSON.stringify({ secret: TEST_SECRET, creatorId: "" }),
+    ]) {
+      const res = await t.fetch("/lc_maya/start_google_calendar_oauth", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      });
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("ADVERSARIAL: creator-not-found returns 404", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, {
+      suffix: "gcal_c",
+      plan: "manager",
+    });
+    await t.run((ctx) => ctx.db.delete(creatorId));
+    const res = await t.fetch("/lc_maya/start_google_calendar_oauth", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: TEST_SECRET, creatorId }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("CROSS-TENANT: state row carries Creator A's id, never Creator B's", async () => {
+    const t = convexTest(schema, modules);
+    const creatorA = await insertCreator(t, {
+      suffix: "gcal_xa",
+      plan: "manager",
+    });
+    const creatorB = await insertCreator(t, {
+      suffix: "gcal_xb",
+      plan: "manager",
+    });
+
+    const res = await t.fetch("/lc_maya/start_google_calendar_oauth", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: TEST_SECRET, creatorId: creatorA }),
+    });
+    expect(res.status).toBe(200);
+    const url = new URL((await res.json()).oauthUrl);
+    const stateToken = url.searchParams.get("state") as string;
+    const row = await t.run((ctx) =>
+      ctx.db
+        .query("oauthStateTokens")
+        .withIndex("by_state_token", (q) => q.eq("stateToken", stateToken))
+        .first()
+    );
+    expect(row?.creatorId).toBe(creatorA);
+    expect(row?.creatorId).not.toBe(creatorB);
+  });
+
+  it("MISSING-ENV: returns 500 when GOOGLE_CLIENT_ID is unset", async () => {
+    delete process.env.GOOGLE_CLIENT_ID;
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, {
+      suffix: "gcal_d",
+      plan: "manager",
+    });
+    const res = await t.fetch("/lc_maya/start_google_calendar_oauth", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: TEST_SECRET, creatorId }),
+    });
+    expect(res.status).toBe(500);
+    expect((await res.json()).error).toBe("missing-google-client-id");
+  });
+
+  it("CONSUME: token round-trips through consumeGoogleCalendarStateToken (single-use, TTL-enforced)", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, {
+      suffix: "gcal_e",
+      plan: "manager",
+    });
+
+    // Issue a state token via the http endpoint.
+    const res = await t.fetch("/lc_maya/start_google_calendar_oauth", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: TEST_SECRET, creatorId }),
+    });
+    const url = new URL((await res.json()).oauthUrl);
+    const stateToken = url.searchParams.get("state") as string;
+
+    // First consume returns ok + creatorId.
+    const first = await t.mutation(
+      internal.lcMaya.lcMayaHttp.consumeGoogleCalendarStateToken,
+      { stateToken, nowMs: Date.now() }
+    );
+    expect(first).toEqual({ ok: true, creatorId });
+
+    // Second consume returns ok: false (single-use).
+    const second = await t.mutation(
+      internal.lcMaya.lcMayaHttp.consumeGoogleCalendarStateToken,
+      { stateToken, nowMs: Date.now() }
+    );
+    expect(second).toEqual({ ok: false });
+
+    // Row is gone.
+    const row = await t.run((ctx) =>
+      ctx.db
+        .query("oauthStateTokens")
+        .withIndex("by_state_token", (q) => q.eq("stateToken", stateToken))
+        .first()
+    );
+    expect(row).toBeNull();
+  });
+
+  it("CONSUME-EXPIRED: an expired state token rejects and the row is cleaned up", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, {
+      suffix: "gcal_f",
+      plan: "manager",
+    });
+    const res = await t.fetch("/lc_maya/start_google_calendar_oauth", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: TEST_SECRET, creatorId }),
+    });
+    const url = new URL((await res.json()).oauthUrl);
+    const stateToken = url.searchParams.get("state") as string;
+
+    // Pretend it's 16 minutes later (TTL is 15).
+    const farFuture = Date.now() + 16 * 60 * 1000;
+    const consumed = await t.mutation(
+      internal.lcMaya.lcMayaHttp.consumeGoogleCalendarStateToken,
+      { stateToken, nowMs: farFuture }
+    );
+    expect(consumed).toEqual({ ok: false });
+
+    // Row was deleted even though it expired (lazy cleanup contract).
+    const row = await t.run((ctx) =>
+      ctx.db
+        .query("oauthStateTokens")
+        .withIndex("by_state_token", (q) => q.eq("stateToken", stateToken))
+        .first()
+    );
+    expect(row).toBeNull();
   });
 });
