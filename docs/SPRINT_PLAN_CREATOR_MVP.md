@@ -169,7 +169,28 @@ Carryover: **Live Fly cron smoke is still red.** Goes in Sprint 1.
 
 ---
 
-## Sprint 3 — Cron + heartbeat collapse + thinking budget tags
+## Sprint 3 — Cron + heartbeat collapse + thinking budget tags — DONE
+
+**Status:** Merged to `staging`. 2717/2717 tests passing, tsc clean, real-world Fly smoke green with `cron jobs.json` showing exactly 6 entries (down from 21).
+
+**Outcome (2 parallel slices + sibling-file cleanup):**
+
+- **Slice 1:** `standingOrders.ts` reshape — 6 cron / 9 heartbeat (kind="heartbeat") / 6 deleted entirely for MVP. `buildCronJobsJson.ts` already filtered `kind === "cron"` so emits exactly 6. 7 new tests added asserting the cron count + kept/moved/deleted invariants.
+- **Slice 2:** `generateHeartbeatMd.ts` rewritten — 11 ordered checks, idle-aware 10pm-7am with URGENT override, skip-if-recent cooldowns to `mayaActionLog`, max 1 push per tick, citation-firewall mandatory, anti-sycophancy posture. Final char count 1997 / 2000 soft cap. 5 new task-tag thinking budgets added (`heartbeat_tick: low`, `pre_post_scorer: high`, `underperformance_diagnoser: high`, `picture_verification: medium`, `revenue_snapshot: low`); `weekly_content_plan` raised medium → high. `mayaActionLog` schema gained `tickKind`, `pushed`, `engagedAt`, plus new `skipped_cooldown` outcome literal. All additive — pre-Sprint-3 rows still validate.
+- **Sibling-file cleanup:** `agents/skills/maya-platform/cron.md` restructured into § cron (6) / § heartbeat-driven (9 with cooldown guidance) / § event-on-demand-folded / § removed entries. `playbook.md` rewrote 9 heartbeat-driven trigger lines, deleted Manager-readiness-packet + algo-research sections entirely, updated § 4 intro to the 3-bucket framing. `tests/cronSimulator.test.ts` and `scripts/cron-smoke.ts` updated to the 6-entry inventory (renamed Starter/Pro → Coach/Manager). `scripts/cron-smoke-results.txt` regenerated. `STANDING_ORDERS` ↔ cron.md ↔ playbook.md ↔ buildCronJobsJson.ts now coherent.
+
+**Real-world bar (verified):**
+- `npm run smoke:creator-maya-v0 -- --live --confirm` exits 0 in ~50s on real Fly v2026.4.23
+- SSH: `jq '.jobs | length' /data/cron/jobs.json` returns `6`
+- Job IDs (alphabetical): `accountability_nudge, evening_recap, morning_brief, revenue_snapshot, weekly_content_plan, weekly_review`
+- Gateway log shows `enabled=true, jobs=6, cron: started`
+- Voice grep over `/data/workspace/*.md` returns ZERO hits (regression check)
+
+**Carry-forward into Sprint 4:** The 90-min waking-hour live tick observation (≥2 ticks fire, max 1 push each, telemetry rows) was NOT performed — pure unit + smoke validation. Worth confirming during Sprint 4's bulk-pull deploys, since heartbeat ticks fire from real cron once the deploy is up. Push back to operator if a separate observation slot is needed.
+
+---
+
+## Sprint 3 — Cron + heartbeat collapse + thinking budget tags (original spec, kept for reference)
 
 **Goal:** Cron is exactly 6 entries (precise timing only). HEARTBEAT.md is the proactive spine. Thinking budgets match task class.
 
