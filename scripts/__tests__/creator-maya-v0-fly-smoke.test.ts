@@ -23,11 +23,14 @@ describe("creator-maya-v0-fly-smoke", () => {
     expect(fixture.workspaceFiles["skills/creator-calendar-content-planner/SKILL.md"]).toContain(
       "name: creator-calendar-content-planner"
     );
+    // Sprint 2 Slice D — pin set refresh. remotion-video-toolkit dropped;
+    // video-frames is the new ClawHub pin we smoke-check (it's the closest
+    // analog and keeps the lock file healthy through hydration-stub state).
     expect(fixture.workspaceFiles[".clawhub/lock.json"]).toContain(
-      "remotion-video-toolkit"
+      "video-frames"
     );
-    expect(fixture.workspaceFiles["skills/remotion-video-toolkit/SKILL.md"]).toContain(
-      "name: remotion-video-toolkit"
+    expect(fixture.workspaceFiles["skills/video-frames/SKILL.md"]).toContain(
+      "name: video-frames"
     );
     expect(fixture.workspaceFiles["skills/tiktok/SKILL.md"]).toContain("name: tiktok");
     expect(fixture.gatewayConfig).toMatchObject({

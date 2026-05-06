@@ -85,21 +85,37 @@ describe("Creator Maya v0 OpenClaw workspace manifest", () => {
     expect(Object.keys(lock.skills).sort()).toEqual(
       [...CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS].sort()
     );
-    expect(lock.skills["remotion-video-toolkit"].version).toBe("1.4.0");
+    // Sprint 2 Slice D pin set — see convex/creatorMayaV0/pinnedClawhubSkills.ts
+    // for per-pin reasoning. tiktok is the strategy/hook OS (full vendored
+    // content); the 6 newer pins ship as hydration stubs that the deploy
+    // pipeline replaces with real ClawHub content at install time.
     expect(lock.skills.tiktok.version).toBe("3.0.0");
-    expect(
-      manifest.files["skills/remotion-video-toolkit/SKILL.md"]
-    ).toContain("name: remotion-video-toolkit");
+    expect(lock.skills["free-video-generator-capcut"].version).toBe("1.0.0");
+    expect(lock.skills["video-frames"].version).toBe("1.0.0");
+    expect(lock.skills["faster-whisper"].version).toBe("1.5.1");
+    expect(lock.skills["elevenlabs-transcribe"].version).toBe("1.0.1");
+    expect(lock.skills["instagram-photo-text-overlay"].version).toBe("1.0.0");
+    expect(lock.skills["brave-search"].version).toBe("1.0.1");
+    // remotion-video-toolkit was dropped in Slice D (operator decision —
+    // misaligned for Maya's clip-composer surface; NemoVideo will replace).
+    expect(lock.skills["remotion-video-toolkit"]).toBeUndefined();
+    // Each pinned skill writes a SKILL.md plus pin metadata into the workspace.
     expect(manifest.files["skills/tiktok/SKILL.md"]).toContain("name: tiktok");
-    expect(
-      manifest.files["skills/remotion-video-toolkit/rules/display-captions.md"]
-    ).toContain("TikTok-style");
     expect(manifest.files["skills/tiktok/references/hooks.md"]).toContain(
       "Hook"
     );
-    expect(manifest.files["TOOLS.md"]).toContain(
-      "remotion-video-toolkit@1.4.0"
-    );
+    expect(
+      manifest.files["skills/video-frames/SKILL.md"]
+    ).toContain("name: video-frames");
+    expect(
+      manifest.files["skills/video-frames/.clawhub/origin.json"]
+    ).toContain('"slug": "video-frames"');
+    expect(
+      manifest.files["skills/brave-search/SKILL.md"]
+    ).toContain("name: brave-search");
+    expect(
+      manifest.files["skills/free-video-generator-capcut/SKILL.md"]
+    ).toContain("name: free-video-generator-capcut");
   });
 
   it("locks v0 to iMessage and calendar-aware tools", () => {

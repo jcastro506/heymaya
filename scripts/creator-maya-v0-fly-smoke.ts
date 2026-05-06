@@ -299,10 +299,12 @@ function verifyMachine(appName: string, machineId: string): string {
     "test -w /data/workspace",
     "test -w /data/cron",
     "grep -q '^name: creator-calendar-content-planner$' /data/workspace/skills/creator-calendar-content-planner/SKILL.md",
-    "grep -q '^name: remotion-video-toolkit$' /data/workspace/skills/remotion-video-toolkit/SKILL.md",
+    // Sprint 2 Slice D — remotion-video-toolkit dropped from pin set;
+    // video-frames is the new pin we verify alongside tiktok.
+    "grep -q '^name: video-frames$' /data/workspace/skills/video-frames/SKILL.md",
     "grep -q '^name: tiktok$' /data/workspace/skills/tiktok/SKILL.md",
     "openclaw skills list | grep -q 'creator-calendar-content-planner'",
-    "openclaw skills list | grep -q 'remotion-video-toolkit'",
+    "openclaw skills list | grep -q 'video-frames'",
     "openclaw skills list | grep -q 'tiktok'",
     "(curl -fsS http://127.0.0.1:18789/healthz || curl -fsS http://127.0.0.1:3000/healthz || true)",
   ].join(" && ");
