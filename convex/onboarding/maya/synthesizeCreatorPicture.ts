@@ -330,6 +330,16 @@ const synthGrowthPlanValidator = v.object({
   generatedAt: v.number(),
 });
 
+// Sprint 6 — needsVerification[] validator. Mirrors the schema shape.
+const needsVerificationItemValidator = v.object({
+  field: v.string(),
+  selfReported: v.optional(v.any()),
+  observedSignal: v.optional(v.any()),
+  evidence: v.array(v.string()),
+  question: v.string(),
+  severity: v.union(v.literal("blocker"), v.literal("soft")),
+});
+
 export const upsertSynthesizedPicture = internalMutation({
   args: {
     creatorId: v.id("creators"),
@@ -349,6 +359,8 @@ export const upsertSynthesizedPicture = internalMutation({
     careerStageReasoning: v.optional(v.string()),
     careerStageReconciliation: v.optional(careerStageReconciliationValidator),
     growthPlan: v.optional(synthGrowthPlanValidator),
+    // ─── Sprint 6 — generalized reconciliation queue ──────────────────────
+    needsVerification: v.optional(v.array(needsVerificationItemValidator)),
   },
   handler: async (ctx, args): Promise<Id<"creatorPicture">> => {
     const existing = await ctx.db
@@ -380,6 +392,14 @@ export const upsertSynthesizedPicture = internalMutation({
     }
     if (args.growthPlan !== undefined) {
       synthFields.growthPlan = args.growthPlan;
+    }
+    // Sprint 6 — generalized reconciliation queue. Always patched (even
+    // when empty) so re-syntheses don't leave stale entries from a prior
+    // run. The downstream `maya-picture-verifier` reads this list to
+    // decide whether the lock_picture endpoint can fire silently or needs
+    // a verification round-trip first.
+    if (args.needsVerification !== undefined) {
+      synthFields.needsVerification = args.needsVerification;
     }
     // The synthesis-inferred careerStage IS the source of truth per spec.
     // It overrides any self-reported value already on the picture row. We
@@ -505,6 +525,28 @@ interface PromptPayload {
     monthlyRevenueUsd?: number;
     currentRevenueStreams?: ReadonlyArray<string>;
     longTermGoals?: { oneYear?: string; fiveYear?: string };
+  };
+  /**
+   * Sprint 6 — opening answers from the 6-question iMessage anchor sequence.
+   * Surfaced as ANCHORS the synth must respect. When present, the synth
+   * preserves them and surfaces divergence in `needsVerification[]` rather
+   * than silently overwriting. Optional for back-compat with pre-Sprint-6
+   * fixtures + creators who haven't been through the anchor flow yet.
+   */
+  openingAnswers?: {
+    goal?: string;
+    tone?: "supportive" | "strategic" | "tough-love";
+    brandDealFloorUsd?: number;
+    locationCity?: string;
+    locationState?: string;
+    locationCountry?: string;
+    timezone?: string;
+    nicheInOwnWords?: string;
+    goals3Mo?: string;
+    jobStatus?: string;
+    dealsInterest?: string;
+    dealsFloorUsd?: number;
+    antiNiches?: ReadonlyArray<string>;
   };
   /**
    * Sprint 4 — per-platform upstream audience demographics. May be empty
@@ -706,6 +748,27 @@ export function buildPromptPayload(
     if (norm) audienceUpstream.push(norm);
   }
 
+  // Sprint 6 — surface openingAnswers as anchors when the picture row has
+  // them. Read directly from the picture row; the lcMaya HTTP endpoint
+  // persists them there before synthesis runs.
+  const openingAnswers = inputs.picture?.openingAnswers
+    ? {
+        goal: inputs.picture.openingAnswers.goal,
+        tone: inputs.picture.openingAnswers.tone,
+        brandDealFloorUsd: inputs.picture.openingAnswers.brandDealFloorUsd,
+        locationCity: inputs.picture.openingAnswers.locationCity,
+        locationState: inputs.picture.openingAnswers.locationState,
+        locationCountry: inputs.picture.openingAnswers.locationCountry,
+        timezone: inputs.picture.openingAnswers.timezone,
+        nicheInOwnWords: inputs.picture.openingAnswers.nicheInOwnWords,
+        goals3Mo: inputs.picture.openingAnswers.goals3Mo,
+        jobStatus: inputs.picture.openingAnswers.jobStatus,
+        dealsInterest: inputs.picture.openingAnswers.dealsInterest,
+        dealsFloorUsd: inputs.picture.openingAnswers.dealsFloorUsd,
+        antiNiches: inputs.picture.openingAnswers.antiNiches,
+      }
+    : undefined;
+
   const payload: PromptPayload = {
     creator: {
       timezone: creator.timezone,
@@ -718,6 +781,7 @@ export function buildPromptPayload(
       currentRevenueStreams: inputs.picture?.currentRevenueStreams,
       longTermGoals: inputs.picture?.longTermGoals,
     },
+    openingAnswers,
     audienceUpstream,
     perPlatform,
     batchingDiagnostics: {
@@ -1339,6 +1403,59 @@ CITATION DISCIPLINE FOR THE STAGE FIELDS:
 - Every focusAreas[i] / antiPatterns[i] / nextMilestone claim has a corresponding entry in growthPlan.citations[]. The citation may reference a post OR an absence-of-post (e.g. usedFor="cadence-gap", postId="absence-2024-04-12-to-2024-04-26").
 - Reconciliation evidence cites the divergence concretely (e.g. "self-reported monetizing but $0 revenue across the input window and no brand-deal mentions in 30 posts").
 
+=== ANCHOR-DRIVEN VERIFICATION (Sprint 6 — onboarding redesign) ===
+
+The input may include a top-level "openingAnswers" block. These are anchors the creator gave Maya directly over iMessage during the 6-question opening sequence — location, niche-in-own-words, 3-month goals, job status, brand-deal interest + floor, anti-niches. Anchors are higher trust than your inference because they came from the creator's own mouth.
+
+ANCHOR SUPREMACY RULES (read carefully):
+
+- When an anchor is present and the observed signal AGREES with it, just emit the picture normally. No verification needed.
+- When an anchor is present and the observed signal DISAGREES with it, you MUST:
+  1. PRESERVE the anchor as the canonical value in the picture (e.g. if openingAnswers.locationCity="Brooklyn" and the last 30 posts are mostly London, the picture's location stays Brooklyn).
+  2. Surface the divergence in needsVerification[] (schema below) with a question Maya will text the creator before the picture is locked.
+  3. NEVER silently overwrite the anchor with the observed signal. The creator confirms or corrects via Maya's verify round-trip; only then does the picture lock.
+- When an anchor is ABSENT, you may infer normally from the observed signal — there's no anchor to override.
+
+Required addition to the JSON output — top-level "needsVerification" array:
+
+"needsVerification": [
+  {
+    "field": string,            // canonical field name — "location" | "niche" | "audience" | "voiceFingerprint" | "brandDealHistory" | "goals3Mo" | "jobStatus"
+    "selfReported": any,        // the creator's anchor value, if any (else null)
+    "observedSignal": any,      // the value the data would suggest if you had no anchor
+    "evidence": string[],       // 1-3 short evidence strings — what in the data made you think the divergence is real
+    "question": string,         // the EXACT question Maya will text the creator (1 sentence, conversational, anti-sycophantic)
+    "severity": "blocker" | "soft"  // blocker = picture cannot lock until creator confirms; soft = Maya asks but the creator can wave through
+  }
+]
+
+SEVERITY HEURISTIC:
+
+- "blocker" — material picture-defining divergence the creator MUST confirm. Examples: location anchor disagrees with majority-of-posts-location; "niche-in-own-words" disagrees with niche the data suggests; brand-deal floor below evidence; job status (full-time vs hobby) disagrees with posting cadence.
+- "soft" — narrower divergence the creator can wave through. Examples: voice register slightly tonally off, audience-tag drift, secondary geo split.
+
+LONDON-BUG RULE (the canonical example for severity=blocker on location):
+
+If openingAnswers.locationCity="Brooklyn" or any other US city, but >50% of last-30-posts evidence (geotags, captions, comments, on-screen footage) reads as a different city/country, you MUST emit:
+{
+  "field": "location",
+  "selfReported": { "city": "Brooklyn", "state": "NY", "country": "US" },
+  "observedSignal": { "city": "London", "country": "UK" },
+  "evidence": ["18 of last 30 captions reference London landmarks", "comments addressing creator as London-based", "on-screen Tube signage in 6 posts"],
+  "question": "I see a lot of London footage in your last 30 — are you actually in Brooklyn or splitting time?",
+  "severity": "blocker"
+}
+
+The picture's locationSoul stays { city: "Brooklyn", state: "NY", country: "US" } — the anchor — until the creator confirms or corrects.
+
+WHEN needsVerification[] IS EMPTY:
+
+If every anchor agrees with the observed signal, emit "needsVerification": []. The picture-lock endpoint sees an empty array and lets Maya skip the verification round-trip.
+
+CITATION DISCIPLINE FOR needsVerification:
+
+Every entry in needsVerification[] must have at least one entry in evidence[]. Empty evidence[] is rejected by the validator. Evidence strings are SHORT (≤120 chars) and SPECIFIC ("18 of last 30 captions reference London landmarks", not "lots of London stuff").
+
 Return ONLY the JSON object. No markdown. No prose around it.`;
 
 const RETRY_REMINDER = `Your previous response was malformed JSON or missing required fields. Re-read the schema carefully. Output ONE single JSON object matching the schema exactly. No markdown, no commentary, no code fences. Every populated field needs at least one entry in sourceCitations[].`;
@@ -1420,6 +1537,70 @@ interface ParsedReconciliation {
   gentleNudge: string | null;
 }
 
+/**
+ * Sprint 6 — generalized reconciliation entry. Every claim about the
+ * creator either matches an anchor in `openingAnswers` (no entry) OR
+ * appears here (one entry per divergence). The shape is the LLM-emitted
+ * needsVerification[] item; the parser validates it; the upsert
+ * mutation persists it on `creatorPicture.needsVerification[]` for
+ * `maya-picture-verifier` (Sprint 5) to consume.
+ *
+ * Severity:
+ *   - "blocker" — Maya MUST ask before locking the picture (e.g. London-bug).
+ *   - "soft"    — Maya asks, but the creator can wave through.
+ */
+export type NeedsVerificationSeverity = "blocker" | "soft";
+
+export interface NeedsVerificationItem {
+  field: string;
+  selfReported: unknown;
+  observedSignal: unknown;
+  evidence: string[];
+  question: string;
+  severity: NeedsVerificationSeverity;
+}
+
+/**
+ * Sprint 6 — generic reconciliation helper. Lifts the
+ * `careerStageReconciliation` shape into a function any field can call
+ * to emit a `NeedsVerificationItem` when self-report and observation
+ * diverge. The original `careerStageReconciliation` block stays for
+ * back-compat (UI consumers + tests still read that exact shape); this
+ * helper is what new fields call.
+ *
+ * Pure logic — no model call. Used by the runtime invariant check
+ * (every unanchored claim must appear in needsVerification[]).
+ */
+export function reconcileAnchorVsObserved<T>(opts: {
+  field: string;
+  selfReported: T | undefined | null;
+  observedSignal: T | undefined | null;
+  matches: (anchor: T, observed: T) => boolean;
+  buildQuestion: (anchor: T, observed: T) => string;
+  buildEvidence: (anchor: T, observed: T) => string[];
+  severity: NeedsVerificationSeverity;
+}): NeedsVerificationItem | null {
+  if (
+    opts.selfReported === undefined ||
+    opts.selfReported === null ||
+    opts.observedSignal === undefined ||
+    opts.observedSignal === null
+  ) {
+    return null;
+  }
+  if (opts.matches(opts.selfReported, opts.observedSignal)) {
+    return null;
+  }
+  return {
+    field: opts.field,
+    selfReported: opts.selfReported,
+    observedSignal: opts.observedSignal,
+    evidence: opts.buildEvidence(opts.selfReported, opts.observedSignal),
+    question: opts.buildQuestion(opts.selfReported, opts.observedSignal),
+    severity: opts.severity,
+  };
+}
+
 interface ParsedSmartAlternative {
   antiPattern: string;
   insteadDoThis: string;
@@ -1486,6 +1667,11 @@ interface ParsedPicture {
   careerStageReasoning: string;
   careerStageReconciliation: ParsedReconciliation;
   growthPlan: ParsedGrowthPlan;
+  // Sprint 6 — generalized reconciliation queue. Every divergence between
+  // openingAnswers anchor and observed signal lands here. Empty array is
+  // valid (means every anchor agreed with the data — no verification
+  // round-trip needed before lock).
+  needsVerification: NeedsVerificationItem[];
 }
 
 export class SynthValidationError extends Error {
@@ -1666,6 +1852,12 @@ export function parseAndValidatePicture(raw: string): ParsedPicture {
     );
   }
 
+  // ─── Sprint 6 — needsVerification[] parse + validation ──────────────────
+  // Optional in v0 — pre-Sprint-6 model outputs that don't emit the field
+  // are treated as empty array (no anchor divergences). When present, every
+  // entry must validate.
+  const needsVerification = parseNeedsVerification(obj.needsVerification);
+
   return {
     niche,
     audience,
@@ -1679,7 +1871,114 @@ export function parseAndValidatePicture(raw: string): ParsedPicture {
     careerStageReasoning,
     careerStageReconciliation,
     growthPlan,
+    needsVerification,
   };
+}
+
+/**
+ * Sprint 6 — parse the model-emitted `needsVerification[]` block. Tolerates
+ * a missing field (older model outputs) by defaulting to empty array. When
+ * present, validates every entry shape; throws SynthValidationError on
+ * malformed entries (triggers the single-shot retry, same path as malformed
+ * top-level JSON).
+ */
+function parseNeedsVerification(v: unknown): NeedsVerificationItem[] {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) {
+    throw new SynthValidationError(
+      "needsVerification must be an array (or omitted entirely)."
+    );
+  }
+  return v.map((entry, i) => {
+    if (typeof entry !== "object" || entry === null) {
+      throw new SynthValidationError(
+        `needsVerification[${i}] must be an object.`
+      );
+    }
+    const e = entry as Record<string, unknown>;
+    if (typeof e.field !== "string" || e.field.length === 0) {
+      throw new SynthValidationError(
+        `needsVerification[${i}].field must be a non-empty string.`
+      );
+    }
+    if (typeof e.question !== "string" || e.question.length === 0) {
+      throw new SynthValidationError(
+        `needsVerification[${i}].question must be a non-empty string.`
+      );
+    }
+    if (e.severity !== "blocker" && e.severity !== "soft") {
+      throw new SynthValidationError(
+        `needsVerification[${i}].severity must be 'blocker' or 'soft' (got '${e.severity}').`
+      );
+    }
+    if (!Array.isArray(e.evidence) || e.evidence.length === 0) {
+      throw new SynthValidationError(
+        `needsVerification[${i}].evidence must be a non-empty array of strings.`
+      );
+    }
+    const evidence = e.evidence.map((s, j) => {
+      if (typeof s !== "string" || s.length === 0) {
+        throw new SynthValidationError(
+          `needsVerification[${i}].evidence[${j}] must be a non-empty string.`
+        );
+      }
+      return s;
+    });
+    return {
+      field: e.field,
+      selfReported: e.selfReported ?? null,
+      observedSignal: e.observedSignal ?? null,
+      evidence,
+      question: e.question,
+      severity: e.severity,
+    };
+  });
+}
+
+/**
+ * Sprint 6 — runtime invariant check. After parsing the model output, walk
+ * the picture's claim fields against `openingAnswers` anchors. Every claim
+ * about the creator either matches an anchor OR appears in
+ * `needsVerification[]`. Fail-closed if synth emitted an unanchored claim
+ * — that's the silent-overwrite bug (London-bug) we're preventing.
+ *
+ * The contract is asymmetric: an absent anchor is fine (no claim to check
+ * against); a present anchor MUST either agree with the picture's claim
+ * for the same field OR be flagged in needsVerification[].
+ *
+ * Returns null when the invariant holds; returns a SynthValidationError
+ * to throw when it doesn't (the caller decides retry vs surface).
+ */
+export function checkAnchorInvariant(
+  parsed: ParsedPicture,
+  openingAnswers: PromptPayload["openingAnswers"]
+): SynthValidationError | null {
+  if (!openingAnswers) return null;
+  const flagged = new Set(parsed.needsVerification.map((n) => n.field));
+
+  // location anchor — picture's audience.topGeos OR an explicit location
+  // claim. We compare against the city/country anchor; if the picture's
+  // top geos don't include the anchor city/country and the anchor isn't
+  // flagged, the invariant fails.
+  const anchorCity = openingAnswers.locationCity?.trim().toLowerCase();
+  const anchorCountry = openingAnswers.locationCountry?.trim().toLowerCase();
+  if ((anchorCity || anchorCountry) && !flagged.has("location")) {
+    const geos = parsed.audience.topGeos.map((g) => g.toLowerCase());
+    const interestTags = parsed.audience.interestTags.map((t) =>
+      t.toLowerCase()
+    );
+    const niche = parsed.niche.toLowerCase();
+    const corpus = [...geos, ...interestTags, niche].join(" | ");
+    const anchorMatches =
+      (anchorCity && corpus.includes(anchorCity)) ||
+      (anchorCountry && corpus.includes(anchorCountry));
+    if (!anchorMatches) {
+      return new SynthValidationError(
+        `needsVerification invariant: openingAnswers.location anchor (${anchorCity ?? "?"}/${anchorCountry ?? "?"}) is not reflected in the picture's audience.topGeos or niche, and 'location' is not in needsVerification[]. Synth must either ground the location in the picture or surface the divergence.`
+      );
+    }
+  }
+  return null;
 }
 
 function stripCodeFences(s: string): string {
@@ -2326,6 +2625,42 @@ export const synthesizeCreatorPicture = internalAction({
     const derivedFocusArea = focusAreaForStage(parsed.careerStage);
     const generatedAtTs = Date.now();
 
+    // Sprint 6 — anchor invariant check. If the model emitted a picture
+    // claim that contradicts an openingAnswers anchor without surfacing
+    // the divergence in needsVerification[], we DON'T silently accept it.
+    // Auto-inject a synthesized blocker entry against the missing anchor
+    // so the picture lock can't fire without operator confirmation. This
+    // is the structural protection against the London-bug — even if the
+    // LLM forgets to flag the divergence, the deterministic check catches
+    // it. PRESERVES the anchor as canonical via the upsert path.
+    const invariantViolation = checkAnchorInvariant(parsed, payload.openingAnswers);
+    if (invariantViolation && payload.openingAnswers) {
+      const anchorCity = payload.openingAnswers.locationCity;
+      const anchorState = payload.openingAnswers.locationState;
+      const anchorCountry = payload.openingAnswers.locationCountry;
+      const observedGeos = parsed.audience.topGeos.slice(0, 3).join(", ");
+      parsed.needsVerification.push({
+        field: "location",
+        selfReported: {
+          city: anchorCity,
+          state: anchorState,
+          country: anchorCountry,
+        },
+        observedSignal:
+          parsed.audience.topGeos.length > 0
+            ? { topGeos: parsed.audience.topGeos.slice(0, 3) }
+            : null,
+        evidence: [
+          `Creator anchor: ${anchorCity ?? "?"}${anchorState ? ", " + anchorState : ""}${anchorCountry ? " (" + anchorCountry + ")" : ""}`,
+          observedGeos.length > 0
+            ? `Observed audience top geos: ${observedGeos}`
+            : "Observed signal does not corroborate the location anchor",
+        ],
+        question: `I see a different geographic signal in your last 30 — are you actually in ${anchorCity ?? anchorCountry ?? "the place you said"}, or splitting time?`,
+        severity: "blocker",
+      });
+    }
+
     // Stage: patch-row
     let creatorPictureId: Id<"creatorPicture">;
     try {
@@ -2368,6 +2703,10 @@ export const synthesizeCreatorPicture = internalAction({
             focusArea: derivedFocusArea,
             generatedAt: generatedAtTs,
           },
+          // Sprint 6 — generalized reconciliation queue. Always pass
+          // through (even when empty) so re-syntheses don't leave stale
+          // entries from a prior run.
+          needsVerification: parsed.needsVerification,
         }
       );
     } catch (err) {
@@ -2526,6 +2865,10 @@ async function synthesizeProfileOnlyCreatorPicture(
           focusArea: focusAreaForStage(stage),
           generatedAt,
         },
+        // Sprint 6 — empty needsVerification on profile-only fallback. We
+        // can't reconcile anchors against post data we don't have; the lock
+        // can fire silently because there's nothing to verify against yet.
+        needsVerification: [],
       }
     );
   } catch (err) {

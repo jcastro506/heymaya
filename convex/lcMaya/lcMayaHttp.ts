@@ -51,7 +51,16 @@ import { assertWebhookSecret } from "../lib/webhookSecret";
 
 const PROVIDER_LITERALS = [
   "gmail",
+  // `googlecalendar` (legacy alias) routes through the DIRECT Google OAuth
+  // path in v0 MVP, same as `googlecalendar-direct`. See the
+  // PROVIDER_TO_PLAN_FEATURES_KEY mapping below.
   "googlecalendar",
+  // Sprint 6 — explicit fork between the direct OAuth path (MVP) and the
+  // legacy Composio-mediated path. The direct path uses
+  // `convex/creatorMayaV0/backend.ts:1703-1802` token-refresh + fetch
+  // helpers; Composio Calendar is DEPRECATED and rejected at the gate.
+  "googlecalendar-direct",
+  "googlecalendar-composio",
   "tiktok",
   "linkedin",
   "twitter",
@@ -91,15 +100,29 @@ const PROVIDER_TO_PLAN_FEATURES_KEY: Partial<
   Record<LcMayaProvider, "gmail" | "calendar" | "linkedin" | "twitter">
 > = {
   gmail: "gmail",
+  // Sprint 6 — both `googlecalendar` (legacy alias) and the explicit
+  // `googlecalendar-direct` route through the DIRECT Google OAuth path in
+  // v0 MVP. Composio Calendar is intentionally absent — see the
+  // `googlecalendar-composio` rejection in `startOAuthHttp`.
   googlecalendar: "calendar",
+  "googlecalendar-direct": "calendar",
   linkedin: "linkedin",
   twitter: "twitter",
   // tiktok intentionally absent — see comment above.
+  // googlecalendar-composio intentionally absent — DEPRECATED, fail-closed.
 };
 
 /* -------------------------------------------------------------------------- */
 /* Endpoint 1 — submit_opening_answers                                         */
 /* -------------------------------------------------------------------------- */
+
+type JobStatusLiteral =
+  | "full-time-creator"
+  | "transitioning-full-time"
+  | "side-hustle"
+  | "hobby";
+
+type DealsInterestLiteral = "yes" | "maybe" | "no";
 
 interface SubmitOpeningAnswersPayload {
   secret: string;
@@ -107,6 +130,90 @@ interface SubmitOpeningAnswersPayload {
   goal: string;
   tone: "supportive" | "strategic" | "tough-love";
   brandDealFloorUsd?: number;
+  // Sprint 6 — six anchor questions. All optional so partial answers
+  // never break boot. Maya POSTs whichever subset she has parsed; the
+  // synth pipeline reads `openingAnswers` BEFORE the model call and
+  // injects them as constraints (see `synthesizeCreatorPicture.ts`).
+  locationCity?: string;
+  locationState?: string;
+  locationCountry?: string;
+  timezone?: string;
+  nicheInOwnWords?: string;
+  goals3Mo?: string;
+  jobStatus?: JobStatusLiteral;
+  dealsInterest?: DealsInterestLiteral;
+  dealsFloorUsd?: number;
+  antiNiches?: string[];
+}
+
+const JOB_STATUS_LITERALS = [
+  "full-time-creator",
+  "transitioning-full-time",
+  "side-hustle",
+  "hobby",
+] as const;
+
+const DEALS_INTEREST_LITERALS = ["yes", "maybe", "no"] as const;
+
+function isJobStatusLiteral(value: unknown): value is JobStatusLiteral {
+  return (
+    typeof value === "string" &&
+    (JOB_STATUS_LITERALS as readonly string[]).includes(value)
+  );
+}
+
+function isDealsInterestLiteral(
+  value: unknown
+): value is DealsInterestLiteral {
+  return (
+    typeof value === "string" &&
+    (DEALS_INTEREST_LITERALS as readonly string[]).includes(value)
+  );
+}
+
+function readOptionalString(
+  obj: Record<string, unknown>,
+  field: string
+): string | undefined {
+  if (obj[field] === undefined || obj[field] === null) return undefined;
+  if (typeof obj[field] !== "string") {
+    throw new Error(`${field} must be a string when provided.`);
+  }
+  return obj[field] as string;
+}
+
+function readOptionalStringArray(
+  obj: Record<string, unknown>,
+  field: string
+): string[] | undefined {
+  if (obj[field] === undefined || obj[field] === null) return undefined;
+  if (!Array.isArray(obj[field])) {
+    throw new Error(`${field} must be an array of strings when provided.`);
+  }
+  const arr = obj[field] as unknown[];
+  for (let i = 0; i < arr.length; i++) {
+    if (typeof arr[i] !== "string") {
+      throw new Error(`${field}[${i}] must be a string.`);
+    }
+  }
+  return arr as string[];
+}
+
+function readOptionalNonNegFiniteNumber(
+  obj: Record<string, unknown>,
+  field: string
+): number | undefined {
+  if (obj[field] === undefined || obj[field] === null) return undefined;
+  if (
+    typeof obj[field] !== "number" ||
+    !Number.isFinite(obj[field] as number) ||
+    (obj[field] as number) < 0
+  ) {
+    throw new Error(
+      `${field} must be a non-negative finite number when provided.`
+    );
+  }
+  return obj[field] as number;
 }
 
 function isToneLiteral(
@@ -138,18 +245,29 @@ function parseSubmitOpeningAnswersPayload(
   if (!isToneLiteral(obj.tone)) {
     throw new Error("tone must be one of supportive | strategic | tough-love.");
   }
-  let brandDealFloorUsd: number | undefined;
-  if (obj.brandDealFloorUsd !== undefined && obj.brandDealFloorUsd !== null) {
-    if (
-      typeof obj.brandDealFloorUsd !== "number" ||
-      !Number.isFinite(obj.brandDealFloorUsd) ||
-      obj.brandDealFloorUsd < 0
-    ) {
+  const brandDealFloorUsd = readOptionalNonNegFiniteNumber(
+    obj,
+    "brandDealFloorUsd"
+  );
+  // Sprint 6 — six anchor questions. Each is optional so partial answers
+  // never block boot. We validate each shape if present and pass through.
+  let jobStatus: JobStatusLiteral | undefined;
+  if (obj.jobStatus !== undefined && obj.jobStatus !== null) {
+    if (!isJobStatusLiteral(obj.jobStatus)) {
       throw new Error(
-        "brandDealFloorUsd must be a non-negative finite number when provided."
+        `jobStatus must be one of ${JOB_STATUS_LITERALS.join(" | ")} when provided.`
       );
     }
-    brandDealFloorUsd = obj.brandDealFloorUsd;
+    jobStatus = obj.jobStatus;
+  }
+  let dealsInterest: DealsInterestLiteral | undefined;
+  if (obj.dealsInterest !== undefined && obj.dealsInterest !== null) {
+    if (!isDealsInterestLiteral(obj.dealsInterest)) {
+      throw new Error(
+        `dealsInterest must be one of ${DEALS_INTEREST_LITERALS.join(" | ")} when provided.`
+      );
+    }
+    dealsInterest = obj.dealsInterest;
   }
   return {
     secret: obj.secret,
@@ -157,6 +275,16 @@ function parseSubmitOpeningAnswersPayload(
     goal: obj.goal,
     tone: obj.tone,
     brandDealFloorUsd,
+    locationCity: readOptionalString(obj, "locationCity"),
+    locationState: readOptionalString(obj, "locationState"),
+    locationCountry: readOptionalString(obj, "locationCountry"),
+    timezone: readOptionalString(obj, "timezone"),
+    nicheInOwnWords: readOptionalString(obj, "nicheInOwnWords"),
+    goals3Mo: readOptionalString(obj, "goals3Mo"),
+    jobStatus,
+    dealsInterest,
+    dealsFloorUsd: readOptionalNonNegFiniteNumber(obj, "dealsFloorUsd"),
+    antiNiches: readOptionalStringArray(obj, "antiNiches"),
   };
 }
 
@@ -176,6 +304,28 @@ export const submitOpeningAnswersInternal = internalMutation({
       v.literal("tough-love")
     ),
     brandDealFloorUsd: v.optional(v.number()),
+    // Sprint 6 — six anchor questions. All optional so partial answers
+    // never block boot. The synth pipeline reads these BEFORE the model
+    // call and injects them as constraints.
+    locationCity: v.optional(v.string()),
+    locationState: v.optional(v.string()),
+    locationCountry: v.optional(v.string()),
+    timezone: v.optional(v.string()),
+    nicheInOwnWords: v.optional(v.string()),
+    goals3Mo: v.optional(v.string()),
+    jobStatus: v.optional(
+      v.union(
+        v.literal("full-time-creator"),
+        v.literal("transitioning-full-time"),
+        v.literal("side-hustle"),
+        v.literal("hobby")
+      )
+    ),
+    dealsInterest: v.optional(
+      v.union(v.literal("yes"), v.literal("maybe"), v.literal("no"))
+    ),
+    dealsFloorUsd: v.optional(v.number()),
+    antiNiches: v.optional(v.array(v.string())),
     nowMs: v.number(),
   },
   handler: async (ctx, args): Promise<{ pictureId: Id<"creatorPicture"> }> => {
@@ -185,15 +335,14 @@ export const submitOpeningAnswersInternal = internalMutation({
     }
 
     // Stamp the canonical "Maya has the basics" timestamp on the creators
-    // row. The `first_weekly_plan` standing order keys off this.
+    // row. The `first_weekly_plan` standing order keys off pictureLockedAt
+    // (Sprint 6) — openingAnswersAt is now an upstream cursor only.
     await ctx.db.patch(creator._id, { openingAnswersAt: args.nowMs });
 
-    const openingAnswersPayload: {
-      goal: string;
-      tone: SubmitOpeningAnswersPayload["tone"];
-      brandDealFloorUsd?: number;
-      submittedAt: number;
-    } = {
+    // Build the openingAnswers payload — only set keys whose value is
+    // defined. The schema treats every Sprint 6 field as optional, so
+    // omitting them is the canonical "creator hasn't answered yet" state.
+    const openingAnswersPayload: Record<string, unknown> = {
       goal: args.goal,
       tone: args.tone,
       submittedAt: args.nowMs,
@@ -201,6 +350,23 @@ export const submitOpeningAnswersInternal = internalMutation({
     if (args.brandDealFloorUsd !== undefined) {
       openingAnswersPayload.brandDealFloorUsd = args.brandDealFloorUsd;
     }
+    if (args.locationCity !== undefined)
+      openingAnswersPayload.locationCity = args.locationCity;
+    if (args.locationState !== undefined)
+      openingAnswersPayload.locationState = args.locationState;
+    if (args.locationCountry !== undefined)
+      openingAnswersPayload.locationCountry = args.locationCountry;
+    if (args.timezone !== undefined) openingAnswersPayload.timezone = args.timezone;
+    if (args.nicheInOwnWords !== undefined)
+      openingAnswersPayload.nicheInOwnWords = args.nicheInOwnWords;
+    if (args.goals3Mo !== undefined) openingAnswersPayload.goals3Mo = args.goals3Mo;
+    if (args.jobStatus !== undefined) openingAnswersPayload.jobStatus = args.jobStatus;
+    if (args.dealsInterest !== undefined)
+      openingAnswersPayload.dealsInterest = args.dealsInterest;
+    if (args.dealsFloorUsd !== undefined)
+      openingAnswersPayload.dealsFloorUsd = args.dealsFloorUsd;
+    if (args.antiNiches !== undefined)
+      openingAnswersPayload.antiNiches = args.antiNiches;
 
     const existing = await ctx.db
       .query("creatorPicture")
@@ -208,8 +374,16 @@ export const submitOpeningAnswersInternal = internalMutation({
       .first();
 
     if (existing) {
+      // Merge into any existing openingAnswers so partial answer rounds
+      // accumulate (Maya may post 3 of 6 anchor questions, then 3 more in a
+      // later round). We preserve already-known anchors when the new
+      // payload omits them.
+      const merged = {
+        ...(existing.openingAnswers ?? {}),
+        ...openingAnswersPayload,
+      } as typeof existing.openingAnswers;
       await ctx.db.patch(existing._id, {
-        openingAnswers: openingAnswersPayload,
+        openingAnswers: merged,
       });
       return { pictureId: existing._id };
     }
@@ -230,7 +404,7 @@ export const submitOpeningAnswersInternal = internalMutation({
       generatedAt: args.nowMs,
       model: "awaiting-synthesis",
       sourceCitations: [],
-      openingAnswers: openingAnswersPayload,
+      openingAnswers: openingAnswersPayload as never,
     });
     return { pictureId };
   },
@@ -259,10 +433,242 @@ export const submitOpeningAnswersHttp = httpAction(async (ctx, request) => {
         goal: payload.goal,
         tone: payload.tone,
         brandDealFloorUsd: payload.brandDealFloorUsd,
+        // Sprint 6 — six anchor questions, all optional.
+        locationCity: payload.locationCity,
+        locationState: payload.locationState,
+        locationCountry: payload.locationCountry,
+        timezone: payload.timezone,
+        nicheInOwnWords: payload.nicheInOwnWords,
+        goals3Mo: payload.goals3Mo,
+        jobStatus: payload.jobStatus,
+        dealsInterest: payload.dealsInterest,
+        dealsFloorUsd: payload.dealsFloorUsd,
+        antiNiches: payload.antiNiches,
         nowMs: Date.now(),
       }
     );
     return jsonResponse({ ok: true }, 200);
+  } catch (err) {
+    const msg = (err as Error).message ?? "internal-error";
+    if (msg === "creator-not-found") {
+      return jsonResponse({ error: "creator-not-found" }, 404);
+    }
+    return jsonResponse({ error: msg }, 500);
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/* Endpoint 1.5 — lock_picture (Sprint 6 — onboarding flow redesign)           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Sprint 6 — Maya commits the synthesized creator picture after the
+ * post-synth verify round-trip. Body shape:
+ *
+ *   { secret, creatorId, corrections?: Array<{ field, correctedValue }> }
+ *
+ * `corrections` lets the creator amend any `needsVerification[]` field
+ * before the lock — e.g. London-bug location: synth flagged
+ * `field: "location"`, creator confirms NYC, Maya posts
+ * `corrections: [{ field: "location", correctedValue: { city: "Brooklyn", state: "NY", country: "US" } }]`.
+ *
+ * The lock stamps `creators.pictureLockedAt`. Standing-order
+ * `first_weekly_plan` triggers off this — NOT `openingAnswersAt` — so the
+ * plan never reads unverified picture data.
+ *
+ * Idempotency: re-locking is allowed (re-stamps `pictureLockedAt` to the
+ * latest call). Maya can re-collect corrections in a follow-up round if
+ * the creator changes their mind; the lock is the cursor that unblocks
+ * downstream programs, not a one-shot fuse.
+ */
+interface LockPictureCorrection {
+  field: string;
+  correctedValue: unknown;
+}
+
+interface LockPicturePayload {
+  secret: string;
+  creatorId: string;
+  corrections?: LockPictureCorrection[];
+}
+
+function parseLockPicturePayload(raw: unknown): LockPicturePayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") {
+    throw new Error("secret must be a string.");
+  }
+  if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+    throw new Error("creatorId is required.");
+  }
+  let corrections: LockPictureCorrection[] | undefined;
+  if (obj.corrections !== undefined && obj.corrections !== null) {
+    if (!Array.isArray(obj.corrections)) {
+      throw new Error("corrections must be an array when provided.");
+    }
+    corrections = obj.corrections.map((entry, i) => {
+      if (!entry || typeof entry !== "object") {
+        throw new Error(`corrections[${i}] must be an object.`);
+      }
+      const e = entry as Record<string, unknown>;
+      if (typeof e.field !== "string" || e.field.length === 0) {
+        throw new Error(
+          `corrections[${i}].field must be a non-empty string.`
+        );
+      }
+      // `correctedValue` is intentionally `unknown` — different fields take
+      // different shapes (location is an object; niche is a string; etc.).
+      return { field: e.field, correctedValue: e.correctedValue };
+    });
+  }
+  return {
+    secret: obj.secret,
+    creatorId: obj.creatorId,
+    corrections,
+  };
+}
+
+export const lockPictureInternal = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    corrections: v.optional(
+      v.array(
+        v.object({
+          field: v.string(),
+          correctedValue: v.any(),
+        })
+      )
+    ),
+    nowMs: v.number(),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ lockedAt: number; appliedCorrections: number }> => {
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) {
+      throw new Error("creator-not-found");
+    }
+    // Apply corrections to the openingAnswers slot on the picture row. The
+    // synth wrote what it inferred; the creator's correction is the
+    // ground-truth anchor that supersedes it. Future heartbeats / standing
+    // orders read `openingAnswers` first, then the synth picture.
+    let appliedCorrections = 0;
+    if (args.corrections && args.corrections.length > 0) {
+      const picture = await ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creator._id))
+        .first();
+      if (picture) {
+        const merged: Record<string, unknown> = {
+          ...(picture.openingAnswers ?? {}),
+        };
+        // Keep `submittedAt` if it exists; default to nowMs if the creator
+        // never went through submit_opening_answers (corrections-only flow).
+        if (typeof merged.submittedAt !== "number") {
+          merged.submittedAt = args.nowMs;
+        }
+        for (const c of args.corrections) {
+          if (c.field === "location") {
+            const cv = c.correctedValue as
+              | {
+                  city?: string;
+                  state?: string;
+                  country?: string;
+                  timezone?: string;
+                }
+              | null
+              | undefined;
+            if (cv && typeof cv === "object") {
+              if (typeof cv.city === "string") merged.locationCity = cv.city;
+              if (typeof cv.state === "string") merged.locationState = cv.state;
+              if (typeof cv.country === "string")
+                merged.locationCountry = cv.country;
+              if (typeof cv.timezone === "string")
+                merged.timezone = cv.timezone;
+            }
+            appliedCorrections++;
+            continue;
+          }
+          if (c.field === "niche") {
+            if (typeof c.correctedValue === "string") {
+              merged.nicheInOwnWords = c.correctedValue;
+              appliedCorrections++;
+            }
+            continue;
+          }
+          if (c.field === "goals3Mo") {
+            if (typeof c.correctedValue === "string") {
+              merged.goals3Mo = c.correctedValue;
+              appliedCorrections++;
+            }
+            continue;
+          }
+          if (c.field === "antiNiches") {
+            if (Array.isArray(c.correctedValue)) {
+              merged.antiNiches = c.correctedValue.filter(
+                (v): v is string => typeof v === "string"
+              );
+              appliedCorrections++;
+            }
+            continue;
+          }
+          // Unknown fields are stored verbatim under the field name so we
+          // never silently drop a creator's correction. Callers can extend
+          // by adding well-typed branches above; the catch-all keeps the
+          // contract forward-compatible without requiring schema bumps.
+          merged[c.field] = c.correctedValue;
+          appliedCorrections++;
+        }
+        // Required-cast: `merged` always includes `goal`/`tone`/`submittedAt`
+        // when the picture had a prior `openingAnswers`. When it didn't, we
+        // still need those required fields — fall back to safe defaults so
+        // the schema-required slots are filled (corrections-only callers
+        // are rare; this is a defensive guard).
+        if (typeof merged.goal !== "string") merged.goal = "";
+        if (
+          merged.tone !== "supportive" &&
+          merged.tone !== "strategic" &&
+          merged.tone !== "tough-love"
+        ) {
+          merged.tone = "strategic";
+        }
+        await ctx.db.patch(picture._id, {
+          openingAnswers: merged as never,
+        });
+      }
+    }
+    await ctx.db.patch(creator._id, { pictureLockedAt: args.nowMs });
+    return { lockedAt: args.nowMs, appliedCorrections };
+  },
+});
+
+export const lockPictureHttp = httpAction(async (ctx, request) => {
+  let payload: LockPicturePayload;
+  try {
+    payload = parseLockPicturePayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+
+  try {
+    const result = await ctx.runMutation(
+      internal.lcMaya.lcMayaHttp.lockPictureInternal,
+      {
+        creatorId: payload.creatorId as Id<"creators">,
+        corrections: payload.corrections,
+        nowMs: Date.now(),
+      }
+    );
+    return jsonResponse({ ok: true, ...result }, 200);
   } catch (err) {
     const msg = (err as Error).message ?? "internal-error";
     if (msg === "creator-not-found") {

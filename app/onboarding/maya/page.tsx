@@ -40,6 +40,12 @@ const meRef = api.creators.me;
 
 type ViewState = "loading" | "form" | "preparing" | "ready";
 
+// Sprint 6 — channel preference is now operator-selectable on the form.
+// MVP supports iMessage (Apple Messages relay) and SMS fallback. WhatsApp
+// + web are deferred (see CLAUDE.md operator-locked decisions: iMessage-only,
+// TikTok-only, single platform).
+type ChannelPreference = "imessage" | "sms";
+
 export default function MayaOnboardingPage() {
   const me = useQuery(meRef);
   const submit = useAction(submitOnboardingRef);
@@ -47,6 +53,22 @@ export default function MayaOnboardingPage() {
   const [handle, setHandle] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState("");
+  // Sprint 6 — channel preference is now a real form field. Default is
+  // derived from the user-agent via `recommendChannel`. iPhone → iMessage,
+  // Android → SMS (we don't ship WhatsApp/web in MVP — see CLAUDE.md
+  // operator-locked decisions: iMessage-only TikTok-only single platform).
+  const [channelPreference, setChannelPreference] = useState<ChannelPreference>(
+    () => {
+      if (typeof navigator === "undefined") return "imessage";
+      const recommended = recommendChannel(navigator.userAgent);
+      // Coerce non-MVP recommendations to one of the supported tiers.
+      // recommendChannel returns "whatsapp" / "web" too — we collapse those
+      // to "sms" for the form so the radio always shows a choice the
+      // backend will accept.
+      if (recommended === "imessage") return "imessage";
+      return "sms";
+    }
+  );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submittedLocally, setSubmittedLocally] = useState(false);
@@ -72,6 +94,7 @@ export default function MayaOnboardingPage() {
         handle,
         displayName,
         phoneNumber: phone,
+        channelPreference,
       });
       if (!result.ok) {
         setError(result.message);
@@ -105,6 +128,8 @@ export default function MayaOnboardingPage() {
             setDisplayName={setDisplayName}
             phone={phone}
             setPhone={setPhone}
+            channelPreference={channelPreference}
+            setChannelPreference={setChannelPreference}
             submitting={submitting}
             error={error}
             onSubmit={onSubmit}
@@ -128,6 +153,8 @@ interface FormViewProps {
   setDisplayName: (next: string) => void;
   phone: string;
   setPhone: (next: string) => void;
+  channelPreference: ChannelPreference;
+  setChannelPreference: (next: ChannelPreference) => void;
   submitting: boolean;
   error: string | null;
   onSubmit: (e: React.FormEvent) => void;
@@ -140,6 +167,8 @@ function FormView({
   setDisplayName,
   phone,
   setPhone,
+  channelPreference,
+  setChannelPreference,
   submitting,
   error,
   onSubmit,
@@ -279,6 +308,36 @@ function FormView({
             aria-label="Your phone number"
             disabled={submitting}
           />
+        </Field>
+
+        <Field
+          label="How should Maya text you?"
+          hint="iMessage on iPhone — pick SMS if you're on Android."
+        >
+          <div className="grid grid-cols-2 gap-2" role="radiogroup">
+            {(
+              [
+                { value: "imessage", label: "iMessage" },
+                { value: "sms", label: "SMS" },
+              ] as Array<{ value: ChannelPreference; label: string }>
+            ).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                role="radio"
+                aria-checked={channelPreference === opt.value}
+                onClick={() => setChannelPreference(opt.value)}
+                disabled={submitting}
+                className={
+                  channelPreference === opt.value
+                    ? "h-12 rounded-2xl border border-lime bg-lime/10 px-4 text-sm font-semibold text-paper outline-none"
+                    : "h-12 rounded-2xl border border-[var(--hairline-strong)] bg-ink-2 px-4 text-sm text-paper-dim outline-none transition hover:text-paper"
+                }
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </Field>
 
         {error ? (
@@ -469,16 +528,13 @@ function stripStack(msg: string): string {
   return cleaned.replace(/^Server Error:?\s*/i, "");
 }
 
-// staged for Wave 2 channel radio
-//
-// Heuristic device detection. Pure function (takes the user-agent string) so
-// it's trivially testable.
+// Sprint 6 — channel preference is now a real form field. Pure function
+// (takes the user-agent string) so it's trivially testable.
 //   - iPhone / iPad / iPod -> iMessage
-//   - Android -> WhatsApp (rich media + ubiquitous)
+//   - Android -> WhatsApp (rich media + ubiquitous, but MVP ships SMS fallback)
 //   - Anything else -> web (the always-available fallback)
 type Channel = "imessage" | "whatsapp" | "sms" | "web";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars: staged for Wave 2 channel radio; intentionally unused until then.
-function recommendChannel(userAgent: string): Channel {
+export function recommendChannel(userAgent: string): Channel {
   const ua = userAgent.toLowerCase();
   if (/iphone|ipad|ipod/.test(ua)) return "imessage";
   if (/android/.test(ua)) return "whatsapp";

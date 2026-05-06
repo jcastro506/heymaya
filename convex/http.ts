@@ -17,6 +17,7 @@ import { voiceTranscriptHttp } from "./voice/transcriptHttp";
 import { openClawMediaIngestHttp } from "./creatorMayaV0/openClawMediaIngestHttp";
 import {
   cronHeartbeatHttp,
+  lockPictureHttp,
   logTrendHttp,
   submitOpeningAnswersHttp,
   startOAuthHttp,
@@ -52,6 +53,15 @@ http.route({
   path: "/lc_maya/submit_opening_answers",
   method: "POST",
   handler: submitOpeningAnswersHttp,
+});
+// Sprint 6 — Maya commits the synthesized picture after the post-synth
+// verify round-trip. Stamps `creators.pictureLockedAt`, which is what the
+// `first_weekly_plan` standing order keys off (replaces the prior trigger
+// on `openingAnswersAt`). Body: { secret, creatorId, corrections? }.
+http.route({
+  path: "/lc_maya/lock_picture",
+  method: "POST",
+  handler: lockPictureHttp,
 });
 http.route({
   path: "/lc_maya/start_oauth",
