@@ -8,6 +8,20 @@
  * Plan-tier caps are enforced separately in convex/lib/planFeatures.ts via
  * clampThinkingBudget(). This file only encodes the *intent* per task; the
  * router clamps that intent against the creator's plan.
+ *
+ * Sprint 3 Slice 2 additions:
+ *   - `heartbeat_tick` (low) — the 11-check tick driver itself; the
+ *     individual checks Maya fires use their own per-task tags.
+ *   - `pre_post_scorer` (high) — `maya-pre-post-scorer` is high-stakes
+ *     reasoning (predicts how a draft will perform).
+ *   - `underperformance_diagnoser` (high) — `maya-underperformance-diagnoser`
+ *     diagnoses why a post bombed; needs careful causal reasoning.
+ *   - `picture_verification` (medium) — onboarding-time verification step
+ *     against the synthesized creatorPicture; multi-doc grounding.
+ *   - `revenue_snapshot` (low) — Stripe pull + cross-ref `brandDeals`;
+ *     mostly arithmetic + cited one-liner.
+ *   - `weekly_content_plan` raised medium → high — Sunday plan drives the
+ *     creator's whole week; deserves the higher budget.
  */
 
 import type { ThinkingBudget } from "../../lib/planFeatures";
@@ -20,19 +34,24 @@ export const TASK_TAGS = [
   "accountability_nudge",
   "niche_scan",
   "evening_recap",
+  "heartbeat_tick",
+  "revenue_snapshot",
   // medium — reasoning quality matters; multi-document grounding
   "morning_brief",
   "post_publish_reaction",
-  "weekly_content_plan",
   "hook_library_build",
   "rate_suggestion",
+  "picture_verification",
   // high — high-stakes; wrong output has real cost
   "brand_email_draft",
   "weekly_review_synth",
+  "weekly_content_plan",
   "manager_readiness_packet",
   "contract_redflag_scan",
   "creator_picture_synthesis",
   "soul_generation",
+  "pre_post_scorer",
+  "underperformance_diagnoser",
 ] as const;
 
 export type TaskTag = (typeof TASK_TAGS)[number];
@@ -44,19 +63,24 @@ const DEFAULT_BUDGET: Record<TaskTag, ThinkingBudget> = {
   accountability_nudge: "low",
   niche_scan: "low",
   evening_recap: "low",
+  heartbeat_tick: "low",
+  revenue_snapshot: "low",
   // medium
   morning_brief: "medium",
   post_publish_reaction: "medium",
-  weekly_content_plan: "medium",
   hook_library_build: "medium",
   rate_suggestion: "medium",
+  picture_verification: "medium",
   // high
   brand_email_draft: "high",
   weekly_review_synth: "high",
+  weekly_content_plan: "high",
   manager_readiness_packet: "high",
   contract_redflag_scan: "high",
   creator_picture_synthesis: "high",
   soul_generation: "high",
+  pre_post_scorer: "high",
+  underperformance_diagnoser: "high",
 };
 
 /**
@@ -96,6 +120,7 @@ const CRON_TASK_TAGS: ReadonlySet<TaskTag> = new Set<TaskTag>([
   "weekly_review_synth",
   "hook_library_build",
   "manager_readiness_packet",
+  "revenue_snapshot",
 ]);
 
 /**
@@ -103,6 +128,12 @@ const CRON_TASK_TAGS: ReadonlySet<TaskTag> = new Set<TaskTag>([
  * Excludes pure on-demand chat (`chat_reply` is a chat_turn_out, not an
  * event firing). The brand_email_draft + contract_redflag_scan +
  * post_publish_reaction tags are textbook event-driven Maya behaviors.
+ *
+ * `heartbeat_tick` is the heartbeat driver itself (Sprint 3 Slice 2);
+ * individual checks fired inside it emit their own event under their
+ * own tag (post_publish_reaction, brand_email_draft, ...). The tick's
+ * own `event_fired` is what shows the dashboard a tick decision was
+ * made — including silent no-ops.
  */
 const EVENT_TASK_TAGS: ReadonlySet<TaskTag> = new Set<TaskTag>([
   "brand_email_draft",
@@ -113,6 +144,10 @@ const EVENT_TASK_TAGS: ReadonlySet<TaskTag> = new Set<TaskTag>([
   "accountability_nudge",
   "creator_picture_synthesis",
   "soul_generation",
+  "heartbeat_tick",
+  "pre_post_scorer",
+  "underperformance_diagnoser",
+  "picture_verification",
 ]);
 
 /**
