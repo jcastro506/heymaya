@@ -52,7 +52,12 @@ import {
   selectOnboardingVideoSamples,
   type TikTokPostCandidate,
 } from "./videoSampling";
-import { buildCreatorMayaWorkspaceManifest } from "./workspaceManifest";
+import { assembleWorkspaceBundle } from "../agents/packs/maya/workspace/assembleWorkspaceBundle";
+import type { WorkspaceInputs } from "../agents/packs/maya/workspace/types";
+import {
+  CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK,
+  CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILLS,
+} from "./pinnedClawhubSkills";
 import { listEvents } from "../integrations/composio/actions/calendar";
 import { decrypt, encrypt } from "../lib/encryption";
 import {
@@ -858,22 +863,10 @@ export const deployOpenClawLive = action({
     }
 
     const appName = appNameForCreatorMayaLive(creator._id, args.mode);
-    const workspace = buildCreatorMayaWorkspaceManifest({
-      creatorId: creator._id,
-      timezone: payload.creator.timezone,
+    const workspace = buildCreatorWorkspaceForDeploy({
+      creator,
+      v0Picture: payload.picture,
       tiktokHandle: payload.tiktok.handle,
-      calendarConnected: payload.onboarding.calendarConnected,
-      imessagePaired: payload.onboarding.imessagePaired,
-      creatorPicture: {
-        niche: payload.picture.niche,
-        stage: payload.picture.stage,
-        goal: payload.picture.goal,
-        voiceFingerprint: payload.picture.voiceFingerprint,
-        contentPillars: payload.picture.contentPillars,
-        workingHooks: payload.picture.workingHooks,
-        weakHooks: payload.picture.weakHooks,
-        scheduleConstraints: payload.picture.scheduleConstraints,
-      },
     });
 
     const fly = new FlyClient({ orgSlug: process.env.FLY_ORG_SLUG ?? "personal" });
@@ -1048,22 +1041,10 @@ export const deployOpenClaw = mutation({
 
     if (!picture || !tiktok) throw new Error("deployOpenClaw: missing seed data.");
 
-    const workspace = buildCreatorMayaWorkspaceManifest({
-      creatorId: creator._id,
-      timezone: creator.timezone,
+    const workspace = buildCreatorWorkspaceForDeploy({
+      creator,
+      v0Picture: picture,
       tiktokHandle: tiktok.handle,
-      calendarConnected: onboarding.calendarConnected,
-      imessagePaired: onboarding.imessagePaired,
-      creatorPicture: {
-        niche: picture.niche,
-        stage: picture.stage,
-        goal: picture.goal,
-        voiceFingerprint: picture.voiceFingerprint,
-        contentPillars: picture.contentPillars,
-        workingHooks: picture.workingHooks,
-        weakHooks: picture.weakHooks,
-        scheduleConstraints: picture.scheduleConstraints,
-      },
     });
 
     await ctx.db.insert("creatorMayaV0OpenClawDeployments", {
@@ -1935,6 +1916,101 @@ function appNameForCreatorMayaLive(
   const short = creatorId.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 18);
   if (mode === "production") return `heymaya-cmv0-${short}`;
   return `heymaya-cmv0-${short}-${Date.now().toString(36)}`;
+}
+
+/**
+ * Sprint 2 (slice A) — single deploy path. Adapt the v0
+ * `creatorMayaV0CreatorPictures` doc + tiktok handle into the canonical
+ * `WorkspaceInputs` consumed by `assembleWorkspaceBundle`, then flatten the
+ * resulting bundle into the `Record<string, string>` shape that
+ * `creatorMayaLiveMachineConfig` already expects (with `jobs.json` materialized
+ * as a workspace file at `/data/cron/jobs.json` per its tar-upload mapping).
+ *
+ * Pinned ClawHub skills (Slice D) are layered on top so the legacy
+ * `.clawhub/lock.json` + per-skill `skills/<slug>/...` files continue to
+ * land on disk for the OpenClaw runtime to discover.
+ *
+ * The v0 `creatorMayaV0CreatorPictures` schema is much narrower than the
+ * canonical `creatorPicture` table — niche/stage/goal/voice + pillars/hooks/
+ * schedule. The generators handle missing optional fields with
+ * `not yet provided` placeholders, so this adapter only fills the fields the
+ * v0 capture flow has and leaves the rest unset.
+ */
+function buildCreatorWorkspaceForDeploy(input: {
+  creator: Doc<"creators">;
+  v0Picture: Doc<"creatorMayaV0CreatorPictures">;
+  tiktokHandle: string;
+}): { files: Record<string, string> } {
+  const { creator, v0Picture, tiktokHandle } = input;
+  const now = Date.now();
+
+  // Adapter: synthesize the canonical `creatorPicture` shape from the v0
+  // narrow capture. We populate the load-bearing fields the generators
+  // dereference (niche, voiceFingerprint) and leave the rest as
+  // schema-required-but-empty defaults so the generators emit grounded
+  // placeholders rather than blowing up.
+  const picture: Doc<"creatorPicture"> = {
+    _id: `cmv0_picture_${creator._id}` as unknown as Id<"creatorPicture">,
+    _creationTime: now,
+    creatorId: creator._id,
+    niche: v0Picture.niche,
+    audience: { ageRanges: [], topGeos: [], interestTags: [] },
+    voiceFingerprint: v0Picture.voiceFingerprint,
+    topHooks: [],
+    bottomHooks: [],
+    postingCadence: { perPlatform: [] },
+    brandDealHistory: [],
+    generatedAt: v0Picture.generatedAt,
+    model: "creatorMayaV0",
+    sourceCitations: [],
+  };
+
+  // Single TikTok handle — Sprint 2 v0 is TikTok-only. The handle on the
+  // v0 row is stored bare; the creatorHandles convention is `@`-prefixed.
+  const handles: ReadonlyArray<Doc<"creatorHandles">> = [
+    {
+      _id: `cmv0_handle_${creator._id}` as unknown as Id<"creatorHandles">,
+      _creationTime: now,
+      creatorId: creator._id,
+      platform: "tiktok",
+      handle: tiktokHandle.startsWith("@") ? tiktokHandle : `@${tiktokHandle}`,
+      verified: true,
+    } as Doc<"creatorHandles">,
+  ];
+
+  const inputs: WorkspaceInputs = {
+    creator,
+    picture,
+    handles,
+    connectedAccounts: [],
+    plan: creator.plan,
+    now,
+  };
+
+  const bundle = assembleWorkspaceBundle(inputs);
+
+  const files: Record<string, string> = {};
+  for (const [name, content] of bundle.files) {
+    files[name] = content;
+  }
+  // jobs.json gets materialized as a workspace file. The Fly machine config
+  // routes it to `/data/cron/jobs.json` via guest_path mapping in
+  // `creatorMayaLiveMachineConfig` (see the `name === "jobs.json"` branch).
+  files["jobs.json"] = JSON.stringify(bundle.jobsJson, null, 2);
+
+  // Pinned ClawHub vendor skills + lock file (Slice D registry).
+  files[".clawhub/lock.json"] = `${JSON.stringify(
+    CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK,
+    null,
+    2
+  )}\n`;
+  for (const skill of CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILLS) {
+    for (const [path, body] of Object.entries(skill.files)) {
+      files[`skills/${skill.slug}/${path}`] = body;
+    }
+  }
+
+  return { files };
 }
 
 export function creatorMayaLiveMachineConfig(

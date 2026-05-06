@@ -272,6 +272,30 @@ export function machineConfigFor(
  *
  * Steps run sequentially via `&&` — any failure aborts the boot, Fly retries
  * per `restart.policy = "always"`.
+ *
+ * Sprint 2 carry-forward fix (2026-05-06): mirrors
+ * `convex/onboarding/business/deployServiceMaya.ts`'s buildBootstrapShell.
+ *
+ * OpenClaw native layout: with `OPENCLAW_STATE_DIR=/data` (set on the
+ * machine env by the deploy below), OpenClaw reads its workspace, cron
+ * jobs, and gateway config directly from `/data/workspace`,
+ * `/data/cron/jobs.json`, and `/data/openclaw.json`. No `$HOME/.openclaw`
+ * symlink dance — that was the legacy macOS layout. Native-first per
+ * `feedback_openclaw_native_first.md`.
+ *
+ * Gateway bind: OpenClaw default loopback 127.0.0.1:18789. We do NOT
+ * pass `--bind lan` because non-loopback binds require explicit
+ * `gateway.controlUi.allowedOrigins` config (validated 2026-04-28
+ * when the previous lan-bind attempt failed startup with that error,
+ * and re-validated in Sprint 1's cron-fly-smoke 2026-05-06 — the legacy
+ * `--bind lan --port 3000` form crash-loops on v2026.4.23). CLI commands
+ * from inside the machine connect via the default ws://127.0.0.1:18789 URL.
+ * When we eventually need external Convex → gateway HTTP push, we'll add
+ * the controlUi config + re-enable lan bind in a follow-up wave.
+ *
+ * `--allow-unconfigured` lets the gateway start even before its first
+ * config-validation pass — we write `/data/openclaw.json` immediately
+ * before exec, but the flag covers any race or partial-write edge case.
  */
 function buildBootstrapShell(): string {
   return [
@@ -298,8 +322,13 @@ function buildBootstrapShell(): string {
     'echo "$MAYA_BOOTSTRAP_JSON" | jq .gatewayConfig > /data/openclaw.json',
     // 6. Add runtime-only gateway auth from Fly secrets when configured.
     'if [ -n "${OPENCLAW_GATEWAY_TOKEN:-${MAYA_RUNTIME_SECRET:-}}" ]; then token="${OPENCLAW_GATEWAY_TOKEN:-$MAYA_RUNTIME_SECRET}"; jq --arg token "$token" \'.gateway.auth = { mode: "token", token: $token }\' /data/openclaw.json > /tmp/openclaw.json && mv /tmp/openclaw.json /data/openclaw.json; fi',
-    // 7. Start the gateway from our generated config and isolated state dir.
-    "exec openclaw gateway --bind lan --tailscale off --port 3000",
+    // 7. Start the gateway via OpenClaw's loopback default. Sprint 2
+    // carry-forward (mirrors `deployServiceMaya.ts`): legacy
+    // `--bind lan --tailscale off --port 3000` form crash-loops on
+    // v2026.4.23 because non-loopback binds require explicit
+    // `gateway.controlUi.allowedOrigins` config. `--allow-unconfigured`
+    // lets the gateway start before its first config-validation pass.
+    "exec openclaw gateway --allow-unconfigured",
   ].join(" && ");
 }
 

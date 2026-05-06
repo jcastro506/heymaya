@@ -266,13 +266,19 @@ describe("deployMaya — happy path", () => {
     );
     expect(machineCfg.init?.cmd).toBeDefined();
     const initShell = machineCfg.init!.cmd!.join(" ");
-    // Sanity: the bootstrap pipeline performs the canonical 6 steps.
+    // Sprint 2 carry-forward: bootstrap mirrors `deployServiceMaya.ts`. Cron
+    // jobs land at `/data/cron/jobs.json` (OpenClaw native state-dir layout,
+    // no `$HOME/.openclaw` symlink dance) and the gateway starts with
+    // `--allow-unconfigured` instead of the broken `--bind lan --port 3000`
+    // form that crash-loops on v2026.4.23. See `buildBootstrapShell` doc.
     expect(initShell).toContain("curl -fsSL");
     expect(initShell).toContain("tar -xf");
     expect(initShell).toContain("/data/cron/jobs.json");
     expect(initShell).toContain("/data/openclaw.json");
-    expect(initShell).toContain("openclaw gateway --bind lan --tailscale off --port 3000");
-    expect(initShell).not.toContain("--allow-unconfigured");
+    expect(initShell).toContain("openclaw gateway --allow-unconfigured");
+    expect(initShell).not.toContain("--bind lan");
+    // OPENCLAW_STATE_DIR pin (Sprint 2 carry-forward).
+    expect(machineCfg.env?.OPENCLAW_STATE_DIR).toBe("/data");
 
     const after = await getCreator(t, c);
     expect(after?.status).toBe("active");
@@ -1045,13 +1051,17 @@ describe("machineConfigFor", () => {
     expect(out.metadata?.creator_id).toBe("fakecreator");
     expect(out.init?.cmd).toBeDefined();
     const initShell = out.init!.cmd!.join(" ");
+    // Sprint 2 carry-forward: bootstrap mirrors `deployServiceMaya.ts`.
+    // The cron-fly-smoke validated this exact shape on real Fly v2026.4.23
+    // (Sprint 1 close, 2026-05-06). See `buildBootstrapShell` doc.
     expect(initShell).toContain("curl -fsSL");
     expect(initShell).toContain("tar -xf");
     expect(initShell).toContain("base64 -d");
     expect(initShell).toContain("/data/openclaw.json");
     expect(initShell).toContain("OPENCLAW_GATEWAY_TOKEN");
     expect(initShell).toContain(".gateway.auth");
-    expect(initShell).toContain("openclaw gateway --bind lan --tailscale off --port 3000");
-    expect(initShell).not.toContain("--allow-unconfigured");
+    expect(initShell).toContain("openclaw gateway --allow-unconfigured");
+    expect(initShell).not.toContain("--bind lan");
+    expect(out.env?.OPENCLAW_STATE_DIR).toBe("/data");
   });
 });

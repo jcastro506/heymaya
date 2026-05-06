@@ -6,23 +6,35 @@ import {
 } from "../creator-maya-v0-fly-smoke";
 
 describe("creator-maya-v0-fly-smoke", () => {
-  it("builds an iMessage-only Creator Maya workspace for OpenClaw", () => {
+  it("builds a Creator Maya workspace from the canonical assembleWorkspaceBundle", () => {
+    // Sprint 2 (slice A) deploy-path consolidation: the workspace now comes
+    // from `convex/agents/packs/maya/workspace/assembleWorkspaceBundle` via
+    // the thin `workspaceManifest.ts` adapter. Old thin-stub prose-only
+    // assertions (e.g. "TikTok-first social media manager",
+    // "Calendar: connected", `creator-calendar-content-planner` SKILL.md)
+    // moved out when those stubs were deleted. Slice C will re-assert the
+    // 13 maya-* / creator-* skills once they're bundled into the canonical
+    // BUNDLED_SKILLS registry.
     const fixture = buildCreatorMayaFlySmokeFixture("heymaya-cmv0-smoke-test", "iad");
 
     expect(fixture.image).toBe("registry.fly.io/heymaya-openclaw:v2026.4.23");
-    expect(fixture.workspaceFiles["AGENTS.md"]).toContain("TikTok-first social media manager");
-    expect(fixture.workspaceFiles["AGENTS.md"]).toContain("primary outbound channel is iMessage");
-    expect(fixture.workspaceFiles["AGENTS.md"]).toContain(
-      "Do not use SMS, WhatsApp, email, or web chat in v0"
-    );
-    expect(fixture.workspaceFiles["TOOLS.md"]).not.toMatch(/sms|whatsapp/i);
-    expect(fixture.workspaceFiles["TOOLS.md"]).toContain("brand.send_approved_email");
-    expect(fixture.workspaceFiles["TOOLS.md"]).toContain("fail closed");
-    expect(fixture.workspaceFiles["USER.md"]).toContain("Calendar: connected");
+    // Canonical AGENTS.md prose lives in `generateAgentsMd.ts`. Verify the
+    // load-bearing first-message header is present.
+    expect(fixture.workspaceFiles["AGENTS.md"]).toContain("# AGENTS.md — Maya for");
+    expect(fixture.workspaceFiles["AGENTS.md"]).toContain("Operating instructions");
+    // Canonical SOUL.md (Sprint 2 slice A — generated from generateSoulMd.ts)
+    // is now an always-emitted root file and must carry the anti-sycophancy
+    // frame.
+    expect(fixture.workspaceFiles["SOUL.md"]).toContain("# SOUL.md — Maya for");
+    expect(fixture.workspaceFiles["SOUL.md"]).toContain("Anti-sycophancy");
+    // Canonical IDENTITY.md (Sprint 2 slice A — generated from
+    // generateIdentityMd.ts) — small + stable cosmetic identity.
+    expect(fixture.workspaceFiles["IDENTITY.md"]).toContain("**Name:** Maya");
+    expect(fixture.workspaceFiles["IDENTITY.md"]).toContain("**Creature:** creator manager");
+    // Cron jobs.json includes the morning_brief entry from the canonical
+    // standing-orders catalog.
     expect(fixture.workspaceFiles["jobs.json"]).toContain("morning_brief");
-    expect(fixture.workspaceFiles["skills/creator-calendar-content-planner/SKILL.md"]).toContain(
-      "name: creator-calendar-content-planner"
-    );
+    // Pinned ClawHub vendor pack — locked at lock.json for the deploy.
     expect(fixture.workspaceFiles[".clawhub/lock.json"]).toContain(
       "remotion-video-toolkit"
     );
