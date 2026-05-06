@@ -3504,3 +3504,160 @@ describe("synthesizeCreatorPicture — Sprint 6 anchor-driven verification", () 
     expect(userContent).not.toMatch(/A goal/);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 9.5 — always-ask soft verification (real-world test 2026-05-06)      */
+/* -------------------------------------------------------------------------- */
+
+describe("synthesizeCreatorPicture — Sprint 9.5 always-ask soft verification", () => {
+  it("system prompt includes the ALWAYS-ASK RULE section", () => {
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/ALWAYS-ASK RULE/);
+    // The four picture-defining axes that must surface a soft entry on
+    // confident first-boot reads.
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/"niche"/);
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/"location"/);
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/"audience\.ageRanges"/);
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/"audience\.topGeos"/);
+  });
+
+  it("system prompt explains the rationale: confident reads still get verified", () => {
+    // Anti-sycophancy + anti-silent-confidence framing — Maya cannot KNOW
+    // without the creator's word, even when the data reads clearly.
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/cannot KNOW/);
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/cite/i);
+    // The operator's framing: asking while referencing what she's seeing.
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/asking while|referencing what/i);
+  });
+
+  it("system prompt routes always-ask entries to severity=soft (blockers reserved for divergence)", () => {
+    // The "always-ask" section must specify severity is ALWAYS soft.
+    const alwaysAskBlock = SYNTH_SYSTEM_PROMPT.split("ALWAYS-ASK RULE")[1] ?? "";
+    expect(alwaysAskBlock).toMatch(/severity is ALWAYS "soft"/);
+    // Severity stays "blocker" only for the divergence cases (London-bug class).
+    expect(alwaysAskBlock).toMatch(/blocker.*only for the divergence/i);
+  });
+
+  it("system prompt updates the WHEN-EMPTY rule: never empty on Day-0 inferred reads", () => {
+    // Old rule: empty when anchors-and-observation agree.
+    // New rule: empty only when every axis is anchored OR sourced verbatim
+    // from audienceUpstream. Day-0 with no openingAnswers → always non-empty.
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/Day-0 boot/);
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/NEVER empty/);
+  });
+
+  it("system prompt instructs Maya to cite evidence + reference the read in the question", () => {
+    // The operator quote: "She's asking while also referencing what she's
+    // seeing." The example questions should encode this shape.
+    const alwaysAskBlock = SYNTH_SYSTEM_PROMPT.split("ALWAYS-ASK RULE")[1] ?? "";
+    // At least one example question that follows the "I see X — confirm or
+    // correct?" shape.
+    expect(alwaysAskBlock).toMatch(/Reading your last 30/);
+    // Audience age example.
+    expect(alwaysAskBlock).toMatch(/Audience comments|comments skew/);
+  });
+
+  it("validator accepts a Day-0 confident-read picture with 4 soft entries (no blockers)", () => {
+    // Confident-read fixture: niche, location, audience.ageRanges,
+    // audience.topGeos all inferred from posts — no openingAnswers anchor.
+    // Every entry is severity=soft and selfReported=null. The validator
+    // must accept this shape — no schema regressions from the prompt
+    // change, since the schema stays the same.
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.needsVerification = [
+      {
+        field: "niche",
+        selfReported: null,
+        observedSignal:
+          "Home-gym builds for ADHD-prone fitness adopters who hate the typical gym aesthetic.",
+        evidence: [
+          "23 of last 30 posts feature gym builds",
+          "captions reference ADHD productivity in 8 posts",
+          "audience comments cluster on home-gym hashtags",
+        ],
+        question:
+          "Reading your last 30 — niche reads as gym + ADHD-friendly home builds. Is that the read or did I miss something?",
+        severity: "soft",
+      },
+      {
+        field: "location",
+        selfReported: null,
+        observedSignal: { city: "London", country: "UK" },
+        evidence: [
+          "Tube signage on-screen in 6 posts",
+          "comments addressing creator as London-based",
+        ],
+        question:
+          "I'm seeing a lot of London footage — are you based in London?",
+        severity: "soft",
+      },
+      {
+        field: "audience",
+        selfReported: null,
+        observedSignal: ["25-34", "18-24"],
+        evidence: ["comment language clusters early-career", "no parent-talk"],
+        question:
+          "Audience comments skew 25-34 — does that match what your analytics tell you?",
+        severity: "soft",
+      },
+      {
+        field: "audience",
+        selfReported: null,
+        observedSignal: ["UK", "US", "CA"],
+        evidence: ["UK-locale spelling in comments", "GBP price references"],
+        question:
+          "Top geo reads as UK then US/Canada — does that match your numbers?",
+        severity: "soft",
+      },
+    ];
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+
+    // Regression bar: confident-read fixture → length ≥ 3, all soft.
+    expect(parsed.needsVerification.length).toBeGreaterThanOrEqual(3);
+    for (const item of parsed.needsVerification) {
+      expect(item.severity).toBe("soft");
+    }
+    // Picture is still confident — niche + audience + handles all populated
+    // — Maya is just going to ask before locking.
+    expect(parsed.niche.length).toBeGreaterThan(0);
+  });
+
+  it("validator still accepts a London-bug-style blocker entry alongside soft entries", () => {
+    // Mixed-mode fixture: 3 soft entries (Day-0 inferred axes) + 1 blocker
+    // (location anchor disagrees with observed). Both shapes coexist.
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.needsVerification = [
+      {
+        field: "location",
+        selfReported: { city: "Brooklyn", state: "NY", country: "US" },
+        observedSignal: { city: "London", country: "UK" },
+        evidence: ["18 of 30 captions reference London", "Tube signage in 6"],
+        question: "Brooklyn or London?",
+        severity: "blocker",
+      },
+      {
+        field: "niche",
+        selfReported: null,
+        observedSignal: "Home-gym builds",
+        evidence: ["23 of 30 posts gym-themed"],
+        question: "Gym-niche read — confirm?",
+        severity: "soft",
+      },
+      {
+        field: "audience",
+        selfReported: null,
+        observedSignal: ["25-34"],
+        evidence: ["comment language clusters early-career"],
+        question: "Audience reads 25-34 — match your analytics?",
+        severity: "soft",
+      },
+    ];
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    const blockers = parsed.needsVerification.filter(
+      (i) => i.severity === "blocker"
+    );
+    const softs = parsed.needsVerification.filter((i) => i.severity === "soft");
+    expect(blockers).toHaveLength(1);
+    expect(softs).toHaveLength(2);
+    expect(blockers[0].field).toBe("location");
+  });
+});

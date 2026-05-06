@@ -126,14 +126,52 @@ describe("Wave 5 — jobs.json determinism (jobs.json must stay stable for git)"
     }
   });
 
-  it("jobs.json from configGeneratorMaya is identical across two builds (no Date.now drift)", () => {
+  it("jobs.json cron entries are identical across two builds (no Date.now drift in cron set)", () => {
     const a = buildMayaConfig(inputsFor("manager"), NOW);
     const b = buildMayaConfig(inputsFor("manager"), NOW + 9_999_999); // different now
-    // jobs.json must not embed `now` — generator is pure on (creator, catalog).
-    expect(JSON.stringify(a.config.jobsJson)).toBe(JSON.stringify(b.config.jobsJson));
+    // The cron set (entries with schedule.kind="cron") must not embed `now`
+    // — generator is pure on (creator, catalog).
+    //
+    // EXCEPTION (Sprint 9.5, 2026-05-06): the first-boot kickstart entry
+    // legitimately embeds an absolute `at` timestamp derived from `now`
+    // because OpenClaw's `kind: "at"` schedule needs an absolute moment to
+    // arm against, and we want it in the past at deploy time so the
+    // scheduler arms with zero delay. The kickstart is filtered out of
+    // this stability assertion; cron entries are checked verbatim.
+    const cronOnly = (j: ReturnType<typeof buildCronJobsJson>) => ({
+      jobs: j.jobs.filter((entry) => entry.schedule.kind === "cron"),
+    });
+    expect(JSON.stringify(cronOnly(a.config.jobsJson))).toBe(
+      JSON.stringify(cronOnly(b.config.jobsJson))
+    );
+  });
+
+  it("jobs.json kickstart entry is gated on creator.firstBootCompletedAt", () => {
+    // Booted creator (firstBootCompletedAt set) → no kickstart at all,
+    // jobs.json is fully `now`-independent again.
+    const bootedInputs = (): BuildInputs => ({
+      ...inputsFor("manager"),
+      creator: {
+        ...inputsFor("manager").creator,
+        firstBootCompletedAt: NOW - 86_400_000,
+      },
+    });
+    const a = buildMayaConfig(bootedInputs(), NOW);
+    const b = buildMayaConfig(bootedInputs(), NOW + 9_999_999);
+    // Whole jobs.json must be byte-identical when the kickstart is gated off.
+    expect(JSON.stringify(a.config.jobsJson)).toBe(
+      JSON.stringify(b.config.jobsJson)
+    );
+    // …and the kickstart entry must not be present.
+    expect(
+      a.config.jobsJson.jobs.find((j) => j.id === "0001_first_boot_kickstart")
+    ).toBeUndefined();
   });
 
   it("every jobs.json entry has the normalized 4.23 field set", () => {
+    // This tests the cron-only set; the first-boot kickstart entry is
+    // covered by `__tests__/buildCronJobsJson.test.ts § Sprint 9.5`. Default
+    // call below (no `firstBootKickstart` arg) returns the cron-only set.
     const { jobs } = buildCronJobsJson({ creator: fakeCreator("manager") });
     expect(jobs.length).toBeGreaterThan(0);
     for (const j of jobs) {
@@ -143,6 +181,8 @@ describe("Wave 5 — jobs.json determinism (jobs.json must stay stable for git)"
       expect(j.name.length).toBeGreaterThan(0);
       expect(j.enabled).toBe(true);
       expect(j.schedule.kind).toBe("cron");
+      // Type narrow for the .expr / .tz reads below.
+      if (j.schedule.kind !== "cron") throw new Error("type-narrow guard");
       expect(j.schedule.expr).toMatch(/^\S+\s+\S+\s+\S+\s+\S+\s+\S+$/); // 5-field POSIX
       expect(j.schedule.tz).toBe(TZ);
       expect(["isolated", "main"]).toContain(j.sessionTarget);

@@ -31,6 +31,14 @@ import {
  * `sessionTarget`, `wakeMode`, and `payload.kind`. Emitting the normalized
  * shape prevents boot-time scheduler crashes before `openclaw doctor --fix`
  * has a chance to migrate legacy rows.
+ *
+ * Sprint 9.5 (2026-05-06) — schedule.kind is a discriminated union now:
+ *   - "cron"   — the recurring 5-field POSIX expression we already had.
+ *   - "at"     — one-shot fire at an absolute timestamp. Used by the
+ *                first-boot kickstart job to trigger the
+ *                `first_boot_introduction` standing order immediately on
+ *                gateway start, instead of waiting up to 30 min for the
+ *                heartbeat. See `buildFirstBootKickstartJob` below.
  */
 export interface JobSpec {
   id: string;
@@ -39,13 +47,25 @@ export interface JobSpec {
   enabled: boolean;
   createdAtMs: number;
   updatedAtMs: number;
-  schedule: {
-    kind: "cron";
-    expr: string;
-    tz: string;
-  };
+  schedule:
+    | {
+        kind: "cron";
+        expr: string;
+        tz: string;
+      }
+    | {
+        kind: "at";
+        /** ISO-8601 absolute timestamp the OpenClaw scheduler parses with `parseAbsoluteTimeMs`. */
+        at: string;
+      };
   sessionTarget: CronSession;
   wakeMode: "now";
+  /**
+   * One-shot jobs (`schedule.kind === "at"`) self-delete after the run
+   * completes. OpenClaw's scheduler honors this flag natively so the
+   * kickstart doesn't pollute future jobs.json reloads.
+   */
+  deleteAfterRun?: boolean;
   payload:
     | {
         kind: "systemEvent";
@@ -68,13 +88,62 @@ export interface JobsJson {
 }
 
 export interface BuildCronJobsJsonInputs {
-  creator: Pick<Doc<"creators">, "plan" | "timezone">;
+  creator: Pick<
+    Doc<"creators">,
+    "plan" | "timezone" | "firstBootCompletedAt"
+  >;
   /**
    * Optional override for the standing-orders catalog. Tests use this to
    * inject a smaller fixture; production passes nothing and gets the full
    * catalog.
    */
   catalogOverride?: ReadonlyArray<StandingOrderProgram>;
+  /**
+   * Sprint 9.5 (2026-05-06) — first-boot kickstart switch.
+   *
+   * When the creator has not yet completed first boot
+   * (`firstBootCompletedAt === undefined`), the bundle includes a one-shot
+   * `kind: "at"` job whose payload triggers `first_boot_introduction` the
+   * moment the gateway scheduler arms. Without this, a fresh creator waits
+   * up to 30 min for the next heartbeat before Maya sends her first
+   * iMessage — bad UX on a deploy that the operator just paid for.
+   *
+   * Mechanism (verified against
+   * `node_modules/openclaw/dist/jobs-*.js` 2026.4.23 and the package's
+   * `plugin-sdk/src/gateway/protocol/schema/cron.d.ts`):
+   *
+   *   - schedule.kind="at" + a past `at` timestamp → scheduler fires on
+   *     the first `armTimer` tick after `activateGatewayScheduledServices`
+   *     boots (`Math.max(nextAt - now, 0)` clamps to 0 → `MIN_REFIRE_GAP_MS`).
+   *   - sessionTarget="isolated" + payload.kind="agentTurn" → the cron
+   *     daemon spawns an isolated agent turn, which loads
+   *     AGENTS.md/SOUL.md/USER.md/standing-orders.md, sees
+   *     `firstBootCompletedAt === undefined` in USER.md, and runs the
+   *     existing `first_boot_introduction` standing order.
+   *   - delivery.mode="announce" + channel="last" → the agent's reply
+   *     goes to the most recently active channel (claw-messenger
+   *     iMessage).
+   *   - deleteAfterRun=true → OpenClaw drops the row from the cron store
+   *     after the first successful run; subsequent redeploys that
+   *     re-stamp jobs.json don't refire because by then
+   *     `firstBootCompletedAt` is set and we don't emit the kickstart at
+   *     all.
+   *
+   * This is OpenClaw's NATIVE one-shot mechanism — no plugin hook
+   * (`gateway_start` would require shipping a custom plugin), no Convex
+   * → gateway HTTP push (would require LAN bind + controlUi config which
+   * we deliberately do not enable, see `deployMaya.ts` boot script
+   * comments). Native-first per `feedback_openclaw_native_first.md`.
+   */
+  firstBootKickstart?: {
+    /**
+     * Test seam — overrides the absolute timestamp emitted on the kickstart
+     * job. In production we pass `Date.now() - 1` so the timestamp is
+     * deterministically in the past at parse time. Tests pass a fixed value
+     * so the bundle hash stays stable across runs.
+     */
+    nowMsOverride?: number;
+  };
 }
 
 const FIVE_FIELD_CRON = /^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)$/;
@@ -159,7 +228,73 @@ export function buildCronJobsJson(inputs: BuildCronJobsJsonInputs): JobsJson {
   // depends on this).
   jobs.sort((a, b) => a.name.localeCompare(b.name));
 
-  return { jobs };
+  // Sprint 9.5 — prepend the first-boot kickstart job (when applicable)
+  // AFTER the cron sort so it always sits at index 0. Fresh-deploy UX
+  // benefits from the lexical first slot in jobs.json being human-obvious
+  // ("0001_first_boot_kickstart"); the cron set above stays alphabetized
+  // among itself.
+  const kickstart = inputs.firstBootKickstart
+    ? buildFirstBootKickstartJob({
+        creator,
+        nowMsOverride: inputs.firstBootKickstart.nowMsOverride,
+      })
+    : null;
+
+  return { jobs: kickstart ? [kickstart, ...jobs] : jobs };
+}
+
+/**
+ * Sprint 9.5 — emit the one-shot `kind: "at"` kickstart job that triggers
+ * `first_boot_introduction` immediately on gateway boot.
+ *
+ * Skipped when `creator.firstBootCompletedAt` is set: the standing order
+ * would fall through to a no-op (USER.md says `completed <ts>`), but it's
+ * cleaner not to emit a job at all.
+ *
+ * `nowMs` is set to one millisecond ago so the OpenClaw scheduler clamps
+ * the delay to zero on its first armTimer pass — i.e. fires within
+ * MIN_REFIRE_GAP_MS of gateway start. We don't pass `0`/epoch because some
+ * OpenClaw schedule-validators reject zero / pre-2000 timestamps as
+ * obviously-malformed (parseAbsoluteTimeMs guards against `<= 0`).
+ */
+function buildFirstBootKickstartJob(opts: {
+  creator: Pick<Doc<"creators">, "plan" | "timezone" | "firstBootCompletedAt">;
+  nowMsOverride?: number;
+}): JobSpec | null {
+  if (opts.creator.firstBootCompletedAt) return null;
+  const now = opts.nowMsOverride ?? Date.now();
+  // Use `now - 1` so the schedule is in the past at the moment OpenClaw
+  // ingests jobs.json — guarantees a 0-delay arm on the first scheduler
+  // tick. Encoded as ISO-8601 because the scheduler's `parseAbsoluteTimeMs`
+  // accepts both numeric ms and ISO strings; ISO is more debuggable in the
+  // Fly logs.
+  const at = new Date(now - 1).toISOString();
+  return {
+    id: "0001_first_boot_kickstart",
+    name: "0001 First-boot kickstart",
+    description:
+      "One-shot trigger that runs `first_boot_introduction` immediately on gateway start, " +
+      "instead of waiting for the next heartbeat (~30 min). Self-deletes after first run; only " +
+      "emitted while creators.firstBootCompletedAt is undefined.",
+    enabled: true,
+    createdAtMs: 0,
+    updatedAtMs: 0,
+    schedule: { kind: "at", at },
+    sessionTarget: "isolated",
+    wakeMode: "now",
+    deleteAfterRun: true,
+    payload: {
+      kind: "agentTurn",
+      message:
+        "First-boot kickstart. Run the `first_boot_introduction` standing order now: greet, send one cited insight grounded in `creatorPicture`, ask the two opening questions (goal-with-examples + tone), and offer Gmail + Calendar OAuth opt-ins. NO brand-deal floor on first boot. Stamp `creators.openingAnswersAt` after the answers come back, and `creators.firstBootCompletedAt` after the whole arc lands. See AGENTS.md / SOUL.md / USER.md / standing-orders.md for the full Scope / Triggers / Approval / Escalation rules.",
+      lightContext: true,
+    },
+    delivery: {
+      mode: "announce",
+      channel: "last",
+      bestEffort: true,
+    },
+  };
 }
 
 function isPlanAllowed(

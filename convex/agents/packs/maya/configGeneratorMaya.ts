@@ -468,8 +468,11 @@ function shortIdSegment(id: Id<"creators">): string {
 
 /**
  * Deterministic 128-bit FNV-1a hash of the config, hex-encoded. Excludes
- * `generatedAt` (timestamp drift) and `workspaceBundleUrl` (changes per
- * upload even when the underlying workspace bytes are identical).
+ * `generatedAt` (timestamp drift), `workspaceBundleUrl` (changes per
+ * upload even when the underlying workspace bytes are identical), and
+ * the first-boot kickstart's `schedule.at` (Sprint 9.5 — intentionally a
+ * function of deploy time so the OpenClaw scheduler arms with zero
+ * delay, not a function of configuration).
  *
  * Canonical JSON: keys sorted at every object level. Arrays preserve order
  * (we sort upstream where stability matters).
@@ -478,9 +481,37 @@ function hashConfig(config: MayaConfig): string {
   const rest: Record<string, unknown> = {};
   for (const [k, val] of Object.entries(config)) {
     if (k === "generatedAt" || k === "workspaceBundleUrl") continue;
+    if (k === "jobsJson") {
+      rest[k] = stripVolatileJobsFields(val as MayaConfig["jobsJson"]);
+      continue;
+    }
     rest[k] = val;
   }
   return fnv1a128(canonicalJson(rest));
+}
+
+/**
+ * Sprint 9.5 — strip the kickstart's `schedule.at` ISO timestamp before
+ * hashing. Whether the kickstart is PRESENT (first-boot pending) or ABSENT
+ * (booted) still affects the hash; only its embedded timestamp does not.
+ * Two redeploys for the same un-booted creator produce the same version
+ * even though the embedded `at` shifts every time.
+ */
+function stripVolatileJobsFields(
+  jobsJson: MayaConfig["jobsJson"]
+): MayaConfig["jobsJson"] {
+  return {
+    jobs: jobsJson.jobs.map((j) => {
+      if (j.id !== "0001_first_boot_kickstart") return j;
+      // Replace the volatile `at` with a stable placeholder while keeping
+      // every other field byte-identical. Using `__kickstart__` makes the
+      // intent obvious if the canonical JSON is ever debugged.
+      return {
+        ...j,
+        schedule: { kind: "at" as const, at: "__kickstart__" },
+      };
+    }),
+  };
 }
 
 function canonicalJson(value: unknown): string {

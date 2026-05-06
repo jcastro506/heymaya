@@ -337,4 +337,78 @@ describe("deriveDisplayName", () => {
   it("handles all-uppercase local parts", () => {
     expect(deriveDisplayName("JOSHUA@example.com")).toBe("Joshua");
   });
+
+  /* ---- 2026-05-06 real-world test regression: prefer creator.displayName ---- */
+
+  it("prefers creator.displayName over the email-derived fallback", () => {
+    const name = deriveDisplayName(
+      makeCreator({
+        displayName: "Kevin Castro",
+        email: "kevin@heymaya.local",
+      })
+    );
+    expect(name).toBe("Kevin Castro");
+  });
+
+  it("falls back to email derivation when displayName is missing", () => {
+    const name = deriveDisplayName(
+      makeCreator({ email: "kevin.castro@heymaya.local" })
+    );
+    expect(name).toBe("Kevin Castro");
+  });
+
+  it("falls back to email when displayName is the empty string", () => {
+    const name = deriveDisplayName(
+      makeCreator({ displayName: "", email: "kevin@heymaya.local" })
+    );
+    expect(name).toBe("Kevin");
+  });
+
+  it("falls back to email when displayName is whitespace-only", () => {
+    const name = deriveDisplayName(
+      makeCreator({ displayName: "   ", email: "kevin@heymaya.local" })
+    );
+    expect(name).toBe("Kevin");
+  });
+
+  it("trims surrounding whitespace from displayName when present", () => {
+    const name = deriveDisplayName(
+      makeCreator({ displayName: "  Kevin Castro  ", email: "x@y.z" })
+    );
+    expect(name).toBe("Kevin Castro");
+  });
+});
+
+describe("generateUserMd — displayName regression (real-world test 2026-05-06)", () => {
+  it("USER.md heading uses creator.displayName, not email-derived name", () => {
+    // The exact bug: creator.displayName='Kevin Castro' but USER.md
+    // shipped as `# USER.md — Real World Test` (derived from
+    // `real-world-test@heymaya.local`).
+    const md = generateUserMd({
+      creator: makeCreator({
+        displayName: "Kevin Castro",
+        email: "real-world-test@heymaya.local",
+      }),
+      picture: null,
+      handles: makeHandles(),
+      plan: "manager",
+    });
+    expect(md).toContain("# USER.md — Kevin Castro");
+    expect(md).toContain("**Display name:** Kevin Castro");
+    expect(md).toContain("**Preferred address:** Kevin Castro (first name).");
+    expect(md).not.toContain("Real World Test");
+  });
+
+  it("USER.md heading falls back to email-derived name when displayName missing", () => {
+    const md = generateUserMd({
+      creator: makeCreator({
+        // intentionally undefined displayName
+        email: "kevin.castro@heymaya.local",
+      }),
+      picture: null,
+      handles: makeHandles(),
+      plan: "manager",
+    });
+    expect(md).toContain("# USER.md — Kevin Castro");
+  });
 });

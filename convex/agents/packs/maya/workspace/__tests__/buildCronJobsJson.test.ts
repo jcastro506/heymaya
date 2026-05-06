@@ -67,9 +67,11 @@ describe("buildCronJobsJson", () => {
   });
 
   it("every emitted job has a valid 5-field cron expression", () => {
+    // No firstBootKickstart flag → cron-only set; every entry is kind=cron.
     const { jobs } = buildCronJobsJson({ creator: creator("manager") });
     for (const j of jobs) {
       expect(j.schedule.kind).toBe("cron");
+      if (j.schedule.kind !== "cron") throw new Error("type-narrow guard");
       expect(FIVE_FIELD_CRON.test(j.schedule.expr)).toBe(true);
     }
   });
@@ -79,6 +81,8 @@ describe("buildCronJobsJson", () => {
       creator: creator("manager", "Asia/Tokyo"),
     });
     for (const j of jobs) {
+      expect(j.schedule.kind).toBe("cron");
+      if (j.schedule.kind !== "cron") throw new Error("type-narrow guard");
       expect(j.schedule.tz).toBe("Asia/Tokyo");
     }
   });
@@ -248,5 +252,137 @@ describe("buildCronJobsJson", () => {
       expect("message" in job).toBe(false);
       expect("entryId" in job).toBe(false);
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 9.5 — first-boot kickstart job (real-world test 2026-05-06)          */
+/* -------------------------------------------------------------------------- */
+
+describe("buildCronJobsJson — first-boot kickstart", () => {
+  // Determinism seam — pin the timestamp the kickstart embeds so the test
+  // doesn't drift across runs.
+  const KICKSTART_NOW = 1_730_000_000_000;
+  const EXPECTED_AT = new Date(KICKSTART_NOW - 1).toISOString();
+
+  function freshCreator(plan: "coach" | "manager", tz = "America/Los_Angeles") {
+    // firstBootCompletedAt intentionally undefined → kickstart fires.
+    return { plan, timezone: tz };
+  }
+
+  function bootedCreator(plan: "coach" | "manager", tz = "America/Los_Angeles") {
+    return {
+      plan,
+      timezone: tz,
+      firstBootCompletedAt: 1_700_000_000_000,
+    };
+  }
+
+  it("emits a one-shot kickstart entry when firstBootCompletedAt is undefined", () => {
+    const { jobs } = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    const kickstart = jobs.find((j) => j.id === "0001_first_boot_kickstart");
+    expect(kickstart).toBeDefined();
+    expect(kickstart!.schedule.kind).toBe("at");
+    if (kickstart!.schedule.kind !== "at")
+      throw new Error("type-narrow guard");
+    expect(kickstart!.schedule.at).toBe(EXPECTED_AT);
+    expect(kickstart!.deleteAfterRun).toBe(true);
+    expect(kickstart!.payload.kind).toBe("agentTurn");
+    expect(kickstart!.delivery?.mode).toBe("announce");
+    expect(kickstart!.delivery?.channel).toBe("last");
+  });
+
+  it("places the kickstart entry at index 0 (lexical-first slot in jobs.json)", () => {
+    const { jobs } = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    expect(jobs[0].id).toBe("0001_first_boot_kickstart");
+  });
+
+  it("kickstart payload references the first_boot_introduction standing order", () => {
+    const { jobs } = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    const kickstart = jobs.find((j) => j.id === "0001_first_boot_kickstart")!;
+    expect(kickstart.payload.kind).toBe("agentTurn");
+    if (kickstart.payload.kind !== "agentTurn")
+      throw new Error("type-narrow guard");
+    // The agent turn message must mention the standing order so Maya
+    // doesn't have to guess what to do; AGENTS.md ties the order to
+    // first_boot_introduction by name.
+    expect(kickstart.payload.message).toContain("first_boot_introduction");
+    expect(kickstart.payload.lightContext).toBe(true);
+  });
+
+  it("does NOT emit the kickstart when firstBootCompletedAt is set", () => {
+    const { jobs } = buildCronJobsJson({
+      creator: bootedCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    expect(jobs.find((j) => j.id === "0001_first_boot_kickstart")).toBeUndefined();
+  });
+
+  it("does NOT emit the kickstart when the firstBootKickstart flag is omitted", () => {
+    // Backward-compat: callers that don't opt in (e.g. the existing
+    // unit-test fixtures above) keep getting the cron-only set.
+    const { jobs } = buildCronJobsJson({
+      creator: freshCreator("manager"),
+    });
+    expect(jobs.find((j) => j.id === "0001_first_boot_kickstart")).toBeUndefined();
+  });
+
+  it("kickstart fires for both Coach and Manager — first boot is plan-tier-agnostic", () => {
+    const coach = buildCronJobsJson({
+      creator: freshCreator("coach"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    const manager = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    expect(coach.jobs[0].id).toBe("0001_first_boot_kickstart");
+    expect(manager.jobs[0].id).toBe("0001_first_boot_kickstart");
+  });
+
+  it("kickstart entry uses a past timestamp so the scheduler arms with zero delay", () => {
+    const { jobs } = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    const kickstart = jobs[0];
+    if (kickstart.schedule.kind !== "at")
+      throw new Error("type-narrow guard");
+    const atMs = Date.parse(kickstart.schedule.at);
+    // strictly less than now — Math.max(at - now, 0) clamps to 0 →
+    // MIN_REFIRE_GAP_MS in OpenClaw's armTimer (~immediate).
+    expect(atMs).toBeLessThan(KICKSTART_NOW);
+  });
+
+  it("kickstart entry is deterministic across calls with the same nowMsOverride", () => {
+    const a = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    const b = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    expect(JSON.stringify(a.jobs[0])).toBe(JSON.stringify(b.jobs[0]));
+  });
+
+  it("the cron set in [1..] is still alphabetized among itself", () => {
+    const { jobs } = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    const cronEntries = jobs.slice(1);
+    const names = cronEntries.map((j) => j.name);
+    const sorted = [...names].sort((a, b) => a.localeCompare(b));
+    expect(names).toEqual(sorted);
   });
 });

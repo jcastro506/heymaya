@@ -66,7 +66,7 @@ export function assembleWorkspaceBundle(
 ): WorkspaceBundle {
   const { creator, picture, handles, plan, now } = inputs;
   const bootstrapMaxChars = options.bootstrapMaxChars ?? DEFAULT_BOOTSTRAP_MAX_CHARS;
-  const displayName = deriveDisplayName(creator.email);
+  const displayName = deriveDisplayName(creator);
 
   const sortedHandlesForHeader = [...handles]
     .sort((a, b) => {
@@ -163,7 +163,16 @@ export function assembleWorkspaceBundle(
     files.set(`skills/${skill.slug}/SKILL.md`, skill.content);
   }
 
-  const jobsJson = buildCronJobsJson({ creator });
+  // Sprint 9.5 — pass `firstBootKickstart: {}` so buildCronJobsJson decides
+  // whether to emit the one-shot kickstart based on
+  // `creator.firstBootCompletedAt`. We pass `now` as the `nowMsOverride` so
+  // the embedded ISO timestamp is deterministic across re-runs of the same
+  // bundle — the bundle hash (`hashConfig`) excludes `generatedAt` but the
+  // workspace tarball is content-addressed, so determinism still matters.
+  const jobsJson = buildCronJobsJson({
+    creator,
+    firstBootKickstart: { nowMsOverride: now },
+  });
 
   return { files, jobsJson, standingOrdersSplit };
 }

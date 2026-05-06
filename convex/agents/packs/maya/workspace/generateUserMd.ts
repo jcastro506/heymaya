@@ -53,14 +53,44 @@ export interface UserMdInputs {
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * Extract a display name from the creator. Today we only have email; the
- * onboarding agent will add an explicit `displayName` field in a future
- * sprint. Until then we titlecase the email's local part.
+ * Extract a display name from the creator. Prefers the explicit
+ * `creator.displayName` (captured during step 2 of onboarding —
+ * pre-filled from ScrapeCreators verify, editable before submit).
+ * Falls back to titlecasing the email local part for legacy / smoke /
+ * test fixtures that pre-date the displayName field.
  *
- * Examples: "joshua@castro.com" -> "Joshua"
- *           "j.castro@x.com"    -> "J Castro"
+ * Real-world test (2026-05-06) regression: `Real World Test` was being
+ * derived from `real-world-test@heymaya.local` and shipped to USER.md
+ * even though `creator.displayName === "Kevin Castro"` was set during
+ * onboarding. Fix: every caller passes the full creator (or at minimum
+ * the displayName + email) so the explicit field always wins.
+ *
+ * Two overloads:
+ *   - deriveDisplayName(creator)  — preferred call site (full doc)
+ *   - deriveDisplayName(email)    — legacy fallback for callers that
+ *     genuinely only have an email (e.g. test fixtures)
+ *
+ * Examples (creator.displayName="Kevin Castro", email="kevin@hm.local"):
+ *           -> "Kevin Castro"   (displayName wins)
+ *
+ * Examples (no displayName, email="joshua@castro.com"):
+ *           -> "Joshua"
+ *
+ * Examples (no displayName, email="j.castro@x.com"):
+ *           -> "J Castro"
  */
-export function deriveDisplayName(email: string): string {
+export function deriveDisplayName(
+  source: Pick<Doc<"creators">, "displayName" | "email"> | string
+): string {
+  if (typeof source === "string") {
+    return deriveDisplayNameFromEmail(source);
+  }
+  const trimmed = source.displayName?.trim();
+  if (trimmed && trimmed.length > 0) return trimmed;
+  return deriveDisplayNameFromEmail(source.email);
+}
+
+function deriveDisplayNameFromEmail(email: string): string {
   const local = email.split("@")[0] ?? email;
   return local
     .split(/[._-]+/)
@@ -71,7 +101,7 @@ export function deriveDisplayName(email: string): string {
 
 export function generateUserMd(inputs: UserMdInputs): string {
   const { creator, picture, handles, plan } = inputs;
-  const displayName = deriveDisplayName(creator.email);
+  const displayName = deriveDisplayName(creator);
   const now = inputs.now ?? Date.now();
   const snapshots = inputs.followerSnapshots ?? [];
 

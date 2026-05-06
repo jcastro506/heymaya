@@ -57,7 +57,11 @@ const PLAN_AUTONOMY: Record<Plan, string> = {
 
 export function generateSoulMd(inputs: SoulMdInputs): string {
   const { creator, picture, plan } = inputs;
-  const displayName = creator.displayName ?? deriveDisplayName(creator.email);
+  // deriveDisplayName now prefers creator.displayName when present and
+  // falls back to email-derivation; the old explicit `creator.displayName ??`
+  // pattern was redundant after the 2026-05-06 displayName-bug fix and
+  // skipped trim/empty-string normalization that deriveDisplayName handles.
+  const displayName = deriveDisplayName(creator);
   const vibe = resolveVibe(creator, picture);
   const vibeDescription = VIBE_DESCRIPTIONS[vibe];
   const autonomy = PLAN_AUTONOMY[plan];
