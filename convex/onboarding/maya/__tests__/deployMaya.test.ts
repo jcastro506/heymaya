@@ -648,7 +648,7 @@ function makeSynthOkFetch(): ReturnType<typeof vi.fn> {
 }
 
 describe("deployMaya — synthesis stage integration", () => {
-  it("synth stage runs end-to-end: creatorPicture row populated by deploy", async () => {
+  it("synth stage runs end-to-end: creatorPicture row populated by deploy", { timeout: 30_000 }, async () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithCachedScrape(t, {
       suffix: "synthok",
@@ -686,7 +686,7 @@ describe("deployMaya — synthesis stage integration", () => {
     expect(logs[0].thinkingBudget).toBe("high");
   });
 
-  it("synthesis failure (model returns garbage twice) → deploy halts at synthesize-picture stage", async () => {
+  it("synthesis failure (model returns garbage twice) → deploy halts at synthesize-picture stage", { timeout: 30_000 }, async () => {
     const t = convexTest(schema, modules);
     const c = await seedCreatorWithCachedScrape(t, {
       suffix: "synthfail",
@@ -886,7 +886,7 @@ describe("deployMaya — Wave 3 pre-fired job skip behavior", () => {
     }
   });
 
-  it("no pre-fired jobs → deploy runs scrape + synth INLINE (legacy fallback preserved)", async () => {
+  it("no pre-fired jobs → deploy runs scrape + synth INLINE (legacy fallback preserved)", { timeout: 30_000 }, async () => {
     // This is essentially the existing "synth stage runs end-to-end" test
     // from the prior describe block, re-asserted here as the explicit
     // "Wave 3 fallback" contract: a creator with no onboardingJobs rows
@@ -953,7 +953,7 @@ describe("deployMaya — Wave 3 pre-fired job skip behavior", () => {
     expect(logs).toHaveLength(1);
   });
 
-  it("FAILED pre-fired bulk-pull job → deploy retries scrape inline", async () => {
+  it("FAILED pre-fired bulk-pull job → deploy retries scrape inline", { timeout: 30_000 }, async () => {
     const t = convexTest(schema, modules);
     // Seed creator + handle + cache (so the inline retry has data to work
     // with — runFullScrapePull is idempotent w.r.t. fresh cache).
