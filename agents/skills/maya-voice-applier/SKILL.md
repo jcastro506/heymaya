@@ -5,6 +5,16 @@ description: Applies the creator's voiceFingerprint (from soul.md) to any draft 
 when-to-use: On every output more than two sentences of original prose (morning briefs, evening recaps, weekly reviews, brand-email drafts, chat replies, hook drafts, idea cards, on-demand packet narrative). Skip on structured output (tables/JSON/lists), <2-sentence outputs, the manager-readiness packet (stays neutral third-person), and never invoke twice on the same draft (idempotent but wastes latency).
 plan-tier: ungated.
 thinking-budget: low
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - voice
+      - tone
+      - voice-applier
+      - draft-rewrite
+      - creator
 ---
 
 ## Calls

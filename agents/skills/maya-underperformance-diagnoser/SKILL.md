@@ -5,6 +5,16 @@ description: Post-mortem on a bombed post. Maya forms a grounded judgment on WHY
 when-to-use: Folded into Evening recap when one or more posts underperformed vs trailing-30 baseline; on-demand from chat when creator asks why did [post] flop.
 plan-tier: ungated.
 thinking-budget: medium
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - underperformance
+      - diagnostic
+      - post-mortem
+      - performance
+      - creator
 ---
 
 ## Calls

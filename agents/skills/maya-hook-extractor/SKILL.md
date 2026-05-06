@@ -5,6 +5,16 @@ description: Multimodal video → hook patterns. Watches the first 3 seconds of 
 when-to-use: Fired by the post-publish reaction (event-driven, ~30min Pro / <5min Studio) and by the hook library auto-build behavior when a post crosses 2× baseline. Output writes to `posts.mayaAnnotation` (Sprint 4 schema add) and may append to `hookLibrary` if the pattern is novel.
 plan-tier: Pro+ for the full multimodal video read; Starter falls back to caption + top-comments analysis only (no video frame ingestion). The fallback is documented; Maya tells the Starter creator the analysis is shallower.
 thinking-budget: medium (post_publish_reaction / hook_library_build task tags)
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - hook
+      - video-analysis
+      - multimodal
+      - performance
+      - creator
 ---
 
 # maya-hook-extractor

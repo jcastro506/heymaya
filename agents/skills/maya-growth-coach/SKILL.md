@@ -5,6 +5,16 @@ description: Generates do-this-next tactical moves from performance data + creat
 when-to-use: When creator asks what should I do / what's next / I'm stuck in chat; folded into Sun-night weekly review push; folded after accountability-nudge cron detects a missed commitment. Not used inside morning brief (stays light) or content planning (the planner makes posts; this skill makes moves).
 plan-tier: pro+ (Starter gets lighter coaching folded into evening recap; folded into morning brief on Pro+ via Growth coaching standing order). Studio adds optional cross-creator anchors when peer benchmarks opt-in.
 thinking-budget: high
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - coaching
+      - growth
+      - tactical-moves
+      - strategy
+      - creator
 ---
 
 ## Calls

@@ -6,6 +6,15 @@ description: DEV-TIME REFERENCE ONLY. This was originally designed as a runtime 
 when-to-use: NOT INVOKED IN V0. The runtime extension surface is retired. If reintroduced post-MVP (Phase 1.5+), it would gate behind explicit operator opt-in + the security gates documented below. For v0, the curated baseline ships uniformly with every Maya — no operator-approved on-demand installs.
 plan-tier: not-applicable-v0 (Phase 1.5+ would be Pro+ only).
 model-routing: not-applicable-v0.
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - skill-installer
+      - dev-time-only
+      - not-shipped-v0
+      - creator
 ---
 
 # maya-skill-installer (NOT SHIPPED IN V0)

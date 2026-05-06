@@ -5,6 +5,15 @@ description: Brand-deal rate suggestion engine. Hybrid heuristic floor (niche CP
 when-to-use: When a brand inbound is detected (called inside `maya-brand-deal-triager`) or when the creator asks "what should I charge for X?" in chat. Always pair with `maya-citation-firewall` on the output — every rate cited must point to a deliverable or a comparable.
 plan-tier: all (Starter gets heuristic-only; Pro+ gets full LLM reasoning + comparable creator data points)
 thinking-budget: medium (rate_suggestion task tag)
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - rate-calculator
+      - brand-deal
+      - pricing
+      - creator
 ---
 
 # maya-rate-calculator

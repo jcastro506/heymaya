@@ -5,6 +5,16 @@ description: Milestone- and stall-triggered advisor for stacking new revenue str
 when-to-use: Three triggers — milestone events (10K/50K/100K/500K folds into morning brief), revenue-flat-90d (folds into evening recap), and on-demand from chat (how do I make more money / merch yes or no).
 plan-tier: ungated (monetizationAdvisorEnabled true on every tier per W1-A revised matrix). Studio adds optional cross-creator anchors when peer benchmarks opt-in.
 thinking-budget: high
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - monetization
+      - revenue
+      - diversification
+      - playbooks
+      - creator
 ---
 
 ## Calls

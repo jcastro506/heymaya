@@ -4,6 +4,15 @@ version: 0.1.0-sprint3.5
 description: Multi-day content arc generator. Given a seed event (calendar life-event) or theme, plus creator picture and platform mix, produces per-platform per-day post outlines (hook options, format, caption draft, posting time, rationale). Calendar arcs follow build-up → day-of → morning-after → evergreen; theme arcs adapt to niche cadence.
 when-to-use: Fired by Weekly content plan (Sun 4pm) and Calendar-aware planning (daily 8am, Pro+) programs, once per theme or classified life-event. Also from chat when creator asks plan a 3-post arc around X.
 plan-tier: ungated (Starter constrained to single-platform variants by 1-handle cap; Pro/Studio get full multi-platform arcs).
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - content-planning
+      - arc
+      - multi-platform
+      - creator
 ---
 
 ## Calls

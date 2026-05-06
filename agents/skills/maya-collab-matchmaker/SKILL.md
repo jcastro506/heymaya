@@ -5,6 +5,16 @@ description: Proposes peer creators to DM for collabs. Expands from soul.md name
 when-to-use: Weekly Sunday companion to weekly review (cron); on-demand from chat. Output flows to Today as tap-to-DM cards; writes collabMatchLog with creatorActedOn=pending.
 plan-tier: ungated (collabMatchEnabled true on every tier per W1-A revised matrix). Studio gets larger maxResults + richer overlap scoring.
 thinking-budget: medium
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - collab
+      - matchmaker
+      - peers
+      - scrapecreators
+      - creator
 ---
 
 ## Calls

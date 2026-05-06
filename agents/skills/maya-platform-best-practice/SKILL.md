@@ -5,6 +5,19 @@ description: Per-platform expert consultant. TikTok hooks vs IG saves vs YT rete
 when-to-use: Whenever Maya is making a platform-specific recommendation. Called inline by `maya-content-arc-planner` when generating per-platform variants, by `maya-hook-extractor` when classifying hook fit, and directly by Maya during the morning brief / weekly content plan / chat replies whenever a platform-specific question comes up.
 plan-tier: all
 thinking-budget: low
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - platform-best-practice
+      - tiktok
+      - instagram
+      - youtube
+      - linkedin
+      - twitter
+      - consultant
+      - creator
 ---
 
 # maya-platform-best-practice

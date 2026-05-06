@@ -4,6 +4,16 @@ version: 0.1.0-sprint3.5
 description: Manager-readiness packet generator. Assembles a creator's 90-day picture (snapshot, niche, audience, top posts, brand-deal log, voice samples, why-hire-me one-pager) and delegates final PDF render to Anthropic pdf skill. The packet is what a creator hands to a prospective human manager so the manager can evaluate them in 5 minutes.
 when-to-use: Manager-readiness packet program — on-demand from chat (Studio) or quarterly cron (Pro+). Per readinessPacketCadence: Starter none, Pro quarterly, Studio on-demand. Do NOT invoke freeform — grounded entirely in Convex tables and runs through citation firewall before render.
 plan-tier: pro+ for the cron cadence. Studio additionally permits on-demand. Starter has no readiness packet (readinessPacketCadence=none).
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - packet
+      - manager-readiness
+      - pdf
+      - reporting
+      - creator
 ---
 
 ## Calls

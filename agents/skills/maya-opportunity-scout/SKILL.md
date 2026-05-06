@@ -5,6 +5,15 @@ description: Daily scan of UGC-marketplace listings (Aspire, GRIN, Creator.co, M
 when-to-use: Cron-driven daily; on-demand from chat for find me brands in my area / what UGC briefs are out today. Output consumed by morning brief (top 3 highest-fit), Today (full list), and brand-outreach pipeline (creator-confirmed opportunities flow to pitch-strategy then outreach).
 plan-tier: ungated (opportunityScoutEnabled true on every tier per W1-A revised matrix). Studio gets larger maxResults + Apollo/Hunter contact discovery on surfaced opportunities.
 thinking-budget: medium
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - opportunity-scout
+      - ugc-marketplace
+      - brand-discovery
+      - creator
 ---
 
 ## Calls

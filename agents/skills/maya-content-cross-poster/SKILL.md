@@ -5,6 +5,15 @@ description: Per-platform content variant generator. Takes one approved piece + 
 when-to-use: On-demand when a creator approves a piece and asks give me this in every format. Also folded into Weekly content plan (per idea card) and surfaced after Post-publish reaction identifies a top-performer worth re-cutting.
 plan-tier: ungated; bounded by handle cap (Starter 1, Pro 3, Studio 5).
 thinking-budget: medium
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - content-publishing
+      - cross-posting
+      - per-platform-variant
+      - creator
 ---
 
 ## Calls
