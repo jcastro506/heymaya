@@ -19,6 +19,8 @@ import {
   tiktokPostsFixture,
   tiktokCommentsFixture,
   tiktokTranscriptFixture,
+  tiktokAudienceFixture,
+  tiktokFollowingFixture,
 } from "./fixtures/tiktok";
 import {
   igProfileFixture,
@@ -50,6 +52,8 @@ function makeRouter(): ReturnType<typeof vi.fn> {
     // Paths follow the official ScrapeCreators agent skill (v3/v2 for TikTok
     // single-video and feed endpoints). Order matters: the `/v1/tiktok/video/*`
     // patterns must be checked before the bare `/v1/tiktok/profile` pattern.
+    if (url.includes("/v1/tiktok/user/audience")) return jsonResp(tiktokAudienceFixture);
+    if (url.includes("/v1/tiktok/user/following")) return jsonResp(tiktokFollowingFixture);
     if (url.includes("/v1/tiktok/profile")) return jsonResp(tiktokProfileFixture);
     if (url.includes("/v3/tiktok/profile/videos")) return jsonResp(tiktokPostsFixture);
     if (url.includes("/v1/tiktok/video/comments")) return jsonResp(tiktokCommentsFixture);
@@ -269,5 +273,375 @@ describe("runFullScrapePull — adversarial", () => {
     );
     expect(handles).toHaveLength(1);
     expect(handles[0].platform).toBe("tiktok");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 4 — bulk pull expansion: tiktok.audience + tiktok.following          */
+/* -------------------------------------------------------------------------- */
+
+import {
+  TIKTOK_AUDIENCE_MIN_FOLLOWERS,
+} from "../runFullScrapePull";
+
+describe("runFullScrapePull — Sprint 4 audience + following", () => {
+  it("calls tiktok.audience + tiktok.following for >5K-follower TT handles and writes cache + audit rows", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await makeCreator(t, "s4_tt_big");
+    const fetchSpy = makeRouter();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const result = await t.action(
+      internal.integrations.scrapeCreators.runFullScrapePull.runFullScrapePull,
+      {
+        creatorId,
+        handles: [{ platform: "tiktok", handle: "fitcreator99" }],
+      }
+    );
+
+    const tt = result.platforms[0];
+    expect(tt.ok).toBe(true);
+    expect(tt.audience).not.toBeNull();
+    expect(tt.audience?.ageRanges).toContain("18-24");
+    expect(tt.audience?.topGeos).toContain("US");
+    expect(tt.audience?.genderSplit).not.toBeNull();
+    expect(tt.following).not.toBeNull();
+    expect(tt.following?.users.length).toBeGreaterThan(0);
+    expect(tt.followerSnapshotId).not.toBeNull();
+
+    // Cache rows: audience + following keys present
+    const cacheRows = await t.run(async (ctx) =>
+      ctx.db
+        .query("scrapeCreatorsCache")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    expect(
+      cacheRows.some((r) => r.cacheKey === "sc:tiktok:audience:fitcreator99")
+    ).toBe(true);
+    expect(
+      cacheRows.some((r) => r.cacheKey === "sc:tiktok:following:fitcreator99")
+    ).toBe(true);
+
+    // Credit audit: one "called" row for audience (26 credits) + one for following (1 credit).
+    const audit = await t.run(async (ctx) =>
+      ctx.db
+        .query("scrapeCreatorsCreditAudit")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    const audienceAudit = audit.find((a) => a.kind === "audience");
+    const followingAudit = audit.find((a) => a.kind === "following");
+    expect(audienceAudit?.called).toBe(true);
+    expect(audienceAudit?.credits).toBe(26);
+    expect(followingAudit?.called).toBe(true);
+    expect(followingAudit?.credits).toBe(1);
+
+    // Follower snapshot: one row written.
+    const snaps = await t.run(async (ctx) =>
+      ctx.db
+        .query("creatorFollowerSnapshots")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    expect(snaps.length).toBe(1);
+    expect(snaps[0].followerCount).toBe(248311);
+    expect(snaps[0].platform).toBe("tiktok");
+  });
+
+  it("SKIPS tiktok.audience for handles with <5K followers (credit gating)", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await makeCreator(t, "s4_tt_small");
+
+    // Override the profile fixture to return <5K followers.
+    const smallFollowerProfile = {
+      ...tiktokProfileFixture,
+      stats: {
+        ...tiktokProfileFixture.stats,
+        followerCount: 1234, // below TIKTOK_AUDIENCE_MIN_FOLLOWERS
+      },
+    };
+    expect(smallFollowerProfile.stats.followerCount).toBeLessThan(
+      TIKTOK_AUDIENCE_MIN_FOLLOWERS
+    );
+
+    let audienceCalled = false;
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : (input as Request).url;
+      if (url.includes("/v1/tiktok/user/audience")) {
+        audienceCalled = true;
+        return jsonResp(tiktokAudienceFixture);
+      }
+      if (url.includes("/v1/tiktok/user/following"))
+        return jsonResp(tiktokFollowingFixture);
+      if (url.includes("/v1/tiktok/profile")) return jsonResp(smallFollowerProfile);
+      if (url.includes("/v3/tiktok/profile/videos")) return jsonResp(tiktokPostsFixture);
+      if (url.includes("/v1/tiktok/video/comments")) return jsonResp(tiktokCommentsFixture);
+      if (url.includes("/v1/tiktok/video/transcript")) return jsonResp(tiktokTranscriptFixture);
+      return jsonResp({ error: "unmatched" }, 404);
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const result = await t.action(
+      internal.integrations.scrapeCreators.runFullScrapePull.runFullScrapePull,
+      {
+        creatorId,
+        handles: [{ platform: "tiktok", handle: "fitcreator99" }],
+      }
+    );
+
+    expect(audienceCalled).toBe(false);
+    expect(result.platforms[0].audience).toBeNull();
+    // Following is NOT credit-gated (1 credit) — should still fire.
+    expect(result.platforms[0].following).not.toBeNull();
+
+    // Audit row: audience skipped with credits=0, reason mentions threshold.
+    const audit = await t.run(async (ctx) =>
+      ctx.db
+        .query("scrapeCreatorsCreditAudit")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    const audienceAudit = audit.find((a) => a.kind === "audience");
+    expect(audienceAudit?.called).toBe(false);
+    expect(audienceAudit?.credits).toBe(0);
+    expect(audienceAudit?.reason).toContain("skipped");
+    expect(audienceAudit?.reason).toContain("1234");
+  });
+
+  it("SKIPS tiktok.audience + following entirely for non-TikTok platforms", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await makeCreator(t, "s4_ig_only");
+    const fetchSpy = vi.fn(makeRouter());
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const result = await t.action(
+      internal.integrations.scrapeCreators.runFullScrapePull.runFullScrapePull,
+      {
+        creatorId,
+        handles: [{ platform: "instagram", handle: "studio.lena" }],
+      }
+    );
+
+    expect(result.platforms[0].audience).toBeNull();
+    expect(result.platforms[0].following).toBeNull();
+
+    // No audience or following endpoint should have been called for IG.
+    const calls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(calls.some((u) => u.includes("/v1/tiktok/user/audience"))).toBe(false);
+    expect(calls.some((u) => u.includes("/v1/tiktok/user/following"))).toBe(false);
+
+    // No credit audit rows for an IG-only handle (the gating logic is
+    // TT-only; non-TT platforms never enter the audit path).
+    const audit = await t.run(async (ctx) =>
+      ctx.db
+        .query("scrapeCreatorsCreditAudit")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    expect(audit).toEqual([]);
+  });
+
+  it("malformed audience response → graceful fallback (no crash, audience=null)", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await makeCreator(t, "s4_adv_audience");
+    const wrapped = vi.fn(async (input: RequestInfo | URL) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : (input as Request).url;
+      if (url.includes("/v1/tiktok/user/audience")) {
+        // Garbage shape — Zod parser tolerates it (passthrough), normalizer
+        // returns empty arrays. The endpoint still returns ok; pull keeps going.
+        return jsonResp({ totally: "wrong shape", garbage: [1, 2, 3] });
+      }
+      if (url.includes("/v1/tiktok/user/following"))
+        return jsonResp(tiktokFollowingFixture);
+      if (url.includes("/v1/tiktok/profile")) return jsonResp(tiktokProfileFixture);
+      if (url.includes("/v3/tiktok/profile/videos")) return jsonResp(tiktokPostsFixture);
+      if (url.includes("/v1/tiktok/video/comments")) return jsonResp(tiktokCommentsFixture);
+      if (url.includes("/v1/tiktok/video/transcript")) return jsonResp(tiktokTranscriptFixture);
+      return jsonResp({ error: "unmatched" }, 404);
+    });
+    vi.stubGlobal("fetch", wrapped);
+
+    const result = await t.action(
+      internal.integrations.scrapeCreators.runFullScrapePull.runFullScrapePull,
+      {
+        creatorId,
+        handles: [{ platform: "tiktok", handle: "fitcreator99" }],
+      }
+    );
+
+    // The pull should succeed overall; audience normalizer returns empty
+    // arrays from the malformed payload (no crash, no thrown error).
+    expect(result.platforms[0].ok).toBe(true);
+    const aud = result.platforms[0].audience;
+    expect(aud).not.toBeNull();
+    expect(aud?.ageRanges).toEqual([]);
+    expect(aud?.topGeos).toEqual([]);
+    expect(aud?.genderSplit).toBeNull();
+
+    // Audit row still records the call.
+    const audit = await t.run(async (ctx) =>
+      ctx.db
+        .query("scrapeCreatorsCreditAudit")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    expect(audit.find((a) => a.kind === "audience")?.called).toBe(true);
+  });
+
+  it("audience + following caches are CREATOR-SCOPED (cross-tenant isolation)", async () => {
+    const t = convexTest(schema, modules);
+    const a = await makeCreator(t, "s4_iso_a");
+    const b = await makeCreator(t, "s4_iso_b");
+    vi.stubGlobal("fetch", makeRouter());
+
+    await t.action(
+      internal.integrations.scrapeCreators.runFullScrapePull.runFullScrapePull,
+      { creatorId: a, handles: [{ platform: "tiktok", handle: "fitcreator99" }] }
+    );
+    await t.action(
+      internal.integrations.scrapeCreators.runFullScrapePull.runFullScrapePull,
+      { creatorId: b, handles: [{ platform: "tiktok", handle: "fitcreator99" }] }
+    );
+
+    const aAud = await t.run(async (ctx) =>
+      ctx.db
+        .query("scrapeCreatorsCache")
+        .withIndex("by_creator_and_key", (q) =>
+          q.eq("creatorId", a).eq("cacheKey", "sc:tiktok:audience:fitcreator99")
+        )
+        .unique()
+    );
+    const bAud = await t.run(async (ctx) =>
+      ctx.db
+        .query("scrapeCreatorsCache")
+        .withIndex("by_creator_and_key", (q) =>
+          q.eq("creatorId", b).eq("cacheKey", "sc:tiktok:audience:fitcreator99")
+        )
+        .unique()
+    );
+    expect(aAud).not.toBeNull();
+    expect(bAud).not.toBeNull();
+    expect(aAud?.creatorId).toBe(a);
+    expect(bAud?.creatorId).toBe(b);
+    expect(aAud?._id).not.toBe(bAud?._id);
+
+    const aSnaps = await t.run(async (ctx) =>
+      ctx.db
+        .query("creatorFollowerSnapshots")
+        .withIndex("by_creator", (q) => q.eq("creatorId", a))
+        .collect()
+    );
+    const bSnaps = await t.run(async (ctx) =>
+      ctx.db
+        .query("creatorFollowerSnapshots")
+        .withIndex("by_creator", (q) => q.eq("creatorId", b))
+        .collect()
+    );
+    for (const s of aSnaps) expect(s.creatorId).toBe(a);
+    for (const s of bSnaps) expect(s.creatorId).toBe(b);
+  });
+
+  it("plan-tier × action: BOTH coach and manager tiers gate at the same >5K threshold (no special-casing)", async () => {
+    const t = convexTest(schema, modules);
+    const coachId = await t.run(async (ctx) =>
+      ctx.db.insert("creators", {
+        clerkUserId: "u_coach_s4",
+        email: "coach@s4.test",
+        channelPreference: "web",
+        timezone: "America/Los_Angeles",
+        status: "active",
+        plan: "coach",
+        createdAt: NOW,
+      })
+    );
+    const managerId = await t.run(async (ctx) =>
+      ctx.db.insert("creators", {
+        clerkUserId: "u_mgr_s4",
+        email: "manager@s4.test",
+        channelPreference: "web",
+        timezone: "America/Los_Angeles",
+        status: "active",
+        plan: "manager",
+        createdAt: NOW,
+      })
+    );
+
+    // Both creators get the SAME small (<5K) profile — gating is purely a
+    // budget concern, not a tier feature. Both should skip.
+    const smallProfile = {
+      ...tiktokProfileFixture,
+      stats: { ...tiktokProfileFixture.stats, followerCount: 4_999 },
+    };
+    let audienceHits = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : (input as Request).url;
+        if (url.includes("/v1/tiktok/user/audience")) {
+          audienceHits++;
+          return jsonResp(tiktokAudienceFixture);
+        }
+        if (url.includes("/v1/tiktok/user/following"))
+          return jsonResp(tiktokFollowingFixture);
+        if (url.includes("/v1/tiktok/profile")) return jsonResp(smallProfile);
+        if (url.includes("/v3/tiktok/profile/videos")) return jsonResp(tiktokPostsFixture);
+        if (url.includes("/v1/tiktok/video/comments")) return jsonResp(tiktokCommentsFixture);
+        if (url.includes("/v1/tiktok/video/transcript")) return jsonResp(tiktokTranscriptFixture);
+        return jsonResp({ error: "unmatched" }, 404);
+      })
+    );
+
+    await t.action(
+      internal.integrations.scrapeCreators.runFullScrapePull.runFullScrapePull,
+      { creatorId: coachId, handles: [{ platform: "tiktok", handle: "fitcreator99" }] }
+    );
+    await t.action(
+      internal.integrations.scrapeCreators.runFullScrapePull.runFullScrapePull,
+      { creatorId: managerId, handles: [{ platform: "tiktok", handle: "fitcreator99" }] }
+    );
+
+    expect(audienceHits).toBe(0);
+  });
+
+  it("follower snapshot: re-pull writes a NEW row each time (append-only history)", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await makeCreator(t, "s4_snap_history");
+    vi.stubGlobal("fetch", makeRouter());
+
+    await t.action(
+      internal.integrations.scrapeCreators.runFullScrapePull.runFullScrapePull,
+      { creatorId, handles: [{ platform: "tiktok", handle: "fitcreator99" }] }
+    );
+    await t.action(
+      internal.integrations.scrapeCreators.runFullScrapePull.runFullScrapePull,
+      { creatorId, handles: [{ platform: "tiktok", handle: "fitcreator99" }] }
+    );
+
+    const snaps = await t.run(async (ctx) =>
+      ctx.db
+        .query("creatorFollowerSnapshots")
+        .withIndex("by_creator_and_platform", (q) =>
+          q.eq("creatorId", creatorId).eq("platform", "tiktok")
+        )
+        .collect()
+    );
+    expect(snaps.length).toBe(2);
+    expect(snaps[0].followerCount).toBe(snaps[1].followerCount);
   });
 });

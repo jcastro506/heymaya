@@ -474,6 +474,21 @@ interface NormalizedPostForPrompt {
   topComments: Array<{ text: string; likeCount: number | null }>;
 }
 
+/**
+ * Sprint 4 — audience demographics surfaced from `tiktok.audience`. When
+ * present, the synthesizer is instructed to PREFER these signals over its
+ * own inference (the upstream is ground truth). When absent (non-TT handle,
+ * sub-5K follower handle, or upstream error), the synthesizer falls back to
+ * inferring audience from comments + caption.
+ */
+export interface AudienceUpstream {
+  platform: string;
+  handle: string;
+  ageRanges: string[];
+  topGeos: string[];
+  genderSplit: { male: number; female: number; other: number } | null;
+}
+
 interface PromptPayload {
   creator: {
     timezone: string;
@@ -490,6 +505,13 @@ interface PromptPayload {
     currentRevenueStreams?: ReadonlyArray<string>;
     longTermGoals?: { oneYear?: string; fiveYear?: string };
   };
+  /**
+   * Sprint 4 — per-platform upstream audience demographics. May be empty
+   * (no qualifying handle, all sub-5K, all errored). Synthesizer prefers
+   * this over inferred when present. Optional for back-compat with
+   * pre-Sprint-4 fixtures; `buildPromptPayload` always populates it.
+   */
+  audienceUpstream?: AudienceUpstream[];
   perPlatform: Array<{
     platform: string;
     handle: string;
@@ -665,6 +687,24 @@ export function buildPromptPayload(
     })),
   }));
 
+  // Sprint 4 — pull audience cache rows for any platform that has one. The
+  // upstream payload shape is loose; we apply the same defensive walk the
+  // endpoints normalizer uses, but here we read the already-cached raw blob
+  // (ScrapeCreators audience response) and re-normalize without spending
+  // another 26 credits.
+  const audienceUpstream: AudienceUpstream[] = [];
+  for (const row of inputs.cacheRows) {
+    if (row.kind !== "audience") continue;
+    const handle = handlesByPlatform.get(row.platform);
+    if (!handle) continue;
+    const norm = renormalizeAudienceFromCache(
+      row.platform,
+      handle.handle,
+      row.payload
+    );
+    if (norm) audienceUpstream.push(norm);
+  }
+
   const payload: PromptPayload = {
     creator: {
       timezone: creator.timezone,
@@ -677,6 +717,7 @@ export function buildPromptPayload(
       currentRevenueStreams: inputs.picture?.currentRevenueStreams,
       longTermGoals: inputs.picture?.longTermGoals,
     },
+    audienceUpstream,
     perPlatform,
     batchingDiagnostics: {
       totalPostsConsidered: allPosts.length,
@@ -941,6 +982,128 @@ function asNum(v: unknown): number | null {
   return null;
 }
 
+/**
+ * Sprint 4 — re-walk a cached `audience` upstream payload into the prompt
+ * shape WITHOUT re-spending credits. Returns null when the payload has no
+ * usable signal (the caller drops the entry instead of pushing an empty
+ * upstream marker into the prompt — the synthesizer's fallback path is to
+ * infer from comments, which is better than telling the model "the upstream
+ * said nothing" and confusing it).
+ *
+ * Mirrors `normalizeTikTokAudience` in `endpoints.ts` but tolerates the
+ * payload being either the bare audience shape OR the wrapped `{ audience }`
+ * envelope — we cache `audience.raw` (the full upstream blob) so wrapping
+ * is preserved.
+ */
+export function renormalizeAudienceFromCache(
+  platform: string,
+  handle: string,
+  payload: unknown
+): AudienceUpstream | null {
+  if (!payload || typeof payload !== "object") return null;
+  const root = payload as Record<string, unknown>;
+  const data = (root.data as Record<string, unknown> | undefined) ?? null;
+  const a =
+    ((root.audience as Record<string, unknown> | undefined) ??
+      (data?.audience as Record<string, unknown> | undefined) ??
+      // Some upstream variants flatten directly at top-level.
+      (Array.isArray(root.ageRanges) ||
+      Array.isArray(root.age_ranges) ||
+      Array.isArray(root.topGeos) ||
+      Array.isArray(root.top_geos) ||
+      Array.isArray(root.countries)
+        ? root
+        : null)) as Record<string, unknown> | null;
+  if (!a) return null;
+
+  const pickAgeArray = (): string[] => {
+    const candidates: unknown[] = [
+      a.ageRanges,
+      a.age_ranges,
+      a.age,
+      a.ageGroups,
+      a.age_groups,
+    ];
+    for (const arr of candidates) {
+      if (!Array.isArray(arr) || arr.length === 0) continue;
+      const labels = arr
+        .map((entry, i) => {
+          if (typeof entry !== "object" || entry === null) return null;
+          const e = entry as Record<string, unknown>;
+          return (
+            asStr(e.range) ??
+            asStr(e.label) ??
+            asStr(e.bucket) ??
+            asStr(e.name) ??
+            String(i)
+          );
+        })
+        .filter((s): s is string => typeof s === "string" && s.length > 0);
+      if (labels.length > 0) return labels;
+    }
+    return [];
+  };
+
+  const pickGeoArray = (): string[] => {
+    const candidates: unknown[] = [
+      a.topGeos,
+      a.top_geos,
+      a.countries,
+      a.geos,
+      a.geo,
+    ];
+    for (const arr of candidates) {
+      if (!Array.isArray(arr) || arr.length === 0) continue;
+      const labels = arr
+        .map((entry) => {
+          if (typeof entry !== "object" || entry === null) return null;
+          const e = entry as Record<string, unknown>;
+          return (
+            asStr(e.country) ??
+            asStr(e.countryCode) ??
+            asStr(e.code) ??
+            asStr(e.region) ??
+            asStr(e.city) ??
+            asStr(e.name) ??
+            asStr(e.label)
+          );
+        })
+        .filter((s): s is string => typeof s === "string" && s.length > 0);
+      if (labels.length > 0) return labels;
+    }
+    return [];
+  };
+
+  const pickGender = (): AudienceUpstream["genderSplit"] => {
+    const g =
+      (a.gender as Record<string, unknown> | undefined) ??
+      (a.genderSplit as Record<string, unknown> | undefined) ??
+      (a.gender_distribution as Record<string, unknown> | undefined);
+    if (!g) return null;
+    const male = asNum(g.male) ?? 0;
+    const female = asNum(g.female) ?? 0;
+    const other = asNum(g.other) ?? 0;
+    if (male === 0 && female === 0 && other === 0) return null;
+    const total = male + female + other;
+    if (total > 1.5) {
+      return {
+        male: male / total,
+        female: female / total,
+        other: other / total,
+      };
+    }
+    return { male, female, other };
+  };
+
+  const ageRanges = pickAgeArray();
+  const topGeos = pickGeoArray();
+  const genderSplit = pickGender();
+  if (ageRanges.length === 0 && topGeos.length === 0 && genderSplit === null) {
+    return null;
+  }
+  return { platform, handle, ageRanges, topGeos, genderSplit };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Prompt construction                                                         */
 /* -------------------------------------------------------------------------- */
@@ -973,6 +1136,12 @@ Multimodal post handling:
 - "kind":"text-context" — you CANNOT watch the video. Use caption + transcript (if present) + topComments + engagement metrics ONLY. Do NOT make claims about visual content for these posts.
 - Both kinds count equally for citations — a text-context post can ground "niche" or "voiceFingerprint" or any other field. The kind only constrains whether you can describe what's visually on screen.
 - The signal-prioritized batching deliberately includes the creator's TOP-engagement posts as "video" (best hooks) and BOTTOM-engagement posts as "video" (worst patterns). The middle of the engagement distribution is "text-context".
+
+Upstream audience signal (Sprint 4):
+- The input may include "audienceUpstream": an array of per-platform demographic snapshots from the platform's own analytics (ScrapeCreators TikTok audience endpoint).
+- When audienceUpstream contains an entry for a platform, PREFER its ageRanges / topGeos / genderSplit over your own inference. The platform's own analytics are ground truth at scale; your comment-based inference is a fallback.
+- When audienceUpstream is empty for a platform (e.g. handle below the gating threshold, non-TikTok platform, or upstream error), infer audience from comments + caption + bio as you would today.
+- For audience.ageRanges and audience.topGeos in the output: copy verbatim from audienceUpstream when present, otherwise infer. Cite the upstream entry with usedFor="audience" and postId="upstream" (no actual post — the upstream snapshot is the source). For inferred audience, cite the comment-bearing posts that drove the inference.
 
 Required output schema (JSON):
 {

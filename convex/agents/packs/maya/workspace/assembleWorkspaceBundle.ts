@@ -93,7 +93,14 @@ export function assembleWorkspaceBundle(
     standingOrdersSplit = true;
   }
 
-  const userMd = generateUserMd({ creator, picture, handles, plan });
+  const userMd = generateUserMd({
+    creator,
+    picture,
+    handles,
+    plan,
+    followerSnapshots: inputs.followerSnapshots,
+    now,
+  });
   const heartbeatMd = generateHeartbeatMd({ plan });
   const bootMd = generateBootMd({ creatorDisplayName: displayName });
   const memoryMd = generateMemoryMdSeed({ creator, picture, handles, now });

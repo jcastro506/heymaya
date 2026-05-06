@@ -29,6 +29,7 @@ import {
   buildPromptPayload,
   buildWorkerPosts,
   buildWorkerUserPayloadJson,
+  renormalizeAudienceFromCache,
   SynthValidationError,
   SYNTH_SYSTEM_PROMPT,
   cacheKey,
@@ -2743,5 +2744,107 @@ describe("synthesizeCreatorPicture — Wave 4 worker routing", () => {
     expect(result.ok).toBe(true);
     expect(workerSpy).not.toHaveBeenCalled();
     expect(fetchSpy).toHaveBeenCalled();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 4 — audience upstream consumption                                    */
+/* -------------------------------------------------------------------------- */
+
+describe("synthesizeCreatorPicture — Sprint 4 audience upstream", () => {
+  it("renormalizeAudienceFromCache extracts ageRanges + topGeos + gender from documented shape", () => {
+    const upstream = {
+      audience: {
+        ageRanges: [
+          { range: "18-24", percent: 0.4 },
+          { range: "25-34", percent: 0.35 },
+        ],
+        topGeos: [
+          { country: "US", percent: 0.6 },
+          { country: "CA", percent: 0.1 },
+        ],
+        gender: { male: 0.55, female: 0.44, other: 0.01 },
+      },
+    };
+    const out = renormalizeAudienceFromCache("tiktok", "h", upstream);
+    expect(out).not.toBeNull();
+    expect(out?.ageRanges).toEqual(["18-24", "25-34"]);
+    expect(out?.topGeos).toEqual(["US", "CA"]);
+    expect(out?.genderSplit?.male).toBeCloseTo(0.55, 2);
+  });
+
+  it("renormalizeAudienceFromCache returns null on completely empty / malformed payloads", () => {
+    expect(renormalizeAudienceFromCache("tiktok", "h", null)).toBeNull();
+    expect(renormalizeAudienceFromCache("tiktok", "h", {})).toBeNull();
+    expect(renormalizeAudienceFromCache("tiktok", "h", { unrelated: 42 })).toBeNull();
+    expect(
+      renormalizeAudienceFromCache("tiktok", "h", { audience: {} })
+    ).toBeNull();
+  });
+
+  it("buildPromptPayload surfaces audienceUpstream when an audience cache row is present", async () => {
+    const t = convexTest(schema, modules);
+    const c = await seedCreatorWithScrapedData(t, {
+      suffix: "s4_aud",
+      plan: "manager",
+    });
+    // Seed an audience cache row keyed to this creator's TT handle.
+    await t.run(async (ctx) =>
+      ctx.db.insert("scrapeCreatorsCache", {
+        creatorId: c,
+        cacheKey: cacheKey("tiktok", "audience", "s4_aud_tt"),
+        payload: {
+          audience: {
+            ageRanges: [{ range: "18-24" }, { range: "25-34" }],
+            topGeos: [{ country: "US" }, { country: "GB" }],
+            gender: { male: 0.6, female: 0.4 },
+          },
+        },
+        fetchedAt: NOW,
+        ttlSec: 86_400,
+      })
+    );
+    const inputs = await t.query(
+      internal.onboarding.maya.synthesizeCreatorPicture.loadSynthInputs,
+      { creatorId: c }
+    );
+    const { payload } = buildPromptPayload(inputs);
+    expect(payload.audienceUpstream).toBeDefined();
+    expect(payload.audienceUpstream?.length).toBe(1);
+    expect(payload.audienceUpstream?.[0].platform).toBe("tiktok");
+    expect(payload.audienceUpstream?.[0].ageRanges).toEqual([
+      "18-24",
+      "25-34",
+    ]);
+    expect(payload.audienceUpstream?.[0].topGeos).toEqual(["US", "GB"]);
+  });
+
+  it("buildPromptPayload omits audienceUpstream entries with no usable signal", async () => {
+    const t = convexTest(schema, modules);
+    const c = await seedCreatorWithScrapedData(t, {
+      suffix: "s4_aud_empty",
+      plan: "manager",
+    });
+    // Garbage audience row.
+    await t.run(async (ctx) =>
+      ctx.db.insert("scrapeCreatorsCache", {
+        creatorId: c,
+        cacheKey: cacheKey("tiktok", "audience", "s4_aud_empty_tt"),
+        payload: { unrelated: "garbage" },
+        fetchedAt: NOW,
+        ttlSec: 86_400,
+      })
+    );
+    const inputs = await t.query(
+      internal.onboarding.maya.synthesizeCreatorPicture.loadSynthInputs,
+      { creatorId: c }
+    );
+    const { payload } = buildPromptPayload(inputs);
+    expect(payload.audienceUpstream ?? []).toEqual([]);
+  });
+
+  it("system prompt instructs the model to PREFER audienceUpstream over inference", () => {
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/audienceUpstream/);
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/PREFER/);
   });
 });

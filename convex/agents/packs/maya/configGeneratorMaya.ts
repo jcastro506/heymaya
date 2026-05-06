@@ -197,6 +197,12 @@ export interface BuildInputs {
   connectedAccounts: Doc<"connectedAccounts">[];
   /** Resolved decrypted composio account IDs, paired with the connectedAccount row. */
   decryptedComposioAccounts: Map<Id<"connectedAccounts">, string>;
+  /**
+   * Sprint 4 — append-only follower-count snapshots from
+   * `creatorFollowerSnapshots`. Optional: when missing, USER.md emits
+   * "no prior snapshot" for every handle (the documented first-run state).
+   */
+  followerSnapshots?: Doc<"creatorFollowerSnapshots">[];
 }
 
 /**
@@ -282,6 +288,7 @@ export function buildMayaConfig(inputs: BuildInputs, now: number): MayaConfigBun
       connectedAccounts: sortedAccounts,
       plan: creator.plan,
       now,
+      followerSnapshots: inputs.followerSnapshots,
     },
     { bootstrapMaxChars: MAYA_BOOTSTRAP_MAX_CHARS }
   );
@@ -430,10 +437,17 @@ export const loadConfigInputs = internalQuery({
     picture: Doc<"creatorPicture"> | null;
     handles: Doc<"creatorHandles">[];
     connectedAccounts: Doc<"connectedAccounts">[];
+    followerSnapshots: Doc<"creatorFollowerSnapshots">[];
   }> => {
     const creator = await ctx.db.get(args.creatorId);
     if (!creator) {
-      return { creator: null, picture: null, handles: [], connectedAccounts: [] };
+      return {
+        creator: null,
+        picture: null,
+        handles: [],
+        connectedAccounts: [],
+        followerSnapshots: [],
+      };
     }
     const handles = await ctx.db
       .query("creatorHandles")
@@ -455,7 +469,21 @@ export const loadConfigInputs = internalQuery({
         : pictures.reduce((latest, p) =>
             p.generatedAt > latest.generatedAt ? p : latest
           );
-    return { creator, picture, handles, connectedAccounts };
+    // Sprint 4 — load follower snapshots for the USER.md 30-day delta.
+    // Append-only history; the generator picks the snapshot closest to 30d
+    // ago at render time. Empty array on first deploy = "no prior snapshot"
+    // rendering, which is the documented Sprint 4 first-run state.
+    const followerSnapshots = await ctx.db
+      .query("creatorFollowerSnapshots")
+      .withIndex("by_creator", (q) => q.eq("creatorId", args.creatorId))
+      .collect();
+    return {
+      creator,
+      picture,
+      handles,
+      connectedAccounts,
+      followerSnapshots,
+    };
   },
 });
 
@@ -510,6 +538,7 @@ export const generateMayaConfig = internalAction({
         handles: inputs.handles,
         connectedAccounts: inputs.connectedAccounts,
         decryptedComposioAccounts: decrypted,
+        followerSnapshots: inputs.followerSnapshots,
       },
       now
     );

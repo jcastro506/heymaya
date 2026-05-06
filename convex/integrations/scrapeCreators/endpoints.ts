@@ -91,6 +91,61 @@ export const NormalizedCommentSchema = z.object({
 });
 export type NormalizedComment = z.infer<typeof NormalizedCommentSchema>;
 
+/**
+ * Sprint 4 — normalized audience demographics.
+ *
+ * Optional fields: every bucket can be missing if the upstream didn't surface
+ * it. The synthesizer treats missing as "no signal" and falls back to inferred
+ * audience signal from comments + caption analysis (the existing v0 path).
+ *
+ * `raw` is the upstream payload retained for forensics / future re-parsing
+ * without re-spending the 26 credits. NEVER show raw to the model — costs
+ * tokens for no benefit. Use `ageRanges` / `topGeos` / `genderSplit`.
+ */
+export const NormalizedAudienceSchema = z.object({
+  platform: PlatformSchema,
+  handle: z.string(),
+  /** Top age buckets, e.g. ["18-24", "25-34"]. Empty when no signal. */
+  ageRanges: z.array(z.string()),
+  /** Top geographies (country / region / city labels). Empty when no signal. */
+  topGeos: z.array(z.string()),
+  /**
+   * Normalized gender split (sums ≈1.0). Null when the upstream didn't surface
+   * any gender signal.
+   */
+  genderSplit: z
+    .object({ male: z.number(), female: z.number(), other: z.number() })
+    .nullable(),
+  raw: z.unknown(),
+});
+export type NormalizedAudience = z.infer<typeof NormalizedAudienceSchema>;
+
+/**
+ * Sprint 4 — normalized following list (TikTok-only in v0).
+ *
+ * `count` is the size of the returned page (paginated upstream; we only
+ * pull page 1 in v0 — full traversal would burn credits without compounding
+ * value at the bulk-pull stage).
+ *
+ * `total` is the upstream total following count when the response surfaces
+ * it, else null (caller falls back to `profile.followingCount`).
+ */
+export const NormalizedFollowingSchema = z.object({
+  platform: PlatformSchema,
+  handle: z.string(),
+  count: z.number(),
+  total: z.number().nullable(),
+  /** Subset of the page (handle + nickname) Maya's competitor_watch consumes. */
+  users: z.array(
+    z.object({
+      handle: z.string().nullable(),
+      nickname: z.string().nullable(),
+    })
+  ),
+  raw: z.unknown(),
+});
+export type NormalizedFollowing = z.infer<typeof NormalizedFollowingSchema>;
+
 /* -------------------------------------------------------------------------- */
 /* Upstream parsers — narrow Zod schemas per platform                         */
 /* -------------------------------------------------------------------------- */
@@ -212,6 +267,149 @@ const TikTokTranscriptResponseSchema = z
           .passthrough()
       )
       .optional(),
+  })
+  .passthrough();
+
+/**
+ * Sprint 4 — TikTok audience demographics (`/v1/tiktok/user/audience`).
+ *
+ * 26 credits/call, so callers must gate aggressively (Sprint 4 policy: skip
+ * for handles with ≤5K followers — the demographic signal at that size is
+ * thin and the credit cost is the same as a 1M-follower call).
+ *
+ * The upstream payload's exact shape is undocumented in our installed SKILL.md,
+ * so we keep the Zod parser lenient with `.passthrough()` everywhere and let
+ * the synthesizer's defensive field extraction do the heavy lifting. We
+ * normalize a small surface (ageRanges / topGeos / genderSplit) so callers
+ * don't all replicate the upstream-shape walking.
+ *
+ * Common response shapes observed in the wild include `audience.ageRanges`,
+ * `audience.topGeos`, `audience.gender_distribution` keyed by male/female
+ * proportions; we tolerate both `audience: { ... }` and a flat top-level
+ * shape and the generic `data: { audience }` envelope.
+ */
+const AudienceAgeBucketSchema = z
+  .object({
+    range: z.string().optional(),
+    label: z.string().optional(),
+    bucket: z.string().optional(),
+    name: z.string().optional(),
+    percent: NumberLike.optional(),
+    percentage: NumberLike.optional(),
+    share: NumberLike.optional(),
+    weight: NumberLike.optional(),
+    value: NumberLike.optional(),
+  })
+  .passthrough();
+
+const AudienceGeoBucketSchema = z
+  .object({
+    country: z.string().optional(),
+    countryCode: z.string().optional(),
+    code: z.string().optional(),
+    name: z.string().optional(),
+    label: z.string().optional(),
+    region: z.string().optional(),
+    city: z.string().optional(),
+    percent: NumberLike.optional(),
+    percentage: NumberLike.optional(),
+    share: NumberLike.optional(),
+    weight: NumberLike.optional(),
+    value: NumberLike.optional(),
+  })
+  .passthrough();
+
+const AudienceCoreSchema = z
+  .object({
+    ageRanges: z.array(AudienceAgeBucketSchema).optional(),
+    age_ranges: z.array(AudienceAgeBucketSchema).optional(),
+    age: z.array(AudienceAgeBucketSchema).optional(),
+    ageGroups: z.array(AudienceAgeBucketSchema).optional(),
+    age_groups: z.array(AudienceAgeBucketSchema).optional(),
+    topGeos: z.array(AudienceGeoBucketSchema).optional(),
+    top_geos: z.array(AudienceGeoBucketSchema).optional(),
+    countries: z.array(AudienceGeoBucketSchema).optional(),
+    geo: z.array(AudienceGeoBucketSchema).optional(),
+    geos: z.array(AudienceGeoBucketSchema).optional(),
+    gender: z
+      .object({
+        male: NumberLike.optional(),
+        female: NumberLike.optional(),
+        other: NumberLike.optional(),
+      })
+      .partial()
+      .passthrough()
+      .optional(),
+    genderSplit: z
+      .object({
+        male: NumberLike.optional(),
+        female: NumberLike.optional(),
+        other: NumberLike.optional(),
+      })
+      .partial()
+      .passthrough()
+      .optional(),
+    gender_distribution: z
+      .object({
+        male: NumberLike.optional(),
+        female: NumberLike.optional(),
+        other: NumberLike.optional(),
+      })
+      .partial()
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+const TikTokAudienceResponseSchema = z
+  .object({
+    audience: AudienceCoreSchema.optional(),
+    data: z
+      .object({ audience: AudienceCoreSchema.optional() })
+      .partial()
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+/**
+ * Sprint 4 — TikTok following list (`/v1/tiktok/user/following`).
+ * 1 credit. Used as the cheap probe alongside the bulk pull's profile call —
+ * gives Maya a peer signal (named-peers list) for `competitor_watch` and
+ * cross-validates the `followingCount` from the profile call. The upstream
+ * is paginated with `min_time`; for v0 we take the first page only and
+ * surface `count` (length of the returned page) plus `total` if upstream
+ * provides it.
+ */
+const TikTokFollowingUserSchema = z
+  .object({
+    uniqueId: z.string().optional(),
+    unique_id: z.string().optional(),
+    nickname: z.string().optional(),
+    secUid: z.string().optional(),
+    sec_uid: z.string().optional(),
+  })
+  .passthrough();
+
+const TikTokFollowingResponseSchema = z
+  .object({
+    users: z.array(TikTokFollowingUserSchema).optional(),
+    following: z.array(TikTokFollowingUserSchema).optional(),
+    userList: z.array(TikTokFollowingUserSchema).optional(),
+    data: z
+      .object({
+        users: z.array(TikTokFollowingUserSchema).optional(),
+        following: z.array(TikTokFollowingUserSchema).optional(),
+      })
+      .partial()
+      .passthrough()
+      .optional(),
+    total: NumberLike.optional(),
+    totalCount: NumberLike.optional(),
+    cursor: NumberLike.optional(),
+    min_time: NumberLike.optional(),
+    hasMore: z.boolean().optional(),
+    has_more: z.union([z.boolean(), NumberLike]).optional(),
   })
   .passthrough();
 
@@ -505,6 +703,134 @@ function normalizeTikTokPosts(raw: unknown): NormalizedPost[] {
       videoDurationSec: durationSec,
       raw: v,
     });
+  });
+}
+
+/**
+ * Sprint 4 — TikTok audience normalizer.
+ *
+ * The upstream payload is loosely shaped (different keyings across regions /
+ * accounts), so we walk a handful of common spellings and pick the first
+ * non-empty result for each axis. Any axis that has no signal returns an
+ * empty array (ageRanges / topGeos) or null (genderSplit).
+ *
+ * Age-range labels are emitted verbatim — "18-24" / "25-34" / etc — as the
+ * upstream provides them. If the upstream returns ranks instead of labels
+ * (rare), we fall back to the bucket index ("0" / "1") to avoid losing the
+ * signal entirely; the synthesizer ignores numeric-only labels.
+ */
+function normalizeTikTokAudience(
+  handle: string,
+  raw: unknown
+): NormalizedAudience {
+  const parsed = TikTokAudienceResponseSchema.parse(raw);
+  const a = parsed.audience ?? parsed.data?.audience ?? null;
+
+  const pickAgeArray = (): string[] => {
+    if (!a) return [];
+    const candidates = [
+      a.ageRanges,
+      a.age_ranges,
+      a.age,
+      a.ageGroups,
+      a.age_groups,
+    ];
+    for (const arr of candidates) {
+      if (!Array.isArray(arr) || arr.length === 0) continue;
+      const labels = arr
+        .map(
+          (entry, i) =>
+            entry.range ??
+            entry.label ??
+            entry.bucket ??
+            entry.name ??
+            String(i)
+        )
+        .filter((s): s is string => typeof s === "string" && s.length > 0);
+      if (labels.length > 0) return labels;
+    }
+    return [];
+  };
+
+  const pickGeoArray = (): string[] => {
+    if (!a) return [];
+    const candidates = [a.topGeos, a.top_geos, a.countries, a.geos, a.geo];
+    for (const arr of candidates) {
+      if (!Array.isArray(arr) || arr.length === 0) continue;
+      const labels = arr
+        .map(
+          (entry) =>
+            entry.country ??
+            entry.countryCode ??
+            entry.code ??
+            entry.region ??
+            entry.city ??
+            entry.name ??
+            entry.label
+        )
+        .filter((s): s is string => typeof s === "string" && s.length > 0);
+      if (labels.length > 0) return labels;
+    }
+    return [];
+  };
+
+  const pickGender = (): NormalizedAudience["genderSplit"] => {
+    const g = a?.gender ?? a?.genderSplit ?? a?.gender_distribution;
+    if (!g) return null;
+    const male = num(g.male) ?? 0;
+    const female = num(g.female) ?? 0;
+    const other = num(g.other) ?? 0;
+    if (male === 0 && female === 0 && other === 0) return null;
+    // Normalize percent (0-100) → 0-1 if upstream sent percent.
+    const total = male + female + other;
+    if (total > 1.5) {
+      return {
+        male: male / total,
+        female: female / total,
+        other: other / total,
+      };
+    }
+    return { male, female, other };
+  };
+
+  return NormalizedAudienceSchema.parse({
+    platform: "tiktok",
+    handle,
+    ageRanges: pickAgeArray(),
+    topGeos: pickGeoArray(),
+    genderSplit: pickGender(),
+    raw,
+  });
+}
+
+/**
+ * Sprint 4 — TikTok following normalizer. Defensive: tolerates `users` /
+ * `following` / `userList` keys at top level OR under `data`.
+ */
+function normalizeTikTokFollowing(
+  handle: string,
+  raw: unknown
+): NormalizedFollowing {
+  const parsed = TikTokFollowingResponseSchema.parse(raw);
+  const list =
+    parsed.users ??
+    parsed.following ??
+    parsed.userList ??
+    parsed.data?.users ??
+    parsed.data?.following ??
+    [];
+  const total = num(parsed.total) ?? num(parsed.totalCount);
+  const users = list.map((u) => ({
+    handle: str(u.uniqueId ?? u.unique_id),
+    nickname: str(u.nickname),
+  }));
+  return NormalizedFollowingSchema.parse({
+    platform: "tiktok",
+    handle,
+    count: list.length,
+    total,
+    users,
+    raw,
   });
 }
 
@@ -839,6 +1165,46 @@ export const tiktok = {
       return { transcript: parsed.segments.map((s) => s.text).join(" ") };
     }
     return { transcript: null };
+  },
+  /**
+   * Sprint 4 — audience demographics for a TikTok handle.
+   *
+   * COSTS 26 CREDITS PER CALL. Callers MUST gate on follower count
+   * (`runFullScrapePull` skips for handles ≤5K followers) and
+   * MUST log a `scrapeCreatorsCreditAudit` row so the operator can monitor
+   * burn. The endpoint returns the upstream raw payload alongside the
+   * normalized projection so synthesis can inspect anything the normalizer
+   * dropped without spending another 26 credits.
+   *
+   * Endpoint: `/v1/tiktok/user/audience?handle=H` (per skill SKILL.md
+   * § Followers / Following / Live).
+   */
+  async audience(
+    handle: string,
+    deps?: EndpointDeps
+  ): Promise<NormalizedAudience> {
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/user/audience",
+      { query: { handle } }
+    );
+    return normalizeTikTokAudience(handle, raw);
+  },
+  /**
+   * Sprint 4 — following list for a TikTok handle. 1 credit. Used as a
+   * cheap peer-signal probe; in v0 we read page 1 only (the upstream is
+   * `min_time` paginated). Returns the page count + total when surfaced.
+   *
+   * Endpoint: `/v1/tiktok/user/following?handle=H`.
+   */
+  async following(
+    handle: string,
+    deps?: EndpointDeps
+  ): Promise<NormalizedFollowing> {
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/user/following",
+      { query: { handle } }
+    );
+    return normalizeTikTokFollowing(handle, raw);
   },
 };
 

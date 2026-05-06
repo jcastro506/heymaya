@@ -39,6 +39,8 @@ import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import {
   PLATFORM_READERS,
+  type NormalizedAudience,
+  type NormalizedFollowing,
   type NormalizedPost,
   type NormalizedProfile,
   type Platform,
@@ -50,11 +52,27 @@ import {
   TTL_POSTS_SEC,
   TTL_COMMENTS_SEC,
   TTL_TRANSCRIPT_SEC,
+  TTL_AUDIENCE_SEC,
+  TTL_FOLLOWING_SEC,
 } from "./cache";
 import { ScrapeCreatorsClient } from "./client";
 
 const POSTS_LIMIT = 30;
 const TIKTOK_DEEP_DIVE_TOP_N = 3;
+
+/**
+ * Sprint 4 — credit gate threshold for `tiktok.audience` (26 credits/call).
+ * Below this follower count the demographic signal is too thin to justify the
+ * spend; the synthesizer can still infer audience from comments + caption.
+ *
+ * Locked at 5_000 by the sprint plan. Both Coach and Manager tiers gate at
+ * the same threshold — the cost is a budget concern, not a tier feature.
+ */
+export const TIKTOK_AUDIENCE_MIN_FOLLOWERS = 5_000;
+
+/** Credit costs per ScrapeCreators agent skill SKILL.md § Credit Costs. */
+const AUDIENCE_CREDIT_COST = 26;
+const FOLLOWING_CREDIT_COST = 1;
 
 export interface PerPlatformResult {
   platform: Platform;
@@ -68,6 +86,16 @@ export interface PerPlatformResult {
     transcript: string | null;
     topComments: Array<{ text: string; likeCount: number | null }>;
   }>;
+  // Sprint 4 — TikTok-only. Null on non-TT or when the handle didn't qualify
+  // for the call (e.g. <5K followers for audience, transient error, etc).
+  audience: NormalizedAudience | null;
+  following: NormalizedFollowing | null;
+  /**
+   * Sprint 4 — follower-count snapshot ID written for this pull. Surfaces so
+   * downstream callers (synthesis pipeline, USER.md generator) can resolve
+   * prior snapshots for trend computation without re-querying.
+   */
+  followerSnapshotId: Id<"creatorFollowerSnapshots"> | null;
   errors: string[];
 }
 
@@ -106,15 +134,28 @@ export const runFullScrapePull = internalAction({
         const errors: string[] = [];
         let profile: NormalizedProfile | null = null;
         let posts: NormalizedPost[] = [];
+        let audience: NormalizedAudience | null = null;
+        let following: NormalizedFollowing | null = null;
+        let followerSnapshotId: Id<"creatorFollowerSnapshots"> | null = null;
         const topPostExtras: PerPlatformResult["topPostExtras"] = [];
 
         const reader = PLATFORM_READERS[h.platform];
 
-        // Profile + posts in parallel — both reads are independent.
-        const [profileSettled, postsSettled] = await Promise.allSettled([
-          reader.profile(h.handle, deps),
-          reader.lastPosts(h.handle, POSTS_LIMIT, deps),
-        ]);
+        // Stage 1 — profile + posts. We pull these BEFORE the audience call
+        // so the credit-gate decision can use the freshly-resolved
+        // followerCount (instead of trusting a stale `creatorHandles` value).
+        // Following is parallelized with profile/posts because it's cheap
+        // (1 credit) and TikTok-only.
+        const isTikTok = h.platform === "tiktok";
+        const followingPromise: Promise<NormalizedFollowing> | null = isTikTok
+          ? tiktok.following(h.handle, deps)
+          : null;
+        const [profileSettled, postsSettled, followingSettled] =
+          await Promise.allSettled([
+            reader.profile(h.handle, deps),
+            reader.lastPosts(h.handle, POSTS_LIMIT, deps),
+            followingPromise ?? Promise.resolve(null),
+          ]);
 
         if (profileSettled.status === "fulfilled") {
           profile = profileSettled.value;
@@ -144,6 +185,127 @@ export const runFullScrapePull = internalAction({
           );
         } else {
           errors.push(`posts: ${stringifyErr(postsSettled.reason)}`);
+        }
+
+        // Sprint 4 — following result handling (TikTok-only; null on others).
+        if (isTikTok) {
+          if (
+            followingSettled.status === "fulfilled" &&
+            followingSettled.value !== null
+          ) {
+            following = followingSettled.value;
+            await ctx.runMutation(
+              internal.integrations.scrapeCreators.cache.setCachedRow,
+              {
+                creatorId: args.creatorId,
+                key: cacheKey("tiktok", "following", h.handle),
+                payload: following.raw,
+                ttlSec: TTL_FOLLOWING_SEC,
+              }
+            );
+            await ctx.runMutation(
+              internal.integrations.scrapeCreators.runFullScrapePull
+                .recordCreditAudit,
+              {
+                creatorId: args.creatorId,
+                platform: "tiktok",
+                kind: "following",
+                endpoint: "/v1/tiktok/user/following",
+                credits: FOLLOWING_CREDIT_COST,
+                called: true,
+                reason: "called",
+                handle: h.handle,
+                ts: Date.now(),
+              }
+            );
+          } else if (followingSettled.status === "rejected") {
+            // Following is non-essential — log the error but don't fail
+            // the platform pull. The synthesizer falls back to
+            // `profile.followingCount` and competitor signals from comments.
+            errors.push(
+              `tiktok-following: ${stringifyErr(followingSettled.reason)}`
+            );
+          }
+
+          // Sprint 4 — audience demographics. CREDIT-GATED (26 credits/call):
+          // skip for handles ≤TIKTOK_AUDIENCE_MIN_FOLLOWERS followers. The
+          // gate consults the freshly-resolved profile.followerCount — a
+          // creator who just crossed 5K on this scrape qualifies; one whose
+          // last scrape said 6K but today's says 4K does not.
+          const followers = profile?.followerCount ?? null;
+          const qualifies =
+            followers !== null && followers >= TIKTOK_AUDIENCE_MIN_FOLLOWERS;
+          if (qualifies) {
+            try {
+              audience = await tiktok.audience(h.handle, deps);
+              await ctx.runMutation(
+                internal.integrations.scrapeCreators.cache.setCachedRow,
+                {
+                  creatorId: args.creatorId,
+                  key: cacheKey("tiktok", "audience", h.handle),
+                  payload: audience.raw,
+                  ttlSec: TTL_AUDIENCE_SEC,
+                }
+              );
+              await ctx.runMutation(
+                internal.integrations.scrapeCreators.runFullScrapePull
+                  .recordCreditAudit,
+                {
+                  creatorId: args.creatorId,
+                  platform: "tiktok",
+                  kind: "audience",
+                  endpoint: "/v1/tiktok/user/audience",
+                  credits: AUDIENCE_CREDIT_COST,
+                  called: true,
+                  reason: `called: followers=${followers}`,
+                  handle: h.handle,
+                  ts: Date.now(),
+                }
+              );
+            } catch (err) {
+              errors.push(`tiktok-audience: ${stringifyErr(err)}`);
+              // Still log the (failed) attempt so the operator sees credits
+              // burned even when the call errors after auth — ScrapeCreators
+              // only refunds on 5xx. We log credits=0 on rejection so the
+              // burn report is honest about which calls completed.
+              await ctx.runMutation(
+                internal.integrations.scrapeCreators.runFullScrapePull
+                  .recordCreditAudit,
+                {
+                  creatorId: args.creatorId,
+                  platform: "tiktok",
+                  kind: "audience",
+                  endpoint: "/v1/tiktok/user/audience",
+                  credits: 0,
+                  called: false,
+                  reason: `errored: ${stringifyErr(err).slice(0, 120)}`,
+                  handle: h.handle,
+                  ts: Date.now(),
+                }
+              );
+            }
+          } else {
+            // Skipped by gate. Log audit row with credits=0 so the operator's
+            // credit-burn report shows skipped-gate as a recovered budget.
+            await ctx.runMutation(
+              internal.integrations.scrapeCreators.runFullScrapePull
+                .recordCreditAudit,
+              {
+                creatorId: args.creatorId,
+                platform: "tiktok",
+                kind: "audience",
+                endpoint: "/v1/tiktok/user/audience",
+                credits: 0,
+                called: false,
+                reason:
+                  followers === null
+                    ? "skipped: profile pull failed, follower count unknown"
+                    : `skipped: followers=${followers} < ${TIKTOK_AUDIENCE_MIN_FOLLOWERS}`,
+                handle: h.handle,
+                ts: Date.now(),
+              }
+            );
+          }
         }
 
         // TikTok-only deep dive on top N posts (Sprint 2 multimodal synth needs transcript +
@@ -226,6 +388,23 @@ export const runFullScrapePull = internalAction({
               followerCount: profile.followerCount,
             }
           );
+
+          // Sprint 4 — append-only follower snapshot for trend computation.
+          // Idempotency: we don't dedupe by capturedAt because re-running
+          // the bulk pull on the same day SHOULD yield a fresh snapshot
+          // (operator may rerun after a viral spike). The 30-day query
+          // walks backward and picks the oldest snapshot in the window.
+          followerSnapshotId = await ctx.runMutation(
+            internal.integrations.scrapeCreators.runFullScrapePull
+              .recordFollowerSnapshot,
+            {
+              creatorId: args.creatorId,
+              platform: h.platform,
+              handle: h.handle,
+              followerCount: profile.followerCount,
+              capturedAt: Date.now(),
+            }
+          );
         }
 
         return {
@@ -235,6 +414,9 @@ export const runFullScrapePull = internalAction({
           profile,
           posts,
           topPostExtras,
+          audience,
+          following,
+          followerSnapshotId,
           errors,
         };
       })
@@ -296,3 +478,59 @@ function stringifyErr(err: unknown): string {
     return String(err);
   }
 }
+
+/**
+ * Sprint 4 — append-only follower-count snapshot. Used by `generateUserMd`
+ * to compute the 30-day delta. Each call inserts a new row; the table is
+ * not deduped by day intentionally (operator may re-run after a viral spike).
+ */
+export const recordFollowerSnapshot = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    platform: PlatformValidator,
+    handle: v.string(),
+    followerCount: v.number(),
+    capturedAt: v.number(),
+  },
+  handler: async (ctx, args): Promise<Id<"creatorFollowerSnapshots">> => {
+    return await ctx.db.insert("creatorFollowerSnapshots", {
+      creatorId: args.creatorId,
+      platform: args.platform,
+      handle: args.handle,
+      followerCount: args.followerCount,
+      capturedAt: args.capturedAt,
+    });
+  },
+});
+
+/**
+ * Sprint 4 — credit-usage audit row. Tracks every credit-expensive endpoint
+ * call (and the gated skips) so the operator can monitor ScrapeCreators
+ * burn separately from per-creator OpenRouter token spend (`aiCallLog`).
+ */
+export const recordCreditAudit = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    platform: v.string(),
+    kind: v.string(),
+    endpoint: v.string(),
+    credits: v.number(),
+    called: v.boolean(),
+    reason: v.string(),
+    handle: v.string(),
+    ts: v.number(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("scrapeCreatorsCreditAudit", {
+      creatorId: args.creatorId,
+      platform: args.platform,
+      kind: args.kind,
+      endpoint: args.endpoint,
+      credits: args.credits,
+      called: args.called,
+      reason: args.reason,
+      handle: args.handle,
+      ts: args.ts,
+    });
+  },
+});
