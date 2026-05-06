@@ -225,6 +225,11 @@ export function machineConfigFor(
   jobsJsonBase64: string
 ): FlyMachineConfig {
   const env: Record<string, string> = {
+    // OpenClaw native state-dir: the gateway reads workspace/, cron/jobs.json,
+    // openclaw.json out of this root. Pinning it on the deploy keeps the
+    // image layout-agnostic and matches the bootstrap shell above (Sprint 2
+    // carry-forward; mirrors `deployServiceMaya.ts`).
+    OPENCLAW_STATE_DIR: "/data",
     MAYA_PLAN: config.plan,
     MAYA_TIMEZONE: config.timezone,
     MAYA_OPENCLAW_VERSION: config.openclawVersion,
@@ -259,23 +264,39 @@ export function machineConfigFor(
  *
  * Steps run sequentially via `&&` — any failure aborts the boot, Fly retries
  * per `restart.policy = "always"`.
+ *
+ * Sprint 2 carry-forward fix (2026-05-06): mirrors
+ * `convex/onboarding/business/deployServiceMaya.ts`'s buildBootstrapShell.
+ *
+ * OpenClaw native layout: with `OPENCLAW_STATE_DIR=/data` (set on the
+ * machine env by the deploy below), OpenClaw reads its workspace, cron
+ * jobs, and gateway config directly from `/data/workspace`,
+ * `/data/cron/jobs.json`, and `/data/openclaw.json`. No `$HOME/.openclaw`
+ * symlink dance — that was the legacy macOS layout. Native-first per
+ * `feedback_openclaw_native_first.md`.
+ *
+ * Gateway bind: OpenClaw default loopback 127.0.0.1:18789. We do NOT
+ * pass `--bind lan` because non-loopback binds require explicit
+ * `gateway.controlUi.allowedOrigins` config (validated 2026-04-28
+ * when the previous lan-bind attempt failed startup with that error,
+ * and re-validated in Sprint 1's cron-fly-smoke 2026-05-06 — the legacy
+ * `--bind lan --port 3000` form crash-loops on v2026.4.23). CLI commands
+ * from inside the machine connect via the default ws://127.0.0.1:18789 URL.
+ * When we eventually need external Convex → gateway HTTP push, we'll add
+ * the controlUi config + re-enable lan bind in a follow-up wave.
+ *
+ * `--allow-unconfigured` lets the gateway start even before its first
+ * config-validation pass — we write `/data/openclaw.json` immediately
+ * before exec, but the flag covers any race or partial-write edge case.
  */
 function buildBootstrapShell(): string {
   return [
-    // 1. Make data + workspace + cron dirs.
-    'mkdir -p "/data/workspace-${MAYA_APP_NAME}" "$HOME/.openclaw/cron" "$HOME/.openclaw"',
-    // 2. Download + extract the workspace tarball.
+    "mkdir -p /data/workspace /data/cron",
     'curl -fsSL "$MAYA_WORKSPACE_BUNDLE_URL" -o /tmp/workspace.tar',
-    'tar -xf /tmp/workspace.tar -C "/data/workspace-${MAYA_APP_NAME}"',
-    // 3. Symlink to OpenClaw's expected workspace path.
-    'rm -rf "$HOME/.openclaw/workspace-default"',
-    'ln -s "/data/workspace-${MAYA_APP_NAME}" "$HOME/.openclaw/workspace-default"',
-    // 4. Install cron jobs from base64-encoded env.
-    'echo "$MAYA_JOBS_JSON_BASE64" | base64 -d > "$HOME/.openclaw/cron/jobs.json"',
-    // 5. Materialize the gateway config from MAYA_BOOTSTRAP_JSON.
+    "tar -xf /tmp/workspace.tar -C /data/workspace",
+    'echo "$MAYA_JOBS_JSON_BASE64" | base64 -d > /data/cron/jobs.json',
     'echo "$MAYA_BOOTSTRAP_JSON" | jq .gatewayConfig > /data/openclaw.json',
-    // 6. Start the gateway.
-    'exec openclaw gateway start --config /data/openclaw.json',
+    "exec openclaw gateway --allow-unconfigured",
   ].join(" && ");
 }
 

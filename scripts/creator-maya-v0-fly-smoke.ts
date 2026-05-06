@@ -290,18 +290,25 @@ function waitForMachine(appName: string): MachineListRow {
 }
 
 function verifyMachine(appName: string, machineId: string): string {
+  // Sprint 2 (slice A) deploy-path consolidation: workspace bundle now comes
+  // from the canonical `assembleWorkspaceBundle`. The 13 prose-only
+  // `creator-*` skill stubs were deleted; the canonical BUNDLED_SKILLS
+  // registry currently ships `scrapecreators-api` plus the pinned ClawHub
+  // vendor pack. Slice C will add the maya-* skills back to BUNDLED_SKILLS;
+  // until then verify only what the canonical bundle actually emits.
   const command = [
     "test -s /data/workspace/AGENTS.md",
     "test -s /data/workspace/SOUL.md",
+    "test -s /data/workspace/IDENTITY.md",
     "test -s /data/workspace/USER.md",
     "test -s /data/cron/jobs.json",
     "test -s /data/openclaw.json",
     "test -w /data/workspace",
     "test -w /data/cron",
-    "grep -q '^name: creator-calendar-content-planner$' /data/workspace/skills/creator-calendar-content-planner/SKILL.md",
+    "grep -q '^name: scrapecreators-api$' /data/workspace/skills/scrapecreators-api/SKILL.md",
     "grep -q '^name: remotion-video-toolkit$' /data/workspace/skills/remotion-video-toolkit/SKILL.md",
     "grep -q '^name: tiktok$' /data/workspace/skills/tiktok/SKILL.md",
-    "openclaw skills list | grep -q 'creator-calendar-content-planner'",
+    "openclaw skills list | grep -q 'scrapecreators-api'",
     "openclaw skills list | grep -q 'remotion-video-toolkit'",
     "openclaw skills list | grep -q 'tiktok'",
     "(curl -fsS http://127.0.0.1:18789/healthz || curl -fsS http://127.0.0.1:3000/healthz || true)",

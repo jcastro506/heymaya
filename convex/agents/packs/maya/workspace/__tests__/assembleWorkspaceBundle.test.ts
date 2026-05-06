@@ -57,6 +57,8 @@ function baseInputs(over: Partial<WorkspaceInputs> = {}): WorkspaceInputs {
 
 const ALWAYS_FILES = [
   "AGENTS.md",
+  "SOUL.md",
+  "IDENTITY.md",
   "USER.md",
   "HEARTBEAT.md",
   "BOOT.md",
