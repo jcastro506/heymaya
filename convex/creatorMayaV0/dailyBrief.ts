@@ -150,6 +150,37 @@ function findWorkSlot(
   };
 }
 
+/**
+ * Build the structured morning-brief envelope that Maya's runtime
+ * (`maya-morning-brief` skill — Sprint 9 follow-on) consumes to draft the
+ * actual creator-facing prose. This builder is intentionally prose-free:
+ * it surfaces the cited facts (signal, hook, fit, scheduled time) as a
+ * structured payload. The runtime applies the creator's `voiceFingerprint`
+ * via `maya-voice-applier` before the message goes out.
+ *
+ * Sprint 8 Slice A (this commit) deleted the prior hardcoded English
+ * template ("Morning. ... Reply 'draft' ...") in line with the operator's
+ * locked rule: zero hardcoded user-facing prose in production paths. Maya
+ * generates her own voice; the orchestrator provides only the data.
+ *
+ * The serialized payload is JSON so downstream consumers (the heartbeat
+ * loop and OpenClaw runtime) can parse it and feed it into the skill.
+ * Until the `maya-morning-brief` skill is wired (Sprint 9 follow-on), the
+ * runtime treats this as the message verbatim and the creator sees the
+ * citation-rich intent envelope. That is acceptable — better a structured
+ * data block than a templated phrase that pretends to be Maya's voice.
+ *
+ * Schema (intent + citations, no prose):
+ * {
+ *   intent: "morning_brief",
+ *   signal: string,         // the cited insight Maya should lead with
+ *   hook: string,           // the proposed post hook
+ *   whyItFits: string,      // grounding rationale
+ *   scheduledLocalTime: string,  // human-readable local clock
+ *   approveTokens: ["draft", "schedule"],  // tokens the creator replies with
+ *   placeholder: true       // explicit signal this is pre-skill data
+ * }
+ */
 function renderMorningMessage(args: {
   signal: string;
   hook: string;
@@ -158,12 +189,15 @@ function renderMorningMessage(args: {
   timezone: string;
 }): string {
   const time = renderLocalClock(args.startMs, args.timezone);
-  return [
-    `Morning. ${args.signal}`,
-    `Today at ${time}, film: ${args.hook}.`,
-    `${args.fit}`,
-    `Reply "draft" for the shot list or "schedule" and I will hold the block.`,
-  ].join(" ");
+  return JSON.stringify({
+    intent: "morning_brief",
+    signal: args.signal,
+    hook: args.hook,
+    whyItFits: args.fit,
+    scheduledLocalTime: time,
+    approveTokens: ["draft", "schedule"],
+    placeholder: true,
+  });
 }
 
 function renderLocalClock(ms: number, timezone: string): string {

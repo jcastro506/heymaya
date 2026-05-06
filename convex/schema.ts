@@ -457,6 +457,26 @@ export default defineSchema({
       })
     ),
     /**
+     * Optional boundary anchors the creator surfaces during onboarding (anti-
+     * niches, off-limits topics, brand categories they refuse). Read by:
+     *   - `maya-thumbnail-maker` (avoids generating overlay text on banned topics)
+     *   - `maya-clip-editor` (thumbnail-overlay path filters banned-topic frames)
+     *   - `maya-trend-watcher` (adversarial guard — drops trend cards intersecting the list)
+     *   - any future skill that needs a "do-not-go-there" list
+     *
+     * Sprint 8 Slice A added the field; synthesis emits it from the creator's
+     * anti-niche answer when present. The field stays optional so old picture
+     * rows pre-S8 keep loading; skills must null-coalesce to the empty list.
+     */
+    boundaries: v.optional(
+      v.object({
+        banned_topics: v.optional(v.array(v.string())),
+        // Forward room: future bounding categories (banned-brands,
+        // banned-formats, banned-cohosts) extend this object. Adding fields
+        // is non-breaking because every member is optional.
+      })
+    ),
+    /**
      * The 3 opening answers Maya parses out of the creator's first reply in
      * iMessage — captured by `POST /lc_maya/submit_opening_answers` (see
      * `convex/lcMaya/lcMayaHttp.ts`). This is the lightweight first-boot

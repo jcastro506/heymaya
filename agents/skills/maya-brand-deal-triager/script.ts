@@ -160,6 +160,79 @@ export interface VariantDrafterModel {
   }): Promise<Record<ReplyVariantKind, string>>;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Variant prompt builder                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Build the prompt the variant drafter (model-router task tag
+ * `brand_email_draft`) consumes to emit the 4 reply variants. Pure, testable,
+ * no model calls — the calling action passes the returned prompt to whatever
+ * model-router/transport it has wired.
+ *
+ * The prompt is the source-of-truth for variant style and tone. The
+ * orchestrator is forbidden from synthesizing user-facing prose itself; it
+ * MUST route through this builder + a real model (Sprint 8 Slice A
+ * principle: zero hardcoded user-facing prose in production paths).
+ *
+ * Sprint 8 Slice A: this replaces the per-variant fallback strings the
+ * orchestrator used to template directly. Now the orchestrator passes the
+ * prompt to the model-router and the model emits the prose.
+ */
+export interface VariantPromptArgs {
+  thread: GmailThread;
+  classification: Classification;
+  parsedOffer: ParsedOffer | null;
+  suggestedRate?: RateSuggestion;
+  voiceFingerprint: string;
+}
+
+export function buildVariantPrompt(args: VariantPromptArgs): string {
+  const brand =
+    args.parsedOffer?.brand ?? args.thread.from.name ?? args.thread.from.domain;
+  const value = args.parsedOffer?.proposedValueUsd;
+  const valueStr =
+    value !== null && value !== undefined ? `$${value}` : "no dollar amount stated";
+  const deliverables = args.parsedOffer?.deliverables ?? "(unspecified)";
+  const exclusivity = args.parsedOffer?.exclusivityMentioned
+    ? "yes (exclusivity language present)"
+    : "no";
+  const rateBlock = args.suggestedRate
+    ? `Suggested counter range: low=$${args.suggestedRate.low} target=$${args.suggestedRate.target} stretch=$${args.suggestedRate.stretch}. Reasoning: ${args.suggestedRate.reasoning}`
+    : "(no counter range — non-real-deal classification)";
+
+  return [
+    "You are drafting four short reply variants to a brand outreach email.",
+    "Each variant is the FULL email body the creator would send. Plaintext, no signature.",
+    "",
+    `Voice fingerprint to mirror: ${args.voiceFingerprint}`,
+    "",
+    `Brand: ${brand}`,
+    `Subject: ${args.thread.subject}`,
+    `Classification: ${args.classification}`,
+    `Parsed offer value: ${valueStr}`,
+    `Deliverables: ${deliverables}`,
+    `Exclusivity mentioned: ${exclusivity}`,
+    rateBlock,
+    "",
+    "Inbound body (verbatim):",
+    args.thread.bodyText,
+    "",
+    "Required variants (return strict JSON: { enthusiastic: string, neutral: string, firm: string, pass: string }):",
+    "  enthusiastic — yes I'm in; warm, specific, references the deliverables.",
+    "  neutral — buys time; non-committal; promises to review.",
+    "  firm — counter-offer using the suggested rate range; respectful but anchored at top of range.",
+    "  pass — polite decline; leaves the door open for future fit.",
+    "",
+    "Rules:",
+    "  - Mirror the voice fingerprint exactly. Do NOT introduce yourself or sign as Maya — these are the creator's words.",
+    "  - Cite only what is grounded in the inbound thread + parsed offer + suggested rate. Do not invent rates, dates, or deliverables.",
+    "  - No filler greetings beyond what the voice fingerprint allows.",
+    "  - Each variant must read as a complete reply.",
+    "Return JSON only. No surrounding commentary.",
+  ].join("\n");
+}
+
 export interface TriageDeps {
   rateCalculator: RateCalculatorSkill;
   contractRedflag: ContractRedFlagSkill;

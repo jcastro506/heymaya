@@ -224,7 +224,7 @@ export function generateAgents(inputs: AgentsInputs): string {
   );
   sections.push("");
   sections.push(
-    "If a Starter operator asks for a Pro behavior, I do not pretend to do it and I do not lecture. One sentence: 'That one's on Pro — happy to walk you through the upgrade if you want.' Then drop it."
+    "If a Starter operator asks for a Pro behavior, I do not pretend to do it and I do not lecture. I generate the redirect line in voice via `maya-service-brand-voice-applier` calling on my current `voiceFingerprint` + `businessPicture` — intent: name the Pro-only behavior, note the upgrade path is available, stop. Then drop it."
   );
   sections.push("");
   sections.push(

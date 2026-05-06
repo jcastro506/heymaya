@@ -51,7 +51,7 @@ describe("Creator Maya v0 daily morning brief", () => {
     expect(nextMorningBriefLocalHour()).toBe(7);
   });
 
-  it("builds one grounded iMessage with a calendar-aware work block", () => {
+  it("builds a structured citation envelope with a calendar-aware work block (Sprint 8 Slice A: prose removed; Sprint 9 wires maya-morning-brief skill)", () => {
     const result = buildMorningBrief(context());
 
     expect(result.shouldSend).toBe(true);
@@ -59,9 +59,17 @@ describe("Creator Maya v0 daily morning brief", () => {
 
     expect(result.dailyBrief.scheduledForLocalHour).toBe(7);
     expect(result.dailyBrief.proposedWorkStartMs).toBe(slotStart);
-    expect(result.dailyBrief.message).toContain("Today at 3pm");
-    expect(result.dailyBrief.message).toContain("Reply \"draft\"");
-    expect(result.dailyBrief.message).toContain("\"schedule\"");
+    // Message is now a structured JSON envelope — no hardcoded English
+    // prose. Maya's runtime (Sprint 9 maya-morning-brief skill) applies
+    // her voice via maya-voice-applier before the creator sees it.
+    const envelope = JSON.parse(result.dailyBrief.message);
+    expect(envelope.intent).toBe("morning_brief");
+    expect(envelope.scheduledLocalTime).toBe("3pm");
+    expect(envelope.approveTokens).toEqual(["draft", "schedule"]);
+    expect(envelope.placeholder).toBe(true);
+    expect(typeof envelope.signal).toBe("string");
+    expect(typeof envelope.hook).toBe("string");
+    expect(typeof envelope.whyItFits).toBe("string");
     expect(result.dailyBrief.citations.length).toBeGreaterThanOrEqual(2);
     expect(result.actionLog.action).toBe("send_imessage");
   });
