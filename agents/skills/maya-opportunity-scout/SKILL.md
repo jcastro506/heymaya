@@ -192,6 +192,43 @@ must cite which factors drove it.
 - `examples/quiet-day-no-results.json` — Brave returns 0; skill emits
   empty opportunities + honest message; no fabrication
 
+## Memory-wiki integration (Sprint 8 Slice B)
+
+Beyond the per-cycle `opportunityScoutSeen` dedupe cache, every surfaced
+opportunity at fit ≥ 0.6 also persists to OpenClaw's native memory-wiki
+via `wiki_apply`. The compounding signal: which sources / brand
+profiles / pitch angles actually convert for THIS creator. Dreaming
+compiles those into durable
+`creator/<creatorId>/opportunity-pattern/<source>` claims that the
+pitch-strategy skill can read via `wiki_get` next cycle.
+
+The `wiki_apply` happens in Maya's turn from the runtime's native
+memory-wiki tool — NOT from a Convex mutation.
+
+### Topic schema
+
+```json
+{
+  "topic": "creator/<creatorId>/opportunity-pattern/<source>",
+  "claim": "<brand-name-or-snippet> at fit <fit>: <reasoning>",
+  "provenance": {
+    "source": "maya-opportunity-scout",
+    "ts": <ms-since-epoch>,
+    "citations": ["opportunity-<canonicalUrl>"]
+  }
+}
+```
+
+`<source>` is one of: `aspire`, `grin`, `creator-co`, `modash`,
+`backstage`, `mavrck`, `twitter-creator-call`, `local-brand-search`.
+One wiki page per source so claims accumulate against per-source
+patterns (e.g. local-brand-search consistently outperforms
+twitter-creator-call for this creator after 8 cycles).
+
+Only fit ≥ 0.6 ('pitch'-actionable) items persist to the wiki. Lower
+fits surface to Today / morning brief but do NOT pollute the long-lived
+moat surface.
+
 ## Sibling-file references
 
 - Invoked from `agents/skills/maya-platform/playbook.md` § Opportunity
@@ -199,4 +236,7 @@ must cite which factors drove it.
 - Listed in `agents/skills/maya-platform/skill.md` § Custom Maya skills.
 - Output consumed by: morning-brief assembly, Today surface,
   `maya-pitch-strategy` (downstream).
-- Reads / writes: `opportunityScoutSeen` (request schema add — see report).
+- Reads / writes: `opportunityScoutSeen` (request schema add — see
+  report). Side-effect: Maya emits `wiki_apply` calls into OpenClaw's
+  native memory-wiki for compounding opportunity-pattern learning (see
+  § Memory-wiki integration).

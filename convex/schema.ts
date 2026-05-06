@@ -1136,14 +1136,33 @@ export default defineSchema({
     .index("by_creator_and_post", ["creatorId", "postId"]),
 
   // ────────────────────────────────────────────────────────────────────────
-  // Sprint 5 — Trends screen source-of-truth tables.
-  // `trendObservations` covers both the daily niche scan (6pm) and the
-  // industry-intel daily push (7:30am) and the platform-wide trend watcher
-  // (9am) — the `source` field disambiguates so the UI can tab them.
+  // Sprint 5 — Trends screen read-only projections of the memory-wiki vault.
+  //
+  // Sprint 8 Slice B (memory-wiki adoption, 2026-05-06): these tables are
+  // DOWNGRADED to read-only projections. Source of truth for compiled
+  // claims is OpenClaw's native memory-wiki on the per-creator Fly machine
+  // (`/data/memory-wiki/<topic>.md`). The high-frequency learning skills
+  // (`maya-platform-algo-researcher`, `maya-pre-post-scorer`,
+  // `maya-collab-matchmaker`, `maya-industry-intel`,
+  // `maya-opportunity-scout`, plus the trend-watcher cron behavior) emit
+  // `wiki_apply` calls in their turn output instead of writing here
+  // directly. A future dreaming-pass / wiki sync cron (queued for Sprint
+  // 8.5) mirrors compiled wiki claims back into these tables so the
+  // existing HQ Trends screen + heartbeat skim continue to work without a
+  // round-trip to the agent runtime. `mirroredAt` marks the last sync.
+  //
+  // `trendObservations` covers the daily niche scan (6pm) + industry-intel
+  // daily push (7:30am) + platform-wide trend watcher (9am) — `source`
+  // disambiguates so the UI can tab them.
+  //
   // `competitorObservations` covers the per-creator named-peer watch (9am).
-  // Both carry `creatorId` + `by_creator(*)` indexes so the cross-tenant gate
-  // is enforceable from the same `getCurrentCreator` helper Today/Performance
-  // already use.
+  //
+  // Both carry `creatorId` + `by_creator(*)` indexes so the cross-tenant
+  // gate is enforceable from the same `getCurrentCreator` helper that
+  // Today/Performance already use. New writes from the legacy
+  // `lc_maya.log_trend` / `lc_maya.log_competitor_observation` HTTP
+  // endpoints continue working during the wiki-mirror migration window;
+  // those endpoints will be removed once the Sprint 8.5 sync cron lands.
   // ────────────────────────────────────────────────────────────────────────
 
   trendObservations: defineTable({
@@ -1170,6 +1189,17 @@ export default defineSchema({
     ),
     relevanceScore: v.number(),
     observedAt: v.number(),
+    /**
+     * Sprint 8 Slice B — UTC ms when the wiki-mirror sync last touched
+     * this row. `undefined` = legacy row written directly by the
+     * `lc_maya.log_trend` HTTP endpoint before the wiki adoption migration.
+     * Set by the future Sprint-8.5 dreaming-pass / wiki-mirror cron when
+     * it projects a compiled `niche/<niche>/trend-pattern` or
+     * `creator/<creatorId>/industry-intel/<topic>` wiki claim into this
+     * table. Readers (HQ Trends, heartbeat) treat older `observedAt` rows
+     * with a missing `mirroredAt` as legacy-but-valid.
+     */
+    mirroredAt: v.optional(v.number()),
   })
     .index("by_creator", ["creatorId"])
     .index("by_creator_and_observedAt", ["creatorId", "observedAt"])
@@ -1198,6 +1228,16 @@ export default defineSchema({
       })
     ),
     observedAt: v.number(),
+    /**
+     * Sprint 8 Slice B — UTC ms when the wiki-mirror sync last touched
+     * this row. `undefined` = legacy row written directly by the
+     * `lc_maya.log_competitor_observation` HTTP endpoint before the wiki
+     * adoption migration. Set by the future Sprint-8.5 dreaming-pass /
+     * wiki-mirror cron when it projects a compiled
+     * `competitor/<creatorId>/<peerHandle>/observation` wiki claim into
+     * this table.
+     */
+    mirroredAt: v.optional(v.number()),
   })
     .index("by_creator", ["creatorId"])
     .index("by_creator_and_peer", ["creatorId", "peerHandle"])
@@ -2968,6 +3008,16 @@ export default defineSchema({
         droppedPatternCount: v.number(),
       })
     ),
+    /**
+     * Sprint 8 Slice B — UTC ms when the wiki-mirror sync last touched
+     * this row. The extractor materializes patterns into the memory-wiki
+     * vault under `concepts/what-works/<platform>/*` via `wiki_apply` and
+     * stamps `mirroredAt` so HQ readers can distinguish a fresh wiki
+     * round-trip from a legacy direct insert. `undefined` for rows
+     * created before the slice landed; non-null after the extractor's
+     * `wiki_apply` cycle for a given week completes.
+     */
+    mirroredAt: v.optional(v.number()),
   })
     .index("by_business", ["businessId"])
     .index("by_business_and_week", ["businessId", "weekStartMs"]),

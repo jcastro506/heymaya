@@ -314,6 +314,11 @@ export function matchPrompt(args: {
   lines.push("- Do NOT promise outcomes. Do NOT name dollar amounts.");
   lines.push("- Reasoning MUST trace to overlap score / momentum / niche tag — no fabrication about the peer's audience or career.");
   lines.push("- If a candidate's recent top post is missing, write a generic open that does not invent post details.");
+  lines.push("");
+  lines.push("Memory-wiki side-effect — AFTER the JSON, for each match you proposed AND for each anti-pattern that fired, emit one `wiki_apply` tool call:");
+  lines.push('  match → { "topic": "creator/<creatorId>/collab-pattern/<format>", "claim": "@<peerHandle> overlap <score> momentum <momentum> on <platform> at <followers>", "provenance": { "source": "maya-collab-matchmaker", "ts": <ms-now>, "citations": ["peer-<handle-lower>", "creator-niche"] } }');
+  lines.push('  anti-pattern → { "topic": "creator/<creatorId>/collab-anti-pattern", "claim": "<which filter fired and how many peers dropped>", "provenance": { ... } }');
+  lines.push("Use the `creatorId` the orchestrator provides — substitute it into the topic key. The runtime exposes `wiki_apply` natively. Do NOT emit a wiki claim for any candidate whose reasoning failed the citation firewall.");
   // Wave 2 — when the plan flags collab activity as an antiPattern (e.g. for
   // a just-starting creator with no clear niche), route to the smartAlternative
   // ("amplify in-niche peers via comment engagement first") instead of refusing.

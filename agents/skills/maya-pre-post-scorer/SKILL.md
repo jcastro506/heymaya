@@ -338,6 +338,48 @@ skill does NOT branch internally).
 - `examples/reconsider-bottom-hook.json` — opener is in bottomHooks;
   reconsider verdict
 
+## Memory-wiki integration (Sprint 8 Slice B)
+
+The pre-post scorer is read-only on Convex side, but every score is a
+learning opportunity for the creator's compounding picture. After Maya
+emits the structured `ScoreOutput`, she ALSO emits `wiki_apply` calls so
+the topic patterns + voice-drift observations + format-fit reads
+accumulate in OpenClaw's native memory-wiki. Dreaming compiles these
+into refined `creator/<creatorId>/hook-pattern` and
+`creator/<creatorId>/format-fit/<platform>` claims that future scoring
+cycles consult.
+
+The `wiki_apply` happens in Maya's turn, NOT from a Convex mutation —
+the runtime registers the tool natively per OpenClaw's `memory-wiki`
+plugin.
+
+### Topic schema
+
+For each material signal in the score output, emit one call shaped:
+
+```json
+{
+  "topic": "creator/<creatorId>/<facet>",
+  "claim": "<the observation — e.g. 'specific-number openers in IG carousels score top-quartile for this creator (n=5, avg 2.3x lift)'>",
+  "provenance": {
+    "source": "maya-pre-post-scorer",
+    "ts": <ms-since-epoch>,
+    "citations": ["<postId-1>", "<postId-2>"]
+  }
+}
+```
+
+Topic facets used by this skill (one `wiki_apply` per facet that fired):
+
+- `creator/<creatorId>/hook-pattern` — when hookMatchTopHooks/Bottom matched
+- `creator/<creatorId>/format-fit/<platform>` — when formatHistoricalPerformance has n≥3
+- `creator/<creatorId>/posting-cadence/<platform>` — when postingTimeFit was decisive
+- `creator/<creatorId>/voice-fingerprint` — when voiceConsistency.detectedDrift fires
+- `creator/<creatorId>/audience-fit` — when audienceFit was 'weak' (high-signal negative)
+
+NEVER write a wiki claim for a signal Maya could not ground in a
+citation — same anti-fabrication rule as the citation firewall.
+
 ## Sibling-file references
 
 - Invoked from `agents/skills/maya-platform/playbook.md` § Pre-post
@@ -347,6 +389,8 @@ skill does NOT branch internally).
 - Convex action wrapper: `convex/prePostReview.ts` (`scoreDraft` —
   Clerk-auth-gated, all-tiers, cross-tenant safe)
 - Reads: `creatorPicture`, `posts`, `postMetrics`, `hookLibrary`
-- Writes: nothing — read-only synthesis
+- Writes: nothing on Convex side — read-only synthesis. Side-effect:
+  Maya emits `wiki_apply` tool calls into OpenClaw's native
+  memory-wiki for compounding learning (see § Memory-wiki integration).
 - Output passes through: `maya-citation-firewall` mandatory before
   return

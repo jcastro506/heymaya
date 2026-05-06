@@ -108,8 +108,52 @@ scan enforces).
 6. **Write cache.** Insert into `platformAlgoCache` with
    `researchedAt = Date.now()`, `ttlDays = 7` (Pro) or `3` (Studio), and the
    list of source URLs.
-7. **Return.** Skill's caller is usually the cron, which doesn't consume the
+7. **Emit `wiki_apply` calls.** For each high-confidence signal, emit a
+   `wiki_apply` tool call (see § Memory-wiki integration below) so the
+   compiled platform-algo claim accumulates in OpenClaw's native
+   memory-wiki. The signals compound across cycles via dreaming and become
+   queryable via `wiki_get` from any other skill that asks "what does
+   TikTok reward right now for THIS creator's niche?"
+8. **Return.** Skill's caller is usually the cron, which doesn't consume the
    return — but on-demand invocations consume it directly to answer a chat.
+
+## Memory-wiki integration (Sprint 8 Slice B)
+
+This skill writes its compiled signals to two surfaces: `platformAlgoCache`
+(fast read-projection for skills that need a short-TTL lookup) and the
+OpenClaw native memory-wiki (long-lived, dream-compiled, provenance-traced
+moat). The wiki write happens in Maya's turn output, NOT from a Convex
+mutation — `wiki_apply` is an agent tool the runtime registers.
+
+### Topic schema
+
+Each signal becomes one `wiki_apply` call shaped:
+
+```json
+{
+  "topic": "platform/<platform>/algo-signal",
+  "claim": "<the signal text — e.g. 'IG is favoring Reels >90s as of 2026-04'>",
+  "provenance": {
+    "source": "maya-platform-algo-researcher",
+    "ts": <ms-since-epoch>,
+    "citations": ["<sourceUrl-1>", "<sourceUrl-2>"]
+  }
+}
+```
+
+Topic key shape: `platform/<platform>/algo-signal` — one wiki page per
+platform; claims accumulate. A second optional topic-narrowing pattern
+when `topic` input is set: `platform/<platform>/algo-signal/<topic-slug>`.
+
+### Why two surfaces (cache + wiki)
+
+`platformAlgoCache` is a Convex table (TTL'd, indexed by platform + niche)
+that supports fast per-request lookups when a chat skill needs "what's
+hot on IG right now?". The wiki is the compounding learning surface —
+older claims age out of the cache but stay in the wiki with full
+provenance. Other skills (`maya-pre-post-scorer`, `maya-content-arc-planner`)
+can query the wiki via `wiki_get('platform/instagram/algo-signal')` for
+a richer evidence chain when they want to weight a recommendation.
 
 ## Plan-tier gating (server-side, fail-closed)
 

@@ -394,6 +394,10 @@ export function fitScoringPrompt(
   lines.push("Local brands (geo-match) score higher — local pitches convert at multiples of remote.");
   lines.push("Only score what the snippet supports. NULL brand-name is fine when not extractable.");
   lines.push("If you cannot score with confidence, output `<idx>|0.0|NULL|insufficient signal`.");
+  lines.push("");
+  lines.push("Memory-wiki side-effect — AFTER the scored lines, for EACH candidate with fit >= 0.6 emit one `wiki_apply` tool call:");
+  lines.push('  { "topic": "creator/<creatorId>/opportunity-pattern/<source>", "claim": "<brand-or-title> fit <fit>: <reasoning>", "provenance": { "source": "maya-opportunity-scout", "ts": <ms-now>, "citations": ["opportunity-<canonical-url>"] } }');
+  lines.push("`<source>` is the same source slug as the candidate row (aspire / grin / local-brand-search / etc.). The orchestrator supplies `creatorId`. Lower-fit items surface to Today but DO NOT persist — wiki claims are the long-lived moat.");
   // Wave 2 — when the plan flags marketplace prospecting as an antiPattern,
   // route to the matched smartAlternative (e.g. "watch local-brand signal
   // first" + a concrete spec-piece scout action) instead of refusing.

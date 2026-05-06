@@ -212,6 +212,10 @@ export function scoringPrompt(
     "- Score 100 only for items that materially change what this creator should DO this week.",
     "- One sentence per item. No fabrication: say only what the headline + snippet support.",
     "- If you cannot score an item with confidence, output `<idx>|0|insufficient signal`.",
+    "",
+    "Memory-wiki side-effect — AFTER the scored lines, for EACH item with score >= 70 emit one `wiki_apply` tool call:",
+    '  { "topic": "creator/<creatorId>/industry-intel/<short-topic-slug>", "claim": "<headline> — <relevance to this creator>", "provenance": { "source": "maya-industry-intel", "ts": <ms-now>, "citations": ["<url>"] } }',
+    "Use a stable `<topic-slug>` so repeat coverage of the same trend accumulates to one wiki page (e.g. 'subscriptions-rollout', 'rate-survey-2026'). The orchestrator provides `creatorId`. Items below score 70 surface to today's brief but DO NOT persist to the wiki — keep the long-lived moat clean.",
   ].join("\n");
 }
 
