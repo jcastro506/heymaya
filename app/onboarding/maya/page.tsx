@@ -468,3 +468,19 @@ function stripStack(msg: string): string {
   const cleaned = msg.replace(/\[CONVEX[^\]]*\]\s*/g, "").trim();
   return cleaned.replace(/^Server Error:?\s*/i, "");
 }
+
+// staged for Wave 2 channel radio
+//
+// Heuristic device detection. Pure function (takes the user-agent string) so
+// it's trivially testable.
+//   - iPhone / iPad / iPod -> iMessage
+//   - Android -> WhatsApp (rich media + ubiquitous)
+//   - Anything else -> web (the always-available fallback)
+type Channel = "imessage" | "whatsapp" | "sms" | "web";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars: staged for Wave 2 channel radio; intentionally unused until then.
+function recommendChannel(userAgent: string): Channel {
+  const ua = userAgent.toLowerCase();
+  if (/iphone|ipad|ipod/.test(ua)) return "imessage";
+  if (/android/.test(ua)) return "whatsapp";
+  return "web";
+}

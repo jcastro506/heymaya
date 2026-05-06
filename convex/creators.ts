@@ -127,9 +127,8 @@ export const me = query({
 
 /**
  * Validator for the conversational answer payload submitted at the end of
- * the `questions` step. Mirrors `AnswersState` in
- * `app/onboarding/maya/_state.ts` but with all fields optional so partial
- * progress can be persisted as the cursor advances.
+ * the `questions` step. All fields optional so partial progress can be
+ * persisted as the cursor advances.
  *
  * The full required-vs-optional gate runs in the handler — the validator is
  * intentionally permissive so a refresh mid-flow can be saved verbatim.
