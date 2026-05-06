@@ -638,7 +638,31 @@ Hardcoded prose extinct in user-facing surfaces. Memory-wiki receiving claims. D
 
 ---
 
-## Sprint 9 — Beta hardening + ship to friend cohort
+## Sprint 9 — Beta hardening + ship to friend cohort — DONE (code-side)
+
+**Status:** All code-doable beta prep merged to `staging`. 3311/3311 tests, tsc clean, regression smoke green on real Fly. **Operator-blockers remaining:** real friend cohort (2 creators), live trial monitoring, bug bash, OAuth registrations, Stripe product seeding.
+
+**Outcome:**
+- **Admin comp accounts:** new `creators.compedByAdmin` flag + `adminCompCreator` mutation (gated by `ADMIN_TOKEN`). Both `planFeatures()` and `subscriptionActive()` short-circuit on `compedByAdmin === true` returning Manager features + active status regardless of Stripe state. Operator runs `npx convex run admin:compCreator '{ token, creatorId }'` to comp friends.
+- **Sprint 8.5 — wiki mirror sync:** new `lc_maya/sync_wiki_observations` HTTP endpoint + `wiki_mirror_sync` heartbeat-driven standing order (cooldown 6h). Maya scans `/data/memory-wiki/<topic>.md` for recent additions, batches deltas (≤200 rows), POSTs to Convex. Idempotent on `(creatorId, wikiVaultPath)` for trend/competitor; on `(creatorId, weekStartMs)` for weekly learnings. New `wikiVaultPath` schema field on the 3 projection tables. Cross-tenant-validated on every upsert.
+- **"Are you AI?" trap handler:** new playbook § 5.1 with directional examples ("I'm Maya. I run your account in the background and ping when something matters." / "I'm your manager. The thing that matters is what we ship next week — what do you want to look at first?") + the rule (no disclaimers, no AI mentions, redirect to the work). Voice fixture extended with 13 trap entries (6 in-voice passes + 7 disclaimer-leak fails). New `findDisclaimerLeak` regex validator.
+- **Idle-aware enforcement test:** new `pickHeartbeatChecksForTime(creator, fakeTimeMs)` API in `generateHeartbeatMd.ts` exposing the 11-check decision logic. Tests assert: 11pm + 3am + 6:30am local return zero pushes; 7am returns the normal check set; URGENT override (post crashed >50% baseline) fires push even at 3am.
+- **Stripe test products:** `convex/integrations/stripe/products.ts` — Coach + Manager products with monthly + annual variants. Idempotent on `lookup_key`. New `scripts/setup-stripe-products.ts` reads config + creates in Stripe test mode. Operator runs `STRIPE_SECRET_KEY=sk_test_... npx tsx scripts/setup-stripe-products.ts`.
+- **Smoke harness extension:** new `--full-flow` flag asserts USER.md content (real audience block, no "not yet provided" placeholder). Default off — no breaking changes for existing CI / cron-fly-smoke callers. Bound documented in printout: doesn't trigger `submitOnboarding` (Clerk auth not fakeable from harness); operator drives onboarding via live UI for `Kevin.Castro9996`, then runs smoke with `--full-flow` to verify.
+- **Heartbeat-tick decision review:** new `mayaActionLog:tickDecisionsLast7Days(creatorId)` query + `summarizeTickDecisions` pure summarizer + `scripts/review-heartbeat-decisions.ts` CLI. Operator runs to review the past week of tick decisions.
+
+**Sibling fix:** `convex/mayaActionLog.ts` `byOutcome` interface was missing the `skipped_cooldown` literal that Sprint 3's schema added — the Sprint 9 review-tooling exercised that gap and surfaced it. Fixed.
+
+**Real-world bar (operator-blocker):**
+- Friend 1 + Friend 2 complete 7-day trials. Both onboard in <5 min. Picture locks accurately (no London-shape errors). First-day proactive value lands. ≥5 distinct skill invocations observed each. Memory-wiki accumulates ≥30 compiled claims. Voice fixture passes every observed output. Friend texts operator "yeah I'd keep this."
+- Cron + heartbeat fire correctly throughout the week (no missed entries, no thrash).
+- Zero "AI" / chatbot leakage in any creator-facing message across both friends.
+
+**MVP code-side: COMPLETE.** All 9 sprints landed + sealed. The operator's beta cohort handoff is the next step — that's monitor-and-iterate work, not code work. The handoff document covers every operator-blocker item with the exact command + env var + dashboard URL needed.
+
+---
+
+## Sprint 9 — Beta hardening + ship to friend cohort (original spec, kept for reference)
 
 **Goal:** 2 friend creators sign up and use Maya for a week. Both say "I'd keep this."
 
