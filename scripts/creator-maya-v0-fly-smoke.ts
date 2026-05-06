@@ -292,10 +292,15 @@ function waitForMachine(appName: string): MachineListRow {
 function verifyMachine(appName: string, machineId: string): string {
   // Sprint 2 (slice A) deploy-path consolidation: workspace bundle now comes
   // from the canonical `assembleWorkspaceBundle`. The 13 prose-only
-  // `creator-*` skill stubs were deleted; the canonical BUNDLED_SKILLS
-  // registry currently ships `scrapecreators-api` plus the pinned ClawHub
-  // vendor pack. Slice C will add the maya-* skills back to BUNDLED_SKILLS;
-  // until then verify only what the canonical bundle actually emits.
+  // Sprint 2 final post-merge:
+  //   - Slice A deleted the 13 `creator-*` prose-only stubs.
+  //   - Slice C bundled all 23 `maya-*` custom skills into BUNDLED_SKILLS.
+  //   - Slice D dropped remotion-video-toolkit, added 6 ClawHub pins
+  //     (capcut, video-frames, faster-whisper, elevenlabs-transcribe,
+  //      photo-text-overlay, brave-search), and vendored 3 Anthropic
+  //     skills (pdf, docx, internal-comms).
+  // Verify representatives from each layer: BUNDLED + custom-maya + ClawHub
+  // pin (kept) + ClawHub pin (new) + Anthropic vendored.
   const command = [
     "test -s /data/workspace/AGENTS.md",
     "test -s /data/workspace/SOUL.md",
@@ -306,11 +311,13 @@ function verifyMachine(appName: string, machineId: string): string {
     "test -w /data/workspace",
     "test -w /data/cron",
     "grep -q '^name: scrapecreators-api$' /data/workspace/skills/scrapecreators-api/SKILL.md",
-    "grep -q '^name: remotion-video-toolkit$' /data/workspace/skills/remotion-video-toolkit/SKILL.md",
+    "grep -q '^name: maya-platform$' /data/workspace/skills/maya-platform/SKILL.md",
     "grep -q '^name: tiktok$' /data/workspace/skills/tiktok/SKILL.md",
+    "grep -q '^name: video-frames$' /data/workspace/skills/video-frames/SKILL.md",
+    "test -d /data/workspace/skills/pdf",
     "openclaw skills list | grep -q 'scrapecreators-api'",
-    "openclaw skills list | grep -q 'remotion-video-toolkit'",
-    "openclaw skills list | grep -q 'tiktok'",
+    "openclaw skills list | grep -q 'maya-platform'",
+    "openclaw skills list | grep -q 'video-frames'",
     "(curl -fsS http://127.0.0.1:18789/healthz || curl -fsS http://127.0.0.1:3000/healthz || true)",
   ].join(" && ");
   const shellCommand = `/bin/sh -lc ${quoteShell(command)}`;

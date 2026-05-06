@@ -17,13 +17,16 @@ metadata:
 
 This is the canonical reference for every skill installed in Maya's workspace. It is shared across all Mayas (every creator gets the same skill bundle; only `soul.md` and connected accounts vary). Maya consults this file when she is deciding which skill to invoke for a given task.
 
-The inventory is split into three sources:
+The inventory is split into four sources:
 
-1. **Anthropic public utility skills** — installed unchanged from `github.com/anthropics/skills`. Universal-utility only (PDF, docx, prose tone, skill authoring).
-2. **Custom Maya skills** — written by us, Maya-specific, all 10 ship in Sprint 3.5.
+1. **Anthropic public utility skills** — vendored unchanged from `github.com/anthropics/skills` into `agents/skills/`. Universal-utility only (PDF, docx, prose tone). Provenance and re-vendor command in `agents/skills/VENDOR_MANIFEST.md`.
+2. **Custom Maya skills** — written by us, Maya-specific.
 3. **Third-party agent skills** — vendor-supplied (ScrapeCreators, Composio).
+4. **Pinned ClawHub skills** — registered in `convex/creatorMayaV0/pinnedClawhubSkills.ts` and materialized into Maya's deployed workspace at build time. ClawHub pins fill gaps that custom skills don't cover (clip rendering, frame extraction, transcription, photo overlay, web search) without us reinventing them. Original v0 stance ("no ClawHub skills") relaxed in Sprint 2 Slice D once specific gaps were identified.
 
-The locked sourcing policy is documented in `project_skill_strategy.md` (operator memory). No third-party ClawHub skills in v0. See § Skills explicitly NOT installed for the audit trail.
+**Maya's skill mix at deploy: 22 bundled `maya-*` custom skills + 6 ClawHub pins (capcut, video-frames, faster-whisper, elevenlabs-transcribe, photo-text-overlay, brave-search) + 3 Anthropic vendored skills (pdf, docx, internal-comms). The `tiktok` ClawHub Growth-OS skill is also pinned alongside the 6 above for hook/script/retention strategy work.**
+
+The sourcing policy is documented in `project_skill_strategy.md` (operator memory). Per-pin reasoning is in `convex/creatorMayaV0/pinnedClawhubSkills.ts`. See § Skills explicitly NOT installed for the audit trail of skills we evaluated and declined.
 
 ---
 

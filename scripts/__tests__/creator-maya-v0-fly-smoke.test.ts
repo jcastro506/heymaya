@@ -34,12 +34,17 @@ describe("creator-maya-v0-fly-smoke", () => {
     // Cron jobs.json includes the morning_brief entry from the canonical
     // standing-orders catalog.
     expect(fixture.workspaceFiles["jobs.json"]).toContain("morning_brief");
-    // Pinned ClawHub vendor pack — locked at lock.json for the deploy.
-    expect(fixture.workspaceFiles[".clawhub/lock.json"]).toContain(
-      "remotion-video-toolkit"
+    // Sprint 2 final post-merge: BUNDLED + custom-maya + ClawHub pin.
+    // creator-* prose stubs deleted (Slice A), maya-* skills now bundled
+    // (Slice C), remotion-video-toolkit replaced with video-frames (Slice D).
+    expect(fixture.workspaceFiles["skills/maya-platform/SKILL.md"]).toContain(
+      "name: maya-platform"
     );
-    expect(fixture.workspaceFiles["skills/remotion-video-toolkit/SKILL.md"]).toContain(
-      "name: remotion-video-toolkit"
+    expect(fixture.workspaceFiles[".clawhub/lock.json"]).toContain(
+      "video-frames"
+    );
+    expect(fixture.workspaceFiles["skills/video-frames/SKILL.md"]).toContain(
+      "name: video-frames"
     );
     expect(fixture.workspaceFiles["skills/tiktok/SKILL.md"]).toContain("name: tiktok");
     expect(fixture.gatewayConfig).toMatchObject({

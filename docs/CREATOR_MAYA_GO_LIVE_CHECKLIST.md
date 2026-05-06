@@ -144,9 +144,18 @@ Deployment rule:
   confirmation skills in the bundled pack.
 - [x] External mechanics/reference skills are pinned into the repo and emitted
   during deploy/first boot before Maya is marked active. Maya must not discover,
-  install, or upgrade skills during a user conversation.
-  - `remotion-video-toolkit@1.4.0`
-  - `tiktok@3.0.0`
+  install, or upgrade skills during a user conversation. Sprint 2 Slice D
+  refreshed the pin set (canonical list lives in
+  `convex/creatorMayaV0/pinnedClawhubSkills.ts`):
+  - `tiktok@3.0.0` (kept — TikTok Growth-OS, complementary to scrapecreators)
+  - `vcarolxhberger/free-video-generator-capcut@1.0.0`
+  - `steipete/video-frames@1.0.0`
+  - `theplasmak/faster-whisper@1.5.1`
+  - `paulasjes/elevenlabs-transcribe@1.0.1`
+  - `psyduckler/instagram-photo-text-overlay@1.0.0`
+  - `steipete/brave-search@1.0.1`
+  - `remotion-video-toolkit@1.4.0` — DROPPED in Slice D; NemoVideo will
+    replace in a later slice.
 - [x] Add a deploy gate that fails if a required external skill cannot be
   resolved before activation. Live Fly smoke now verifies each pinned skill is
   visible through `openclaw skills list`.
