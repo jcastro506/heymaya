@@ -76,11 +76,24 @@ export interface JobSpec {
         message: string;
         lightContext: true;
       };
-  delivery?: {
-    mode: "announce";
-    channel: "last";
-    bestEffort: true;
-  };
+  delivery?:
+    | {
+        mode: "announce";
+        channel: "last";
+        bestEffort: true;
+      }
+    | {
+        // Sprint 9.6 — explicit-target delivery for the first-boot kickstart.
+        // The "last" channel doesn't resolve on first deploy because the
+        // creator hasn't messaged in yet; claw-messenger errors with
+        // "Delivering to Claw Messenger requires target +1XXXXXXXXXX".
+        // Pin the target to the creator's primary phone number for the
+        // kickstart; ongoing crons keep using "last".
+        mode: "announce";
+        channel: "claw-messenger";
+        target: string;
+        bestEffort: true;
+      };
 }
 
 export interface JobsJson {
@@ -90,7 +103,7 @@ export interface JobsJson {
 export interface BuildCronJobsJsonInputs {
   creator: Pick<
     Doc<"creators">,
-    "plan" | "timezone" | "firstBootCompletedAt"
+    "plan" | "timezone" | "firstBootCompletedAt" | "phoneNumber"
   >;
   /**
    * Optional override for the standing-orders catalog. Tests use this to
@@ -258,10 +271,18 @@ export function buildCronJobsJson(inputs: BuildCronJobsJsonInputs): JobsJson {
  * obviously-malformed (parseAbsoluteTimeMs guards against `<= 0`).
  */
 function buildFirstBootKickstartJob(opts: {
-  creator: Pick<Doc<"creators">, "plan" | "timezone" | "firstBootCompletedAt">;
+  creator: Pick<
+    Doc<"creators">,
+    "plan" | "timezone" | "firstBootCompletedAt" | "phoneNumber"
+  >;
   nowMsOverride?: number;
 }): JobSpec | null {
   if (opts.creator.firstBootCompletedAt) return null;
+  // Sprint 9.6 — kickstart needs the creator's phone to send the very first
+  // iMessage (no "last" channel exists on a fresh deploy). Skip if missing —
+  // a kickstart with no delivery target would silently fail in claw-messenger
+  // and the creator would never hear from Maya.
+  if (!opts.creator.phoneNumber) return null;
   const now = opts.nowMsOverride ?? Date.now();
   // Use `now - 1` so the schedule is in the past at the moment OpenClaw
   // ingests jobs.json — guarantees a 0-delay arm on the first scheduler
@@ -286,12 +307,13 @@ function buildFirstBootKickstartJob(opts: {
     payload: {
       kind: "agentTurn",
       message:
-        "First-boot kickstart. Run the `first_boot_introduction` standing order now: greet, send one cited insight grounded in `creatorPicture`, ask the two opening questions (goal-with-examples + tone), and offer Gmail + Calendar OAuth opt-ins. NO brand-deal floor on first boot. Stamp `creators.openingAnswersAt` after the answers come back, and `creators.firstBootCompletedAt` after the whole arc lands. See AGENTS.md / SOUL.md / USER.md / standing-orders.md for the full Scope / Triggers / Approval / Escalation rules.",
+        "First-boot kickstart. Run the `first_boot_introduction` standing order now: greet, send one cited insight grounded in `creatorPicture`, ask the six anchor questions one at a time (location → niche → 3-month goals → job status → brand deals + floor → anti-patterns), and after picture-verify lock offer Gmail + Calendar OAuth opt-ins. Stamp `creators.openingAnswersAt` after answers come back, and `creators.firstBootCompletedAt` after the whole arc lands. See AGENTS.md / SOUL.md / USER.md for the full Scope / Triggers / Approval / Escalation rules — the standing orders are embedded inline in AGENTS.md (Wave 5 / OpenClaw 4.23 convention; no separate standing-orders.md file).",
       lightContext: true,
     },
     delivery: {
       mode: "announce",
-      channel: "last",
+      channel: "claw-messenger",
+      target: opts.creator.phoneNumber,
       bestEffort: true,
     },
   };

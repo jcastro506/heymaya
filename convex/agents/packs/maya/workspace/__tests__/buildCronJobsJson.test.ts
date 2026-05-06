@@ -23,7 +23,10 @@ import { STANDING_ORDERS } from "../standingOrders";
 const FIVE_FIELD_CRON = /^\S+\s+\S+\s+\S+\s+\S+\s+\S+$/;
 
 function creator(plan: "coach" | "manager", tz = "America/Los_Angeles") {
-  return { plan, timezone: tz };
+  // Sprint 9.6 — phoneNumber required for first-boot kickstart delivery
+  // (claw-messenger needs an explicit target on the very first message
+  // because the "last" channel doesn't exist on a fresh deploy).
+  return { plan, timezone: tz, phoneNumber: "+15551234567" };
 }
 
 describe("buildCronJobsJson", () => {
@@ -267,13 +270,16 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
 
   function freshCreator(plan: "coach" | "manager", tz = "America/Los_Angeles") {
     // firstBootCompletedAt intentionally undefined → kickstart fires.
-    return { plan, timezone: tz };
+    // phoneNumber required for kickstart delivery (Sprint 9.6 — claw-messenger
+    // needs an explicit target on the very first message).
+    return { plan, timezone: tz, phoneNumber: "+15551234567" };
   }
 
   function bootedCreator(plan: "coach" | "manager", tz = "America/Los_Angeles") {
     return {
       plan,
       timezone: tz,
+      phoneNumber: "+15551234567",
       firstBootCompletedAt: 1_700_000_000_000,
     };
   }
@@ -292,7 +298,10 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     expect(kickstart!.deleteAfterRun).toBe(true);
     expect(kickstart!.payload.kind).toBe("agentTurn");
     expect(kickstart!.delivery?.mode).toBe("announce");
-    expect(kickstart!.delivery?.channel).toBe("last");
+    expect(kickstart!.delivery?.channel).toBe("claw-messenger");
+    if (kickstart!.delivery?.channel !== "claw-messenger")
+      throw new Error("type-narrow guard");
+    expect(kickstart!.delivery.target).toBe("+15551234567");
   });
 
   it("places the kickstart entry at index 0 (lexical-first slot in jobs.json)", () => {
