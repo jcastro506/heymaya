@@ -127,6 +127,7 @@ import type * as integrations_zernio_oauth from "../integrations/zernio/oauth.js
 import type * as integrations_zernio_types from "../integrations/zernio/types.js";
 import type * as integrations_zernio_webhooks from "../integrations/zernio/webhooks.js";
 import type * as jobs from "../jobs.js";
+import type * as lcMaya_firstProactivePing from "../lcMaya/firstProactivePing.js";
 import type * as lcMaya_lcMayaHttp from "../lcMaya/lcMayaHttp.js";
 import type * as lib_encryption from "../lib/encryption.js";
 import type * as lib_flyClient from "../lib/flyClient.js";
@@ -305,6 +306,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/zernio/types": typeof integrations_zernio_types;
   "integrations/zernio/webhooks": typeof integrations_zernio_webhooks;
   jobs: typeof jobs;
+  "lcMaya/firstProactivePing": typeof lcMaya_firstProactivePing;
   "lcMaya/lcMayaHttp": typeof lcMaya_lcMayaHttp;
   "lib/encryption": typeof lib_encryption;
   "lib/flyClient": typeof lib_flyClient;

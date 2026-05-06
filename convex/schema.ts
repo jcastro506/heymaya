@@ -113,6 +113,13 @@ export default defineSchema({
     //     `creatorPicture.openingAnswers`. The `first_weekly_plan` standing
     //     order keys off this.
     //   - `firstWeeklyPlanSentAt` — set after the first proactive weekly plan ships.
+    //   - `pictureLockedAt`        — Sprint 6 stamp the moment creatorPicture
+    //     synthesis lands AND any operator-required verification has cleared.
+    //     This is the trigger for Sprint 7 Slice D's `first_proactive_ping`
+    //     standing order — the Day 1 first-touch ping fires 15-30 min later.
+    //   - `firstProactivePingSentAt` — set after Slice D's Day 1 ping ships.
+    //     Idempotency cursor: if `pictureLockedAt` somehow re-stamps (re-lock
+    //     after manual verification flip), the ping does NOT re-fire.
     firstBootCompletedAt: v.optional(v.number()),
     openingAnswersAt: v.optional(v.number()),
     firstWeeklyPlanSentAt: v.optional(v.number()),
@@ -122,6 +129,10 @@ export default defineSchema({
     // Standing-order `first_weekly_plan` triggers off this — NOT
     // `openingAnswersAt` — so the plan never reads unverified picture data.
     pictureLockedAt: v.optional(v.number()),
+    // Sprint 7 Slice D — Day 1 first-proactive-ping idempotency cursor.
+    // Stamped after the ping fires (or is skipped on empty trend+idea).
+    // If `pictureLockedAt` re-stamps, the ping does NOT re-fire.
+    firstProactivePingSentAt: v.optional(v.number()),
     createdAt: v.number(),
     // Sprint 3.7 — partial onboarding answer cursor + payload so a refresh
     // mid-flow doesn't lose progress. The full answer set is persisted to
@@ -3498,4 +3509,75 @@ export default defineSchema({
     .index("by_state_token", ["stateToken"])
     .index("by_creator", ["creatorId"]),
   // ─── end OAuth state tokens ─────────────────────────────────────────────
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Sprint 7 Slice D — Day 1 first-proactive-ping queue.
+  //
+  // After `creators.pictureLockedAt` is stamped (Sprint 6's verification
+  // gate), `firePictureLockedEvent` schedules a +15-30min Convex action that
+  // composes the Day 1 first-touch content (1 cited trend + 1 grounded idea
+  // + Gmail/Calendar connect offers) and writes a row into this table for
+  // Maya the agent to pick up on her next heartbeat. Convex doesn't talk to
+  // claw-messenger directly — the agent runtime does — so the bridge is this
+  // queue table + Maya's standing-order entry pointing at it.
+  //
+  // Idempotency: `creators.firstProactivePingSentAt` is the cursor; the row
+  // here is a write-once artifact. A second-fire on a re-stamped
+  // `pictureLockedAt` is a silent no-op.
+  //
+  // Status semantics:
+  //   - "queued"  — composer ran, content ready, agent has not yet sent.
+  //   - "sent"    — agent read the row and pushed to creator's primary
+  //                 channel. Stamps `firstProactivePingSentAt` on creators
+  //                 row at the same time.
+  //   - "skipped" — composer ran but BOTH trend + idea were empty. Per
+  //                 Slice D's locked precedence rule: silent no-op > bad
+  //                 first impression. Stamps `firstProactivePingSentAt` so
+  //                 the event doesn't re-fire on the next heartbeat.
+  // ────────────────────────────────────────────────────────────────────────
+  firstProactivePings: defineTable({
+    creatorId: v.id("creators"),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("sent"),
+      v.literal("skipped")
+    ),
+    /**
+     * Composed iMessage body. Empty string when status === "skipped".
+     */
+    body: v.string(),
+    /**
+     * Provenance for the citation firewall + sibling-file scan. The empty
+     * field shape is preserved (rather than dropping the prop) so test
+     * assertions against the row shape are stable.
+     */
+    citations: v.object({
+      trendRef: v.optional(v.string()),
+      ideaPostIds: v.array(v.string()),
+    }),
+    /**
+     * Empty-input precedence trace. One of:
+     *   - "trend+idea" — both present, full ping.
+     *   - "trend-only" — idea generator was empty.
+     *   - "idea-only"  — trend watcher was empty.
+     *   - "skip-empty" — both empty; status === "skipped".
+     */
+    precedence: v.union(
+      v.literal("trend+idea"),
+      v.literal("trend-only"),
+      v.literal("idea-only"),
+      v.literal("skip-empty")
+    ),
+    composedAt: v.number(),
+    /** Set when status flips to "sent". */
+    sentAt: v.optional(v.number()),
+    /**
+     * Convex scheduler id of the composer action. Captured at schedule time
+     * by `firePictureLockedEvent` so tests + ops can confirm the 15-30 min
+     * jitter actually applied.
+     */
+    scheduledFireAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_status", ["creatorId", "status"]),
 });
