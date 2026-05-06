@@ -31,15 +31,26 @@
  * loop), and the autonomous-outbound programs that ship in subsequent
  * patches (`brand_outreach`, `pitch_strategy`). Read/advisory programs that
  * were briefly tagged `manager` during the mechanical pro+→manager rename —
- * `competitor_watch`, `manager_readiness_packet_quarterly`,
- * `revenue_snapshot`, `calendar_lookahead`, `industry_intel_daily`, and the
- * `algo_research_*` family — have since been corrected back to `all`. They
+ * `competitor_watch`, `revenue_snapshot`, `calendar_lookahead`,
+ * `industry_intel_daily` — have since been corrected back to `all`. They
  * are pure cost-optimization gates (Brave / Composio per-query reads), not
  * autonomy gates, and the cost ceiling is well within both tiers' margin.
+ * (Sprint 3 Slice 1 dropped `manager_readiness_packet_quarterly` and the
+ * `algo_research_*` family entirely for MVP.)
  *
  * Kind semantics:
  *   - "cron"        — runs on a schedule. `cronEntryId` and `defaultCron`
- *                     are required; the cron generator consumes them.
+ *                     are required; the cron generator consumes them. After
+ *                     Sprint 3 Slice 1 the cron set collapses to exactly six
+ *                     precise-timing entries: morning_brief, evening_recap,
+ *                     weekly_content_plan, weekly_review,
+ *                     accountability_nudge, revenue_snapshot.
+ *   - "heartbeat"   — fires off OpenClaw's heartbeat tick during waking
+ *                     hours; LLM decides whether the trigger condition is
+ *                     met. Retains `defaultCron` / `session` / `cronEntryId`
+ *                     / `cronMessage` for prose/telemetry continuity, but
+ *                     `buildCronJobsJson` skips these. Slice 2's
+ *                     `generateHeartbeatMd.ts` consumes them.
  *   - "event"       — fires on an external trigger; no schedule.
  *   - "on-demand"   — creator-initiated; no schedule, no event.
  *   - "folded"      — composed into another program's run (e.g. growth
@@ -50,7 +61,24 @@
 import type { Plan } from "../../../../lib/planFeatures";
 
 export type StandingOrderTier = "all" | "manager";
-export type StandingOrderKind = "cron" | "event" | "on-demand" | "folded";
+/**
+ * Sprint 3 Slice 1: introduced "heartbeat" alongside "cron".
+ *
+ * "heartbeat" entries used to be `kind: "cron"`; they retain `defaultCron`,
+ * `session`, `cronEntryId`, `cronMessage` etc. (so Slice 2's
+ * `generateHeartbeatMd.ts` can read them), but they are NOT emitted into
+ * `~/.openclaw/cron/jobs.json`. The cron daemon collapses to exactly the
+ * six precise-timing entries (morning_brief, evening_recap,
+ * weekly_content_plan, weekly_review, accountability_nudge,
+ * revenue_snapshot). Everything else fires from heartbeat ticks during
+ * waking hours, where the LLM decides whether the trigger condition is met.
+ */
+export type StandingOrderKind =
+  | "cron"
+  | "heartbeat"
+  | "event"
+  | "on-demand"
+  | "folded";
 
 /**
  * Session semantics per OpenClaw's `~/.openclaw/cron/jobs.json`:
@@ -183,7 +211,9 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     id: "performance_check_2h",
     title: "2-hour performance check",
     tier: "all",
-    kind: "cron",
+    // Sprint 3 Slice 1: moved from cron → heartbeat. The 2-hour cadence is
+    // approximate; the heartbeat tick decides whether to surface anything.
+    kind: "heartbeat",
     cronEntryId: "performance_check_2h",
     defaultCron: "0 8,10,12,14,16,18,20,22 * * *",
     session: "isolated",
@@ -200,7 +230,8 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     id: "daily_niche_scan",
     title: "Daily niche scan",
     tier: "all",
-    kind: "cron",
+    // Sprint 3 Slice 1: moved from cron → heartbeat.
+    kind: "heartbeat",
     cronEntryId: "daily_niche_scan",
     defaultCron: "0 18 * * *",
     session: "isolated",
@@ -217,7 +248,8 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     id: "trend_watcher",
     title: "Trend watcher",
     tier: "all",
-    kind: "cron",
+    // Sprint 3 Slice 1: moved from cron → heartbeat.
+    kind: "heartbeat",
     cronEntryId: "trend_watcher",
     defaultCron: "5 9 * * *",
     session: "isolated",
@@ -234,7 +266,8 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     id: "comment_triage",
     title: "Comment triage",
     tier: "all",
-    kind: "cron",
+    // Sprint 3 Slice 1: moved from cron → heartbeat.
+    kind: "heartbeat",
     cronEntryId: "comment_triage",
     defaultCron: "0 11,17 * * *",
     session: "isolated",
@@ -331,7 +364,8 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     id: "competitor_watch",
     title: "Competitor watch",
     tier: "all",
-    kind: "cron",
+    // Sprint 3 Slice 1: moved from cron → heartbeat.
+    kind: "heartbeat",
     cronEntryId: "competitor_watch",
     defaultCron: "0 9 * * *",
     session: "isolated",
@@ -348,7 +382,8 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     id: "calendar_lookahead",
     title: "Calendar-aware content planning",
     tier: "all",
-    kind: "cron",
+    // Sprint 3 Slice 1: moved from cron → heartbeat.
+    kind: "heartbeat",
     cronEntryId: "calendar_lookahead",
     defaultCron: "0 8 * * *",
     session: "isolated",
@@ -361,23 +396,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     cronMessage:
       "Run calendar lookahead: pull events 1-14d out, classify via `maya-calendar-classifier`, propose content-arc variants for relevant events. Wait for creator confirmation.",
   },
-  {
-    id: "manager_readiness_packet_quarterly",
-    title: "Manager-readiness packet (quarterly)",
-    tier: "all",
-    kind: "cron",
-    cronEntryId: "manager_readiness_packet_quarterly",
-    defaultCron: "0 14 1 */3 *",
-    session: "isolated",
-    scope:
-      "Run `maya-packet-generator` against full creatorPicture + 90d metrics + brandDeals + audience + top hooks. Render PDF via `pdf` skill. Write `packetGenerations`; push 'your packet is ready' with link.",
-    triggers: "Cron 1st of every quarter 2:00pm local. Manager additionally permits on-demand.",
-    approvalGates: "None — creator consumes the artifact.",
-    escalation:
-      "Pass content through citation firewall before render. Render failures retry once; second failure surfaces to operator.",
-    cronMessage:
-      "Run quarterly manager-readiness packet: full creatorPicture + 90d metrics + brandDeals + audience + top hooks, render PDF, write `packetGenerations`, push link.",
-  },
+  // Sprint 3 Slice 1: deleted manager_readiness_packet_quarterly for MVP.
   {
     id: "revenue_snapshot",
     title: "Revenue snapshot",
@@ -400,7 +419,8 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     id: "industry_intel_daily",
     title: "Industry intel",
     tier: "all",
-    kind: "cron",
+    // Sprint 3 Slice 1: moved from cron → heartbeat.
+    kind: "heartbeat",
     cronEntryId: "industry_intel_daily",
     defaultCron: "30 7 * * *",
     session: "isolated",
@@ -412,78 +432,8 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     cronMessage:
       "Run industry intel: call `maya-industry-intel` with creator's niche+platforms, dedupe, inline items with relevance>=0.7 into morning brief.",
   },
-  {
-    id: "algo_research_tiktok",
-    title: "Platform algorithm research — TikTok",
-    tier: "all",
-    kind: "cron",
-    cronEntryId: "algo_research_tiktok",
-    defaultCron: "0 4 * * 1",
-    session: "isolated",
-    scope:
-      "Call `maya-platform-algo-researcher` for TikTok via Brave Search across allowlisted creator-economy publications. Update global `platformAlgoCache`.",
-    triggers: "Cron Monday 4:00am local. Manager gets a second weekly run Thursday 4am.",
-    approvalGates: "None — cache write.",
-    escalation: "If Brave returns 0 results, retain prior cache; log to `mayaActionLog`.",
-    cronMessage:
-      "Run TikTok algo research: call `maya-platform-algo-researcher` platform=tiktok, write to global platformAlgoCache.",
-  },
-  {
-    id: "algo_research_instagram",
-    title: "Platform algorithm research — Instagram",
-    tier: "all",
-    kind: "cron",
-    cronEntryId: "algo_research_instagram",
-    defaultCron: "15 4 * * 1",
-    session: "isolated",
-    scope: "Same as TikTok algo research, scoped to Instagram.",
-    triggers: "Cron Monday 4:15am local. Offset 15min from TikTok.",
-    approvalGates: "None.",
-    escalation: "Same as TikTok algo research.",
-    cronMessage: "Run Instagram algo research: platform=instagram, write to global platformAlgoCache.",
-  },
-  {
-    id: "algo_research_youtube",
-    title: "Platform algorithm research — YouTube",
-    tier: "all",
-    kind: "cron",
-    cronEntryId: "algo_research_youtube",
-    defaultCron: "30 4 * * 1",
-    session: "isolated",
-    scope: "Same as TikTok algo research, scoped to YouTube.",
-    triggers: "Cron Monday 4:30am local.",
-    approvalGates: "None.",
-    escalation: "Same as TikTok algo research.",
-    cronMessage: "Run YouTube algo research: platform=youtube, write to global platformAlgoCache.",
-  },
-  {
-    id: "algo_research_linkedin",
-    title: "Platform algorithm research — LinkedIn",
-    tier: "all",
-    kind: "cron",
-    cronEntryId: "algo_research_linkedin",
-    defaultCron: "45 4 * * 1",
-    session: "isolated",
-    scope: "Same as TikTok algo research, scoped to LinkedIn.",
-    triggers: "Cron Monday 4:45am local.",
-    approvalGates: "None.",
-    escalation: "Same as TikTok algo research.",
-    cronMessage: "Run LinkedIn algo research: platform=linkedin, write to global platformAlgoCache.",
-  },
-  {
-    id: "algo_research_x",
-    title: "Platform algorithm research — X",
-    tier: "all",
-    kind: "cron",
-    cronEntryId: "algo_research_x",
-    defaultCron: "0 5 * * 1",
-    session: "isolated",
-    scope: "Same as TikTok algo research, scoped to X.",
-    triggers: "Cron Monday 5:00am local.",
-    approvalGates: "None.",
-    escalation: "Same as TikTok algo research.",
-    cronMessage: "Run X algo research: platform=x, write to global platformAlgoCache.",
-  },
+  // Sprint 3 Slice 1: deleted algo_research_{tiktok,instagram,youtube,linkedin,x}
+  // for MVP. Platform algorithm research returns post-MVP if needed.
   {
     id: "growth_coach",
     title: "Growth coaching",
@@ -535,7 +485,8 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     id: "opportunity_scout_daily",
     title: "Opportunity scout",
     tier: "all",
-    kind: "cron",
+    // Sprint 3 Slice 1: moved from cron → heartbeat.
+    kind: "heartbeat",
     cronEntryId: "opportunity_scout_daily",
     defaultCron: "0 6 * * *",
     session: "isolated",
@@ -551,7 +502,8 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     id: "collab_matchmaker_weekly",
     title: "Collab matchmaker",
     tier: "all",
-    kind: "cron",
+    // Sprint 3 Slice 1: moved from cron → heartbeat.
+    kind: "heartbeat",
     cronEntryId: "collab_matchmaker_weekly",
     defaultCron: "0 17 * * 0",
     session: "isolated",

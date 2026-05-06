@@ -248,20 +248,25 @@ describe("assembleWorkspaceBundle", () => {
     }
   });
 
-  it("coach bundle's jobsJson includes advisory programs (revenue, competitor, calendar, packet, intel) — boundary is autonomy, not breadth", () => {
+  it("coach bundle's jobsJson is the Sprint 3 Slice 1 cron set (6 entries, all tier='all', revenue_snapshot included)", () => {
+    // Sprint 3 Slice 1: the cron set collapsed from 21 → 6. The previously-
+    // advisory programs (competitor, calendar, intel, opportunity_scout,
+    // collab_matchmaker) became kind="heartbeat" and run off heartbeat
+    // ticks. manager_readiness_packet_quarterly + algo_research_* were
+    // deleted entirely for MVP. Only revenue_snapshot (Mon 9am — needs
+    // precise timing because it pairs with the prior week's Stripe pull)
+    // remains in the cron set among the former advisory list.
     const inputs = baseInputs({ plan: "coach" });
     inputs.creator = { ...inputs.creator, plan: "coach" };
     const bundle = assembleWorkspaceBundle(inputs);
     const ids = bundle.jobsJson.jobs.map((j) => j.id);
-    // Advisory programs reclassified to tier:"all" — Coach receives them.
     expect(ids).toContain("revenue_snapshot");
-    expect(ids).toContain("competitor_watch");
-    expect(ids).toContain("calendar_lookahead");
-    expect(ids).toContain("manager_readiness_packet_quarterly");
-    expect(ids).toContain("industry_intel_daily");
-    expect(ids).toContain("algo_research_tiktok");
-    expect(ids).toContain("opportunity_scout_daily");
-    expect(ids).toContain("collab_matchmaker_weekly");
+    // Heartbeat-kind entries must NOT appear in jobsJson.
+    expect(ids).not.toContain("competitor_watch");
+    expect(ids).not.toContain("calendar_lookahead");
+    expect(ids).not.toContain("industry_intel_daily");
+    expect(ids).not.toContain("opportunity_scout_daily");
+    expect(ids).not.toContain("collab_matchmaker_weekly");
   });
 
   it("coach bundle's jobsJson excludes Manager-only autonomy crons (none today; brand_outreach is event-driven not cron)", async () => {
