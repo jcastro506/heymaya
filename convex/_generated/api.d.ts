@@ -10,6 +10,7 @@
 
 import type * as _test_serviceFixtures from "../_test/serviceFixtures.js";
 import type * as accountDeletion from "../accountDeletion.js";
+import type * as admin from "../admin.js";
 import type * as agents_modelRouter_logCall from "../agents/modelRouter/logCall.js";
 import type * as agents_modelRouter_maya from "../agents/modelRouter/maya.js";
 import type * as agents_modelRouter_openRouterClient from "../agents/modelRouter/openRouterClient.js";
@@ -114,6 +115,7 @@ import type * as integrations_scrapeCreators_verifyHandle from "../integrations/
 import type * as integrations_stripe_checkout from "../integrations/stripe/checkout.js";
 import type * as integrations_stripe_customerPortal from "../integrations/stripe/customerPortal.js";
 import type * as integrations_stripe_priceIds from "../integrations/stripe/priceIds.js";
+import type * as integrations_stripe_products from "../integrations/stripe/products.js";
 import type * as integrations_stripe_voiceMetering from "../integrations/stripe/voiceMetering.js";
 import type * as integrations_stripe_webhooks from "../integrations/stripe/webhooks.js";
 import type * as integrations_twilio_client from "../integrations/twilio/client.js";
@@ -129,11 +131,13 @@ import type * as integrations_zernio_webhooks from "../integrations/zernio/webho
 import type * as jobs from "../jobs.js";
 import type * as lcMaya_firstProactivePing from "../lcMaya/firstProactivePing.js";
 import type * as lcMaya_lcMayaHttp from "../lcMaya/lcMayaHttp.js";
+import type * as lcMaya_wikiMirrorSync from "../lcMaya/wikiMirrorSync.js";
 import type * as lib_encryption from "../lib/encryption.js";
 import type * as lib_flyClient from "../lib/flyClient.js";
 import type * as lib_planFeatures from "../lib/planFeatures.js";
 import type * as lib_usageEvents from "../lib/usageEvents.js";
 import type * as lib_webhookSecret from "../lib/webhookSecret.js";
+import type * as mayaActionLog from "../mayaActionLog.js";
 import type * as mediaAssets_enqueueCatalog from "../mediaAssets/enqueueCatalog.js";
 import type * as mediaAssets_ingest from "../mediaAssets/ingest.js";
 import type * as mediaAssets_listAssets from "../mediaAssets/listAssets.js";
@@ -189,6 +193,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   "_test/serviceFixtures": typeof _test_serviceFixtures;
   accountDeletion: typeof accountDeletion;
+  admin: typeof admin;
   "agents/modelRouter/logCall": typeof agents_modelRouter_logCall;
   "agents/modelRouter/maya": typeof agents_modelRouter_maya;
   "agents/modelRouter/openRouterClient": typeof agents_modelRouter_openRouterClient;
@@ -293,6 +298,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/stripe/checkout": typeof integrations_stripe_checkout;
   "integrations/stripe/customerPortal": typeof integrations_stripe_customerPortal;
   "integrations/stripe/priceIds": typeof integrations_stripe_priceIds;
+  "integrations/stripe/products": typeof integrations_stripe_products;
   "integrations/stripe/voiceMetering": typeof integrations_stripe_voiceMetering;
   "integrations/stripe/webhooks": typeof integrations_stripe_webhooks;
   "integrations/twilio/client": typeof integrations_twilio_client;
@@ -308,11 +314,13 @@ declare const fullApi: ApiFromModules<{
   jobs: typeof jobs;
   "lcMaya/firstProactivePing": typeof lcMaya_firstProactivePing;
   "lcMaya/lcMayaHttp": typeof lcMaya_lcMayaHttp;
+  "lcMaya/wikiMirrorSync": typeof lcMaya_wikiMirrorSync;
   "lib/encryption": typeof lib_encryption;
   "lib/flyClient": typeof lib_flyClient;
   "lib/planFeatures": typeof lib_planFeatures;
   "lib/usageEvents": typeof lib_usageEvents;
   "lib/webhookSecret": typeof lib_webhookSecret;
+  mayaActionLog: typeof mayaActionLog;
   "mediaAssets/enqueueCatalog": typeof mediaAssets_enqueueCatalog;
   "mediaAssets/ingest": typeof mediaAssets_ingest;
   "mediaAssets/listAssets": typeof mediaAssets_listAssets;

@@ -218,7 +218,39 @@ const FEATURES_BY_PLAN: Record<Plan, PlanFeatures> = {
   manager: MANAGER,
 };
 
-export function planFeatures(creator: Pick<Doc<"creators">, "plan">): PlanFeatures {
+/**
+ * Sprint 9 — admin-flagged comp accounts.
+ *
+ * The operator can comp a creator (no Stripe subscription required) by
+ * flipping `creators.compedByAdmin = true` via the `admin.compCreator`
+ * mutation. A comp'd creator is treated as a Manager-tier subscriber:
+ *
+ *   - `planFeatures(creator)` returns Manager features regardless of the
+ *     stored `plan` field (so we don't have to also patch `plan` to
+ *     "manager" — the comp flag is the source of truth).
+ *   - `subscriptionActive(creator)` short-circuits to `true` so any caller
+ *     gating on "is the subscription active?" lets the comp'd creator
+ *     through without a Stripe row.
+ *
+ * The flag exists so the operator can sign up friends without a Stripe
+ * card. Tests must verify both: comp'd creator gets full Manager features,
+ * un-comp'd creator still hits the paywall.
+ *
+ * IMPORTANT: only the COMP flag overrides the plan. We DO NOT default to
+ * Manager features on missing data — corrupted/unknown `plan` still throws
+ * via `PlanGateError`. The override is opt-in (operator-driven) only.
+ */
+export function planFeatures(
+  creator: Pick<Doc<"creators">, "plan"> & {
+    compedByAdmin?: boolean;
+  }
+): PlanFeatures {
+  // Sprint 9: comp short-circuit. Operator-flagged comp creators get the
+  // full Manager features regardless of stored plan. This is the load-
+  // bearing gate the friend-cohort beta relies on.
+  if (creator.compedByAdmin === true) {
+    return MANAGER;
+  }
   const f = FEATURES_BY_PLAN[creator.plan];
   if (!f) {
     // Adversarial / corrupted plan field — fail closed with a typed error so
@@ -230,6 +262,39 @@ export function planFeatures(creator: Pick<Doc<"creators">, "plan">): PlanFeatur
     );
   }
   return f;
+}
+
+/**
+ * Sprint 9 — `subscriptionActive(creator)` returns the operator-comp /
+ * Stripe-subscription status as a single boolean. Sources of truth:
+ *
+ *   1. `creator.compedByAdmin === true` → active (operator-comped beta).
+ *   2. `creator.stripeSubscriptionId` set AND `currentPlanPeriodEnd` is in
+ *      the future (or unset, which means we're inside an open-ended
+ *      subscription window) → active.
+ *   3. Otherwise → inactive (creator hit the paywall, must subscribe).
+ *
+ * Callers that gate ANY feature on "must have an active subscription"
+ * should call this helper rather than hand-rolling a check — the comp
+ * short-circuit lives here so it can never be missed.
+ */
+export function subscriptionActive(
+  creator: Pick<
+    Doc<"creators">,
+    "stripeSubscriptionId" | "currentPlanPeriodEnd"
+  > & {
+    compedByAdmin?: boolean;
+  },
+  nowMs: number = Date.now()
+): boolean {
+  // Sprint 9 comp short-circuit — first check, never bypassed.
+  if (creator.compedByAdmin === true) return true;
+  if (!creator.stripeSubscriptionId) return false;
+  // If `currentPlanPeriodEnd` is unset, treat as still-active (Stripe webhook
+  // hasn't landed the period boundary yet — defaulting to "blocked" would
+  // strand creators mid-subscription on missing-data races).
+  if (creator.currentPlanPeriodEnd === undefined) return true;
+  return creator.currentPlanPeriodEnd > nowMs;
 }
 
 const BUDGET_RANK: Record<ThinkingBudget, number> = {

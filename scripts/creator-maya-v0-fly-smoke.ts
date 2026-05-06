@@ -38,6 +38,30 @@ interface Flags {
   appName: string | null;
   keepApp: boolean;
   help: boolean;
+  /**
+   * Sprint 9 — `--full-flow` flag. Extends the live smoke with extra
+   * USER.md content assertions: the file must contain a real audience
+   * block (not the placeholder "not yet provided"), confirming that the
+   * onboarding pipeline ran end-to-end (handle scrape → picture synthesis
+   * → soul.md → USER.md emission).
+   *
+   * Default false → existing CI / cron-fly-smoke callers see no behavior
+   * change. The flag itself does NOT trigger `submitOnboarding` from the
+   * smoke harness — that requires Clerk auth which the smoke can't fake.
+   * The expected workflow is: operator runs onboarding via the live UI
+   * for `Kevin.Castro9996` + `+1 631-335-7603`, then runs the smoke with
+   * `--full-flow` to verify the resulting workspace landed cleanly.
+   *
+   * Bounds (deliberately surfaced in the printout when the flag is set):
+   *   - Picture synthesis is async; the smoke pollers wait up to 90s for
+   *     the live USER.md to materialize. Beyond that we surface a
+   *     non-zero exit so the operator notices.
+   *   - `creatorPicture.pictureLockedAt` polling is operator-blocked on
+   *     a manual creator-side iMessage step (the creator must reply to
+   *     Maya's first message). The flag prints the gating reminder; it
+   *     does NOT poll Convex (the smoke is Fly-side only).
+   */
+  fullFlow: boolean;
 }
 
 export interface CreatorMayaFlySmokeFixture {
@@ -75,6 +99,7 @@ function parseFlags(argv: ReadonlyArray<string>): Flags {
     appName: null,
     keepApp: false,
     help: false,
+    fullFlow: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -84,6 +109,7 @@ function parseFlags(argv: ReadonlyArray<string>): Flags {
     else if (arg === "--confirm") flags.confirm = true;
     else if (arg === "--keep-app") flags.keepApp = true;
     else if (arg === "--help" || arg === "-h") flags.help = true;
+    else if (arg === "--full-flow") flags.fullFlow = true;
     else if (arg === "--app") flags.appName = argv[++i] ?? null;
     else if (arg.startsWith("--app=")) flags.appName = arg.slice("--app=".length);
   }
@@ -424,6 +450,117 @@ function destroyApp(appName: string): void {
   }
 }
 
+/**
+ * Sprint 9 — `--full-flow` end-to-end assertions.
+ *
+ * Premise: by the time the operator runs `--full-flow`, they should have
+ * driven the live UI through `submitOnboarding` for the test creator
+ * (Kevin.Castro9996 + +1 631-335-7603), which writes a real audience
+ * block into the per-creator workspace. The smoke can't trigger
+ * `submitOnboarding` itself (Clerk auth is required), but it CAN read
+ * the resulting USER.md off the Fly machine and verify the substantive
+ * content landed.
+ *
+ * Assertions:
+ *   1. /data/workspace/USER.md exists (already covered by the base verify
+ *      step above, but we re-check explicitly in case the operator built
+ *      a degenerate workspace).
+ *   2. USER.md does NOT contain the placeholder "not yet provided" — that
+ *      string is a tell that the picture-synthesis stage didn't land.
+ *   3. USER.md contains an `audience` (or `Audience`) block — case-
+ *      insensitive scan because the soul.md generator's casing has
+ *      shifted across waves.
+ *
+ * On failure: log a clear actionable error AND surface the first 40 lines
+ * of USER.md so the operator can see what landed. Exit non-zero so CI
+ * sees the failure.
+ *
+ * Out-of-scope (documented intentionally):
+ *   - We do NOT poll Convex for `creatorPicture.pictureLockedAt`. That
+ *     requires a manual creator-side iMessage step (the creator has to
+ *     reply to Maya's first message). Point the operator at the bound
+ *     in the printout.
+ */
+function runFullFlowAssertions(appName: string, machineId: string): void {
+  console.log("\n=== --full-flow assertions ===");
+  console.log(
+    "Premise: operator has already driven `submitOnboarding` via the live UI"
+  );
+  console.log(
+    "for the test creator (Kevin.Castro9996 + +1 631-335-7603) before this run."
+  );
+  console.log(
+    "Reminder: `creatorPicture.pictureLockedAt` polling is out of scope —"
+  );
+  console.log(
+    "it requires a manual creator-side iMessage reply that the smoke can't drive."
+  );
+
+  const userMd = catFileFromMachine(appName, machineId, "/data/workspace/USER.md");
+  if (!userMd || userMd.length === 0) {
+    console.error("--full-flow FAILED: /data/workspace/USER.md is empty.");
+    process.exit(4);
+  }
+
+  // Placeholder-content check — the soul.md generator emits "not yet provided"
+  // when audience data is missing. A successful end-to-end onboarding produces
+  // a real audience block, never the placeholder.
+  if (/not yet provided/i.test(userMd)) {
+    console.error(
+      "--full-flow FAILED: USER.md still contains 'not yet provided'."
+    );
+    console.error(
+      "This means the audience block did not synthesize. Re-run onboarding."
+    );
+    console.error("--- USER.md (first 40 lines) ---");
+    console.error(userMd.split("\n").slice(0, 40).join("\n"));
+    console.error("--- end USER.md preview ---");
+    process.exit(4);
+  }
+
+  // Audience block check — case-insensitive substring is intentional; the
+  // soul.md generator's casing has shifted across waves. Both `Audience`
+  // (heading) and `audience` (yaml-style key) are acceptable.
+  if (!/audience/i.test(userMd)) {
+    console.error(
+      "--full-flow FAILED: USER.md is missing an audience block."
+    );
+    console.error("--- USER.md (first 40 lines) ---");
+    console.error(userMd.split("\n").slice(0, 40).join("\n"));
+    console.error("--- end USER.md preview ---");
+    process.exit(4);
+  }
+
+  console.log("--full-flow PASSED: USER.md has a real audience block.");
+}
+
+/**
+ * SSH into the running machine and `cat` a file. Returns the file content
+ * as a string. Errors propagate (the parent runFullFlowAssertions handles
+ * them with a clean exit).
+ */
+function catFileFromMachine(
+  appName: string,
+  machineId: string,
+  remotePath: string
+): string {
+  const command = `cat ${quoteShell(remotePath)}`;
+  const shellCommand = `/bin/sh -lc ${quoteShell(command)}`;
+  return runFly(
+    [
+      "ssh",
+      "console",
+      "--app",
+      appName,
+      "--machine",
+      machineId,
+      "--command",
+      shellCommand,
+    ],
+    60_000
+  );
+}
+
 async function runLiveSmoke(flags: Flags): Promise<void> {
   loadDotEnvLocal();
   preflight(flags);
@@ -459,6 +596,10 @@ async function runLiveSmoke(flags: Flags): Promise<void> {
 
     pollCronAndVoiceReady(appName, machine.id);
 
+    if (flags.fullFlow) {
+      runFullFlowAssertions(appName, machine.id);
+    }
+
     console.log("Creator Maya v0 live Fly/OpenClaw smoke passed.");
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -486,6 +627,9 @@ function printHelp(): void {
       "  --confirm         Required with --live.",
       "  --app <name>      Optional app name for live mode.",
       "  --keep-app        Do not destroy the Fly app after live mode.",
+      "  --full-flow       (Sprint 9) Live-mode only: assert USER.md has a real",
+      "                    audience block (operator must have run onboarding via",
+      "                    the live UI before this run; smoke can't fake Clerk auth).",
       "  --help            Show this help.",
     ].join("\n")
   );

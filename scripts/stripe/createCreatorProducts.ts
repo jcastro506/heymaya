@@ -31,59 +31,15 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import Stripe from "stripe";
+import {
+  CREATOR_TIER_CONFIGS,
+  HEYMAYA_CREATOR_TIER_TAG as HEYMAYA_TIER_TAG,
+  priceLookupKey,
+  productLookupKey,
+  type CreatorProductTierConfig as TierConfig,
+} from "../../convex/integrations/stripe/products";
 
-/* ---------------------------------------------------------------------- */
-/* Configuration — locked tier prices                                      */
-/* ---------------------------------------------------------------------- */
-
-interface TierConfig {
-  key: "coach" | "manager";
-  productName: string;
-  /** Stripe statement_descriptor — must be ≤ 22 chars, uppercase. */
-  statementDescriptor: string;
-  description: string;
-  monthlyCents: number;
-  annualCents: number;
-  /** Metadata key used by checkout/webhook for filterability. */
-  metadataLookupKey: {
-    monthly: string;
-    annual: string;
-  };
-}
-
-const CREATOR_TIERS: ReadonlyArray<TierConfig> = [
-  {
-    key: "coach",
-    productName: "HeyMaya Coach",
-    statementDescriptor: "HEYMAYA COACH",
-    description:
-      "Maya as your AI creator coach. Daily proactive guidance across iMessage. Limited cron set, capped chat, cost-bounded thinking budget. The post-trial default.",
-    monthlyCents: 1999, // $19.99
-    annualCents: 19900, // $199.00
-    metadataLookupKey: {
-      monthly: "heymaya_creator_coach_monthly",
-      annual: "heymaya_creator_coach_annual",
-    },
-  },
-  {
-    key: "manager",
-    productName: "HeyMaya Manager",
-    statementDescriptor: "HEYMAYA MANAGER",
-    description:
-      "Maya as your full-time AI creator manager. Full proactive cron set, unlimited chat, all thinking budgets, full Gmail deal desk, brand-contact discovery via Apollo/Hunter. New sign-ups get 7 days free.",
-    monthlyCents: 4999, // $49.99
-    annualCents: 49900, // $499.00
-    metadataLookupKey: {
-      monthly: "heymaya_creator_manager_monthly",
-      annual: "heymaya_creator_manager_annual",
-    },
-  },
-];
-
-/** Tag attached to every product/price the script creates so reruns can
- *  detect existing rows rather than duplicating. Mirrors the service
- *  product's `heymaya_service_tier_v0` convention. */
-const HEYMAYA_TIER_TAG = "heymaya_creator_tier_v0";
+const CREATOR_TIERS = CREATOR_TIER_CONFIGS;
 
 /* ---------------------------------------------------------------------- */
 /* Helpers                                                                 */
@@ -117,7 +73,7 @@ async function ensureProduct(
   stripe: Stripe,
   cfg: TierConfig
 ): Promise<Stripe.Product> {
-  const lookupKey = `creator-${cfg.key}`;
+  const lookupKey = productLookupKey(cfg.key);
   const existing = await findProductByLookupKey(stripe, lookupKey);
   if (existing) {
     console.log(`[product] reuse ${existing.id} (${cfg.productName})`);
@@ -151,7 +107,7 @@ async function ensureRecurringPrice(
   interval: "month" | "year"
 ): Promise<Stripe.Price> {
   const intervalSuffix = interval === "month" ? "monthly" : "annual";
-  const lookupKey = `creator-${cfg.key}-${intervalSuffix}`;
+  const lookupKey = priceLookupKey(cfg.key, interval);
   const existing = await findPriceByLookupKey(stripe, lookupKey);
   if (existing) {
     console.log(

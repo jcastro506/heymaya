@@ -620,6 +620,19 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     approvalGates: "Creator-approved by default. Auto-send only when `autoSendThreshold` set + ask under threshold + firewall pass. Manager unlocks Apollo/Hunter discovery via `brandContactDiscoveryEnabled`.",
     escalation: "Manager-only — Coach never composes cold outbound. Gmail revoke → 15-min-poll-for-2h fallback like `brand_email_triage`.",
   },
+  {
+    id: "wiki_mirror_sync",
+    title: "Wiki → Convex projection mirror sync",
+    tier: "all",
+    kind: "folded",
+    scope:
+      "Sprint 8.5: scan the memory-wiki (`wiki_search` for entries written since last mirror tick) for new trend observations, competitor observations, and weekly learnings. Batch into one POST to `lc_maya.sync_wiki_observations` (idempotent on `(creatorId, wikiVaultPath)`). The endpoint dedupes — same wiki entry never round-trips into a duplicate row. Cap one tick at 200 rows; if more, drop oldest (the wiki is the source of truth, the projection is for HQ reactivity).",
+    triggers:
+      "Folded into the heartbeat (cadence: every 6h). Silent no-op when nothing new in the wiki. Never fires more than once per 6h per creator — the heartbeat tick decision function enforces the cooldown.",
+    approvalGates: "None — projection writes only; the wiki itself was already the source of truth.",
+    escalation:
+      "On 5xx from the sync endpoint, retry on the next heartbeat (zero per-tick retry; backoff is 'wait 6h'). On 4xx (validator reject), log the offending row to `mayaActionLog` with detail and skip. Never block heartbeat completion on this entry.",
+  },
 ];
 
 /**
