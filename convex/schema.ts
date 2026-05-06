@@ -1043,6 +1043,21 @@ export default defineSchema({
   // Surfaced by Sprint 3 cron.md retry/skip discipline. Captures why a cron
   // entry skipped (plan-tier disabled, condition not met) or retried (5xx).
   // Operator dashboard reads this to surface degraded behaviors.
+  //
+  // Sprint 3 Slice 2 additions (additive — pre-existing rows lack these
+  // fields, all optional):
+  //   - `tickKind` — 'cron' | 'event' | 'heartbeat' | 'on-demand'. Lets
+  //     the dashboard slice tick decisions by source.
+  //   - `pushed` — did this firing send a creator-facing message?
+  //     HEARTBEAT.md states "max 1 push per tick"; this is the field
+  //     that proves it.
+  //   - `engagedAt` — backfilled when the creator demonstrably engaged
+  //     with what Maya pushed (replied to the message, tapped the
+  //     surfaced card, marked an idea approved). Lets us measure whether
+  //     proactive pushes earn their keep.
+  //   - `outcome` adds `skipped_cooldown` — heartbeat checks honor
+  //     skip-if-recent windows; the suppression is logged so operators
+  //     can see what Maya chose NOT to do.
   mayaActionLog: defineTable({
     creatorId: v.id("creators"),
     entryId: v.string(),
@@ -1051,12 +1066,23 @@ export default defineSchema({
       v.literal("skipped_plan_disabled"),
       v.literal("skipped_condition_unmet"),
       v.literal("skipped_dependency_missing"),
+      v.literal("skipped_cooldown"),
       v.literal("retried"),
       v.literal("failed")
     ),
     detail: v.optional(v.string()),
     durationMs: v.optional(v.number()),
     ts: v.number(),
+    tickKind: v.optional(
+      v.union(
+        v.literal("cron"),
+        v.literal("event"),
+        v.literal("heartbeat"),
+        v.literal("on-demand")
+      )
+    ),
+    pushed: v.optional(v.boolean()),
+    engagedAt: v.optional(v.number()),
   })
     .index("by_creator", ["creatorId"])
     .index("by_creator_and_ts", ["creatorId", "ts"])
