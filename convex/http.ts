@@ -20,6 +20,7 @@ import {
   submitOpeningAnswersHttp,
   startOAuthHttp,
 } from "./lcMaya/lcMayaHttp";
+import { syncWikiObservationsHttp } from "./lcMaya/wikiMirrorSync";
 
 const http = httpRouter();
 
@@ -61,6 +62,15 @@ http.route({
   path: "/lc_maya/log_trend",
   method: "POST",
   handler: logTrendHttp,
+});
+
+// Sprint 8.5 — wiki → Convex projection mirror sync. Heartbeat-driven,
+// batched, idempotent on (creatorId, wikiVaultPath). See
+// `convex/lcMaya/wikiMirrorSync.ts` for the full contract.
+http.route({
+  path: "/lc_maya/sync_wiki_observations",
+  method: "POST",
+  handler: syncWikiObservationsHttp,
 });
 
 export default http;

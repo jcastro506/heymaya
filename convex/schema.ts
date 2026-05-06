@@ -116,6 +116,18 @@ export default defineSchema({
     firstBootCompletedAt: v.optional(v.number()),
     openingAnswersAt: v.optional(v.number()),
     firstWeeklyPlanSentAt: v.optional(v.number()),
+    // ─── Sprint 9 — admin-flagged comp accounts ───────────────────────────
+    // Operator-set flag. When true, the creator gets full Manager features
+    // without a Stripe subscription. Used to onboard friend-cohort beta
+    // testers without making them swipe a card. Flipped via the
+    // `admin.compCreator` internal mutation, gated by ADMIN_TOKEN. The
+    // `subscriptionActive(creator)` helper in `convex/lib/planFeatures.ts`
+    // short-circuits to "active" when this is true; gated entry points
+    // either consult that helper directly or read `creator.compedByAdmin`
+    // alongside their existing Stripe subscription check. See also:
+    // `convex/admin.ts` for the comp/uncomp mutations.
+    compedByAdmin: v.optional(v.boolean()),
+    // ─── end Sprint 9 ──────────────────────────────────────────────────────
     createdAt: v.number(),
     // Sprint 3.7 — partial onboarding answer cursor + payload so a refresh
     // mid-flow doesn't lose progress. The full answer set is persisted to
@@ -1170,10 +1182,22 @@ export default defineSchema({
     ),
     relevanceScore: v.number(),
     observedAt: v.number(),
+    /**
+     * Sprint 8.5 — wiki mirror sync. When the row was written by the
+     * heartbeat-driven mirror (rather than by an in-flight skill call),
+     * `mirroredAt` is the timestamp the mirror posted it. Used for
+     * idempotency: the mirror dedupes on (creatorId, vaultPath) so the
+     * same wiki entry never round-trips into a duplicate row.
+     * `wikiVaultPath` (when set) pins the source page on the Fly-side
+     * vault so HQ can offer a "see Maya's notes" link.
+     */
+    mirroredAt: v.optional(v.number()),
+    wikiVaultPath: v.optional(v.string()),
   })
     .index("by_creator", ["creatorId"])
     .index("by_creator_and_observedAt", ["creatorId", "observedAt"])
-    .index("by_creator_and_source", ["creatorId", "source"]),
+    .index("by_creator_and_source", ["creatorId", "source"])
+    .index("by_creator_and_vault_path", ["creatorId", "wikiVaultPath"]),
 
   competitorObservations: defineTable({
     creatorId: v.id("creators"),
@@ -1198,10 +1222,77 @@ export default defineSchema({
       })
     ),
     observedAt: v.number(),
+    /** Sprint 8.5 — wiki mirror sync (see trendObservations.mirroredAt). */
+    mirroredAt: v.optional(v.number()),
+    wikiVaultPath: v.optional(v.string()),
   })
     .index("by_creator", ["creatorId"])
     .index("by_creator_and_peer", ["creatorId", "peerHandle"])
-    .index("by_creator_and_observedAt", ["creatorId", "observedAt"]),
+    .index("by_creator_and_observedAt", ["creatorId", "observedAt"])
+    .index("by_creator_and_vault_path", ["creatorId", "wikiVaultPath"]),
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Sprint 8.5 — creator-side weekly learnings projection.
+  //
+  // Mirrors the service-product `weeklyLearnings` table (see § Wave C.5)
+  // but with `creatorId` instead of `businessId`. Same shape rationale:
+  // Maya's per-week synthesis of "what worked across the whole creator
+  // surface" gets materialized into the wiki under
+  // `concepts/what-works/<platform>/*` AND projected here so the Growth /
+  // Performance HQ tabs can render "what Maya learned this week" without
+  // a runtime round-trip.
+  //
+  // Cross-tenant: `creatorId`-indexed; every read filters. Mirror sync is
+  // idempotent on (creatorId, weekStartMs) — the sync endpoint dedupes.
+  // Phantom-pattern guard: the extractor refuses sampleSize<3 patterns so
+  // this table never carries unsupported claims (mirrors § Wave C.5).
+  // ────────────────────────────────────────────────────────────────────────
+  weeklyLearningsCreator: defineTable({
+    creatorId: v.id("creators"),
+    /** UTC ms — start of the 7d window (inclusive). */
+    weekStartMs: v.number(),
+    /** UTC ms — end of the 7d window (exclusive). */
+    weekEndMs: v.number(),
+    /** UTC ms — when the extractor produced this row. */
+    synthesizedAt: v.number(),
+    /**
+     * Top patterns this week, ranked by outcome impact. Each pattern is a
+     * grounded claim with sample size + attribution counts. `wikiVaultPath`
+     * pins the materialized wiki page under `concepts/what-works/<...>`.
+     */
+    topPatterns: v.array(
+      v.object({
+        kind: v.union(
+          v.literal("hook-text"),
+          v.literal("posting-time"),
+          v.literal("format"),
+          v.literal("topic"),
+          v.literal("brand-tone"),
+          v.literal("collab-pattern")
+        ),
+        claim: v.string(),
+        sampleSize: v.number(),
+        engagementLift: v.optional(v.number()),
+        confidence: v.number(),
+        wikiVaultPath: v.string(),
+      })
+    ),
+    /**
+     * Diff vs the prior week's row. `null` for the very first week.
+     * Drives the Growth tab's "Maya is getting smarter" affordance.
+     */
+    priorWeekDelta: v.optional(
+      v.object({
+        newPatternCount: v.number(),
+        droppedPatternCount: v.number(),
+        confidenceShift: v.number(),
+      })
+    ),
+    /** Sprint 8.5 — wiki mirror sync timestamp (idempotency key). */
+    mirroredAt: v.optional(v.number()),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_week", ["creatorId", "weekStartMs"]),
 
   // ────────────────────────────────────────────────────────────────────────
   // Sprint 6C — channel pairing rows.
