@@ -424,7 +424,9 @@ describe("generateMayaConfig — Convex action surface", () => {
     expect(bundle.config.composioAccounts[0].composioAccountId).toBe(
       "real-composio-id-xyz"
     );
-    expect(bundle.config.gatewayConfig.channels.telegram).toBeUndefined();
+    expect(
+      "telegram" in bundle.config.gatewayConfig.channels
+    ).toBe(false);
     expect(bundle.version).toMatch(/^[0-9a-f]{32}$/);
     // The action uploads the workspace tarball internally and patches the
     // URL onto the config — bytes never cross the action boundary (Convex's
@@ -505,7 +507,9 @@ describe("generateMayaConfig — Convex action surface", () => {
       internal.agents.packs.maya.configGeneratorMaya.generateMayaConfig,
       { creatorId: c, nowOverride: NOW }
     );
-    expect(bundle.config.gatewayConfig.channels.telegram).toBeUndefined();
+    expect(
+      "telegram" in bundle.config.gatewayConfig.channels
+    ).toBe(false);
     expect(bundle.config.composioAccounts.map((a) => a.provider).sort()).toEqual(
       ["gmail", "stripe"]
     );

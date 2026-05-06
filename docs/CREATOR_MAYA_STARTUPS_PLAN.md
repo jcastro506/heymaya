@@ -11,7 +11,7 @@ Creator Maya for this segment should be a single product, not a two-tier Coach/M
 Recommended public shape:
 
 - Product: Maya for Consumer App Distribution
-- Landing-page category: "For builders" or "For app builders" is sharper than "For startups." Use "startups" in supporting copy, not as the top nav label.
+- Landing-page category: "For Builders". This should be the top-level vertical label beside "For Creators." It is broader and sharper than "For Startups" because the wedge includes indie app makers, vibe coders, tiny teams, AI app builders, and early consumer/prosumer founders who may not self-identify as startups yet.
 - Tiering: one startup tier
 - Internal behavior: use Manager-level autonomy gates with stricter approval defaults
 - Initial price posture: one flat monthly price, likely beta-priced at $149/mo or production-priced at $199/mo
@@ -24,9 +24,10 @@ The existing Creator Maya backend already contains most of the learning loop: po
 
 Top-level public framing:
 
-- Primary nav/card label: "For app builders" or "For consumer apps"
-- Avoid making "For startups" the first label unless we intentionally want a broader buyer. Many of these users may call themselves builders, indie hackers, vibe coders, or founders before they call themselves startups.
-- Supporting line can still say "for consumer startups, indie builders, and tiny teams."
+- Primary nav/card label: "For Builders"
+- Avoid making "For Startups" the first label unless we intentionally want a more traditional founder/company-stage buyer. Many of these users call themselves builders, indie hackers, vibe coders, app makers, or founders before they call themselves startups.
+- Avoid making "For Consumer Apps" the nav label. It is accurate, but less emotional. Use it in supporting copy.
+- Supporting line can still say "for consumer apps, indie tools, AI apps, tiny teams, and early startups."
 
 Recommended hero/flow:
 
@@ -42,7 +43,13 @@ Landing page should show one concrete loop, not a generic social manager:
 4. "She drafts TikToks, edits clips, writes X posts/replies, and asks for approvals in iMessage."
 5. "She tracks what worked and doubles down next week."
 
-This is the first marketable flow. Creator Maya can still have "For creators" beside it, but the second card should probably become "For app builders" rather than "For businesses" or generic "For startups."
+This is the first marketable flow. Creator Maya can still have "For Creators" beside it, but the second card should become "For Builders" rather than "For Businesses" or generic "For Startups."
+
+Recommended section/card copy:
+
+- Label: "For Builders"
+- Headline: "Text Maya your app. She turns it into a TikTok + X distribution engine."
+- Supporting copy: "Built something useful but have no audience? Maya learns your product, studies what is working, turns demos into posts, drafts TikToks and X content, tracks signal, and doubles down every week."
 
 ## Research Inputs
 
@@ -99,19 +106,27 @@ The ScrapeCreators pipeline is a strong fit:
 The Composio layer is partly ready:
 
 - Existing wrappers already cover Twitter/X and LinkedIn for the internal Riley growth agent.
-- Composio's current OpenClaw toolkit pages for Twitter/X and TikTok advertise managed OAuth, API key handling, token refresh, and scopes.
+- Composio's current Twitter and TikTok toolkit docs both say "Composio Managed App not available"; we should assume the operator/customer must bring working OAuth app configuration and scopes before authenticated account actions work reliably.
 - The OpenClaw plugin path is `@composio/openclaw-plugin`, configured with `plugins.entries.composio.config.consumerKey`.
 - Our deploy code conditionally installs and configures that plugin when `COMPOSIO_CONSUMER_KEY` is present.
 - Our Convex typed wrapper layer currently has X/Twitter action wrappers, but no TikTok typed wrappers yet.
 - Our existing Composio OAuth helper currently allows Gmail, Stripe, Calendar, Apollo, and Hunter; it does not yet allow Twitter or TikTok as first-class app OAuth providers.
 - Startup Maya should not assume full direct posting across all three platforms until auth and API behavior is proved in the app.
 
+Current Composio toolkit inventory for the TikTok + X wedge:
+
+- Twitter/X toolkit: 79 tools. Useful v0 read tools include `TWITTER_USER_LOOKUP_ME`, `TWITTER_USER_LOOKUP_BY_USERNAME`, `TWITTER_USER_LOOKUP_BY_USERNAMES`, `TWITTER_POST_LOOKUP_BY_POST_ID`, `TWITTER_POST_LOOKUP_BY_POST_IDS`, `TWITTER_RECENT_SEARCH`, `TWITTER_SEARCH_RECENT_COUNTS`, `TWITTER_GET_POST_ANALYTICS`, `TWITTER_GET_POST_USAGE`, `TWITTER_GET_POST_RETWEETERS_ACTION`, `TWITTER_RETRIEVE_POSTS_THAT_QUOTE_A_POST`, `TWITTER_GET_RECENT_DM_EVENTS`, and timeline/list/bookmark reads.
+- Twitter/X approved-action tools include `TWITTER_CREATION_OF_A_POST`, `TWITTER_UPLOAD_MEDIA`, `TWITTER_INITIALIZE_MEDIA_UPLOAD`, `TWITTER_APPEND_MEDIA_UPLOAD`, `TWITTER_GET_MEDIA_UPLOAD_STATUS`, `TWITTER_RETWEET_POST`, `TWITTER_UNRETWEET_POST`, `TWITTER_USER_LIKE_POST`, `TWITTER_UNLIKE_POST`, `TWITTER_SEND_A_NEW_MESSAGE_TO_A_USER`, and `TWITTER_SEND_DM_TO_CONVERSATION`.
+- Twitter/X destructive or sensitive tools must require explicit approval and audit logging: delete tweet, mute/unmute, follow/unfollow, list create/update/delete/member changes, reply visibility changes, compliance jobs, and DMs.
+- TikTok toolkit: 10 tools. Safe v0 read/status tools are `TIKTOK_GET_USER_STATS`, `TIKTOK_LIST_VIDEOS`, and `TIKTOK_FETCH_PUBLISH_STATUS`. `TIKTOK_GET_ACTION_CATEGORIES`, `TIKTOK_GET_TERM`, and `TIKTOK_LIST_GMV_MAX_OCCUPIED_CUSTOM_SHOP_ADS` are secondary/specialized reads.
+- TikTok write/publish tools are `TIKTOK_POST_PHOTO`, `TIKTOK_UPLOAD_VIDEO`, `TIKTOK_UPLOAD_VIDEOS`, and `TIKTOK_PUBLISH_VIDEO`. Do not enable these for Builder Maya v0. TikTok's posting API and platform enforcement are not a good fit for invisible bot posting. Maya should create scripts, carousels, edits, captions, and upload-ready assets, then hand off to the builder or create drafts only after a separate capability audit proves a compliant account flow.
+
 For the TikTok + X consumer-app wedge:
 
 - X is closer to automation-ready because the repo has Composio wrapper functions for posting, recent search, tweet lookup, liker lookup, user lookup, liking, retweeting, and timeline reads.
 - TikTok is available through Composio's OpenClaw plugin docs for upload, publish, list videos, user info, user stats, and publish-status checks, but this repo has not wrapped or tested those actions yet.
 - TikTok is currently strongest in our repo as intelligence/editing/handoff: ScrapeCreators TikTok profile/video/comment/transcript pulls plus Creator Maya media/edit request tables.
-- The V0 product should promise "Maya runs the distribution loop" rather than "Maya silently posts everywhere." The loop can be highly automated while still showing plans, approval prompts, drafts, edits, and results.
+- The V0 product should promise "Maya runs the distribution loop" rather than "Maya silently posts everywhere." The loop can be highly automated while still showing plans, approval prompts, drafts, edits, and results. X can graduate to approve-to-send earlier; TikTok stays script/edit/asset/draft-handoff until proven otherwise.
 
 Composio keys/accounts needed:
 
@@ -125,7 +140,7 @@ Composio smoke tests required before launch:
 
 - OpenClaw boot with `COMPOSIO_CONSUMER_KEY` set and verify the plugin registers Twitter and TikTok tools.
 - X: authenticate a test account, get authenticated user, search recent tweets, create a private/test post, lookup post metrics, like/unlike or reply behind an approval gate.
-- TikTok: authenticate a test account, get user basic/profile/stats, list videos, upload a test video, fetch publish status, and only then test publish on a throwaway account.
+- TikTok: authenticate a test account if we have app credentials, get user stats, list videos, and fetch publish status. Do not test production publishing in the Builder v0 path. Keep upload/photo/video/publish tools blocked unless we intentionally run a separate throwaway-account lab test.
 - Confirm failed auth returns an actionable connect prompt in iMessage/UI, not a raw tool error.
 - Confirm Maya's approval layer blocks direct post/publish calls unless a specific draft/action was approved.
 
@@ -244,6 +259,7 @@ Required fields:
 - Founder/company voice sources: founder X handle, company X handle, Instagram, TikTok, LinkedIn optional, website/blog/docs
 - Platforms to operate first: X, Instagram, TikTok
 - Existing assets: screenshots, demos, customer quotes, changelog, blog posts, launch media kit
+- Existing strategy material: GTM plan, marketing strategy, social strategy, launch plan, positioning doc, campaign plan, or rough notes. If none exists, Maya creates the first working distribution strategy.
 - Brand constraints: claims not to make, regulated topics, words to avoid, tone preference
 - Approval preference: draft-only, approve-to-post, or trusted replies later
 
@@ -264,9 +280,21 @@ Onboarding flow:
 4. Platforms: X, Instagram, TikTok handles; connect OAuth only where needed.
 5. Voice pull: founder/company handles plus website/blog copy.
 6. Proof/assets: upload or link demo, screenshots, customer quotes, launch kit.
-7. Readback: Maya summarizes stage, voice, ICP, goal, content pillars, risks.
-8. Approval rules: what Maya can draft, queue, send, reply to, or never do.
-9. Deploy OpenClaw workspace.
+7. Strategy intake: ask "Do you already have a GTM, marketing, launch, or social strategy?" with options:
+   - "No, Maya should build it"
+   - "Yes, I'll paste/upload it"
+   - "Sort of, we'll explain it in chat"
+8. Readback: Maya summarizes stage, voice, ICP, goal, content pillars, risks, and how any supplied strategy will shape the plan.
+9. Approval rules: what Maya can draft, queue, send, reply to, or never do.
+10. Deploy OpenClaw workspace.
+
+Strategy-intake behavior:
+
+- If the builder has no strategy, Maya builds an initial distribution strategy from website, stage, goal, ICP, competitors, existing social data, and supplied assets.
+- If the builder has a strategy, Maya ingests it, summarizes it back, identifies assumptions/gaps, asks for approval, and turns it into the weekly TikTok/X execution plan.
+- If the builder has a partial strategy, Maya asks targeted clarifying questions, fills gaps, and labels assumptions.
+- Maya should never override an approved team strategy silently. When data contradicts it, she should say so and propose an update: "Your strategy says X; the signal says Y; I recommend changing Z."
+- The weekly plan should be framed as "Maya's plan based on your strategy + what the data is showing," not as a random autonomous plan.
 
 ## Backend Plan
 
@@ -376,6 +404,37 @@ Maya needs raw material:
 - editRequestId optional
 - createdAt
 
+### `startupStrategySources`
+
+Strategy material should be first-class, not buried in generic notes. New table keyed by `creatorId`:
+
+- creatorId
+- type: gtm, marketing, social, launch, positioning, campaign, other
+- source: paste, upload, url, chat
+- title
+- rawText optional
+- storageId optional
+- url optional
+- summary
+- goals
+- targetAudience
+- channels
+- positioning
+- constraints
+- assumptions
+- gaps
+- approvedAsSourceOfTruth: boolean
+- supersededBy optional
+- createdByUserId optional
+- createdAt, updatedAt
+
+Usage rules:
+
+- Only one or a small set of strategy sources should be marked `approvedAsSourceOfTruth` at a time.
+- Maya can draft a strategy source when the builder starts from zero, but it should not become source-of-truth until the builder/team approves it.
+- All weekly content plans, experiments, CTAs, and approval prompts should reference the active strategy source ids where relevant.
+- When Maya proposes a strategy change, write a new version and mark it pending approval rather than mutating the approved source silently.
+
 ### Startup media asset plan
 
 Creator Maya already has a useful media foundation:
@@ -439,6 +498,33 @@ TikTok-first V0 scope:
 - Let Maya generate supporting stills and cover frames.
 - Defer fully autonomous generated video campaigns until the edit/approval loop is proven.
 - Keep all publishing approval-first.
+
+Current media generation provider research (May 2026):
+
+- Google Gemini image generation is viable for core Builder workflows. The Gemini API exposes `gemini-3.1-flash-image-preview` for text-to-image and text-plus-image editing through `generateContent`; Google documents image editing for adding/removing/modifying elements, style changes, and color grading. Source: https://ai.google.dev/gemini-api/docs/image-generation
+- Google Imagen is viable for high-fidelity static image generation. The Gemini API exposes `imagen-4.0-generate-001` through `generateImages`; Google notes SynthID watermarking and aspect ratios including 1:1, 16:9, and 9:16. Source: https://ai.google.dev/gemini-api/docs/imagen
+- Google Veo is technically viable but should be gated. Gemini API exposes `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, and `veo-3.1-lite-generate-preview`; docs describe 8-second video with audio, image-to-video, up to three reference images for Veo 3.1, first/last frame control, 9:16 aspect ratio, and 720p/1080p/4k options depending on model. Source: https://ai.google.dev/gemini-api/docs/video
+- ByteDance Seedance 2.0 is promising for reference-driven short-form video, but it belongs behind a beta/credit gate. ByteDance describes unified audio-video generation with text, image, audio, and video inputs plus reference and editing capabilities. The launch blog also states there are still flaws in detail stability, hyper-realism, dynamic vitality, audio distortion, text rendering accuracy, and complex editing effects. Sources: https://seed.bytedance.com/en/seedance2_0 and https://seed.bytedance.com/en/blog/seedance-2-0-official-launch
+- I did not find a reliable ByteDance-controlled Seedance 3.0 video API page. Treat third-party "Seedance 3.0" sites as unverified until ByteDance, fal.ai, Replicate, OpenRouter, or another trusted provider exposes a clear model page and API contract.
+- Practical Seedance access is available through third-party provider APIs today. fal.ai exposes `bytedance/seedance-2.0/text-to-video`, fast text-to-video, image-to-video, fast image-to-video, reference-to-video, and fast reference-to-video endpoints with `FAL_KEY`, async queue/webhook support, 4-15 second durations, 9:16 support, and pricing around $0.3034/second for 720p with audio or $0.2419/second for fast 720p with audio. Source: https://fal.ai/docs/model-api-reference/video-generation-api/bytedance-seedance-2.0-text-to-video
+- OpenRouter currently lists Seedance 2.0 and Seedance 2.0 Fast as ByteDance video generation models supporting text-to-video, image-to-video with first/last frame control, and multimodal reference-to-video. This is useful for routing if we want model abstraction, but provider-specific file handling and async job lifecycle still need a real adapter. Source: https://openrouter.ai/provider/seed
+
+Promise boundary:
+
+- Safe public promise: "Bring Maya your app. She builds and runs your TikTok + X distribution loop: strategy, scripts, posts, experiments, edits, assets, approvals, and learning from results."
+- Safe media promise: "Maya turns your demos, screenshots, product notes, and founder clips into TikTok-ready scripts, X posts, carousels, visuals, edits, and test variants."
+- Avoid as a V0 promise: "Maya fully creates and posts all TikTok videos for you." TikTok posting stays handoff/approval-first, and generated video stays beta because of cost, latency, quality variance, rights review, and platform authenticity risk.
+- Image creation can be included in the base product with reasonable monthly limits because static image generation and editing are reliable enough for screenshots, carousels, cards, thumbnails, launch graphics, and explainer visuals.
+- Video editing from user-provided footage should be a core product capability once the renderer is connected. This is more defensible than prompt-only generated video because it preserves the real product, real UI, and founder/user context.
+- Prompt-only generated video should be an add-on, credit-billed beta, or higher-plan feature. Maya must quote estimated cost before running a paid generation job and must preserve prompt/model/asset lineage.
+
+Recommended media packaging:
+
+- Base Builder plan: media library, asset cataloging, product screenshot/demo analysis, script and shot-list generation, X image cards, simple generated static images, carousel drafts, TikTok cover frames, and edit plans.
+- Base Builder plan after renderer integration: light video edits from user-provided footage, including trim, crop, captions, hook overlay, dead-air removal, 9:16 export, and handoff download.
+- Credit-gated media: Gemini/Imagen image generation above included monthly limits, Veo jobs, Seedance jobs, long videos, multiple variants, 1080p/4k, audio generation, and reference-to-video jobs.
+- Manual approval required: any video using a person's likeness, customer proof, private UI, unreleased features, competitor comparisons, health/finance/legal claims, testimonials, or generated scenes that could look like real customer/user evidence.
+- Internal metadata required for every generated or edited asset: provider, model id, prompt, input asset ids, output asset id, cost estimate, actual cost if available, approval state, usage rights, derived lineage, and target experiment/post.
 
 ### Existing tables to reuse
 
@@ -597,6 +683,22 @@ ClawHub/reference skills can support:
 - Screenshot/demo asset handling
 - File/transcript summarization
 - Platform-specific upload/draft-handoff utilities once vetted
+
+Exact ClawHub candidates reviewed for Builder Maya:
+
+- `digital-marketing` (`https://clawhub.ai/ivangdavila/digital-marketing`): recommended. Benign, instruction-only, and directly useful for market model, channel system, short-form video workflow, funnels, measurement, experiments, launches, and retention playbooks.
+- `marketing-skills` (`https://clawhub.ai/jchopard69/marketing-skills`): recommended selectively. Load only the needed modules: `social-content`, `launch-strategy`, `analytics-tracking`, `copywriting`, `page-cro`, `signup-flow-cro`, `onboarding-cro`, `competitor-alternatives`, `pricing-strategy`, and `marketing-ideas`.
+- `g0atbot-tiktok-carousel` (`https://clawhub.ai/g0atfac3/g0atbot-tiktok-carousel`): use as a reference or fork, not a direct production dependency. The 6-slide app carousel formula is useful for Builder TikToks, but the skill requires `TIKTOK_COOKIES` and can post. Extract the playbook and rebuild it behind our approval/asset pipeline.
+- `tiktok-content-pipeline` (`https://clawhub.ai/matttandy855/tiktok-content-pipeline`): maybe later. It has useful carousel generation, scheduling, scoring, and diagnostic ideas, but it depends on Postiz and includes auto-post/auto-improve paths. Do not ship in v0 unless we disable publishing and map outputs into Convex approvals.
+- `content-creator-skill` (`https://clawhub.ai/h4gen/content-creator-skill`): maybe after audit. It has a useful writing pipeline (`humanizer`, `de-ai-ify`, `copywriting`, `tweet-writer`), but it installs/upgrades dependencies through `npx @latest`. If used, pin/fork the dependency set first.
+
+ClawHub skills to avoid in Builder production runtime:
+
+- `openclaw-x`: avoid. It asks for exported X browser cookies and a third-party local executable. Use Composio Twitter/X tools instead.
+- `social-media-agent`: avoid for hosted Builder Maya. It relies on browser automation and can autonomously post to X; too broad and brittle for customer accounts.
+- `openclaw-social-scheduler`: avoid in v0. It duplicates scheduling/publishing that should live in Convex plus Composio approval gates.
+- `tiktok-android`: lab only. ADB/TikTok commenting is not the Builder product path.
+- `ai-product-space`: possible later for ecommerce-like product imagery, but not core to consumer app distribution v0.
 
 ClawHub usage requirements:
 
@@ -810,6 +912,8 @@ Startup-specific behavior:
 - Generate product concept visuals, explainer graphics, launch countdown graphics, carousel backgrounds, thumbnail options, and simple video/storyboard assets.
 - Generate video only within explicit constraints: scripts, storyboards, text-motion explainers, product-demo assemblies, generated b-roll, or simple animation.
 - Avoid fake UI, fake testimonials, unapproved founder/customer likenesses, or unsupported product claims.
+- Prefer static image generation/editing first, then user-footage video editing, then credit-gated generated video. This order matches reliability, cost, and trust.
+- Provider strategy: use Gemini Flash Image or Imagen for static visuals and edits; use Veo or Seedance only through a media-job adapter that can estimate cost, queue/poll async jobs, persist outputs, and require approval before external use.
 
 Reads:
 
@@ -1099,20 +1203,20 @@ Approval gates:
 
 Public surface:
 
-- Rename Creator landing toggle from "For businesses" to "For startups".
-- Link to a new startup landing page, not `/business`.
+- Rename Creator landing toggle from "For businesses" to "For Builders".
+- Link to a new Builders landing page for consumer app distribution, not `/business`.
 - Keep service-business routes separate.
 
-Startup landing page:
+Builders landing page:
 
 - One tier.
-- "Hire Maya as your startup social media manager."
-- Emphasize startup stages, X/Instagram/TikTok, learning loop, launch support, approval-first operation.
+- "Hire Maya as your app's social media manager."
+- Emphasize builder/app stages, X/Instagram/TikTok, learning loop, launch support, approval-first operation.
 - Avoid service-business/trades language.
 
 Onboarding:
 
-- Create `/creator-maya-startups` or `/startups`.
+- Create `/builders`, `/creator-maya-builders`, or `/maya-for-builders`.
 - Do not overload `/business-maya-v0`.
 - Reuse Creator Maya visual language, but ask startup questions.
 
@@ -1126,6 +1230,13 @@ HQ:
   - Hooks -> Angles/hooks
   - Brand opportunities -> Conversations/opportunities
 - Add a Learnings/Experiments surface if not too much scope. Otherwise start by adding experiment cards into Today and Weekly Review.
+- Add a Strategy surface, or at minimum a Strategy card inside Profile/Today:
+  - current approved GTM/marketing/social strategy
+  - Maya's readback
+  - open questions/gaps
+  - what Maya is using this week
+  - pending strategy updates awaiting approval
+  - actions: paste/upload/replace strategy, approve Maya's generated strategy, ask Maya to revise
 
 ## Integrations Plan
 
@@ -1142,7 +1253,7 @@ Composio:
 - Use for authenticated action when the startup connects accounts.
 - X has broad tool coverage but no Composio-managed app credentials today, so expect user-owned OAuth/config work.
 - Instagram supports managed OAuth but only Business/Creator accounts.
-- TikTok toolkit supports creation/publish tools but no managed app credentials today.
+- TikTok toolkit exposes creation/upload/publish tools but no Composio-managed app credentials today; keep those write tools disabled in Builder v0 and use TikTok for authenticated reads/status only if credentials are available.
 - V0 should treat Composio as an execution layer after explicit connection, not as the primary source of public data.
 
 OpenClaw:
@@ -1154,8 +1265,8 @@ OpenClaw:
 
 ### Phase 1: Product shell
 
-- Add startup landing page.
-- Update audience toggle to "For startups".
+- Add Builders landing page.
+- Update audience toggle to "For Builders".
 - Add one startup pricing SKU.
 - Decide final beta price.
 - Preserve existing Creator Coach/Manager tiers.
@@ -1167,12 +1278,13 @@ OpenClaw:
 - Add `startupExperiments`.
 - Add `startupConversionEvents`.
 - Add `startupContentSources`.
+- Add `startupStrategySources`.
 - Add startup query/mutation helpers with strict creator ownership checks.
 
 ### Phase 3: Startup onboarding
 
 - Build startup onboarding flow.
-- Collect startup stage, goal, CTA, platforms, ICP, competitors, assets, approval mode.
+- Collect startup stage, goal, CTA, platforms, ICP, competitors, assets, existing GTM/marketing/social strategy, and approval mode.
 - Run ScrapeCreators pull for X/Instagram/TikTok handles.
 - Generate startup readback.
 
@@ -1216,6 +1328,60 @@ OpenClaw:
 - Support manual conversion event import first.
 - Add webhook/API import later for waitlist, Calendly, Stripe, PostHog, or product analytics.
 
+## Testing Plan
+
+Strategy intake must be tested as a first-class Builder flow, not as a generic text field.
+
+Unit tests:
+
+- `startupStrategySources` validators accept GTM, marketing, social, launch, positioning, campaign, and other strategy types.
+- Only creator-owned strategy sources can be read, approved, superseded, or referenced by plans.
+- Only one active `approvedAsSourceOfTruth` strategy source is allowed unless explicitly modeled as a bundle.
+- Maya-generated strategies are saved as pending until the builder approves them.
+- Superseding a strategy keeps prior versions immutable enough for audit/history.
+- Weekly plan records can reference strategy source ids.
+- Media job validators require provider, model id, prompt, input asset ids, target platform, cost estimate, approval status, and derived output asset linkage for generated or edited assets.
+- Generated video jobs cannot start without an explicit cost/approval record; generated image jobs respect monthly included limits or credit gates.
+
+Onboarding tests:
+
+- Builder with no strategy chooses "Maya should build it"; onboarding stores that choice and Maya's first readback includes assumptions and open questions.
+- Builder pastes a GTM/social plan; onboarding saves raw text, summary, extracted goals/channels/constraints, and pending approval state.
+- Builder uploads or links a strategy doc; onboarding stores `storageId` or URL and the generated summary.
+- Partial strategy path asks clarifying questions and labels unverified assumptions.
+- Strategy intake works alongside required fields: website, stage, goal, CTA, ICP, platforms, assets, and approval mode.
+
+UI tests:
+
+- Builders landing/onboarding exposes "Do you already have a GTM, marketing, launch, or social strategy?"
+- Thin HQ shows the current strategy card: source, Maya readback, open gaps, and "used in this week's plan."
+- Replacing a strategy creates a new source and does not silently mutate the previous approved one.
+- Approving Maya's generated strategy updates the active source-of-truth and causes the next plan query to reflect it.
+- Empty state is explicit: "No strategy yet; Maya is building the first one from your app, stage, goal, and data."
+- Media UI shows uploaded assets, generated assets, edit requests, approval status, provider/model metadata, and which post/experiment each asset supports.
+- Generated video UI uses a beta/credit affordance and requires explicit approval before Maya queues a paid Veo/Seedance job.
+
+OpenClaw/runtime tests:
+
+- Builder workspace includes strategy guidance in `AGENTS.md`, `USER.md`, and `TOOLS.md`.
+- `lc_maya_builder.save_strategy_source`, `approve_strategy_source`, and `supersede_strategy_source` require `MAYA_RUNTIME_SECRET` and creator scoping.
+- Maya's weekly-plan standing order includes active strategy source ids and cites strategy assumptions separately from performance data.
+- If performance data contradicts the approved strategy, Maya proposes a strategy update instead of silently changing direction.
+- Group iMessage flow handles a team pasting strategy text in chat and persists it as a strategy source only after an approved team member confirms.
+- Media generator skills cannot publish to TikTok and cannot externally send generated/edited media without approval.
+- Mock Gemini image generation, Imagen generation, Veo async lifecycle, and Seedance/fal async lifecycle, including failed-job recovery and cost guard behavior.
+- Asset-rights guard blocks generated likeness, private UI, customer proof, and unsupported claims unless the correct approval record exists.
+
+End-to-end acceptance:
+
+- Fresh Builder signup -> onboarding -> paste GTM/social strategy -> Maya readback -> approve strategy -> OpenClaw deploy -> first iMessage -> first weekly plan.
+- Verify the first weekly plan says it is based on the approved strategy plus observed data.
+- Verify the plan includes TikTok script/edit/handoff items and X draft/approval items, with no TikTok publish action.
+- Verify the Strategy card in HQ updates live after Maya writes/supersedes a source.
+- Verify cross-tenant isolation by trying to read or approve another builder's strategy source.
+- Upload app screenshots and a short demo clip; verify Maya catalogs them, proposes TikTok/X uses, creates a static image/card draft, and stores lineage.
+- Queue one mocked generated image and one mocked generated video; verify approval, cost, provider metadata, status updates, output persistence, and no external publish.
+
 ## Risks
 
 - Platform publishing APIs are uneven. Do not promise full autoposting across X/Instagram/TikTok until OAuth and account requirements are verified.
@@ -1227,7 +1393,7 @@ OpenClaw:
 ## Open Decisions
 
 - Final startup beta price: $149/mo versus $199/mo.
-- Public route: `/startups`, `/creator-maya-startups`, or `/maya-for-startups`.
+- Public route: `/builders`, `/creator-maya-builders`, or `/maya-for-builders`.
 - Whether startup accounts should keep `accountType: "creator"` plus `creatorKind: "startup"` or add a new `accountType: "startup"`.
 - Whether first release includes X approve-to-send or all platforms stay draft-only.
 - Whether to build a dedicated Experiments page immediately or surface experiments inside Today/Plan/Weekly Review first.
@@ -1237,8 +1403,8 @@ OpenClaw:
 Scope the first PR to the product shell and schema foundation:
 
 1. Add `creatorKind` and `billingProduct`.
-2. Add `startupProfiles`, `startupExperiments`, `startupConversionEvents`, and `startupContentSources`.
-3. Add startup landing page and update "For businesses" to "For startups".
+2. Add `startupProfiles`, `startupExperiments`, `startupConversionEvents`, `startupContentSources`, and `startupStrategySources`.
+3. Add Builders landing page and update "For businesses" to "For Builders".
 4. Add one startup pricing component/SKU placeholder.
 5. Add startup onboarding state types, but do not wire publishing yet.
 

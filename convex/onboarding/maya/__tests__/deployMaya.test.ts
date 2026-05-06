@@ -998,9 +998,18 @@ describe("machineConfigFor", () => {
             bootstrapMaxChars: 20_000,
             workspace: "/data/workspace",
             model: { primary: "openrouter/google/gemini-3-flash-preview" },
+            memorySearch: {
+              sync: {
+                onSessionStart: false as const,
+                onSearch: false as const,
+                watch: false as const,
+              },
+            },
           },
         },
         channels: {},
+        browser: { enabled: false as const },
+        discovery: { mdns: { mode: "off" as const } },
         gateway: { mode: "local" as const, bind: "auto" as const },
         meta: {},
       },
