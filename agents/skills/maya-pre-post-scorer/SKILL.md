@@ -353,7 +353,7 @@ skill does NOT branch internally).
 - Invoked from `agents/skills/maya-platform/playbook.md` § Pre-post
   review (NEW — added in this sprint between § Calendar-aware content
   planning and § Free-form chat handling)
-- Listed in `agents/skills/maya-platform/skill.md` § Custom Maya skills
+- Listed in `agents/skills/maya-platform/SKILL.md` § Custom Maya skills
 - Convex action wrapper: `convex/prePostReview.ts` (`scoreDraft` —
   Clerk-auth-gated, all-tiers, cross-tenant safe)
 - Reads: `creatorPicture`, `posts`, `postMetrics`, `hookLibrary`

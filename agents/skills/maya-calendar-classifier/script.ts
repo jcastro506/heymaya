@@ -201,7 +201,7 @@ export function buildClassifierPrompt(
   enforcePrivacyContract(event);
 
   const system =
-    "You classify creator calendar events for Maya, an AI creator manager. " +
+    "You classify creator calendar events for Maya, a creator manager. " +
     "Pick exactly one of: creator-relevant-life-event, creator-shoot, work-meeting, recurring-noise, personal-private. " +
     "DO NOT reason about attendee identities (you don't have them). " +
     "DO NOT speculate about content beyond what the title and description say. " +

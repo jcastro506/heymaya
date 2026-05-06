@@ -5,7 +5,7 @@
  *
  * Sprint 3.5. The skill's job is *content assembly + section authoring*. PDF
  * layout/typography/page-break logic lives in the Anthropic `pdf` skill we
- * delegate to (see agents/skills/maya-platform/skill.md § pdf).
+ * delegate to (see agents/skills/maya-platform/SKILL.md § pdf).
  *
  * Plan-tier gating is enforced server-side via `planFeatures(creator)` at
  * the entry point — Starter creators cannot invoke on-demand; only the

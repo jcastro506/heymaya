@@ -37,7 +37,7 @@ TikToks. LinkedIn rejects vertical video. X downranks any post with an
 external link in the first message.
 
 The work is per-platform variants — same idea, optimized format per platform.
-This is mechanical, repetitive, exactly what an AI manager should own. Maya
+This is mechanical, repetitive, exactly what a manager should own. Maya
 takes one approved source piece, reads the creator's connected platforms,
 and emits one variant per platform with the right aspect ratio, the right
 duration cut, the right caption shape, the right hashtag posture, the right
@@ -175,7 +175,7 @@ the skill returns a single tightened variant.
 
 - Invoked from `agents/skills/maya-platform/playbook.md` § Weekly content plan
   (each idea card is materialized via this skill) and (forthcoming) § Cross-post.
-- Listed in `agents/skills/maya-platform/skill.md` § Custom Maya skills.
+- Listed in `agents/skills/maya-platform/SKILL.md` § Custom Maya skills.
 - Note: the operator lead is backfilling playbook/skill/cron references in a
   separate task (per the parent agent brief). This SKILL.md is authored
   assuming those backfills land.

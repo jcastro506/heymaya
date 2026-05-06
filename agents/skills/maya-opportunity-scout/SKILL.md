@@ -205,7 +205,7 @@ must cite which factors drove it.
 
 - Invoked from `agents/skills/maya-platform/playbook.md` § Opportunity
   scouting (lead backfills the cron + playbook entries).
-- Listed in `agents/skills/maya-platform/skill.md` § Custom Maya skills.
+- Listed in `agents/skills/maya-platform/SKILL.md` § Custom Maya skills.
 - Output consumed by: morning-brief assembly, Today surface,
   `maya-pitch-strategy` (downstream).
 - Reads / writes: `opportunityScoutSeen` (request schema add — see report).

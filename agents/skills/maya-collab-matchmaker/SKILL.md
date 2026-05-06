@@ -198,7 +198,7 @@ ensures the peer's name + the cited post reference are not mutated.
 - Invoked from `agents/skills/maya-platform/playbook.md` § Collab
   matchmaking (lead backfills the cron + playbook entries — Sunday
   companion to `weekly_review_synth`).
-- Listed in `agents/skills/maya-platform/skill.md` § Custom Maya skills.
+- Listed in `agents/skills/maya-platform/SKILL.md` § Custom Maya skills.
 - Reads input from: `creatorPicture.namedPeers` (soul.md), ScrapeCreators
   creator-search (action layer).
 - Writes to: `collabMatchLog` (request schema add — see report).

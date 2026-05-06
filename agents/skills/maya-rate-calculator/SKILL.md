@@ -100,6 +100,6 @@ The `planFeatures(creator)` helper is consulted by the calling Convex action (th
 ## Sibling files
 
 - Referenced in: `agents/skills/maya-platform/playbook.md` § Brand email triage, § Rate suggestion
-- Inventory entry: `agents/skills/maya-platform/skill.md` § Custom Maya skills → `maya-rate-calculator`
+- Inventory entry: `agents/skills/maya-platform/SKILL.md` § Custom Maya skills → `maya-rate-calculator`
 - Convex tables touched (read): `creators`, `creatorHandles`, `brandDeals` (for `priorDeals`)
 - Output passes through: `maya-citation-firewall` before Maya sends to the creator

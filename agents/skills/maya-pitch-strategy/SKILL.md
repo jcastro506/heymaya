@@ -185,7 +185,7 @@ before acting on the recommendation.
 
 - Invoked from `agents/skills/maya-platform/playbook.md` § Brand outreach
   + § Opportunity surfacing (lead backfills the cron + playbook entries).
-- Listed in `agents/skills/maya-platform/skill.md` § Custom Maya skills.
+- Listed in `agents/skills/maya-platform/SKILL.md` § Custom Maya skills.
 - Output consumed by: `maya-brand-outreach` (sets pitch tone + ask),
   `maya-rate-calculator` (anchors paid recommendation).
 - Reads no new tables; pure pass-through logic against caller-supplied

@@ -53,7 +53,7 @@ Two reasons:
 1. **Determinism.** A creator's Maya should behave identically across her lifetime unless
    we *intentionally* update her. Auto-pulling the latest skill defeats this.
 2. **Citation firewall.** Sprint 2's hallucination check requires that every tool Maya
-   uses is enumerated in `skill.md`. Auto-updating tools breaks the enumeration.
+   uses is enumerated in `SKILL.md`. Auto-updating tools breaks the enumeration.
 
 ## Open question for the lead
 

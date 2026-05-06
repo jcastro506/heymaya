@@ -99,5 +99,5 @@ See `examples/` for three realistic input/output pairs:
 ## Sibling files
 
 - Referenced in: `agents/skills/maya-platform/playbook.md` § 1 (Identity & ethics), § 9 (Citation discipline), and inline in every behavior in § 4 that produces creator-facing text
-- Inventory entry: `agents/skills/maya-platform/skill.md` § Custom Maya skills → `maya-citation-firewall`
+- Inventory entry: `agents/skills/maya-platform/SKILL.md` § Custom Maya skills → `maya-citation-firewall`
 - Convex tables touched: none directly (the calling skill writes to `aiCallLog` on failure)
