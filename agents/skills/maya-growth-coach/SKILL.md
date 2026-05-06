@@ -169,6 +169,6 @@ re-entry actions.
   (folded into the synthesis push), § Accountability nudge (when the
   re-direct is more useful than the nudge). Lead is backfilling per the
   parent agent brief.
-- Listed in `agents/skills/maya-platform/skill.md` § Custom Maya skills.
+- Listed in `agents/skills/maya-platform/SKILL.md` § Custom Maya skills.
 - Reads no new tables; relies on existing `creatorPicture`, `posts` (Sprint 4
   schema add), `postMetrics` (Sprint 4), and the `soul.md` workspace file.

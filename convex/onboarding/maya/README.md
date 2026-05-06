@@ -123,7 +123,7 @@ Each machine receives `MAYA_BOOTSTRAP_JSON` env var with the full config (see
   "platformFiles": {
     "playbookPath": "/data/skills/maya-platform/playbook.md",
     "cronPath": "/data/skills/maya-platform/cron.md",
-    "skillPath": "/data/skills/maya-platform/skill.md"
+    "skillPath": "/data/skills/maya-platform/SKILL.md"
   },
   "skills": [ ... ],
   "composioAccounts": [ ... ],

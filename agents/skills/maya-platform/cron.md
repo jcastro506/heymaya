@@ -20,7 +20,7 @@ the entries the creator's plan tier permits. Disabled entries are skipped
 silently — the creator is never told an entry was suppressed.
 
 This document is paired with `playbook.md` (the prose for each behavior) and
-`skill.md` (the skill inventory each behavior depends on). The Sprint 3
+`SKILL.md` (the skill inventory each behavior depends on). The Sprint 3
 acceptance gate runs a sibling-file scan that asserts every `entryId` here
 has a matching playbook section AND every playbook section has either a
 matching cron entry here or is explicitly tagged event-only / on-demand-only.
@@ -118,7 +118,7 @@ documented here for sibling-scan completeness:
 > (`opportunity_scout_daily`, `collab_matchmaker_weekly`,
 > `monetization_diversifier`, `pitch_strategy`, `brand_outreach`) now
 > have first-class cron / event / folded entries. Keep this count in
-> sync with `playbook.md § Index` and `skill.md § Coverage matrix`.
+> sync with `playbook.md § Index` and `SKILL.md § Coverage matrix`.
 
 ---
 
@@ -349,7 +349,7 @@ If you need to add, remove, rename, or reschedule an entry:
 1. Edit this file (`cron.md`).
 2. Edit the matching section in `playbook.md`. If the entry is new, add a
    section; if removed, delete it.
-3. Edit `skill.md` if the change affects which skills the entry depends on.
+3. Edit `SKILL.md` if the change affects which skills the entry depends on.
 4. Edit `convex/agents/packs/maya/workspace/standingOrders.ts` — every
    program lives there as the single source of truth for tier + cron
    metadata. The workspace-bundle generators (`generateAgentsMd.ts`,

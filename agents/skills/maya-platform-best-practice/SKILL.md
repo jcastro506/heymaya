@@ -79,6 +79,6 @@ Threads beat single posts for non-newsy content; single posts beat threads for h
 ## Sibling files
 
 - Referenced in: `agents/skills/maya-platform/playbook.md` § 3 (Platform expertise), § Weekly content plan, § Post-publish reaction
-- Inventory entry: `agents/skills/maya-platform/skill.md` § Custom Maya skills → `maya-platform-best-practice`
+- Inventory entry: `agents/skills/maya-platform/SKILL.md` § Custom Maya skills → `maya-platform-best-practice`
 - Convex tables touched (read): `platformAlgoCache` (added in Sprint 4 by `maya-platform-algo-researcher`; this skill is cache-tolerant — works with or without it)
 - Output passes through: `maya-citation-firewall` if Maya is going to surface the answer to the creator (internal-only invocations may skip)

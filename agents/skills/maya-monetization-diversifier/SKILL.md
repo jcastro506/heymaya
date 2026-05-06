@@ -199,6 +199,6 @@ creator's size + niche. Examples baked into the playbook:
 
 - Invoked from `agents/skills/maya-platform/playbook.md` § Monetization
   diversification (lead backfills the cron + playbook entries).
-- Listed in `agents/skills/maya-platform/skill.md` § Custom Maya skills.
+- Listed in `agents/skills/maya-platform/SKILL.md` § Custom Maya skills.
 - Reads no new tables directly; writes to `monetizationProposalLog`
   (request schema add — see report).

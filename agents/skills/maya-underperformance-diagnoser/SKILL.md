@@ -331,7 +331,7 @@ caption as the opener proxy).
 - Invoked from `agents/skills/maya-platform/playbook.md` § Evening
   recap (when 1+ posts today underperformed) and § Free-form chat
   handling (on-demand "why did [post] flop?")
-- Listed in `agents/skills/maya-platform/skill.md` § Custom Maya skills
+- Listed in `agents/skills/maya-platform/SKILL.md` § Custom Maya skills
 - Reads: `posts`, `postMetrics`, `creatorPicture`, `platformAlgoCache`
 - Writes: `postPostmortems` (NEW — schema add flagged in skill report)
 - Output passes through: `maya-citation-firewall` mandatory before

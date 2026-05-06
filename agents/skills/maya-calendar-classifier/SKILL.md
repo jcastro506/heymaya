@@ -80,7 +80,7 @@ Pro+ only. The calling action MUST check `providerAllowed(creator, 'calendar')` 
 ## Sibling files
 
 - Referenced in: `agents/skills/maya-platform/playbook.md` § Calendar-aware content planning
-- Inventory entry: `agents/skills/maya-platform/skill.md` § Custom Maya skills → `maya-calendar-classifier`
+- Inventory entry: `agents/skills/maya-platform/SKILL.md` § Custom Maya skills → `maya-calendar-classifier`
 - Convex tables touched (read): `calendarEventOptOuts` (caller filters BEFORE invoking — see schema.ts; live as of Sprint 3)
 - Convex tables touched (write): none directly (caller writes classification result to `contentPlans`)
 - Output passes through: `maya-citation-firewall` if the classification surfaces in a creator-facing message; internal-only invocations may skip

@@ -28,7 +28,7 @@ in every intro call.
 
 This skill owns the **content assembly + section authoring**. The actual
 `.pdf` byte-stream render is delegated to the Anthropic `pdf` skill — see
-`agents/skills/maya-platform/skill.md § pdf`.
+`agents/skills/maya-platform/SKILL.md § pdf`.
 
 ## Inputs
 

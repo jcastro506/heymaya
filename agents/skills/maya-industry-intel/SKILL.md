@@ -149,5 +149,5 @@ says so. Maya never invents news to fill the gap.
 - Folded into `agents/skills/maya-platform/playbook.md` § Morning brief as
   a Pro+ section. The lead is backfilling that reference per the parent
   agent brief.
-- Listed in `agents/skills/maya-platform/skill.md` § Custom Maya skills.
+- Listed in `agents/skills/maya-platform/SKILL.md` § Custom Maya skills.
 - Reads `industryIntelSeen` (see `convex/schema.ts` — added in Sprint 3.5).

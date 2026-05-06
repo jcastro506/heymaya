@@ -81,6 +81,6 @@ The Convex action calling this skill is responsible for:
 ## Sibling files
 
 - Referenced in: `agents/skills/maya-platform/playbook.md` § Post-publish reaction, § Hook library auto-build
-- Inventory entry: `agents/skills/maya-platform/skill.md` § Custom Maya skills → `maya-hook-extractor`
+- Inventory entry: `agents/skills/maya-platform/SKILL.md` § Custom Maya skills → `maya-hook-extractor`
 - Convex tables touched (write): `posts.mayaAnnotation` (Sprint 4 schema add), `hookLibrary` (Sprint 4 schema add)
 - Output passes through: `maya-citation-firewall` before persistence

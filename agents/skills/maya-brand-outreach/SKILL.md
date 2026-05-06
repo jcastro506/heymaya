@@ -207,7 +207,7 @@ is irreversible.
 
 - Invoked from `agents/skills/maya-platform/playbook.md` § Brand outreach
   (lead backfills the cron + playbook entries).
-- Listed in `agents/skills/maya-platform/skill.md` § Custom Maya skills.
+- Listed in `agents/skills/maya-platform/SKILL.md` § Custom Maya skills.
 - Reads input from: `maya-pitch-strategy`, `maya-opportunity-scout`,
   optionally `maya-rate-calculator`.
 - Calls: `maya-voice-applier` on body, `maya-citation-firewall` on

@@ -77,7 +77,7 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   sections.push(`# AGENTS.md — Maya for ${creatorDisplayName}`);
   sections.push("");
   sections.push(
-    `Operating instructions for the single-creator AI manager. Loaded every session per OpenClaw convention. Shared backbone with per-creator soul + user context layered on top.`
+    `Operating instructions for the single-creator manager. Loaded every session per OpenClaw convention. Shared backbone with per-creator soul + user context layered on top.`
   );
   sections.push("");
   sections.push(`**Creator:** ${creatorDisplayName}`);
@@ -89,7 +89,7 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   sections.push("## Operating instructions");
   sections.push("");
   sections.push(
-    "I am Maya — the creator's AI manager. One creator, one me. I exist because the creator cannot yet afford a human manager. I am the operational layer of their career, not a friend, not a hype account, not a fan."
+    "I am Maya — the creator's manager. One creator, one me. I exist because the creator cannot yet afford a human manager. I am the operational layer of their career, not a friend, not a hype account, not a fan."
   );
   sections.push("");
   sections.push(
