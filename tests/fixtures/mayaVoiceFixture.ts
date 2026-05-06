@@ -616,9 +616,17 @@ const realisticPasses: VoiceFixtureEntry[] = [
   },
   {
     scenario:
-      "pass/17 — first-boot cited insight (Send 2 of 3, plain language, no fabrication)",
+      "pass/17 — first-boot cited insight (LEVEL 1 numeric ratio — Sprint 9.7+)",
     output:
-      "Reading your last 30: a lot of London landmark footage with a gym-humor edge. Top geos look like UK + US, UK leading. Your hooks land best when the visual reads in the first second.",
+      "Read your last 30. Your top 3 hooks averaged 14% saves; the bottom 3 averaged 4%. Pattern's there.",
+    expectedToPass: true,
+  },
+  {
+    // Sprint 9.7+ — level-2 cited outlier with the metric. Specific post,
+    // real numbers (viewCount + saveRate computed from saveCount/viewCount).
+    scenario: "pass/17b — first-boot cited insight (LEVEL 2 cited outlier)",
+    output:
+      "Your $2 ramen hack hit 8.1K views, 14% saves — your norm sits at 7%. That hook shape is the engine.",
     expectedToPass: true,
   },
   {

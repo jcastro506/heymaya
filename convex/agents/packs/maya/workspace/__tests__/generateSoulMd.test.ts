@@ -23,7 +23,12 @@ import { generateSoulMd } from "../generateSoulMd";
 import type { Doc } from "../../../../../_generated/dataModel";
 import type { CreatorPictureExt } from "../types";
 
-const SOUL_MAX_CHARS = 6_000;
+// Sprint 9.7+ — bumped 6000 → 9500 to accommodate the cited-insight
+// quality-bar section (the load-bearing rule that prevents Maya from
+// firing weak audience-tautology insights on first-boot). SOUL.md is
+// loaded every session — keeping it under 10K leaves comfortable budget
+// for everything else inside Gemini Flash's 1M context.
+const SOUL_MAX_CHARS = 9_500;
 
 // AI-self-reference + sycophantic-output patterns that have to stay off
 // every Maya surface. The list intentionally excludes phrases SOUL.md
