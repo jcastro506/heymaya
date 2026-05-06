@@ -32,6 +32,11 @@ export const TTL_POSTS_SEC = 30 * 60;
 export const TTL_POST_DETAIL_SEC = 30 * 60;
 export const TTL_COMMENTS_SEC = 30 * 60;
 export const TTL_TRANSCRIPT_SEC = 7 * 24 * 60 * 60;
+// Audience demographics drift slowly — 24h cache protects the 26-credit budget
+// against duplicate same-day calls (e.g. cron + onboarding race). Following
+// list is cheaper but larger payload; same TTL keeps the bulk pull idempotent.
+export const TTL_AUDIENCE_SEC = 24 * 60 * 60;
+export const TTL_FOLLOWING_SEC = 24 * 60 * 60;
 
 export type CacheKind =
   | "profile"
@@ -39,7 +44,8 @@ export type CacheKind =
   | "post"
   | "comments"
   | "transcript"
-  | "audience";
+  | "audience"
+  | "following";
 
 export function cacheKey(
   platform: string,

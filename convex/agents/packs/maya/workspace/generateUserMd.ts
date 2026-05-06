@@ -22,12 +22,35 @@ import type { Doc } from "../../../../_generated/dataModel";
 import type { Plan, Channel } from "../../../../lib/planFeatures";
 import { NOT_YET_PROVIDED, type CreatorPictureExt } from "./types";
 
+/**
+ * Sprint 4 — follower snapshot used for the 30-day trend line. The caller
+ * (workspace assembler) provides a small, pre-filtered list scoped to the
+ * creator. Each handle resolves to its most recent + nearest-to-30d-ago
+ * snapshots; the generator picks the pair on read. Empty array = no
+ * snapshots ever recorded (first-run state).
+ */
+export interface FollowerSnapshot {
+  platform: Doc<"creatorHandles">["platform"];
+  handle: string;
+  followerCount: number;
+  capturedAt: number;
+}
+
 export interface UserMdInputs {
   creator: Doc<"creators">;
   picture: CreatorPictureExt | null;
   handles: ReadonlyArray<Doc<"creatorHandles">>;
   plan: Plan;
+  /** Sprint 4 — snapshots powering the 30-day delta. Optional for forward-compat. */
+  followerSnapshots?: ReadonlyArray<FollowerSnapshot>;
+  /**
+   * Sprint 4 — "now" injected for determinism. Falls back to Date.now() so
+   * existing callers keep working without changes.
+   */
+  now?: number;
 }
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Extract a display name from the creator. Today we only have email; the
@@ -49,6 +72,8 @@ export function deriveDisplayName(email: string): string {
 export function generateUserMd(inputs: UserMdInputs): string {
   const { creator, picture, handles, plan } = inputs;
   const displayName = deriveDisplayName(creator.email);
+  const now = inputs.now ?? Date.now();
+  const snapshots = inputs.followerSnapshots ?? [];
 
   const sortedHandles = [...handles].sort((a, b) => {
     if (a.platform !== b.platform) return a.platform.localeCompare(b.platform);
@@ -57,10 +82,11 @@ export function generateUserMd(inputs: UserMdInputs): string {
 
   const handlesBlock = sortedHandles.length
     ? sortedHandles
-        .map(
-          (h) =>
-            `- **${h.platform}** \`${h.handle}\` — ${formatFollowerCount(h.followerCount)} followers${h.verified ? "" : " (unverified)"}`
-        )
+        .map((h) => {
+          const trend = renderFollowerTrend(h, snapshots, now);
+          const base = `- **${h.platform}** \`${h.handle}\` — ${formatFollowerCount(h.followerCount)} followers${h.verified ? "" : " (unverified)"}`;
+          return trend ? `${base} (${trend})` : base;
+        })
         .join("\n")
     : `- _${NOT_YET_PROVIDED}_`;
 
@@ -180,12 +206,76 @@ function renderAudience(picture: CreatorPictureExt | null): string {
   const interests = picture.audience.interestTags.length
     ? picture.audience.interestTags.slice(0, 8).join(", ")
     : NOT_YET_PROVIDED;
+  // Sprint 4 — gender split surfaces only when synthesis grounded it from
+  // upstream demographics. Skipped silently when null (no signal).
+  const gender = picture.audience.genderSplit
+    ? formatGenderSplit(picture.audience.genderSplit)
+    : null;
   const lines = [
     `- **Age ranges:** ${ages}`,
     `- **Top geographies:** ${geos}`,
     `- **Interest tags:** ${interests}`,
   ];
+  if (gender) lines.push(`- **Gender split:** ${gender}`);
   return lines.join("\n");
+}
+
+function formatGenderSplit(g: {
+  male: number;
+  female: number;
+  other: number;
+}): string {
+  const pct = (n: number) => `${Math.round(n * 100)}%`;
+  // Surface "other" only when meaningful (>=1%) to keep the line scannable.
+  const parts = [`male ${pct(g.male)}`, `female ${pct(g.female)}`];
+  if (g.other >= 0.01) parts.push(`other ${pct(g.other)}`);
+  return parts.join(" / ");
+}
+
+/**
+ * Sprint 4 — render a 30-day follower delta for a handle. Returns null when
+ * there's nothing to say (no snapshots yet), so the caller can skip the
+ * suffix entirely. Returns "no prior snapshot" on first run, "+X / month"
+ * (or "-X / month") thereafter.
+ *
+ * Algorithm: among snapshots for this (platform, handle) older than `now`,
+ * pick the one whose age is closest to 30 days. Compare to current
+ * `h.followerCount`. If no qualifying snapshot exists, emit "no prior
+ * snapshot" so the agent knows the data is too fresh for a delta.
+ *
+ * Edge case: same-day snapshots only (operator just onboarded). The window
+ * is "anything older than 7 days, prefer ~30d". 7-day floor avoids
+ * meaningless delta-from-an-hour-ago noise on first-run.
+ */
+function renderFollowerTrend(
+  handle: Doc<"creatorHandles">,
+  snapshots: ReadonlyArray<FollowerSnapshot>,
+  now: number
+): string | null {
+  if (handle.followerCount == null) return null;
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  const candidates = snapshots
+    .filter((s) => s.platform === handle.platform && s.handle === handle.handle)
+    .filter((s) => now - s.capturedAt >= SEVEN_DAYS_MS);
+  if (candidates.length === 0) {
+    return "no prior snapshot";
+  }
+  // Pick the snapshot whose age is CLOSEST to 30 days.
+  const target = now - THIRTY_DAYS_MS;
+  let best = candidates[0];
+  let bestDist = Math.abs(best.capturedAt - target);
+  for (const c of candidates.slice(1)) {
+    const d = Math.abs(c.capturedAt - target);
+    if (d < bestDist) {
+      best = c;
+      bestDist = d;
+    }
+  }
+  const delta = handle.followerCount - best.followerCount;
+  const ageDays = Math.round((now - best.capturedAt) / (24 * 60 * 60 * 1000));
+  const sign = delta >= 0 ? "+" : "−";
+  const magnitude = formatFollowerCount(Math.abs(delta));
+  return `${sign}${magnitude} in ${ageDays}d`;
 }
 
 function renderLocation(picture: CreatorPictureExt | null): string {

@@ -726,6 +726,60 @@ export default defineSchema({
     .index("by_creator", ["creatorId"])
     .index("by_creator_and_key", ["creatorId", "cacheKey"]),
 
+  // Sprint 4 — append-only follower-count snapshots so USER.md can show a
+  // 30-day delta on every fresh bulk pull. One row per (creator, platform,
+  // handle, scrapedAt). The bulk-pull pipeline writes a snapshot whenever
+  // `runFullScrapePull` lands a profile result. The 30-day window is derived
+  // at read time by `generateUserMd`, NOT pre-computed — keeps the schema
+  // history-of-truth and lets future windows (7d / 90d) come for free.
+  creatorFollowerSnapshots: defineTable({
+    creatorId: v.id("creators"),
+    platform: v.union(
+      v.literal("tiktok"),
+      v.literal("instagram"),
+      v.literal("youtube"),
+      v.literal("linkedin"),
+      v.literal("x")
+    ),
+    handle: v.string(),
+    followerCount: v.number(),
+    /** Snapshot timestamp (ms). Equal to the runFullScrapePull `finishedAt`. */
+    capturedAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_platform", ["creatorId", "platform"])
+    .index("by_creator_platform_and_capturedAt", [
+      "creatorId",
+      "platform",
+      "capturedAt",
+    ]),
+
+  // Sprint 4 — credit-expensive ScrapeCreators endpoint audit. Today the only
+  // expensive endpoint is `/v1/tiktok/user/audience` (26 credits/call); future
+  // expensive endpoints get appended to this table. Operator monitors total
+  // credit burn here without scanning the cache (which is dominated by 1-credit
+  // calls). `aiCallLog` is for OpenRouter token spend; this is the parallel
+  // for ScrapeCreators credit spend — different vendor, different bucket.
+  scrapeCreatorsCreditAudit: defineTable({
+    creatorId: v.id("creators"),
+    platform: v.string(),
+    /** Cache-kind ("audience" / "following" / etc). Mirrors `CacheKind`. */
+    kind: v.string(),
+    /** Endpoint path so future skim-by-route reports work. */
+    endpoint: v.string(),
+    /** Credit cost as documented by ScrapeCreators (audience=26, others=1). */
+    credits: v.number(),
+    /** Whether the call ran. False = skipped (e.g. <5K followers gating). */
+    called: v.boolean(),
+    /** Reason for skip (or "called" when ran). Free-form audit string. */
+    reason: v.string(),
+    handle: v.string(),
+    ts: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_ts", ["creatorId", "ts"])
+    .index("by_kind", ["kind"]),
+
   // Per-creator memory of "don't plan content around this calendar event" opt-outs.
   // Surfaced by Sprint 3 playbook § Calendar-aware content planning.
   // Keyed on (creatorId, eventId) — eventId is the Composio Calendar event ID,

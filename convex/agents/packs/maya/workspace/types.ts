@@ -45,6 +45,12 @@ export interface WorkspaceInputs {
   plan: Plan;
   /** Test seam — pinned for determinism in tests. */
   now: number;
+  /**
+   * Sprint 4 — follower snapshots powering the USER.md 30-day delta line.
+   * Optional for backward compatibility with pre-Sprint-4 callers; missing
+   * = "no prior snapshot" rendering on every handle.
+   */
+  followerSnapshots?: ReadonlyArray<Doc<"creatorFollowerSnapshots">>;
 }
 
 /** Marker for fields that require phase B schema work. */

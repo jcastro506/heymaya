@@ -27,6 +27,8 @@ import {
   tiktokV3ProfileVideosFixture,
   tiktokCommentsFixture,
   tiktokTranscriptFixture,
+  tiktokAudienceFixture,
+  tiktokFollowingFixture,
 } from "./fixtures/tiktok";
 import {
   igProfileFixture,
@@ -254,6 +256,68 @@ describe("endpoints — TikTok", () => {
   it("throws on garbage profile shape", async () => {
     const { client } = clientReturning({ totally: "wrong shape", stats: "not-an-object" });
     await expect(tiktok.profile("x", { client })).rejects.toThrow();
+  });
+
+  // Sprint 4 — audience demographics endpoint (26 credits/call).
+  it("parses audience fixture into normalized ageRanges + topGeos + genderSplit", async () => {
+    const { client, fetchImpl } = clientReturning(tiktokAudienceFixture);
+    const out = await tiktok.audience("fitcreator99", { client });
+    expect(out.platform).toBe("tiktok");
+    expect(out.handle).toBe("fitcreator99");
+    expect(out.ageRanges).toContain("18-24");
+    expect(out.ageRanges).toContain("25-34");
+    expect(out.topGeos).toContain("US");
+    expect(out.topGeos).toContain("CA");
+    expect(out.genderSplit).not.toBeNull();
+    expect(out.genderSplit?.male).toBeCloseTo(0.58, 2);
+
+    // Verify the wrapper hit the right path.
+    const url = fetchImpl.mock.calls[0][0] as URL | string;
+    const sent = url instanceof URL ? url.toString() : String(url);
+    expect(sent).toContain("/v1/tiktok/user/audience");
+    expect(sent).toContain("handle=fitcreator99");
+  });
+
+  it("audience returns empty arrays + null gender on completely missing-shape payload", async () => {
+    const { client } = clientReturning({});
+    const out = await tiktok.audience("emptycreator", { client });
+    expect(out.ageRanges).toEqual([]);
+    expect(out.topGeos).toEqual([]);
+    expect(out.genderSplit).toBeNull();
+  });
+
+  it("audience normalizes 0-100 percent gender to 0-1 ratios", async () => {
+    const { client } = clientReturning({
+      audience: { gender: { male: 60, female: 40 } },
+    });
+    const out = await tiktok.audience("h", { client });
+    expect(out.genderSplit?.male).toBeCloseTo(0.6, 2);
+    expect(out.genderSplit?.female).toBeCloseTo(0.4, 2);
+  });
+
+  // Sprint 4 — following list endpoint (1 credit; cheap probe).
+  it("parses following fixture into normalized count + total + users", async () => {
+    const { client, fetchImpl } = clientReturning(tiktokFollowingFixture);
+    const out = await tiktok.following("fitcreator99", { client });
+    expect(out.platform).toBe("tiktok");
+    expect(out.count).toBe(3);
+    expect(out.total).toBe(412);
+    expect(out.users[0].handle).toBe("lifter_lee");
+    expect(out.users[0].nickname).toBe("Lee Lifts");
+
+    const url = fetchImpl.mock.calls[0][0] as URL | string;
+    const sent = url instanceof URL ? url.toString() : String(url);
+    expect(sent).toContain("/v1/tiktok/user/following");
+    expect(sent).toContain("handle=fitcreator99");
+  });
+
+  it("following tolerates the `data.users` envelope shape", async () => {
+    const { client } = clientReturning({
+      data: { users: [{ unique_id: "peer1" }] },
+    });
+    const out = await tiktok.following("h", { client });
+    expect(out.count).toBe(1);
+    expect(out.users[0].handle).toBe("peer1");
   });
 });
 

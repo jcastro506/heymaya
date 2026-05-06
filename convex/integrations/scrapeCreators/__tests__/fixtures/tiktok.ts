@@ -130,3 +130,43 @@ export const tiktokTranscriptFixture = {
     { text: "that take five minutes.", startSec: 2, endSec: 4 },
   ],
 };
+
+/**
+ * Sprint 4 — TikTok audience demographics fixture (`/v1/tiktok/user/audience`).
+ * Shape mirrors the documented `audience: { ageRanges, topGeos, gender }` form.
+ * The endpoint costs 26 credits/call; gating + audit lives in `runFullScrapePull`.
+ */
+export const tiktokAudienceFixture = {
+  audience: {
+    ageRanges: [
+      { range: "18-24", percent: 0.41 },
+      { range: "25-34", percent: 0.33 },
+      { range: "35-44", percent: 0.16 },
+      { range: "13-17", percent: 0.07 },
+      { range: "45+", percent: 0.03 },
+    ],
+    topGeos: [
+      { country: "US", percent: 0.62 },
+      { country: "CA", percent: 0.09 },
+      { country: "GB", percent: 0.07 },
+      { country: "AU", percent: 0.05 },
+      { country: "DE", percent: 0.04 },
+    ],
+    gender: { male: 0.58, female: 0.41, other: 0.01 },
+  },
+};
+
+/**
+ * Sprint 4 — TikTok following list fixture (`/v1/tiktok/user/following`).
+ * One page; cursor present so the wrapper exposes `total` when surfaced.
+ */
+export const tiktokFollowingFixture = {
+  users: [
+    { uniqueId: "lifter_lee", nickname: "Lee Lifts" },
+    { uniqueId: "morning_macros", nickname: "Morning Macros" },
+    { uniqueId: "kettlebell_kate", nickname: "Kate K." },
+  ],
+  total: 412,
+  cursor: 1714000000,
+  hasMore: true,
+};

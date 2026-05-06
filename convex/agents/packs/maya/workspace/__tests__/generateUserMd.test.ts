@@ -167,6 +167,159 @@ describe("generateUserMd", () => {
   });
 });
 
+describe("generateUserMd — Sprint 4 follower trend + audience", () => {
+  const NOW = 1_700_000_000_000;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  function makeSnapshot(over: {
+    platform: "tiktok" | "instagram";
+    handle: string;
+    followerCount: number;
+    capturedAt: number;
+  }) {
+    return {
+      _id: `k_snap_${over.platform}_${over.capturedAt}` as unknown as never,
+      _creationTime: over.capturedAt,
+      creatorId: "k_creator_test" as unknown as never,
+      ...over,
+    } as unknown as import("../../../../../_generated/dataModel").Doc<"creatorFollowerSnapshots">;
+  }
+
+  it("emits 'no prior snapshot' when no qualifying snapshots exist", () => {
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: null,
+      handles: makeHandles(),
+      plan: "manager",
+      followerSnapshots: [],
+      now: NOW,
+    });
+    // Both handles get 'no prior snapshot' on first run.
+    const lines = md.split("\n").filter((l) => l.startsWith("- **tiktok**") || l.startsWith("- **instagram**"));
+    for (const l of lines) expect(l).toContain("no prior snapshot");
+  });
+
+  it("computes 30-day delta when an old-enough snapshot exists", () => {
+    const snaps = [
+      // 30-day-old snapshot at 40K — current 47.3K → +7.3K delta.
+      makeSnapshot({
+        platform: "tiktok",
+        handle: "@joshuacastro",
+        followerCount: 40_000,
+        capturedAt: NOW - 30 * DAY_MS,
+      }),
+    ];
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: null,
+      handles: makeHandles(),
+      plan: "manager",
+      followerSnapshots: snaps,
+      now: NOW,
+    });
+    expect(md).toMatch(/\+7\.3K in 30d/);
+  });
+
+  it("renders negative delta with a minus sign when followers decreased", () => {
+    const snaps = [
+      makeSnapshot({
+        platform: "tiktok",
+        handle: "@joshuacastro",
+        followerCount: 50_000, // higher than current 47.3K
+        capturedAt: NOW - 30 * DAY_MS,
+      }),
+    ];
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: null,
+      handles: makeHandles(),
+      plan: "manager",
+      followerSnapshots: snaps,
+      now: NOW,
+    });
+    // Delta = -2679 → −2.7K (using minus-sign per renderer).
+    expect(md).toMatch(/−2\.7K in 30d/);
+  });
+
+  it("snapshots within the 7-day floor are ignored (too fresh)", () => {
+    const snaps = [
+      makeSnapshot({
+        platform: "tiktok",
+        handle: "@joshuacastro",
+        followerCount: 47_000,
+        capturedAt: NOW - 2 * DAY_MS,
+      }),
+    ];
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: null,
+      handles: makeHandles(),
+      plan: "manager",
+      followerSnapshots: snaps,
+      now: NOW,
+    });
+    // Filtered out → "no prior snapshot".
+    const ttLine = md.split("\n").find((l) => l.startsWith("- **tiktok**"))!;
+    expect(ttLine).toContain("no prior snapshot");
+  });
+
+  it("renders real audience age ranges + top geos when picture has them (no 'not yet provided')", () => {
+    const realPicture = {
+      _id: "k_pic" as unknown as never,
+      _creationTime: NOW,
+      creatorId: "k_creator_test" as unknown as never,
+      niche: "fitness",
+      audience: {
+        ageRanges: ["18-24", "25-34"],
+        topGeos: ["US", "CA", "GB"],
+        interestTags: ["gym", "macros"],
+        genderSplit: { male: 0.58, female: 0.41, other: 0.01 },
+      },
+      voiceFingerprint: "Direct.",
+      topHooks: [],
+      bottomHooks: [],
+      postingCadence: { perPlatform: [] },
+      brandDealHistory: [],
+      generatedAt: NOW,
+      model: "gemini-3-flash",
+      sourceCitations: [],
+    } as unknown as import("../types").CreatorPictureExt;
+
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: realPicture,
+      handles: makeHandles(),
+      plan: "manager",
+      now: NOW,
+    });
+    expect(md).toContain("**Age ranges:** 18-24, 25-34");
+    expect(md).toContain("**Top geographies:** US, CA, GB");
+    expect(md).toContain("**Gender split:** male 58% / female 41%");
+    // The "not yet provided" placeholder for the audience fields must NOT appear in the audience block.
+    const audienceSlice = md.slice(
+      md.indexOf("## Niche & audience"),
+      md.indexOf("## Career snapshot")
+    );
+    expect(audienceSlice).not.toContain("not yet provided");
+  });
+
+  it("preserves 'not yet provided' fallback when picture is null (legitimate empty case)", () => {
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: null,
+      handles: makeHandles(),
+      plan: "manager",
+      now: NOW,
+    });
+    // Audience block keeps the fallback.
+    const audienceSlice = md.slice(
+      md.indexOf("## Niche & audience"),
+      md.indexOf("## Career snapshot")
+    );
+    expect(audienceSlice).toContain("not yet provided");
+  });
+});
+
 describe("deriveDisplayName", () => {
   it("titlecases simple email locals", () => {
     expect(deriveDisplayName("joshua@example.com")).toBe("Joshua");
