@@ -5,6 +5,16 @@ description: Stage-aware free / gifted / paid / decline decision engine for bran
 when-to-use: Before drafting any outbound pitch (scout-discovered or manually added) and before replying to inbound emails with no proposed dollars. Output consumed by maya-brand-outreach and optionally maya-rate-calculator.
 plan-tier: ungated (pure decision logic; no LLM, no external calls).
 thinking-budget: none
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - pitch
+      - strategy
+      - brand-deal
+      - decision-engine
+      - creator
 ---
 
 ## Calls

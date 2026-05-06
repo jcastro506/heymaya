@@ -5,6 +5,19 @@ description: Researches each platform's current algorithm — what is being rewa
 when-to-use: Cron-driven weekly per platform (Pro+ Platform algorithm research programs); twice-weekly for Studio. Pro+ on-demand when cache is older than ttlDays for a platform. Do NOT invoke freeform during a chat reply; defer to the cache.
 plan-tier: pro+ (Starter read-only on whatever cache exists; never triggers research). Studio gets twice-weekly cron.
 thinking-budget: high
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - platform-algo
+      - research
+      - tiktok
+      - instagram
+      - youtube
+      - linkedin
+      - twitter
+      - creator
 ---
 
 ## Calls

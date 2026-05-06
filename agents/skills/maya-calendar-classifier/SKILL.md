@@ -5,6 +5,16 @@ description: Calendar event → content-arc classification. Filters noise (recur
 when-to-use: Daily 8am cron `calendar_lookahead` (Pro+ only, see playbook.md § Calendar-aware content planning) on every event 1–14 days out. Also folded into Sunday weekly_content_plan generation when the upcoming week includes events. Output feeds `maya-content-arc-planner`.
 plan-tier: Pro+ only. Calendar is not in Starter's `allowedProviders` (see `convex/lib/planFeatures.ts`).
 thinking-budget: medium (LLM call required for context inference; cannot ship as pure logic)
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - calendar
+      - content-planning
+      - classifier
+      - google-calendar
+      - creator
 ---
 
 # maya-calendar-classifier

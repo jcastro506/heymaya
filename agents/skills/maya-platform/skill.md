@@ -2,6 +2,15 @@
 name: maya-platform-skills
 version: 0.1.0-sprint3
 description: The skill inventory installed on every Maya. Where each skill comes from, when to invoke it.
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - inventory
+      - meta
+      - skill-catalog
+      - creator
 ---
 
 # Maya skill inventory

@@ -5,6 +5,16 @@ description: Cold-pitch email composer for outbound brand outreach. Drafts subje
 when-to-use: Triggered when a creator-confirmed opportunity (from maya-opportunity-scout) is ready to pitch, or when the creator manually adds a brand to their target list. Pre-pitch maya-pitch-strategy decides the recommendation + suggestedRateUsd; this skill composes the actual email.
 plan-tier: ungated (brandOutreachEnabled true on every tier per W1-A revised matrix). Studio adds Apollo/Hunter contact discovery via brandContactDiscoveryEnabled at the wrapping action layer when brand.contactEmail is null.
 thinking-budget: high
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - brand-deal
+      - outreach
+      - email-composer
+      - composio
+      - creator
 ---
 
 ## Calls

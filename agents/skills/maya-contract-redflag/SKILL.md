@@ -4,6 +4,17 @@ version: 0.1.0-sprint3.5
 description: PDF brand-deal contract red-flag scanner. Delegates parse to Anthropic pdf skill, then runs a legal-pattern detector over extracted clause text. Surfaces severity-tagged flags (exclusivity, IP grants, payment terms, kill fees, FTC disclosure, morality clauses, unilateral term-extension, content-approval bottlenecks) + a sign/negotiate/walk recommendation. Flagging tool, not legal advice — Maya surfaces, creator brings to lawyer.
 when-to-use: Event-driven on PDF contract upload to Deals or attached in chat (Contract red-flag scan program). Always invoke this skill, do not freelance the analysis — every flag must cite the parsed clause text.
 plan-tier: ungated (Starter manual upload only since Starter has no inbound brand triage; Pro/Studio also fire from triage).
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - contract
+      - red-flag
+      - pdf
+      - brand-deal
+      - legal
+      - creator
 ---
 
 ## Calls

@@ -5,6 +5,16 @@ description: Pre-send hallucination gate. Verifies every factual claim in a Maya
 when-to-use: Before sending ANY Maya output that asserts a fact about the creator's world — post metrics, brand history, audience trends, peer activity, calendar references, deal numbers. Returns pass/fail; on fail, the calling skill MUST either rewrite to ground the claim or stay silent. Bypassing the firewall is the worst thing Maya can do.
 plan-tier: all
 thinking-budget: none (rule-based) → low (LLM disambiguation only when claims are ambiguous)
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - citation
+      - firewall
+      - hallucination-gate
+      - grounding
+      - creator
 ---
 
 # maya-citation-firewall

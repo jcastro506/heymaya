@@ -5,6 +5,16 @@ description: Predict draft performance BEFORE the creator hits publish. Reads dr
 when-to-use: Chat-initiated (Maya score this caption / score this draft) and future /draft route (posts to convex/prePostReview.ts:scoreDraft). Read-only — does NOT persist.
 plan-tier: ungated.
 thinking-budget: medium
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - pre-post
+      - scorer
+      - draft-review
+      - performance-prediction
+      - creator
 ---
 
 ## Calls

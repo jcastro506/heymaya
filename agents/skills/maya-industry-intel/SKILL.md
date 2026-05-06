@@ -5,6 +5,16 @@ description: Creator-economy news + platform-policy watcher. Surfaces relevant c
 when-to-use: Cron-driven daily before morning brief assembly (Industry intel program). On-demand from chat returns the same dedupe-cached items by design.
 plan-tier: pro+ (Starter morning brief is bare minimum, no industry intel; gated via proactiveCronAll false on Starter).
 thinking-budget: medium
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - industry-intel
+      - news
+      - platform-policy
+      - morning-brief
+      - creator
 ---
 
 ## Calls

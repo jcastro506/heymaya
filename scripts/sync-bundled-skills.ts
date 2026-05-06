@@ -49,6 +49,52 @@ const SKILLS: ReadonlyArray<SkillSource> = [
       "/* -------------------------------------------------------------------------- */",
     ].join("\n"),
   },
+
+  /* ------------------------------------------------------------------------ */
+  /* Custom maya-* skills — Sprint 2 Slice C (2026-05-06) bundles all 23      */
+  /* creator-side maya-* skills into the workspace tarball. Each ships with   */
+  /* `metadata.openclaw` frontmatter so the OpenClaw skill loader            */
+  /* auto-discovers them under skills/<slug>/SKILL.md. None of them require   */
+  /* external env vars — they call into Convex via the gateway, not          */
+  /* directly into third-party APIs (that's scrapecreators-api's job).        */
+  /*                                                                          */
+  /* Order: alphabetical by slug for stable diff output.                      */
+  /* ------------------------------------------------------------------------ */
+  ...([
+    "maya-brand-deal-triager",
+    "maya-brand-outreach",
+    "maya-calendar-classifier",
+    "maya-citation-firewall",
+    "maya-collab-matchmaker",
+    "maya-content-arc-planner",
+    "maya-content-cross-poster",
+    "maya-contract-redflag",
+    "maya-growth-coach",
+    "maya-hook-extractor",
+    "maya-industry-intel",
+    "maya-monetization-diversifier",
+    "maya-opportunity-scout",
+    "maya-packet-generator",
+    "maya-pitch-strategy",
+    "maya-platform",
+    "maya-platform-algo-researcher",
+    "maya-platform-best-practice",
+    "maya-pre-post-scorer",
+    "maya-rate-calculator",
+    "maya-skill-installer",
+    "maya-underperformance-diagnoser",
+    "maya-voice-applier",
+  ].map((slug) => ({
+    slug,
+    header: [
+      "/* -------------------------------------------------------------------------- */",
+      `/* ${slug.padEnd(72)} */`,
+      "/*                                                                             */",
+      `/* Custom Maya skill (creator-side). Source: agents/skills/${slug}/SKILL.md`,
+      "/* Bundled by Sprint 2 Slice C — see scripts/sync-bundled-skills.ts.           */",
+      "/* -------------------------------------------------------------------------- */",
+    ].join("\n"),
+  }))),
 ];
 
 function constName(slug: string): string {

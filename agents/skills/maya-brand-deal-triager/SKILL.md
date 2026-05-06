@@ -5,6 +5,16 @@ description: Inbound brand-email triage. Classifies (real-deal / cold-pitch / sp
 when-to-use: Cron-driven from Brand email triage program (Composio Gmail webhook on inbound thread). Also invoked from the Deals screen when the creator forwards a brand email manually. Do NOT invoke for outbound drafts or non-brand emails.
 plan-tier: pro+ (Starter has no Gmail in allowedProviders; manual deal entry only). Studio adds brand-context lookup via Apollo/Hunter.
 thinking-budget: medium
+metadata:
+  openclaw:
+    requires:
+      env: []
+    tags:
+      - brand-deal
+      - email-triage
+      - gmail
+      - composio
+      - creator
 ---
 
 ## Calls

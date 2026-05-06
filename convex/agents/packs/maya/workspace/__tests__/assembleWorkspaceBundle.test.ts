@@ -141,19 +141,32 @@ describe("assembleWorkspaceBundle", () => {
     expect(JSON.stringify(a.jobsJson)).toBe(JSON.stringify(b.jobsJson));
   });
 
-  it("every emitted file fits under the 28K bootstrap cap (we override the 12K default in gateway config)", () => {
+  it("every bootstrap-loaded file fits under the 28K bootstrap cap (we override the 12K default in gateway config)", () => {
     // OpenClaw's default `agents.defaults.bootstrapMaxChars` is 12K. Maya
     // ships with 28K so the canonical standing-orders inventory embeds
     // INSIDE AGENTS.md (per the OpenClaw 2026.4.23 convention — only
     // root canonical files are auto-injected; standalone .md files in the
     // workspace root are not guaranteed to load). The override lives in the
     // gateway config emitted by configGeneratorMaya (phase C).
+    //
+    // The cap applies to BOOTSTRAP-loaded files only — the canonical root
+    // files OpenClaw auto-injects at session start (AGENTS / SOUL / USER /
+    // HEARTBEAT / TOOLS / MEMORY / BOOTSTRAP / IDENTITY) plus the
+    // standalone standing-orders.md when split. Skill files under
+    // `skills/<slug>/SKILL.md` are auto-discovered by OpenClaw's skill
+    // loader on a different code path and are not bootstrap-loaded; they
+    // can be larger than the cap (the maya-platform inventory is ~33K
+    // because it lists every shipped skill with sourcing).
     const CAP = 32_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
       const bundle = assembleWorkspaceBundle(inputs, { bootstrapMaxChars: CAP });
       for (const [name, content] of bundle.files) {
+        // Skip auto-discovered skill files (loaded outside the bootstrap
+        // path) and the Daily Notes seeds (loaded on-demand).
+        if (name.startsWith("skills/")) continue;
+        if (name.startsWith("Operations/")) continue;
         expect(
           content.length,
           `${plan}: ${name} = ${content.length} chars (cap ${CAP})`
@@ -199,6 +212,39 @@ describe("assembleWorkspaceBundle", () => {
         skill.content,
         `${skill.slug}: registry drifted from on-disk SKILL.md — re-run \`npx tsx scripts/sync-bundled-skills.ts\``
       ).toBe(onDisk);
+    }
+  });
+
+  it("BUNDLED_SKILLS ships all 22+ creator-side maya-* skills (Sprint 2 Slice C)", () => {
+    // Sprint 2 Slice C bundles every custom maya-* skill — Slice A's deploy
+    // pipeline previously orphaned ~22 of them by shipping only a hand-picked
+    // subset. The full set (alphabetical) must be present so the OpenClaw
+    // skill loader sees them under skills/<slug>/SKILL.md on the Fly machine.
+    expect(BUNDLED_SKILLS.length).toBeGreaterThanOrEqual(22);
+
+    const slugs = BUNDLED_SKILLS.map((s) => s.slug);
+    // Sample 5 slugs spanning different concern areas: brand, content, voice,
+    // platform meta, performance.
+    const required = [
+      "maya-content-cross-poster",
+      "maya-platform",
+      "maya-rate-calculator",
+      "maya-citation-firewall",
+      "maya-voice-applier",
+    ];
+    for (const slug of required) {
+      expect(slugs, `BUNDLED_SKILLS missing ${slug}`).toContain(slug);
+    }
+
+    // Every maya-* slug must carry the OpenClaw discovery frontmatter so the
+    // gateway's skill loader picks them up. Verify metadata.openclaw is in
+    // the inlined SKILL.md content for each.
+    for (const skill of BUNDLED_SKILLS) {
+      if (!skill.slug.startsWith("maya-")) continue;
+      expect(
+        skill.content,
+        `${skill.slug}: SKILL.md missing metadata.openclaw frontmatter`
+      ).toContain("openclaw:");
     }
   });
 
