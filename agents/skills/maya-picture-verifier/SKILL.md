@@ -118,6 +118,22 @@ The local `citationFirewall(question, item)` enforces ONE rule: the question mus
 
 The verifier never bypasses the broader firewall. Verification questions are still creator-facing claims and still subject to the "grounded or silent" rule.
 
+## Anti-fabrication: ranked lists are NOT percentages
+
+A specific failure mode the verifier exists to catch (and that any creator-facing question must avoid): synthesizing precise percentages from data that is actually a *ranked list*.
+
+`audience.topGeos: ['United Kingdom', 'United States']` does NOT mean a 50/50 UK/US split. It means UK is the largest geo, US is second. Saying "your audience is split 50/50 between UK and US" invents precision that is not in the data. Saying "your audience is 60/40 UK/US" is also invented. The honest phrasing is "mostly UK, US second" or "top geos are UK + US."
+
+The same rule applies to:
+
+- `audience.ageRanges` — a ranked list, not a per-bucket percentage breakdown.
+- `audience.interestTags` — a ranked list, not weighted scores.
+- `topHooks` / `bottomHooks` — ranked lists, not rated scores.
+
+If a verifier-generated question contains a percentage that is not literally present in the cited evidence, the question MUST be rejected by the local citation firewall. "Your audience is mostly UK with US second — is that right?" passes. "Your audience is 50/50 UK/US — is that right?" fails because 50/50 is not in the cited evidence.
+
+This rule is enforced both by the prompt (SOUL.md "Anti-fabrication" section) and by the citation firewall's literal-excerpt requirement.
+
 ## Plan-tier
 
 All tiers. Verification is part of every onboarding regardless of plan — picture quality is non-negotiable. Starter creators get the same verifier flow Studio creators do.

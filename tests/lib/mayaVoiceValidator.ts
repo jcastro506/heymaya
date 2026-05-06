@@ -1,13 +1,17 @@
 /**
  * mayaVoiceValidator — runtime guard for Maya voice degradation.
  *
- * Sprint 8 Slice C deliverable. Extends the original Sprint 2 banned-term
- * grep into a four-check validator that catches the four documented voice
- * degradation modes:
+ * Sprint 8 Slice C deliverable, extended in Sprint 9.7 (2026-05-06) with
+ * the per-message length cap, the no-jargon check, and the anti-fabrication
+ * pattern check after a real-world test where Maya's first iMessage came
+ * out as a 700-char marketing-pitch novel with a fabricated "50/50 UK/US"
+ * stat and a pile of creator-jargon.
+ *
+ * Six checks now:
  *
  *   1. AI-self-reference leaks   ("As an AI manager, I think...")
- *   2. Length blowups            (>280 words, >2000 chars — heartbeat tick
- *                                 soft cap from `generateHeartbeatMd.ts`)
+ *   2. Length blowups            (>280 words OR >400 chars — operator-locked
+ *                                 per-message cap, was 2000 pre-9.7)
  *   3. Sycophancy / cheerleading ("Amazing!", "crushing it", "great question")
  *   4. Generic-chatbot scaffolding ("two quick things", "happy to walk you
  *                                   through", "let me know if I can help")
@@ -15,20 +19,35 @@
  *      when the model gets nervous about citations.
  *   6. (composed) citation-firewall echo: numeric claims with no citation
  *      tokens (post id, URL, weekday).
+ *   7. (Sprint 9.7) jargonCheck — flags creator-jargon and corporate-speak
+ *      that read corny in a text. Operator's spec: "Maya doesn't speak in
+ *      technical language. Everything she says should sound human."
+ *   8. (Sprint 9.7) fabricationCheck — flags invented precision: percentages
+ *      attached to ranked-list data ("audience is split 50/50 UK/US"
+ *      where the data is `topGeos: ['UK', 'US']`).
  *
  * Authoritative voice spec lives in:
  *   - `agents/skills/maya-platform/playbook.md` § Voice + tone
  *   - `agents/skills/maya-citation-firewall/SKILL.md`
  *   - `agents/skills/maya-voice-applier/SKILL.md`
+ *   - `agents/skills/maya-picture-verifier/SKILL.md` § Anti-fabrication
+ *   - `convex/agents/packs/maya/workspace/generateSoulMd.ts` § Anti-
+ *     fabrication + Human language only
  *   - `convex/agents/packs/maya/workspace/generateAgentsMd.ts` § Operating
  *     instructions
  *
  * Operator-locked rules baked in here:
  *   - Anti-sycophancy is non-negotiable (CLAUDE.md principle 4).
- *   - Heartbeat / morning-brief outputs target ≤200 words on mobile;
- *     ≤280-word ceiling above that is the disclaimer-creep alarm.
+ *   - Per-message cap is 400 chars (Sprint 9.7, operator-locked).
+ *     Multi-message arcs send N separate `claw-messenger.sendText` calls,
+ *     each ≤400 chars, instead of one 2000-char wall.
  *   - "Grounded or silent" (CLAUDE.md principle 3): a numeric claim with
  *     no anchor is presumed unsupported and flagged for the firewall.
+ *   - "Human language only": no creator-jargon, no coach-speak, no
+ *     corporate-strategy register.
+ *   - "Anti-fabrication": never invent precise numbers. Ranked lists are
+ *     not percentages. (The validator catches the obvious patterns; the
+ *     load-bearing rule lives in SOUL.md where Maya reads it.)
  *
  * Performance: the validator is regex-only, deterministic, sync, and runs
  * in microseconds — designed for unit-test-time use, not runtime. If we
@@ -134,6 +153,65 @@ const SCAFFOLDING_PHRASES: ReadonlyArray<string> = [
 ];
 
 /**
+ * Creator-jargon and corporate-speak. Sprint 9.7 — added after a real-world
+ * test where Maya's first iMessage included "first-frame visual clarity",
+ * "global FYP", "share metrics", "anchor questions", "brand-deal matching",
+ * "operational weight", and "lock in your strategy" in a single 700-char
+ * message. All of these read corny in a text. Operator's rule: "Maya
+ * doesn't speak in technical language. Everything she says should sound
+ * human and understandable."
+ *
+ * The list is intentionally focused — these are the actual offenders from
+ * the live test plus the obvious creator-jargon adjacents (KPI, value
+ * prop, north star metric, etc.). The load-bearing rule with full prose
+ * alternatives lives in SOUL.md "Human language only" — this list is the
+ * mechanical-correctness backstop.
+ *
+ * Match is case-insensitive substring. Workspace-file mode tolerates
+ * quoted-as-bad-example occurrences via the same `isInstructionalQuote`
+ * heuristic that protects the other banned-term lists — SOUL.md teaches
+ * the rule by NAMING the jargon it forbids, so the doc itself contains
+ * the substrings.
+ */
+const JARGON_PHRASES: ReadonlyArray<string> = [
+  // FYP / For You Page — creator jargon. Maya says "the For You feed" or
+  // just "the feed."
+  "fyp",
+  "for you page",
+  "global fyp",
+  // Metric-jargon. Maya says "people sharing", "people engaging", "saves".
+  "share metric",
+  "share metrics",
+  "engagement metric",
+  "engagement metrics",
+  "metric-driven",
+  "key driver",
+  // Visual / production jargon. Maya says "a strong first second" /
+  // "clear visual right at the open."
+  "first-frame",
+  "first frame visual",
+  "visual clarity",
+  // Coach-speak / framework labels. Maya just calls them questions.
+  "anchor question",
+  "anchor questions",
+  // Operational / pitch register. Maya says "matching you with brands",
+  // "the day-to-day stuff", "figure out the plan."
+  "brand-deal matching",
+  "operational weight",
+  "lock in your strategy",
+  "lock in the strategy",
+  "strategic alignment",
+  // Corporate-deck register.
+  "value prop",
+  "kpi",
+  "kpis",
+  "north star metric",
+  "north-star metric",
+  "optimization",
+  "optimisation",
+];
+
+/**
  * Hedging / ring-of-truth disclaimer prefixes. The model uses these when
  * its confidence dips below the firewall threshold but it sends anyway.
  * Per CLAUDE.md principle 3 ("grounded or silent") the right move is to
@@ -163,21 +241,27 @@ const DISCLAIMER_PREFIX_PHRASES: ReadonlyArray<string> = [
 
 /**
  * Hard ceiling on Maya output lengths. Anything past this is presumed
- * disclaimer creep / model hand-wringing. Sources:
+ * disclaimer creep / model hand-wringing / multi-message bundling. Sources:
  *
- *   - Morning brief target: <200 words on mobile (`playbook.md` § Morning brief)
+ *   - Operator-locked per-message cap (Sprint 9.7): 400 chars per single
+ *     `claw-messenger.sendText` call. iMessage UX is short rapid-fire
+ *     messages, not walls of text. A first-boot greet+insight+Q1 arc
+ *     becomes THREE separate sends, each ≤400 chars.
+ *   - Morning brief target: <200 words on mobile (`playbook.md` § Morning
+ *     brief)
  *   - Evening recap target: 3 lines max (`playbook.md` § Evening recap)
- *   - HEARTBEAT.md soft cap: 2000 chars (`generateHeartbeatMd.ts`
- *     HEARTBEAT_SOFT_CAP_CHARS)
  *   - Workspace files (AGENTS.md, etc.) are NOT model output — they are
  *     bootstrap docs and bypass the word/char check via the file kind
  *     parameter (see `validateOutput`).
  *
- * 280 words ≈ 1500 chars ≈ a generously-padded morning brief. Past 280
- * the model has almost certainly slipped into multi-section listicle mode.
+ * 280-word ceiling stays as a defense-in-depth guardrail (kept from
+ * Sprint 8). A single creator-facing iMessage shouldn't be anywhere near
+ * 280 words anyway — it would have already tripped the 400-char cap. The
+ * word check still catches whitespace-light walls of text that scrape
+ * under the char cap by stripping spaces.
  */
 export const MAYA_OUTPUT_MAX_WORDS = 280;
-export const MAYA_OUTPUT_MAX_CHARS = 2_000;
+export const MAYA_OUTPUT_MAX_CHARS = 400;
 
 /* -------------------------------------------------------------------------- */
 /* Public types                                                                */
@@ -187,10 +271,12 @@ export type ValidationFailureReason =
   | "banned-ai-self-reference"
   | "banned-sycophancy"
   | "banned-scaffolding"
+  | "banned-jargon"
   | "disclaimer-prefix"
   | "length-words"
   | "length-chars"
   | "uncited-numeric-claim"
+  | "fabricated-precision"
   | "empty-output";
 
 export interface ValidationResult {
@@ -266,6 +352,27 @@ export function validateOutput(
     if (citationHit) {
       reasons.push(citationHit.reason);
       details.push(citationHit.detail);
+    }
+  }
+
+  // ---- 5. Jargon (Sprint 9.7) ----
+  // Workspace-file mode tolerates quoted-as-bad-example occurrences (SOUL.md
+  // teaches the rule by naming the forbidden jargon).
+  const jargonHits = jargonCheck(output, allowQuotedAsBad);
+  for (const hit of jargonHits) {
+    reasons.push(hit.reason);
+    details.push(hit.detail);
+  }
+
+  // ---- 6. Fabrication (Sprint 9.7, model output only) ----
+  // Picks up "split 50/50" / "60/40 UK/US" patterns where Maya invents
+  // a precision the data doesn't support. Workspace files don't speak
+  // about specific creator data so the check is gated on model-output.
+  if (kind === "model-output") {
+    const fabricationHit = fabricationCheck(output);
+    if (fabricationHit) {
+      reasons.push(fabricationHit.reason);
+      details.push(fabricationHit.detail);
     }
   }
 
@@ -486,6 +593,197 @@ export function citationCheck(output: string): CheckHit | null {
   };
 }
 
+/**
+ * Jargon check (Sprint 9.7) — flags creator-jargon and corporate-speak
+ * substrings. Word-boundary-style matching for short tokens (FYP, KPI,
+ * KPIs) so we don't flag legitimate words that happen to contain those
+ * letter-sequences ("typify", "skipping"); substring match for the
+ * multi-word phrases. Case-insensitive.
+ *
+ * `allowQuotedAsBad` mirrors `bannedTermsCheck` — workspace files like
+ * SOUL.md *teach* the rule by naming the jargon, so the doc itself
+ * contains the substrings. `isInstructionalQuote` skips them.
+ */
+export function jargonCheck(
+  output: string,
+  allowQuotedAsBad: boolean
+): ReadonlyArray<CheckHit> {
+  const lower = output.toLowerCase();
+  const hits: CheckHit[] = [];
+  const seen = new Set<string>();
+
+  for (const phrase of JARGON_PHRASES) {
+    const needsBoundary = phrase.length <= 4 || phrase === "kpis";
+    let idx: number;
+    if (needsBoundary) {
+      // Word-boundary regex for short tokens.
+      const re = new RegExp(`\\b${escapeRegex(phrase)}\\b`, "i");
+      const m = re.exec(output);
+      if (!m) continue;
+      idx = m.index;
+    } else {
+      idx = lower.indexOf(phrase);
+      if (idx < 0) continue;
+    }
+    if (seen.has(phrase)) continue;
+    if (allowQuotedAsBad && isInstructionalQuote(output, idx, phrase.length)) {
+      continue;
+    }
+    seen.add(phrase);
+    hits.push({
+      reason: "banned-jargon",
+      detail: `creator-jargon / corporate-speak: "${phrase}" (matched at index ${idx})`,
+    });
+  }
+
+  return hits;
+}
+
+/**
+ * Fabrication check (Sprint 9.7) — flags invented precision: percentages
+ * or splits that look like Maya synthesized a precise number out of
+ * ranked-list data. The most common offender from the live test:
+ * `audience.topGeos: ['UK', 'US']` → "audience is split 50/50 UK/US."
+ *
+ * The check is mechanical, not semantic — we look for the structural
+ * tells:
+ *   - "split N/N" with both numbers being "round" splits (50/50, 60/40,
+ *     70/30, 75/25, 80/20, 90/10) co-located with audience / geo / age
+ *     vocabulary ("audience", "between", "uk", "us", country names).
+ *   - "N/N split" same.
+ *   - "N% / M%" where N+M = 100 and audience-vocabulary is in the same
+ *     sentence.
+ *
+ * We do NOT flag concrete cited numbers like "47k views" or "2.1x
+ * trailing average" — those are anchored claims and `citationCheck`
+ * handles them. We DO flag any audience/demographic ratio that isn't
+ * cited to an actual percentage source.
+ *
+ * False-positive direction: if a creator's actual data has a literal
+ * 50/50 percentage from a real source, this check still flags it
+ * — Maya can either rephrase or cite the source. False-positive is
+ * cheap, false-negative ships a fabricated number.
+ */
+export function fabricationCheck(output: string): CheckHit | null {
+  const lower = output.toLowerCase();
+
+  // Pattern 1: "split N/N" or "N/N split" with audience-vocabulary.
+  // The split numbers are checked for "obviously synthesized" round splits
+  // (multiples of 10 summing to 100; or 75/25, 25/75 — common alternative
+  // round splits).
+  const splitRegex = /\b(\d{1,3})\s*\/\s*(\d{1,3})\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = splitRegex.exec(output)) !== null) {
+    const a = Number.parseInt(m[1], 10);
+    const b = Number.parseInt(m[2], 10);
+    if (!isLikelyDemographicSplit(a, b)) continue;
+    // Look at a 60-char window around the match for audience-vocabulary.
+    const windowStart = Math.max(0, m.index - 60);
+    const windowEnd = Math.min(output.length, m.index + m[0].length + 60);
+    const window = lower.slice(windowStart, windowEnd);
+    if (containsAudienceVocab(window)) {
+      return {
+        reason: "fabricated-precision",
+        detail: `fabricated precision: "${m[0]}" attached to audience/demographic vocabulary — ranked-list data is not a percentage breakdown (see SOUL.md Anti-fabrication rule)`,
+      };
+    }
+  }
+
+  // Pattern 2: "N% UK and M% US" / "N% / M%" — any two %-numbers within
+  // ~50 chars of each other summing to 100, attached to audience-vocab.
+  // The separator can be slash, comma, whitespace, or short connecting
+  // words ("and", "to", "vs").
+  const percentRegex = /\b(\d{1,3})\s*%/g;
+  const percentMatches: Array<{ value: number; index: number; length: number }> = [];
+  while ((m = percentRegex.exec(output)) !== null) {
+    percentMatches.push({
+      value: Number.parseInt(m[1], 10),
+      index: m.index,
+      length: m[0].length,
+    });
+  }
+  for (let i = 0; i < percentMatches.length; i++) {
+    for (let j = i + 1; j < percentMatches.length; j++) {
+      const first = percentMatches[i];
+      const second = percentMatches[j];
+      const gap = second.index - (first.index + first.length);
+      if (gap > 50) continue; // too far apart to be a paired split
+      if (first.value + second.value !== 100) continue;
+      if (!isLikelyDemographicSplit(first.value, second.value)) continue;
+      // Window spans both percentages plus 60 chars on each side.
+      const windowStart = Math.max(0, first.index - 60);
+      const windowEnd = Math.min(
+        output.length,
+        second.index + second.length + 60
+      );
+      const window = lower.slice(windowStart, windowEnd);
+      if (containsAudienceVocab(window)) {
+        return {
+          reason: "fabricated-precision",
+          detail: `fabricated precision: "${first.value}% / ${second.value}%" — paired percentages summing to 100 attached to audience/demographic vocabulary suggest synthesized precision (see SOUL.md Anti-fabrication rule)`,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function isLikelyDemographicSplit(a: number, b: number): boolean {
+  // Rule out small numbers (clearly not %): "3/5 hits" etc.
+  if (a < 10 || b < 10) return false;
+  // Must sum to 100. (50/50, 60/40, 70/30, 75/25, 80/20, 90/10, 25/75, ...)
+  if (a + b !== 100) return false;
+  return true;
+}
+
+function containsAudienceVocab(window: string): boolean {
+  // Demographic / audience-shape vocabulary. Intentionally avoids overly
+  // general words like "split" or "between" (they show up in unrelated
+  // contexts like "split your week 60/40 between filming and editing").
+  // The check fires only when the split co-locates with an actual
+  // demographic noun. Substring tokens are listed first; word-boundary
+  // tokens (short letter-pairs like "uk" / "us") are checked separately
+  // to avoid false positives ("trust" contains "us", "ukraine" contains "uk").
+  const substringTokens = [
+    "audience",
+    "geo",
+    "geos",
+    "follower",
+    "followers",
+    "demographic",
+    "demographics",
+    "age range",
+    "age split",
+    "gender",
+    "u.k.",
+    "u.s.",
+    "united kingdom",
+    "united states",
+    "north america",
+    "male",
+    "female",
+    "men/women",
+    "men to women",
+    "women to men",
+    "gen z",
+    "gen-z",
+    "millennial",
+    "millennials",
+    "boomer",
+    "boomers",
+  ];
+  if (substringTokens.some((t) => window.includes(t))) return true;
+  // Word-boundary checks for short country/region acronyms. These would
+  // trip on substrings of unrelated words otherwise.
+  const wbTokens = ["uk", "us", "eu", "men", "women", "girls", "guys"];
+  return wbTokens.some((t) => new RegExp(`\\b${t}\\b`, "i").test(window));
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -541,6 +839,27 @@ function isInstructionalQuote(
     "rules:",
     "forbidphrases",
     "banned",
+    // Sprint 9.7 — SOUL.md "Human language only" section uses "- Not 'X' —
+    // say 'Y'." pattern to teach the rule. Tolerate the negation.
+    "- not '",
+    "- not \"",
+    "not '",
+    "not \"",
+    "say '",
+    'say "',
+    // Anti-fabrication uses "does NOT mean" / "ranked list" / "invent"
+    "does not mean",
+    "does not include",
+    "ranked list",
+    "invent",
+    "made-up",
+    "made up",
+    "hallucinate",
+    "fabricat",
+    "fake compliment",
+    "fake number",
+    "i never",
+    "i'd never",
   ];
   return cueWords.some((cue) => window.includes(cue));
 }

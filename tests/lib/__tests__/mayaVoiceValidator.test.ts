@@ -25,6 +25,8 @@ import {
   lengthCheck,
   disclaimerPatternCheck,
   citationCheck,
+  jargonCheck,
+  fabricationCheck,
   MAYA_OUTPUT_MAX_WORDS,
   MAYA_OUTPUT_MAX_CHARS,
   type ValidationFailureReason,
@@ -250,8 +252,203 @@ describe("validateOutput", () => {
     // 280 words ceiling per playbook.md morning-brief target (<200 words
     // soft target → 280 hard ceiling for blowup detection).
     expect(MAYA_OUTPUT_MAX_WORDS).toBe(280);
-    // 2000 chars ceiling per HEARTBEAT_SOFT_CAP_CHARS in
-    // generateHeartbeatMd.ts.
-    expect(MAYA_OUTPUT_MAX_CHARS).toBe(2_000);
+    // Sprint 9.7 — operator-locked per-message cap is 400 chars.
+    // iMessage UX is short rapid-fire messages, not walls of text. A
+    // first-boot greet+insight+Q1 arc becomes THREE separate sends, each
+    // ≤400 chars, instead of one bundled message.
+    expect(MAYA_OUTPUT_MAX_CHARS).toBe(400);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* jargonCheck (Sprint 9.7)                                                    */
+/* -------------------------------------------------------------------------- */
+
+describe("jargonCheck (Sprint 9.7)", () => {
+  // Each tuple: phrase Maya should not say in a creator-facing message,
+  // mapped to a substring at least one hit's detail should contain.
+  // (Multiple jargon phrases can fire in a single output — `some` not `[0]`.)
+  const cases: ReadonlyArray<[string, string]> = [
+    ["pushes you onto the global FYP", "fyp"],
+    ["that drives the FYP for you this week", "fyp"],
+    ["first-frame visual clarity matters", "first-frame"],
+    ["your share metrics are leading the lift", "share metric"],
+    ["your engagement metrics are way up", "engagement metric"],
+    ["six anchor questions to ask one at a time", "anchor question"],
+    ["i'll start brand-deal matching once you connect Gmail", "brand-deal matching"],
+    ["take the operational weight off your plate", "operational weight"],
+    ["lock in your strategy before sunday", "lock in your strategy"],
+    ["strategic alignment with your manager packet", "strategic alignment"],
+    ["the key driver of saves is the first second", "key driver"],
+    ["hook optimization on your last 30 posts", "optimization"],
+    ["a metric-driven content plan", "metric-driven"],
+    ["your value prop in the food niche", "value prop"],
+    ["saves per post is your KPI", "kpi"],
+    ["pick a north star metric and ladder up", "north star metric"],
+  ];
+
+  for (const [phrase, expectedHit] of cases) {
+    it(`flags "${phrase}" as banned-jargon ("${expectedHit}")`, () => {
+      const hits = jargonCheck(phrase, false);
+      expect(hits.length).toBeGreaterThan(0);
+      expect(hits.every((h) => h.reason === "banned-jargon")).toBe(true);
+      expect(
+        hits.some((h) => h.detail.toLowerCase().includes(expectedHit))
+      ).toBe(true);
+    });
+  }
+
+  it("returns no hits for human-language alternative phrasings", () => {
+    const clean =
+      "Your top hooks land in the first second — the visual reads before the caption. The For You feed is pushing your wednesday post wider than your norm.";
+    expect(jargonCheck(clean, false)).toEqual([]);
+  });
+
+  it("tolerates SOUL.md teaching the rule (workspace-file mode)", () => {
+    // Mirror of the SOUL.md "Human language only" prose. Should pass under
+    // workspace-file mode because the doc is teaching the rule.
+    const instructional =
+      "I do not say 'first-frame visual clarity' — say 'a strong first second.' I do not say 'global FYP' — say 'the For You feed.'";
+    expect(jargonCheck(instructional, true)).toEqual([]);
+    // Without the workspace allowance the same string flags.
+    expect(jargonCheck(instructional, false).length).toBeGreaterThan(0);
+  });
+
+  it("does not false-flag legitimate words that contain jargon letter-sequences", () => {
+    // 'typify' contains 'fyp' as a substring; 'skipping' contains 'kpi'.
+    // Word-boundary regex protects these.
+    const ok =
+      "Your tuesday post is going to typify the shape — if you keep skipping the long intro you'll see saves climb.";
+    expect(jargonCheck(ok, false)).toEqual([]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* fabricationCheck (Sprint 9.7)                                               */
+/* -------------------------------------------------------------------------- */
+
+describe("fabricationCheck (Sprint 9.7)", () => {
+  it("flags 'split 50/50 UK/US' as fabricated precision", () => {
+    const hit = fabricationCheck(
+      "your audience is split 50/50 between the UK and US, so the landmarks travel."
+    );
+    expect(hit).not.toBeNull();
+    expect(hit?.reason).toBe("fabricated-precision");
+  });
+
+  it("flags '60/40' audience split", () => {
+    const hit = fabricationCheck(
+      "your audience is roughly 60/40 US to Canada based on the geos."
+    );
+    expect(hit).not.toBeNull();
+  });
+
+  it("flags '70/30 men/women' demographic split", () => {
+    const hit = fabricationCheck(
+      "your audience demographics look like 70/30 men/women, mostly Gen Z."
+    );
+    expect(hit).not.toBeNull();
+  });
+
+  it("flags '80% UK, 20% US' paired percentage split", () => {
+    const hit = fabricationCheck(
+      "the geo breakdown on your last 30 posts is roughly 80% UK and 20% US — strong split."
+    );
+    expect(hit).not.toBeNull();
+  });
+
+  it("flags '75/25 millennials/gen z' followers split", () => {
+    const hit = fabricationCheck(
+      "your followers are split 75/25 millennials to gen z, which fits the brand voice."
+    );
+    expect(hit).not.toBeNull();
+  });
+
+  it("does NOT flag a non-split number ratio (e.g. '3/5 hits')", () => {
+    expect(
+      fabricationCheck(
+        "Last week: 3/5 of your posts hit the baseline. Norm is closer to 2/5."
+      )
+    ).toBeNull();
+  });
+
+  it("does NOT flag concrete cited metrics (47k views, 2.1x baseline)", () => {
+    expect(
+      fabricationCheck(
+        "Your Tuesday Reel hit 47k views — about 2.1x your trailing average for the post window."
+      )
+    ).toBeNull();
+  });
+
+  it("does NOT flag a numeric split that is NOT attached to audience-vocabulary", () => {
+    // "60/40" appears but no audience/geo/demographic words nearby — likely
+    // a comparison of something unrelated (e.g. a hypothetical posting cadence).
+    expect(
+      fabricationCheck(
+        "If you split your week 60/40 between filming and editing you'll have buffer."
+      )
+    ).toBeNull();
+  });
+
+  it("does NOT flag a single percentage with no pair", () => {
+    expect(
+      fabricationCheck(
+        "Your save rate is up 12% versus your trailing average."
+      )
+    ).toBeNull();
+  });
+
+  it("does NOT flag the SOUL.md anti-fabrication teaching prose", () => {
+    // SOUL.md mentions "50/50" + "60/40" as bad examples — but model-output
+    // mode flags any audience-vocab+split number combo. The check fires
+    // here because the string matches the structure. That's accepted —
+    // SOUL.md is a workspace-file (skips fabrication via validateOutput's
+    // kind gate); the stand-alone check is intentionally aggressive.
+    // This test pins the contract: fabricationCheck does not have a
+    // workspace-file escape hatch on its own.
+    const soulProse =
+      "If audience.topGeos is ['UK', 'US'], that does NOT mean 50/50 and it does NOT mean 60/40 — it means UK is the largest geo.";
+    expect(fabricationCheck(soulProse)).not.toBeNull();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* validateOutput composes jargon + fabrication checks                          */
+/* -------------------------------------------------------------------------- */
+
+describe("validateOutput composes the Sprint 9.7 checks", () => {
+  it("the real-world 700-char first-boot failure trips length+jargon+fabrication", () => {
+    const realFailure =
+      "Hey Kevin Castro! I'm Maya, your manager. I'm here to take the operational weight off your plate—handling the content planning, brand deals, and performance tracking so you can focus on creating. " +
+      "I've been looking at your initial profile and your focus on London landmarks like Piccadilly Circus alongside that gym humor is a strong combo. " +
+      "One insight for you: in the London travel niche, first-frame visual clarity on landmarks is the biggest driver for the share metrics that push you onto the global FYP. " +
+      "Since your audience is split 50/50 between the UK and US, your landmark shots are essentially travel porn for the US side and relatable for the UK side. " +
+      "To get us moving, I have six anchor questions to lock in your strategy. Let's do them one at a time.";
+    const result = validateOutput(realFailure);
+    expect(result.ok).toBe(false);
+    expect(result.reasons).toContain("length-chars");
+    expect(result.reasons).toContain("banned-jargon");
+    expect(result.reasons).toContain("fabricated-precision");
+  });
+
+  it("workspace-file mode skips fabricationCheck (model-output-only) but applies jargonCheck-with-tolerance", () => {
+    // SOUL.md cites 50/50 AND lists banned jargon. Under workspace-file
+    // mode the fabrication check is skipped entirely; jargon hits are
+    // tolerated when surrounded by instructional cues.
+    const soulProse =
+      "I never invent precise numbers — if topGeos is ['UK', 'US'] that does NOT mean 50/50. I do not say 'global FYP' — say 'the For You feed.'";
+    const asWorkspace = validateOutput(soulProse, "workspace-file");
+    expect(asWorkspace.reasons).not.toContain("fabricated-precision");
+    expect(asWorkspace.reasons).not.toContain("banned-jargon");
+  });
+
+  it("a clean multi-send first-boot greet (Send 1 of 3) passes validation", () => {
+    const result = validateOutput("Hey Kevin. I'm Maya, your manager.");
+    expect(result.ok).toBe(true);
+  });
+
+  it("a clean multi-send first-boot Q1 (Send 3 of 3) passes validation", () => {
+    const result = validateOutput("Where are you based?");
+    expect(result.ok).toBe(true);
   });
 });

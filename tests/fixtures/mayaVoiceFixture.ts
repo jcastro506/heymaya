@@ -3,15 +3,24 @@
  *
  * Two coexisting bundles in this file:
  *
- *  A) Sprint 8 Slice C corpus (`VoiceFixtureEntry` / `VOICE_FIXTURE`).
- *     30+ realistic Maya outputs covering the four voice degradation
+ *  A) Sprint 8 Slice C corpus + Sprint 9.7 extensions
+ *     (`VoiceFixtureEntry` / `VOICE_FIXTURE`).
+ *     50+ realistic Maya outputs covering the seven voice degradation
  *     modes plus the realistic-PASS shape Maya should ship.
  *     - banned-ai-self-reference  — 5 entries
  *     - banned-sycophancy         — 5 entries
  *     - banned-scaffolding        — 5 entries
- *     - length blowup             — 5 entries (each tripping ≥1 of the
+ *     - length blowup (legacy)    — 5 entries (each tripping ≥1 of the
  *                                   length / disclaimer / banned categories)
- *     - realistic PASS            — 15 entries
+ *     - fabrication-precision     — 5 entries (Sprint 9.7 — invented
+ *                                   percentages from ranked-list data)
+ *     - jargon / corporate-speak  — 6 entries (Sprint 9.7 — FYP, anchor
+ *                                   questions, KPI, etc.)
+ *     - length blowup (400-cap)   — 3 entries (Sprint 9.7 — including the
+ *                                   real-world 700-char regression)
+ *     - realistic PASS            — 25 entries (Sprint 9.7 — extended with
+ *                                   multi-send first-boot shape + human-
+ *                                   language alternatives to the jargon)
  *     Consumed by `tests/mayaVoice.test.ts` via `tests/lib/mayaVoiceValidator.ts`.
  *
  *  B) Sprint 9 AI-trap fixture (`MayaVoiceFixtureEntry` / `AI_TRAP_FIXTURE`)
@@ -294,6 +303,172 @@ const scaffoldingFailures: VoiceFixtureEntry[] = [
 ];
 
 /* -------------------------------------------------------------------------- */
+/* FAIL-MODE 5 — Fabricated precision (Sprint 9.7)                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Sprint 9.7 — added after a real-world test where Maya synthesized
+ * "audience is split 50/50 UK/US" from `topGeos: ['UK', 'US']`. Ranked
+ * lists are NOT percentages. The fabricationCheck catches the obvious
+ * patterns; the load-bearing rule lives in SOUL.md "Anti-fabrication".
+ */
+const fabricationFailures: VoiceFixtureEntry[] = [
+  {
+    scenario: "fabrication/01 — invented 50/50 UK/US split (the live failure)",
+    output:
+      "your audience is split 50/50 between the UK and US, so your landmark shots work for both sides.",
+    expectedToPass: false,
+    expectedReasons: ["fabricated-precision"],
+    failureReasonIfNot:
+      "topGeos is a ranked list, not a percentage — 50/50 is fabricated.",
+  },
+  {
+    scenario: "fabrication/02 — invented 60/40 audience split",
+    output:
+      "your audience is roughly 60/40 US to Canada based on the geos i'm seeing in the data.",
+    expectedToPass: false,
+    expectedReasons: ["fabricated-precision"],
+    failureReasonIfNot:
+      "60/40 is invented from a ranked list of countries.",
+  },
+  {
+    scenario: "fabrication/03 — invented 70/30 men/women age split",
+    output:
+      "your audience demographics look like 70/30 men/women, mostly Gen Z, based on what i can see.",
+    expectedToPass: false,
+    expectedReasons: ["fabricated-precision"],
+    failureReasonIfNot:
+      "70/30 men/women is fabricated — gender split needs an explicit data source.",
+  },
+  {
+    scenario: "fabrication/04 — invented 80% / 20% percentage pair",
+    output:
+      "the geo breakdown on your last 30 posts is roughly 80% UK and 20% US — strong for a local brand match between the two markets.",
+    expectedToPass: false,
+    expectedReasons: ["fabricated-precision"],
+    failureReasonIfNot:
+      "80%/20% paired percentages summing to 100 attached to geo vocab.",
+  },
+  {
+    scenario: "fabrication/05 — invented 75/25 followers split",
+    output:
+      "your followers are split 75/25 millennials to gen z, which fits the brand voice you've been building.",
+    expectedToPass: false,
+    expectedReasons: ["fabricated-precision"],
+    failureReasonIfNot:
+      "75/25 millennials/gen-z is fabricated audience precision.",
+  },
+];
+
+/* -------------------------------------------------------------------------- */
+/* FAIL-MODE 6 — Creator-jargon / corporate-speak (Sprint 9.7)                 */
+/* -------------------------------------------------------------------------- */
+
+const jargonFailures: VoiceFixtureEntry[] = [
+  {
+    scenario: "jargon/01 — 'global FYP' + 'share metrics'",
+    output:
+      "first-frame visual clarity on landmarks is the biggest driver for the share metrics that push you onto the global FYP.",
+    expectedToPass: false,
+    expectedReasons: ["banned-jargon"],
+    failureReasonIfNot:
+      "Three jargon hits in one line: first-frame, share metric, global FYP.",
+  },
+  {
+    scenario: "jargon/02 — 'anchor questions' framing",
+    output:
+      "to get us moving, i have six anchor questions to lock in your strategy. let's do them one at a time.",
+    expectedToPass: false,
+    expectedReasons: ["banned-jargon"],
+    failureReasonIfNot:
+      "'anchor questions' + 'lock in your strategy' — coach-speak.",
+  },
+  {
+    scenario: "jargon/03 — 'brand-deal matching' + 'operational weight'",
+    output:
+      "i'm here to take the operational weight off your plate — handling brand-deal matching, content planning, and performance tracking.",
+    expectedToPass: false,
+    expectedReasons: ["banned-jargon"],
+    failureReasonIfNot:
+      "'operational weight' + 'brand-deal matching' — both corporate-pitch register.",
+  },
+  {
+    scenario: "jargon/04 — KPI / value prop / north star metric",
+    output:
+      "your north star metric should be saves per post — that's the KPI that ties to your value prop in the food niche.",
+    expectedToPass: false,
+    expectedReasons: ["banned-jargon"],
+    failureReasonIfNot:
+      "KPI + value prop + north star metric — pure deck register.",
+  },
+  {
+    scenario: "jargon/05 — 'optimization' + 'engagement metrics' + 'key driver'",
+    output:
+      "the key driver for hook optimization on your last 30 posts is engagement metrics in the first three seconds — that's where to focus.",
+    expectedToPass: false,
+    expectedReasons: ["banned-jargon"],
+    failureReasonIfNot:
+      "'engagement metrics' + 'optimization' + 'key driver' all corporate-flavored.",
+  },
+  {
+    scenario: "jargon/06 — 'strategic alignment' + 'metric-driven'",
+    output:
+      "your tuesday post had strong strategic alignment with your manager-readiness packet — really metric-driven shape.",
+    expectedToPass: false,
+    expectedReasons: ["banned-jargon"],
+    failureReasonIfNot:
+      "'strategic alignment' + 'metric-driven' — consultant-speak.",
+  },
+];
+
+/* -------------------------------------------------------------------------- */
+/* FAIL-MODE 7 — Length blowup at the new 400-char cap (Sprint 9.7)            */
+/* -------------------------------------------------------------------------- */
+
+const lengthBlowupFailures400: VoiceFixtureEntry[] = [
+  {
+    scenario: "length-400/01 — the actual 700-char first-boot regression",
+    // The real message Maya sent in the live test. Multiple problems at
+    // once (length, fabrication, jargon, scaffolding). Length is the cap
+    // the test asserts on; the other reasons may also fire and that's
+    // fine — the entry is the canonical "what we broke and why" anchor.
+    output:
+      "Hey Kevin Castro! I'm Maya, your manager. I'm here to take the operational weight off your plate—handling the content planning, brand deals, and performance tracking so you can focus on creating. I've been looking at your initial profile and your focus on London landmarks like Piccadilly Circus alongside that gym humor is a strong combo. One insight for you: in the London travel niche, first-frame visual clarity on landmarks is the biggest driver for the share metrics that push you onto the global FYP. Since your audience is split 50/50 between the UK and US, your landmark shots are essentially travel porn for the US side and relatable for the UK side. To get us moving, I have six anchor questions to lock in your strategy. Let's do them one at a time. First: Where are you based exactly?",
+    expectedToPass: false,
+    expectedReasons: [
+      "length-chars",
+      "fabricated-precision",
+      "banned-jargon",
+    ],
+    failureReasonIfNot:
+      "The real-world 700-char failure. Length cap (400) + fabricated 50/50 + jargon stack.",
+  },
+  {
+    scenario: "length-400/02 — wall just over the 400-char cap",
+    output:
+      "your tuesday post landed well — 47k views and the save rate is up versus your trailing 30-day window. " +
+      "the hook shape is what carried it. " +
+      "i think we run the same shape on thursday and see if it holds. " +
+      "want me to draft the caption tonight or do you want to take a swing first? " +
+      "either way it's grounded in the data we have. " +
+      "the deals tab also has two new drafts waiting — i can pull those forward when you're ready to look.",
+    expectedToPass: false,
+    expectedReasons: ["length-chars"],
+    failureReasonIfNot:
+      "Just over the 400-char cap, no other voice problems — pure length.",
+  },
+  {
+    scenario: "length-400/03 — 600-char bundled greet+insight+question",
+    output:
+      "Hey there. I'm Maya, your manager — the operational layer of your creator career. I've been looking at your last 30 TikToks and there's a strong cooking-on-a-budget angle, plus a warm-but-dry voice that reads well to a Gen-Z audience. The pacing on your hooks is tight (under 6 words on the wins). One question to start: where are you based? I want to anchor your audience geography before I plan around posting times. After that I'll ask about niche and goals.",
+    expectedToPass: false,
+    expectedReasons: ["length-chars"],
+    failureReasonIfNot:
+      "Bundled 3-message arc into one — should have been three separate sends.",
+  },
+];
+
+/* -------------------------------------------------------------------------- */
 /* PASS — Realistic Maya outputs                                               */
 /* -------------------------------------------------------------------------- */
 
@@ -386,6 +561,70 @@ const realisticPasses: VoiceFixtureEntry[] = [
       "Three flags on the Brand Y contract: 6-month exclusivity, IP grant covers derivative works, payment is net-60. This is a flag, not legal advice — get a lawyer if anything feels off.",
     expectedToPass: true,
   },
+  // Sprint 9.7 pass-mode additions — multi-send first-boot shape + human
+  // language alternatives to the failed-fixture jargon. Each entry is
+  // ≤400 chars (the new per-message cap) and uses the plain-human phrasing
+  // SOUL.md "Human language only" prescribes.
+  {
+    scenario: "pass/16 — first-boot greet (Send 1 of 3, ≤80 chars)",
+    output: "Hey Kevin. I'm Maya, your manager.",
+    expectedToPass: true,
+  },
+  {
+    scenario:
+      "pass/17 — first-boot cited insight (Send 2 of 3, plain language, no fabrication)",
+    output:
+      "Reading your last 30: a lot of London landmark footage with a gym-humor edge. Top geos look like UK + US, UK leading. Your hooks land best when the visual reads in the first second.",
+    expectedToPass: true,
+  },
+  {
+    scenario: "pass/18 — first-boot Q1 location (Send 3 of 3, ≤120 chars)",
+    output: "Where are you based?",
+    expectedToPass: true,
+  },
+  {
+    scenario: "pass/19 — first-boot Q2 niche (single message)",
+    output:
+      "What are you making content about? Your words, not what people say back to you.",
+    expectedToPass: true,
+  },
+  {
+    scenario: "pass/20 — first-boot Q5 deals (single message)",
+    output:
+      "Brand deals — interested? If yes, rough floor — what's the smallest number you'd say yes to?",
+    expectedToPass: true,
+  },
+  {
+    scenario: "pass/21 — human-language alternative to 'first-frame visual clarity'",
+    output:
+      "Your top hooks land in the first second — the visual reads before the caption. Want me to draft three more in that same shape for Thursday?",
+    expectedToPass: true,
+  },
+  {
+    scenario: "pass/22 — human-language alternative to 'global FYP'",
+    output:
+      "Your last Wednesday TikTok is showing up on the For You feed wider than your norm — the save rate is leading the lift.",
+    expectedToPass: true,
+  },
+  {
+    scenario:
+      "pass/23 — ranked-list audience phrasing (no fabricated precision)",
+    output:
+      "Top geos on your last 30 are UK and US — UK leading. Your landmark shots travel for both sides. Posting times anchor to UK afternoon.",
+    expectedToPass: true,
+  },
+  {
+    scenario: "pass/24 — picture-summary verification (in-voice, no jargon)",
+    output:
+      "Reading your last 30: niche is constraint-POV cooking-on-a-budget, voice is warm and dry, audience indexes Gen-Z. One thing — I see London footage in your last 30, are you actually in Brooklyn or splitting time?",
+    expectedToPass: true,
+  },
+  {
+    scenario: "pass/25 — short proactive ping using 'the feed' instead of 'FYP'",
+    output:
+      "Your noon Reel is at 12k saves in 4h vs 4k baseline — the feed is pushing it. Want me to draft a follow-up tonight?",
+    expectedToPass: true,
+  },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -397,6 +636,9 @@ export const VOICE_FIXTURE: ReadonlyArray<VoiceFixtureEntry> = [
   ...lengthBlowupFailures,
   ...sycophancyFailures,
   ...scaffoldingFailures,
+  ...fabricationFailures,
+  ...jargonFailures,
+  ...lengthBlowupFailures400,
   ...realisticPasses,
 ];
 
@@ -405,6 +647,9 @@ export const VOICE_FIXTURE_COUNTS = {
   lengthBlowup: lengthBlowupFailures.length,
   sycophancy: sycophancyFailures.length,
   scaffolding: scaffoldingFailures.length,
+  fabrication: fabricationFailures.length,
+  jargon: jargonFailures.length,
+  lengthBlowup400: lengthBlowupFailures400.length,
   realisticPass: realisticPasses.length,
   total: VOICE_FIXTURE.length,
 } as const;

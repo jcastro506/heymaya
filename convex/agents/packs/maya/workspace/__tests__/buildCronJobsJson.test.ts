@@ -328,6 +328,33 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     expect(kickstart.payload.lightContext).toBe(true);
   });
 
+  it("kickstart payload (Sprint 9.7) instructs THREE separate sends + anti-fabrication + no-jargon", () => {
+    // Sprint 9.7 — after the live-test failure where Maya bundled greet +
+    // identity + insight + Q1 into one 700-char marketing-pitch novel with
+    // a fabricated 50/50 stat, the kickstart prose explicitly directs the
+    // multi-send shape, names the fabrication anti-pattern, and lists the
+    // jargon to avoid.
+    const { jobs } = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    const kickstart = jobs.find((j) => j.id === "0001_first_boot_kickstart")!;
+    if (kickstart.payload.kind !== "agentTurn")
+      throw new Error("type-narrow guard");
+    const msg = kickstart.payload.message;
+    // Multi-send shape — explicit "THREE separate" calls, not bundled.
+    expect(msg).toMatch(/THREE separate/i);
+    expect(msg).toContain("claw-messenger.sendText");
+    // Anti-fabrication — names the ranked-list trap.
+    expect(msg).toMatch(/never invent precise numbers/i);
+    expect(msg).toMatch(/50\/50/); // names the bad pattern by example
+    expect(msg).toMatch(/ranked list/i);
+    // Per-message cap — operator-locked 400 chars.
+    expect(msg).toContain("400");
+    // No-jargon — names at least the live-test offenders.
+    expect(msg).toMatch(/FYP|first-frame|share metrics|anchor questions/i);
+  });
+
   it("does NOT emit the kickstart when firstBootCompletedAt is set", () => {
     const { jobs } = buildCronJobsJson({
       creator: bootedCreator("manager"),

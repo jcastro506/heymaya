@@ -52,20 +52,29 @@ import type { Doc } from "../convex/_generated/dataModel";
 /* -------------------------------------------------------------------------- */
 
 describe("mayaVoice — fixture-driven validation", () => {
-  it("ships ≥30 entries (≥20 fail-mode + ≥10 pass-mode)", () => {
-    expect(VOICE_FIXTURE_COUNTS.total).toBeGreaterThanOrEqual(30);
+  it("ships ≥50 entries with all 7 fail-mode categories + multi-send pass shape", () => {
+    // Sprint 9.7 — extended from ≥30 to ≥50 entries to cover the four
+    // new degradation modes (fabrication, jargon, 400-char cap regression,
+    // bundled-multi-send) plus the multi-send pass-mode shape.
+    expect(VOICE_FIXTURE_COUNTS.total).toBeGreaterThanOrEqual(50);
     const failMode =
       VOICE_FIXTURE_COUNTS.aiSelfReference +
       VOICE_FIXTURE_COUNTS.lengthBlowup +
       VOICE_FIXTURE_COUNTS.sycophancy +
-      VOICE_FIXTURE_COUNTS.scaffolding;
-    expect(failMode).toBeGreaterThanOrEqual(20);
-    expect(VOICE_FIXTURE_COUNTS.realisticPass).toBeGreaterThanOrEqual(10);
+      VOICE_FIXTURE_COUNTS.scaffolding +
+      VOICE_FIXTURE_COUNTS.fabrication +
+      VOICE_FIXTURE_COUNTS.jargon +
+      VOICE_FIXTURE_COUNTS.lengthBlowup400;
+    expect(failMode).toBeGreaterThanOrEqual(30);
+    expect(VOICE_FIXTURE_COUNTS.realisticPass).toBeGreaterThanOrEqual(20);
     // Each fail-mode category must have ≥5 entries per spec.
     expect(VOICE_FIXTURE_COUNTS.aiSelfReference).toBeGreaterThanOrEqual(5);
     expect(VOICE_FIXTURE_COUNTS.lengthBlowup).toBeGreaterThanOrEqual(5);
     expect(VOICE_FIXTURE_COUNTS.sycophancy).toBeGreaterThanOrEqual(5);
     expect(VOICE_FIXTURE_COUNTS.scaffolding).toBeGreaterThanOrEqual(5);
+    expect(VOICE_FIXTURE_COUNTS.fabrication).toBeGreaterThanOrEqual(5);
+    expect(VOICE_FIXTURE_COUNTS.jargon).toBeGreaterThanOrEqual(5);
+    expect(VOICE_FIXTURE_COUNTS.lengthBlowup400).toBeGreaterThanOrEqual(3);
   });
 
   // Group by scenario prefix for readable test failures. Each entry runs
