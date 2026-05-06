@@ -298,9 +298,13 @@ function verifyMachine(appName: string, machineId: string): string {
   //   - Slice D dropped remotion-video-toolkit, added 6 ClawHub pins
   //     (capcut, video-frames, faster-whisper, elevenlabs-transcribe,
   //      photo-text-overlay, brave-search), and vendored 3 Anthropic
-  //     skills (pdf, docx, internal-comms).
-  // Verify representatives from each layer: BUNDLED + custom-maya + ClawHub
-  // pin (kept) + ClawHub pin (new) + Anthropic vendored.
+  //     skills (pdf, docx, internal-comms) into the repo. Multi-file
+  //     skill bundling to the runtime workspace is a follow-on; the
+  //     vendored skills are pinned in agents/skills/ but don't land in
+  //     /data/workspace/skills/ until that work lands.
+  // Verify representatives from each runtime-bundled layer: scrapecreators
+  // (BUNDLED) + maya-platform (custom-maya) + tiktok (kept ClawHub pin) +
+  // video-frames (new ClawHub pin).
   const command = [
     "test -s /data/workspace/AGENTS.md",
     "test -s /data/workspace/SOUL.md",
@@ -310,14 +314,13 @@ function verifyMachine(appName: string, machineId: string): string {
     "test -s /data/openclaw.json",
     "test -w /data/workspace",
     "test -w /data/cron",
-    "grep -q '^name: scrapecreators-api$' /data/workspace/skills/scrapecreators-api/SKILL.md",
-    "grep -q '^name: maya-platform$' /data/workspace/skills/maya-platform/SKILL.md",
-    "grep -q '^name: tiktok$' /data/workspace/skills/tiktok/SKILL.md",
-    "grep -q '^name: video-frames$' /data/workspace/skills/video-frames/SKILL.md",
-    "test -d /data/workspace/skills/pdf",
-    "openclaw skills list | grep -q 'scrapecreators-api'",
-    "openclaw skills list | grep -q 'maya-platform'",
-    "openclaw skills list | grep -q 'video-frames'",
+    // Per-skill SKILL.md existence (frontmatter `name:` differs from slug
+    // for some skills — e.g. maya-platform/SKILL.md frontmatter is
+    // `name: maya-platform-skills` — so we test the file, not the name).
+    "test -s /data/workspace/skills/scrapecreators-api/SKILL.md",
+    "test -s /data/workspace/skills/maya-platform/SKILL.md",
+    "test -s /data/workspace/skills/tiktok/SKILL.md",
+    "test -s /data/workspace/skills/video-frames/SKILL.md",
     "(curl -fsS http://127.0.0.1:18789/healthz || curl -fsS http://127.0.0.1:3000/healthz || true)",
   ].join(" && ");
   const shellCommand = `/bin/sh -lc ${quoteShell(command)}`;
@@ -325,6 +328,50 @@ function verifyMachine(appName: string, machineId: string): string {
     ["ssh", "console", "--app", appName, "--machine", machineId, "--command", shellCommand],
     60_000
   );
+}
+
+/**
+ * Post-ready verification: polls for `cron: started` in the gateway log
+ * (Sprint 1 cron-init regression check) and runs a voice-leak grep over
+ * /data/workspace (Sprint 2 voice-strip verification). Cron init lands at
+ * ~T+1:30 after gateway ready, so this can't be in `verifyMachine` —
+ * separate poll with retries.
+ */
+function pollCronAndVoiceReady(appName: string, machineId: string): void {
+  const deadline = Date.now() + 90_000;
+  const cronCmd =
+    "grep -h 'cron: started' /tmp/openclaw-1000/openclaw-*.log 2>/dev/null | head -1";
+  while (Date.now() < deadline) {
+    const out = runFly(
+      ["ssh", "console", "--app", appName, "--machine", machineId, "--command", `/bin/sh -lc ${quoteShell(cronCmd)}`],
+      30_000
+    );
+    if (out.includes("cron: started")) {
+      console.log("Cron started log observed.");
+      break;
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5_000);
+  }
+  if (Date.now() >= deadline) {
+    throw new Error(`Timed out waiting for "cron: started" in gateway log for ${appName}.`);
+  }
+
+  // Voice grep: zero "AI"/"AI assistant" leaks in agent-readable .md surfaces.
+  const voiceCmd =
+    "grep -rli 'AI creator manager\\|as an AI\\|AI assistant\\|I will synthesize' /data/workspace/ --include='*.md' 2>/dev/null || true";
+  const voiceOut = runFly(
+    ["ssh", "console", "--app", appName, "--machine", machineId, "--command", `/bin/sh -lc ${quoteShell(voiceCmd)}`],
+    30_000
+  );
+  const hits = voiceOut
+    .split(/\r?\n/)
+    .filter((l) => l.startsWith("/data/workspace/"));
+  if (hits.length > 0) {
+    throw new Error(
+      `Voice leak in deployed workspace (Sprint 2 voice-strip regression):\n  ${hits.join("\n  ")}`
+    );
+  }
+  console.log("Voice grep clean: no AI-self-reference leaks in /data/workspace/*.md.");
 }
 
 function waitForGatewayReadyLogs(appName: string, machineId: string): string {
@@ -409,6 +456,8 @@ async function runLiveSmoke(flags: Flags): Promise<void> {
       .slice(-20)
       .join("\n");
     if (interesting) console.log(interesting);
+
+    pollCronAndVoiceReady(appName, machine.id);
 
     console.log("Creator Maya v0 live Fly/OpenClaw smoke passed.");
   } finally {

@@ -73,7 +73,35 @@ Carryover: **Live Fly cron smoke is still red.** Goes in Sprint 1.
 
 ---
 
-## Sprint 2 — Foundation: deploy path consolidation + voice fix + skill bundling
+## Sprint 2 — Foundation: deploy path consolidation + voice fix + skill bundling — DONE
+
+**Status:** Merged to `staging`, pushed. 2704/2704 tests passing, tsc clean, real-world Fly smoke green.
+
+**Outcome:**
+- `assembleWorkspaceBundle.ts` is the single creator deploy path. `creatorMayaV0/backend.ts` callers point at it. 13 prose-only `creator-*` skill stubs + 8 thin-stub generators (agentsMd/soulMd/userMd/toolsMd/heartbeatMd/memoryMd/dreamingMd/jobsJson) deleted from `workspaceManifest.ts`.
+- `generateSoulMd.ts` + `generateIdentityMd.ts` written, wired into `assembleWorkspaceBundle.ts:103`. Both ship anti-sycophancy frame, anti-fake-busy, banned-term enforcement.
+- 6 voice leaks stripped (5 confirmed + 1 in `maya-calendar-classifier/script.ts:204`). `agents/skills/maya-platform/skill.md` → `SKILL.md` rename via `git mv` (history preserved). `tests/mayaVoice.test.ts` (17 cases) extended to grep banned terms in every workspace generator's output.
+- 23 creator-side `maya-*` skills bundled into `BUNDLED_SKILLS` (vs. 1 before). `metadata.openclaw` frontmatter added to each. Regen via `scripts/sync-bundled-skills.ts`. Companion test asserts byte-for-byte sync.
+- `pinnedClawhubSkills.ts` refreshed: `remotion-video-toolkit` dropped; `tiktok@3.0.0` kept (Growth-OS, complementary to scrapecreators read-layer per skill-content judgment); 6 ClawHub pins added (capcut, video-frames, faster-whisper, elevenlabs-transcribe, photo-text-overlay, brave-search).
+- 3 Anthropic skills vendored faithfully from `anthropics/skills@d230a6dd` into `agents/skills/{pdf,docx,internal-comms}/` (79 files). Provenance + re-vendor command in `agents/skills/VENDOR_MANIFEST.md`.
+- Sprint 1 carry-forward landed: `convex/onboarding/maya/deployMaya.ts:buildBootstrapShell()` switched from `--bind lan --port 3000` (crash-loops on v2026.4.23) to `--allow-unconfigured` loopback default — mirrors `deployServiceMaya.ts`.
+- `creator-maya-v0-fly-smoke.ts` extended with post-ready `pollCronAndVoiceReady()` step: polls for `cron: started enabled=true jobs=21` in gateway log, then voice-grep over `/data/workspace/*.md`. Both green on real Fly machine in iad in ~50s.
+
+**Real-world bar (verified):**
+- `npm run smoke:creator-maya-v0 -- --live --confirm` exits 0 in ~50s on real Fly v2026.4.23
+- 11 root files emit (AGENTS, SOUL, IDENTITY, USER, MEMORY, HEARTBEAT, BOOT, TOOLS, DREAMING, standing-orders, Operations/) + 31 skills in `/data/workspace/skills/` (23 maya-* + scrapecreators-api + 7 ClawHub pins)
+- SOUL.md ships SEED-only anti-sycophancy frame; IDENTITY.md is `name=Maya, vibe=strategic, emoji=✨, creature=creator manager`
+- Voice grep over `/data/workspace/*.md` returns ZERO hits on banned terms
+- `cron: started` observed in gateway log with `enabled=true, jobs=21` (Sprint 1 win regression-checked + scaled from 1 → 21 jobs)
+
+**Carry-forward into Sprint 3:**
+- 3 Anthropic vendored skills (`pdf/`, `docx/`, `internal-comms/`) live in `agents/skills/` but DO NOT ship to `/data/workspace/skills/` at deploy. The `BUNDLED_SKILLS` registry only inlines a single SKILL.md per slug; the Anthropic skills have helper scripts/examples/refs (79 files) that need a multi-file bundling path. Decide whether to: (a) extend the bundle assembler to walk subtrees per slug, (b) ship them via a separate ClawHub-style hydration step, or (c) defer until Maya needs them at runtime (likely not v0).
+- `agents/skills/maya-platform/SKILL.md` frontmatter is `name: maya-platform-skills` (not `maya-platform`); harmless but worth standardizing if the OpenClaw loader ever uses the frontmatter name for resolution.
+- `__tests__/deployMaya.test.ts` — 4 synthesis/Wave-3 tests bumped to `{ timeout: 30_000 }`. They run real model-router code paths with retries (~20s each); the previous "2673/2673 passing" count from the Sprint 1 handoff was likely vitest's default 5s timeout failing them silently. Investigate whether the synthesis path can be sped up or split into faster unit tests.
+
+---
+
+## Sprint 2 — Foundation (original spec, kept for reference)
 
 **Goal:** Maya boots with the right files + the right skills + clean voice. This is the foundation; everything else assumes it.
 

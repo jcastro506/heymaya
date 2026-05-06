@@ -22,7 +22,9 @@ import type * as agents_packs_maya_workspace_generateAgentsMd from "../agents/pa
 import type * as agents_packs_maya_workspace_generateBootMd from "../agents/packs/maya/workspace/generateBootMd.js";
 import type * as agents_packs_maya_workspace_generateDreamingMd from "../agents/packs/maya/workspace/generateDreamingMd.js";
 import type * as agents_packs_maya_workspace_generateHeartbeatMd from "../agents/packs/maya/workspace/generateHeartbeatMd.js";
+import type * as agents_packs_maya_workspace_generateIdentityMd from "../agents/packs/maya/workspace/generateIdentityMd.js";
 import type * as agents_packs_maya_workspace_generateMemoryMdSeed from "../agents/packs/maya/workspace/generateMemoryMdSeed.js";
+import type * as agents_packs_maya_workspace_generateSoulMd from "../agents/packs/maya/workspace/generateSoulMd.js";
 import type * as agents_packs_maya_workspace_generateToolsMd from "../agents/packs/maya/workspace/generateToolsMd.js";
 import type * as agents_packs_maya_workspace_generateUserMd from "../agents/packs/maya/workspace/generateUserMd.js";
 import type * as agents_packs_maya_workspace_skillsRegistry from "../agents/packs/maya/workspace/skillsRegistry.js";
@@ -198,7 +200,9 @@ declare const fullApi: ApiFromModules<{
   "agents/packs/maya/workspace/generateBootMd": typeof agents_packs_maya_workspace_generateBootMd;
   "agents/packs/maya/workspace/generateDreamingMd": typeof agents_packs_maya_workspace_generateDreamingMd;
   "agents/packs/maya/workspace/generateHeartbeatMd": typeof agents_packs_maya_workspace_generateHeartbeatMd;
+  "agents/packs/maya/workspace/generateIdentityMd": typeof agents_packs_maya_workspace_generateIdentityMd;
   "agents/packs/maya/workspace/generateMemoryMdSeed": typeof agents_packs_maya_workspace_generateMemoryMdSeed;
+  "agents/packs/maya/workspace/generateSoulMd": typeof agents_packs_maya_workspace_generateSoulMd;
   "agents/packs/maya/workspace/generateToolsMd": typeof agents_packs_maya_workspace_generateToolsMd;
   "agents/packs/maya/workspace/generateUserMd": typeof agents_packs_maya_workspace_generateUserMd;
   "agents/packs/maya/workspace/skillsRegistry": typeof agents_packs_maya_workspace_skillsRegistry;
