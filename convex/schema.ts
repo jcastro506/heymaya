@@ -3286,4 +3286,31 @@ export default defineSchema({
     .index("by_label_and_ts", ["label", "ts"])
     .index("by_creator_and_kind_and_ts", ["creatorId", "kind", "ts"]),
   // ─── end Creator usage analytics ────────────────────────────────────────
+
+  // ─── Cron heartbeat — added 2026-05-06 (Wave 0b) ────────────────────────
+  // Append-only audit log proving OpenClaw cron actually fires for a given
+  // creator. Written via the `lc_maya/cron_heartbeat` HTTP endpoint that
+  // Maya can hit from a `cron.heartbeat` standing order. Read by:
+  //   - the real-OpenClaw smoke harness (waits 90s, expects ≥1 row)
+  //   - the operator at `npx convex run admin:cronHeartbeats:latest`
+  //
+  // Cross-tenant isolation: every row carries `creatorId`. The HTTP
+  // endpoint validates the shared webhook secret + binds the row to the
+  // exact creatorId in the body — Maya cannot write a heartbeat for
+  // another creator's machine.
+  //
+  // NOT a re-implementation of cron — OpenClaw still owns the scheduler.
+  // This table only records that we OBSERVED a fire, so we can prove
+  // end-to-end liveness from the smoke test side.
+  cronHeartbeat: defineTable({
+    creatorId: v.id("creators"),
+    /** Standing-order id ("morning_brief", "smoke_minute_heartbeat", …). */
+    jobName: v.string(),
+    /** Unix ms when OpenClaw fired the cron entry. Set client-side. */
+    firedAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_firedAt", ["creatorId", "firedAt"])
+    .index("by_jobName_and_firedAt", ["jobName", "firedAt"]),
+  // ─── end Cron heartbeat ─────────────────────────────────────────────────
 });

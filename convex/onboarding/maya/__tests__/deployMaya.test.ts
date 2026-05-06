@@ -257,7 +257,10 @@ describe("deployMaya — happy path", () => {
     expect(machineCfg.env?.MAYA_JOBS_JSON_BASE64).toBeDefined();
     expect(machineCfg.env?.OPENCLAW_STATE_DIR).toBe("/data");
     expect(machineCfg.env?.OPENCLAW_CONFIG_PATH).toBe("/data/openclaw.json");
-    expect(machineCfg.env?.OPENCLAW_SKIP_CRON).toBe("1");
+    // OPENCLAW_SKIP_CRON MUST NOT be set — cron is OpenClaw-native and runs
+    // every Maya proactive behavior (morning brief, weekly review, etc.).
+    // The flag is the kill switch; setting it silently disables all crons.
+    expect(machineCfg.env?.OPENCLAW_SKIP_CRON).toBeUndefined();
     expect(machineCfg.env?.NODE_OPTIONS).toBe(
       "--max-old-space-size=1536 --dns-result-order=ipv4first"
     );
@@ -1016,7 +1019,8 @@ describe("machineConfigFor", () => {
     expect(out.env?.MAYA_OPENCLAW_VERSION).toBe("2026.4.23");
     expect(out.env?.OPENCLAW_STATE_DIR).toBe("/data");
     expect(out.env?.OPENCLAW_CONFIG_PATH).toBe("/data/openclaw.json");
-    expect(out.env?.OPENCLAW_SKIP_CRON).toBe("1");
+    // OPENCLAW_SKIP_CRON MUST NOT be set — cron is OpenClaw-native.
+    expect(out.env?.OPENCLAW_SKIP_CRON).toBeUndefined();
     expect(out.env?.NODE_OPTIONS).toBe(
       "--max-old-space-size=1536 --dns-result-order=ipv4first"
     );

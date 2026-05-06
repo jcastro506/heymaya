@@ -225,12 +225,17 @@ export function machineConfigFor(
   config: MayaConfig,
   jobsJsonBase64: string
 ): FlyMachineConfig {
+  // OPENCLAW_SKIP_CRON is intentionally NOT set. OpenClaw's cron service
+  // runs natively from /data/cron/jobs.json (path resolves via
+  // OPENCLAW_STATE_DIR=/data → resolveDefaultCronStorePath in
+  // openclaw/dist/store-CQBu1BbB.js). All 19 of Maya's proactive behaviors
+  // (morning brief, weekly review, performance check, etc.) live in jobs.json
+  // and would silently no-op if cron were disabled here.
   const env: Record<string, string> = {
     OPENCLAW_DISABLE_BONJOUR: "1",
     OPENCLAW_CONFIG_PATH: "/data/openclaw.json",
     OPENCLAW_PREFER_PNPM: "1",
     OPENCLAW_PLUGIN_STAGE_DIR: "/opt/openclaw-runtime-preseed/plugin-runtime-deps",
-    OPENCLAW_SKIP_CRON: "1",
     OPENCLAW_STATE_DIR: "/data",
     NODE_OPTIONS: "--max-old-space-size=1536 --dns-result-order=ipv4first",
     MAYA_PLAN: config.plan,
