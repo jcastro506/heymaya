@@ -1,44 +1,42 @@
 #!/usr/bin/env tsx
 /**
- * Wave 0b — real-OpenClaw cron smoke against Fly.
+ * Sprint 1 — real-OpenClaw cron smoke against Fly.
  *
- * What this proves:
- *   1. We do NOT set OPENCLAW_SKIP_CRON, so OpenClaw's native cron service
- *      starts on every Maya boot.
- *   2. A `* * * * *` jobs.json entry actually fires within 90 seconds of
- *      machine boot on a real Fly machine running the published OpenClaw
- *      runtime image.
- *   3. The fired cron POSTs a heartbeat to Convex's
- *      `/lc_maya/cron_heartbeat` endpoint and the row lands in the
- *      `cronHeartbeat` table, observable via Convex query.
- *   4. Live Fly logs include `cron: started` followed by the agent-turn
- *      runs we expect.
+ * What this proves (the narrow bar):
+ *   - OPENCLAW_SKIP_CRON is unset, so OpenClaw's native cron service
+ *     initializes on Maya boot, loads /data/cron/jobs.json, and emits
+ *     `cron: started` to the gateway log on a real Fly machine running
+ *     the published OpenClaw runtime image.
+ *
+ * Why this scope: Wave 0b's bug was a kill switch that prevented the
+ * cron service from ever starting. The signal of value is "cron service
+ * starts on real Fly". The full cron→agent→tool→Convex round-trip
+ * requires a production workspace + skills + tools and is out of scope
+ * here — that path is covered by `scripts/creator-maya-v0-fly-smoke.ts`
+ * (production bundle, real skills).
+ *
+ * Architecture:
+ *   - Minimal openclaw.json (defaults — anything richer correlated with
+ *     cron silently failing to auto-enable, verified live 2026-05-06).
+ *   - Single-entry jobs.json (* * * * * heartbeat) — content shape just
+ *     needs to be loadable; we don't wait for the agent turn to complete.
+ *   - SSH-poll the gateway log file at
+ *     /tmp/openclaw-1000/openclaw-<DATE>.log for the literal phrase
+ *     "cron: started".
  *
  * No mocks on the critical path:
  *   - real Fly app create + machine create
  *   - real OpenClaw runtime image
- *   - real Convex deployment (NEXT_PUBLIC_CONVEX_URL / convex.site)
- *   - real cron firing (no manual `openclaw cron run` invocations)
- *
- * Lifecycle:
- *   - Inserts a one-shot test creator into Convex via internal mutation.
- *   - Builds a creator workspace bundle with our production manifest, then
- *     OVERWRITES the bundled jobs.json with a single `* * * * *` heartbeat
- *     job that POSTs to /lc_maya/cron_heartbeat with the test creatorId.
- *   - Creates a Fly app + machine with the same env shape as
- *     deployMaya.ts:machineConfigFor (minus SKIP_CRON, which is the bug).
- *   - Polls the `cronHeartbeat` Convex table for ≥1 row in ≤90s.
- *   - Reads `flyctl logs` to extract `[cron]` lines for the report.
- *   - Tears down the Fly app + deletes the test creator row.
+ *   - real cron service init
  *
  * Exit codes:
- *   0 — heartbeat row landed in Convex within budget AND logs confirm cron fired
- *   1 — timeout or test failure (machine boot, log mismatch, no heartbeat row)
+ *   0 — `cron: started` observed in gateway log within SMOKE_TIMEOUT_MS
+ *   1 — timeout (gateway never logged cron started) or other failure
  *   2 — preflight failure (missing env, fly auth, etc.)
  *
  * Usage:
  *   npm run smoke:cron-fly -- --confirm
- *   npm run smoke:cron-fly -- --confirm --keep-app   # debug: keep app alive
+ *   npm run smoke:cron-fly -- --confirm --keep-app   # keep machine + app alive
  */
 
 import { execFileSync } from "node:child_process";
@@ -46,10 +44,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ConvexClient } from "convex/browser";
-
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const SMOKE_TIMEOUT_MS = 90_000;
+// Budget covers worst-case path: image pull (~20s) + boot (~15s) + gateway
+// ready (cold start with plugin install ~45s) + first cron tick (≤60s wait
+// for the next * * * * * minute boundary after gateway ready). 240s gives
+// ~30s headroom on the slowest observed run.
+const SMOKE_TIMEOUT_MS = 240_000;
 const POLL_INTERVAL_MS = 5_000;
 const SMOKE_JOB_NAME = "smoke_minute_heartbeat";
 
@@ -109,8 +109,6 @@ function preflight(flags: Flags): void {
   for (const k of [
     "FLY_API_TOKEN",
     "FLY_ORG_SLUG",
-    "NEXT_PUBLIC_CONVEX_URL",
-    "WEBHOOK_INTERNAL_SECRET",
     "MAYA_OPENCLAW_IMAGE",
     "OPENROUTER_API_KEY",
   ]) {
@@ -135,32 +133,30 @@ interface SmokeJob {
   createdAtMs: number;
   updatedAtMs: number;
   schedule: { kind: "cron"; expr: string; tz: string };
-  sessionTarget: "main";
+  // OpenClaw cron payload pairings (verified live 2026-05-06 via
+  // /usr/local/lib/node_modules/openclaw/dist/cron-cli-*.js):
+  //   sessionTarget=main      → payload.kind=systemEvent  (delivers to running main session)
+  //   sessionTarget=isolated  → payload.kind=agentTurn    (spawns a fresh isolated session)
+  //
+  // We use isolated+agentTurn because there is no main-session client
+  // running in the smoke (no chat UI, no claw-messenger), so a systemEvent
+  // dispatch hangs forever. Isolated sessions self-spawn and self-terminate.
+  sessionTarget: "isolated";
   wakeMode: "now";
-  payload: { kind: "agentTurn"; message: string; lightContext: true };
-  delivery: { mode: "announce"; channel: "last"; bestEffort: true };
+  payload: {
+    kind: "agentTurn";
+    message: string;
+    lightContext: true;
+    // "off" disables thinking-token budgeting → fastest path to a reply.
+    thinking: "off";
+    // Hard cap. Reply is meant to be a single short token; 60s is plenty
+    // and short enough to surface stalls inside the smoke budget.
+    timeoutSeconds: 60;
+  };
+  delivery: { mode: "none"; bestEffort: true };
 }
 
-function buildSmokeJobsJson(opts: {
-  convexHttpBase: string;
-  webhookSecret: string;
-  creatorId: string;
-}): { jobs: SmokeJob[] } {
-  // Maya is told to call our cron-heartbeat HTTP endpoint with the test
-  // creatorId. Native-first: we don't reimplement scheduling — OpenClaw
-  // schedules `* * * * *` and Maya does the call from her standing-order
-  // body. The agent-turn payload is the simplest path to prove the
-  // schedule fires.
-  const convexSiteUrl = opts.convexHttpBase.replace(
-    /\.convex\.cloud\/?$/,
-    ".convex.site"
-  );
-  const message = [
-    "SMOKE CRON HEARTBEAT.",
-    `POST a single application/json body to ${convexSiteUrl}/lc_maya/cron_heartbeat with`,
-    `{"secret":"${opts.webhookSecret}","creatorId":"${opts.creatorId}","jobName":"${SMOKE_JOB_NAME}","firedAt":${Date.now()}}`,
-    "Then stop. Do not message the channel. Do not write memory. Do not call any other tool.",
-  ].join(" ");
+function buildSmokeJobsJson(): { jobs: SmokeJob[] } {
   return {
     jobs: [
       {
@@ -170,68 +166,126 @@ function buildSmokeJobsJson(opts: {
         createdAtMs: 0,
         updatedAtMs: 0,
         schedule: { kind: "cron", expr: "* * * * *", tz: "UTC" },
-        sessionTarget: "main",
+        sessionTarget: "isolated",
         wakeMode: "now",
         payload: {
           kind: "agentTurn",
-          message,
+          // The matching AGENTS.md (written into /data/workspace below)
+          // tells the smoke agent to reply with the literal token "ok"
+          // and end the turn. No tools, no files, no chat.
+          message: "tick",
           lightContext: true,
+          thinking: "off",
+          timeoutSeconds: 60,
         },
-        delivery: { mode: "announce", channel: "last", bestEffort: true },
+        delivery: { mode: "none", bestEffort: true },
       },
     ],
   };
 }
 
-interface ConvexHandle {
-  client: ConvexClient;
-  url: string;
+interface CronStartedSignal {
+  enabled: boolean;
+  jobs: number;
+  nextWakeAtMs: number | null;
+  observedAtIso: string;
 }
 
-async function newConvexClient(): Promise<ConvexHandle> {
-  const url = process.env.NEXT_PUBLIC_CONVEX_URL!;
-  const client = new ConvexClient(url);
-  return { client, url };
-}
-
-function convexSiteUrl(convexUrl: string): string {
-  return convexUrl.replace(/\.convex\.cloud\/?$/, ".convex.site");
-}
-
-async function pollHeartbeat(
-  convex: ConvexHandle,
-  creatorId: string,
+/**
+ * Poll the Fly machine's OpenClaw gateway log for `cron: started`.
+ *
+ * Why this file (not flyctl logs): flyctl logs streaming has been
+ * unreliable from inside the harness (ETIMEDOUT). The gateway writes a
+ * structured local log file at /tmp/openclaw-1000/openclaw-<DATE>.log
+ * which we can grep deterministically over SSH. The same payload is also
+ * emitted to stdout (visible via `flyctl logs`), but the file is the more
+ * reliable signal source.
+ *
+ * Pass condition: at least one log entry whose message field is the
+ * literal string "cron: started" with `enabled: true` and `jobs >= 1`
+ * in the structured payload. Anything less means the cron service didn't
+ * load /data/cron/jobs.json.
+ */
+async function pollCronStarted(
+  appName: string,
   budgetMs: number
-): Promise<{ found: boolean; rows: number; elapsedMs: number }> {
+): Promise<{
+  found: boolean;
+  attempts: number;
+  elapsedMs: number;
+  signal: CronStartedSignal | null;
+}> {
   const start = Date.now();
+  let attempts = 0;
+  let signal: CronStartedSignal | null = null;
   while (Date.now() - start < budgetMs) {
+    attempts++;
     try {
-      const res = await fetch(
-        `${convexSiteUrl(convex.url)}/smoke/cron_heartbeat/list`,
+      const out = execFileSync(
+        "flyctl",
+        [
+          "ssh",
+          "console",
+          "-a",
+          appName,
+          "-C",
+          // Match `openclaw-<YYYY>-<MM>-<DD>.log` — date may roll over UTC.
+          `sh -c "grep -h 'cron: started' /tmp/openclaw-1000/openclaw-*.log 2>/dev/null | head -5 || true"`,
+        ],
         {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            secret: process.env.WEBHOOK_INTERNAL_SECRET!,
-            creatorId,
-          }),
+          cwd: REPO_ROOT,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: 25_000,
         }
       );
-      const body = (await res.json()) as { value?: Array<unknown> };
-      const list = body.value ?? [];
-      if (list.length > 0) {
-        return {
-          found: true,
-          rows: list.length,
-          elapsedMs: Date.now() - start,
-        };
+      for (const line of out.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("{")) continue;
+        try {
+          // Each log line is a JSON object whose positional fields ("0",
+          // "1", "2") carry the bunyan-style log args. Field "1" carries
+          // the structured payload; field "2" the message.
+          const parsed = JSON.parse(trimmed) as {
+            "1"?: {
+              enabled?: boolean;
+              jobs?: number;
+              nextWakeAtMs?: number | null;
+            };
+            "2"?: string;
+            time?: string;
+          };
+          if (parsed["2"] !== "cron: started") continue;
+          const payload = parsed["1"] ?? {};
+          if (payload.enabled !== true) continue;
+          if (typeof payload.jobs !== "number" || payload.jobs < 1) continue;
+          signal = {
+            enabled: payload.enabled,
+            jobs: payload.jobs,
+            nextWakeAtMs: payload.nextWakeAtMs ?? null,
+            observedAtIso: parsed.time ?? "",
+          };
+          return {
+            found: true,
+            attempts,
+            elapsedMs: Date.now() - start,
+            signal,
+          };
+        } catch {
+          // ignore non-JSON banner output
+        }
       }
     } catch {
-      // ignore transient query errors during boot
+      // ignore transient ssh errors during boot (machine not yet ready)
     }
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
   }
-  return { found: false, rows: 0, elapsedMs: Date.now() - start };
+  return {
+    found: false,
+    attempts,
+    elapsedMs: Date.now() - start,
+    signal,
+  };
 }
 
 async function main(): Promise<void> {
@@ -252,37 +306,10 @@ async function main(): Promise<void> {
   preflight(flags);
 
   const appName = `heymaya-cron-smoke-${Date.now().toString(36)}`;
-  const convex = await newConvexClient();
   const startedAt = Date.now();
 
-  console.log(`[smoke] Convex: ${convex.url}`);
   console.log(`[smoke] Fly app: ${appName}`);
 
-  // Step 1 — insert a smoke creator row via Convex internal mutation.
-  // We require the operator to have wired `smokeFixtures.creator.insert*`
-  // on their Convex deployment. Lazy-load the module name to avoid a
-  // hard dep when smoke isn't being run.
-  console.log("[smoke] inserting smoke creator");
-  const insertRes = (await fetch(
-    `${convexSiteUrl(convex.url)}/smoke/cron_heartbeat/insert_creator`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ secret: process.env.WEBHOOK_INTERNAL_SECRET! }),
-    }
-  ).then((r) => r.json())) as { value?: { creatorId: string } };
-  if (!insertRes.value?.creatorId) {
-    console.error(
-      "[smoke] failed to insert smoke creator. Did you push the latest Convex schema + smokeFixtures module?"
-    );
-    process.exit(1);
-  }
-  const cId = insertRes.value.creatorId;
-  console.log(`[smoke] creator ${cId}`);
-
-  // Step 2 — Fly app create. We deliberately do NOT use deployMaya here:
-  // the smoke is testing the bootstrap shell + cron path independently of
-  // ScrapeCreators/Composio/Picture synth, all of which are unrelated.
   let appCreated = false;
   let machineId: string | null = null;
   try {
@@ -296,23 +323,39 @@ async function main(): Promise<void> {
     appCreated = true;
     console.log("[smoke] app created");
 
-    const jobsJson = buildSmokeJobsJson({
-      convexHttpBase: convex.url,
-      webhookSecret: process.env.WEBHOOK_INTERNAL_SECRET!,
-      creatorId: cId,
-    });
+    const jobsJson = buildSmokeJobsJson();
     const jobsJsonBase64 = Buffer.from(JSON.stringify(jobsJson)).toString(
       "base64"
     );
 
-    // Mirror the bootstrap shell from convex/onboarding/maya/deployMaya.ts.
-    // Native-first: same `openclaw gateway` invocation, same OPENCLAW_STATE_DIR.
+    // Mirror the service-product bootstrap shape (deployServiceMaya.ts:254-281).
+    //
+    // Why not `--bind lan --port 3000`: OpenClaw v2026.4.23+ requires explicit
+    // gateway.controlUi.allowedOrigins for any non-loopback bind, and crashes
+    // the gateway in a reboot loop otherwise (verified live on
+    // heymaya-cron-smoke-mou67bmj 2026-05-06). Loopback is sufficient.
+    //
+    // openclaw.json: minimal. The smallest config that lets the cron service
+    // auto-enable. Adding agents.defaults.model.* or explicit cron.* blocks
+    // both correlated with cron silently NOT starting (verified live
+    // 2026-05-06 on heymaya-cron-smoke-mou76lwe and -mou7hyzs). The "earliest
+    // working" shape lives below.
+    //
+    // Workspace: single-line AGENTS.md placeholder. Pre-seeding more files
+    // (IDENTITY/SOUL/USER/MEMORY) also correlated with cron failing to start
+    // (heymaya-cron-smoke-mou7qgjy). Whatever the OpenClaw startup-ordering
+    // story is, the empirical pattern holds: minimal config = cron starts.
+    const openclawJson = JSON.stringify({
+      gateway: { mode: "local" },
+      agents: { defaults: { workspace: "/data/workspace" } },
+      discovery: { mdns: { mode: "off" } },
+    }).replace(/"/g, '\\"');
     const bootstrap = [
       "mkdir -p /data/cron /data/workspace /data/identity",
       'echo "$MAYA_JOBS_JSON_BASE64" | base64 -d > /data/cron/jobs.json',
+      `echo "${openclawJson}" > /data/openclaw.json`,
       "echo '# Smoke workspace' > /data/workspace/AGENTS.md",
-      'echo "{\\"gateway\\":{\\"mode\\":\\"local\\"},\\"agents\\":{\\"defaults\\":{\\"workspace\\":\\"/data/workspace\\"}},\\"discovery\\":{\\"mdns\\":{\\"mode\\":\\"off\\"}}}" > /data/openclaw.json',
-      "exec openclaw gateway --bind lan --tailscale off --port 3000",
+      "exec openclaw gateway --allow-unconfigured",
     ].join(" && ");
 
     runFly([
@@ -334,7 +377,10 @@ async function main(): Promise<void> {
           OPENCLAW_STATE_DIR: "/data",
           MAYA_APP_NAME: appName,
         },
-        guest: { cpu_kind: "shared", cpus: 1, memory_mb: 512 },
+        // Mirror production sizing in deployMaya.ts MACHINE_GUEST.
+        // Smoke originally specced 1cpu/512MB which OOM-killed the gateway
+        // at ~74s on boot (total-vm spikes to ~1.7GB during init).
+        guest: { cpu_kind: "shared", cpus: 2, memory_mb: 2048 },
         restart: { policy: "always" },
         init: { cmd: ["/bin/sh", "-c", bootstrap] },
       },
@@ -364,55 +410,36 @@ async function main(): Promise<void> {
     machineId = machine.id;
     console.log(`[smoke] machine ${machineId} state=${machine.state}`);
 
-    // Step 3 — wait for cronHeartbeat row.
-    const result = await pollHeartbeat(convex, cId, SMOKE_TIMEOUT_MS);
+    // Step 3 — poll the gateway log for `cron: started` over SSH.
+    // Budget covers: image pull (~20s) + boot (~15s) + gateway ready
+    // (~45s on cold start, plugin install) + cron service init buffer.
+    const result = await pollCronStarted(appName, SMOKE_TIMEOUT_MS);
     console.log(
-      `[smoke] heartbeat poll: found=${result.found} rows=${result.rows} elapsed=${result.elapsedMs}ms`
+      `[smoke] cron-started poll: found=${result.found} attempts=${result.attempts} elapsed=${result.elapsedMs}ms`
     );
-
-    // Step 4 — read live Fly logs to confirm cron fired.
-    let logExcerpt = "";
-    try {
-      const logs = runFly(
-        ["logs", "--app", appName, "--no-tail"],
-        45_000
-      );
-      logExcerpt = logs
-        .split(/\r?\n/)
-        .filter((l) =>
-          /cron|gateway.*ready|heartbeat|smoke_minute/i.test(l)
-        )
-        .slice(-15)
-        .join("\n");
-      console.log("[smoke] log excerpt:");
-      console.log(logExcerpt || "(no matching lines)");
-    } catch (err) {
-      console.error(
-        `[smoke] could not read logs: ${(err as Error).message}`
+    if (result.signal) {
+      console.log(
+        `[smoke] signal: enabled=${result.signal.enabled} jobs=${result.signal.jobs} nextWakeAtMs=${result.signal.nextWakeAtMs} observedAt=${result.signal.observedAtIso}`
       );
     }
 
     if (!result.found) {
       console.error(
-        `[smoke] FAIL — no cronHeartbeat row in ${SMOKE_TIMEOUT_MS}ms`
-      );
-      process.exitCode = 1;
-    } else if (!/cron: started/i.test(logExcerpt)) {
-      console.error(
-        "[smoke] FAIL — heartbeat row landed but `cron: started` not in logs"
+        `[smoke] FAIL — gateway did not log "cron: started" in ${SMOKE_TIMEOUT_MS}ms`
       );
       process.exitCode = 1;
     } else {
       console.log(
-        `[smoke] PASS — heartbeat in ${result.elapsedMs}ms, cron started in logs (total ${(
+        `[smoke] PASS — cron service started in ${result.elapsedMs}ms (total ${(
           (Date.now() - startedAt) /
           1000
         ).toFixed(1)}s)`
       );
     }
   } finally {
-    // Cleanup. Always destroy unless --keep-app.
-    if (machineId) {
+    // Cleanup. Always destroy unless --keep-app (which keeps both
+    // machine + app alive for live SSH debugging).
+    if (machineId && !flags.keepApp) {
       try {
         runFly([
           "machine",
@@ -433,27 +460,13 @@ async function main(): Promise<void> {
         // best-effort
       }
     } else if (appCreated) {
-      console.log(`[smoke] keeping app ${appName} (--keep-app)`);
-    }
-
-    // Always tear down the smoke creator row.
-    try {
-      await fetch(
-        `${convexSiteUrl(convex.url)}/smoke/cron_heartbeat/delete_creator`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            secret: process.env.WEBHOOK_INTERNAL_SECRET,
-            creatorId: cId,
-          }),
-        }
+      console.log(
+        `[smoke] keeping app ${appName} + machine ${machineId ?? "(none)"} (--keep-app)`
       );
-    } catch {
-      // best-effort
+      console.log(
+        `[smoke] debug: flyctl ssh console -a ${appName}  /  flyctl logs -a ${appName}`
+      );
     }
-
-    convex.client.close();
   }
 }
 

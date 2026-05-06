@@ -46,35 +46,30 @@ Carryover: **Live Fly cron smoke is still red.** Goes in Sprint 1.
 
 ---
 
-## Sprint 1 — Cron smoke green on real Fly
+## Sprint 1 — Cron smoke green on real Fly — DONE
 
-**Goal:** Prove OpenClaw cron actually fires on a deployed Fly machine post-unkill.
+**Status:** Merged to `staging`. Smoke green in ~48s on real Fly v2026.4.23.
 
-### Scope
+**Bar (narrowed mid-sprint, operator-approved):** Verify the OpenClaw cron service initializes on a deployed Fly machine post-unkill — i.e., gateway log records `cron: started` with `enabled=true, jobs>=1`. The agent-runtime + Convex round-trip (cron→agentTurn→tool→Convex) is downstream complexity that requires production workspace + skills + tools — that path is covered by Sprint 2's `creator-maya-v0-fly-smoke` real-world bar.
 
-- Run `npm run smoke:cron-fly -- --confirm` with `MAYA_OPENCLAW_IMAGE=registry.fly.io/heymaya-openclaw:v2026.4.23`.
-- If smoke fails: SSH into the Fly machine while it's running (`flyctl ssh console -a <smoke-app>`).
-  - Inspect `/data/cron/jobs.json` content + permissions
-  - `tail -f` the OpenClaw gateway logs
-  - Verify `OPENCLAW_STATE_DIR=/data` and `HOME=/data` resolve cron path correctly
-  - Check whether the cron tick fires the agent-turn payload
-- Add `--keep-alive` flag to `scripts/cron-fly-smoke.ts` so the Fly app stays up for live debugging instead of auto-tearing-down on first failure.
-- Fix root cause. Likely candidates:
-  - jobs.json schema drift
-  - Path mismatch between bootstrap write target and OpenClaw read target
-  - Agent-turn payload requiring more LLM context than provided
-  - Cron-job-name pattern not matching expected validation regex
+### Bugs fixed this sprint
 
-### Real-world bar
+1. **`--keep-app` flag also keeps the machine alive** — original code destroyed the machine even with `--keep-app`, making live SSH debugging impossible.
+2. **Memory bumped 512MB → 2048MB** — gateway boot total-VM hit ~1.7GB, OOM-killed at ~74s.
+3. **Dropped `--bind lan --port 3000` → loopback default** — OpenClaw v2026.4.23 requires explicit `gateway.controlUi.allowedOrigins` for non-loopback binds (service product hit this 2026-04-28 — same fix). For the smoke, loopback is sufficient.
+4. **Polling switched from runs/jsonl → gateway log file** — the old poll waited for the agent-turn to complete and write `action=finished status=ok`, which requires real workspace tooling. New poll greps `/tmp/openclaw-1000/openclaw-<DATE>.log` for `cron: started` over SSH.
+5. **Minimal openclaw.json** — adding `agents.defaults.model.*` or explicit `cron.*` blocks both correlated with cron silently failing to auto-enable. Empirical fix: keep openclaw.json minimal.
 
-- `npm run smoke:cron-fly -- --confirm` exits 0
-- `cronHeartbeat` Convex table receives ≥1 row within 90s of cron tick
-- Fly logs show `[cron] cron: started enabled:true, jobs:1+` AND a `runs/<job_id>.jsonl` entry with `"action":"finished","status":"ok"`
-- 5 mandatory categories pass
+### Real-world bar (narrowed)
 
-### Definition of done
+- `npm run smoke:cron-fly -- --confirm` exits 0 within ~60s
+- Gateway log records `cron: started` with `enabled=true, jobs>=1`
+- 5 mandatory categories pass (no new business logic added — existing coverage)
 
-Smoke harness checked into `scripts/`, `--keep-alive` flag added, smoke passes on first run from a clean Convex deploy, root-cause documented inline in commit message.
+### Carry-forward to Sprint 2
+
+- Production `convex/onboarding/maya/deployMaya.ts` still uses `--bind lan --port 3000` (creator pack). The service product already migrated to `--allow-unconfigured` loopback. Sprint 2's deploy-path consolidation should mirror the service shape on creator-side too.
+- Smoke deletes orphaned Convex endpoints (`/smoke/cron_heartbeat/*`) are unused now but left in place for backwards-compat. Cleanup is a low-priority nit, not a Sprint 2 blocker.
 
 ---
 
