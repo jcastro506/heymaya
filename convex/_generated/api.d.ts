@@ -165,6 +165,7 @@ import type * as queries_business_profile from "../queries/business/profile.js";
 import type * as queries_business_reviews from "../queries/business/reviews.js";
 import type * as queries_business_today from "../queries/business/today.js";
 import type * as serviceTelemetry from "../serviceTelemetry.js";
+import type * as smokeFixtures_cronHeartbeat from "../smokeFixtures/cronHeartbeat.js";
 import type * as smokeFixtures_serviceBusiness from "../smokeFixtures/serviceBusiness.js";
 import type * as today from "../today.js";
 import type * as trends from "../trends.js";
@@ -340,6 +341,7 @@ declare const fullApi: ApiFromModules<{
   "queries/business/reviews": typeof queries_business_reviews;
   "queries/business/today": typeof queries_business_today;
   serviceTelemetry: typeof serviceTelemetry;
+  "smokeFixtures/cronHeartbeat": typeof smokeFixtures_cronHeartbeat;
   "smokeFixtures/serviceBusiness": typeof smokeFixtures_serviceBusiness;
   today: typeof today;
   trends: typeof trends;

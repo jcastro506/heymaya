@@ -563,6 +563,110 @@ export const logTrendHttp = httpAction(async (ctx, request) => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* Endpoint 4 — cron_heartbeat (Wave 0b — proves OpenClaw cron actually fires) */
+/* -------------------------------------------------------------------------- */
+
+interface CronHeartbeatPayload {
+  secret: string;
+  creatorId: string;
+  jobName: string;
+  firedAt?: number;
+}
+
+function parseCronHeartbeatPayload(raw: unknown): CronHeartbeatPayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") {
+    throw new Error("secret must be a string.");
+  }
+  if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+    throw new Error("creatorId is required.");
+  }
+  if (typeof obj.jobName !== "string" || obj.jobName.trim().length === 0) {
+    throw new Error("jobName must be a non-empty string.");
+  }
+  let firedAt: number | undefined;
+  if (obj.firedAt !== undefined && obj.firedAt !== null) {
+    if (
+      typeof obj.firedAt !== "number" ||
+      !Number.isFinite(obj.firedAt) ||
+      obj.firedAt < 0
+    ) {
+      throw new Error("firedAt must be a non-negative finite number.");
+    }
+    firedAt = obj.firedAt;
+  }
+  return {
+    secret: obj.secret,
+    creatorId: obj.creatorId,
+    jobName: obj.jobName,
+    firedAt,
+  };
+}
+
+/**
+ * Records that an OpenClaw cron entry fired for a creator. Append-only —
+ * never patches existing rows (a re-fire IS a separate event).
+ *
+ * Cross-tenant safety: the row inherits creatorId from the request body,
+ * which is signed by the webhook secret. We verify the creator exists; we
+ * never use any other creator's id implicitly.
+ */
+export const recordCronHeartbeatInternal = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    jobName: v.string(),
+    firedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) {
+      throw new Error("creator-not-found");
+    }
+    return await ctx.db.insert("cronHeartbeat", {
+      creatorId: args.creatorId,
+      jobName: args.jobName,
+      firedAt: args.firedAt,
+    });
+  },
+});
+
+export const cronHeartbeatHttp = httpAction(async (ctx, request) => {
+  let payload: CronHeartbeatPayload;
+  try {
+    payload = parseCronHeartbeatPayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+
+  try {
+    const heartbeatId = await ctx.runMutation(
+      internal.lcMaya.lcMayaHttp.recordCronHeartbeatInternal,
+      {
+        creatorId: payload.creatorId as Id<"creators">,
+        jobName: payload.jobName,
+        firedAt: payload.firedAt ?? Date.now(),
+      }
+    );
+    return jsonResponse({ ok: true, heartbeatId }, 200);
+  } catch (err) {
+    const msg = (err as Error).message ?? "internal-error";
+    if (msg === "creator-not-found") {
+      return jsonResponse({ error: "creator-not-found" }, 404);
+    }
+    return jsonResponse({ error: msg }, 500);
+  }
+});
+
+/* -------------------------------------------------------------------------- */
 /* Helpers                                                                     */
 /* -------------------------------------------------------------------------- */
 

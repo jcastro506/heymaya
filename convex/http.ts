@@ -16,6 +16,7 @@ import { httpRouter } from "convex/server";
 import { voiceTranscriptHttp } from "./voice/transcriptHttp";
 import { openClawMediaIngestHttp } from "./creatorMayaV0/openClawMediaIngestHttp";
 import {
+  cronHeartbeatHttp,
   logTrendHttp,
   submitOpeningAnswersHttp,
   startOAuthHttp,
@@ -61,6 +62,40 @@ http.route({
   path: "/lc_maya/log_trend",
   method: "POST",
   handler: logTrendHttp,
+});
+// Wave 0b — append-only cron heartbeat receipt. Maya hits this from a
+// `cron.heartbeat` standing order so we have ground-truth that OpenClaw
+// cron is firing in production. Read-back lives in the smoke harness +
+// admin queries; never exposed to browser clients.
+http.route({
+  path: "/lc_maya/cron_heartbeat",
+  method: "POST",
+  handler: cronHeartbeatHttp,
+});
+
+// Wave 0b smoke harness routes — gated by WEBHOOK_INTERNAL_SECRET in the
+// body. Used ONLY by `scripts/cron-fly-smoke.ts` to insert + tear down
+// the smoke creator and read back its heartbeat rows. Never used by the
+// production web client.
+import {
+  cronHeartbeatsForCreatorHttp,
+  deleteSmokeCreatorHttp,
+  insertSmokeCreatorHttp,
+} from "./smokeFixtures/cronHeartbeat";
+http.route({
+  path: "/smoke/cron_heartbeat/insert_creator",
+  method: "POST",
+  handler: insertSmokeCreatorHttp,
+});
+http.route({
+  path: "/smoke/cron_heartbeat/delete_creator",
+  method: "POST",
+  handler: deleteSmokeCreatorHttp,
+});
+http.route({
+  path: "/smoke/cron_heartbeat/list",
+  method: "POST",
+  handler: cronHeartbeatsForCreatorHttp,
 });
 
 export default http;
