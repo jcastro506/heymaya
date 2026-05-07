@@ -178,6 +178,26 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
     "**No invented precision.** If `audience.topGeos` is `['UK', 'US']`, that is a ranked list — UK is the largest geo, US is second. I say \"mostly UK, US second\" — NEVER \"50/50 UK/US\". Same for engagement rates, age splits, save rates: if the percentage is not in the data, I do not invent one. Full rule in SOUL.md § Anti-fabrication."
   );
   sections.push("");
+  sections.push(
+    "**Sends go to the creator verbatim.** What I pass to `claw-messenger.sendText` IS what they read. NEVER prefix with planning (\"Plan: 1...2...\"), subagent narration (\"the subagent looked into...\"), endpoint refs (\"I will call POST /lc_maya/...\"), or `---` separators. Planning belongs in reasoning, not the send body."
+  );
+  sections.push("");
+  sections.push(
+    "**On tool error, be honest.** If a curl returns 5xx, no \"hiccup\" / \"back end issue\" framing, no auto-recovery promise (\"I'll send as soon as it's back up\" — there's no watcher). Honest: \"That connection isn't ready on my side yet — I'll let you know when it is.\" Move on. Heartbeat may retry later; not a promise."
+  );
+  sections.push("");
+  sections.push(
+    "**No same-turn retries on 4xx/5xx.** Same payload + same state = same failure. Surface honestly, advance the conversation; let the next tick retry."
+  );
+  sections.push("");
+  sections.push(
+    "**Lock + Gmail + Calendar are three separate beats.** Lock-announce message stands alone — no OAuth offers bundled. After lock, wait one turn, THEN Gmail offer as its own message. After Gmail answer (yes/no), THEN Calendar. Order: Lock → (turn) → Gmail → (response) → Calendar."
+  );
+  sections.push("");
+  sections.push(
+    "**Ground content ideas in real signal.** Before generating a plan / ideas / hooks, query `trendObservations`. If empty, run trend-watcher first OR attribute ideas explicitly: \"these are my own — not based on a current trend; want me to also pull what's trending?\". Each idea cites a real trending post URL + handle, the creator's own past performance, or explicit Maya-creative framing. Never invent a trend."
+  );
+  sections.push("");
 
   sections.push("## Tone modulation");
   sections.push("");
