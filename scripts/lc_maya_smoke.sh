@@ -105,7 +105,13 @@ probe "sync_wiki_observations (single trend)" \
   "{\"secret\":\"$SECRET\",\"creatorId\":\"$CREATOR\",\"trends\":[{\"wikiVaultPath\":\"trends/smoke.md\",\"observation\":\"smoke probe trend\",\"source\":\"niche-scan\",\"evidence\":[{\"kind\":\"hashtag\",\"ref\":\"https://tiktok.com/tag/smoke\",\"fact\":\"smoke probe\"}],\"relevanceScore\":0.5,\"observedAt\":$(date +%s)000}],\"competitors\":[],\"weeklyLearnings\":[]}" \
   "200"
 
-# 12. Wrong-secret 401 sanity
+# 12. apple_calendar_connect — fake creds → 401 with hint (Sprint 9.8 B)
+probe "apple_calendar_connect (fake creds → 401)" \
+  "/lc_maya/apple_calendar_connect" \
+  "{\"secret\":\"$SECRET\",\"creatorId\":\"$CREATOR\",\"appleId\":\"smoke-only@example.com\",\"appPassword\":\"fake-fake-fake-fake\"}" \
+  "401"
+
+# 13. Wrong-secret 401 sanity
 probe "submit_opening_answers (wrong secret)" \
   "/lc_maya/submit_opening_answers" \
   "{\"secret\":\"wrong\",\"creatorId\":\"$CREATOR\",\"goal\":\"x\",\"tone\":\"strategic\"}" \
