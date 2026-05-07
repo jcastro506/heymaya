@@ -60,6 +60,13 @@ const isPublic = createRouteMatcher([
   "/api/clerk/webhook",
   "/api/google-calendar/start",
   "/api/google-calendar/callback",
+  // Sprint 7 Slice B + Sprint 9.8 — iMessage-tap OAuth callback. The
+  // state token in the URL IS the auth (bound to the creator's id in
+  // `oauthStateTokens`); Clerk auth must not interpose. Without this,
+  // Clerk middleware redirects the OAuth callback to /sign-in and the
+  // code/state never reach the route handler, breaking the iMessage
+  // flow entirely.
+  "/api/google-calendar/callback-imessage",
   "/api/account/delete/request-from-imessage",
   "/api/account/delete/from-imessage",
 ]);
