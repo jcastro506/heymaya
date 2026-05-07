@@ -5,6 +5,22 @@
  */
 import { internalQuery } from "../_generated/server";
 
+export const listAll = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const creators = await ctx.db.query("creators").collect();
+    return creators.map((c) => ({
+      _id: c._id,
+      clerkUserId: c.clerkUserId,
+      email: c.email,
+      channelPreference: c.channelPreference,
+      status: c.status,
+      firstBootCompletedAt: c.firstBootCompletedAt ?? null,
+      openingAnswersAt: c.openingAnswersAt ?? null,
+    }));
+  },
+});
+
 export const peek = internalQuery({
   args: {},
   handler: async (ctx) => {
