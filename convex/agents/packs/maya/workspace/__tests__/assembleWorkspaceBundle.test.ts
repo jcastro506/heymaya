@@ -157,7 +157,7 @@ describe("assembleWorkspaceBundle", () => {
     // loader on a different code path and are not bootstrap-loaded; they
     // can be larger than the cap (the maya-platform inventory is ~33K
     // because it lists every shipped skill with sourcing).
-    const CAP = 32_000;
+    const CAP = 40_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
@@ -327,7 +327,7 @@ describe("assembleWorkspaceBundle", () => {
     // standing order BEFORE anything else. Verify the prose is present
     // in both the embedded form (production 28K cap) and the split form
     // (low cap fallback).
-    const PROD_CAP = 32_000;
+    const PROD_CAP = 40_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
@@ -384,7 +384,7 @@ describe("assembleWorkspaceBundle", () => {
     // .md files in the workspace root are NOT guaranteed to load. So Maya
     // bumps the cap to 28K (MAYA_BOOTSTRAP_MAX_CHARS) and embeds standing
     // orders inline. Verify that the production cap path actually fits.
-    const PROD_CAP = 32_000;
+    const PROD_CAP = 40_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };

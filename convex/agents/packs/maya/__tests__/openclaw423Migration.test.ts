@@ -268,7 +268,7 @@ describe("Wave 5 — standing orders embed inline in AGENTS.md (OpenClaw 4.23 co
   });
 
   it("MAYA_BOOTSTRAP_MAX_CHARS is 28K (legitimate space for the 25-program inventory)", () => {
-    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(32_000);
+    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(40_000);
   });
 
   it("AGENTS.md actually fits under the 28K cap for every plan (defense-in-depth)", () => {

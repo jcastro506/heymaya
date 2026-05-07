@@ -289,7 +289,13 @@ export interface BuildInputs {
  * The 28K cap is our override; OpenClaw still respects whatever we declare
  * in `gatewayConfig.agents.defaults.bootstrapMaxChars`.
  */
-export const MAYA_BOOTSTRAP_MAX_CHARS = 32_000;
+// Sprint 9.7+ — bumped 32K → 40K. The new "iMessage UX rules" section
+// embedded in AGENTS.md (every-session voice ceiling) pushed the
+// embedded-form bundle over 32K. 40K stays well under any practical
+// agent-context concern (Gemini 3 Flash has 1M ctx); the goal of this
+// cap is just to keep AGENTS.md from accidentally swallowing arbitrary
+// large prose in future edits.
+export const MAYA_BOOTSTRAP_MAX_CHARS = 40_000;
 
 /**
  * Build the OpenClaw config + workspace bundle for one creator. Pure function

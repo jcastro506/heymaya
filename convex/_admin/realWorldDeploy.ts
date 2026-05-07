@@ -31,7 +31,21 @@ export const ensureCreator = internalMutation({
       .query("creators")
       .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", TEST_CLERK_USER_ID))
       .unique();
-    if (existing) return existing._id;
+    if (existing) {
+      // Clear first-boot cursors so the kickstart fires fresh on every
+      // re-deploy. Without this, once `firstBootCompletedAt` is stamped
+      // in a prior test, the kickstart skips silently and Maya never
+      // sends her first message — bad UX during iteration.
+      await ctx.db.patch(existing._id, {
+        firstBootCompletedAt: undefined,
+        openingAnswersAt: undefined,
+        pictureLockedAt: undefined,
+        firstWeeklyPlanSentAt: undefined,
+        firstProactivePingSentAt: undefined,
+        status: "onboarding",
+      });
+      return existing._id;
+    }
 
     return await ctx.db.insert("creators", {
       clerkUserId: TEST_CLERK_USER_ID,

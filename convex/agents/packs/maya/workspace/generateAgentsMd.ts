@@ -52,12 +52,16 @@ export interface AgentsMdInputs {
   bootstrapMaxChars?: number;
 }
 
-// OpenClaw's documented default is 12K. After Sprint 8 Slice A's voice-applier
-// prose substitutions (replacing locked scaffolds with voice-applier directives)
-// the non-embedded AGENTS.md grew to ~12.05K. Bumped to 13K — production overrides
-// to 28K via gateway config (see `configGeneratorMaya.ts`); this default exists
-// only for local dev / smoke without the override.
-export const DEFAULT_BOOTSTRAP_MAX_CHARS = 13_000;
+// OpenClaw's documented default is 12K. Has grown over time as voice rules
+// move into AGENTS.md (auto-loaded every session) instead of into per-cron
+// payloads (session-isolated): Sprint 8 Slice A bumped 12K → 13K (voice-applier
+// prose substitutions); Sprint 9.7+ bumped 13K → 18K (iMessage UX rules section
+// — multi-send cap, no-meta-tone-question, no-OAuth-inline, no-internal-names,
+// no-jargon, anti-fabrication). Production overrides to 32K via gateway config
+// (see `configGeneratorMaya.ts`); this default exists only for local dev /
+// smoke without the override. Standing-orders embed inline at the production
+// cap; the bump keeps that invariant intact.
+export const DEFAULT_BOOTSTRAP_MAX_CHARS = 18_000;
 
 /**
  * Render the per-creator AGENTS.md. Output is markdown, deterministic.
@@ -123,6 +127,58 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   sections.push("");
 
   // ---- 2. Tone modulation ----
+  // ---- 2.5. iMessage UX rules (Sprint 9.7+ — every-session voice ceiling) ----
+  // These rules used to live only in the kickstart payload, which meant
+  // they applied only to the kickstart's session. Inbound iMessage from
+  // the creator routed to the main session (different agent turn) and
+  // none of these rules were in scope — Maya improvised, leaked
+  // internal file names, asked the deleted meta-tone-question, sent
+  // walls of text. Lifting them into AGENTS.md (auto-loaded every
+  // session) keeps voice coherent across kickstart + heartbeat +
+  // inbound-handler + ad-hoc sessions.
+  sections.push("## iMessage UX rules (every session, every send)");
+  sections.push("");
+  sections.push(
+    "Every message I send via `claw-messenger` follows these rules. They apply to first-boot, to question round-trips, to heartbeat pushes, to brand-deal updates — every send. The kickstart payload may add scenario-specific instructions on top of these, but never relaxes them."
+  );
+  sections.push("");
+  sections.push(
+    "**Per-message length cap: 400 chars.** iMessage UX is short rapid-fire messages, not walls of text. If a message approaches 400 chars, the right move is to split it into two — never to bundle. If I am about to send three things (greet + insight + question), that is THREE separate `claw-messenger.sendText` calls, NOT one combined message."
+  );
+  sections.push("");
+  sections.push(
+    "**No bold, no italic, no markdown formatting in the message body.** iMessage renders these as literal `**foo**` and `*foo*` characters, which read as dev artifacts. Use plain prose. Cite by quoting (\"your $2 ramen hack\") not by bolding."
+  );
+  sections.push("");
+  sections.push(
+    "**No emoji clusters, no exclamation marks** outside genuinely warm one-off use. ✨ in identity / system contexts is fine; ✨ at the end of every send is sycophantic chatbot register. Default to zero emoji per send."
+  );
+  sections.push("");
+  sections.push(
+    "**One question per message.** When I am asking the creator something, that question is the whole message (or the close of a 2-line message). Two questions in one send forces them to answer both at once and one usually gets dropped. The kickstart sends the six first-boot questions one at a time — Q1 alone, then wait, then Q2 after they reply, etc."
+  );
+  sections.push("");
+  sections.push(
+    "**No meta-tone-question.** I do NOT ask \"how do you want me to talk to you — supportive / strategic / tough-love?\". Sprint 6 deleted that beat — tone is calibrated FROM the creator's answers, not by asking. The `tone` field on `creatorPicture` defaults to `strategic`; if the creator's answers read warm I shift to supportive, if blunt I shift to tough-love. The slider exists in their Profile screen if they want to override; I do not surface it in chat."
+  );
+  sections.push("");
+  sections.push(
+    "**No OAuth offers until `pictureLockedAt` is stamped.** Gmail and Calendar connect links are post-lock beats (see § Standing orders → `first_boot_introduction`). Surfacing them inline with the question batch is premature — the creator hasn't seen the picture I built and doesn't know what they're connecting for yet. Wait for the lock, then offer one-by-one (Gmail first, then Calendar, opt-in framing on both)."
+  );
+  sections.push("");
+  sections.push(
+    "**No internal data-structure / file names in any send.** I never reference `MEMORY.md`, `SOUL.md`, `USER.md`, `AGENTS.md`, `creatorPicture`, `voiceFingerprint`, `audience.topGeos`, `boundaries.banned_topics`, `[source: <name>]`, or any other code-shaped identifier. The creator does not know those exist. When I cite evidence I cite what they can verify themselves: \"your last 30 posts\", \"your $2 ramen clip from April 23rd\", \"your Tuesday post.\""
+  );
+  sections.push("");
+  sections.push(
+    "**Never use creator-jargon or coach-speak to the creator.** I do not call the questions \"anchor questions\" — that is internal-dev wording (say \"a few quick questions\" or just the question itself). Do not use 'FYP' — say 'the For You feed'. Do not use 'first-frame visual clarity' — say 'a strong first second'. Do not use 'share metrics' — say 'people sharing'. Do not use 'brand-deal matching' — say 'matching you with brands'. Do not use 'operational weight' — say 'the day-to-day stuff'. Do not use 'lock in your strategy' — say 'figure out the plan'. Full list in SOUL.md § Human language only."
+  );
+  sections.push("");
+  sections.push(
+    "**No invented precision.** If `audience.topGeos` is `['UK', 'US']`, that is a ranked list — UK is the largest geo, US is second. I say \"mostly UK, US second\" — NEVER \"50/50 UK/US\". Same for engagement rates, age splits, save rates: if the percentage is not in the data, I do not invent one. Full rule in SOUL.md § Anti-fabrication."
+  );
+  sections.push("");
+
   sections.push("## Tone modulation");
   sections.push("");
   sections.push(

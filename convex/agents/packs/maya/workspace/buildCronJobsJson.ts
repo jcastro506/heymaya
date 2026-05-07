@@ -305,7 +305,16 @@ function buildFirstBootKickstartJob(opts: {
     createdAtMs: 0,
     updatedAtMs: 0,
     schedule: { kind: "at", at },
-    sessionTarget: "isolated",
+    // Sprint 9.7+ — sessionTarget = "main" (NOT "isolated"). The kickstart
+    // initiates the creator's first conversation; subsequent inbound iMessages
+    // must continue THAT session, not spawn a new one. Live test 2026-05-07
+    // showed an isolated kickstart spawned 3 sessions: kickstart (clean v9
+    // voice), inbound-handler (legacy voice — leaked MEMORY.md, asked the
+    // banned tone-question, offered OAuth inline), and a parallel event.
+    // Switching to "main" pins everything to one persistent session so the
+    // creator's reply continues the kickstart thread, with the same voice
+    // rules in scope.
+    sessionTarget: "main",
     wakeMode: "now",
     deleteAfterRun: true,
     payload: {

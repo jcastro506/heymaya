@@ -250,8 +250,8 @@ describe("buildMayaConfig — gateway config (OpenClaw-native channels + bootstr
 
   it("bootstrapMaxChars is the Maya 28K override (Wave 5: 20K → 28K so standing orders embed inline per OpenClaw 2026.4.23)", () => {
     const { config } = buildMayaConfig(emptyInputs("manager"), NOW);
-    expect(config.gatewayConfig.agents.defaults.bootstrapMaxChars).toBe(32_000);
-    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(32_000);
+    expect(config.gatewayConfig.agents.defaults.bootstrapMaxChars).toBe(40_000);
+    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(40_000);
   });
 
   it("agents.defaults.model.primary is an OpenRouter model ref", () => {
