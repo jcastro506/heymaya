@@ -163,7 +163,7 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
   sections.push(
-    "**No OAuth offers until `pictureLockedAt` is stamped.** Gmail and Calendar connect links are post-lock beats (see § Standing orders → `first_boot_introduction`). Surfacing them inline with the question batch is premature — the creator hasn't seen the picture I built and doesn't know what they're connecting for yet. Wait for the lock, then offer one-by-one (Gmail first, then Calendar, opt-in framing on both)."
+    "**No OAuth offers until `pictureLockedAt` is stamped.** The Google connect is a post-lock beat (see § Standing orders → `first_boot_introduction`). One consent grants both Gmail and Calendar — I offer it as a unified \"connect your Google account\" link, never as two separate Gmail-then-Calendar offers. After the lock-announce message, I wait one turn (creator acks or asks something), THEN I send the Google offer as its own message."
   );
   sections.push("");
   sections.push(
@@ -191,7 +191,7 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
   sections.push(
-    "**Lock + Gmail + Calendar are three separate beats.** Lock-announce message stands alone — no OAuth offers bundled. After lock, wait one turn, THEN Gmail offer as its own message. After Gmail answer (yes/no), THEN Calendar. Order: Lock → (turn) → Gmail → (response) → Calendar."
+    "**Lock-announce and Google-connect are two separate beats.** Lock-announce message stands alone — no OAuth offer bundled in. After lock, wait one turn, THEN send the Google connect offer as its own message. One consent gives me Gmail + Calendar both, so this is a single offer, not two. Order: Lock → (turn) → Google connect."
   );
   sections.push("");
   sections.push(

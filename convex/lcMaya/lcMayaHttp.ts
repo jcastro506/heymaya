@@ -954,6 +954,58 @@ export const startOAuthHttp = httpAction(async (ctx, request) => {
     return jsonResponse({ error: "unauthorized" }, 401);
   }
 
+  // Sprint 9.8 — Google providers (gmail / googlecalendar / googlecalendar-direct)
+  // route through the unified direct-OAuth path on `start_google_calendar_oauth`.
+  // One consent grants Calendar + Gmail scopes (see GOOGLE_OAUTH_SCOPES). We
+  // short-circuit Composio for these so Maya's existing curl pattern
+  // (`start_oauth provider=gmail`) just works — but the access token she
+  // gets back covers BOTH services, no second consent needed.
+  if (
+    payload.provider === "gmail" ||
+    payload.provider === "googlecalendar" ||
+    payload.provider === "googlecalendar-direct"
+  ) {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const redirectUri = process.env.GOOGLE_CALENDAR_IMESSAGE_REDIRECT_URI;
+    if (!clientId) {
+      return jsonResponse({ error: "missing-google-client-id" }, 500);
+    }
+    if (!redirectUri) {
+      return jsonResponse({ error: "missing-redirect-uri" }, 500);
+    }
+    let stateToken: string;
+    try {
+      const result = await ctx.runMutation(
+        internal.lcMaya.lcMayaHttp.issueGoogleCalendarStateTokenForCreator,
+        {
+          creatorId: payload.creatorId as Id<"creators">,
+          nowMs: Date.now(),
+        }
+      );
+      stateToken = result.stateToken;
+    } catch (err) {
+      const msg = (err as Error).message ?? "internal-error";
+      if (msg === "creator-not-found") {
+        return jsonResponse({ error: "creator-not-found" }, 404);
+      }
+      return jsonResponse({ error: msg }, 500);
+    }
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: GOOGLE_OAUTH_SCOPES.join(" "),
+      access_type: "offline",
+      prompt: "consent",
+      include_granted_scopes: "true",
+      state: stateToken,
+    });
+    return jsonResponse(
+      { ok: true, oauthUrl: `${GOOGLE_AUTH_URL}?${params.toString()}` },
+      200
+    );
+  }
+
   // Resolve which `Provider` (per `convex/lib/planFeatures.ts`) this maps
   // to. Providers without a mapping are not yet wired on the read/write
   // side, so we reject them at the gate with a stable error code Maya can
@@ -1334,10 +1386,34 @@ function parseStartGoogleCalendarOAuthPayload(
   return { secret: obj.secret, creatorId: obj.creatorId };
 }
 
-const GOOGLE_CALENDAR_SCOPES = [
+/**
+ * Sprint 9.8 — unified Google scope list. Single OAuth consent grants
+ * Maya BOTH Calendar (read + write events) AND Gmail (read + send + draft).
+ * Replaces the prior Composio-mediated Gmail flow entirely.
+ *
+ * Why one consent: Gmail's `gmail.modify` is a "sensitive" scope requiring
+ * Google verification (4-6 wk async clock). Bundling Calendar + Gmail in
+ * one consent means the creator only sees one Google-account-permission
+ * screen at sign-up time, not two — and Maya only manages one connection
+ * row per creator instead of two.
+ *
+ * `gmail.modify` covers read + send + draft + label, but NOT permanent
+ * delete. That's the right tradeoff for a creator manager: she needs to
+ * surface brand emails and draft replies; she has no business hard-deleting
+ * mail.
+ */
+const GOOGLE_OAUTH_SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/gmail.modify",
 ];
+
+/**
+ * Back-compat alias. Tests and any internal call sites that still reference
+ * `GOOGLE_CALENDAR_SCOPES` continue to work; new sites prefer
+ * `GOOGLE_OAUTH_SCOPES`.
+ */
+const GOOGLE_CALENDAR_SCOPES = GOOGLE_OAUTH_SCOPES;
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 
@@ -1564,7 +1640,7 @@ export const startGoogleCalendarOAuthHttp = httpAction(async (ctx, request) => {
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: GOOGLE_CALENDAR_SCOPES.join(" "),
+    scope: GOOGLE_OAUTH_SCOPES.join(" "),
     access_type: "offline",
     prompt: "consent",
     include_granted_scopes: "true",

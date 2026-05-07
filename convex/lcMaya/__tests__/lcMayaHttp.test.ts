@@ -334,6 +334,12 @@ describe("POST /lc_maya/start_oauth", () => {
     process.env.COMPOSIO_AUTH_CONFIG_LINKEDIN = "ac_linkedin";
     process.env.COMPOSIO_AUTH_CONFIG_TWITTER = "ac_twitter";
     process.env.COMPOSIO_API_KEY = "test-key";
+    // Sprint 9.8 — gmail / googlecalendar / googlecalendar-direct now route
+    // through the unified direct-OAuth path. The path needs Google client
+    // creds in env to mint a valid oauthUrl.
+    process.env.GOOGLE_CLIENT_ID = "test-google-client-id";
+    process.env.GOOGLE_CALENDAR_IMESSAGE_REDIRECT_URI =
+      "https://heymaya.test/api/google-calendar/callback-imessage";
   });
   afterEach(() => {
     _setWebhookSecretForTests(null);
@@ -343,18 +349,13 @@ describe("POST /lc_maya/start_oauth", () => {
     delete process.env.COMPOSIO_AUTH_CONFIG_LINKEDIN;
     delete process.env.COMPOSIO_AUTH_CONFIG_TWITTER;
     delete process.env.COMPOSIO_API_KEY;
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CALENDAR_IMESSAGE_REDIRECT_URI;
   });
 
-  it("HAPPY: pro creator → gmail OAuth link returned (200, with redirectUrl + state)", async () => {
+  it("HAPPY: pro creator → gmail oauthUrl returned (200, direct Google OAuth path)", async () => {
     const t = convexTest(schema, modules);
     const creatorId = await insertCreator(t, { suffix: "p", plan: "manager" });
-
-    _setComposioClientForTests(
-      buildFakeComposioClient(() => ({
-        redirectUrl: "https://composio.test/oauth/abc",
-        state: "state_xyz",
-      }))
-    );
 
     const res = await t.fetch("/lc_maya/start_oauth", {
       method: "POST",
@@ -369,20 +370,18 @@ describe("POST /lc_maya/start_oauth", () => {
 
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.redirectUrl).toBe("https://composio.test/oauth/abc");
-    expect(json.state).toBe("state_xyz");
+    // Sprint 9.8 — Gmail/Calendar route through direct Google OAuth. The
+    // oauthUrl encodes BOTH calendar + gmail scopes in one consent.
+    expect(typeof json.oauthUrl).toBe("string");
+    expect(json.oauthUrl).toContain("accounts.google.com/o/oauth2");
+    expect(json.oauthUrl).toContain("calendar.events");
+    expect(json.oauthUrl).toContain("gmail.modify");
+    expect(json.oauthUrl).toContain("test-google-client-id");
   });
 
-  it("HAPPY: googlecalendar maps to the calendar provider on Pro", async () => {
+  it("HAPPY: googlecalendar routes through the same direct-OAuth path (one consent for both)", async () => {
     const t = convexTest(schema, modules);
     const creatorId = await insertCreator(t, { suffix: "p2", plan: "manager" });
-
-    _setComposioClientForTests(
-      buildFakeComposioClient(() => ({
-        redirectUrl: "https://composio.test/oauth/cal",
-        state: "state_cal",
-      }))
-    );
 
     const res = await t.fetch("/lc_maya/start_oauth", {
       method: "POST",
@@ -396,9 +395,10 @@ describe("POST /lc_maya/start_oauth", () => {
     });
 
     expect(res.status).toBe(200);
-    expect((await res.json()).redirectUrl).toBe(
-      "https://composio.test/oauth/cal"
-    );
+    const json = await res.json();
+    expect(typeof json.oauthUrl).toBe("string");
+    expect(json.oauthUrl).toContain("calendar.events");
+    expect(json.oauthUrl).toContain("gmail.modify");
   });
 
   it("ADVERSARIAL: missing / wrong secret returns 401", async () => {
@@ -559,35 +559,17 @@ describe("POST /lc_maya/start_oauth", () => {
     expect(json.provider).toBe("tiktok");
   });
 
-  it("CROSS-TENANT: secret holder cannot OAuth Creator A's account by passing Creator B's id (entityId follows the body's creatorId)", async () => {
+  it("CROSS-TENANT: gmail oauth issues state token scoped to body's creatorId, not any other creator", async () => {
+    // Sprint 9.8 — gmail/googlecalendar route through direct OAuth. The
+    // tenant-isolation guarantee is now via the `oauthStateTokens` row:
+    // its `creatorId` must match the body's `creatorId` exactly. The state
+    // token is what the iMessage callback consumes to resolve which creator
+    // just authorized — if it points at creatorA, creatorB never gets
+    // their tokens written to creatorA's connection row.
     const t = convexTest(schema, modules);
     const creatorA = await insertCreator(t, { suffix: "ca", plan: "manager" });
     const creatorB = await insertCreator(t, { suffix: "cb", plan: "manager" });
 
-    let observedEntityId: unknown = null;
-    const fetchSpy = vi.fn().mockImplementation(async (_url, init) => {
-      const body = JSON.parse((init as RequestInit).body as string);
-      observedEntityId = body.entityId;
-      return new Response(
-        JSON.stringify({
-          redirectUrl: "https://composio.test/oauth/x",
-          state: "s",
-        }),
-        { status: 200, headers: { "content-type": "application/json" } }
-      );
-    });
-    _setComposioClientForTests(
-      new RealComposioClient({
-        apiKey: "test-key",
-        baseUrl: "https://composio.test",
-        fetchImpl: fetchSpy,
-        sleep: async () => {},
-      })
-    );
-
-    // Maya posts for creatorA. The Composio request body's `entityId` MUST
-    // be creatorA — never creatorB — so the resulting connectedAccount is
-    // scoped to the right tenant.
     const res = await t.fetch("/lc_maya/start_oauth", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -599,8 +581,24 @@ describe("POST /lc_maya/start_oauth", () => {
       }),
     });
     expect(res.status).toBe(200);
-    expect(observedEntityId).toBe(creatorA);
-    expect(observedEntityId).not.toBe(creatorB);
+    const json = await res.json();
+    expect(typeof json.oauthUrl).toBe("string");
+
+    // Extract the state token from the oauthUrl and verify it's bound to
+    // creatorA in the oauthStateTokens table (NOT creatorB).
+    const url = new URL(json.oauthUrl);
+    const stateToken = url.searchParams.get("state");
+    expect(stateToken).toBeTypeOf("string");
+    const row = await t.run((ctx) =>
+      ctx.db
+        .query("oauthStateTokens")
+        .withIndex("by_state_token", (q) =>
+          q.eq("stateToken", stateToken as string)
+        )
+        .first()
+    );
+    expect(row?.creatorId).toBe(creatorA);
+    expect(row?.creatorId).not.toBe(creatorB);
   });
 });
 
@@ -1588,6 +1586,11 @@ describe("POST /lc_maya/start_oauth — Sprint 6 calendar provider fork", () => 
     process.env.COMPOSIO_AUTH_CONFIG_GMAIL = "ac_gmail";
     process.env.COMPOSIO_AUTH_CONFIG_CALENDAR = "ac_calendar";
     process.env.COMPOSIO_API_KEY = "test-key";
+    // Sprint 9.8 — googlecalendar-direct also routes through the unified
+    // direct Google OAuth path now (one consent for both Calendar + Gmail).
+    process.env.GOOGLE_CLIENT_ID = "test-google-client-id";
+    process.env.GOOGLE_CALENDAR_IMESSAGE_REDIRECT_URI =
+      "https://heymaya.test/api/google-calendar/callback-imessage";
     _setComposioClientForTests(
       buildFakeComposioClient(() => ({
         redirectUrl: "https://composio.test/connect",
@@ -1601,9 +1604,11 @@ describe("POST /lc_maya/start_oauth — Sprint 6 calendar provider fork", () => 
     delete process.env.COMPOSIO_AUTH_CONFIG_GMAIL;
     delete process.env.COMPOSIO_AUTH_CONFIG_CALENDAR;
     delete process.env.COMPOSIO_API_KEY;
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CALENDAR_IMESSAGE_REDIRECT_URI;
   });
 
-  it("HAPPY: googlecalendar-direct routes to the calendar plan-features key", async () => {
+  it("HAPPY: googlecalendar-direct routes to the unified Google OAuth path (Calendar + Gmail in one consent)", async () => {
     const t = convexTest(schema, modules);
     const creatorId = await insertCreator(t, { suffix: "calD", plan: "manager" });
     const res = await t.fetch("/lc_maya/start_oauth", {
@@ -1617,6 +1622,11 @@ describe("POST /lc_maya/start_oauth — Sprint 6 calendar provider fork", () => 
       }),
     });
     expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(typeof json.oauthUrl).toBe("string");
+    // Sprint 9.8 — every Google provider lands on the same unified scope set.
+    expect(json.oauthUrl).toContain("calendar.events");
+    expect(json.oauthUrl).toContain("gmail.modify");
   });
 
   it("REJECT: googlecalendar-composio is deprecated and returns 403 provider-not-supported", async () => {
