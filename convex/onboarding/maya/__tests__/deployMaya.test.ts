@@ -262,7 +262,7 @@ describe("deployMaya — happy path", () => {
     // The flag is the kill switch; setting it silently disables all crons.
     expect(machineCfg.env?.OPENCLAW_SKIP_CRON).toBeUndefined();
     expect(machineCfg.env?.NODE_OPTIONS).toBe(
-      "--max-old-space-size=1536 --dns-result-order=ipv4first"
+      "--max-old-space-size=3072 --dns-result-order=ipv4first"
     );
     expect(machineCfg.init?.cmd).toBeDefined();
     const initShell = machineCfg.init!.cmd!.join(" ");
@@ -1037,7 +1037,7 @@ describe("machineConfigFor", () => {
     // OPENCLAW_SKIP_CRON MUST NOT be set — cron is OpenClaw-native.
     expect(out.env?.OPENCLAW_SKIP_CRON).toBeUndefined();
     expect(out.env?.NODE_OPTIONS).toBe(
-      "--max-old-space-size=1536 --dns-result-order=ipv4first"
+      "--max-old-space-size=3072 --dns-result-order=ipv4first"
     );
     expect(out.env?.MAYA_CONVEX_HTTP_BASE).toBe("https://x.convex.cloud");
     expect(out.env?.MAYA_WORKSPACE_BUNDLE_URL).toBe("https://convex.cloud/storage/abc123");
@@ -1047,7 +1047,7 @@ describe("machineConfigFor", () => {
     expect(out.env?.MAYA_BOOTSTRAP_JSON).toBeUndefined();
     expect(out.guest?.cpu_kind).toBe("shared");
     expect(out.guest?.cpus).toBe(2);
-    expect(out.guest?.memory_mb).toBe(2048);
+    expect(out.guest?.memory_mb).toBe(4096);
     expect(out.metadata?.creator_id).toBe("fakecreator");
     expect(out.init?.cmd).toBeDefined();
     const initShell = out.init!.cmd!.join(" ");

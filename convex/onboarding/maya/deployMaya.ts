@@ -192,7 +192,7 @@ const OPENCLAW_IMAGE =
 const MACHINE_GUEST: NonNullable<FlyMachineConfig["guest"]> = {
   cpu_kind: "shared",
   cpus: 2,
-  memory_mb: 2048,
+  memory_mb: 4096,
 };
 
 /**
@@ -237,7 +237,7 @@ export function machineConfigFor(
     OPENCLAW_PREFER_PNPM: "1",
     OPENCLAW_PLUGIN_STAGE_DIR: "/opt/openclaw-runtime-preseed/plugin-runtime-deps",
     OPENCLAW_STATE_DIR: "/data",
-    NODE_OPTIONS: "--max-old-space-size=1536 --dns-result-order=ipv4first",
+    NODE_OPTIONS: "--max-old-space-size=3072 --dns-result-order=ipv4first",
     MAYA_PLAN: config.plan,
     MAYA_TIMEZONE: config.timezone,
     MAYA_OPENCLAW_VERSION: config.openclawVersion,
