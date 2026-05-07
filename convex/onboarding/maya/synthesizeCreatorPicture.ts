@@ -352,6 +352,52 @@ const boundariesValidator = v.object({
   banned_topics: v.optional(v.array(v.string())),
 });
 
+// Sprint 10 — multimodal picture fields. Optional throughout: text-only
+// fallback synthesis emits null/[] for these. Validation enforces shape
+// when present so a malformed multimodal output doesn't poison the row.
+const voiceAndPersonalityValidator = v.object({
+  humorType: v.string(),
+  energyLevel: v.string(),
+  onCameraPersona: v.string(),
+  dryWittyEarnest: v.string(),
+  signaturePhrases: v.array(v.string()),
+});
+
+const visualStyleValidator = v.object({
+  framing: v.string(),
+  aesthetic: v.array(v.string()),
+  settingsSeen: v.array(v.string()),
+  strengths: v.array(v.string()),
+  weaknesses: v.array(v.string()),
+});
+
+const recurringElementValidator = v.object({
+  kind: v.union(
+    v.literal("person"),
+    v.literal("pet"),
+    v.literal("location"),
+    v.literal("prop"),
+    v.literal("format")
+  ),
+  name: v.string(),
+  appearancesIn: v.array(v.string()),
+  roleSummary: v.string(),
+});
+
+const warmthMaterialValidator = v.object({
+  kind: v.union(
+    v.literal("compliment"),
+    v.literal("recurring-element-callout"),
+    v.literal("specific-moment")
+  ),
+  text: v.string(),
+  confidence: v.union(
+    v.literal("safe-to-use"),
+    v.literal("check-with-creator")
+  ),
+  citationPostIds: v.array(v.string()),
+});
+
 export const upsertSynthesizedPicture = internalMutation({
   args: {
     creatorId: v.id("creators"),
@@ -375,6 +421,11 @@ export const upsertSynthesizedPicture = internalMutation({
     needsVerification: v.optional(v.array(needsVerificationItemValidator)),
     // ─── Sprint 8 Slice A — boundary anchors ─────────────────────────────
     boundaries: v.optional(boundariesValidator),
+    // ─── Sprint 10 — multimodal picture fields ───────────────────────────
+    voiceAndPersonality: v.optional(v.union(voiceAndPersonalityValidator, v.null())),
+    visualStyle: v.optional(v.union(visualStyleValidator, v.null())),
+    recurringElements: v.optional(v.array(recurringElementValidator)),
+    warmthMaterial: v.optional(v.array(warmthMaterialValidator)),
   },
   handler: async (ctx, args): Promise<Id<"creatorPicture">> => {
     const existing = await ctx.db
@@ -427,6 +478,22 @@ export const upsertSynthesizedPicture = internalMutation({
     // get clobbered with empty arrays.
     if (args.boundaries !== undefined) {
       synthFields.boundaries = args.boundaries;
+    }
+    // Sprint 10 — multimodal fields. Synthesis owns these. Patch only when
+    // present so a text-only fallback synthesis doesn't wipe a prior
+    // multimodal run's data, and a multimodal run with no recurring
+    // elements (legitimately empty arr) still writes [].
+    if (args.voiceAndPersonality !== undefined) {
+      synthFields.voiceAndPersonality = args.voiceAndPersonality;
+    }
+    if (args.visualStyle !== undefined) {
+      synthFields.visualStyle = args.visualStyle;
+    }
+    if (args.recurringElements !== undefined) {
+      synthFields.recurringElements = args.recurringElements;
+    }
+    if (args.warmthMaterial !== undefined) {
+      synthFields.warmthMaterial = args.warmthMaterial;
     }
 
     if (existing) {
@@ -1317,7 +1384,61 @@ Required output schema (JSON):
   "boundaries": {
     "banned_topics": string[]  // OPTIONAL. Topics the creator has explicitly stated they avoid (anti-niches answer in onboarding) OR observed in posts as deliberately-avoided categories. Empty array if none. Skills consume this to refuse generation against listed topics. Be specific — "weight-loss-before-after" not "fitness".
   } | null,
+  // ─── MULTIMODAL FIELDS (Sprint 10) — populate ONLY when watching kind:"video" posts ────
+  // These four fields exist so Maya sounds like a friend who actually watched, not an
+  // analytics dashboard. They're populated when at least 2 kind:"video" posts were
+  // watchable. In text-only mode (no video posts received OR all video downloads failed),
+  // set voiceAndPersonality + visualStyle to null and the array fields to []. NEVER
+  // fabricate these from caption text alone — text inferences belong in voiceFingerprint.
+  "voiceAndPersonality": {
+    "humorType": string  // 1-3 words: "deadpan", "self-deprecating", "absurdist", "earnest", "biting"
+    "energyLevel": string  // 1 short phrase: "low-key conversational", "high-energy chaos"
+    "onCameraPersona": string  // 1 sentence: how they read on camera
+    "dryWittyEarnest": string  // 1-3 word slot: pick or describe
+    "signaturePhrases": string[]  // 0-5 verbatim phrases that recur across watched videos
+  } | null,
+  "visualStyle": {
+    "framing": string  // 1 sentence: framing tendencies ("Tight handheld POV; eye-level dominates")
+    "aesthetic": string[]  // 2-5 descriptors ["high-contrast urban", "natural light", "minimal cuts"]
+    "settingsSeen": string[]  // 2-8 specific places ["bodegas", "Washington Square", "subway platforms"]
+    "strengths": string[]  // 1-3 visual things they do well
+    "weaknesses": string[]  // 0-2 visual things that drop quality
+  } | null,
+  "recurringElements": [  // 0-8 entries — empty unless 2+ watched videos
+    {
+      "kind": "person" | "pet" | "location" | "prop" | "format",
+      "name": string,  // natural language reference: "Charlie (dog)", "the bodega cat"
+      "appearancesIn": string[],  // postIds where the element appeared (each must be in sourceCitations[])
+      "roleSummary": string  // 1 sentence: "Charlie steals every shot — runs across frame in 3 of 5 watched"
+    }
+  ],
+  "warmthMaterial": [  // 0-5 entries — raw material for Maya's first-text warmth
+    {
+      "kind": "compliment" | "recurring-element-callout" | "specific-moment",
+      "text": string,  // 1 sentence Maya could paraphrase to the creator. NOT a fact dump.
+      "confidence": "safe-to-use" | "check-with-creator",  // see rule below
+      "citationPostIds": string[]  // 1+ postIds backing the claim (each must be in sourceCitations[])
+    }
+  ]
 }
+
+MULTIMODAL FIELDS RULES:
+
+- voiceAndPersonality / visualStyle / recurringElements / warmthMaterial are populated
+  ONLY when at least 2 kind:"video" posts were actually watched. In text-only mode,
+  set the object fields to null and the array fields to []. Never fabricate from caption text alone.
+- recurringElements: each appearancesIn[] postId MUST appear in sourceCitations[] with
+  usedFor="recurringElements[i]" (or similar). An element seen in only 1 video is NOT recurring — drop it.
+- warmthMaterial.confidence rule (load-bearing for Maya's voice safety):
+  - "safe-to-use" — element observed clearly across 2+ watched videos AND any name (pet/person/place)
+    appears verbatim in caption text. Maya uses these as direct paraphrase in her first message.
+  - "check-with-creator" — element inferred (e.g. you guess the dog's name) OR observed in only 1 video.
+    Maya phrases these as questions ("I think your dog is Charlie — right?"), NEVER assertions.
+  - When in doubt, default to "check-with-creator". A wrong "safe-to-use" claim destroys trust.
+- warmthMaterial entries are SHORT (≤120 chars) and SPECIFIC. Anti-pattern: "you have a great
+  smile" (vague). Pattern: "your dog Charlie running across Washington Square — gorgeous shot" (specific).
+- Cap warmthMaterial at 5 entries even if you saw more. Maya picks ONE to weave into her first message —
+  more candidates is helpful but more than 5 is noise.
 
 Citation discipline:
 - Every "topHooks" entry's examplePostId must also appear in sourceCitations.
@@ -1723,6 +1844,37 @@ interface ParsedPicture {
   // observed posts surface explicit "do-not-go-there" topics; otherwise the
   // model omits the field and skills null-coalesce.
   boundaries?: { banned_topics?: string[] };
+  // ─── Sprint 10 — multimodal picture fields ──────────────────────────────
+  // Populated when the synthesis ran multimodal (video-synth-worker watched
+  // the creator's videos). Object fields are null + array fields are []
+  // when text-only fallback is in use. Skills (especially first-boot kickstart)
+  // read warmthMaterial[] for first-text warmth — see playbook.md § Voice.
+  voiceAndPersonality?: {
+    humorType: string;
+    energyLevel: string;
+    onCameraPersona: string;
+    dryWittyEarnest: string;
+    signaturePhrases: string[];
+  } | null;
+  visualStyle?: {
+    framing: string;
+    aesthetic: string[];
+    settingsSeen: string[];
+    strengths: string[];
+    weaknesses: string[];
+  } | null;
+  recurringElements?: Array<{
+    kind: "person" | "pet" | "location" | "prop" | "format";
+    name: string;
+    appearancesIn: string[];
+    roleSummary: string;
+  }>;
+  warmthMaterial?: Array<{
+    kind: "compliment" | "recurring-element-callout" | "specific-moment";
+    text: string;
+    confidence: "safe-to-use" | "check-with-creator";
+    citationPostIds: string[];
+  }>;
 }
 
 export class SynthValidationError extends Error {
@@ -1945,6 +2097,53 @@ export function parseAndValidatePicture(raw: string): ParsedPicture {
     boundaries = parsedBounded;
   }
 
+  // ─── Sprint 10 — multimodal picture fields (all optional) ────────────────
+  // Populated only when the synthesis ran multimodal. Text-only fallback
+  // emits null/[] for these. Parser tolerates either; on malformed shape it
+  // throws SynthValidationError (triggers single-shot retry).
+  const voiceAndPersonality = parseVoiceAndPersonality(obj.voiceAndPersonality);
+  const visualStyle = parseVisualStyle(obj.visualStyle);
+  const recurringElements = parseRecurringElements(obj.recurringElements);
+  const warmthMaterial = parseWarmthMaterial(obj.warmthMaterial);
+
+  // Citation firewall extension: every recurringElements[i].appearancesIn
+  // postId AND every warmthMaterial[i].citationPostIds postId MUST appear
+  // in sourceCitations[]. Auto-add the citation pointer if the model
+  // omitted the entry but the post is mentioned (same repair pattern as
+  // topHooks/bottomHooks).
+  const citedPostIdsForMultimodal = new Set(
+    sourceCitations.map((c) => c.postId)
+  );
+  recurringElements.forEach((el, i) => {
+    el.appearancesIn.forEach((postId) => {
+      if (!citedPostIdsForMultimodal.has(postId)) {
+        sourceCitations.push({
+          platform: "tiktok", // best-effort — synthesis runs primarily on TikTok in v0
+          postId,
+          usedFor: `recurringElements[${i}]`,
+        });
+        citedPostIdsForMultimodal.add(postId);
+      }
+    });
+  });
+  warmthMaterial.forEach((wm, i) => {
+    if (wm.citationPostIds.length === 0) {
+      throw new SynthValidationError(
+        `warmthMaterial[${i}] must cite at least one postId.`
+      );
+    }
+    wm.citationPostIds.forEach((postId) => {
+      if (!citedPostIdsForMultimodal.has(postId)) {
+        sourceCitations.push({
+          platform: "tiktok",
+          postId,
+          usedFor: `warmthMaterial[${i}]`,
+        });
+        citedPostIdsForMultimodal.add(postId);
+      }
+    });
+  });
+
   return {
     niche,
     audience,
@@ -1960,7 +2159,239 @@ export function parseAndValidatePicture(raw: string): ParsedPicture {
     growthPlan,
     needsVerification,
     ...(boundaries !== undefined ? { boundaries } : {}),
+    ...(voiceAndPersonality !== undefined ? { voiceAndPersonality } : {}),
+    ...(visualStyle !== undefined ? { visualStyle } : {}),
+    ...(recurringElements.length > 0 ? { recurringElements } : { recurringElements: [] }),
+    ...(warmthMaterial.length > 0 ? { warmthMaterial } : { warmthMaterial: [] }),
   };
+}
+
+/**
+ * Sprint 10 — parse multimodal voiceAndPersonality block. Tolerates
+ * absence (text-only fallback) and explicit null. Validates shape strictly
+ * when populated. Returns undefined for absent, null for explicit null,
+ * object for populated.
+ */
+function parseVoiceAndPersonality(
+  raw: unknown
+):
+  | {
+      humorType: string;
+      energyLevel: string;
+      onCameraPersona: string;
+      dryWittyEarnest: string;
+      signaturePhrases: string[];
+    }
+  | null
+  | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    throw new SynthValidationError(
+      "voiceAndPersonality must be an object or null."
+    );
+  }
+  const o = raw as Record<string, unknown>;
+  const reqStr = (k: string): string => {
+    if (typeof o[k] !== "string" || (o[k] as string).length === 0) {
+      throw new SynthValidationError(
+        `voiceAndPersonality.${k} must be a non-empty string.`
+      );
+    }
+    return (o[k] as string).trim();
+  };
+  const phrases: string[] = [];
+  if (o.signaturePhrases !== undefined && o.signaturePhrases !== null) {
+    if (!Array.isArray(o.signaturePhrases)) {
+      throw new SynthValidationError(
+        "voiceAndPersonality.signaturePhrases must be an array of strings."
+      );
+    }
+    for (const p of o.signaturePhrases) {
+      if (typeof p === "string" && p.trim().length > 0) phrases.push(p.trim());
+    }
+  }
+  return {
+    humorType: reqStr("humorType"),
+    energyLevel: reqStr("energyLevel"),
+    onCameraPersona: reqStr("onCameraPersona"),
+    dryWittyEarnest: reqStr("dryWittyEarnest"),
+    signaturePhrases: phrases,
+  };
+}
+
+function parseVisualStyle(
+  raw: unknown
+):
+  | {
+      framing: string;
+      aesthetic: string[];
+      settingsSeen: string[];
+      strengths: string[];
+      weaknesses: string[];
+    }
+  | null
+  | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    throw new SynthValidationError("visualStyle must be an object or null.");
+  }
+  const o = raw as Record<string, unknown>;
+  if (typeof o.framing !== "string" || (o.framing as string).length === 0) {
+    throw new SynthValidationError(
+      "visualStyle.framing must be a non-empty string."
+    );
+  }
+  const arrField = (k: string): string[] => {
+    if (o[k] === undefined || o[k] === null) return [];
+    if (!Array.isArray(o[k])) {
+      throw new SynthValidationError(`visualStyle.${k} must be an array.`);
+    }
+    return (o[k] as unknown[])
+      .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+      .map((x) => x.trim());
+  };
+  return {
+    framing: o.framing.trim(),
+    aesthetic: arrField("aesthetic"),
+    settingsSeen: arrField("settingsSeen"),
+    strengths: arrField("strengths"),
+    weaknesses: arrField("weaknesses"),
+  };
+}
+
+function parseRecurringElements(
+  raw: unknown
+): Array<{
+  kind: "person" | "pet" | "location" | "prop" | "format";
+  name: string;
+  appearancesIn: string[];
+  roleSummary: string;
+}> {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    throw new SynthValidationError("recurringElements must be an array.");
+  }
+  const allowedKinds = new Set([
+    "person",
+    "pet",
+    "location",
+    "prop",
+    "format",
+  ]);
+  return raw.map((entry, i) => {
+    if (typeof entry !== "object" || entry === null) {
+      throw new SynthValidationError(
+        `recurringElements[${i}] must be an object.`
+      );
+    }
+    const e = entry as Record<string, unknown>;
+    if (typeof e.kind !== "string" || !allowedKinds.has(e.kind)) {
+      throw new SynthValidationError(
+        `recurringElements[${i}].kind must be person|pet|location|prop|format.`
+      );
+    }
+    if (typeof e.name !== "string" || e.name.length === 0) {
+      throw new SynthValidationError(
+        `recurringElements[${i}].name must be a non-empty string.`
+      );
+    }
+    if (typeof e.roleSummary !== "string" || e.roleSummary.length === 0) {
+      throw new SynthValidationError(
+        `recurringElements[${i}].roleSummary must be a non-empty string.`
+      );
+    }
+    if (!Array.isArray(e.appearancesIn) || e.appearancesIn.length === 0) {
+      throw new SynthValidationError(
+        `recurringElements[${i}].appearancesIn must be a non-empty array of postIds.`
+      );
+    }
+    const ids: string[] = [];
+    for (const id of e.appearancesIn) {
+      if (typeof id !== "string" || id.length === 0) {
+        throw new SynthValidationError(
+          `recurringElements[${i}].appearancesIn entries must be non-empty postIds.`
+        );
+      }
+      ids.push(id);
+    }
+    return {
+      kind: e.kind as "person" | "pet" | "location" | "prop" | "format",
+      name: e.name.trim(),
+      appearancesIn: ids,
+      roleSummary: e.roleSummary.trim(),
+    };
+  });
+}
+
+function parseWarmthMaterial(
+  raw: unknown
+): Array<{
+  kind: "compliment" | "recurring-element-callout" | "specific-moment";
+  text: string;
+  confidence: "safe-to-use" | "check-with-creator";
+  citationPostIds: string[];
+}> {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    throw new SynthValidationError("warmthMaterial must be an array.");
+  }
+  const allowedKinds = new Set([
+    "compliment",
+    "recurring-element-callout",
+    "specific-moment",
+  ]);
+  const allowedConfidence = new Set(["safe-to-use", "check-with-creator"]);
+  return raw.map((entry, i) => {
+    if (typeof entry !== "object" || entry === null) {
+      throw new SynthValidationError(
+        `warmthMaterial[${i}] must be an object.`
+      );
+    }
+    const e = entry as Record<string, unknown>;
+    if (typeof e.kind !== "string" || !allowedKinds.has(e.kind)) {
+      throw new SynthValidationError(
+        `warmthMaterial[${i}].kind must be compliment|recurring-element-callout|specific-moment.`
+      );
+    }
+    if (typeof e.text !== "string" || e.text.length === 0) {
+      throw new SynthValidationError(
+        `warmthMaterial[${i}].text must be a non-empty string.`
+      );
+    }
+    if (
+      typeof e.confidence !== "string" ||
+      !allowedConfidence.has(e.confidence)
+    ) {
+      throw new SynthValidationError(
+        `warmthMaterial[${i}].confidence must be safe-to-use|check-with-creator.`
+      );
+    }
+    if (!Array.isArray(e.citationPostIds) || e.citationPostIds.length === 0) {
+      throw new SynthValidationError(
+        `warmthMaterial[${i}].citationPostIds must be a non-empty array.`
+      );
+    }
+    const ids: string[] = [];
+    for (const id of e.citationPostIds) {
+      if (typeof id !== "string" || id.length === 0) {
+        throw new SynthValidationError(
+          `warmthMaterial[${i}].citationPostIds entries must be non-empty postIds.`
+        );
+      }
+      ids.push(id);
+    }
+    return {
+      kind: e.kind as
+        | "compliment"
+        | "recurring-element-callout"
+        | "specific-moment",
+      text: e.text.trim(),
+      confidence: e.confidence as "safe-to-use" | "check-with-creator",
+      citationPostIds: ids,
+    };
+  });
 }
 
 /**
@@ -2800,6 +3231,21 @@ export const synthesizeCreatorPicture = internalAction({
           // don't get clobbered).
           ...(parsed.boundaries !== undefined
             ? { boundaries: parsed.boundaries }
+            : {}),
+          // Sprint 10 — multimodal picture fields. Forward when present;
+          // otherwise leave undefined so a text-only fallback doesn't wipe
+          // a prior multimodal row's data.
+          ...(parsed.voiceAndPersonality !== undefined
+            ? { voiceAndPersonality: parsed.voiceAndPersonality }
+            : {}),
+          ...(parsed.visualStyle !== undefined
+            ? { visualStyle: parsed.visualStyle }
+            : {}),
+          ...(parsed.recurringElements !== undefined
+            ? { recurringElements: parsed.recurringElements }
+            : {}),
+          ...(parsed.warmthMaterial !== undefined
+            ? { warmthMaterial: parsed.warmthMaterial }
             : {}),
         }
       );

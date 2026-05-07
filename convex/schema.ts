@@ -530,6 +530,75 @@ export default defineSchema({
       })
     ),
     /**
+     * Sprint 10 — multimodal picture fields. Populated when synthesis
+     * actually WATCHED the creator's videos via the video-synth-worker
+     * (Gemini Files API). In text-only fallback mode (worker disabled OR
+     * all video downloads failed), object fields are null and array fields
+     * are empty. Skills consume these to write content that sounds like a
+     * friend who already loves the creator's content, not an analytics
+     * dashboard. See `agents/skills/maya-platform/playbook.md` § Voice for
+     * the warmthMaterial usage rules — the confidence field is load-bearing
+     * (safe-to-use → verbatim paraphrase; check-with-creator → phrased as
+     * a question).
+     */
+    voiceAndPersonality: v.optional(
+      v.union(
+        v.object({
+          humorType: v.string(),
+          energyLevel: v.string(),
+          onCameraPersona: v.string(),
+          dryWittyEarnest: v.string(),
+          signaturePhrases: v.array(v.string()),
+        }),
+        v.null()
+      )
+    ),
+    visualStyle: v.optional(
+      v.union(
+        v.object({
+          framing: v.string(),
+          aesthetic: v.array(v.string()),
+          settingsSeen: v.array(v.string()),
+          strengths: v.array(v.string()),
+          weaknesses: v.array(v.string()),
+        }),
+        v.null()
+      )
+    ),
+    recurringElements: v.optional(
+      v.array(
+        v.object({
+          kind: v.union(
+            v.literal("person"),
+            v.literal("pet"),
+            v.literal("location"),
+            v.literal("prop"),
+            v.literal("format")
+          ),
+          name: v.string(),
+          appearancesIn: v.array(v.string()),
+          roleSummary: v.string(),
+        })
+      )
+    ),
+    warmthMaterial: v.optional(
+      v.array(
+        v.object({
+          kind: v.union(
+            v.literal("compliment"),
+            v.literal("recurring-element-callout"),
+            v.literal("specific-moment")
+          ),
+          text: v.string(),
+          confidence: v.union(
+            v.literal("safe-to-use"),
+            v.literal("check-with-creator")
+          ),
+          citationPostIds: v.array(v.string()),
+        })
+      )
+    ),
+    /**
      * The 3 opening answers Maya parses out of the creator's first reply in
      * iMessage — captured by `POST /lc_maya/submit_opening_answers` (see
      * `convex/lcMaya/lcMayaHttp.ts`). This is the lightweight first-boot

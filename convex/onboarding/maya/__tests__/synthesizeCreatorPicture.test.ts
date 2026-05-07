@@ -3661,3 +3661,163 @@ describe("synthesizeCreatorPicture — Sprint 9.5 always-ask soft verification",
     expect(blockers[0].field).toBe("location");
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 10 — multimodal picture fields (voiceAndPersonality / visualStyle / */
+/*               recurringElements / warmthMaterial)                          */
+/* -------------------------------------------------------------------------- */
+
+describe("synthesizeCreatorPicture — Sprint 10 multimodal fields", () => {
+  it("HAPPY: parses voiceAndPersonality + visualStyle + recurringElements + warmthMaterial when present", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.voiceAndPersonality = {
+      humorType: "deadpan",
+      energyLevel: "low-key conversational",
+      onCameraPersona: "Talks to camera like a friend, occasional eye-roll for emphasis",
+      dryWittyEarnest: "dry-witty",
+      signaturePhrases: ["that's the move", "you already know"],
+    };
+    baseJson.visualStyle = {
+      framing: "Tight handheld POV; eye-level dominates; rarely uses tripods",
+      aesthetic: ["high-contrast urban", "natural light", "minimal cuts"],
+      settingsSeen: ["bodegas", "Washington Square", "subway platforms"],
+      strengths: ["good first-second hooks", "consistent color palette"],
+      weaknesses: ["audio inconsistent in evening clips"],
+    };
+    baseJson.recurringElements = [
+      {
+        kind: "pet",
+        name: "Charlie (dog)",
+        appearancesIn: ["tt_post_0", "tt_post_2", "tt_post_4"],
+        roleSummary:
+          "Charlie steals every shot — runs across frame in 3 of 5 watched",
+      },
+      {
+        kind: "location",
+        name: "Washington Square Park",
+        appearancesIn: ["tt_post_1", "tt_post_2"],
+        roleSummary: "Recurring NYC backdrop, signature wide shots",
+      },
+    ];
+    baseJson.warmthMaterial = [
+      {
+        kind: "recurring-element-callout",
+        text: "Your dog Charlie running across Washington Square — gorgeous shot",
+        confidence: "safe-to-use",
+        citationPostIds: ["tt_post_2"],
+      },
+      {
+        kind: "compliment",
+        text: "Your London street clips are punching above your baseline",
+        confidence: "check-with-creator",
+        citationPostIds: ["tt_post_1"],
+      },
+    ];
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    expect(parsed.voiceAndPersonality?.humorType).toBe("deadpan");
+    expect(parsed.voiceAndPersonality?.signaturePhrases).toContain("that's the move");
+    expect(parsed.visualStyle?.framing).toContain("Tight handheld POV");
+    expect(parsed.visualStyle?.settingsSeen).toContain("Washington Square");
+    expect(parsed.recurringElements).toHaveLength(2);
+    expect(parsed.recurringElements?.[0]?.name).toBe("Charlie (dog)");
+    expect(parsed.warmthMaterial).toHaveLength(2);
+    expect(parsed.warmthMaterial?.[0]?.confidence).toBe("safe-to-use");
+    expect(parsed.warmthMaterial?.[1]?.confidence).toBe("check-with-creator");
+    // Citation firewall: warmthMaterial postIds get auto-added to sourceCitations.
+    const citedIds = parsed.sourceCitations.map((c) => c.postId);
+    expect(citedIds).toContain("tt_post_2");
+    expect(citedIds).toContain("tt_post_1");
+  });
+
+  it("TEXT-ONLY FALLBACK: explicit null voiceAndPersonality / visualStyle is preserved as null", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.voiceAndPersonality = null;
+    baseJson.visualStyle = null;
+    baseJson.recurringElements = [];
+    baseJson.warmthMaterial = [];
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    expect(parsed.voiceAndPersonality).toBeNull();
+    expect(parsed.visualStyle).toBeNull();
+    expect(parsed.recurringElements).toEqual([]);
+    expect(parsed.warmthMaterial).toEqual([]);
+  });
+
+  it("ABSENT: omitting all multimodal fields entirely doesn't break the parser", () => {
+    // Old text-only synth output (pre-Sprint-10) must still parse.
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    delete baseJson.voiceAndPersonality;
+    delete baseJson.visualStyle;
+    delete baseJson.recurringElements;
+    delete baseJson.warmthMaterial;
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    expect(parsed.voiceAndPersonality).toBeUndefined();
+    expect(parsed.visualStyle).toBeUndefined();
+    expect(parsed.recurringElements).toEqual([]);
+    expect(parsed.warmthMaterial).toEqual([]);
+  });
+
+  it("ADVERSARIAL: warmthMaterial entry with empty citationPostIds is rejected", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.warmthMaterial = [
+      {
+        kind: "compliment",
+        text: "broken — no citations",
+        confidence: "safe-to-use",
+        citationPostIds: [],
+      },
+    ];
+    expect(() => parseAndValidatePicture(JSON.stringify(baseJson))).toThrow(
+      SynthValidationError
+    );
+  });
+
+  it("ADVERSARIAL: invalid recurringElements.kind is rejected", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.recurringElements = [
+      {
+        kind: "vehicle", // not in allowed enum
+        name: "Truck",
+        appearancesIn: ["tt_post_0"],
+        roleSummary: "appears in one post",
+      },
+    ];
+    expect(() => parseAndValidatePicture(JSON.stringify(baseJson))).toThrow(
+      SynthValidationError
+    );
+  });
+
+  it("ADVERSARIAL: invalid warmthMaterial.confidence is rejected", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.warmthMaterial = [
+      {
+        kind: "compliment",
+        text: "x",
+        confidence: "high", // not in allowed enum
+        citationPostIds: ["tt_post_0"],
+      },
+    ];
+    expect(() => parseAndValidatePicture(JSON.stringify(baseJson))).toThrow(
+      SynthValidationError
+    );
+  });
+
+  it("CITATION-FIREWALL: recurringElements.appearancesIn postIds get auto-added to sourceCitations", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.recurringElements = [
+      {
+        kind: "pet",
+        name: "Charlie",
+        // post not in sourceCitations — parser must auto-add
+        appearancesIn: ["uncited_post_id_xyz", "tt_post_0"],
+        roleSummary: "recurring dog",
+      },
+    ];
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    const citedIds = parsed.sourceCitations.map((c) => c.postId);
+    expect(citedIds).toContain("uncited_post_id_xyz");
+    const usedFors = parsed.sourceCitations
+      .filter((c) => c.postId === "uncited_post_id_xyz")
+      .map((c) => c.usedFor);
+    expect(usedFors).toContain("recurringElements[0]");
+  });
+});
