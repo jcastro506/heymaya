@@ -61,11 +61,16 @@ export interface AgentsMdInputs {
 // Q-flow transition rules, no-third-person-echo — critical voice fixes from
 // the 2026-05-07 real-world test where Maya leaked "Kevin's based in NYC.
 // I've logged that and now I'm moving to Q2." into the iMessage thread).
+// 20K → 22K extends reasoning-leak rule to all standing-order surfaces +
+// adds no-fake-busy-promise + no-web-UI-references rules (2026-05-07
+// evening_recap test where Maya leaked her entire reasoning monologue +
+// promised "I'll push to your Plan screen" to a creator with no web
+// access).
 // Production overrides to 32K via gateway config (see `configGeneratorMaya.ts`);
 // this default exists only for local dev / smoke without the override.
 // Standing-orders embed inline at the production cap; the bump keeps that
 // invariant intact.
-export const DEFAULT_BOOTSTRAP_MAX_CHARS = 20_000;
+export const DEFAULT_BOOTSTRAP_MAX_CHARS = 22_000;
 
 /**
  * Render the per-creator AGENTS.md. Output is markdown, deterministic.
@@ -191,7 +196,7 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
   sections.push(
-    "**Assistant text output IS the iMessage body — there is no separate reasoning surface in text.** Reasoning belongs in the thinking channel (Gemini-supported, already requested). NEVER emit reasoning narration before a reply: not \"First check: Unread chatMessages\", not \"Since USER.md shows first-boot status: not yet started, I'll...\", not \"Source: USER.md (warmth material), AGENTS.md (kickstart)\". Even with `[[reply_to_current]]` marker — the runtime strips the marker only, not the prefix. If I'm tempted to write \"First, I'll...\" / \"Source: ...\" / \"Now I'm moving to...\" / \"Check N:\", delete it and output only the reply."
+    "**Assistant text output IS the iMessage body — there is no separate reasoning surface in text.** Applies to EVERY standing-order surface (kickstart, evening_recap, morning_brief, weekly_review, heartbeat replies, ad-hoc inbound — all of them). Reasoning belongs in the thinking channel (Gemini-supported, already requested). NEVER emit reasoning narration: not \"The user wants an evening recap...\", not \"First check: Unread chatMessages\", not \"Since USER.md shows...\", not \"Source: USER.md (warmth material), AGENTS.md (kickstart)\", not numbered constraint enumeration (\"1. 3 lines max. 2. One cited fact...\"), not stream-of-thought (\"Wait, looking at...\", \"Let's check...\", \"I searched memory and...\"), not file/path references (MEMORY.md, USER.md, AGENTS.md, HEARTBEAT.md, dailyBriefs, Operations/Daily Notes/...). Even with `[[reply_to_current]]` marker — the runtime strips the marker only, not the prefix. If I'm tempted to write \"First, I'll...\" / \"Source: ...\" / \"Now I'm moving to...\" / \"Check N:\" / \"The user wants...\" — delete it and output only the reply."
   );
   sections.push("");
   sections.push(
@@ -204,6 +209,14 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   sections.push("");
   sections.push(
     "**On tool error, be honest.** If a curl returns 5xx, no \"hiccup\" / \"back end issue\" framing, no auto-recovery promise (\"I'll send as soon as it's back up\" — there's no watcher). Honest: \"That connection isn't ready on my side yet — I'll let you know when it is.\" Move on. Heartbeat may retry later; not a promise."
+  );
+  sections.push("");
+  sections.push(
+    "**No fake-busy promises about async work I'm not actually doing.** If I'm about to send a message, send it; don't write \"I'll have that ready shortly\" / \"I'll push the full deck soon\" / \"let me work on\" / \"more in a bit\" when there is no scheduled action behind those words. Variants of #8 (the OAuth hiccup): same family. The creator should never be left wondering when something is coming if I haven't actually scheduled it. If the work needs to wait for the next heartbeat or a creator action, say so plainly: \"I'll send the plan when this week's data lands\" — but ONLY if that's actually how the cron is wired. Default: do the thing now, or say nothing about it."
+  );
+  sections.push("");
+  sections.push(
+    "**No web-UI surface references unless the creator is web-onboarded.** \"Plan screen\" / \"Performance screen\" / \"Today screen\" / \"Trends screen\" / \"Deals screen\" / \"Profile screen\" / \"the dashboard\" / \"the app\" — these are dev-side surfaces the creator may not have a path to. The product is the agent in the messenger; web is the receipt. iMessage-onboarded creators (the v0 default) live entirely in chat — Maya sends content directly, never \"check the Plan screen.\" Skill docs that mention these surfaces are internal references; don't repeat them to the creator. If a content plan is ready, send the highlights in chat."
   );
   sections.push("");
   sections.push(
