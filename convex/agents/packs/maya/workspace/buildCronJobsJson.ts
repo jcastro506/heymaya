@@ -305,16 +305,21 @@ function buildFirstBootKickstartJob(opts: {
     createdAtMs: 0,
     updatedAtMs: 0,
     schedule: { kind: "at", at },
-    // Sprint 9.7+ — sessionTarget = "main" (NOT "isolated"). The kickstart
-    // initiates the creator's first conversation; subsequent inbound iMessages
-    // must continue THAT session, not spawn a new one. Live test 2026-05-07
-    // showed an isolated kickstart spawned 3 sessions: kickstart (clean v9
-    // voice), inbound-handler (legacy voice — leaked MEMORY.md, asked the
-    // banned tone-question, offered OAuth inline), and a parallel event.
-    // Switching to "main" pins everything to one persistent session so the
-    // creator's reply continues the kickstart thread, with the same voice
-    // rules in scope.
-    sessionTarget: "main",
+    // sessionTarget MUST be "isolated" because payload.kind = "agentTurn"
+    // — OpenClaw's contract is that "main" sessions only accept
+    // payload.kind = "systemEvent" (notification-shape, no full agent
+    // turn). The kickstart needs Maya to run a complete turn (read
+    // workspace, compose 3 messages, call claw-messenger.sendText 3x),
+    // so agentTurn + isolated is the only valid combo.
+    //
+    // The "two Mayas" bug from v9 (kickstart's session vs inbound-handler's
+    // session diverging in voice) is solved by Fix B — voice rules now
+    // live in AGENTS.md (loaded every session) instead of only in this
+    // payload. Channel-level message history (Maya's outbound + creator's
+    // reply) is shared across sessions via the claw-messenger plugin, so
+    // when the creator replies, the main session that handles inbound
+    // sees the full thread context AND has the AGENTS.md rules in scope.
+    sessionTarget: "isolated",
     wakeMode: "now",
     deleteAfterRun: true,
     payload: {
