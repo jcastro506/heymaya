@@ -576,13 +576,22 @@ export const lockPictureInternal = internalMutation({
     // synth wrote what it inferred; the creator's correction is the
     // ground-truth anchor that supersedes it. Future heartbeats / standing
     // orders read `openingAnswers` first, then the synth picture.
+    //
+    // Sprint 9.7+ v2 — even with NO corrections (clean confirm path), we
+    // still sync top-level `niche` from openingAnswers.nicheInOwnWords if
+    // the creator's stated niche is set. Maya often calls lock_picture with
+    // `corrections:[]` when she's already submitted the corrected info via
+    // submit_opening_answers — without this sync, picture.niche stays as
+    // the pre-verification synthesized string forever. The user's words
+    // are authoritative once provided; the synth niche is a bootstrap guess.
     let appliedCorrections = 0;
-    if (args.corrections && args.corrections.length > 0) {
-      const picture = await ctx.db
-        .query("creatorPicture")
-        .withIndex("by_creator", (q) => q.eq("creatorId", creator._id))
-        .first();
-      if (picture) {
+    const hasCorrections = !!args.corrections && args.corrections.length > 0;
+    const picture = await ctx.db
+      .query("creatorPicture")
+      .withIndex("by_creator", (q) => q.eq("creatorId", creator._id))
+      .first();
+    if (picture && hasCorrections) {
+      {
         const merged: Record<string, unknown> = {
           ...(picture.openingAnswers ?? {}),
         };
@@ -591,7 +600,7 @@ export const lockPictureInternal = internalMutation({
         if (typeof merged.submittedAt !== "number") {
           merged.submittedAt = args.nowMs;
         }
-        for (const c of args.corrections) {
+        for (const c of args.corrections!) {
           if (c.field === "location") {
             const cv = c.correctedValue as
               | {
@@ -666,7 +675,7 @@ export const lockPictureInternal = internalMutation({
         // readers (maya-trend-watcher, weekly brief) read picture.niche
         // directly. Replace with the creator's stated niche so the trend
         // scan + brief don't keep working from the pre-correction picture.
-        const correctedFields = new Set(args.corrections.map((c) => c.field));
+        const correctedFields = new Set(args.corrections!.map((c) => c.field));
         const synthesizedNicheNeedsRefresh =
           correctedFields.has("location") || correctedFields.has("niche");
         const userStatedNiche =
@@ -685,6 +694,26 @@ export const lockPictureInternal = internalMutation({
         await ctx.db.patch(picture._id, picturePatch as never);
       }
     }
+
+    // Sprint 9.7+ v2 — unconditional niche sync. Even when the lock call
+    // carried no corrections (creator clean-confirmed and Maya already
+    // submitted the corrected anchors via submit_opening_answers), the
+    // top-level synthesized niche string is still stale relative to the
+    // creator's stated niche. Sync once on lock so trend-watcher / weekly
+    // brief / chat-context all read from the same authoritative string.
+    if (picture && !hasCorrections) {
+      const oa = picture.openingAnswers as
+        | { nicheInOwnWords?: unknown }
+        | undefined;
+      const userStatedNicheRaw =
+        typeof oa?.nicheInOwnWords === "string"
+          ? oa.nicheInOwnWords.trim()
+          : "";
+      if (userStatedNicheRaw.length > 0 && picture.niche !== userStatedNicheRaw) {
+        await ctx.db.patch(picture._id, { niche: userStatedNicheRaw });
+      }
+    }
+
     await ctx.db.patch(creator._id, { pictureLockedAt: args.nowMs });
     return { lockedAt: args.nowMs, appliedCorrections };
   },

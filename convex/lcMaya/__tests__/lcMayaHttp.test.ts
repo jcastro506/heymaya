@@ -1308,6 +1308,98 @@ describe("Sprint 9.7+ — lock_picture syncs top-level niche from corrections", 
     );
   });
 
+  it("CLEAN-CONFIRM (empty corrections) STILL syncs top-level niche from nicheInOwnWords", async () => {
+    // Sprint 9.7+ v2 — Maya often calls lock_picture with corrections:[]
+    // when she's already submitted the corrected info via
+    // submit_opening_answers. Without unconditional sync, picture.niche
+    // stays as the pre-verification synthesized string forever.
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "n3", plan: "manager" });
+    await t.run((ctx) =>
+      ctx.db.insert("creatorPicture", {
+        creatorId,
+        niche: "Atmospheric London travel vlogging and relatable fitness snapshots.",
+        audience: { ageRanges: [], topGeos: ["UK"], interestTags: [] },
+        voiceFingerprint: "fp",
+        topHooks: [],
+        bottomHooks: [],
+        postingCadence: { perPlatform: [] },
+        brandDealHistory: [],
+        generatedAt: NOW,
+        model: "gemini-3-flash",
+        sourceCitations: [],
+        openingAnswers: {
+          goal: "Hitting 1k followers",
+          tone: "strategic",
+          submittedAt: NOW,
+          locationCity: "New York City",
+          locationCountry: "US",
+          nicheInOwnWords: "nyc lifestyle, funny observational posts about the city",
+        },
+      })
+    );
+    // Lock with EMPTY corrections array — clean-confirm flow.
+    const res = await t.fetch("/lc_maya/lock_picture", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        corrections: [],
+      }),
+    });
+    expect(res.status).toBe(200);
+
+    const picture = await t.run((ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .first()
+    );
+    expect(picture?.niche).toBe(
+      "nyc lifestyle, funny observational posts about the city"
+    );
+  });
+
+  it("CLEAN-CONFIRM with no nicheInOwnWords set leaves synthesized niche untouched", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "n4", plan: "manager" });
+    await t.run((ctx) =>
+      ctx.db.insert("creatorPicture", {
+        creatorId,
+        niche: "Synthesized only.",
+        audience: { ageRanges: [], topGeos: [], interestTags: [] },
+        voiceFingerprint: "fp",
+        topHooks: [],
+        bottomHooks: [],
+        postingCadence: { perPlatform: [] },
+        brandDealHistory: [],
+        generatedAt: NOW,
+        model: "gemini-3-flash",
+        sourceCitations: [],
+        openingAnswers: {
+          goal: "g",
+          tone: "strategic",
+          submittedAt: NOW,
+          // no nicheInOwnWords — Maya hasn't gotten Q2 yet
+        },
+      })
+    );
+    await t.fetch("/lc_maya/lock_picture", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: TEST_SECRET, creatorId, corrections: [] }),
+    });
+    const picture = await t.run((ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .first()
+    );
+    // No fallback signal — leave synthesized in place.
+    expect(picture?.niche).toBe("Synthesized only.");
+  });
+
   it("location correction WITHOUT nicheInOwnWords leaves top-level niche untouched", async () => {
     const t = convexTest(schema, modules);
     const creatorId = await insertCreator(t, { suffix: "n2", plan: "manager" });
