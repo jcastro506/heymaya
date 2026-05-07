@@ -412,3 +412,110 @@ describe("generateUserMd — displayName regression (real-world test 2026-05-06)
     expect(md).toContain("# USER.md — Kevin Castro");
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 10 — multimodal observations section                                 */
+/* -------------------------------------------------------------------------- */
+
+describe("generateUserMd — Sprint 10 multimodal section", () => {
+  function makeMultimodalPicture(): CreatorPictureExt {
+    return {
+      _id: "k_pic_test" as unknown as CreatorPictureExt["_id"],
+      _creationTime: 1_700_000_000_000,
+      creatorId: "k_creator_test" as unknown as CreatorPictureExt["creatorId"],
+      niche: "Observational NYC lifestyle comedy",
+      audience: { ageRanges: ["25-34"], topGeos: ["US"], interestTags: [] },
+      voiceFingerprint: "Short declarative.",
+      topHooks: [],
+      bottomHooks: [],
+      postingCadence: { perPlatform: [] },
+      brandDealHistory: [],
+      generatedAt: 1_700_000_000_000,
+      model: "gemini-3-flash-preview",
+      sourceCitations: [{ platform: "tiktok", postId: "p1", usedFor: "niche" }],
+      voiceAndPersonality: {
+        humorType: "self-deprecating",
+        energyLevel: "low-key conversational",
+        onCameraPersona:
+          "An earnest observer of city life, occasional eye-roll for emphasis",
+        dryWittyEarnest: "dry-witty",
+        signaturePhrases: ["that's the move"],
+      },
+      visualStyle: {
+        framing: "Tight handheld POV; eye-level dominates",
+        aesthetic: ["high-contrast urban", "natural light"],
+        settingsSeen: ["bodegas", "Washington Square"],
+        strengths: ["good first-second hooks"],
+        weaknesses: [],
+      },
+      recurringElements: [
+        {
+          kind: "pet",
+          name: "Charlie (dog)",
+          appearancesIn: ["p1", "p2", "p3"],
+          roleSummary: "Charlie steals every shot — runs across frame in 3 of 5",
+        },
+      ],
+      warmthMaterial: [
+        {
+          kind: "recurring-element-callout",
+          text: "Your dog Charlie running across Washington Square — gorgeous",
+          confidence: "safe-to-use",
+          citationPostIds: ["p2"],
+        },
+        {
+          kind: "compliment",
+          text: "Your London street clips punching above your baseline",
+          confidence: "check-with-creator",
+          citationPostIds: ["p1"],
+        },
+      ],
+    } as unknown as CreatorPictureExt;
+  }
+
+  it("renders the 'What I observed watching your videos' section when multimodal fields are populated", () => {
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: makeMultimodalPicture(),
+      handles: makeHandles(),
+      plan: "manager",
+    });
+    expect(md).toContain("## What I observed watching your videos");
+    expect(md).toContain("Humor: self-deprecating");
+    expect(md).toContain("Energy: low-key conversational");
+    expect(md).toContain("Framing: Tight handheld POV");
+    expect(md).toContain("Settings seen: bodegas, Washington Square");
+    expect(md).toContain("Charlie (dog)");
+    expect(md).toContain("Charlie steals every shot");
+    expect(md).toContain("[safe-to-use]");
+    expect(md).toContain("[check-with-creator]");
+    expect(md).toContain(
+      "Your dog Charlie running across Washington Square — gorgeous"
+    );
+  });
+
+  it("OMITS the section entirely when multimodal fields are absent (text-only synth)", () => {
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: null,
+      handles: makeHandles(),
+      plan: "manager",
+    });
+    expect(md).not.toContain("What I observed watching your videos");
+  });
+
+  it("OMITS the section when picture exists but multimodal fields are null/empty (text-only fallback)", () => {
+    const pic = makeMultimodalPicture() as unknown as Record<string, unknown>;
+    pic.voiceAndPersonality = null;
+    pic.visualStyle = null;
+    pic.recurringElements = [];
+    pic.warmthMaterial = [];
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: pic as CreatorPictureExt,
+      handles: makeHandles(),
+      plan: "manager",
+    });
+    expect(md).not.toContain("What I observed watching your videos");
+  });
+});

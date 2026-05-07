@@ -122,6 +122,7 @@ export function generateUserMd(inputs: UserMdInputs): string {
 
   const niche = picture?.niche ?? NOT_YET_PROVIDED;
   const audienceBlock = renderAudience(picture);
+  const watchedBlock = renderWatchedObservations(picture);
   const careerStage = picture?.careerStage ?? NOT_YET_PROVIDED;
   const location = renderLocation(picture);
   const monthlyRevenue =
@@ -225,6 +226,7 @@ export function generateUserMd(inputs: UserMdInputs): string {
     "",
     audienceBlock,
     "",
+    ...(watchedBlock ? [watchedBlock, ""] : []),
     "## Career snapshot",
     "",
     `- **Career stage:** ${careerStage}`,
@@ -248,6 +250,118 @@ export function generateUserMd(inputs: UserMdInputs): string {
     `- **Tone:** ${toneNote}`,
     "",
   ].join("\n");
+}
+
+/**
+ * Sprint 10 — render the multimodal-synthesis observations Maya should weave
+ * into her first iMessage. Empty / null when synthesis ran text-only or
+ * pre-Sprint-10. When populated, surfaces:
+ *   - voiceAndPersonality (humor, energy, persona)
+ *   - visualStyle (framing, settings seen, aesthetic)
+ *   - recurringElements (people/pets/locations/props that span videos)
+ *   - warmthMaterial (raw lines Maya can paraphrase into the first send)
+ *
+ * The warmthMaterial section is the load-bearing one: the kickstart prompt
+ * picks ONE `confidence: "safe-to-use"` entry to weave naturally into the
+ * greet line. `confidence: "check-with-creator"` entries are NEVER used as
+ * assertions — phrased as questions only.
+ */
+function renderWatchedObservations(
+  picture: CreatorPictureExt | null
+): string | null {
+  if (!picture) return null;
+  const vp = (picture as unknown as { voiceAndPersonality?: {
+    humorType?: string;
+    energyLevel?: string;
+    onCameraPersona?: string;
+    dryWittyEarnest?: string;
+    signaturePhrases?: string[];
+  } | null }).voiceAndPersonality;
+  const vs = (picture as unknown as { visualStyle?: {
+    framing?: string;
+    aesthetic?: string[];
+    settingsSeen?: string[];
+    strengths?: string[];
+    weaknesses?: string[];
+  } | null }).visualStyle;
+  const re = (picture as unknown as {
+    recurringElements?: Array<{
+      kind: string;
+      name: string;
+      appearancesIn: string[];
+      roleSummary: string;
+    }>;
+  }).recurringElements ?? [];
+  const wm = (picture as unknown as {
+    warmthMaterial?: Array<{
+      kind: string;
+      text: string;
+      confidence: "safe-to-use" | "check-with-creator";
+      citationPostIds: string[];
+    }>;
+  }).warmthMaterial ?? [];
+
+  // If everything is null/empty, the synthesis ran text-only. Skip the section
+  // entirely so USER.md doesn't carry a hollow "I watched your videos" header
+  // when I didn't.
+  const hasAny =
+    Boolean(vp) ||
+    Boolean(vs) ||
+    re.length > 0 ||
+    wm.length > 0;
+  if (!hasAny) return null;
+
+  const lines: string[] = ["## What I observed watching your videos"];
+  lines.push("");
+
+  if (vp) {
+    lines.push(`**Voice & personality:**`);
+    if (vp.humorType) lines.push(`- Humor: ${vp.humorType}`);
+    if (vp.energyLevel) lines.push(`- Energy: ${vp.energyLevel}`);
+    if (vp.onCameraPersona) lines.push(`- On-camera: ${vp.onCameraPersona}`);
+    if (vp.signaturePhrases && vp.signaturePhrases.length > 0) {
+      lines.push(
+        `- Signature phrases: ${vp.signaturePhrases.map((p) => `"${p}"`).join(", ")}`
+      );
+    }
+    lines.push("");
+  }
+
+  if (vs) {
+    lines.push(`**Visual style:**`);
+    if (vs.framing) lines.push(`- Framing: ${vs.framing}`);
+    if (vs.aesthetic && vs.aesthetic.length > 0) {
+      lines.push(`- Aesthetic: ${vs.aesthetic.join(", ")}`);
+    }
+    if (vs.settingsSeen && vs.settingsSeen.length > 0) {
+      lines.push(`- Settings seen: ${vs.settingsSeen.join(", ")}`);
+    }
+    if (vs.strengths && vs.strengths.length > 0) {
+      lines.push(`- Strengths: ${vs.strengths.join("; ")}`);
+    }
+    if (vs.weaknesses && vs.weaknesses.length > 0) {
+      lines.push(`- Watch-outs: ${vs.weaknesses.join("; ")}`);
+    }
+    lines.push("");
+  }
+
+  if (re.length > 0) {
+    lines.push(`**Recurring elements** (people/pets/locations/props that span videos):`);
+    for (const el of re) {
+      lines.push(`- **${el.name}** (${el.kind}): ${el.roleSummary}`);
+    }
+    lines.push("");
+  }
+
+  if (wm.length > 0) {
+    lines.push(`**Warmth material** — raw lines I can paraphrase into the first iMessage. Pick ONE per opening sequence (never enumerate). \`safe-to-use\` entries go verbatim-paraphrased; \`check-with-creator\` entries are phrased as questions only.`);
+    for (const w of wm) {
+      lines.push(`- [${w.confidence}] ${w.text}`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
 }
 
 function renderAudience(picture: CreatorPictureExt | null): string {
