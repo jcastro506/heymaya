@@ -361,6 +361,47 @@ export default defineSchema({
     .index("by_creator_and_provider", ["creatorId", "provider"])
     .index("by_account_hash", ["composioAccountIdHash"]),
 
+  /**
+   * Sprint 9.8 Workstream B — Apple iCloud Calendar via CalDAV +
+   * app-specific password. Separate table from `connectedAccounts` because
+   * the auth model is fundamentally different: not OAuth, no refresh
+   * tokens, no Composio mediation. The user pastes an app-specific
+   * password in iMessage; we encrypt and store it; subsequent CalDAV
+   * calls use HTTP Basic with Apple ID + decrypted password.
+   *
+   * Apple has signaled they may deprecate app-specific passwords in
+   * favor of Sign in with Apple + 2FA. This integration is borrowed
+   * time. Watch Apple Developer Forums + iCloud release notes.
+   */
+  appleCalendarConnections: defineTable({
+    creatorId: v.id("creators"),
+    /** Apple ID email (the email the user logs into iCloud with). Plaintext
+     *  — not a secret on its own, only useful with the password. */
+    appleId: v.string(),
+    /** Encrypted (AES-256-GCM, random IV) — see convex/lib/encryption.ts. */
+    encryptedAppPassword: v.string(),
+    /** SHA-256 hash of the plaintext password, hex. Same dedupe pattern as
+     *  composioAccountIdHash. Lets us detect "user pasted the same password
+     *  twice" without decrypting. */
+    appPasswordHash: v.optional(v.string()),
+    /** Discovered CalDAV principal URL — set on connect, used to short-
+     *  circuit the discovery dance on subsequent calls. */
+    principalUrl: v.optional(v.string()),
+    /** Default calendar URL Maya writes to unless told otherwise. Set to
+     *  the user's primary calendar at connect time; user can override
+     *  later via Profile screen. */
+    defaultCalendarUrl: v.optional(v.string()),
+    /** "active" — credentials work; "revoked" — last call returned 401
+     *  (user revoked the app password from appleid.apple.com) */
+    status: v.union(v.literal("active"), v.literal("revoked")),
+    connectedAt: v.number(),
+    /** Timestamp of last successful CalDAV call. Useful for "is the
+     *  connection alive?" checks. */
+    lastValidatedAt: v.optional(v.number()),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_password_hash", ["appPasswordHash"]),
+
   creatorPicture: defineTable({
     creatorId: v.id("creators"),
     niche: v.string(),

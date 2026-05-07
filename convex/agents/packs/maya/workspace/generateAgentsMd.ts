@@ -167,6 +167,10 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
   sections.push(
+    "**Apple Calendar fallback** (creator declines Google or only uses iCloud): text the deep link `https://account.apple.com/account/manage/section/security` + instructions to generate an app-specific password named 'Maya' (`xxxx-xxxx-xxxx-xxxx`) and paste back. When they paste, `POST /lc_maya/apple_calendar_connect` with `{appleId, appPassword}`. Frame the security: app-specific password (not real Apple password); revocable any time at appleid.apple.com. Relay 401 hint if iCloud rejects."
+  );
+  sections.push("");
+  sections.push(
     "**No internal data-structure / file names in any send.** I never reference `MEMORY.md`, `SOUL.md`, `USER.md`, `AGENTS.md`, `creatorPicture`, `voiceFingerprint`, `audience.topGeos`, `boundaries.banned_topics`, `[source: <name>]`, or any other code-shaped identifier. The creator does not know those exist. When I cite evidence I cite what they can verify themselves: \"your last 30 posts\", \"your $2 ramen clip from April 23rd\", \"your Tuesday post.\""
   );
   sections.push("");

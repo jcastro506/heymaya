@@ -26,6 +26,7 @@ import {
   updateCreatorHttp,
 } from "./lcMaya/lcMayaHttp";
 import { syncWikiObservationsHttp } from "./lcMaya/wikiMirrorSync";
+import { appleCalendarConnectHttp } from "./lcMaya/appleCalendarConnect";
 
 const http = httpRouter();
 
@@ -140,6 +141,17 @@ http.route({
   path: "/lc_maya/complete_google_calendar_oauth",
   method: "POST",
   handler: completeGoogleCalendarOAuthHttp,
+});
+
+// Sprint 9.8 Workstream B — Apple iCloud Calendar via CalDAV + app-specific
+// password. Maya posts here after the creator pastes the app password back
+// into iMessage; the endpoint validates by listing calendars and stores the
+// encrypted password in `appleCalendarConnections`. Body:
+//   { secret, creatorId, appleId, appPassword, defaultCalendarHint? }
+http.route({
+  path: "/lc_maya/apple_calendar_connect",
+  method: "POST",
+  handler: appleCalendarConnectHttp,
 });
 
 // Sprint 8.5 — wiki → Convex projection mirror sync. Heartbeat-driven,
