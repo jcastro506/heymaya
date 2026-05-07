@@ -68,7 +68,7 @@ export interface UploadedVideoRef {
   mimeType: string;
 }
 
-const DEFAULT_MODEL = "gemini-3-flash";
+const DEFAULT_MODEL = "gemini-3-flash-preview";
 const DEFAULT_POLLING_TIMEOUT_MS = 30_000;
 const DEFAULT_POLLING_INTERVAL_MS = 2_000;
 const DEFAULT_GENERATE_TIMEOUT_MS = 120_000;

@@ -16,12 +16,15 @@
 
 import { execFile } from "node:child_process";
 import {
+  createWriteStream,
   existsSync,
   unlinkSync,
   mkdirSync,
   readdirSync,
   statSync,
 } from "node:fs";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import path from "node:path";
 
@@ -154,6 +157,78 @@ export async function downloadVideo(
 
   const filename = `vid_${Date.now()}_${nextCounter()}.mp4`;
   const outputPath = path.join(tmpDir, filename);
+
+  // Sprint 10 — TikTok fast path: ScrapeCreators normalizes posts to a
+  // direct CDN URL (aweme_detail.video.play_addr.url_list[0]) that's
+  // already a playable mp4. yt-dlp expects a TikTok PAGE url like
+  // https://www.tiktok.com/@user/video/123 and chokes on the raw CDN url
+  // ("no extractor matches"). For TikTok we skip yt-dlp entirely and just
+  // fetch() the bytes — much faster (no Python+ffmpeg subprocess), no
+  // impersonation drama, and dependable. yt-dlp stays in the image for
+  // platforms where ScrapeCreators returns a page URL (IG/YouTube/Threads
+  // when those land in v1+).
+  // Match any TikTok CDN URL — covers /video/tos/ paths anywhere in the
+  // URL (TikTok CDN often prepends hash-folder segments before /video/),
+  // /obj/ paths (older TikTok CDN format), and the *.tiktokcdn* /
+  // *.tiktokv.com / *.tiktok.com hostnames. We're permissive on purpose
+  // here: if it's a TikTok-shaped URL, try plain fetch; only fall through
+  // to yt-dlp for truly unrecognized inputs.
+  const isTiktokCdnUrl =
+    platform === "tiktok" &&
+    /^https?:\/\//.test(videoUrl) &&
+    (/\/video\/(tos|obj)\//.test(videoUrl) ||
+      /tiktokcdn(-[a-z]+)?\.com/.test(videoUrl) ||
+      /tiktokv\.com/.test(videoUrl) ||
+      /-webapp-prime[^/]*\.tiktok\.com/.test(videoUrl));
+  if (isTiktokCdnUrl) {
+    try {
+      const ctrl = new AbortController();
+      const tHandle = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const resp = await fetch(videoUrl, { signal: ctrl.signal });
+        if (!resp.ok) {
+          return {
+            ok: false,
+            error: `cdn-fetch-${resp.status}`,
+            elapsedSec: (Date.now() - start) / 1000,
+          };
+        }
+        if (!resp.body) {
+          return {
+            ok: false,
+            error: "cdn-fetch-empty-body",
+            elapsedSec: (Date.now() - start) / 1000,
+          };
+        }
+        // Stream-pipe to disk to avoid buffering large mp4s in memory.
+        await pipeline(
+          Readable.fromWeb(resp.body as never),
+          createWriteStream(outputPath)
+        );
+      } finally {
+        clearTimeout(tHandle);
+      }
+      if (!existsSync(outputPath)) {
+        return {
+          ok: false,
+          error: "cdn-fetch-no-output-file",
+          elapsedSec: (Date.now() - start) / 1000,
+        };
+      }
+      return {
+        ok: true,
+        filePath: outputPath,
+        elapsedSec: (Date.now() - start) / 1000,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        error: `cdn-fetch-error: ${msg}`,
+        elapsedSec: (Date.now() - start) / 1000,
+      };
+    }
+  }
 
   const argv = [
     "-o",

@@ -384,6 +384,13 @@ export async function runSynthesis(
       contentLen: geminiResult.content.length,
       inputTokens: geminiResult.usage.inputTokens,
       outputTokens: geminiResult.usage.outputTokens,
+      // Sprint 10 — track which multimodal fields Gemini emitted (cheap
+      // substring check — useful diagnostic for empty multimodal output
+      // without forcing a re-parse on the worker).
+      hasVoiceAndPersonality: geminiResult.content.includes('"voiceAndPersonality"'),
+      hasVisualStyle: geminiResult.content.includes('"visualStyle"'),
+      hasRecurringElements: geminiResult.content.includes('"recurringElements"'),
+      hasWarmthMaterial: geminiResult.content.includes('"warmthMaterial"'),
     });
 
     return {
