@@ -21,6 +21,29 @@ export const listAll = internalQuery({
   },
 });
 
+export const recentActions = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const creators = await ctx.db.query("creators").collect();
+    const test = creators.filter((c) => c.clerkUserId.startsWith("test_real_world_kevin_"));
+    if (test.length === 0) return { error: "no test creator" };
+    const me = test[test.length - 1];
+    const rows = await ctx.db
+      .query("mayaActionLog")
+      .withIndex("by_creator", (q) => q.eq("creatorId", me._id))
+      .order("desc")
+      .take(20);
+    return rows.map((r) => ({
+      _creationTime: r._creationTime,
+      entryId: (r as unknown as { entryId?: string }).entryId ?? null,
+      outcome: (r as unknown as { outcome?: string }).outcome ?? null,
+      pushed: (r as unknown as { pushed?: boolean }).pushed ?? null,
+      tickKind: (r as unknown as { tickKind?: string }).tickKind ?? null,
+      summary: (r as unknown as { summary?: string }).summary ?? null,
+    }));
+  },
+});
+
 export const peek = internalQuery({
   args: {},
   handler: async (ctx) => {
