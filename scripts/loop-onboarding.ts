@@ -82,20 +82,28 @@ function logTo(file: string, line: string): void {
 }
 
 function readMayaResponse(app: string, sinceLineCount: number): { lines: string[]; total: number } {
-  // Pull all assistant message-tool calls across all sessions, return any new
-  // ones that appeared since `sinceLineCount` total lines.
-  const cmd = `cat /data/agents/main/sessions/*.jsonl 2>/dev/null | grep -o '"action":"send","target":"[^"]*","message":"[^"]*"' | tail -200`;
+  // OpenClaw writes a "delivery-mirror" session for every channel send: one
+  // assistant-role line per outbound message. Counting those is far more
+  // robust than parsing the originating session's toolCall JSON (whose field
+  // order varies). The line itself is the raw JSON — ugly but readable in
+  // the log.
+  const cmd = `grep -h delivery-mirror /data/agents/main/sessions/*.jsonl 2>/dev/null | grep assistant | tail -200`;
   const out = ssh(app, cmd, 60_000);
-  const lines = out.split("\n").filter((l) => l.length > 0);
+  const lines = out.split("\n").filter((l) => l.length > 0 && l.includes("delivery-mirror"));
   const newLines = lines.slice(sinceLineCount);
   return { lines: newLines, total: lines.length };
 }
 
 function injectAnswer(app: string, phone: string, message: string): string {
-  // Run an agent turn as if `message` came from `phone` via claw-messenger.
-  // --deliver makes Maya's reply land back on the channel.
+  // Run an agent turn as if `message` came from `phone`.
+  // `--to` derives the session key from the phone (so all turns from this
+  // operator land in the same session). NO --deliver — Maya's response
+  // stays in the session log only, does NOT get sent back to the
+  // operator's iMessage. Critical for overnight runs: no iMessage buzzes
+  // through the night. We read Maya's response from the delivery-mirror
+  // session JSONL instead.
   const escaped = message.replace(/"/g, '\\"');
-  const cmd = `openclaw agent --channel imessage --reply-to "${phone}" --deliver -m "${escaped}" --json 2>&1`;
+  const cmd = `openclaw agent --to "${phone}" -m "${escaped}" --json --timeout 90 2>&1`;
   return ssh(app, cmd, 180_000);
 }
 
@@ -112,22 +120,11 @@ function main(): void {
   const logFile = join("logs", `loop-onboarding-${args.app}-${Date.now()}.log`);
   logTo(logFile, `=== loop-onboarding start app=${args.app} phone=${args.phone} ===`);
 
-  // Wait for kickstart to land (initial 4 messages from Maya). Poll up to 3 min.
-  let totalSeen = 0;
-  const kickstartDeadline = Date.now() + 180_000;
-  while (Date.now() < kickstartDeadline) {
-    const r = readMayaResponse(args.app, totalSeen);
-    if (r.lines.length >= 4) {
-      r.lines.forEach((l) => logTo(logFile, `MAYA: ${l.slice(0, 300)}`));
-      totalSeen = r.total;
-      break;
-    }
-    sleep(15);
-  }
-  if (totalSeen < 4) {
-    logTo(logFile, "[fail] kickstart did not land within 3 min");
-    process.exit(1);
-  }
+  // Establish baseline send count. Kickstart may or may not have landed —
+  // skip the gate. If Maya sees Q1 cold, AGENTS.md + standing-orders
+  // direct her into the first-boot Q-flow anyway.
+  let totalSeen = readMayaResponse(args.app, 0).total;
+  logTo(logFile, `[baseline] ${totalSeen} delivery-mirror sends already on disk`);
 
   // Walk Q1-Q6 + verify-confirm.
   for (const step of ANSWERS) {

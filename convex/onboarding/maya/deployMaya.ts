@@ -307,6 +307,18 @@ function buildBootstrapShell(): string {
     "mkdir -p /data/workspace /data/extensions /data/cron /data/identity",
     // 2. Seed image-bundled channel plugins onto the mounted volume.
     "if [ -d /opt/openclaw-seed/extensions/claw-messenger ]; then rm -rf /data/extensions/claw-messenger && cp -a /opt/openclaw-seed/extensions/claw-messenger /data/extensions/claw-messenger; fi",
+    // OpenClaw's plugin loader requires uid=0 (root) ownership for
+    // `/data/extensions/*` or it blocks the plugin with `suspicious
+    // ownership: uid=1000, expected uid=0 or root` — fatal for the
+    // `openclaw agent` CLI (the gateway's `--allow-unconfigured` masks
+    // this at boot but CLI tools enforce it). The seed image stores the
+    // plugin under `node:node` (uid=1000); chown after copy. Bootstrap
+    // runs as `node` per docker-entrypoint, so this `chown` only succeeds
+    // when the entrypoint itself runs as root or via a setuid wrapper —
+    // if the docker image switches user to node before this line, the
+    // chown silently fails. Real fix is to bake root ownership into the
+    // seed image; this is the runtime backstop until that lands.
+    "chown -R root:root /data/extensions/claw-messenger 2>/dev/null || true",
     // 2a. Provider runtime deps are preseeded in the image and read via
     // OPENCLAW_PLUGIN_STAGE_DIR, so boot avoids a large persistent-volume copy.
     // 2b. Compatibility fallback for @emotion-machine/claw-messenger 0.1.8
@@ -354,6 +366,10 @@ function buildSecretsBundle(config: MayaConfig): Record<string, string> {
     "MAYA_RUNTIME_SECRET",
     "CLAW_MESSENGER_API_KEY",
     "OPENCLAW_GATEWAY_TOKEN",
+    // Maya needs this to authenticate her per-question state writes against
+    // /lc_maya/* HTTP endpoints (assertWebhookSecret in convex/lib/webhookSecret.ts).
+    // Without it she gets `{"error":"secret must be a string."}` on every submit.
+    "WEBHOOK_INTERNAL_SECRET",
   ]) {
     const v = process.env[k];
     if (v) out[k] = v;
