@@ -184,3 +184,36 @@ Fly logs after 03:19:15 show NO new agent runs. The agent CLI invocations comple
 5. **Implement (or remove) the lc_maya endpoints Maya tries during heartbeat:** `metrics_window` + `get_commitments` both 404'd. Either build them or rewrite HEARTBEAT.md to use the existing surface.
 6. **Add picture-verify and lock_picture flow tests** that verify the full state machine end-to-end without needing real Maya: `submit_opening_answers` → `synthesizeCreatorPicture` → `lock_picture` → `pictureLocked` event → `firstProactivePing`.
 
+### Wakeup 7 — 00:30 ET — OOM kill, machine auto-restarted
+
+After SSH cert recovered, found out **the gateway got OOM-killed at 04:29:48 UTC (00:29 ET)**:
+
+```
+[ 4744.967715] Out of memory: Killed process 679 (openclaw-gatewa)
+total-vm:2078084kB, anon-rss:409168kB, file-rss:224kB, shmem-rss:0kB,
+UID:1000 pgtables:11716kB oom_score_adj:0
+```
+
+Machine specs: `shared-cpu-2x:2048MB`. The openclaw-gateway process used ~2GB virtual memory after **~1.3 hours of uptime** and got killed by the kernel. Fly auto-restarted the machine 6 seconds later.
+
+**This is a critical production-readiness issue.** A creator Maya that crashes every 1-2 hours under no real load is unshippable. Causes to investigate:
+- Workspace bundle is now ~50KB+ (31 skills + 11 root files + frontmatter + IDENTITY.md + USER.md + SOUL.md). Each session loads the full bundle into context, and the trajectory.jsonl gets huge fast (300-700KB per session). Memory may scale with cumulative session content.
+- The HEARTBEAT.md/MEMORY.md truncation messages suggest the gateway is loading then trimming bootstrap content per session — possibly accumulating in memory across sessions.
+- Maya's Q1 turn used 29K tokens input + 4K cached. Each subsequent turn would re-load that bundle. Multiplied across the 5 ssh-queued agent CLI invocations, this could spike memory rapidly.
+
+**Action items added:**
+7. **Profile gateway memory** under load. Set up either Fly's metrics or a manual /proc/{pid}/status read every 30s during onboarding. Find what's leaking.
+8. **Bump machine size** as a band-aid (`shared-cpu-2x:4096MB` or `performance-1x`). Buys time for proper investigation.
+9. **Consider session-rotation policy.** OpenClaw might keep all session jsonl files open — old completed sessions should be archivable to disk-only without mmap.
+
+**Post-restart state (04:30 ET):**
+- Fresh machine, /data/agents wiped (only persisted dirs are `cron`, `extensions`, `identity`, `workspace`)
+- Gateway re-bootstrapping from bundle
+- Plugin owner reset to node:node again (predicted)
+- Convex creator state untouched: still has Q1 fields persisted (`creatorPicture.openingAnswers`)
+- The kickstart cron job is back in `/data/cron/jobs.json` (re-installed from bundle); whether it'll re-fire depends on OpenClaw's `at`-job idempotency
+- USER.md is back to its original (pre-overnight-patches) form because the bundle re-extracts on every boot
+
+The overnight test ended on a forced restart. The post-restart state is what the operator wakes up to.
+
+
