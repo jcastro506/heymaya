@@ -70,7 +70,7 @@ export interface AgentsMdInputs {
 // this default exists only for local dev / smoke without the override.
 // Standing-orders embed inline at the production cap; the bump keeps that
 // invariant intact.
-export const DEFAULT_BOOTSTRAP_MAX_CHARS = 22_000;
+export const DEFAULT_BOOTSTRAP_MAX_CHARS = 23_000;
 
 /**
  * Render the per-creator AGENTS.md. Output is markdown, deterministic.
@@ -172,11 +172,11 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
   sections.push(
-    "**No OAuth offers until `pictureLockedAt` is stamped.** The Google connect is a post-lock beat (see § Standing orders → `first_boot_introduction`). One consent grants both Gmail and Calendar — I offer it as a unified \"connect your Google account\" link, never as two separate Gmail-then-Calendar offers. After the lock-announce message, I wait one turn (creator acks or asks something), THEN I send the Google offer as its own message."
+    "**Calendar-first OAuth flow (Sprint 10 reframe — use-case, not tech-consent).** After lock + one turn pause, the offer beat leads with calendar, not \"Google account.\" Three-step shape: (1) \"Want me to connect your calendar? Helps me plan content around your actual schedule + spot anything coming up worth making content over.\" (2) If yes: \"Cool — Google Calendar or Apple Calendar?\" (3) Branch — Google → POST /lc_maya/start_oauth provider=`gmail` (unified consent covers BOTH Calendar AND Gmail; when sending link mention as side note \"heads up — this also connects your Gmail so I can spot brand-deal emails, one tap covers both\"). Apple → text the deep link https://account.apple.com/account/manage/section/security + instructions to generate an app-specific password named \"Maya\" (xxxx-xxxx-xxxx-xxxx) and paste back; when password arrives POST /lc_maya/apple_calendar_connect with {appleId, appPassword}. Frame security as: app-specific password, not real Apple password, revocable any time at appleid.apple.com. Relay 401 hint verbatim if iCloud rejects. Apple users do NOT get Gmail bundled — separate beat later (\"want me to triage brand emails too? need to connect Gmail for that\")."
   );
   sections.push("");
   sections.push(
-    "**Apple Calendar fallback** (creator declines Google or only uses iCloud): text the deep link `https://account.apple.com/account/manage/section/security` + instructions to generate an app-specific password named 'Maya' (`xxxx-xxxx-xxxx-xxxx`) and paste back. When they paste, `POST /lc_maya/apple_calendar_connect` with `{appleId, appPassword}`. Frame the security: app-specific password (not real Apple password); revocable any time at appleid.apple.com. Relay 401 hint if iCloud rejects."
+    "**Verify before confirming connection success.** When the creator says they tapped the link / completed the flow, I do NOT assume it worked. I call `gmail_list_inbox` (Google) or list-calendars (Apple) with maxResults:1; 200 = real, 404 no-google-connection = the connection didn't land. Honest framing on failure: \"doesn't look like the connection landed yet — did the redirect bring you back to a working page?\" Never confirm a connection without a 200."
   );
   sections.push("");
   sections.push(
@@ -224,7 +224,7 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
   sections.push(
-    "**Lock-announce and Google-connect are two separate beats.** Lock-announce message stands alone — no OAuth offer bundled in. After lock, wait one turn, THEN send the Google connect offer as its own message. One consent gives me Gmail + Calendar both, so this is a single offer, not two. Order: Lock → (turn) → Google connect."
+    "**Lock-announce and Calendar-connect are two separate beats.** Lock-announce stands alone. After lock, wait one turn, THEN send the calendar offer (calendar-first framing per the OAuth flow rule above). The offer is a use-case question (\"want me to connect your calendar?\"), not a tech-consent ask. Order: Lock → (turn) → Calendar offer → (creator says yes) → Provider question → Send link."
   );
   sections.push("");
   sections.push(
