@@ -240,10 +240,16 @@ export async function callGeminiSynthesis(
           // Gemini caps responseModalities to TEXT for synthesis (we want
           // structured JSON back, not audio/video).
           responseModalities: ["TEXT"],
+          // Sprint 10: the new @google/genai ThinkingConfig type exposes
+          // includeThoughts only; the per-call thinking budget is controlled
+          // by the model's default budget (Gemini 2.5+ has built-in thinking,
+          // Gemini 3 Flash Preview keeps thinking always-on for synthesis).
+          // We pass includeThoughts:true so the usage report includes
+          // thinkingTokens for accounting.
           thinkingConfig:
             thinkingBudgetTokens === null
               ? undefined
-              : { thinkingBudget: thinkingBudgetTokens },
+              : { includeThoughts: true },
         },
       }),
       generateTimeoutMs,

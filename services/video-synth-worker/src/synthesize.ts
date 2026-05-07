@@ -294,9 +294,12 @@ export async function runSynthesis(
     uploadElapsedMs = Date.now() - upStart;
 
     for (const o of upOutcomes) {
-      if ("ref" in o) {
+      // Type narrowing: TypeScript widens the discriminated union after
+      // the runWithConcurrency lane returns. Use the explicit "ref" key
+      // check + non-null assertion to recover the success/failure branch.
+      if ("ref" in o && o.ref) {
         uploadResults.push(o.ref);
-      } else {
+      } else if ("error" in o) {
         skippedVideos.push({
           postId: o.post.postId,
           platform: o.post.platform,
