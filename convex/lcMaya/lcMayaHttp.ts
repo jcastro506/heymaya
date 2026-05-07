@@ -340,8 +340,13 @@ export const submitOpeningAnswersInternal = internalMutation({
 
     // Stamp the canonical "Maya has the basics" timestamp on the creators
     // row. The `first_weekly_plan` standing order keys off pictureLockedAt
-    // (Sprint 6) — openingAnswersAt is now an upstream cursor only.
-    await ctx.db.patch(creator._id, { openingAnswersAt: args.nowMs });
+    // (Sprint 6) — openingAnswersAt is now an upstream cursor only. First
+    // submit wins: re-submits (e.g. with a verification correction) do NOT
+    // roll the timestamp forward, so it stays a useful "when did the
+    // creator first answer" marker.
+    if (creator.openingAnswersAt === undefined) {
+      await ctx.db.patch(creator._id, { openingAnswersAt: args.nowMs });
+    }
 
     // Build the openingAnswers payload — only set keys whose value is
     // defined. The schema treats every Sprint 6 field as optional, so
@@ -382,9 +387,21 @@ export const submitOpeningAnswersInternal = internalMutation({
       // accumulate (Maya may post 3 of 6 anchor questions, then 3 more in a
       // later round). We preserve already-known anchors when the new
       // payload omits them.
+      //
+      // First-submit wins for `submittedAt`: if the picture already has a
+      // submittedAt, we keep that timestamp instead of stamping nowMs again
+      // (re-submits driven by verification corrections must not erase the
+      // creator's actual first-answer moment).
+      const existingSubmittedAt = (existing.openingAnswers as
+        | { submittedAt?: unknown }
+        | undefined)?.submittedAt;
       const merged = {
         ...(existing.openingAnswers ?? {}),
         ...openingAnswersPayload,
+        submittedAt:
+          typeof existingSubmittedAt === "number"
+            ? existingSubmittedAt
+            : args.nowMs,
       } as typeof existing.openingAnswers;
       await ctx.db.patch(existing._id, {
         openingAnswers: merged,
@@ -639,9 +656,33 @@ export const lockPictureInternal = internalMutation({
         ) {
           merged.tone = "strategic";
         }
-        await ctx.db.patch(picture._id, {
+
+        // Sprint 9.7+ — sync top-level `niche` from openingAnswers when a
+        // correction invalidates the synthesized niche string. The synth
+        // wrote `niche` (e.g. "London cityscapes / fitness struggles")
+        // before the creator confirmed/corrected verification. When the
+        // creator corrects location ("I'm in NYC, not London") or niche
+        // directly, the synthesized niche string is stale — and downstream
+        // readers (maya-trend-watcher, weekly brief) read picture.niche
+        // directly. Replace with the creator's stated niche so the trend
+        // scan + brief don't keep working from the pre-correction picture.
+        const correctedFields = new Set(args.corrections.map((c) => c.field));
+        const synthesizedNicheNeedsRefresh =
+          correctedFields.has("location") || correctedFields.has("niche");
+        const userStatedNiche =
+          typeof merged.nicheInOwnWords === "string" &&
+          merged.nicheInOwnWords.trim().length > 0
+            ? merged.nicheInOwnWords.trim()
+            : undefined;
+
+        const picturePatch: { openingAnswers: typeof merged; niche?: string } = {
           openingAnswers: merged as never,
-        });
+        };
+        if (synthesizedNicheNeedsRefresh && userStatedNiche !== undefined) {
+          picturePatch.niche = userStatedNiche;
+        }
+
+        await ctx.db.patch(picture._id, picturePatch as never);
       }
     }
     await ctx.db.patch(creator._id, { pictureLockedAt: args.nowMs });
@@ -669,6 +710,147 @@ export const lockPictureHttp = httpAction(async (ctx, request) => {
       {
         creatorId: payload.creatorId as Id<"creators">,
         corrections: payload.corrections,
+        nowMs: Date.now(),
+      }
+    );
+    return jsonResponse({ ok: true, ...result }, 200);
+  } catch (err) {
+    const msg = (err as Error).message ?? "internal-error";
+    if (msg === "creator-not-found") {
+      return jsonResponse({ error: "creator-not-found" }, 404);
+    }
+    return jsonResponse({ error: msg }, 500);
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/* Endpoint 1.6 — update_creator (Sprint 9.7+ — first-boot arc-complete)       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Sprint 9.7+ — minimal write surface for Maya to advance creator-row cursors
+ * that the first-boot standing order needs to stamp once a beat completes.
+ *
+ * Body shape:
+ *   { secret, creatorId,
+ *     setFirstBootCompletedAt?: boolean,
+ *     setFirstWeeklyPlanSentAt?: boolean }
+ *
+ * Idempotent: each `setX` flag stamps `nowMs` only if the field is currently
+ * undefined. Re-calls after stamping are no-ops so Maya doesn't accidentally
+ * shift the cursor by re-running a beat.
+ *
+ * Why this is the minimal surface (not a generic "patch any field"):
+ * cursor fields drive standing-order triggers; the gateway must NOT be able
+ * to write arbitrary creator-row fields (plan, channelPreference, ...).
+ * Each new advanceable cursor adds an explicit flag here.
+ */
+interface UpdateCreatorPayload {
+  secret: string;
+  creatorId: string;
+  setFirstBootCompletedAt?: boolean;
+  setFirstWeeklyPlanSentAt?: boolean;
+}
+
+function parseUpdateCreatorPayload(raw: unknown): UpdateCreatorPayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") {
+    throw new Error("secret must be a string.");
+  }
+  if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+    throw new Error("creatorId is required.");
+  }
+  const out: UpdateCreatorPayload = {
+    secret: obj.secret,
+    creatorId: obj.creatorId,
+  };
+  if (obj.setFirstBootCompletedAt !== undefined) {
+    if (typeof obj.setFirstBootCompletedAt !== "boolean") {
+      throw new Error("setFirstBootCompletedAt must be a boolean when provided.");
+    }
+    out.setFirstBootCompletedAt = obj.setFirstBootCompletedAt;
+  }
+  if (obj.setFirstWeeklyPlanSentAt !== undefined) {
+    if (typeof obj.setFirstWeeklyPlanSentAt !== "boolean") {
+      throw new Error("setFirstWeeklyPlanSentAt must be a boolean when provided.");
+    }
+    out.setFirstWeeklyPlanSentAt = obj.setFirstWeeklyPlanSentAt;
+  }
+  return out;
+}
+
+export const updateCreatorInternal = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    setFirstBootCompletedAt: v.optional(v.boolean()),
+    setFirstWeeklyPlanSentAt: v.optional(v.boolean()),
+    nowMs: v.number(),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    stampedFirstBootCompletedAt: number | null;
+    stampedFirstWeeklyPlanSentAt: number | null;
+  }> => {
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) {
+      throw new Error("creator-not-found");
+    }
+    const patch: {
+      firstBootCompletedAt?: number;
+      firstWeeklyPlanSentAt?: number;
+    } = {};
+    let stampedFirstBoot: number | null = null;
+    let stampedFirstWeekly: number | null = null;
+    if (
+      args.setFirstBootCompletedAt === true &&
+      creator.firstBootCompletedAt === undefined
+    ) {
+      patch.firstBootCompletedAt = args.nowMs;
+      stampedFirstBoot = args.nowMs;
+    }
+    if (
+      args.setFirstWeeklyPlanSentAt === true &&
+      creator.firstWeeklyPlanSentAt === undefined
+    ) {
+      patch.firstWeeklyPlanSentAt = args.nowMs;
+      stampedFirstWeekly = args.nowMs;
+    }
+    if (Object.keys(patch).length > 0) {
+      await ctx.db.patch(creator._id, patch);
+    }
+    return {
+      stampedFirstBootCompletedAt: stampedFirstBoot,
+      stampedFirstWeeklyPlanSentAt: stampedFirstWeekly,
+    };
+  },
+});
+
+export const updateCreatorHttp = httpAction(async (ctx, request) => {
+  let payload: UpdateCreatorPayload;
+  try {
+    payload = parseUpdateCreatorPayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+
+  try {
+    const result = await ctx.runMutation(
+      internal.lcMaya.lcMayaHttp.updateCreatorInternal,
+      {
+        creatorId: payload.creatorId as Id<"creators">,
+        setFirstBootCompletedAt: payload.setFirstBootCompletedAt,
+        setFirstWeeklyPlanSentAt: payload.setFirstWeeklyPlanSentAt,
         nowMs: Date.now(),
       }
     );

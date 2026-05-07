@@ -23,6 +23,7 @@ import {
   submitOpeningAnswersHttp,
   startGoogleCalendarOAuthHttp,
   startOAuthHttp,
+  updateCreatorHttp,
 } from "./lcMaya/lcMayaHttp";
 import { syncWikiObservationsHttp } from "./lcMaya/wikiMirrorSync";
 
@@ -70,6 +71,14 @@ http.route({
   path: "/lc_maya/start_oauth",
   method: "POST",
   handler: startOAuthHttp,
+});
+// Sprint 9.7+ — minimal write surface for first-boot arc-complete cursors
+// (firstBootCompletedAt, firstWeeklyPlanSentAt). Per-flag idempotency in the
+// internal mutation; first stamp wins.
+http.route({
+  path: "/lc_maya/update_creator",
+  method: "POST",
+  handler: updateCreatorHttp,
 });
 http.route({
   path: "/lc_maya/log_trend",

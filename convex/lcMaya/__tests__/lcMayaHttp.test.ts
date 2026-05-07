@@ -1166,6 +1166,327 @@ describe("POST /lc_maya/lock_picture", () => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* Sprint 9.7+ — first-submit semantics + niche-correction sync + update_creator */
+/* -------------------------------------------------------------------------- */
+
+describe("Sprint 9.7+ — submit_opening_answers first-submit wins", () => {
+  beforeEach(() => {
+    _setWebhookSecretForTests(TEST_SECRET);
+  });
+  afterEach(() => {
+    _setWebhookSecretForTests(null);
+  });
+
+  it("preserves openingAnswers.submittedAt + creators.openingAnswersAt across re-submits", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "fs1", plan: "manager" });
+
+    // First submission.
+    const res1 = await t.fetch("/lc_maya/submit_opening_answers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        goal: "tbd",
+        tone: "supportive",
+        locationCity: "London",
+        locationCountry: "UK",
+      }),
+    });
+    expect(res1.status).toBe(200);
+
+    const creatorAfterFirst = await t.run((ctx) => ctx.db.get(creatorId));
+    const firstStamp = creatorAfterFirst?.openingAnswersAt as number;
+    expect(firstStamp).toBeTypeOf("number");
+    const pictureAfterFirst = await t.run((ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .first()
+    );
+    const firstSubmitted = pictureAfterFirst?.openingAnswers?.submittedAt as number;
+    expect(firstSubmitted).toBeTypeOf("number");
+
+    // Wait one tick so any nowMs-stamping diff would be visible.
+    await new Promise((r) => setTimeout(r, 5));
+
+    // Second submission (e.g. verification correction). New goal + corrected
+    // location; `submittedAt` and `openingAnswersAt` must NOT roll forward.
+    const res2 = await t.fetch("/lc_maya/submit_opening_answers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        goal: "hit 1,000 followers",
+        tone: "supportive",
+        locationCity: "New York City",
+        locationState: "NY",
+        locationCountry: "US",
+      }),
+    });
+    expect(res2.status).toBe(200);
+
+    const creatorAfterSecond = await t.run((ctx) => ctx.db.get(creatorId));
+    expect(creatorAfterSecond?.openingAnswersAt).toBe(firstStamp);
+
+    const pictureAfterSecond = await t.run((ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .first()
+    );
+    expect(pictureAfterSecond?.openingAnswers?.submittedAt).toBe(firstSubmitted);
+    // Other fields DID update — sanity check.
+    expect(pictureAfterSecond?.openingAnswers?.goal).toBe("hit 1,000 followers");
+    expect(pictureAfterSecond?.openingAnswers?.locationCity).toBe("New York City");
+  });
+});
+
+describe("Sprint 9.7+ — lock_picture syncs top-level niche from corrections", () => {
+  beforeEach(() => {
+    _setWebhookSecretForTests(TEST_SECRET);
+  });
+  afterEach(() => {
+    _setWebhookSecretForTests(null);
+  });
+
+  it("location correction overwrites stale synthesized niche with creator's stated niche", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "n1", plan: "manager" });
+    // Seed: synth wrote a London-flavored niche; creator's own words say NYC.
+    await t.run((ctx) =>
+      ctx.db.insert("creatorPicture", {
+        creatorId,
+        niche: "Lifestyle observations contrasting gym culture with London streets.",
+        audience: { ageRanges: [], topGeos: ["UK"], interestTags: [] },
+        voiceFingerprint: "fp",
+        topHooks: [],
+        bottomHooks: [],
+        postingCadence: { perPlatform: [] },
+        brandDealHistory: [],
+        generatedAt: NOW,
+        model: "gemini-3-flash",
+        sourceCitations: [],
+        openingAnswers: {
+          goal: "hit 1,000 followers",
+          tone: "supportive",
+          submittedAt: NOW,
+          locationCity: "London",
+          locationCountry: "UK",
+          nicheInOwnWords: "New York City lifestyle, nightlife, buildings, history",
+        },
+      })
+    );
+    const res = await t.fetch("/lc_maya/lock_picture", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        corrections: [
+          {
+            field: "location",
+            correctedValue: { city: "New York City", state: "NY", country: "US" },
+          },
+        ],
+      }),
+    });
+    expect(res.status).toBe(200);
+
+    const picture = await t.run((ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .first()
+    );
+    // Top-level niche replaced with creator's stated niche so trend-watcher
+    // and weekly-brief readers don't keep ideating from the London picture.
+    expect(picture?.niche).toBe(
+      "New York City lifestyle, nightlife, buildings, history"
+    );
+  });
+
+  it("location correction WITHOUT nicheInOwnWords leaves top-level niche untouched", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "n2", plan: "manager" });
+    await t.run((ctx) =>
+      ctx.db.insert("creatorPicture", {
+        creatorId,
+        niche: "Lifestyle observations.",
+        audience: { ageRanges: [], topGeos: ["UK"], interestTags: [] },
+        voiceFingerprint: "fp",
+        topHooks: [],
+        bottomHooks: [],
+        postingCadence: { perPlatform: [] },
+        brandDealHistory: [],
+        generatedAt: NOW,
+        model: "gemini-3-flash",
+        sourceCitations: [],
+        openingAnswers: {
+          goal: "g",
+          tone: "strategic",
+          submittedAt: NOW,
+          locationCity: "London",
+          locationCountry: "UK",
+          // no nicheInOwnWords — Maya didn't get Q2 yet
+        },
+      })
+    );
+    await t.fetch("/lc_maya/lock_picture", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        corrections: [
+          {
+            field: "location",
+            correctedValue: { city: "Brooklyn", state: "NY", country: "US" },
+          },
+        ],
+      }),
+    });
+    const picture = await t.run((ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .first()
+    );
+    // No fallback — synthesized niche stays put when there's no creator-stated alternative.
+    expect(picture?.niche).toBe("Lifestyle observations.");
+  });
+});
+
+describe("Sprint 9.7+ — POST /lc_maya/update_creator", () => {
+  beforeEach(() => {
+    _setWebhookSecretForTests(TEST_SECRET);
+  });
+  afterEach(() => {
+    _setWebhookSecretForTests(null);
+  });
+
+  it("HAPPY: stamps firstBootCompletedAt on first call; idempotent on second", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "uc1", plan: "manager" });
+
+    const res1 = await t.fetch("/lc_maya/update_creator", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        setFirstBootCompletedAt: true,
+      }),
+    });
+    expect(res1.status).toBe(200);
+    const body1 = (await res1.json()) as {
+      ok: boolean;
+      stampedFirstBootCompletedAt: number | null;
+    };
+    expect(body1.ok).toBe(true);
+    expect(body1.stampedFirstBootCompletedAt).toBeTypeOf("number");
+    const stamped = body1.stampedFirstBootCompletedAt as number;
+
+    const creator1 = await t.run((ctx) => ctx.db.get(creatorId));
+    expect(creator1?.firstBootCompletedAt).toBe(stamped);
+
+    // Second call — already-stamped, must NOT overwrite.
+    await new Promise((r) => setTimeout(r, 5));
+    const res2 = await t.fetch("/lc_maya/update_creator", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        setFirstBootCompletedAt: true,
+      }),
+    });
+    expect(res2.status).toBe(200);
+    const body2 = (await res2.json()) as {
+      stampedFirstBootCompletedAt: number | null;
+    };
+    expect(body2.stampedFirstBootCompletedAt).toBe(null);
+    const creator2 = await t.run((ctx) => ctx.db.get(creatorId));
+    expect(creator2?.firstBootCompletedAt).toBe(stamped);
+  });
+
+  it("HAPPY: stamps firstWeeklyPlanSentAt independently", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "uc2", plan: "manager" });
+    const res = await t.fetch("/lc_maya/update_creator", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        setFirstWeeklyPlanSentAt: true,
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      stampedFirstBootCompletedAt: number | null;
+      stampedFirstWeeklyPlanSentAt: number | null;
+    };
+    expect(body.stampedFirstBootCompletedAt).toBe(null);
+    expect(body.stampedFirstWeeklyPlanSentAt).toBeTypeOf("number");
+  });
+
+  it("ADVERSARIAL: missing / wrong secret returns 401", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "uc3", plan: "manager" });
+    for (const bad of ["", "wrong", `${TEST_SECRET}x`]) {
+      const res = await t.fetch("/lc_maya/update_creator", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          secret: bad,
+          creatorId,
+          setFirstBootCompletedAt: true,
+        }),
+      });
+      expect(res.status).toBe(401);
+    }
+  });
+
+  it("ADVERSARIAL: creator-not-found returns 404", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "uc4", plan: "manager" });
+    await t.run((ctx) => ctx.db.delete(creatorId));
+    const res = await t.fetch("/lc_maya/update_creator", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        setFirstBootCompletedAt: true,
+      }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("CROSS-TENANT: stamping creator A never touches creator B", async () => {
+    const t = convexTest(schema, modules);
+    const a = await insertCreator(t, { suffix: "ucA", plan: "manager" });
+    const b = await insertCreator(t, { suffix: "ucB", plan: "manager" });
+    await t.fetch("/lc_maya/update_creator", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId: a,
+        setFirstBootCompletedAt: true,
+      }),
+    });
+    const ca = await t.run((ctx) => ctx.db.get(a));
+    const cb = await t.run((ctx) => ctx.db.get(b));
+    expect(ca?.firstBootCompletedAt).toBeTypeOf("number");
+    expect(cb?.firstBootCompletedAt).toBeUndefined();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* Sprint 6 — provider fork (googlecalendar-direct vs googlecalendar-composio)*/
 /* -------------------------------------------------------------------------- */
 
