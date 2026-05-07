@@ -314,10 +314,12 @@ describe("assembleWorkspaceBundle", () => {
       const catalog = bundle.files.get("standing-orders.md")!;
       expect(catalog).toContain("### First-boot introduction");
       expect(catalog).toContain("### First weekly plan (immediate, after picture lock)");
-      // The intro entry must reference the OAuth action — sibling file
-      // scan: AGENTS.md / standing-orders.md must reach the action name
-      // so Maya knows what to invoke.
-      expect(catalog).toContain("composio.oauth.startOAuth");
+      // The intro entry must reference the OAuth invocation — sibling file
+      // scan: AGENTS.md / standing-orders.md must reach the action name so
+      // Maya knows what to invoke. Sprint 9.7+ renamed from
+      // `composio.oauth.startOAuth` to the canonical lc_maya HTTP endpoint
+      // `start_oauth` (the actual surface Maya hits).
+      expect(catalog).toContain("start_oauth");
     }
   });
 

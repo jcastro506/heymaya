@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as _admin_peekState from "../_admin/peekState.js";
 import type * as _admin_realWorldDeploy from "../_admin/realWorldDeploy.js";
 import type * as _test_serviceFixtures from "../_test/serviceFixtures.js";
 import type * as accountDeletion from "../accountDeletion.js";
@@ -192,6 +193,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "_admin/peekState": typeof _admin_peekState;
   "_admin/realWorldDeploy": typeof _admin_realWorldDeploy;
   "_test/serviceFixtures": typeof _test_serviceFixtures;
   accountDeletion: typeof accountDeletion;
