@@ -68,17 +68,17 @@ probe "update_creator (firstWeeklyPlanSentAt)" \
   "{\"secret\":\"$SECRET\",\"creatorId\":\"$CREATOR\",\"setFirstWeeklyPlanSentAt\":true}" \
   "200"
 
-# 6. start_oauth gmail — known-failure, Composio config missing
-probe "start_oauth gmail (expect 500)" \
+# 6. start_oauth gmail — Sprint 9.8 unified Google OAuth (Calendar + Gmail one consent)
+probe "start_oauth gmail (unified Google)" \
   "/lc_maya/start_oauth" \
   "{\"secret\":\"$SECRET\",\"creatorId\":\"$CREATOR\",\"provider\":\"gmail\",\"redirectUri\":\"https://heymaya.ai/oauth/callback\"}" \
-  "500"
+  "200"
 
-# 7. start_oauth googlecalendar — direct path, may 500 or 200 depending on env
-probe "start_oauth googlecalendar (direct)" \
+# 7. start_oauth googlecalendar — same unified path (alias)
+probe "start_oauth googlecalendar (alias)" \
   "/lc_maya/start_oauth" \
   "{\"secret\":\"$SECRET\",\"creatorId\":\"$CREATOR\",\"provider\":\"googlecalendar\",\"redirectUri\":\"https://heymaya.ai/oauth/callback\"}" \
-  "500"
+  "200"
 
 # 8. log_trend — happy
 probe "log_trend (happy)" \
