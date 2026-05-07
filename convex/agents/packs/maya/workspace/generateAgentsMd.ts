@@ -57,11 +57,15 @@ export interface AgentsMdInputs {
 // payloads (session-isolated): Sprint 8 Slice A bumped 12K → 13K (voice-applier
 // prose substitutions); Sprint 9.7+ bumped 13K → 18K (iMessage UX rules section
 // — multi-send cap, no-meta-tone-question, no-OAuth-inline, no-internal-names,
-// no-jargon, anti-fabrication). Production overrides to 32K via gateway config
-// (see `configGeneratorMaya.ts`); this default exists only for local dev /
-// smoke without the override. Standing-orders embed inline at the production
-// cap; the bump keeps that invariant intact.
-export const DEFAULT_BOOTSTRAP_MAX_CHARS = 18_000;
+// no-jargon, anti-fabrication); Sprint 10 bumped 18K → 20K (no-reasoning-in-text-output,
+// Q-flow transition rules, no-third-person-echo — critical voice fixes from
+// the 2026-05-07 real-world test where Maya leaked "Kevin's based in NYC.
+// I've logged that and now I'm moving to Q2." into the iMessage thread).
+// Production overrides to 32K via gateway config (see `configGeneratorMaya.ts`);
+// this default exists only for local dev / smoke without the override.
+// Standing-orders embed inline at the production cap; the bump keeps that
+// invariant intact.
+export const DEFAULT_BOOTSTRAP_MAX_CHARS = 20_000;
 
 /**
  * Render the per-creator AGENTS.md. Output is markdown, deterministic.
@@ -184,6 +188,18 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   sections.push("");
   sections.push(
     "**Sends go to the creator verbatim.** What I pass to `claw-messenger.sendText` IS what they read. NEVER prefix with planning (\"Plan: 1...2...\"), subagent narration (\"the subagent looked into...\"), endpoint refs (\"I will call POST /lc_maya/...\"), or `---` separators. Planning belongs in reasoning, not the send body."
+  );
+  sections.push("");
+  sections.push(
+    "**Assistant text output IS the iMessage body — there is no separate reasoning surface in text.** Reasoning belongs in the thinking channel (Gemini-supported, already requested). NEVER emit reasoning narration before a reply: not \"First check: Unread chatMessages\", not \"Since USER.md shows first-boot status: not yet started, I'll...\", not \"Source: USER.md (warmth material), AGENTS.md (kickstart)\". Even with `[[reply_to_current]]` marker — the runtime strips the marker only, not the prefix. If I'm tempted to write \"First, I'll...\" / \"Source: ...\" / \"Now I'm moving to...\" / \"Check N:\", delete it and output only the reply."
+  );
+  sections.push("");
+  sections.push(
+    "**Q-flow transitions: 1-3 word ack + next question. No status updates.** After Q1's answer: \"Got it.\" or \"Nice, NYC.\" + Q2. NOT: \"Kevin's based in NYC. I've logged that and now I'm moving to Q2.\" / \"Logged the niche. Moving to Q3.\" / \"Got it. Next:\". `submit_opening_answers` is silent — never announce it. Q1/Q2/Q3 numbering is internal-only. Banned in transitions: \"logged that/the\", \"I've logged\", \"moving to Q[0-9]\", \"Now I'm\", \"Next:\", \"Check [0-9]\". Allowed acks: \"Nice.\", \"Got it.\", \"Sure.\", \"Makes sense.\""
+  );
+  sections.push("");
+  sections.push(
+    "**No third-person echo of the creator's name.** They told me their location is NYC — I say \"Got it.\" or \"Nice, NYC.\" Not \"Kevin's based in NYC.\" — that's narrating ABOUT them to a phantom audience instead of talking TO them."
   );
   sections.push("");
   sections.push(
