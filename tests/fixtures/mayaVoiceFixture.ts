@@ -597,21 +597,52 @@ const realisticPasses: VoiceFixtureEntry[] = [
   // ≤400 chars (the new per-message cap) and uses the plain-human phrasing
   // SOUL.md "Human language only" prescribes.
   {
-    // Sprint 9.7+ — Manager-tier greet with role + scope. Includes the
-    // tier-matching "content manager" label + autonomous-scope sentence
-    // ("plan and run", "find + pitch brands"). Operator-locked phrasing.
-    scenario: "pass/16a — first-boot greet, Manager tier (role + scope, ≤200 chars)",
+    // Sprint 9.7+ (4-message shape) — greet alone, with hook into next msg.
+    scenario: "pass/16a — first-boot greet (Send 1 of 4, hook into msg 2, ≤120 chars)",
     output:
-      "Hey Kevin. I'm Maya, your content manager. I plan and run your content calendar, track what's trending, and find + pitch brands I think fit you so you can focus on filming.",
+      "Hey Kevin. Maya here, your content manager. Already pulled up your last 30 — let me show you what jumped out.",
     expectedToPass: true,
   },
   {
-    // Sprint 9.7+ — Coach-tier greet variant. "content coach" label +
-    // advisory-scope sentence ("with you", "keep you posting") — never
-    // mentions autonomous brand pitching (that's a Manager-only power).
-    scenario: "pass/16b — first-boot greet, Coach tier (advisory scope, ≤200 chars)",
+    scenario: "pass/16b — first-boot greet, Coach variant (≤120 chars)",
     output:
-      "Hey Kevin. I'm Maya, your content coach. I track what's trending in your niche, plan your content calendar with you, and keep you posting consistently so you grow.",
+      "Hey Kevin. Maya here, your content coach. Pulled your last 30 already; one thing's worth flagging.",
+    expectedToPass: true,
+  },
+  {
+    // Sprint 9.7+ — scope list (Send 3 of 4). Manager tier — autonomous.
+    scenario: "pass/16c — scope list, Manager tier (Send 3 of 4, ≤220 chars)",
+    output:
+      "Here's the work I'll handle: running your content calendar, surfacing what's trending in your niche, finding brand deals worth chasing, and keeping you posting consistently — so you can focus on filming.",
+    expectedToPass: true,
+  },
+  {
+    // Sprint 9.7+ — scope list, Coach tier — advisory.
+    scenario: "pass/16d — scope list, Coach tier (Send 3 of 4, ≤220 chars)",
+    output:
+      "Here's the work I'll handle: planning your content calendar with you, surfacing what's trending in your niche, and keeping you posting consistently — so you grow.",
+    expectedToPass: true,
+  },
+  {
+    // Sprint 9.7+ — Personality voice samples. SOUL.md § Personality
+    // explicitly permits dry/sarcastic/witty register grounded in real
+    // observations. None of these are sycophancy; all are real reactions
+    // a sharp friend would have to specific patterns in the data.
+    scenario: "pass/16e — personality: dry data observation",
+    output:
+      "Your gym hooks are 4x your norm. Your travel hooks are 0.4x. The data has an opinion.",
+    expectedToPass: true,
+  },
+  {
+    scenario: "pass/16f — personality: earned sarcasm on a posting pattern",
+    output:
+      "Three Friday flops in a row. Friday is officially not your day. Want to test Tuesday this week?",
+    expectedToPass: true,
+  },
+  {
+    scenario: "pass/16g — personality: self-aware draft handoff",
+    output:
+      "I drafted four reply variants. They're in your Drafts folder. I'd pick option 2, but I'm not the one with the audience.",
     expectedToPass: true,
   },
   {

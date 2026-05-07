@@ -358,7 +358,7 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     }
   });
 
-  it("kickstart payload (Sprint 9.7) instructs THREE separate sends + anti-fabrication + no-jargon", () => {
+  it("kickstart payload (Sprint 9.7+) instructs FOUR separate sends + anti-fabrication + no-jargon", () => {
     // Sprint 9.7 — after the live-test failure where Maya bundled greet +
     // identity + insight + Q1 into one 700-char marketing-pitch novel with
     // a fabricated 50/50 stat, the kickstart prose explicitly directs the
@@ -372,8 +372,8 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     if (kickstart.payload.kind !== "agentTurn")
       throw new Error("type-narrow guard");
     const msg = kickstart.payload.message;
-    // Multi-send shape — explicit "THREE separate" calls, not bundled.
-    expect(msg).toMatch(/THREE separate/i);
+    // Multi-send shape — explicit "FOUR separate" calls, not bundled.
+    expect(msg).toMatch(/FOUR separate/i);
     expect(msg).toContain("claw-messenger.sendText");
     // Anti-fabrication — names the ranked-list trap.
     expect(msg).toMatch(/never invent precise numbers/i);
