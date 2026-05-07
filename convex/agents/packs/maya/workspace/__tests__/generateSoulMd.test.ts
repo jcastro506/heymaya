@@ -26,9 +26,11 @@ import type { CreatorPictureExt } from "../types";
 // Sprint 9.7+ — cap evolved with each load-bearing addition: 6K (Sprint 8) →
 // 9.5K (cited-insight quality bar) → 12K (Personality section, load-bearing
 // against Maya reading like a chatbot). SOUL.md is loaded every session —
-// keeping it under 12K leaves comfortable budget inside Gemini Flash's 1M
-// context.
-const SOUL_MAX_CHARS = 12_000;
+// keeping it under 13K leaves comfortable budget inside Gemini Flash's 1M
+// context. Sprint 10 bumped 12K→13K to fit Q-flow personality reaction
+// examples added 2026-05-07 after operator feedback that transitions felt
+// terse/clinical.
+const SOUL_MAX_CHARS = 13_000;
 
 // AI-self-reference + sycophantic-output patterns that have to stay off
 // every Maya surface. The list intentionally excludes phrases SOUL.md
