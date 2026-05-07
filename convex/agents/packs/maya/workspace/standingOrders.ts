@@ -169,11 +169,17 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     title: "First-boot introduction",
     tier: "all",
     kind: "event",
+    // Sprint 9.7+ (rewritten 2026-05-07 after live test caught the
+    // inbound-handler session reading the LEGACY 2-questions+tone script
+    // embedded in this scope text — Wave 5 inlines standing orders into
+    // AGENTS.md, so this prose has to match the current Sprint 6 / 9.7+
+    // onboarding flow exactly. Drift here re-creates the "second Maya"
+    // bug.)
     scope:
-      "ONCE: greet + cited insight + 2 opening Q's (goal w/ examples + tone) + opt-in Gmail + Calendar OAuth offers via `composio.oauth.startOAuth({provider})`. NO brand-deal floor on first boot. Stamp `openingAnswersAt` + `firstBootCompletedAt`. See `playbook.md § 4.5`.",
-    triggers: "Session start, `firstBootCompletedAt === undefined`. Partial completion resumes.",
+      "ONCE: 4 separate `claw-messenger.sendText` sends (greet + cited insight + scope list + Q1), then Q2-Q6 one at a time as creator answers, then synth runs in background → picture summary + verification questions → creator confirms → POST `/lc_maya/lock_picture` → THEN Gmail + Calendar OAuth offers via `composio.oauth.startOAuth({provider})`. NEVER ask the meta-tone-question (\"supportive / strategic / tough-love\") — Sprint 6 deleted that beat; tone is calibrated FROM the answers. NEVER use \"anchor\" / \"anchor questions\" wording to the creator (internal-dev only). NEVER offer OAuth links inline with the question batch — they come AFTER picture lock. The 6 questions in target order: location → niche → 3-month goals → job status → brand deals + floor → anti-patterns. NO brand-deal floor on first boot beyond Q5; floor calibration happens later when a real brand email lands. Stamp `openingAnswersAt` after answers come back, `firstBootCompletedAt` after the whole arc lands. See `playbook.md § 4.5` for the full send-shape spec + voice rules + anti-fabrication / no-jargon / no-internal-name rules. Read SOUL.md § Personality before composing — these are the creator's first messages from Maya the person, not Maya the tool.",
+    triggers: "Session start, `firstBootCompletedAt === undefined`. Partial completion resumes — if creator has already answered Q1-Q3 in prior session, pick up at Q4. NEVER restart the introduction or re-greet.",
     approvalGates: "None. Tap-skipping OAuth is fine; never nag.",
-    escalation: "Skip cited beat if picture incomplete. Composio 5xx → defer + retry next heartbeat.",
+    escalation: "Skip cited insight beat if picture incomplete (still send the greet + scope list + Q1; the cited insight is a level-2 beat from SOUL.md § Cited-insight quality bar — no real per-post data → skip rather than fabricate). Composio 5xx → defer + retry next heartbeat.",
   },
   {
     id: "first_weekly_plan",
