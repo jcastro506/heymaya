@@ -105,6 +105,27 @@ probe "sync_wiki_observations (single trend)" \
   "{\"secret\":\"$SECRET\",\"creatorId\":\"$CREATOR\",\"trends\":[{\"wikiVaultPath\":\"trends/smoke.md\",\"observation\":\"smoke probe trend\",\"source\":\"niche-scan\",\"evidence\":[{\"kind\":\"hashtag\",\"ref\":\"https://tiktok.com/tag/smoke\",\"fact\":\"smoke probe\"}],\"relevanceScore\":0.5,\"observedAt\":$(date +%s)000}],\"competitors\":[],\"weeklyLearnings\":[]}" \
   "200"
 
+# Sprint 9.8 A — Gmail HTTP endpoints. No Google connection yet → 404 with hint.
+probe "gmail_list_inbox (no connection → 404)" \
+  "/lc_maya/gmail_list_inbox" \
+  "{\"secret\":\"$SECRET\",\"creatorId\":\"$CREATOR\"}" \
+  "404"
+
+probe "gmail_get_message (no connection → 404)" \
+  "/lc_maya/gmail_get_message" \
+  "{\"secret\":\"$SECRET\",\"creatorId\":\"$CREATOR\",\"messageId\":\"abc123\"}" \
+  "404"
+
+probe "gmail_draft (no connection → 404)" \
+  "/lc_maya/gmail_draft" \
+  "{\"secret\":\"$SECRET\",\"creatorId\":\"$CREATOR\",\"to\":\"x@y.com\",\"bodyText\":\"smoke\"}" \
+  "404"
+
+probe "gmail_send (no connection → 404)" \
+  "/lc_maya/gmail_send" \
+  "{\"secret\":\"$SECRET\",\"creatorId\":\"$CREATOR\",\"to\":\"x@y.com\",\"bodyText\":\"smoke\"}" \
+  "404"
+
 # 12. apple_calendar_connect — fake creds → 401 with hint (Sprint 9.8 B)
 probe "apple_calendar_connect (fake creds → 401)" \
   "/lc_maya/apple_calendar_connect" \

@@ -27,6 +27,12 @@ import {
 } from "./lcMaya/lcMayaHttp";
 import { syncWikiObservationsHttp } from "./lcMaya/wikiMirrorSync";
 import { appleCalendarConnectHttp } from "./lcMaya/appleCalendarConnect";
+import {
+  gmailDraftHttp,
+  gmailGetMessageHttp,
+  gmailListInboxHttp,
+  gmailSendHttp,
+} from "./lcMaya/gmailHttp";
 
 const http = httpRouter();
 
@@ -141,6 +147,30 @@ http.route({
   path: "/lc_maya/complete_google_calendar_oauth",
   method: "POST",
   handler: completeGoogleCalendarOAuthHttp,
+});
+
+// Sprint 9.8 Workstream A — Gmail HTTP endpoints. Token resolution +
+// scope assertion happens in the resolver (`resolveGoogleAccessTokenForCreator`);
+// these handlers are thin wrappers around `convex/integrations/google/gmail.ts`.
+http.route({
+  path: "/lc_maya/gmail_list_inbox",
+  method: "POST",
+  handler: gmailListInboxHttp,
+});
+http.route({
+  path: "/lc_maya/gmail_get_message",
+  method: "POST",
+  handler: gmailGetMessageHttp,
+});
+http.route({
+  path: "/lc_maya/gmail_draft",
+  method: "POST",
+  handler: gmailDraftHttp,
+});
+http.route({
+  path: "/lc_maya/gmail_send",
+  method: "POST",
+  handler: gmailSendHttp,
 });
 
 // Sprint 9.8 Workstream B — Apple iCloud Calendar via CalDAV + app-specific

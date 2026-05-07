@@ -81,6 +81,7 @@ import type * as gbp_computeHealthScore from "../gbp/computeHealthScore.js";
 import type * as http from "../http.js";
 import type * as integrations_aggregators_unified_client from "../integrations/aggregators/unified/client.js";
 import type * as integrations_aggregators_unified_types from "../integrations/aggregators/unified/types.js";
+import type * as integrations_apple_caldav from "../integrations/apple/caldav.js";
 import type * as integrations_composio_actions_calendar from "../integrations/composio/actions/calendar.js";
 import type * as integrations_composio_actions_gmail from "../integrations/composio/actions/gmail.js";
 import type * as integrations_composio_actions_index from "../integrations/composio/actions/index.js";
@@ -99,6 +100,8 @@ import type * as integrations_crm_quickbooks from "../integrations/crm/quickbook
 import type * as integrations_gbp_direct_client from "../integrations/gbp/direct/client.js";
 import type * as integrations_gbp_index from "../integrations/gbp/index.js";
 import type * as integrations_gbp_zernio from "../integrations/gbp/zernio.js";
+import type * as integrations_google_gmail from "../integrations/google/gmail.js";
+import type * as integrations_google_tokenResolver from "../integrations/google/tokenResolver.js";
 import type * as integrations_openclaw_channels from "../integrations/openclaw/channels.js";
 import type * as integrations_openclaw_cliClient from "../integrations/openclaw/cliClient.js";
 import type * as integrations_photoBridgeWorker_client from "../integrations/photoBridgeWorker/client.js";
@@ -131,7 +134,9 @@ import type * as integrations_zernio_oauth from "../integrations/zernio/oauth.js
 import type * as integrations_zernio_types from "../integrations/zernio/types.js";
 import type * as integrations_zernio_webhooks from "../integrations/zernio/webhooks.js";
 import type * as jobs from "../jobs.js";
+import type * as lcMaya_appleCalendarConnect from "../lcMaya/appleCalendarConnect.js";
 import type * as lcMaya_firstProactivePing from "../lcMaya/firstProactivePing.js";
+import type * as lcMaya_gmailHttp from "../lcMaya/gmailHttp.js";
 import type * as lcMaya_lcMayaHttp from "../lcMaya/lcMayaHttp.js";
 import type * as lcMaya_wikiMirrorSync from "../lcMaya/wikiMirrorSync.js";
 import type * as lib_encryption from "../lib/encryption.js";
@@ -266,6 +271,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "integrations/aggregators/unified/client": typeof integrations_aggregators_unified_client;
   "integrations/aggregators/unified/types": typeof integrations_aggregators_unified_types;
+  "integrations/apple/caldav": typeof integrations_apple_caldav;
   "integrations/composio/actions/calendar": typeof integrations_composio_actions_calendar;
   "integrations/composio/actions/gmail": typeof integrations_composio_actions_gmail;
   "integrations/composio/actions/index": typeof integrations_composio_actions_index;
@@ -284,6 +290,8 @@ declare const fullApi: ApiFromModules<{
   "integrations/gbp/direct/client": typeof integrations_gbp_direct_client;
   "integrations/gbp/index": typeof integrations_gbp_index;
   "integrations/gbp/zernio": typeof integrations_gbp_zernio;
+  "integrations/google/gmail": typeof integrations_google_gmail;
+  "integrations/google/tokenResolver": typeof integrations_google_tokenResolver;
   "integrations/openclaw/channels": typeof integrations_openclaw_channels;
   "integrations/openclaw/cliClient": typeof integrations_openclaw_cliClient;
   "integrations/photoBridgeWorker/client": typeof integrations_photoBridgeWorker_client;
@@ -316,7 +324,9 @@ declare const fullApi: ApiFromModules<{
   "integrations/zernio/types": typeof integrations_zernio_types;
   "integrations/zernio/webhooks": typeof integrations_zernio_webhooks;
   jobs: typeof jobs;
+  "lcMaya/appleCalendarConnect": typeof lcMaya_appleCalendarConnect;
   "lcMaya/firstProactivePing": typeof lcMaya_firstProactivePing;
+  "lcMaya/gmailHttp": typeof lcMaya_gmailHttp;
   "lcMaya/lcMayaHttp": typeof lcMaya_lcMayaHttp;
   "lcMaya/wikiMirrorSync": typeof lcMaya_wikiMirrorSync;
   "lib/encryption": typeof lib_encryption;
