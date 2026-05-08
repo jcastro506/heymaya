@@ -21,6 +21,112 @@ export const listAll = internalQuery({
   },
 });
 
+export const fullDump = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const creators = await ctx.db.query("creators").collect();
+    const test = creators.filter((c) =>
+      c.clerkUserId.startsWith("test_real_world_kevin_")
+    );
+    if (test.length === 0) return { error: "no test creator" };
+    const me = test[test.length - 1];
+    const picture = await ctx.db
+      .query("creatorPicture")
+      .withIndex("by_creator", (q) => q.eq("creatorId", me._id))
+      .first();
+    const calendar = await ctx.db
+      .query("creatorMayaV0CalendarConnections")
+      .withIndex("by_creator", (q) => q.eq("creatorId", me._id))
+      .collect();
+    const connectedAccounts = await ctx.db
+      .query("connectedAccounts")
+      .withIndex("by_creator", (q) => q.eq("creatorId", me._id))
+      .collect();
+    const handles = await ctx.db
+      .query("creatorHandles")
+      .withIndex("by_creator", (q) => q.eq("creatorId", me._id))
+      .collect();
+    const aiCalls = await ctx.db
+      .query("aiCallLog")
+      .withIndex("by_creator_and_ts", (q) => q.eq("creatorId", me._id))
+      .order("desc")
+      .take(10);
+    const trendObservations = await ctx.db
+      .query("trendObservations")
+      .withIndex("by_creator", (q) => q.eq("creatorId", me._id))
+      .collect();
+    const oauthTokens = await ctx.db
+      .query("oauthStateTokens")
+      .withIndex("by_creator", (q) => q.eq("creatorId", me._id))
+      .collect();
+    return {
+      creator: {
+        _id: me._id,
+        clerkUserId: me.clerkUserId,
+        plan: me.plan,
+        status: me.status,
+        firstBootCompletedAt: me.firstBootCompletedAt ?? null,
+        openingAnswersAt: me.openingAnswersAt ?? null,
+        pictureLockedAt: me.pictureLockedAt ?? null,
+        firstWeeklyPlanSentAt: me.firstWeeklyPlanSentAt ?? null,
+      },
+      handles: handles.map((h) => ({
+        platform: h.platform,
+        handle: h.handle,
+        followerCount: h.followerCount,
+      })),
+      picture: picture
+        ? {
+            niche: picture.niche,
+            audience: picture.audience,
+            voiceFingerprint: picture.voiceFingerprint,
+            topHooks: picture.topHooks?.length ?? 0,
+            bottomHooks: picture.bottomHooks?.length ?? 0,
+            postingCadence: picture.postingCadence,
+            sourceCitations: picture.sourceCitations?.length ?? 0,
+            careerStage: (picture as unknown as { careerStage?: string }).careerStage,
+            growthPlan: (picture as unknown as { growthPlan?: unknown }).growthPlan
+              ? "present"
+              : "missing",
+            needsVerification: (picture as unknown as { needsVerification?: unknown[] }).needsVerification?.length ?? 0,
+            openingAnswers: (picture as unknown as { openingAnswers?: unknown }).openingAnswers ?? null,
+            voiceAndPersonality: (picture as unknown as { voiceAndPersonality?: unknown }).voiceAndPersonality ?? null,
+            visualStyle: (picture as unknown as { visualStyle?: unknown }).visualStyle ?? null,
+            recurringElements: (picture as unknown as { recurringElements?: unknown[] }).recurringElements ?? [],
+            warmthMaterial: (picture as unknown as { warmthMaterial?: unknown[] }).warmthMaterial ?? [],
+            model: picture.model,
+            generatedAt: picture.generatedAt,
+          }
+        : null,
+      calendarConnections: calendar.map((c) => ({
+        externalAccountId: (c as unknown as { externalAccountId?: string }).externalAccountId ?? null,
+        scope: (c as unknown as { oauthScope?: string }).oauthScope ?? null,
+        hasAccessToken: Boolean((c as unknown as { oauthAccessToken?: string }).oauthAccessToken),
+        hasRefreshToken: Boolean((c as unknown as { oauthRefreshToken?: string }).oauthRefreshToken),
+        expiresAt: (c as unknown as { oauthExpiresAt?: number }).oauthExpiresAt ?? null,
+        connectedAt: (c as unknown as { connectedAt?: number }).connectedAt ?? null,
+      })),
+      connectedAccounts: connectedAccounts.map((a) => ({
+        provider: a.provider,
+        scopeStatus: a.scopeStatus,
+        scopes: a.scopes?.length ?? 0,
+        connectedAt: a.connectedAt,
+      })),
+      aiCallsCount: aiCalls.length,
+      latestAiCalls: aiCalls.slice(0, 3).map((c) => ({
+        taskTag: (c as unknown as { taskTag?: string }).taskTag,
+        model: (c as unknown as { model?: string }).model,
+        inputTokens: (c as unknown as { inputTokens?: number }).inputTokens,
+        outputTokens: (c as unknown as { outputTokens?: number }).outputTokens,
+        costUsd: (c as unknown as { costUsd?: number }).costUsd,
+        ts: (c as unknown as { ts?: number }).ts,
+      })),
+      trendObservationsCount: trendObservations.length,
+      oauthStateTokensActive: oauthTokens.length,
+    };
+  },
+});
+
 export const peekVideoUrls = internalQuery({
   args: {},
   handler: async (ctx) => {
