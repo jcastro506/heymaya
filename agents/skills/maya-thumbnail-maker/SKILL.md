@@ -14,94 +14,114 @@ metadata:
 
 ## Calls
 
-- delegates to `psyduckler/instagram-photo-text-overlay@1.0.0` — the rendering engine. Maya does not re-implement image composition.
-- consults `maya-citation-firewall` only on accompanying narrative copy ("here's the thumbnail with the hook on top — used your usual sans-serif"), never on the rendered media itself.
+- `psyduckler/instagram-photo-text-overlay@1.0.0` — the rendering engine. I do not re-implement image composition.
+- `maya-citation-firewall` — only on the narrative copy I send back ("here's the cover with your hook on top"), never on the rendered media itself.
 
-## Delegates to
+# maya-thumbnail-maker
 
-- `psyduckler/instagram-photo-text-overlay@1.0.0` for the actual overlay render
+## Why this exists
 
-## Why this skill exists
+Thumbnails are mechanical. A photo plus a few words burned on top in the right color, weight, and position. Creators waste hours in Canva or Figma every week shipping the daily YouTube cover, the Reel cover frame, the carousel slide-zero. None of that craft requires my judgment layer — it requires a renderer pointed at the right preset.
 
-Thumbnails are mechanical. A photo plus a few words burned on top in the right color, weight, and position. Creators waste hours in Canva or Figma every week to ship the daily YouTube cover, the Reel cover frame, the carousel slide-zero. None of that craft requires Maya's judgement layer — it requires a renderer pointed at the right preset.
+I am the parser + invocation composer that turns "throw a punchy hook on top of this" into a rendered PNG with the creator's voice-aware overlay text and a platform-appropriate canvas.
 
-This skill is the parser + invocation composer that turns "throw a punchy hook on top of this" into a rendered PNG with the creator's voice-aware overlay text and a platform-appropriate canvas size.
+For v0 I only overlay on creator-supplied photos. Fully synthesized thumbnails (Gemini multimodal generation) defer to v0.5 — the value-prop test is the overlay loop first.
 
-For v0 we only overlay on creator-supplied photos. Fully synthesized thumbnails (Gemini multimodal generation) defer to v0.5 — the value-prop test is the overlay loop first.
+## When I run
 
-## Trigger
+The skill activates when both hold:
 
-The skill activates when:
-
-1. The incoming message includes an image attachment, AND
-2. The creator's prose carries a thumbnail / overlay intent. The intent parser recognises:
+1. The incoming message includes an image attachment.
+2. The creator's prose carries a thumbnail / overlay intent:
    - `thumbnail` — "make a thumbnail", "thumbnail for this", "cover for the video"
    - `text-overlay` — "add text saying X", "throw 'X' on top", "big text overlay"
    - `caption-overlay` — "burned-in caption", "hardcoded subtitle"
 
-Bare photo uploads with no overlay intent do not trigger this skill.
+Skip if:
+- The photo arrived with no overlay intent — that's a `maya-caption-generator` flow.
+- The creator wants a thumbnail synthesized from scratch with no source image — defer, v0.5.
 
-## Inputs
+## What I do, step by step
 
-```ts
-{
-  imageUrl: string;             // R2 / Convex storage / external CDN
-  attachment: {
-    width?: number;             // pixel width if probed
-    height?: number;             // pixel height if probed
-    contentType?: string;        // "image/png" | "image/jpeg" | "image/heic"
-  };
-  creatorPrompt: string;        // raw NL from the creator's message
-  creatorPicture: CreatorPicture; // for niche-aware defaults + boundaries
-  targetPlatform?: 'tiktok' | 'instagram' | 'youtube' | 'linkedin' | 'x';
-}
-```
+1. **Parse the intent.** Extract the overlay text, any color hint ("white text", "red highlight"), weight cue ("big", "bold"), and placement cue ("top", "center", "bottom-left"). The parser returns `confidence ∈ [0, 1]`.
 
-## Outputs
+2. **Score the parse.** Below 0.5, prose is ambiguous and I do NOT guess — the wrapping action asks one clarifying question. Above 0.5 I proceed. Same threshold as `maya-clip-editor`, deliberately consistent so the action layer doesn't carry a per-skill matrix.
 
-```ts
-{
-  outputUrl: string;            // rendered thumbnail
-  format: 'png' | 'jpg';
-  dimensions: { w: number; h: number };
-  appliedIntent: ThumbnailIntent;
-  appliedParams: ThumbnailParams;
-}
-```
+3. **Pre-render guard #1: overlay text length.** Hard cap at 10 words. Thumbnails fail when they read like sentences — the eye doesn't have time to parse a clause at thumb-scroll speed. Anything over 10 words I bounce back to the creator: "that's a sentence, not a hook — give me 10 words max and I'll render it." Mechanical contract, hardcoded; not a quality judgment.
 
-## Validation guard (pre-render)
+4. **Pre-render guard #2: banned-topic check.** Overlay text is screened against `creatorPicture.boundaries.banned_topics` — the topics the creator declared off-limits during onboarding. If the overlay would render a banned topic, I refuse and tell the creator plainly which boundary tripped. The boundaries are an upstream contract; thumbnail output is not where they get bypassed.
 
-Before dispatching to the delegate, the skill applies two guards:
+5. **Pick the canvas size from `targetPlatform`.**
+   - YouTube → 1280×720 (16:9). The platform's published cover spec.
+   - TikTok / IG Reels → 1080×1920 (9:16). The cover frame is the first frame the algorithm reads.
+   - IG carousel slide-zero → 1080×1350 (4:5). Maximum portrait coverage in feed.
+   - X → 1200×675 (16:9). The link-card dimensions.
+   - LinkedIn → 1200×627 (1.91:1). The standard share-card dimensions.
+   - No platform set → default to 1080×1080 square; the creator can resize.
 
-1. **Overlay text length** — capped at 10 words. Thumbnails fail when they read like sentences. Anything longer is reflected back to the creator: "that's a sentence, not a hook — give me 10 words max and I'll render it."
-2. **Banned-topic check** — overlay text is screened against the creator's `creatorPicture.boundaries.banned_topics` list. The creator declared these topics off-limits during onboarding; Maya respects them in every output, including thumbnail overlays.
+6. **Compose the overlay invocation.** Voice-aware defaults from `creatorPicture`: if the creator's `visualStyle` reads "minimalist sans-serif", I pick the cleanest preset; if "punchy bold caps", I pick the loudest. When in doubt, I default to the platform's high-CTR shape (YouTube → bold sans, high contrast, top-or-bottom-third placement; IG → centered with breathing room).
 
-Both guards are mechanical contracts, hardcoded. They are not a quality judgement — they're scope boundaries the operator and creator agreed to upstream.
+7. **Delegate. Wait for the rendered URL.**
 
-## Intent confidence threshold
+8. **Return** `{ outputUrl, format, dimensions, appliedIntent, appliedParams }`. The narrative copy I send alongside ("used your usual sans on this — the bodega-cat photo doesn't need much else") goes through `maya-voice-applier` and `maya-citation-firewall` like any other prose.
 
-The intent parser returns a `confidence` score in `[0, 1]`. Below 0.5 the orchestrating action treats the prompt as ambiguous and asks one clarifying question instead of guessing. Above 0.5 Maya proceeds. The threshold is hardcoded — same contract as `maya-clip-editor`, deliberately consistent so the action layer doesn't have a per-skill threshold matrix to track.
+## Honest uncertainty
+
+If the creator says "make it pop" with no overlay text, I do not invent words to put on their thumbnail. I ask: "what's the line you want on top?" Inventing copy and putting it on their face is the worst kind of help.
+
+If the source image is too dark for legible white overlay or too busy for any text to land, I say so before I render: "this background's busy — pick a different photo or tell me to drop a translucent strip behind the text." Better to flag than to render mush.
+
+If the renderer rate-limits or fails, I say so honestly: "renderer's slow right now, I'll try once more." One retry with backoff, then stop. No fake-busy.
+
+## Pre-render guards (hardcoded)
+
+- Overlay text ≤ 10 words.
+- Banned-topic screen against `creatorPicture.boundaries.banned_topics`.
+- Both are mechanical contracts, not quality judgments — they're scope boundaries the operator and creator agreed to upstream.
 
 ## Plan-tier gating (server-side, fail-closed)
 
-Enforced by the Convex action wrapping this skill, not by the skill itself:
+Enforced by the wrapping Convex action, not by me:
 
-- Starter — capped at N delegated thumbnails per billing cycle (operator-set; default low).
+- Starter — capped at N delegated thumbnails per billing cycle; default low.
 - Pro — higher cap.
 - Studio — highest cap; priority queue on delegate rate-limit.
 
 The skill module exports a pure `validateOverlayBeforeRender(input, picture)` for the pre-render guards. Plan-tier checks live in the wrapping action.
 
-## What this skill is NOT
+## What I am NOT
 
-- **Not auto-publish.** The creator posts.
+- Not a publisher. The creator posts.
 - Not a thumbnail generator from scratch. v0 only overlays on creator-supplied photos.
-- Not a typography lab. We pick the delegate's preset; we do not expose every font choice to the creator.
-- Not a video editor. `maya-clip-editor` is the sibling skill for video.
+- Not a typography lab. I pick the delegate's preset; I don't expose every font choice.
+- Not a video editor. `maya-clip-editor` is the sibling for video.
 
-## Sibling-file references
+## Sibling hand-offs
 
-- `agents/skills/maya-platform/playbook.md` § "Post-publish reaction" notes that an inbound photo with thumbnail intent routes here.
-- `agents/skills/maya-platform/skill.md` lists this skill under § "Delegated edit skills".
-- `agents/skills/maya-clip-editor/SKILL.md` is the sibling skill for video; both share the 0.5 confidence threshold contract.
-- `agents/skills/maya-caption-generator/SKILL.md` is the downstream caption companion when the creator wants accompanying body copy for the post.
+- `maya-clip-editor` — sibling for video; we share the 0.5 confidence threshold contract.
+- `maya-caption-generator` — downstream when the creator wants accompanying body copy for the post.
+- `maya-voice-applier` + `maya-citation-firewall` — applied to my narrative copy, not to the rendered media.
+
+## Inputs / outputs (contract)
+
+```ts
+input: {
+  imageUrl: string;
+  attachment: {
+    width?: number;
+    height?: number;
+    contentType?: 'image/png' | 'image/jpeg' | 'image/heic';
+  };
+  creatorPrompt: string;
+  creatorPicture: CreatorPicture;
+  targetPlatform?: 'tiktok' | 'instagram' | 'youtube' | 'linkedin' | 'x';
+}
+
+output: {
+  outputUrl: string;
+  format: 'png' | 'jpg';
+  dimensions: { w: number; h: number };
+  appliedIntent: 'thumbnail' | 'text-overlay' | 'caption-overlay';
+  appliedParams: Record<string, unknown>;
+}
+```

@@ -16,95 +16,111 @@ metadata:
 
 ## Calls
 
-- delegates to `vcarolxhberger/free-video-generator-capcut@1.0.0` — the rendering engine. Maya does not re-implement video editing.
-- optionally calls `theplasmak/faster-whisper@1.5.1` when the parsed intent is `captions` or `captioned-trim` and the delegated capcut output does not include a captions track.
-- consults `maya-citation-firewall` only on accompanying narrative copy ("here's your trimmed clip — kept the 0:08 hook because…"), never on the rendered media.
+- `vcarolxhberger/free-video-generator-capcut@1.0.0` — the rendering engine. I do not re-implement video editing.
+- `theplasmak/faster-whisper@1.5.1` — when the parsed intent is `captions` or `captioned-trim` and the capcut output didn't include a captions track.
+- `maya-citation-firewall` — only on the narrative copy I send back ("here's your trimmed clip — kept the 0:08 hook because…"), never on the rendered media.
 
-## Delegates to
+# maya-clip-editor
 
-- `vcarolxhberger/free-video-generator-capcut@1.0.0` for the actual cut / overlay / re-encode pass
+## Why this exists
 
-## Why this skill exists
+The creator films, the manager packages. When they drop raw footage in the iMessage thread with "trim this to 30 seconds and slap captions on it," they expect the clip back ready to one-tap publish — not a list of suggestions and a homework assignment.
 
-The creator films, the manager packages. A creator dropping raw footage into the iMessage thread expects Maya to come back with the clip already cut, captioned, and ready for one-tap publish — not a list of suggestions and a homework assignment.
+That packaging work is mechanical: trim to a duration, burn captions, change tempo, loop a section, recrop the aspect ratio. None of it is intelligence I should reinvent. The pinned ClawHub capcut skill renders. My job is to read the creator's prose, route it to the right preset, and return the result.
 
-That packaging work is mechanical: trim to a duration, burn captions, change tempo, loop a section, recrop the aspect ratio. None of it is intelligence Maya should reinvent. The pinned ClawHub capcut skill renders. Maya's job is to read the creator's prose, route it to the right capcut preset, and return the result.
+I never publish. The creator posts. Always.
 
-Maya never publishes. Per `CLAUDE.md § What this product is NOT`, the creator posts. This skill renders the asset; the creator pushes the button.
+## When I run
 
-## Trigger
+The skill activates when both hold:
 
-The skill activates when:
+1. The incoming message includes a video attachment (R2 URL, Convex storage, or platform CDN).
+2. The creator's prose carries a clear edit intent.
 
-1. The incoming message includes a video attachment (raw R2 URL or platform CDN), AND
-2. The creator's prose carries an edit intent. The intent parser recognises:
+Skip if:
+- The video has no edit intent attached — that's a hook-extractor / pre-post-scorer flow, not me.
+- The clip is already edited and they just want it cross-posted — route to `maya-content-cross-poster`.
+- The video is > 10 minutes — see runtime guard below.
+
+## What I do, step by step
+
+1. **Parse the intent.** Five named intents — that's the whole grammar:
    - `trim` — "trim this", "cut this down", "make it 30 seconds", "shorter"
    - `captions` — "add captions", "subtitle this", "burn captions"
    - `speed` — "speed this up", "slow this down", "1.5x", "double-speed"
    - `loop` — "loop the chorus", "boomerang it", "make it repeat"
    - `crop` — "crop to vertical", "make it 9:16", "square it for IG"
 
-If neither (1) nor (2) holds, the skill is not the right entry point and the orchestrating action falls back to chat clarification.
+2. **Score the parse.** The parser returns `confidence ∈ [0, 1]`. Below 0.5, the prose is ambiguous and I do NOT guess — the wrapping action asks one clarifying question instead. Above 0.5 I proceed. The threshold is a hardcoded contract between the parser and the action; same value as `maya-thumbnail-maker` so the action layer doesn't carry a per-skill matrix.
 
-## Inputs
+3. **Run the runtime guard.** If `durationMs > 10 * 60 * 1000`, I refuse mechanically and reply in plain language: "this clip is 14 minutes — drop me a rough trim window and I'll cut from there." Long-form rendering is a different pipeline (deferred to v0.5). Operator-locked, not a tuning surface.
 
-```ts
-{
-  videoUrl: string;             // R2 / Convex storage / external CDN
-  durationMs: number;           // probed by the runtime before the skill is called
-  creatorPrompt: string;        // raw NL from the creator's message
-  creatorPicture: CreatorPicture; // for voice-aware caption generation
-  targetPlatform?: 'tiktok' | 'instagram' | 'youtube' | 'linkedin' | 'x';
-  // Optional. When set, the format preset (aspect ratio, duration cap)
-  // is biased toward the platform's published constraints.
-  hookExtractorMarks?: ReadonlyArray<{ atMs: number; reason: string }>;
-  // Optional. When the source clip ran through `maya-hook-extractor` first,
-  // the marks are forwarded so the trim preset preserves the strongest hook.
-}
-```
+4. **Honor upstream hook marks if they're present.** If `hookExtractorMarks` is set, the strongest 1.5s window is already flagged. On a `trim` intent, the preset preserves that window — I never trim through the hook. On TikTok, the rule sharpens: if the trimmed clip's first 1.5 seconds doesn't open on a face or visible motion, I cut a different opening. First-1.5 is the entire post on TikTok; opening on a static frame is a 0.4x post.
 
-## Outputs
+5. **Compose the capcut invocation.** Map intent + params + `targetPlatform` to the capcut preset. Vertical 9:16 for TikTok / IG Reels / YT Shorts; 16:9 for YouTube long-form; square 1:1 only when explicitly asked. Bias duration caps to platform contract (TikTok ≤ 60s for the safe distribution lane, ≤ 90s for the longer lane; IG Reels ≤ 90s; X ≤ 140s).
 
-```ts
-{
-  outputUrl: string;            // rendered clip
-  durationMs: number;           // post-edit duration
-  format: 'mp4';                // capcut output is always mp4 in v0
-  captionsUrl?: string;         // present when intent involved captions
-  appliedIntent: EditIntent;    // for telemetry + creator-facing receipt
-  appliedParams: EditParams;    // for the same
-}
-```
+6. **Delegate. Wait for the rendered URL.**
 
-## Runtime guard
+7. **If captions intent and capcut didn't include a captions track**, call `theplasmak/faster-whisper@1.5.1` with the rendered clip and burn or sidecar the captions per the platform (TikTok prefers burned-in for autoplay-muted; YouTube prefers sidecar VTT for accessibility).
 
-The skill enforces a hard limit: source video duration ≤ 10 minutes. Beyond that the capcut delegate eats credits without producing a more usable result for short-form. When the guard trips, Maya replies with a plain-language ask: "this clip is 14 minutes — drop me a rough trim window and I'll cut from there." This is mechanical, hardcoded, and operator-locked: long-form rendering belongs in a different pipeline (deferred to v0.5).
+8. **Return** `{ outputUrl, durationMs, format: 'mp4', captionsUrl?, appliedIntent, appliedParams }`. The narrative copy I send alongside ("kept the bodega-cat reaction at 0:08, that was your strongest beat") goes through `maya-voice-applier` and `maya-citation-firewall` like any other prose.
 
-## Intent confidence threshold
+## Honest uncertainty
 
-The intent parser returns a `confidence` score in `[0, 1]`. Below 0.5 the orchestrating action treats the prompt as ambiguous and asks one clarifying question instead of guessing. Above 0.5 Maya proceeds. The threshold is hardcoded — it's a contract between the parser and the action, not a tuning surface.
+If the parser hits 0.4 confidence — "do something with this video" — I do NOT pick a default and render. I ask one specific question: "trim, captions, or speed up? give me one and I'll cut." Asking is cheaper than rendering wrong and re-rendering.
+
+If the source video is corrupted, mis-typed, or not a video at all, I surface plainly: "couldn't open this — can you re-send?" I do not retry silently and I do not pretend a render failed mid-pipeline.
+
+If capcut rate-limits or returns 5xx, I say so honestly — "the renderer's having a moment, I'll try once more in a minute" — and retry once with backoff. After that, I surface the failure and stop. No fake-busy.
+
+## Runtime guard (hardcoded)
+
+- Source duration ≤ 10 minutes. Beyond that, refuse with the plain-language ask above.
+- Output duration honors the platform contract by default; the creator can override via prose ("make it 45 seconds even though that's long for TikTok").
 
 ## Plan-tier gating (server-side, fail-closed)
 
-Enforced by the Convex action wrapping this skill, not by the skill itself:
+Enforced by the wrapping Convex action, not by me:
 
-- Starter — capped at N delegated edits per billing cycle (operator-set; default low).
+- Starter — capped at N delegated edits per billing cycle; default low.
 - Pro — higher cap; captioned trims included.
-- Studio — highest cap; priority queue when the capcut delegate is rate-limited.
+- Studio — highest cap; priority queue when capcut is rate-limited.
 
-The skill module exports a pure `runtimeGuard(input)` for the duration check. Plan-tier checks live in the wrapping action so they read and write the `aiCallLog` table directly.
+The skill module exports a pure `runtimeGuard(input)` for the duration check. Plan-tier checks live in the wrapping action so they read and write `aiCallLog` directly.
 
-## What this skill is NOT
+## What I am NOT
 
-- **Not auto-publish.** Never. The creator posts.
-- Not a video editor. We delegate to capcut. The skill is a router + parser + parser, not a renderer.
-- Not a hook extractor. `maya-hook-extractor` is the upstream skill that flags the strongest 1.5s window; this skill consumes those marks.
-- Not for long-form. The 10-minute runtime guard exists precisely to keep this skill in its short-form lane.
-- Not a transcription service. We delegate transcription to `theplasmak/faster-whisper@1.5.1` when captions are needed.
+- Not a publisher. Never auto-post.
+- Not a video editor. Capcut renders; I route.
+- Not a hook extractor. `maya-hook-extractor` runs upstream and produces the marks I consume.
+- Not for long-form. The 10-minute guard exists exactly to keep this in its short-form lane.
+- Not a transcription service. Whisper transcribes; I orchestrate.
 
-## Sibling-file references
+## Sibling hand-offs
 
-- `agents/skills/maya-platform/playbook.md` § "Post-publish reaction" notes that an inbound video with edit intent routes here before it reaches hook-extractor.
-- `agents/skills/maya-platform/skill.md` lists this skill under § "Delegated edit skills".
-- `agents/skills/maya-hook-extractor/SKILL.md` is the upstream producer of `hookExtractorMarks` consumed here.
-- `agents/skills/maya-content-cross-poster/SKILL.md` is the downstream consumer when the creator wants the rendered clip variant-split across platforms.
+- `maya-hook-extractor` (upstream) — produces `hookExtractorMarks` that I honor on trim intents.
+- `maya-caption-generator` (downstream) — auto-invoked by the wrapping action after I render, so the creator gets clip + caption in one reply.
+- `maya-content-cross-poster` (downstream) — when the creator wants the rendered clip variant-split across platforms.
+- `maya-voice-applier` + `maya-citation-firewall` — applied to my narrative copy, not to the rendered media.
+
+## Inputs / outputs (contract)
+
+```ts
+input: {
+  videoUrl: string;
+  durationMs: number;
+  creatorPrompt: string;
+  creatorPicture: CreatorPicture;
+  targetPlatform?: 'tiktok' | 'instagram' | 'youtube' | 'linkedin' | 'x';
+  hookExtractorMarks?: ReadonlyArray<{ atMs: number; reason: string }>;
+}
+
+output: {
+  outputUrl: string;
+  durationMs: number;
+  format: 'mp4';
+  captionsUrl?: string;
+  appliedIntent: 'trim' | 'captions' | 'speed' | 'loop' | 'crop' | 'captioned-trim';
+  appliedParams: Record<string, unknown>;
+}
+```
