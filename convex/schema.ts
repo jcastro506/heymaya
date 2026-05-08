@@ -1391,10 +1391,74 @@ export default defineSchema({
     replyAt: v.optional(v.number()),
     outcome: v.optional(v.string()),
     gmailThreadId: v.optional(v.string()),
+    // Sprint 11 — lead provenance for cap accounting. Optional for
+    // back-compat with rows written before the cap system. Cold cap
+    // (5/day, 30/wk, 30d warmup → 10/day) only counts rows where
+    // `coldOrWarm === "cold"`. Warm follow-ups are unbounded.
+    leadSource: v.optional(
+      v.union(
+        v.literal("inbox-warm"),
+        v.literal("llm-target"),
+        v.literal("apollo"),
+        v.literal("hunter"),
+        v.literal("marketplace"),
+        v.literal("manual")
+      )
+    ),
+    coldOrWarm: v.optional(v.union(v.literal("cold"), v.literal("warm"))),
+    brandContactId: v.optional(v.id("brandContacts")),
   })
     .index("by_creator", ["creatorId"])
     .index("by_creator_and_status", ["creatorId", "status"])
-    .index("by_creator_and_brand", ["creatorId", "brand"]),
+    .index("by_creator_and_brand", ["creatorId", "brand"])
+    .index("by_creator_and_sentAt", ["creatorId", "sentAt"]),
+
+  // Sprint 11 — discovered brand contacts (warm + cold sources).
+  // Layer 4 (inbox warm-mining via direct Gmail OAuth) writes "warm"
+  // rows when the creator already has a thread with the brand. Layer 1
+  // (LLM niche → target list) writes "cool" rows with no contact email
+  // yet. Layer 2 (Apollo / Hunter, behind flag) enriches "cool" → "cold"
+  // with a verified email. Layer 3 (marketplace scout) is deferred to
+  // phase 1.5. Manager-tier outreach pulls from this table warm-first.
+  brandContacts: defineTable({
+    creatorId: v.id("creators"),
+    brand: v.string(),
+    contactName: v.optional(v.string()),
+    contactRole: v.optional(v.string()),
+    contactEmail: v.optional(v.string()),
+    emailVerifiedAt: v.optional(v.number()),
+    source: v.union(
+      v.literal("inbox-warm"),
+      v.literal("llm-target"),
+      v.literal("apollo"),
+      v.literal("hunter"),
+      v.literal("marketplace"),
+      v.literal("manual")
+    ),
+    sourceRef: v.optional(v.string()),
+    warmth: v.union(
+      v.literal("hot"),
+      v.literal("warm"),
+      v.literal("cool"),
+      v.literal("cold")
+    ),
+    lastInboundAt: v.optional(v.number()),
+    lastOutboundAt: v.optional(v.number()),
+    dedupeKey: v.string(),
+    status: v.union(
+      v.literal("active"),
+      v.literal("dnc"),
+      v.literal("bounced"),
+      v.literal("unsubscribed")
+    ),
+    discoveredAt: v.number(),
+    lastEnrichedAt: v.optional(v.number()),
+    notes: v.optional(v.string()),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_warmth", ["creatorId", "warmth"])
+    .index("by_creator_and_brand", ["creatorId", "brand"])
+    .index("by_dedupe", ["dedupeKey"]),
 
   // Sprint 3.5b — `maya-opportunity-scout` per-creator URL dedupe cache.
   opportunityScoutSeen: defineTable({
