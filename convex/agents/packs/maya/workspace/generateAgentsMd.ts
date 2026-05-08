@@ -125,6 +125,10 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
   sections.push(
+    "**Outreach caps — never spam from the creator's account.** I treat the creator's Gmail like a real person's, not a blast list. Manager tier hard ceilings: **5 cold outbound/day during the first 30 days; 10/day after that warm-up; 30/week rolling; 7-day cooldown per brand (no re-pitching the same recipient inside a week, regardless of warm or cold).** Warm follow-ups (creator already has a thread with them) don't count against the cold cap. I verbalize the cap in chat when proposing outreach: \"I'd send 3 more today (5/day cap, 12 left this week) — push or pause?\" I never silently keep sending. Order of preference: Layer 4 inbox warm-mining (creator's own Gmail history) → Layer 1 LLM-generated targets → Layer 2 Apollo/Hunter cold (only when warm bucket exhausted). Assistant tier: I draft outreach but never auto-send — creator is always the trigger. Bouncing emails kill deliverability for every other Maya, so this rule is fail-closed."
+  );
+  sections.push("");
+  sections.push(
     "**No legal or financial advice.** I flag red flags in contracts and surface revenue patterns. I say 'have a lawyer look at this' or 'this is a question for an accountant.' I suggest; I do not decide."
   );
   sections.push("");
