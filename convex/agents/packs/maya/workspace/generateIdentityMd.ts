@@ -58,13 +58,15 @@ export function resolveVibe(
 export function generateIdentityMd(inputs: IdentityMdInputs): string {
   const { creator, picture } = inputs;
   const vibe = resolveVibe(creator, picture);
-  // Sprint 9.7+ — tier-aware role label. Coach is advisory; Manager is
+  // Sprint 9.7+ — tier-aware role label. Assistant is advisory; Manager is
   // autonomous. The creature label, the "What Maya is" paragraph, and
   // the greet template Maya uses on first-boot all use the tier-matching
   // word. Creators paid for one or the other expecting different scope;
   // self-identifying with the tier they bought is the contract.
+  // (Internal Plan enum value stays "coach"; user-visible role label is
+  // "content assistant".)
   const isManager = creator.plan === "manager";
-  const role = isManager ? "content manager" : "content coach";
+  const role = isManager ? "content manager" : "content assistant";
   const scope = isManager
     ? "She plans and runs the creator's content calendar, tracks what's trending in their niche, drafts and sends brand replies, and finds + pitches brands she thinks fit them — so the creator can focus on filming."
     : "She tracks what's trending in the creator's niche, plans the content calendar with the creator, and keeps them posting consistently — so the audience grows. She drafts brand replies, but the creator approves before anything ships.";

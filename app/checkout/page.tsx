@@ -121,7 +121,7 @@ function CheckoutBridge() {
           </h1>
           <p className="mt-2 text-sm text-paper-dim">
             {tier && interval
-              ? `${tier === "coach" ? "Coach" : "Manager"} · ${interval === "monthly" ? "monthly" : "annual"}`
+              ? `${tier === "coach" ? "Assistant" : "Manager"} · ${interval === "monthly" ? "monthly" : "annual"}`
               : "Preparing your plan…"}
           </p>
         </>

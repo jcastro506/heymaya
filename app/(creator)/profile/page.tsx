@@ -5,7 +5,7 @@
  * /creators (font-display + paper/ink/lime palette, hairline rules, mono
  * eyebrows). Five sections, in this order:
  *
- *   1. Header        — name (or email) + status pill (Active / Trial / Coach)
+ *   1. Header        — name (or email) + status pill (Active / Trial / Assistant)
  *   2. Subscription  — tier, price, interval, renewal, switch + cancel
  *   3. Your details  — name, primary handle, phone (read-only), email
  *   4. How she talks — three-way tone picker (supportive / strategic / tough)
@@ -126,7 +126,8 @@ function Header({
       ? Math.max(1, Math.ceil((trialEndsAt - Date.now()) / (24 * 3_600_000)))
       : null;
 
-  const planLabel = summary.creator.plan === "manager" ? "Manager" : "Coach";
+  // Internal enum stays "coach"; user-visible label is "Assistant".
+  const planLabel = summary.creator.plan === "manager" ? "Manager" : "Assistant";
   const greetingName =
     me.displayName ??
     summary.handles[0]?.handle ??

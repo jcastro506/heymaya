@@ -271,7 +271,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     triggers: "Cron `weekly_review` Sunday 9:00pm local.",
     approvalGates: "None — creator consumes; they don't approve.",
     escalation:
-      "Pass aggressively through citation firewall — highest-stakes weekly output. Drop unsupported claims rather than ship them. Coach receives a stripped-down low-thinking version.",
+      "Pass aggressively through citation firewall — highest-stakes weekly output. Drop unsupported claims rather than ship them. Assistant tier receives a stripped-down low-thinking version.",
     cronMessage:
       "Run weekly review: synthesize 7 days — top posts, what worked, what didn't, one hypothesis + one experiment. Write `weeklyReviews`, push 3-line summary.",
   },
@@ -389,7 +389,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     kind: "event",
     scope:
       "On a new post, run `maya-hook-extractor` (multimodal both tiers), write `posts.mayaAnnotation`, append novel patterns to `hookLibrary`, ping with one-sentence hook read + one suggestion.",
-    triggers: "Event: ScrapeCreators delta. Latency cap by tier (Coach 600s, Manager 300s).",
+    triggers: "Event: ScrapeCreators delta. Latency cap by tier (Assistant 600s, Manager 300s).",
     approvalGates: "None — first-impression read is a push.",
     escalation:
       "If platform-fetch fails twice, drop to caption-only rather than skip. Hold judgment for the 2h check — early metrics are noise.",
@@ -457,11 +457,11 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     scope:
       "Pull each named peer's last 24h posts + metric deltas; write `competitorObservations`; surface to Trends.",
     triggers:
-      "Cron 9:00am local. Conditional — silent no-op if `creators.namedPeers` empty. Coach caps at 5 peers; Manager at 10.",
+      "Cron 9:00am local. Conditional — silent no-op if `creators.namedPeers` empty. Assistant caps at 5 peers; Manager at 10.",
     approvalGates: "None — read surface.",
     escalation: "Do not editorialize about whether to copy a peer's move. Cite the post; the creator decides.",
     cronMessage:
-      "Run competitor watch: pull last 24h posts + deltas for each named peer (Coach: 5, Manager: 10), write `competitorObservations`, surface to Trends.",
+      "Run competitor watch: pull last 24h posts + deltas for each named peer (Assistant: 5, Manager: 10), write `competitorObservations`, surface to Trends.",
   },
   {
     id: "calendar_lookahead",
@@ -529,7 +529,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     triggers: "Folded into morning brief daily; on-demand from chat.",
     approvalGates: "None — coaching is suggestion.",
     escalation:
-      "Strict citation discipline. Never invent expectedOutcome — be explicit about uncertainty. Manager only; Coach gets lighter coaching in evening recap.",
+      "Strict citation discipline. Never invent expectedOutcome — be explicit about uncertainty. Manager only; Assistant tier gets lighter coaching in evening recap.",
   },
   {
     id: "cross_post_distribution",
@@ -553,7 +553,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     triggers: "Folded into evening recap when posts underperformed; on-demand from chat ('why did [post] flop?').",
     approvalGates: "None — diagnosis is informational.",
     escalation:
-      "Manager benefits from richer hook-pattern data in `posts.mayaAnnotation`; Coach falls back to first-line-of-caption as opener proxy.",
+      "Manager benefits from richer hook-pattern data in `posts.mayaAnnotation`; Assistant tier falls back to first-line-of-caption as opener proxy.",
   },
   {
     id: "pre_post_review",
@@ -579,7 +579,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
       "Call `maya-opportunity-scout`: scan UGC marketplaces + X creator-call hashtags + local-brand Brave search per niche/location. Dedupe via `opportunityScoutSeen`. Surface top 3 to morning brief; full list to Today.",
     triggers: "Cron 6:00am local — runs before morning brief so the top-3 fold in. Manager also permits on-demand from chat.",
     approvalGates: "None on the scan. Creator marks 'pursue' before it flows to `pitch_strategy` + `brand_outreach`.",
-    escalation: "Manager unlocks larger `maxResults` + Apollo/Hunter discovery on confirmed opportunities; Coach stops at 'creator decides'.",
+    escalation: "Manager unlocks larger `maxResults` + Apollo/Hunter discovery on confirmed opportunities; Assistant tier stops at 'creator decides'.",
     cronMessage:
       "Run opportunity scout: scan UGC marketplaces + creator-call hashtags + local brands per niche/location, dedupe, surface top 3 to brief + full list to Today.",
   },
@@ -620,7 +620,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
       "Call `maya-pitch-strategy`: free / gifted / paid / decline decision + suggested rate. Pure-logic engine on creator size + revenue + prior deals. Feeds `brand_outreach` and `maya-rate-calculator`.",
     triggers: "Folded BEFORE every outbound pitch and BEFORE replying to inbound emails with no proposed dollars.",
     approvalGates: "None on the decision. Downstream `brand_outreach` enforces the creator-approval gate.",
-    escalation: "Manager-only — Coach skips entirely (Coach's pitch path stops at 'consider these brands').",
+    escalation: "Manager-only — Assistant tier skips entirely (Assistant's pitch path stops at 'consider these brands').",
   },
   {
     id: "brand_outreach",
@@ -631,7 +631,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
       "Call `maya-brand-outreach`: compose cold-pitch subject + body + follow-up cadence (gentle/firm/final) tuned to creator voice + pitch angle (partnership/gifted/paid-content/ambassador/event-coverage). Pre-pitch `maya-pitch-strategy` set angle + rate. Always firewalled + voice-applied.",
     triggers: "Event — creator-confirmed opportunity from `opportunity_scout_daily`, or creator manually adds a brand.",
     approvalGates: "Creator-approved by default. Auto-send only when `autoSendThreshold` set + ask under threshold + firewall pass. Manager unlocks Apollo/Hunter discovery via `brandContactDiscoveryEnabled`.",
-    escalation: "Manager-only — Coach never composes cold outbound. Gmail revoke → 15-min-poll-for-2h fallback like `brand_email_triage`.",
+    escalation: "Manager-only — Assistant tier never composes cold outbound. Gmail revoke → 15-min-poll-for-2h fallback like `brand_email_triage`.",
   },
   {
     id: "wiki_mirror_sync",

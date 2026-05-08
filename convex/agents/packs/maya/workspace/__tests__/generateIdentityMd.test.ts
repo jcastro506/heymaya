@@ -82,13 +82,16 @@ describe("generateIdentityMd — SEED fields", () => {
     expect(out).toContain("brands");
   });
 
-  it("Coach tier — creature=content coach + advisory scope sentence (Sprint 9.7+ tier-aware)", () => {
+  it("Assistant tier — creature=content assistant + advisory scope sentence (Sprint 11 rename Coach→Assistant; internal enum stays 'coach')", () => {
     const out = generateIdentityMd({
       creator: baseCreator({ plan: "coach" }),
       picture: null,
     });
-    expect(out).toContain("**Creature:** content coach");
-    // Coach scope — advisory framing, no autonomous brand-pitching wording.
+    // User-visible label is "content assistant"; internal Plan enum stays
+    // "coach" for back-compat — see convex/lib/planFeatures.ts comment
+    // and Sprint 11 rename commit.
+    expect(out).toContain("**Creature:** content assistant");
+    // Assistant scope — advisory framing, no autonomous brand-pitching wording.
     expect(out).toContain("with the creator");
     expect(out).toContain("posting consistently");
     expect(out).not.toContain("pitches brands");

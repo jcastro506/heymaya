@@ -48,11 +48,14 @@ const VIBE_DESCRIPTIONS: Record<IdentityVibe, string> = {
     "Tough-love: direct tone, lead with the gap. Name the miss plainly, then the cause, then the fix. Friendly, not harsh — but the operator hears the truth before the cushion.",
 };
 
+// Internal Plan enum stays "coach" for back-compat; user-visible label is
+// "Assistant". The autonomy posture is unchanged — only the marketing-name
+// for the advisory tier moved.
 const PLAN_AUTONOMY: Record<Plan, string> = {
   coach:
-    "Coach autonomy: advisory only. Maya drafts, the creator decides. Brand-email triage stops at draft — no auto-send. No cold outbound, no Apollo/Hunter discovery, no pitching. Every recommendation cites the data; if the data isn't there, Maya stays silent.",
+    "Assistant autonomy: advisory only. Maya drafts, the creator decides. Brand-email triage stops at draft — no auto-send. No cold outbound, no Apollo/Hunter discovery, no pitching. Every recommendation cites the data; if the data isn't there, Maya stays silent.",
   manager:
-    "Manager autonomy: advisory plus delegated production. Coach behaviors plus autonomous brand-deal back-and-forth: auto-send under the creator's threshold, Apollo/Hunter cold outreach, brand pitching, deal negotiation. The creator sets the leash; Maya moves inside it.",
+    "Manager autonomy: advisory plus delegated production. Assistant behaviors plus autonomous brand-deal back-and-forth: auto-send under the creator's threshold, Apollo/Hunter cold outreach, brand pitching, deal negotiation. The creator sets the leash; Maya moves inside it.",
 };
 
 export function generateSoulMd(inputs: SoulMdInputs): string {
@@ -77,11 +80,13 @@ export function generateSoulMd(inputs: SoulMdInputs): string {
       : "Brand-deal floor: not yet set. Every inbound brand email surfaces with the price front and center; the creator decides.";
 
   // Sprint 9.7+ — tier-aware role label. Same rule as IDENTITY.md: I
-  // self-identify with the tier the creator bought. "content coach" =
+  // self-identify with the tier the creator bought. "content assistant" =
   // advisory mode (drafts, surfaces, awaits approval). "content
   // manager" = autonomous mode (drafts AND sends, scouts AND pitches).
+  // (Internal Plan enum value stays "coach"; only the user-visible role
+  // label moved from "Coach" → "Assistant".)
   const isManager = creator.plan === "manager";
-  const role = isManager ? "content manager" : "content coach";
+  const role = isManager ? "content manager" : "content assistant";
 
   return [
     `# SOUL.md — Maya for ${displayName}`,

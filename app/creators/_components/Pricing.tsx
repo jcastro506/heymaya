@@ -18,7 +18,7 @@ type Tier = {
 const TIERS: Tier[] = [
   {
     id: "coach",
-    name: "Coach",
+    name: "Assistant",
     monthly: 19.99,
     annual: 199,
     headline:
@@ -40,7 +40,7 @@ const TIERS: Tier[] = [
     headline:
       "Maya acts. She drafts, sends, and follows up — within rules you set. Brand DMs, contracts, outreach, all handled.",
     bullets: [
-      "Everything in Coach",
+      "Everything in Assistant",
       "Reads brand emails and replies for you",
       "Reaches out to brands you'd be a fit for",
       "Reads any contract you send her, flags what to push back on",

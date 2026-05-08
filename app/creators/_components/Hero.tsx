@@ -7,7 +7,8 @@ import { ArrowUpRight, Sparkles } from "lucide-react";
  * Editorial hero: left-column headline + right-column "first message" receipt.
  *
  * Single primary CTA — "Start 7 days free" → /checkout?tier=manager&interval=monthly.
- * Manager is the headline experience; Coach is offered later in pricing.
+ * Manager is the headline experience; Assistant is offered later in pricing.
+ * (Internal Plan enum value stays "coach" — see convex/lib/planFeatures.ts.)
  *
  * Headline avoids the word "AI" (operator constraint). Maya is positioned as
  * ONE social media manager, with autonomy as the variable, not personality.

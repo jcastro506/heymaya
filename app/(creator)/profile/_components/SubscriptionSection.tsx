@@ -34,6 +34,13 @@ type CreatorMe = NonNullable<FunctionReturnType<typeof api.creators.me>>;
 type Plan = "coach" | "manager";
 type Interval = "monthly" | "annual";
 
+// User-visible label per plan. Internal enum stays "coach" for back-compat;
+// the marketing surface reads "Assistant" everywhere.
+const PLAN_LABEL: Record<Plan, string> = {
+  coach: "Assistant",
+  manager: "Manager",
+};
+
 const PRICE: Record<Plan, Record<Interval, { price: string; per: string }>> = {
   coach: {
     monthly: { price: "$19.99", per: "/ mo" },
@@ -99,7 +106,7 @@ export function SubscriptionSection({
 
         <div className="mt-4 flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="font-display text-3xl tracking-tight text-paper sm:text-4xl">
-            <span className="capitalize">{plan}</span>
+            <span>{PLAN_LABEL[plan]}</span>
             {","}
             <span className="italic text-paper-dim"> {labelForInterval(interval)}.</span>
           </h2>
@@ -128,7 +135,7 @@ export function SubscriptionSection({
             href={`/checkout?tier=${otherPlan}&interval=${interval}`}
             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-[var(--hairline-strong)] bg-ink-2 px-5 text-sm text-paper transition-colors hover:border-paper-dim"
           >
-            Switch to <span className="capitalize">{otherPlan}</span>
+            Switch to <span>{PLAN_LABEL[otherPlan]}</span>
             <ArrowUpRight className="h-4 w-4" />
           </Link>
           <Link
