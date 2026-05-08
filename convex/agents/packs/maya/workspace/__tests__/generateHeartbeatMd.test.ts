@@ -60,7 +60,10 @@ describe("generateHeartbeatMd — content shape", () => {
 
   it("declares the idle-window guard (10pm-7am) with the URGENT override and named overrides", () => {
     const out = generateHeartbeatMd({ plan: "manager" });
-    expect(out).toContain("Idle 10pm-7am");
+    // Sprint 11.1 — header reframed from "Idle 10pm-7am" config-shorthand to
+    // "10pm-7am local: I don't push." human prose. The window itself + the
+    // URGENT override + both named overrides remain intact.
+    expect(out).toContain("10pm-7am local");
     expect(out).toContain("URGENT");
     // The two URGENT overrides spelled out in the brief: post-crash + paid-deal-pending.
     expect(out).toContain("0.3× baseline");

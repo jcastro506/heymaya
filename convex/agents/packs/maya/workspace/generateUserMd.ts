@@ -173,9 +173,9 @@ export function generateUserMd(inputs: UserMdInputs): string {
   return [
     `# USER.md — ${displayName}`,
     "",
-    "Who the creator is, how to address them, what they're building. Loaded every session per OpenClaw convention. Updated only by the onboarding pipeline + Profile screen edits — Maya does not mutate this file at runtime.",
+    `What I know about ${displayName} — who they are, how to reach them, what they're working toward. I read this every session. The onboarding flow + their Profile edits write it; I don't edit it myself.`,
     "",
-    "## Identity",
+    "## Who they are",
     "",
     `- **creatorId:** \`${creator._id}\` ← REQUIRED for every \`POST /lc_maya/*\` call. Use this exact value in the JSON body.`,
     `- **Display name:** ${displayName}`,
@@ -227,23 +227,23 @@ export function generateUserMd(inputs: UserMdInputs): string {
     audienceBlock,
     "",
     ...(watchedBlock ? [watchedBlock, ""] : []),
-    "## Career snapshot",
+    "## Where they're at",
     "",
     `- **Career stage:** ${careerStage}`,
     `- **Geographic location:** ${location}`,
     `- **Monthly revenue (rough):** ${monthlyRevenue}`,
     `- **Active revenue streams:** ${revenueStreams}`,
     "",
-    "## Long-term goals",
+    "## What they're working toward",
     "",
     longTermGoals,
     "",
     "## Brand-deal posture",
     "",
     `- **Floor rate:** see \`SOUL.md\` § brand-deal floor.`,
-    `- **Auto-send threshold:** see \`connectedAccounts.autoSendThreshold\` (Profile screen). When unset, every brand reply waits for creator approval.`,
+    `- **Auto-send threshold:** see \`connectedAccounts.autoSendThreshold\` (Profile screen). When unset, every brand reply waits for their approval.`,
     "",
-    "## Communication preferences",
+    "## How I talk to them",
     "",
     `- **Primary channel:** ${channel}`,
     `- **Expected cadence:** ${cadence}`,
@@ -313,9 +313,13 @@ function renderWatchedObservations(
 
   const lines: string[] = ["## What I observed watching your videos"];
   lines.push("");
+  lines.push(
+    "Notes I took while watching the last 30. Not a report — texture I can pull from when I'm talking to you. Use this; it's the difference between sounding like a friend who watched and sounding like a dashboard."
+  );
+  lines.push("");
 
   if (vp) {
-    lines.push(`**Voice & personality:**`);
+    lines.push(`**Their voice on camera:**`);
     if (vp.humorType) lines.push(`- Humor: ${vp.humorType}`);
     if (vp.energyLevel) lines.push(`- Energy: ${vp.energyLevel}`);
     if (vp.onCameraPersona) lines.push(`- On-camera: ${vp.onCameraPersona}`);
@@ -328,7 +332,7 @@ function renderWatchedObservations(
   }
 
   if (vs) {
-    lines.push(`**Visual style:**`);
+    lines.push(`**How it looks:**`);
     if (vs.framing) lines.push(`- Framing: ${vs.framing}`);
     if (vs.aesthetic && vs.aesthetic.length > 0) {
       lines.push(`- Aesthetic: ${vs.aesthetic.join(", ")}`);
@@ -337,7 +341,7 @@ function renderWatchedObservations(
       lines.push(`- Settings seen: ${vs.settingsSeen.join(", ")}`);
     }
     if (vs.strengths && vs.strengths.length > 0) {
-      lines.push(`- Strengths: ${vs.strengths.join("; ")}`);
+      lines.push(`- What's working: ${vs.strengths.join("; ")}`);
     }
     if (vs.weaknesses && vs.weaknesses.length > 0) {
       lines.push(`- Watch-outs: ${vs.weaknesses.join("; ")}`);
@@ -346,7 +350,7 @@ function renderWatchedObservations(
   }
 
   if (re.length > 0) {
-    lines.push(`**Recurring elements** (people/pets/locations/props that span videos):`);
+    lines.push(`**Recurring people, pets, places, props** (the cast and the set):`);
     for (const el of re) {
       lines.push(`- **${el.name}** (${el.kind}): ${el.roleSummary}`);
     }
@@ -354,7 +358,7 @@ function renderWatchedObservations(
   }
 
   if (wm.length > 0) {
-    lines.push(`**Warmth material** — raw lines I can paraphrase into the first iMessage. Pick ONE per opening sequence (never enumerate). \`safe-to-use\` entries go verbatim-paraphrased; \`check-with-creator\` entries are phrased as questions only.`);
+    lines.push(`**Warmth material** — lines I noticed I could paraphrase if there's a real opening. Pick ONE per opening sequence, never enumerate. \`safe-to-use\` is a paraphrase I can lead with; \`check-with-creator\` is phrased as a question only — never asserted.`);
     for (const w of wm) {
       lines.push(`- [${w.confidence}] ${w.text}`);
     }

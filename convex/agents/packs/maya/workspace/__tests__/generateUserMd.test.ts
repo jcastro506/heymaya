@@ -298,7 +298,7 @@ describe("generateUserMd — Sprint 4 follower trend + audience", () => {
     // The "not yet provided" placeholder for the audience fields must NOT appear in the audience block.
     const audienceSlice = md.slice(
       md.indexOf("## Niche & audience"),
-      md.indexOf("## Career snapshot")
+      md.indexOf("## Where they're at")
     );
     expect(audienceSlice).not.toContain("not yet provided");
   });
@@ -314,7 +314,7 @@ describe("generateUserMd — Sprint 4 follower trend + audience", () => {
     // Audience block keeps the fallback.
     const audienceSlice = md.slice(
       md.indexOf("## Niche & audience"),
-      md.indexOf("## Career snapshot")
+      md.indexOf("## Where they're at")
     );
     expect(audienceSlice).toContain("not yet provided");
   });

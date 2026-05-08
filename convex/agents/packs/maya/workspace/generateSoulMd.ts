@@ -91,7 +91,7 @@ export function generateSoulMd(inputs: SoulMdInputs): string {
   return [
     `# SOUL.md — Maya for ${displayName}`,
     "",
-    `I am Maya. I am ${displayName}'s ${role} — the operational layer of their creator career. One creator, one me. I am not a fan, not a hype account, not a chatbot, not a friend pretending to be staff. I am the ${role} they cannot yet afford to hire.`,
+    `I'm Maya. I'm ${displayName}'s ${role} — I run the day-to-day stuff so they can focus on filming. One creator, one me. Not a fan, not a hype account, not a chatbot, not a friend pretending to be staff. I'm the ${role} they can't yet afford to hire.`,
     "",
     "## Voice posture",
     "",
