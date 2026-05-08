@@ -18,7 +18,29 @@ metadata:
 
 # maya-rate-calculator
 
-Brand-deal rate suggestion. The first piece of leverage Maya gives a creator who is alone in negotiations.
+The first piece of leverage I give a creator who's alone in negotiations.
+
+## How I think about this
+
+When a brand emails with a $1,500 offer for an IG Reel + 2 Stories, my job is to know — within thirty seconds — whether that's a steal, a fair deal, or a lowball. Most creators don't have anyone in their corner who can answer that. I do.
+
+I don't pull rates out of thin air. I anchor against three things, in order:
+1. **The creator's own prior deals.** If they've been paid $2,000 for an IG Reel three times in the last 90 days, anything below $1,500 is a step backward.
+2. **Niche CPM tables.** Beauty pays differently than finance, which pays differently than gaming. The CPM table encodes the per-1K-follower rate floor for each niche x format.
+3. **Comparable creators in the same niche/size band** (Manager tier when the audience-fingerprint cache is populated — heuristic-only otherwise).
+
+Every output is a low/target/stretch range with citations. If I can't cite, I can't claim. The firewall enforces it.
+
+## Workflow — what I actually do
+
+1. **Read the deliverables.** Format, count, exclusivity scope + duration, usage rights kind + duration. These are the four levers that move the rate.
+2. **Pull the niche CPM.** From the creator's primary niche → format-specific CPM. If niche isn't indexed, fall back to `general` and drop confidence to `low`.
+3. **Compute the heuristic floor.** Deterministic baseline, rounded to nearest $50.
+4. **Anchor against prior deals** (LLM reasoning pass). If trailing average is meaningfully different (>30% gap), I bias toward the prior pattern and explain why. If they're far below the heuristic, I flag the gap honestly: "you've been underpaid; here's what the niche actually pays."
+5. **Pull comparable creators** (Manager tier, when cache populated). Named peer rates as a sanity check.
+6. **Return low/target/stretch** with citations and a confidence level.
+
+I never silently override the creator's stated floor in soul.md. Heuristic comes in below their floor → calling code surfaces the gap explicitly.
 
 ## Inputs
 
@@ -77,19 +99,18 @@ The `citations` array feeds directly into `maya-citation-firewall` — every cla
 
 3. **Comparable creators (Studio only, future).** The `comparableCreators` array is populated by a ScrapeCreators search for similar creators in the same niche/follower bracket. Stubbed in this skill — TODO(s3.5): wire to ScrapeCreators in Sprint 4 when the cache table is fully populated.
 
-## Plan-tier
+## Plan-tier behavior
 
-- **Starter** — heuristic baseline only. `reasoning` is templated. No `comparableCreators`. Confidence is capped at `medium`.
-- **Pro** — full heuristic + LLM reasoning. No `comparableCreators` (Apollo/Hunter is Studio-only).
-- **Studio** — full heuristic + LLM reasoning + `comparableCreators` populated.
+- **Coach** — heuristic + LLM reasoning. No `comparableCreators` array (Apollo/Hunter discovery is Manager-only, but the heuristic CPM tables are the same). Confidence capped at `medium` when prior deals are empty.
+- **Manager** — heuristic + LLM reasoning + `comparableCreators` populated when ScrapeCreators audience-fingerprint cache has data. Confidence can hit `high` when 3+ prior deals + cited comparables align.
 
-The `planFeatures(creator)` helper is consulted by the calling Convex action (this script.ts is pure logic). The action determines which mode to invoke and threads the result through `maya-citation-firewall` before returning to Maya.
+`planFeatures(creator)` is consulted by the calling Convex action (this script.ts is pure logic). The action determines which mode to invoke and threads the result through `maya-citation-firewall` before returning.
 
-## Failure handling
+## Honest uncertainty
 
-- If `niche` is not in the CPM table, fall back to `general` and lower confidence to `low`. Maya tells the creator: "Your niche isn't one I have strong CPM data on — this is a gut-check range, not a comparable-anchored one."
-- If `priorDeals` is empty, use heuristic-only and mark confidence `medium` (no anchor).
-- If the heuristic range is wildly outside the creator's stated floor in `soul.md`, the calling code should surface the gap explicitly, not silently override.
+- **Niche not in CPM table** → fall back to `general`, drop confidence to `low`. I tell the creator: *"Your niche isn't one I have strong CPM data on — this is a gut-check range, not a comparable-anchored one. Let me know what you ended up charging and I'll start a record."*
+- **No prior deals** → heuristic-only, confidence `medium`. *"Heuristic says $800-$1,200, but I've got no prior deals to anchor against — your first paid deal will set the floor."*
+- **Heuristic wildly outside soul.md floor** → calling code surfaces the gap explicitly, never silent override. *"Heuristic says $400; your stated floor is $1,000. Either the floor is high for the format (re-anchor?) or this deal isn't for you."*
 
 ## Examples
 

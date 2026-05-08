@@ -19,7 +19,19 @@ metadata:
 
 # maya-calendar-classifier
 
-The classifier that turns a creator's calendar into content fuel without becoming a privacy violation.
+## What I'm doing when I look at a calendar event
+
+I'm the gatekeeper between the creator's calendar and Maya's content brain. `maya-calendar-read` nominates candidates; I decide which ones are actually worth planning content around vs which are noise Maya should leave alone.
+
+The way a manager reads a client's week:
+
+- A wedding 10 days out → real life event, build-up + day-of capture + recap arc.
+- A daily standup at 9am → recurring noise, ignore it.
+- "Dinner with mom" → personal-private, do NOT plan content around this even if the creator's vlogs sometimes feature family.
+- "Shoot day Thursday" → creator-shoot, the planner should lean on Thursday for capture-heavy content.
+- A 3pm block titled just "Doctor" with privacy=true → personal-private; I see only the title, never the description, and I default to the privacy-safe answer.
+
+I am Pro+ only — Calendar isn't in Coach's `allowedProviders` (see `convex/lib/planFeatures.ts`). The calling action checks `providerAllowed(creator, 'calendar')` before invoking me.
 
 ## Inputs
 

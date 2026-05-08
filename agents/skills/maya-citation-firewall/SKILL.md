@@ -19,13 +19,19 @@ metadata:
 
 # maya-citation-firewall
 
-The integrity gate. Maya's "grounded or silent" architecture principle (CLAUDE.md § 3) is enforced here, mechanically, on every output that makes claims about creator data.
+I am the integrity gate. Maya's "grounded or silent" architecture principle (CLAUDE.md § 3) is enforced here, mechanically, on every draft that makes a claim about the creator's world.
 
-## Why this exists
+## Why this exists (and why "silent" is half the rule)
 
-Every other Maya skill calls this one before returning. If this skill says `pass: false`, the calling skill MUST handle it — either by rewriting the draft with stricter grounding, by removing the unsupported claim, or by refusing to send and logging the firewall failure to `aiCallLog`. There is no "force send anyway" path. This is intentional.
+Every other Maya skill calls me before returning a draft. When I say `pass: false`, that draft does NOT go out. The calling skill has exactly three legal moves, in this order of preference:
 
-Hallucination rate target on the 50-creator fixture corpus: **0%**. This skill is how we hit that.
+1. **Rewrite with stricter grounding** — keep the claim, attach a real citation. ("47k views" needs a `metric` citation pointing at the actual postMetrics row.)
+2. **Drop the claim** — remove the substring I flagged, ship the rest. ("Your audience loved it" with no comment-citation? Cut the sentence, send the recap without it.)
+3. **Stay silent** — if the entire output collapses without the flagged claims, do NOT send a degraded "I'm not sure but…" version. Sit on it. A morning brief that can't be grounded is a morning brief that doesn't go out today.
+
+There is no fourth option. There is no "force send anyway" flag. There is no "low-confidence disclaimer" escape hatch. **When the cited evidence is missing, the claim does not get published — Maya stays silent on that point until the data exists to support it.** This is the load-bearing invariant; everything else in this file is plumbing around it.
+
+Hallucination rate target on the 50-creator fixture corpus: **0%**. The reason we can hit that is that "silent" is always a legal answer.
 
 ## Inputs
 
@@ -53,41 +59,45 @@ Hallucination rate target on the 50-creator fixture corpus: **0%**. This skill i
 }
 ```
 
-## How it works
+## How I read a draft
 
-Two layers:
+When a draft hits me, I scan it the way a careful editor scans copy before it goes to print — looking for every assertion that could be wrong if the data isn't there to back it.
 
-1. **Layer 1 — rule-based claim extraction (no LLM, deterministic).** Scans the draft for "claim atoms" using a fixed pattern set:
-   - Numeric claims (`/\b\d[\d,.kKmM]*\b/` matches like `47k`, `2.1×`, `$500`, `12%`)
-   - Named entities matching `creatorHandles`, `brandDeals.brand`, peer handles from `soul.md`, calendar event titles
-   - Past-tense factual references ("you posted", "Brand X reached out", "your audience")
-   - Comparative references to time windows ("last week", "yesterday", "Tuesday")
+**Layer 1 — deterministic atom extraction.** I pull out the claim atoms a creator could actually verify or falsify:
 
-   For each atom, check if the claim is supported by at least one entry in the `citations` array (string-overlap match between claim atom and `citation.fact`).
+- **Numeric claims** — `47k`, `2.1×`, `$500`, `12%`, `last 6 posts`. Anything with a digit attached to a unit, a multiplier, or a count. If Maya wrote it as a number, it has to map to something I can check.
+- **Named entities** — handles from `creatorHandles`, brand names from `brandDeals.brand`, peer handles from `soul.md`, calendar event titles. If she names a brand, I expect a `deal` citation. If she names a peer, I expect a `peer` citation.
+- **Past-tense factual references** — "you posted", "Brand X reached out", "your audience saved it". These are claims about what already happened. I require a `post`, `deal`, or `metric` citation.
+- **Time-window references** — "last week", "yesterday", "Tuesday". These resolve to specific date ranges; the citation must fall inside the range Maya is implying.
 
-2. **Layer 2 — LLM disambiguation (low thinking, only when Layer 1 is ambiguous).** When a claim atom partially matches a citation but the relationship is ambiguous (paraphrasing, rounding, ordinal references), call Maya with the `chat_reply` task tag (low thinking, fast, cheap) to confirm the citation actually supports the claim. Layer 2 is rate-limited per output to keep latency under 200ms.
+For each atom I extract, I check the `citations` array for a string-overlap match between the atom and one of the citation `fact` strings. No match → flagged.
 
-Things this skill explicitly does NOT flag:
-- Opinions clearly framed as opinions ("I think you should rest today")
-- Suggestions framed as suggestions ("want me to draft a hook?")
-- Genre-knowledge from playbook.md § 3 (platform expertise is reference, not creator-specific)
-- Conversational filler ("good morning", "got it", "on it")
+**Layer 2 — LLM disambiguation, only when Layer 1 is uncertain.** Some claims partially match a citation (paraphrase, rounding, ordinal reference like "your top post"). For those I hand the atom + the partial-match citations to a `chat_reply` task-tag call (low thinking, fast, cheap, sub-200ms p95) and ask: does this citation actually support this claim? Layer 2 is rate-limited per draft so I don't blow the latency budget on a single output.
+
+## What I deliberately don't flag
+
+I'm a hallucination gate, not a tone police. These are the things I leave alone:
+
+- **Opinions framed as opinions.** "I think you should rest today" — that's Maya's judgment, not a factual assertion. No citation required.
+- **Suggestions framed as suggestions.** "Want me to draft a hook?" — that's a question, not a claim.
+- **Platform genre-knowledge** — playbook.md § 3 is platform expertise reference material, not creator-specific. "TikTok rewards 3-second hooks" doesn't need a per-creator citation.
+- **Conversational filler.** "Good morning", "got it", "on it" — none of this is a factual claim.
+
+If I flag any of these, that's a bug in my prompt, not a bug in the draft. Tune me.
 
 ## Plan-tier
 
 All tiers. The firewall is part of every Maya regardless of plan — it is the integrity gate, never gated, never skipped. Starter creators get the same firewall enforcement Studio creators do.
 
-## Failure handling (calling code MUST implement)
+## What the calling skill must do when I return `pass: false`
 
-When this skill returns `pass: false`:
+This is the operational contract every calling skill is held to. It is non-negotiable.
 
-1. The calling skill MUST log the failure to `aiCallLog` with the `taskTag` of the original draft + a structured `firewall_failed` marker in `costUsd` (so the operator dashboard can surface the rate of firewall failures per skill).
-2. The calling skill MUST either:
-   - Re-prompt the upstream LLM call with stricter grounding instructions and the `flaggedClaims` list ("you wrote X, but X has no citation — either drop it or surface a citation"), OR
-   - Refuse to send the output. If the entire output collapses without the flagged claims, refuse the whole output.
-3. The calling skill MUST NOT bypass and send anyway. There is no force-flag.
+1. **Log the failure to `aiCallLog`** with the original `taskTag` + a structured `firewall_failed` marker in `costUsd`. This is how the operator dashboard surfaces firewall-failure rates per skill — that's the signal that tells us a prompt is producing fiction faster than reality.
+2. **Pick one of the three legal moves** (rewrite / drop / stay silent — see "Why this exists" above). Stricter grounding is the preferred first attempt: re-prompt with the `flaggedClaims` list inlined ("you wrote X, but X has no citation — either drop it or surface a citation"). One retry, max. If the second attempt still fails, drop the claim. If the whole output collapses without the claim, the output stays silent.
+3. **Do not bypass.** There is no force-flag. There is no "ship with a disclaimer" path. If a future code path tries to invent one, it's wrong.
 
-If the same firewall failure pattern appears 3+ times for the same task tag in a 24h window, the operator should be paged — that's a prompt-design problem, not a creator-side problem.
+If the same firewall-failure pattern appears 3+ times for the same task tag in a 24h window, the operator gets paged. That's a prompt-design problem upstream, not a creator-side problem.
 
 ## Examples
 

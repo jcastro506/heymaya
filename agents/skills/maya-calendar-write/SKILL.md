@@ -34,17 +34,21 @@ metadata:
 
 # maya-calendar-write
 
-Lets the creator block calendar time through Maya. Pure-logic parsing +
-validation; the orchestrating action issues the actual Google Calendar
-v3 `events.insert` call via `createGoogleCalendarEvent` in
-`convex/creatorMayaV0/backend.ts`.
+## What I'm doing when I write to the calendar
 
-## Triggers
+I am the only path Maya has to put something ON the creator's calendar. The creator says "block 3pm Tuesday for filming" — I'm what turns those words into an actual event in their Google Calendar. Pure-logic parsing + validation; the orchestrating action issues the actual `events.insert` call via `createGoogleCalendarEvent` in `convex/creatorMayaV0/backend.ts`.
 
-- **Direct request from creator** — "block 3pm Tuesday for filming," "put
-  a hold on Saturday morning for the wedding shoot," "schedule batch
-  recording 9–11am Wednesday."
-- Maya never writes to the calendar without an explicit instruction.
+The job is shaped like a senior assistant taking dictation — I listen for the time, the duration, the reason, and I confirm anything that's even slightly ambiguous BEFORE the calendar gets touched. "Next Tuesday" two days into the week is genuinely ambiguous (this Tuesday vs the following one); I flag it so Maya can text back "this Tuesday or next?" instead of guessing wrong and making the creator delete an event.
+
+## Cadence — strictly creator-initiated
+
+I never run on cron. I never run on heartbeat. I run only when the creator explicitly tells Maya to block time:
+
+- "block 3pm Tuesday for filming"
+- "put a hold on Saturday morning for the wedding shoot"
+- "schedule batch recording 9–11am Wednesday"
+
+Maya does not write to the calendar on her own. Not "I noticed you have free time, I added a content block" — never. Calendar writes are a permission boundary; the creator owns it, I execute on request.
 
 ## Inputs
 
@@ -89,20 +93,15 @@ The skill is structured around a 3-stage call sequence:
 
 Maya texts the `htmlLink` back so the creator can verify the block landed.
 
-## Guards (validateEventBeforeWrite)
+## Guards — the three things I will not write
 
-Three hard refusals — the action MUST NOT issue the Google API call if any
-of these fire:
+The validate-before-write step is where I hold the line. If any of these fire, the action MUST NOT issue the Google API call:
 
-1. **No past start times.** Refuses any event whose `startMs` is before
-   `Date.now()` (sanity — Maya should not be backfilling).
-2. **Duration cap of 8 hours.** Anything longer is treated as a parse
-   error. Filming days that genuinely run that long can be split into
-   multiple holds.
-3. **Banned-topic title.** If the creator's `boundaries.banned_topics`
-   list (read from the creator picture / intake) matches the event title,
-   the skill refuses. The creator should not be able to ask Maya to write
-   the very topic they told her not to surface.
+1. **No past start times.** Anything whose `startMs` is before `Date.now()` gets refused. Maya should not be backfilling yesterday's events; if she's putting a hold on the calendar, it's forward-looking. Sanity check, not policy.
+2. **Duration cap of 8 hours.** Anything longer is a parse error bouncing back. Real filming days that genuinely run 12 hours can be split into morning + afternoon holds; one block longer than a workday is almost always a misparse ("Saturday for the wedding shoot" doesn't mean 24h on Saturday).
+3. **Banned-topic title.** If the creator's `boundaries.banned_topics` list (read from the picture / intake) matches the event title, I refuse. The creator told Maya not to surface this topic; she should not be able to ask Maya to write the topic to her own calendar by accident.
+
+A guard refusal is surfaced verbatim by the orchestrator — Maya quotes the reason back so the creator knows exactly what bounced and why ("I won't write a 12-hour block — split into morning/afternoon?").
 
 ## Failure handling
 

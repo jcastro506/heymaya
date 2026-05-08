@@ -29,21 +29,29 @@ metadata:
 
 # maya-opportunity-scout
 
-## Why this exists
+## How I think about this
 
-The hardest gap between a 50K creator and a working pro creator isn't
-talent — it's deal flow. Pros have inboxes full of inbound; everyone else
-has to hunt. UGC marketplaces (Aspire, GRIN, Creator.co), creator-call
-tweets, and local brand searches are public information, but no single
-creator has time to scan them daily. This skill is the daily scan,
-filtered to opportunities that fit THIS creator's niche, follower band,
-and (when relevant) location.
+The hardest gap between a 50K creator and a working pro creator isn't talent — it's deal flow. Pros have inboxes full of inbound; everyone else has to hunt. UGC marketplaces (Aspire, GRIN, Creator.co), creator-call tweets, and local brand searches are public information, but no single creator has time to scan them daily. I do that scan, filtered to opportunities that fit THIS creator's niche, follower band, and (when relevant) location.
 
-The operator-requested addition: **local brand search**. Most beginner-
-to-mid creators massively under-pitch their own city. A small fitness
-brand in Austin will reply to an Austin-based 30K fitness creator at
-~10× the rate of a NYC brand they have no geographic anchor to. Maya
-surfaces local brands proactively — that's the conversion edge.
+**Local brand search** is the highest-conversion source I surface. Most beginner-to-mid creators massively under-pitch their own city. A small fitness brand in Austin will reply to an Austin-based 30K fitness creator at roughly 10x the rate of a NYC brand they have no geographic anchor to. I surface local brands proactively — that's the conversion edge.
+
+The output of this skill flows into `maya-pitch-strategy` (decides angle + rate) → `maya-brand-outreach` (drafts the email + enforces the 5/day cap). I'm the surface; outreach is the act.
+
+## Workflow — what I actually do
+
+1. **Build the deterministic query set** (`buildScoutQueries` in script.ts) — one per source, parameterized by niche / location / platforms.
+2. **Pull candidates** via Brave Search (site-restricted) and ScrapeCreators X-search where available. Top-N per query, dedupe on canonical URL within the cycle.
+3. **Drop seen URLs** against `opportunityScoutSeen` for this creator. Same URL never surfaces twice.
+4. **Fit-score the survivors** (model router, medium thinking) on niche match, follower-band match, geographic match, platform match.
+5. **Firewall every reasoning string** against the source URL + the fit factors named in the score.
+6. **Persist seen** so next cycle skips them.
+7. **Return ranked-by-fit.** The morning brief takes the top 3; Today shows the full list; outreach pipeline pulls anything tagged `pitch`.
+
+## When I sit out
+
+- **Brave returns 0 results.** Empty return, honest message: *"Quiet day on the boards — no new opportunities to surface."* I do NOT invent listings.
+- **All-seen day.** Same empty return: *"Surface is caught up — I'll re-scan tomorrow."*
+- **Suspicious-snippet load.** If >50% of returned snippets look like promo/affiliate spam (common on cluttered query days), I drop the cycle and tell the creator: *"Today's scrape was mostly affiliate-spam — sitting out, will re-run tomorrow."*
 
 ## Inputs
 
@@ -164,15 +172,10 @@ must cite which factors drove it.
 
 ## Plan-tier gating (server-side, fail-closed)
 
-- `starter`: action throws `PlanGateError` at entry.
-  `planFeatures(creator).opportunityScoutEnabled === false` for Starter.
-- `pro`: enabled. `maxResults` default 10. Local-brand-search runs.
-  Surfaced opportunities can flow to brand-outreach when the creator
-  manually adds a contact email.
-- `studio`: enabled. `maxResults` default 20. Studio additionally invokes
-  `brandContactDiscoveryEnabled` workflow on `pitch`-action opportunities
-  to backfill contact email/name via Apollo/Hunter — at the wrapping
-  action layer, not in this skill.
+`opportunityScoutEnabled` is `true` on both Coach and Manager.
+
+- `coach`: enabled. `maxResults` default 10. Local-brand-search runs. Surfaced opportunities can flow to brand-outreach as drafts when the creator manually pastes a contact email — autonomous send is Manager-only.
+- `manager`: enabled. `maxResults` default 20. The wrapping action invokes `brandContactDiscoveryEnabled` (Apollo/Hunter) on `pitch`-action opportunities to backfill contact email/name when an Apollo key is configured. Without a key, the manager-tier flow falls back to coach-tier behavior (creator-paste required).
 
 ## Adversarial / robustness
 

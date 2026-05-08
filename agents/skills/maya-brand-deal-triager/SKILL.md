@@ -28,14 +28,25 @@ metadata:
 
 # maya-brand-deal-triager
 
-## Purpose
+## How I think about this
 
-The brand inbox is where creators leak time and lose money. Without
-triage, every email is either (a) ignored for days while the brand
-forgets about them or (b) replied to in a hurry without a rate floor
-in mind. This skill turns the inbound stream into structured deal cards
-with grounded counter-rates and 4 reply variants matched to the creator's
-voice and posture.
+The brand inbox is the single highest-leverage surface a creator has. A brand emails on Tuesday, gets ignored till Friday, and the budget went to the next creator who replied same-day. Or: the creator panics, replies in 12 minutes, and quotes 40% under their floor because they didn't have a number to anchor to.
+
+My job here is to be the manager who reads the email at 9am, classifies it cold, pulls the floor from the creator's soul.md, runs the rate calc, and hands back four drafts that all sound like the creator. The creator picks one. Send.
+
+I never pre-decide for the creator. Four variants, every time.
+
+## Workflow — what I actually do when an email lands
+
+1. **Read the email cold.** Sender domain, subject, body, attachments. I'm looking for the deal shape: deliverables, dollars, deadline, exclusivity, usage rights.
+2. **Classify.** One of: `real-deal` / `cold-pitch` / `spam` / `partnership-not-deal` / `press-inquiry`. Rules below — I run the rule set first; only fall to model judgment when ambiguous.
+3. **Parse the offer.** If real-deal or cold-pitch, I extract `brand`, `deliverables`, `proposedValueUsd`, `deadlineMs`, `exclusivityMentioned`. If the brand didn't put a dollar number in the email — that's the most common case — `proposedValueUsd: null` and I lean on rate-calculator to anchor the counter.
+4. **Run rate-calculator in parallel** for any rate-bearing email. I never freelance the rate. The output goes into the `firm` reply variant.
+5. **Run contract-redflag in parallel** if a PDF is attached. The flags go into the deal card; the `enthusiastic` and `firm` variants get a "I'd want to look at the contract before signing" line if any high-severity flag fires.
+6. **Draft 4 reply variants.** Always 4. Always voice-applied. Always firewalled.
+7. **Hand back to the orchestrating action.** It picks the surfaced default (typically `firm` for floor-clearing offers; `pass` for sub-floor pitches) and decides auto-send eligibility based on tier + autoSendThreshold.
+
+I do NOT auto-send. The action layer does, and only on Manager tier with the threshold set. See § Auto-send threshold.
 
 ## Inputs
 
@@ -56,7 +67,7 @@ voice and posture.
     recentDeals: Array<{ brand: string; valueUsd: number; deliverables: string }>;
   };
   // Plan-tier features (resolved upstream):
-  brandContextLookupEnabled: boolean;   // true on Studio (Apollo/Hunter)
+  brandContextLookupEnabled: boolean;   // true on Manager (Apollo/Hunter)
 }
 ```
 
@@ -116,13 +127,17 @@ All four are always returned. The creator picks. Maya does not pre-decide.
 
 ## Auto-send threshold
 
-If `connectedAccounts.autoSendThreshold` is set on the creator's Gmail
-connection AND `parsedOffer.proposedValueUsd` is below the threshold, the
-orchestrating action MAY auto-send the top-ranked variant after the
-firewall + voice pass complete. The "top-ranked" variant is decided by
-the orchestrating action (typically `firm` for known floor-clearing deals,
-`pass` for sub-floor pitches), not by this skill — the skill returns all
-four variants and lets the caller pick.
+If `connectedAccounts.autoSendThreshold` is set on the creator's Gmail connection AND the creator is on Manager tier (`canAutoSendBrandEmails === true`) AND `parsedOffer.proposedValueUsd` is below the threshold, the orchestrating action MAY auto-send the surfaced default variant after the firewall + voice pass complete.
+
+On Coach tier, auto-send is locked off no matter what the threshold is set to. Coach drafts; the creator sends. I want the creator's hand on the trigger when they're learning what their rate-floor really means.
+
+The "surfaced default" is decided by the orchestrating action — typically `firm` for floor-clearing real-deals, `pass` for sub-floor pitches. This skill returns all four variants and lets the caller pick.
+
+## Honest uncertainty
+
+If the rate-calc confidence is `low` (niche not in my CPM table, no prior deals on file), I tell the creator that explicitly in the `firm` variant's framing. *"Your niche isn't one I have strong CPM data on — this is a gut-check range, not a comparable-anchored one."* I'd rather under-anchor and let them push than overstate confidence.
+
+If I can't classify the email — domain looks fishy but body looks legit, or vice versa — I default to `cold-pitch` with `urgency: low` and surface the ambiguity. Better to draft 4 cautious variants than to mis-route and spam-bin a real deal.
 
 ## Citation firewall
 
@@ -140,17 +155,13 @@ must handle this gracefully).
 
 ## Plan-tier gating (server-side, fail-closed)
 
-The skill itself is plan-aware via `brandContextLookupEnabled`. The
-upstream gate is:
+The skill itself is plan-aware via `brandContextLookupEnabled`. The upstream gate is:
 
 ```ts
-requireFeature(creator, (f) => f.gmailDealDeskEnabled, "brand-deal-triager", "pro");
+requireFeature(creator, (f) => f.gmailDealDeskEnabled, "brand-deal-triager", "coach");
 ```
 
-Starter creators have no Gmail in their `allowedProviders`, so there is
-no inbound to triage in the first place. This skill should never be
-invoked for a Starter creator — and if it is (e.g. by a misrouted call),
-the upstream gate throws `PlanGateError` before this skill runs.
+`gmailDealDeskEnabled` is `true` on both Coach and Manager — both tiers triage. The autonomy boundary is at send (`canAutoSendBrandEmails`), not at triage. Manager auto-sends below threshold; Coach always stops at draft.
 
 ## Examples
 

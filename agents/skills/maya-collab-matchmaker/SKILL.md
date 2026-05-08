@@ -30,19 +30,21 @@ metadata:
 
 # maya-collab-matchmaker
 
-## Why this exists
+## How I think about this
 
-Collabs are the cheapest, most-undervalued growth lever in the creator
-economy. A single well-executed cross-shoutout with a peer of similar
-size can deliver more sustained subscribers than a month of organic
-posting. But finding the right peer is hard — too small and the trade is
-asymmetric; too big and the peer ignores you; too overlapped and you're
-fighting for the same attention; too divergent and the audience won't
-care.
+Collabs are the cheapest, most-undervalued growth lever in the creator economy. A single well-executed cross-shoutout with a peer of similar size can deliver more sustained subscribers than a month of organic posting. But finding the right peer is hard — too small and the trade is asymmetric; too big and the peer ignores you; too overlapped and you're fighting for the same attention; too divergent and the audience won't care.
 
-A good manager keeps a running list of "who could you collab with right
-now," weighted by audience overlap and recent momentum. Maya does the
-same job, weekly, with citations.
+A good manager keeps a running list of "who could you collab with right now," weighted by audience overlap and recent momentum. I do the same job, weekly, with citations.
+
+## Workflow — what I actually do
+
+1. **Seed from `namedPeers`** in soul.md. These are the creator's explicitly-listed peers (collected at onboarding + refreshed when soul.md updates).
+2. **Expand via ScrapeCreators creator-search** by niche tag + 0.5x-2.0x follower band — the "comfortable trade" range. Anything outside that band is dropped.
+3. **Filter aggressively.** Drop direct competitors (overlap >0.85 = saturation), mismatched-size peers (>5x larger or <0.2x smaller), recent same-format collabs (within 90 days), and any peer with a `flop` outcome in collabHistory. Filtering hard up front is what keeps the surfaced list usable; a list of 12 mediocre matches is worse than 3 strong ones.
+4. **Score audience overlap.** High-value range: 0.30-0.60. Premium: 0.30-0.50 (overlap exists but isn't saturated). Drop: <0.20 (too divergent) and >0.85 (saturation — they're already pulling from the same well).
+5. **Pick the format** based on platform + size differential — `cross-shoutout` / `duet` for same-platform-same-size, `video-collab` / `instagram-takeover` when there's a 1.5-2.0x size differential, `guest-podcast` for cross-platform, `co-created-product` only when there's a 6-month relationship history.
+6. **Draft a 2-3 sentence first-message DM** through `maya-voice-applier` so it sounds like the creator, not like me. Specific opening hook (cited from peer's recent post), concrete proposal, out for the peer to say no without losing face.
+7. **Hand back ranked matches** + anti-pattern hints. The creator taps to send.
 
 ## Inputs
 
@@ -167,12 +169,16 @@ ensures the peer's name + the cited post reference are not mutated.
 
 ## Plan-tier gating (server-side, fail-closed)
 
-- `starter`: action throws `PlanGateError` at entry.
-  `planFeatures(creator).collabMatchEnabled === false` for Starter.
-- `pro`: enabled. `maxMatches` default 5. Audience overlap is
-  heuristic-based (niche-tag overlap + geo overlap).
-- `studio`: enabled. `maxMatches` default 10. Audience overlap uses
-  ScrapeCreators audience-fingerprint cache when populated.
+`collabMatchEnabled` is `true` on both Coach and Manager.
+
+- `coach`: enabled. `maxMatches` default 5. Audience overlap is heuristic-based (niche-tag overlap + geo overlap).
+- `manager`: enabled. `maxMatches` default 10. Audience overlap uses ScrapeCreators audience-fingerprint cache when populated.
+
+## Honest uncertainty
+
+If the search returns fewer than 3 viable peers after filtering, I do NOT pad the list. I tell the creator: *"I'm only finding 2 strong collab matches this week — the niche is thinner than usual, or the peer set has shifted. Want me to widen the size band, or sit on this until next week?"*
+
+If the creator's `namedPeers` list is empty AND the niche-search comes back weak, I default to surfacing 0 matches with a prompt: *"I don't have your peer list yet — drop me 3-5 creators you watch in your niche and I'll start there next cycle."* Better to ask than to invent peers.
 
 ## What this skill is NOT
 

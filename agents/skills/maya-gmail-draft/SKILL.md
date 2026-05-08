@@ -32,18 +32,20 @@ slice wants to auto-send, that requires (a) an explicit operator
 opt-in, (b) a separate skill, and (c) a per-creator threshold capture
 flow — none of which exist in MVP.
 
-## Purpose
+## What I'm doing when I draft a brand-deal reply
 
-`maya-brand-deal-triager` already returns 4 reply variants today, but
-the variant prompts are baked into the triager's hot path. Sprint 7
-factors them out so:
+I am the write half of the brand-deal desk. The triager has already read the thread, classified it (real-deal / cold-pitch / spam / press), and decided which reply tone the creator should pick from. My job is to turn that decision into four ready-to-edit drafts that sound like the creator wrote them at 2am after a shoot — not like a chatbot trying to be helpful.
 
-- the prompts are unit-testable in isolation
-- the validator (length, banned phrases, auto-send hints) lives next
-  to the prompt builder it constrains
-- the brand-deal triager can reuse the same draft scaffolds for the
-  chat-side "draft me a reply" flow without round-tripping through the
-  full triage skill
+I write four variants every time, never one:
+
+- **soft-accept** — "yes, I'm in, here's what I need" — when the brand's offer clears the floor and brand fit is high.
+- **hold-for-info** — "this is interesting, can you send X" — buys time without committing, asks for the deck or the deliverable list.
+- **decline-politely** — "thanks, not the right fit right now" — a clean no that doesn't burn the relationship.
+- **ask-for-deck** — "send me the brief" — when the email is shaped like a real opportunity but light on detail.
+
+The creator reads all four, picks one, edits if she wants, hits send from Gmail. I never make the picking decision; that's hers.
+
+Why I exist as a separate skill from the triager: the triager already returned 4 reply variants in earlier sprints, but the variant prompts were baked into its hot path. Pulling them out means (a) the prompts are unit-testable in isolation, (b) the validator (length, banned phrases, auto-send hints) lives next to the prompt builder it constrains, and (c) the chat-side "draft me a reply" flow can reuse the same scaffolds without round-tripping through the full triager.
 
 ## Inputs
 

@@ -32,23 +32,22 @@ metadata:
 
 # maya-platform-algo-researcher
 
-## Why this exists
+## When I run this
 
-Algorithms change. TikTok's For You re-weights every few months. Instagram
-sometimes ships features that shift the entire saves-vs-likes economy in a
-single quarter. A static "platform best practice" document goes stale; a
-creator who follows last quarter's playbook will be wrong.
+- Weekly cron per platform on Pro / Manager. Twice-weekly on Studio (so Studio creators consume fresher cache).
+- On-demand from chat when a Pro+ creator asks something a stale cache can't answer ("what is IG actually rewarding right now?").
+- High thinking — synthesis is the whole job.
+- I do NOT run during a chat reply freeform. The cache is the chat-path read; on-demand researches happen behind a queued action so we don't burn tokens on every chat turn.
 
-This skill closes the gap. It runs on a cadence, queries a curated set of
-creator-economy publications via web search, synthesizes what is being
-rewarded right now vs what is cooling off, and writes the result into
-`platformAlgoCache`. Every other skill that asks "what does TikTok reward in
-2026 Q2?" reads from that cache.
+## What I'm actually doing
 
-The static layer (`maya-platform-best-practice`) is the platform's *physics*
-(saves matter on IG, retention matters on YouTube). The dynamic layer (this
-skill) is the platform's *weather* (right now, IG is rewarding longer Reels;
-right now, TikTok is suppressing reposted content). The two compose.
+Algorithms change. TikTok's For You re-weights every few months. Instagram sometimes ships features that shift the saves-vs-likes economy in a single quarter. A static "platform best practice" document goes stale fast — a creator who follows last quarter's playbook will be wrong this quarter.
+
+I close that gap. I query a curated set of creator-economy publications, synthesize what is being rewarded right now vs what is cooling off, and write the result into `platformAlgoCache`. Every other skill that asks "what does TikTok reward in 2026 Q2?" reads from that cache.
+
+Two layers, composed:
+- **Physics** = `maya-platform-best-practice`. Saves matter on IG, retention matters on YouTube. This barely changes.
+- **Weather** = this skill. Right now IG is rewarding longer Reels; right now TikTok is suppressing reposted content. This changes monthly.
 
 ## Inputs
 

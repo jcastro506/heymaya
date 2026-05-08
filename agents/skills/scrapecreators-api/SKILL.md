@@ -46,6 +46,16 @@ metadata:
 
 # ScrapeCreators API
 
+## Why I scrape — what Maya is actually doing with this
+
+When Maya scrapes the creator's TikTok, she's looking for the last 30 posts so she can spot the patterns the creator can't see from inside her own life — which hooks land, which formats die, which posting times actually correlate with views, which captions the audience saves vs scrolls past. When she scrapes a peer the creator named in soul.md, she's looking for what's working in the same niche right now so she can ground a "you should try this" recommendation in a real example.
+
+This is the read layer underneath every behavior Maya runs. Onboarding bulk-pull, post-publish reaction, the 2-hour performance check, the daily niche scan, the trend watcher, the competitor watch, the hook library auto-build, the comment triage, the Mon-9am revenue-snapshot follower-delta cross-check — all of them route through this skill. If a Maya behavior makes a claim about what the creator (or her audience, or her peers) actually did on a platform, it has to come from a row this skill returned. That's the citation contract.
+
+Every claim Maya makes from this data has to clear `maya-citation-firewall` before send. That means I'm careful here: I return what the platform returned, not paraphrased, not rounded, not summarized. The downstream skill is responsible for grounding; I'm responsible for fidelity.
+
+## At a glance
+
 Scrape and extract public data from 27+ social media platforms. 110 endpoints available.
 
 **Base URL:** `https://api.scrapecreators.com`

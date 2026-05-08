@@ -23,114 +23,84 @@ metadata:
 
 # maya-content-arc-planner
 
-## Purpose
+## When I run this
 
-A creator's hardest question is not "what should I post" — it is "how do I
-turn one moment into a week of posts." Calendar life-events (a wedding, a
-trip, a launch, a kid's milestone, a conference talk) are gold: they are
-specific, dated, audience-relevant, and they generate natural build-up /
-day-of / recap rhythm. Theme-based arcs (e.g., "this week is about
-recovery") are softer but still benefit from structure.
+- Sunday 4pm `weekly_content_plan` whenever a theme is locked.
+- Daily 8am calendar look-ahead (Pro+) when `maya-calendar-classifier` flags a real life-event 1–14 days out.
+- On-demand: "Maya, plan me a 3-post arc around X."
+- NOT on the heartbeat. Arcs are weekly-cadence work.
 
-This skill produces the per-platform per-day plan that the Plan screen
-renders.
+## What I'm actually doing
 
-## Inputs
+The hardest question for a creator is not "what should I post." It's "I have this thing happening — a wedding, a trip, a launch, a kid's milestone, a conference talk. How do I turn that one moment into a week of content without it feeling like spam?"
 
-```ts
-{
-  seedEvent?: CalendarEvent;       // Composio Calendar event, classified as creator-relevant-life-event
-  theme?: string;                  // alternative seed when there is no calendar anchor
-  creatorPicture: CreatorPicture;  // niche, audience, voice, top hooks, posting cadence
-  platforms: Array<"tiktok" | "instagram" | "youtube" | "linkedin" | "x">;
-  lookAheadDays: number;           // typically 7; can be 3–14
-  // Plan-tier features (resolved upstream from `planFeatures(creator)`):
-  maxPlatformVariantsPerDay: number; // 1 for Starter, len(platforms) for Pro+
-}
-```
+That's the job. I take one seed (a calendar event or a theme) and I drop it onto a multi-day, multi-platform plan that respects the creator's actual posting rhythm and platform mix.
 
-Exactly one of `seedEvent` or `theme` must be present.
+There are two shapes I pick from depending on the seed:
 
-## Outputs
+- **Calendar life-event** → `build-up → day-of → morning-after → evergreen`. The natural rhythm of an event the audience can anticipate, witness, and remember.
+- **Theme** (e.g. "recovery week," "shipping mode," "summer cooking") → `flexible-theme`. No anchor date, so I follow the creator's posting cadence and let the theme thread through.
 
-```ts
-{
-  arc: ArcDay[];
-  rationale: string;            // ≤ 4 sentences, citation-firewalled against the seed
-  shape: "build-up-day-of-recap" | "flexible-theme";
-  citationFirewall: { passed: true } | never;
-}
+## How I shape a calendar arc
 
-interface ArcDay {
-  dayOffset: number;            // -7..0..+7 relative to seed event date (0 = day-of); for theme arcs, 0..lookAheadDays-1
-  platform: Platform;
-  format: PostFormat;           // "tiktok-post" | "ig-reel" | "ig-carousel" | "yt-short" | "yt-long" | "linkedin-post" | "x-thread" | "x-single"
-  hookOptions: string[];        // 3 hook options
-  captionDraft: string;
-  postingTimeLocal: string;     // "HH:MM" in creator's tz, from cadence + best-practice
-  rationale: string;            // why this slot, this platform, this format
-  citation: { sourceKind: "calendar-event" | "theme"; sourceId: string };
-}
-```
+For a seed event on day 0:
 
-## Build-up / day-of / recap shape (calendar life-events)
+| dayOffset | beat | what fits here | what does NOT |
+|---|---|---|---|
+| -7 to -1 | build-up | anticipation, behind-the-scenes, "what I'm packing" | the actual event content (it hasn't happened) |
+| 0 | day-of | live capture, real-time post | over-edited recap (too soon) |
+| +1 | morning-after recap | synthesis, lessons, the one moment that landed | live-feel content (the moment is gone) |
+| +7 to +14 | evergreen variant | the same event told as a durable how-to | another version of the day-of (audience saw it) |
 
-- `dayOffset = -7..-1` — build-up (anticipation, behind-the-scenes,
-  context-setting).
-- `dayOffset = 0` — day-of (live capture, real-time post).
-- `dayOffset = +1` — morning-after recap (synthesis, lessons, gratitude).
-- `dayOffset = +7..+14` — evergreen variant (the same event told as a
-  durable how-to or carousel that retains value beyond the moment).
+Then I match each beat to platforms and formats, because not every beat fits every platform:
 
-Not every offset gets every platform. The skill picks platform-format
-combinations that match each beat:
-- Build-up: TikTok hook-tease, IG Story (not in v0 — story is out of scope),
-  IG carousel preview.
-- Day-of: TikTok live-capture, IG Reel.
-- Recap: TikTok narrative, IG carousel, YT Short, LinkedIn post.
-- Evergreen: YT long, LinkedIn carousel, IG carousel.
+- **Build-up** → TikTok hook-tease, IG carousel preview. (No IG Stories in v0 — out of scope.)
+- **Day-of** → TikTok live-capture, IG Reel. Short-form, immediate.
+- **Recap** → TikTok narrative, IG carousel, YT Short, LinkedIn post. The reflective beat.
+- **Evergreen** → YT long, LinkedIn carousel, IG carousel. Things that retain value past the moment.
 
-## Theme arcs
+Not every day gets every platform. A creator who posts 4×/week on TikTok and 2×/week on IG should not suddenly get a 7-platform-variant carpet bomb because there's a wedding coming. I read `creatorPicture.postingCadence.perPlatform` and respect their actual rhythm.
 
-When `theme` is the seed, the arc is flexible. The skill produces
-`lookAheadDays` of post slots (default 7). The cadence pulls from
-`creatorPicture.postingCadence.perPlatform` (so a creator who posts 4×/week
-on TT and 2×/week on IG gets a plan that respects their actual rhythm).
+## How I shape a theme arc
 
-## Plan-tier behavior
+No event date. I produce `lookAheadDays` (default 7) post slots, paced to the creator's actual posting cadence per platform. The theme string threads each post — but I do not force connection. If the theme is "recovery week" and the creator's strongest content is gym hooks, I lean gym-hooks-with-a-recovery-frame, not "what foam roller I bought." Voice anchor wins over theme anchor.
 
-Starter is capped at `maxPlatformVariantsPerDay = 1`. The skill picks the
-creator's primary platform from `creatorHandles[0].platform` (resolved
-upstream and passed in via `platforms` length 1). Pro and Studio receive
-all connected platforms.
+## What goes in each arc day
 
-Plan-tier enforcement is server-side at the entry point; this skill is
-plan-aware via the input shape rather than reading `planFeatures` directly.
-This keeps the skill pure and testable.
+Every `ArcDay` carries:
+
+- `dayOffset` — relative to the seed (calendar) or 0..N-1 (theme)
+- `platform` and `format` — chosen from the table above based on the beat
+- `hookOptions[3]` — three real options, not one. The creator picks at draft time.
+- `captionDraft` — voice-applied at the action layer via `maya-voice-applier` before render
+- `postingTimeLocal` — pulled from `postingCadence.bestHoursLocal`, refined by `maya-platform-best-practice`
+- `rationale` — one line: why this slot, why this platform, why this format
+- `citation` — points to `seedEvent.id` (calendar) or `theme:${slug}` (theme)
+
+## The hard gate
+
+Every arc day must cite either the calendar event ID (and the day-offset has to math against the event date) or the theme synthetic ID. The `rationale` text — both per-day and the bundle-level summary — gets firewalled against the seed and the top-3 most-cited posts in the arc. If a rationale leaks creator-data claims I cannot ground (e.g. "your audience loves Italian food" without that being in `creatorPicture.audience.interestTags`), the firewall rewrites or drops it.
+
+## Tier behavior
+
+- **Assistant / Starter** — `maxPlatformVariantsPerDay = 1`. The single platform is the creator's primary (`creatorHandles[0].platform`), resolved upstream and passed in via a length-1 `platforms` array. The 1-handle cap is the gating mechanism, not a special branch in this skill.
+- **Manager / Pro / Studio** — full multi-platform spread.
+
+The skill itself is plan-aware via the input shape, not by reading `planFeatures` directly. Plan-tier enforcement is at the entry-point action.
+
+## Hand-offs
+
+- `maya-platform-best-practice` — for each platform variant, I consult it for format choice + posting time refinement.
+- `maya-citation-firewall` — mandatory on every per-day rationale and the bundle rationale.
+- `maya-voice-applier` — runs at the action layer on `captionDraft` before persist.
+- I get my seed from either `maya-calendar-classifier` (event) or `maya-idea-generator` (theme/candidate).
 
 ## Model routing
 
-The skill calls the model router with task tag `weekly_content_plan`
-(medium thinking). The hooks + caption drafts benefit from reasoning, but
-this is not a high-stakes one-shot — Sunday weekly plans run weekly and the
-creator has a full week to react.
-
-## Citation firewall
-
-Every arc day's `citation` field points to either:
-- the `seedEvent.id` (calendar) — the firewall confirms the event is in
-  the creator's calendar and the day-offset matches the event date.
-- a synthetic `theme:${slug}` ID — the firewall verifies the rationale
-  references the theme string and not creator-data claims.
-
-The `rationale` synthesized at the bundle level is firewalled against the
-top-3 most-cited posts in the arc + the seed.
+`weekly_content_plan` task tag, medium thinking. Sunday weekly plans run weekly — the creator has a full week to react and edit. This is not a high-stakes one-shot. High thinking is wasted here.
 
 ## Examples
 
-- `examples/calendar-arc-wedding.json` — life-event arc for a creator with a
-  wedding 5 days out, multi-platform.
-- `examples/theme-arc-recovery.json` — theme arc for a fitness creator with
-  a "recovery week" theme, 7-day plan.
-- `examples/starter-single-platform.json` — Starter creator, 1 platform,
-  3-day theme arc.
+- `examples/calendar-arc-wedding.json` — wedding 5 days out, multi-platform.
+- `examples/theme-arc-recovery.json` — fitness creator, "recovery week," 7-day theme arc.
+- `examples/starter-single-platform.json` — Starter, 1 platform, 3-day theme arc.

@@ -28,20 +28,20 @@ metadata:
 
 # maya-contract-redflag
 
-## Purpose
+## How I think about this
 
-Brand-deal contracts are where creators get hurt — perpetual IP grants
-hidden in "all media now known or hereafter devised," exclusivity windows
-that block the next deal, payment terms that net out at 90 days, missing
-kill fees on a shoot they already prepared for. A creator without a manager
-or lawyer is reading these PDFs at 11pm before signing. This skill is the
-first-pass safety net.
+Brand-deal contracts are where creators get hurt — perpetual IP grants hidden in "all media now known or hereafter devised," exclusivity windows that block the next deal, payment terms that net out at 90 days, missing kill fees on a shoot they already prepared for. A creator without a manager or lawyer is reading these PDFs at 11pm before signing. I'm the first-pass safety net.
 
-The skill **flags**. It does **not opine**. There is no "this contract is
-fine" verdict — only "no flag detected on category X." This distinction is
-load-bearing: a missed clause with a "fine" stamp is worse than no scan at
-all. See `playbook.md § Contract red-flag scan` for the conversational
-shape Maya uses when surfacing flags.
+I **flag**. I do **not opine**. There is no "this contract is fine" verdict — only "no flag detected on category X." This distinction is load-bearing: a missed clause with a "fine" stamp is worse than no scan at all. The creator brings the contract to a lawyer; I make sure they know what to ask about.
+
+## Workflow — what I actually do
+
+1. **Hand the PDF to Anthropic's `pdf` skill** for parse + clause segmentation. I get back structured text with page numbers and clause hashes.
+2. **Run the regex/keyword rule set** (REDFLAG_RULES in script.ts) over each clause. Each rule is `{ regex, category, severity, concernTemplate, suggestionTemplate }`. Deterministic — same parsed text, same flags.
+3. **Cross-reference creator's floorRate from soul.md** when scoring payment-term flags. Net-90 on a $5K deal is more flagable than net-90 on a $50K deal where it's industry standard.
+4. **Synthesize the summary** (high thinking, model router) only after every individual flag is grounded in a verbatim clause cite that the firewall has verified.
+5. **Compute the recommendation** — `walk` / `negotiate` / `sign` per the rules below.
+6. **Return** with the disclaimer baked in.
 
 ## Inputs
 
@@ -124,11 +124,9 @@ emitting the disclaimer as part of the `summary` string.
 
 ## Plan-tier gating
 
-All tiers. Contract liability protection is a baseline feature — even
-Starter creators upload contracts and need scanning. Note that Starter has
-no Gmail integration, so contract uploads are manual (Deals screen drag /
-chat attachment), not auto-triaged from inbound email. The skill itself is
-plan-agnostic; the entry point gating is upstream.
+All tiers (Coach + Manager). Contract liability protection is a baseline feature — every creator who uploads a contract gets it scanned. The skill itself is plan-agnostic; the entry point gating is upstream.
+
+Note: on Coach, contract uploads happen manually (Deals screen drag / chat attachment). On Manager, the brand-deal-triager auto-fires this skill in parallel when a contract PDF is attached to an inbound email.
 
 ## Examples
 

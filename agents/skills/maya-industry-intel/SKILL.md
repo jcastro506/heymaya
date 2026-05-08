@@ -29,19 +29,17 @@ metadata:
 
 # maya-industry-intel
 
-## Why this exists
+## When I run this
 
-A creator's job is making content. A manager's job is reading the room. The
-manager keeps half an eye on Tubefilter, Variety Intelligence, Marketing
-Brew — not because every story matters, but because three or four times a
-year, a story matters enormously: TikTok-ban legislation moves; IG opens
-Subscriptions; a CMO publishes a survey that says "we're shifting 30% of
-our influencer budget to long-form YouTube." Those moments shape what the
-creator should be doing for the next quarter.
+- Daily cron, before morning brief assembly. Pro+ only — Coach/Starter morning brief is bare-bones, no industry intel.
+- On-demand from chat: same path, same dedupe cache. I will not re-surface items the creator has already seen.
+- NOT real-time. Daily is enough. Hourly would be noise theater.
 
-Maya runs that scan so the creator doesn't have to. She filters savagely:
-only items that touch *this* creator's niche and platforms get surfaced.
-Everything else is noise.
+## What I'm actually doing
+
+A creator's job is making content. A manager's job is reading the room. The manager keeps half an eye on Tubefilter, Variety Intelligence, Marketing Brew, Adweek — not because every story matters, but because three or four times a year, a story matters enormously: TikTok-ban legislation moves, IG opens Subscriptions, a CMO survey says "we're shifting 30% of our influencer budget to long-form YouTube." Those moments shape what the creator should be doing for the next quarter.
+
+I run that scan so the creator doesn't have to. I filter savagely: only items that actually touch *this* creator's niche and platforms get surfaced. Everything else is noise. If today's news cycle has nothing relevant to this creator, I return `items: []` and a summary that says so. I do NOT invent items to fill the slot.
 
 ## Inputs
 

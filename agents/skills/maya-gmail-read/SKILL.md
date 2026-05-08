@@ -17,18 +17,18 @@ metadata:
 
 # maya-gmail-read
 
-## Purpose
+## What I'm doing when I look at the creator's inbox
 
-`maya-brand-deal-triager` consumes a normalized thread shape, but the
-upstream Convex action has to (a) compose a Gmail-search-syntax query
-when it pulls active brand-deal threads on a cron, (b) flatten the raw
-Composio response into something Maya can summarize without leaking the
-whole inbox into a prompt, and (c) hold every claim Maya makes about a
-thread to facts that actually appear in the thread body.
+I'm the read half of the brand-deal desk. When the creator's Gmail fires (cron pull every morning, or a Composio webhook on a fresh thread), I do what a real talent manager does the first 90 seconds of their workday:
 
-This skill bundles those three jobs as pure-logic primitives. No model
-calls live here. The Convex action wires the model spend; this script
-gives the action the deterministic scaffolds.
+- **Scan the sender domain.** Is this a known brand? An agency I recognize? A free webmail with a generic display name? The domain tells me 80% of what I need before I read a word of the body.
+- **Read the subject line.** "Partnership opportunity" + "campaign brief" + "rate card" patterns are the loud signals. "Quick question about your content" is the cold-template signal.
+- **Skim the first paragraph.** A real brand opens with the deliverable. A cold pitch opens with flattery. A spam pitch opens with a URL.
+- **Note dollar amounts and dates.** $5k, 30-day usage rights, deadline next Friday — these are the signals the triager downstream needs to build a proper deal card. If they're in the body, I capture them literally; if they're not, I do not invent them.
+
+I am NOT making the real-deal / cold / spam call here — that's `maya-brand-deal-triager`'s job. I'm the deterministic scaffolding it sits on top of: (a) compose the right Gmail-search-syntax query when the cron pulls active threads, (b) flatten the Composio response into something the triager can read without leaking the entire inbox into its prompt, and (c) hold every downstream claim to facts that actually appear in the thread body, the subject, or the from-header.
+
+No model calls live here. I am pure logic. The triager wires the model spend; I hand it back the citation-safe scaffolds.
 
 ## Inputs
 
@@ -94,39 +94,35 @@ cites a number Maya didn't pull from the thread, this returns
 `{ ok: false }` and the calling skill is expected to drop the claim or
 restate it as a question to the creator.
 
-## Triggers
+## Cadence — when I run
 
-- Cron `brand-deal-active-pull` (daily, Pro+) — calls `searchThreads`
-  with the query from `buildSearchQuery({ intent: "brand-deal-active" })`
-- Composio webhook → `maya-brand-deal-triager` — the triager fetches
-  the full thread, calls `summarizeThread` to render the deal-card
-  preview, and feeds `extractDealSignals` into its rule layer
-- Chat-side "triage this for me" path — the creator pastes a thread
-  reference; the action calls `summarizeThread` for the chat preview
+I am NOT a heartbeat skill and I am NOT proactive on my own. I run on three triggers, all event-driven:
 
-## Heuristic phrases (deal signals)
+- **Daily cron pull (Pro+ only).** `brand-deal-active-pull` fires once a morning to find anything from the last 7 days that smells like a partnership thread. I compose the search query and hand the results to the triager. Cron exists so a brand email that landed at 11pm and was buried by overnight noise still surfaces in the morning brief.
+- **Composio webhook on inbound.** When a fresh email lands in the connected inbox, Composio pings the triager; the triager calls me to flatten the raw thread into the citation-safe summary it renders on the deal card.
+- **Chat-side "triage this for me."** The creator forwards a thread reference in iMessage. The Convex action calls `summarizeThread` for the chat preview before the triager classifies.
 
-Deterministic, case-insensitive substring checks against `bodyText`:
+I do not poll. I do not run on heartbeat. I do not pull mail Maya hasn't been asked to look at.
 
-- `partnership`, `partner with`
-- `campaign`, `campaign brief`
-- `collab`, `collaboration`
-- `rate`, `rate card`, `your rates`
-- `we'd love to`, `would love to work with`
-- `usage rights`, `whitelisting`, `paid amplification`
-- `deliverable`, `deliverables`
-- explicit `$NN` with at least 3 digits OR `Nk` shorthand
+## What I'm scanning for in the body — the deal signals
 
-Maya's downstream skill is allowed to read these signals as evidence,
-not as a verdict. The verdict lives in `maya-brand-deal-triager`.
+Deterministic, case-insensitive substring checks against `bodyText`. These are the phrases I'd circle in red pen if I were reading the email on paper:
 
-## Citation rule
+- **Relationship-shape language** — `partnership`, `partner with`, `collab`, `collaboration`. Tells me this isn't a press inquiry.
+- **Campaign-shape language** — `campaign`, `campaign brief`, `deliverable`, `deliverables`. Tells me they have a brief, which means they have budget allocated.
+- **Money language** — `rate`, `rate card`, `your rates`, plus explicit `$NN` (3+ digits) or `Nk` shorthand. This is the strongest real-deal signal short of a contract attachment.
+- **Rights language** — `usage rights`, `whitelisting`, `paid amplification`. Big-brand campaigns include this; cold pitches almost never do.
+- **Warm-opener language** — `we'd love to`, `would love to work with`. Genuine on real deals; a tell on cold pitches when there's nothing else.
 
-The thread body, the subject line, the from-header, and the receivedMs
-are the only facts Maya may cite from this skill's output. Anything
-else (rate comparables, niche fit, the creator's history) must come
-from another skill's citation set. The firewall above is the
-mechanical enforcement.
+I return the matched-phrase list, NOT a verdict. The verdict — real-deal vs cold-pitch vs spam — lives one skill downstream in `maya-brand-deal-triager`. I'm the evidence; the triager is the jury.
+
+## Citation rule — what Maya is allowed to claim from my output
+
+The thread body, the subject line, the from-header (display name + email + domain), and `receivedMs` are the ONLY facts Maya may cite from anything I return. If the brand wrote "$5k for a Reel + IG carousel" in the body, Maya can quote it. If Maya wants to say "your last brand deal was $4k so this is a $1k bump," that's a different claim that needs a `deal` citation from the brand-deal history — not from me.
+
+Anything else — rate comparables, niche fit, the creator's posting history — must come from another skill's citation set. My firewall above is the mechanical enforcement: a claim that cites a number not present in the thread comes back `{ ok: false }` and the calling skill drops the claim or restates it as a question to the creator.
+
+Hand-off chain when I run: cron / webhook → me (`buildSearchQuery` + `summarizeThread` + `extractDealSignals`) → `maya-brand-deal-triager` (classification + reply variants) → `maya-citation-firewall` (final gate).
 
 ## Plan-tier (server-side, fail-closed)
 

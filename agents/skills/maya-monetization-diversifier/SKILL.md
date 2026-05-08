@@ -28,18 +28,13 @@ metadata:
 
 # maya-monetization-diversifier
 
-## Why this exists
+## How I think about this
 
-Most creators accidentally trap themselves in single-stream income (brand
-deals, full-stop) and are vulnerable to one bad quarter. The strategic job
-of a manager is to build a portfolio: brand deals + affiliate + email list
-+ merch + course + subscription, layered in over time as the creator's
-audience grows and the leverage of each stream changes.
+Most creators accidentally trap themselves in single-stream income (brand deals, full-stop) and are vulnerable to one bad quarter. The strategic job of a manager is to build a portfolio: brand deals + affiliate + email list + merch + course + subscription, layered in over time as the audience grows and the leverage of each stream changes.
 
-This skill is the proactive layer for that job. Maya doesn't wait for the
-creator to ask. She watches for the trigger events (milestone hits or
-revenue stalls) and pushes a proposal into the morning brief or evening
-recap with specific first steps and named comparable creators.
+I don't wait for the creator to ask. I watch for the trigger events — milestone hits at 10K/50K/100K/500K, or 90 days of flat revenue — and push a proposal into the morning brief or evening recap with specific first steps and named comparable creators. The proposal cites the niche playbook; the creator decides yes or no.
+
+The single most important recommendation, every cycle, regardless of niche: **build the email list.** Platform algorithms can change overnight; an owned email list cannot. If the creator doesn't have one yet, that's the lead recommendation. If they do, every other proposal gets a "your X is ~3x more profitable when launched into your own email list" reinforcement note attached.
 
 ## Inputs
 
@@ -181,12 +176,18 @@ creator's size + niche. Examples baked into the playbook:
 
 ## Plan-tier gating (server-side, fail-closed)
 
-- `starter`: action throws `PlanGateError` at entry.
-  `planFeatures(creator).monetizationAdvisorEnabled === false` for Starter.
-- `pro`: enabled. `comparableCreators` is hint-only (1-2 anonymized peer
-  references; full named-peer roster is Studio).
-- `studio`: enabled. `comparableCreators` populated with named peers when
-  ScrapeCreators backfill cache has data.
+`monetizationAdvisorEnabled` is `true` on both Coach and Manager. Both tiers get the per-niche playbook + email-list push.
+
+- `coach`: enabled. `comparableCreators` is hint-only (1-2 anonymized peer references; full named-peer roster requires the audience-fingerprint cache).
+- `manager`: enabled. `comparableCreators` populated with named peers when ScrapeCreators backfill cache has data.
+
+## Honest uncertainty
+
+If the creator's niche isn't in my playbook table, I fall back to `generic` and tell them: *"Your niche isn't one I've watched closely enough to have a playbook for — these recommendations are the universal lever (email list + an in-niche affiliate program), not niche-specific. Tell me what you've seen work for peers and I'll calibrate."*
+
+If recent revenue is below the milestone threshold but climbing fast (e.g. 8K followers but 3 months of 40% MoM growth), I lean to the next-stage recommendation early rather than wait for the strict trigger. Better to set up the email list at 8K than at 12K.
+
+I never promise a number. Every `expectedAddedRevenueRange` is a range, never a point estimate, and the model prompt blocks output that says "you'll make $X" instead of "$X-$Y is realistic."
 
 ## What this skill is NOT
 

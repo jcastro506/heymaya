@@ -22,7 +22,24 @@ metadata:
 
 # maya-platform-best-practice
 
-The platform-physics consultant. Maya's playbook.md § 3 ("Platform expertise") cites this skill as the canonical source for any platform-specific recommendation. The static knowledge below is the ~200-words-per-platform baseline; the `platformAlgoCache` table (added by `maya-platform-algo-researcher` in batch C) is the dynamic refresh layer.
+I'm the platform-physics consultant. When Maya is making any platform-specific recommendation — what hook to lead with, what format to pick, what posting time the platform actually rewards — she calls me. The static knowledge below is the per-platform baseline (the physics: what the algorithm is wired to reward). `platformAlgoCache` is the live weather layer (what's working *right now*) — `maya-platform-algo-researcher` writes to that on a weekly cadence and I read it when present.
+
+## When I run this
+
+- Inline call from `maya-content-arc-planner` when generating per-platform variants.
+- Inline call from `maya-hook-extractor` when classifying whether a hook fits the platform's distribution model.
+- Direct call from Maya during morning brief, weekly content plan, or chat replies whenever a platform question comes up.
+- Low thinking — I'm a consultant, not a synthesizer. Answers should be fast.
+
+## How I answer
+
+`answerQuestion(input, cacheRows?)`:
+
+1. **Check the cache first.** If `cacheRows` has a fresh entry for `(platform, contentType)`, that's the primary citation and confidence is `high`. Live signal beats static knowledge every time.
+2. **Fall back to the static body.** Parse the per-platform section below for the answer. Confidence is `medium`.
+3. **No match either way.** Return a low-confidence answer that says so plainly: "I don't have strong data on this — answering from general platform knowledge." I never fake authority.
+
+If `cacheRows` is passed but stale (older than 7 days), I prefer the static body and surface a note that the cache is stale. If `platform` isn't one of the five v0 platforms, I return a low-confidence "platform not in v0 scope" answer with a recommendation to ask in chat.
 
 ## Inputs
 
@@ -38,25 +55,17 @@ The platform-physics consultant. Maya's playbook.md § 3 ("Platform expertise") 
 
 ```ts
 {
-  answer: string;             // 1–4 paragraphs, citation-firewall-safe (cites the static body or the cache row)
+  answer: string;             // 1–4 paragraphs, citation-firewall-safe
   citedExamples: Array<{ source: 'static-body' | 'platform-algo-cache'; reference: string }>;
   confidenceLevel: 'low' | 'medium' | 'high';
 }
 ```
 
-## How it works
+## Tier
 
-`script.ts` exposes `answerQuestion(input, cacheRows?)`:
+All tiers. Platform best-practice is foundational — every Maya needs it.
 
-1. If `cacheRows` (passed in by the calling Convex action from `platformAlgoCache`) has a fresh entry for `(platform, contentType)`, that entry is the primary citation and confidence is `high`.
-2. Otherwise, fall back to the static knowledge body in this SKILL.md (parsed at skill-load time into a structured map, or — for v0 — embedded as a constant in `script.ts`). Confidence is `medium`.
-3. If neither matches, return a low-confidence fallback that explicitly says "I don't have strong data on this — answering from general platform knowledge."
-
-## Plan-tier
-
-All tiers. Platform best-practice is foundational — every Maya needs it regardless of plan.
-
-## Static knowledge body (the ~200-words-per-platform baseline)
+## Per-platform physics (the ~200-words-per-platform baseline)
 
 ### TikTok
 
@@ -77,11 +86,6 @@ Voice register is professional-but-personal — first-person stories with a busi
 ### X
 
 Threads beat single posts for non-newsy content; single posts beat threads for hot-take or news. The first post of a thread has to function as a standalone. Replies in your own thread within the first 5 minutes signal "this is alive" to the algorithm. Quote-tweet engagement compounds. Avoid links in the original post — put them in a reply (the platform downranks outbound links). Image and video posts outperform text-only by ~40% on engagement. Don't autopost from other platforms — the cross-post signature gets downranked. Common pitfalls: thread-leading post that requires the next tweet for context (won't get the algo lift); links in the OP.
-
-## Failure handling
-
-- If `platform` is not one of the five v0 platforms, return a low-confidence "platform not in v0 scope" answer with a recommendation to ask in chat.
-- If `cacheRows` is passed but stale (`fetchedAt` older than 7 days), prefer the static body and surface a note in the answer that the cache is stale.
 
 ## Examples
 

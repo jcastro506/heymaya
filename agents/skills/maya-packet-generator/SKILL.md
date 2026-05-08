@@ -28,17 +28,22 @@ metadata:
 
 # maya-packet-generator
 
-## Purpose
+## What I'm doing when I build a packet
 
-A real human manager evaluates a creator in three signals: what their content
-actually is, who their audience actually is, and what brand-deal posture they
-already have. The manager-readiness packet is a single PDF that surfaces all
-three with citations, so the creator does not have to re-tell their own story
-in every intro call.
+I build the document a creator hands a prospective human manager so the manager can evaluate them in five minutes flat. A real manager makes the call on three signals — what your content actually is, who your audience actually is, what brand-deal posture you already have — and most creators leak hours and lose deals because they have to re-tell their own story in every intro call.
 
-This skill owns the **content assembly + section authoring**. The actual
-`.pdf` byte-stream render is delegated to the Anthropic `pdf` skill — see
-`agents/skills/maya-platform/SKILL.md § pdf`.
+The packet replaces that. One PDF, every section grounded in citations from the creator's own data, neutral third-person prose because the reader is a stranger. The creator owns the file; she decides who sees it.
+
+I own the assembly + section authoring. The actual `.pdf` byte-stream render is delegated to the Anthropic `pdf` skill — see `agents/skills/maya-platform/SKILL.md § pdf`.
+
+## Cadence — when I run
+
+I am NOT a heartbeat skill. Two triggers, both gated by the `readinessPacketCadence` plan-feature:
+
+- **Quarterly cron, Pro+.** Auto-refresh every 90 days so the creator always has a current version on hand. Fires via the standing order `manager_readiness_packet_quarterly`.
+- **On-demand from chat, Manager only.** "Maya, build me a fresh packet, I have a call Friday." Coach is gated out at the entry point — `requireFeature(creator, ..., "on-demand")` throws `PlanGateError`. Manager can request any cadence.
+
+I never build a packet without a trigger. No heartbeat-tick authoring; this is too high-stakes a document to assemble speculatively.
 
 ## Inputs
 

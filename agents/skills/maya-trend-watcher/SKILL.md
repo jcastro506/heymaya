@@ -37,19 +37,17 @@ metadata:
 
 # maya-trend-watcher
 
-## Why this exists
+## When I run this
 
-A creator's job is making content. Spotting a rising trend in your niche
-six hours before everyone else does is a manager's job. Maya runs the
-scan: she pulls the platform's popular hashtags + trending feed +
-popular creators in the niche, scores each candidate against THIS
-creator's voice and boundaries, drops the noise, and surfaces the 2-4
-items that actually match what this creator could authentically post.
+- Heartbeat check #5 (cooldown 6h, per `HEARTBEAT.md`). Pro+ only — Assistant/Starter heartbeat is bare-bones.
+- On-demand: "what's trending in my niche?" Same path, same dedupe cache.
+- NOT every heartbeat tick. The 6h cooldown is intentional — burning ScrapeCreators credits on a 2h loop adds noise without adding signal.
 
-This is the skill that prevents Maya from sounding like every other
-trend-watching tool: cross-niche virality is rejected if it conflicts
-with the creator's voice fingerprint. A finance creator does not get
-told to make dance videos because the dance is trending.
+## What I'm actually doing
+
+A creator's job is making content. Spotting a rising trend in their niche six hours before the rest of the world does is a manager's job. So that's what I do: I pull the platform's popular hashtags + trending feed + popular creators in the niche, score each candidate against THIS creator's voice and stated boundaries, drop the noise, and surface the 2–4 items that actually match what this creator could authentically post.
+
+The thing that separates me from every other trend-watching tool: I reject cross-niche virality if it conflicts with the voice fingerprint. A finance creator does not get told to make dance videos because the dance is trending. The voice anchor is non-negotiable.
 
 ## Inputs
 
@@ -109,19 +107,30 @@ The Convex action takes this output and writes a row per observation to
 `trendObservations` with `source: 'platform-wide'` (or `'niche-scan'`
 for niche-scoped runs).
 
-## How it works
+## How I score a candidate
 
-1. **Build the scoring prompt.** `buildScoringPrompt(creatorPicture, candidates)` composes a deterministic prompt that gives Maya the creator's niche, voice fingerprint, audience interest tags, and stated boundaries, plus the candidate list. The prompt instructs Maya to score 1-10 fit-to-creator and to LOWER the score when a candidate conflicts with the voice fingerprint or with `boundaries.banned_topics` / `boundaries.banned_formats`.
-2. **Score.** Convex action calls `callMaya` with `taskTag: "niche_scan"` (medium thinking). The model returns structured JSON.
-3. **Parse.** `parseScoringResponse(modelOutput)` parses the JSON. Entries without a citation are dropped. Entries with malformed scores are dropped. The parser is strict and never fabricates.
-4. **Citation firewall.** Each surviving observation runs through `citationFirewall(observation)`. The firewall checks that `citation.ref` is a non-empty string that looks like a ScrapeCreators URL/id (host on `scrapecreators.com`, `tiktok.com`, `instagram.com`, `youtube.com`, `linkedin.com`, `x.com`/`twitter.com`, `threads.net`, or a bare hashtag/sound id with a recognizable prefix). Hallucinated citations are rejected. The Convex action then layers `maya-citation-firewall` on the rationale text for full grounding.
-5. **Dedupe against baseline.** `dedupeAgainstBaseline(observations, baseline)` drops observations whose dedupe key matches any row in the trailing 7d of `trendObservations` for this creator. **Dedupe key = canonicalized hash of `${platform}:${kind}:${slugified-trendPattern}` joined with the canonicalized citation `ref`** — this makes the same hashtag on the same platform cited via two different example posts collapse to one row, but the same hashtag on TikTok vs Instagram surface separately (correctly, because the trend mechanics differ per platform).
-6. **Cap.** Caller caps to 4 observations max per heartbeat tick. Maya does not pad.
-7. **Return.**
+I read four things off `creatorPicture` and judge from there. I do NOT compute a weighted score in code — the model reads the same data and forms the call.
+
+1. **Voice fingerprint.** Does this trend sound like something the creator would say in their own register? A trend pattern that requires a different tone (e.g. high-energy hype voice, when the creator is dry-deadpan) is fit ≤4 even if niche-relevant.
+2. **Niche + audience interest tags.** A trend has to land in a niche the creator actually plays in OR an adjacent one their audience already cares about. Cross-niche virality is rejected hard — a finance creator does not get a fitness trend because fitness is trending.
+3. **Stated boundaries.** `boundaries.banned_topics` and `boundaries.banned_formats` are floors, not suggestions. Any candidate that touches a banned topic or format gets fit `0` and is dropped. No exceptions.
+4. **Authentic-fit check.** Could the creator make this without it feeling like a costume? If the answer is "they'd have to fake it," fit ≤3.
+
+The prompt instructs the model to LOWER scores when these signals conflict. Anti-sycophancy applies here too — I do not inflate fit to surface more items. Empty `observations` is the right answer when the candidate set is genuinely off-niche.
+
+## The pipeline
+
+1. **Build prompt** — `buildScoringPrompt(creatorPicture, candidates)` packages the four signals above + the candidate list.
+2. **Score** — model router via `callMaya`, taskTag `niche_scan`, medium thinking.
+3. **Parse** — `parseScoringResponse(modelOutput)`. Entries without a citation are dropped. Entries with malformed scores are dropped. The parser never fabricates.
+4. **Citation firewall (structural)** — `citationFirewall(observation)` rejects any observation whose `citation.ref` is empty or doesn't resolve to a real ScrapeCreators-shaped URL/id. Hosts allowed: `scrapecreators.com`, `tiktok.com`, `instagram.com`, `youtube.com`, `linkedin.com`, `x.com`/`twitter.com`, `threads.net`, or a bare hashtag/sound id with a recognizable prefix.
+5. **Citation firewall (text-level)** — the Convex action passes each observation's `rationale` through `maya-citation-firewall` to verify that the prose claim ("this matches your audience because…") traces back to the citation `fact` and not to fabricated audience-specific detail.
+6. **Dedupe against trailing 7d.** `dedupeAgainstBaseline(observations, baseline)` drops observations whose dedupe key matches any row in the trailing 7d of `trendObservations` for this creator. Dedupe key = canonicalized hash of `${platform}:${kind}:${slugified-trendPattern}` joined with the canonicalized citation `ref`. Same hashtag, same platform, two different example posts → collapses to one row. Same hashtag on TikTok vs Instagram → surfaces separately, because the trend mechanics differ per platform.
+7. **Cap at 4.** Heartbeat ticks get max 4 observations. I do not pad.
 
 ## Plan-tier gating (server-side, fail-closed)
 
-- `starter` (creator product) / Coach tier: action throws `PlanGateError` at entry. Starter heartbeat skips trend watcher — see SPRINT_PLAN_V0.md pricing matrix.
+- `starter` (creator product) / Assistant tier: action throws `PlanGateError` at entry. Starter heartbeat skips trend watcher — see SPRINT_PLAN_V0.md pricing matrix.
 - `pro` / `studio` / Manager: enabled.
 
 The gate is enforced in the calling Convex action; this skill is unaware of plan tier.
