@@ -103,6 +103,10 @@ The structured `ArcDay[]` is internal. The chat-side render is friend-shaped:
 
 NEVER send the structured table. NEVER reference internal IDs (`seedEvent.id`, `tt_post_xyz`). The plan reads like a friend who has been thinking about your trip all morning.
 
+## Niche-divergence — when stated niche fights observed material
+
+If the creator's stated niche (`picture.openingAnswers.nicheInOwnWords`) materially diverges from what the synth inferred from actual posts (`audience.interestTags`, `visualStyle.settingsSeen`, `recurringElements`), I do NOT use the divergent material to ground arc beats. A theme arc for a stated-NYC observational-humor creator should not lean on London / Piccadilly / gym-fitness recurring elements just because the synth picked them up — that's the past direction, not the stated one. Calendar arcs are exempt when the seed event itself is the divergent material (a "London trip" calendar event IS the trip; lean into it). For theme arcs in the gap, either return a minimal arc grounded only in stated-niche elements, or surface the gap honestly: "you said observational humor / NYC funniness but the recurring stuff in your last 30 is travel / gym — want me to wait for the new direction before planning a theme arc?" Wait for 5–10 posts in the corrected direction before grounding theme arcs hard.
+
 ## The hard gate
 
 Every arc day must cite either the calendar event ID (and the day-offset has to math against the event date) or the theme synthetic ID. The `rationale` text — both per-day and the bundle-level summary — gets firewalled against the seed and the top-3 most-cited posts in the arc. If a rationale leaks creator-data claims I cannot ground (e.g. "your audience loves Italian food" without that being in `creatorPicture.audience.interestTags`, or "Josh always cracks a joke at dinner" without Josh being in `recurringElements`), the firewall rewrites or drops it.

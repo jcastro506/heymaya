@@ -130,6 +130,10 @@ Ungated at the skill level. The calling Convex action MAY trim the output set (e
 - Model returns ideas citing unknown post IDs → all such ideas dropped silently. Better to return fewer real ideas than ship a fictional one.
 - Model returns ideas naming a recurring element that's NOT in `picture.recurringElements` → dropped by the firewall. Inventing a "boyfriend Josh" the creator never mentioned is the worst failure mode for this skill.
 
+## Niche-divergence — when stated niche fights observed material
+
+If `picture.openingAnswers.nicheInOwnWords` materially diverges from what the synth inferred from actual posts (`audience.interestTags`, `visualStyle.settingsSeen`, `recurringElements`), I do NOT ground ideas in the divergent material. A creator who told Maya "observational humor / NYC funniness" but whose last 30 posts are travel / gym / London should not get London-flavored idea recommendations. The honest move is to flag the gap once ("you said observational humor / NYC funniness but most of your last 30 are travel / gym — want me to wait for the new direction to land before drafting ideas?") and either return `[]` or return only ideas grounded in the stated direction. Wait for 5–10 posts in the corrected direction before grounding hard. Confident London-flavored ideas for a stated-NYC creator are a worse failure than no ideas at all.
+
 ## Voice rules (every idea text the chat layer sends)
 
 - **Name real elements concretely.** Boyfriend Josh, dog Linden, the bodega corner, the architecture tilt — pulled verbatim from `recurringElements`. Never invent.

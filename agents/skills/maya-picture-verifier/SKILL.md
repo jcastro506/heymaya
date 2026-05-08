@@ -2,7 +2,7 @@
 name: maya-picture-verifier
 version: 0.1.0-sprint5
 description: Confirmation conversation that runs after multimodal creator-picture synthesis. Surfaces every low-confidence inference as a cited yes/no question to the creator, parses their free-text reply, and applies confirmed (or corrected) values back to the picture draft before it locks in. Composes with `maya-citation-firewall` so every question carries the evidence Maya is asking about.
-when-to-use: Called by the onboarding pipeline after `creatorPicture` synthesis lands, for every entry on `creatorPicture.needsVerification[]`. Maya MUST hold the draft in pending state until the verifier round-trip resolves each item — picture is not "locked" until every flagged inference is confirmed, corrected, or explicitly skipped by the creator. Also invoked on-demand when the creator says something that contradicts a picture field already locked in (e.g. "I moved to Brooklyn last month" → re-open the location verification flow).
+when-to-use: Called by the onboarding pipeline after `creatorPicture` synthesis lands, ONLY when `creatorPicture.needsVerification[]` is non-empty (which is no longer guaranteed — see ASK-WHEN-YOU-HAVE-A-QUESTION rule below). For severity `blocker` items the picture stays in pending state until resolved; for severity `soft` items the creator can wave through and the picture locks anyway. Also invoked on-demand when the creator says something that contradicts a picture field already locked in (e.g. "I moved to Brooklyn last month" → re-open the location verification flow).
 plan-tier: all
 thinking-budget: low (rule-based parsing) → medium (LLM fallback when free-text is irreducibly ambiguous, gated through the calling skill)
 metadata:
@@ -24,9 +24,13 @@ The confirmation gate between Maya's synthesized creator picture and the picture
 
 ## Why this exists
 
-The Sprint 4 multimodal synthesizer is high-thinking but it still infers. Some inferences are confident (the creator's last 30 TikToks are clearly cooking-niche). Some are borderline (the handle says NYC but six recent posts reference the London Tube — are they in London now?). Borderline inferences land on `creatorPicture.needsVerification[]` and Maya MUST surface them before the picture is treated as ground truth — otherwise every downstream skill (rate calculator, peer competitor watcher, brand outreach) inherits the uncertainty silently.
+The multimodal synthesizer is high-thinking but it still infers. Some inferences are confident (the creator's last 30 TikToks are clearly cooking-niche). Some are borderline (the handle says NYC but six recent posts reference the London Tube — are they in London now?). When a borderline inference rises to a real question — hard divergence (blocker), recurring person Maya can't identify (soft), recurring location Maya can't reconcile (soft), or load-bearing recurring object/phrase Maya can't ground (soft) — synthesis lands an entry on `creatorPicture.needsVerification[]` and this skill owns the round-trip. When synthesis has nothing to ask, `needsVerification[]` is empty and this skill does NOT run — silence is the right answer.
 
-This skill owns that conversation. It is the iMessage-shaped "I noticed X — true?" loop, with the cited evidence inline. Every question Maya sends through this skill carries the post / metric / audience signal that triggered the inference, so the creator is never asked to confirm something out of thin air.
+This is the iMessage-shaped "I noticed X — true?" loop, with the cited evidence inline. Every question Maya sends through this skill carries the post / metric / audience signal that triggered the inference, so the creator is never asked to confirm something out of thin air.
+
+## ASK-WHEN-YOU-HAVE-A-QUESTION
+
+A real human social-media manager doesn't interrogate a creator on Day 0. She watches their content, forms a read, and asks ONLY when something is genuinely unclear or doesn't fit. The synthesis upstream applies the same rule: it emits a `needsVerification[]` entry only when there's a real question (severity `blocker` for hard divergence; severity `soft` for person/location/object Maya can't ground). Empty `needsVerification[]` is fine — the picture locks silently when the read is clean. This skill exists to handle the items that DO get flagged, not to manufacture questions when none are warranted. If the calling pipeline passes an empty list, do nothing and let the picture lock.
 
 ## Inputs
 
@@ -104,7 +108,7 @@ The parser intentionally does not threshold-classify free text. When the reply i
 
 - `confirmed: true` — write `item.inferredValue` to `item.field` and append `{ field, source: "verifier-confirmed", at: Date.now() }` to a verification audit log on the draft. The picture row's `sourceCitations` is also extended with each `item.citations[]` entry that backed the inference (so downstream skills see the verifier's evidence chain).
 - `confirmed: false, correctedValue: X` — write `X` to `item.field`. Append `{ field, source: "verifier-corrected", before: inferredValue, after: X, at: Date.now() }`.
-- `ambiguous: true` — leave the draft unchanged. The verifier item stays in `needsVerification[]` and the calling skill MUST re-ask.
+- `ambiguous: true` — leave the draft unchanged. For `blocker` items the calling skill re-asks; for `soft` items the calling skill MAY wave the item through (creator chose to skip) and let the picture lock with the inferred value. Severity decides — soft items never block lock.
 
 Mutation is purely on the draft object passed in (no Convex calls). The pipeline writes the resulting draft to Convex when every verification item is resolved.
 
