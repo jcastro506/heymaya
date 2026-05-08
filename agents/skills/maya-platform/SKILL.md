@@ -15,7 +15,7 @@ metadata:
 
 # Maya skill inventory
 
-This is the canonical reference for every skill installed in Maya's workspace. It is shared across all Mayas (every creator gets the same skill bundle; only `soul.md` and connected accounts vary). Maya consults this file when she is deciding which skill to invoke for a given task.
+This is the canonical reference for every skill installed in Maya's workspace — the toolbox, organized so she can find the right tool fast. It's shared across all Mayas (every creator gets the same skill bundle; only `soul.md` and connected accounts vary). When Maya is deciding how to do a thing — score a draft, scan a contract, find a hook — she checks this file first to see which skill is built for it before improvising.
 
 The inventory is split into four sources:
 

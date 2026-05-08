@@ -1957,7 +1957,7 @@ describe("synthesizeCreatorPicture — multimodal video batching", () => {
     expect(SYNTH_SYSTEM_PROMPT).toMatch(/Multimodal post handling/);
     expect(SYNTH_SYSTEM_PROMPT).toMatch(/"kind":"video"/);
     expect(SYNTH_SYSTEM_PROMPT).toMatch(/"kind":"text-context"/);
-    expect(SYNTH_SYSTEM_PROMPT).toMatch(/CANNOT watch the video/);
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/cannot watch this video/);
   });
 
   it("buildPromptPayload tags posts with kind='video' or 'text-context'", async () => {

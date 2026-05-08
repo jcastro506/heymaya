@@ -6,32 +6,36 @@ description: Maya's proactive behavior schedule — cron + heartbeat + event spl
 
 # cron.md — Maya's proactive schedule
 
-This file is the single source of truth for **when Maya does what**. Every
-proactive behavior Maya performs — every push, every brief, every nudge —
-lives in one of three buckets:
+This file is the source of truth for **when Maya does what**. A real human
+manager has a rough rhythm to her week — morning check-in, afternoon
+performance look, Sunday planning session — and this file is Maya's version
+of that rhythm. Every proactive behavior she performs (every push, every
+brief, every nudge) sits in one of three buckets:
 
 1. **Cron (precise wall-clock).** Six entries in § 2 below. These have a
-   5-field POSIX cron expression and fire at a precise local time on the
-   creator's timezone. The OpenClaw scheduler reads `~/.openclaw/cron/jobs.json`
-   (built by `convex/agents/packs/maya/workspace/buildCronJobsJson.ts` from
+   5-field POSIX cron expression and fire at a precise local time in the
+   creator's timezone — the heartbeat of the week. The OpenClaw scheduler
+   reads `~/.openclaw/cron/jobs.json` (built by
+   `convex/agents/packs/maya/workspace/buildCronJobsJson.ts` from
    `STANDING_ORDERS` in `standingOrders.ts`) at boot and fires these on
    their schedules.
 2. **Heartbeat-driven (no fixed schedule).** Nine entries in § 3 below.
-   These have no cron expression. Maya decides per-tick whether to run
-   them based on cooldowns, current state, and what the creator's day
-   actually needs. The cooldowns listed are guidance, not gates — Maya's
-   judgment owns the trigger. (Mechanical correctness still lives in
-   the per-skill SKILL.md and per-mutation validator.)
+   No cron expression — on each tick Maya checks the cooldown guidance, looks
+   at what the creator's day actually needs, and decides whether to run.
+   The cooldowns listed are defaults, not gates — judgment owns the
+   trigger. (Mechanical correctness still lives in the per-skill SKILL.md
+   and per-mutation validator.)
 3. **Event-driven / on-demand / folded.** Listed in § 4 below for
    sibling-scan completeness. Fire on external triggers (Gmail webhook,
    PDF upload, ScrapeCreators delta), creator-initiated chat, or
    composed inside another program's run.
 
-This document is paired with `playbook.md` (the prose for each behavior)
-and `SKILL.md` (the skill inventory each behavior depends on). The Sprint 3
-acceptance gate runs a sibling-file scan that asserts every program in
-`STANDING_ORDERS` has a matching playbook section, and every cron entry
-here has a matching cron-kind program in `STANDING_ORDERS`.
+This document pairs with `playbook.md` (the prose for each behavior — how
+it sounds when Maya delivers it) and `SKILL.md` (the skill inventory each
+behavior depends on). The Sprint 3 acceptance gate runs a sibling-file
+scan that asserts every program in `STANDING_ORDERS` has a matching
+playbook section, and every cron entry here has a matching cron-kind
+program in `STANDING_ORDERS`.
 
 ---
 
@@ -86,13 +90,14 @@ an entry here, you must update that catalog.
 
 ## 3. Heartbeat-driven entries — no fixed schedule (9)
 
-These programs do not run on a wall-clock schedule. They fire off
-heartbeat ticks: on each tick Maya consults the cooldown listed below
-plus the current state of the creator's day, and decides whether to
-invoke. Cooldowns are **guidance** Maya uses as a default cadence; the
-real trigger is her judgment. If the creator just posted, run the
-2h check earlier than the 60-min default; if the niche is quiet, hold
-the niche scan past 6h. The .md file does not encode a hard gate.
+These programs don't run on a wall-clock schedule. They fire off
+heartbeat ticks: on each tick Maya looks at the cooldown listed below,
+looks at what the creator's day actually looks like right now, and
+decides whether to run. The cooldowns are a default cadence, not a
+gate — her judgment owns the call. If the creator just posted, run
+the 2h check earlier than the 60-min default. If the niche is quiet,
+hold the niche scan past 6h. This file doesn't encode a hard rule
+against either move.
 
 | entryId | trigger | description | thinking | tier | cooldown guidance | playbook § |
 |---|---|---|---|---|---|---|
