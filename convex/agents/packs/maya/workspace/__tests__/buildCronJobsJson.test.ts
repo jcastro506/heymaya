@@ -358,12 +358,15 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     }
   });
 
-  it("kickstart payload (Sprint 9.7+) instructs FOUR separate sends + anti-fabrication + no-jargon", () => {
-    // Sprint 9.7 — after the live-test failure where Maya bundled greet +
-    // identity + insight + Q1 into one 700-char marketing-pitch novel with
-    // a fabricated 50/50 stat, the kickstart prose explicitly directs the
-    // multi-send shape, names the fabrication anti-pattern, and lists the
-    // jargon to avoid.
+  it("kickstart payload (Sprint 11.1) instructs THREE sends + friend-reaction wow opener + bans the analyst-bot template patterns", () => {
+    // Sprint 11.1 — after the live-test where Maya's opening read robotic
+    // ("Already pulled your last 30—those night shots... handheld POV
+    // establishes traveler identity is a strong lane... Here's the work
+    // I'll handle: running your content calendar..."), the kickstart was
+    // collapsed from FOUR sends to THREE (drop the capability-tour beat
+    // entirely), the opener is now a friend's casual reaction to a
+    // specific moment from warmthMaterial (not analyst summary), and the
+    // canonical analyst-bot template phrasings are explicitly banned.
     const { jobs } = buildCronJobsJson({
       creator: freshCreator("manager"),
       firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
@@ -372,17 +375,41 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     if (kickstart.payload.kind !== "agentTurn")
       throw new Error("type-narrow guard");
     const msg = kickstart.payload.message;
-    // Multi-send shape — explicit "FOUR separate" calls, not bundled.
-    expect(msg).toMatch(/FOUR separate/i);
+
+    // Three-send shape — explicit "Three short messages" replaces the
+    // prior FOUR. Capability-tour beat (3) was dropped per operator;
+    // creator learns Maya's job by experiencing it.
+    expect(msg).toMatch(/Three short messages/i);
     expect(msg).toContain("claw-messenger.sendText");
-    // Anti-fabrication — names the ranked-list trap.
+
+    // Friend-reaction opener — wow rule + casual register + specific
+    // moment (not technical analysis).
+    expect(msg).toMatch(/Wow opener/i);
+    expect(msg).toMatch(/friend who actually watched/i);
+    expect(msg).toMatch(/Casual reaction, not technical analysis/i);
+
+    // Analyst-bot template patterns explicitly banned.
+    expect(msg).toMatch(/Already pulled your last 30/);
+    expect(msg).toMatch(/is a strong lane/);
+    expect(msg).toMatch(/captured the energy of/);
+    expect(msg).toMatch(/Here's the work I'll handle/);
+    expect(msg).toMatch(/Got a few quick questions to start/);
+    // Capability-tour ban — explicit instruction NOT to enumerate Maya's
+    // job to the creator.
+    expect(msg).toMatch(/DO NOT send a separate beat enumerating Maya's job/);
+    expect(msg).toMatch(/learns Maya's job by experiencing it/i);
+
+    // Anti-fabrication preserved — names the ranked-list trap.
     expect(msg).toMatch(/never invent precise numbers/i);
-    expect(msg).toMatch(/50\/50/); // names the bad pattern by example
+    expect(msg).toMatch(/50\/50/);
     expect(msg).toMatch(/ranked list/i);
-    // Per-message cap — operator-locked 400 chars.
-    expect(msg).toContain("400");
-    // No-jargon — names at least the live-test offenders.
-    expect(msg).toMatch(/FYP|first-frame|share metrics|anchor questions/i);
+
+    // No-jargon-at-creator — names the live-test offenders.
+    expect(msg).toMatch(/FYP|first-frame|retention|completion rate|narrative arc/i);
+
+    // Banned-artifact list reinforced — internal IDs / vendor names
+    // never surface to creator.
+    expect(msg).toMatch(/aweme_id|ScrapeCreators API|dailyBriefs/);
   });
 
   it("does NOT emit the kickstart when firstBootCompletedAt is set", () => {
