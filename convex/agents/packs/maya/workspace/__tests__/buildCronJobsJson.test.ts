@@ -404,8 +404,8 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     }
     // Hard citation rule must be present.
     expect(msg).toMatch(/HARD CITATION RULE/);
-    expect(msg).toMatch(/MUST quote or paraphrase/);
-    expect(msg).toMatch(/from THIS creator's `warmthMaterial/);
+    expect(msg).toMatch(/MUST quote\/paraphrase|MUST quote or paraphrase/);
+    expect(msg).toMatch(/THIS creator's `warmthMaterial|THIS creator's USER\.md/);
     expect(msg).toMatch(/NEVER fabricate a moment/);
     // Honest no-claim fallback when warmthMaterial empty.
     expect(msg).toMatch(/honest no-claim fallback/i);
@@ -429,28 +429,46 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
       throw new Error("type-narrow guard");
     const msg = kickstart.payload.message;
 
-    // Three-send shape — explicit "Three short messages" replaces the
-    // prior FOUR. Capability-tour beat (3) was dropped per operator;
-    // creator learns Maya's job by experiencing it.
-    expect(msg).toMatch(/Three short messages/i);
+    // Three-send shape — explicit "Three messages" + send order header
+    // replaces the prior FOUR. Capability-tour beat dropped per operator.
+    expect(msg).toMatch(/Three messages/);
     expect(msg).toContain("claw-messenger.sendText");
 
-    // Friend-reaction opener — wow rule + casual register.
-    expect(msg).toMatch(/Wow opener/i);
-    expect(msg).toMatch(/friend who actually watched/i);
-    expect(msg).toMatch(/Casual reaction register, not analyst register/);
+    // SEND ORDER hard-locked block — pulled to top so model sees order
+    // before drowning in bans.
+    expect(msg).toMatch(/SEND ORDER \(HARD-LOCKED\)/);
+    expect(msg).toMatch(/NEVER send Q1 first/);
+    expect(msg).toMatch(/NEVER repeat any beat/);
+    expect(msg).toMatch(/NEVER bundle two beats/);
 
-    // Analyst-bot template patterns explicitly banned.
+    // Send 1 has identity beat (no full-name; first-name only) AND
+    // friend-reaction wow.
+    expect(msg).toMatch(/SEND 1 — GREET \+ WOW OPENER/);
+    expect(msg).toMatch(/Maya here/);
+    expect(msg).toMatch(/first-name only/);
+    expect(msg).toMatch(/never 'Kevin Castro'/);
+    expect(msg).toMatch(/friend texting after watching/i);
+
+    // Send 2 cited insight + banned numerical ticks.
+    expect(msg).toMatch(/SEND 2 — CITED INSIGHT/);
+    expect(msg).toMatch(/Banned ticks/);
+    expect(msg).toMatch(/the numbers back it up/);
+    expect(msg).toMatch(/the data agrees/);
+    expect(msg).toMatch(/the cherry, not the lede/);
+
+    // Send 3 Q1 + capability-tour-loophole closure on the question itself.
+    expect(msg).toMatch(/SEND 3 — Q1 LOCATION/);
+    expect(msg).toMatch(/must NOT carry capability-justification/);
+    expect(msg).toMatch(/stealth capability-tour/);
+    expect(msg).toMatch(/Got a few quick questions to start/);
+
+    // Universal bans block — preserved analyst-bot patterns.
+    expect(msg).toMatch(/UNIVERSAL BANS/);
     expect(msg).toMatch(/Already pulled your last 30/);
-    // Universal `is a [adjective] lane` ban (not just "strong lane")
     expect(msg).toMatch(/is a \[adjective\] lane/);
     expect(msg).toMatch(/captured the energy of/);
     expect(msg).toMatch(/Here's the work I'll handle/);
-    expect(msg).toMatch(/Got a few quick questions to start/);
-    // Capability-tour ban — explicit instruction NOT to enumerate Maya's
-    // job to the creator.
-    expect(msg).toMatch(/DO NOT send a separate beat enumerating Maya's job/);
-    expect(msg).toMatch(/learns Maya's job by experiencing it/i);
+    expect(msg).toMatch(/DO NOT send a separate message enumerating Maya's job/);
 
     // Anti-fabrication preserved — names the ranked-list trap.
     expect(msg).toMatch(/never invent precise numbers/i);
