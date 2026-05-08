@@ -105,6 +105,7 @@ import type * as integrations_google_gmail from "../integrations/google/gmail.js
 import type * as integrations_google_tokenResolver from "../integrations/google/tokenResolver.js";
 import type * as integrations_hunter_client from "../integrations/hunter/client.js";
 import type * as integrations_inbox_warmMining from "../integrations/inbox/warmMining.js";
+import type * as integrations_inbox_warmMiningAction from "../integrations/inbox/warmMiningAction.js";
 import type * as integrations_openclaw_channels from "../integrations/openclaw/channels.js";
 import type * as integrations_openclaw_cliClient from "../integrations/openclaw/cliClient.js";
 import type * as integrations_photoBridgeWorker_client from "../integrations/photoBridgeWorker/client.js";
@@ -299,6 +300,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/google/tokenResolver": typeof integrations_google_tokenResolver;
   "integrations/hunter/client": typeof integrations_hunter_client;
   "integrations/inbox/warmMining": typeof integrations_inbox_warmMining;
+  "integrations/inbox/warmMiningAction": typeof integrations_inbox_warmMiningAction;
   "integrations/openclaw/channels": typeof integrations_openclaw_channels;
   "integrations/openclaw/cliClient": typeof integrations_openclaw_cliClient;
   "integrations/photoBridgeWorker/client": typeof integrations_photoBridgeWorker_client;
