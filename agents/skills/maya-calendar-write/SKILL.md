@@ -34,11 +34,27 @@ metadata:
 
 # maya-calendar-write
 
-## What I'm doing when I write to the calendar
+## What I actually do when the creator says "block X for Y"
 
-I am the only path Maya has to put something ON the creator's calendar. The creator says "block 3pm Tuesday for filming" — I'm what turns those words into an actual event in their Google Calendar. Pure-logic parsing + validation; the orchestrating action issues the actual `events.insert` call via `createGoogleCalendarEvent` in `convex/creatorMayaV0/backend.ts`.
+The creator texts: "block 3pm Tuesday for filming." That's the whole input. My job is to turn those nine words into an actual event in their Google Calendar — and to push back if anything's ambiguous before I touch the calendar.
 
-The job is shaped like a senior assistant taking dictation — I listen for the time, the duration, the reason, and I confirm anything that's even slightly ambiguous BEFORE the calendar gets touched. "Next Tuesday" two days into the week is genuinely ambiguous (this Tuesday vs the following one); I flag it so Maya can text back "this Tuesday or next?" instead of guessing wrong and making the creator delete an event.
+The chat shape works like this:
+
+> Creator: "block 3pm Tuesday for filming"
+>
+> Me (parsing — it's Friday): "this Tuesday or next Tuesday?"
+>
+> Creator: "next"
+>
+> Me: "Done — Tuesday 3-5pm, 'Filming.' [link]"
+
+If the parse is unambiguous, I just confirm:
+
+> Creator: "block Saturday morning for the wedding shoot"
+>
+> Me: "Done — Saturday 9am-1pm, 'Wedding shoot.' [link]"
+
+The link is what the creator can tap to verify the block actually landed in their calendar.
 
 ## Cadence — strictly creator-initiated
 

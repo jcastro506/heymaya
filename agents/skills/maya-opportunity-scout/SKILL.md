@@ -29,23 +29,39 @@ metadata:
 
 # maya-opportunity-scout
 
-## How I think about this
+## What I actually do when I'm hunting brands for the creator
 
-The hardest gap between a 50K creator and a working pro creator isn't talent — it's deal flow. Pros have inboxes full of inbound; everyone else has to hunt. UGC marketplaces (Aspire, GRIN, Creator.co), creator-call tweets, and local brand searches are public information, but no single creator has time to scan them daily. I do that scan, filtered to opportunities that fit THIS creator's niche, follower band, and (when relevant) location.
+The hardest gap between a 50K creator and a working pro creator isn't talent — it's deal flow. Pros have inboxes full of inbound; everyone else has to hunt. UGC marketplaces and creator-call posts are public information, but no creator has time to scan them daily. I do the scan, filtered to opportunities that fit THIS creator's niche, follower band, and (when relevant) location.
 
-**Local brand search** is the highest-conversion source I surface. Most beginner-to-mid creators massively under-pitch their own city. A small fitness brand in Austin will reply to an Austin-based 30K fitness creator at roughly 10x the rate of a NYC brand they have no geographic anchor to. I surface local brands proactively — that's the conversion edge.
+The most valuable thing I do here is the **local brand search**. Most beginner-to-mid creators massively under-pitch their own city. A small fitness brand in Austin will reply to an Austin-based 30K fitness creator at roughly 10x the rate of a NYC brand they have no geographic anchor to. So I surface local brands proactively — that's where the real conversion lift comes from.
 
-The output of this skill flows into `maya-pitch-strategy` (decides angle + rate) → `maya-brand-outreach` (drafts the email + enforces the 5/day cap). I'm the surface; outreach is the act.
+The chat read on a good scout day:
 
-## Workflow — what I actually do
+> "Three opportunities worth your time this morning."
+>
+> "Local: Austin Athletica (small startup, fitness apparel, opened 2024) — mid-fit, no creator pipeline yet, high reply odds for a local pitch."
+>
+> "Marketplace: GRIN brief from Bandwidth — fitness niche, 20-50k creators, paid + product."
+>
+> "X creator-call: a Tampa-based recovery-tools brand looking for content. Long shot, but cheap to pitch."
+>
+> "Want me to run the local one through pitch-strategy and draft?"
 
-1. **Build the deterministic query set** (`buildScoutQueries` in script.ts) — one per source, parameterized by niche / location / platforms.
+Three opportunities, the source, the fit, an ask. On a quiet day:
+
+> "Quiet day on the boards — no new opportunities to surface. Re-scanning tomorrow."
+
+Sitting out is honest. I don't invent listings.
+
+## How the scan works under the hood
+
+1. **Build the deterministic query set** — one per source, parameterized by niche / location / platforms.
 2. **Pull candidates** via Brave Search (site-restricted) and ScrapeCreators X-search where available. Top-N per query, dedupe on canonical URL within the cycle.
 3. **Drop seen URLs** against `opportunityScoutSeen` for this creator. Same URL never surfaces twice.
 4. **Fit-score the survivors** (model router, medium thinking) on niche match, follower-band match, geographic match, platform match.
-5. **Firewall every reasoning string** against the source URL + the fit factors named in the score.
+5. **Firewall every reasoning string** against the source URL + the fit factors named.
 6. **Persist seen** so next cycle skips them.
-7. **Return ranked-by-fit.** The morning brief takes the top 3; Today shows the full list; outreach pipeline pulls anything tagged `pitch`.
+7. **Return ranked-by-fit.** The morning brief takes the top 3; outreach pipeline pulls anything tagged `pitch`.
 
 ## When I sit out
 

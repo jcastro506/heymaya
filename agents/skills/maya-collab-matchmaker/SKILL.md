@@ -30,21 +30,45 @@ metadata:
 
 # maya-collab-matchmaker
 
-## How I think about this
+## What I actually do when I'm matchmaking collabs
 
-Collabs are the cheapest, most-undervalued growth lever in the creator economy. A single well-executed cross-shoutout with a peer of similar size can deliver more sustained subscribers than a month of organic posting. But finding the right peer is hard — too small and the trade is asymmetric; too big and the peer ignores you; too overlapped and you're fighting for the same attention; too divergent and the audience won't care.
+A single well-executed cross-shoutout with a peer of similar size delivers more sustained subscribers than a month of organic posting. The catch: finding the right peer is hard. Too small and the trade is asymmetric. Too big and they ignore you. Too overlapped and you're fighting for the same audience. Too divergent and the audience doesn't care.
 
-A good manager keeps a running list of "who could you collab with right now," weighted by audience overlap and recent momentum. I do the same job, weekly, with citations.
+A real manager keeps a running list of "who could you collab with right now," weighted by audience overlap and recent momentum. I do the same job — Sunday cycle, on-demand when the creator asks.
 
-## Workflow — what I actually do
+The chat read on Sunday looks like:
 
-1. **Seed from `namedPeers`** in soul.md. These are the creator's explicitly-listed peers (collected at onboarding + refreshed when soul.md updates).
-2. **Expand via ScrapeCreators creator-search** by niche tag + 0.5x-2.0x follower band — the "comfortable trade" range. Anything outside that band is dropped.
-3. **Filter aggressively.** Drop direct competitors (overlap >0.85 = saturation), mismatched-size peers (>5x larger or <0.2x smaller), recent same-format collabs (within 90 days), and any peer with a `flop` outcome in collabHistory. Filtering hard up front is what keeps the surfaced list usable; a list of 12 mediocre matches is worse than 3 strong ones.
-4. **Score audience overlap.** High-value range: 0.30-0.60. Premium: 0.30-0.50 (overlap exists but isn't saturated). Drop: <0.20 (too divergent) and >0.85 (saturation — they're already pulling from the same well).
-5. **Pick the format** based on platform + size differential — `cross-shoutout` / `duet` for same-platform-same-size, `video-collab` / `instagram-takeover` when there's a 1.5-2.0x size differential, `guest-podcast` for cross-platform, `co-created-product` only when there's a 6-month relationship history.
-6. **Draft a 2-3 sentence first-message DM** through `maya-voice-applier` so it sounds like the creator, not like me. Specific opening hook (cited from peer's recent post), concrete proposal, out for the peer to say no without losing face.
+> "Three collab matches worth your time this week."
+>
+> "@sarahfitness — 32k, your size, audience overlap is in the sweet spot (~0.4). Her last Reel — the resistance-band circuit — is the angle. Cross-shoutout would land for both of you."
+>
+> "@chrislifts — 80k, rising momentum, video-collab format (he's got the longer-form audience you don't). Him hosting you on his Sunday Q&A series is the move."
+>
+> "@meghan_runs — IG takeover candidate, slightly bigger but you'd be the value-add for her travel-running audience."
+>
+> "Want me to draft the openers?"
+
+Three matches, the why, the format, an ask. Each one ties to a specific peer post or pattern — not "great audience overlap!" but "her last Reel was the resistance-band circuit, which is exactly your lane."
+
+## What I'm looking at
+
+1. **Seed from `namedPeers`** in soul.md. The creator's explicitly-listed peers (collected at onboarding).
+2. **Expand via creator-search** by niche tag + 0.5x-2.0x follower band — the "comfortable trade" range. Outside that band, the trade is asymmetric.
+3. **Filter aggressively.** Drop direct competitors (overlap >0.85 = saturation), mismatched-size peers (>5x larger or <0.2x smaller), recent same-format collabs (within 90 days), any peer with a `flop` outcome in collab history. Filtering hard upfront keeps the surfaced list usable — 12 mediocre matches is worse than 3 strong ones.
+4. **Score audience overlap.** High-value: 0.30-0.60. Premium: 0.30-0.50 (overlap exists but isn't saturated). Drop: <0.20 (too divergent), >0.85 (saturation).
+5. **Pick the format** based on platform + size differential — `cross-shoutout` / `duet` for same-platform-same-size, `video-collab` / `instagram-takeover` for 1.5-2.0x size differential, `guest-podcast` for cross-platform, `co-created-product` only when 6-month relationship history exists.
+6. **Draft a 2-3 sentence DM** through `maya-voice-applier` so it sounds like the creator. Specific opening hook (cited from peer's recent post), concrete proposal, an out for the peer to say no without losing face.
 7. **Hand back ranked matches** + anti-pattern hints. The creator taps to send.
+
+## The first-message draft — what makes it land
+
+A 2-3 sentence DM in the creator's voice. The shape:
+
+1. **Specific opening hook.** Reference a peer's recent post or pattern (cited). Not "love your content!" — *"the resistance-band Reel from last Tuesday — that's basically my lane too."*
+2. **Concrete proposal.** Name the format and a low-friction starting point. *"would you be down to do a cross-shoutout this week — I'll repost yours, you repost mine?"*
+3. **Out.** Leave room for the peer to say no without losing face. *"no pressure if timing's not right — happy to revisit."*
+
+Run through `maya-voice-applier` so the message sounds like the creator wrote it, not like a tool. Fact-preservation guard ensures the peer's name + the cited post reference don't mutate.
 
 ## Inputs
 

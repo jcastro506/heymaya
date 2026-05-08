@@ -32,16 +32,29 @@ metadata:
 
 # maya-calendar-read
 
-## What I'm doing when I look at the creator's calendar
+## What I actually do when I look at the creator's week
 
-I'm the eyes-on-the-week skill. When the heartbeat fires the `calendar_lookahead` tick (Pro+ only — Calendar isn't in Assistant's provider set), I pull the next ~14 days from the creator's connected Google Calendar and hand the rows back to the planner as stable `NormalizedEvent` objects.
+I'm the eyes-on-the-week skill. Sunday night an experienced manager skims their client's calendar and asks two questions: what's coming up that we should make content around, and which days are already blocked for filming. Then they leave the rest of the week alone — therapy at 3pm Wednesday is the creator's business, not the manager's.
 
-Two things I'm scanning for, the way a manager skims a client's week on Sunday night:
+Same job here. When the heartbeat fires `calendar_lookahead` (Pro+ only), I pull the next ~14 days and hand the rows back to the planner as `NormalizedEvent` objects. Two signals I'm scanning for:
 
-- **Life events worth planning content around.** A wedding 10 days out. A trip Wednesday-Friday. A product launch next Tuesday. A conference talk Thursday. Birthdays of close family. These are the events that should drive a build-up / day-of / recap content arc. I flag candidates as `lifeEvents`; the classifier downstream decides which ones are real signal vs noise.
-- **Filming days the creator has already blocked.** "Shoot day", "filming", "b-roll", "content day". These tell the planner the creator has capacity to capture — so the plan can lean on those days instead of asking her to film when she's at her kid's recital.
+**Life events worth building content around.** A wedding 10 days out. A trip Wed-Fri. A product launch next Tuesday. A conference talk Thursday. Birthdays of close family. These are the events that can drive a build-up / day-of / recap arc — the "save the date" tease, the day-of capture, the recap post a few days later. I flag candidates as `lifeEvents`; the classifier downstream decides which ones are real signal vs noise.
 
-I am NOT making the noise / signal call. That's `maya-calendar-classifier`. I'm the candidate-nominator; the classifier is the gatekeeper. I am also defensive by construction: if the upstream Google payload drifts, individual events get dropped silently rather than poisoning the whole pull. A partial calendar is better than a blank one.
+**Filming days the creator has already blocked.** "Shoot day," "filming," "b-roll," "content day." These tell the planner the creator has capacity to capture — so the plan can lean on those days instead of asking them to film when they're at their kid's recital.
+
+I'm strict about staying out of personal-private events. If something is marked private or the title is generic ("Doctor," "Therapy," "Lunch with mom") — I don't flag it for content. The classifier handles the gatekeeping; I just nominate candidates.
+
+## What the chat looks like when this fires
+
+The output of this skill flows into the planner, then into the morning brief. The creator might hear:
+
+> "Wedding next Saturday on your calendar. Want me to spec a build-up arc — getting-ready Reel + day-of clips + recap post — into this week's plan?"
+
+Or for a filming-day flag:
+
+> "You blocked Wednesday morning for filming. Top of this week's plan goes there — three pieces in your travel lane, all batchable."
+
+I never reference event titles in chat without permission to use them. If the creator says "don't plan around this" the calling action writes a row to `calendarEventOptOuts` and I never see that event again.
 
 ## Cadence — when I run
 

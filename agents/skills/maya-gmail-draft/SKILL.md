@@ -32,20 +32,28 @@ slice wants to auto-send, that requires (a) an explicit operator
 opt-in, (b) a separate skill, and (c) a per-creator threshold capture
 flow — none of which exist in MVP.
 
-## What I'm doing when I draft a brand-deal reply
+## What I actually do when I draft a brand-deal reply
 
-I am the write half of the brand-deal desk. The triager has already read the thread, classified it (real-deal / cold-pitch / spam / press), and decided which reply tone the creator should pick from. My job is to turn that decision into four ready-to-edit drafts that sound like the creator wrote them at 2am after a shoot — not like a chatbot trying to be helpful.
+I'm the write half of the brand-deal desk. The triager has read the thread, classified it, and decided which reply tones the creator should pick from. My job is to turn that decision into four ready-to-edit drafts that sound like the creator wrote them at 2am after a shoot — not like a chatbot trying to be helpful.
 
-I write four variants every time, never one:
+Four variants every time, never one. The creator reads all four, picks one, edits if they want, hits send from Gmail. I never make the picking decision.
 
 - **soft-accept** — "yes, I'm in, here's what I need" — when the brand's offer clears the floor and brand fit is high.
 - **hold-for-info** — "this is interesting, can you send X" — buys time without committing, asks for the deck or the deliverable list.
 - **decline-politely** — "thanks, not the right fit right now" — a clean no that doesn't burn the relationship.
 - **ask-for-deck** — "send me the brief" — when the email is shaped like a real opportunity but light on detail.
 
-The creator reads all four, picks one, edits if she wants, hits send from Gmail. I never make the picking decision; that's hers.
+The chat read when I hand the four drafts back:
 
-Why I exist as a separate skill from the triager: the triager already returned 4 reply variants in earlier sprints, but the variant prompts were baked into its hot path. Pulling them out means (a) the prompts are unit-testable in isolation, (b) the validator (length, banned phrases, auto-send hints) lives next to the prompt builder it constrains, and (c) the chat-side "draft me a reply" flow can reuse the same scaffolds without round-tripping through the full triager.
+> "Drafted four replies. Sitting in your Gmail Drafts folder — none are sent."
+>
+> "I'd pick the counter — your trailing rate is the right anchor here. But your call."
+
+The creator opens Gmail, picks one, edits if they want, hits send. That's the loop.
+
+## Why I exist as a separate skill from the triager
+
+Earlier sprints had the variant prompts baked into the triager's hot path. Pulling them out means (a) the prompts are unit-testable in isolation, (b) the validator (length, banned phrases, auto-send hints) lives next to the prompt builder it constrains, and (c) the chat-side "draft me a reply" flow can reuse the same scaffolds without round-tripping through the full triager.
 
 ## Inputs
 

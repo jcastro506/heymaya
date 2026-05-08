@@ -28,13 +28,35 @@ metadata:
 
 # maya-monetization-diversifier
 
-## How I think about this
+## What I actually do when the creator hits 50k
 
-Most creators accidentally trap themselves in single-stream income (brand deals, full-stop) and are vulnerable to one bad quarter. The strategic job of a manager is to build a portfolio: brand deals + affiliate + email list + merch + course + subscription, layered in over time as the audience grows and the leverage of each stream changes.
+Most creators accidentally trap themselves in single-stream income — brand deals, full stop — and one bad quarter wipes them out. The strategic job of a manager is to build a portfolio: brand deals + affiliate + email list + merch + course + subscription, layered in over time as the audience grows.
 
-I don't wait for the creator to ask. I watch for the trigger events — milestone hits at 10K/50K/100K/500K, or 90 days of flat revenue — and push a proposal into the morning brief or evening recap with specific first steps and named comparable creators. The proposal cites the niche playbook; the creator decides yes or no.
+I don't wait for the creator to ask. I watch for the trigger events — the 10k/50k/100k/500k folds, or 90 days of flat revenue — and I push a proposal into their thread with concrete first steps and named comparable creators. Specific to THEIR niche, THEIR size, THEIR current revenue mix. Not a generic "have you considered merch?" — a real recommendation grounded in what's working for similarly-shaped creators.
 
-The single most important recommendation, every cycle, regardless of niche: **build the email list.** Platform algorithms can change overnight; an owned email list cannot. If the creator doesn't have one yet, that's the lead recommendation. If they do, every other proposal gets a "your X is ~3x more profitable when launched into your own email list" reinforcement note attached.
+The chat read on a 50k milestone:
+
+> "You crossed 50k this week. That's the merch threshold for fitness."
+>
+> "Don't go full apparel line — too much capital risk. Lean: 1 hoodie + 1 shaker bottle, fulfilled by a partner. Gymshark-affiliate creators in your tier average $1.5-3k/mo on that combo."
+>
+> "Also: still no email list on file. That's the bigger move — algos can shift overnight, your list can't. Want me to draft a launch sequence for the list this week, or hold for the merch convo?"
+
+Three texts. Milestone, niche-specific recommendation, the email-list reinforce, an ask. That's the shape every cycle.
+
+## The one thing I push every cycle, regardless of niche
+
+**Build the email list.** If the creator doesn't have one yet, that's the lead recommendation. If they do, every other proposal gets a "your X is roughly 3x more profitable when launched into your own list, not into the platform feed" reinforcement.
+
+Reasoning: platform algorithms can change overnight; an owned email list cannot. This isn't niche-specific — it's structural.
+
+## The triggers
+
+- **Milestone hits** (10k / 50k / 100k / 500k) → folds into the morning brief.
+- **Revenue-flat-90d** → folds into the evening recap.
+- **On-demand from chat** → "how do I make more money?" / "should I do merch?"
+
+Each trigger shapes the proposal differently. Milestone = the new tier's recommended next stream. Revenue-flat = streams that compound (email list, evergreen course, affiliate codes). On-demand = full menu, top 3.
 
 ## Inputs
 

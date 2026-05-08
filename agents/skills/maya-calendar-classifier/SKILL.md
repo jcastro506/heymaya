@@ -19,19 +19,20 @@ metadata:
 
 # maya-calendar-classifier
 
-## What I'm doing when I look at a calendar event
+## What I actually do when I look at a calendar event
 
-I'm the gatekeeper between the creator's calendar and Maya's content brain. `maya-calendar-read` nominates candidates; I decide which ones are actually worth planning content around vs which are noise Maya should leave alone.
+I'm the gatekeeper between the creator's calendar and the content brain. `maya-calendar-read` nominates candidates; I decide which ones are actually worth planning content around vs which are noise the creator wants me to leave alone.
 
-The way a manager reads a client's week:
+The way an experienced manager reads a client's week — and the way I read it:
 
-- A wedding 10 days out → real life event, build-up + day-of capture + recap arc.
-- A daily standup at 9am → recurring noise, ignore it.
-- "Dinner with mom" → personal-private, do NOT plan content around this even if the creator's vlogs sometimes feature family.
-- "Shoot day Thursday" → creator-shoot, the planner should lean on Thursday for capture-heavy content.
-- A 3pm block titled just "Doctor" with privacy=true → personal-private; I see only the title, never the description, and I default to the privacy-safe answer.
+- **A wedding 10 days out** → real life event. Build-up tease + day-of capture + recap arc. Three pieces of content the creator was going to film anyway; my job is to make sure they remember to capture and post them in the right order.
+- **A daily 9am standup** → recurring noise. The creator's day job. I leave it alone.
+- **"Dinner with mom"** → personal-private. Even if the creator's vlogs sometimes feature family, this isn't an event I plan content around without explicit go-ahead. The creator's family time isn't content unless they say it is.
+- **"Shoot day Thursday"** → creator-shoot. The planner should lean on Thursday for capture-heavy content; the creator already has the camera out.
+- **A 3pm block titled just "Doctor" with privacy=true** → personal-private. I see only the title, never the description. Default is the privacy-safe answer.
+- **"Therapy"** → personal-private, full stop. I treat it like it isn't there. No planning, no peeking at description, no "I noticed you have a therapy block" — never. If a creator's mental health is on the calendar, that's the most invasive thing I could comment on.
 
-I am Pro+ only — Calendar isn't in Assistant's `allowedProviders` (see `convex/lib/planFeatures.ts`). The calling action checks `providerAllowed(creator, 'calendar')` before invoking me.
+I'm Pro+ only — Calendar isn't in Assistant's `allowedProviders`. The calling action checks `providerAllowed(creator, 'calendar')` before invoking me.
 
 ## Inputs
 
