@@ -358,6 +358,59 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     }
   });
 
+  it("kickstart prompt does NOT contain any concrete creator-content examples (in-context bias prevention)", () => {
+    // Sprint 11.1 third-occurrence fix — Maya in-context-leaked the
+    // word "bodega" from a prior iteration's GOOD-example into a live
+    // opener for a creator whose account had no bodega content. Same
+    // bug that hit Kevin/Sarah/Mike examples earlier this sprint.
+    // Operator-locked: kickstart prompt must use NO concrete content
+    // examples. Every example you might want comes from THIS creator's
+    // data via warmthMaterial/recurringElements, not from a template.
+    const { jobs } = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    const kickstart = jobs.find((j) => j.id === "0001_first_boot_kickstart")!;
+    if (kickstart.payload.kind !== "agentTurn")
+      throw new Error("type-narrow guard");
+    const msg = kickstart.payload.message;
+    // Concrete content nouns that have leaked through prior iterations.
+    // The prompt may BAN these phrasings (negative pattern); it must NOT
+    // present them in a positive ("GOOD: ...") example.
+    const bannedPositiveExamples = [
+      "bodega",
+      "ramen hack",
+      "the dog clip is sending",
+      "bark moment",
+      "Kevin your delivery",
+      "Sarah",
+      "Mike",
+    ];
+    for (const ex of bannedPositiveExamples) {
+      // Verify the prompt does NOT use these as POSITIVE/GOOD example
+      // payloads. They may appear as banned-list mentions or in tests
+      // — but the production prompt string itself must not seed them.
+      // We check: phrase is absent OR appears only after a "BANNED" /
+      // "banned" / "anti-pattern" cue word within 200 chars.
+      if (msg.toLowerCase().includes(ex.toLowerCase())) {
+        const idx = msg.toLowerCase().indexOf(ex.toLowerCase());
+        const window = msg.slice(Math.max(0, idx - 200), idx).toLowerCase();
+        const hasBanCue = /banned|anti-pattern|never|do not|don't/.test(window);
+        expect(
+          hasBanCue,
+          `concrete example "${ex}" appears in kickstart prompt without a ban-cue within 200 chars before it`
+        ).toBe(true);
+      }
+    }
+    // Hard citation rule must be present.
+    expect(msg).toMatch(/HARD CITATION RULE/);
+    expect(msg).toMatch(/MUST quote or paraphrase/);
+    expect(msg).toMatch(/from THIS creator's `warmthMaterial/);
+    expect(msg).toMatch(/NEVER fabricate a moment/);
+    // Honest no-claim fallback when warmthMaterial empty.
+    expect(msg).toMatch(/honest no-claim fallback/i);
+  });
+
   it("kickstart payload (Sprint 11.1) instructs THREE sends + friend-reaction wow opener + bans the analyst-bot template patterns", () => {
     // Sprint 11.1 — after the live-test where Maya's opening read robotic
     // ("Already pulled your last 30—those night shots... handheld POV
@@ -382,15 +435,15 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     expect(msg).toMatch(/Three short messages/i);
     expect(msg).toContain("claw-messenger.sendText");
 
-    // Friend-reaction opener — wow rule + casual register + specific
-    // moment (not technical analysis).
+    // Friend-reaction opener — wow rule + casual register.
     expect(msg).toMatch(/Wow opener/i);
     expect(msg).toMatch(/friend who actually watched/i);
-    expect(msg).toMatch(/Casual reaction, not technical analysis/i);
+    expect(msg).toMatch(/Casual reaction register, not analyst register/);
 
     // Analyst-bot template patterns explicitly banned.
     expect(msg).toMatch(/Already pulled your last 30/);
-    expect(msg).toMatch(/is a strong lane/);
+    // Universal `is a [adjective] lane` ban (not just "strong lane")
+    expect(msg).toMatch(/is a \[adjective\] lane/);
     expect(msg).toMatch(/captured the energy of/);
     expect(msg).toMatch(/Here's the work I'll handle/);
     expect(msg).toMatch(/Got a few quick questions to start/);
