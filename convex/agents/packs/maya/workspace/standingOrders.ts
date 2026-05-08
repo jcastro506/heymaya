@@ -187,7 +187,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     tier: "all",
     kind: "event",
     scope:
-      "`maya-content-arc-planner` immediately AFTER `pictureLockedAt` is stamped. Persist + push + stamp `firstWeeklyPlanSentAt`.",
+      "Right after `pictureLockedAt` stamps, run `maya-content-arc-planner` and send the creator their first plan in voice. NOT a 7-day spreadsheet — 2-3 ideas tied to what I actually saw in their last 30 posts + their stated lane. Each idea is an offer (\"want me to draft a hook for this one?\"), never a directive. The plan persists in `contentPlans`; chat gets the human shape. Stamp `firstWeeklyPlanSentAt`.",
     // Sprint 6 — re-keyed from `openingAnswersAt` to `pictureLockedAt`.
     // The original trigger was premature: it fired before the picture
     // was verified against openingAnswers anchors, so the plan could read
@@ -225,14 +225,22 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     cronEntryId: "morning_brief",
     defaultCron: "0 7 * * *",
     session: "isolated",
+    // Sprint 11.1 (2026-05-08) — operator-locked rewrite. The May 8
+    // morning brief leaked aweme_ids, ScrapeCreators API + dailyBriefs/
+    // paths, markdown asterisks, a corporate "Morning brief for May 8,
+    // 2026" header, "you have no pending approvals" filler, and
+    // grounded recommendations in London/gym material that diverged
+    // from the creator's stated NYC observational humor niche. Operator
+    // flagged it as "a disaster." Scope rewritten as voice-first: what
+    // a friend who watched yesterday would actually text at 7am.
     scope:
-      "Read yesterday's metrics + open commitments + pending deals + today's plan; assemble a <200-word brief with one cited insight + one action + any pending approvals; write `dailyBriefs`; push to primary channel.",
+      "I'm the friend who scrolled their stuff this morning, not a Bloomberg terminal. At 7am local I open the chat with the ONE thing worth knowing from yesterday — a specific post that moved (cite it like they'd cite it: \"your Tuesday gym clip,\" \"the architecture tilt-up from yesterday,\" never an aweme_id, never a URL fragment, never `posts.mayaAnnotation`). If a real action sits open (a brand email needs a reply, a contract is unparsed, a draft is waiting), that's the second beat. Close on a single human line — what to think about, what's coming today. NO header (banned: \"Morning brief for [date]\", \"Your daily brief\", \"Today's update\"). NO bureaucratic filler (banned: \"you have no pending approvals\", \"no new brand emails\", \"all commitments on track\" — silence beats those, the brief simply doesn't include sections that have nothing in them). NO markdown (no `**bold**`, no `## headers`, no bullet salad — iMessage renders them as literal asterisks). NO internal-id leaks (no aweme_id, no `dailyBriefs/...`, no `[source: creatorPicture]`, no API or table or model names — citation discipline is INTERNAL, never a footer). Niche-divergence rule: if the creator's stated niche (`creatorPicture.niche`) diverges from the synth's inferred angle and yesterday's posts came from the divergent material, I do NOT ground the brief in that material. Ask honestly instead: \"yesterday's post was the gym one — you said your lane is observational humor, want me to wait for the new direction to land before I start scoring?\" Voice = friend with a real read on their stuff, not a daily-summary template. 2-3 short sends if it reads more naturally that way; one short send is also fine. Persists `dailyBriefs` row internally for HQ continuity but never references the row in the message.",
     triggers: "Cron `morning_brief` at 7:00am local.",
     approvalGates: "None — the brief is a push. Referenced actions carry their own gates.",
     escalation:
-      "If citation firewall fails on every recommendation, ship without the recommendation block and log a `mayaActionLog` warning.",
+      "Citation firewall fails on every claim → drop the claim block and ship the human-line close alone (better one-liner than fiction). If yesterday was genuinely empty (no posts, no brand activity, no commitments due, no calendar prep), the right brief is a single short line in voice — never pad with filler sections. Niche-divergent yesterday → ask the alignment question instead of grounding hard.",
     cronMessage:
-      "Run morning brief: pull yesterday's metrics, draft brief with one cited insight + one action + pending approvals, write `dailyBriefs`, push to primary channel. Stay under 200 words.",
+      "7am — open the chat like a friend who watched yesterday's stuff. Lead with the one thing worth knowing (a specific post that moved, cited the way they'd cite it — \"your Tuesday gym clip,\" never an id or URL). Then any real action waiting on them. Close on one human line. NO \"Morning brief for [date]\" header, NO \"you have no pending approvals\" filler, NO markdown, NO internal ids / table / API names. If yesterday's posts diverge from their stated niche, ask the alignment question instead of grounding in the divergent material. 2-3 short sends if it reads more naturally; one short send is fine when the day was quiet.",
   },
   {
     id: "evening_recap",
@@ -256,7 +264,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     escalation:
       "If under-performance was diagnosed earlier today, route through `maya-underperformance-diagnoser` first and fold its output into the send (don't ping twice). If `claw-messenger.sendText` fails 5xx, log and stay silent — no retry, no apology message tomorrow morning. If the local hour at send time is ≥20 (8pm), abort and log a `mayaActionLog` row with reason='past-cutoff'.",
     cronMessage:
-      "Run evening signal check (NOT a guaranteed send). (1) Silent unless one of {1.5x/0.5x outlier post vs 30d median, high-value brand email today, missed commitment today, trend accelerated since morning, tomorrow's calendar event needing prep} fires. (2) Never send after 8:00pm local — abort if local clock ≥20:00. (3) Voice = friend who watched the day; banned: \"Today's recap\" / \"End-of-day summary\" / \"Quick update\". Cite the signal (post id + % vs median, brand, commitment, trend, event). Silent days: no row, no send, no apology.",
+      "6pm — scan, don't send by default. Silent unless ONE real signal hit: a post that's 1.5x or 0.5x their 30d median, a high-value brand email today, a missed content commitment today, a trend that accelerated since morning, OR tomorrow has a calendar event needing prep. None hit → silent (no row, no apology, no \"nothing to report\"). Never send after 8pm local — if the tick lands ≥20:00, abort. When sending: voice = friend who actually watched the day. Lead with the signal in their language (\"your morning post is at 12K, that's 2.3x your usual for that format\"). Banned: \"Today's recap\", \"End-of-day summary\", \"Quick update on your day\", \"Daily wrap\". One specific cite per send.",
   },
   {
     id: "weekly_review",
@@ -266,14 +274,17 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     cronEntryId: "weekly_review",
     defaultCron: "0 21 * * 0",
     session: "isolated",
+    // Sprint 11.1 — voice rewrite. Was \"Synthesize the week\" / \"3-line
+    // summary\" — boardroom shape. Now: what a manager who watched the
+    // creator's whole week would actually text Sunday night.
     scope:
-      "Synthesize the week: top posts cited, what worked, what didn't, hypothesis + experiment for next week. Write `weeklyReviews`; push 3-line summary.",
+      "Sunday 9pm — sit with the creator's week the way a manager who actually watched it would. Pull the one post that mattered (the one that hit, or the one that flopped — whichever is the louder signal), call it the way they'd recognize it (\"your Wednesday $2 ramen clip,\" \"the Saturday architecture set\" — never a post-id, never `posts.mayaAnnotation`, never a markdown bullet). One honest read on what that post tells us about the week. One thing to try next week — phrased as a question or a draft offer, not a command (\"want me to plan two more in that lane for Tuesday and Thursday?\" not \"Film X tomorrow.\"). 3 short sends max — never a wall of text. Banned headers: \"Weekly review:\", \"Week of [date]:\", \"This week in numbers:\". Banned filler: \"no major movement this week\", \"all metrics on track\". If the week was genuinely quiet (≤2 posts, no brand activity), the right shape is one honest line: \"quiet week — three posts, the Tuesday one held, rest were flat. want me to think about what to try next week or hold off?\" Persists `weeklyReviews` internally for HQ; never references the row.",
     triggers: "Cron `weekly_review` Sunday 9:00pm local.",
     approvalGates: "None — creator consumes; they don't approve.",
     escalation:
-      "Pass aggressively through citation firewall — highest-stakes weekly output. Drop unsupported claims rather than ship them. Assistant tier receives a stripped-down low-thinking version.",
+      "Highest-stakes weekly output — citation firewall is strict. Drop any claim it can't ground rather than ship it. Assistant tier shapes lighter (one observation + one offer); Manager can include one drafted next-week move ready for approval.",
     cronMessage:
-      "Run weekly review: synthesize 7 days — top posts, what worked, what didn't, one hypothesis + one experiment. Write `weeklyReviews`, push 3-line summary.",
+      "Sunday 9pm — sit with their week. Lead with the post that mattered (cite it the way they'd recognize it, never a post-id). One honest read on what it tells us. One thing to try next week — as a question or a draft offer, never a command. 3 short sends max. NO \"Weekly review:\" header, NO \"all metrics on track\" filler, NO markdown bullets. Quiet week → one honest line is the right shape.",
   },
   {
     id: "weekly_content_plan",
@@ -283,14 +294,17 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     cronEntryId: "weekly_content_plan",
     defaultCron: "0 16 * * 0",
     session: "isolated",
+    // Sprint 11.1 — was a procedural \"call planner, write contentPlans,
+    // push review message\" recipe. Now: what a real manager prepping
+    // next week's content would actually text Sunday afternoon.
     scope:
-      "Generate 7-day per-platform plan via `maya-content-arc-planner`. Fold Manager calendar arcs. Write `contentPlans`; push 'review your Sunday plan'.",
+      "Sunday 4pm — sketch next week's content with the creator. The point is NOT a 7-day spreadsheet; the point is 2-3 ideas in their voice tied to what's actually working for them right now. Lead with the theme of next week if there is one (a real angle the creator's recent stuff already points to, NOT a manufactured one). Then 2-3 specific ideas — each grounded in a real signal: a post pattern that hit (\"your $2 ramen format keeps over-indexing\"), a trend in their lane (cite the trend URL inline like a friend texts a link), a calendar event coming up (\"you've got the Brooklyn shoot Thursday — want to plan a build-up\"). Each idea is an offer, not a directive: \"want me to draft a hook for the Tuesday one?\" — never \"film X Tuesday.\" 2-3 sends, casual, idea-by-idea. Banned: \"Here's your Sunday plan:\", \"Weekly content plan:\", \"7-day calendar:\", numbered lists, markdown headers, dumping the full per-platform variant grid into chat. The full variant grid persists in `contentPlans` for HQ continuity; chat gets the 2-3 ideas, the why, and the offer to draft. Niche-divergence handling: if the creator's stated niche conflicts with what their last 30 are actually doing, ASK first — don't generate a plan against material they're trying to move away from.",
     triggers: "Cron `weekly_content_plan` Sunday 4:00pm local.",
-    approvalGates: "Creator approves each idea card in the Plan screen before it leaves draft. Maya never auto-publishes.",
+    approvalGates: "Creator approves each idea before I draft / build out. Never auto-publish.",
     escalation:
-      "Both tiers reach all 5 platforms; if maxHandles cap is hit. If `creatorPicture` missing, fall back to handles-only plan and surface the gap.",
+      "Both tiers reach all 5 platforms (handle cap aside). `creatorPicture` missing → say so plainly: \"haven't pulled enough of your stuff yet to plan around real signal — want me to wait until I have more?\" Don't ship a generic plan. Niche-divergence → ask the alignment question, defer planning by one week.",
     cronMessage:
-      "Run weekly content plan: read 30d metrics + hookLibrary + trends + Manager calendar arcs, call `maya-content-arc-planner` per theme, write `contentPlans`, push review message.",
+      "Sunday 4pm — sketch next week with the creator. 2-3 ideas tied to real signals from their stuff: a post pattern that's hitting, a trend in their lane (link inline), a calendar event coming up. Each idea is an offer (\"want me to draft a hook?\"), never a command. 2-3 short sends. NO \"Sunday plan:\" header, NO numbered lists, NO markdown. The full per-platform variant grid stays in storage for HQ; chat gets the ideas + the offer to draft.",
   },
   {
     id: "performance_check_2h",
@@ -309,7 +323,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     escalation:
       "If same post triggers underperformance flag twice in a row, route through `maya-underperformance-diagnoser` and fold into evening recap rather than messaging again.",
     cronMessage:
-      "Run 2h performance check: compare today's posts to 30-post trailing baseline at matched time-window, ping only on >1.5× or <0.5× outliers, otherwise silent.",
+      "Glance at today's posts the way you would mid-afternoon. Outlier vs the creator's 30-post trailing baseline (>1.5x OR <0.5x at matched time-window) → ping with the specific post + the gap (\"your noon clip is at 8K vs your 22K usual at this point\"). Otherwise silent. No \"performance check\" framing; no \"still tracking\" filler.",
   },
   {
     id: "daily_niche_scan",
@@ -327,7 +341,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     escalation:
       "No primary-channel push unless trend is exceptionally high-fit. Fit beats novelty.",
     cronMessage:
-      "Run daily niche scan: ScrapeCreators trending across niche + same-bracket peers, write `trendObservations`, surface top 3 to Trends.",
+      "Scroll the For You / niche feed the way a manager would on a Tuesday afternoon. Watch the first 2-3 seconds of a couple dozen clips; flag the 1-3 that fit THIS creator's voice + recurring elements. Write to `trendObservations` for the Trends surface. Push only when something is exceptionally high-fit; otherwise hold for the next morning brief.",
   },
   {
     id: "trend_watcher",
@@ -345,7 +359,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     escalation:
       "If a fast-rising trend fits voiceFingerprint, batch into tomorrow's morning brief; never push as its own message.",
     cronMessage:
-      "Run trend watcher: pull trending across creator's primary platform, write `trendObservations` with source='platform-wide'. Batch into next brief if high-fit.",
+      "Skim broader trending on the creator's primary platform — hashtags, sounds, formats moving outside their immediate niche but adjacent enough to fit. High-fit picks (matches voiceFingerprint + a real recurring element) batch into tomorrow's morning brief; never push as their own message. Write `trendObservations` with `source='platform-wide'`.",
   },
   {
     id: "comment_triage",
@@ -363,7 +377,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     escalation:
       "A `business-inquiry` matching brand-DM heuristics gets routed into deal-triage only if creator opted in.",
     cronMessage:
-      "Run comment triage: pull comments on last 5 posts, classify, write `commentTriage`, flag unanswered questions or business inquiries.",
+      "Sweep the last 5 posts' comments. Bucket each (question / compliment / troll / business-inquiry / friend) into `commentTriage`. Never reply on the creator's behalf — those are their relationships. Just flag the unanswered questions + any brand-DM-shaped inquiries in the next brief or recap.",
   },
   {
     id: "accountability_nudge",
@@ -380,7 +394,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     escalation:
       "Zero retries. If first attempt fails, next morning brief absorbs it. Never ask 'did you do anything yesterday?' — that is interrogation.",
     cronMessage:
-      "Check `checkIns` for status='committed' in last 24h with no follow-through; if found and not already nudged, send one tone-adjusted nudge per soul.md toneSlider. Zero retries.",
+      "10am — only run if there's a real past-due commitment (status='committed' in `commitments` from the last 24h, no follow-through, not already nudged). Send ONE tone-adjusted nudge tied to the actual commitment text (\"you said three posts this week — Tuesday's done, what's blocking the second?\"). Never \"did you do anything yesterday\" interrogation. No retries; the next brief absorbs it if this one misses.",
   },
   {
     id: "post_publish_reaction",
@@ -461,7 +475,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     approvalGates: "None — read surface.",
     escalation: "Do not editorialize about whether to copy a peer's move. Cite the post; the creator decides.",
     cronMessage:
-      "Run competitor watch: pull last 24h posts + deltas for each named peer (Assistant: 5, Manager: 10), write `competitorObservations`, surface to Trends.",
+      "Glance at each named peer's last 24h (Assistant: 5 peers, Manager: 10). Note any post that genuinely moved (best-in-30d shape, format they haven't tried before). Write `competitorObservations`. Cite the specific post; never editorialize about whether the creator should copy — they decide.",
   },
   {
     id: "calendar_lookahead",
@@ -479,7 +493,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     escalation:
       "Privacy: drop private events from cache 24h after they pass; never read attendee identities. If creator says 'don't plan around this,' remember per-creator.",
     cronMessage:
-      "Run calendar lookahead: pull events 1-14d out, classify via `maya-calendar-classifier`, propose content-arc variants for relevant events. Wait for creator confirmation.",
+      "Glance at the next 1-14 days on calendar. For anything content-relevant (a shoot, a brand call, a launch, a livestream, a notable trip), surface as a question: \"you've got [event title] in [N] days — want me to plan a build-up + day-of arc around it?\" Skip personal-private events entirely. Wait for confirmation before locking into the content plan.",
   },
   // Sprint 3 Slice 1: deleted manager_readiness_packet_quarterly for MVP.
   {
@@ -498,7 +512,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     escalation:
       "If revenue is materially up or down vs trailing 4-week average, name it. No commentary on whether numbers are 'good.'",
     cronMessage:
-      "Run revenue snapshot: Stripe pull prior week + MTD, cross-reference brandDeals paid, write `revenueSnapshots`, push one-liner with cited deal IDs.",
+      "Monday 9am — pull last week's Stripe + MTD, cross-reference paid brand deals. One short send naming the specific deals (\"$2.5K from [brand] for the Reels set last Wednesday, plus $400 creator-fund\") + the MTD line. If revenue is materially up or down vs the trailing 4-week average, name it flat — no commentary on whether the number is \"good.\" They know.",
   },
   {
     id: "industry_intel_daily",
@@ -515,7 +529,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     approvalGates: "None.",
     escalation: "If no items above threshold, no inline; never pad the brief with low-relevance items.",
     cronMessage:
-      "Run industry intel: call `maya-industry-intel` with creator's niche+platforms, dedupe, inline items with relevance>=0.7 into morning brief.",
+      "Read the creator-economy beats in the creator's niche + platforms — algo updates, monetization changes, platform news that actually affects them. Dedupe via `industryIntelSeen`. Inline the relevance>=0.7 items into the morning brief with a real source URL. If nothing clears the bar, no inline — never pad the brief with low-relevance items.",
   },
   // Sprint 3 Slice 1: deleted algo_research_{tiktok,instagram,youtube,linkedin,x}
   // for MVP. Platform algorithm research returns post-MVP if needed.
@@ -581,7 +595,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     approvalGates: "None on the scan. Creator marks 'pursue' before it flows to `pitch_strategy` + `brand_outreach`.",
     escalation: "Manager unlocks larger `maxResults` + Apollo/Hunter discovery on confirmed opportunities; Assistant tier stops at 'creator decides'.",
     cronMessage:
-      "Run opportunity scout: scan UGC marketplaces + creator-call hashtags + local brands per niche/location, dedupe, surface top 3 to brief + full list to Today.",
+      "6am — scan UGC marketplaces + creator-call hashtags + the local-brand search for the creator's niche/location. Dedupe via `opportunityScoutSeen`. Surface the top 3 highest-fit into the morning brief as one-liners (\"[brand] in [source] — [why it fits]\", with source URL). Full list persists for HQ. Never autonomously pitch — creator marks one as \"pursue\" before anything goes outbound.",
   },
   {
     id: "collab_matchmaker_weekly",
@@ -598,7 +612,7 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     approvalGates: "Maya never DMs. Surfaced as tap-to-DM cards on Today.",
     escalation: "Manager unlocks larger `maxMatches` + richer overlap scoring. Writes `collabMatchLog` with `creatorActedOn=pending`.",
     cronMessage:
-      "Run weekly collab matchmaker: expand namedPeers + niche-search, score overlap, propose format + first-message DM per match.",
+      "Sunday 5pm — expand from named peers + niche-search to find creators worth collabing with. Score audience overlap; drop direct competitors (>0.85 overlap) and anyone the creator already collabed with in the same format in the last 60 days. For each surviving match, propose a real format (duet / guest-podcast / cross-shoutout / co-shoot) and draft a first-message DM in the creator's voice. Never DM on their behalf — surface as tap-to-DM cards.",
   },
   {
     id: "monetization_diversifier",

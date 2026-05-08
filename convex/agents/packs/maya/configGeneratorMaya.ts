@@ -310,8 +310,15 @@ export interface BuildInputs {
 // EXPOSE artifact list (citation discipline = INTERNAL, never a user-
 // facing footer); no corporate report headers; no bureaucratic filler
 // ("you have no pending approvals"); niche-divergence ASK-don't-
-// ASSERT.
-export const MAYA_BOOTSTRAP_MAX_CHARS = 54_000;
+// ASSERT. Sprint 11.1 evening (2026-05-08) bumped 54K → 60K to fit
+// the human-behavior rewrites of every cron-fired standing order's
+// scope + cronMessage prose (morning_brief / weekly_review /
+// weekly_content_plan / accountability_nudge / revenue_snapshot /
+// evening_recap voice tune + heartbeat-program cronMessage rewrites).
+// Programs now narrate what Maya DOES like a person, not what
+// pipeline she runs — that prose is intentionally longer because it
+// encodes voice, not procedure.
+export const MAYA_BOOTSTRAP_MAX_CHARS = 60_000;
 
 /**
  * Build the OpenClaw config + workspace bundle for one creator. Pure function
