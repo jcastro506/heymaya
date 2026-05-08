@@ -395,7 +395,13 @@ function base64UtfEncode(str: string): string {
 /* Main action                                                                 */
 /* -------------------------------------------------------------------------- */
 
-const WAIT_TIMEOUT_MS = 120_000;
+// Sprint 11.1 — bumped 120s → 240s. Cold image pulls on a fresh
+// machine on Fly's iad region can take 130-150s alone (registry pull
+// + extract + firecracker config), and the machine has to fully boot
+// + register health check before "started." 120s was racing on
+// redeploys after the heymaya-openclaw image gets evicted from cache.
+// Convex actions can run up to 600s so 240s is safe.
+const WAIT_TIMEOUT_MS = 240_000;
 const WAIT_INTERVAL_MS = 1_500;
 
 export const deployMaya = internalAction({

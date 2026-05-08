@@ -139,3 +139,42 @@ export const run = internalAction({
     return { ok: true, creatorId, deploy };
   },
 });
+
+/**
+ * Sprint 11.1 — destroy the existing Fly machine for a creator's Maya
+ * app, then re-run deployMaya. Use this when the running Maya bundle
+ * is stale (older AGENTS.md / standing orders / skills) and you want
+ * the live machine to pick up the latest workspace WITHOUT wiping
+ * Convex creator data (picture, opening answers, posts, etc.).
+ *
+ * Usage:
+ *   npx convex run _admin/realWorldDeploy:redeployForCreator '{"creatorId":"<id>"}'
+ *
+ * The Fly app itself is preserved — only the machine is replaced. The
+ * creator's iMessage thread continues; on next inbound message Maya
+ * boots into the new bundle.
+ */
+export const redeployForCreator = internalAction({
+  args: { creatorId: v.id("creators") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; destroyed: number; deploy: unknown }> => {
+    const { FlyClient } = await import("../lib/flyClient");
+    const fly = new FlyClient();
+    const appName = `maya-${args.creatorId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).toLowerCase()}`;
+    const machines = await fly.listMachines(appName);
+    let destroyed = 0;
+    for (const m of machines) {
+      console.log(`[redeployForCreator] destroying ${appName}/${m.id} (state=${m.state})`);
+      await fly.destroyMachine(appName, m.id, { force: true });
+      destroyed += 1;
+    }
+    const deploy = await ctx.runAction(
+      internal.onboarding.maya.deployMaya.deployMaya,
+      { creatorId: args.creatorId }
+    );
+    console.log(`[redeployForCreator] deploy result:`, JSON.stringify(deploy, null, 2));
+    return { ok: true, destroyed, deploy };
+  },
+});
