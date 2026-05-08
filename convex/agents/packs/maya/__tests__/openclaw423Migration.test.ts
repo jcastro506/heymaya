@@ -268,7 +268,7 @@ describe("Wave 5 — standing orders embed inline in AGENTS.md (OpenClaw 4.23 co
   });
 
   it("MAYA_BOOTSTRAP_MAX_CHARS is 48K (Sprint 11 bump for signal-conditional evening_recap + matching AGENTS.md voice rule, on top of Sprint 10's 25-program inventory + voice rules)", () => {
-    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(48_000);
+    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(54_000);
   });
 
   it("AGENTS.md actually fits under the 28K cap for every plan (defense-in-depth)", () => {

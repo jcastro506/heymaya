@@ -302,8 +302,16 @@ export interface BuildInputs {
 // banned corporate "Today's recap" phrasing) plus the matching
 // AGENTS.md voice rule. Gemini 3 Flash has 1M ctx; the cap is just to
 // keep AGENTS.md from accidentally swallowing arbitrary large prose
-// in future edits.
-export const MAYA_BOOTSTRAP_MAX_CHARS = 48_000;
+// in future edits. Sprint 11.1 (2026-05-08 morning) bumped 48K → 54K
+// to fit four load-bearing AGENTS.md rules added after the disastrous
+// May 8 morning brief leaked aweme_ids + ScrapeCreators API mentions
+// + dailyBriefs/ paths + markdown asterisks + a "Morning brief for
+// [date]" header + niche-divergence assertion. Rules added: NEVER-
+// EXPOSE artifact list (citation discipline = INTERNAL, never a user-
+// facing footer); no corporate report headers; no bureaucratic filler
+// ("you have no pending approvals"); niche-divergence ASK-don't-
+// ASSERT.
+export const MAYA_BOOTSTRAP_MAX_CHARS = 54_000;
 
 /**
  * Build the OpenClaw config + workspace bundle for one creator. Pure function
