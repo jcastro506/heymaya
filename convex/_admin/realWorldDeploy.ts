@@ -141,6 +141,92 @@ export const run = internalAction({
 });
 
 /**
+ * Sprint 11.1 — clean-slate wipe. Destroys ALL creators (not filtered to
+ * test prefix) + their cascade tables + ALL maya-* Fly apps. Returns
+ * a summary of what was wiped. Used to start fresh for a new round of
+ * real-world testing.
+ *
+ * NOT TOUCHED:
+ *   - heymaya-openclaw (base image)
+ *   - heymaya-video-synth (multimodal worker)
+ *   - any non-maya-* Fly app
+ *
+ * Usage:
+ *   npx convex run _admin/realWorldDeploy:wipeEverything '{}'
+ */
+export const wipeAllCreatorsCascade = internalMutation({
+  args: {},
+  handler: async (ctx): Promise<{ wipedCount: number; appNames: string[] }> => {
+    const creators = await ctx.db.query("creators").collect();
+    const appNames: string[] = [];
+    for (const creator of creators) {
+      const cid = creator._id;
+      const slug = String(cid).replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).toLowerCase();
+      appNames.push(`maya-${slug}`);
+      const sweeps = await Promise.all([
+        ctx.db.query("creatorPicture").withIndex("by_creator", (q) => q.eq("creatorId", cid)).collect(),
+        ctx.db.query("creatorHandles").withIndex("by_creator", (q) => q.eq("creatorId", cid)).collect(),
+        ctx.db.query("creatorFollowerSnapshots").withIndex("by_creator", (q) => q.eq("creatorId", cid)).collect(),
+        ctx.db.query("posts").withIndex("by_creator", (q) => q.eq("creatorId", cid)).collect(),
+        ctx.db.query("postMetrics").withIndex("by_creator", (q) => q.eq("creatorId", cid)).collect(),
+        ctx.db.query("mayaActionLog").withIndex("by_creator", (q) => q.eq("creatorId", cid)).collect(),
+        ctx.db.query("scrapeCreatorsCreditAudit").withIndex("by_creator", (q) => q.eq("creatorId", cid)).collect(),
+        ctx.db.query("dailyBriefs").withIndex("by_creator", (q) => q.eq("creatorId", cid)).collect(),
+        ctx.db.query("trendObservations").withIndex("by_creator", (q) => q.eq("creatorId", cid)).collect(),
+        ctx.db.query("competitorObservations").withIndex("by_creator", (q) => q.eq("creatorId", cid)).collect(),
+        ctx.db.query("firstProactivePings").withIndex("by_creator", (q) => q.eq("creatorId", cid)).collect(),
+        ctx.db.query("oauthStateTokens").withIndex("by_creator", (q) => q.eq("creatorId", cid)).collect(),
+        ctx.db.query("connectedAccounts").withIndex("by_creator", (q) => q.eq("creatorId", cid)).collect(),
+      ]);
+      for (const rows of sweeps) {
+        for (const row of rows) {
+          await ctx.db.delete(row._id);
+        }
+      }
+      await ctx.db.delete(creator._id);
+    }
+    return { wipedCount: creators.length, appNames };
+  },
+});
+
+export const wipeEverything = internalAction({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{
+    convex: { wipedCount: number };
+    fly: { destroyed: string[]; failed: string[] };
+  }> => {
+    const wipe = await ctx.runMutation(
+      internal._admin.realWorldDeploy.wipeAllCreatorsCascade,
+      {}
+    );
+    console.log(
+      `[wipeEverything] convex: wiped ${wipe.wipedCount} creators + cascade`
+    );
+    const { FlyClient } = await import("../lib/flyClient");
+    const fly = new FlyClient();
+    const destroyed: string[] = [];
+    const failed: string[] = [];
+    for (const appName of wipe.appNames) {
+      try {
+        await fly.destroyApp(appName);
+        destroyed.push(appName);
+        console.log(`[wipeEverything] fly: destroyed ${appName}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        failed.push(`${appName}: ${msg}`);
+        console.error(`[wipeEverything] fly: failed ${appName}: ${msg}`);
+      }
+    }
+    return {
+      convex: { wipedCount: wipe.wipedCount },
+      fly: { destroyed, failed },
+    };
+  },
+});
+
+/**
  * Sprint 11.1 — destroy the existing Fly machine for a creator's Maya
  * app, then re-run deployMaya. Use this when the running Maya bundle
  * is stale (older AGENTS.md / standing orders / skills) and you want
