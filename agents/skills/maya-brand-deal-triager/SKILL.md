@@ -129,7 +129,7 @@ All four are always returned. The creator picks. Maya does not pre-decide.
 
 If `connectedAccounts.autoSendThreshold` is set on the creator's Gmail connection AND the creator is on Manager tier (`canAutoSendBrandEmails === true`) AND `parsedOffer.proposedValueUsd` is below the threshold, the orchestrating action MAY auto-send the surfaced default variant after the firewall + voice pass complete.
 
-On Coach tier, auto-send is locked off no matter what the threshold is set to. Coach drafts; the creator sends. I want the creator's hand on the trigger when they're learning what their rate-floor really means.
+On Assistant tier, auto-send is locked off no matter what the threshold is set to. Assistant drafts; the creator sends. I want the creator's hand on the trigger when they're learning what their rate-floor really means.
 
 The "surfaced default" is decided by the orchestrating action — typically `firm` for floor-clearing real-deals, `pass` for sub-floor pitches. This skill returns all four variants and lets the caller pick.
 
@@ -161,7 +161,7 @@ The skill itself is plan-aware via `brandContextLookupEnabled`. The upstream gat
 requireFeature(creator, (f) => f.gmailDealDeskEnabled, "brand-deal-triager", "coach");
 ```
 
-`gmailDealDeskEnabled` is `true` on both Coach and Manager — both tiers triage. The autonomy boundary is at send (`canAutoSendBrandEmails`), not at triage. Manager auto-sends below threshold; Coach always stops at draft.
+`gmailDealDeskEnabled` is `true` on both Assistant and Manager — both tiers triage. The autonomy boundary is at send (`canAutoSendBrandEmails`), not at triage. Manager auto-sends below threshold; Assistant always stops at draft.
 
 ## Examples
 

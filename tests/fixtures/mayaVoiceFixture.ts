@@ -606,7 +606,7 @@ const realisticPasses: VoiceFixtureEntry[] = [
   {
     scenario: "pass/16b — first-boot greet, Coach variant (≤120 chars)",
     output:
-      "Hey Kevin. Maya here, your content coach. Pulled your last 30 already; one thing's worth flagging.",
+      "Hey Kevin. Maya here, your content assistant. Pulled your last 30 already; one thing's worth flagging.",
     expectedToPass: true,
   },
   {

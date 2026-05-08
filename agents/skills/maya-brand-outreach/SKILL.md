@@ -233,7 +233,7 @@ Then the wrapping action MAY auto-send via Composio Gmail. Even auto-sends emit 
 
 **For COLD pitches at any rate, `creatorApprovalRequired` is always `true`.** Cold-send-without-approval is never a path in v0 — relationship damage is irreversible.
 
-**For Coach tier, `creatorApprovalRequired` is always `true` regardless of threshold.** Coach drafts; the creator sends. Manager is the autonomous tier.
+**For Assistant tier, `creatorApprovalRequired` is always `true` regardless of threshold.** Assistant drafts; the creator sends. Manager is the autonomous tier.
 
 ## Plan-tier gating (server-side, fail-closed)
 

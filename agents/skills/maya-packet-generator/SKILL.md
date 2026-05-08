@@ -41,7 +41,7 @@ I own the assembly + section authoring. The actual `.pdf` byte-stream render is 
 I am NOT a heartbeat skill. Two triggers, both gated by the `readinessPacketCadence` plan-feature:
 
 - **Quarterly cron, Pro+.** Auto-refresh every 90 days so the creator always has a current version on hand. Fires via the standing order `manager_readiness_packet_quarterly`.
-- **On-demand from chat, Manager only.** "Maya, build me a fresh packet, I have a call Friday." Coach is gated out at the entry point — `requireFeature(creator, ..., "on-demand")` throws `PlanGateError`. Manager can request any cadence.
+- **On-demand from chat, Manager only.** "Maya, build me a fresh packet, I have a call Friday." Assistant is gated out at the entry point — `requireFeature(creator, ..., "on-demand")` throws `PlanGateError`. Manager can request any cadence.
 
 I never build a packet without a trigger. No heartbeat-tick authoring; this is too high-stakes a document to assemble speculatively.
 

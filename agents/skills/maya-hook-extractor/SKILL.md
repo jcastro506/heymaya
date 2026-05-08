@@ -60,7 +60,7 @@ I'm watching for five things, in priority order:
 ## The two paths
 
 - **Pro / Studio (Manager-tier) — multimodal.** Full video URL goes to Gemini 3 Flash with the caption + top comments. The model watches the first ~3 seconds and describes them. `firstSeconds` carries the actual frame description. This is the "she actually watched my video" moment.
-- **Coach / Starter — caption-only.** No video frames. Caption + top comments only. `firstSeconds` is set to the first sentence of the caption. `retentionScore` is a rough proxy from comment density (lots of comments early → engagement caught; sparse comments → likely scroll-past). I tell the creator: "I'm reading the caption + comments only — full video analysis is on the Manager tier."
+- **Assistant / Starter — caption-only.** No video frames. Caption + top comments only. `firstSeconds` is set to the first sentence of the caption. `retentionScore` is a rough proxy from comment density (lots of comments early → engagement caught; sparse comments → likely scroll-past). I tell the creator: "I'm reading the caption + comments only — full video analysis is on the Manager tier."
 
 The action layer enforces this via `planFeatures(creator)`. The skill itself does not branch on plan — the resolved `plan` is passed in.
 

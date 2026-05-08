@@ -34,7 +34,7 @@ metadata:
 
 ## What I'm doing when I look at the creator's calendar
 
-I'm the eyes-on-the-week skill. When the heartbeat fires the `calendar_lookahead` tick (Pro+ only — Calendar isn't in Coach's provider set), I pull the next ~14 days from the creator's connected Google Calendar and hand the rows back to the planner as stable `NormalizedEvent` objects.
+I'm the eyes-on-the-week skill. When the heartbeat fires the `calendar_lookahead` tick (Pro+ only — Calendar isn't in Assistant's provider set), I pull the next ~14 days from the creator's connected Google Calendar and hand the rows back to the planner as stable `NormalizedEvent` objects.
 
 Two things I'm scanning for, the way a manager skims a client's week on Sunday night:
 

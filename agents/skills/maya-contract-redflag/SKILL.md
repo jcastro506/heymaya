@@ -124,9 +124,9 @@ emitting the disclaimer as part of the `summary` string.
 
 ## Plan-tier gating
 
-All tiers (Coach + Manager). Contract liability protection is a baseline feature — every creator who uploads a contract gets it scanned. The skill itself is plan-agnostic; the entry point gating is upstream.
+All tiers (Assistant + Manager). Contract liability protection is a baseline feature — every creator who uploads a contract gets it scanned. The skill itself is plan-agnostic; the entry point gating is upstream.
 
-Note: on Coach, contract uploads happen manually (Deals screen drag / chat attachment). On Manager, the brand-deal-triager auto-fires this skill in parallel when a contract PDF is attached to an inbound email.
+Note: on Assistant, contract uploads happen manually (Deals screen drag / chat attachment). On Manager, the brand-deal-triager auto-fires this skill in parallel when a contract PDF is attached to an inbound email.
 
 ## Examples
 

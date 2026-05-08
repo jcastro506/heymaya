@@ -101,7 +101,7 @@ The `citations` array feeds directly into `maya-citation-firewall` — every cla
 
 ## Plan-tier behavior
 
-- **Coach** — heuristic + LLM reasoning. No `comparableCreators` array (Apollo/Hunter discovery is Manager-only, but the heuristic CPM tables are the same). Confidence capped at `medium` when prior deals are empty.
+- **Assistant** — heuristic + LLM reasoning. No `comparableCreators` array (Apollo/Hunter discovery is Manager-only, but the heuristic CPM tables are the same). Confidence capped at `medium` when prior deals are empty.
 - **Manager** — heuristic + LLM reasoning + `comparableCreators` populated when ScrapeCreators audience-fingerprint cache has data. Confidence can hit `high` when 3+ prior deals + cited comparables align.
 
 `planFeatures(creator)` is consulted by the calling Convex action (this script.ts is pure logic). The action determines which mode to invoke and threads the result through `maya-citation-firewall` before returning.

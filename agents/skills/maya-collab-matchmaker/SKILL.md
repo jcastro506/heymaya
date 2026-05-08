@@ -169,7 +169,7 @@ ensures the peer's name + the cited post reference are not mutated.
 
 ## Plan-tier gating (server-side, fail-closed)
 
-`collabMatchEnabled` is `true` on both Coach and Manager.
+`collabMatchEnabled` is `true` on both Assistant and Manager.
 
 - `coach`: enabled. `maxMatches` default 5. Audience overlap is heuristic-based (niche-tag overlap + geo overlap).
 - `manager`: enabled. `maxMatches` default 10. Audience overlap uses ScrapeCreators audience-fingerprint cache when populated.

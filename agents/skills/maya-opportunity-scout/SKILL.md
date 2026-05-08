@@ -172,10 +172,10 @@ must cite which factors drove it.
 
 ## Plan-tier gating (server-side, fail-closed)
 
-`opportunityScoutEnabled` is `true` on both Coach and Manager.
+`opportunityScoutEnabled` is `true` on both Assistant and Manager.
 
 - `coach`: enabled. `maxResults` default 10. Local-brand-search runs. Surfaced opportunities can flow to brand-outreach as drafts when the creator manually pastes a contact email — autonomous send is Manager-only.
-- `manager`: enabled. `maxResults` default 20. The wrapping action invokes `brandContactDiscoveryEnabled` (Apollo/Hunter) on `pitch`-action opportunities to backfill contact email/name when an Apollo key is configured. Without a key, the manager-tier flow falls back to coach-tier behavior (creator-paste required).
+- `manager`: enabled. `maxResults` default 20. The wrapping action invokes `brandContactDiscoveryEnabled` (Apollo/Hunter) on `pitch`-action opportunities to backfill contact email/name when an Apollo key is configured. Without a key, the manager-tier flow falls back to assistant-tier behavior (creator-paste required).
 
 ## Adversarial / robustness
 

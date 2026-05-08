@@ -176,7 +176,7 @@ creator's size + niche. Examples baked into the playbook:
 
 ## Plan-tier gating (server-side, fail-closed)
 
-`monetizationAdvisorEnabled` is `true` on both Coach and Manager. Both tiers get the per-niche playbook + email-list push.
+`monetizationAdvisorEnabled` is `true` on both Assistant and Manager. Both tiers get the per-niche playbook + email-list push.
 
 - `coach`: enabled. `comparableCreators` is hint-only (1-2 anonymized peer references; full named-peer roster requires the audience-fingerprint cache).
 - `manager`: enabled. `comparableCreators` populated with named peers when ScrapeCreators backfill cache has data.

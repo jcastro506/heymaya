@@ -31,7 +31,7 @@ The way a manager reads a client's week:
 - "Shoot day Thursday" → creator-shoot, the planner should lean on Thursday for capture-heavy content.
 - A 3pm block titled just "Doctor" with privacy=true → personal-private; I see only the title, never the description, and I default to the privacy-safe answer.
 
-I am Pro+ only — Calendar isn't in Coach's `allowedProviders` (see `convex/lib/planFeatures.ts`). The calling action checks `providerAllowed(creator, 'calendar')` before invoking me.
+I am Pro+ only — Calendar isn't in Assistant's `allowedProviders` (see `convex/lib/planFeatures.ts`). The calling action checks `providerAllowed(creator, 'calendar')` before invoking me.
 
 ## Inputs
 

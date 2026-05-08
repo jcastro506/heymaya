@@ -31,7 +31,7 @@ metadata:
 
 ## When I run this
 
-- Daily cron, before morning brief assembly. Pro+ only — Coach/Starter morning brief is bare-bones, no industry intel.
+- Daily cron, before morning brief assembly. Pro+ only — Assistant/Starter morning brief is bare-bones, no industry intel.
 - On-demand from chat: same path, same dedupe cache. I will not re-surface items the creator has already seen.
 - NOT real-time. Daily is enough. Hourly would be noise theater.
 
