@@ -66,11 +66,16 @@ export interface AgentsMdInputs {
 // evening_recap test where Maya leaked her entire reasoning monologue +
 // promised "I'll push to your Plan screen" to a creator with no web
 // access).
+// 23K → 24K (Sprint 11 / 2026-05-08) — adds the
+// `evening_recap is signal-conditional` rule (no clock-driven send,
+// no corporate "Today's recap" template, hard 8pm cutoff). Operator-
+// locked direction after Sprint 10 caught Maya emitting 7pm recaps as
+// filler on quiet days.
 // Production overrides to 32K via gateway config (see `configGeneratorMaya.ts`);
 // this default exists only for local dev / smoke without the override.
 // Standing-orders embed inline at the production cap; the bump keeps that
 // invariant intact.
-export const DEFAULT_BOOTSTRAP_MAX_CHARS = 23_000;
+export const DEFAULT_BOOTSTRAP_MAX_CHARS = 24_000;
 
 /**
  * Render the per-creator AGENTS.md. Output is markdown, deterministic.
@@ -85,10 +90,11 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
     ? handles.map((h) => `\`${h.platform}: ${h.handle}\``).join(" · ")
     : "_(no handles connected yet)_";
 
+  // Internal Plan enum value stays "coach"; user-visible label is "Assistant".
   const planTierLine =
     plan === "coach"
-      ? "Coach — advisory only. Full proactive cron, all 5 channels, brand-email triage stops at draft. NO auto-send, NO cold pitching, NO Apollo/Hunter discovery."
-      : "Manager — Coach plus autonomous brand-deal back-and-forth: auto-send under threshold, Apollo/Hunter cold outreach, brand pitching, deal negotiation.";
+      ? "Assistant — advisory only. Full proactive cron, all 5 channels, brand-email triage stops at draft. NO auto-send, NO cold pitching, NO Apollo/Hunter discovery."
+      : "Manager — Assistant plus autonomous brand-deal back-and-forth: auto-send under threshold, Apollo/Hunter cold outreach, brand pitching, deal negotiation.";
 
   const sections: string[] = [];
 
@@ -229,6 +235,10 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   sections.push("");
   sections.push(
     "**Ground content ideas in real signal.** Before generating a plan / ideas / hooks, query `trendObservations`. If empty, run trend-watcher first OR attribute ideas explicitly: \"these are my own — not based on a current trend; want me to also pull what's trending?\". Each idea cites a real trending post URL + handle, the creator's own past performance, or explicit Maya-creative framing. Never invent a trend."
+  );
+  sections.push("");
+  sections.push(
+    "**`evening_recap` is signal-conditional, not clock-conditional.** The 6:00pm tick is a SCAN. Send only if a real signal hit — outlier post (1.5x or 0.5x median), high-value brand email, missed commitment, accelerated trend, tomorrow's calendar event needing prep. None hit → silent: no filler, no apology, no `dailyBriefs` row. Silence is the right answer most days. **Hard cutoff: never send after 8:00pm local** — creators are winding down. Voice when sending = friend who watched the day, NOT corporate end-of-day report. Banned: \"Today's recap\", \"End-of-day summary\", \"Quick update on your day\", \"Daily wrap\". Lead with the signal: \"Your morning post is at 12K, that's 2.3x your median for that format.\""
   );
   sections.push("");
 

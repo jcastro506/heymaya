@@ -248,10 +248,10 @@ describe("buildMayaConfig — gateway config (OpenClaw-native channels + bootstr
     });
   });
 
-  it("bootstrapMaxChars is the Maya 44K override (Sprint 10: 40K → 44K so the no-reasoning-in-text + Q-flow-transition voice rules fit alongside embedded standing orders)", () => {
+  it("bootstrapMaxChars is the Maya 48K override (Sprint 11: 44K → 48K so the signal-conditional evening_recap + matching AGENTS.md voice rule fit, alongside Sprint 10 voice rules and embedded standing orders)", () => {
     const { config } = buildMayaConfig(emptyInputs("manager"), NOW);
-    expect(config.gatewayConfig.agents.defaults.bootstrapMaxChars).toBe(44_000);
-    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(44_000);
+    expect(config.gatewayConfig.agents.defaults.bootstrapMaxChars).toBe(48_000);
+    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(48_000);
   });
 
   it("agents.defaults.model.primary is an OpenRouter model ref", () => {

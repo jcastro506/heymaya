@@ -354,8 +354,9 @@ export const goalsFocusContext = query({
       }));
 
     // Next-scheduled cron hint — synthetic, derived from the creator's
-    // timezone + the well-known cron schedule (morning_brief 7am, evening_recap
-    // 7pm, weekly_review Sunday 9pm). Reading jobs.json from a query is
+    // timezone + the well-known cron schedule (morning_brief 7am,
+    // evening_recap signal-scan 6pm — conditional send only, hard 8pm
+    // cutoff; weekly_review Sunday 9pm). Reading jobs.json from a query is
     // disallowed (no fs in the Convex sandbox), so we synthesize.
     const nextScheduledCronHint = computeNextScheduledHint(
       Date.now(),
@@ -392,7 +393,8 @@ export const goalsFocusContext = query({
 
 /**
  * Synthesize the next scheduled cron hint based on the well-known shared
- * cron schedule (morning_brief 7am local; evening_recap 7pm local; weekly_review
+ * cron schedule (morning_brief 7am local; evening signal-scan 6pm local
+ * — only sends if a real signal hit, hard 8pm cutoff; weekly_review
  * Sunday 9pm local). Returns the next future event from `nowMs` in the
  * creator's timezone, formatted as a short label.
  *
@@ -441,11 +443,15 @@ function computeNextScheduledHint(
     return null;
   }
 
-  // Earliest of: today's 7am, today's 7pm, Sunday 9pm. Compare in local-hour
-  // arithmetic — close-enough for a hint, no need for full date math.
+  // Earliest of: today's 7am, today's 6pm signal-scan, Sunday 9pm. Compare
+  // in local-hour arithmetic — close-enough for a hint, no need for full
+  // date math. The 6pm hint is honest about being conditional: Maya only
+  // pings if a real signal hit (outlier post, brand email, missed
+  // commitment, accelerating trend, tomorrow's calendar prep), and never
+  // after 8pm under any condition.
   if (localHour < 7) return "Morning brief at 7am local";
-  if (localHour < 19) return "Evening recap at 7pm local";
-  // After 7pm — next event is tomorrow's morning brief unless tonight is
+  if (localHour < 18) return "Evening signal scan at 6pm local (silent if nothing real surfaced)";
+  // After 6pm — next event is tomorrow's morning brief unless tonight is
   // Sunday and weekly_review (9pm) hasn't fired yet.
   if (localDow === 0 && localHour < 21) {
     return "Weekly review at 9pm local";

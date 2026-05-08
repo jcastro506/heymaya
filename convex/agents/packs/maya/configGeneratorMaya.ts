@@ -295,10 +295,15 @@ export interface BuildInputs {
 // context concern through Sprint 9.7+. Sprint 10 bumped to 44K to fit
 // the no-reasoning-in-text + Q-flow-transition + no-third-person-echo
 // rules added after the 2026-05-07 leak ("Kevin's based in NYC. I've
-// logged that and now I'm moving to Q2."). Gemini 3 Flash has 1M ctx;
-// the cap is just to keep AGENTS.md from accidentally swallowing
-// arbitrary large prose in future edits.
-export const MAYA_BOOTSTRAP_MAX_CHARS = 44_000;
+// logged that and now I'm moving to Q2."). Sprint 11 (2026-05-08)
+// bumped 44K → 48K to fit the rewritten signal-conditional
+// `evening_recap` standing-order scope (operator-locked: drop 9-5
+// recap framing, idea-driven not clock-driven, hard 8pm cutoff,
+// banned corporate "Today's recap" phrasing) plus the matching
+// AGENTS.md voice rule. Gemini 3 Flash has 1M ctx; the cap is just to
+// keep AGENTS.md from accidentally swallowing arbitrary large prose
+// in future edits.
+export const MAYA_BOOTSTRAP_MAX_CHARS = 48_000;
 
 /**
  * Build the OpenClaw config + workspace bundle for one creator. Pure function

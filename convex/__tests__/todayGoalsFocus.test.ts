@@ -361,7 +361,7 @@ describe("today.goalsFocusContext — Maya activity column", () => {
     // One of the four well-known phrasings — tested without locking on
     // wall-clock time at test execution.
     expect(out!.nextScheduledCronHint).toMatch(
-      /Morning brief at 7am local|Evening recap at 7pm local|Weekly review at 9pm local|Morning brief at 7am local tomorrow/
+      /Morning brief at 7am local|Evening signal scan at 6pm local \(silent if nothing real surfaced\)|Weekly review at 9pm local|Morning brief at 7am local tomorrow/
     );
   });
 });

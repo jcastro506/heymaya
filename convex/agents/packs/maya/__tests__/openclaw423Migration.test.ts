@@ -263,12 +263,12 @@ describe("Wave 5 — standing orders embed inline in AGENTS.md (OpenClaw 4.23 co
       // Verify a few canonical program titles are inline.
       expect(agentsMd).toContain("### Morning brief");
       expect(agentsMd).toContain("### Weekly review");
-      expect(agentsMd).toContain("### Evening recap");
+      expect(agentsMd).toContain("### Evening signal check (silent unless something real surfaced)");
     }
   });
 
-  it("MAYA_BOOTSTRAP_MAX_CHARS is 44K (legitimate space for the 25-program inventory + Sprint 10 voice rules)", () => {
-    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(44_000);
+  it("MAYA_BOOTSTRAP_MAX_CHARS is 48K (Sprint 11 bump for signal-conditional evening_recap + matching AGENTS.md voice rule, on top of Sprint 10's 25-program inventory + voice rules)", () => {
+    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(48_000);
   });
 
   it("AGENTS.md actually fits under the 28K cap for every plan (defense-in-depth)", () => {

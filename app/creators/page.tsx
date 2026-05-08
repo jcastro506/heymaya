@@ -19,8 +19,9 @@ import { Pricing, type Billing } from "./_components/Pricing";
  * proposition → per-feature pain-led sections → pricing → FAQ → final CTA.
  *
  * Constraint: zero "AI" mentions in rendered copy. Maya is "your social media
- * manager" / "your content coach." Coach and Manager are autonomy-level
- * pricing tiers of one product, never two products.
+ * manager" / "your content assistant." Assistant and Manager are autonomy-level
+ * pricing tiers of one product, never two products. (Internal Plan enum value
+ * stays "coach" for back-compat — see convex/lib/planFeatures.ts.)
  */
 export default function CreatorLanding() {
   const [billing, setBilling] = useState<Billing>("monthly");
@@ -336,9 +337,10 @@ function FeatureRail() {
         }
         subhead={
           <>
-            Morning brief at 7am. Evening recap at 7pm. Sunday plan. Weekly
-            review. All on iMessage, where you already are. No app to open,
-            no dashboard to remember the password for.
+            Morning brief at 7am. An evening text only when something
+            real surfaced — never after 8pm. Sunday plan. Weekly review.
+            All on iMessage, where you already are. No app to open, no
+            dashboard to remember the password for.
           </>
         }
         visual={

@@ -329,7 +329,7 @@ describe("assembleWorkspaceBundle", () => {
     // standing order BEFORE anything else. Verify the prose is present
     // in both the embedded form (production 28K cap) and the split form
     // (low cap fallback).
-    const PROD_CAP = 44_000;
+    const PROD_CAP = 48_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
@@ -386,7 +386,7 @@ describe("assembleWorkspaceBundle", () => {
     // .md files in the workspace root are NOT guaranteed to load. So Maya
     // bumps the cap to 28K (MAYA_BOOTSTRAP_MAX_CHARS) and embeds standing
     // orders inline. Verify that the production cap path actually fits.
-    const PROD_CAP = 44_000;
+    const PROD_CAP = 48_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };

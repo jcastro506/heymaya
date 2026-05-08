@@ -236,20 +236,27 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
   },
   {
     id: "evening_recap",
-    title: "Evening recap",
+    title: "Evening signal check (silent unless something real surfaced)",
     tier: "all",
     kind: "cron",
     cronEntryId: "evening_recap",
-    defaultCron: "0 19 * * *",
+    // Sprint 11 (2026-05-08) — operator-locked rewrite. Was 7:00pm fixed
+    // recap; now 6:00pm scan with conditional send. Creators don't operate
+    // on a 9-5 timetable, and a "Today's recap" template at 7pm reads
+    // corporate / out of voice / fills with filler when nothing happened.
+    // Hard cutoff 8:00pm local — no sends after that under any condition;
+    // the prompt enforces it because a 6pm cron tick can run long if the
+    // gateway is queued. Idea-driven, not clock-driven.
+    defaultCron: "0 18 * * *",
     session: "isolated",
     scope:
-      "Three lines: one cited fact from today + one pending overnight + one thing for tomorrow. On no-post days say so plainly. Write `dailyBriefs` with kind='evening_recap'.",
-    triggers: "Cron `evening_recap` 7:00pm local.",
-    approvalGates: "None.",
+      "Signal-conditional, NOT clock-conditional. At 6:00pm local I scan; I do NOT send by default. Send only if AT LEAST ONE hit: (a) post crossed 1.5x or 0.5x trailing-30d median engagement (good or bad — both matter); (b) high-value brand email landed today (`brandDeals` row since 00:00 local, value ≥ floor or unknown-treated-as-above); (c) a `commitments` content commitment scheduled today was missed; (d) a `trendObservations` trend I flagged earlier today actually accelerated (delta ≥1.5x vs morning capture); (e) tomorrow has a `calendarEvents` event needing ≥1 prep beat (filming, brand call, podcast, livestream). None hit → stay silent. No filler, no \"nothing to report today\". Silence is the right answer most days. **Hard cutoff: never send after 8:00pm local under any condition** — if the tick lands after 8pm (queue lag, restart), abort even if a signal hit. Voice = friend who watched the day, NOT corporate end-of-day report. Cite specifically: post id + % vs median, brand name, commitment text, trend handle/URL, event title. Banned phrases: \"Today's recap\", \"End-of-day summary\", \"Quick update on your day\", \"Daily wrap\", \"Here's what happened today\" — corporate-bot tells. Lead with the thing: \"Your morning post is at 12K, that's 2.3x your median for that format.\" / \"A brand email from [name] hit — draft tonight or fold into tomorrow's brief?\" Write `dailyBriefs` kind='evening_recap' ONLY when a send goes out. Silent days = no row. Absence is the data.",
+    triggers: "Cron `evening_recap` 6:00pm local. Send is conditional on at least one signal crossing the threshold; silence is fine. Hard 8:00pm cutoff under all conditions.",
+    approvalGates: "None when silent. None when sending — informational push.",
     escalation:
-      "If quiet day with no pending work, recap is one line; do not pad. If under-performance was diagnosed, route through `maya-underperformance-diagnoser` first.",
+      "If under-performance was diagnosed earlier today, route through `maya-underperformance-diagnoser` first and fold its output into the send (don't ping twice). If `claw-messenger.sendText` fails 5xx, log and stay silent — no retry, no apology message tomorrow morning. If the local hour at send time is ≥20 (8pm), abort and log a `mayaActionLog` row with reason='past-cutoff'.",
     cronMessage:
-      "Run evening recap: 3 lines max — one cited fact + one pending + one for tomorrow. Write `dailyBriefs` with kind='evening_recap'.",
+      "Run evening signal check (NOT a guaranteed send). (1) Silent unless one of {1.5x/0.5x outlier post vs 30d median, high-value brand email today, missed commitment today, trend accelerated since morning, tomorrow's calendar event needing prep} fires. (2) Never send after 8:00pm local — abort if local clock ≥20:00. (3) Voice = friend who watched the day; banned: \"Today's recap\" / \"End-of-day summary\" / \"Quick update\". Cite the signal (post id + % vs median, brand, commitment, trend, event). Silent days: no row, no send, no apology.",
   },
   {
     id: "weekly_review",
