@@ -3506,54 +3506,62 @@ describe("synthesizeCreatorPicture — Sprint 6 anchor-driven verification", () 
 });
 
 /* -------------------------------------------------------------------------- */
-/* Sprint 9.5 — always-ask soft verification (real-world test 2026-05-06)      */
+/* Sprint 11.1 — ask-when-you-have-a-question (relaxed from Sprint 9.5)        */
+/* Operator-locked 2026-05-08: Maya should ASK only when she has a real        */
+/* question — not interrogate every Day-0 inferred axis. Empty                 */
+/* needsVerification[] is fine when the read is clean. Recurring person/       */
+/* location triggers added: ask "who's @joshmiller?" when ≥3 posts show a     */
+/* tagged person Maya doesn't know.                                            */
 /* -------------------------------------------------------------------------- */
 
-describe("synthesizeCreatorPicture — Sprint 9.5 always-ask soft verification", () => {
-  it("system prompt includes the ALWAYS-ASK RULE section", () => {
-    expect(SYNTH_SYSTEM_PROMPT).toMatch(/ALWAYS-ASK RULE/);
-    // The four picture-defining axes that must surface a soft entry on
-    // confident first-boot reads.
-    expect(SYNTH_SYSTEM_PROMPT).toMatch(/"niche"/);
-    expect(SYNTH_SYSTEM_PROMPT).toMatch(/"location"/);
-    expect(SYNTH_SYSTEM_PROMPT).toMatch(/"audience\.ageRanges"/);
-    expect(SYNTH_SYSTEM_PROMPT).toMatch(/"audience\.topGeos"/);
+describe("synthesizeCreatorPicture — Sprint 11.1 ask-when-you-have-a-question", () => {
+  it("system prompt includes the ASK-WHEN-YOU-HAVE-A-QUESTION RULE section", () => {
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/ASK-WHEN-YOU-HAVE-A-QUESTION RULE/);
   });
 
-  it("system prompt explains the rationale: confident reads still get verified", () => {
-    // Anti-sycophancy + anti-silent-confidence framing — Maya cannot KNOW
-    // without the creator's word, even when the data reads clearly.
-    expect(SYNTH_SYSTEM_PROMPT).toMatch(/cannot KNOW/);
-    expect(SYNTH_SYSTEM_PROMPT).toMatch(/cite/i);
-    // The operator's framing: asking while referencing what she's seeing.
-    expect(SYNTH_SYSTEM_PROMPT).toMatch(/asking while|referencing what/i);
+  it("system prompt encodes the four trigger types (divergence, recurring person, recurring location, recurring object)", () => {
+    const block = SYNTH_SYSTEM_PROMPT.split("ASK-WHEN-YOU-HAVE-A-QUESTION RULE")[1] ?? "";
+    expect(block).toMatch(/Hard divergence/);
+    expect(block).toMatch(/Recurring person Maya can't identify/);
+    expect(block).toMatch(/Recurring location Maya can't reconcile/);
+    expect(block).toMatch(/Recurring object\/format\/phrase/);
   });
 
-  it("system prompt routes always-ask entries to severity=soft (blockers reserved for divergence)", () => {
-    // The "always-ask" section must specify severity is ALWAYS soft.
-    const alwaysAskBlock = SYNTH_SYSTEM_PROMPT.split("ALWAYS-ASK RULE")[1] ?? "";
-    expect(alwaysAskBlock).toMatch(/severity is ALWAYS "soft"/);
-    // Severity stays "blocker" only for the divergence cases (London-bug class).
-    expect(alwaysAskBlock).toMatch(/blocker.*only for the divergence/i);
+  it("system prompt encodes tag-grounded vs open probe for recurring people", () => {
+    const block = SYNTH_SYSTEM_PROMPT.split("ASK-WHEN-YOU-HAVE-A-QUESTION RULE")[1] ?? "";
+    // Tag-grounded probe: name the @-handle when the post has tags
+    expect(block).toMatch(/Tag-grounded probe/);
+    expect(block).toMatch(/@joshmiller/);
+    // Open probe: ask without naming when no tag is available
+    expect(block).toMatch(/Open probe/);
   });
 
-  it("system prompt updates the WHEN-EMPTY rule: never empty on Day-0 inferred reads", () => {
-    // Old rule: empty when anchors-and-observation agree.
-    // New rule: empty only when every axis is anchored OR sourced verbatim
-    // from audienceUpstream. Day-0 with no openingAnswers → always non-empty.
-    expect(SYNTH_SYSTEM_PROMPT).toMatch(/Day-0 boot/);
-    expect(SYNTH_SYSTEM_PROMPT).toMatch(/NEVER empty/);
+  it("system prompt requires recurring-person questions to tie to a content-arc next step", () => {
+    const block = SYNTH_SYSTEM_PROMPT.split("ASK-WHEN-YOU-HAVE-A-QUESTION RULE")[1] ?? "";
+    // The operator's locked direction: questions tie to action ("plan content
+    // around your hangouts?"), not just data collection.
+    expect(block).toMatch(/plan content around/i);
+    expect(block).toMatch(/already thinking about how to USE the answer|tie to (a |an )?content[- ]arc/i);
   });
 
-  it("system prompt instructs Maya to cite evidence + reference the read in the question", () => {
-    // The operator quote: "She's asking while also referencing what she's
-    // seeing." The example questions should encode this shape.
-    const alwaysAskBlock = SYNTH_SYSTEM_PROMPT.split("ALWAYS-ASK RULE")[1] ?? "";
-    // At least one example question that follows the "I see X — confirm or
-    // correct?" shape.
-    expect(alwaysAskBlock).toMatch(/Reading your last 30/);
-    // Audience age example.
-    expect(alwaysAskBlock).toMatch(/Audience comments|comments skew/);
+  it("system prompt caps total entries at 3 with priority ranking", () => {
+    const block = SYNTH_SYSTEM_PROMPT.split("ASK-WHEN-YOU-HAVE-A-QUESTION RULE")[1] ?? "";
+    expect(block).toMatch(/at most 3/i);
+    expect(block).toMatch(/blockers always/i);
+  });
+
+  it("system prompt explicitly forbids forced asks on clean reads", () => {
+    const block = SYNTH_SYSTEM_PROMPT.split("ASK-WHEN-YOU-HAVE-A-QUESTION RULE")[1] ?? "";
+    // The "DO NOT" section locks the conditional behavior
+    expect(block).toMatch(/DO NOT emit needsVerification entries for/);
+    expect(block).toMatch(/read CLEANLY/);
+    expect(block).toMatch(/anchors? that AGREE/i);
+  });
+
+  it("system prompt allows empty needsVerification[] when read is clean", () => {
+    // Operator-locked reversal of Sprint 9.5's NEVER-empty rule
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/CAN be empty/);
+    expect(SYNTH_SYSTEM_PROMPT).toMatch(/SHOULD be when there's nothing to ask/);
   });
 
   it("validator accepts a Day-0 confident-read picture with 4 soft entries (no blockers)", () => {
@@ -3611,14 +3619,23 @@ describe("synthesizeCreatorPicture — Sprint 9.5 always-ask soft verification",
     ];
     const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
 
-    // Regression bar: confident-read fixture → length ≥ 3, all soft.
-    expect(parsed.needsVerification.length).toBeGreaterThanOrEqual(3);
+    // Sprint 11.1: schema still accepts up to 4 soft entries (the validator
+    // doesn't enforce the 3-cap; the prompt does). Confirms the validator
+    // didn't regress when the prompt rule changed. Real-world output now
+    // averages 0-3, not the forced 3-4 from Sprint 9.5.
+    expect(parsed.needsVerification.length).toBeGreaterThanOrEqual(1);
     for (const item of parsed.needsVerification) {
       expect(item.severity).toBe("soft");
     }
-    // Picture is still confident — niche + audience + handles all populated
-    // — Maya is just going to ask before locking.
     expect(parsed.niche.length).toBeGreaterThan(0);
+  });
+
+  it("validator accepts an empty needsVerification[] (clean read, nothing to ask)", () => {
+    // Sprint 11.1 reversal: empty IS valid when Maya has no real question.
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.needsVerification = [];
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    expect(parsed.needsVerification).toEqual([]);
   });
 
   it("validator still accepts a London-bug-style blocker entry alongside soft entries", () => {
