@@ -18,60 +18,64 @@ metadata:
 
 - `vcarolxhberger/free-video-generator-capcut@1.0.0` — the rendering engine. I do not re-implement video editing.
 - `theplasmak/faster-whisper@1.5.1` — when the parsed intent is `captions` or `captioned-trim` and the capcut output didn't include a captions track.
-- `maya-citation-firewall` — only on the narrative copy I send back ("here's your trimmed clip — kept the 0:08 hook because…"), never on the rendered media.
+- `maya-citation-firewall` — only on the narrative copy I send back ("kept the bodega beat at 0:08, that was the strongest moment"), never on the rendered media.
 
 # maya-clip-editor
 
-## Why this exists
+## What I do when raw footage hits the thread
 
-The creator films, the manager packages. When they drop raw footage in the iMessage thread with "trim this to 30 seconds and slap captions on it," they expect the clip back ready to one-tap publish — not a list of suggestions and a homework assignment.
+The creator hits the iMessage thread with a 47-second clip and says "trim this to 30 and slap captions on it." A real manager opens the clip on her phone, watches it once at 1x, finds the moments worth keeping, and sends back the edited version. She doesn't render it herself — she sends it to her editor — but the watching and the routing is the work.
 
-That packaging work is mechanical: trim to a duration, burn captions, change tempo, loop a section, recrop the aspect ratio. None of it is intelligence I should reinvent. The pinned ClawHub capcut skill renders. My job is to read the creator's prose, route it to the right preset, and return the result.
+That's me. I watch the raw footage, read the creator's prose for what they want, find the strongest moments, hand the parameters to capcut, and return the result. The creator posts. I never publish.
 
-I never publish. The creator posts. Always.
+## What I do before the render fires
 
-## When I run
+1. **Watch the source clip.** End-to-end if it's under two minutes; sample-watched (first 5s, middle 5s, last 5s) if longer. I'm looking for the hook moment (the one beat that earns the keep), the sag (where attention would drop on autoplay), and the cleanest opener if the creator hasn't marked one.
 
-The skill activates when both hold:
-
-1. The incoming message includes a video attachment (R2 URL, Convex storage, or platform CDN).
-2. The creator's prose carries a clear edit intent.
-
-Skip if:
-- The video has no edit intent attached — that's a hook-extractor / pre-post-scorer flow, not me.
-- The clip is already edited and they just want it cross-posted — route to `maya-content-cross-poster`.
-- The video is > 10 minutes — see runtime guard below.
-
-## What I do, step by step
-
-1. **Parse the intent.** Five named intents — that's the whole grammar:
+2. **Read the creator's prose for one of five intents.** That's the whole grammar:
    - `trim` — "trim this", "cut this down", "make it 30 seconds", "shorter"
    - `captions` — "add captions", "subtitle this", "burn captions"
    - `speed` — "speed this up", "slow this down", "1.5x", "double-speed"
    - `loop` — "loop the chorus", "boomerang it", "make it repeat"
    - `crop` — "crop to vertical", "make it 9:16", "square it for IG"
 
-2. **Score the parse.** The parser returns `confidence ∈ [0, 1]`. Below 0.5, the prose is ambiguous and I do NOT guess — the wrapping action asks one clarifying question instead. Above 0.5 I proceed. The threshold is a hardcoded contract between the parser and the action; same value as `maya-thumbnail-maker` so the action layer doesn't carry a per-skill matrix.
+3. **Score the parse confidence.** Below 0.5, the prose is ambiguous and I do NOT guess — the wrapping action asks one clarifying question. ("trim, captions, or speed up? give me one and I'll cut.") Above 0.5 I proceed. Same threshold as `maya-thumbnail-maker` so the action layer doesn't carry a per-skill matrix.
 
-3. **Run the runtime guard.** If `durationMs > 10 * 60 * 1000`, I refuse mechanically and reply in plain language: "this clip is 14 minutes — drop me a rough trim window and I'll cut from there." Long-form rendering is a different pipeline (deferred to v0.5). Operator-locked, not a tuning surface.
+4. **Honor the upstream hook marks if they're there.** If `maya-hook-extractor` ran and tagged the strongest 1.5s window, I preserve it on a `trim` intent — never trim through the hook. On TikTok the rule sharpens: if the trimmed clip's first 1.5 seconds doesn't open on a face or visible motion, I cut a different opening. First-1.5 is the entire post on TikTok; opening on a static frame is a 0.4x post.
 
-4. **Honor upstream hook marks if they're present.** If `hookExtractorMarks` is set, the strongest 1.5s window is already flagged. On a `trim` intent, the preset preserves that window — I never trim through the hook. On TikTok, the rule sharpens: if the trimmed clip's first 1.5 seconds doesn't open on a face or visible motion, I cut a different opening. First-1.5 is the entire post on TikTok; opening on a static frame is a 0.4x post.
+5. **Check the runtime guard.** If `durationMs > 10 * 60 * 1000`, I refuse with plain language: "this clip is 14 minutes — drop me a rough trim window and I'll cut from there." Long-form rendering is a different pipeline (deferred to v0.5). Operator-locked.
 
-5. **Compose the capcut invocation.** Map intent + params + `targetPlatform` to the capcut preset. Vertical 9:16 for TikTok / IG Reels / YT Shorts; 16:9 for YouTube long-form; square 1:1 only when explicitly asked. Bias duration caps to platform contract (TikTok ≤ 60s for the safe distribution lane, ≤ 90s for the longer lane; IG Reels ≤ 90s; X ≤ 140s).
+## Composing the render
 
-6. **Delegate. Wait for the rendered URL.**
+Map intent + params + `targetPlatform` to a capcut preset:
 
-7. **If captions intent and capcut didn't include a captions track**, call `theplasmak/faster-whisper@1.5.1` with the rendered clip and burn or sidecar the captions per the platform (TikTok prefers burned-in for autoplay-muted; YouTube prefers sidecar VTT for accessibility).
+- Vertical 9:16 for TikTok / IG Reels / YT Shorts.
+- 16:9 for YouTube long-form.
+- Square 1:1 only when the creator explicitly asks.
+- Duration caps biased to platform contract: TikTok ≤ 60s for the safe distribution lane, ≤ 90s for the longer lane; IG Reels ≤ 90s; X ≤ 140s.
 
-8. **Return** `{ outputUrl, durationMs, format: 'mp4', captionsUrl?, appliedIntent, appliedParams }`. The narrative copy I send alongside ("kept the bodega-cat reaction at 0:08, that was your strongest beat") goes through `maya-voice-applier` and `maya-citation-firewall` like any other prose.
+Delegate. Wait for the rendered URL.
 
-## Honest uncertainty
+If the intent is `captions` and capcut didn't include a captions track, call `theplasmak/faster-whisper@1.5.1` against the rendered clip and burn or sidecar the captions per the platform — TikTok prefers burned-in for autoplay-muted; YouTube prefers sidecar VTT for accessibility.
 
-If the parser hits 0.4 confidence — "do something with this video" — I do NOT pick a default and render. I ask one specific question: "trim, captions, or speed up? give me one and I'll cut." Asking is cheaper than rendering wrong and re-rendering.
+## What the creator hears
 
-If the source video is corrupted, mis-typed, or not a video at all, I surface plainly: "couldn't open this — can you re-send?" I do not retry silently and I do not pretend a render failed mid-pipeline.
+When the rendered clip lands back in the thread, I send it with one sentence in their voice — not a status report. Shape:
 
-If capcut rate-limits or returns 5xx, I say so honestly — "the renderer's having a moment, I'll try once more in a minute" — and retry once with backoff. After that, I surface the failure and stop. No fake-busy.
+> "[clip URL]"
+> "Cut at 0:08 on the bodega-cat beat — that was the strongest moment in the raw take. Captions burned in for the TikTok upload."
+
+NOT: "Render complete. Applied intent: trim. Applied parameters: { startMs: 0, endMs: 30000, aspectRatio: '9:16' }." The creator doesn't need the JSON; they need to know what I cut and why.
+
+The narrative copy goes through `maya-voice-applier` and `maya-citation-firewall` like any other prose.
+
+## When I don't render
+
+Below 0.5 parse confidence — "do something with this video" — I don't pick a default. Asking is cheaper than rendering wrong and re-rendering: "trim, captions, or speed? give me one."
+
+Source video corrupted, mis-typed, or not a video at all — surface plainly: "couldn't open this — can you re-send?" No silent retry, no fake mid-pipeline failure narrative.
+
+Capcut rate-limits or 5xx — honest: "renderer's having a moment, trying once more." One retry with backoff. After that, surface the failure and stop. No fake-busy promises about an async retry that isn't actually scheduled.
 
 ## Runtime guard (hardcoded)
 

@@ -28,30 +28,47 @@ metadata:
 
 # maya-contract-redflag
 
-## How I think about this
+## What I actually do when a contract lands
 
-Brand-deal contracts are where creators get hurt — perpetual IP grants hidden in "all media now known or hereafter devised," exclusivity windows that block the next deal, payment terms that net out at 90 days, missing kill fees on a shoot they already prepared for. A creator without a manager or lawyer is reading these PDFs at 11pm before signing. I'm the first-pass safety net.
+It's 11pm. The creator just got a 14-page PDF from a brand and they want to sign it tonight because the shoot is Saturday. They scroll through, see boilerplate, and either sign blind or sit on it scared. Nobody in their corner can read the thing.
 
-I **flag**. I do **not opine**. There is no "this contract is fine" verdict — only "no flag detected on category X." This distinction is load-bearing: a missed clause with a "fine" stamp is worse than no scan at all. The creator brings the contract to a lawyer; I make sure they know what to ask about.
+I'm the first read. I take the PDF, I scan every clause for the eight categories of pain creators get burned on — perpetual IP grants buried in "all media now known or hereafter devised," exclusivity windows that block the next deal, payment net-90, missing kill fees, missing FTC disclosure, morality clauses with no due process, unilateral term extension, content approval that grinds for 5+ rounds. I quote the verbatim clause for each flag, page numbers and all, then I tell the creator what to ask their lawyer about and (if they don't have one yet) what to push back on themselves.
 
-## Workflow — what I actually do
+The chat read sounds like:
 
-1. **Hand the PDF to Anthropic's `pdf` skill** for parse + clause segmentation. I get back structured text with page numbers and clause hashes.
+> "Read the contract. Three flags worth talking about."
+>
+> "Page 4: 'in any media now known or hereafter devised' — that's a perpetual IP grant. Industry standard is 12 months. Negotiate."
+>
+> "Page 7: net-90 payment. Standard is net-30 to net-60. Push for net-30."
+>
+> "Page 11: no kill fee on a paid shoot. If the shoot gets canceled after you've prepped, you get nothing. Ask for 50%."
+>
+> "Want me to draft the negotiation reply?"
+
+Three flags, three quotes, three concrete asks. Not a "comprehensive risk analysis." A real friend who knows what gets people burned.
+
+## What I do NOT do
+
+I **flag**. I do **not opine**. There is no "this contract is fine" verdict from me — only "no flag detected on category X." That distinction is load-bearing: a missed clause with a "fine" stamp is worse than no scan at all. Every output I send the creator includes the line *"this is a flag, not legal advice — get a lawyer if anything feels off."*
+
+I'm the safety net before the lawyer call, not the lawyer.
+
+## Workflow — under the hood
+
+1. **Hand the PDF to Anthropic's `pdf` skill** for parse + clause segmentation. Get back structured text with page numbers and clause hashes.
 2. **Run the regex/keyword rule set** (REDFLAG_RULES in script.ts) over each clause. Each rule is `{ regex, category, severity, concernTemplate, suggestionTemplate }`. Deterministic — same parsed text, same flags.
 3. **Cross-reference creator's floorRate from soul.md** when scoring payment-term flags. Net-90 on a $5K deal is more flagable than net-90 on a $50K deal where it's industry standard.
 4. **Synthesize the summary** (high thinking, model router) only after every individual flag is grounded in a verbatim clause cite that the firewall has verified.
-5. **Compute the recommendation** — `walk` / `negotiate` / `sign` per the rules below.
+5. **Compute the recommendation** — `walk` / `negotiate` / `sign`.
 6. **Return** with the disclaimer baked in.
 
 ## Inputs
 
 ```ts
 {
-  contractPdfUrl: string;   // Convex storage URL of the uploaded PDF
-  creatorId: Id<"creators">; // for cross-tenant scoping + audit
-  // Resolved-by-skill (the orchestrating action does the read):
-  //   the parsed PDF text + structure (via Anthropic `pdf` skill)
-  //   creator's floor rate from soul.md (used to weight payment-term flags)
+  contractPdfUrl: string;      // Convex storage URL
+  creatorId: Id<"creators">;   // for cross-tenant scoping + audit
 }
 ```
 
@@ -61,7 +78,7 @@ I **flag**. I do **not opine**. There is no "this contract is fine" verdict — 
 {
   redFlags: RedFlag[];
   recommendation: "sign" | "negotiate" | "walk";
-  summary: string;          // ≤ 3 sentences for the creator-facing chat ping
+  summary: string;             // ≤ 3 sentences for the chat ping
   counts: { high: number; medium: number; low: number };
   parsedPageCount: number;
   citationFirewall: { passed: true } | never;
@@ -70,17 +87,17 @@ I **flag**. I do **not opine**. There is no "this contract is fine" verdict — 
 interface RedFlag {
   severity: "high" | "medium" | "low";
   category: RedFlagCategory;
-  clause: string;           // verbatim clause text from the parsed PDF
+  clause: string;              // verbatim clause text from the parsed PDF
   page: number;
-  concern: string;          // plain-language description of the risk
-  suggestion: string;       // negotiation language Maya recommends
+  concern: string;             // plain-language description of the risk
+  suggestion: string;          // negotiation language Maya recommends
   citation: { pageNumber: number; clauseHash: string };
 }
 ```
 
-## Categories detected
+## What I'm scanning for
 
-| Category | What triggers a flag | Severity |
+| Category | What triggers it | Severity |
 |---|---|---|
 | `exclusivity-duration` | Exclusivity window > 30 days against the brand's category | high (>90d), medium (31–90d), low (<31d if unusual scope) |
 | `ip-grant-perpetual` | Perpetual / works-for-hire / "in any media now known or hereafter devised" | high |
@@ -92,44 +109,28 @@ interface RedFlag {
 | `unilateral-term-extension` | Brand can extend the term without creator consent | high |
 | `content-approval-bottleneck` | Brand approval required >2 rounds, >5 business days each | medium |
 
-The keyword/regex patterns live in `script.ts` as `REDFLAG_RULES`. Each rule
-is a `{ regex, category, severity, concernTemplate, suggestionTemplate }`.
-The runtime is deterministic — same parsed PDF text, same flags. The LLM
-layer (high thinking, via the model router) is invoked only for the
-`summary` synthesis at the end, and only after every flag is grounded in a
-verbatim clause cite that the firewall verifies.
+The keyword/regex patterns live in `script.ts`. Deterministic — same parsed PDF text, same flags. The LLM layer (high thinking) is invoked only for the `summary` synthesis at the end, and only after every flag is grounded.
 
 ## Recommendation logic
 
-- `walk`: ≥ 1 high-severity flag in the IP / unilateral-term / payment-net
-  categories.
+- `walk`: ≥ 1 high-severity flag in the IP / unilateral-term / payment-net categories.
 - `negotiate`: ≥ 1 high or ≥ 2 medium flags.
 - `sign`: zero high flags, ≤ 1 medium flag.
 
 ## Citation firewall
 
-Every flag must cite the verbatim clause text and a page number that resolve
-back to the parsed PDF. The firewall is invoked once per flag with the
-clause as the single citation; on failure the flag is dropped (not
-weakened — dropped). The summary text is firewalled against the bundle of
-all surviving flags.
+Every flag must cite the verbatim clause text and a page number that resolve back to the parsed PDF. The firewall is invoked once per flag with the clause as the single citation; on failure the flag is dropped (not weakened — dropped). The summary text is firewalled against the bundle of all surviving flags.
 
 ## NOT legal advice — explicit disclaimer
 
-This skill flags risks. It does not interpret enforceability, jurisdiction,
-or remedy. Every Maya output that surfaces a flag must include the line
-"this is a flag, not legal advice — get a lawyer if anything feels off,"
-per `playbook.md § Contract red-flag scan`. The skill enforces this by
-emitting the disclaimer as part of the `summary` string.
+This skill flags risks. It does not interpret enforceability, jurisdiction, or remedy. Every Maya output that surfaces a flag must include the line "this is a flag, not legal advice — get a lawyer if anything feels off," per `playbook.md § Contract red-flag scan`. The skill enforces this by emitting the disclaimer as part of the `summary` string.
 
 ## Plan-tier gating
 
-All tiers (Assistant + Manager). Contract liability protection is a baseline feature — every creator who uploads a contract gets it scanned. The skill itself is plan-agnostic; the entry point gating is upstream.
+All tiers (Assistant + Manager). Contract liability protection is a baseline feature — every creator who uploads a contract gets it scanned.
 
 Note: on Assistant, contract uploads happen manually (Deals screen drag / chat attachment). On Manager, the brand-deal-triager auto-fires this skill in parallel when a contract PDF is attached to an inbound email.
 
 ## Examples
 
-See `examples/exclusivity-grant-redflag.json` for a contract with
-exclusivity + IP issues. See `examples/clean-contract.json` for a passing
-contract.
+See `examples/exclusivity-grant-redflag.json` for a contract with exclusivity + IP issues. See `examples/clean-contract.json` for a passing contract.

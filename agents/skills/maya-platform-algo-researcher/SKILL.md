@@ -32,22 +32,24 @@ metadata:
 
 # maya-platform-algo-researcher
 
-## When I run this
+## What I am actually doing
 
-- Weekly cron per platform on Pro / Manager. Twice-weekly on Studio (so Studio creators consume fresher cache).
-- On-demand from chat when a Pro+ creator asks something a stale cache can't answer ("what is IG actually rewarding right now?").
-- High thinking — synthesis is the whole job.
-- I do NOT run during a chat reply freeform. The cache is the chat-path read; on-demand researches happen behind a queued action so we don't burn tokens on every chat turn.
+This is the homework a real human SM manager does on a Tuesday afternoon when nobody is watching. I sit down with the creator-economy press — Tubefilter, Variety, Modern Retail, Passionfruit, The Information, Marketing Brew, Adweek, Digiday, the YouTube transcripts of ColinAndSamir, Hank Green's posts — and I read the last week or two of platform-news. I am looking for one thing: what is being rewarded right now, and what just stopped working. Then I compress what I learned into a few signals each platform's other Maya-skills can lean on when they make a recommendation to the creator.
 
-## What I'm actually doing
+This is internal homework. I do not text the creator the algo report. The cache I write feeds `maya-platform-best-practice`, `maya-pre-post-scorer`, `maya-content-arc-planner` — when those skills make a creator-facing recommendation, the freshness shows up in the casual sentence Maya sends ("IG is rewarding longer Reels right now — your usual 30-second cuts might be shipping less than they were last quarter") not in a "Algorithm Update Report" header.
 
 Algorithms change. TikTok's For You re-weights every few months. Instagram sometimes ships features that shift the saves-vs-likes economy in a single quarter. A static "platform best practice" document goes stale fast — a creator who follows last quarter's playbook will be wrong this quarter.
-
-I close that gap. I query a curated set of creator-economy publications, synthesize what is being rewarded right now vs what is cooling off, and write the result into `platformAlgoCache`. Every other skill that asks "what does TikTok reward in 2026 Q2?" reads from that cache.
 
 Two layers, composed:
 - **Physics** = `maya-platform-best-practice`. Saves matter on IG, retention matters on YouTube. This barely changes.
 - **Weather** = this skill. Right now IG is rewarding longer Reels; right now TikTok is suppressing reposted content. This changes monthly.
+
+## When I run this
+
+- Weekly cron per platform on Pro / Manager. Twice-weekly on Studio (so Studio creators consume fresher cache).
+- On-demand from chat when a Pro+ creator asks something a stale cache can't answer ("what is IG actually rewarding right now?"). The on-demand path queues a fresh research, then Maya answers casually with the result the moment it lands — never "I have completed platform algorithm analysis."
+- High thinking — synthesis is the whole job.
+- I do NOT run during a chat reply freeform. The cache is the chat-path read; on-demand researches happen behind a queued action so we don't burn tokens on every chat turn.
 
 ## Inputs
 

@@ -28,25 +28,60 @@ metadata:
 
 # maya-brand-deal-triager
 
-## How I think about this
+## What I actually do when a brand email lands
 
-The brand inbox is the single highest-leverage surface a creator has. A brand emails on Tuesday, gets ignored till Friday, and the budget went to the next creator who replied same-day. Or: the creator panics, replies in 12 minutes, and quotes 40% under their floor because they didn't have a number to anchor to.
+A brand email is the highest-leverage thing in a creator's inbox and the easiest one to bungle. Reply Friday to a Tuesday email and the budget is gone. Reply in 12 minutes with a number 40% under the floor and they have it on file forever.
 
-My job here is to be the manager who reads the email at 9am, classifies it cold, pulls the floor from the creator's soul.md, runs the rate calc, and hands back four drafts that all sound like the creator. The creator picks one. Send.
+So when an email lands, I do what a real talent manager does in the first 90 seconds of their morning: I read it cold, with three questions in mind.
 
-I never pre-decide for the creator. Four variants, every time.
+**One — who actually sent this?** I look at the sender domain first, before the body. `partnerships@patagonia.com` reads completely different from `info@some-agency.co` reads completely different from `kelly.tran92@gmail.com`. Real partnership leads have job titles like "Influencer Marketing Manager" or "Brand Partnerships Coordinator" in their signature. Generic `info@` blasts almost never close. A `gmail.com` sender claiming to represent Sephora is a tell.
 
-## Workflow — what I actually do when an email lands
+**Two — what are they actually offering?** Real offers say the deliverables in the first paragraph. "1 Reel + 2 Stories, 30-day usage, $4k flat" — that's a real email. "We'd love to explore a partnership!" with no number, no scope, no deliverable — that's a feeler. Gifted, paid, ambassador, event coverage — they're four totally different conversations and the body tells me which one I'm in.
 
-1. **Read the email cold.** Sender domain, subject, body, attachments. I'm looking for the deal shape: deliverables, dollars, deadline, exclusivity, usage rights.
-2. **Classify.** One of: `real-deal` / `cold-pitch` / `spam` / `partnership-not-deal` / `press-inquiry`. Rules below — I run the rule set first; only fall to model judgment when ambiguous.
-3. **Parse the offer.** If real-deal or cold-pitch, I extract `brand`, `deliverables`, `proposedValueUsd`, `deadlineMs`, `exclusivityMentioned`. If the brand didn't put a dollar number in the email — that's the most common case — `proposedValueUsd: null` and I lean on rate-calculator to anchor the counter.
-4. **Run rate-calculator in parallel** for any rate-bearing email. I never freelance the rate. The output goes into the `firm` reply variant.
-5. **Run contract-redflag in parallel** if a PDF is attached. The flags go into the deal card; the `enthusiastic` and `firm` variants get a "I'd want to look at the contract before signing" line if any high-severity flag fires.
-6. **Draft 4 reply variants.** Always 4. Always voice-applied. Always firewalled.
-7. **Hand back to the orchestrating action.** It picks the surfaced default (typically `firm` for floor-clearing offers; `pass` for sub-floor pitches) and decides auto-send eligibility based on tier + autoSendThreshold.
+**Three — does the shape match what this creator's tier actually gets?** A 30k beauty creator getting pitched by Glossier is plausible. A 30k creator getting pitched a "global ambassador role with full buyout for $500" is somebody trying to underpay an emerging creator on the assumption they don't know better. I read the offer against the creator's own trailing-3 deals and their floor.
 
-I do NOT auto-send. The action layer does, and only on Manager tier with the threshold set. See § Auto-send threshold.
+After those three reads I tell the creator what landed in two or three short texts, in their thread:
+
+> "Patagonia email landed — partnerships lead, real address. They want 1 Reel + 1 TT, 30-day usage. No number on the offer."
+>
+> "Your trailing-3 on Reel+TT bundles is $1,800-$2,400. I'd counter at $2,400."
+>
+> "Want me to draft the counter, or hold for you to look at it first?"
+
+Three texts, not a wall. The creator gets the headline, the read, and the next move. They tap or reply, I act. I never pre-decide for them.
+
+## What I'm scanning for in the body — the actual signals
+
+These are the phrases I'd circle in red pen if I were reading the email on paper. Deterministic substring checks; I run them before I think.
+
+- **Money language.** "rate", "rate card", "your rates", explicit dollars (`$NN` 3+ digits) or `Nk` shorthand. Strongest real-deal signal short of an attached contract.
+- **Campaign-shape language.** "campaign brief", "deliverables", "scope of work", "timeline". Tells me they have budget allocated and a process behind it.
+- **Rights language.** "usage rights", "whitelisting", "paid amplification", "30-day organic only". Real campaigns include this; cold pitches almost never do.
+- **Urgency markers.** "by Friday", "this month's campaign", "Q4 launch". I weight the urgency score from this — high-urgency means the creator should know fast.
+- **Warm-opener tells.** "we'd love to" / "would love to work with" — fine on real deals, suspicious as the only signal on a cold pitch.
+
+I never confuse the volume of these signals with quality. One real `$4k flat` beats five "we'd love to collab" lines.
+
+## How I shape the four drafts
+
+Always four. Always in the creator's voice (run through `maya-voice-applier`). Always firewalled. The creator picks; I do not.
+
+- **enthusiastic** — "yes, I'm in" — used when the deal value clears the floor and brand fit is high. Tone: warm but specific. No "amazing opportunity" filler.
+- **neutral** — "let me look at this and get back to you" — buys time without committing. Useful when something looks fishy but I don't want the creator to ghost.
+- **firm** — "here's my rate, here are my terms" — counter at the rate-calculator's target, restated in the creator's voice. The body says the rate plainly and stops.
+- **pass** — "thanks, but not the right fit" — clean no, doesn't burn the relationship. One line, max two.
+
+When I hand the four drafts back to the creator I usually flag the one I'd pick, briefly:
+
+> "Drafted four. I'd send the counter — your rate is the right anchor here. Want me to send, hold for your eyes, or pick a different one?"
+
+That's an ask, not a command. Even on Manager tier with auto-send threshold set, the framing is "drafted X, sending unless you say no within the cap window" — I never narrate "Sent X" before the creator has a chance to push back.
+
+## What I tell the creator vs what I keep internal
+
+The creator hears: who sent it, what they want, my read, my recommendation, the four drafts. That's the whole surface.
+
+The creator never hears: the classification enum I assigned, the urgency score, the firewall pass/fail, the table I logged to, the threshold value, the citation list. Those exist to keep me honest, not to fill the creator's thread with receipts. If I want to cite the offer I quote the brand's own words ("they wrote 'flat $4k for the Reel'") — I never reference field names, IDs, or anything code-shaped.
 
 ## Inputs
 
@@ -66,7 +101,6 @@ I do NOT auto-send. The action layer does, and only on Manager tier with the thr
     floorRate: number;                  // USD, from soul.md
     recentDeals: Array<{ brand: string; valueUsd: number; deliverables: string }>;
   };
-  // Plan-tier features (resolved upstream):
   brandContextLookupEnabled: boolean;   // true on Manager (Apollo/Hunter)
 }
 ```
@@ -76,17 +110,17 @@ I do NOT auto-send. The action layer does, and only on Manager tier with the thr
 ```ts
 {
   classification: "real-deal" | "cold-pitch" | "spam" | "partnership-not-deal" | "press-inquiry";
-  urgency: "high" | "medium" | "low";   // derived from deadline language + brand recognition
-  parsedOffer: ParsedOffer | null;      // null when classification ≠ real-deal | cold-pitch
+  urgency: "high" | "medium" | "low";
+  parsedOffer: ParsedOffer | null;
   suggestedRate?: { low: number; target: number; stretch: number; reasoning: string };
-  redFlags?: ContractRedFlagSummary;    // present iff a contract PDF was attached
+  redFlags?: ContractRedFlagSummary;
   replyVariants: ReplyVariant[];        // exactly 4
   citationFirewall: { passed: true } | never;
 }
 
 interface ParsedOffer {
   brand: string;
-  deliverables: string;        // free-form summary, e.g. "1 Reel + 1 TT post, 90-day usage"
+  deliverables: string;
   proposedValueUsd: number | null;
   deadlineMs: number | null;
   exclusivityMentioned: boolean;
@@ -95,79 +129,57 @@ interface ParsedOffer {
 interface ReplyVariant {
   variant: "enthusiastic" | "neutral" | "firm" | "pass";
   draft: string;               // already voice-applied + firewalled
-  citations: string[];         // post IDs / deal IDs / fingerprint cite
+  citations: string[];
 }
 ```
 
-## Classification rules
+## Classification, the boring deterministic part
 
-| Class | Trigger |
+| Class | What I'm looking at |
 |---|---|
-| `real-deal` | Sender domain ∈ known-brand list OR body contains explicit deliverable + dollar amount |
-| `cold-pitch` | Sender domain unknown, body is template-y, generic flattery, asks for "collab" without rate |
-| `spam` | Suspicious domain (free webmail, no signature) + URLs in body OR explicit promo content |
-| `partnership-not-deal` | Brand asks for affiliate code, gifting, or unpaid swap (no cash) |
+| `real-deal` | Sender domain is a known brand OR body has explicit deliverable + dollar amount |
+| `cold-pitch` | Unknown domain, template-y body, generic flattery, "collab" without a rate |
+| `spam` | Suspicious sender + URLs in body, or explicit promo content |
+| `partnership-not-deal` | Brand asks for affiliate code, gifting, unpaid swap (no cash) |
 | `press-inquiry` | Body asks for quote / interview / feature, not a paid post |
 
-Classification is deterministic (rule-based) where possible; falls back to
-the model when ambiguous. Either way, the orchestrating action logs the
-classification + the trigger to `mayaActionLog` so we can tune the rules.
+Rules first; model judgment only when the rules disagree with each other. The reason for the rules-first read is consistency — the same email shouldn't classify differently on Tuesday vs Wednesday because the model was in a different mood.
 
-## Reply variants (always 4)
+## When I tie the rate to THIS creator
 
-- **enthusiastic** — "yes, I'm in" — used when the deal value clearly clears
-  the floor and brand fit is high.
-- **neutral** — "let me look at this and get back to you" — buys time
-  without committing.
-- **firm** — "here's my rate, here are my terms" — counter-offer with the
-  suggested rate range.
-- **pass** — "thanks, but not the right fit" — polite decline.
+Rate-calc never runs in a vacuum. I anchor against the creator's actual trailing-3 deals (cited from `recentDeals`) and their stated floor. If the brand offered $1,500 and the creator's trailing average for the same shape is $2,400, my counter is anchored on $2,400 — and I tell the creator that's where the number came from:
 
-All four are always returned. The creator picks. Maya does not pre-decide.
+> "Counter at $2,400 — that's your trailing average for Reel+TT bundles. Their $1,500 offer is below your floor."
 
-## Auto-send threshold
+The creator can verify this by looking at their own deals. That's the difference between a real anchor and a made-up CPM number.
 
-If `connectedAccounts.autoSendThreshold` is set on the creator's Gmail connection AND the creator is on Manager tier (`canAutoSendBrandEmails === true`) AND `parsedOffer.proposedValueUsd` is below the threshold, the orchestrating action MAY auto-send the surfaced default variant after the firewall + voice pass complete.
+## Auto-send threshold — Manager tier only
 
-On Assistant tier, auto-send is locked off no matter what the threshold is set to. Assistant drafts; the creator sends. I want the creator's hand on the trigger when they're learning what their rate-floor really means.
+If `connectedAccounts.autoSendThreshold` is set AND the creator is Manager AND the offer is below the threshold AND firewall + voice pass, the wrapping action MAY auto-send the surfaced default. Even then, the framing in chat is "drafted X, sending in 30 unless you push back" — never "Sent X" with no warning.
 
-The "surfaced default" is decided by the orchestrating action — typically `firm` for floor-clearing real-deals, `pass` for sub-floor pitches. This skill returns all four variants and lets the caller pick.
+On Assistant tier, auto-send is locked off no matter what. Drafts only. The creator's hand stays on the trigger while they're learning what their floor actually means.
 
 ## Honest uncertainty
 
-If the rate-calc confidence is `low` (niche not in my CPM table, no prior deals on file), I tell the creator that explicitly in the `firm` variant's framing. *"Your niche isn't one I have strong CPM data on — this is a gut-check range, not a comparable-anchored one."* I'd rather under-anchor and let them push than overstate confidence.
+If the rate-calc confidence is low (niche thin, no priors), I tell the creator that explicitly in the firm variant's framing: *"Your niche is one I don't have strong rate data on — this counter is a gut-check, not a comparable-anchored one."* Better to under-anchor and let them push than to overstate.
 
-If I can't classify the email — domain looks fishy but body looks legit, or vice versa — I default to `cold-pitch` with `urgency: low` and surface the ambiguity. Better to draft 4 cautious variants than to mis-route and spam-bin a real deal.
+If the email is genuinely ambiguous — domain looks fishy but body looks legit — I default to `cold-pitch` + low urgency and surface the ambiguity. Better to draft four cautious variants than to spam-bin a real deal.
 
 ## Citation firewall
 
-Mandatory. Every reply variant draft is firewalled against the bundle of:
-- the parsed offer fields (so "your offer of $X" cites `gmailThread:X`)
-- the creator's voiceFingerprint (so the firewall can reject voicing
-  pass artifacts that reintroduced or mutated facts)
-- the suggested rate range (firewalled against `maya-rate-calculator`'s
-  cited comparables)
-
-If a variant fails firewall, it is rebuilt without the unsupported claim;
-if rebuild still fails, that variant is omitted from the returned set
-(meaning the caller may receive < 4 variants — the orchestrating action
-must handle this gracefully).
+Mandatory. Every reply variant is firewalled against the parsed offer + the creator's voiceFingerprint + the suggested rate range. If a variant fails the firewall I rebuild without the unsupported claim; if rebuild still fails, that variant is dropped (the orchestrating action handles getting fewer than 4 gracefully).
 
 ## Plan-tier gating (server-side, fail-closed)
-
-The skill itself is plan-aware via `brandContextLookupEnabled`. The upstream gate is:
 
 ```ts
 requireFeature(creator, (f) => f.gmailDealDeskEnabled, "brand-deal-triager", "coach");
 ```
 
-`gmailDealDeskEnabled` is `true` on both Assistant and Manager — both tiers triage. The autonomy boundary is at send (`canAutoSendBrandEmails`), not at triage. Manager auto-sends below threshold; Assistant always stops at draft.
+Both Assistant and Manager triage. The boundary is at send (`canAutoSendBrandEmails`), not at triage. Manager auto-sends below threshold; Assistant always stops at draft.
 
 ## Examples
 
-- `examples/real-deal-known-brand.json` — real-deal with explicit dollar
-  offer from a known-brand domain.
+- `examples/real-deal-known-brand.json` — real-deal with explicit dollar offer from a known-brand domain.
 - `examples/cold-pitch-no-rate.json` — generic cold pitch, no rate.
-- `examples/spam-prize-promo.json` — adversarial spam example.
-- `examples/contract-attached.json` — real-deal with PDF attached, invokes
-  `maya-contract-redflag` in parallel.
+- `examples/spam-prize-promo.json` — adversarial spam.
+- `examples/contract-attached.json` — real-deal with PDF attached, fires `maya-contract-redflag` in parallel.

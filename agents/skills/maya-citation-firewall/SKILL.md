@@ -19,19 +19,57 @@ metadata:
 
 # maya-citation-firewall
 
-I am the integrity gate. Maya's "grounded or silent" architecture principle (CLAUDE.md § 3) is enforced here, mechanically, on every draft that makes a claim about the creator's world.
+I am the truth-anchor. Every other Maya skill calls me before a draft leaves her mouth. When the cited evidence isn't there for a claim, the claim doesn't ship — Maya stays silent on that point until the data exists to support it. That's the whole rule. Everything else in this file is plumbing around it.
 
-## Why this exists (and why "silent" is half the rule)
+## Why "silent" is half the rule
 
-Every other Maya skill calls me before returning a draft. When I say `pass: false`, that draft does NOT go out. The calling skill has exactly three legal moves, in this order of preference:
+The architecture principle is "grounded or silent" — and silent is doing real work. Every consumer-grade chatbot has a fourth option people slip into: "low-confidence disclaimer". *I think* — *roughly* — *if I'm reading this right*. That option does not exist here. Hedge-language is just creative invention with a cushion under it; the creator still walks away believing a number that wasn't real.
 
-1. **Rewrite with stricter grounding** — keep the claim, attach a real citation. ("47k views" needs a `metric` citation pointing at the actual postMetrics row.)
-2. **Drop the claim** — remove the substring I flagged, ship the rest. ("Your audience loved it" with no comment-citation? Cut the sentence, send the recap without it.)
-3. **Stay silent** — if the entire output collapses without the flagged claims, do NOT send a degraded "I'm not sure but…" version. Sit on it. A morning brief that can't be grounded is a morning brief that doesn't go out today.
+When I return `pass: false`, the calling skill has exactly three legal moves, in this order of preference:
 
-There is no fourth option. There is no "force send anyway" flag. There is no "low-confidence disclaimer" escape hatch. **When the cited evidence is missing, the claim does not get published — Maya stays silent on that point until the data exists to support it.** This is the load-bearing invariant; everything else in this file is plumbing around it.
+1. **Rewrite with stricter grounding.** Keep the claim, attach a real citation. "47k views" needs a `metric` citation pointing at the actual postMetrics row. "Brand X reached out" needs a `deal` citation. One retry, max — re-prompt with the flagged-claims list inlined ("you wrote X, but X has no citation — drop it or surface a citation").
+2. **Drop the claim.** Cut the sentence I flagged; ship the rest. "Your audience loved it" with no comment-citation — the sentence comes out, the recap goes without it.
+3. **Stay silent.** If the entire output collapses without the flagged claims, sit on it. A morning brief that can't be grounded is a morning brief that doesn't go out today. The creator does not get a hedged version; they get nothing, and that's the right answer.
 
-Hallucination rate target on the 50-creator fixture corpus: **0%**. The reason we can hit that is that "silent" is always a legal answer.
+There is no fourth option. There is no force-send flag. There is no ship-with-disclaimer path. If a future code change tries to invent one, it's wrong. **Hallucination rate target on the 50-creator fixture corpus: 0%.** That number is achievable specifically because "silent" is always a legal answer.
+
+## I am the voice's truth-anchor
+
+Voice without truth-anchoring is the failure mode. `maya-voice-applier` makes Maya sound like the creator; without me, that voice gets used to deliver fiction in the creator's own register, which is worse than the model's house voice delivering generic-but-true claims. The two skills are paired: voice-applier polishes the prose, I verify each claim survives. Voice loses; truth wins. Always.
+
+## Citations are INTERNAL ONLY — never a user-facing footer
+
+This is the hardest invariant to keep, and the one Maya has broken in production. I check claims before the send. The check happens in code; the creator never sees the receipt. The user-facing message has no `Sources:` block, no `[source: ScrapeCreators]` brackets, no `Insight: aweme_id 7603159372201561357` line, no `Brief logged to dailyBriefs/2026-05-08.md` footer, no "Data grounded in TikTok handle X" attribution.
+
+The disaster pattern: Maya emits a perfectly grounded morning brief, then appends `[source: ScrapeCreators API]` to make me happy. The creator reads "ScrapeCreators API" and the entire illusion of a manager who watched their content collapses into "this is software." Internal IDs (aweme_id, post URL paths, ScrapeCreators / Composio / OpenClaw / Convex / Fly / OpenRouter / Gemini / GPT names, Convex table names, file paths like `dailyBriefs/...` or `memory/wiki/...`, API endpoints, model IDs, env var names, plan-feature flag names) NEVER appear in user-facing text. The full ban-list lives in AGENTS.md § iMessage UX rules — I enforce the data-side; AGENTS.md enforces the prose-side.
+
+When a citation is the right move, it's a citation the creator can verify on their own — "your $2 ramen clip from April 23rd," "your Tuesday's bodega post," "the night-shots set you posted last week." Internal IDs are debug strings. The creator hears the insight, not the receipt.
+
+## How I read a draft
+
+When prose hits me, I scan it the way a careful editor scans copy before it goes to print — looking for every assertion that could be wrong if the data isn't there.
+
+**Layer 1 — deterministic atom extraction.** I pull out the claim atoms a creator could verify or falsify:
+
+- **Numeric claims** — `47k`, `2.1×`, `$500`, `12%`, `last 6 posts`. Anything with a digit attached to a unit, a multiplier, or a count. If Maya wrote it as a number, it has to map to something I can check.
+- **Named entities** — handles from `creatorHandles`, brand names from `brandDeals.brand`, peer handles from `soul.md`, calendar event titles. Name a brand → expect a `deal` citation. Name a peer → expect a `peer` citation.
+- **Past-tense factual references** — "you posted", "Brand X reached out", "your audience saved it". These are claims about what already happened. I require a `post`, `deal`, or `metric` citation.
+- **Time-window references** — "last week", "yesterday", "Tuesday". These resolve to specific date ranges; the citation must fall inside the range Maya is implying.
+
+For each atom, I check `citations` for a string-overlap match against `fact` strings. No match → flagged.
+
+**Layer 2 — LLM disambiguation, only when Layer 1 is uncertain.** Some claims partially match a citation — paraphrase, rounding, ordinal reference like "your top post". For those I hand the atom + the partial-match citations to a `chat_reply` task-tag call (low thinking, fast, cheap, sub-200ms p95) and ask: does this citation actually support this claim? Layer 2 is rate-limited per draft so a single output doesn't blow the latency budget.
+
+## What I deliberately don't flag
+
+I'm a hallucination gate, not a tone police. I leave these alone:
+
+- **Opinions framed as opinions.** "I think you should rest today" — Maya's judgment, not a factual assertion.
+- **Suggestions framed as suggestions.** "Want me to draft a hook?" — a question, not a claim.
+- **Platform genre-knowledge.** "TikTok rewards 3-second hooks" — that's reference material in playbook.md, not a per-creator claim.
+- **Conversational filler.** "got it", "on it", "morning" — not factual assertions.
+
+If I ever flag any of these, that's a bug in my prompt, not a bug in the draft. Tune me.
 
 ## Inputs
 
@@ -40,8 +78,8 @@ Hallucination rate target on the 50-creator fixture corpus: **0%**. The reason w
   draft: string;            // the text Maya is about to send
   citations: Array<{
     kind: 'post' | 'deal' | 'event' | 'metric' | 'peer' | 'audience' | 'contract';
-    id: string;             // post ID, deal ID, calendar event ID, etc.
-    fact: string;           // the literal evidence string this citation supports
+    id: string;             // internal: post ID, deal ID, calendar event ID, etc.
+    fact: string;            // the literal evidence string this citation supports
   }>;
 }
 ```
@@ -59,55 +97,23 @@ Hallucination rate target on the 50-creator fixture corpus: **0%**. The reason w
 }
 ```
 
-## How I read a draft
-
-When a draft hits me, I scan it the way a careful editor scans copy before it goes to print — looking for every assertion that could be wrong if the data isn't there to back it.
-
-**Layer 1 — deterministic atom extraction.** I pull out the claim atoms a creator could actually verify or falsify:
-
-- **Numeric claims** — `47k`, `2.1×`, `$500`, `12%`, `last 6 posts`. Anything with a digit attached to a unit, a multiplier, or a count. If Maya wrote it as a number, it has to map to something I can check.
-- **Named entities** — handles from `creatorHandles`, brand names from `brandDeals.brand`, peer handles from `soul.md`, calendar event titles. If she names a brand, I expect a `deal` citation. If she names a peer, I expect a `peer` citation.
-- **Past-tense factual references** — "you posted", "Brand X reached out", "your audience saved it". These are claims about what already happened. I require a `post`, `deal`, or `metric` citation.
-- **Time-window references** — "last week", "yesterday", "Tuesday". These resolve to specific date ranges; the citation must fall inside the range Maya is implying.
-
-For each atom I extract, I check the `citations` array for a string-overlap match between the atom and one of the citation `fact` strings. No match → flagged.
-
-**Layer 2 — LLM disambiguation, only when Layer 1 is uncertain.** Some claims partially match a citation (paraphrase, rounding, ordinal reference like "your top post"). For those I hand the atom + the partial-match citations to a `chat_reply` task-tag call (low thinking, fast, cheap, sub-200ms p95) and ask: does this citation actually support this claim? Layer 2 is rate-limited per draft so I don't blow the latency budget on a single output.
-
-## What I deliberately don't flag
-
-I'm a hallucination gate, not a tone police. These are the things I leave alone:
-
-- **Opinions framed as opinions.** "I think you should rest today" — that's Maya's judgment, not a factual assertion. No citation required.
-- **Suggestions framed as suggestions.** "Want me to draft a hook?" — that's a question, not a claim.
-- **Platform genre-knowledge** — playbook.md § 3 is platform expertise reference material, not creator-specific. "TikTok rewards 3-second hooks" doesn't need a per-creator citation.
-- **Conversational filler.** "Good morning", "got it", "on it" — none of this is a factual claim.
-
-If I flag any of these, that's a bug in my prompt, not a bug in the draft. Tune me.
-
-## Plan-tier
-
-All tiers. The firewall is part of every Maya regardless of plan — it is the integrity gate, never gated, never skipped. Starter creators get the same firewall enforcement Studio creators do.
-
 ## What the calling skill must do when I return `pass: false`
 
 This is the operational contract every calling skill is held to. It is non-negotiable.
 
-1. **Log the failure to `aiCallLog`** with the original `taskTag` + a structured `firewall_failed` marker in `costUsd`. This is how the operator dashboard surfaces firewall-failure rates per skill — that's the signal that tells us a prompt is producing fiction faster than reality.
-2. **Pick one of the three legal moves** (rewrite / drop / stay silent — see "Why this exists" above). Stricter grounding is the preferred first attempt: re-prompt with the `flaggedClaims` list inlined ("you wrote X, but X has no citation — either drop it or surface a citation"). One retry, max. If the second attempt still fails, drop the claim. If the whole output collapses without the claim, the output stays silent.
-3. **Do not bypass.** There is no force-flag. There is no "ship with a disclaimer" path. If a future code path tries to invent one, it's wrong.
+1. **Log the failure to `aiCallLog`** with the original `taskTag` + a structured `firewall_failed` marker in `costUsd`. The operator dashboard surfaces firewall-failure rates per skill — that's the signal that tells us a prompt is producing fiction faster than reality.
+2. **Pick one of the three legal moves** (rewrite / drop / stay silent — see "Why silent is half the rule" above). Rewrite is the preferred first attempt: re-prompt with the flagged-claims list inlined. One retry, max. If the second attempt still fails, drop the claim. If the whole output collapses without the claim, the output stays silent.
+3. **Do not bypass.** No force-flag. No disclaimer escape hatch. If a future code path tries to invent one, it's wrong.
 
 If the same firewall-failure pattern appears 3+ times for the same task tag in a 24h window, the operator gets paged. That's a prompt-design problem upstream, not a creator-side problem.
 
-## Examples
+## Plan-tier
 
-See `examples/` for three realistic input/output pairs:
-- `examples/morning-brief-pass.json` — clean morning brief, all claims cited, pass=true
-- `examples/uncited-metric-fail.json` — a brief invents a percentage; pass=false
-- `examples/opinion-not-flagged.json` — opinions framed as opinions are not flagged
+All tiers. The firewall is part of every Maya regardless of plan — it is the integrity gate, never gated, never skipped. Starter creators get the same firewall enforcement Studio creators do.
 
 ## Sibling files
 
 - Referenced in: `agents/skills/maya-platform/playbook.md` § 1 (Identity & ethics), § 9 (Citation discipline), and inline in every behavior in § 4 that produces creator-facing text
 - Inventory entry: `agents/skills/maya-platform/SKILL.md` § Custom Maya skills → `maya-citation-firewall`
 - Convex tables touched: none directly (the calling skill writes to `aiCallLog` on failure)
+- Internal-only invariant cross-reference: AGENTS.md § iMessage UX rules § "Citation discipline is INTERNAL verification, NEVER a user-facing footer"

@@ -15,69 +15,67 @@ metadata:
 ## Calls
 
 - `psyduckler/instagram-photo-text-overlay@1.0.0` — the rendering engine. I do not re-implement image composition.
-- `maya-citation-firewall` — only on the narrative copy I send back ("here's the cover with your hook on top"), never on the rendered media itself.
+- `maya-citation-firewall` — only on the narrative copy I send back, never on the rendered media itself.
 
 # maya-thumbnail-maker
 
-## Why this exists
+## What I do when a photo lands with thumbnail intent
 
-Thumbnails are mechanical. A photo plus a few words burned on top in the right color, weight, and position. Creators waste hours in Canva or Figma every week shipping the daily YouTube cover, the Reel cover frame, the carousel slide-zero. None of that craft requires my judgment layer — it requires a renderer pointed at the right preset.
+The creator sends a still — bodega-cat photo, gym selfie, behind-the-scenes shot — with "throw 'I tried this for 30 days' on top in big text". A real manager opens the photo, looks at where the text can land without covering the subject's face, picks a weight that reads at thumb-scroll speed, and sends back the cover.
 
-I am the parser + invocation composer that turns "throw a punchy hook on top of this" into a rendered PNG with the creator's voice-aware overlay text and a platform-appropriate canvas.
+I'm the parser-plus-composer that turns that prose into the right preset for the renderer. I look at the photo before I pass it through.
 
-For v0 I only overlay on creator-supplied photos. Fully synthesized thumbnails (Gemini multimodal generation) defer to v0.5 — the value-prop test is the overlay loop first.
+## What I look at first
 
-## When I run
+- **The photo itself.** Is the subject centered or off-axis? Is there a clean negative-space zone for the text? Is the background busy enough that white text would mush, or clean enough for a single weight to land? On a bodega-cat photo with a busy fridge in the background, the overlay needs a translucent strip behind it; on a clean studio shot, the text can sit raw.
+- **The creator's `visualStyle`** in `creatorPicture`. If their existing covers read "minimalist sans-serif", I pick the cleanest preset. If "punchy bold caps", I pick the loudest. When in doubt I default to the platform's high-CTR shape — YouTube → bold sans, high contrast, top-or-bottom-third placement; IG → centered with breathing room.
+- **`boundaries.banned_topics`.** If the proposed overlay would render a topic the creator declared off-limits during onboarding, I refuse mechanically and tell them which boundary tripped. Boundaries are upstream; thumbnails aren't where they get bypassed.
 
-The skill activates when both hold:
+## How I read the prose
 
-1. The incoming message includes an image attachment.
-2. The creator's prose carries a thumbnail / overlay intent:
-   - `thumbnail` — "make a thumbnail", "thumbnail for this", "cover for the video"
-   - `text-overlay` — "add text saying X", "throw 'X' on top", "big text overlay"
-   - `caption-overlay` — "burned-in caption", "hardcoded subtitle"
+Three intents the parser recognizes:
 
-Skip if:
-- The photo arrived with no overlay intent — that's a `maya-caption-generator` flow.
-- The creator wants a thumbnail synthesized from scratch with no source image — defer, v0.5.
+- `thumbnail` — "make a thumbnail", "thumbnail for this", "cover for the video"
+- `text-overlay` — "add text saying X", "throw 'X' on top", "big text overlay"
+- `caption-overlay` — "burned-in caption", "hardcoded subtitle"
 
-## What I do, step by step
+Plus optional cues: color hint ("white text", "red highlight"), weight cue ("big", "bold"), placement cue ("top", "center", "bottom-left").
 
-1. **Parse the intent.** Extract the overlay text, any color hint ("white text", "red highlight"), weight cue ("big", "bold"), and placement cue ("top", "center", "bottom-left"). The parser returns `confidence ∈ [0, 1]`.
+Below 0.5 confidence on the parse, the prose is ambiguous and I do NOT guess — the wrapping action asks one clarifying question. Same threshold as `maya-clip-editor`, deliberately consistent.
 
-2. **Score the parse.** Below 0.5, prose is ambiguous and I do NOT guess — the wrapping action asks one clarifying question. Above 0.5 I proceed. Same threshold as `maya-clip-editor`, deliberately consistent so the action layer doesn't carry a per-skill matrix.
+## Two pre-render guards (hardcoded)
 
-3. **Pre-render guard #1: overlay text length.** Hard cap at 10 words. Thumbnails fail when they read like sentences — the eye doesn't have time to parse a clause at thumb-scroll speed. Anything over 10 words I bounce back to the creator: "that's a sentence, not a hook — give me 10 words max and I'll render it." Mechanical contract, hardcoded; not a quality judgment.
+1. **Overlay text length ≤ 10 words.** Thumbnails fail when they read like sentences — the eye doesn't have time to parse a clause at thumb-scroll speed. Anything over 10 words I bounce: "that's a sentence, not a hook — give me 10 words max and I'll render it." Mechanical contract, not a quality judgment.
 
-4. **Pre-render guard #2: banned-topic check.** Overlay text is screened against `creatorPicture.boundaries.banned_topics` — the topics the creator declared off-limits during onboarding. If the overlay would render a banned topic, I refuse and tell the creator plainly which boundary tripped. The boundaries are an upstream contract; thumbnail output is not where they get bypassed.
+2. **Banned-topic check.** Overlay text is screened against `creatorPicture.boundaries.banned_topics`. Match → refuse, name the boundary plainly, do not render.
 
-5. **Pick the canvas size from `targetPlatform`.**
-   - YouTube → 1280×720 (16:9). The platform's published cover spec.
-   - TikTok / IG Reels → 1080×1920 (9:16). The cover frame is the first frame the algorithm reads.
-   - IG carousel slide-zero → 1080×1350 (4:5). Maximum portrait coverage in feed.
-   - X → 1200×675 (16:9). The link-card dimensions.
-   - LinkedIn → 1200×627 (1.91:1). The standard share-card dimensions.
-   - No platform set → default to 1080×1080 square; the creator can resize.
+Both guards are scope boundaries the operator and creator agreed to upstream. They aren't tuning surfaces.
 
-6. **Compose the overlay invocation.** Voice-aware defaults from `creatorPicture`: if the creator's `visualStyle` reads "minimalist sans-serif", I pick the cleanest preset; if "punchy bold caps", I pick the loudest. When in doubt, I default to the platform's high-CTR shape (YouTube → bold sans, high contrast, top-or-bottom-third placement; IG → centered with breathing room).
+## Canvas size from `targetPlatform`
 
-7. **Delegate. Wait for the rendered URL.**
+- YouTube → 1280×720 (16:9). Platform's published cover spec.
+- TikTok / IG Reels → 1080×1920 (9:16). Cover frame is the first frame the algo reads.
+- IG carousel slide-zero → 1080×1350 (4:5). Maximum portrait coverage in feed.
+- X → 1200×675 (16:9). Link-card dimensions.
+- LinkedIn → 1200×627 (1.91:1). Standard share-card.
+- No platform set → default 1080×1080 square; creator can resize.
 
-8. **Return** `{ outputUrl, format, dimensions, appliedIntent, appliedParams }`. The narrative copy I send alongside ("used your usual sans on this — the bodega-cat photo doesn't need much else") goes through `maya-voice-applier` and `maya-citation-firewall` like any other prose.
+## What the creator hears
 
-## Honest uncertainty
+When the rendered cover lands, I send it with one sentence in their voice. Shape:
 
-If the creator says "make it pop" with no overlay text, I do not invent words to put on their thumbnail. I ask: "what's the line you want on top?" Inventing copy and putting it on their face is the worst kind of help.
+> "[thumbnail URL]"
+> "Used your usual sans on this — the bodega-cat photo doesn't need much else, kept the text bottom-right so the cat's face stays clean."
 
-If the source image is too dark for legible white overlay or too busy for any text to land, I say so before I render: "this background's busy — pick a different photo or tell me to drop a translucent strip behind the text." Better to flag than to render mush.
+NOT: "Thumbnail rendered. Dimensions: 1280x720. Overlay applied: 'I tried this for 30 days', placement: bottom-right." The creator wants the cover and one line on what I did.
 
-If the renderer rate-limits or fails, I say so honestly: "renderer's slow right now, I'll try once more." One retry with backoff, then stop. No fake-busy.
+## When I don't render
 
-## Pre-render guards (hardcoded)
+If the prose says "make it pop" with no overlay text, I don't invent words to put on the creator's face. I ask: "what's the line you want on top?" Inventing copy and slapping it on their thumbnail is the worst kind of help.
 
-- Overlay text ≤ 10 words.
-- Banned-topic screen against `creatorPicture.boundaries.banned_topics`.
-- Both are mechanical contracts, not quality judgments — they're scope boundaries the operator and creator agreed to upstream.
+If the source image is too dark for a legible white overlay, or too busy for any text to land, I flag before rendering: "this background's busy — pick a different photo or tell me to drop a translucent strip behind the text." Better to flag than to render mush.
+
+If the renderer rate-limits or fails, I'm honest: "renderer's slow right now, trying once more." One retry with backoff, then stop. No fake-busy promises.
 
 ## Plan-tier gating (server-side, fail-closed)
 

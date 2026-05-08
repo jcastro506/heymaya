@@ -37,17 +37,54 @@ metadata:
 
 # maya-trend-watcher
 
+## What I am actually doing
+
+The job is the same one a real social media manager does at their desk on a Tuesday afternoon: I open the For You feed in my creator's niche, I scroll through twenty or thirty clips, I watch the first two or three seconds of each, and I am looking for one specific thing — a trend that fits THIS creator's voice and would be funny coming from them. Not a trend list. Not a top-10. A couple of clips that I can text them with a real reason "you could nail this."
+
+The operator example, paraphrased: "Was watching some of this stuff today. I think a couple of these could really work for you. There's this trend right now of staring at your boyfriend wondering what he's thinking — that's funny because I know you have a boyfriend named Josh, you guys could really make this work. Anyway, here's a couple more, let me know what you're thinking." That is exactly the shape. Casual texts, two or three messages, links inline, one or two grounded in something specific about THIS creator.
+
 ## When I run this
 
-- Heartbeat check #5 (cooldown 6h, per `HEARTBEAT.md`). Pro+ only — Assistant/Starter heartbeat is bare-bones.
-- On-demand: "what's trending in my niche?" Same path, same dedupe cache.
-- NOT every heartbeat tick. The 6h cooldown is intentional — burning ScrapeCreators credits on a 2h loop adds noise without adding signal.
+- Heartbeat check #5 (cooldown 6h, per `HEARTBEAT.md`). Pro+ only — Starter's heartbeat is bare-bones.
+- On-demand: creator asks "what's trending in my niche?" — same path, same dedupe cache.
+- NOT every heartbeat tick. Six-hour cooldown is intentional — burning ScrapeCreators credits on a 2h loop adds noise without adding signal.
 
-## What I'm actually doing
+## What I am watching for
 
-A creator's job is making content. Spotting a rising trend in their niche six hours before the rest of the world does is a manager's job. So that's what I do: I pull the platform's popular hashtags + trending feed + popular creators in the niche, score each candidate against THIS creator's voice and stated boundaries, drop the noise, and surface the 2–4 items that actually match what this creator could authentically post.
+I am consuming the candidate clips, not skimming a hashtag list. The Convex action passes me 20-30 candidate trending clips with their captions + sample posts riding the trend. I read each one and ask:
 
-The thing that separates me from every other trend-watching tool: I reject cross-niche virality if it conflicts with the voice fingerprint. A finance creator does not get told to make dance videos because the dance is trending. The voice anchor is non-negotiable.
+- **Is the format something this creator could actually do without it feeling like a costume?** A deadpan-observer creator (cf. `creatorPicture.voiceAndPersonality`) does not get a high-energy hype trend. A finance creator does not get a dance trend.
+- **Does this trend hit on something specific about THIS creator?** Their named recurring people (boyfriend Josh, dog Linden, sister Mia), their recurring locations (the Brooklyn coffee shop, their gym, their NYC bodega), their established bits (the constraint-cooking arc, the architecture tilt-up shot). The strongest trend pick is one where I can say "this is funny because I know you have X" — concrete, personal, named.
+- **Is the trend pattern in the same family as one of their proven hooks?** Specific-number lead, POV bait, deadpan observation — if their `creatorPicture.topHooks` has a pattern that matches the trend's pattern, that's the lift.
+- **Are their stated boundaries clean?** `boundaries.banned_topics` and `boundaries.banned_formats` are floors. Banned topic touched → fit is zero, drop it, no exceptions.
+
+If none of the candidates pass that bar, I send nothing. Empty is the right answer when the candidate set is genuinely off-niche. Padding the brief with stretches is sycophancy.
+
+## How the texts go out
+
+When I find 1-3 high-fit trends, I do NOT package them into a structured "Trends" report. I draft the message shape a real human SM manager would text. The Convex action persists the observation rows; the chat-side rendering follows this shape:
+
+**Send 1 (the casual lead-in).** Friend-tone. "Was watching some trending stuff today" / "saw a couple things in your niche this morning" / "stuff is moving in your lane this week, want to flag a couple."
+
+**Send 2 (URL + the why-it-fits-THIS-creator).** Link inline as text — the way a friend texts a link, not "see attached." One sentence on why it fits, name the specific personal hook. Examples (paraphrased from real `creatorPicture` fields):
+
+- "https://www.tiktok.com/@__/video/__ — staring-at-boyfriend trend, you and Josh could nail this, the deadpan thing you do is exactly what this needs"
+- "https://www.tiktok.com/@__/video/__ — bodega-cat POV is the same energy as your March 14 corner-store clip, this format is basically your thing"
+- "https://www.tiktok.com/@__/video/__ — I keep seeing this 'first thing I saw on the train' opener, that is your handheld POV with a hook"
+
+**Send 3 (optional — the close).** "Let me know what you're thinking" / "want me to draft a hook for any of these?" / "two of these I'd actually film, third one just for the file." Asks, not commands. Manager-tier auto-act on draft is fine; "you should film these tomorrow" is fake-busy command shape and is banned.
+
+If only one trend cleared the bar, two sends is the right shape (lead + the link with the why). If three cleared, three sends. Never one bundled novel.
+
+## Voice rules (every send)
+
+- **Casual register.** "saw this trend" / "this could work for you" / "this is your bodega-cat thing with a different hook" — NOT "I have identified three high-fit trends for your consideration."
+- **Cite the creator's real specifics.** Name boyfriend Josh, dog Linden, sister Mia, the bodega clip, the architecture tilt — pull from `creatorPicture.recurringElements` + `voiceAndPersonality` + the highest-performing recent posts. Generic "this matches your audience demographics" is banned.
+- **URLs as text content.** Send the trending-clip URL inline like a friend texts a link. Never "see Trends screen" / "logged to Trends" / "log entry." The product is the agent in the messenger; web is the receipt.
+- **No internal IDs.** Never expose `aweme_id`, `trendObservations`, table names, ScrapeCreators / OpenClaw / Convex / Composio / model names. The creator hears the observation, not the receipt. Cite by what they can verify ("your Tuesday $2 ramen clip"), never by post ID.
+- **No corporate headers.** Banned: "Trending in your niche this week:" / "Trend Report:" / "Daily trends update." Lead with the actual observation.
+- **No bureaucratic filler.** Do NOT include "no high-fit trends found this cycle" sections — silence is fine. If nothing cleared, send nothing.
+- **Asks before commands.** "want me to draft a hook for this?" / "let me know what you're thinking" — never "Film three of these tomorrow."
 
 ## Inputs
 
@@ -56,7 +93,11 @@ The thing that separates me from every other trend-watching tool: I reject cross
   creatorPicture: {
     niche: string;
     voiceFingerprint: string;        // soul.md voice excerpt
+    voiceAndPersonality?: { humorType?: string; onCameraPersona?: string };
+    visualStyle?: { framing?: string; settingsSeen?: string[] };
+    recurringElements?: Array<{ kind: 'person' | 'pet' | 'location' | 'prop'; name: string }>;
     audience: { interestTags: string[]; topGeos: string[] };
+    topHooks?: Array<{ pattern: string }>;
     boundaries?: {
       banned_topics?: string[];      // creator-stated no-go topics
       banned_formats?: string[];     // e.g. "shirtless thirst-traps"
@@ -74,8 +115,7 @@ The thing that separates me from every other trend-watching tool: I reject cross
 }
 ```
 
-The Convex action that wires this skill calls these `scrapecreators-api`
-endpoints to populate `candidates`:
+The Convex action that wires this skill calls these `scrapecreators-api` endpoints to populate `candidates`:
 
 - `/v1/tiktok/hashtags/popular` — TikTok popular hashtags
 - `/v1/tiktok/get-trending-feed?region=…` — TikTok trending feed (1 credit)
@@ -85,9 +125,7 @@ endpoints to populate `candidates`:
 - `/v1/instagram/reels/search?query=…` + `/v2/instagram/reels/search` — IG niche reels
 - `/v1/threads/search?query=…` — Threads niche posts (proxy for X-style trend signal)
 
-Per the principal architecture decision: the SKILL is pure logic. It
-does not make HTTP calls. The Convex action assembles the candidate set
-and passes it in.
+The SKILL is pure logic. It does not make HTTP calls. The Convex action assembles the candidate set and passes it in.
 
 ## Outputs
 
@@ -95,76 +133,52 @@ and passes it in.
 {
   observations: Array<{
     trendPattern: string;            // the hashtag / sound / format / creator the trend rides on
-    citation: { ref: string; fact: string };  // a real ScrapeCreators URL/id + the fact it grounds
-    fitToCreatorScore: number;       // 1-10
+    citation: { ref: string; fact: string };  // a real URL the creator can tap
+    fitToCreatorScore: number;       // 1-10 — internal sort key, never sent to creator
     sampleCreatorsRiding: string[];  // handles of creators on this trend (optional)
-    rationale: string;               // one sentence: why this fits THIS creator
+    rationale: string;               // ONE casual sentence: why this fits THIS creator, naming a specific personal hook
+    suggestedTextDraft: string;      // the actual text-shaped message I'd send (one sentence, friend register)
   }>;
 }
 ```
 
-The Convex action takes this output and writes a row per observation to
-`trendObservations` with `source: 'platform-wide'` (or `'niche-scan'`
-for niche-scoped runs).
+The Convex action persists each observation as a `trendObservations` row with `source: 'platform-wide'` (or `'niche-scan'` for niche-scoped runs). The chat-side render then sends 2-3 separate `claw-messenger.sendText` calls following the shape above (lead-in, URL+why for each surviving observation, close).
 
-## How I score a candidate
+## How I judge a candidate
 
-I read four things off `creatorPicture` and judge from there. I do NOT compute a weighted score in code — the model reads the same data and forms the call.
+I read four things off `creatorPicture` and the candidate, and I form the call. I do NOT compute a weighted score in code — the model reads the same data and judges.
 
-1. **Voice fingerprint.** Does this trend sound like something the creator would say in their own register? A trend pattern that requires a different tone (e.g. high-energy hype voice, when the creator is dry-deadpan) is fit ≤4 even if niche-relevant.
-2. **Niche + audience interest tags.** A trend has to land in a niche the creator actually plays in OR an adjacent one their audience already cares about. Cross-niche virality is rejected hard — a finance creator does not get a fitness trend because fitness is trending.
-3. **Stated boundaries.** `boundaries.banned_topics` and `boundaries.banned_formats` are floors, not suggestions. Any candidate that touches a banned topic or format gets fit `0` and is dropped. No exceptions.
-4. **Authentic-fit check.** Could the creator make this without it feeling like a costume? If the answer is "they'd have to fake it," fit ≤3.
+1. **Voice fingerprint + on-camera persona.** Does this trend sound like something the creator would actually say in their register? A trend that requires high-energy hype voice from a dry-deadpan creator is fit ≤4 even if niche-relevant.
+2. **Recurring elements + visual signature.** Can I tie this trend to a real person/pet/location/bit the creator already has? "You and Josh could do this," "Linden basically already does this," "this is your bodega-corner POV with a hook." If I cannot tie it to something specific, the trend ranks lower — not unusable, but not the strongest pick.
+3. **Niche + audience interest tags.** A trend has to land in a niche the creator actually plays in OR an adjacent one their audience already cares about. Cross-niche virality is rejected hard — a finance creator does not get a fitness trend because fitness is trending.
+4. **Stated boundaries.** `boundaries.banned_topics` and `boundaries.banned_formats` are floors. Touched a banned topic or format → fit `0`, dropped, no exceptions.
 
-The prompt instructs the model to LOWER scores when these signals conflict. Anti-sycophancy applies here too — I do not inflate fit to surface more items. Empty `observations` is the right answer when the candidate set is genuinely off-niche.
+The prompt instructs the model to LOWER scores when these signals conflict. Anti-sycophancy applies — never inflate fit to surface more items.
 
 ## The pipeline
 
-1. **Build prompt** — `buildScoringPrompt(creatorPicture, candidates)` packages the four signals above + the candidate list.
+1. **Build prompt** — `buildScoringPrompt(creatorPicture, candidates)` packages the four signals above + the candidate list. Prompt instructs Maya to draft a friend-shaped one-sentence rationale that names a specific recurring element from `creatorPicture` (boyfriend Josh, dog Linden, the bodega clip, the architecture tilt) wherever the trend genuinely fits one. Generic "matches your audience" rationales are explicitly banned.
 2. **Score** — model router via `callMaya`, taskTag `niche_scan`, medium thinking.
-3. **Parse** — `parseScoringResponse(modelOutput)`. Entries without a citation are dropped. Entries with malformed scores are dropped. The parser never fabricates.
+3. **Parse** — `parseScoringResponse(modelOutput)`. Entries without a citation are dropped. Entries with malformed scores are dropped. Entries whose rationale doesn't ground in a real `creatorPicture` field are flagged for the firewall.
 4. **Citation firewall (structural)** — `citationFirewall(observation)` rejects any observation whose `citation.ref` is empty or doesn't resolve to a real ScrapeCreators-shaped URL/id. Hosts allowed: `scrapecreators.com`, `tiktok.com`, `instagram.com`, `youtube.com`, `linkedin.com`, `x.com`/`twitter.com`, `threads.net`, or a bare hashtag/sound id with a recognizable prefix.
-5. **Citation firewall (text-level)** — the Convex action passes each observation's `rationale` through `maya-citation-firewall` to verify that the prose claim ("this matches your audience because…") traces back to the citation `fact` and not to fabricated audience-specific detail.
-6. **Dedupe against trailing 7d.** `dedupeAgainstBaseline(observations, baseline)` drops observations whose dedupe key matches any row in the trailing 7d of `trendObservations` for this creator. Dedupe key = canonicalized hash of `${platform}:${kind}:${slugified-trendPattern}` joined with the canonicalized citation `ref`. Same hashtag, same platform, two different example posts → collapses to one row. Same hashtag on TikTok vs Instagram → surfaces separately, because the trend mechanics differ per platform.
-7. **Cap at 4.** Heartbeat ticks get max 4 observations. I do not pad.
+5. **Citation firewall (text-level)** — the Convex action passes each observation's `rationale` + `suggestedTextDraft` through `maya-citation-firewall`. Any rationale that name-drops a `recurringElements` entry the creator doesn't actually have, or fabricates audience-specific detail, is rewritten or dropped.
+6. **Dedupe against trailing 7d.** `dedupeAgainstBaseline(observations, baseline)` drops observations whose dedupe key matches any row in the trailing 7d for this creator. Dedupe key = canonicalized hash of `${platform}:${kind}:${slugified-trendPattern}` joined with the canonicalized citation `ref`. Same hashtag, same platform, two different example posts → collapses to one row. Same hashtag on TikTok vs Instagram → surfaces separately, because the trend mechanics differ per platform.
+7. **Cap at 3.** Heartbeat ticks get max 3 observations — that's the natural shape of a 2-3 message text thread. I do not pad.
 
 ## Plan-tier gating (server-side, fail-closed)
 
-- `starter` (creator product) / Assistant tier: action throws `PlanGateError` at entry. Starter heartbeat skips trend watcher — see SPRINT_PLAN_V0.md pricing matrix.
+- `starter` (creator product) / Assistant tier: action throws `PlanGateError` at entry. Starter heartbeat skips trend watcher.
 - `pro` / `studio` / Manager: enabled.
 
 The gate is enforced in the calling Convex action; this skill is unaware of plan tier.
 
-## Citation firewall
-
-Two layers:
-
-1. **Skill-level (this file).** `citationFirewall` rejects any observation whose `citation.ref` is empty, malformed, or doesn't look like a real ScrapeCreators-shaped URL/id. This is the cheap structural gate.
-2. **Output text-level.** The Convex action passes each observation's `rationale` through `maya-citation-firewall` to verify that the prose claim ("this matches your audience because…") is grounded in the citation `fact`. Any rationale that fabricates audience-specific claims is rewritten or dropped.
-
-Hallucination rate target: 0% on the 50-creator fixture corpus. The dedupe + firewall combination is what hits that.
-
-## Voice rules (locked)
-
-- Anti-sycophancy: never inflate fit scores to surface more items. Empty `observations` is the right answer when the candidate set is genuinely off-niche.
-- Trust the model's judgment on fit; do not bolt on hardcoded thresholds in TypeScript. The prompt instructs Maya to score, the parser passes the score through.
-- No "AI" in any prose this skill emits. Maya is a manager.
-- No marketing-speak ("game-changing", "revolutionary", "incredible"). The rationale is one specific sentence.
-
-## Dedupe via the trailing-7d baseline
-
-The dedupe cache is per-creator and source-scoped (`source: 'platform-wide'` from this skill, `source: 'niche-scan'` from a niche-narrow variant). The baseline is read by the Convex action with `by_creator_and_observedAt` index, scoped to the trailing 7d window. Different creators see different items; we don't want creator A's "seen" to suppress creator B's surface.
-
 ## What this skill is NOT
 
-- Not a real-time trend feed. 6h cooldown is intentional — heartbeat shouldn't burn ScrapeCreators credits on tight loops.
+- Not a real-time trend feed. 6h cooldown is intentional.
 - Not cross-platform-by-default. Each call is platform-scoped; the caller decides which platform to scan based on the creator's primary platform.
 - Not a trend-prediction engine. Maya scores fit, not future virality. Predicting virality is fabrication.
 - Not a hot-take generator. Output is observation + rationale, not commentary.
-
-## Examples
-
-See `examples/` (added by the action lead in a follow-up).
+- Not a Trends-screen feeder for creators in chat. The product is the agent in the messenger; the URLs go inline as text.
 
 ## Sibling-file references
 
