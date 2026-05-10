@@ -33,6 +33,17 @@ import {
   gmailListInboxHttp,
   gmailSendHttp,
 } from "./lcMaya/gmailHttp";
+import {
+  appleCalendarCreateEventHttp,
+  appleCalendarDeleteEventHttp,
+  appleCalendarListCalendarsHttp,
+  appleCalendarListEventsHttp,
+  appleCalendarUpdateEventHttp,
+  calendarCreateEventHttp,
+  calendarDeleteEventHttp,
+  calendarListEventsHttp,
+  calendarUpdateEventHttp,
+} from "./lcMaya/calendarHttp";
 
 const http = httpRouter();
 
@@ -182,6 +193,56 @@ http.route({
   path: "/lc_maya/apple_calendar_connect",
   method: "POST",
   handler: appleCalendarConnectHttp,
+});
+
+// Sprint 12 Phase 1C — calendar CRUD HTTP endpoints (Google + Apple).
+// Phase 2's content-plan flow writes events here; verified end-to-end
+// before that lands. Token resolution + scope assertion handled inside
+// the handlers (mirrors the gmail HTTP pattern).
+http.route({
+  path: "/lc_maya/calendar_list_events",
+  method: "POST",
+  handler: calendarListEventsHttp,
+});
+http.route({
+  path: "/lc_maya/calendar_create_event",
+  method: "POST",
+  handler: calendarCreateEventHttp,
+});
+http.route({
+  path: "/lc_maya/calendar_update_event",
+  method: "POST",
+  handler: calendarUpdateEventHttp,
+});
+http.route({
+  path: "/lc_maya/calendar_delete_event",
+  method: "POST",
+  handler: calendarDeleteEventHttp,
+});
+http.route({
+  path: "/lc_maya/apple_calendar_list_calendars",
+  method: "POST",
+  handler: appleCalendarListCalendarsHttp,
+});
+http.route({
+  path: "/lc_maya/apple_calendar_list_events",
+  method: "POST",
+  handler: appleCalendarListEventsHttp,
+});
+http.route({
+  path: "/lc_maya/apple_calendar_create_event",
+  method: "POST",
+  handler: appleCalendarCreateEventHttp,
+});
+http.route({
+  path: "/lc_maya/apple_calendar_update_event",
+  method: "POST",
+  handler: appleCalendarUpdateEventHttp,
+});
+http.route({
+  path: "/lc_maya/apple_calendar_delete_event",
+  method: "POST",
+  handler: appleCalendarDeleteEventHttp,
 });
 
 // Sprint 8.5 — wiki → Convex projection mirror sync. Heartbeat-driven,

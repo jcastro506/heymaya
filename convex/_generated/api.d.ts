@@ -102,6 +102,7 @@ import type * as integrations_crm_quickbooks from "../integrations/crm/quickbook
 import type * as integrations_gbp_direct_client from "../integrations/gbp/direct/client.js";
 import type * as integrations_gbp_index from "../integrations/gbp/index.js";
 import type * as integrations_gbp_zernio from "../integrations/gbp/zernio.js";
+import type * as integrations_google_calendar from "../integrations/google/calendar.js";
 import type * as integrations_google_gmail from "../integrations/google/gmail.js";
 import type * as integrations_google_tokenResolver from "../integrations/google/tokenResolver.js";
 import type * as integrations_hunter_actions from "../integrations/hunter/actions.js";
@@ -141,6 +142,7 @@ import type * as integrations_zernio_types from "../integrations/zernio/types.js
 import type * as integrations_zernio_webhooks from "../integrations/zernio/webhooks.js";
 import type * as jobs from "../jobs.js";
 import type * as lcMaya_appleCalendarConnect from "../lcMaya/appleCalendarConnect.js";
+import type * as lcMaya_calendarHttp from "../lcMaya/calendarHttp.js";
 import type * as lcMaya_firstProactivePing from "../lcMaya/firstProactivePing.js";
 import type * as lcMaya_gmailHttp from "../lcMaya/gmailHttp.js";
 import type * as lcMaya_lcMayaHttp from "../lcMaya/lcMayaHttp.js";
@@ -299,6 +301,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/gbp/direct/client": typeof integrations_gbp_direct_client;
   "integrations/gbp/index": typeof integrations_gbp_index;
   "integrations/gbp/zernio": typeof integrations_gbp_zernio;
+  "integrations/google/calendar": typeof integrations_google_calendar;
   "integrations/google/gmail": typeof integrations_google_gmail;
   "integrations/google/tokenResolver": typeof integrations_google_tokenResolver;
   "integrations/hunter/actions": typeof integrations_hunter_actions;
@@ -338,6 +341,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/zernio/webhooks": typeof integrations_zernio_webhooks;
   jobs: typeof jobs;
   "lcMaya/appleCalendarConnect": typeof lcMaya_appleCalendarConnect;
+  "lcMaya/calendarHttp": typeof lcMaya_calendarHttp;
   "lcMaya/firstProactivePing": typeof lcMaya_firstProactivePing;
   "lcMaya/gmailHttp": typeof lcMaya_gmailHttp;
   "lcMaya/lcMayaHttp": typeof lcMaya_lcMayaHttp;

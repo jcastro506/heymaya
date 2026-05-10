@@ -254,11 +254,249 @@ function cryptoRandomUuid(): string {
 }
 
 /* -------------------------------------------------------------------------- */
+/* List events                                                                 */
+/* -------------------------------------------------------------------------- */
+
+export interface ListAppleEventsInput {
+  /** Calendar URL from validateAndListCalendars. */
+  calendarUrl: string;
+  /** ISO 8601 start of window. */
+  timeRangeStartIso: string;
+  /** ISO 8601 end of window. */
+  timeRangeEndIso: string;
+}
+
+/**
+ * List events in a window for a specific iCloud calendar. Uses CalDAV's
+ * REPORT method via tsdav's `fetchCalendarObjects` with a time-range
+ * filter. The returned objects carry both the raw iCalendar text and the
+ * CalDAV object URL (which is also the delete handle).
+ *
+ * Pure-stateless wrapper — caller owns credentials + calendar selection.
+ */
+export async function listEvents(
+  creds: AppleCredentials,
+  input: ListAppleEventsInput
+): Promise<AppleEvent[]> {
+  let client: Awaited<ReturnType<typeof createDAVClient>>;
+  try {
+    client = await createDAVClient({
+      serverUrl: ICLOUD_CALDAV_SERVER,
+      credentials: { username: creds.appleId, password: creds.appPassword },
+      authMethod: "Basic",
+      defaultAccountType: "caldav",
+    });
+  } catch (err) {
+    throw new AppleCaldavError(
+      "auth-failed: iCloud rejected the Apple ID + app password combo",
+      err,
+      401
+    );
+  }
+
+  let objects: Awaited<ReturnType<typeof client.fetchCalendarObjects>>;
+  try {
+    const minimalCalendar = {
+      url: input.calendarUrl,
+      ctag: "",
+      description: "",
+      displayName: "",
+      timezone: "",
+      components: ["VEVENT"],
+      reports: [],
+      objects: [],
+      resourcetype: ["collection", "calendar"],
+      syncToken: "",
+    } as unknown as Parameters<typeof client.fetchCalendarObjects>[0]["calendar"];
+    objects = await client.fetchCalendarObjects({
+      calendar: minimalCalendar,
+      timeRange: {
+        start: input.timeRangeStartIso,
+        end: input.timeRangeEndIso,
+      },
+    });
+  } catch (err) {
+    throw new AppleCaldavError("list-events-failed", err);
+  }
+
+  return objects.map((obj) => {
+    const ics = typeof obj.data === "string" ? obj.data : "";
+    const url = typeof obj.url === "string" ? obj.url : "";
+    const filename = url.split("/").pop() ?? "";
+    const uid = parseIcsField(ics, "UID") ?? filename.replace(/\.ics$/, "");
+    const summary = parseIcsField(ics, "SUMMARY");
+    const startMs = parseIcsDate(ics, "DTSTART");
+    const endMs = parseIcsDate(ics, "DTEND");
+    return {
+      uid,
+      filename,
+      url,
+      ics,
+      summary,
+      startMs,
+      endMs,
+    };
+  });
+}
+
+/**
+ * Pull a single named field from an iCalendar VEVENT. Handles line-folding
+ * (RFC 5545 § 3.1) — continuation lines start with a single space or tab.
+ */
+function parseIcsField(ics: string, field: string): string | undefined {
+  if (!ics) return undefined;
+  // Unfold first: any CRLF (or LF) followed by space/tab is a continuation.
+  const unfolded = ics.replace(/\r?\n[ \t]/g, "");
+  const re = new RegExp(`^${field}(?:;[^:]*)?:(.*)$`, "m");
+  const match = unfolded.match(re);
+  return match ? match[1]?.trim() : undefined;
+}
+
+/** Parse a DTSTART/DTEND value back to ms-since-epoch. Handles both the
+ *  UTC form (`20260512T190000Z`) we emit and explicit-offset / floating
+ *  forms iCloud may return. */
+function parseIcsDate(ics: string, field: string): number | undefined {
+  const raw = parseIcsField(ics, field);
+  if (!raw) return undefined;
+  // UTC form: YYYYMMDDTHHMMSSZ
+  const utc = raw.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+  if (utc) {
+    const [, y, mo, d, h, mi, s] = utc;
+    const ms = Date.UTC(
+      Number(y),
+      Number(mo) - 1,
+      Number(d),
+      Number(h),
+      Number(mi),
+      Number(s)
+    );
+    return Number.isFinite(ms) ? ms : undefined;
+  }
+  // Floating / date-only — best-effort parse.
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Update event                                                                */
+/* -------------------------------------------------------------------------- */
+
+export interface UpdateAppleEventInput {
+  /** CalDAV object URL (returned from createEvent or listEvents). */
+  eventUrl: string;
+  /** Existing UID — preserved verbatim in the rewritten ics. */
+  uid: string;
+  /** New event content (full replacement — CalDAV updates the whole VEVENT). */
+  summary: string;
+  startIso: string;
+  endIso: string;
+  description?: string;
+  location?: string;
+}
+
+/**
+ * Update an existing iCloud event. CalDAV doesn't support partial updates
+ * — the client PUTs a complete replacement ics under the same object URL.
+ * Caller passes the full new event spec; we rewrite the VEVENT and PUT.
+ *
+ * Returns the updated event echo so the caller can confirm the round-trip.
+ */
+export async function updateEvent(
+  creds: AppleCredentials,
+  input: UpdateAppleEventInput
+): Promise<AppleEvent> {
+  const client = await createDAVClient({
+    serverUrl: ICLOUD_CALDAV_SERVER,
+    credentials: { username: creds.appleId, password: creds.appPassword },
+    authMethod: "Basic",
+    defaultAccountType: "caldav",
+  });
+
+  const ics = buildEventIcs(
+    {
+      // calendarUrl is unused in buildEventIcs (see source) — pass empty.
+      calendarUrl: "",
+      summary: input.summary,
+      startIso: input.startIso,
+      endIso: input.endIso,
+      description: input.description,
+      location: input.location,
+    },
+    input.uid
+  );
+
+  try {
+    // tsdav.updateCalendarObject takes a calendarObject with `url` + `data`
+    // (and an optional etag for optimistic concurrency — we skip that for v0
+    // since iCloud is single-user-per-account and concurrent edits are rare).
+    await client.updateCalendarObject({
+      calendarObject: {
+        url: input.eventUrl,
+        data: ics,
+        etag: "",
+      },
+    });
+  } catch (err) {
+    throw new AppleCaldavError("update-event-failed", err);
+  }
+
+  return {
+    uid: input.uid,
+    filename: input.eventUrl.split("/").pop() ?? `${input.uid}.ics`,
+    url: input.eventUrl,
+    ics,
+    summary: input.summary,
+    startMs: Date.parse(input.startIso),
+    endMs: Date.parse(input.endIso),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Delete event                                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Delete an iCloud event. Caller supplies the CalDAV object URL (from
+ * createEvent or listEvents). Returns `{ ok: true, eventUrl }` on success;
+ * throws AppleCaldavError on failure.
+ *
+ * iCloud returns 204 No Content for a successful DELETE. Deleting an
+ * already-deleted event returns 404; we surface that as an
+ * AppleCaldavError so the caller can decide whether to treat as success.
+ */
+export async function deleteEvent(
+  creds: AppleCredentials,
+  input: { eventUrl: string }
+): Promise<{ ok: true; eventUrl: string }> {
+  const client = await createDAVClient({
+    serverUrl: ICLOUD_CALDAV_SERVER,
+    credentials: { username: creds.appleId, password: creds.appPassword },
+    authMethod: "Basic",
+    defaultAccountType: "caldav",
+  });
+
+  try {
+    await client.deleteCalendarObject({
+      calendarObject: {
+        url: input.eventUrl,
+        etag: "",
+      },
+    });
+  } catch (err) {
+    throw new AppleCaldavError("delete-event-failed", err);
+  }
+
+  return { ok: true, eventUrl: input.eventUrl };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Test seam                                                                   */
 /* -------------------------------------------------------------------------- */
 
 export const _internal = {
   buildEventIcs,
   escapeIcsText,
+  parseIcsField,
+  parseIcsDate,
   ICLOUD_CALDAV_SERVER,
 };
