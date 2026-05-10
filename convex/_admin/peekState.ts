@@ -190,6 +190,47 @@ export const peekVideoUrls = internalQuery({
   },
 });
 
+export const peekPostDates = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const creators = await ctx.db.query("creators").collect();
+    const test = creators.filter((c) => c.clerkUserId.startsWith("test_real_world_kevin_"));
+    if (test.length === 0) return { error: "no test creator" };
+    const me = test[test.length - 1];
+    const cache = await ctx.db.query("scrapeCreatorsCache").collect();
+    const myCache = cache.filter((row) => row.creatorId === me._id);
+    const out: Array<{ id?: unknown; dateIso?: string; playCount?: unknown; desc?: string }> = [];
+    for (const row of myCache) {
+      const payload = row.payload as Record<string, unknown>;
+      if (!payload) continue;
+      const isIndexedObject =
+        typeof payload === "object" && Object.keys(payload).every((k) => /^\d+$/.test(k));
+      const indexedAsArray = isIndexedObject
+        ? Object.keys(payload).sort((a, b) => Number(a) - Number(b)).map((k) => (payload as Record<string, unknown>)[k])
+        : undefined;
+      const posts = (indexedAsArray ??
+        (payload?.posts as unknown[]) ??
+        (payload?.aweme_list as unknown[]) ??
+        (payload?.itemList as unknown[]) ??
+        []) as Array<Record<string, unknown>>;
+      if (!Array.isArray(posts)) continue;
+      for (const post of posts) {
+        const id = post?.aweme_id ?? post?.id ?? (post?.video as Record<string, unknown> | undefined)?.id;
+        const ct =
+          (post?.create_time as number | undefined) ??
+          (post?.createTime as number | undefined) ??
+          (post?.created_at as number | undefined);
+        const dateIso = typeof ct === "number" ? new Date(ct * 1000).toISOString().slice(0, 10) : undefined;
+        const stats = post?.statistics as Record<string, unknown> | undefined;
+        const playCount = stats?.play_count;
+        const desc = (post?.desc as string | undefined) ?? (post?.caption as string | undefined) ?? "";
+        out.push({ id, dateIso, playCount, desc: desc.slice(0, 80) });
+      }
+    }
+    return { creatorId: me._id, postCount: out.length, posts: out.slice(0, 15) };
+  },
+});
+
 export const recentActions = internalQuery({
   args: {},
   handler: async (ctx) => {
