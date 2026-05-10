@@ -379,14 +379,16 @@ describe("assembleWorkspaceBundle", () => {
     expect(userMd2).toContain("completed");
   });
 
-  it("Wave 5 (OpenClaw 2026.4.23): at production 28K cap, standing orders embed inline (no separate file)", () => {
+  it("Wave 5 (OpenClaw 2026.4.23): at production cap, standing orders embed inline (no separate file)", () => {
     // Per https://docs.openclaw.ai/automation/standing-orders only the
     // canonical root files (AGENTS / SOUL / USER / HEARTBEAT / TOOLS / MEMORY /
     // BOOTSTRAP / IDENTITY) are auto-injected at session start; arbitrary
     // .md files in the workspace root are NOT guaranteed to load. So Maya
-    // bumps the cap to 28K (MAYA_BOOTSTRAP_MAX_CHARS) and embeds standing
-    // orders inline. Verify that the production cap path actually fits.
-    const PROD_CAP = 66_000;
+    // sets a generous cap (MAYA_BOOTSTRAP_MAX_CHARS in configGeneratorMaya.ts,
+    // currently 80K) and embeds standing orders inline. Verify the production
+    // cap path actually fits — keep this aligned with MAYA_BOOTSTRAP_MAX_CHARS
+    // every time it bumps.
+    const PROD_CAP = 80_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };

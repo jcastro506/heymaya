@@ -248,10 +248,10 @@ describe("buildMayaConfig — gateway config (OpenClaw-native channels + bootstr
     });
   });
 
-  it("bootstrapMaxChars is the Maya 66K override (Sprint 12 Phase 1A: 60K → 66K to fit the integrated-picture reading + date-discipline + pleasantries-clarification rules alongside the embedded standing-order inventory)", () => {
+  it("bootstrapMaxChars is the Maya 80K override (Sprint 12.6: 66K → 80K to fit the integrated-read rule block + per-proactive-order pre-checks)", () => {
     const { config } = buildMayaConfig(emptyInputs("manager"), NOW);
-    expect(config.gatewayConfig.agents.defaults.bootstrapMaxChars).toBe(66_000);
-    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(66_000);
+    expect(config.gatewayConfig.agents.defaults.bootstrapMaxChars).toBe(80_000);
+    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(80_000);
   });
 
   it("agents.defaults.model.primary is an OpenRouter model ref", () => {

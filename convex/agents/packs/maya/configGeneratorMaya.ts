@@ -320,10 +320,16 @@ export interface BuildInputs {
 // encodes voice, not procedure.
 // Sprint 12 Phase 1A — bumped 60K → 66K to fit the new integrated-picture
 // reading section + date-discipline rules + pleasantries clarification.
+// Sprint 12.6 — bumped 66K → 80K to fit the stated-lane / observed-signal
+// integrated-read rule block + per-proactive-order pre-checks (morning_brief,
+// evening_recap, weekly_content_plan, trend_watcher, daily_niche_scan,
+// hook_library_build, opportunity_scout_daily). Each got a "READ FIRST"
+// pre-check pointing back to AGENTS.md § "ONE manager reading an integrated
+// picture" so format ≠ setting ≠ niche is enforced at the standing-order layer.
 // Cost on Gemini 1M context is trivial; this keeps the voice rules embedded
 // alongside the standing-order inventory without forcing the split-out
 // fallback path.
-export const MAYA_BOOTSTRAP_MAX_CHARS = 66_000;
+export const MAYA_BOOTSTRAP_MAX_CHARS = 80_000;
 
 /**
  * Build the OpenClaw config + workspace bundle for one creator. Pure function
