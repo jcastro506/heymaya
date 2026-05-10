@@ -157,7 +157,9 @@ describe("assembleWorkspaceBundle", () => {
     // loader on a different code path and are not bootstrap-loaded; they
     // can be larger than the cap (the maya-platform inventory is ~33K
     // because it lists every shipped skill with sourcing).
-    const CAP = 40_000;
+    // Sprint 12.6+ — bumped 40K → 45K to fit timezone-discipline +
+    // abort-silence rules added after the 2026-05-10 evening leak.
+    const CAP = 45_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };

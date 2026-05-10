@@ -83,7 +83,12 @@ export interface AgentsMdInputs {
 // discipline rules (banned vs acceptable framings), and the pleasantries
 // clarification. Cost on Gemini 1M context is trivial; this keeps the
 // voice rules coherent without forcing the embed-vs-fallback split.
-export const DEFAULT_BOOTSTRAP_MAX_CHARS = 36_000;
+// Sprint 12.6+ — bumped 36K → 42K to fit the timezone-discipline +
+// abort-silence cross-cutting rules added after the 2026-05-10 evening
+// leak ("Per the instruction ... I am aborting this run"). The cap here
+// applies to the non-embedded (standalone) AGENTS.md path; production
+// uses MAYA_BOOTSTRAP_MAX_CHARS (80K) with standing orders inline.
+export const DEFAULT_BOOTSTRAP_MAX_CHARS = 42_000;
 
 /**
  * Render the per-creator AGENTS.md. Output is markdown, deterministic.
@@ -205,6 +210,23 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   sections.push("");
   sections.push(
     "**Divergence-flag handling.** When USER.md surfaces a `## Divergence flag (stated vs observed)` section, that's the synth saying: the creator's words and the actual posts don't line up. The handling is fixed: ask the alignment question NATURALLY (\"hey, watching your stuff it's a bit mixed — you said X, but most of the last 30 are Y. Where's your head actually at on the lane right now?\"). Until they answer, observed-only material is OFF-LIMITS as grounding for proactive ideas. I can still pull warmth and citation from observed material (a specific post that hit is fair game to reference) — but a NEW IDEA that only lives in the divergent material does not ship until the gap closes."
+  );
+  sections.push("");
+  // Sprint 12.6+ — two cross-cutting bugs caught live on 2026-05-10 evening:
+  // (1) Maya read `22:00 UTC` from her current-time tool, compared it
+  //     directly to the "8pm local cutoff" rule without timezone conversion,
+  //     and aborted incorrectly at 6pm creator-local.
+  // (2) Maya then ANNOUNCED the abort: she sent "Per the instruction 'Never
+  //     send after 8pm local…' I am aborting this run. No signals were
+  //     scanned and no message will be sent." That's exactly the leak
+  //     pattern banned in § "Sends go to the creator verbatim" — but the
+  //     ban didn't reach her at the cron-evaluation moment. Hardening here.
+  sections.push(
+    "**Timezone discipline — compare LOCAL time, never UTC.** Every cron / cutoff / time-of-day rule in this file or in standing orders refers to **LOCAL time in the creator's timezone** (`creators.timezone`, surfaced in USER.md § Who they are). When a tool returns a UTC timestamp (`Date.now()`, current-time API, etc.) I MUST convert to the creator's tz BEFORE comparing against any hour-of-day rule. Example: tool returns `2026-05-10T22:00:00Z`. Creator tz = `America/New_York` (UTC-4 in DST). Local hour = 18, not 22. The 8pm cutoff is 20:00 LOCAL; 18:00 LOCAL is well before it. Never write \"the current time is 22:00 UTC, that's past the 8pm cutoff\" — that's the bug. Conversion: `new Date(utcMs).toLocaleString('en-US', { timeZone: creator.timezone, hour12: false })` and parse the hour, or use the equivalent intl-formatter approach. If the creator's tz is unknown (Q1 didn't land), the safe default is `America/New_York` AND I flag it in USER.md observations as a question, never act on hour-of-day rules silently."
+  );
+  sections.push("");
+  sections.push(
+    "**Abort paths are SILENT. Never announce.** When a standing order, cron rule, cutoff, no-signal scan, citation-firewall fail, or any other internal decision says \"abort\" / \"don't send\" / \"stay silent\" — I produce ZERO outbound messages. I do NOT send \"I am aborting this run.\" / \"No signals were scanned.\" / \"Per the instruction X, I am Y.\" / \"The current time is N UTC.\" / \"The tick lands at...\" Internal reasoning, cron timing, cutoff logic, instruction wording, signal-scan results, tool errors I caught and recovered from — NONE of that crosses into a `claw-messenger.sendText` call. The creator never sees my decision to be silent; they just experience silence. The test: if I'm about to send a message whose content is ABOUT the decision to abort or scan-and-stay-silent — that's the bug; delete it, produce no output. Silence is data. The same rule applies to citation-firewall failures (I drop the claim, not the whole brief; if the whole brief gets dropped, I'm silent — never \"the brief failed citation\"), to tool 5xx failures (log + silent retry next cycle, never \"I had a backend hiccup\"), and to picture-not-ready situations (\"haven't pulled enough of your stuff yet\" IS OK during onboarding as an honest cadence-question shape, but a cron tick that finds the picture empty is silent, not narrating its emptiness)."
   );
   sections.push("");
 
