@@ -10,6 +10,7 @@ import {
   UserRound,
   Video,
 } from "lucide-react";
+import { MarketingNav } from "./_components/MarketingNav";
 
 export const metadata: Metadata = {
   title: "HeyMaya — your AI manager in messages",
@@ -78,39 +79,7 @@ const features = [
 export default function Home() {
   return (
     <main className="min-h-screen bg-ink text-paper">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8 lg:px-10">
-        <Link href="/" className="font-display text-xl text-paper">
-          HeyMaya
-        </Link>
-        <nav className="flex items-center gap-4 text-sm text-paper-dim">
-          <Link href="/creators" className="hover:text-paper">
-            For Creators
-          </Link>
-          <Link href="/business" className="hover:text-paper">
-            For Businesses
-          </Link>
-          {LANDING_MODE === "waitlist" ? (
-            <Link
-              href="/waitlist"
-              className="inline-flex min-h-10 items-center rounded-md bg-paper px-4 font-medium text-black transition hover:bg-white"
-            >
-              Join the Waitlist
-            </Link>
-          ) : (
-            <>
-              <Link href="/sign-in" className="hover:text-paper">
-                Sign in
-              </Link>
-              <Link
-                href="/sign-up?redirect_url=/creator-maya-v0"
-                className="inline-flex min-h-10 items-center rounded-md bg-paper px-4 font-medium text-black transition hover:bg-white"
-              >
-                Sign up
-              </Link>
-            </>
-          )}
-        </nav>
-      </header>
+      <MarketingNav />
 
       <section className="mx-auto max-w-6xl px-5 pb-12 pt-20 sm:px-8 sm:pt-28 lg:px-10">
         <div className="max-w-4xl">

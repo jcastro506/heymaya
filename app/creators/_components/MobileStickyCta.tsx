@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 
+import { primaryCtaHref, primaryCtaLabel } from "../../_components/landingMode";
+
 /**
  * Mobile-only sticky bottom CTA. Hidden on md+ so the in-flow CTAs do the work.
  *
@@ -29,10 +31,10 @@ export function MobileStickyCta() {
           </span>
         </div>
         <Link
-          href="/checkout?tier=manager&interval=monthly"
+          href={primaryCtaHref("/checkout?tier=manager&interval=monthly")}
           className="btn btn-primary h-12 px-4 text-sm !bg-paper !text-ink hover:!bg-white"
         >
-          Start free
+          {primaryCtaLabel("Start free")}
           <ArrowUpRight className="h-4 w-4" />
         </Link>
       </div>
