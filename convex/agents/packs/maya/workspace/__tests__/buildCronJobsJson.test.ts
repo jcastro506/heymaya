@@ -266,7 +266,10 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
   // Determinism seam — pin the timestamp the kickstart embeds so the test
   // doesn't drift across runs.
   const KICKSTART_NOW = 1_730_000_000_000;
-  const EXPECTED_AT = new Date(KICKSTART_NOW - 1).toISOString();
+  // Sprint 12.2 — flipped from past to near-future (KICKSTART_NOW + 5_000)
+  // so OpenClaw's scheduler arms a real timer instead of treating the job
+  // as a missed-deadline and rescheduling for at+4h.
+  const EXPECTED_AT = new Date(KICKSTART_NOW + 5_000).toISOString();
 
   function freshCreator(plan: "coach" | "manager", tz = "America/Los_Angeles") {
     // firstBootCompletedAt intentionally undefined → kickstart fires.
@@ -546,7 +549,7 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     expect(manager.jobs[0].id).toBe("0001_first_boot_kickstart");
   });
 
-  it("kickstart entry uses a past timestamp so the scheduler arms with zero delay", () => {
+  it("kickstart entry uses a near-future timestamp so the scheduler arms a real timer (Sprint 12.2 — flipped from past timestamp)", () => {
     const { jobs } = buildCronJobsJson({
       creator: freshCreator("manager"),
       firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
@@ -555,9 +558,15 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     if (kickstart.schedule.kind !== "at")
       throw new Error("type-narrow guard");
     const atMs = Date.parse(kickstart.schedule.at);
-    // strictly less than now — Math.max(at - now, 0) clamps to 0 →
-    // MIN_REFIRE_GAP_MS in OpenClaw's armTimer (~immediate).
-    expect(atMs).toBeLessThan(KICKSTART_NOW);
+    // Sprint 12.2 (2026-05-10) — flipped from past to near-future.
+    // Past `at` made OpenClaw's scheduler treat the job as a missed
+    // deadline and reschedule it for `at + 4h` (verified in production
+    // on `maya-jn71ys01`: nextWakeAtMs was 4h after the past `at`).
+    // Future `at` makes the scheduler arm a real timer for ~5 sec.
+    expect(atMs).toBeGreaterThan(KICKSTART_NOW);
+    // But not too far in the future — must fire within ~10 sec of boot
+    // so the creator gets the kickstart promptly. Current value: 5_000.
+    expect(atMs - KICKSTART_NOW).toBeLessThanOrEqual(10_000);
   });
 
   it("kickstart entry is deterministic across calls with the same nowMsOverride", () => {

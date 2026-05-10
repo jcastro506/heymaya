@@ -288,12 +288,23 @@ function buildFirstBootKickstartJob(opts: {
   // and the creator would never hear from Maya.
   if (!opts.creator.phoneNumber) return null;
   const now = opts.nowMsOverride ?? Date.now();
-  // Use `now - 1` so the schedule is in the past at the moment OpenClaw
-  // ingests jobs.json — guarantees a 0-delay arm on the first scheduler
-  // tick. Encoded as ISO-8601 because the scheduler's `parseAbsoluteTimeMs`
-  // accepts both numeric ms and ISO strings; ISO is more debuggable in the
-  // Fly logs.
-  const at = new Date(now - 1).toISOString();
+  // Sprint 12.2 (2026-05-10) — set `at` 5 SECONDS IN THE FUTURE, not in
+  // the past. OpenClaw 2026.4.23's scheduler treats stale-past-`at` jobs
+  // as "missed deadlines" and reschedules them for `at + 4h` instead of
+  // firing immediately at boot. Verified in production: live machine
+  // `maya-jn71ys01` had `nextWakeAtMs: 1778430520651` (4h after the
+  // intended `at`) when we set `at = Date.now() - 1`. The earlier
+  // documentation that read `Math.max(at - now, 0) clamps to 0 →
+  // MIN_REFIRE_GAP_MS` was wrong — that path doesn't trigger for
+  // already-past `at` values; the scheduler treats them as missed-by-X
+  // and uses a 4h catch-up window. Setting `at = Date.now() + 5_000`
+  // means the scheduler sees a future job, arms the timer for ~5 sec,
+  // and fires when the timer pops. End-to-end: gateway boot (~10-15
+  // sec) + the 5-sec arm + first cron tick = first kickstart message
+  // lands ~15-20 sec after machine state hits "started." Encoded as
+  // ISO-8601 because parseAbsoluteTimeMs accepts both numeric ms and
+  // ISO strings; ISO is more debuggable in the Fly logs.
+  const at = new Date(now + 5_000).toISOString();
   return {
     id: "0001_first_boot_kickstart",
     name: "0001 First-boot kickstart",
