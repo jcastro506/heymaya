@@ -549,4 +549,54 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     const sorted = [...names].sort((a, b) => a.localeCompare(b));
     expect(names).toEqual(sorted);
   });
+
+  it("kickstart payload (Sprint 12 Phase 1B) folds posting cadence into Q3 and signals the calendar-content-plan finish line", () => {
+    // Sprint 12 Phase 1B — Q3 redesign: the goal-only question
+    // ("3-month goals") is gone; Q3 is now the goal AND the cadence
+    // ("how many days a week are you trying to post?") in one message.
+    // The cadence answer parses into `targetPostsPerWeek` and feeds the
+    // 14-day content plan that becomes the new onboarding finish line
+    // (after calendar OAuth + verify, Maya drafts a plan, the creator
+    // approves, the events write to the synced calendar).
+    const { jobs } = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    const kickstart = jobs.find((j) => j.id === "0001_first_boot_kickstart")!;
+    if (kickstart.payload.kind !== "agentTurn")
+      throw new Error("type-narrow guard");
+    const msg = kickstart.payload.message;
+
+    // Q3 is now the combined goal + cadence question.
+    expect(msg).toMatch(
+      /3-month goals \+ posting cadence \(combined into one question\)|niche → 3-month goals \+ posting cadence/
+    );
+    // POST shape carries both fields for Q3.
+    expect(msg).toMatch(/goals3Mo/);
+    expect(msg).toMatch(/targetPostsPerWeek/);
+
+    // Cadence parse rules — at least one canonical example named.
+    expect(msg).toMatch(/three days a week.*→.*3|every day.*→.*7|M\/W\/F/);
+
+    // Fuzzy-answer follow-up rule — "ONCE" not "always".
+    expect(msg).toMatch(/follow up ONCE|follow.*up.*once/i);
+    expect(msg).toMatch(/depends on the week|as much as I can|it varies/);
+
+    // Don't force-verify a clear answer — guard against over-verification.
+    expect(msg).toMatch(/Don't force-verify|don't force.*verify/i);
+
+    // Finish-line signal block — the new arc-complete shape.
+    expect(msg).toMatch(/FINISH LINE|finish line/);
+    expect(msg).toMatch(
+      /let me look at your calendar for the next 2 weeks/i
+    );
+    expect(msg).toMatch(/content_plan_initial/);
+
+    // Verify-before-confirm rule called out for the calendar leg.
+    expect(msg).toMatch(/gmail_list_inbox|apple_calendar_list_calendars/);
+    expect(msg).toMatch(/Never confirm without a 200|never confirm without/i);
+
+    // Each idea is an offer, not a directive — voice rule preserved.
+    expect(msg).toMatch(/offer.*not a directive|each idea is an offer/i);
+  });
 });
