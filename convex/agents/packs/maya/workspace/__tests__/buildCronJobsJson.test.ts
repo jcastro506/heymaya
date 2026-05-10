@@ -404,11 +404,13 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     }
     // Hard citation rule must be present.
     expect(msg).toMatch(/HARD CITATION RULE/);
-    expect(msg).toMatch(/MUST quote\/paraphrase|MUST quote or paraphrase/);
+    expect(msg).toMatch(/MUST quote\/paraphrase|MUST quote or paraphrase|MUST paraphrase/);
     expect(msg).toMatch(/THIS creator's `warmthMaterial|THIS creator's USER\.md/);
     expect(msg).toMatch(/NEVER fabricate a moment/);
-    // Honest no-claim fallback when warmthMaterial empty.
-    expect(msg).toMatch(/honest no-claim fallback/i);
+    // Empty-warmth fallback path documented (now: "skip the specific
+    // call-out and lead with the general only").
+    expect(msg).toMatch(/empty|EMPTY/i);
+    expect(msg).toMatch(/skip the specific call-out|honest no-claim/i);
   });
 
   it("kickstart payload (Sprint 11.1) instructs THREE sends + friend-reaction wow opener + bans the analyst-bot template patterns", () => {
@@ -429,46 +431,56 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
       throw new Error("type-narrow guard");
     const msg = kickstart.payload.message;
 
-    // Three-send shape — explicit "Three messages" + send order header
-    // replaces the prior FOUR. Capability-tour beat dropped per operator.
-    expect(msg).toMatch(/Three messages/);
+    // Sprint 12 Phase 2.1 — 4-send shape (was 3). Operator restored
+    // the role+outcome beat after live test showed Maya not introducing
+    // herself + no clarity on what she's there to do.
+    expect(msg).toMatch(/Four messages/);
     expect(msg).toContain("claw-messenger.sendText");
 
-    // SEND ORDER hard-locked block — pulled to top so model sees order
-    // before drowning in bans.
+    // SEND ORDER hard-locked block.
     expect(msg).toMatch(/SEND ORDER \(HARD-LOCKED\)/);
     expect(msg).toMatch(/NEVER send Q1 first/);
     expect(msg).toMatch(/NEVER repeat any beat/);
     expect(msg).toMatch(/NEVER bundle two beats/);
 
-    // Send 1 has identity beat (no full-name; first-name only) AND
-    // friend-reaction wow.
-    expect(msg).toMatch(/SEND 1 — GREET \+ WOW OPENER/);
+    // Send 1 = greet + role + outcome (the new restored beat).
+    expect(msg).toMatch(/SEND 1 — GREET \+ ROLE \+ OUTCOME/);
     expect(msg).toMatch(/Maya here/);
-    expect(msg).toMatch(/first-name only/);
-    expect(msg).toMatch(/never 'Kevin Castro'/);
-    expect(msg).toMatch(/friend texting after watching/i);
+    expect(msg).toMatch(/your new manager/);
+    expect(msg).toMatch(/your new assistant/);
+    expect(msg).toMatch(/OUTCOME TAIL IS REQUIRED/);
+    expect(msg).toMatch(/so you can \[creator benefit\]/);
+    expect(msg).toMatch(/'Kevin Castro'/);
 
-    // Send 2 cited insight + banned numerical ticks.
-    expect(msg).toMatch(/SEND 2 — CITED INSIGHT/);
-    expect(msg).toMatch(/Banned ticks/);
+    // Send 2 = watched + love + ONE specific call-out.
+    expect(msg).toMatch(/SEND 2 — WATCHED \+ LOVE \+ ONE SPECIFIC CALL-OUT/);
+    expect(msg).toMatch(/Lead with the GENERAL read/);
+    expect(msg).toMatch(/HARD CITATION RULE/);
+    expect(msg).toMatch(/SIGNATURE-PHRASE CALLBACK RULE/);
+    expect(msg).toMatch(/Banned numerical-cliché ticks/);
     expect(msg).toMatch(/the numbers back it up/);
-    expect(msg).toMatch(/the data agrees/);
-    expect(msg).toMatch(/the cherry, not the lede/);
 
-    // Send 3 Q1 + capability-tour-loophole closure on the question itself.
-    expect(msg).toMatch(/SEND 3 — Q1 LOCATION/);
-    expect(msg).toMatch(/must NOT carry capability-justification/);
-    expect(msg).toMatch(/stealth capability-tour/);
-    expect(msg).toMatch(/Got a few quick questions to start/);
+    // Send 3 = bridge to questions with REQUIRED outcome tail.
+    expect(msg).toMatch(/SEND 3 — BRIDGE TO QUESTIONS/);
+    expect(msg).toMatch(/OUTCOME TAIL IS REQUIRED/);
+    expect(msg).toMatch(/so I can \[creator benefit\]/);
+    expect(msg).toMatch(/Got a few quick questions to start/); // banned without outcome tail
+
+    // Send 4 = Q1 + capability-tour-loophole closure.
+    expect(msg).toMatch(/SEND 4 — Q1 LOCATION/);
+    expect(msg).toMatch(/must NOT carry capability-tour tail/);
+    expect(msg).toMatch(/the dropped capability beat sneaking back/);
 
     // Universal bans block — preserved analyst-bot patterns.
     expect(msg).toMatch(/UNIVERSAL BANS/);
     expect(msg).toMatch(/Already pulled your last 30/);
     expect(msg).toMatch(/is a \[adjective\] lane/);
     expect(msg).toMatch(/captured the energy of/);
+    // Capability-tour ban now refined: standalone feature-list-with-colon = banned;
+    // outcome-framed role inside send 1 = required.
     expect(msg).toMatch(/Here's the work I'll handle/);
-    expect(msg).toMatch(/DO NOT send a separate message enumerating Maya's job/);
+    expect(msg).toMatch(/feature-list-with-colon-and-no-outcome-close/);
+    expect(msg).toMatch(/required 'so you can \[creator benefit\]' tail = OK/);
 
     // Anti-fabrication preserved — names the ranked-list trap.
     expect(msg).toMatch(/never invent precise numbers/i);
