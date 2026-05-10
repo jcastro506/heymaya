@@ -83,18 +83,19 @@ export default function Home() {
           HeyMaya
         </Link>
         <nav className="flex items-center gap-4 text-sm text-paper-dim">
+          <Link href="/creators" className="hover:text-paper">
+            For Creators
+          </Link>
+          <Link href="/business" className="hover:text-paper">
+            For Businesses
+          </Link>
           {LANDING_MODE === "waitlist" ? (
-            <>
-              <Link href="/business" className="hover:text-paper">
-                For Businesses
-              </Link>
-              <Link
-                href="/waitlist"
-                className="inline-flex min-h-10 items-center rounded-md bg-paper px-4 font-medium text-black transition hover:bg-white"
-              >
-                Join the Waitlist
-              </Link>
-            </>
+            <Link
+              href="/waitlist"
+              className="inline-flex min-h-10 items-center rounded-md bg-paper px-4 font-medium text-black transition hover:bg-white"
+            >
+              Join the Waitlist
+            </Link>
           ) : (
             <>
               <Link href="/sign-in" className="hover:text-paper">
