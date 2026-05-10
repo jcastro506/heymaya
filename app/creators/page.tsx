@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 
-import { AudienceToggle } from "./_components/AudienceToggle";
+import { MarketingNav } from "../_components/MarketingNav";
+import { primaryCtaHref, primaryCtaLabel } from "../_components/landingMode";
 import { Faq } from "./_components/Faq";
 import { FeatureSection } from "./_components/FeatureSection";
 import { Hero } from "./_components/Hero";
@@ -28,7 +29,7 @@ export default function CreatorLanding() {
 
   return (
     <div className="relative isolate flex min-h-screen flex-col pb-24 md:pb-0">
-      <Nav />
+      <MarketingNav />
       <main className="relative z-10 flex-1">
         <Hero />
         <ValueProp />
@@ -40,64 +41,6 @@ export default function CreatorLanding() {
       <Footer />
       <MobileStickyCta />
     </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                                  NAV                                       */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-function Nav() {
-  return (
-    <header className="relative z-20 px-6 pt-6 sm:px-10 sm:pt-8">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-        <Link
-          href="/"
-          className="group inline-flex items-center gap-2"
-          aria-label="HeyMaya home"
-        >
-          <Logo />
-          <span className="font-display text-xl tracking-tight text-paper">
-            HeyMaya
-          </span>
-        </Link>
-        <div className="hidden md:block">
-          <AudienceToggle />
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/sign-in"
-            className="hidden text-sm text-paper-dim transition-colors hover:text-paper sm:inline"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/checkout?tier=manager&interval=monthly"
-            className="btn btn-primary h-10 px-4 text-sm !bg-paper !text-ink hover:!bg-white"
-          >
-            Start 7 days free
-          </Link>
-        </div>
-      </div>
-      <div className="mx-auto mt-4 flex max-w-7xl justify-center md:hidden">
-        <AudienceToggle />
-      </div>
-    </header>
-  );
-}
-
-function Logo() {
-  return (
-    <span
-      aria-hidden
-      className="grid h-8 w-8 place-items-center rounded-full bg-lime text-ink"
-      style={{
-        boxShadow:
-          "0 0 0 1px rgba(214,255,61,0.3), 0 6px 24px -6px rgba(214,255,61,0.5)",
-      }}
-    >
-      <span className="font-display text-lg leading-none">m</span>
-    </span>
   );
 }
 
@@ -744,10 +687,10 @@ function FinalCta() {
           </p>
           <div className="relative mt-9 flex flex-wrap items-center justify-center gap-3">
             <Link
-              href="/checkout?tier=manager&interval=monthly"
+              href={primaryCtaHref("/checkout?tier=manager&interval=monthly")}
               className="btn btn-primary group !bg-paper !text-ink hover:!bg-white"
             >
-              Start 7 days free
+              {primaryCtaLabel("Start 7 days free")}
               <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-[1px] group-hover:translate-x-[1px]" />
             </Link>
             <a href="#pricing" className="btn btn-ghost">

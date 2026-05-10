@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 
+import { primaryCtaHref, primaryCtaLabel } from "../../_components/landingMode";
+
 export type Billing = "monthly" | "annual";
 
 type Tier = {
@@ -199,14 +201,14 @@ function PricingCard({ tier, billing }: { tier: Tier; billing: Billing }) {
       </ul>
 
       <Link
-        href={`/checkout?tier=${tier.id}&interval=${billing}`}
+        href={primaryCtaHref(`/checkout?tier=${tier.id}&interval=${billing}`)}
         className={`btn mt-auto w-full ${
           tier.recommended
             ? "btn-primary !bg-paper !text-ink hover:!bg-white"
             : "btn-ghost"
         }`}
       >
-        Start 7 days free
+        {primaryCtaLabel("Start 7 days free")}
       </Link>
     </div>
   );

@@ -32,6 +32,9 @@ import {
   Star,
 } from "lucide-react";
 
+import { MarketingNav } from "../_components/MarketingNav";
+import { primaryCtaHref, primaryCtaLabel } from "../_components/landingMode";
+
 type Billing = "monthly" | "annual";
 
 type Tier = {
@@ -124,7 +127,7 @@ export default function BusinessHome() {
 
   return (
     <div className="relative isolate flex min-h-screen flex-col">
-      <Nav />
+      <MarketingNav />
       <main className="relative z-10 flex-1">
         <Hero />
         <Marquee />
@@ -135,75 +138,6 @@ export default function BusinessHome() {
       </main>
       <Footer />
     </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────────────────── */
-/*                                  NAV                                       */
-/* ─────────────────────────────────────────────────────────────────────────── */
-
-function Nav() {
-  return (
-    <header className="relative z-20 px-6 pt-6 sm:px-10 sm:pt-8">
-      <div className="mx-auto flex max-w-7xl items-center justify-between">
-        <Link
-          href="/"
-          className="group inline-flex items-center gap-2"
-          aria-label="HeyMaya home"
-        >
-          <Logo />
-          <span className="font-display text-xl tracking-tight text-paper">
-            HeyMaya
-          </span>
-          <span className="ml-1 rounded-full border border-[var(--hairline-strong)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-paper-dim">
-            Trades
-          </span>
-        </Link>
-        <nav className="hidden items-center gap-8 text-sm text-paper-dim md:flex">
-          <a href="#how" className="transition-colors hover:text-paper">
-            How she works
-          </a>
-          <a href="#showcase" className="transition-colors hover:text-paper">
-            Conversation
-          </a>
-          <a href="#pricing" className="transition-colors hover:text-paper">
-            Pricing
-          </a>
-          <a href="#faq" className="transition-colors hover:text-paper">
-            FAQ
-          </a>
-        </nav>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/sign-in"
-            className="hidden text-sm text-paper-dim transition-colors hover:text-paper sm:inline"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/onboarding/business"
-            className="btn btn-primary h-10 px-4 text-sm"
-          >
-            Hire Maya
-          </Link>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-function Logo() {
-  return (
-    <span
-      aria-hidden
-      className="grid h-8 w-8 place-items-center rounded-full bg-lime text-ink"
-      style={{
-        boxShadow:
-          "0 0 0 1px rgba(214,255,61,0.3), 0 6px 24px -6px rgba(214,255,61,0.5)",
-      }}
-    >
-      <span className="font-display text-lg leading-none">m</span>
-    </span>
   );
 }
 
@@ -234,10 +168,10 @@ function Hero() {
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-3">
               <Link
-                href="/onboarding/business"
+                href={primaryCtaHref("/onboarding/business")}
                 className="btn btn-primary group"
               >
-                Start 14-day Pro trial
+                {primaryCtaLabel("Start 14-day Pro trial")}
                 <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-[1px] group-hover:translate-x-[1px]" />
               </Link>
               <a href="#how" className="btn btn-ghost">
@@ -838,14 +772,18 @@ function PricingCard({ tier, billing }: { tier: Tier; billing: Billing }) {
       </ul>
 
       <Link
-        href={`/onboarding/business?plan=${tier.name.toLowerCase()}${
-          tier.recommended ? "&trial=true" : ""
-        }`}
+        href={primaryCtaHref(
+          `/onboarding/business?plan=${tier.name.toLowerCase()}${
+            tier.recommended ? "&trial=true" : ""
+          }`,
+        )}
         className={`btn mt-auto w-full ${
           tier.recommended ? "btn-primary" : "btn-ghost"
         }`}
       >
-        {tier.recommended ? "Start with Pro free" : `Choose ${tier.name}`}
+        {primaryCtaLabel(
+          tier.recommended ? "Start with Pro free" : `Choose ${tier.name}`,
+        )}
       </Link>
     </div>
   );

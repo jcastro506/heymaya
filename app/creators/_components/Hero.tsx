@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { ArrowUpRight, Sparkles } from "lucide-react";
 
+import { primaryCtaHref, primaryCtaLabel } from "../../_components/landingMode";
+
 /**
  * Editorial hero: left-column headline + right-column "first message" receipt.
  *
@@ -35,10 +37,10 @@ export function Hero() {
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-3">
               <Link
-                href="/checkout?tier=manager&interval=monthly"
+                href={primaryCtaHref("/checkout?tier=manager&interval=monthly")}
                 className="btn btn-primary group !bg-paper !text-ink hover:!bg-white"
               >
-                Start 7 days free
+                {primaryCtaLabel("Start 7 days free")}
                 <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-[1px] group-hover:translate-x-[1px]" />
               </Link>
               <a href="#features" className="btn btn-ghost">
