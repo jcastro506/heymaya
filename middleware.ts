@@ -91,8 +91,14 @@ export default clerkMiddleware(async (auth, req) => {
   if (!CREATOR_PRODUCT_ENABLED) {
     const { pathname, search } = req.nextUrl;
 
-    // /creators (and any future sub-paths like /creators/case-studies) → /business
-    if (pathname === "/creators" || pathname.startsWith("/creators/")) {
+    // Sprint 12.4 — /creators is reachable as a marketing landing even
+    // when the creator-product SIGNUP is suppressed. Both products need
+    // a public-facing surface for Google Business Profile API access
+    // verification + general SEO. The /creators page is informational
+    // (no signup CTA when creator product is suppressed); only the
+    // sub-paths that imply signed-in creator activity (/creators/...)
+    // still bounce to /business.
+    if (pathname.startsWith("/creators/")) {
       const dest = new URL("/business", req.url);
       return NextResponse.redirect(dest, 308);
     }
