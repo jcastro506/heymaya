@@ -50,6 +50,7 @@ const isPublic = createRouteMatcher([
   "/creator-maya-v0(.*)",
   "/business",
   "/business-maya-v0(.*)",
+  "/waitlist",
   "/growth",
   "/privacy",
   "/terms",
