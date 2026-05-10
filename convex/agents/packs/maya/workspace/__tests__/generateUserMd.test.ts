@@ -519,3 +519,211 @@ describe("generateUserMd — Sprint 10 multimodal section", () => {
     expect(md).not.toContain("What I observed watching your videos");
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 12 Phase 1A — integrated-picture summary, dates, cadence              */
+/* -------------------------------------------------------------------------- */
+
+describe("generateUserMd — Sprint 12 Phase 1A integrated picture", () => {
+  function makeIntegratedPicture(over: Partial<Record<string, unknown>> = {}): CreatorPictureExt {
+    const pic = {
+      _id: "k_pic_int" as unknown as CreatorPictureExt["_id"],
+      _creationTime: 1_700_000_000_000,
+      creatorId: "k_creator_test" as unknown as CreatorPictureExt["creatorId"],
+      niche: "Observational NYC humor",
+      audience: { ageRanges: ["25-34"], topGeos: ["US"], interestTags: [] },
+      voiceFingerprint: "Short, dry.",
+      topHooks: [],
+      bottomHooks: [],
+      postingCadence: { perPlatform: [] },
+      brandDealHistory: [],
+      generatedAt: 1_700_000_000_000,
+      model: "gemini-3-flash-preview",
+      sourceCitations: [
+        { platform: "tiktok", postId: "p1", usedFor: "niche" },
+      ],
+      // Sprint 12 Phase 1A — cadence anchor.
+      daysSinceLastPost: 85,
+      openingAnswers: {
+        goal: "10K followers",
+        tone: "supportive" as const,
+        submittedAt: 1_700_000_000_000,
+        targetPostsPerWeek: 3,
+      },
+      recurringElements: [
+        {
+          kind: "location" as const,
+          name: "London landmarks",
+          appearancesIn: ["p1", "p2", "p3"],
+          appearanceDates: ["2026-02-04", "2026-02-09", "2026-02-13"],
+          roleSummary: "Travel-vlog backdrop across last few posts",
+        },
+      ],
+      warmthMaterial: [
+        {
+          kind: "specific-moment" as const,
+          text: "the way you held the shot through the Piccadilly crowd is sending me",
+          confidence: "safe-to-use" as const,
+          citationPostIds: ["p1"],
+          citationPostDates: ["2026-02-04"],
+        },
+        {
+          kind: "compliment" as const,
+          text: "your delivery on the bodega line had me dying",
+          confidence: "safe-to-use" as const,
+          citationPostIds: ["p2"],
+          // intentionally NO citationPostDates — falls back to bare reference
+        },
+      ],
+      ...over,
+    };
+    return pic as unknown as CreatorPictureExt;
+  }
+
+  it("renders the 'Right now' integrated-picture summary at the top when daysSinceLastPost / target are present", () => {
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: makeIntegratedPicture(),
+      handles: makeHandles(),
+      plan: "manager",
+    });
+    expect(md).toContain("## Right now");
+    expect(md).toContain("3× per week");
+    expect(md).toContain("85 days ago");
+    // Section appears BEFORE "## Who they are"
+    const idxRightNow = md.indexOf("## Right now");
+    const idxWho = md.indexOf("## Who they are");
+    expect(idxRightNow).toBeGreaterThan(0);
+    expect(idxRightNow).toBeLessThan(idxWho);
+  });
+
+  it("renders the Cadence section with target + reality", () => {
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: makeIntegratedPicture(),
+      handles: makeHandles(),
+      plan: "manager",
+    });
+    expect(md).toContain("## Cadence");
+    expect(md).toContain("**Target:** 3× per week");
+    expect(md).toMatch(/Reality so far:.*85 days ago/);
+  });
+
+  it("OMITS the 'Right now' summary when neither daysSinceLastPost nor target exist", () => {
+    const pic = makeIntegratedPicture();
+    delete (pic as unknown as Record<string, unknown>).daysSinceLastPost;
+    (pic.openingAnswers as Record<string, unknown>).targetPostsPerWeek = undefined;
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: pic,
+      handles: makeHandles(),
+      plan: "manager",
+    });
+    expect(md).not.toContain("## Right now");
+    expect(md).not.toContain("## Cadence");
+  });
+
+  it("renders warmth lines with date prefix when citationPostDates is populated", () => {
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: makeIntegratedPicture(),
+      handles: makeHandles(),
+      plan: "manager",
+    });
+    // The Feb 4 entry shows the "Feb 4 —" prefix.
+    expect(md).toMatch(/Feb 4 —.*Piccadilly/);
+    // The bodega entry has no citationPostDates, so no date prefix.
+    expect(md).toContain("delivery on the bodega line had me dying");
+  });
+
+  it("renders recurringElements with date range '(3 posts, Feb 4-13)' when appearanceDates present", () => {
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: makeIntegratedPicture(),
+      handles: makeHandles(),
+      plan: "manager",
+    });
+    expect(md).toContain(
+      "**London landmarks** (location) — 3 posts, Feb 4–Feb 13"
+    );
+  });
+
+  it("renders recurringElements with count-only fallback when appearanceDates missing", () => {
+    const pic = makeIntegratedPicture({
+      recurringElements: [
+        {
+          kind: "pet" as const,
+          name: "Charlie",
+          appearancesIn: ["p1", "p2"],
+          // intentionally NO appearanceDates
+          roleSummary: "Recurring dog",
+        },
+      ],
+    });
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: pic,
+      handles: makeHandles(),
+      plan: "manager",
+    });
+    expect(md).toContain("**Charlie** (pet) — 2 posts: Recurring dog");
+  });
+
+  it("formats today / yesterday / weeks / months naturally for daysSinceLastPost", () => {
+    const cases: Array<[number, RegExp]> = [
+      [0, /today/],
+      [1, /yesterday/],
+      [3, /3 days ago/],
+      [10, /about a week back/],
+      [21, /~3 weeks/],
+      [60, /~2 months/],
+      [120, /over 3 months/],
+    ];
+    for (const [days, expected] of cases) {
+      const md = generateUserMd({
+        creator: makeCreator(),
+        picture: makeIntegratedPicture({ daysSinceLastPost: days }),
+        handles: makeHandles(),
+        plan: "manager",
+      });
+      expect(md).toMatch(expected);
+    }
+  });
+
+  it("Right now / Cadence sections embed NO hardcoded threshold rules — facts only, no 'if days > N' patterns", () => {
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: makeIntegratedPicture(),
+      handles: makeHandles(),
+      plan: "manager",
+    });
+    // Slice out the two sections we own. Each runs from its `## Heading`
+    // to the next `## ` heading (anywhere in the doc).
+    function sliceSection(heading: string): string {
+      const start = md.indexOf(heading);
+      if (start < 0) return "";
+      const next = md.indexOf("\n## ", start + heading.length);
+      return md.slice(start, next < 0 ? md.length : next);
+    }
+    const ourSection = `${sliceSection("## Right now")}\n${sliceSection(
+      "## Cadence"
+    )}`;
+    // Surface facts, not rules. No "if days > 30" / "ping when over N days" /
+    // hardcoded threshold language.
+    expect(ourSection).not.toMatch(/if .* days/i);
+    expect(ourSection).not.toMatch(/over\s*\d+\s*days.*ping/i);
+    expect(ourSection).not.toMatch(/days\s*>\s*\d+/i);
+    expect(ourSection).not.toMatch(/threshold/i);
+  });
+
+  it("Right now summary instructs Maya to read live commitments + chat history alongside cadence", () => {
+    const md = generateUserMd({
+      creator: makeCreator(),
+      picture: makeIntegratedPicture(),
+      handles: makeHandles(),
+      plan: "manager",
+    });
+    expect(md).toContain("commitments");
+    expect(md).toContain("chatMessages");
+  });
+});

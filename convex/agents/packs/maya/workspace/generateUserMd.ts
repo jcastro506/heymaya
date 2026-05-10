@@ -105,6 +105,13 @@ export function generateUserMd(inputs: UserMdInputs): string {
   const now = inputs.now ?? Date.now();
   const snapshots = inputs.followerSnapshots ?? [];
 
+  // Sprint 12 Phase 1A — integrated-picture summary at top of USER.md.
+  // Maya reads this first every session and naturally weaves the gap
+  // between target cadence and reality into her response. NO threshold
+  // logic here — facts, surfaced. The agent is the brain.
+  const rightNowSummary = renderRightNowSummary(picture);
+  const cadenceSection = renderCadenceSection(picture);
+
   const sortedHandles = [...handles].sort((a, b) => {
     if (a.platform !== b.platform) return a.platform.localeCompare(b.platform);
     return a.handle.localeCompare(b.handle);
@@ -175,6 +182,7 @@ export function generateUserMd(inputs: UserMdInputs): string {
     "",
     `What I know about ${displayName} — who they are, how to reach them, what they're working toward. I read this every session. The onboarding flow + their Profile edits write it; I don't edit it myself.`,
     "",
+    ...(rightNowSummary ? [rightNowSummary, ""] : []),
     "## Who they are",
     "",
     `- **creatorId:** \`${creator._id}\` ← REQUIRED for every \`POST /lc_maya/*\` call. Use this exact value in the JSON body.`,
@@ -249,6 +257,7 @@ export function generateUserMd(inputs: UserMdInputs): string {
     `- **Expected cadence:** ${cadence}`,
     `- **Tone:** ${toneNote}`,
     "",
+    ...(cadenceSection ? [cadenceSection, ""] : []),
   ].join("\n");
 }
 
@@ -289,6 +298,7 @@ function renderWatchedObservations(
       kind: string;
       name: string;
       appearancesIn: string[];
+      appearanceDates?: string[];
       roleSummary: string;
     }>;
   }).recurringElements ?? [];
@@ -298,6 +308,7 @@ function renderWatchedObservations(
       text: string;
       confidence: "safe-to-use" | "check-with-creator";
       citationPostIds: string[];
+      citationPostDates?: string[];
     }>;
   }).warmthMaterial ?? [];
 
@@ -352,7 +363,13 @@ function renderWatchedObservations(
   if (re.length > 0) {
     lines.push(`**Recurring people, pets, places, props** (the cast and the set):`);
     for (const el of re) {
-      lines.push(`- **${el.name}** (${el.kind}): ${el.roleSummary}`);
+      // Sprint 12 Phase 1A — surface date range when available so Maya
+      // reads time-of-occurrence: "(3 posts, Feb 4-13)" instead of bare
+      // count. Falls back to count-only when synth didn't emit dates.
+      const window = formatAppearanceWindow(el.appearancesIn, el.appearanceDates);
+      lines.push(
+        `- **${el.name}** (${el.kind})${window ? ` — ${window}` : ""}: ${el.roleSummary}`
+      );
     }
     lines.push("");
   }
@@ -360,7 +377,12 @@ function renderWatchedObservations(
   if (wm.length > 0) {
     lines.push(`**Warmth material** — lines I noticed I could paraphrase if there's a real opening. Pick ONE per opening sequence, never enumerate. \`safe-to-use\` is a paraphrase I can lead with; \`check-with-creator\` is phrased as a question only — never asserted.`);
     for (const w of wm) {
-      lines.push(`- [${w.confidence}] ${w.text}`);
+      // Sprint 12 Phase 1A — when synth emitted citationPostDates, prefix
+      // the line with the post date so Maya cites by date in chat ("your
+      // Feb 4 London clip — that pause is sending me") instead of bare
+      // reference ("your London clip — that pause is sending me").
+      const datePrefix = formatWarmthDatePrefix(w.citationPostDates);
+      lines.push(`- [${w.confidence}]${datePrefix} ${w.text}`);
     }
     lines.push("");
   }
@@ -493,4 +515,187 @@ function describeCadence(plan: Plan): string {
     case "manager":
       return "Assistant cadence + autonomous brand-deal back-and-forth — post-publish reactions within ~5 min, Apollo/Hunter cold outreach, brand pitching, auto-send under your threshold, on-demand manager-readiness packets.";
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 12 Phase 1A — integrated-picture summary + cadence                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Sprint 12 Phase 1A — top-of-USER.md "Right now" section. Maya reads this
+ * first every session and weaves the picture into her response naturally.
+ *
+ * The integrated facts (last post / cadence target / open commitments / etc.)
+ * are surfaced as a snapshot, not as actionable rules. Maya — the brain —
+ * reads target + reality and notices the gap. NO threshold logic here.
+ *
+ * Returns null when there's nothing to say (no picture or no anchors yet —
+ * pre-onboarding-complete state).
+ */
+function renderRightNowSummary(
+  picture: CreatorPictureExt | null
+): string | null {
+  if (!picture) return null;
+  const dslp = (picture as unknown as { daysSinceLastPost?: number })
+    .daysSinceLastPost;
+  const target = picture.openingAnswers?.targetPostsPerWeek;
+
+  // If neither the cadence anchor nor a posting timestamp exist, the
+  // section would be empty — skip it.
+  if (dslp === undefined && target === undefined) return null;
+
+  const lines: string[] = ["## Right now"];
+  lines.push("");
+  lines.push(
+    "Snapshot Maya reads first every session. I respond to what's in here, I don't run a checklist over it. When the target cadence and the actual gap are far apart, the question is obvious — I ask it the way a friend would, not the way a coach would."
+  );
+  lines.push("");
+
+  if (dslp !== undefined) {
+    lines.push(`- **Last post:** ${formatDaysSinceLastPost(dslp)}`);
+  }
+  if (target !== undefined) {
+    lines.push(
+      `- **Target cadence:** ${target}× per week (their answer during onboarding)`
+    );
+  }
+  // Open commitments / pending decisions / recently completed are read off
+  // the live `commitments` + `mayaActionLog` tables at runtime — Maya
+  // queries them directly when she boots a session. We don't denormalize
+  // them into USER.md (would go stale immediately). The header here cues
+  // her to look at those signals alongside cadence.
+  lines.push(
+    `- **Open commitments / pending decisions / recently completed:** read live from \`commitments\` + recent \`chatMessages\` + \`brandDeals\` at session start. Surface anything there alongside this snapshot.`
+  );
+
+  return lines.join("\n");
+}
+
+/**
+ * Sprint 12 Phase 1A — Cadence section. Surfaces the creator's stated target
+ * + the observed reality (days-since-last-post) side by side. Maya reads the
+ * gap. No "if days > N then ping" — just facts.
+ *
+ * Returns null when neither anchor exists (nothing to say).
+ */
+function renderCadenceSection(
+  picture: CreatorPictureExt | null
+): string | null {
+  if (!picture) return null;
+  const dslp = (picture as unknown as { daysSinceLastPost?: number })
+    .daysSinceLastPost;
+  const target = picture.openingAnswers?.targetPostsPerWeek;
+  if (dslp === undefined && target === undefined) return null;
+
+  const lines: string[] = ["## Cadence"];
+  lines.push("");
+  if (target !== undefined) {
+    lines.push(`- **Target:** ${target}× per week (their answer)`);
+  } else {
+    lines.push(
+      `- **Target:** _not yet provided — they didn't lock a cadence in onboarding_`
+    );
+  }
+  if (dslp !== undefined) {
+    lines.push(`- **Reality so far:** ${formatDaysSinceLastPost(dslp)}`);
+  } else {
+    lines.push(
+      `- **Reality so far:** _no datable post timestamps yet — wait for the next pull_`
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Render the days-since-last-post number as natural language. Maya prefers
+ * "yesterday" / "3 days ago" / "about a month ago" / "85 days ago" depending
+ * on the magnitude. We DON'T paraphrase aggressively — Maya should see the
+ * actual number for her own reasoning. The natural-language framing is a
+ * hint, not a mask.
+ */
+function formatDaysSinceLastPost(days: number): string {
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday (1 day ago)";
+  if (days < 7) return `${days} days ago`;
+  if (days < 14) return `${days} days ago (about a week back)`;
+  if (days < 35) return `${days} days ago (~${Math.round(days / 7)} weeks)`;
+  if (days < 90) return `${days} days ago (~${Math.round(days / 30)} months)`;
+  return `${days} days ago (over 3 months)`;
+}
+
+/**
+ * Format an appearance window like "(3 posts, Feb 4-13)" or "(2 posts, Feb 4)"
+ * or null when no parseable dates. Used inline in the recurringElements list.
+ */
+function formatAppearanceWindow(
+  postIds: ReadonlyArray<string>,
+  dates: ReadonlyArray<string> | undefined
+): string | null {
+  const count = postIds.length;
+  if (!dates || dates.length === 0) {
+    // No date signal — fall back to count-only.
+    return count > 0 ? `${count} posts` : null;
+  }
+  const sortedIso = [...dates].sort();
+  const first = sortedIso[0];
+  const last = sortedIso[sortedIso.length - 1];
+  const firstHuman = humanShortDate(first);
+  const lastHuman = humanShortDate(last);
+  if (!firstHuman) return `${count} posts`;
+  if (first === last || !lastHuman) {
+    return `${count} posts, ${firstHuman}`;
+  }
+  return `${count} posts, ${firstHuman}–${lastHuman}`;
+}
+
+/**
+ * Format an inline date prefix for a warmth-material entry like
+ * "Feb 4 — " (returned with trailing whitespace included for direct
+ * concatenation). Returns "" when no dates available so the prefix slot
+ * disappears cleanly.
+ */
+function formatWarmthDatePrefix(
+  dates: ReadonlyArray<string> | undefined
+): string {
+  if (!dates || dates.length === 0) return "";
+  // Always use the first cited post's date — the warmth line speaks to
+  // a specific moment, and the first citation is the canonical anchor.
+  const human = humanShortDate(dates[0]);
+  return human ? ` ${human} —` : "";
+}
+
+/**
+ * Convert "YYYY-MM-DD" → "Feb 4". Returns null when the input doesn't
+ * parse (defensive — synth validators reject malformed dates upstream,
+ * but we tolerate a stray bad string rather than crashing USER.md).
+ */
+function humanShortDate(iso: string): string | null {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (
+    !Number.isFinite(month) ||
+    month < 1 ||
+    month > 12 ||
+    !Number.isFinite(day) ||
+    day < 1 ||
+    day > 31
+  )
+    return null;
+  const MONTHS = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  return `${MONTHS[month - 1]} ${day}`;
 }

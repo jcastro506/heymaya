@@ -87,7 +87,7 @@ describe("generateAgentsMd", () => {
     expect(md).toContain("`standing-orders.md`");
   });
 
-  it("renders all 10 doc sections (operating instructions, tone, platform, standing orders, chat, auto-send, plan-tier, failure modes, connected toolkits, citation)", () => {
+  it("renders all 12 doc sections (operating instructions, integrated picture, date discipline, tone, platform, standing orders, chat, auto-send, plan-tier, failure modes, connected toolkits, citation)", () => {
     const md = generateAgentsMd({
       ...BASE_INPUTS,
       plan: "manager",
@@ -95,6 +95,8 @@ describe("generateAgentsMd", () => {
     });
     const expected = [
       "## Operating instructions",
+      "## You are ONE manager reading an integrated picture",
+      "## Date discipline — cite posts by their actual posted date",
       "## Tone modulation",
       "## Platform expertise",
       "## Standing orders",
@@ -200,5 +202,80 @@ describe("renderStandingOrdersDocument", () => {
     const a = renderStandingOrdersDocument("manager");
     const b = renderStandingOrdersDocument("manager");
     expect(a).toBe(b);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 12 Phase 1A — integrated-picture re-frame + date discipline           */
+/* -------------------------------------------------------------------------- */
+
+describe("generateAgentsMd — Sprint 12 Phase 1A", () => {
+  it("integrated-picture rule frames Maya as ONE manager reading USER.md, NOT a stack of if-then rules", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: true,
+    });
+    expect(md).toContain("ONE manager reading an integrated picture");
+    expect(md).toContain("Read. Think. Respond.");
+    // Anti-rule guidance is explicit.
+    expect(md).toContain("No hardcoded thresholds");
+    expect(md).toMatch(/days_since_last_post\s*>\s*30/);
+    // The "what a friend asks" framing is present.
+    expect(md).toMatch(/like a person reading their notes/i);
+  });
+
+  it("date discipline rule lists banned vs acceptable post-recency framings", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: true,
+    });
+    expect(md).toContain("Date discipline");
+    expect(md).toContain("yesterday");
+    expect(md).toContain("Banned framings");
+    expect(md).toContain("Acceptable framings");
+    // Concrete examples from the operator's brief.
+    expect(md).toContain("Feb 4");
+    expect(md).toContain("couple months back");
+  });
+
+  it("date discipline references the synth's date arrays (appearanceDates / citationPostDates) so Maya knows where the data is", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: true,
+    });
+    expect(md).toContain("appearanceDates");
+    expect(md).toContain("citationPostDates");
+  });
+
+  it("pleasantries clarification keeps warm closings ALLOWED while still banning forced template signoffs", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: true,
+    });
+    // Operator-confirmed: pleasantries are kept. Real warmth = good.
+    expect(md).toContain("Pleasantries are FINE");
+    expect(md).toContain("Piccadilly");
+    // Forced template signoffs still called out.
+    expect(md).toMatch(/Have a great day|Stay awesome|Talk soon/);
+  });
+
+  it("integrated-picture rule sits before the iMessage UX rules so the framing carries through every send", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: true,
+    });
+    const idxIntegrated = md.indexOf(
+      "## You are ONE manager reading an integrated picture"
+    );
+    const idxImessage = md.indexOf(
+      "## iMessage UX rules"
+    );
+    expect(idxIntegrated).toBeGreaterThan(0);
+    expect(idxImessage).toBeGreaterThan(idxIntegrated);
   });
 });

@@ -318,7 +318,12 @@ export interface BuildInputs {
 // Programs now narrate what Maya DOES like a person, not what
 // pipeline she runs — that prose is intentionally longer because it
 // encodes voice, not procedure.
-export const MAYA_BOOTSTRAP_MAX_CHARS = 60_000;
+// Sprint 12 Phase 1A — bumped 60K → 66K to fit the new integrated-picture
+// reading section + date-discipline rules + pleasantries clarification.
+// Cost on Gemini 1M context is trivial; this keeps the voice rules embedded
+// alongside the standing-order inventory without forcing the split-out
+// fallback path.
+export const MAYA_BOOTSTRAP_MAX_CHARS = 66_000;
 
 /**
  * Build the OpenClaw config + workspace bundle for one creator. Pure function

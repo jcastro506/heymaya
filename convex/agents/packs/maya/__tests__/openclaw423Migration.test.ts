@@ -267,8 +267,8 @@ describe("Wave 5 — standing orders embed inline in AGENTS.md (OpenClaw 4.23 co
     }
   });
 
-  it("MAYA_BOOTSTRAP_MAX_CHARS is 60K (Sprint 11.1 evening bump for human-behavior cron-prose rewrites alongside the embedded standing-order inventory)", () => {
-    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(60_000);
+  it("MAYA_BOOTSTRAP_MAX_CHARS is 66K (Sprint 12 Phase 1A bump: integrated-picture reading + date discipline + pleasantries clarification alongside the embedded standing-order inventory)", () => {
+    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(66_000);
   });
 
   it("AGENTS.md actually fits under the 28K cap for every plan (defense-in-depth)", () => {

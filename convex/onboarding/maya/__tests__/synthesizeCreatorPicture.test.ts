@@ -35,6 +35,7 @@ import {
   cacheKey,
   reconcileAnchorVsObserved,
   checkAnchorInvariant,
+  computeDaysSinceLastPost,
 } from "../synthesizeCreatorPicture";
 import {
   _setVideoSynthClientForTests,
@@ -3836,5 +3837,196 @@ describe("synthesizeCreatorPicture — Sprint 10 multimodal fields", () => {
       .filter((c) => c.postId === "uncited_post_id_xyz")
       .map((c) => c.usedFor);
     expect(usedFors).toContain("recurringElements[0]");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 12 Phase 1A — date arrays + computeDaysSinceLastPost                  */
+/* -------------------------------------------------------------------------- */
+
+describe("synthesizeCreatorPicture — Sprint 12 Phase 1A date arrays", () => {
+  it("HAPPY: parses recurringElements.appearanceDates parallel to appearancesIn", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.recurringElements = [
+      {
+        kind: "location",
+        name: "London landmarks",
+        appearancesIn: ["tt_post_0", "tt_post_2", "tt_post_4"],
+        appearanceDates: ["2026-02-04", "2026-02-09", "2026-02-13"],
+        roleSummary: "Recurring travel backdrop across 3 of last 30 posts",
+      },
+    ];
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    expect(parsed.recurringElements).toHaveLength(1);
+    expect(parsed.recurringElements?.[0]?.appearanceDates).toEqual([
+      "2026-02-04",
+      "2026-02-09",
+      "2026-02-13",
+    ]);
+  });
+
+  it("HAPPY: parses warmthMaterial.citationPostDates parallel to citationPostIds", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.warmthMaterial = [
+      {
+        kind: "specific-moment",
+        text: "the way you held the shot through the Piccadilly crowd is sending me",
+        confidence: "safe-to-use",
+        citationPostIds: ["tt_post_0"],
+        citationPostDates: ["2026-02-04"],
+      },
+    ];
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    expect(parsed.warmthMaterial?.[0]?.citationPostDates).toEqual([
+      "2026-02-04",
+    ]);
+  });
+
+  it("BACK-COMPAT: omitting appearanceDates / citationPostDates is allowed (pre-S12 outputs)", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.recurringElements = [
+      {
+        kind: "pet",
+        name: "Charlie (dog)",
+        appearancesIn: ["tt_post_0", "tt_post_2"],
+        roleSummary: "recurring pet",
+      },
+    ];
+    baseJson.warmthMaterial = [
+      {
+        kind: "compliment",
+        text: "your delivery is unreal",
+        confidence: "safe-to-use",
+        citationPostIds: ["tt_post_0"],
+      },
+    ];
+    const parsed = parseAndValidatePicture(JSON.stringify(baseJson));
+    expect(parsed.recurringElements?.[0]?.appearanceDates).toBeUndefined();
+    expect(parsed.warmthMaterial?.[0]?.citationPostDates).toBeUndefined();
+  });
+
+  it("ADVERSARIAL: appearanceDates length mismatch is rejected", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.recurringElements = [
+      {
+        kind: "location",
+        name: "London",
+        appearancesIn: ["tt_post_0", "tt_post_2"],
+        appearanceDates: ["2026-02-04"], // 1 vs 2
+        roleSummary: "recurring backdrop",
+      },
+    ];
+    expect(() => parseAndValidatePicture(JSON.stringify(baseJson))).toThrow(
+      SynthValidationError
+    );
+  });
+
+  it("ADVERSARIAL: citationPostDates length mismatch is rejected", () => {
+    const baseJson = JSON.parse(makeValidSynthesisJson());
+    baseJson.warmthMaterial = [
+      {
+        kind: "compliment",
+        text: "x",
+        confidence: "safe-to-use",
+        citationPostIds: ["tt_post_0", "tt_post_1"],
+        citationPostDates: ["2026-02-04"], // 1 vs 2
+      },
+    ];
+    expect(() => parseAndValidatePicture(JSON.stringify(baseJson))).toThrow(
+      SynthValidationError
+    );
+  });
+});
+
+describe("computeDaysSinceLastPost", () => {
+  function makePayload(postedIsoList: Array<string | null>): Parameters<
+    typeof computeDaysSinceLastPost
+  >[0] {
+    return {
+      creator: { timezone: "America/Los_Angeles", plan: "manager" },
+      perPlatform: [
+        {
+          platform: "tiktok",
+          handle: "@test",
+          profile: {
+            displayName: null,
+            bio: null,
+            followerCount: null,
+            bioLink: null,
+            verified: false,
+          },
+          posts: postedIsoList.map((iso, i) => ({
+            platform: "tiktok",
+            postId: `p${i}`,
+            caption: null,
+            transcript: null,
+            thumbnailUrl: null,
+            videoUrl: null,
+            videoDurationSec: null,
+            postedAtIso: iso,
+            viewCount: null,
+            likeCount: null,
+            commentCount: null,
+            shareCount: null,
+            saveCount: null,
+            topComments: [],
+            kind: "text-context" as const,
+          })),
+        },
+      ],
+      batchingDiagnostics: {
+        totalPostsConsidered: postedIsoList.length,
+        fullVideoCount: 0,
+        textOnlyCount: postedIsoList.length,
+        totalVideoDurationSec: 0,
+        cappedAtSec: 0,
+        finalTopN: 0,
+        finalBottomM: 0,
+        downShifted: false,
+        oversizedSingleVideoCount: 0,
+      },
+    };
+  }
+
+  it("returns the gap in days between most-recent post and now", () => {
+    const now = Date.parse("2026-05-08T12:00:00Z");
+    // Most-recent post is 2026-02-12 (≈85 days back).
+    const payload = makePayload([
+      "2026-02-04T10:00:00Z",
+      "2026-02-12T10:00:00Z",
+      "2026-01-30T10:00:00Z",
+    ]);
+    const days = computeDaysSinceLastPost(payload, now);
+    expect(days).toBeGreaterThanOrEqual(84);
+    expect(days).toBeLessThanOrEqual(86);
+  });
+
+  it("returns undefined when no post has a parseable timestamp", () => {
+    const now = Date.parse("2026-05-08T12:00:00Z");
+    const payload = makePayload([null, null]);
+    expect(computeDaysSinceLastPost(payload, now)).toBeUndefined();
+  });
+
+  it("returns 0 when the most-recent post is later than now (clock skew)", () => {
+    const now = Date.parse("2026-02-04T10:00:00Z");
+    const payload = makePayload(["2026-02-05T10:00:00Z"]);
+    expect(computeDaysSinceLastPost(payload, now)).toBe(0);
+  });
+});
+
+describe("SYNTH_SYSTEM_PROMPT — Sprint 12 Phase 1A date instructions", () => {
+  it("instructs the model to populate appearanceDates parallel to appearancesIn", () => {
+    expect(SYNTH_SYSTEM_PROMPT).toContain("appearanceDates");
+    expect(SYNTH_SYSTEM_PROMPT).toContain("PARALLEL to appearancesIn");
+  });
+
+  it("instructs the model to populate citationPostDates parallel to citationPostIds", () => {
+    expect(SYNTH_SYSTEM_PROMPT).toContain("citationPostDates");
+    expect(SYNTH_SYSTEM_PROMPT).toContain("PARALLEL to citationPostIds");
+  });
+
+  it("explains the date discipline rule (slice YYYY-MM-DD from postedAtIso, omit on missing)", () => {
+    expect(SYNTH_SYSTEM_PROMPT).toContain("postedAtIso");
+    expect(SYNTH_SYSTEM_PROMPT).toContain("DATES");
   });
 });

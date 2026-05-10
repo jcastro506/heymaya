@@ -578,6 +578,12 @@ export default defineSchema({
           name: v.string(),
           appearancesIn: v.array(v.string()),
           roleSummary: v.string(),
+          // Sprint 12 Phase 1A — parallel to `appearancesIn`, ISO date strings
+          // (YYYY-MM-DD) per appearance. Same length and order as
+          // `appearancesIn`. Optional so pre-Sprint-12 rows continue to load.
+          // Lets USER.md surface ranges like "London landmarks (3 posts,
+          // Feb 4-13)" so Maya reads time, not just count.
+          appearanceDates: v.optional(v.array(v.string())),
         })
       )
     ),
@@ -595,9 +601,27 @@ export default defineSchema({
             v.literal("check-with-creator")
           ),
           citationPostIds: v.array(v.string()),
+          // Sprint 12 Phase 1A — parallel to `citationPostIds`, ISO date
+          // strings (YYYY-MM-DD), one per cited post. Same length and order.
+          // Optional so pre-Sprint-12 rows continue to load. Lets Maya cite
+          // posts by date in chat ("your Feb 4 London clip…") instead of
+          // bare reference ("your London clip…").
+          citationPostDates: v.optional(v.array(v.string())),
         })
       )
     ),
+    /**
+     * Sprint 12 Phase 1A — days between the creator's most recent post (across
+     * any platform) and `generatedAt`. The synth computes this from the input
+     * post timestamps; USER.md surfaces it in the integrated-picture summary
+     * so Maya naturally reads cadence gaps without hardcoded thresholds.
+     *
+     * Optional. When absent (no datable posts in the cache), USER.md skips
+     * the line. Re-syntheses overwrite. Skills MUST NOT branch on a
+     * threshold here — they read it alongside `openingAnswers.targetPostsPerWeek`
+     * and let Maya respond like a person.
+     */
+    daysSinceLastPost: v.optional(v.number()),
     /**
      * The 3 opening answers Maya parses out of the creator's first reply in
      * iMessage — captured by `POST /lc_maya/submit_opening_answers` (see
@@ -665,6 +689,13 @@ export default defineSchema({
         dealsFloorUsd: v.optional(v.number()),
         // 6. Anti-patterns — anything tried that didn't work, or shouldn't push toward.
         antiNiches: v.optional(v.array(v.string())),
+        // Sprint 12 Phase 1A — creator's stated target posting cadence,
+        // posts-per-week. Captured by the Phase 1B onboarding question
+        // folded into Q3 (3-month goals). Optional — pre-Phase-1B creators
+        // and creators who decline the question land here with `undefined`.
+        // USER.md surfaces this as the cadence anchor; Maya reads it
+        // alongside `daysSinceLastPost` to read gaps naturally.
+        targetPostsPerWeek: v.optional(v.number()),
       })
     ),
     /**

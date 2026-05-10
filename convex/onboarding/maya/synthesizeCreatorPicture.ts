@@ -382,6 +382,10 @@ const recurringElementValidator = v.object({
   name: v.string(),
   appearancesIn: v.array(v.string()),
   roleSummary: v.string(),
+  // Sprint 12 Phase 1A — parallel ISO-date strings (YYYY-MM-DD), one per
+  // appearancesIn entry, same order. Optional for back-compat with pre-S12
+  // rows; synth populates from post `create_time` / `createTime` / `created_at`.
+  appearanceDates: v.optional(v.array(v.string())),
 });
 
 const warmthMaterialValidator = v.object({
@@ -396,6 +400,10 @@ const warmthMaterialValidator = v.object({
     v.literal("check-with-creator")
   ),
   citationPostIds: v.array(v.string()),
+  // Sprint 12 Phase 1A — parallel ISO-date strings, one per citationPostIds
+  // entry, same order. Optional for back-compat; synth populates from post
+  // timestamps. Lets USER.md cite posts by date ("your Feb 4 London clip").
+  citationPostDates: v.optional(v.array(v.string())),
 });
 
 export const upsertSynthesizedPicture = internalMutation({
@@ -426,6 +434,11 @@ export const upsertSynthesizedPicture = internalMutation({
     visualStyle: v.optional(v.union(visualStyleValidator, v.null())),
     recurringElements: v.optional(v.array(recurringElementValidator)),
     warmthMaterial: v.optional(v.array(warmthMaterialValidator)),
+    // ─── Sprint 12 Phase 1A — integrated-picture cadence anchor ──────────
+    // Days between the creator's most recent post and `generatedAt`. Read
+    // by USER.md so Maya naturally reads cadence gaps (target 3x/week +
+    // last post 85 days ago = an obvious question, no threshold needed).
+    daysSinceLastPost: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<Id<"creatorPicture">> => {
     const existing = await ctx.db
@@ -494,6 +507,12 @@ export const upsertSynthesizedPicture = internalMutation({
     }
     if (args.warmthMaterial !== undefined) {
       synthFields.warmthMaterial = args.warmthMaterial;
+    }
+    // Sprint 12 Phase 1A — daysSinceLastPost. The synth always computes
+    // it (or leaves undefined when no datable posts exist), so the patch
+    // path forwards it whenever present.
+    if (args.daysSinceLastPost !== undefined) {
+      synthFields.daysSinceLastPost = args.daysSinceLastPost;
     }
 
     if (existing) {
@@ -634,6 +653,14 @@ interface PromptPayload {
     dealsInterest?: string;
     dealsFloorUsd?: number;
     antiNiches?: ReadonlyArray<string>;
+    /**
+     * Sprint 12 Phase 1A — creator's stated target posting cadence in
+     * posts-per-week. Phase 1B's onboarding question (folded into Q3)
+     * populates this. Synth surfaces it as an anchor; USER.md renders the
+     * "Cadence" section with this + `daysSinceLastPost` so Maya reads
+     * gaps naturally without hardcoded thresholds.
+     */
+    targetPostsPerWeek?: number;
   };
   /**
    * Sprint 4 — per-platform upstream audience demographics. May be empty
@@ -853,6 +880,8 @@ export function buildPromptPayload(
         dealsInterest: inputs.picture.openingAnswers.dealsInterest,
         dealsFloorUsd: inputs.picture.openingAnswers.dealsFloorUsd,
         antiNiches: inputs.picture.openingAnswers.antiNiches,
+        // Sprint 12 Phase 1A — cadence anchor surfaced for USER.md.
+        targetPostsPerWeek: inputs.picture.openingAnswers.targetPostsPerWeek,
       }
     : undefined;
 
@@ -885,6 +914,34 @@ export function buildPromptPayload(
   };
 
   return { payload, postsCount: totalPosts };
+}
+
+/**
+ * Sprint 12 Phase 1A — compute days-since-last-post deterministically from
+ * the prompt payload's normalized post timestamps. Returns undefined when
+ * no post in the payload has a parseable `postedAtIso` (synth ran on a
+ * profile-only payload, or the cache was missing timestamps). The call site
+ * threads this into the upsert mutation so USER.md can render it without
+ * re-walking the post cache.
+ *
+ * Pure function — `now` injected for determinism in tests.
+ */
+export function computeDaysSinceLastPost(
+  payload: PromptPayload,
+  now: number
+): number | undefined {
+  let mostRecent: number | null = null;
+  for (const pp of payload.perPlatform) {
+    for (const post of pp.posts) {
+      if (!post.postedAtIso) continue;
+      const ms = Date.parse(post.postedAtIso);
+      if (!Number.isFinite(ms)) continue;
+      if (mostRecent === null || ms > mostRecent) mostRecent = ms;
+    }
+  }
+  if (mostRecent === null) return undefined;
+  const diffMs = Math.max(0, now - mostRecent);
+  return Math.floor(diffMs / (24 * 60 * 60 * 1000));
 }
 
 /**
@@ -1414,6 +1471,7 @@ Required output schema (JSON):
       "kind": "person" | "pet" | "location" | "prop" | "format",
       "name": string,  // natural language reference: "Charlie (dog)", "the bodega cat"
       "appearancesIn": string[],  // postIds where the element appeared (each must be in sourceCitations[])
+      "appearanceDates": string[],  // PARALLEL to appearancesIn. ISO YYYY-MM-DD per entry, same order. Derived from each post's create_time / createTime / created_at (unix seconds → toISOString → "YYYY-MM-DD"). Lets Maya cite ranges like "London landmarks (Feb 4-13)" instead of just count.
       "roleSummary": string  // 1 sentence: "Charlie steals every shot — runs across frame in 3 of 5 watched"
     }
   ],
@@ -1422,7 +1480,8 @@ Required output schema (JSON):
       "kind": "compliment" | "recurring-element-callout" | "specific-moment",
       "text": string,  // 1 sentence Maya could paraphrase to the creator. NOT a fact dump.
       "confidence": "safe-to-use" | "check-with-creator",  // see rule below
-      "citationPostIds": string[]  // 1+ postIds backing the claim (each must be in sourceCitations[])
+      "citationPostIds": string[],  // 1+ postIds backing the claim (each must be in sourceCitations[])
+      "citationPostDates": string[]  // PARALLEL to citationPostIds. ISO YYYY-MM-DD per entry, same order. Same derivation as recurringElements.appearanceDates. Lets Maya cite specific posts by date ("your Feb 4 London clip — that pause is sending me") instead of bare reference ("your London clip — that pause is sending me").
     }
   ]
 }
@@ -1477,6 +1536,16 @@ MULTIMODAL FIELDS RULES:
   rule above is non-negotiable.
 - Cap warmthMaterial at 5 entries even if you saw more. Maya picks ONE to weave into her first message —
   more candidates is helpful but more than 5 is noise.
+
+- DATES — populate appearanceDates (recurringElements) and citationPostDates
+  (warmthMaterial) for every entry, parallel to the postIds arrays. Each post in
+  the input carries postedAtIso ("2026-02-04T12:34:56.789Z"); slice the date
+  portion ("2026-02-04") and emit one entry per cited postId in the SAME order.
+  Length must match the postIds array exactly. If a postedAtIso is missing on a
+  cited post, omit the date arrays entirely for that entry rather than emitting
+  a partial array. This lets Maya cite posts by date in chat ("your Feb 4
+  London clip…") instead of generic reference; downstream USER.md rendering
+  depends on it.
 
 Citation discipline:
 - Every "topHooks" entry's examplePostId must also appear in sourceCitations.
@@ -1923,13 +1992,24 @@ interface ParsedPicture {
     name: string;
     appearancesIn: string[];
     roleSummary: string;
+    /** Sprint 12 Phase 1A — parallel ISO-date list. Same length / order as appearancesIn. */
+    appearanceDates?: string[];
   }>;
   warmthMaterial?: Array<{
     kind: "compliment" | "recurring-element-callout" | "specific-moment";
     text: string;
     confidence: "safe-to-use" | "check-with-creator";
     citationPostIds: string[];
+    /** Sprint 12 Phase 1A — parallel ISO-date list. Same length / order as citationPostIds. */
+    citationPostDates?: string[];
   }>;
+  /**
+   * Sprint 12 Phase 1A — days between the creator's most recent post (across
+   * any platform) and synth `generatedAt`. Computed deterministically from
+   * the prompt payload's post timestamps, NOT model-emitted, so we can ground
+   * USER.md's cadence summary without trusting the LLM to report it.
+   */
+  daysSinceLastPost?: number;
 }
 
 export class SynthValidationError extends Error {
@@ -2323,6 +2403,7 @@ function parseRecurringElements(
   name: string;
   appearancesIn: string[];
   roleSummary: string;
+  appearanceDates?: string[];
 }> {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) {
@@ -2371,11 +2452,38 @@ function parseRecurringElements(
       }
       ids.push(id);
     }
+    // Sprint 12 Phase 1A — appearanceDates parallel array (optional). When
+    // present, length must match appearancesIn. When absent, we leave
+    // undefined and USER.md falls back to count-only rendering.
+    let appearanceDates: string[] | undefined;
+    if (e.appearanceDates !== undefined && e.appearanceDates !== null) {
+      if (!Array.isArray(e.appearanceDates)) {
+        throw new SynthValidationError(
+          `recurringElements[${i}].appearanceDates must be an array of ISO date strings (or omitted).`
+        );
+      }
+      const dates: string[] = [];
+      for (const d of e.appearanceDates) {
+        if (typeof d !== "string" || d.length === 0) {
+          throw new SynthValidationError(
+            `recurringElements[${i}].appearanceDates entries must be non-empty ISO date strings.`
+          );
+        }
+        dates.push(d);
+      }
+      if (dates.length !== ids.length) {
+        throw new SynthValidationError(
+          `recurringElements[${i}].appearanceDates length (${dates.length}) must match appearancesIn length (${ids.length}).`
+        );
+      }
+      appearanceDates = dates;
+    }
     return {
       kind: e.kind as "person" | "pet" | "location" | "prop" | "format",
       name: e.name.trim(),
       appearancesIn: ids,
       roleSummary: e.roleSummary.trim(),
+      ...(appearanceDates !== undefined ? { appearanceDates } : {}),
     };
   });
 }
@@ -2387,6 +2495,7 @@ function parseWarmthMaterial(
   text: string;
   confidence: "safe-to-use" | "check-with-creator";
   citationPostIds: string[];
+  citationPostDates?: string[];
 }> {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) {
@@ -2437,6 +2546,32 @@ function parseWarmthMaterial(
       }
       ids.push(id);
     }
+    // Sprint 12 Phase 1A — citationPostDates parallel array (optional).
+    // When present, length must match citationPostIds. Lets USER.md surface
+    // post dates inline ("your Feb 4 London clip…") so Maya cites by date.
+    let citationPostDates: string[] | undefined;
+    if (e.citationPostDates !== undefined && e.citationPostDates !== null) {
+      if (!Array.isArray(e.citationPostDates)) {
+        throw new SynthValidationError(
+          `warmthMaterial[${i}].citationPostDates must be an array of ISO date strings (or omitted).`
+        );
+      }
+      const dates: string[] = [];
+      for (const d of e.citationPostDates) {
+        if (typeof d !== "string" || d.length === 0) {
+          throw new SynthValidationError(
+            `warmthMaterial[${i}].citationPostDates entries must be non-empty ISO date strings.`
+          );
+        }
+        dates.push(d);
+      }
+      if (dates.length !== ids.length) {
+        throw new SynthValidationError(
+          `warmthMaterial[${i}].citationPostDates length (${dates.length}) must match citationPostIds length (${ids.length}).`
+        );
+      }
+      citationPostDates = dates;
+    }
     return {
       kind: e.kind as
         | "compliment"
@@ -2445,6 +2580,7 @@ function parseWarmthMaterial(
       text: e.text.trim(),
       confidence: e.confidence as "safe-to-use" | "check-with-creator",
       citationPostIds: ids,
+      ...(citationPostDates !== undefined ? { citationPostDates } : {}),
     };
   });
 }
@@ -3198,6 +3334,12 @@ export const synthesizeCreatorPicture = internalAction({
     const derivedFollowerMilestone = syntheticFollowerMilestone(topFollowers);
     const derivedFocusArea = focusAreaForStage(parsed.careerStage);
     const generatedAtTs = Date.now();
+    // Sprint 12 Phase 1A — deterministic cadence anchor. Computed from the
+    // prompt payload (normalized `postedAtIso` per post) so USER.md can
+    // surface it in the integrated-picture summary without re-walking the
+    // post cache. Undefined when no post in the payload had a parseable
+    // timestamp (profile-only / mid-rollout cache).
+    const daysSinceLastPost = computeDaysSinceLastPost(payload, generatedAtTs);
 
     // Sprint 6 — anchor invariant check. If the model emitted a picture
     // claim that contradicts an openingAnswers anchor without surfacing
@@ -3301,6 +3443,10 @@ export const synthesizeCreatorPicture = internalAction({
             : {}),
           ...(parsed.warmthMaterial !== undefined
             ? { warmthMaterial: parsed.warmthMaterial }
+            : {}),
+          // Sprint 12 Phase 1A — cadence anchor.
+          ...(daysSinceLastPost !== undefined
+            ? { daysSinceLastPost }
             : {}),
         }
       );
