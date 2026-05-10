@@ -355,6 +355,27 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
         hit,
         `${job.id} payload contains control char U+${hit?.[0]?.charCodeAt(0).toString(16).padStart(4, "0")} — JSON-fragile, will break the bootstrap shell`
       ).toBeNull();
+      // Sprint 12 Phase 2.1 — guard against invalid JSON escape sequences.
+      // The TS source \\' produces the literal 2-char sequence \' in the
+      // string. JSON spec doesn't allow \' as a valid escape (only
+      // \" \\ \/ \b \f \n \r \t \uXXXX), so when MAYA_BOOTSTRAP_JSON
+      // gets passed through `jq` in the bootstrap shell the parser
+      // chokes with "Invalid escape at line 1, column NNNN" and the
+      // Fly machine enters a crash loop. Real-world hit on 2026-05-10:
+      // Maya never sent her kickstart because every machine reboot
+      // crashed inside the deploy boot script. Use plain ' or rephrase
+      // any example that wants to quote a creator's catchphrase.
+      const escapeHit = text.match(/\\['"abfnrtv0]/g)?.filter((m) => {
+        // Allow the explicit JSON-valid escapes that round-trip cleanly
+        // through JSON.stringify (e.g., \\\" gets re-stringified safely).
+        // We only flag literal backslash-singlequote (\') and the rarer
+        // unescaped \v / \0 which jq also rejects.
+        return m === "\\'" || m === "\\v" || m === "\\0";
+      });
+      expect(
+        escapeHit?.length ?? 0,
+        `${job.id} payload contains invalid JSON escape sequence (${escapeHit?.[0]}) — will break jq parsing in the bootstrap shell. Use plain quote instead.`
+      ).toBe(0);
     }
   });
 
