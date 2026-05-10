@@ -17,6 +17,21 @@ export const metadata: Metadata = {
     "Maya helps creators and businesses plan content, understand what is working, schedule around real life, and follow up from messages.",
 };
 
+// Sprint 12.3 (2026-05-10) — landing mode switch.
+// Production (heymaya.com): mode="waitlist" → primary CTA is "Join the
+// Waitlist" + secondary "For Businesses" (since the consumer creator
+// product is pre-launch). Set NEXT_PUBLIC_HEYMAYA_LANDING_MODE=waitlist
+// in Vercel production env vars.
+// Staging / preview / dev: mode="signup" (default) → keeps the existing
+// "Sign up" / "Sign in" CTAs so we can keep onboarding test creators
+// against the staging Convex deployment.
+type LandingMode = "waitlist" | "signup";
+const LANDING_MODE: LandingMode =
+  (process.env.NEXT_PUBLIC_HEYMAYA_LANDING_MODE as LandingMode | undefined) ===
+  "waitlist"
+    ? "waitlist"
+    : "signup";
+
 const features = [
   {
     icon: <UserRound className="h-5 w-5" />,
@@ -68,15 +83,31 @@ export default function Home() {
           HeyMaya
         </Link>
         <nav className="flex items-center gap-4 text-sm text-paper-dim">
-          <Link href="/sign-in" className="hover:text-paper">
-            Sign in
-          </Link>
-          <Link
-            href="/sign-up?redirect_url=/creator-maya-v0"
-            className="inline-flex min-h-10 items-center rounded-md bg-paper px-4 font-medium text-black transition hover:bg-white"
-          >
-            Sign up
-          </Link>
+          {LANDING_MODE === "waitlist" ? (
+            <>
+              <Link href="/business" className="hover:text-paper">
+                For Businesses
+              </Link>
+              <Link
+                href="/waitlist"
+                className="inline-flex min-h-10 items-center rounded-md bg-paper px-4 font-medium text-black transition hover:bg-white"
+              >
+                Join the Waitlist
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link href="/sign-in" className="hover:text-paper">
+                Sign in
+              </Link>
+              <Link
+                href="/sign-up?redirect_url=/creator-maya-v0"
+                className="inline-flex min-h-10 items-center rounded-md bg-paper px-4 font-medium text-black transition hover:bg-white"
+              >
+                Sign up
+              </Link>
+            </>
+          )}
         </nav>
       </header>
 
@@ -93,19 +124,39 @@ export default function Home() {
             it, what deserves follow-up, and what the next move should be.
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
-            <Link
-              href="/sign-up?redirect_url=/creator-maya-v0"
-              className="inline-flex min-h-12 items-center gap-2 rounded-md bg-paper px-5 text-sm font-medium text-black transition hover:bg-white"
-            >
-              Sign up
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-            <Link
-              href="/sign-in"
-              className="inline-flex min-h-12 items-center rounded-md border border-[var(--hairline-strong)] px-5 text-sm text-paper-dim transition hover:text-paper"
-            >
-              Sign in
-            </Link>
+            {LANDING_MODE === "waitlist" ? (
+              <>
+                <Link
+                  href="/waitlist"
+                  className="inline-flex min-h-12 items-center gap-2 rounded-md bg-paper px-5 text-sm font-medium text-black transition hover:bg-white"
+                >
+                  Join the Waitlist
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+                <Link
+                  href="/business"
+                  className="inline-flex min-h-12 items-center rounded-md border border-[var(--hairline-strong)] px-5 text-sm text-paper-dim transition hover:text-paper"
+                >
+                  For Businesses
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/sign-up?redirect_url=/creator-maya-v0"
+                  className="inline-flex min-h-12 items-center gap-2 rounded-md bg-paper px-5 text-sm font-medium text-black transition hover:bg-white"
+                >
+                  Sign up
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+                <Link
+                  href="/sign-in"
+                  className="inline-flex min-h-12 items-center rounded-md border border-[var(--hairline-strong)] px-5 text-sm text-paper-dim transition hover:text-paper"
+                >
+                  Sign in
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </section>

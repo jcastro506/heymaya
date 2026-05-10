@@ -3726,6 +3726,22 @@ export default defineSchema({
     .index("by_account_and_status", ["accountId", "status"])
     .index("by_account_and_platform", ["accountId", "platform"]),
 
+  // Sprint 12.3 — HeyMaya's own product waitlist. Distinct from
+  // `growthWaitlist` (which is per-creator Riley signups for THEIR products).
+  // This table is for emails captured on heymaya.com when LANDING_MODE=
+  // waitlist (production, pre-launch creator product). De-duplicated by
+  // lower-cased email; latest signup wins.
+  mayaProductWaitlist: defineTable({
+    email: v.string(),
+    /** Optional name field if the form ever asks for it; unused in v0. */
+    name: v.optional(v.string()),
+    /** Free-form referrer / UTM source. "homepage" is the default. */
+    source: v.string(),
+    signedUpAt: v.number(),
+  })
+    .index("by_email", ["email"])
+    .index("by_signed_up", ["signedUpAt"]),
+
   // Waitlist signups Riley tracks for the operator's product. Provenance
   // tells the operator which post / outreach drove each signup.
   growthWaitlist: defineTable({

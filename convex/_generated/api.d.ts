@@ -196,6 +196,7 @@ import type * as voice_pinChallenge from "../voice/pinChallenge.js";
 import type * as voice_sensitiveOps from "../voice/sensitiveOps.js";
 import type * as voice_transcriptHttp from "../voice/transcriptHttp.js";
 import type * as voice_transcripts from "../voice/transcripts.js";
+import type * as waitlist_mayaProductWaitlist from "../waitlist/mayaProductWaitlist.js";
 import type * as webhooks_crm from "../webhooks/crm.js";
 import type * as webhooks_qbo from "../webhooks/qbo.js";
 import type * as wikiProjections from "../wikiProjections.js";
@@ -395,6 +396,7 @@ declare const fullApi: ApiFromModules<{
   "voice/sensitiveOps": typeof voice_sensitiveOps;
   "voice/transcriptHttp": typeof voice_transcriptHttp;
   "voice/transcripts": typeof voice_transcripts;
+  "waitlist/mayaProductWaitlist": typeof waitlist_mayaProductWaitlist;
   "webhooks/crm": typeof webhooks_crm;
   "webhooks/qbo": typeof webhooks_qbo;
   wikiProjections: typeof wikiProjections;
