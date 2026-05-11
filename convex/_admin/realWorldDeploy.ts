@@ -264,3 +264,198 @@ export const redeployForCreator = internalAction({
     return { ok: true, destroyed, deploy };
   },
 });
+
+/**
+ * Sprint 12.6+ — nuclear wipe. Empties every table in the schema so the
+ * deployment is back to first-boot state. Use after `wipeEverything` when
+ * the operator wants a TRULY fresh start (no waitlist rows, no orphaned
+ * onboardingJobs, no cron heartbeat history, no usage events, etc.) —
+ * not just the creator-scoped cascade.
+ *
+ * Usage:
+ *   npx convex run _admin/realWorldDeploy:wipeEntireDatabase '{}'
+ *
+ * Safety: this is destructive and irreversible. The action explicitly
+ * enumerates every table from `convex/schema.ts`; tables added later
+ * MUST be appended here or they'll be skipped. The `creators` table is
+ * intentionally last so creator-cascade tables get wiped first (defense
+ * in depth — `wipeEverything` should have run already, but this is
+ * idempotent if it hasn't).
+ *
+ * Returns per-table delete counts so the operator can sanity-check the
+ * wipe touched what they expected.
+ */
+const ALL_TABLES = [
+  // Creator-scoped (creator-cascade runs in wipeEverything but listed here
+  // for the nuclear path too — second wipe is a cheap no-op).
+  "creatorPicture",
+  "creatorHandles",
+  "connectedAccounts",
+  "appleCalendarConnections",
+  "creatorFollowerSnapshots",
+  "scrapeCreatorsCreditAudit",
+  "calendarEventOptOuts",
+  "posts",
+  "postMetrics",
+  "dailyBriefs",
+  "weeklyReviews",
+  "hookLibrary",
+  "contentPlans",
+  "brandDeals",
+  "packetGenerations",
+  "mayaActionLog",
+  "pitchOutreach",
+  "brandContacts",
+  "opportunityScoutSeen",
+  "monetizationProposalLog",
+  "collabMatchLog",
+  "postPostmortems",
+  "trendObservations",
+  "competitorObservations",
+  "weeklyLearningsCreator",
+  "pairedChannels",
+  "accountDeletionRequests",
+  "opportunitySurface",
+  "firstProactivePings",
+  "oauthStateTokens",
+  // Service-business cascade.
+  "businessPicture",
+  "gbpLocations",
+  "serviceCustomers",
+  "serviceJobs",
+  "gbpPosts",
+  "reviews",
+  "reviewRequests",
+  "serviceContent",
+  "inboundLeads",
+  "crmConnections",
+  "voiceChannels",
+  "voiceCallTranscripts",
+  "voiceUsage",
+  "mediaAssets",
+  "customSkills",
+  "approvalRules",
+  "zernioConnections",
+  "mayaTaskQueue",
+  "wikiProjections",
+  "weeklyLearnings",
+  "gbpHealthScores",
+  "serviceTelemetry",
+  "growthAgents",
+  "growthPosts",
+  // Top-level / shared.
+  "mayaProductWaitlist",
+  "growthWaitlist",
+  "usageEvents",
+  "cronHeartbeat",
+  "aiCallLog",
+  "scrapeCreatorsCache",
+  "platformAlgoCache",
+  "industryIntelSeen",
+  "gmailWebhookEvents",
+  "stripeWebhookEvents",
+  "webhookEvents",
+  "onboardingJobs",
+  "businesses",
+  // Wiped last so creator-cascade tables clear before the FK targets.
+  "creators",
+] as const;
+
+/**
+ * Delete up to `batchSize` rows from one table. Returns the count deleted
+ * and whether more rows remain. Called by `wipeEntireDatabase` in a loop
+ * to stay under Convex's 16MB-per-mutation read limit (which the
+ * scrapeCreatorsCache + aiCallLog tables can blow in a single sweep).
+ */
+export const wipeTableBatch = internalMutation({
+  args: { table: v.string(), batchSize: v.number() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ deleted: number; hasMore: boolean }> => {
+    const rows = await ctx.db
+      .query(args.table as never)
+      .take(args.batchSize);
+    for (const row of rows) {
+      await ctx.db.delete((row as { _id: never })._id);
+    }
+    return { deleted: rows.length, hasMore: rows.length === args.batchSize };
+  },
+});
+
+export const wipeEntireDatabase = internalAction({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{ counts: Record<string, number>; totalDeleted: number }> => {
+    const counts: Record<string, number> = {};
+    let totalDeleted = 0;
+    // Very small batch — scrapeCreatorsCache rows can be 100KB+ each (full
+    // platform API responses), so a 200-row batch can exceed Convex's 16MB
+    // read limit. 25 rows × 100KB = 2.5MB, safe headroom.
+    const BATCH_SIZE = 25;
+    for (const table of ALL_TABLES) {
+      let tableTotal = 0;
+      let safety = 0;
+      while (true) {
+        const result: { deleted: number; hasMore: boolean } = await ctx.runMutation(
+          internal._admin.realWorldDeploy.wipeTableBatch,
+          { table, batchSize: BATCH_SIZE }
+        );
+        tableTotal += result.deleted;
+        if (!result.hasMore) break;
+        safety += 1;
+        if (safety > 500) {
+          console.error(
+            `[wipeEntireDatabase] aborted ${table} after 500 batches — investigate`
+          );
+          break;
+        }
+      }
+      counts[table] = tableTotal;
+      totalDeleted += tableTotal;
+      console.log(`[wipeEntireDatabase] ${table}: ${tableTotal}`);
+    }
+    return { counts, totalDeleted };
+  },
+});
+
+/**
+ * Sprint 12.6+ — nuclear: wipe every table AND every maya-* Fly app.
+ * Calls `wipeEverything` first (creator-cascade + Fly destroy) then runs
+ * `wipeEntireDatabase` to clear non-creator-scoped tables (waitlist rows,
+ * orphaned cron heartbeats, service-business tables, etc.).
+ *
+ * Usage:
+ *   npx convex run _admin/realWorldDeploy:wipeEverythingNuclear '{}'
+ */
+export const wipeEverythingNuclear = internalAction({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{
+    creatorCascade: { wipedCount: number };
+    fly: { destroyed: string[]; failed: string[] };
+    everyTable: { counts: Record<string, number>; totalDeleted: number };
+  }> => {
+    const creatorWipe = await ctx.runAction(
+      internal._admin.realWorldDeploy.wipeEverything,
+      {}
+    );
+    console.log(
+      `[wipeEverythingNuclear] creator-cascade + Fly done: ${creatorWipe.convex.wipedCount} creators, ${creatorWipe.fly.destroyed.length} apps`
+    );
+    const dbWipe = await ctx.runAction(
+      internal._admin.realWorldDeploy.wipeEntireDatabase,
+      {}
+    );
+    console.log(
+      `[wipeEverythingNuclear] every-table wipe: ${dbWipe.totalDeleted} rows across ${Object.keys(dbWipe.counts).length} tables`
+    );
+    return {
+      creatorCascade: creatorWipe.convex,
+      fly: creatorWipe.fly,
+      everyTable: dbWipe,
+    };
+  },
+});
