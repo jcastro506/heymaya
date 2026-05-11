@@ -1753,6 +1753,123 @@ export const fetchTrendsLiveHttp = httpAction(async (ctx, request) => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* Sprint 12.7.1 — connected_accounts_health                                    */
+/*                                                                              */
+/* Maya's first instinct on "did the OAuth land?" is to hit a single endpoint   */
+/* that says yes/no, not to call gmail_list_inbox or calendar_list_events as a  */
+/* proxy. Pre-12.7.1 those were her only options; she invented                 */
+/* `/lc_maya/connected_accounts_health` herself on the Kevin re-onboard and got */
+/* 404. This endpoint exists so she doesn't have to.                            */
+/*                                                                              */
+/* Returns connection state for Google (calendar + gmail share one connection   */
+/* row, surfaced as separate booleans) and Apple Calendar (when present).       */
+/* Stateless query — no API roundtrips, just DB reads. ~10ms.                   */
+/* -------------------------------------------------------------------------- */
+
+interface ConnectedAccountsHealthPayload {
+  secret: string;
+  creatorId: string;
+}
+
+function parseConnectedAccountsHealthPayload(
+  raw: unknown
+): ConnectedAccountsHealthPayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") {
+    throw new Error("secret must be a string.");
+  }
+  if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+    throw new Error("creatorId is required.");
+  }
+  return { secret: obj.secret, creatorId: obj.creatorId };
+}
+
+export const connectedAccountsHealthInternal = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, args) => {
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) {
+      throw new Error("creator-not-found");
+    }
+    const googleConnection = await ctx.db
+      .query("creatorMayaV0CalendarConnections")
+      .withIndex("by_creator", (q) => q.eq("creatorId", args.creatorId))
+      .order("desc")
+      .first();
+    const appleConnection = await ctx.db
+      .query("appleCalendarConnections")
+      .withIndex("by_creator", (q) => q.eq("creatorId", args.creatorId))
+      .order("desc")
+      .first();
+    const googleScopes = (googleConnection?.oauthScope ?? "")
+      .split(/\s+/)
+      .filter((s) => s.length > 0);
+    const calendarConnected =
+      Boolean(googleConnection) &&
+      googleScopes.some(
+        (s) =>
+          s === "https://www.googleapis.com/auth/calendar.events" ||
+          s === "https://www.googleapis.com/auth/calendar.readonly" ||
+          s === "https://www.googleapis.com/auth/calendar"
+      );
+    const gmailConnected =
+      Boolean(googleConnection) &&
+      googleScopes.includes("https://www.googleapis.com/auth/gmail.modify");
+    return {
+      calendar: {
+        connected: calendarConnected,
+        provider: calendarConnected
+          ? ("google" as const)
+          : appleConnection
+            ? ("apple" as const)
+            : null,
+        scopes: googleScopes.filter((s) => s.includes("/calendar")),
+        expiresAt: googleConnection?.oauthExpiresAt ?? null,
+        connectedAt: googleConnection?._creationTime ?? null,
+      },
+      gmail: {
+        connected: gmailConnected,
+        scopes: googleScopes.filter((s) => s.includes("/gmail")),
+        expiresAt: googleConnection?.oauthExpiresAt ?? null,
+      },
+      apple_calendar: {
+        connected: Boolean(appleConnection),
+      },
+    };
+  },
+});
+
+export const connectedAccountsHealthHttp = httpAction(async (ctx, request) => {
+  let payload: ConnectedAccountsHealthPayload;
+  try {
+    payload = parseConnectedAccountsHealthPayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+  try {
+    const result = await ctx.runQuery(
+      internal.lcMaya.lcMayaHttp.connectedAccountsHealthInternal,
+      { creatorId: payload.creatorId as Id<"creators"> }
+    );
+    return jsonResponse({ ok: true, ...result }, 200);
+  } catch (err) {
+    const msg = (err as Error).message ?? "internal-error";
+    if (msg === "creator-not-found") {
+      return jsonResponse({ error: "creator-not-found" }, 404);
+    }
+    return jsonResponse({ error: msg }, 500);
+  }
+});
+
+/* -------------------------------------------------------------------------- */
 /* Sprint 12.7 Phase 2 — validate_trend_citation                                */
 /*                                                                              */
 /* Maya hits this BEFORE every outbound send that mentions a trend. The         */

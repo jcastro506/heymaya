@@ -119,3 +119,34 @@ describe("standing orders — trend-grounding coherence (Sprint 12.7 Phase 3)", 
     expect(md).toContain("### Chat trend lookup (on-demand)");
   });
 });
+
+describe("AGENTS.md Sprint 12.7.1 fixes — connection-health + fake-busy ban", () => {
+  it("verification rule points at /lc_maya/connected_accounts_health, NOT gmail_list_inbox-as-proxy", () => {
+    const md = renderAgentsMdForPlan("manager");
+    expect(md).toContain("/lc_maya/connected_accounts_health");
+    // The pre-12.7.1 rule used gmail_list_inbox/list-calendars as a verification
+    // proxy with maxResults:1; that produced 400s on calendar_list_events when
+    // Maya skipped the required timeMin/timeMax args. The 12.7.1 rule warns
+    // against using those endpoints for health-checks.
+    expect(md).toMatch(/Do NOT use `gmail_list_inbox`|verification proxy/);
+  });
+
+  it("fake-busy rule explicitly bans 'Give me a second' and variants", () => {
+    const md = renderAgentsMdForPlan("manager");
+    // The actual confabulation phrasings Maya emitted on the Kevin re-onboard:
+    expect(md).toContain('"Give me a second."');
+    expect(md).toContain('"One sec."');
+    expect(md).toContain('"Let me think."');
+    expect(md).toContain('"Hold on."');
+    // The Sprint 12.7 Kevin re-onboard failure should be named in the rule:
+    expect(md).toMatch(/Kevin re-onboard failure|banned by name/);
+  });
+
+  it("fake-busy rule explains the architectural reality (no self-trigger between turns)", () => {
+    const md = renderAgentsMdForPlan("manager");
+    // The rule has to teach Maya WHY — she has one turn per inbound; nothing
+    // wakes her until the next cron / heartbeat / inbound. Otherwise she'll
+    // keep promising future follow-ups she can't deliver.
+    expect(md).toMatch(/ONE turn per inbound|cannot "come back/);
+  });
+});

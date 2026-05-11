@@ -17,6 +17,7 @@ import { voiceTranscriptHttp } from "./voice/transcriptHttp";
 import { openClawMediaIngestHttp } from "./creatorMayaV0/openClawMediaIngestHttp";
 import {
   completeGoogleCalendarOAuthHttp,
+  connectedAccountsHealthHttp,
   cronHeartbeatHttp,
   fetchTrendsLiveHttp,
   getRecentTrendsHttp,
@@ -128,6 +129,15 @@ http.route({
   path: "/lc_maya/validate_trend_citation",
   method: "POST",
   handler: validateTrendCitationHttp,
+});
+// Sprint 12.7.1 — canonical "is the OAuth landed?" check. Pre-12.7.1 Maya was
+// forced to call gmail_list_inbox or calendar_list_events (which both require
+// extra args) as a proxy; on the Kevin re-onboard she confabulated an endpoint
+// at this exact path. This is the endpoint she was reaching for.
+http.route({
+  path: "/lc_maya/connected_accounts_health",
+  method: "POST",
+  handler: connectedAccountsHealthHttp,
 });
 // Wave 0b — append-only cron heartbeat receipt. Maya hits this from a
 // `cron.heartbeat` standing order so we have ground-truth that OpenClaw
