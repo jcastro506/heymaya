@@ -1572,7 +1572,12 @@ export default defineSchema({
       v.literal("niche-scan"),
       v.literal("platform-wide"),
       v.literal("industry-intel"),
-      v.literal("competitor-watch")
+      v.literal("competitor-watch"),
+      // Sprint 12.7 Phase 1 — chat-time live fetch via `fetchTrendsLiveHttp`.
+      // Maya promotes candidates from a live ScrapeCreators trending pull into
+      // grounded observations she ships in chat. Lets the integrated-read pre-check
+      // distinguish "fresh on-demand" from cron-driven niche-scan.
+      v.literal("chat-on-demand")
     ),
     observation: v.string(),
     evidence: v.array(

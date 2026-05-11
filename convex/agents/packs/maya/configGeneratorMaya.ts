@@ -103,6 +103,14 @@ export interface GatewayConfig {
        */
       bootstrapMaxChars: number;
       /**
+       * Total char cap for ALL embedded-context bootstrap files combined.
+       * OpenClaw default is 60,000. Per-file injects are clamped to
+       * `min(bootstrapMaxChars, remainingTotalChars)`, so an undersized total
+       * silently truncates per-file caps. Sized 200K so AGENTS.md + USER.md +
+       * SOUL.md + IDENTITY.md + HEARTBEAT.md + jobs.json all fit.
+       */
+      bootstrapTotalMaxChars: number;
+      /**
        * OpenClaw's default model selector. Must be a provider-qualified ref,
        * e.g. `openrouter/google/gemini-3-flash-preview`.
        */
@@ -329,7 +337,23 @@ export interface BuildInputs {
 // Cost on Gemini 1M context is trivial; this keeps the voice rules embedded
 // alongside the standing-order inventory without forcing the split-out
 // fallback path.
-export const MAYA_BOOTSTRAP_MAX_CHARS = 80_000;
+// Sprint 12.7 — 80K → 100K. Adding the trend-grounding section + the new
+// `chat_trend_lookup` standing order to AGENTS.md pushed the inline-embed
+// merged size past 80K, triggering the bundler's split-fallback that emits a
+// separate `standing-orders.md` file. That file isn't in OpenClaw's canonical
+// bootstrap-inject list, so the split would silently drop Maya's standing
+// orders from the system prompt. 100K keeps the inline embed coherent with
+// room to spare for future additions.
+export const MAYA_BOOTSTRAP_MAX_CHARS = 100_000;
+
+// Sprint 12.7 Phase 0 — embedded-context total budget. OpenClaw's
+// `agents.defaults.bootstrapTotalMaxChars` defaults to 60K; per-file injects
+// are clamped to `min(bootstrapMaxChars, remainingTotalChars)`. With our 80K
+// per-file cap but no total override, AGENTS.md (76K) was eating ~all of the
+// default 60K total and starving USER.md / SOUL.md / IDENTITY.md / HEARTBEAT.md
+// / jobs.json out of the inject. 200K leaves comfortable headroom for the
+// full workspace plus future growth before another cap bump is needed.
+export const MAYA_BOOTSTRAP_TOTAL_MAX_CHARS = 200_000;
 
 /**
  * Build the OpenClaw config + workspace bundle for one creator. Pure function
@@ -400,6 +424,7 @@ export function buildMayaConfig(inputs: BuildInputs, now: number): MayaConfigBun
     agents: {
       defaults: {
         bootstrapMaxChars: MAYA_BOOTSTRAP_MAX_CHARS,
+        bootstrapTotalMaxChars: MAYA_BOOTSTRAP_TOTAL_MAX_CHARS,
         workspace: "/data/workspace",
         memorySearch: {
           sync: {

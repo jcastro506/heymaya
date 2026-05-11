@@ -45,6 +45,7 @@
 
 import {
   httpAction,
+  internalAction,
   internalMutation,
   internalQuery,
 } from "../_generated/server";
@@ -77,6 +78,7 @@ const TREND_SOURCE_LITERALS = [
   "platform-wide",
   "industry-intel",
   "competitor-watch",
+  "chat-on-demand",
 ] as const;
 
 const TREND_EVIDENCE_KIND_LITERALS = [
@@ -1092,6 +1094,166 @@ function isTrendEvidenceKind(value: unknown): value is TrendEvidenceKind {
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* Sprint 12.7 Phase 2 — citation firewall (URL detection + trend-shape gate). */
+/*                                                                              */
+/* Maya's chat-time confabulation problem: she names "trends" without          */
+/* citing them, because Gemini's training data is full of generic              */
+/* niche-content tropes that pattern-match against any creator's lane.         */
+/*                                                                              */
+/* These helpers are exported so the standing-order pre-check (callable via    */
+/* `/lc_maya/validate_trend_citation`) and the hard gate on `log_trend`        */
+/* chat-on-demand persistence share one URL-recognition regex set.             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Platform URL recognizers — host + path heuristic per platform. Accepts the
+ * canonical shape ScrapeCreators returns plus the share/short forms creators
+ * paste. Returns the matched URL substrings in document order.
+ */
+export function extractPlatformUrls(text: string): string[] {
+  if (typeof text !== "string" || text.length === 0) return [];
+  // One combined regex: scans for http(s)://... and we filter by host below.
+  const urlRe = /https?:\/\/[^\s<>"'`]+/gi;
+  const out: string[] = [];
+  for (const match of text.matchAll(urlRe)) {
+    const url = match[0].replace(/[.,)\]\}>;:!?]+$/, "");
+    if (isPlatformPostUrl(url)) {
+      out.push(url);
+    }
+  }
+  return out;
+}
+
+/**
+ * True when `url` is recognizably a public post / video / reel on a supported
+ * platform. Used by the citation firewall to allow grounded trend pitches and
+ * to reject confabulated ones. Profile / hashtag pages do NOT count — only
+ * specific posts.
+ */
+export function isPlatformPostUrl(url: string): boolean {
+  if (typeof url !== "string") return false;
+  let host: string;
+  let path: string;
+  try {
+    const u = new URL(url);
+    host = u.host.replace(/^www\./, "").toLowerCase();
+    path = u.pathname;
+  } catch {
+    return false;
+  }
+  // TikTok — full or short. Numeric video IDs in production; we accept any
+  // word-character ID so test fixtures + future ID-format changes don't trip
+  // this gate.
+  if (host === "tiktok.com" && /\/@[\w.\-]+\/video\/[\w\-]+/.test(path)) return true;
+  if (host === "vm.tiktok.com" || host === "vt.tiktok.com") {
+    return /^\/\w+/.test(path);
+  }
+  // Instagram — posts and reels (story URLs are ephemeral; not a real citation).
+  if (host === "instagram.com" && /^\/(p|reel|tv)\/[\w\-]+/.test(path)) return true;
+  // YouTube — long-form, Shorts, share form.
+  if (host === "youtube.com" && /^\/watch/.test(path)) return true;
+  if (host === "youtube.com" && /^\/shorts\/[\w\-]+/.test(path)) return true;
+  if (host === "youtu.be" && /^\/[\w\-]+/.test(path)) return true;
+  // X / Twitter — status URL.
+  if ((host === "x.com" || host === "twitter.com") && /^\/[\w]+\/status\/\d+/.test(path)) {
+    return true;
+  }
+  // LinkedIn — feed updates / posts (`linkedin.com/posts/<urn>` or
+  // `linkedin.com/feed/update/urn:li:activity:<id>`).
+  if (host === "linkedin.com" && /^\/(posts|feed\/update)\b/.test(path)) return true;
+  // Pinterest — pin URLs (creator UX, also used as discovery citations).
+  if (host === "pinterest.com" && /^\/pin\/[\w]+/.test(path)) return true;
+  return false;
+}
+
+/**
+ * Lower-case match: does the text talk about trends in a way that should be
+ * grounded with a citation? Conservative — false positives are cheap (the
+ * citation check pass-throughs on a real URL), false negatives let
+ * confabulation slip through.
+ *
+ * Banned-but-detectable language matrix:
+ *   - "trend" / "trending" / "viral" / "going viral" / "blowing up"
+ *   - "I'm seeing" / "saw a couple things"
+ *   - "real-time" / "right now in your lane"
+ *   - "people are doing" / "everyone is making"
+ *   - "X is hitting" / "X is hot"
+ */
+const TREND_SHAPE_PATTERNS: RegExp[] = [
+  /\btrend(ing|s)?\b/i,
+  /\bviral\b/i,
+  /\bgoing viral\b/i,
+  /\bblowing up\b/i,
+  /\b(saw|seeing|watching|noticed)\s+(a|some|this|that|the|couple|few|stuff|trend|hashtag|format)\b/i,
+  /\bright now\s+(in|on|across)\b/i,
+  /\breal[- ]time\b/i,
+  /\b(everyone|people|creators)\s+(is|are)\s+(making|doing|posting|using|riding)\b/i,
+  /\bis hitting\b/i,
+];
+
+export interface TrendCitationCheck {
+  ok: boolean;
+  mentionsTrend: boolean;
+  urlsFound: string[];
+  blockedReason: string | null;
+  suggestedFix: string | null;
+}
+
+/**
+ * Pure function — given a draft Maya outbound message, return a pass/fail
+ * verdict on whether trend-shaped claims are grounded by ≥1 platform-post URL.
+ *
+ * Semantics:
+ *   - mentionsTrend = false → always ok (message doesn't claim a trend)
+ *   - mentionsTrend = true && urlsFound.length > 0 → ok (claim is grounded)
+ *   - mentionsTrend = true && urlsFound.length = 0 → BLOCK
+ *
+ * Maya's required response on a block:
+ *   1. Drop the trend reference and ship the rest, OR
+ *   2. Stay silent on trends this turn, OR
+ *   3. Call `fetch_trends_live`, score, and re-emit with a real URL inline.
+ */
+export function checkTrendCitation(message: string): TrendCitationCheck {
+  if (typeof message !== "string" || message.length === 0) {
+    return {
+      ok: true,
+      mentionsTrend: false,
+      urlsFound: [],
+      blockedReason: null,
+      suggestedFix: null,
+    };
+  }
+  const mentionsTrend = TREND_SHAPE_PATTERNS.some((re) => re.test(message));
+  const urlsFound = extractPlatformUrls(message);
+  if (!mentionsTrend) {
+    return {
+      ok: true,
+      mentionsTrend: false,
+      urlsFound,
+      blockedReason: null,
+      suggestedFix: null,
+    };
+  }
+  if (urlsFound.length > 0) {
+    return {
+      ok: true,
+      mentionsTrend: true,
+      urlsFound,
+      blockedReason: null,
+      suggestedFix: null,
+    };
+  }
+  return {
+    ok: false,
+    mentionsTrend: true,
+    urlsFound: [],
+    blockedReason: "trend-mention-without-citation",
+    suggestedFix:
+      "Drop the trend reference, OR include a real platform post URL inline (tiktok.com/@…/video/…, instagram.com/p/…, instagram.com/reel/…, youtube.com/shorts/…, x.com/…/status/…).",
+  };
+}
+
 function parseLogTrendPayload(raw: unknown): LogTrendPayload {
   if (!raw || typeof raw !== "object") {
     throw new Error("Body must be a JSON object.");
@@ -1147,6 +1309,19 @@ function parseLogTrendPayload(raw: unknown): LogTrendPayload {
   ) {
     throw new Error("relevanceScore must be in [0, 1].");
   }
+  // Sprint 12.7 Phase 2 — hard gate: chat-on-demand survivors MUST cite a
+  // platform-post URL in at least one evidence row's `ref`. Cron-driven
+  // sources are exempt — they already pull from ScrapeCreators and write
+  // real URLs by design — but the chat-time persistence path is where
+  // confabulation slipped through pre-12.7.
+  if (obj.source === "chat-on-demand") {
+    const hasPlatformUrl = evidence.some((e) => isPlatformPostUrl(e.ref));
+    if (!hasPlatformUrl) {
+      throw new Error(
+        "chat-on-demand source requires at least one evidence.ref that is a recognizable platform-post URL (tiktok.com/@…/video/…, instagram.com/p/…, instagram.com/reel/…, youtube.com/shorts/…, x.com/…/status/…)."
+      );
+    }
+  }
   return {
     secret: obj.secret,
     creatorId: obj.creatorId,
@@ -1164,7 +1339,8 @@ export const logTrendInternal = internalMutation({
       v.literal("niche-scan"),
       v.literal("platform-wide"),
       v.literal("industry-intel"),
-      v.literal("competitor-watch")
+      v.literal("competitor-watch"),
+      v.literal("chat-on-demand")
     ),
     observation: v.string(),
     evidence: v.array(
@@ -1233,6 +1409,397 @@ export const logTrendHttp = httpAction(async (ctx, request) => {
     }
     return jsonResponse({ error: msg }, 500);
   }
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 12.7 Phase 1 — get_recent_trends + fetch_trends_live                  */
+/*                                                                              */
+/* Two endpoints Maya hits at chat-time to ground trend pitches in real data:   */
+/*                                                                              */
+/* 1. `get_recent_trends` — read trendObservations the crons already wrote.     */
+/*    Cache-first path: integrated-read pre-check tells Maya to hit this first  */
+/*    before claiming any trend. Returns cached rows from the last 24h (default)*/
+/*    or the requested window.                                                  */
+/*                                                                              */
+/* 2. `fetch_trends_live` — when the cache is empty/stale, Maya calls this to   */
+/*    pull a fresh ScrapeCreators trending-feed sample. Returns the raw         */
+/*    NormalizedPost array (URLs + captions + metrics). Maya scores fit         */
+/*    against creatorPicture in her own turn, then calls `log_trend` to persist */
+/*    survivors with `source='chat-on-demand'`. The endpoint itself does NOT    */
+/*    do scoring — that's Maya's judgment call.                                 */
+/*                                                                              */
+/* Auth: both require `assertWebhookSecret(body.secret)`.                       */
+/* Cross-tenant: both require `creatorId` and look up the row by exact id; no   */
+/* cross-creator data ever returned.                                            */
+/* Platform: only `tiktok` supported in v0 (only platform with a wired          */
+/* trendingFeed endpoint). Other platforms return `platform-not-supported`.     */
+/* -------------------------------------------------------------------------- */
+
+interface GetRecentTrendsPayload {
+  secret: string;
+  creatorId: string;
+  withinMs?: number;
+  limit?: number;
+  sources?: TrendSource[];
+}
+
+function parseGetRecentTrendsPayload(raw: unknown): GetRecentTrendsPayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") {
+    throw new Error("secret must be a string.");
+  }
+  if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+    throw new Error("creatorId is required.");
+  }
+  let withinMs: number | undefined;
+  if (obj.withinMs !== undefined && obj.withinMs !== null) {
+    if (
+      typeof obj.withinMs !== "number" ||
+      !Number.isFinite(obj.withinMs) ||
+      obj.withinMs <= 0
+    ) {
+      throw new Error("withinMs must be a positive finite number.");
+    }
+    withinMs = obj.withinMs;
+  }
+  let limit: number | undefined;
+  if (obj.limit !== undefined && obj.limit !== null) {
+    if (
+      typeof obj.limit !== "number" ||
+      !Number.isFinite(obj.limit) ||
+      obj.limit <= 0 ||
+      obj.limit > 200
+    ) {
+      throw new Error("limit must be a positive integer ≤ 200.");
+    }
+    limit = Math.floor(obj.limit);
+  }
+  let sources: TrendSource[] | undefined;
+  if (obj.sources !== undefined && obj.sources !== null) {
+    if (!Array.isArray(obj.sources)) {
+      throw new Error("sources must be an array of trend source literals.");
+    }
+    const accepted: TrendSource[] = [];
+    for (const item of obj.sources) {
+      if (!isTrendSource(item)) {
+        throw new Error(
+          `sources must be one of ${TREND_SOURCE_LITERALS.join(" | ")}.`
+        );
+      }
+      accepted.push(item);
+    }
+    sources = accepted;
+  }
+  return {
+    secret: obj.secret,
+    creatorId: obj.creatorId,
+    withinMs,
+    limit,
+    sources,
+  };
+}
+
+const TREND_SOURCE_VALIDATOR = v.union(
+  v.literal("niche-scan"),
+  v.literal("platform-wide"),
+  v.literal("industry-intel"),
+  v.literal("competitor-watch"),
+  v.literal("chat-on-demand")
+);
+
+export const getRecentTrendsInternal = internalQuery({
+  args: {
+    creatorId: v.id("creators"),
+    sinceMs: v.number(),
+    limit: v.number(),
+    sources: v.optional(v.array(TREND_SOURCE_VALIDATOR)),
+  },
+  handler: async (ctx, args) => {
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) {
+      throw new Error("creator-not-found");
+    }
+    const rows = await ctx.db
+      .query("trendObservations")
+      .withIndex("by_creator_and_observedAt", (q) =>
+        q.eq("creatorId", args.creatorId).gte("observedAt", args.sinceMs)
+      )
+      .order("desc")
+      .take(args.limit);
+    const sourceFilter = args.sources;
+    const filtered =
+      sourceFilter && sourceFilter.length > 0
+        ? rows.filter((r) => sourceFilter.includes(r.source))
+        : rows;
+    return filtered.map((r) => ({
+      id: r._id,
+      source: r.source,
+      observation: r.observation,
+      evidence: r.evidence,
+      relevanceScore: r.relevanceScore,
+      observedAt: r.observedAt,
+    }));
+  },
+});
+
+export const getRecentTrendsHttp = httpAction(async (ctx, request) => {
+  let payload: GetRecentTrendsPayload;
+  try {
+    payload = parseGetRecentTrendsPayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+
+  const withinMs = payload.withinMs ?? 24 * 60 * 60 * 1000;
+  const limit = payload.limit ?? 25;
+  const sinceMs = Date.now() - withinMs;
+
+  try {
+    const trends = await ctx.runQuery(
+      internal.lcMaya.lcMayaHttp.getRecentTrendsInternal,
+      {
+        creatorId: payload.creatorId as Id<"creators">,
+        sinceMs,
+        limit,
+        ...(payload.sources ? { sources: payload.sources } : {}),
+      }
+    );
+    return jsonResponse(
+      { ok: true, count: trends.length, withinMs, sinceMs, trends },
+      200
+    );
+  } catch (err) {
+    const msg = (err as Error).message ?? "internal-error";
+    if (msg === "creator-not-found") {
+      return jsonResponse({ error: "creator-not-found" }, 404);
+    }
+    return jsonResponse({ error: msg }, 500);
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/* fetch_trends_live — live ScrapeCreators trending feed for chat-time fetch    */
+/* -------------------------------------------------------------------------- */
+
+const SUPPORTED_LIVE_PLATFORMS = ["tiktok"] as const;
+type SupportedLivePlatform = (typeof SUPPORTED_LIVE_PLATFORMS)[number];
+
+function isSupportedLivePlatform(value: unknown): value is SupportedLivePlatform {
+  return (
+    typeof value === "string" &&
+    (SUPPORTED_LIVE_PLATFORMS as readonly string[]).includes(value)
+  );
+}
+
+interface FetchTrendsLivePayload {
+  secret: string;
+  creatorId: string;
+  platform?: SupportedLivePlatform;
+  region?: string;
+  limit?: number;
+}
+
+function parseFetchTrendsLivePayload(raw: unknown): FetchTrendsLivePayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") {
+    throw new Error("secret must be a string.");
+  }
+  if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+    throw new Error("creatorId is required.");
+  }
+  let platform: SupportedLivePlatform | undefined;
+  if (obj.platform !== undefined && obj.platform !== null) {
+    if (!isSupportedLivePlatform(obj.platform)) {
+      throw new Error(
+        `platform must be one of ${SUPPORTED_LIVE_PLATFORMS.join(" | ")}.`
+      );
+    }
+    platform = obj.platform;
+  }
+  let region: string | undefined;
+  if (obj.region !== undefined && obj.region !== null) {
+    if (typeof obj.region !== "string" || obj.region.trim().length === 0) {
+      throw new Error("region must be a non-empty string.");
+    }
+    region = obj.region.toUpperCase();
+  }
+  let limit: number | undefined;
+  if (obj.limit !== undefined && obj.limit !== null) {
+    if (
+      typeof obj.limit !== "number" ||
+      !Number.isFinite(obj.limit) ||
+      obj.limit <= 0 ||
+      obj.limit > 100
+    ) {
+      throw new Error("limit must be a positive integer ≤ 100.");
+    }
+    limit = Math.floor(obj.limit);
+  }
+  return {
+    secret: obj.secret,
+    creatorId: obj.creatorId,
+    ...(platform ? { platform } : {}),
+    ...(region ? { region } : {}),
+    ...(limit ? { limit } : {}),
+  };
+}
+
+export const fetchTrendsLiveInternal = internalAction({
+  args: {
+    creatorId: v.id("creators"),
+    platform: v.union(v.literal("tiktok")),
+    region: v.string(),
+    limit: v.number(),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    platform: "tiktok";
+    region: string;
+    fetchedAt: number;
+    count: number;
+    candidates: Array<{
+      url: string | null;
+      caption: string | null;
+      postedAt: number | null;
+      viewCount: number | null;
+      likeCount: number | null;
+      commentCount: number | null;
+      videoDurationSec: number | null;
+    }>;
+  }> => {
+    // Confirm the creator exists before burning a ScrapeCreators credit.
+    // Cross-tenant safety: lookup is by exact id; we never accept a handle.
+    await ctx.runQuery(internal.lcMaya.lcMayaHttp.getRecentTrendsInternal, {
+      creatorId: args.creatorId,
+      sinceMs: 0,
+      limit: 1,
+    });
+    // Lazy-import the ScrapeCreators endpoints module so the cache-read
+    // endpoint never has to load it (and Convex bundles only this action with it).
+    const { tiktok } = await import("../integrations/scrapeCreators/endpoints");
+    const result = await tiktok.trendingFeed(args.region);
+    const candidates = result.posts.slice(0, args.limit).map((post) => ({
+      url: post.url ?? null,
+      caption: post.caption ?? null,
+      postedAt: post.postedAt ?? null,
+      viewCount: post.metrics.viewCount ?? null,
+      likeCount: post.metrics.likeCount ?? null,
+      commentCount: post.metrics.commentCount ?? null,
+      videoDurationSec: post.videoDurationSec ?? null,
+    }));
+    return {
+      platform: args.platform,
+      region: args.region,
+      fetchedAt: Date.now(),
+      count: candidates.length,
+      candidates,
+    };
+  },
+});
+
+export const fetchTrendsLiveHttp = httpAction(async (ctx, request) => {
+  let payload: FetchTrendsLivePayload;
+  try {
+    payload = parseFetchTrendsLivePayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+
+  const platform: SupportedLivePlatform = payload.platform ?? "tiktok";
+  const region = payload.region ?? "US";
+  const limit = payload.limit ?? 25;
+
+  try {
+    const result = await ctx.runAction(
+      internal.lcMaya.lcMayaHttp.fetchTrendsLiveInternal,
+      {
+        creatorId: payload.creatorId as Id<"creators">,
+        platform,
+        region,
+        limit,
+      }
+    );
+    return jsonResponse({ ok: true, ...result }, 200);
+  } catch (err) {
+    const msg = (err as Error).message ?? "internal-error";
+    if (msg === "creator-not-found") {
+      return jsonResponse({ error: "creator-not-found" }, 404);
+    }
+    if (msg === "SCRAPE_CREATORS_API_KEY is not set. Configure it in the Convex deployment env.") {
+      return jsonResponse({ error: "scrape-creators-api-key-missing" }, 503);
+    }
+    return jsonResponse({ error: msg }, 500);
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 12.7 Phase 2 — validate_trend_citation                                */
+/*                                                                              */
+/* Maya hits this BEFORE every outbound send that mentions a trend. The         */
+/* endpoint returns ok=false when the draft talks about trends without          */
+/* citing a real platform-post URL. Maya is instructed (AGENTS.md + standing    */
+/* orders) to either rewrite with a URL inline, drop the trend reference, or    */
+/* stay silent — never ship a confabulated trend pitch.                         */
+/*                                                                              */
+/* Purely diagnostic — no DB writes. Stateless. Maya can call it any number of  */
+/* times per turn while drafting; the cost is one Convex action invocation.     */
+/* -------------------------------------------------------------------------- */
+
+interface ValidateTrendCitationPayload {
+  secret: string;
+  message: string;
+}
+
+function parseValidateTrendCitationPayload(
+  raw: unknown
+): ValidateTrendCitationPayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") {
+    throw new Error("secret must be a string.");
+  }
+  if (typeof obj.message !== "string") {
+    throw new Error("message must be a string.");
+  }
+  return { secret: obj.secret, message: obj.message };
+}
+
+export const validateTrendCitationHttp = httpAction(async (_ctx, request) => {
+  let payload: ValidateTrendCitationPayload;
+  try {
+    payload = parseValidateTrendCitationPayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+  const verdict = checkTrendCitation(payload.message);
+  return jsonResponse(verdict, 200);
 });
 
 /* -------------------------------------------------------------------------- */

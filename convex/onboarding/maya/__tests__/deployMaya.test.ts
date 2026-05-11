@@ -1002,6 +1002,7 @@ describe("machineConfigFor", () => {
         agents: {
           defaults: {
             bootstrapMaxChars: 20_000,
+            bootstrapTotalMaxChars: 200_000,
             workspace: "/data/workspace",
             model: { primary: "openrouter/google/gemini-3-flash-preview" },
             memorySearch: {

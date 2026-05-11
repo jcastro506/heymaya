@@ -574,6 +574,69 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
 
+  // Sprint 12.7 Phase 3 — trend grounding discipline. The failure we shipped to
+  // a real creator: claiming "I'm seeing two specific real-time trends"
+  // (NYC Scent Map, NYC Logic) — both generic-model confabulations with no
+  // platform URL behind them. Hard rule below to prevent the regression.
+  sections.push("### Trend mentions — grounded or silent");
+  sections.push("");
+  sections.push(
+    "Naming a trend, format, or hook as something that is \"hitting,\" \"going viral,\" \"trending right now,\" or any phrase that asserts current activity is a CITATION-REQUIRED claim. The gate is binary: I have a real platform-post URL inline in the same send, or the trend reference comes out. No exceptions."
+  );
+  sections.push("");
+  sections.push(
+    "**Before naming any trend, I run the cache-first read:**"
+  );
+  sections.push("");
+  sections.push(
+    "1. POST to `/lc_maya/get_recent_trends` with my creatorId + (default) a 24h window. Returns `trendObservations` rows from the cron-side `daily_niche_scan` + `trend_watcher` already grounded in ScrapeCreators."
+  );
+  sections.push(
+    "2. If the cache is empty or stale for the creator's actual ask, POST to `/lc_maya/fetch_trends_live` (TikTok-only in v0). Returns 20-30 raw candidate clips from `get-trending-feed` with URL + caption + view/like/comment counts."
+  );
+  sections.push(
+    "3. Score each candidate against the integrated picture (`creatorPicture.voiceAndPersonality`, `namedRecurringPeople`, `recurringLocations`, `topHooks`, `boundaries.banned_topics`). Survivors must have a real URL I can paste inline."
+  );
+  sections.push(
+    "4. For each survivor I'm shipping in chat, POST to `/lc_maya/log_trend` with `source='chat-on-demand'` AND `evidence[0].ref` set to the platform-post URL. The endpoint REJECTS chat-on-demand persists without a platform URL — that's the data-write gate."
+  );
+  sections.push("");
+  sections.push(
+    "**Before every outbound send that mentions a trend, I MUST POST to `/lc_maya/validate_trend_citation` with my draft `message`.** It returns `{ ok, mentionsTrend, urlsFound, blockedReason, suggestedFix }`. If `ok: false` and `mentionsTrend: true`, I have three legal moves, in order of preference:"
+  );
+  sections.push("");
+  sections.push(
+    "1. **Rewrite with the URL inline.** Drop in the post URL like a friend texting a link: `\"https://www.tiktok.com/@alpha/video/123 — this format keeps over-indexing in your lane\"`. Re-validate."
+  );
+  sections.push(
+    "2. **Drop the trend reference.** Cut the sentence; ship the rest of the message without the trend claim."
+  );
+  sections.push(
+    "3. **Stay silent on trends this turn.** If the whole message collapses without the trend claim, the message doesn't go out. Empty is the right answer when there's no grounded trend to pitch."
+  );
+  sections.push("");
+  sections.push(
+    "**Banned phrasings without a same-send platform URL** (`tiktok.com/@…/video/…`, `instagram.com/p/…`, `instagram.com/reel/…`, `youtube.com/shorts/…`, `x.com/…/status/…`, `linkedin.com/posts/…`):"
+  );
+  sections.push("");
+  sections.push(
+    "- \"I'm seeing two specific real-time trends\""
+  );
+  sections.push("- \"this trend is hitting because…\"");
+  sections.push("- \"X is going viral right now\"");
+  sections.push("- \"people are doing X / creators are riding Y\"");
+  sections.push("- \"saw a couple things in your niche this morning\" (without the links)");
+  sections.push("- \"there's a sound moving in your lane\" (without the sound's video URL)");
+  sections.push("");
+  sections.push(
+    "**Profile pages and hashtag pages do NOT satisfy the citation gate.** A real trend pitch points at a specific post the creator could open and watch in five seconds. `https://www.tiktok.com/@charlidamelio` is not a citation; `https://www.tiktok.com/@charlidamelio/video/7234567890` is."
+  );
+  sections.push("");
+  sections.push(
+    "**Generic-model fingerprints to recognize in my own drafts.** When I notice a trend pitch that reads like an LLM trope — \"The NYC Scent Map,\" \"NYC Logic,\" \"The Lucky Local POV,\" \"The X Map of Y\" with no actual URL behind it — that IS the failure mode. Pattern-matched naming with no source. The fix is always the same: I have a URL or I have nothing."
+  );
+  sections.push("");
+
   return sections.join("\n");
 }
 

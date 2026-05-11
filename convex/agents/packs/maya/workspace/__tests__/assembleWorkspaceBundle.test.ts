@@ -390,7 +390,10 @@ describe("assembleWorkspaceBundle", () => {
     // currently 80K) and embeds standing orders inline. Verify the production
     // cap path actually fits — keep this aligned with MAYA_BOOTSTRAP_MAX_CHARS
     // every time it bumps.
-    const PROD_CAP = 80_000;
+    // Sprint 12.7 — bumped 80K → 100K alongside the trend-grounding section
+    // + chat_trend_lookup standing order. Keep this in sync with
+    // MAYA_BOOTSTRAP_MAX_CHARS in configGeneratorMaya.ts.
+    const PROD_CAP = 100_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };

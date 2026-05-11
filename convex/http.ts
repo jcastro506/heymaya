@@ -18,12 +18,15 @@ import { openClawMediaIngestHttp } from "./creatorMayaV0/openClawMediaIngestHttp
 import {
   completeGoogleCalendarOAuthHttp,
   cronHeartbeatHttp,
+  fetchTrendsLiveHttp,
+  getRecentTrendsHttp,
   lockPictureHttp,
   logTrendHttp,
   submitOpeningAnswersHttp,
   startGoogleCalendarOAuthHttp,
   startOAuthHttp,
   updateCreatorHttp,
+  validateTrendCitationHttp,
 } from "./lcMaya/lcMayaHttp";
 import { syncWikiObservationsHttp } from "./lcMaya/wikiMirrorSync";
 import { appleCalendarConnectHttp } from "./lcMaya/appleCalendarConnect";
@@ -102,6 +105,29 @@ http.route({
   path: "/lc_maya/log_trend",
   method: "POST",
   handler: logTrendHttp,
+});
+// Sprint 12.7 Phase 1 — cache-read + live-fetch for trend grounding.
+// `get_recent_trends` is the integrated-read pre-check Maya runs before
+// claiming any trend; `fetch_trends_live` is the fallback when the cache is
+// empty or stale. Maya combines them with `log_trend` (above) to ground every
+// chat-time trend pitch in real ScrapeCreators URLs.
+http.route({
+  path: "/lc_maya/get_recent_trends",
+  method: "POST",
+  handler: getRecentTrendsHttp,
+});
+http.route({
+  path: "/lc_maya/fetch_trends_live",
+  method: "POST",
+  handler: fetchTrendsLiveHttp,
+});
+// Sprint 12.7 Phase 2 — pre-send citation firewall. Maya invokes this before
+// any outbound message that mentions trends. Returns ok=false when the draft
+// talks about trends without citing a real platform-post URL. Stateless.
+http.route({
+  path: "/lc_maya/validate_trend_citation",
+  method: "POST",
+  handler: validateTrendCitationHttp,
 });
 // Wave 0b — append-only cron heartbeat receipt. Maya hits this from a
 // `cron.heartbeat` standing order so we have ground-truth that OpenClaw
