@@ -54,14 +54,24 @@ export interface PinnedClawhubSkill {
   files: Record<string, string>;
 }
 
+// Sprint 12.7.2 — MVP scope reduced to two pins:
+//   1. `tiktok` — Growth OS pack (content strategy / hooks / scripts).
+//      Fully vendored inline; works at runtime.
+//   2. `ffmpeg-video-editor` — natural-language → FFmpeg command generator
+//      (mahmoudadelbghany/ffmpeg-video-editor, 12K+ downloads, 19 stars on
+//      ClawHub as of 2026-05-11). Fully vendored inline. Requires the
+//      `ffmpeg` binary on Maya's runtime image; added to
+//      `infra/openclaw-runtime/Dockerfile` in the same sprint.
+//
+// The previously-stubbed pins (free-video-generator-capcut, video-frames,
+// faster-whisper, elevenlabs-transcribe, instagram-photo-text-overlay,
+// brave-search) are dropped from the lock per operator scope decision
+// 2026-05-11. They were placeholder text only and added no capability.
+// Re-add them later by vendoring real ClawHub content the same way as the
+// tiktok pin (full SKILL.md + scripts as inline string literals).
 export const CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS = [
   "tiktok",
-  "free-video-generator-capcut",
-  "video-frames",
-  "faster-whisper",
-  "elevenlabs-transcribe",
-  "instagram-photo-text-overlay",
-  "brave-search",
+  "ffmpeg-video-editor",
 ] as const;
 
 export const CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK = {
@@ -71,29 +81,9 @@ export const CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK = {
       version: "3.0.0",
       source: "clawhub:tiktok",
     },
-    "free-video-generator-capcut": {
+    "ffmpeg-video-editor": {
       version: "1.0.0",
-      source: "clawhub:vcarolxhberger/free-video-generator-capcut",
-    },
-    "video-frames": {
-      version: "1.0.0",
-      source: "clawhub:steipete/video-frames",
-    },
-    "faster-whisper": {
-      version: "1.5.1",
-      source: "clawhub:theplasmak/faster-whisper",
-    },
-    "elevenlabs-transcribe": {
-      version: "1.0.1",
-      source: "clawhub:paulasjes/elevenlabs-transcribe",
-    },
-    "instagram-photo-text-overlay": {
-      version: "1.0.0",
-      source: "clawhub:psyduckler/instagram-photo-text-overlay",
-    },
-    "brave-search": {
-      version: "1.0.1",
-      source: "clawhub:steipete/brave-search",
+      source: "clawhub:mahmoudadelbghany/ffmpeg-video-editor",
     },
   },
 } as const;
@@ -219,58 +209,14 @@ export const CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILLS: ReadonlyArray<PinnedClawhubS
           '{\n  "name": "tiktok",\n  "version": "3.0.0",\n  "description": "Local-first TikTok Growth OS for strategy, hooks, scripts, retention design, and analytics feedback. Generates execution-ready short-form outputs and stores all assets locally. No API, no posting, no platform automation.",\n  "author": "cj"\n}\n',
       },
     },
-    buildStubPin({
-      slug: "free-video-generator-capcut",
-      owner: "vcarolxhberger",
+    {
+      slug: "ffmpeg-video-editor",
       version: "1.0.0",
-      displayName: "Free Video Generator CapCut",
-      description:
-        "Get edited video clips ready to post, without touching a single slider. Upload your video clips or images (MP4, MOV, AVI, WebM, up to 500MB), say what you want, and the cloud workflow returns a 1080p MP4. CapCut-style export for TikTok, Reels, and short-form video creators.",
-      source: "https://clawhub.ai/skills/vcarolxhberger/free-video-generator-capcut",
-    }),
-    buildStubPin({
-      slug: "video-frames",
-      owner: "steipete",
-      version: "1.0.0",
-      displayName: "Video Frames",
-      description:
-        "Extract frames or short clips from videos using ffmpeg. Use when Maya needs thumbnail frames, sampled stills for multimodal analysis, or a short reference clip from a longer source video.",
-      source: "https://clawhub.ai/skills/steipete/video-frames",
-    }),
-    buildStubPin({
-      slug: "faster-whisper",
-      owner: "theplasmak",
-      version: "1.5.1",
-      displayName: "Faster Whisper",
-      description:
-        "Local speech-to-text using faster-whisper. 4-6x faster than OpenAI Whisper with identical accuracy; GPU acceleration enables ~20x realtime transcription. Supports SRT/VTT/text outputs, batch transcription, and optional speaker diarization.",
-      source: "https://clawhub.ai/skills/theplasmak/faster-whisper",
-    }),
-    buildStubPin({
-      slug: "elevenlabs-transcribe",
-      owner: "paulasjes",
-      version: "1.0.1",
-      displayName: "ElevenLabs Transcribe",
-      description:
-        "Transcribe audio to text using ElevenLabs Scribe. Supports batch transcription, realtime streaming from URLs, microphone input, and local files. Use when Maya needs higher-accuracy transcription than local Whisper or when latency matters.",
-      source: "https://clawhub.ai/skills/paulasjes/elevenlabs-transcribe",
-    }),
-    buildStubPin({
-      slug: "instagram-photo-text-overlay",
-      owner: "psyduckler",
-      version: "1.0.0",
-      displayName: "Instagram Photo Text Overlay",
-      description:
-        "Overlay text on photos for Instagram posts. Generates portrait (4:5) images with gradient overlays, titles, and optional numbered lists. Use when Maya needs a quick text-on-image asset for Instagram or carousel posts.",
-      source: "https://clawhub.ai/skills/psyduckler/instagram-photo-text-overlay",
-    }),
-    buildStubPin({
-      slug: "brave-search",
-      owner: "steipete",
-      version: "1.0.1",
-      displayName: "Brave Search",
-      description:
-        "Web search and content extraction via Brave Search API. Use for searching documentation, facts, or any web content. Lightweight, no browser required. Pinned to latest stable (1.0.1) at slice time; no version was specified by the operator.",
-      source: "https://clawhub.ai/skills/steipete/brave-search",
-    }),
+      source: "clawhub:mahmoudadelbghany/ffmpeg-video-editor",
+      files: {
+        ".clawhub/origin.json": "{\n  \"version\": 1,\n  \"registry\": \"https://clawhub.ai\",\n  \"slug\": \"ffmpeg-video-editor\",\n  \"installedVersion\": \"1.0.0\",\n  \"installedAt\": 1778538807081\n}\n",
+        "SKILL.md": "---\nname: FFmpeg Video Editor\ndescription: Generate FFmpeg commands from natural language video editing requests - cut, trim, convert, compress, change aspect ratio, extract audio, and more.\n---\n\n# FFmpeg Video Editor\n\nYou are a video editing assistant that translates natural language requests into FFmpeg commands. When the user asks to edit a video, generate the correct FFmpeg command.\n\n## How to Generate Commands\n\n1. **Identify the operation** from the user's request\n2. **Extract parameters** (input file, output file, timestamps, formats, etc.)\n3. **Generate the FFmpeg command** using the patterns below\n4. **If output filename not specified**, create one based on the operation (e.g., `video_trimmed.mp4`)\n5. **Always include** `-y` (overwrite) and `-hide_banner` for cleaner output\n\n---\n\n## Command Reference\n\n### Cut/Trim Video\n\nExtract a portion of video between two timestamps.\n\n**User might say:** \"cut video.mp4 from 1:21 to 1:35\", \"trim first 30 seconds\", \"extract 0:05:00 to 0:10:30\"\n\n**Command:**\n```bash\nffmpeg -y -hide_banner -i \"INPUT\" -ss START_TIME -to END_TIME -c copy \"OUTPUT\"\n```\n\n**Examples:**\n- Cut from 1:21 to 1:35:\n  ```bash\n  ffmpeg -y -hide_banner -i \"video.mp4\" -ss 00:01:21 -to 00:01:35 -c copy \"video_trimmed.mp4\"\n  ```\n- Extract first 2 minutes:\n  ```bash\n  ffmpeg -y -hide_banner -i \"video.mp4\" -ss 00:00:00 -to 00:02:00 -c copy \"video_clip.mp4\"\n  ```\n\n---\n\n### Format Conversion\n\nConvert between video formats: mp4, mkv, avi, webm, mov, flv, wmv.\n\n**User might say:** \"convert to mkv\", \"change format from avi to mp4\", \"make it a webm\"\n\n**Commands by format:**\n```bash\n# MP4 (most compatible)\nffmpeg -y -hide_banner -i \"INPUT\" -c:v libx264 -c:a aac \"OUTPUT.mp4\"\n\n# MKV (lossless container change)\nffmpeg -y -hide_banner -i \"INPUT\" -c copy \"OUTPUT.mkv\"\n\n# WebM (web optimized)\nffmpeg -y -hide_banner -i \"INPUT\" -c:v libvpx-vp9 -c:a libopus \"OUTPUT.webm\"\n\n# AVI\nffmpeg -y -hide_banner -i \"INPUT\" -c:v mpeg4 -c:a mp3 \"OUTPUT.avi\"\n\n# MOV\nffmpeg -y -hide_banner -i \"INPUT\" -c:v libx264 -c:a aac \"OUTPUT.mov\"\n```\n\n---\n\n### Change Aspect Ratio\n\nResize video to different aspect ratios with letterboxing (black bars).\n\n**User might say:** \"change aspect ratio to 16:9\", \"make it square\", \"vertical for TikTok\"\n\n**Common aspect ratios:**\n| Ratio | Resolution | Use Case |\n|-------|------------|----------|\n| 16:9 | 1920x1080 | YouTube, TV |\n| 4:3 | 1440x1080 | Old TV format |\n| 1:1 | 1080x1080 | Instagram square |\n| 9:16 | 1080x1920 | TikTok, Reels, Stories |\n| 21:9 | 2560x1080 | Ultrawide/Cinema |\n\n**Command (with letterboxing):**\n```bash\nffmpeg -y -hide_banner -i \"INPUT\" -vf \"scale=WIDTH:HEIGHT:force_original_aspect_ratio=decrease,pad=WIDTH:HEIGHT:(ow-iw)/2:(oh-ih)/2:black\" -c:a copy \"OUTPUT\"\n```\n\n**Examples:**\n- 16:9 for YouTube:\n  ```bash\n  ffmpeg -y -hide_banner -i \"video.mp4\" -vf \"scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black\" -c:a copy \"video_16x9.mp4\"\n  ```\n- Square for Instagram:\n  ```bash\n  ffmpeg -y -hide_banner -i \"video.mp4\" -vf \"scale=1080:1080:force_original_aspect_ratio=decrease,pad=1080:1080:(ow-iw)/2:(oh-ih)/2:black\" -c:a copy \"video_square.mp4\"\n  ```\n- Vertical for TikTok:\n  ```bash\n  ffmpeg -y -hide_banner -i \"video.mp4\" -vf \"scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black\" -c:a copy \"video_vertical.mp4\"\n  ```\n\n---\n\n### Change Resolution\n\nResize video to standard resolutions.\n\n**User might say:** \"resize to 720p\", \"make it 4K\", \"downscale to 480p\"\n\n**Resolutions:**\n| Name | Dimensions |\n|------|------------|\n| 4K | 3840x2160 |\n| 1080p | 1920x1080 |\n| 720p | 1280x720 |\n| 480p | 854x480 |\n| 360p | 640x360 |\n\n**Command:**\n```bash\nffmpeg -y -hide_banner -i \"INPUT\" -vf \"scale=WIDTH:HEIGHT\" -c:a copy \"OUTPUT\"\n```\n\n**Example - Resize to 720p:**\n```bash\nffmpeg -y -hide_banner -i \"video.mp4\" -vf \"scale=1280:720\" -c:a copy \"video_720p.mp4\"\n```\n\n---\n\n### Compress Video\n\nReduce file size. CRF controls quality: 18 (high quality) \u2192 28 (low quality), 23 is balanced.\n\n**User might say:** \"compress video\", \"reduce file size\", \"make smaller for email\"\n\n**Command:**\n```bash\nffmpeg -y -hide_banner -i \"INPUT\" -c:v libx264 -crf CRF_VALUE -preset medium -c:a aac -b:a 128k \"OUTPUT\"\n```\n\n**Examples:**\n- Balanced compression (CRF 23):\n  ```bash\n  ffmpeg -y -hide_banner -i \"video.mp4\" -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 128k \"video_compressed.mp4\"\n  ```\n- High compression/smaller file (CRF 28):\n  ```bash\n  ffmpeg -y -hide_banner -i \"video.mp4\" -c:v libx264 -crf 28 -preset fast -c:a aac -b:a 96k \"video_small.mp4\"\n  ```\n- High quality (CRF 18):\n  ```bash\n  ffmpeg -y -hide_banner -i \"video.mp4\" -c:v libx264 -crf 18 -preset slow -c:a aac -b:a 192k \"video_hq.mp4\"\n  ```\n\n---\n\n### Extract Audio\n\nExtract audio track from video.\n\n**User might say:** \"extract audio as mp3\", \"get the audio from video\", \"convert to audio only\"\n\n**Command:**\n```bash\nffmpeg -y -hide_banner -i \"INPUT\" -vn -acodec CODEC \"OUTPUT.FORMAT\"\n```\n\n**Codecs by format:**\n| Format | Codec |\n|--------|-------|\n| mp3 | libmp3lame |\n| aac | aac |\n| wav | pcm_s16le |\n| flac | flac |\n| ogg | libvorbis |\n\n**Example - Extract as MP3:**\n```bash\nffmpeg -y -hide_banner -i \"video.mp4\" -vn -acodec libmp3lame \"video.mp3\"\n```\n\n---\n\n### Remove Audio\n\nCreate silent video (remove audio track).\n\n**User might say:** \"remove audio\", \"mute video\", \"make silent\"\n\n**Command:**\n```bash\nffmpeg -y -hide_banner -i \"INPUT\" -an -c:v copy \"OUTPUT\"\n```\n\n**Example:**\n```bash\nffmpeg -y -hide_banner -i \"video.mp4\" -an -c:v copy \"video_silent.mp4\"\n```\n\n---\n\n### Change Speed\n\nSpeed up or slow down video.\n\n**User might say:** \"speed up 2x\", \"slow motion\", \"make 10x timelapse\"\n\n**Command:**\n```bash\n# Speed up (e.g., 2x speed)\nffmpeg -y -hide_banner -i \"INPUT\" -filter_complex \"[0:v]setpts=0.5*PTS[v];[0:a]atempo=2.0[a]\" -map \"[v]\" -map \"[a]\" \"OUTPUT\"\n\n# Slow down (e.g., 0.5x speed / half speed)\nffmpeg -y -hide_banner -i \"INPUT\" -filter_complex \"[0:v]setpts=2.0*PTS[v];[0:a]atempo=0.5[a]\" -map \"[v]\" -map \"[a]\" \"OUTPUT\"\n```\n\n**Formula:**\n- Video: `setpts = (1/speed)*PTS` (2x speed \u2192 0.5*PTS)\n- Audio: `atempo = speed` (must be 0.5-2.0, chain for extremes)\n\n**Examples:**\n- 2x speed:\n  ```bash\n  ffmpeg -y -hide_banner -i \"video.mp4\" -filter_complex \"[0:v]setpts=0.5*PTS[v];[0:a]atempo=2.0[a]\" -map \"[v]\" -map \"[a]\" \"video_2x.mp4\"\n  ```\n- Half speed (slow motion):\n  ```bash\n  ffmpeg -y -hide_banner -i \"video.mp4\" -filter_complex \"[0:v]setpts=2.0*PTS[v];[0:a]atempo=0.5[a]\" -map \"[v]\" -map \"[a]\" \"video_slowmo.mp4\"\n  ```\n\n---\n\n### Convert to GIF\n\nCreate animated GIF from video.\n\n**User might say:** \"make a gif\", \"convert to gif\", \"gif from 0:10 to 0:15\"\n\n**Command:**\n```bash\nffmpeg -y -hide_banner -i \"INPUT\" -ss START -t DURATION -vf \"fps=15,scale=480:-1:flags=lanczos\" -loop 0 \"OUTPUT.gif\"\n```\n\n**Example - GIF of 5 seconds starting at 0:10:**\n```bash\nffmpeg -y -hide_banner -i \"video.mp4\" -ss 00:00:10 -t 5 -vf \"fps=15,scale=480:-1:flags=lanczos\" -loop 0 \"video.gif\"\n```\n\n---\n\n### Rotate/Flip Video\n\nRotate or flip video orientation.\n\n**User might say:** \"rotate 90 degrees\", \"flip horizontally\", \"rotate upside down\"\n\n**Commands:**\n```bash\n# Rotate 90\u00b0 clockwise\nffmpeg -y -hide_banner -i \"INPUT\" -vf \"transpose=1\" -c:a copy \"OUTPUT\"\n\n# Rotate 90\u00b0 counter-clockwise\nffmpeg -y -hide_banner -i \"INPUT\" -vf \"transpose=2\" -c:a copy \"OUTPUT\"\n\n# Rotate 180\u00b0\nffmpeg -y -hide_banner -i \"INPUT\" -vf \"transpose=2,transpose=2\" -c:a copy \"OUTPUT\"\n\n# Flip horizontal (mirror)\nffmpeg -y -hide_banner -i \"INPUT\" -vf \"hflip\" -c:a copy \"OUTPUT\"\n\n# Flip vertical\nffmpeg -y -hide_banner -i \"INPUT\" -vf \"vflip\" -c:a copy \"OUTPUT\"\n```\n\n---\n\n### Extract Screenshot/Frame\n\nCapture a single frame from video.\n\n**User might say:** \"screenshot at 1:30\", \"extract thumbnail\", \"get frame at 5 seconds\"\n\n**Command:**\n```bash\nffmpeg -y -hide_banner -i \"INPUT\" -ss TIMESTAMP -frames:v 1 \"OUTPUT.jpg\"\n```\n\n**Example:**\n```bash\nffmpeg -y -hide_banner -i \"video.mp4\" -ss 00:01:30 -frames:v 1 \"screenshot.jpg\"\n```\n\n---\n\n### Add Watermark/Logo\n\nOverlay image on video.\n\n**User might say:** \"add logo.png\", \"put watermark in corner\", \"overlay image\"\n\n**Positions:**\n| Position | Overlay Value |\n|----------|--------------|\n| Top-left | overlay=10:10 |\n| Top-right | overlay=W-w-10:10 |\n| Bottom-left | overlay=10:H-h-10 |\n| Bottom-right | overlay=W-w-10:H-h-10 |\n| Center | overlay=(W-w)/2:(H-h)/2 |\n\n**Command:**\n```bash\nffmpeg -y -hide_banner -i \"VIDEO\" -i \"LOGO\" -filter_complex \"overlay=POSITION\" \"OUTPUT\"\n```\n\n**Example - Logo in top-right:**\n```bash\nffmpeg -y -hide_banner -i \"video.mp4\" -i \"logo.png\" -filter_complex \"overlay=W-w-10:10\" \"video_watermarked.mp4\"\n```\n\n---\n\n### Burn Subtitles\n\nPermanently embed subtitles into video.\n\n**User might say:** \"add subtitles\", \"burn srt file\", \"embed captions\"\n\n**Command:**\n```bash\nffmpeg -y -hide_banner -i \"INPUT\" -vf \"subtitles='SUBTITLE_FILE'\" \"OUTPUT\"\n```\n\n**Example:**\n```bash\nffmpeg -y -hide_banner -i \"video.mp4\" -vf \"subtitles='subtitles.srt'\" \"video_subtitled.mp4\"\n```\n\n---\n\n### Merge/Concatenate Videos\n\nJoin multiple videos together.\n\n**User might say:** \"merge video1 and video2\", \"combine clips\", \"join intro and main\"\n\n**Method:** First create a text file listing videos, then concatenate.\n\n**Step 1 - Create file list (files.txt):**\n```\nfile 'video1.mp4'\nfile 'video2.mp4'\nfile 'video3.mp4'\n```\n\n**Step 2 - Concatenate:**\n```bash\nffmpeg -y -hide_banner -f concat -safe 0 -i files.txt -c copy \"merged.mp4\"\n```\n\n---\n\n## Time Format Reference\n\nUse these formats for timestamps:\n- `HH:MM:SS` \u2192 01:30:45 (1 hour 30 min 45 sec)\n- `MM:SS` \u2192 05:30 (5 min 30 sec)\n- `SS` \u2192 90 (90 seconds)\n- `HH:MM:SS.mmm` \u2192 00:01:23.500 (with milliseconds)\n\n---\n\n## Response Format\n\nWhen generating commands:\n\n1. Show the FFmpeg command in a code block\n2. Briefly explain what it does\n3. Mention if output filename was assumed\n\n**Example response:**\n```\nHere's the command to cut your video from 1:21 to 1:35:\n\n\u200b```bash\nffmpeg -y -hide_banner -i \"video.mp4\" -ss 00:01:21 -to 00:01:35 -c copy \"video_trimmed.mp4\"\n\u200b```\n\nThis extracts the segment without re-encoding (using `-c copy` for speed). Output saved as `video_trimmed.mp4`.\n```\n",
+        "_meta.json": "{\"ownerId\": \"mahmoudadelbghany\", \"slug\": \"ffmpeg-video-editor\", \"version\": \"1.0.0\", \"publishedAt\": 1769908420733}",
+      },
+    },
   ];

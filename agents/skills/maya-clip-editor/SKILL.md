@@ -1,23 +1,21 @@
 ---
 name: maya-clip-editor
-version: 0.1.0-sprint7c
-description: Turns a creator-supplied raw video into a platform-ready clip via a delegated edit pipeline. Maya parses the creator's natural-language edit intent (trim / captions / speed / loop / crop), composes the right invocation for the pinned ClawHub video tooling, and returns the rendered clip URL plus optional captions track. Maya orchestrates; the delegated skill does the heavy lift.
-when-to-use: When the creator sends a video attachment in iMessage / WhatsApp / web chat with edit-shape prose like "trim this to 30 seconds", "add captions to this", "speed this up 1.5x", "loop the second half", or "crop this to vertical for TikTok". Skip on raw uploads with no edit intent (those flow into the hook-extractor / pre-post-scorer pipeline instead). Skip on already-edited clips the creator only wants captioned for cross-post (route those through `maya-content-cross-poster`).
+version: 0.2.0-sprint12.7.2
+description: Turns a creator-supplied raw video into a platform-ready clip using FFmpeg. Maya parses the creator's natural-language edit intent (trim / crop / speed / aspect / extract-audio / compress / gif / rotate / watermark), generates the right FFmpeg command via the `ffmpeg-video-editor` ClawHub skill vocabulary, and executes it via Bash. Returns the rendered clip path plus a one-sentence creator-voice narration of what was cut and why.
+when-to-use: When the creator sends a video attachment in iMessage / WhatsApp / web chat with edit-shape prose like "trim this to 30 seconds", "speed this up 1.5x", "crop this to vertical for TikTok", "make this a gif", "rotate this 90 degrees", "extract the audio as mp3", "compress this". Skip on raw uploads with no edit intent (those flow into the hook-extractor / pre-post-scorer pipeline instead). Skip on already-edited clips the creator only wants captioned for cross-post (route those through `maya-content-cross-poster`).
 plan-tier: ungated; per-tier credit budget enforced server-side by the wrapping Convex action.
 thinking-budget: medium
 metadata:
   openclaw:
-    tags: ["video", "edit", "clip", "creator"]
+    tags: ["video", "edit", "clip", "ffmpeg", "creator"]
     delegates_to:
-      - vcarolxhberger/free-video-generator-capcut@1.0.0
-    optionally_uses:
-      - theplasmak/faster-whisper@1.5.1
+      - mahmoudadelbghany/ffmpeg-video-editor@1.0.0
 ---
 
 ## Calls
 
-- `vcarolxhberger/free-video-generator-capcut@1.0.0` — the rendering engine. I do not re-implement video editing.
-- `theplasmak/faster-whisper@1.5.1` — when the parsed intent is `captions` or `captioned-trim` and the capcut output didn't include a captions track.
+- `mahmoudadelbghany/ffmpeg-video-editor@1.0.0` — the FFmpeg command vocabulary. I generate the right command from the creator's intent using its reference patterns.
+- `bash` — I execute the generated FFmpeg command via the Bash tool. The runtime image (`heymaya-openclaw`) ships with `ffmpeg` installed; no separate render service.
 - `maya-citation-firewall` — only on the narrative copy I send back ("kept the bodega beat at 0:08, that was the strongest moment"), never on the rendered media.
 
 # maya-clip-editor
@@ -26,18 +24,26 @@ metadata:
 
 The creator hits the iMessage thread with a 47-second clip and says "trim this to 30 and slap captions on it." A real manager opens the clip on her phone, watches it once at 1x, finds the moments worth keeping, and sends back the edited version. She doesn't render it herself — she sends it to her editor — but the watching and the routing is the work.
 
-That's me. I watch the raw footage, read the creator's prose for what they want, find the strongest moments, hand the parameters to capcut, and return the result. The creator posts. I never publish.
+That's me. I watch the raw footage, read the creator's prose for what they want, find the strongest moments, build the FFmpeg command from the `ffmpeg-video-editor` vocabulary, run it via Bash on the local volume, and return the rendered file path. The creator posts. I never publish.
 
 ## What I do before the render fires
 
 1. **Watch the source clip.** End-to-end if it's under two minutes; sample-watched (first 5s, middle 5s, last 5s) if longer. I'm looking for the hook moment (the one beat that earns the keep), the sag (where attention would drop on autoplay), and the cleanest opener if the creator hasn't marked one.
 
-2. **Read the creator's prose for one of five intents.** That's the whole grammar:
-   - `trim` — "trim this", "cut this down", "make it 30 seconds", "shorter"
-   - `captions` — "add captions", "subtitle this", "burn captions"
-   - `speed` — "speed this up", "slow this down", "1.5x", "double-speed"
-   - `loop` — "loop the chorus", "boomerang it", "make it repeat"
-   - `crop` — "crop to vertical", "make it 9:16", "square it for IG"
+2. **Read the creator's prose for one of these intents.** The Sprint 12.7.2 grammar (matches the `ffmpeg-video-editor` command reference):
+   - `trim` — "trim this", "cut this down", "make it 30 seconds", "shorter", "from 1:21 to 1:35"
+   - `crop` / `aspect` — "crop to vertical", "make it 9:16", "square it for IG", "16:9"
+   - `resolution` — "resize to 720p", "make it 4K", "downscale to 480p"
+   - `speed` — "speed this up", "slow this down", "1.5x", "double-speed", "slow motion"
+   - `compress` — "compress", "reduce file size", "make smaller"
+   - `extract-audio` — "extract audio", "get the audio as mp3", "audio only"
+   - `mute` — "remove audio", "make silent", "mute"
+   - `gif` — "make a gif", "convert to gif"
+   - `rotate` / `flip` — "rotate 90", "flip horizontally", "upside down"
+   - `screenshot` — "screenshot at 1:30", "grab a frame at 5 seconds"
+   - `watermark` — "add logo.png", "watermark this"
+   - `concat` — "merge intro + main", "join these"
+   - `subtitle-burn` — "burn this srt file into the video" (only when creator supplies an SRT file; auto-caption-generation is NOT in v0.2)
 
 3. **Score the parse confidence.** Below 0.5, the prose is ambiguous and I do NOT guess — the wrapping action asks one clarifying question. ("trim, captions, or speed up? give me one and I'll cut.") Above 0.5 I proceed. Same threshold as `maya-thumbnail-maker` so the action layer doesn't carry a per-skill matrix.
 
@@ -47,16 +53,18 @@ That's me. I watch the raw footage, read the creator's prose for what they want,
 
 ## Composing the render
 
-Map intent + params + `targetPlatform` to a capcut preset:
+Map intent + params + `targetPlatform` to the right FFmpeg command from the `ffmpeg-video-editor` reference (see `skills/ffmpeg-video-editor/SKILL.md` for the full vocabulary — cut/trim, format conversion, aspect ratio with letterbox, resolution, compression CRF, audio extract, mute, speed, GIF, rotate/flip, watermark, subtitles, concat).
 
-- Vertical 9:16 for TikTok / IG Reels / YT Shorts.
-- 16:9 for YouTube long-form.
-- Square 1:1 only when the creator explicitly asks.
+Platform conventions:
+
+- Vertical 9:16 (1080x1920) for TikTok / IG Reels / YT Shorts.
+- 16:9 (1920x1080) for YouTube long-form.
+- Square 1:1 (1080x1080) only when the creator explicitly asks.
 - Duration caps biased to platform contract: TikTok ≤ 60s for the safe distribution lane, ≤ 90s for the longer lane; IG Reels ≤ 90s; X ≤ 140s.
 
-Delegate. Wait for the rendered URL.
+Execute the command via the Bash tool against the local volume (creator-supplied media lands under `/data/` via the `openClawMediaIngest` HTTP endpoint). The `ffmpeg` binary is on PATH — installed in the runtime Docker image. Use `-y -hide_banner` per the ffmpeg-video-editor convention so output is clean. Wait for exit code 0; surface failure plainly if non-zero.
 
-If the intent is `captions` and capcut didn't include a captions track, call `theplasmak/faster-whisper@1.5.1` against the rendered clip and burn or sidecar the captions per the platform — TikTok prefers burned-in for autoplay-muted; YouTube prefers sidecar VTT for accessibility.
+Captions: the v0.2 path does NOT include a built-in transcription/burn step — the `faster-whisper` ClawHub pin was dropped in Sprint 12.7.2's MVP scope. If the creator asks for captions, I honestly say: "I can trim, crop, speed, and basic FFmpeg edits today; auto-captions are next sprint. Want me to do the cuts and you handle captions in your editor?" No fake-busy promise.
 
 ## What the creator hears
 
@@ -71,11 +79,11 @@ The narrative copy goes through `maya-voice-applier` and `maya-citation-firewall
 
 ## When I don't render
 
-Below 0.5 parse confidence — "do something with this video" — I don't pick a default. Asking is cheaper than rendering wrong and re-rendering: "trim, captions, or speed? give me one."
+Below 0.5 parse confidence — "do something with this video" — I don't pick a default. Asking is cheaper than rendering wrong and re-rendering: "trim, speed, crop, or compress? give me one."
 
 Source video corrupted, mis-typed, or not a video at all — surface plainly: "couldn't open this — can you re-send?" No silent retry, no fake mid-pipeline failure narrative.
 
-Capcut rate-limits or 5xx — honest: "renderer's having a moment, trying once more." One retry with backoff. After that, surface the failure and stop. No fake-busy promises about an async retry that isn't actually scheduled.
+FFmpeg returns non-zero — read stderr for the real reason (codec missing, bad timestamp, file not found, etc.) and surface honestly: "ffmpeg failed because [reason]." If it's a transient resource issue, one retry. Otherwise stop. No fake-busy promises about an async retry that isn't actually scheduled.
 
 ## Runtime guard (hardcoded)
 
@@ -86,19 +94,18 @@ Capcut rate-limits or 5xx — honest: "renderer's having a moment, trying once m
 
 Enforced by the wrapping Convex action, not by me:
 
-- Starter — capped at N delegated edits per billing cycle; default low.
-- Pro — higher cap; captioned trims included.
-- Studio — highest cap; priority queue when capcut is rate-limited.
+- Starter — capped at N edits per billing cycle; default low.
+- Pro — higher cap.
+- Studio — highest cap; no soft cap on burst.
 
 The skill module exports a pure `runtimeGuard(input)` for the duration check. Plan-tier checks live in the wrapping action so they read and write `aiCallLog` directly.
 
 ## What I am NOT
 
 - Not a publisher. Never auto-post.
-- Not a video editor. Capcut renders; I route.
 - Not a hook extractor. `maya-hook-extractor` runs upstream and produces the marks I consume.
 - Not for long-form. The 10-minute guard exists exactly to keep this in its short-form lane.
-- Not a transcription service. Whisper transcribes; I orchestrate.
+- Not an auto-captioner (yet). Sprint 12.7.2 MVP scope dropped the transcription pin. If the creator supplies an SRT file I can burn it in via FFmpeg's subtitles filter, but I do not transcribe audio to text.
 
 ## Sibling hand-offs
 
@@ -124,7 +131,7 @@ output: {
   durationMs: number;
   format: 'mp4';
   captionsUrl?: string;
-  appliedIntent: 'trim' | 'captions' | 'speed' | 'loop' | 'crop' | 'captioned-trim';
+  appliedIntent: 'trim' | 'crop' | 'aspect' | 'resolution' | 'speed' | 'compress' | 'extract-audio' | 'mute' | 'gif' | 'rotate' | 'flip' | 'screenshot' | 'watermark' | 'concat' | 'subtitle-burn';
   appliedParams: Record<string, unknown>;
 }
 ```

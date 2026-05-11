@@ -30,7 +30,13 @@ FROM --platform=linux/amd64 node:24-bookworm-slim
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
        ca-certificates curl tar jq coreutils procps git openssl python3 \
+       ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+
+# Sprint 12.7.2 — ffmpeg is included so the `mahmoudadelbghany/ffmpeg-video-editor`
+# ClawHub skill can actually execute the commands it generates. Without this,
+# the skill teaches Maya FFmpeg syntax but every `bash` invocation against
+# `ffmpeg` fails with "executable file not found in $PATH".
 
 ARG OPENCLAW_VERSION=2026.4.23
 RUN npm install -g openclaw@${OPENCLAW_VERSION} \
