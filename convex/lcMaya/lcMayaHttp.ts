@@ -1600,12 +1600,16 @@ function isSupportedLivePlatform(value: unknown): value is SupportedLivePlatform
   );
 }
 
+const NICHE_FILTER_MAX_CHARS = 200;
+
 interface FetchTrendsLivePayload {
   secret: string;
   creatorId: string;
   platform?: SupportedLivePlatform;
   region?: string;
   limit?: number;
+  keyword?: string;
+  hashtag?: string;
 }
 
 function parseFetchTrendsLivePayload(raw: unknown): FetchTrendsLivePayload {
@@ -1647,12 +1651,49 @@ function parseFetchTrendsLivePayload(raw: unknown): FetchTrendsLivePayload {
     }
     limit = Math.floor(obj.limit);
   }
+  let keyword: string | undefined;
+  if (obj.keyword !== undefined && obj.keyword !== null) {
+    if (typeof obj.keyword !== "string") {
+      throw new Error("keyword must be a string.");
+    }
+    const trimmed = obj.keyword.trim();
+    if (trimmed.length === 0) {
+      throw new Error("keyword must be a non-empty string.");
+    }
+    if (trimmed.length > NICHE_FILTER_MAX_CHARS) {
+      throw new Error(
+        `keyword must be ≤ ${NICHE_FILTER_MAX_CHARS} chars.`
+      );
+    }
+    keyword = trimmed;
+  }
+  let hashtag: string | undefined;
+  if (obj.hashtag !== undefined && obj.hashtag !== null) {
+    if (typeof obj.hashtag !== "string") {
+      throw new Error("hashtag must be a string.");
+    }
+    const trimmed = obj.hashtag.trim();
+    if (trimmed.length === 0) {
+      throw new Error("hashtag must be a non-empty string.");
+    }
+    if (trimmed.length > NICHE_FILTER_MAX_CHARS) {
+      throw new Error(
+        `hashtag must be ≤ ${NICHE_FILTER_MAX_CHARS} chars.`
+      );
+    }
+    hashtag = trimmed;
+  }
+  // If both arrive on the same payload, keyword wins — it's the broader
+  // filter (free text vs. literal hashtag) and matches the common ask
+  // "find content killing in nyc rn" without forcing the caller to pick.
   return {
     secret: obj.secret,
     creatorId: obj.creatorId,
     ...(platform ? { platform } : {}),
     ...(region ? { region } : {}),
     ...(limit ? { limit } : {}),
+    ...(keyword ? { keyword } : {}),
+    ...(hashtag && !keyword ? { hashtag } : {}),
   };
 }
 
@@ -1662,6 +1703,8 @@ export const fetchTrendsLiveInternal = internalAction({
     platform: v.union(v.literal("tiktok")),
     region: v.string(),
     limit: v.number(),
+    keyword: v.optional(v.string()),
+    hashtag: v.optional(v.string()),
   },
   handler: async (
     ctx,
@@ -1669,6 +1712,7 @@ export const fetchTrendsLiveInternal = internalAction({
   ): Promise<{
     platform: "tiktok";
     region: string;
+    filter: { kind: "keyword" | "hashtag" | "none"; value: string | null };
     fetchedAt: number;
     count: number;
     candidates: Array<{
@@ -1691,7 +1735,26 @@ export const fetchTrendsLiveInternal = internalAction({
     // Lazy-import the ScrapeCreators endpoints module so the cache-read
     // endpoint never has to load it (and Convex bundles only this action with it).
     const { tiktok } = await import("../integrations/scrapeCreators/endpoints");
-    const result = await tiktok.trendingFeed(args.region);
+    let result;
+    let filter: { kind: "keyword" | "hashtag" | "none"; value: string | null };
+    if (args.keyword) {
+      // datePosted+sortBy bias the keyword fan-out toward what's actually
+      // hitting this week, not stale long-tail matches.
+      result = await tiktok.searchKeyword(args.keyword, {
+        datePosted: "this_week",
+        sortBy: "likes",
+        region: args.region,
+      });
+      filter = { kind: "keyword", value: args.keyword };
+    } else if (args.hashtag) {
+      result = await tiktok.searchHashtag(args.hashtag, {
+        region: args.region,
+      });
+      filter = { kind: "hashtag", value: args.hashtag.replace(/^#/, "") };
+    } else {
+      result = await tiktok.trendingFeed(args.region);
+      filter = { kind: "none", value: null };
+    }
     const candidates = result.posts.slice(0, args.limit).map((post) => ({
       url: post.url ?? null,
       caption: post.caption ?? null,
@@ -1704,6 +1767,7 @@ export const fetchTrendsLiveInternal = internalAction({
     return {
       platform: args.platform,
       region: args.region,
+      filter,
       fetchedAt: Date.now(),
       count: candidates.length,
       candidates,
@@ -1737,6 +1801,8 @@ export const fetchTrendsLiveHttp = httpAction(async (ctx, request) => {
         platform,
         region,
         limit,
+        ...(payload.keyword ? { keyword: payload.keyword } : {}),
+        ...(payload.hashtag ? { hashtag: payload.hashtag } : {}),
       }
     );
     return jsonResponse({ ok: true, ...result }, 200);
@@ -1917,6 +1983,189 @@ export const validateTrendCitationHttp = httpAction(async (_ctx, request) => {
   }
   const verdict = checkTrendCitation(payload.message);
   return jsonResponse(verdict, 200);
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint 12.7.3 — validate_outbound_send (pre-send firewall)                   */
+/*                                                                              */
+/* The claw-messenger plugin invokes this RIGHT before every outbound message  */
+/* leaves the Fly machine. Two failure modes get blocked at the wire:           */
+/*                                                                              */
+/*   1. Trend-shape claim with no citation → reuses checkTrendCitation          */
+/*      (covers the 12.7 Phase 2 confabulation surface for sends, not just      */
+/*      log_trend persistence).                                                 */
+/*   2. Markdown leak — Maya's LLM intermittently ships **bold**, headers,      */
+/*      numbered lists, and bullet lists despite explicit AGENTS.md bans.       */
+/*      iMessage renders none of it; the operator sees the raw asterisks.      */
+/*                                                                              */
+/* Stateless: no DB writes. The endpoint returns a structured verdict; the      */
+/* plugin throws a `send-blocked: ...` Error on ok=false so the underlying LLM  */
+/* loop sees the failure and redrafts.                                          */
+/* -------------------------------------------------------------------------- */
+
+const MARKDOWN_BOLD_RE = /\*\*\S[^*]*?\*\*/;
+const MARKDOWN_ITALIC_RE = /(?:^|[^*\w])\*[^\s*][^*\n]*?[^\s*]\*(?:$|[^*\w])/;
+const MARKDOWN_HEADER_RE = /^#{1,6}\s+\S/m;
+const CODE_FENCE_RE = /```/;
+
+export interface ImessageFormatCheck {
+  ok: boolean;
+  categoriesTripped: string[];
+  suggestedFix: string | null;
+}
+
+/**
+ * Pure function — given a draft Maya outbound message, return a pass/fail
+ * verdict on whether it contains markdown formatting iMessage cannot render.
+ *
+ * Categories detected (each tripped independently):
+ *   - markdown-bold: paired ** around non-whitespace
+ *   - markdown-italic: paired * around non-whitespace on one line; conservative
+ *     (skips * adjacent to word chars / asterisks, so "*starring*" tripping is
+ *     acceptable but "the *thing*" + word-boundary forms are caught)
+ *   - markdown-headers: ^#{1,6}\s+ at line start
+ *   - numbered-list: 2+ lines starting with `\d+. ` (single "1. Foo" line is
+ *     legitimate prose — only repeated occurrences indicate a list)
+ *   - bullet-list: 2+ lines starting with `- ` or `* `
+ *   - code-fence: triple-backtick anywhere
+ */
+export function checkImessageFormat(message: string): ImessageFormatCheck {
+  if (typeof message !== "string" || message.length === 0) {
+    return { ok: true, categoriesTripped: [], suggestedFix: null };
+  }
+  const categoriesTripped: string[] = [];
+
+  if (MARKDOWN_BOLD_RE.test(message)) {
+    categoriesTripped.push("markdown-bold");
+  }
+  if (MARKDOWN_ITALIC_RE.test(message)) {
+    categoriesTripped.push("markdown-italic");
+  }
+  if (MARKDOWN_HEADER_RE.test(message)) {
+    categoriesTripped.push("markdown-headers");
+  }
+  if (CODE_FENCE_RE.test(message)) {
+    categoriesTripped.push("code-fence");
+  }
+
+  const lines = message.split(/\r?\n/);
+  let numberedCount = 0;
+  let bulletCount = 0;
+  for (const line of lines) {
+    if (/^\s*\d+\.\s+\S/.test(line)) numberedCount += 1;
+    if (/^\s*[-*]\s+\S/.test(line)) bulletCount += 1;
+  }
+  if (numberedCount >= 2) categoriesTripped.push("numbered-list");
+  if (bulletCount >= 2) categoriesTripped.push("bullet-list");
+
+  if (categoriesTripped.length === 0) {
+    return { ok: true, categoriesTripped: [], suggestedFix: null };
+  }
+  return {
+    ok: false,
+    categoriesTripped,
+    suggestedFix:
+      "Rewrite as plain sentences — iMessage doesn't render markdown. No bullets, headers, bold, or numbered lists. Conversational prose.",
+  };
+}
+
+interface ValidateOutboundSendPayload {
+  secret: string;
+  creatorId: string;
+  message: string;
+}
+
+function parseValidateOutboundSendPayload(
+  raw: unknown
+): ValidateOutboundSendPayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") {
+    throw new Error("secret must be a string.");
+  }
+  if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+    throw new Error("creatorId is required.");
+  }
+  if (typeof obj.message !== "string") {
+    throw new Error("message must be a string.");
+  }
+  return {
+    secret: obj.secret,
+    creatorId: obj.creatorId,
+    message: obj.message,
+  };
+}
+
+/**
+ * Tiny existence-check helper for the outbound-send firewall. Returns just
+ * the row id (or null) — never leaks creator data through the firewall path.
+ */
+export const getCreatorForFirewall = internalQuery({
+  args: { creatorId: v.id("creators") },
+  handler: async (ctx, args) => {
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) return null;
+    return { _id: creator._id };
+  },
+});
+
+export const validateOutboundSendHttp = httpAction(async (ctx, request) => {
+  let payload: ValidateOutboundSendPayload;
+  try {
+    payload = parseValidateOutboundSendPayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+
+  // Validate creator exists. The endpoint is stateless beyond this check —
+  // we never write per-creator data — but a bogus creatorId in the firewall
+  // hook indicates a misconfigured machine and should fail loudly.
+  let creator: { _id: Id<"creators"> } | null;
+  try {
+    creator = await ctx.runQuery(
+      internal.lcMaya.lcMayaHttp.getCreatorForFirewall,
+      { creatorId: payload.creatorId as Id<"creators"> }
+    );
+  } catch {
+    return jsonResponse({ error: "creator-not-found" }, 404);
+  }
+  if (!creator) {
+    return jsonResponse({ error: "creator-not-found" }, 404);
+  }
+
+  const trendCheck = checkTrendCitation(payload.message);
+  const formatCheck = checkImessageFormat(payload.message);
+
+  const blockedReasons: string[] = [];
+  if (!trendCheck.ok && trendCheck.blockedReason) {
+    blockedReasons.push(trendCheck.blockedReason);
+  }
+  if (!formatCheck.ok) {
+    blockedReasons.push(...formatCheck.categoriesTripped);
+  }
+
+  const fixes: string[] = [];
+  if (trendCheck.suggestedFix) fixes.push(trendCheck.suggestedFix);
+  if (formatCheck.suggestedFix) fixes.push(formatCheck.suggestedFix);
+  const suggestedFix = fixes.length > 0 ? fixes.join("; ") : null;
+
+  const ok = trendCheck.ok && formatCheck.ok;
+  return jsonResponse(
+    {
+      ok,
+      blockedReasons,
+      suggestedFix,
+      mentionsTrend: trendCheck.mentionsTrend,
+    },
+    200
+  );
 });
 
 /* -------------------------------------------------------------------------- */

@@ -1,28 +1,31 @@
 /**
- * Sprint 12.5 — shared marketing nav.
+ * Shared marketing nav.
  *
  * Used on every public landing (/, /creators, /business, /waitlist) so
- * the cross-product navigation is always visible. Active route gets a
- * subtle highlight; the rightmost CTA is mode-gated:
+ * cross-product navigation is always visible. Active route gets a subtle
+ * highlight; the rightmost CTA is mode-gated by the shared
+ * `LANDING_MODE` helper:
  *
- *   - LANDING_MODE === "waitlist" (production): "Join the Waitlist"
- *   - LANDING_MODE === "signup"  (default / staging): "Sign in" + "Sign up"
- *     so we can keep onboarding test creators against staging Convex.
+ *   - waitlist (production default): "Join the Waitlist"
+ *   - signup   (staging opt-in):    "Sign in" + "Sign up"
  *
- * Renders client-side so we can read the current path with usePathname()
- * for the active-tab highlight without burning a server roundtrip.
+ * When the creator product is suppressed (NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT
+ * unset/false), `/` renders the business landing in-place, so we treat
+ * `/` as a business pathname for the active-tab highlight. When the
+ * creator product is on, `/` renders the creator landing instead.
+ *
+ * Renders client-side so usePathname() can drive the active-tab highlight
+ * without burning a server roundtrip.
  */
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-type LandingMode = "waitlist" | "signup";
-const LANDING_MODE: LandingMode =
-  (process.env.NEXT_PUBLIC_HEYMAYA_LANDING_MODE as LandingMode | undefined) ===
-  "waitlist"
-    ? "waitlist"
-    : "signup";
+import { LANDING_MODE } from "./landingMode";
+
+const CREATOR_PRODUCT_ENABLED =
+  process.env.NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT === "true";
 
 function NavLink({
   href,
@@ -49,8 +52,15 @@ function NavLink({
 
 export function MarketingNav() {
   const pathname = usePathname() ?? "/";
-  const isCreators = pathname === "/creators" || pathname.startsWith("/creators/");
-  const isBusiness = pathname === "/business" || pathname.startsWith("/business/");
+  const onHome = pathname === "/";
+  const isCreators =
+    pathname === "/creators" ||
+    pathname.startsWith("/creators/") ||
+    (CREATOR_PRODUCT_ENABLED && onHome);
+  const isBusiness =
+    pathname === "/business" ||
+    pathname.startsWith("/business/") ||
+    (!CREATOR_PRODUCT_ENABLED && onHome);
 
   return (
     <header className="relative z-20 px-6 pt-6 sm:px-10 sm:pt-8">

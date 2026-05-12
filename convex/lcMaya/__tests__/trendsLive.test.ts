@@ -28,16 +28,21 @@ const NOW = 1_700_000_000_000;
 
 vi.mock("../../integrations/scrapeCreators/endpoints", async () => {
   // We don't load the real module — fetch_trends_live calls
-  // `tiktok.trendingFeed(region)`, which we stub here. Tests override the
-  // implementation via `mockTrendingFeed.mockImplementation` per case.
+  // `tiktok.trendingFeed`, `tiktok.searchKeyword`, or `tiktok.searchHashtag`
+  // depending on the niche-filter payload. All three are stubbed here; tests
+  // override the implementation via `.mockImplementation` per case.
   return {
     tiktok: {
       trendingFeed: mockTrendingFeed,
+      searchKeyword: mockSearchKeyword,
+      searchHashtag: mockSearchHashtag,
     },
   };
 });
 
 const mockTrendingFeed = vi.fn();
+const mockSearchKeyword = vi.fn();
+const mockSearchHashtag = vi.fn();
 
 async function insertCreator(
   t: ReturnType<typeof convexTest>,
@@ -358,11 +363,69 @@ const stubTrendingFeedResponse = {
   raw: {},
 };
 
+const stubKeywordResponse = {
+  source: "tiktok_search_keyword",
+  query: { query: "nyc" },
+  posts: [
+    {
+      platform: "tiktok" as const,
+      postId: "k1",
+      url: "https://www.tiktok.com/@nyc.guy/video/k1",
+      caption: "bodega run",
+      postedAt: 1_700_003_000_000,
+      metrics: {
+        likeCount: 80_000,
+        commentCount: 2_000,
+        viewCount: 3_300_000,
+        shareCount: 500,
+        saveCount: 300,
+      },
+      mediaType: "video" as const,
+      thumbnailUrl: null,
+      videoUrl: "https://cdn/k1.mp4",
+      videoDurationSec: 18,
+      raw: {},
+    },
+  ],
+  raw: {},
+};
+
+const stubHashtagResponse = {
+  source: "tiktok_search_hashtag",
+  query: { hashtag: "fitness" },
+  posts: [
+    {
+      platform: "tiktok" as const,
+      postId: "h1",
+      url: "https://www.tiktok.com/@fit.girl/video/h1",
+      caption: "5 high-protein meals",
+      postedAt: 1_700_004_000_000,
+      metrics: {
+        likeCount: 25_000,
+        commentCount: 600,
+        viewCount: 900_000,
+        shareCount: 120,
+        saveCount: 90,
+      },
+      mediaType: "video" as const,
+      thumbnailUrl: null,
+      videoUrl: "https://cdn/h1.mp4",
+      videoDurationSec: 22,
+      raw: {},
+    },
+  ],
+  raw: {},
+};
+
 describe("POST /lc_maya/fetch_trends_live", () => {
   beforeEach(() => {
     _setWebhookSecretForTests(TEST_SECRET);
     mockTrendingFeed.mockReset();
     mockTrendingFeed.mockResolvedValue(stubTrendingFeedResponse);
+    mockSearchKeyword.mockReset();
+    mockSearchKeyword.mockResolvedValue(stubKeywordResponse);
+    mockSearchHashtag.mockReset();
+    mockSearchHashtag.mockResolvedValue(stubHashtagResponse);
   });
   afterEach(() => {
     _setWebhookSecretForTests(null);
@@ -388,6 +451,9 @@ describe("POST /lc_maya/fetch_trends_live", () => {
       viewCount: 410_000,
     });
     expect(mockTrendingFeed).toHaveBeenCalledWith("US");
+    expect(mockSearchKeyword).not.toHaveBeenCalled();
+    expect(mockSearchHashtag).not.toHaveBeenCalled();
+    expect(json.filter).toEqual({ kind: "none", value: null });
   });
 
   it("HAPPY: limit caps the candidate count", async () => {
@@ -414,6 +480,120 @@ describe("POST /lc_maya/fetch_trends_live", () => {
     });
     expect(res.status).toBe(200);
     expect(mockTrendingFeed).toHaveBeenCalledWith("GB");
+  });
+
+  it("NICHE: keyword param routes to tiktok.searchKeyword with this_week + likes bias", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "flkw", plan: "manager" });
+    const res = await t.fetch("/lc_maya/fetch_trends_live", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: TEST_SECRET, creatorId, keyword: "nyc" }),
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.ok).toBe(true);
+    expect(json.filter).toEqual({ kind: "keyword", value: "nyc" });
+    expect(mockSearchKeyword).toHaveBeenCalledWith("nyc", {
+      datePosted: "this_week",
+      sortBy: "likes",
+      region: "US",
+    });
+    expect(mockSearchHashtag).not.toHaveBeenCalled();
+    expect(mockTrendingFeed).not.toHaveBeenCalled();
+    expect(json.candidates[0]).toMatchObject({
+      url: "https://www.tiktok.com/@nyc.guy/video/k1",
+      viewCount: 3_300_000,
+    });
+  });
+
+  it("NICHE: hashtag param routes to tiktok.searchHashtag with creator's region", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "flht", plan: "manager" });
+    const res = await t.fetch("/lc_maya/fetch_trends_live", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        hashtag: "fitness",
+        region: "GB",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.filter).toEqual({ kind: "hashtag", value: "fitness" });
+    expect(mockSearchHashtag).toHaveBeenCalledWith("fitness", { region: "GB" });
+    expect(mockSearchKeyword).not.toHaveBeenCalled();
+    expect(mockTrendingFeed).not.toHaveBeenCalled();
+  });
+
+  it("NICHE: hashtag with leading '#' is preserved at HTTP layer and stripped by the search wrapper", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "flht2", plan: "manager" });
+    const res = await t.fetch("/lc_maya/fetch_trends_live", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        hashtag: "#fitness",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    // The HTTP layer forwards the literal "#fitness"; the existing search
+    // wrapper strips the leading "#" before hitting ScrapeCreators. We confirm
+    // the wrapper was invoked with the raw value here; the strip is unit-tested
+    // separately in endpoints.test.ts.
+    expect(mockSearchHashtag).toHaveBeenCalledWith("#fitness", { region: "US" });
+    // The reported filter value is the post-strip canonical form.
+    expect(json.filter).toEqual({ kind: "hashtag", value: "fitness" });
+  });
+
+  it("NICHE: keyword wins when both keyword and hashtag are supplied", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "flboth", plan: "manager" });
+    const res = await t.fetch("/lc_maya/fetch_trends_live", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        keyword: "nyc",
+        hashtag: "fitness",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.filter).toEqual({ kind: "keyword", value: "nyc" });
+    expect(mockSearchKeyword).toHaveBeenCalledTimes(1);
+    expect(mockSearchHashtag).not.toHaveBeenCalled();
+    expect(mockTrendingFeed).not.toHaveBeenCalled();
+  });
+
+  it("CROSS-TENANT: keyword payload for creator A never returns creator B's data (404 on deleted)", async () => {
+    const t = convexTest(schema, modules);
+    const creatorA = await insertCreator(t, { suffix: "flxa", plan: "manager" });
+    const creatorB = await insertCreator(t, { suffix: "flxb", plan: "manager" });
+    // Delete A; B still exists. A request for A's id must 404, never silently
+    // fall through to B's scrape — same guarantee as the no-filter path.
+    await t.run((ctx) => ctx.db.delete(creatorA));
+    const res = await t.fetch("/lc_maya/fetch_trends_live", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId: creatorA,
+        keyword: "nyc",
+      }),
+    });
+    expect(res.status).toBe(404);
+    expect(mockSearchKeyword).not.toHaveBeenCalled();
+    expect(mockSearchHashtag).not.toHaveBeenCalled();
+    expect(mockTrendingFeed).not.toHaveBeenCalled();
+    // Sanity: creator B is untouched and would still resolve on its own id.
+    expect(creatorB).not.toBe(creatorA);
   });
 
   it("CROSS-TENANT: still 404s on a deleted creator even though scrape would succeed", async () => {
@@ -478,6 +658,46 @@ describe("POST /lc_maya/fetch_trends_live", () => {
       {
         body: JSON.stringify({ secret: TEST_SECRET, creatorId, limit: 200 }),
         label: "over-cap-limit",
+      },
+      {
+        body: JSON.stringify({ secret: TEST_SECRET, creatorId, keyword: "" }),
+        label: "empty-keyword",
+      },
+      {
+        body: JSON.stringify({
+          secret: TEST_SECRET,
+          creatorId,
+          keyword: "   ",
+        }),
+        label: "whitespace-keyword",
+      },
+      {
+        body: JSON.stringify({
+          secret: TEST_SECRET,
+          creatorId,
+          keyword: "x".repeat(201),
+        }),
+        label: "over-cap-keyword",
+      },
+      {
+        body: JSON.stringify({ secret: TEST_SECRET, creatorId, keyword: 42 }),
+        label: "non-string-keyword",
+      },
+      {
+        body: JSON.stringify({ secret: TEST_SECRET, creatorId, hashtag: "" }),
+        label: "empty-hashtag",
+      },
+      {
+        body: JSON.stringify({
+          secret: TEST_SECRET,
+          creatorId,
+          hashtag: "x".repeat(201),
+        }),
+        label: "over-cap-hashtag",
+      },
+      {
+        body: JSON.stringify({ secret: TEST_SECRET, creatorId, hashtag: 42 }),
+        label: "non-string-hashtag",
       },
     ];
     for (const { body, label } of cases) {

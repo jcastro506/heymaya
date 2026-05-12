@@ -250,6 +250,10 @@ export function machineConfigFor(
     MAYA_WORKSPACE_BUNDLE_URL: config.workspaceBundleUrl,
     MAYA_JOBS_JSON_BASE64: jobsJsonBase64,
     MAYA_APP_NAME: config.appName,
+    // Sprint 12.7.3 — read by the claw-messenger pre-send firewall hook to
+    // identify which creator's drafts are being validated against the
+    // /lc_maya/validate_outbound_send endpoint.
+    MAYA_CREATOR_ID: config.creatorId,
   };
 
   return {

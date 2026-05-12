@@ -99,15 +99,10 @@ export default clerkMiddleware(async (auth, req) => {
       return NextResponse.redirect(dest, 308);
     }
 
-    // Sprint 12.5 — `/` lands on `/business` while creator product is
-    // suppressed. The default product is service-business; visitors who
-    // want the creator marketing page can click "For Creators" in the
-    // shared MarketingNav. Anchoring on /business keeps the URL the
-    // user sees aligned with the active product.
-    if (pathname === "/") {
-      const dest = new URL("/business", req.url);
-      return NextResponse.redirect(dest, 308);
-    }
+    // `/` renders the business landing in-place via `app/page.tsx`
+    // (conditional on NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT). The earlier
+    // Sprint 12.5 redirect to /business was removed so the front door
+    // is a single URL — `/` is the canonical home, no hop.
 
     // /onboarding/maya (creator's conversational onboarding) → /onboarding/business
     if (pathname === "/onboarding/maya" || pathname.startsWith("/onboarding/maya/")) {

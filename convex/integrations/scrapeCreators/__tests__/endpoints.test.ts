@@ -237,6 +237,51 @@ describe("endpoints — TikTok", () => {
     }
   });
 
+  it("searchKeyword forwards niche-bias options as snake_case query params", async () => {
+    const { client, fetchImpl } = clientReturning(tiktokPostsFixture);
+    await tiktok.searchKeyword("nyc", {
+      client,
+      datePosted: "this_week",
+      sortBy: "likes",
+      region: "US",
+      cursor: "abc123",
+      trim: true,
+    });
+    const sent = String(fetchImpl.mock.calls[0][0]);
+    expect(sent).toContain("/v1/tiktok/search/keyword");
+    expect(sent).toContain("query=nyc");
+    expect(sent).toContain("date_posted=this_week");
+    expect(sent).toContain("sort_by=likes");
+    expect(sent).toContain("region=US");
+    expect(sent).toContain("cursor=abc123");
+    expect(sent).toContain("trim=true");
+    // The non-bias call shape from earlier in this file must still work — no
+    // bias options means no leaked query params.
+    const { client: c2, fetchImpl: f2 } = clientReturning(tiktokPostsFixture);
+    await tiktok.searchKeyword("plain", { client: c2 });
+    const sent2 = String(f2.mock.calls[0][0]);
+    expect(sent2).toContain("query=plain");
+    expect(sent2).not.toContain("date_posted=");
+    expect(sent2).not.toContain("sort_by=");
+  });
+
+  it("searchHashtag forwards region/cursor/trim and strips leading '#'", async () => {
+    const { client, fetchImpl } = clientReturning(tiktokPostsFixture);
+    await tiktok.searchHashtag("#fitness", {
+      client,
+      region: "GB",
+      cursor: "next-page",
+      trim: false,
+    });
+    const sent = String(fetchImpl.mock.calls[0][0]);
+    expect(sent).toContain("/v1/tiktok/search/hashtag");
+    expect(sent).toContain("hashtag=fitness");
+    expect(sent).not.toContain("hashtag=%23fitness");
+    expect(sent).toContain("region=GB");
+    expect(sent).toContain("cursor=next-page");
+    expect(sent).toContain("trim=false");
+  });
+
   it("raw TikTok research wrappers preserve raw payloads for high-variance endpoints", async () => {
     const payload = { creators: [{ handle: "fitcreator99" }] };
     const { client, fetchImpl } = clientReturning(payload);

@@ -27,6 +27,7 @@ import {
   startGoogleCalendarOAuthHttp,
   startOAuthHttp,
   updateCreatorHttp,
+  validateOutboundSendHttp,
   validateTrendCitationHttp,
 } from "./lcMaya/lcMayaHttp";
 import { syncWikiObservationsHttp } from "./lcMaya/wikiMirrorSync";
@@ -129,6 +130,16 @@ http.route({
   path: "/lc_maya/validate_trend_citation",
   method: "POST",
   handler: validateTrendCitationHttp,
+});
+// Sprint 12.7.3 — pre-send firewall. The claw-messenger plugin invokes this
+// before every outbound message leaves the Fly machine. ok=false → the plugin
+// throws so Maya's LLM loop sees the failure and redrafts. Catches both
+// trend-shape confabulation (no citation) and markdown that iMessage cannot
+// render (bold, headers, bullets, numbered lists, code fences).
+http.route({
+  path: "/lc_maya/validate_outbound_send",
+  method: "POST",
+  handler: validateOutboundSendHttp,
 });
 // Sprint 12.7.1 — canonical "is the OAuth landed?" check. Pre-12.7.1 Maya was
 // forced to call gmail_list_inbox or calendar_list_events (which both require
