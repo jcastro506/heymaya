@@ -185,9 +185,14 @@ export const patchCreatorOnFailure = internalMutation({
 /* Bootstrap shape                                                             */
 /* -------------------------------------------------------------------------- */
 
+// Sprint 12.7.2 — bumped from sha256:fc3cf73… to sha256:b2ca5a73… to pick up
+// the new layer that apt-installs `ffmpeg`. Required by the
+// `mahmoudadelbghany/ffmpeg-video-editor` ClawHub pin so Maya can actually
+// execute the FFmpeg commands she generates. Rebuild + repush via the
+// command documented in `infra/openclaw-runtime/Dockerfile` header.
 const OPENCLAW_IMAGE =
   process.env.MAYA_OPENCLAW_IMAGE ??
-  "registry.fly.io/heymaya-openclaw@sha256:fc3cf7390174c94ae8aea2f31d24a5a6c2458d7226d05196adc35df47d990057";
+  "registry.fly.io/heymaya-openclaw@sha256:b2ca5a732a307e64f9f9f5b14a5ade347f7c9885a2b2ea1b2c5beed4c2d1cbf7";
 
 const MACHINE_GUEST: NonNullable<FlyMachineConfig["guest"]> = {
   cpu_kind: "shared",
