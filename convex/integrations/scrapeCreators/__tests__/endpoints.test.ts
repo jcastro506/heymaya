@@ -24,6 +24,7 @@ import {
 import {
   tiktokProfileFixture,
   tiktokPostsFixture,
+  tiktokSearchKeywordFixture,
   tiktokV3ProfileVideosFixture,
   tiktokCommentsFixture,
   tiktokTranscriptFixture,
@@ -263,6 +264,16 @@ describe("endpoints — TikTok", () => {
     expect(sent2).toContain("query=plain");
     expect(sent2).not.toContain("date_posted=");
     expect(sent2).not.toContain("sort_by=");
+  });
+
+  it("searchKeyword normalizes the search_item_list / aweme_info upstream shape", async () => {
+    const { client } = clientReturning(tiktokSearchKeywordFixture);
+    const result = await tiktok.searchKeyword("nyc", { client });
+    expect(result.posts).toHaveLength(1);
+    expect(result.posts[0]).toMatchObject({
+      postId: "7637798581134527757",
+      metrics: { viewCount: 14015, likeCount: 618, commentCount: 13 },
+    });
   });
 
   it("searchHashtag forwards region/cursor/trim and strips leading '#'", async () => {

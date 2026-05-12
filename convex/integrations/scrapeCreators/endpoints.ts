@@ -825,6 +825,11 @@ function normalizeTikTokResearchPosts(raw: unknown): NormalizedPost[] {
       itemList: z.array(TikTokVideoSchema).optional(),
       items: z.array(TikTokVideoSchema).optional(),
       videos: z.array(TikTokVideoSchema).optional(),
+      // `/v1/tiktok/search/keyword` wraps each post in `{ aweme_info: {...} }`
+      // under `search_item_list`. Unwrap to the flat shape the other endpoints use.
+      search_item_list: z
+        .array(z.object({ aweme_info: TikTokVideoSchema }).passthrough())
+        .optional(),
       data: z
         .union([
           z.array(TikTokVideoSchema),
@@ -853,6 +858,7 @@ function normalizeTikTokResearchPosts(raw: unknown): NormalizedPost[] {
       parsed.itemList ??
       parsed.items ??
       parsed.videos ??
+      parsed.search_item_list?.map((entry) => entry.aweme_info) ??
       dataList ??
       [],
   });

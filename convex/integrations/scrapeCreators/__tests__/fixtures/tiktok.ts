@@ -61,6 +61,33 @@ export const tiktokPostsFixture = {
   hasMore: true,
 };
 
+// `/v1/tiktok/search/keyword` wraps each post in `{ aweme_info: {...} }` under
+// `search_item_list` — different shape from the other search/trending endpoints.
+export const tiktokSearchKeywordFixture = {
+  success: true,
+  credits_remaining: 10287,
+  search_item_list: [
+    {
+      aweme_info: {
+        id: "7637798581134527757",
+        desc: "Studio for rent in Manhattan #NYC #rentnyc",
+        createTime: 1778313678,
+        stats: {
+          diggCount: 618,
+          commentCount: 13,
+          playCount: 14015,
+          shareCount: 5,
+          collectCount: 12,
+        },
+        video: {
+          cover: "https://p16-sign.tiktokcdn.com/cover-keyword.jpg",
+          playAddr: "https://v16-webapp.tiktok.com/keyword.mp4",
+        },
+      },
+    },
+  ],
+};
+
 export const tiktokV3ProfileVideosFixture = {
   success: true,
   status_code: 200,
