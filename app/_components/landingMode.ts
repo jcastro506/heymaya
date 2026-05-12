@@ -1,25 +1,25 @@
 /**
- * Sprint 12.5 — landing-mode helper.
+ * Landing-mode helper.
  *
- * Production (heymaya.com): mode = "waitlist". The creator product is
- * pre-launch, so every signup/checkout CTA on a marketing landing should
- * point to /waitlist instead of /checkout or /sign-up.
+ * Default: "waitlist". Both products are pre-launch on production, so
+ * every primary CTA on a marketing landing (nav, hero, pricing, final
+ * CTA) collapses to "Join the Waitlist" → /waitlist (Convex-backed form
+ * at `convex/waitlist/mayaProductWaitlist.ts`).
  *
- * Staging / preview / dev: mode = "signup" (default). Keeps the
- * /checkout?tier=… and /sign-up CTAs live so we can keep onboarding
- * test creators against the staging Convex deployment.
+ * Staging / dev opt-in: set NEXT_PUBLIC_HEYMAYA_LANDING_MODE=signup to
+ * restore the /checkout + /sign-up CTAs for onboarding test creators
+ * against the staging Convex deployment. Any other value (or unset)
+ * falls through to waitlist mode.
  *
- * Toggled by NEXT_PUBLIC_HEYMAYA_LANDING_MODE in Vercel env. Read at
- * module-eval time — Next.js inlines NEXT_PUBLIC_* into the client
- * bundle, so a build is required to flip the mode.
+ * Read at module-eval time — Next.js inlines NEXT_PUBLIC_* into the
+ * client bundle, so a build is required to flip the mode.
  */
 export type LandingMode = "waitlist" | "signup";
 
 export const LANDING_MODE: LandingMode =
-  (process.env.NEXT_PUBLIC_HEYMAYA_LANDING_MODE as LandingMode | undefined) ===
-  "waitlist"
-    ? "waitlist"
-    : "signup";
+  process.env.NEXT_PUBLIC_HEYMAYA_LANDING_MODE === "signup"
+    ? "signup"
+    : "waitlist";
 
 /**
  * The href every "primary CTA" on a marketing landing should point at.

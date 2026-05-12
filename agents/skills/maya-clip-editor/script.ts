@@ -66,7 +66,7 @@ export interface ClipEditInput {
 }
 
 export interface CapcutInvocation {
-  readonly skillSlug: "vcarolxhberger/free-video-generator-capcut";
+  readonly skillSlug: "mahmoudadelbghany/ffmpeg-video-editor";
   readonly skillVersion: "1.0.0";
   readonly preset:
     | "trim"
@@ -288,7 +288,7 @@ export function buildCapcutInvocation(input: ClipEditInput): CapcutInvocation {
   };
 
   return {
-    skillSlug: "vcarolxhberger/free-video-generator-capcut",
+    skillSlug: "mahmoudadelbghany/ffmpeg-video-editor",
     skillVersion: "1.0.0",
     preset,
     args,

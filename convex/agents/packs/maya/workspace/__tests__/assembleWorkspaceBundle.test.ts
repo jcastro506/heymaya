@@ -157,7 +157,9 @@ describe("assembleWorkspaceBundle", () => {
     // loader on a different code path and are not bootstrap-loaded; they
     // can be larger than the cap (the maya-platform inventory is ~33K
     // because it lists every shipped skill with sourcing).
-    const CAP = 40_000;
+    // Sprint 12.6+ — bumped 40K → 45K to fit timezone-discipline +
+    // abort-silence rules added after the 2026-05-10 evening leak.
+    const CAP = 45_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
@@ -379,14 +381,19 @@ describe("assembleWorkspaceBundle", () => {
     expect(userMd2).toContain("completed");
   });
 
-  it("Wave 5 (OpenClaw 2026.4.23): at production 28K cap, standing orders embed inline (no separate file)", () => {
+  it("Wave 5 (OpenClaw 2026.4.23): at production cap, standing orders embed inline (no separate file)", () => {
     // Per https://docs.openclaw.ai/automation/standing-orders only the
     // canonical root files (AGENTS / SOUL / USER / HEARTBEAT / TOOLS / MEMORY /
     // BOOTSTRAP / IDENTITY) are auto-injected at session start; arbitrary
     // .md files in the workspace root are NOT guaranteed to load. So Maya
-    // bumps the cap to 28K (MAYA_BOOTSTRAP_MAX_CHARS) and embeds standing
-    // orders inline. Verify that the production cap path actually fits.
-    const PROD_CAP = 66_000;
+    // sets a generous cap (MAYA_BOOTSTRAP_MAX_CHARS in configGeneratorMaya.ts,
+    // currently 80K) and embeds standing orders inline. Verify the production
+    // cap path actually fits — keep this aligned with MAYA_BOOTSTRAP_MAX_CHARS
+    // every time it bumps.
+    // Sprint 12.7 — bumped 80K → 100K alongside the trend-grounding section
+    // + chat_trend_lookup standing order. Keep this in sync with
+    // MAYA_BOOTSTRAP_MAX_CHARS in configGeneratorMaya.ts.
+    const PROD_CAP = 100_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };

@@ -37,17 +37,18 @@ describe("creator-maya-v0-fly-smoke", () => {
     // Cron jobs.json includes the morning_brief entry from the canonical
     // standing-orders catalog.
     expect(fixture.workspaceFiles["jobs.json"]).toContain("morning_brief");
-    // Sprint 2 final post-merge: BUNDLED + custom-maya + ClawHub pin.
-    // creator-* prose stubs deleted (Slice A), maya-* skills now bundled
-    // (Slice C), remotion-video-toolkit replaced with video-frames (Slice D).
+    // Sprint 12.7.2 — MVP scope reduced to 2 ClawHub pins: tiktok (Growth OS)
+    // + ffmpeg-video-editor (real edit capability). The Sprint-2 stub pins
+    // (video-frames, capcut, whisper, elevenlabs, photo-overlay, brave) were
+    // dropped from the lock — they were placeholders only.
     expect(fixture.workspaceFiles["skills/maya-platform/SKILL.md"]).toContain(
       "name: maya-platform"
     );
     expect(fixture.workspaceFiles[".clawhub/lock.json"]).toContain(
-      "video-frames"
+      "ffmpeg-video-editor"
     );
-    expect(fixture.workspaceFiles["skills/video-frames/SKILL.md"]).toContain(
-      "name: video-frames"
+    expect(fixture.workspaceFiles["skills/ffmpeg-video-editor/SKILL.md"]).toContain(
+      "FFmpeg Video Editor"
     );
     expect(fixture.workspaceFiles["skills/tiktok/SKILL.md"]).toContain("name: tiktok");
     expect(fixture.gatewayConfig).toMatchObject({

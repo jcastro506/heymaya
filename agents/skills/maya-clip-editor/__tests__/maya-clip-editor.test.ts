@@ -88,7 +88,7 @@ describe("maya-clip-editor — parseEditIntent", () => {
 describe("maya-clip-editor — buildCapcutInvocation", () => {
   it("pins the capcut skill slug + version", () => {
     const inv = buildCapcutInvocation(baseInput);
-    expect(inv.skillSlug).toBe("vcarolxhberger/free-video-generator-capcut");
+    expect(inv.skillSlug).toBe("mahmoudadelbghany/ffmpeg-video-editor");
     expect(inv.skillVersion).toBe("1.0.0");
   });
 

@@ -128,8 +128,26 @@ export function generateUserMd(inputs: UserMdInputs): string {
     : `- _${NOT_YET_PROVIDED}_`;
 
   const niche = picture?.niche ?? NOT_YET_PROVIDED;
+  // Sprint 12.6 — pull the creator's stated 3-month goal + anti-niches up to
+  // the stated-lane section so Maya sees them next to the niche-in-own-words
+  // line, not buried 3 sections down. The longer-horizon goals (1y / 5y) stay
+  // in "What they're working toward" — those frame ambition, not next-week
+  // grounding. anti-niches surface as a list line (empty → omitted).
+  const statedGoals3Mo =
+    picture?.openingAnswers?.goals3Mo &&
+    picture.openingAnswers.goals3Mo.trim().length > 0
+      ? picture.openingAnswers.goals3Mo
+      : NOT_YET_PROVIDED;
+  const statedNicheInOwnWords =
+    picture?.openingAnswers?.nicheInOwnWords &&
+    picture.openingAnswers.nicheInOwnWords.trim().length > 0
+      ? picture.openingAnswers.nicheInOwnWords
+      : null;
+  const antiNiches = picture?.openingAnswers?.antiNiches ?? [];
   const audienceBlock = renderAudience(picture);
   const watchedBlock = renderWatchedObservations(picture);
+  const divergenceBlock = renderDivergenceBlock(picture);
+  const groundingRulesBlock = renderGroundingRules();
   const careerStage = picture?.careerStage ?? NOT_YET_PROVIDED;
   const location = renderLocation(picture);
   const monthlyRevenue =
@@ -228,13 +246,35 @@ export function generateUserMd(inputs: UserMdInputs): string {
     "",
     handlesBlock,
     "",
-    "## Niche & audience",
+    // Sprint 12.6 — split the old "Niche & audience" into:
+    //   ## Stated lane (their words)        — niche, 3-month goal, anti-niches
+    //   ## What their content actually looks like — observed signal, with the
+    //                                         note that observed ≠ niche
+    //   ## Divergence flag                  — only when stated ≠ observed
+    //   ## Audience demographics            — age / geos / interests / gender
+    //
+    // The headers cue Maya that stated and observed are different reads. A
+    // human manager looking at the picture would never collapse "creator
+    // shot 8 posts in London on a trip" into "creator's niche is London."
+    // The structure here makes the same distinction the LLM should make.
+    "## Stated lane (their words)",
     "",
-    `**Niche:** ${niche}`,
+    "What they told me their lane is. This is the GROUNDING FLOOR for every proactive idea I ship.",
+    "",
+    `- **Niche they describe:** ${statedNicheInOwnWords ?? niche}`,
+    `- **3-month goal:** ${statedGoals3Mo}`,
+    ...(antiNiches.length > 0
+      ? [`- **No-go topics / anti-niches:** ${antiNiches.join(", ")}`]
+      : []),
+    "",
+    ...(watchedBlock ? [watchedBlock, ""] : []),
+    ...(divergenceBlock ? [divergenceBlock, ""] : []),
+    "## Audience demographics",
+    "",
+    "Who watches their stuff. NOT the same as their niche — this is the audience the content reaches, which may or may not be a clean match for the lane they're trying to build.",
     "",
     audienceBlock,
     "",
-    ...(watchedBlock ? [watchedBlock, ""] : []),
     "## Where they're at",
     "",
     `- **Career stage:** ${careerStage}`,
@@ -258,6 +298,7 @@ export function generateUserMd(inputs: UserMdInputs): string {
     `- **Tone:** ${toneNote}`,
     "",
     ...(cadenceSection ? [cadenceSection, ""] : []),
+    groundingRulesBlock,
   ].join("\n");
 }
 
@@ -322,10 +363,18 @@ function renderWatchedObservations(
     wm.length > 0;
   if (!hasAny) return null;
 
-  const lines: string[] = ["## What I observed watching your videos"];
+  // Sprint 12.6 — renamed from "What I observed watching your videos" to make
+  // the stated-vs-observed distinction explicit. The header note teaches Maya
+  // to read this as recency data (what the last 30 contained) rather than as
+  // a definition of the creator's lane. "Settings seen: London, NYC" doesn't
+  // mean their niche is London-or-NYC; it means those were the settings in
+  // the watched window. The lane is in `## Stated lane (their words)`.
+  const lines: string[] = [
+    "## What their content actually looks like (last 30 posts)",
+  ];
   lines.push("");
   lines.push(
-    "Notes I took while watching the last 30. Not a report — texture I can pull from when I'm talking to you. Use this; it's the difference between sounding like a friend who watched and sounding like a dashboard."
+    "What the last 30 posts CONTAINED — settings, recurring elements, voice on camera, what's working visually. **This is NOT the same as their niche.** A creator who shoots a trip to London still has their actual lane (see § Stated lane); the London clips are just a setting that showed up in the watched window. Read the format-level patterns (handheld POV, walking monologue, kitchen-counter explainer) as how they work; read the setting-level patterns (London / Piccadilly / bodega) as where the last 30 happened to land. Ground new ideas in the format, not the setting — unless the creator told me the setting IS the niche."
   );
   lines.push("");
 
@@ -698,4 +747,82 @@ function humanShortDate(iso: string): string | null {
     "Dec",
   ];
   return `${MONTHS[month - 1]} ${day}`;
+}
+
+/**
+ * Sprint 12.6 — Divergence flag block. Renders an explicit "stated vs
+ * observed" section ONLY when the synth flagged a mismatch (niche / location
+ * / goal etc.) in `picture.needsVerification`. The block names the field, the
+ * self-reported value, the observed signal, and the question Maya should ask
+ * — so when she opens USER.md she sees the gap before she drafts anything
+ * proactive.
+ *
+ * Returns null when there's no divergence flagged. Severity is preserved so
+ * Maya can decide between asking proactively (blocker) and weaving the
+ * question into the next natural exchange (soft).
+ */
+function renderDivergenceBlock(
+  picture: CreatorPictureExt | null
+): string | null {
+  if (!picture) return null;
+  const items = picture.needsVerification ?? [];
+  if (items.length === 0) return null;
+
+  const lines: string[] = ["## Divergence flag (stated vs observed)"];
+  lines.push("");
+  lines.push(
+    "The synth flagged a gap between what the creator told me and what their last 30 posts actually contain. **Until the creator clarifies, observed-only material here is question fodder, NOT idea fodder.** I do not ground proactive recommendations in the divergent material; I ask the alignment question first, the way a real manager would when they noticed the gap."
+  );
+  lines.push("");
+  for (const item of items) {
+    const sev = item.severity === "blocker" ? " [BLOCKER]" : "";
+    lines.push(`- **${item.field}**${sev}`);
+    if (item.selfReported !== undefined && item.selfReported !== null) {
+      const sr =
+        typeof item.selfReported === "string"
+          ? item.selfReported
+          : JSON.stringify(item.selfReported);
+      lines.push(`  - **Their words:** ${sr}`);
+    }
+    if (item.observedSignal !== undefined && item.observedSignal !== null) {
+      const os =
+        typeof item.observedSignal === "string"
+          ? item.observedSignal
+          : JSON.stringify(item.observedSignal);
+      lines.push(`  - **What I observed:** ${os}`);
+    }
+    if (item.evidence && item.evidence.length > 0) {
+      lines.push(
+        `  - **Evidence:** ${item.evidence.slice(0, 3).join("; ")}`
+      );
+    }
+    lines.push(`  - **Question to ask:** "${item.question}"`);
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Sprint 12.6 — Grounding rules footer. The pre-check Maya runs before any
+ * proactive output (morning_brief, evening_recap, weekly_content_plan,
+ * trend_watcher, daily_niche_scan, accountability_nudge, hook_library_build,
+ * etc.). Lives at the bottom of USER.md so it's the last thing Maya reads
+ * before composing — closest to the moment she'd violate it.
+ *
+ * The rules are NOT thresholds. They're how a human manager reads the
+ * picture: stated = floor, format ≠ setting, observed-only = question.
+ */
+function renderGroundingRules(): string {
+  return [
+    "## How I ground recommendations",
+    "",
+    "Before I draft anything proactive (morning brief, weekly plan, evening recap, trend pick, nudge, hook idea, post reaction), I read this file as one integrated picture — not a tag dump. The pre-check:",
+    "",
+    "1. **Stated lane is the grounding floor.** Every idea I ship has to land in the lane the creator described (`## Stated lane`). If the only support for an idea is observed-but-not-stated material (a setting that happened to show up, an audience interest tag), that idea is QUESTION fodder, not IDEA fodder. I ask the alignment question instead of shipping the recommendation.",
+    "2. **Format ≠ setting ≠ niche.** The format is HOW they make stuff (handheld POV, walking monologue, kitchen-counter explainer, voiceover-on-b-roll). The setting is WHERE the last 30 happened to land (London, NYC, their kitchen). The niche is WHAT THE WORK IS ABOUT (observational humor, skincare reviews, beginner cooking). I reason at the format-and-niche layer when generating ideas. Settings are interchangeable unless the creator said otherwise.",
+    "3. **Read the whole picture, not single fields.** Stated lane + cadence target + last-post gap + calendar for next 14 days + any open commitments + the divergence flag (if present) all factor into what to surface today. A 3×/week creator who hasn't posted in 6 weeks doesn't need a trend pick — they need an honest cadence question. A creator with a Brooklyn shoot on Thursday gets the plan built around Thursday, not floating.",
+    "4. **Observed signal is recency, stated is intent.** Top geos, interest tags, settings seen, recurring locations are all RECENCY data — what the last 30 contained. The creator's stated niche / goal / job framing is INTENT. When they diverge, intent wins for grounding; recency surfaces as a question.",
+    "5. **No idea ships without a real signal trail.** Every proactive recommendation cites something concrete — a post pattern, a calendar event, a trend URL, a commitment that's slipping, a specific clip. \"Three ideas in your lane\" with no trail is the cheerleading move; that's banned.",
+    "",
+    "When in doubt: what would a real manager who watched the last 30 posts and read the onboarding answers actually text right now? That's the move. Not a checklist over the picture.",
+  ].join("\n");
 }

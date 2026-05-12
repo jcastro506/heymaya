@@ -29,6 +29,96 @@ if (sendSrc.includes('import { normalizeE164 } from "openclaw/plugin-sdk";')) {
   );
 }
 
+// Sprint 12.7.3 — pre-send firewall. Maya's underlying LLM ignores AGENTS.md
+// procedural rules about trend grounding and iMessage markdown bans. We
+// enforce at the wire: every outbound message routes through Convex
+// validate_outbound_send before delivery. ok=false throws a structured
+// `send-blocked: ...` Error so the LLM loop sees the failure and redrafts.
+if (!sendSrc.includes("async function validateOutboundOrThrow(")) {
+  const firewallHelper = `async function validateOutboundOrThrow(parts) {
+    const creatorId = process.env.MAYA_CREATOR_ID;
+    const httpBase = process.env.MAYA_CONVEX_HTTP_BASE;
+    const secret = process.env.WEBHOOK_INTERNAL_SECRET;
+    if (!creatorId || !httpBase || !secret) {
+        return;
+    }
+    const text = (Array.isArray(parts) ? parts : [])
+        .filter((p) => p && p.type === "text" && typeof p.value === "string")
+        .map((p) => p.value)
+        .join("\\n");
+    if (!text) return;
+    let res;
+    try {
+        res = await fetch(\`\${httpBase}/lc_maya/validate_outbound_send\`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ secret, creatorId, message: text }),
+        });
+    } catch (err) {
+        console.warn("[firewall] validate_outbound_send network failure, allowing send:", String(err));
+        return;
+    }
+    if (!res.ok) {
+        console.warn(\`[firewall] validate_outbound_send returned HTTP \${res.status}, allowing send\`);
+        return;
+    }
+    let body;
+    try { body = await res.json(); } catch { return; }
+    if (body && body.ok === false) {
+        const reasons = Array.isArray(body.blockedReasons) ? body.blockedReasons.join("; ") : "blocked";
+        const fix = body.suggestedFix ? \` Fix: \${body.suggestedFix}\` : "";
+        throw new Error(\`send-blocked: \${reasons}.\${fix}\`);
+    }
+}
+`;
+  const sendMessageNeedle = `export async function sendMessage(ws, to, parts, service) {
+    const normalizedTarget = normalizeDirectTarget(to);
+    if (!normalizedTarget) {
+        throw new Error("Recipient is required");
+    }
+    const resp = await ws.request({ type: "send", to: normalizedTarget, parts, ...(service ? { service } : {}) });`;
+  if (!sendSrc.includes(sendMessageNeedle)) {
+    throw new Error("Unable to patch sendMessage pre-send hook; expected marker not found.");
+  }
+  sendSrc = sendSrc.replace(
+    sendMessageNeedle,
+    `${firewallHelper}export async function sendMessage(ws, to, parts, service) {
+    const normalizedTarget = normalizeDirectTarget(to);
+    if (!normalizedTarget) {
+        throw new Error("Recipient is required");
+    }
+    await validateOutboundOrThrow(parts);
+    const resp = await ws.request({ type: "send", to: normalizedTarget, parts, ...(service ? { service } : {}) });`
+  );
+
+  const sendGroupMessageNeedle = `async function sendGroupMessage(ws, chatId, parts, service) {
+    const resp = await ws.request({ type: "send", chatId, parts, ...(service ? { service } : {}) });`;
+  if (!sendSrc.includes(sendGroupMessageNeedle)) {
+    throw new Error("Unable to patch sendGroupMessage pre-send hook; expected marker not found.");
+  }
+  sendSrc = sendSrc.replace(
+    sendGroupMessageNeedle,
+    `async function sendGroupMessage(ws, chatId, parts, service) {
+    await validateOutboundOrThrow(parts);
+    const resp = await ws.request({ type: "send", chatId, parts, ...(service ? { service } : {}) });`
+  );
+
+  // sendToNewGroup has an inline ws.request — patch best-effort if the
+  // canonical shape is present. Group-creation paths are rare in v0; if the
+  // marker shifts we don't fail the build.
+  const sendToNewGroupNeedle = `export async function sendToNewGroup(ws, to, text, service) {`;
+  if (sendSrc.includes(sendToNewGroupNeedle)) {
+    const inlineNeedle = /(export async function sendToNewGroup\(ws, to, text, service\) \{[\s\S]*?)(const resp = await ws\.request\(\{ type: "send",)/;
+    const m = sendSrc.match(inlineNeedle);
+    if (m && !m[1].includes("validateOutboundOrThrow")) {
+      sendSrc = sendSrc.replace(
+        inlineNeedle,
+        `$1await validateOutboundOrThrow(parts);\n        $2`
+      );
+    }
+  }
+}
+
 if (!src.includes("describeMessageTool:")) {
   const needle = '    actions: {\n        listActions: () => ["send", "react"],';
   const replacement = `    actions: {

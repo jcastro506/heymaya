@@ -17,13 +17,18 @@ import { voiceTranscriptHttp } from "./voice/transcriptHttp";
 import { openClawMediaIngestHttp } from "./creatorMayaV0/openClawMediaIngestHttp";
 import {
   completeGoogleCalendarOAuthHttp,
+  connectedAccountsHealthHttp,
   cronHeartbeatHttp,
+  fetchTrendsLiveHttp,
+  getRecentTrendsHttp,
   lockPictureHttp,
   logTrendHttp,
   submitOpeningAnswersHttp,
   startGoogleCalendarOAuthHttp,
   startOAuthHttp,
   updateCreatorHttp,
+  validateOutboundSendHttp,
+  validateTrendCitationHttp,
 } from "./lcMaya/lcMayaHttp";
 import { syncWikiObservationsHttp } from "./lcMaya/wikiMirrorSync";
 import { appleCalendarConnectHttp } from "./lcMaya/appleCalendarConnect";
@@ -102,6 +107,48 @@ http.route({
   path: "/lc_maya/log_trend",
   method: "POST",
   handler: logTrendHttp,
+});
+// Sprint 12.7 Phase 1 — cache-read + live-fetch for trend grounding.
+// `get_recent_trends` is the integrated-read pre-check Maya runs before
+// claiming any trend; `fetch_trends_live` is the fallback when the cache is
+// empty or stale. Maya combines them with `log_trend` (above) to ground every
+// chat-time trend pitch in real ScrapeCreators URLs.
+http.route({
+  path: "/lc_maya/get_recent_trends",
+  method: "POST",
+  handler: getRecentTrendsHttp,
+});
+http.route({
+  path: "/lc_maya/fetch_trends_live",
+  method: "POST",
+  handler: fetchTrendsLiveHttp,
+});
+// Sprint 12.7 Phase 2 — pre-send citation firewall. Maya invokes this before
+// any outbound message that mentions trends. Returns ok=false when the draft
+// talks about trends without citing a real platform-post URL. Stateless.
+http.route({
+  path: "/lc_maya/validate_trend_citation",
+  method: "POST",
+  handler: validateTrendCitationHttp,
+});
+// Sprint 12.7.3 — pre-send firewall. The claw-messenger plugin invokes this
+// before every outbound message leaves the Fly machine. ok=false → the plugin
+// throws so Maya's LLM loop sees the failure and redrafts. Catches both
+// trend-shape confabulation (no citation) and markdown that iMessage cannot
+// render (bold, headers, bullets, numbered lists, code fences).
+http.route({
+  path: "/lc_maya/validate_outbound_send",
+  method: "POST",
+  handler: validateOutboundSendHttp,
+});
+// Sprint 12.7.1 — canonical "is the OAuth landed?" check. Pre-12.7.1 Maya was
+// forced to call gmail_list_inbox or calendar_list_events (which both require
+// extra args) as a proxy; on the Kevin re-onboard she confabulated an endpoint
+// at this exact path. This is the endpoint she was reaching for.
+http.route({
+  path: "/lc_maya/connected_accounts_health",
+  method: "POST",
+  handler: connectedAccountsHealthHttp,
 });
 // Wave 0b — append-only cron heartbeat receipt. Maya hits this from a
 // `cron.heartbeat` standing order so we have ground-truth that OpenClaw

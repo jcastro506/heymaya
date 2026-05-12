@@ -46,6 +46,10 @@ import { generateSoulMd } from "./generateSoulMd";
 import { generateIdentityMd } from "./generateIdentityMd";
 import { buildCronJobsJson, type JobsJson } from "./buildCronJobsJson";
 import { BUNDLED_SKILLS } from "./skillsRegistry";
+import {
+  CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK,
+  CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILLS,
+} from "../../../../creatorMayaV0/pinnedClawhubSkills";
 import type { WorkspaceInputs } from "./types";
 
 export interface WorkspaceBundle {
@@ -161,6 +165,29 @@ export function assembleWorkspaceBundle(
   // `scripts/sync-bundled-skills.ts` from the on-disk SKILL.md files).
   for (const skill of BUNDLED_SKILLS) {
     files.set(`skills/${skill.slug}/SKILL.md`, skill.content);
+  }
+
+  // Sprint 12.7.2 — pinned ClawHub vendor skills. Previously these were only
+  // shipped via `creatorMayaV0/workspaceManifest.ts` (a parallel deploy path
+  // not used by the live creator-Maya pipeline). The active path —
+  // `configGeneratorMaya.ts` → `assembleWorkspaceBundle` — skipped them,
+  // which is why `/data/workspace/skills/` on Kevin's machine had zero
+  // ClawHub pins despite the lock file referencing 7.
+  //
+  // Currently only `tiktok` carries real content; the other 6 are hydration
+  // stubs that read as placeholder SKILL.md files until ClawHub hydration
+  // is wired (see pinnedClawhubSkills.ts:32-48 for the carry-forward note).
+  // We ship them regardless so Maya can see the slugs + the lock file
+  // (skills/<slug>/SKILL.md + .clawhub/lock.json) — that's the source of
+  // truth for "what should be installed" even when content isn't yet.
+  files.set(
+    ".clawhub/lock.json",
+    `${JSON.stringify(CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK, null, 2)}\n`
+  );
+  for (const skill of CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILLS) {
+    for (const [path, body] of Object.entries(skill.files)) {
+      files.set(`skills/${skill.slug}/${path}`, body);
+    }
   }
 
   // Sprint 9.5 — pass `firstBootKickstart: {}` so buildCronJobsJson decides

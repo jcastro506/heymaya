@@ -297,7 +297,7 @@ describe("generateUserMd — Sprint 4 follower trend + audience", () => {
     expect(md).toContain("**Gender split:** male 58% / female 41%");
     // The "not yet provided" placeholder for the audience fields must NOT appear in the audience block.
     const audienceSlice = md.slice(
-      md.indexOf("## Niche & audience"),
+      md.indexOf("## Audience demographics"),
       md.indexOf("## Where they're at")
     );
     expect(audienceSlice).not.toContain("not yet provided");
@@ -313,7 +313,7 @@ describe("generateUserMd — Sprint 4 follower trend + audience", () => {
     });
     // Audience block keeps the fallback.
     const audienceSlice = md.slice(
-      md.indexOf("## Niche & audience"),
+      md.indexOf("## Audience demographics"),
       md.indexOf("## Where they're at")
     );
     expect(audienceSlice).toContain("not yet provided");
@@ -480,7 +480,7 @@ describe("generateUserMd — Sprint 10 multimodal section", () => {
       handles: makeHandles(),
       plan: "manager",
     });
-    expect(md).toContain("## What I observed watching your videos");
+    expect(md).toContain("## What their content actually looks like (last 30 posts)");
     expect(md).toContain("Humor: self-deprecating");
     expect(md).toContain("Energy: low-key conversational");
     expect(md).toContain("Framing: Tight handheld POV");
@@ -501,7 +501,7 @@ describe("generateUserMd — Sprint 10 multimodal section", () => {
       handles: makeHandles(),
       plan: "manager",
     });
-    expect(md).not.toContain("What I observed watching your videos");
+    expect(md).not.toContain("What their content actually looks like (last 30 posts)");
   });
 
   it("OMITS the section when picture exists but multimodal fields are null/empty (text-only fallback)", () => {
@@ -516,7 +516,7 @@ describe("generateUserMd — Sprint 10 multimodal section", () => {
       handles: makeHandles(),
       plan: "manager",
     });
-    expect(md).not.toContain("What I observed watching your videos");
+    expect(md).not.toContain("What their content actually looks like (last 30 posts)");
   });
 });
 
