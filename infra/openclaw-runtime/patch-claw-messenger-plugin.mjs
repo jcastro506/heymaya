@@ -71,36 +71,41 @@ if (!sendSrc.includes("async function validateOutboundOrThrow(")) {
     }
 }
 `;
-  const sendMessageNeedle = `export async function sendMessage(ws, to, parts, service) {
+  // Inject helper at the top of the file (after the existing imports/helpers,
+  // before the first exported send fn). The exact upstream `ws.request({...})`
+  // call is multi-line; replace just inside sendMessage rather than reproduce
+  // the full body in the needle so minor upstream formatting drift doesn't
+  // break the build.
+  const sendMessageHeader = `export async function sendMessage(ws, to, parts, service) {
     const normalizedTarget = normalizeDirectTarget(to);
     if (!normalizedTarget) {
         throw new Error("Recipient is required");
     }
-    const resp = await ws.request({ type: "send", to: normalizedTarget, parts, ...(service ? { service } : {}) });`;
-  if (!sendSrc.includes(sendMessageNeedle)) {
+    const resp = await ws.request({`;
+  if (!sendSrc.includes(sendMessageHeader)) {
     throw new Error("Unable to patch sendMessage pre-send hook; expected marker not found.");
   }
   sendSrc = sendSrc.replace(
-    sendMessageNeedle,
+    sendMessageHeader,
     `${firewallHelper}export async function sendMessage(ws, to, parts, service) {
     const normalizedTarget = normalizeDirectTarget(to);
     if (!normalizedTarget) {
         throw new Error("Recipient is required");
     }
     await validateOutboundOrThrow(parts);
-    const resp = await ws.request({ type: "send", to: normalizedTarget, parts, ...(service ? { service } : {}) });`
+    const resp = await ws.request({`
   );
 
-  const sendGroupMessageNeedle = `async function sendGroupMessage(ws, chatId, parts, service) {
-    const resp = await ws.request({ type: "send", chatId, parts, ...(service ? { service } : {}) });`;
-  if (!sendSrc.includes(sendGroupMessageNeedle)) {
+  const sendGroupMessageHeader = `async function sendGroupMessage(ws, chatId, parts, service) {
+    const resp = await ws.request({`;
+  if (!sendSrc.includes(sendGroupMessageHeader)) {
     throw new Error("Unable to patch sendGroupMessage pre-send hook; expected marker not found.");
   }
   sendSrc = sendSrc.replace(
-    sendGroupMessageNeedle,
+    sendGroupMessageHeader,
     `async function sendGroupMessage(ws, chatId, parts, service) {
     await validateOutboundOrThrow(parts);
-    const resp = await ws.request({ type: "send", chatId, parts, ...(service ? { service } : {}) });`
+    const resp = await ws.request({`
   );
 
   // sendToNewGroup has an inline ws.request — patch best-effort if the
@@ -108,7 +113,7 @@ if (!sendSrc.includes("async function validateOutboundOrThrow(")) {
   // marker shifts we don't fail the build.
   const sendToNewGroupNeedle = `export async function sendToNewGroup(ws, to, text, service) {`;
   if (sendSrc.includes(sendToNewGroupNeedle)) {
-    const inlineNeedle = /(export async function sendToNewGroup\(ws, to, text, service\) \{[\s\S]*?)(const resp = await ws\.request\(\{ type: "send",)/;
+    const inlineNeedle = /(export async function sendToNewGroup\(ws, to, text, service\) \{[\s\S]*?)(const resp = await ws\.request\(\{)/;
     const m = sendSrc.match(inlineNeedle);
     if (m && !m[1].includes("validateOutboundOrThrow")) {
       sendSrc = sendSrc.replace(
