@@ -1216,6 +1216,30 @@ export interface EndpointDeps {
   client?: ScrapeCreatorsClient;
 }
 
+// TikTok keyword-search bias params per ScrapeCreators OpenAPI
+// (/v1/tiktok/search/keyword). Snake_case mapping happens at the wrapper.
+export type TikTokDatePosted =
+  | "this_day"
+  | "this_week"
+  | "this_month"
+  | "last_3_months"
+  | "last_6_months";
+export type TikTokSortBy = "relevance" | "likes" | "comments" | "recent";
+
+export interface TikTokSearchKeywordOptions {
+  datePosted?: TikTokDatePosted;
+  sortBy?: TikTokSortBy;
+  region?: string;
+  cursor?: string;
+  trim?: boolean;
+}
+
+export interface TikTokSearchHashtagOptions {
+  region?: string;
+  cursor?: string;
+  trim?: boolean;
+}
+
 function clientOf(deps?: EndpointDeps): ScrapeCreatorsClient {
   return deps?.client ?? getDefaultClient();
 }
@@ -1393,10 +1417,15 @@ export const tiktok = {
   },
   async searchHashtag(
     hashtag: string,
-    deps?: EndpointDeps
+    options?: EndpointDeps & TikTokSearchHashtagOptions
   ): Promise<TikTokResearchResult> {
-    const query = { hashtag: hashtag.replace(/^#/, "") };
-    const raw = await clientOf(deps).request<unknown>(
+    const query: Record<string, string | number | boolean | undefined> = {
+      hashtag: hashtag.replace(/^#/, ""),
+    };
+    if (options?.region !== undefined) query.region = options.region;
+    if (options?.cursor !== undefined) query.cursor = options.cursor;
+    if (options?.trim !== undefined) query.trim = options.trim;
+    const raw = await clientOf(options).request<unknown>(
       "/v1/tiktok/search/hashtag",
       { query }
     );
@@ -1404,10 +1433,18 @@ export const tiktok = {
   },
   async searchKeyword(
     queryText: string,
-    deps?: EndpointDeps
+    options?: EndpointDeps & TikTokSearchKeywordOptions
   ): Promise<TikTokResearchResult> {
-    const query = { query: queryText };
-    const raw = await clientOf(deps).request<unknown>(
+    const query: Record<string, string | number | boolean | undefined> = {
+      query: queryText,
+    };
+    // TS camelCase → API snake_case at the wrapper boundary.
+    if (options?.datePosted !== undefined) query.date_posted = options.datePosted;
+    if (options?.sortBy !== undefined) query.sort_by = options.sortBy;
+    if (options?.region !== undefined) query.region = options.region;
+    if (options?.cursor !== undefined) query.cursor = options.cursor;
+    if (options?.trim !== undefined) query.trim = options.trim;
+    const raw = await clientOf(options).request<unknown>(
       "/v1/tiktok/search/keyword",
       { query }
     );
