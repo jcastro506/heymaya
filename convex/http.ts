@@ -17,6 +17,7 @@ import { voiceTranscriptHttp } from "./voice/transcriptHttp";
 import { openClawMediaIngestHttp } from "./creatorMayaV0/openClawMediaIngestHttp";
 import { uploadRenderedMediaHttp } from "./creatorMayaV0/uploadRenderedMediaHttp";
 import {
+  applyObservationsToFingerprintHttp,
   completeGoogleCalendarOAuthHttp,
   connectedAccountsHealthHttp,
   cronHeartbeatHttp,
@@ -24,6 +25,7 @@ import {
   getRecentTrendsHttp,
   lockPictureHttp,
   logTrendHttp,
+  observePublishedEditHttp,
   submitOpeningAnswersHttp,
   startGoogleCalendarOAuthHttp,
   startOAuthHttp,
@@ -312,6 +314,25 @@ http.route({
   path: "/lc_maya/sync_wiki_observations",
   method: "POST",
   handler: syncWikiObservationsHttp,
+});
+
+// Sprint B.2 — continuous-learning loop. Maya POSTs here from the
+// `post_publish_reaction` standing order after analyzing performance:
+// watch the published video, diff against the rendered variant + the
+// current `editingFingerprint`, persist the structured observation.
+// `apply_observations_to_fingerprint` runs the rolling synthesis that
+// folds unapplied observations back into the creator's fingerprint.
+// See `convex/creatorMayaV0/editingFingerprintObservations.ts` for the
+// full contract.
+http.route({
+  path: "/lc_maya/observe_published_edit",
+  method: "POST",
+  handler: observePublishedEditHttp,
+});
+http.route({
+  path: "/lc_maya/apply_observations_to_fingerprint",
+  method: "POST",
+  handler: applyObservationsToFingerprintHttp,
 });
 
 export default http;

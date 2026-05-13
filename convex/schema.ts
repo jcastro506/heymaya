@@ -2469,6 +2469,84 @@ export default defineSchema({
     .index("by_creator_and_status", ["creatorId", "status"])
     .index("by_creator_and_created", ["creatorId", "createdAt"]),
 
+  // ─── Sprint B.2 — continuous-learning loop for editingFingerprint ─────
+  //
+  // Append-only audit-style observations of "what the creator actually
+  // published" vs "what Maya rendered / what the rolling fingerprint
+  // predicted." Sprint A.2 seeds the fingerprint at onboarding from the
+  // last 30 posts; this table closes the loop — every shipped post
+  // sharpens the fingerprint via `applyObservationsToFingerprint`.
+  //
+  // Schema decision (per Sprint B.2 spec): a NEW additive table rather
+  // than extending `creatorPicture.editingFingerprint`. The fingerprint
+  // remains the rolling synthesis (still mutated additively only); these
+  // rows are append-only deltas that drive the next synthesis pass.
+  //
+  // Each row captures qualitative deltas (model-described, not
+  // frame-accurate) for the specific axes the fingerprint covers. When a
+  // rendered variant is linked, the diff is "published vs Maya's render";
+  // otherwise it's "published vs current fingerprint."
+  editingFingerprintObservations: defineTable({
+    creatorId: v.id("creators"),
+    /** Platform post id (e.g. TikTok video id). Idempotency key candidate. */
+    publishedPostId: v.string(),
+    /** Canonical URL — citation source for any narrative Maya later emits. */
+    publishedPostUrl: v.string(),
+    /**
+     * The Maya-rendered variant this published post derived from. Optional —
+     * sometimes the creator publishes without Maya's render (manual edits).
+     * When set, deltas describe published-vs-rendered; when absent, deltas
+     * describe published-vs-current-fingerprint.
+     */
+    renderedMediaAssetId: v.optional(v.id("creatorMayaV0MediaAssets")),
+    observedAt: v.number(),
+    /** Actual published duration in ms. */
+    durationMs: v.number(),
+    /**
+     * Per-axis deltas vs the creator's current editingFingerprint (or vs the
+     * Maya-rendered variant when one is linked). Each item names the field
+     * and describes the observed-vs-expected difference qualitatively. Maya
+     * synthesizes these via Gemini multimodal against the published video.
+     */
+    deltas: v.array(
+      v.object({
+        field: v.union(
+          v.literal("pacing.avgCutEverySec"),
+          v.literal("pacing.consistency"),
+          v.literal("pacing.hookLandsAtMs"),
+          v.literal("pacing.pacingCurve"),
+          v.literal("opening"),
+          v.literal("transitions"),
+          v.literal("captions.style"),
+          v.literal("captions.position"),
+          v.literal("captions.cadence"),
+          v.literal("captions.visualDescription"),
+          v.literal("audio"),
+          v.literal("framing"),
+          v.literal("signatureMoves")
+        ),
+        /** Free-text: "0:11 setup beat" / "deadpan stare opener". */
+        observed: v.string(),
+        /** What the fingerprint or Maya's render had. */
+        expected: v.string(),
+        /** Model's one-sentence explanation. */
+        reason: v.string(),
+      })
+    ),
+    /**
+     * Whether this observation has been folded into the rolling fingerprint.
+     * Unset = unapplied; set to a ms timestamp once `applyObservationsToFingerprint`
+     * folds the row into `creatorPicture.editingFingerprint`.
+     */
+    appliedToFingerprintAt: v.optional(v.number()),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_observedAt", ["creatorId", "observedAt"])
+    .index("by_creator_and_published_post", [
+      "creatorId",
+      "publishedPostId",
+    ]),
+
   // ────────────────────────────────────────────────────────────────────────
   // ─── Service product Sprint 0 (heymaya/service-v0) — added 2026-04-27 ──
   //

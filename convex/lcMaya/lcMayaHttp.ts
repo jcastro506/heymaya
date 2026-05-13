@@ -2587,6 +2587,260 @@ export const startGoogleCalendarOAuthHttp = httpAction(async (ctx, request) => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* Sprint B.2 — observe_published_edit + apply_observations_to_fingerprint     */
+/* -------------------------------------------------------------------------- */
+
+interface ObservePublishedEditPayload {
+  secret: string;
+  creatorId: string;
+  publishedPostId: string;
+  publishedPostUrl: string;
+  renderedMediaAssetId?: string;
+  thinkingBudget?: "low" | "medium" | "high";
+}
+
+function parseObservePublishedEditPayload(
+  raw: unknown
+): ObservePublishedEditPayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") throw new Error("secret must be a string.");
+  if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+    throw new Error("creatorId is required.");
+  }
+  if (
+    typeof obj.publishedPostId !== "string" ||
+    obj.publishedPostId.length === 0
+  ) {
+    throw new Error("publishedPostId is required.");
+  }
+  if (
+    typeof obj.publishedPostUrl !== "string" ||
+    obj.publishedPostUrl.length === 0
+  ) {
+    throw new Error("publishedPostUrl is required.");
+  }
+  let renderedMediaAssetId: string | undefined;
+  if (
+    obj.renderedMediaAssetId !== undefined &&
+    obj.renderedMediaAssetId !== null
+  ) {
+    if (typeof obj.renderedMediaAssetId !== "string") {
+      throw new Error("renderedMediaAssetId must be a string when provided.");
+    }
+    renderedMediaAssetId = obj.renderedMediaAssetId;
+  }
+  let thinkingBudget: "low" | "medium" | "high" | undefined;
+  if (obj.thinkingBudget !== undefined && obj.thinkingBudget !== null) {
+    if (
+      obj.thinkingBudget !== "low" &&
+      obj.thinkingBudget !== "medium" &&
+      obj.thinkingBudget !== "high"
+    ) {
+      throw new Error(
+        "thinkingBudget must be one of low | medium | high when provided."
+      );
+    }
+    thinkingBudget = obj.thinkingBudget;
+  }
+  return {
+    secret: obj.secret,
+    creatorId: obj.creatorId,
+    publishedPostId: obj.publishedPostId,
+    publishedPostUrl: obj.publishedPostUrl,
+    renderedMediaAssetId,
+    thinkingBudget,
+  };
+}
+
+/**
+ * `POST /lc_maya/observe_published_edit` — Sprint B.2 continuous-learning loop.
+ *
+ * After a creator publishes a TikTok that Maya rendered, the
+ * `post_publish_reaction` standing order POSTs here. We:
+ *   1. Validate auth via `assertWebhookSecret`.
+ *   2. Run `extractObservationFromPublishedPost` (multimodal: watch the
+ *      published video + the rendered variant if linked + diff against the
+ *      current fingerprint).
+ *   3. Insert the structured observation row via
+ *      `insertEditingFingerprintObservation`.
+ *   4. Return the inserted row id + the creator's current observation
+ *      counts so the standing order can decide whether to trigger an
+ *      apply-pass.
+ *
+ * Failure surface:
+ *   - 400 — malformed body
+ *   - 401 — missing / invalid secret
+ *   - 404 — creator not found
+ *   - 409 — extraction failure (no fingerprint to diff against, multimodal
+ *           not wired, model invalid). Stable error codes Maya can
+ *           recognize and skip the observation step.
+ *   - 500 — internal mutation throw
+ */
+export const observePublishedEditHttp = httpAction(async (ctx, request) => {
+  let payload: ObservePublishedEditPayload;
+  try {
+    payload = parseObservePublishedEditPayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+
+  // Extract the observation. The action surfaces a structured failure
+  // for every known reason; we translate to HTTP status codes here.
+  const extract = await ctx.runAction(
+    internal.creatorMayaV0.editingFingerprintObservations
+      .extractObservationFromPublishedPost,
+    {
+      creatorId: payload.creatorId as Id<"creators">,
+      publishedPostId: payload.publishedPostId,
+      publishedPostUrl: payload.publishedPostUrl,
+      renderedMediaAssetId: payload.renderedMediaAssetId as
+        | Id<"creatorMayaV0MediaAssets">
+        | undefined,
+      thinkingBudget: payload.thinkingBudget,
+    }
+  );
+
+  if (!extract.ok) {
+    if (extract.reason === "creator-not-found") {
+      return jsonResponse({ error: "creator-not-found" }, 404);
+    }
+    // All other failures are functional — Maya should skip the observation
+    // and continue with the post-publish reaction. 409 surfaces a stable
+    // "extraction skipped" signal without polluting alerting on transport.
+    return jsonResponse(
+      { error: extract.reason, detail: extract.detail ?? null },
+      409
+    );
+  }
+
+  try {
+    const inserted = await ctx.runMutation(
+      internal.creatorMayaV0.editingFingerprintObservations
+        .insertEditingFingerprintObservation,
+      {
+        creatorId: payload.creatorId as Id<"creators">,
+        publishedPostId: extract.observation.publishedPostId,
+        publishedPostUrl: extract.observation.publishedPostUrl,
+        renderedMediaAssetId: payload.renderedMediaAssetId as
+          | Id<"creatorMayaV0MediaAssets">
+          | undefined,
+        durationMs: extract.observation.durationMs,
+        deltas: extract.observation.deltas,
+        nowMs: Date.now(),
+      }
+    );
+    return jsonResponse(
+      {
+        ok: true,
+        observationId: inserted.observationId,
+        totalForCreator: inserted.totalForCreator,
+        unappliedForCreator: inserted.unappliedForCreator,
+        model: extract.model,
+      },
+      200
+    );
+  } catch (err) {
+    const msg = (err as Error).message ?? "internal-error";
+    if (msg === "creator-not-found") {
+      return jsonResponse({ error: "creator-not-found" }, 404);
+    }
+    if (
+      msg === "rendered-asset-not-found" ||
+      msg === "rendered-asset-cross-tenant"
+    ) {
+      return jsonResponse({ error: msg }, 409);
+    }
+    if (msg.startsWith("observation-validation-failed")) {
+      return jsonResponse({ error: msg }, 400);
+    }
+    return jsonResponse({ error: msg }, 500);
+  }
+});
+
+interface ApplyObservationsPayload {
+  secret: string;
+  creatorId: string;
+}
+
+function parseApplyObservationsPayload(
+  raw: unknown
+): ApplyObservationsPayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") throw new Error("secret must be a string.");
+  if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+    throw new Error("creatorId is required.");
+  }
+  return { secret: obj.secret, creatorId: obj.creatorId };
+}
+
+/**
+ * `POST /lc_maya/apply_observations_to_fingerprint` — Sprint B.2 rolling
+ * synthesis driver.
+ *
+ * Maya invokes this from `post_publish_reaction` after observing a new
+ * published edit, gated by the standing order to "run if last apply > 24h
+ * OR 5+ unapplied rows." We:
+ *   1. Validate auth.
+ *   2. Pull all unapplied observations within the recency window.
+ *   3. Compute the next fingerprint via the rolling synthesis.
+ *   4. Patch `creatorPicture.editingFingerprint` + stamp each row as applied.
+ *   5. Return the structured summary (updated fields / applied count /
+ *      conflicts) for telemetry.
+ */
+export const applyObservationsToFingerprintHttp = httpAction(async (ctx, request) => {
+  let payload: ApplyObservationsPayload;
+  try {
+    payload = parseApplyObservationsPayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+
+  try {
+    const result = await ctx.runAction(
+      internal.creatorMayaV0.editingFingerprintObservations
+        .applyObservationsToFingerprint,
+      { creatorId: payload.creatorId as Id<"creators"> }
+    );
+    if (!result.ok) {
+      // "no-unapplied-observations" is a legitimate no-op; we surface 200
+      // with applied: 0 so the standing order can treat it as benign.
+      if (result.reason === "no-unapplied-observations") {
+        return jsonResponse(
+          {
+            ok: true,
+            summary: { updated: [], applied: 0, conflicts: [] },
+            noop: true,
+          },
+          200
+        );
+      }
+      return jsonResponse({ error: result.reason }, 404);
+    }
+    return jsonResponse({ ok: true, summary: result.summary }, 200);
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message ?? "internal-error" }, 500);
+  }
+});
+
+/* -------------------------------------------------------------------------- */
 /* Helpers                                                                     */
 /* -------------------------------------------------------------------------- */
 

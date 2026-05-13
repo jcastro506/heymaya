@@ -3,9 +3,23 @@ import { readFileSync, writeFileSync } from "node:fs";
 const channelPath = "/opt/openclaw-seed/extensions/claw-messenger/dist/channel.js";
 const sendPath = "/opt/openclaw-seed/extensions/claw-messenger/dist/outbound/send.js";
 const gatewayServerPath = "/usr/local/lib/node_modules/openclaw/dist/server.impl-DhtU4okW.js";
+// Sprint B.3 — runtime-layer firewall (defense-in-depth). The existing
+// claw-messenger send.js firewall (added Sprint 12.7.3) catches every
+// outbound that flows through `sendMessage` / `sendGroupMessage`. After
+// auditing openclaw 2026.4.23, every assistant-text delivery path
+// (inbound-reply via `dispatchReplyWithBufferedBlockDispatcher`, proactive
+// via `deliverAgentCommandResult`, route-reply via `routeReplyToOriginating`)
+// eventually calls claw-messenger's `outbound.sendText` → `sendMessage`,
+// so the existing firewall is sufficient on paper. This second layer
+// patches openclaw's own `deliver-BAZ1LU-l.js::sendTextChunks` so the
+// firewall trigger lives ABOVE plugin code — catches the assistant text
+// before any channel-specific code runs and before per-chunk splitting.
+// Channel-agnostic: covers Telegram/WhatsApp/Discord if/when added.
+const deliverRuntimePath = "/usr/local/lib/node_modules/openclaw/dist/deliver-BAZ1LU-l.js";
 let src = readFileSync(channelPath, "utf8");
 let sendSrc = readFileSync(sendPath, "utf8");
 let gatewaySrc = readFileSync(gatewayServerPath, "utf8");
+let deliverSrc = readFileSync(deliverRuntimePath, "utf8");
 
 if (src.includes("buildChannelConfigSchema, DEFAULT_ACCOUNT_ID,")) {
   src = src.replace(
@@ -429,3 +443,63 @@ gatewaySrc = gatewaySrc.replace(
 );
 
 writeFileSync(gatewayServerPath, gatewaySrc);
+
+// Sprint B.3 — runtime-layer outbound firewall. Wraps
+// `sendTextChunks` so the validate_outbound_send check fires once per
+// payload (before per-chunk splitting) for every channel handler the
+// gateway creates. Same fail-open-on-infra-failure semantics as the
+// claw-messenger send.js firewall; throws `send-blocked: ...` on a
+// `{ok:false}` verdict so the LLM loop sees the failure and redrafts.
+//
+// Injection point: top of `sendTextChunks` body in
+// `deliver-BAZ1LU-l.js::deliverOutboundPayloadsCore`. Marker is the
+// exact arrow-fn header from openclaw 2026.4.23; if upstream renames
+// or relocates this helper, the patch fails loud (consistent with the
+// other patches in this script).
+if (!deliverSrc.includes("async function validateOutboundOrThrowRuntime(")) {
+  const deliverFirewallHelper = `async function validateOutboundOrThrowRuntime(text) {
+\tconst creatorId = process.env.MAYA_CREATOR_ID;
+\tconst httpBase = process.env.MAYA_CONVEX_HTTP_BASE;
+\tconst secret = process.env.WEBHOOK_INTERNAL_SECRET;
+\tif (!creatorId || !httpBase || !secret) return;
+\tconst body = typeof text === "string" ? text : "";
+\tif (!body.trim()) return;
+\tlet res;
+\ttry {
+\t\tres = await fetch(\`\${httpBase}/lc_maya/validate_outbound_send\`, {
+\t\t\tmethod: "POST",
+\t\t\theaders: { "content-type": "application/json" },
+\t\t\tbody: JSON.stringify({ secret, creatorId, message: body }),
+\t\t});
+\t} catch (err) {
+\t\tconsole.warn("[firewall:runtime] validate_outbound_send network failure, allowing send:", String(err));
+\t\treturn;
+\t}
+\tif (!res.ok) {
+\t\tconsole.warn(\`[firewall:runtime] validate_outbound_send returned HTTP \${res.status}, allowing send\`);
+\t\treturn;
+\t}
+\tlet payload;
+\ttry { payload = await res.json(); } catch { return; }
+\tif (payload && payload.ok === false) {
+\t\tconst reasons = Array.isArray(payload.blockedReasons) ? payload.blockedReasons.join("; ") : "blocked";
+\t\tconst fix = payload.suggestedFix ? \` Fix: \${payload.suggestedFix}\` : "";
+\t\tthrow new Error(\`send-blocked: \${reasons}.\${fix}\`);
+\t}
+}
+`;
+
+  const sendTextChunksNeedle = `\tconst sendTextChunks = async (text, overrides) => {
+\t\tthrowIfAborted(abortSignal);`;
+  if (!deliverSrc.includes(sendTextChunksNeedle)) {
+    throw new Error("Unable to patch deliver-runtime sendTextChunks; expected marker not found.");
+  }
+  deliverSrc = deliverSrc.replace(
+    sendTextChunksNeedle,
+    `${deliverFirewallHelper}\tconst sendTextChunks = async (text, overrides) => {
+\t\tthrowIfAborted(abortSignal);
+\t\tawait validateOutboundOrThrowRuntime(text);`
+  );
+}
+
+writeFileSync(deliverRuntimePath, deliverSrc);

@@ -421,9 +421,12 @@ describe("assembleWorkspaceBundle", () => {
     }
   });
 
-  it("ClawHub pin manifest carries the three MVP pins (tiktok + ffmpeg + carousel)", () => {
-    // Sprint 12.7.5 (A.4) — added `g0atbot-tiktok-carousel` to the MVP pin
-    // set. The lock + slug array + skill-list must all agree.
+  it("ClawHub pin manifest carries the four MVP pins (tiktok + ffmpeg + carousel + proactive-agent)", () => {
+    // Sprint 12.7.5 (A.4) — added `g0atbot-tiktok-carousel`.
+    // Sprint B.1 — added `proactive-agent` (halthelobster/proactive-agent
+    // @ 3.1.0) as the 4th pin so Maya carries WAL / Working Buffer /
+    // Compaction Recovery / Verify Implementation patterns.
+    // The lock + slug array + skill-list must all agree.
     expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS).toContain("tiktok");
     expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS).toContain(
       "ffmpeg-video-editor"
@@ -431,7 +434,10 @@ describe("assembleWorkspaceBundle", () => {
     expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS).toContain(
       "g0atbot-tiktok-carousel"
     );
-    expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS.length).toBe(3);
+    expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS).toContain(
+      "proactive-agent"
+    );
+    expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS.length).toBe(4);
 
     // Lock entries are present + agree on slug set.
     const lockSlugs = Object.keys(CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK.skills);
@@ -444,8 +450,14 @@ describe("assembleWorkspaceBundle", () => {
       version: "1.0.0",
       source: "clawhub:g0atfac3/g0atbot-tiktok-carousel",
     });
+    expect(
+      CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK.skills["proactive-agent"]
+    ).toEqual({
+      version: "3.1.0",
+      source: "clawhub:halthelobster/proactive-agent",
+    });
 
-    // Skill bodies list also has all three.
+    // Skill bodies list also has all four.
     const bodySlugs = CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILLS.map((s) => s.slug).sort();
     expect(bodySlugs).toEqual(
       [...CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS].sort()
@@ -482,7 +494,7 @@ describe("assembleWorkspaceBundle", () => {
     expect(skill).toContain("ffmpeg-video-editor");
   });
 
-  it("workspace bundle ships .clawhub/lock.json listing all three pinned skills", () => {
+  it("workspace bundle ships .clawhub/lock.json listing all four pinned skills", () => {
     const bundle = assembleWorkspaceBundle(baseInputs());
     const lockRaw = bundle.files.get(".clawhub/lock.json");
     expect(lockRaw).toBeDefined();
@@ -494,9 +506,50 @@ describe("assembleWorkspaceBundle", () => {
     expect(Object.keys(lock.skills).sort()).toEqual([
       "ffmpeg-video-editor",
       "g0atbot-tiktok-carousel",
+      "proactive-agent",
       "tiktok",
     ]);
     expect(lock.skills["g0atbot-tiktok-carousel"].version).toBe("1.0.0");
+    expect(lock.skills["proactive-agent"].version).toBe("3.1.0");
+  });
+
+  // Sprint B.1 — proactive-agent pin ships with the canonical WAL Protocol /
+  // Working Buffer / Compaction Recovery / Autonomous-vs-Prompted-Crons /
+  // Verify-Implementation-Not-Intent / Relentless-Resourcefulness body. The
+  // pin is the deeper reference for Maya's follow-through protocol section
+  // in AGENTS.md.
+  it("workspace bundle ships the proactive-agent ClawHub pin at skills/proactive-agent/SKILL.md with the real ClawHub-vendored body", () => {
+    const bundle = assembleWorkspaceBundle(baseInputs());
+    const path = "skills/proactive-agent/SKILL.md";
+    expect(bundle.files.has(path)).toBe(true);
+    const skill = bundle.files.get(path)!;
+    // Frontmatter shape — real ClawHub install has name/version/description/author.
+    expect(skill.startsWith("---\n")).toBe(true);
+    expect(skill).toContain("name: proactive-agent");
+    expect(skill).toContain("version: 3.1.0");
+    expect(skill).toContain("author: halthelobster");
+    // Heading present (markdown is parseable).
+    expect(skill).toContain("# Proactive Agent");
+    // Every load-bearing section heading the operator briefed (the canonical
+    // Hal-Stack v3.1.0 inventory).
+    const requiredSections = [
+      "## What's New in v3.1.0",
+      "## The Three Pillars",
+      "## Memory Architecture",
+      "## The WAL Protocol",
+      "## Working Buffer Protocol",
+      "## Compaction Recovery",
+      "## Unified Search Protocol",
+      "## Security Hardening",
+      "## Relentless Resourcefulness",
+      "## Self-Improvement Guardrails",
+      "## Autonomous vs Prompted Crons",
+      "## Verify Implementation, Not Intent",
+      "## Tool Migration Checklist",
+    ];
+    for (const heading of requiredSections) {
+      expect(skill, `proactive-agent SKILL.md missing section: ${heading}`).toContain(heading);
+    }
   });
 
   it("ClawHub pin manifest carries no per-creator references (shared infra, not tenant-scoped)", () => {

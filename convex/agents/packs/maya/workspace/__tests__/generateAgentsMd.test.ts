@@ -299,3 +299,145 @@ describe("generateAgentsMd — Sprint 12 Phase 1A", () => {
     expect(idxImessage).toBeGreaterThan(idxIntegrated);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Sprint B.1 — Follow-through protocol (promise-and-stop ban)                 */
+/* -------------------------------------------------------------------------- */
+
+describe("generateAgentsMd — Sprint B.1 follow-through protocol", () => {
+  // The live failure this section prevents: Kevin 2026-05-12 evening — Maya
+  // emitted "Nice—connection is live. Let me take a look at your calendar
+  // for the next 2 weeks and get a content plan ready for you. (Give me a
+  // few seconds to think through the ideas.)" then stopReason: "stop". Turn
+  // ended. No follow-up. The work happened only after the operator nudged.
+  it("Follow-through protocol section is present in both embed forms", () => {
+    for (const embed of [true, false]) {
+      const md = generateAgentsMd({
+        ...BASE_INPUTS,
+        plan: "manager",
+        embedStandingOrders: embed,
+      });
+      expect(md, `embed=${embed}`).toContain("## Follow-through protocol");
+    }
+  });
+
+  it("Follow-through protocol enumerates the banned promise-and-stop phrasings", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // The five canonical banned shapes from the Sprint B.1 brief.
+    const bannedShapes = [
+      "Give me a few seconds to think through",
+      "Let me take a look at",
+      "One moment while I",
+      "Pulling that up now",
+      "Working on it",
+    ];
+    for (const shape of bannedShapes) {
+      expect(md, `missing banned phrasing: ${shape}`).toContain(shape);
+    }
+    // The terminal-stop reason mention so the model recognizes the failure
+    // mode by the runtime signal.
+    expect(md).toContain("stopReason");
+  });
+
+  it("Follow-through protocol names the 3-step shape of a multi-step turn (read → do → emit)", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // The shape is enumerated 1./2./3. inside the section.
+    const sectionStart = md.indexOf("## Follow-through protocol");
+    expect(sectionStart).toBeGreaterThan(0);
+    const sectionTail = md.slice(sectionStart);
+    expect(sectionTail).toMatch(/1\.\s+Read what's needed/);
+    expect(sectionTail).toMatch(/2\.\s+Do the work/);
+    expect(sectionTail).toMatch(/3\.\s+Emit ONE final message/);
+  });
+
+  it("Follow-through protocol carries the verify-implementation-not-intent rule", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // Lifted directly from the proactive-agent SKILL.md — the artifact check
+    // is the load-bearing piece that keeps Maya honest after each tool call.
+    expect(md).toContain("Verify implementation, not intent");
+    expect(md).toMatch(/artifact/i);
+    expect(md).toContain("publicUrl");
+  });
+
+  it("Follow-through protocol points to the proactive-agent ClawHub pin for deeper protocols", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // The companion ClawHub pin (halthelobster/proactive-agent) ships the
+    // full WAL / Working Buffer / Compaction Recovery body. AGENTS.md is the
+    // short-form rule; the pin's SKILL.md is the long-form reference.
+    expect(md).toContain("halthelobster/proactive-agent");
+    expect(md).toMatch(/concepts\/in-flight/);
+  });
+
+  it("Follow-through protocol sits adjacent to the iMessage UX block (alongside the silent-abort / no-fake-busy family)", () => {
+    // Per the Sprint B.1 brief: "Place it alongside the existing iMessage UX
+    // rules / silent-abort rules." The section follows the iMessage UX block
+    // so the model reads no-fake-busy → silent-abort → Follow-through in
+    // sequence, which is the right reading order for the failure mode.
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    const idxIntegrated = md.indexOf(
+      "## You are ONE manager reading an integrated picture"
+    );
+    const idxImessage = md.indexOf("## iMessage UX rules");
+    const idxFollowThrough = md.indexOf("## Follow-through protocol");
+    expect(idxIntegrated).toBeGreaterThan(0);
+    expect(idxImessage).toBeGreaterThan(idxIntegrated);
+    // Follow-through lives after the iMessage block (where no-fake-busy
+    // and silent-abort family live) — the rule is the operational companion
+    // to those bans.
+    expect(idxFollowThrough).toBeGreaterThan(idxImessage);
+  });
+
+  it("non-embed form still fits under DEFAULT_BOOTSTRAP_MAX_CHARS after the Follow-through addition", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // Sprint B.1 — we added ~2K to AGENTS.md; non-embed must still fit the
+    // 48K cap. If this fails, the cap needs bumping to 56K per the brief.
+    expect(md.length).toBeLessThanOrEqual(DEFAULT_BOOTSTRAP_MAX_CHARS);
+  });
+
+  // Sibling-file scan: the follow-through enforcement language must also be
+  // present in the named standing orders (morning_brief, evening_recap,
+  // weekly_review, first_proactive_ping) so the rule fires inside each
+  // cron-driven prompt as well as the every-session AGENTS.md context.
+  it("named standing orders all carry a Follow-through enforcement sentence", async () => {
+    const { STANDING_ORDERS } = await import("../standingOrders");
+    const targets = [
+      "morning_brief",
+      "evening_recap",
+      "weekly_review",
+      "first_proactive_ping",
+    ];
+    for (const id of targets) {
+      const p = STANDING_ORDERS.find((q) => q.id === id);
+      expect(p, `missing standing order: ${id}`).toBeDefined();
+      const body = `${p!.scope}\n${p!.cronMessage ?? ""}`;
+      expect(
+        body,
+        `${id}: missing Follow-through enforcement line`
+      ).toMatch(/Follow-through enforcement/i);
+    }
+  });
+});

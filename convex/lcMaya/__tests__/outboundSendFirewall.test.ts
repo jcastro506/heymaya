@@ -524,6 +524,48 @@ describe("sibling-file scan", () => {
     expect(patchSrc).toMatch(/\/lc_maya\/validate_outbound_send/);
   });
 
+  it("infra patch script also injects runtime-layer firewall (Sprint B.3)", () => {
+    const patchSrc = readFileSync(
+      join(
+        process.cwd(),
+        "infra/openclaw-runtime/patch-claw-messenger-plugin.mjs"
+      ),
+      "utf8"
+    );
+    // The runtime-layer firewall lives in
+    // `/usr/local/lib/node_modules/openclaw/dist/deliver-BAZ1LU-l.js` and
+    // wraps `sendTextChunks`. It is channel-agnostic (catches Telegram /
+    // WhatsApp / Discord paths too if/when added) and runs once per
+    // payload (before chunking, so trend citations split across chunks
+    // are not false-positive-blocked).
+    expect(patchSrc).toMatch(/deliver-BAZ1LU-l\.js/);
+    expect(patchSrc).toMatch(/validateOutboundOrThrowRuntime/);
+    expect(patchSrc).toMatch(/sendTextChunks = async/);
+    // Both firewalls hit the same Convex endpoint with the same env-var
+    // contract — single source of validation logic.
+    const matches = patchSrc.match(/\/lc_maya\/validate_outbound_send/g) ?? [];
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("patch script is idempotent — guard prevents double-injection of runtime firewall", () => {
+    const patchSrc = readFileSync(
+      join(
+        process.cwd(),
+        "infra/openclaw-runtime/patch-claw-messenger-plugin.mjs"
+      ),
+      "utf8"
+    );
+    // Mirror the existing-marker guard pattern used by every other
+    // patch in the script.
+    expect(patchSrc).toMatch(
+      /if \(!deliverSrc\.includes\("async function validateOutboundOrThrowRuntime\(/
+    );
+    // Fail-loud when the upstream openclaw layout changes.
+    expect(patchSrc).toMatch(
+      /Unable to patch deliver-runtime sendTextChunks; expected marker not found\./
+    );
+  });
+
   it("deployMaya.ts seeds MAYA_CREATOR_ID into the Fly env", () => {
     const deploySrc = readFileSync(
       join(process.cwd(), "convex/onboarding/maya/deployMaya.ts"),
