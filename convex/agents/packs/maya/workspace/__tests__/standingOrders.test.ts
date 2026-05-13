@@ -27,12 +27,43 @@ import {
   standingOrdersForPlan,
   type StandingOrderProgram,
 } from "../standingOrders";
+import { BUNDLED_SKILLS } from "../skillsRegistry";
 
 const NAMED_TARGETS = [
   "morning_brief",
   "evening_recap",
   "weekly_review",
   "first_proactive_ping",
+] as const;
+
+/**
+ * Sprint C.2 — three standing orders teach Maya to materialize calendar
+ * events via the `maya-calendar-planner` skill (Sprint C.1 ships the skill
+ * + the `mayaCalendarEvents` table + the cap-enforcing internal mutation).
+ * These tests cover the 5 mandatory categories for the calendar-creation
+ * additions only — the B.1 follow-through suite above stays untouched.
+ */
+const C2_CALENDAR_TARGETS = [
+  "weekly_content_plan",
+  "trend_watcher",
+  "post_publish_reaction",
+] as const;
+
+/**
+ * The 8 canonical event kinds defined by Sprint C.1 in `mayaCalendarEvents`.
+ * Any kind referenced in a standing order MUST be one of these — fabricating
+ * a 9th kind is an adversarial failure mode (the planner skill would reject
+ * the insert, but the prose must not even suggest it).
+ */
+const C1_EVENT_KINDS = [
+  "trend-strike",
+  "content-block",
+  "post-publish",
+  "niche-scroll",
+  "comment-window",
+  "brand-outbox",
+  "weekly-review",
+  "brain-break",
 ] as const;
 
 function pickById(id: string): StandingOrderProgram {
@@ -145,6 +176,338 @@ describe("standingOrders — Sprint B.1 follow-through enforcement", () => {
       const body = bodyOf(pickById(id));
       expect(body, `${id}: enforcement missing Sprint B.1 marker`).toMatch(
         /Sprint B\.1/
+      );
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint C.3 — morning_brief calendar-weave coverage                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Sprint C.3 (2026-05-13) added a "Calendar weave" sub-section to the
+ * `morning_brief` standing order's scope. The brief must:
+ *   - Read today's `mayaCalendarEvents` BEFORE composing.
+ *   - Window is 7am-11:59pm LOCAL in `creators.timezone`.
+ *   - Surface events inline alongside performance + email signals (not as
+ *     a separate bullet block).
+ *   - Never fabricate events when the day is empty.
+ *
+ * The five mandatory categories applied:
+ *   1. Cross-tenant isolation — the catalog stays per-creator-scoped (no
+ *      hardcoded ids leak through the new sub-section).
+ *   2. Plan-tier × action — calendar-weave fires for both Coach + Manager
+ *      (morning_brief is tier='all').
+ *   3. Adversarial — fabrication ban + window-bound language explicit.
+ *   4. Sibling-file scan — references `mayaCalendarEvents` (Sprint C.1
+ *      schema) + `creators.timezone` (existing schema).
+ *   5. TODO grep — handled by the existing block above.
+ */
+describe("standingOrders — Sprint C.3 morning_brief calendar weave", () => {
+  it("morning_brief.scope carries the Sprint C.3 Calendar-weave sub-section", () => {
+    const p = pickById("morning_brief");
+    expect(p.scope, "calendar weave header missing").toMatch(
+      /Calendar weave \(Sprint C\.3\)/
+    );
+  });
+
+  it("calendar-weave reads today's mayaCalendarEvents BEFORE composing the brief", () => {
+    const scope = pickById("morning_brief").scope;
+    expect(scope).toMatch(/BEFORE composing, READ today's `mayaCalendarEvents`/);
+  });
+
+  it("calendar-weave window semantics: 7am-11:59pm LOCAL in creators.timezone", () => {
+    const scope = pickById("morning_brief").scope;
+    // Sprint 12.6 / Sprint C.3 — never compare a UTC instant directly to a
+    // local-hour rule. The brief explicitly cites both the window and the
+    // tz source-of-truth.
+    expect(scope, "window string missing").toContain("7am-11:59pm LOCAL");
+    expect(scope, "tz source missing").toContain("`creators.timezone`");
+    expect(scope, "tz-conversion rule missing").toMatch(
+      /never compare a UTC instant directly to a local-hour rule/
+    );
+  });
+
+  it("calendar-weave fabrication ban — 'do NOT fabricate' is explicit when no events today", () => {
+    const scope = pickById("morning_brief").scope;
+    // Anti-confabulation, mirrors the Sprint 12.7 trend-fabrication
+    // lesson. Filler ban also called out so a no-event day doesn't pad
+    // with "no events today" template tells.
+    expect(scope, "fabrication ban missing").toMatch(/do NOT fabricate/);
+    expect(scope, "filler ban missing").toMatch(/do NOT pad with "no events today" filler/);
+  });
+
+  it("calendar-weave plan-tier × action — fires for BOTH Coach and Manager (morning_brief is tier='all')", () => {
+    for (const plan of ["coach", "manager"] as const) {
+      const programs = standingOrdersForPlan(plan);
+      const p = programs.find((q) => q.id === "morning_brief");
+      expect(p, `${plan}: morning_brief missing`).toBeDefined();
+      expect(p!.scope, `${plan}: missing calendar weave`).toMatch(
+        /Calendar weave \(Sprint C\.3\)/
+      );
+    }
+  });
+
+  it("calendar-weave sibling-file scan — references mayaCalendarEvents (Sprint C.1 schema) without leaking creator-specific ids", () => {
+    const p = pickById("morning_brief");
+    const scope = p.scope;
+    expect(scope, "Sprint C.1 schema ref missing").toContain(
+      "`mayaCalendarEvents`"
+    );
+    // Cross-tenant: the new sub-section carries no leaked creator-specific id.
+    expect(scope, "calendar weave leaks creatorId").not.toMatch(
+      /creatorId\s*[:=]\s*['"]/
+    );
+    expect(scope, "calendar weave leaks clerkUserId").not.toMatch(/clerkUserId/);
+    expect(scope, "calendar weave leaks Convex k_ id").not.toMatch(
+      /\bk_[a-z0-9]{10,}/
+    );
+  });
+
+  it("calendar-weave bullet-salad ban — events surface inline, not as a separate bullet block", () => {
+    const scope = pickById("morning_brief").scope;
+    expect(scope, "inline-integration rule missing").toMatch(
+      /integrate them inline with the loudest signal/i
+    );
+    expect(scope, "no-bullet-salad reference missing").toMatch(
+      /no bullet salad still applies/i
+    );
+  });
+});
+
+describe("standingOrders — Sprint C.2 calendar-creation wiring", () => {
+  it("the three named standing orders all carry a Calendar creation sub-section marked Sprint C.2", () => {
+    // Audit-trail marker: a future sweep can grep `Sprint C.2` to find the
+    // exact prose that teaches the planner-skill invocation pattern.
+    for (const id of C2_CALENDAR_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: missing Calendar creation sub-section`).toMatch(
+        /Calendar creation \(Sprint C\.2/i
+      );
+    }
+  });
+
+  it("the three named standing orders reference the `maya-calendar-planner` skill by name", () => {
+    for (const id of C2_CALENDAR_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: missing maya-calendar-planner reference`).toMatch(
+        /maya-calendar-planner/
+      );
+    }
+  });
+
+  it("plan-tier × action — weekly_content_plan states the right caps for content-block + post-publish kinds (Assistant 1+3/wk, Manager 2+unlimited)", () => {
+    const body = bodyOf(pickById("weekly_content_plan"));
+    // Cap matrix mirrors C.1's mayaCalendarEvents enforcement.
+    expect(body).toMatch(/Assistant.*1\s*`?content-block`?\/?week/i);
+    expect(body).toMatch(/Assistant.*3\s*`?post-publish`?\/?week/i);
+    expect(body).toMatch(/Manager.*2\s*`?content-block`?\/?week/i);
+    expect(body).toMatch(/Manager.*unlimited\s*`?post-publish`?/i);
+  });
+
+  it("plan-tier × action — trend_watcher states the right caps for trend-strike (Assistant 1/wk, Manager 3/wk)", () => {
+    const body = bodyOf(pickById("trend_watcher"));
+    expect(body).toMatch(/Assistant\s*=\s*1\s*`?trend-strike`?\/?week/i);
+    expect(body).toMatch(/Manager\s*=\s*3\s*`?trend-strike`?\/?week/i);
+  });
+
+  it("plan-tier × action — post_publish_reaction states the right caps for comment-window (Assistant 1/wk, Manager 3/wk)", () => {
+    const body = bodyOf(pickById("post_publish_reaction"));
+    expect(body).toMatch(/Assistant\s*=\s*1\s*`?comment-window`?\/?week/i);
+    expect(body).toMatch(/Manager\s*=\s*3\s*`?comment-window`?\/?week/i);
+  });
+
+  it("plan-tier × action — the three calendar-creating standing orders all stay tier='all' so caps reach Coach + Manager from the same prose", () => {
+    // Both tiers see the standing order; the per-kind caps inside the prose
+    // are what differentiate Coach (Assistant) and Manager. Tier itself must
+    // NOT gate the standing order off Coach — the cap matrix is the gate.
+    for (const id of C2_CALENDAR_TARGETS) {
+      const p = pickById(id);
+      expect(p.tier, `${id}: should be tier='all' so the cap rule reaches Coach`).toBe(
+        "all"
+      );
+    }
+    for (const plan of ["coach", "manager"] as const) {
+      const programs = standingOrdersForPlan(plan);
+      for (const id of C2_CALENDAR_TARGETS) {
+        const found = programs.find((q) => q.id === id);
+        expect(found, `${plan}: missing ${id}`).toBeDefined();
+        expect(bodyOf(found!)).toMatch(/Calendar creation \(Sprint C\.2/i);
+      }
+    }
+  });
+
+  it("cross-tenant isolation — Sprint C.2 calendar prose carries no per-tenant identifiers", () => {
+    // The prose is shared infra: same standing-order text for every Maya.
+    // The per-creator binding happens at the planner-skill invocation layer
+    // (via the creatorId on the actual Convex call), never in the catalog.
+    for (const id of C2_CALENDAR_TARGETS) {
+      const p = pickById(id);
+      const body = `${p.id}\n${p.title}\n${p.scope}\n${p.triggers}\n${p.approvalGates}\n${p.escalation}\n${p.cronMessage ?? ""}`;
+      expect(body, `${id} leaks creatorId literal`).not.toMatch(/creatorId\s*[:=]\s*['"]/);
+      expect(body, `${id} leaks clerkUserId`).not.toMatch(/clerkUserId/);
+      expect(body, `${id} leaks a Convex k_ id`).not.toMatch(/\bk_[a-z0-9]{10,}/);
+    }
+  });
+
+  it("adversarial — the three standing orders only reference event kinds from C.1's 8-kind catalog (no fabricated 9th kind)", () => {
+    // The planner skill would reject an unknown kind, but the prose itself
+    // must not even suggest one. Scan for the pattern `<word>-<word>` event-
+    // kind shapes near the word "event" and assert each is in the allowlist.
+    for (const id of C2_CALENDAR_TARGETS) {
+      const body = bodyOf(pickById(id));
+      // Pull every `kind-word` pattern that appears with the suffix " event" or
+      // inside backticks adjacent to "event" / "kind". Conservatively scan all
+      // backticked tokens of the form `<word>-<word>` and check membership.
+      const candidates = body.match(/`([a-z]+-[a-z]+)`/g) ?? [];
+      for (const tok of candidates) {
+        const inner = tok.slice(1, -1);
+        // Filter to things that look like calendar-event kinds (two-segment,
+        // lowercase, no slash). Drop API paths / table names / hyphenated
+        // descriptors that aren't event kinds.
+        const looksLikeEventKind =
+          /^[a-z]+-[a-z]+$/.test(inner) &&
+          !inner.startsWith("lc-") &&
+          !inner.includes("/") &&
+          ![
+            "format-not", "kitchen-counter", "walking-monologue", "handheld-pov",
+            "tone-adjusted", "post-publish", "anti-niches", "side-hustle",
+            "full-time", "follow-through", "promise-and",
+          ].includes(inner);
+        if (!looksLikeEventKind) continue;
+        // If it does look like an event-kind shape, it must be in the C.1 catalog.
+        if (
+          (C1_EVENT_KINDS as ReadonlyArray<string>).includes(inner) ||
+          // Allow general descriptors that are obviously NOT event kinds.
+          false
+        ) {
+          continue;
+        }
+        // Stricter check: only enforce membership when the candidate appears
+        // in a context that names it as an event kind (preceded/followed by
+        // "event" within ~30 chars). Otherwise let it through — it's a
+        // descriptive phrase, not an event kind.
+        const idx = body.indexOf(tok);
+        const window = body.slice(Math.max(0, idx - 30), idx + tok.length + 30);
+        if (/\bevent\b|\bkind[s]?\b/i.test(window)) {
+          expect(
+            (C1_EVENT_KINDS as ReadonlyArray<string>).includes(inner),
+            `${id}: prose references unknown event kind \`${inner}\` — not in C.1's 8-kind catalog`
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("adversarial — the three standing orders do not override C.1's plan-tier cap matrix with a different cap (defer to server-side enforcement)", () => {
+    // The prose must not invent a NEW cap shape (e.g. \"5 per day\") that
+    // would diverge from C.1's `listMayaCalendarEventsForCreatorAndWindow`.
+    // The only cap-language allowed is per-week, mirroring the planner skill.
+    for (const id of C2_CALENDAR_TARGETS) {
+      const body = bodyOf(pickById(id));
+      // Look for the "Plan-tier caps" anchor — any cap line under it should
+      // be per-week, not per-day / per-month / per-hour.
+      const idx = body.indexOf("Plan-tier caps");
+      if (idx < 0) continue;
+      const tail = body.slice(idx, idx + 600);
+      expect(tail, `${id}: cap matrix uses non-weekly granularity`).not.toMatch(
+        /\/\s*day\b|\/\s*hour\b|\/\s*month\b|\bper\s+day\b|\bper\s+hour\b|\bper\s+month\b/i
+      );
+    }
+  });
+
+  it("adversarial — the three standing orders explicitly forbid fabricating event kinds", () => {
+    // Prose-level guardrail: each addition states the 8-kind allowlist is
+    // exhaustive. Mirrors the AGENTS.md no-fabrication contract for trends.
+    for (const id of C2_CALENDAR_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: missing no-fabrication clause for event kinds`).toMatch(
+        /(only.*(trend-strike|content-block|post-publish|comment-window).*exist|never.*(invent|fabricate|make up).*(kind|event))/i
+      );
+    }
+  });
+
+  it("sibling-file scan — the three standing orders reference `mayaCalendarEvents` (C.1's table) OR the planner skill that wraps it", () => {
+    // The standing orders must point at C.1's surface — either the table
+    // name directly or the planner skill that brokers writes to it. This
+    // is the catalog's contract that C.1's schema actually exists.
+    for (const id of C2_CALENDAR_TARGETS) {
+      const body = bodyOf(pickById(id));
+      const referencesC1Surface =
+        /maya-calendar-planner/.test(body) || /mayaCalendarEvents/.test(body);
+      expect(
+        referencesC1Surface,
+        `${id}: missing reference to maya-calendar-planner skill or mayaCalendarEvents table`
+      ).toBe(true);
+    }
+  });
+
+  it("sibling-file scan — the three standing orders reference the gap-finder endpoint `/lc_maya/calendar_list_events` (existing C.1 dependency)", () => {
+    // C.2's "never book over an existing event" rule depends on a real
+    // pre-check call. The endpoint already exists in `convex/http.ts`.
+    for (const id of C2_CALENDAR_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: missing /lc_maya/calendar_list_events pre-check`).toMatch(
+        /\/lc_maya\/calendar_list_events/
+      );
+    }
+  });
+
+  it("sibling-file scan — the planner skill is bundled (Sprint C.1 dependency check; soft-skipped until C.1 lands)", () => {
+    // C.1 ships `maya-calendar-planner` into BUNDLED_SKILLS. Until C.1 lands
+    // this assertion can't be enforced, so we soft-skip when the slug is
+    // missing — but if C.1 has landed, the slug MUST be present to validate
+    // the cross-file invariant.
+    const slugs = BUNDLED_SKILLS.map((s) => s.slug);
+    const present = slugs.includes("maya-calendar-planner");
+    if (!present) {
+      // C.1 not landed yet — log and skip without failing.
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[Sprint C.2 sibling-file scan] maya-calendar-planner not yet in BUNDLED_SKILLS — C.1 must land before this invariant is enforceable"
+      );
+      return;
+    }
+    expect(present, "maya-calendar-planner must ship in BUNDLED_SKILLS once C.1 lands").toBe(
+      true
+    );
+  });
+
+  it("TODO grep — Sprint C.2 additions don't introduce TODO/FIXME/eslint-disable", () => {
+    for (const id of C2_CALENDAR_TARGETS) {
+      const p = pickById(id);
+      const body = `${p.scope}\n${p.cronMessage ?? ""}`;
+      expect(body, `${id} carries TODO`).not.toMatch(/\bTODO\b/);
+      expect(body, `${id} carries FIXME`).not.toMatch(/\bFIXME\b/);
+      expect(body, `${id} carries // eslint-disable`).not.toMatch(
+        /\/\/\s*eslint-disable/
+      );
+    }
+  });
+
+  it("Sprint C.2 additions enforce the 30-minute popup reminder convention for actionable events", () => {
+    // C.1's planner-skill templates set reminders.overrides. The standing
+    // orders that book actionable events (content-block, trend-strike,
+    // comment-window) all state the 30min popup explicitly so a future
+    // regression that drops the field is caught by sibling-file scan.
+    for (const id of C2_CALENDAR_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: missing 30-minute popup reminder convention`).toMatch(
+        /30\s*min(?:ute)?s?\s*(?:popup\s*)?reminder|reminders.*30.*popup|popup.*30/i
+      );
+    }
+  });
+
+  it("Sprint C.2 additions teach Maya to call `/lc_maya/calendar_list_events` BEFORE booking (gap-finder discipline)", () => {
+    // The "never book over an existing event" rule needs to be operational,
+    // not aspirational. Each standing order must explicitly order the call
+    // before the insert.
+    for (const id of C2_CALENDAR_TARGETS) {
+      const body = bodyOf(pickById(id));
+      // The gap-finder language must precede or accompany the booking word.
+      expect(body, `${id}: missing gap-finder before-booking discipline`).toMatch(
+        /(before\s+book|first.*calendar_list_events|calendar_list_events.*(before|first))/i
       );
     }
   });

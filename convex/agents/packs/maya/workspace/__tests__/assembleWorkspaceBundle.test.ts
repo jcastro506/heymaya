@@ -17,6 +17,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { assembleWorkspaceBundle } from "../assembleWorkspaceBundle";
 import { BUNDLED_SKILLS } from "../skillsRegistry";
+import { HEARTBEAT_SOFT_CAP_CHARS } from "../generateHeartbeatMd";
 import {
   CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK,
   CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS,
@@ -165,7 +166,15 @@ describe("assembleWorkspaceBundle", () => {
     // Sprint 12.6+ — bumped 40K → 45K to fit timezone-discipline +
     // abort-silence rules added after the 2026-05-10 evening leak.
     // Sprint A.2 — bumped 45K → 48K for the editing-fingerprint section.
-    const CAP = 48_000;
+    // Sprint C.2/C.3 — bumped 48K → 56K to fit the calendar-creation
+    // additions to weekly_content_plan / trend_watcher /
+    // post_publish_reaction (C.2) + the calendar-weave addition to
+    // morning_brief (C.3). The split standing-orders.md grew from
+    // ~47K to ~53K with all four additions; production never actually
+    // splits (MAYA_BOOTSTRAP_MAX_CHARS=105K embeds AGENTS inline), but
+    // this defense-in-depth test forces the split path so the per-file
+    // cap is still asserted.
+    const CAP = 56_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
@@ -183,10 +192,13 @@ describe("assembleWorkspaceBundle", () => {
     }
   });
 
-  it("HEARTBEAT.md fits the 2K soft cap (token-burn discipline)", () => {
+  it("HEARTBEAT.md fits the HEARTBEAT_SOFT_CAP_CHARS budget (token-burn discipline)", () => {
+    // Sprint C.3 — bumped 2_000 → 3_000 to absorb the calendar-scan check
+    // (pre-event T-30 + post-event T+45-60). Reference the exported constant
+    // so future bumps don't silently regress.
     const bundle = assembleWorkspaceBundle(baseInputs());
     const hb = bundle.files.get("HEARTBEAT.md")!;
-    expect(hb.length).toBeLessThanOrEqual(2_000);
+    expect(hb.length).toBeLessThanOrEqual(HEARTBEAT_SOFT_CAP_CHARS);
   });
 
   it("bundles every registered skill at `skills/<slug>/SKILL.md`", () => {
@@ -399,7 +411,10 @@ describe("assembleWorkspaceBundle", () => {
     // Sprint 12.7 — bumped 80K → 100K alongside the trend-grounding section
     // + chat_trend_lookup standing order. Keep this in sync with
     // MAYA_BOOTSTRAP_MAX_CHARS in configGeneratorMaya.ts.
-    const PROD_CAP = 100_000;
+    // Sprint C.3 — bumped 100K → 105K alongside the calendar-event nudge
+    // section in AGENTS.md + the calendar-weave addition to
+    // `morning_brief.scope`.
+    const PROD_CAP = 105_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
@@ -492,6 +507,50 @@ describe("assembleWorkspaceBundle", () => {
     // replacement. Maya needs to know when to route to the video pipeline.
     expect(skill).toContain("maya-clip-editor");
     expect(skill).toContain("ffmpeg-video-editor");
+  });
+
+  // Sprint C.1 — Maya-authored Google Calendar planner skill. Sibling to
+  // the new `mayaCalendarEvents` schema table + per-tier weekly cap
+  // helper. The planner SKILL.md teaches Maya the 8 event kinds, gap-
+  // finder rules, voice-applier requirement, and the 30-min popup
+  // reminder convention. Bundled alphabetically alongside the rest of
+  // the maya-* skills via scripts/sync-bundled-skills.ts.
+  it("workspace bundle ships the calendar-planner skill at skills/maya-calendar-planner/SKILL.md (Sprint C.1)", () => {
+    const bundle = assembleWorkspaceBundle(baseInputs());
+    const path = "skills/maya-calendar-planner/SKILL.md";
+    expect(bundle.files.has(path)).toBe(true);
+    const skill = bundle.files.get(path)!;
+    // Frontmatter shape.
+    expect(skill.startsWith("---\n")).toBe(true);
+    expect(skill).toContain("name: maya-calendar-planner");
+    expect(skill).toContain("description:");
+    expect(skill).toContain("when-to-use:");
+    expect(skill).toContain("plan-tier:");
+    expect(skill).toContain("thinking-budget:");
+    expect(skill).toContain("metadata:");
+    expect(skill).toContain("openclaw:");
+    // All 8 event kinds present in the taxonomy section.
+    const kinds = [
+      "trend-strike",
+      "content-block",
+      "post-publish",
+      "niche-scroll",
+      "comment-window",
+      "brand-outbox",
+      "weekly-review",
+      "brain-break",
+    ];
+    for (const kind of kinds) {
+      expect(skill, `SKILL.md missing kind=${kind}`).toContain(kind);
+    }
+    // Voice + citation gates are mandatory.
+    expect(skill).toContain("maya-voice-applier");
+    expect(skill).toContain("maya-citation-firewall");
+    // 30-min popup reminder convention.
+    expect(skill).toContain("popup");
+    expect(skill).toContain("30");
+    // References the schema table + backend file.
+    expect(skill).toContain("mayaCalendarEvents");
   });
 
   it("workspace bundle ships .clawhub/lock.json listing all four pinned skills", () => {

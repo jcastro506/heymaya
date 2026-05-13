@@ -344,7 +344,13 @@ export interface BuildInputs {
 // bootstrap-inject list, so the split would silently drop Maya's standing
 // orders from the system prompt. 100K keeps the inline embed coherent with
 // room to spare for future additions.
-export const MAYA_BOOTSTRAP_MAX_CHARS = 100_000;
+// Sprint C.3 — 100K → 105K. Adding the calendar-event nudge section to
+// AGENTS.md + the calendar-weave sub-section to `morning_brief.scope`
+// pushed the embedded-merged size to ~100.3K, retriggering the
+// split-fallback. The same "split silently drops standing orders" risk
+// applies; 105K restores the inline embed with ~4K headroom for the next
+// addition.
+export const MAYA_BOOTSTRAP_MAX_CHARS = 105_000;
 
 // Sprint 12.7 Phase 0 — embedded-context total budget. OpenClaw's
 // `agents.defaults.bootstrapTotalMaxChars` defaults to 60K; per-file injects

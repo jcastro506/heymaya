@@ -537,6 +537,16 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
 
+  // ---- 3.9. Calendar-event nudge windows (Sprint C.3) ---------------------
+  // HEARTBEAT.md owns the full check; this is the brief anchor in Maya's
+  // primary context so she expects calendar-driven proactive pings.
+  sections.push("## Calendar-event nudges (heartbeat-driven)");
+  sections.push("");
+  sections.push(
+    "Every tick the `calendar-scan` check (HEARTBEAT.md § 2) reads `mayaCalendarEvents` for this creator and fires at two windows: **pre-event T-30min** (1-line preview citing the event) and **post-event T+45-60min** (1-line ask, e.g. \"how'd the shoot go?\"). Both **one-ping-max** — never re-fire. Send via `claw-messenger.sendText` + `maya-voice-applier`. Starter caps 5 pre / 3 post per week; Pro/Studio unlimited."
+  );
+  sections.push("");
+
   // ---- 4. Standing orders (embedded or referenced) ----
   sections.push("## Standing orders");
   sections.push("");

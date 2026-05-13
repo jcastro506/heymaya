@@ -66,6 +66,7 @@ const SKILLS: ReadonlyArray<SkillSource> = [
     "maya-calendar-classifier",
     "maya-calendar-read",
     "maya-calendar-write",
+    "maya-calendar-planner",
     "maya-caption-generator",
     "maya-citation-firewall",
     "maya-clip-editor",

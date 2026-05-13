@@ -2548,6 +2548,68 @@ export default defineSchema({
     ]),
 
   // ────────────────────────────────────────────────────────────────────────
+  // Sprint C.1 — Maya-authored Google Calendar events.
+  //
+  // Tracks the calendar events Maya proactively populates (taxonomy of 8
+  // kinds — trend-strike / content-block / post-publish / niche-scroll /
+  // comment-window / brand-outbox / weekly-review / brain-break). Sibling
+  // to `creatorMayaV0CalendarEvents` (which tracks every observed event,
+  // including external ones, for the read/classifier pipeline). This table
+  // is narrower — Maya-authored only — and carries the rich-cited body
+  // metadata + nudge fire stamps so heartbeat scans are cheap indexed
+  // queries (no Google round-trip per tick).
+  //
+  // Cited refs are MANDATORY when `actionable=true` (a no-cite event
+  // breaks Principle 3 "grounded or silent"). Body version + edit stamps
+  // enable diff-on-rerender so Maya can rewrite an event when context
+  // changes (e.g. trend cools, schedule shifts).
+  // ────────────────────────────────────────────────────────────────────────
+  mayaCalendarEvents: defineTable({
+    creatorId: v.id("creators"),
+    googleEventId: v.string(),
+    kind: v.union(
+      v.literal("trend-strike"),
+      v.literal("content-block"),
+      v.literal("post-publish"),
+      v.literal("niche-scroll"),
+      v.literal("comment-window"),
+      v.literal("brand-outbox"),
+      v.literal("weekly-review"),
+      v.literal("brain-break"),
+    ),
+    citedRefs: v.array(
+      v.object({
+        kind: v.union(
+          v.literal("trend"),
+          v.literal("post"),
+          v.literal("peer"),
+          v.literal("email"),
+          v.literal("brand-deal"),
+        ),
+        ref: v.string(),
+        label: v.string(),
+      }),
+    ),
+    bodyVersion: v.number(),
+    lastEditedByMaya: v.number(),
+    lastEditedByCreator: v.optional(v.number()),
+    actionable: v.boolean(),
+    sourceStandingOrderId: v.optional(v.string()),
+    // Denormalized timestamps so heartbeat scan is a cheap indexed query
+    // (avoid round-tripping to Google API every tick).
+    startTimeMs: v.number(),
+    endTimeMs: v.number(),
+    // Nudge fire stamps — one-ping-max enforcement.
+    preEventNudgeSentAt: v.optional(v.number()),
+    postEventCheckInSentAt: v.optional(v.number()),
+    preEventNudgeWaiveReason: v.optional(v.string()),
+    postEventCheckInWaiveReason: v.optional(v.string()),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_start", ["creatorId", "startTimeMs"])
+    .index("by_creator_and_google_event", ["creatorId", "googleEventId"]),
+
+  // ────────────────────────────────────────────────────────────────────────
   // ─── Service product Sprint 0 (heymaya/service-v0) — added 2026-04-27 ──
   //
   // Service-business-side tables. Per docs/SPRINT_PLAN_SERVICE_V0.md § 8:
