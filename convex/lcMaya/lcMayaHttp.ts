@@ -1173,28 +1173,47 @@ export function isPlatformPostUrl(url: string): boolean {
  * citation check pass-throughs on a real URL), false negatives let
  * confabulation slip through.
  *
- * Banned-but-detectable language matrix:
+ * Banned-but-detectable language matrix (Sprint C.6 tightened set):
  *   - "trend" / "trending" / "viral" / "going viral" / "blowing up"
- *   - "I'm seeing" / "saw a couple things"
- *   - "real-time" / "right now in your lane"
+ *   - "real-time" / "right now in/on/across"
  *   - "people are doing" / "everyone is making"
- *   - "X is hitting" / "X is hot"
+ *
+ * Sprint C.6 (2026-05-13) — dropped two overbroad patterns:
+ *   - `saw|seeing|watching|noticed + the/some/this/that/...` —
+ *     blocked legitimate observations about the creator's own content
+ *     ("I saw the bodega clip", "watching your last 30 posts"). Caused the
+ *     2026-05-13 typing-bubble bug where Maya's first opening-line message
+ *     said *"I saw the observational domestic stuff in your last 30"* and
+ *     the firewall blocked the send. False-positive rate too high.
+ *   - `is hitting` — "the post is hitting 2.3x median" is a legitimate
+ *     observation, not a trend claim. Removed.
+ * Kept patterns are the obvious confab tells; locked tighter to reduce false
+ * positives without losing the load-bearing catches.
  */
-const TREND_SHAPE_PATTERNS: RegExp[] = [
-  /\btrend(ing|s)?\b/i,
-  /\bviral\b/i,
-  /\bgoing viral\b/i,
-  /\bblowing up\b/i,
-  /\b(saw|seeing|watching|noticed)\s+(a|some|this|that|the|couple|few|stuff|trend|hashtag|format)\b/i,
-  /\bright now\s+(in|on|across)\b/i,
-  /\breal[- ]time\b/i,
-  /\b(everyone|people|creators)\s+(is|are)\s+(making|doing|posting|using|riding)\b/i,
-  /\bis hitting\b/i,
+// Order matters — more specific patterns FIRST so the matchedPattern label
+// reflects the strongest signal. `going viral` is a stronger tell than bare
+// `viral`; check it first.
+const TREND_SHAPE_PATTERNS: ReadonlyArray<{
+  pattern: RegExp;
+  label: string;
+}> = [
+  { pattern: /\bgoing viral\b/i, label: "going-viral" },
+  { pattern: /\bblowing up\b/i, label: "blowing-up" },
+  { pattern: /\btrend(ing|s)?\b/i, label: "trend-word" },
+  { pattern: /\bviral\b/i, label: "viral" },
+  { pattern: /\bright now\s+(in|on|across)\b/i, label: "right-now-in" },
+  { pattern: /\breal[- ]time\b/i, label: "real-time" },
+  {
+    pattern:
+      /\b(everyone|people|creators)\s+(is|are)\s+(making|doing|posting|using|riding)\b/i,
+    label: "everyone-is-doing",
+  },
 ];
 
 export interface TrendCitationCheck {
   ok: boolean;
   mentionsTrend: boolean;
+  matchedPattern: string | null;
   urlsFound: string[];
   blockedReason: string | null;
   suggestedFix: string | null;
@@ -1219,17 +1238,26 @@ export function checkTrendCitation(message: string): TrendCitationCheck {
     return {
       ok: true,
       mentionsTrend: false,
+      matchedPattern: null,
       urlsFound: [],
       blockedReason: null,
       suggestedFix: null,
     };
   }
-  const mentionsTrend = TREND_SHAPE_PATTERNS.some((re) => re.test(message));
+  let matchedPattern: string | null = null;
+  for (const { pattern, label } of TREND_SHAPE_PATTERNS) {
+    if (pattern.test(message)) {
+      matchedPattern = label;
+      break;
+    }
+  }
+  const mentionsTrend = matchedPattern !== null;
   const urlsFound = extractPlatformUrls(message);
   if (!mentionsTrend) {
     return {
       ok: true,
       mentionsTrend: false,
+      matchedPattern: null,
       urlsFound,
       blockedReason: null,
       suggestedFix: null,
@@ -1239,6 +1267,7 @@ export function checkTrendCitation(message: string): TrendCitationCheck {
     return {
       ok: true,
       mentionsTrend: true,
+      matchedPattern,
       urlsFound,
       blockedReason: null,
       suggestedFix: null,
@@ -1247,6 +1276,7 @@ export function checkTrendCitation(message: string): TrendCitationCheck {
   return {
     ok: false,
     mentionsTrend: true,
+    matchedPattern,
     urlsFound: [],
     blockedReason: "trend-mention-without-citation",
     suggestedFix:
@@ -1951,6 +1981,12 @@ export const connectedAccountsHealthHttp = httpAction(async (ctx, request) => {
 interface ValidateTrendCitationPayload {
   secret: string;
   message: string;
+  /**
+   * Optional — when supplied, the call writes a `firewallEvents` row for
+   * audit. When omitted, the endpoint behaves stateless-as-before. Sprint
+   * C.6 (2026-05-13) telemetry surface.
+   */
+  creatorId?: string;
 }
 
 function parseValidateTrendCitationPayload(
@@ -1966,10 +2002,20 @@ function parseValidateTrendCitationPayload(
   if (typeof obj.message !== "string") {
     throw new Error("message must be a string.");
   }
-  return { secret: obj.secret, message: obj.message };
+  const out: ValidateTrendCitationPayload = {
+    secret: obj.secret,
+    message: obj.message,
+  };
+  if (obj.creatorId !== undefined && obj.creatorId !== null) {
+    if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+      throw new Error("creatorId, when supplied, must be a non-empty string.");
+    }
+    out.creatorId = obj.creatorId;
+  }
+  return out;
 }
 
-export const validateTrendCitationHttp = httpAction(async (_ctx, request) => {
+export const validateTrendCitationHttp = httpAction(async (ctx, request) => {
   let payload: ValidateTrendCitationPayload;
   try {
     payload = parseValidateTrendCitationPayload(await request.json());
@@ -1982,7 +2028,75 @@ export const validateTrendCitationHttp = httpAction(async (_ctx, request) => {
     return jsonResponse({ error: "unauthorized" }, 401);
   }
   const verdict = checkTrendCitation(payload.message);
+
+  // Sprint C.6 telemetry — best-effort. Don't block the firewall response on
+  // a write failure; the firewall verdict is what the caller cares about.
+  if (payload.creatorId) {
+    try {
+      await ctx.runMutation(
+        internal.lcMaya.lcMayaHttp.recordFirewallEventInternal,
+        {
+          creatorId: payload.creatorId as Id<"creators">,
+          message: payload.message,
+          verdict: verdict.ok ? "ok" : "blocked",
+          source: "validate_trend_citation",
+          matchedTrendPattern: verdict.matchedPattern ?? undefined,
+          blockedReasons: verdict.blockedReason ? [verdict.blockedReason] : undefined,
+          urlsFound: verdict.urlsFound,
+          observedAt: Date.now(),
+        }
+      );
+    } catch (err) {
+      console.warn("[firewall-telemetry] validate_trend_citation log failed", String(err));
+    }
+  }
+
   return jsonResponse(verdict, 200);
+});
+
+/**
+ * Sprint C.6 — write one firewall audit row. Used by both
+ * validate_trend_citation and validate_outbound_send. Best-effort: callers
+ * should swallow any error since the firewall verdict matters more than the
+ * audit trail.
+ */
+export const recordFirewallEventInternal = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    message: v.string(),
+    verdict: v.union(v.literal("ok"), v.literal("blocked")),
+    source: v.union(
+      v.literal("validate_outbound_send"),
+      v.literal("validate_trend_citation")
+    ),
+    matchedTrendPattern: v.optional(v.string()),
+    formatCategoriesTripped: v.optional(v.array(v.string())),
+    blockedReasons: v.optional(v.array(v.string())),
+    urlsFound: v.optional(v.array(v.string())),
+    observedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    // Cross-tenant gate: creator must exist. If not, drop the audit silently —
+    // a bogus creatorId in the firewall hook is an ops issue, not an audit
+    // event worth persisting under a phantom row.
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) return null;
+    return await ctx.db.insert("firewallEvents", {
+      creatorId: args.creatorId,
+      message: args.message,
+      verdict: args.verdict,
+      source: args.source,
+      ...(args.matchedTrendPattern
+        ? { matchedTrendPattern: args.matchedTrendPattern }
+        : {}),
+      ...(args.formatCategoriesTripped
+        ? { formatCategoriesTripped: args.formatCategoriesTripped }
+        : {}),
+      ...(args.blockedReasons ? { blockedReasons: args.blockedReasons } : {}),
+      ...(args.urlsFound ? { urlsFound: args.urlsFound } : {}),
+      observedAt: args.observedAt,
+    });
+  },
 });
 
 /* -------------------------------------------------------------------------- */
@@ -2157,6 +2271,30 @@ export const validateOutboundSendHttp = httpAction(async (ctx, request) => {
   const suggestedFix = fixes.length > 0 ? fixes.join("; ") : null;
 
   const ok = trendCheck.ok && formatCheck.ok;
+
+  // Sprint C.6 telemetry — best-effort write. Don't block the firewall response.
+  try {
+    await ctx.runMutation(
+      internal.lcMaya.lcMayaHttp.recordFirewallEventInternal,
+      {
+        creatorId: payload.creatorId as Id<"creators">,
+        message: payload.message,
+        verdict: ok ? "ok" : "blocked",
+        source: "validate_outbound_send",
+        matchedTrendPattern: trendCheck.matchedPattern ?? undefined,
+        formatCategoriesTripped:
+          formatCheck.categoriesTripped.length > 0
+            ? formatCheck.categoriesTripped
+            : undefined,
+        blockedReasons: blockedReasons.length > 0 ? blockedReasons : undefined,
+        urlsFound: trendCheck.urlsFound,
+        observedAt: Date.now(),
+      }
+    );
+  } catch (err) {
+    console.warn("[firewall-telemetry] validate_outbound_send log failed", String(err));
+  }
+
   return jsonResponse(
     {
       ok,

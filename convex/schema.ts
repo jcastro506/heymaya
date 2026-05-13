@@ -1084,6 +1084,45 @@ export default defineSchema({
     .index("by_creator_and_ts", ["creatorId", "ts"])
     .index("by_task_tag", ["taskTag"]),
 
+  // Sprint C.6 (2026-05-13) — firewall telemetry. Every call to
+  // /lc_maya/validate_outbound_send + /lc_maya/validate_trend_citation
+  // writes one row here for audit. Lets us measure (a) hit rate of the
+  // wire-level firewall, (b) which regex patterns actually catch confab
+  // vs cause false positives, (c) whether trend-grounding tools + AGENTS.md
+  // teaching make the firewall less necessary over time.
+  //
+  // Per the operator-locked feedback rule "trust LLM judgment, no hardcoded
+  // rules": the regex firewall is band-aid territory. Before deciding whether
+  // to keep / tighten / remove it, we need data on its real catch-rate vs
+  // false-positive rate. This table is the data plane for that decision.
+  //
+  // Schema is intentionally lean — message bodies are tenant data; we keep
+  // them for a week then trim via a sweeper (future sprint). Cross-tenant
+  // gating: every row indexed by_creator + by_creator_and_observedAt.
+  firewallEvents: defineTable({
+    creatorId: v.id("creators"),
+    /** The original message that hit the firewall. Tenant data — trimmed by sweeper after 7d. */
+    message: v.string(),
+    verdict: v.union(v.literal("ok"), v.literal("blocked")),
+    /** Source endpoint — which firewall surface fired. */
+    source: v.union(
+      v.literal("validate_outbound_send"),
+      v.literal("validate_trend_citation")
+    ),
+    /** Trend-shape regex match (if any). null when no trend-shape detected OR when verdict=ok and no trend-shape claim. */
+    matchedTrendPattern: v.optional(v.string()),
+    /** Which format checks tripped (markdown-bold / numbered-list / etc.) — only on validate_outbound_send. */
+    formatCategoriesTripped: v.optional(v.array(v.string())),
+    /** Combined block reasons returned to caller. */
+    blockedReasons: v.optional(v.array(v.string())),
+    /** Platform-post URLs found in the message (if any). */
+    urlsFound: v.optional(v.array(v.string())),
+    observedAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_observedAt", ["creatorId", "observedAt"])
+    .index("by_observedAt", ["observedAt"]),
+
   // ScrapeCreators response cache. Keyed by `sc:${platform}:${kind}:${handleOrId}`.
   // Per-creator scoping ensures cross-tenant isolation: every read filters by creatorId.
   // TTL is enforced in cache.ts (6h profile / 30min post metrics by default).

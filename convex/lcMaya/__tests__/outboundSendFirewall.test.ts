@@ -574,3 +574,218 @@ describe("sibling-file scan", () => {
     expect(deploySrc).toMatch(/MAYA_CREATOR_ID:\s*config\.creatorId/);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Sprint C.6 — firewallEvents telemetry coverage                             */
+/*                                                                            */
+/* Sprint C.6 adds a `firewallEvents` table that captures every call to       */
+/* /lc_maya/validate_outbound_send + /lc_maya/validate_trend_citation. The    */
+/* table is the data plane for measuring real catch-rate vs false-positive   */
+/* rate on the wire-level firewall. These tests cover the table writes      */
+/* across the 5 mandatory categories.                                       */
+/* -------------------------------------------------------------------------- */
+
+describe("validate_outbound_send — Sprint C.6 firewallEvents telemetry", () => {
+  beforeEach(() => {
+    _setWebhookSecretForTests(TEST_SECRET);
+  });
+  afterEach(() => {
+    _setWebhookSecretForTests(null);
+  });
+
+  it("writes one firewallEvents row on a clean (ok=true) call", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "c6-clean", plan: "manager" });
+
+    const res = await t.fetch("/lc_maya/validate_outbound_send", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        message: "your morning post is at 2.3x your usual median for that format",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+
+    const rows = await t.run((ctx) =>
+      ctx.db
+        .query("firewallEvents")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].verdict).toBe("ok");
+    expect(rows[0].source).toBe("validate_outbound_send");
+    expect(rows[0].matchedTrendPattern).toBeUndefined();
+  });
+
+  it("writes one firewallEvents row on a blocked call with the matched-pattern label", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, {
+      suffix: "c6-blocked",
+      plan: "manager",
+    });
+
+    const res = await t.fetch("/lc_maya/validate_outbound_send", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        message: "this sound is going viral right now",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(false);
+    expect(body.blockedReasons).toContain("trend-mention-without-citation");
+
+    const rows = await t.run((ctx) =>
+      ctx.db
+        .query("firewallEvents")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].verdict).toBe("blocked");
+    expect(rows[0].matchedTrendPattern).toBe("going-viral");
+    expect(rows[0].blockedReasons).toContain("trend-mention-without-citation");
+  });
+
+  it("logs format violations to formatCategoriesTripped", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, {
+      suffix: "c6-format",
+      plan: "manager",
+    });
+
+    await t.fetch("/lc_maya/validate_outbound_send", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        message: "**bold** and:\n1. one\n2. two",
+      }),
+    });
+
+    const rows = await t.run((ctx) =>
+      ctx.db
+        .query("firewallEvents")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].verdict).toBe("blocked");
+    expect(rows[0].formatCategoriesTripped).toBeDefined();
+    expect(rows[0].formatCategoriesTripped).toContain("markdown-bold");
+    expect(rows[0].formatCategoriesTripped).toContain("numbered-list");
+  });
+
+  it("cross-tenant — creator A's firewall events never appear in creator B's query", async () => {
+    const t = convexTest(schema, modules);
+    const creatorA = await insertCreator(t, { suffix: "c6-a", plan: "manager" });
+    const creatorB = await insertCreator(t, { suffix: "c6-b", plan: "manager" });
+
+    await t.fetch("/lc_maya/validate_outbound_send", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId: creatorA,
+        message: "going viral with no url",
+      }),
+    });
+
+    const rowsB = await t.run((ctx) =>
+      ctx.db
+        .query("firewallEvents")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorB))
+        .collect()
+    );
+    expect(rowsB).toHaveLength(0);
+
+    const rowsA = await t.run((ctx) =>
+      ctx.db
+        .query("firewallEvents")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorA))
+        .collect()
+    );
+    expect(rowsA).toHaveLength(1);
+  });
+
+  it("validate_trend_citation writes telemetry when creatorId is supplied", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "c6-trend", plan: "manager" });
+
+    await t.fetch("/lc_maya/validate_trend_citation", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        message: "this trend is blowing up right now",
+      }),
+    });
+
+    const rows = await t.run((ctx) =>
+      ctx.db
+        .query("firewallEvents")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].source).toBe("validate_trend_citation");
+    expect(rows[0].verdict).toBe("blocked");
+    // Most specific pattern wins; "blowing up" should match first.
+    expect(rows[0].matchedTrendPattern).toBe("blowing-up");
+  });
+
+  it("validate_trend_citation does NOT write telemetry when creatorId is omitted (back-compat)", async () => {
+    const t = convexTest(schema, modules);
+    const res = await t.fetch("/lc_maya/validate_trend_citation", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        message: "going viral",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const rows = await t.run((ctx) => ctx.db.query("firewallEvents").collect());
+    expect(rows).toHaveLength(0);
+  });
+
+  it("Sprint C.6 — false-positive fix: 'I saw the X' no longer blocks the typing-bubble bug message", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "c6-fp", plan: "manager" });
+
+    // The actual 2026-05-13 message that triggered the typing-bubble bug.
+    const res = await t.fetch("/lc_maya/validate_outbound_send", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        message:
+          "Nice. The NYC architecture shots already read that way—they have a totally different energy than the London clips. Next: How would you describe your niche in your own words? (I saw the observational domestic and London stuff in your last 30, but I want to hear how you frame what you make.)",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.mentionsTrend).toBe(false);
+
+    const rows = await t.run((ctx) =>
+      ctx.db
+        .query("firewallEvents")
+        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+        .collect()
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].verdict).toBe("ok");
+  });
+});
