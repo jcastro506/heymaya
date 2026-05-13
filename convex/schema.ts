@@ -133,6 +133,16 @@ export default defineSchema({
     // Stamped after the ping fires (or is skipped on empty trend+idea).
     // If `pictureLockedAt` re-stamps, the ping does NOT re-fire.
     firstProactivePingSentAt: v.optional(v.number()),
+    // ─── Sprint C.5 — first-week calendar bootstrap idempotency cursor ──
+    // Stamped after `first_week_calendar_bootstrap` standing order
+    // successfully populates the rest of this week + next week of calendar
+    // events for the creator. The event-driven standing order fires ONCE
+    // post-calendar OAuth completion when this cursor is undefined; the
+    // Sunday `weekly_content_plan` cron takes over for ongoing weeks.
+    // Subsequent calendar reconnects (or session restarts that re-emit the
+    // calendar-connected event) do NOT re-fire because the cursor stays
+    // stamped. UTC ms epoch. Schema additive; no migration impact.
+    firstWeekCalendarBootstrappedAt: v.optional(v.number()),
     // ─── Sprint 9 — admin-flagged comp accounts ───────────────────────────
     // Operator-set flag. When true, the creator gets full Manager features
     // without a Stripe subscription. Used to onboard friend-cohort beta

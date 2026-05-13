@@ -267,8 +267,8 @@ describe("Wave 5 — standing orders embed inline in AGENTS.md (OpenClaw 4.23 co
     }
   });
 
-  it("MAYA_BOOTSTRAP_MAX_CHARS is 105K (Sprint C.3 bump: calendar-event nudge section + morning_brief calendar-weave pushed merged AGENTS.md past 100K; bumped to 105K so the inline embed stays coherent)", () => {
-    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(115_000);
+  it("MAYA_BOOTSTRAP_MAX_CHARS is 125K (Sprint C.5 bump: first_week_calendar_bootstrap event-driven standing order + chat-driven video-link analysis section in AGENTS.md pushed merged size past 115K; bumped to 125K so the inline embed stays coherent)", () => {
+    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(125_000);
   });
 
   it("AGENTS.md actually fits under the 28K cap for every plan (defense-in-depth)", () => {

@@ -91,7 +91,15 @@ export interface AgentsMdInputs {
 // Sprint A.2 — bumped 42K → 48K for the editing-fingerprint section (the
 // multimodal style anchor that lets Maya mimic the creator's actual
 // pacing / opening / transitions / signature moves from day one).
-export const DEFAULT_BOOTSTRAP_MAX_CHARS = 50_000;
+// Sprint C.5 — bumped 50K → 56K for the chat-driven video-link analysis
+// section. The non-embed (split-fallback) form jumped from ~48.1K → ~51.1K
+// after adding the new "## Video link analysis (chat-driven)" block teaching
+// Maya the URL-recognition + tool-routing + editingFingerprint-grounded
+// composition pattern. 56K restores headroom (~5K) for the next addition.
+// Production never actually splits — `MAYA_BOOTSTRAP_MAX_CHARS` in
+// `configGeneratorMaya.ts` embeds standing orders inline — this cap only
+// applies to the standalone-AGENTS.md path used in dev / smoke.
+export const DEFAULT_BOOTSTRAP_MAX_CHARS = 56_000;
 
 /**
  * Render the per-creator AGENTS.md. Output is markdown, deterministic.
@@ -546,6 +554,37 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   sections.push("");
   sections.push(
     "Four standing orders run the calendar nudge surface each day: `morning_brief` (7am — full day weave), `midday_calendar_check` (11am — pre-brief afternoon events + check-in on morning blocks), `afternoon_calendar_check` (3pm — pre-brief evening events + check-in on afternoon blocks), `evening_recap` (6pm — signal-conditional wrap). Each reads `mayaCalendarEvents` for THIS `creatorId` and fires up to two kinds of pings: **pre-event pre-brief** (1-line preview citing the event body) and **post-event check-in** (1-line ask, e.g. \"how'd the shoot go?\"). Both **one-ping-max** via sidecar stamps `preEventNudgeSentAt` / `postEventCheckInSentAt` — never re-fire. Send via `claw-messenger.sendText` + `maya-voice-applier`. The native Google Calendar `reminders.overrides` set in `maya-calendar-planner` covers the T-30min device popup separately (free notification layer). Starter caps 5 pre / 3 post per week across all four ticks combined; Pro/Studio unlimited."
+  );
+  sections.push("");
+
+  // ---- 3.10. Video link analysis (chat-driven) -- Sprint C.5 ---------------
+  // When the creator pastes a TikTok / Instagram / YouTube / X / Pinterest /
+  // LinkedIn URL in chat, Maya recognizes the platform-post shape and routes
+  // it through the right scrapecreators endpoint + Gemini multimodal so she
+  // can compose a grounded read tied to the creator's editingFingerprint. The
+  // primitives already exist (endpoints.ts + multimodal video URL input in
+  // the model router); this section is the AGENTS.md teaching that turns them
+  // on for chat-pasted links instead of the generic "nice link" failure mode.
+  sections.push("## Video link analysis (chat-driven)");
+  sections.push("");
+  sections.push(
+    "When the creator pastes a platform-post URL in chat (TikTok, Instagram, YouTube, X, Pinterest, LinkedIn — same allowlist as the citation firewall's `isPlatformPostUrl`), I recognize the URL shape and route it through the right ScrapeCreators endpoint + Gemini multimodal in the next turn. Pattern set: `tiktok.com/@*/video/*`, `vm.tiktok.com/*`, `vt.tiktok.com/*`, `instagram.com/(p|reel|tv)/*`, `youtube.com/watch?v=*`, `youtube.com/shorts/*`, `youtu.be/*`, `twitter.com/*/status/*` (or `x.com/*/status/*`)."
+  );
+  sections.push("");
+  sections.push(
+    "**Tool routing.** TikTok → `tiktok.post(handle, awemeId)` (parse `@handle` + numeric video id out of the URL path; returns the normalized post + metrics). Instagram → `instagram.post(shortcode)` (parse the `/(p|reel|tv)/<shortcode>` segment). YouTube → `youtube.video(videoId)` (parse `?v=<id>` for long-form, the path-tail for `/shorts/<id>`, or the entire path for `youtu.be/<id>`). Each returns metadata + (when available) a downloadable video URL that I hand to Gemini multimodal in the next turn — the same multimodal path `synthesizeCreatorPicture` already uses for watching frames. **No multimodal call until the metadata read succeeds** — never claim to have watched something I couldn't fetch."
+  );
+  sections.push("");
+  sections.push(
+    "**Compose the read grounded in `editingFingerprint`.** Once I have metrics + the video, I read: what works in this post (pacing, opening, hook timing — cite the scraped numbers: views/likes/comments/postedAt), what wouldn't fit the creator's voice (compare against `creatorPicture.editingFingerprint.pacing.avgCutEverySec` / `opening` / `transitions` / `signatureMoves`), why this is hitting (audience match, format novelty, sound), how the creator could adapt it without breaking their style. Cite `editingFingerprint.citedPostIds` for any claim about THIS creator's style — never invent. Cite the scraped post's metrics for any claim about the pasted post's performance — never estimate or round."
+  );
+  sections.push("");
+  sections.push(
+    "**Citation firewall applies.** Every claim about the pasted post's performance must cite the scraped metrics (views/likes/comments/postedAt). Every claim about the creator's style must cite their `editingFingerprint.citedPostIds`. If ScrapeCreators returns nothing usable (404, malformed payload, region-locked), surface it plainly: \"couldn't pull metrics on that one — want me to read it on the visuals alone, or got a different link?\" Never paper over a fetch failure with a confabulated read."
+  );
+  sections.push("");
+  sections.push(
+    "**Banned shapes:** generic \"nice link\" / \"cool find\" / placeholder acknowledgments that don't do the analysis; \"let me check it out\" / \"give me a sec to watch this\" without the actual read in the same turn (Sprint B.1 follow-through enforcement applies here verbatim — the fetch + read + compose all happen before I emit text); fabricated metrics (\"this looks like it has good engagement\" with no scrape behind it); fabricated style observations about the creator that aren't backed by `editingFingerprint.citedPostIds`."
   );
   sections.push("");
 

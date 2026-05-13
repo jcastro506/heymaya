@@ -701,3 +701,294 @@ describe("standingOrders — Sprint C.4 cron-driven calendar nudge ticks", () =>
     }
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Sprint C.5 — first-week calendar bootstrap (event-driven, one-shot)         */
+/*                                                                            */
+/* Problem this fixes: the Sunday `weekly_content_plan` cron (Sun 4pm local)  */
+/* is the steady-state engine that populates next week's calendar. A creator  */
+/* who onboards Tuesday waits 5+ days for that first cron, so their first-    */
+/* week-with-Maya calendar is empty. The new event-driven standing order      */
+/* `first_week_calendar_bootstrap` fills the gap: it fires ONCE post-         */
+/* calendar-OAuth, conversationally sketches the rest of this week + next     */
+/* week via the maya-calendar-planner skill, and stamps                       */
+/* `firstWeekCalendarBootstrappedAt` so it does not re-fire on subsequent     */
+/* calendar reconnects.                                                       */
+/*                                                                            */
+/* The five mandatory categories applied here:                                */
+/*   1. Cross-tenant isolation — per-creator scope (the cursor lives on       */
+/*      `creators`; no shared global state).                                  */
+/*   2. Plan-tier × action — tier='all'; cap matrix mirrors C.1 inside scope. */
+/*   3. Adversarial — null editingFingerprint path (asks alignment), no-gaps  */
+/*      path (single weekly-review only), declined-plan path (stamp anyway).  */
+/*   4. Sibling-file scan — references maya-calendar-planner skill, the       */
+/*      `firstWeekCalendarBootstrappedAt` cursor, and the C.1 endpoint        */
+/*      `/lc_maya/calendar_list_events`.                                      */
+/*   5. TODO grep — handled below.                                            */
+/* -------------------------------------------------------------------------- */
+
+describe("standingOrders — Sprint C.5 first-week calendar bootstrap", () => {
+  const TARGET_ID = "first_week_calendar_bootstrap";
+
+  function pickEntry(): StandingOrderProgram {
+    const entry = STANDING_ORDERS.find((o) => o.id === TARGET_ID);
+    if (!entry) throw new Error(`Standing order ${TARGET_ID} not found`);
+    return entry;
+  }
+
+  function bodyOfEntry(o: StandingOrderProgram): string {
+    return `${o.scope}\n${o.cronMessage ?? ""}\n${o.triggers ?? ""}\n${o.approvalGates ?? ""}\n${o.escalation ?? ""}`;
+  }
+
+  it("the entry exists and is event-driven (kind='event', tier='all')", () => {
+    const entry = pickEntry();
+    expect(entry.kind, "first_week_calendar_bootstrap: must be kind='event'").toBe(
+      "event"
+    );
+    expect(
+      entry.tier,
+      "first_week_calendar_bootstrap: must be tier='all' so the rule reaches both Coach and Manager"
+    ).toBe("all");
+    // No defaultCron / cronEntryId — this is purely event-driven.
+    expect(
+      entry.defaultCron,
+      "first_week_calendar_bootstrap: event-driven, no defaultCron"
+    ).toBeUndefined();
+    expect(
+      entry.cronEntryId,
+      "first_week_calendar_bootstrap: event-driven, no cronEntryId"
+    ).toBeUndefined();
+  });
+
+  it("trigger references `calendarConnectionCompletedAt` AND the `firstWeekCalendarBootstrappedAt` dedupe cursor", () => {
+    const entry = pickEntry();
+    // The trigger MUST name both: the event that fires it AND the cursor that
+    // dedupes it. Drift on either side breaks the one-shot semantics.
+    expect(entry.triggers).toContain("calendarConnectionCompletedAt");
+    expect(entry.triggers).toContain("firstWeekCalendarBootstrappedAt");
+  });
+
+  it("schema-dedupe assertion — scope text references `firstWeekCalendarBootstrappedAt` so a future schema rename fails this test loudly", () => {
+    // Sibling-file scan: the cursor name lives in BOTH the schema
+    // (`convex/schema.ts:creators.firstWeekCalendarBootstrappedAt`) AND the
+    // standing-order prose. A rename in one place without the other is the
+    // exact regression this assertion catches.
+    const body = bodyOfEntry(pickEntry());
+    expect(
+      body,
+      "first_week_calendar_bootstrap: scope must reference `firstWeekCalendarBootstrappedAt` (schema cursor)"
+    ).toContain("firstWeekCalendarBootstrappedAt");
+  });
+
+  it("plan-tier × action — the entry ships in BOTH Coach and Manager plans (tier='all' + present in standingOrdersForPlan output)", () => {
+    for (const plan of ["coach", "manager"] as const) {
+      const programs = standingOrdersForPlan(plan);
+      const found = programs.find((p) => p.id === TARGET_ID);
+      expect(
+        found,
+        `${plan}: first_week_calendar_bootstrap must be in standingOrdersForPlan output`
+      ).toBeDefined();
+    }
+  });
+
+  it("plan-tier × action — cap matrix mirrors C.1 (Starter caps content-block + post-publish + niche-scroll + comment-window + weekly-review; Pro/Studio unlimited)", () => {
+    const body = bodyOfEntry(pickEntry());
+    // The cap line names the exact tier shapes from C.1 and the 5 caps the
+    // brief locked. Drift on any of these is a regression — the planner skill
+    // enforces server-side so prose-level drift would produce a confusing
+    // mismatch where Maya proposes the plan and the planner silently rejects.
+    expect(body).toMatch(/Starter.*1\s*`?content-block`?\/?week/i);
+    expect(body).toMatch(/Starter.*3\s*`?post-publish`?\/?week/i);
+    expect(body).toMatch(/Starter.*1\s*`?niche-scroll`?\/?day/i);
+    expect(body).toMatch(/Starter.*1\s*`?comment-window`?\/?week/i);
+    expect(body).toMatch(/Starter.*1\s*`?weekly-review`?/i);
+    expect(body).toMatch(/Pro\/Studio.*unlimited/i);
+  });
+
+  it("cross-tenant isolation — the standing-order text carries NO per-tenant identifiers", () => {
+    // Shared infra: same prose for every Maya. Same isolation check as the
+    // other catalog entries — no creatorId / clerkUserId / Convex k_ id leaks.
+    const entry = pickEntry();
+    const body = `${entry.id}\n${entry.title}\n${entry.scope}\n${entry.triggers}\n${entry.approvalGates}\n${entry.escalation}\n${entry.cronMessage ?? ""}`;
+    expect(body, "first_week_calendar_bootstrap leaks creatorId literal").not.toMatch(
+      /creatorId\s*[:=]\s*['"]/
+    );
+    expect(body, "first_week_calendar_bootstrap leaks clerkUserId").not.toMatch(
+      /clerkUserId/
+    );
+    expect(body, "first_week_calendar_bootstrap leaks a Convex k_ id").not.toMatch(
+      /\bk_[a-z0-9]{10,}/
+    );
+  });
+
+  it("adversarial — null/low-confidence editingFingerprint path asks an alignment question instead of forcing a plan", () => {
+    // Mirror weekly_content_plan's divergence handling. Without an
+    // editingFingerprint anchor, the proposed style would be unfounded —
+    // ask the creator what they want first instead of inventing a plan.
+    const entry = pickEntry();
+    const escalation = entry.escalation;
+    expect(
+      escalation,
+      "first_week_calendar_bootstrap: must handle null/low-confidence editingFingerprint with an alignment question"
+    ).toMatch(/editingFingerprint.*null|confidence\s*<\s*0\.5/i);
+    expect(
+      escalation,
+      "first_week_calendar_bootstrap: must ASK alignment question on null fingerprint"
+    ).toMatch(/ASK|alignment\s+question/i);
+  });
+
+  it("adversarial — no-gaps path (zero open gaps in next 14 days) proposes a single weekly-review event only", () => {
+    // The planner skill cap-rejection contract: if calendar is wall-to-wall
+    // for 14d, don't try to cram filming in — propose only the self-renewing
+    // weekly-review event so the standard cron loop picks up from next Sunday.
+    const entry = pickEntry();
+    const escalation = entry.escalation;
+    expect(escalation).toMatch(/zero\s+open\s+gaps|no\s+open\s+gaps|wall-to-wall/i);
+    expect(escalation).toMatch(/single\s+`?weekly-review`?/i);
+  });
+
+  it("adversarial — declined-plan path stamps the cursor anyway so the standing order does NOT re-fire on subsequent reconnects", () => {
+    const entry = pickEntry();
+    const escalation = entry.escalation;
+    expect(escalation).toMatch(/declin.*plan|let me think about it/i);
+    expect(
+      escalation,
+      "first_week_calendar_bootstrap: declined plan must still stamp the cursor"
+    ).toMatch(/stamp.*firstWeekCalendarBootstrappedAt/);
+  });
+
+  it("adversarial — first-boot-not-complete path defers to the kickstart's content_plan_initial beat", () => {
+    // If firstBootCompletedAt is undefined, the kickstart's content_plan_initial
+    // beat owns the calendar surface during onboarding. The bootstrap waits.
+    const entry = pickEntry();
+    const escalation = entry.escalation;
+    expect(escalation).toMatch(/firstBootCompletedAt\s*===\s*undefined/);
+    expect(escalation).toMatch(/(content_plan_initial|kickstart)/i);
+  });
+
+  it("sibling-file scan — references the `maya-calendar-planner` skill (Sprint C.1 dependency)", () => {
+    const body = bodyOfEntry(pickEntry());
+    expect(
+      body,
+      "first_week_calendar_bootstrap: missing maya-calendar-planner skill reference"
+    ).toContain("maya-calendar-planner");
+  });
+
+  it("sibling-file scan — references the `/lc_maya/calendar_list_events` gap-finder endpoint (existing C.1 dependency)", () => {
+    const body = bodyOfEntry(pickEntry());
+    expect(
+      body,
+      "first_week_calendar_bootstrap: missing /lc_maya/calendar_list_events gap-finder reference"
+    ).toContain("/lc_maya/calendar_list_events");
+  });
+
+  it("sibling-file scan — references the `/lc_maya/calendar_create_event` write endpoint (events get written through the existing endpoint)", () => {
+    const body = bodyOfEntry(pickEntry());
+    expect(
+      body,
+      "first_week_calendar_bootstrap: missing /lc_maya/calendar_create_event write endpoint reference"
+    ).toContain("/lc_maya/calendar_create_event");
+  });
+
+  it("event-kind discipline — only references the 8 C.1 catalog kinds (no fabricated 9th kind)", () => {
+    // Same adversarial check the C.2 suite runs: every backtick-quoted
+    // `<word>-<word>` pattern adjacent to "event" / "kind" must be in the
+    // C.1 8-kind allowlist.
+    const body = bodyOfEntry(pickEntry());
+    const candidates = body.match(/`([a-z]+-[a-z]+)`/g) ?? [];
+    for (const tok of candidates) {
+      const inner = tok.slice(1, -1);
+      const looksLikeEventKind =
+        /^[a-z]+-[a-z]+$/.test(inner) &&
+        !inner.startsWith("lc-") &&
+        !inner.includes("/") &&
+        ![
+          "format-not", "kitchen-counter", "walking-monologue", "handheld-pov",
+          "tone-adjusted", "anti-niches", "side-hustle",
+          "full-time", "follow-through", "promise-and",
+          "daily-ish",
+        ].includes(inner);
+      if (!looksLikeEventKind) continue;
+      const idx = body.indexOf(tok);
+      const window = body.slice(Math.max(0, idx - 30), idx + tok.length + 30);
+      if (/\bevent\b|\bkind[s]?\b/i.test(window)) {
+        expect(
+          (C1_EVENT_KINDS as ReadonlyArray<string>).includes(inner),
+          `first_week_calendar_bootstrap: prose references unknown event kind \`${inner}\` — not in C.1's 8-kind catalog`
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("adversarial — the entry explicitly forbids fabricating event kinds", () => {
+    const body = bodyOfEntry(pickEntry());
+    expect(
+      body,
+      "first_week_calendar_bootstrap: missing no-fabrication clause for event kinds"
+    ).toMatch(
+      /(only.*8.*C\.1.*kinds|never\s+(invent|fabricate|make up).*(kind|event))/i
+    );
+  });
+
+  it("approval gates — each proposed event must be CONFIRMED in chat before any /lc_maya/calendar_create_event call", () => {
+    const entry = pickEntry();
+    expect(entry.approvalGates).toMatch(/CONFIRMED?\s+in\s+chat/i);
+    expect(entry.approvalGates).toMatch(/\/lc_maya\/calendar_create_event/);
+  });
+
+  it("Sprint B.1 follow-through enforcement language is present (no fake-busy stalls)", () => {
+    const body = bodyOfEntry(pickEntry());
+    expect(
+      body,
+      "first_week_calendar_bootstrap: missing B.1 follow-through enforcement"
+    ).toMatch(/Follow-through enforcement.*Sprint\s*B\.1/i);
+    // The classic fake-busy phrasings get explicitly named so the model sees
+    // the bans inline.
+    expect(body).toMatch(/let me look at your calendar|give me a sec to plan/i);
+  });
+
+  it("30-minute popup reminder convention is documented (matches C.2's planner-skill template default)", () => {
+    const body = bodyOfEntry(pickEntry());
+    expect(
+      body,
+      "first_week_calendar_bootstrap: missing 30-minute popup reminder convention"
+    ).toMatch(/30[\s-]?min(?:ute)?s?.*popup|popup.*30/i);
+  });
+
+  it("gap-finder-before-booking discipline — calendar_list_events runs before any insert", () => {
+    const body = bodyOfEntry(pickEntry());
+    expect(
+      body,
+      "first_week_calendar_bootstrap: missing gap-finder before-booking discipline"
+    ).toMatch(
+      /(before\s+book|first.*calendar_list_events|never\s+book.*existing\s+event)/i
+    );
+  });
+
+  it("TODO grep — Sprint C.5 additions don't introduce TODO/FIXME/eslint-disable without justification", () => {
+    const entry = pickEntry();
+    const body = `${entry.scope}\n${entry.cronMessage ?? ""}\n${entry.triggers}\n${entry.approvalGates}\n${entry.escalation}`;
+    expect(body, "first_week_calendar_bootstrap carries TODO").not.toMatch(
+      /\bTODO\b/
+    );
+    expect(body, "first_week_calendar_bootstrap carries FIXME").not.toMatch(
+      /\bFIXME\b/
+    );
+    expect(body, "first_week_calendar_bootstrap carries // eslint-disable").not.toMatch(
+      /\/\/\s*eslint-disable/
+    );
+  });
+
+  it("Sprint C.5 marker — first_proactive_ping carries the calendar-bootstrap lookahead one-liner", () => {
+    // The existing first_proactive_ping entry got a brief append teaching
+    // Maya to preview the bootstrap value-prop in the Google-connect offer.
+    // The append must reference Sprint C.5 + the bootstrap promise verbatim.
+    const ping = STANDING_ORDERS.find((p) => p.id === "first_proactive_ping");
+    expect(ping, "first_proactive_ping missing from catalog").toBeDefined();
+    expect(ping!.scope).toContain("Calendar-bootstrap lookahead (Sprint C.5)");
+    expect(ping!.scope).toMatch(/rest of this week\s*\+\s*next week/i);
+    expect(ping!.scope).toMatch(
+      /content-blocks?,?\s*post times?,?\s*scroll\/comment windows?/i
+    );
+  });
+});

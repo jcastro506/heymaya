@@ -177,7 +177,12 @@ describe("assembleWorkspaceBundle", () => {
     // Production never actually splits (MAYA_BOOTSTRAP_MAX_CHARS=115K
     // embeds AGENTS inline), but this defense-in-depth test forces the
     // split path so the per-file cap is still asserted.
-    const CAP = 62_000;
+    // Sprint C.5 — bumped 62K → 70K to fit the new
+    // `first_week_calendar_bootstrap` event-driven standing order (~7K of
+    // scope teaching the one-shot post-OAuth bootstrap). The split
+    // standing-orders.md grew from ~58K to ~65K with the addition.
+    // Production still embeds inline at MAYA_BOOTSTRAP_MAX_CHARS=125K.
+    const CAP = 70_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
@@ -420,7 +425,12 @@ describe("assembleWorkspaceBundle", () => {
     // Sprint C.4 — bumped 105K → 115K alongside the two new cron-driven
     // calendar standing orders (midday_calendar_check + afternoon_calendar_check)
     // that replaced the heartbeat calendar-scan check.
-    const PROD_CAP = 115_000;
+    // Sprint C.5 — bumped 115K → 125K alongside the new
+    // `first_week_calendar_bootstrap` event-driven standing order (~7K) +
+    // the new "## Video link analysis (chat-driven)" AGENTS.md section
+    // (~3K). Keep aligned with MAYA_BOOTSTRAP_MAX_CHARS in
+    // configGeneratorMaya.ts.
+    const PROD_CAP = 125_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
