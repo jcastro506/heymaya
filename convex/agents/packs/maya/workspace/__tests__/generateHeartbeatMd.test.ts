@@ -14,21 +14,13 @@
  *     prose per CLAUDE.md "no AI in marketing copy" rule extended to
  *     agent-internal docs).
  *
- * Sprint C.3 additions (2026-05-13):
- *   - `calendar-scan` check present and references the schema surface
- *     (`mayaCalendarEvents`, `preEventNudgeSentAt`, `postEventCheckInSentAt`).
- *   - Pre-event T-30min window + post-event T+45-60min window documented.
- *   - One-ping-max enforcement documented.
- *   - Plan-tier × action: Starter cap (5 pre/wk + 3 post/wk) + Pro/Studio
- *     unlimited; Coach and Manager get the same playbook (autonomy lives
- *     in standing orders, not here — Coach IS the Starter UX in this
- *     internal-naming convention).
- *   - Adversarial windows: bounded — pre-event check guards against firing
- *     on past events (window is forward-looking) and the post-event window
- *     guards against firing on future events (window is backward-looking).
- *   - HEARTBEAT_SOFT_CAP_CHARS bumped 2_000 → 3_000 to absorb the check;
- *     output still ≤ cap.
- *   - TODO grep.
+ * Sprint C.4 (2026-05-13) — calendar-scan check moved OFF heartbeat to
+ * cron-driven `midday_calendar_check` (11am) + `afternoon_calendar_check`
+ * (3pm) standing orders. Reverted HEARTBEAT_SOFT_CAP_CHARS 3_000 → 2_000.
+ * Heartbeat ordered-check count back to 12 (was briefly 13 in C.3).
+ * Calendar-nudge anchor still in heartbeat playbook as a CROSS-REFERENCE
+ * paragraph pointing at the cron standing orders + the native Google
+ * Calendar reminder layer.
  */
 
 import { describe, it, expect } from "vitest";
@@ -47,18 +39,17 @@ describe("generateHeartbeatMd — content shape", () => {
     }
   });
 
-  it("contains all ordered checks under the 'Ordered checks' section (Sprint C.3: 13 total after calendar-scan added at #2)", () => {
+  it("contains all 12 ordered checks under the 'Ordered checks' section (Sprint C.4 — calendar-scan moved to cron)", () => {
     const out = generateHeartbeatMd({ plan: "manager" });
     expect(out).toContain("## Ordered checks (stop on first ACT)");
-    // Every numbered prefix from 1. through 13. must appear at line-start.
-    for (let i = 1; i <= 13; i += 1) {
+    // Every numbered prefix from 1. through 12. must appear at line-start.
+    for (let i = 1; i <= 12; i += 1) {
       const re = new RegExp(`(^|\\n)${i}\\. \\*\\*`);
       expect(re.test(out), `missing ordered check ${i}.`).toBe(true);
     }
     // Sanity: the named topics are all referenced by keyword in the file.
     const requiredTopics = [
       "Unread `chatMessages`",
-      "Calendar scan", // Sprint C.3 — new check at position 2
       "Past-due `contentPlans`",
       "Post-outlier",
       "Brand-email triage",
@@ -69,10 +60,13 @@ describe("generateHeartbeatMd — content shape", () => {
       "Opportunity scout",
       "Collab matchmaker",
       "Industry intel",
+      "Wiki mirror sync",
     ];
     for (const topic of requiredTopics) {
       expect(out, `missing topic "${topic}"`).toContain(topic);
     }
+    // Sprint C.4 — calendar-scan must NOT be a heartbeat check anymore.
+    expect(out).not.toMatch(/^\s*\d+\.\s+\*\*Calendar scan/m);
   });
 
   it("declares the idle-window guard (10pm-7am) with the URGENT override and named overrides", () => {
@@ -136,11 +130,14 @@ describe("generateHeartbeatMd — soft cap", () => {
     }
   });
 
-  it("HEARTBEAT_SOFT_CAP_CHARS export is the Sprint C.3 documented 3_000", () => {
-    // Sprint C.3 (2026-05-13) — bumped 2_000 → 3_000 to absorb the
-    // calendar-scan check. The bump is documented in the source comment;
-    // this lock guards against silent regression of the cap.
-    expect(HEARTBEAT_SOFT_CAP_CHARS).toBe(3_000);
+  it("HEARTBEAT_SOFT_CAP_CHARS is 2_400 in Sprint C.4 (down from C.3's 3_000)", () => {
+    // Sprint C.4 (2026-05-13) — landed at 2_400 after calendar-scan moved off
+    // heartbeat to cron-driven standing orders. The Sprint C.3 bump to 3_000
+    // was a brief stop on the way to the right architecture; the every-minute
+    // calendar check at full LLM invocation didn't survive the unit-economics
+    // review. The +400 char delta vs original 2_000 covers the cross-reference
+    // paragraph telling Maya where the calendar surface lives now.
+    expect(HEARTBEAT_SOFT_CAP_CHARS).toBe(2_400);
   });
 });
 
@@ -186,129 +183,47 @@ describe("generateHeartbeatMd — determinism", () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* Sprint C.3 — calendar-scan check coverage                                  */
+/* Sprint C.4 — calendar-nudges-on-cron cross-reference                       */
 /* -------------------------------------------------------------------------- */
 
-describe("generateHeartbeatMd — Sprint C.3 calendar-scan check", () => {
+describe("generateHeartbeatMd — Sprint C.4 calendar-nudges-on-cron reference", () => {
   /**
-   * 1. Sibling-file scan: the playbook depends on Sprint C.1's
-   *    `mayaCalendarEvents` schema fields. Lock the surface area here so a
-   *    rename in the schema (e.g. preEventNudgeSentAt → preEventPingedAt)
-   *    fails this test before it ever reaches a live tick.
+   * The heartbeat playbook stays heartbeat-shaped — calendar nudges left.
+   * What stays is a short cross-reference paragraph telling Maya WHERE the
+   * calendar surface lives now (cron standing orders + native Google
+   * reminders) so she doesn't go looking for a heartbeat check that no
+   * longer exists.
    */
-  it("calendar-scan check references mayaCalendarEvents + the two timestamp stamps (Sprint C.1 schema)", () => {
+  it("calendar-nudges cross-reference paragraph points to the four cron standing orders", () => {
     const out = generateHeartbeatMd({ plan: "manager" });
-    expect(out, "missing mayaCalendarEvents table reference").toContain(
-      "`mayaCalendarEvents`"
-    );
-    expect(out, "missing preEventNudgeSentAt field").toContain(
-      "preEventNudgeSentAt"
-    );
-    expect(out, "missing postEventCheckInSentAt field").toContain(
-      "postEventCheckInSentAt"
-    );
-    expect(out, "missing postEventCheckInWaiveReason field").toContain(
-      "postEventCheckInWaiveReason"
-    );
+    expect(out).toMatch(/calendar/i);
+    expect(out).toContain("`morning_brief`");
+    expect(out).toContain("`midday_calendar_check`");
+    expect(out).toContain("`afternoon_calendar_check`");
+    expect(out).toContain("`evening_recap`");
   });
 
-  /**
-   * 2. Adversarial windows: a pre-event nudge must NOT fire on past events
-   *    (window is forward-looking — [now+25m, now+35m]) and a post-event
-   *    check-in must NOT fire on future events (window is backward-looking
-   *    — [now-65m, now-45m]). Lock both windows literally so a regex/typo
-   *    flip is caught.
-   */
-  it("pre-event window is forward-looking (now+25m to now+35m) — never fires on past events", () => {
+  it("calendar-nudges cross-reference names the four ticks/day", () => {
     const out = generateHeartbeatMd({ plan: "manager" });
-    expect(out).toContain("[now+25m, now+35m]");
-    expect(out).toMatch(/Pre-event T-30/i);
+    expect(out).toMatch(/4 calendar-aware ticks per day/i);
   });
 
-  it("post-event window is backward-looking (now-65m to now-45m) — never fires on future events", () => {
+  it("calendar-nudges cross-reference points at the native Google reminder layer", () => {
     const out = generateHeartbeatMd({ plan: "manager" });
-    expect(out).toContain("[now-65m, now-45m]");
-    expect(out).toMatch(/Post-event T\+45-60/i);
+    expect(out).toMatch(/`reminders.overrides`|native Google Calendar reminders/i);
   });
 
-  /**
-   * 3. Adversarial: one-ping-max enforcement documented in playbook text so
-   *    Maya doesn't re-fire across ticks. Two acceptable phrasings —
-   *    "One-ping-max" header phrasing OR "never re-fire" rule statement.
-   */
-  it("one-ping-max enforcement documented in playbook text", () => {
+  it("Sprint C.4 — no heartbeat-driven calendar-scan check remains", () => {
     const out = generateHeartbeatMd({ plan: "manager" });
-    expect(out).toMatch(/(one-ping-max|never re-fire)/i);
+    // The earlier Sprint C.3 markers must be gone.
+    expect(out).not.toContain("preEventNudgeSentAt");
+    expect(out).not.toContain("postEventCheckInSentAt");
+    expect(out).not.toContain("`entryId='calendar-scan'`");
+    expect(out).not.toContain("[now+25m, now+35m]");
+    expect(out).not.toContain("[now-65m, now-45m]");
   });
 
-  /**
-   * 4. Plan-tier × action matrix: Starter cap is named explicitly (5 pre/wk
-   *    + 3 post/wk) and Pro/Studio are unlimited. This is gating prose Maya
-   *    enforces by reading planFeatures at fire time. The cap on the
-   *    Starter tier is the load-bearing line — Pro/Studio surface is
-   *    looser by design.
-   */
-  it("plan-tier caps spelled out: Starter (5 pre/wk + 3 post/wk), Pro/Studio unlimited", () => {
-    const out = generateHeartbeatMd({ plan: "manager" });
-    expect(out).toMatch(/Starter.*5 pre\/wk.*3 post\/wk/i);
-    expect(out).toMatch(/Pro\/Studio unlimited/i);
-    expect(out, "must reference planFeatures source-of-truth").toContain(
-      "`planFeatures`"
-    );
-  });
-
-  /**
-   * 5. Cross-tenant isolation: the scan is documented as per-creator
-   *    ("for THIS creatorId"). This locks the playbook prose at the lowest
-   *    level — the scan never reads across tenants. The Convex query
-   *    (Sprint C.1) carries the same guarantee; this is the agent-side
-   *    mirror.
-   */
-  it("cross-tenant isolation — scan documented as scoped to THIS creator", () => {
-    const out = generateHeartbeatMd({ plan: "manager" });
-    expect(out).toMatch(/THIS\s+`?creatorId`?/i);
-  });
-
-  /**
-   * 6. Telemetry surface: calendar-scan entries land in mayaActionLog with
-   *    entryId='calendar-scan' and the three documented outcomes. Lock the
-   *    enum so an HQ dashboard or reporting query can rely on the shape.
-   */
-  it("calendar-scan telemetry surface (entryId + outcome enum) documented", () => {
-    const out = generateHeartbeatMd({ plan: "manager" });
-    expect(out).toContain("`entryId='calendar-scan'`");
-    expect(out).toContain("`pre-event-nudge`");
-    expect(out).toContain("`post-event-checkin`");
-    expect(out).toContain("`skipped`");
-  });
-
-  /**
-   * 7. Outbound surface: pings ship through claw-messenger.sendText with
-   *    maya-voice-applier. Two tools are named.
-   */
-  it("outbound tools named: claw-messenger.sendText + maya-voice-applier", () => {
-    const out = generateHeartbeatMd({ plan: "manager" });
-    expect(out).toContain("`claw-messenger.sendText`");
-    expect(out).toContain("`maya-voice-applier`");
-  });
-
-  /**
-   * 8. Self-report waiver path: when the creator already messaged Maya
-   *    about the deliverable, the post-event check-in is skipped + stamped
-   *    with `postEventCheckInWaiveReason='creator-self-reported'`. Lock
-   *    the waiver string so the Sprint C.1 mutation and this playbook stay
-   *    in sync.
-   */
-  it("self-report waiver path documented with the exact reason string", () => {
-    const out = generateHeartbeatMd({ plan: "manager" });
-    expect(out).toContain("'creator-self-reported'");
-  });
-
-  /**
-   * 9. TODO grep — Sprint C.3 additions don't introduce TODO/FIXME/
-   *    eslint-disable without justification.
-   */
-  it("TODO grep — Sprint C.3 additions don't introduce TODO/FIXME/eslint-disable", () => {
+  it("TODO grep — no TODO/FIXME/eslint-disable in heartbeat playbook", () => {
     const out = generateHeartbeatMd({ plan: "manager" });
     expect(out).not.toMatch(/\bTODO\b/);
     expect(out).not.toMatch(/\bFIXME\b/);

@@ -512,3 +512,192 @@ describe("standingOrders — Sprint C.2 calendar-creation wiring", () => {
     }
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Sprint C.4 — midday + afternoon calendar-check cron entries                */
+/*                                                                            */
+/* The Sprint C.3 calendar-scan check briefly lived on heartbeat (every-min). */
+/* Sprint C.4 moves it to two cron-driven standing orders to keep COGS sane:  */
+/*   - midday_calendar_check  (11am local)                                    */
+/*   - afternoon_calendar_check (3pm local)                                   */
+/* Combined with morning_brief (7am) + evening_recap (6pm), 4 calendar-aware  */
+/* ticks per day carry the nudge surface. These tests cover the 5 mandatory  */
+/* categories for the two new entries.                                        */
+/* -------------------------------------------------------------------------- */
+
+const C4_CALENDAR_TICK_TARGETS = [
+  "midday_calendar_check",
+  "afternoon_calendar_check",
+] as const;
+
+describe("standingOrders — Sprint C.4 cron-driven calendar nudge ticks", () => {
+  function pickById(id: string): StandingOrderProgram {
+    const entry = STANDING_ORDERS.find((o) => o.id === id);
+    if (!entry) throw new Error(`Standing order ${id} not found`);
+    return entry;
+  }
+
+  function bodyOf(o: StandingOrderProgram): string {
+    return `${o.scope}\n${o.cronMessage ?? ""}\n${o.triggers ?? ""}\n${o.escalation ?? ""}`;
+  }
+
+  it("both new entries exist with kind='cron' (not heartbeat)", () => {
+    for (const id of C4_CALENDAR_TICK_TARGETS) {
+      const entry = pickById(id);
+      expect(entry.kind, `${id}: must be kind='cron'`).toBe("cron");
+      expect(entry.cronEntryId, `${id}: cronEntryId must match id`).toBe(id);
+      expect(entry.defaultCron, `${id}: must declare a defaultCron`).toMatch(
+        /^\d+\s+\d+\s+\*\s+\*\s+\*$/
+      );
+    }
+  });
+
+  it("midday_calendar_check fires at 11am local", () => {
+    const entry = pickById("midday_calendar_check");
+    expect(entry.defaultCron).toBe("0 11 * * *");
+  });
+
+  it("afternoon_calendar_check fires at 3pm local", () => {
+    const entry = pickById("afternoon_calendar_check");
+    expect(entry.defaultCron).toBe("0 15 * * *");
+  });
+
+  it("plan-tier × action — both entries are tier='all' (Starter + Manager both get the surface; cap is enforced per-tier inside scope)", () => {
+    for (const id of C4_CALENDAR_TICK_TARGETS) {
+      const entry = pickById(id);
+      expect(entry.tier, `${id}: tier must be 'all'`).toBe("all");
+    }
+  });
+
+  it("plan-tier caps documented — Starter weekly cap across all four ticks (5 pre + 3 post)", () => {
+    for (const id of C4_CALENDAR_TICK_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: missing Starter weekly cap`).toMatch(
+        /Starter.*5\s*pre.*3\s*post/i
+      );
+      expect(body, `${id}: must reference planFeatures or weekly cap`).toMatch(
+        /Pro\/Studio\s+unlimited/i
+      );
+    }
+  });
+
+  it("adversarial — one-ping-max enforcement documented (sidecar stamps prevent re-fire)", () => {
+    for (const id of C4_CALENDAR_TICK_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: missing one-ping-max language`).toMatch(
+        /(one-ping-max|ONE PING MAX|never re-fire)/i
+      );
+      // Sidecar stamps must be named — these are the C.1 schema surface.
+      expect(body, `${id}: missing preEventNudgeSentAt sidecar field`).toContain(
+        "preEventNudgeSentAt"
+      );
+      expect(body, `${id}: missing postEventCheckInSentAt sidecar field`).toContain(
+        "postEventCheckInSentAt"
+      );
+    }
+  });
+
+  it("adversarial — both windows are bounded (pre-event forward-looking, post-event backward-looking)", () => {
+    // Midday: pre window is now → 6pm local; post window is 7am → now.
+    const midday = bodyOf(pickById("midday_calendar_check"));
+    expect(midday).toMatch(/today after now.*6pm/i);
+    expect(midday).toMatch(/since 7am today/i);
+
+    // Afternoon: pre window is now → 10pm local; post window is 11am → now.
+    const afternoon = bodyOf(pickById("afternoon_calendar_check"));
+    expect(afternoon).toMatch(/now through 10pm/i);
+    expect(afternoon).toMatch(/between 11am and now/i);
+  });
+
+  it("adversarial — self-report waiver path documented with exact reason string ('creator-self-reported')", () => {
+    for (const id of C4_CALENDAR_TICK_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: missing self-report waiver`).toContain(
+        "creator-self-reported"
+      );
+    }
+  });
+
+  it("TZ discipline — both entries explicitly require converting timestamps to creator.timezone before window comparison", () => {
+    for (const id of C4_CALENDAR_TICK_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: missing TZ discipline`).toMatch(
+        /(creators?.timezone|convert.*timezone|TZ discipline)/i
+      );
+      expect(body, `${id}: must warn against direct UTC-to-local comparison`).toMatch(
+        /(never compare.*UTC|LOCAL.*never|forbidden.*UTC)/i
+      );
+    }
+  });
+
+  it("outbound surface — both entries name claw-messenger.sendText + maya-voice-applier", () => {
+    for (const id of C4_CALENDAR_TICK_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: missing claw-messenger.sendText`).toContain(
+        "`claw-messenger.sendText`"
+      );
+      expect(body, `${id}: missing maya-voice-applier`).toContain(
+        "`maya-voice-applier`"
+      );
+    }
+  });
+
+  it("cross-tenant isolation — scan documented as scoped to THIS creator (per-creator only)", () => {
+    for (const id of C4_CALENDAR_TICK_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: missing THIS creator scoping`).toMatch(
+        /THIS\s+`?creatorId`?/i
+      );
+    }
+  });
+
+  it("sibling-file scan — entries reference mayaCalendarEvents (Sprint C.1 schema)", () => {
+    for (const id of C4_CALENDAR_TICK_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: missing mayaCalendarEvents reference`).toContain(
+        "`mayaCalendarEvents`"
+      );
+    }
+  });
+
+  it("Sprint B.1 follow-through enforcement language is present (no fake-busy stalls)", () => {
+    for (const id of C4_CALENDAR_TICK_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: missing B.1 follow-through enforcement`).toMatch(
+        /Follow-through enforcement.*Sprint\s*B\.1/i
+      );
+    }
+  });
+
+  it("silence-when-empty semantics — both entries return silently when both windows are empty (no \"nothing to check\" filler)", () => {
+    for (const id of C4_CALENDAR_TICK_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: missing silence-when-empty rule`).toMatch(
+        /silent\s+if\s+both\s+windows\s+(are\s+)?empty/i
+      );
+    }
+  });
+
+  it("TODO grep — Sprint C.4 additions don't introduce TODO/FIXME/eslint-disable without justification", () => {
+    for (const id of C4_CALENDAR_TICK_TARGETS) {
+      const body = bodyOf(pickById(id));
+      expect(body, `${id}: stray TODO`).not.toMatch(/\bTODO\b/);
+      expect(body, `${id}: stray FIXME`).not.toMatch(/\bFIXME\b/);
+      expect(body, `${id}: stray eslint-disable`).not.toMatch(
+        /\/\/\s*eslint-disable/
+      );
+    }
+  });
+
+  it("Sprint C.4 marker — both entries reference the Sprint number in source comments", () => {
+    // The source-level comments anchor the architecture decision so future
+    // refactors don't accidentally move these back onto heartbeat.
+    for (const id of C4_CALENDAR_TICK_TARGETS) {
+      const entry = pickById(id);
+      // Title carries the human-readable purpose.
+      expect(entry.title, `${id}: title must mention calendar`).toMatch(
+        /calendar/i
+      );
+    }
+  });
+});

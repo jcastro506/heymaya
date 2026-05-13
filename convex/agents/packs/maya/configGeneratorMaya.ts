@@ -350,7 +350,13 @@ export interface BuildInputs {
 // split-fallback. The same "split silently drops standing orders" risk
 // applies; 105K restores the inline embed with ~4K headroom for the next
 // addition.
-export const MAYA_BOOTSTRAP_MAX_CHARS = 105_000;
+// Sprint C.4 — 105K → 115K. The two new cron-driven calendar standing
+// orders (`midday_calendar_check` at 11am + `afternoon_calendar_check`
+// at 3pm) replaced the heartbeat calendar-scan check and added ~5K of
+// scope prose; combined with the AGENTS.md cross-reference rewrite the
+// embedded-merged size hit ~108K. 115K restores the inline embed with
+// comfortable headroom for the next addition.
+export const MAYA_BOOTSTRAP_MAX_CHARS = 115_000;
 
 // Sprint 12.7 Phase 0 — embedded-context total budget. OpenClaw's
 // `agents.defaults.bootstrapTotalMaxChars` defaults to 60K; per-file injects

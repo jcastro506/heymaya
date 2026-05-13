@@ -45,16 +45,19 @@ export interface HeartbeatMdInputs {
 /**
  * Soft cap from the OpenClaw spec — heartbeat is read every tick.
  *
- * Sprint C.3 (2026-05-13) — bumped 2_000 → 3_000 to accommodate the new
- * `calendar-scan` check (pre-event T-30min nudge + post-event T+45-60min
- * check-in for Maya-created `mayaCalendarEvents`). Compression would have
- * lost the one-ping-max rule, the field-name surface
- * (`preEventNudgeSentAt` / `postEventCheckInSentAt` /
- * `postEventCheckInWaiveReason`), and the starter-tier weekly cap that
- * makes the gate enforceable. File is still read every tick; the +1K
- * char burn is the tax for time-sensitive proactive event nudges.
+ * Sprint C.4 (2026-05-13) — landed at 2_400. The calendar-scan check
+ * briefly lived in HEARTBEAT.md in C.3 (cap 3_000) with a ±5min window
+ * around T-30min, but every-minute LLM invocation × 1440 ticks/day was
+ * unsustainable for unit economics (~$14-56/creator/month with caching).
+ * Moved to cron-driven `midday_calendar_check` (11am local) +
+ * `afternoon_calendar_check` (3pm local); combined with existing
+ * morning_brief (7am) + evening_recap (6pm) that's 4 calendar-aware
+ * ticks/day at ~$0.02/day per creator. The remaining +400 char delta
+ * vs the original 2_000 covers the cross-reference paragraph that tells
+ * Maya where the calendar surface lives now — load-bearing pointer so
+ * she doesn't go looking for a heartbeat check that no longer exists.
  */
-export const HEARTBEAT_SOFT_CAP_CHARS = 3_000;
+export const HEARTBEAT_SOFT_CAP_CHARS = 2_400;
 
 export function generateHeartbeatMd(_inputs: HeartbeatMdInputs): string {
   // Plan unused: Coach vs Manager differ on AUTONOMY (auto-send), not
@@ -76,25 +79,25 @@ export function generateHeartbeatMd(_inputs: HeartbeatMdInputs): string {
     "## Ordered checks (stop on first ACT)",
     "",
     "1. **Unread `chatMessages`** — reply; skip rest of tick.",
-    "2. **Calendar scan** — `mayaCalendarEvents` for THIS `creatorId`. One-ping-max each window, never re-fire. Send via `claw-messenger.sendText` + `maya-voice-applier`; citation firewall covers URLs.",
-    "    - **Pre-event T-30**: `startTimeMs ∈ [now+25m, now+35m]` AND `preEventNudgeSentAt == null` → 1-line preview citing event body (open/close from `editingFingerprint`, key `citedRefs`); stamp `preEventNudgeSentAt`.",
-    "    - **Post-event T+45-60**: `endTimeMs ∈ [now-65m, now-45m]` AND `postEventCheckInSentAt == null` AND `actionable == true` → 1-line (\"filming wrap? send the cuts when ready\"). If creator messaged after `startTimeMs` referencing the deliverable → skip + stamp `postEventCheckInWaiveReason='creator-self-reported'`. Else stamp `postEventCheckInSentAt`.",
-    "    - **Plan caps** (`planFeatures`): Starter 5 pre/wk + 3 post/wk. Pro/Studio unlimited.",
-    "3. **Past-due `contentPlans` post** — elapsed, no `posts` row, no nudge today → nudge once.",
-    "4. **Post-outlier** (60m cd). vs 30-post baseline at matched window: >2× ping, >1.5× annotate, <0.3× ping, <0.5× annotate → `posts.mayaAnnotation`.",
-    "5. **Brand-email triage** (30m cd). New thread → `maya-brand-deal-triager`. Auto-send only if `autoSendThreshold` set, under it, firewall+voice pass.",
-    "6. **Niche + trend scan** (6h cd). → `trendObservations`. No push; folds into brief.",
-    "7. **Competitor pull** (6h cd). Each named peer's 24h → `competitorObservations`. Folds into brief.",
-    "8. **Comment triage** (6h cd). Last 5 posts → `commentTriage`. Surfaces qs in brief.",
-    "9. **Calendar peek** (12h cd; if connected). 1-14d → `maya-calendar-classifier`; relevant → propose arc.",
-    "10. **Opportunity scout** (12h cd). UGC marketplaces + creator-call hashtags + local Brave; dedupe `opportunityScoutSeen`; top 3 → brief.",
-    "11. **Collab matchmaker** (7d cd). namedPeers + niche; score overlap; propose format + first-DM. I never DM.",
-    "12. **Industry intel** (12h cd). `maya-industry-intel`; dedupe `industryIntelSeen`; inline ≥0.7 into brief.",
-    "13. **Wiki mirror sync** (6h cd). Batch new wiki entries → POST `lc_maya/sync_wiki_observations` (idem on `(creatorId, wikiVaultPath)`). Silent.",
+    "2. **Past-due `contentPlans` post** — elapsed, no `posts` row, no nudge today → nudge once.",
+    "3. **Post-outlier** (60m cd). vs 30-post baseline at matched window: >2× ping, >1.5× annotate, <0.3× ping, <0.5× annotate → `posts.mayaAnnotation`.",
+    "4. **Brand-email triage** (30m cd). New thread → `maya-brand-deal-triager`. Auto-send only if `autoSendThreshold` set, under it, firewall+voice pass.",
+    "5. **Niche + trend scan** (6h cd). → `trendObservations`. No push; folds into brief.",
+    "6. **Competitor pull** (6h cd). Each named peer's 24h → `competitorObservations`. Folds into brief.",
+    "7. **Comment triage** (6h cd). Last 5 posts → `commentTriage`. Surfaces qs in brief.",
+    "8. **Calendar peek** (12h cd; if connected). 1-14d → `maya-calendar-classifier`; relevant → propose arc.",
+    "9. **Opportunity scout** (12h cd). UGC marketplaces + creator-call hashtags + local Brave; dedupe `opportunityScoutSeen`; top 3 → brief.",
+    "10. **Collab matchmaker** (7d cd). namedPeers + niche; score overlap; propose format + first-DM. I never DM.",
+    "11. **Industry intel** (12h cd). `maya-industry-intel`; dedupe `industryIntelSeen`; inline ≥0.7 into brief.",
+    "12. **Wiki mirror sync** (6h cd). Batch new wiki entries → POST `lc_maya/sync_wiki_observations` (idem on `(creatorId, wikiVaultPath)`). Silent.",
+    "",
+    "## Calendar nudges (cron, not heartbeat)",
+    "",
+    "`mayaCalendarEvents` pre/post nudges live on 4 calendar-aware ticks per day: `morning_brief` 7am + `midday_calendar_check` 11am + `afternoon_calendar_check` 3pm + `evening_recap` 6pm. Native Google Calendar `reminders.overrides` (set by `maya-calendar-planner`) covers the T-30min device popup.",
     "",
     "## Telemetry",
     "",
-    "Every fired check → 1 `mayaActionLog` row: `entryId`, `outcome`, `pushed`, `tickKind`='heartbeat'. Cooldown skips don't log. Calendar-scan rows use `entryId='calendar-scan'` and `outcome` ∈ {`pre-event-nudge`, `post-event-checkin`, `skipped`}.",
+    "Every fired check → 1 `mayaActionLog` row: `entryId`, `outcome`, `pushed`, `tickKind`='heartbeat'. Cooldown skips don't log.",
     "",
   ];
 

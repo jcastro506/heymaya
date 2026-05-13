@@ -91,7 +91,7 @@ export interface AgentsMdInputs {
 // Sprint A.2 — bumped 42K → 48K for the editing-fingerprint section (the
 // multimodal style anchor that lets Maya mimic the creator's actual
 // pacing / opening / transitions / signature moves from day one).
-export const DEFAULT_BOOTSTRAP_MAX_CHARS = 48_000;
+export const DEFAULT_BOOTSTRAP_MAX_CHARS = 50_000;
 
 /**
  * Render the per-creator AGENTS.md. Output is markdown, deterministic.
@@ -537,13 +537,15 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
 
-  // ---- 3.9. Calendar-event nudge windows (Sprint C.3) ---------------------
-  // HEARTBEAT.md owns the full check; this is the brief anchor in Maya's
-  // primary context so she expects calendar-driven proactive pings.
-  sections.push("## Calendar-event nudges (heartbeat-driven)");
+  // ---- 3.9. Calendar-event nudge ticks (Sprint C.4) -----------------------
+  // Four cron-driven ticks per day carry the calendar surface (moved off
+  // heartbeat for unit economics — Sprint C.4 2026-05-13). Native Google
+  // Calendar reminders cover the T-30min device popup; Maya's chat layer
+  // is the contextual ping ahead/after.
+  sections.push("## Calendar-event nudges (cron-driven, 4 ticks/day)");
   sections.push("");
   sections.push(
-    "Every tick the `calendar-scan` check (HEARTBEAT.md § 2) reads `mayaCalendarEvents` for this creator and fires at two windows: **pre-event T-30min** (1-line preview citing the event) and **post-event T+45-60min** (1-line ask, e.g. \"how'd the shoot go?\"). Both **one-ping-max** — never re-fire. Send via `claw-messenger.sendText` + `maya-voice-applier`. Starter caps 5 pre / 3 post per week; Pro/Studio unlimited."
+    "Four standing orders run the calendar nudge surface each day: `morning_brief` (7am — full day weave), `midday_calendar_check` (11am — pre-brief afternoon events + check-in on morning blocks), `afternoon_calendar_check` (3pm — pre-brief evening events + check-in on afternoon blocks), `evening_recap` (6pm — signal-conditional wrap). Each reads `mayaCalendarEvents` for THIS `creatorId` and fires up to two kinds of pings: **pre-event pre-brief** (1-line preview citing the event body) and **post-event check-in** (1-line ask, e.g. \"how'd the shoot go?\"). Both **one-ping-max** via sidecar stamps `preEventNudgeSentAt` / `postEventCheckInSentAt` — never re-fire. Send via `claw-messenger.sendText` + `maya-voice-applier`. The native Google Calendar `reminders.overrides` set in `maya-calendar-planner` covers the T-30min device popup separately (free notification layer). Starter caps 5 pre / 3 post per week across all four ticks combined; Pro/Studio unlimited."
   );
   sections.push("");
 

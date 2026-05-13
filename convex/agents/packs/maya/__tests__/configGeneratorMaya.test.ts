@@ -250,8 +250,8 @@ describe("buildMayaConfig — gateway config (OpenClaw-native channels + bootstr
 
   it("bootstrapMaxChars is the Maya 105K override (Sprint C.3: 100K → 105K to fit the calendar-event nudge section + morning_brief calendar weave)", () => {
     const { config } = buildMayaConfig(emptyInputs("manager"), NOW);
-    expect(config.gatewayConfig.agents.defaults.bootstrapMaxChars).toBe(105_000);
-    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(105_000);
+    expect(config.gatewayConfig.agents.defaults.bootstrapMaxChars).toBe(115_000);
+    expect(MAYA_BOOTSTRAP_MAX_CHARS).toBe(115_000);
   });
 
   it("bootstrapTotalMaxChars is 200K (Sprint 12.7 Phase 0 — OpenClaw default is 60K, per-file inject clamps to min(maxChars, remainingTotalChars); 60K total starved every workspace file except AGENTS.md)", () => {

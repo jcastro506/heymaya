@@ -140,13 +140,21 @@ describe("buildCronJobsJson", () => {
     expect(ids).toContain("weekly_content_plan");
   });
 
-  /* ----- Sprint 3 Slice 1: cron count locked at exactly 6 ----- */
-
-  // The six precise-timing entries Maya runs as real cron jobs. Everything
-  // else fires off heartbeat ticks during waking hours, where the LLM
-  // decides whether the trigger condition is met. Adding a cron without
-  // moving the corresponding cron.md prose + agent UX line is a bug; this
-  // assertion is the trip wire.
+  /* ----- Sprint C.4 (2026-05-13): cron count is exactly 8 -----
+   *
+   * Sprint 3 Slice 1 collapsed cron from 21 → 6 — the 6 precise-timing
+   * entries Maya runs as real cron jobs (everything else moved to heartbeat).
+   * Sprint C.4 (2026-05-13) added 2 more cron entries to carry the calendar
+   * nudge surface OFF heartbeat:
+   *   - midday_calendar_check (11am local)
+   *   - afternoon_calendar_check (3pm local)
+   * COGS reason: every-minute heartbeat × full-LLM-invocation per tick was
+   * unsustainable; moving calendar to cron at 4 ticks/day cuts the cost
+   * from ~$14-56/mo/creator to ~$0.02/day. See sprint handoff doc.
+   *
+   * Adding a cron without moving the corresponding cron.md prose + agent UX
+   * line is a bug; this assertion is the trip wire.
+   */
   const SPRINT_3_CRON_SET: ReadonlyArray<string> = [
     "morning_brief",
     "evening_recap",
@@ -154,6 +162,8 @@ describe("buildCronJobsJson", () => {
     "weekly_review",
     "accountability_nudge",
     "revenue_snapshot",
+    "midday_calendar_check", // Sprint C.4
+    "afternoon_calendar_check", // Sprint C.4
   ];
 
   // Standing orders that USED to be cron and are now heartbeat-driven.
@@ -183,17 +193,17 @@ describe("buildCronJobsJson", () => {
     "algo_research_x",
   ];
 
-  it("Sprint 3 Slice 1: emits exactly 6 cron entries (Manager) — collapsed from 21", () => {
+  it("Sprint C.4 (2026-05-13): emits exactly 8 cron entries (Manager) — Sprint 3's 6 + 2 calendar ticks", () => {
     const { jobs } = buildCronJobsJson({ creator: creator("manager") });
-    expect(jobs.length).toBe(6);
+    expect(jobs.length).toBe(8);
   });
 
-  it("Sprint 3 Slice 1: emits exactly 6 cron entries (Coach) — same 6, all tier='all'", () => {
+  it("Sprint C.4: emits exactly 8 cron entries (Coach) — same 8, all tier='all'", () => {
     const { jobs } = buildCronJobsJson({ creator: creator("coach") });
-    expect(jobs.length).toBe(6);
+    expect(jobs.length).toBe(8);
   });
 
-  it("Sprint 3 Slice 1: each of the 6 kept slugs is present in the emitted cron set", () => {
+  it("Sprint C.4: each of the 8 kept slugs is present in the emitted cron set", () => {
     const { jobs } = buildCronJobsJson({ creator: creator("manager") });
     const ids = jobs.map((j) => j.id);
     for (const slug of SPRINT_3_CRON_SET) {
@@ -201,7 +211,7 @@ describe("buildCronJobsJson", () => {
     }
   });
 
-  it("Sprint 3 Slice 1: emitted cron set is EXACTLY the 6 kept slugs (no extras)", () => {
+  it("Sprint C.4: emitted cron set is EXACTLY the 8 kept slugs (no extras)", () => {
     const { jobs } = buildCronJobsJson({ creator: creator("manager") });
     const emitted = new Set(jobs.map((j) => j.id));
     const expected = new Set(SPRINT_3_CRON_SET);

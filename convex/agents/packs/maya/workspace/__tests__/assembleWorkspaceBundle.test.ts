@@ -169,12 +169,15 @@ describe("assembleWorkspaceBundle", () => {
     // Sprint C.2/C.3 — bumped 48K → 56K to fit the calendar-creation
     // additions to weekly_content_plan / trend_watcher /
     // post_publish_reaction (C.2) + the calendar-weave addition to
-    // morning_brief (C.3). The split standing-orders.md grew from
-    // ~47K to ~53K with all four additions; production never actually
-    // splits (MAYA_BOOTSTRAP_MAX_CHARS=105K embeds AGENTS inline), but
-    // this defense-in-depth test forces the split path so the per-file
-    // cap is still asserted.
-    const CAP = 56_000;
+    // morning_brief (C.3).
+    // Sprint C.4 — bumped 56K → 62K to fit the two new cron-driven
+    // standing orders (midday_calendar_check at 11am + afternoon_calendar_check
+    // at 3pm) that replaced the heartbeat calendar-scan check. The split
+    // standing-orders.md grew from ~53K to ~58K with the two additions.
+    // Production never actually splits (MAYA_BOOTSTRAP_MAX_CHARS=115K
+    // embeds AGENTS inline), but this defense-in-depth test forces the
+    // split path so the per-file cap is still asserted.
+    const CAP = 62_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
@@ -414,7 +417,10 @@ describe("assembleWorkspaceBundle", () => {
     // Sprint C.3 — bumped 100K → 105K alongside the calendar-event nudge
     // section in AGENTS.md + the calendar-weave addition to
     // `morning_brief.scope`.
-    const PROD_CAP = 105_000;
+    // Sprint C.4 — bumped 105K → 115K alongside the two new cron-driven
+    // calendar standing orders (midday_calendar_check + afternoon_calendar_check)
+    // that replaced the heartbeat calendar-scan check.
+    const PROD_CAP = 115_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };

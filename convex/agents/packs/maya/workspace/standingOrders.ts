@@ -307,6 +307,49 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
       "6pm local — scan, don't send by default. **Convert current UTC time to creator.timezone BEFORE comparing to the 8pm cutoff.** Never compare a UTC hour directly to the local-time rule. Silent unless ONE real signal hit: a post that's 1.5x or 0.5x their 30d median, a high-value brand email today, a missed content commitment today, a trend that accelerated since morning, OR tomorrow has a calendar event needing prep. None hit → silent (no row, no apology, no \"nothing to report\"). Past 8pm LOCAL (after correct tz conversion) → silent abort (NO message, never announce it). When sending: voice = friend who actually watched the day. Lead with the signal in their language (\"your morning post is at 12K, that's 2.3x your usual for that format\"). Banned: \"Today's recap\", \"End-of-day summary\", \"Quick update on your day\", \"Daily wrap\". Banned process narration: \"Per the instruction\", \"I am aborting\", \"No message will be sent\", \"The current time is X UTC\" — internal-only. One specific cite per send. **Follow-through enforcement (Sprint B.1):** I do NOT announce intent — the scan happens silently and the send (if any) carries the artifact. Banned: any phrasing that promises follow-up (\"let me wrap up the day,\" \"give me a sec to check signals\") without the actual cited signal in the same response.",
   },
   {
+    // Sprint C.4 (2026-05-13) — calendar-aware proactive nudge tick. Moved
+    // from heartbeat (every-minute, ~$14-56/mo/creator) to cron (4x/day,
+    // ~$0.02/day/creator) after operator-locked unit-economics review.
+    // Combined with morning_brief (7am) + evening_recap (6pm), four ticks
+    // per day carry the calendar surface. Native Google Calendar reminders
+    // (set in maya-calendar-planner) cover the T-30min device popup.
+    id: "midday_calendar_check",
+    title: "Midday calendar check (pre-brief afternoon events + morning post-event check-ins)",
+    tier: "all",
+    kind: "cron",
+    cronEntryId: "midday_calendar_check",
+    defaultCron: "0 11 * * *",
+    session: "isolated",
+    scope:
+      "11am LOCAL — read `mayaCalendarEvents` for THIS `creatorId` across two windows. Send via `claw-messenger.sendText` + `maya-voice-applier`; citation firewall covers URLs. ONE PING MAX per event (sidecar stamps `preEventNudgeSentAt` / `postEventCheckInSentAt` enforce — never re-fire).\n\n**Pre-event pre-brief (window: today after now, up through 6pm local):** for every `actionable=true` event with `preEventNudgeSentAt == null` in that window, send one 1-line preview in voice citing the event body — `kind` + start time (local), open/close direction from `editingFingerprint`, one key `citedRefs` entry (trend URL, peer post, brand email). Example: *\"filming at 3pm — your stare close lands on all three\"*. Stamp `preEventNudgeSentAt`. Multiple events in window stack into a single send max (one combined preview is better than three back-to-back pings).\n\n**Post-event check-in (window: events that ended since 7am today):** for every `actionable=true` event with `endTimeMs >= today_7am_local` AND `endTimeMs <= now` AND `postEventCheckInSentAt == null`, send one 1-line in voice asking how it went / requesting the deliverable (\"filming wrap? send the cuts when ready\"). IF the creator has sent any message after `startTimeMs` referencing the deliverable (rough cut attached, brand reply sent, etc.) → SKIP and stamp `postEventCheckInWaiveReason='creator-self-reported'`. Otherwise stamp `postEventCheckInSentAt`.\n\n**Plan-tier caps** (`planFeatures`): Starter 5 pre/wk + 3 post/wk. Pro/Studio unlimited. Caps are weekly across the four calendar-aware ticks combined, not per-tick. Read `mayaActionLog` for the past 7d to check.\n\n**TZ discipline:** convert `startTimeMs` / `endTimeMs` to `creators.timezone` BEFORE window-comparing. Never compare a UTC instant directly to a local-hour rule. Convert `Date.now()` the same way before computing windows.\n\n**Idempotency:** stamp BEFORE sending — if send fails the stamp prevents a retry storm. Better one missed nudge than a re-fire spam. **Follow-through enforcement (Sprint B.1):** I do NOT announce intent. The scan happens silently and the send (if any) carries the artifact in the same turn. Banned: any phrasing that promises follow-up without the actual nudge content.",
+    triggers: "Cron `midday_calendar_check` 11:00am local. Silent if both windows are empty.",
+    approvalGates: "None — both nudges are informational pushes.",
+    escalation:
+      "Pre-event window empty AND post-event window empty → silent (no row, no apology, no \"nothing to check\" filler). `claw-messenger.sendText` 5xx → log and stamp the nudge-sent timestamp anyway (per idempotency rule); never retry. `mayaCalendarEvents` read fails → log and skip the tick (one missed pre-brief is fine; we'll catch it on the 3pm tick).",
+    cronMessage:
+      "11am local — scan `mayaCalendarEvents`. Pre-brief actionable events between now and 6pm local that haven't been pre-briefed yet (one combined preview if multiple). Post-event check-in on actionable events that ended since 7am and haven't been checked in. ONE PING MAX per event — stamp before sending. Plan-tier weekly cap across all four calendar ticks (Starter 5 pre + 3 post / week). Silent if both windows are empty. **Follow-through enforcement (Sprint B.1):** the scan + send happen in this turn; no \"give me a sec to check the calendar\" promises.",
+  },
+  {
+    // Sprint C.4 (2026-05-13) — afternoon counterpart to midday_calendar_check.
+    // Catches evening events for pre-brief + post-event check-ins on
+    // afternoon blocks (events that ended between 11am-3pm).
+    id: "afternoon_calendar_check",
+    title: "Afternoon calendar check (pre-brief evening events + afternoon post-event check-ins)",
+    tier: "all",
+    kind: "cron",
+    cronEntryId: "afternoon_calendar_check",
+    defaultCron: "0 15 * * *",
+    session: "isolated",
+    scope:
+      "3pm LOCAL — read `mayaCalendarEvents` for THIS `creatorId` across two windows (same shape as `midday_calendar_check`, shifted windows). Send via `claw-messenger.sendText` + `maya-voice-applier`; ONE PING MAX per event (sidecar stamps enforce — never re-fire).\n\n**Pre-event pre-brief (window: now through 10pm local):** for every `actionable=true` event with `preEventNudgeSentAt == null` in that window, send one 1-line preview in voice citing event body + `editingFingerprint` direction + one key `citedRefs` entry. Stamp `preEventNudgeSentAt`. Multiple events stack into one combined send.\n\n**Post-event check-in (window: events that ended between 11am and now):** for every `actionable=true` event with `endTimeMs ∈ [11am_today_local, now]` AND `postEventCheckInSentAt == null`, send 1-line check-in. IF the creator has sent any message after `startTimeMs` referencing the deliverable → SKIP and stamp `postEventCheckInWaiveReason='creator-self-reported'`. Otherwise stamp `postEventCheckInSentAt`.\n\n**Plan-tier caps** (`planFeatures`): Starter 5 pre/wk + 3 post/wk weekly across all four calendar ticks. Pro/Studio unlimited. Read `mayaActionLog` to check past-7d count.\n\n**TZ discipline:** convert `startTimeMs` / `endTimeMs` to `creators.timezone` BEFORE window-comparing. Never compare a UTC instant directly to a local-hour rule. All windows are LOCAL.\n\n**Idle window:** if it's past 10pm local at tick time (rare — 3pm should always be daytime, but cron drift / DST edge cases possible) → silent abort. The post-event check-in window still applies if the event ended before 10pm.\n\n**Follow-through enforcement (Sprint B.1):** scan + send in this turn; no \"let me check what's coming up\" stalls.",
+    triggers: "Cron `afternoon_calendar_check` 3:00pm local. Silent if both windows are empty.",
+    approvalGates: "None — both nudges are informational pushes.",
+    escalation:
+      "Both windows empty → silent. `claw-messenger.sendText` 5xx → log + stamp anyway. `mayaCalendarEvents` read fails → log + skip the tick (evening_recap at 6pm will catch any high-value missed pre-briefs).",
+    cronMessage:
+      "3pm local — scan `mayaCalendarEvents`. Pre-brief actionable events between now and 10pm that haven't been pre-briefed yet. Post-event check-in on actionable events that ended between 11am and now and haven't been checked in. ONE PING MAX per event. Plan-tier weekly cap (Starter 5 pre + 3 post / wk). Silent if both windows empty.",
+  },
+  {
     id: "weekly_review",
     title: "Weekly review",
     tier: "all",
