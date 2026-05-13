@@ -72,6 +72,7 @@ import type * as creatorMayaV0_pinnedClawhubSkills from "../creatorMayaV0/pinned
 import type * as creatorMayaV0_scope from "../creatorMayaV0/scope.js";
 import type * as creatorMayaV0_tiering from "../creatorMayaV0/tiering.js";
 import type * as creatorMayaV0_trendBenchmark from "../creatorMayaV0/trendBenchmark.js";
+import type * as creatorMayaV0_uploadRenderedMediaHttp from "../creatorMayaV0/uploadRenderedMediaHttp.js";
 import type * as creatorMayaV0_videoSampling from "../creatorMayaV0/videoSampling.js";
 import type * as creatorMayaV0_workspaceManifest from "../creatorMayaV0/workspaceManifest.js";
 import type * as creators from "../creators.js";
@@ -164,6 +165,7 @@ import type * as onboarding_business_pipeline from "../onboarding/business/pipel
 import type * as onboarding_growth_deployRiley from "../onboarding/growth/deployRiley.js";
 import type * as onboarding_growth_pipeline from "../onboarding/growth/pipeline.js";
 import type * as onboarding_maya_deployMaya from "../onboarding/maya/deployMaya.js";
+import type * as onboarding_maya_extractEditingFingerprint from "../onboarding/maya/extractEditingFingerprint.js";
 import type * as onboarding_maya_jobs from "../onboarding/maya/jobs.js";
 import type * as onboarding_maya_submitOnboarding from "../onboarding/maya/submitOnboarding.js";
 import type * as onboarding_maya_synthesizeCreatorPicture from "../onboarding/maya/synthesizeCreatorPicture.js";
@@ -272,6 +274,7 @@ declare const fullApi: ApiFromModules<{
   "creatorMayaV0/scope": typeof creatorMayaV0_scope;
   "creatorMayaV0/tiering": typeof creatorMayaV0_tiering;
   "creatorMayaV0/trendBenchmark": typeof creatorMayaV0_trendBenchmark;
+  "creatorMayaV0/uploadRenderedMediaHttp": typeof creatorMayaV0_uploadRenderedMediaHttp;
   "creatorMayaV0/videoSampling": typeof creatorMayaV0_videoSampling;
   "creatorMayaV0/workspaceManifest": typeof creatorMayaV0_workspaceManifest;
   creators: typeof creators;
@@ -364,6 +367,7 @@ declare const fullApi: ApiFromModules<{
   "onboarding/growth/deployRiley": typeof onboarding_growth_deployRiley;
   "onboarding/growth/pipeline": typeof onboarding_growth_pipeline;
   "onboarding/maya/deployMaya": typeof onboarding_maya_deployMaya;
+  "onboarding/maya/extractEditingFingerprint": typeof onboarding_maya_extractEditingFingerprint;
   "onboarding/maya/jobs": typeof onboarding_maya_jobs;
   "onboarding/maya/submitOnboarding": typeof onboarding_maya_submitOnboarding;
   "onboarding/maya/synthesizeCreatorPicture": typeof onboarding_maya_synthesizeCreatorPicture;

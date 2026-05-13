@@ -15,6 +15,7 @@
 import { httpRouter } from "convex/server";
 import { voiceTranscriptHttp } from "./voice/transcriptHttp";
 import { openClawMediaIngestHttp } from "./creatorMayaV0/openClawMediaIngestHttp";
+import { uploadRenderedMediaHttp } from "./creatorMayaV0/uploadRenderedMediaHttp";
 import {
   completeGoogleCalendarOAuthHttp,
   connectedAccountsHealthHttp,
@@ -69,6 +70,18 @@ http.route({
   path: "/creator-maya-v0/openclaw/media",
   method: "POST",
   handler: openClawMediaIngestHttp,
+});
+
+// Sprint A.1 — outbound media bridge. After `maya-clip-editor` renders an
+// mp4 onto the Fly machine's local volume, Maya POSTs the bytes here
+// (multipart/form-data) to land them in Convex storage and get back a
+// publicly fetchable signed URL. She then passes THAT URL to
+// `claw-messenger.sendMedia` — local volume paths can't reach the relay.
+// Sibling: `convex/creatorMayaV0/uploadRenderedMediaHttp.ts`.
+http.route({
+  path: "/lc_maya/upload_rendered_media",
+  method: "POST",
+  handler: uploadRenderedMediaHttp,
 });
 
 // `lc_maya.*` first-boot iMessage flow — see `convex/lcMaya/lcMayaHttp.ts`.

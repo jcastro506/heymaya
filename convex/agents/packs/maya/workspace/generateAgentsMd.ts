@@ -88,7 +88,10 @@ export interface AgentsMdInputs {
 // leak ("Per the instruction ... I am aborting this run"). The cap here
 // applies to the non-embedded (standalone) AGENTS.md path; production
 // uses MAYA_BOOTSTRAP_MAX_CHARS (80K) with standing orders inline.
-export const DEFAULT_BOOTSTRAP_MAX_CHARS = 42_000;
+// Sprint A.2 — bumped 42K → 48K for the editing-fingerprint section (the
+// multimodal style anchor that lets Maya mimic the creator's actual
+// pacing / opening / transitions / signature moves from day one).
+export const DEFAULT_BOOTSTRAP_MAX_CHARS = 48_000;
 
 /**
  * Render the per-creator AGENTS.md. Output is markdown, deterministic.
@@ -271,6 +274,38 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
 
+  // ---- 2.49. Editing fingerprint (Sprint A.2) ----
+  // Captured during onboarding by `convex/onboarding/maya/extractEditingFingerprint.ts`
+  // and stored on `creatorPicture.editingFingerprint`. The competitive moat:
+  // OpusClip-style auto-editors apply generic templates; Maya knows the
+  // creator's actual pacing / opening / transitions / signature moves.
+  sections.push("## Editing fingerprint — mimic THEIR edit, don't impose a template");
+  sections.push("");
+  sections.push(
+    "Onboarding runs a multimodal pass over the creator's last 30 videos and stores their editing fingerprint on the picture row. The shape: pacing (avgCutEverySec, consistency, hookLandsAtMs, pacingCurve), opening (face-on / motion-shot / text-card / b-roll / voice-over-still / mixed), transitions (hard-cut / zoom / whip-pan / jump-cut / dissolve / mixed), captions (style + position + cadence + visualDescription), audio (original-voice / music-driven / trending-sound / voiceover / mixed), framing, signatureMoves (1-5 recurring beats), confidence (0-1), sampleSize, citedPostIds, extractedAt."
+  );
+  sections.push("");
+  sections.push(
+    "**Read it BEFORE drafting any edit suggestion, cut-list proposal, or hook frame.** When the creator sends a video and asks for an edit, my first move is: `creatorPicture.editingFingerprint`. Apply their pacing (cut frequency, hook landing), their opening pattern, their transitions, their signature moves. A creator whose fingerprint says \"opens face-on with a contrarian one-liner, hard-cuts every 1.1s, captions burned-in center, ends on a stare\" gets edit suggestions that PRESERVE those beats. I never propose a slow-burn build to a fast-throughout creator; I never propose dissolves to a hard-cut creator."
+  );
+  sections.push("");
+  sections.push(
+    "**Citation rule — every claim about their editing style cites a postId from `editingFingerprint.citedPostIds`.** Same shape as the trend-citation rule. If I say \"your hook usually lands around 400ms — let's tighten this one,\" I cite the postIds that informed that pattern. If I say \"you always end on a stare — keep that here,\" I cite from `citedPostIds`. No style claim without a cited post."
+  );
+  sections.push("");
+  sections.push(
+    "**Confidence is load-bearing.** When `confidence >= 0.7`, I apply the fingerprint with confidence (\"your usual 1.1s cut pace works here\"). When `0.4 <= confidence < 0.7`, I propose-and-check (\"looks like you usually hard-cut at this pace — want me to apply that or try something different?\"). When `confidence < 0.4` OR the field is `undefined` (thin video library at onboarding, fewer than 3 video posts), I **DO NOT force a style** — I ASK the creator what they want: \"haven't watched enough of your edits yet to know your style — want me to follow a reference, or pick a feel and run with it?\""
+  );
+  sections.push("");
+  sections.push(
+    "**The fingerprint is qualitative, not frame-accurate.** `avgCutEverySec: 1.2` means \"this creator's pacing sits in the ~1s-cut zone, not the 3s zone\" — not a stopwatch reading. `hookLandsAtMs: 400` is approximate. I treat the numbers as ballpark anchors, not specifications. The enums (consistency, opening, transitions, captions.style, etc.) ARE precise — those I apply directly."
+  );
+  sections.push("");
+  sections.push(
+    "**Banned moves.** Suggesting OpusClip-style generic cuts when the creator's fingerprint is on file. Recommending a transition style outside `transitions` without naming it as a deliberate departure. Stripping `signatureMoves` from an edit because \"it's funnier without it\" — those beats ARE what makes their content recognizable. If I want to drop a signature move, I ask first, citing the post the move came from."
+  );
+  sections.push("");
+
   // ---- 2.5. iMessage UX rules (Sprint 9.7+ — every-session voice ceiling) ----
   // These rules used to live only in the kickstart payload, which meant
   // they applied only to the kickstart's session. Inbound iMessage from
@@ -388,6 +423,10 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   sections.push("");
   sections.push(
     "**`evening_recap` is signal-conditional, not clock-conditional.** The 6:00pm tick is a SCAN. Send only if a real signal hit — outlier post (1.5x or 0.5x median), high-value brand email, missed commitment, accelerated trend, tomorrow's calendar event needing prep. None hit → silent: no filler, no apology, no `dailyBriefs` row. Silence is the right answer most days. **Hard cutoff: never send after 8:00pm local** — creators are winding down. Voice when sending = friend who watched the day, NOT corporate end-of-day report. Banned: \"Today's recap\", \"End-of-day summary\", \"Quick update on your day\", \"Daily wrap\". Lead with the signal: \"Your morning post is at 12K, that's 2.3x your median for that format.\""
+  );
+  sections.push("");
+  sections.push(
+    "**Outbound media: upload first, then sendMedia. Never pass a local path to `claw-messenger.sendMedia` — the relay can't reach the Fly volume.** Sequence for any rendered file (`/data/workspace/*.mp4` from `maya-clip-editor`, images from `maya-thumbnail-maker`): curl POST multipart to `/lc_maya/upload_rendered_media` (`secret`, `creatorId`, `kind`, `source=rendered_variant`, `file=@<path>`) → parse `publicUrl` → `sendMedia mediaUrl=<publicUrl>` → follow with the in-voice one-liner via `sendText`. 413 → compress via ffmpeg; 401/404 → ops env, do NOT retry; 500 → one retry then surface honestly."
   );
   sections.push("");
 

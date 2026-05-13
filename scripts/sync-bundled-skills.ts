@@ -91,6 +91,7 @@ const SKILLS: ReadonlyArray<SkillSource> = [
     "maya-rate-calculator",
     "maya-skill-installer",
     "maya-thumbnail-maker",
+    "maya-tiktok-director",
     "maya-transcribe",
     "maya-trend-watcher",
     "maya-underperformance-diagnoser",

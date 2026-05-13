@@ -607,11 +607,11 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     tier: "all",
     kind: "on-demand",
     scope:
-      "Call `maya-content-cross-poster` for per-platform variants — TikTok 9:16 ≤60s, IG 9:16 Reel/4:5 carousel, YT 9:16 Short/16:9 long, LinkedIn native video/text+thread, X 3-5 tweet thread. Each variant: voice-applied caption, duration cut, aspect ratio, hashtags, posting time, optional one-tap deep link.",
+      "Call `maya-content-cross-poster` for per-platform variants — TikTok 9:16 ≤60s, IG 9:16 Reel/4:5 carousel, YT 9:16 Short/16:9 long, LinkedIn native video/text+thread, X 3-5 tweet thread. Each variant: voice-applied caption, duration cut, aspect ratio, hashtags, posting time, optional one-tap deep link. **READ FIRST — `creatorPicture.editingFingerprint`** (when present): pacing.avgCutEverySec, opening, transitions, captions, signatureMoves. Per-platform variants apply the creator's existing editing style — DO NOT swap their burned-in caption cadence for native captions, DO NOT replace their hard-cut transitions with dissolves, DO NOT change the opening pattern. If a platform constraint forces a change (vertical → horizontal), name it explicitly. Cite from `editingFingerprint.citedPostIds` for any style claim.",
     triggers: "On-demand: creator approves a piece, OR auto-folded into weekly content plan.",
     approvalGates: "Maya never auto-publishes. Variants are prepared for the creator to publish.",
     escalation:
-      "Both tiers reach all 5 platforms. If deep-link scheme unavailable, fall back to 'open composer with caption pre-filled.'",
+      "Both tiers reach all 5 platforms. If deep-link scheme unavailable, fall back to 'open composer with caption pre-filled.' If `editingFingerprint` is missing OR `confidence < 0.4`, do NOT force a style — ask the creator what they want first.",
   },
   {
     id: "underperformance_diagnosis",
@@ -631,10 +631,10 @@ export const STANDING_ORDERS: ReadonlyArray<StandingOrderProgram> = [
     tier: "all",
     kind: "on-demand",
     scope:
-      "Call `maya-pre-post-scorer` on a draft (caption + hookCandidate + format + platform + posting time + optional media). Return predicted-tier + signal breakdown + prioritized recommendations + goNoGo verdict.",
+      "Call `maya-pre-post-scorer` on a draft (caption + hookCandidate + format + platform + posting time + optional media). Return predicted-tier + signal breakdown + prioritized recommendations + goNoGo verdict. **When the draft is a VIDEO and `creatorPicture.editingFingerprint` is present**, also score against the editing fingerprint: opening pattern (does it land like their usual face-on / motion-shot?), pacing (does the cut frequency match their `pacing.avgCutEverySec` ±50%?), hook beat (does the hook land in the first ~`pacing.hookLandsAtMs` ms?), signature moves (any of the recurring beats from `signatureMoves` showing up?). Cite postIds from `editingFingerprint.citedPostIds` when making any claim about the creator's style.",
     triggers: "Event: 'Maya score this' in chat OR future `/draft` route. Wrapper at `convex/prePostReview.ts:scoreDraft`.",
     approvalGates: "None — scoring is a read; creator decides whether to post. Honesty over flattery.",
-    escalation: "Read-only — does NOT persist. Recommendations failing citation firewall are dropped.",
+    escalation: "Read-only — does NOT persist. Recommendations failing citation firewall are dropped. If `editingFingerprint` is missing OR confidence is low (< 0.4), do NOT score against an editing style — note the gap honestly (\"haven't watched enough of your stuff to fingerprint your edit style yet\") and skip the style-fit dimension.",
   },
   {
     id: "opportunity_scout_daily",

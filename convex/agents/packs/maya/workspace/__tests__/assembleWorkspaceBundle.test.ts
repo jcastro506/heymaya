@@ -17,6 +17,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { assembleWorkspaceBundle } from "../assembleWorkspaceBundle";
 import { BUNDLED_SKILLS } from "../skillsRegistry";
+import {
+  CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK,
+  CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS,
+  CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILLS,
+} from "../../../../../creatorMayaV0/pinnedClawhubSkills";
 import type { Doc } from "../../../../../_generated/dataModel";
 import type { WorkspaceInputs } from "../types";
 
@@ -159,7 +164,8 @@ describe("assembleWorkspaceBundle", () => {
     // because it lists every shipped skill with sourcing).
     // Sprint 12.6+ — bumped 40K → 45K to fit timezone-discipline +
     // abort-silence rules added after the 2026-05-10 evening leak.
-    const CAP = 45_000;
+    // Sprint A.2 — bumped 45K → 48K for the editing-fingerprint section.
+    const CAP = 48_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
@@ -412,6 +418,102 @@ describe("assembleWorkspaceBundle", () => {
       expect(agentsMd).toContain("### Morning brief");
       // And weekly_review (an "all"-tier program) appears in every plan.
       expect(agentsMd).toContain("### Weekly review");
+    }
+  });
+
+  it("ClawHub pin manifest carries the three MVP pins (tiktok + ffmpeg + carousel)", () => {
+    // Sprint 12.7.5 (A.4) — added `g0atbot-tiktok-carousel` to the MVP pin
+    // set. The lock + slug array + skill-list must all agree.
+    expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS).toContain("tiktok");
+    expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS).toContain(
+      "ffmpeg-video-editor"
+    );
+    expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS).toContain(
+      "g0atbot-tiktok-carousel"
+    );
+    expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS.length).toBe(3);
+
+    // Lock entries are present + agree on slug set.
+    const lockSlugs = Object.keys(CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK.skills);
+    expect(lockSlugs.sort()).toEqual(
+      [...CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS].sort()
+    );
+    expect(
+      CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK.skills["g0atbot-tiktok-carousel"]
+    ).toEqual({
+      version: "1.0.0",
+      source: "clawhub:g0atfac3/g0atbot-tiktok-carousel",
+    });
+
+    // Skill bodies list also has all three.
+    const bodySlugs = CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILLS.map((s) => s.slug).sort();
+    expect(bodySlugs).toEqual(
+      [...CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS].sort()
+    );
+  });
+
+  it("workspace bundle ships the carousel ClawHub pin at skills/g0atbot-tiktok-carousel/SKILL.md", () => {
+    const bundle = assembleWorkspaceBundle(baseInputs());
+    const path = "skills/g0atbot-tiktok-carousel/SKILL.md";
+    expect(bundle.files.has(path)).toBe(true);
+    const skill = bundle.files.get(path)!;
+    // Frontmatter shape (name / version / description / when-to-use /
+    // plan-tier / thinking-budget / metadata.openclaw).
+    expect(skill.startsWith("---\n")).toBe(true);
+    expect(skill).toContain("name: g0atbot-tiktok-carousel");
+    expect(skill).toContain("version: 1.0.0");
+    expect(skill).toContain("description:");
+    expect(skill).toContain("when-to-use:");
+    expect(skill).toContain("plan-tier:");
+    expect(skill).toContain("thinking-budget:");
+    expect(skill).toContain("metadata:");
+    expect(skill).toContain("openclaw:");
+    // Heading present (markdown is parseable).
+    expect(skill).toContain("# TikTok Carousel Generator");
+    // Core content sections the public skill page lists.
+    expect(skill).toContain("6-slide formula");
+    expect(skill).toContain("Image prompt rules");
+    expect(skill).toContain("Text overlay rules");
+    expect(skill).toContain("hook formula");
+    expect(skill).toContain("Learning loop");
+    // Routing guidance — carousel is photo-deck sibling, NOT a video
+    // replacement. Maya needs to know when to route to the video pipeline.
+    expect(skill).toContain("maya-clip-editor");
+    expect(skill).toContain("ffmpeg-video-editor");
+  });
+
+  it("workspace bundle ships .clawhub/lock.json listing all three pinned skills", () => {
+    const bundle = assembleWorkspaceBundle(baseInputs());
+    const lockRaw = bundle.files.get(".clawhub/lock.json");
+    expect(lockRaw).toBeDefined();
+    const lock = JSON.parse(lockRaw!) as {
+      version: number;
+      skills: Record<string, { version: string; source: string }>;
+    };
+    expect(lock.version).toBe(1);
+    expect(Object.keys(lock.skills).sort()).toEqual([
+      "ffmpeg-video-editor",
+      "g0atbot-tiktok-carousel",
+      "tiktok",
+    ]);
+    expect(lock.skills["g0atbot-tiktok-carousel"].version).toBe("1.0.0");
+  });
+
+  it("ClawHub pin manifest carries no per-creator references (shared infra, not tenant-scoped)", () => {
+    // Cross-tenant invariant: pinned skill content is shared across every
+    // Maya — there must be no creator/clerk/handle/tenant identifier
+    // embedded in the manifest. The lock + skill bodies are tenant-neutral
+    // strings.
+    for (const skill of CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILLS) {
+      for (const [path, body] of Object.entries(skill.files)) {
+        const where = `${skill.slug}/${path}`;
+        expect(body, `${where} leaks creatorId`).not.toMatch(/creatorId/);
+        expect(body, `${where} leaks clerkUserId`).not.toMatch(/clerkUserId/);
+        // Convex IDs start with `k_` — guard against accidental fixture
+        // leakage. (The string "ko" in arbitrary prose is fine; we look
+        // for the canonical `k_` Convex prefix.)
+        expect(body, `${where} leaks a Convex k_ id`).not.toMatch(/\bk_[a-z0-9]{10,}/);
+      }
     }
   });
 });

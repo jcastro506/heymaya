@@ -36,7 +36,13 @@ import {
   reconcileAnchorVsObserved,
   checkAnchorInvariant,
   computeDaysSinceLastPost,
+  _setEditingFingerprintCallForTests,
+  collectEditingFingerprintPosts,
 } from "../synthesizeCreatorPicture";
+import type {
+  MultimodalCall,
+  MultimodalCallArgs,
+} from "../extractEditingFingerprint";
 import {
   _setVideoSynthClientForTests,
   VideoSynthWorkerError,
@@ -55,6 +61,7 @@ beforeEach(() => {
 
 afterEach(() => {
   _setSynthFetchForTests(null);
+  _setEditingFingerprintCallForTests(null);
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -4028,5 +4035,233 @@ describe("SYNTH_SYSTEM_PROMPT — Sprint 12 Phase 1A date instructions", () => {
   it("explains the date discipline rule (slice YYYY-MM-DD from postedAtIso, omit on missing)", () => {
     expect(SYNTH_SYSTEM_PROMPT).toContain("postedAtIso");
     expect(SYNTH_SYSTEM_PROMPT).toContain("DATES");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint A.2 — editing fingerprint integration                                */
+/* -------------------------------------------------------------------------- */
+
+function makeValidEditingFingerprintJson(): string {
+  return JSON.stringify({
+    pacing: {
+      avgCutEverySec: 1.1,
+      consistency: "tight",
+      hookLandsAtMs: 380,
+      pacingCurve: "fast-throughout",
+    },
+    opening: "face-on",
+    transitions: "hard-cut",
+    captions: {
+      style: "burned-in",
+      position: "center",
+      cadence: "phrase",
+      visualDescription: "bold white sans-serif with black stroke",
+    },
+    audio: "original-voice",
+    framing: "fully-vertical-9-16",
+    signatureMoves: [
+      "opens with a hook line + cut to demo",
+      "wrap with a contrarian one-liner",
+    ],
+    styleVariance: "low",
+  });
+}
+
+describe("synthesizeCreatorPicture — Sprint A.2 editing fingerprint", () => {
+  it("posts with videoUrls → editingFingerprint is populated on the creatorPicture row", async () => {
+    const t = convexTest(schema, modules);
+    const c = await seedCreatorWithScrapedData(t, {
+      suffix: "efp1",
+      plan: "manager",
+    });
+
+    const { fetchSpy } = makeMockFetch({
+      responses: [makeValidSynthesisJson()],
+    });
+    _setSynthFetchForTests(fetchSpy);
+
+    const captured: MultimodalCallArgs[] = [];
+    const efpCall: MultimodalCall = async (a) => {
+      captured.push(a);
+      return {
+        content: makeValidEditingFingerprintJson(),
+        model: "google/gemini-3-flash-preview",
+      };
+    };
+    _setEditingFingerprintCallForTests(efpCall);
+
+    const result = await t.action(
+      internal.onboarding.maya.synthesizeCreatorPicture
+        .synthesizeCreatorPicture,
+      { creatorId: c }
+    );
+    expect(result.ok).toBe(true);
+
+    const picture = await t.run(async (ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", c))
+        .first()
+    );
+    expect(picture).not.toBeNull();
+    const efp = picture!.editingFingerprint;
+    expect(efp).toBeDefined();
+    if (!efp) return;
+    expect(efp.pacing.avgCutEverySec).toBe(1.1);
+    expect(efp.pacing.consistency).toBe("tight");
+    expect(efp.opening).toBe("face-on");
+    expect(efp.transitions).toBe("hard-cut");
+    expect(efp.framing).toBe("fully-vertical-9-16");
+    expect(efp.signatureMoves.length).toBeGreaterThan(0);
+    expect(efp.citedPostIds.length).toBeGreaterThanOrEqual(3);
+    // 5 posts seeded × low variance = 0.4 base.
+    expect(efp.confidence).toBe(0.4);
+    expect(efp.sampleSize).toBe(5);
+    // The voice synth still completed alongside.
+    expect(picture!.voiceFingerprint).toMatch(/Short declarative/);
+    // The editing-fingerprint pass received the same TikTok posts that
+    // went into the voice synth — cross-tenant: ONLY this creator's posts.
+    expect(captured).toHaveLength(1);
+    for (const p of captured[0].posts) {
+      expect(p.postId).toMatch(/^tt_post_/);
+    }
+  });
+
+  it("posts with no usable videoUrls → editingFingerprint stays undefined, voice synth still lands", async () => {
+    const t = convexTest(schema, modules);
+    const c = await seedCreatorWithScrapedData(t, {
+      suffix: "efp2",
+      plan: "manager",
+    });
+
+    // Strip videoUrls from the seeded posts so the extractor's thin-library
+    // gate fires (< 3 video posts → null).
+    await t.run(async (ctx) => {
+      const cacheRows = await ctx.db
+        .query("scrapeCreatorsCache")
+        .withIndex("by_creator", (q) => q.eq("creatorId", c))
+        .collect();
+      for (const row of cacheRows) {
+        if (!row.cacheKey.includes(":posts:")) continue;
+        const posts = row.payload as Array<{ video?: { playAddr?: string } }>;
+        for (const p of posts) {
+          if (p.video) p.video.playAddr = "";
+        }
+        await ctx.db.patch(row._id, { payload: posts });
+      }
+    });
+
+    const { fetchSpy } = makeMockFetch({
+      responses: [makeValidSynthesisJson()],
+    });
+    _setSynthFetchForTests(fetchSpy);
+
+    // The extractor should short-circuit BEFORE calling the model, so this
+    // stub must NEVER be invoked.
+    const efpSpy = vi.fn();
+    _setEditingFingerprintCallForTests(
+      efpSpy as unknown as MultimodalCall
+    );
+
+    const result = await t.action(
+      internal.onboarding.maya.synthesizeCreatorPicture
+        .synthesizeCreatorPicture,
+      { creatorId: c }
+    );
+    expect(result.ok).toBe(true);
+
+    const picture = await t.run(async (ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", c))
+        .first()
+    );
+    expect(picture!.editingFingerprint).toBeUndefined();
+    // Voice synth lands either way.
+    expect(picture!.voiceFingerprint).toMatch(/Short declarative/);
+    // The fingerprint multimodal call was never invoked.
+    expect(efpSpy).not.toHaveBeenCalled();
+  });
+
+  it("editing-fingerprint extraction failure → voice synth still completes (the two are independent)", async () => {
+    const t = convexTest(schema, modules);
+    const c = await seedCreatorWithScrapedData(t, {
+      suffix: "efp3",
+      plan: "manager",
+    });
+
+    const { fetchSpy } = makeMockFetch({
+      responses: [makeValidSynthesisJson()],
+    });
+    _setSynthFetchForTests(fetchSpy);
+
+    // Extractor receives malformed JSON → returns null → upsert skips the
+    // field. The action should NOT fail.
+    _setEditingFingerprintCallForTests(async () => ({
+      content: "definitely not json {",
+      model: "google/gemini-3-flash-preview",
+    }));
+
+    const result = await t.action(
+      internal.onboarding.maya.synthesizeCreatorPicture
+        .synthesizeCreatorPicture,
+      { creatorId: c }
+    );
+    expect(result.ok).toBe(true);
+
+    const picture = await t.run(async (ctx) =>
+      ctx.db
+        .query("creatorPicture")
+        .withIndex("by_creator", (q) => q.eq("creatorId", c))
+        .first()
+    );
+    expect(picture!.editingFingerprint).toBeUndefined();
+    // Critical: voice synth landed despite the extraction failure.
+    expect(picture!.voiceFingerprint).toMatch(/Short declarative/);
+    expect(picture!.niche).toMatch(/Home-gym/);
+  });
+
+  it("collectEditingFingerprintPosts emits only the post-list metadata, never internal payload", () => {
+    // Sibling-file check: the helper that bridges PromptPayload → extractor
+    // input must NOT leak topComments / transcripts / metrics. Pure shape
+    // assertion.
+    const payload = {
+      perPlatform: [
+        {
+          platform: "tiktok",
+          posts: [
+            {
+              postId: "p1",
+              platform: "tiktok",
+              videoUrl: "https://u/v.mp4",
+              videoDurationSec: 30,
+              kind: "video" as const,
+              caption: "this should NOT leak",
+              transcript: null,
+              thumbnailUrl: null,
+              postedAtIso: null,
+              viewCount: null,
+              likeCount: null,
+              commentCount: null,
+              shareCount: null,
+              saveCount: null,
+              topComments: [{ text: "should-not-leak", likeCount: 1 }],
+            },
+          ],
+        },
+      ],
+    } as unknown as Parameters<typeof collectEditingFingerprintPosts>[0];
+    const out = collectEditingFingerprintPosts(payload);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toEqual({
+      postId: "p1",
+      platform: "tiktok",
+      videoUrl: "https://u/v.mp4",
+      durationSec: 30,
+    });
+    // No extra fields leaked.
+    const keys = Object.keys(out[0]).sort();
+    expect(keys).toEqual(["durationSec", "platform", "postId", "videoUrl"]);
   });
 });

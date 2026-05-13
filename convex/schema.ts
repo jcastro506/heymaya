@@ -944,6 +944,113 @@ export default defineSchema({
       )
     ),
     // ─── end Wave 2 (dynamic onboarding mirror) ───────────────────────────
+    /**
+     * Sprint A.2 — multimodal editing fingerprint. Populated by
+     * `convex/onboarding/maya/extractEditingFingerprint.ts` in parallel with
+     * the voice/visual synthesis pass. Captures the creator's pacing /
+     * opening / transition / caption / audio / framing patterns + signature
+     * moves, so Maya can mimic THEIR editing style from day one when she
+     * drafts cut-lists, hook proposals, or co-edits a piece.
+     *
+     * Optional: undefined when fewer than 3 posts in the synthesis input
+     * had a usable videoUrl (too thin to fingerprint — downstream skills
+     * MUST teach Maya to ASK the creator about preferences rather than
+     * forcing a style on them). All fields qualitative — the model
+     * DESCRIBES patterns, it does not precision-measure them.
+     *
+     * Citation rule (enforced in skill prompts, not at insert time):
+     *   any Maya claim about the creator's editing style cites a postId
+     *   from `citedPostIds`.
+     */
+    editingFingerprint: v.optional(
+      v.object({
+        pacing: v.object({
+          /** Typical cut frequency in seconds (e.g. 0.8, 2.5, 4.0). */
+          avgCutEverySec: v.number(),
+          /** Qualitative rhythm — model describes, doesn't measure. */
+          consistency: v.union(
+            v.literal("tight"),
+            v.literal("loose"),
+            v.literal("mixed")
+          ),
+          /** Where in the first 1500ms the hook beat lands. */
+          hookLandsAtMs: v.number(),
+          pacingCurve: v.union(
+            v.literal("fast-throughout"),
+            v.literal("slow-burn"),
+            v.literal("fast-to-slow"),
+            v.literal("building"),
+            v.literal("irregular")
+          ),
+        }),
+        opening: v.union(
+          v.literal("face-on"),
+          v.literal("motion-shot"),
+          v.literal("text-card"),
+          v.literal("b-roll"),
+          v.literal("voice-over-still"),
+          v.literal("mixed")
+        ),
+        transitions: v.union(
+          v.literal("hard-cut"),
+          v.literal("zoom"),
+          v.literal("whip-pan"),
+          v.literal("jump-cut"),
+          v.literal("dissolve"),
+          v.literal("mixed")
+        ),
+        captions: v.object({
+          style: v.union(
+            v.literal("burned-in"),
+            /** Relies on TikTok's native captions. */
+            v.literal("auto"),
+            v.literal("none"),
+            v.literal("mixed")
+          ),
+          position: v.union(
+            v.literal("top"),
+            v.literal("center"),
+            v.literal("bottom"),
+            v.literal("varies"),
+            v.literal("not-applicable")
+          ),
+          cadence: v.union(
+            v.literal("word-by-word"),
+            v.literal("phrase"),
+            v.literal("sentence"),
+            v.literal("not-applicable")
+          ),
+          /** Free-text: "bold white sans-serif with black stroke, slight bounce on emphasis". */
+          visualDescription: v.string(),
+        }),
+        audio: v.union(
+          v.literal("original-voice"),
+          v.literal("music-driven"),
+          v.literal("trending-sound"),
+          v.literal("voiceover"),
+          v.literal("mixed")
+        ),
+        framing: v.union(
+          v.literal("fully-vertical-9-16"),
+          v.literal("horizontal-letterboxed"),
+          v.literal("square"),
+          v.literal("mixed")
+        ),
+        /**
+         * Recurring beats that make this creator's content recognizable
+         * (e.g. "opens with a sip of coffee", "always ends on a stare").
+         */
+        signatureMoves: v.array(v.string()),
+        /** 0-1. Low when sample is thin or styles vary widely. */
+        confidence: v.number(),
+        /** How many posts informed this fingerprint. */
+        sampleSize: v.number(),
+        /** Platform post ids — citation firewall for any style claim. */
+        citedPostIds: v.array(v.string()),
+        /** ms epoch. */
+        extractedAt: v.number(),
+      })
+    ),
   }).index("by_creator", ["creatorId"]),
 
   aiCallLog: defineTable({

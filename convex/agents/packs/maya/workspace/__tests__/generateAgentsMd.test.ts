@@ -87,7 +87,7 @@ describe("generateAgentsMd", () => {
     expect(md).toContain("`standing-orders.md`");
   });
 
-  it("renders all 12 doc sections (operating instructions, integrated picture, date discipline, tone, platform, standing orders, chat, auto-send, plan-tier, failure modes, connected toolkits, citation)", () => {
+  it("renders all 13 doc sections (operating instructions, integrated picture, date discipline, editing fingerprint, tone, platform, standing orders, chat, auto-send, plan-tier, failure modes, connected toolkits, citation)", () => {
     const md = generateAgentsMd({
       ...BASE_INPUTS,
       plan: "manager",
@@ -97,6 +97,7 @@ describe("generateAgentsMd", () => {
       "## Operating instructions",
       "## You are ONE manager reading an integrated picture",
       "## Date discipline — cite posts by their actual posted date",
+      "## Editing fingerprint — mimic THEIR edit, don't impose a template",
       "## Tone modulation",
       "## Platform expertise",
       "## Standing orders",
@@ -110,6 +111,25 @@ describe("generateAgentsMd", () => {
     for (const heading of expected) {
       expect(md).toContain(heading);
     }
+  });
+
+  // Sprint A.2 — editing fingerprint section content checks.
+  it("editing fingerprint section names the schema fields + the citation rule + the confidence bands", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    expect(md).toContain("creatorPicture.editingFingerprint");
+    expect(md).toContain("citedPostIds");
+    expect(md).toContain("signatureMoves");
+    expect(md).toContain("confidence");
+    expect(md).toContain("avgCutEverySec");
+    // Confidence bands threshold language.
+    expect(md).toContain("confidence >= 0.7");
+    expect(md).toContain("confidence < 0.4");
+    // Forbids generic auto-editor moves when fingerprint is on file.
+    expect(md).toMatch(/OpusClip|generic cuts/);
   });
 
   it("Connected toolkits section names shipping Composio slugs + keeps TikTok on ScrapeCreators", () => {
