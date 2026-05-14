@@ -9,6 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "convex:dev": "convex dev --once",
+    "convex:staging": "CONVEX_DEPLOYMENT=dev:precise-canary-781 convex dev --once",
     "smoke": "tsx scripts/mvp-smoke.ts",
     "smoke:cron": "tsx scripts/cron-smoke.ts",
     "smoke:cron-fly": "tsx scripts/cron-fly-smoke.ts",
