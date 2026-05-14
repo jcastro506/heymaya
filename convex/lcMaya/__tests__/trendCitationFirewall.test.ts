@@ -233,6 +233,91 @@ describe("checkTrendCitation", () => {
     // mentionsTrend false on empty string → ok=true; not a regression case
     expect(checkTrendCitation("").ok).toBe(true);
   });
+
+  /* ------------------------------------------------------------------------ */
+  /* Sprint C.6 — pattern-tightening (false-positive fix)                     */
+  /*                                                                          */
+  /* Two overbroad patterns dropped from TREND_SHAPE_PATTERNS:                */
+  /*   1. `saw|seeing|watching|noticed + the/some/this/...`                   */
+  /*   2. `is hitting`                                                        */
+  /*                                                                          */
+  /* These caused the 2026-05-13 typing-bubble bug. Conversational refs to   */
+  /* the creator's own content ("I saw the bodega clip", "your post is       */
+  /* hitting 2.3x") are now correctly recognized as NOT trend claims.        */
+  /* ------------------------------------------------------------------------ */
+
+  it("Sprint C.6 — PASS: 'I saw the observational stuff' (own-content reference, not a trend claim)", () => {
+    const v = checkTrendCitation(
+      "I saw the observational domestic and London stuff in your last 30."
+    );
+    expect(v.ok).toBe(true);
+    expect(v.mentionsTrend).toBe(false);
+    expect(v.matchedPattern).toBeNull();
+    expect(v.blockedReason).toBeNull();
+  });
+
+  it("Sprint C.6 — PASS: 'watching your last few posts trending up' wait — 'trending' still matches", () => {
+    // 'trending' is the load-bearing pattern; we KEEP this catch.
+    const v = checkTrendCitation("watching your last few posts trending up");
+    expect(v.ok).toBe(false);
+    expect(v.matchedPattern).toBe("trend-word");
+  });
+
+  it("Sprint C.6 — PASS: 'your post is hitting 2.3x median' (legitimate metrics observation)", () => {
+    const v = checkTrendCitation(
+      "your morning post is hitting 2.3x your median engagement for that format"
+    );
+    expect(v.ok).toBe(true);
+    expect(v.mentionsTrend).toBe(false);
+    expect(v.matchedPattern).toBeNull();
+  });
+
+  it("Sprint C.6 — PASS: 'noticed that' (was overbroad)", () => {
+    const v = checkTrendCitation("noticed that the engagement on Wednesday was up");
+    expect(v.ok).toBe(true);
+    expect(v.mentionsTrend).toBe(false);
+    expect(v.matchedPattern).toBeNull();
+  });
+
+  it("Sprint C.6 — PASS: 'saw a couple things' (was overbroad)", () => {
+    const v = checkTrendCitation("saw a couple things I want to ask about");
+    expect(v.ok).toBe(true);
+    expect(v.mentionsTrend).toBe(false);
+  });
+
+  it("Sprint C.6 — matchedPattern field is populated for the obvious-confab patterns", () => {
+    expect(checkTrendCitation("trending sound everyone loves").matchedPattern).toBe(
+      "trend-word"
+    );
+    expect(checkTrendCitation("this is going viral").matchedPattern).toBe(
+      "going-viral"
+    );
+    expect(checkTrendCitation("just blowing up").matchedPattern).toBe("blowing-up");
+    expect(checkTrendCitation("right now in your lane").matchedPattern).toBe(
+      "right-now-in"
+    );
+    expect(checkTrendCitation("real-time data on the trends").matchedPattern).toBe(
+      "trend-word"
+    );
+    expect(
+      checkTrendCitation("everyone is making walking-monologue clips").matchedPattern
+    ).toBe("everyone-is-doing");
+  });
+
+  it("Sprint C.6 — TREND_SHAPE_PATTERNS does NOT include the dropped saw/seeing pattern", () => {
+    // Lock the removal so a future revert without test update fails loud.
+    // We test via behavior — these strings used to BLOCK and must now PASS.
+    expect(checkTrendCitation("I saw the").mentionsTrend).toBe(false);
+    expect(checkTrendCitation("I noticed the").mentionsTrend).toBe(false);
+    expect(checkTrendCitation("watching the").mentionsTrend).toBe(false);
+    expect(checkTrendCitation("seeing the").mentionsTrend).toBe(false);
+  });
+
+  it("Sprint C.6 — TREND_SHAPE_PATTERNS does NOT include the dropped 'is hitting' pattern", () => {
+    expect(
+      checkTrendCitation("the engagement is hitting hard this week").mentionsTrend
+    ).toBe(false);
+  });
 });
 
 /* -------------------------------------------------------------------------- */

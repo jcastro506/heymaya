@@ -344,7 +344,29 @@ export interface BuildInputs {
 // bootstrap-inject list, so the split would silently drop Maya's standing
 // orders from the system prompt. 100K keeps the inline embed coherent with
 // room to spare for future additions.
-export const MAYA_BOOTSTRAP_MAX_CHARS = 100_000;
+// Sprint C.3 — 100K → 105K. Adding the calendar-event nudge section to
+// AGENTS.md + the calendar-weave sub-section to `morning_brief.scope`
+// pushed the embedded-merged size to ~100.3K, retriggering the
+// split-fallback. The same "split silently drops standing orders" risk
+// applies; 105K restores the inline embed with ~4K headroom for the next
+// addition.
+// Sprint C.4 — 105K → 115K. The two new cron-driven calendar standing
+// orders (`midday_calendar_check` at 11am + `afternoon_calendar_check`
+// at 3pm) replaced the heartbeat calendar-scan check and added ~5K of
+// scope prose; combined with the AGENTS.md cross-reference rewrite the
+// embedded-merged size hit ~108K. 115K restores the inline embed with
+// comfortable headroom for the next addition.
+// Sprint C.5 — 115K → 125K. Two additions pushed the embedded-merged
+// size to ~116K and would have re-triggered the split-fallback: (a) the
+// new `first_week_calendar_bootstrap` event-driven standing order
+// (~7K of scope prose teaching the one-shot calendar bootstrap after
+// OAuth completion), (b) the new "## Video link analysis (chat-driven)"
+// section in AGENTS.md (~3K teaching the chat-pasted-URL → scrapecreators
+// → multimodal → editingFingerprint-grounded read pipeline). The split
+// would silently drop standing orders from the system prompt (the
+// canonical bootstrap-inject list doesn't include `standing-orders.md`),
+// so 125K restores the inline embed with ~9K headroom.
+export const MAYA_BOOTSTRAP_MAX_CHARS = 125_000;
 
 // Sprint 12.7 Phase 0 — embedded-context total budget. OpenClaw's
 // `agents.defaults.bootstrapTotalMaxChars` defaults to 60K; per-file injects

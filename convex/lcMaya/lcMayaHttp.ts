@@ -1173,28 +1173,47 @@ export function isPlatformPostUrl(url: string): boolean {
  * citation check pass-throughs on a real URL), false negatives let
  * confabulation slip through.
  *
- * Banned-but-detectable language matrix:
+ * Banned-but-detectable language matrix (Sprint C.6 tightened set):
  *   - "trend" / "trending" / "viral" / "going viral" / "blowing up"
- *   - "I'm seeing" / "saw a couple things"
- *   - "real-time" / "right now in your lane"
+ *   - "real-time" / "right now in/on/across"
  *   - "people are doing" / "everyone is making"
- *   - "X is hitting" / "X is hot"
+ *
+ * Sprint C.6 (2026-05-13) — dropped two overbroad patterns:
+ *   - `saw|seeing|watching|noticed + the/some/this/that/...` —
+ *     blocked legitimate observations about the creator's own content
+ *     ("I saw the bodega clip", "watching your last 30 posts"). Caused the
+ *     2026-05-13 typing-bubble bug where Maya's first opening-line message
+ *     said *"I saw the observational domestic stuff in your last 30"* and
+ *     the firewall blocked the send. False-positive rate too high.
+ *   - `is hitting` — "the post is hitting 2.3x median" is a legitimate
+ *     observation, not a trend claim. Removed.
+ * Kept patterns are the obvious confab tells; locked tighter to reduce false
+ * positives without losing the load-bearing catches.
  */
-const TREND_SHAPE_PATTERNS: RegExp[] = [
-  /\btrend(ing|s)?\b/i,
-  /\bviral\b/i,
-  /\bgoing viral\b/i,
-  /\bblowing up\b/i,
-  /\b(saw|seeing|watching|noticed)\s+(a|some|this|that|the|couple|few|stuff|trend|hashtag|format)\b/i,
-  /\bright now\s+(in|on|across)\b/i,
-  /\breal[- ]time\b/i,
-  /\b(everyone|people|creators)\s+(is|are)\s+(making|doing|posting|using|riding)\b/i,
-  /\bis hitting\b/i,
+// Order matters — more specific patterns FIRST so the matchedPattern label
+// reflects the strongest signal. `going viral` is a stronger tell than bare
+// `viral`; check it first.
+const TREND_SHAPE_PATTERNS: ReadonlyArray<{
+  pattern: RegExp;
+  label: string;
+}> = [
+  { pattern: /\bgoing viral\b/i, label: "going-viral" },
+  { pattern: /\bblowing up\b/i, label: "blowing-up" },
+  { pattern: /\btrend(ing|s)?\b/i, label: "trend-word" },
+  { pattern: /\bviral\b/i, label: "viral" },
+  { pattern: /\bright now\s+(in|on|across)\b/i, label: "right-now-in" },
+  { pattern: /\breal[- ]time\b/i, label: "real-time" },
+  {
+    pattern:
+      /\b(everyone|people|creators)\s+(is|are)\s+(making|doing|posting|using|riding)\b/i,
+    label: "everyone-is-doing",
+  },
 ];
 
 export interface TrendCitationCheck {
   ok: boolean;
   mentionsTrend: boolean;
+  matchedPattern: string | null;
   urlsFound: string[];
   blockedReason: string | null;
   suggestedFix: string | null;
@@ -1219,17 +1238,26 @@ export function checkTrendCitation(message: string): TrendCitationCheck {
     return {
       ok: true,
       mentionsTrend: false,
+      matchedPattern: null,
       urlsFound: [],
       blockedReason: null,
       suggestedFix: null,
     };
   }
-  const mentionsTrend = TREND_SHAPE_PATTERNS.some((re) => re.test(message));
+  let matchedPattern: string | null = null;
+  for (const { pattern, label } of TREND_SHAPE_PATTERNS) {
+    if (pattern.test(message)) {
+      matchedPattern = label;
+      break;
+    }
+  }
+  const mentionsTrend = matchedPattern !== null;
   const urlsFound = extractPlatformUrls(message);
   if (!mentionsTrend) {
     return {
       ok: true,
       mentionsTrend: false,
+      matchedPattern: null,
       urlsFound,
       blockedReason: null,
       suggestedFix: null,
@@ -1239,6 +1267,7 @@ export function checkTrendCitation(message: string): TrendCitationCheck {
     return {
       ok: true,
       mentionsTrend: true,
+      matchedPattern,
       urlsFound,
       blockedReason: null,
       suggestedFix: null,
@@ -1247,6 +1276,7 @@ export function checkTrendCitation(message: string): TrendCitationCheck {
   return {
     ok: false,
     mentionsTrend: true,
+    matchedPattern,
     urlsFound: [],
     blockedReason: "trend-mention-without-citation",
     suggestedFix:
@@ -1951,6 +1981,12 @@ export const connectedAccountsHealthHttp = httpAction(async (ctx, request) => {
 interface ValidateTrendCitationPayload {
   secret: string;
   message: string;
+  /**
+   * Optional — when supplied, the call writes a `firewallEvents` row for
+   * audit. When omitted, the endpoint behaves stateless-as-before. Sprint
+   * C.6 (2026-05-13) telemetry surface.
+   */
+  creatorId?: string;
 }
 
 function parseValidateTrendCitationPayload(
@@ -1966,10 +2002,20 @@ function parseValidateTrendCitationPayload(
   if (typeof obj.message !== "string") {
     throw new Error("message must be a string.");
   }
-  return { secret: obj.secret, message: obj.message };
+  const out: ValidateTrendCitationPayload = {
+    secret: obj.secret,
+    message: obj.message,
+  };
+  if (obj.creatorId !== undefined && obj.creatorId !== null) {
+    if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+      throw new Error("creatorId, when supplied, must be a non-empty string.");
+    }
+    out.creatorId = obj.creatorId;
+  }
+  return out;
 }
 
-export const validateTrendCitationHttp = httpAction(async (_ctx, request) => {
+export const validateTrendCitationHttp = httpAction(async (ctx, request) => {
   let payload: ValidateTrendCitationPayload;
   try {
     payload = parseValidateTrendCitationPayload(await request.json());
@@ -1982,7 +2028,75 @@ export const validateTrendCitationHttp = httpAction(async (_ctx, request) => {
     return jsonResponse({ error: "unauthorized" }, 401);
   }
   const verdict = checkTrendCitation(payload.message);
+
+  // Sprint C.6 telemetry — best-effort. Don't block the firewall response on
+  // a write failure; the firewall verdict is what the caller cares about.
+  if (payload.creatorId) {
+    try {
+      await ctx.runMutation(
+        internal.lcMaya.lcMayaHttp.recordFirewallEventInternal,
+        {
+          creatorId: payload.creatorId as Id<"creators">,
+          message: payload.message,
+          verdict: verdict.ok ? "ok" : "blocked",
+          source: "validate_trend_citation",
+          matchedTrendPattern: verdict.matchedPattern ?? undefined,
+          blockedReasons: verdict.blockedReason ? [verdict.blockedReason] : undefined,
+          urlsFound: verdict.urlsFound,
+          observedAt: Date.now(),
+        }
+      );
+    } catch (err) {
+      console.warn("[firewall-telemetry] validate_trend_citation log failed", String(err));
+    }
+  }
+
   return jsonResponse(verdict, 200);
+});
+
+/**
+ * Sprint C.6 — write one firewall audit row. Used by both
+ * validate_trend_citation and validate_outbound_send. Best-effort: callers
+ * should swallow any error since the firewall verdict matters more than the
+ * audit trail.
+ */
+export const recordFirewallEventInternal = internalMutation({
+  args: {
+    creatorId: v.id("creators"),
+    message: v.string(),
+    verdict: v.union(v.literal("ok"), v.literal("blocked")),
+    source: v.union(
+      v.literal("validate_outbound_send"),
+      v.literal("validate_trend_citation")
+    ),
+    matchedTrendPattern: v.optional(v.string()),
+    formatCategoriesTripped: v.optional(v.array(v.string())),
+    blockedReasons: v.optional(v.array(v.string())),
+    urlsFound: v.optional(v.array(v.string())),
+    observedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    // Cross-tenant gate: creator must exist. If not, drop the audit silently —
+    // a bogus creatorId in the firewall hook is an ops issue, not an audit
+    // event worth persisting under a phantom row.
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) return null;
+    return await ctx.db.insert("firewallEvents", {
+      creatorId: args.creatorId,
+      message: args.message,
+      verdict: args.verdict,
+      source: args.source,
+      ...(args.matchedTrendPattern
+        ? { matchedTrendPattern: args.matchedTrendPattern }
+        : {}),
+      ...(args.formatCategoriesTripped
+        ? { formatCategoriesTripped: args.formatCategoriesTripped }
+        : {}),
+      ...(args.blockedReasons ? { blockedReasons: args.blockedReasons } : {}),
+      ...(args.urlsFound ? { urlsFound: args.urlsFound } : {}),
+      observedAt: args.observedAt,
+    });
+  },
 });
 
 /* -------------------------------------------------------------------------- */
@@ -2157,6 +2271,30 @@ export const validateOutboundSendHttp = httpAction(async (ctx, request) => {
   const suggestedFix = fixes.length > 0 ? fixes.join("; ") : null;
 
   const ok = trendCheck.ok && formatCheck.ok;
+
+  // Sprint C.6 telemetry — best-effort write. Don't block the firewall response.
+  try {
+    await ctx.runMutation(
+      internal.lcMaya.lcMayaHttp.recordFirewallEventInternal,
+      {
+        creatorId: payload.creatorId as Id<"creators">,
+        message: payload.message,
+        verdict: ok ? "ok" : "blocked",
+        source: "validate_outbound_send",
+        matchedTrendPattern: trendCheck.matchedPattern ?? undefined,
+        formatCategoriesTripped:
+          formatCheck.categoriesTripped.length > 0
+            ? formatCheck.categoriesTripped
+            : undefined,
+        blockedReasons: blockedReasons.length > 0 ? blockedReasons : undefined,
+        urlsFound: trendCheck.urlsFound,
+        observedAt: Date.now(),
+      }
+    );
+  } catch (err) {
+    console.warn("[firewall-telemetry] validate_outbound_send log failed", String(err));
+  }
+
   return jsonResponse(
     {
       ok,
@@ -2584,6 +2722,260 @@ export const startGoogleCalendarOAuthHttp = httpAction(async (ctx, request) => {
     { ok: true, oauthUrl: `${GOOGLE_AUTH_URL}?${params.toString()}` },
     200
   );
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint B.2 — observe_published_edit + apply_observations_to_fingerprint     */
+/* -------------------------------------------------------------------------- */
+
+interface ObservePublishedEditPayload {
+  secret: string;
+  creatorId: string;
+  publishedPostId: string;
+  publishedPostUrl: string;
+  renderedMediaAssetId?: string;
+  thinkingBudget?: "low" | "medium" | "high";
+}
+
+function parseObservePublishedEditPayload(
+  raw: unknown
+): ObservePublishedEditPayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") throw new Error("secret must be a string.");
+  if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+    throw new Error("creatorId is required.");
+  }
+  if (
+    typeof obj.publishedPostId !== "string" ||
+    obj.publishedPostId.length === 0
+  ) {
+    throw new Error("publishedPostId is required.");
+  }
+  if (
+    typeof obj.publishedPostUrl !== "string" ||
+    obj.publishedPostUrl.length === 0
+  ) {
+    throw new Error("publishedPostUrl is required.");
+  }
+  let renderedMediaAssetId: string | undefined;
+  if (
+    obj.renderedMediaAssetId !== undefined &&
+    obj.renderedMediaAssetId !== null
+  ) {
+    if (typeof obj.renderedMediaAssetId !== "string") {
+      throw new Error("renderedMediaAssetId must be a string when provided.");
+    }
+    renderedMediaAssetId = obj.renderedMediaAssetId;
+  }
+  let thinkingBudget: "low" | "medium" | "high" | undefined;
+  if (obj.thinkingBudget !== undefined && obj.thinkingBudget !== null) {
+    if (
+      obj.thinkingBudget !== "low" &&
+      obj.thinkingBudget !== "medium" &&
+      obj.thinkingBudget !== "high"
+    ) {
+      throw new Error(
+        "thinkingBudget must be one of low | medium | high when provided."
+      );
+    }
+    thinkingBudget = obj.thinkingBudget;
+  }
+  return {
+    secret: obj.secret,
+    creatorId: obj.creatorId,
+    publishedPostId: obj.publishedPostId,
+    publishedPostUrl: obj.publishedPostUrl,
+    renderedMediaAssetId,
+    thinkingBudget,
+  };
+}
+
+/**
+ * `POST /lc_maya/observe_published_edit` — Sprint B.2 continuous-learning loop.
+ *
+ * After a creator publishes a TikTok that Maya rendered, the
+ * `post_publish_reaction` standing order POSTs here. We:
+ *   1. Validate auth via `assertWebhookSecret`.
+ *   2. Run `extractObservationFromPublishedPost` (multimodal: watch the
+ *      published video + the rendered variant if linked + diff against the
+ *      current fingerprint).
+ *   3. Insert the structured observation row via
+ *      `insertEditingFingerprintObservation`.
+ *   4. Return the inserted row id + the creator's current observation
+ *      counts so the standing order can decide whether to trigger an
+ *      apply-pass.
+ *
+ * Failure surface:
+ *   - 400 — malformed body
+ *   - 401 — missing / invalid secret
+ *   - 404 — creator not found
+ *   - 409 — extraction failure (no fingerprint to diff against, multimodal
+ *           not wired, model invalid). Stable error codes Maya can
+ *           recognize and skip the observation step.
+ *   - 500 — internal mutation throw
+ */
+export const observePublishedEditHttp = httpAction(async (ctx, request) => {
+  let payload: ObservePublishedEditPayload;
+  try {
+    payload = parseObservePublishedEditPayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+
+  // Extract the observation. The action surfaces a structured failure
+  // for every known reason; we translate to HTTP status codes here.
+  const extract = await ctx.runAction(
+    internal.creatorMayaV0.editingFingerprintObservations
+      .extractObservationFromPublishedPost,
+    {
+      creatorId: payload.creatorId as Id<"creators">,
+      publishedPostId: payload.publishedPostId,
+      publishedPostUrl: payload.publishedPostUrl,
+      renderedMediaAssetId: payload.renderedMediaAssetId as
+        | Id<"creatorMayaV0MediaAssets">
+        | undefined,
+      thinkingBudget: payload.thinkingBudget,
+    }
+  );
+
+  if (!extract.ok) {
+    if (extract.reason === "creator-not-found") {
+      return jsonResponse({ error: "creator-not-found" }, 404);
+    }
+    // All other failures are functional — Maya should skip the observation
+    // and continue with the post-publish reaction. 409 surfaces a stable
+    // "extraction skipped" signal without polluting alerting on transport.
+    return jsonResponse(
+      { error: extract.reason, detail: extract.detail ?? null },
+      409
+    );
+  }
+
+  try {
+    const inserted = await ctx.runMutation(
+      internal.creatorMayaV0.editingFingerprintObservations
+        .insertEditingFingerprintObservation,
+      {
+        creatorId: payload.creatorId as Id<"creators">,
+        publishedPostId: extract.observation.publishedPostId,
+        publishedPostUrl: extract.observation.publishedPostUrl,
+        renderedMediaAssetId: payload.renderedMediaAssetId as
+          | Id<"creatorMayaV0MediaAssets">
+          | undefined,
+        durationMs: extract.observation.durationMs,
+        deltas: extract.observation.deltas,
+        nowMs: Date.now(),
+      }
+    );
+    return jsonResponse(
+      {
+        ok: true,
+        observationId: inserted.observationId,
+        totalForCreator: inserted.totalForCreator,
+        unappliedForCreator: inserted.unappliedForCreator,
+        model: extract.model,
+      },
+      200
+    );
+  } catch (err) {
+    const msg = (err as Error).message ?? "internal-error";
+    if (msg === "creator-not-found") {
+      return jsonResponse({ error: "creator-not-found" }, 404);
+    }
+    if (
+      msg === "rendered-asset-not-found" ||
+      msg === "rendered-asset-cross-tenant"
+    ) {
+      return jsonResponse({ error: msg }, 409);
+    }
+    if (msg.startsWith("observation-validation-failed")) {
+      return jsonResponse({ error: msg }, 400);
+    }
+    return jsonResponse({ error: msg }, 500);
+  }
+});
+
+interface ApplyObservationsPayload {
+  secret: string;
+  creatorId: string;
+}
+
+function parseApplyObservationsPayload(
+  raw: unknown
+): ApplyObservationsPayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.secret !== "string") throw new Error("secret must be a string.");
+  if (typeof obj.creatorId !== "string" || obj.creatorId.length === 0) {
+    throw new Error("creatorId is required.");
+  }
+  return { secret: obj.secret, creatorId: obj.creatorId };
+}
+
+/**
+ * `POST /lc_maya/apply_observations_to_fingerprint` — Sprint B.2 rolling
+ * synthesis driver.
+ *
+ * Maya invokes this from `post_publish_reaction` after observing a new
+ * published edit, gated by the standing order to "run if last apply > 24h
+ * OR 5+ unapplied rows." We:
+ *   1. Validate auth.
+ *   2. Pull all unapplied observations within the recency window.
+ *   3. Compute the next fingerprint via the rolling synthesis.
+ *   4. Patch `creatorPicture.editingFingerprint` + stamp each row as applied.
+ *   5. Return the structured summary (updated fields / applied count /
+ *      conflicts) for telemetry.
+ */
+export const applyObservationsToFingerprintHttp = httpAction(async (ctx, request) => {
+  let payload: ApplyObservationsPayload;
+  try {
+    payload = parseApplyObservationsPayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+
+  try {
+    assertWebhookSecret(payload.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+
+  try {
+    const result = await ctx.runAction(
+      internal.creatorMayaV0.editingFingerprintObservations
+        .applyObservationsToFingerprint,
+      { creatorId: payload.creatorId as Id<"creators"> }
+    );
+    if (!result.ok) {
+      // "no-unapplied-observations" is a legitimate no-op; we surface 200
+      // with applied: 0 so the standing order can treat it as benign.
+      if (result.reason === "no-unapplied-observations") {
+        return jsonResponse(
+          {
+            ok: true,
+            summary: { updated: [], applied: 0, conflicts: [] },
+            noop: true,
+          },
+          200
+        );
+      }
+      return jsonResponse({ error: result.reason }, 404);
+    }
+    return jsonResponse({ ok: true, summary: result.summary }, 200);
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message ?? "internal-error" }, 500);
+  }
 });
 
 /* -------------------------------------------------------------------------- */

@@ -3,9 +3,23 @@ import { readFileSync, writeFileSync } from "node:fs";
 const channelPath = "/opt/openclaw-seed/extensions/claw-messenger/dist/channel.js";
 const sendPath = "/opt/openclaw-seed/extensions/claw-messenger/dist/outbound/send.js";
 const gatewayServerPath = "/usr/local/lib/node_modules/openclaw/dist/server.impl-DhtU4okW.js";
+// Sprint B.3 — runtime-layer firewall (defense-in-depth). The existing
+// claw-messenger send.js firewall (added Sprint 12.7.3) catches every
+// outbound that flows through `sendMessage` / `sendGroupMessage`. After
+// auditing openclaw 2026.4.23, every assistant-text delivery path
+// (inbound-reply via `dispatchReplyWithBufferedBlockDispatcher`, proactive
+// via `deliverAgentCommandResult`, route-reply via `routeReplyToOriginating`)
+// eventually calls claw-messenger's `outbound.sendText` → `sendMessage`,
+// so the existing firewall is sufficient on paper. This second layer
+// patches openclaw's own `deliver-BAZ1LU-l.js::sendTextChunks` so the
+// firewall trigger lives ABOVE plugin code — catches the assistant text
+// before any channel-specific code runs and before per-chunk splitting.
+// Channel-agnostic: covers Telegram/WhatsApp/Discord if/when added.
+const deliverRuntimePath = "/usr/local/lib/node_modules/openclaw/dist/deliver-BAZ1LU-l.js";
 let src = readFileSync(channelPath, "utf8");
 let sendSrc = readFileSync(sendPath, "utf8");
 let gatewaySrc = readFileSync(gatewayServerPath, "utf8");
+let deliverSrc = readFileSync(deliverRuntimePath, "utf8");
 
 if (src.includes("buildChannelConfigSchema, DEFAULT_ACCOUNT_ID,")) {
   src = src.replace(
@@ -71,36 +85,41 @@ if (!sendSrc.includes("async function validateOutboundOrThrow(")) {
     }
 }
 `;
-  const sendMessageNeedle = `export async function sendMessage(ws, to, parts, service) {
+  // Inject helper at the top of the file (after the existing imports/helpers,
+  // before the first exported send fn). The exact upstream `ws.request({...})`
+  // call is multi-line; replace just inside sendMessage rather than reproduce
+  // the full body in the needle so minor upstream formatting drift doesn't
+  // break the build.
+  const sendMessageHeader = `export async function sendMessage(ws, to, parts, service) {
     const normalizedTarget = normalizeDirectTarget(to);
     if (!normalizedTarget) {
         throw new Error("Recipient is required");
     }
-    const resp = await ws.request({ type: "send", to: normalizedTarget, parts, ...(service ? { service } : {}) });`;
-  if (!sendSrc.includes(sendMessageNeedle)) {
+    const resp = await ws.request({`;
+  if (!sendSrc.includes(sendMessageHeader)) {
     throw new Error("Unable to patch sendMessage pre-send hook; expected marker not found.");
   }
   sendSrc = sendSrc.replace(
-    sendMessageNeedle,
+    sendMessageHeader,
     `${firewallHelper}export async function sendMessage(ws, to, parts, service) {
     const normalizedTarget = normalizeDirectTarget(to);
     if (!normalizedTarget) {
         throw new Error("Recipient is required");
     }
     await validateOutboundOrThrow(parts);
-    const resp = await ws.request({ type: "send", to: normalizedTarget, parts, ...(service ? { service } : {}) });`
+    const resp = await ws.request({`
   );
 
-  const sendGroupMessageNeedle = `async function sendGroupMessage(ws, chatId, parts, service) {
-    const resp = await ws.request({ type: "send", chatId, parts, ...(service ? { service } : {}) });`;
-  if (!sendSrc.includes(sendGroupMessageNeedle)) {
+  const sendGroupMessageHeader = `async function sendGroupMessage(ws, chatId, parts, service) {
+    const resp = await ws.request({`;
+  if (!sendSrc.includes(sendGroupMessageHeader)) {
     throw new Error("Unable to patch sendGroupMessage pre-send hook; expected marker not found.");
   }
   sendSrc = sendSrc.replace(
-    sendGroupMessageNeedle,
+    sendGroupMessageHeader,
     `async function sendGroupMessage(ws, chatId, parts, service) {
     await validateOutboundOrThrow(parts);
-    const resp = await ws.request({ type: "send", chatId, parts, ...(service ? { service } : {}) });`
+    const resp = await ws.request({`
   );
 
   // sendToNewGroup has an inline ws.request — patch best-effort if the
@@ -108,7 +127,7 @@ if (!sendSrc.includes("async function validateOutboundOrThrow(")) {
   // marker shifts we don't fail the build.
   const sendToNewGroupNeedle = `export async function sendToNewGroup(ws, to, text, service) {`;
   if (sendSrc.includes(sendToNewGroupNeedle)) {
-    const inlineNeedle = /(export async function sendToNewGroup\(ws, to, text, service\) \{[\s\S]*?)(const resp = await ws\.request\(\{ type: "send",)/;
+    const inlineNeedle = /(export async function sendToNewGroup\(ws, to, text, service\) \{[\s\S]*?)(const resp = await ws\.request\(\{)/;
     const m = sendSrc.match(inlineNeedle);
     if (m && !m[1].includes("validateOutboundOrThrow")) {
       sendSrc = sendSrc.replace(
@@ -424,3 +443,63 @@ gatewaySrc = gatewaySrc.replace(
 );
 
 writeFileSync(gatewayServerPath, gatewaySrc);
+
+// Sprint B.3 — runtime-layer outbound firewall. Wraps
+// `sendTextChunks` so the validate_outbound_send check fires once per
+// payload (before per-chunk splitting) for every channel handler the
+// gateway creates. Same fail-open-on-infra-failure semantics as the
+// claw-messenger send.js firewall; throws `send-blocked: ...` on a
+// `{ok:false}` verdict so the LLM loop sees the failure and redrafts.
+//
+// Injection point: top of `sendTextChunks` body in
+// `deliver-BAZ1LU-l.js::deliverOutboundPayloadsCore`. Marker is the
+// exact arrow-fn header from openclaw 2026.4.23; if upstream renames
+// or relocates this helper, the patch fails loud (consistent with the
+// other patches in this script).
+if (!deliverSrc.includes("async function validateOutboundOrThrowRuntime(")) {
+  const deliverFirewallHelper = `async function validateOutboundOrThrowRuntime(text) {
+\tconst creatorId = process.env.MAYA_CREATOR_ID;
+\tconst httpBase = process.env.MAYA_CONVEX_HTTP_BASE;
+\tconst secret = process.env.WEBHOOK_INTERNAL_SECRET;
+\tif (!creatorId || !httpBase || !secret) return;
+\tconst body = typeof text === "string" ? text : "";
+\tif (!body.trim()) return;
+\tlet res;
+\ttry {
+\t\tres = await fetch(\`\${httpBase}/lc_maya/validate_outbound_send\`, {
+\t\t\tmethod: "POST",
+\t\t\theaders: { "content-type": "application/json" },
+\t\t\tbody: JSON.stringify({ secret, creatorId, message: body }),
+\t\t});
+\t} catch (err) {
+\t\tconsole.warn("[firewall:runtime] validate_outbound_send network failure, allowing send:", String(err));
+\t\treturn;
+\t}
+\tif (!res.ok) {
+\t\tconsole.warn(\`[firewall:runtime] validate_outbound_send returned HTTP \${res.status}, allowing send\`);
+\t\treturn;
+\t}
+\tlet payload;
+\ttry { payload = await res.json(); } catch { return; }
+\tif (payload && payload.ok === false) {
+\t\tconst reasons = Array.isArray(payload.blockedReasons) ? payload.blockedReasons.join("; ") : "blocked";
+\t\tconst fix = payload.suggestedFix ? \` Fix: \${payload.suggestedFix}\` : "";
+\t\tthrow new Error(\`send-blocked: \${reasons}.\${fix}\`);
+\t}
+}
+`;
+
+  const sendTextChunksNeedle = `\tconst sendTextChunks = async (text, overrides) => {
+\t\tthrowIfAborted(abortSignal);`;
+  if (!deliverSrc.includes(sendTextChunksNeedle)) {
+    throw new Error("Unable to patch deliver-runtime sendTextChunks; expected marker not found.");
+  }
+  deliverSrc = deliverSrc.replace(
+    sendTextChunksNeedle,
+    `${deliverFirewallHelper}\tconst sendTextChunks = async (text, overrides) => {
+\t\tthrowIfAborted(abortSignal);
+\t\tawait validateOutboundOrThrowRuntime(text);`
+  );
+}
+
+writeFileSync(deliverRuntimePath, deliverSrc);

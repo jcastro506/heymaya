@@ -42,8 +42,22 @@ export interface HeartbeatMdInputs {
   plan: Plan;
 }
 
-/** Soft cap from the OpenClaw spec — heartbeat is read every tick. */
-export const HEARTBEAT_SOFT_CAP_CHARS = 2_000;
+/**
+ * Soft cap from the OpenClaw spec — heartbeat is read every tick.
+ *
+ * Sprint C.4 (2026-05-13) — landed at 2_400. The calendar-scan check
+ * briefly lived in HEARTBEAT.md in C.3 (cap 3_000) with a ±5min window
+ * around T-30min, but every-minute LLM invocation × 1440 ticks/day was
+ * unsustainable for unit economics (~$14-56/creator/month with caching).
+ * Moved to cron-driven `midday_calendar_check` (11am local) +
+ * `afternoon_calendar_check` (3pm local); combined with existing
+ * morning_brief (7am) + evening_recap (6pm) that's 4 calendar-aware
+ * ticks/day at ~$0.02/day per creator. The remaining +400 char delta
+ * vs the original 2_000 covers the cross-reference paragraph that tells
+ * Maya where the calendar surface lives now — load-bearing pointer so
+ * she doesn't go looking for a heartbeat check that no longer exists.
+ */
+export const HEARTBEAT_SOFT_CAP_CHARS = 2_400;
 
 export function generateHeartbeatMd(_inputs: HeartbeatMdInputs): string {
   // Plan unused: Coach vs Manager differ on AUTONOMY (auto-send), not
@@ -76,6 +90,10 @@ export function generateHeartbeatMd(_inputs: HeartbeatMdInputs): string {
     "10. **Collab matchmaker** (7d cd). namedPeers + niche; score overlap; propose format + first-DM. I never DM.",
     "11. **Industry intel** (12h cd). `maya-industry-intel`; dedupe `industryIntelSeen`; inline ≥0.7 into brief.",
     "12. **Wiki mirror sync** (6h cd). Batch new wiki entries → POST `lc_maya/sync_wiki_observations` (idem on `(creatorId, wikiVaultPath)`). Silent.",
+    "",
+    "## Calendar nudges (cron, not heartbeat)",
+    "",
+    "`mayaCalendarEvents` pre/post nudges live on 4 calendar-aware ticks per day: `morning_brief` 7am + `midday_calendar_check` 11am + `afternoon_calendar_check` 3pm + `evening_recap` 6pm. Native Google Calendar `reminders.overrides` (set by `maya-calendar-planner`) covers the T-30min device popup.",
     "",
     "## Telemetry",
     "",
