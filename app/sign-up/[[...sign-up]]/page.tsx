@@ -17,7 +17,7 @@ export default async function SignUpPage({
     <main className="relative z-10 flex min-h-screen items-center justify-center bg-[var(--ink)] px-6 py-16">
       <SignUp
         signInUrl="/sign-in"
-        fallbackRedirectUrl="/creator-maya-v0"
+        fallbackRedirectUrl="/onboarding/maya"
         forceRedirectUrl={redirectUrl}
       />
     </main>
