@@ -37,6 +37,23 @@ export default defineSchema({
     mayaFlyAppId: v.optional(v.string()),
     mayaConfigVersion: v.optional(v.number()),
     /**
+     * Per-creator Claw Messenger identity. The shared `CLAW_MESSENGER_API_KEY`
+     * env var is single-tenant: every Maya that connects with it shares one
+     * relay account, so a second concurrent creator's Maya steals the socket
+     * and inbound routes to the wrong creator (observed 2026-05-16). True
+     * isolation requires one emotion-machine tenant + key + phone route per
+     * creator, provisioned at onboarding via the relay's `/api/tenants`,
+     * `/api/keys`, `/api/routes` REST API. When `clawMessengerApiKey` is set,
+     * `configGeneratorMaya` stamps it into that creator's bootstrap instead of
+     * the shared env key. `clawMessengerTenantId` + `clawMessengerNumber` are
+     * kept for lifecycle (revoke key / release route on account deletion) and
+     * the "save my number as Maya" UX. Absent ⇒ falls back to the shared key
+     * (single-tenant smoke path).
+     */
+    clawMessengerApiKey: v.optional(v.string()),
+    clawMessengerTenantId: v.optional(v.string()),
+    clawMessengerNumber: v.optional(v.string()),
+    /**
      * Sprint 6A — tone slider on the Profile screen. Optional + defaults to
      * the value Maya was deployed with (read off `creatorPicture` voice). This
      * field is the creator-controlled override; soul.md regen on the next

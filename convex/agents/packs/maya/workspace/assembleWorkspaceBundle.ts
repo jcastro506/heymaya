@@ -197,8 +197,19 @@ export function assembleWorkspaceBundle(
   // the embedded ISO timestamp is deterministic across re-runs of the same
   // bundle — the bundle hash (`hashConfig`) excludes `generatedAt` but the
   // workspace tarball is content-addressed, so determinism still matters.
+  // Sprint 12.8 — structural fabrication gate. A profile-only picture means
+  // the synth saw no scrapable posts (private / brand-new / empty scrape),
+  // so there is no real warmthMaterial. The standard kickstart's "cite a
+  // specific clip" beat, handed no real data, made the model invent one
+  // from its own prompt examples (the "Piccadilly 1.1k vs 47" bleed across
+  // three empty accounts). buildCronJobsJson swaps in the honest
+  // content-blocked script when this is true — the gate is structural, not
+  // a prompt the model can ignore.
+  const noScrapedContent =
+    picture == null || picture.model === "profile-only-fallback";
   const jobsJson = buildCronJobsJson({
     creator,
+    noScrapedContent,
     firstBootKickstart: { nowMsOverride: now },
   });
 

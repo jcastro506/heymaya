@@ -476,15 +476,27 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     expect(msg).toMatch(/NEVER send Q1 first/);
     expect(msg).toMatch(/NEVER repeat any beat/);
     expect(msg).toMatch(/NEVER bundle two beats/);
+    // Sprint 12.8 — strict serial execution (the proven root cause of
+    // out-of-order arrival: agent batching/parallel sendText calls).
+    expect(msg).toMatch(/STRICT SERIAL EXECUTION/);
+    expect(msg).toMatch(/Exactly ONE `sendText` call per assistant step/);
+    expect(msg).toMatch(/NEVER batch or parallelize/);
 
-    // Send 1 = greet + role + outcome (the new restored beat).
-    expect(msg).toMatch(/SEND 1 — GREET \+ ROLE \+ OUTCOME/);
+    // Send 1 = greet + role + outcome + save-contact ask.
+    expect(msg).toMatch(/SEND 1 — GREET \+ ROLE \+ OUTCOME \+ SAVE-CONTACT ASK/);
     expect(msg).toMatch(/Maya here/);
     expect(msg).toMatch(/your new manager/);
     expect(msg).toMatch(/your new assistant/);
     expect(msg).toMatch(/OUTCOME TAIL IS REQUIRED/);
     expect(msg).toMatch(/so you can \[creator benefit\]/);
     expect(msg).toMatch(/'Kevin Castro'/);
+    // Save-contact ask must be required + appear in send 1.
+    expect(msg).toMatch(/SAVE-CONTACT LINE IS REQUIRED/);
+    expect(msg).toMatch(/save (this number|me|my number) as Maya/i);
+    // Sprint 12.8 — hard 'Hey [first name],' opener + billing-leak ban.
+    expect(msg).toMatch(/first token of Send 1 MUST be 'Hey \[first name\],'/);
+    expect(msg).toMatch(/HARD BAN — billing\/tier\/plan leakage/);
+    expect(msg).toMatch(/Manager plan's officially live' is BANNED/);
 
     // Send 2 = watched + love + ONE specific call-out.
     expect(msg).toMatch(/SEND 2 — WATCHED \+ LOVE \+ ONE SPECIFIC CALL-OUT/);
@@ -527,6 +539,82 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     // Banned-artifact list reinforced — internal IDs / vendor names
     // never surface to creator.
     expect(msg).toMatch(/aweme_id|ScrapeCreators API|dailyBriefs/);
+  });
+
+  it("Sprint 12.8: noScrapedContent=true swaps in the content-blocked kickstart — NO specific-callout beat to fabricate from", () => {
+    const { jobs } = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      noScrapedContent: true,
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    const kickstart = jobs.find((j) => j.id === "0001_first_boot_kickstart")!;
+    if (kickstart.payload.kind !== "agentTurn")
+      throw new Error("type-narrow guard");
+    const msg = kickstart.payload.message;
+
+    // It is the content-blocked variant, NOT the standard one.
+    expect(msg).toMatch(/CONTENT-BLOCKED variant/);
+    expect(msg).toMatch(/Three messages/);
+    expect(msg).not.toMatch(/Four messages/);
+    // Strict serial execution must be present in the content-blocked variant too.
+    expect(msg).toMatch(/STRICT SERIAL EXECUTION/);
+    expect(msg).toMatch(/Exactly ONE `sendText` call per assistant step/);
+    // The fabrication-prone beat is structurally absent.
+    expect(msg).not.toMatch(/SEND 2 — WATCHED \+ LOVE \+ ONE SPECIFIC CALL-OUT/);
+    expect(msg).not.toMatch(/cite a specific clip/i);
+    // Honest can't-see-content + ask + make-public, never assert private.
+    expect(msg).toMatch(/SEND 2 — HONEST CAN'T-SEE-CONTENT \+ ASK/);
+    expect(msg).toMatch(/could not see any of this creator's posts/i);
+    expect(msg).toMatch(/private/i);
+    expect(msg).toMatch(/public/i);
+    expect(msg).toMatch(/brand-new|just getting started|just starting/i);
+    // Names the incident so the rule can't be quietly relaxed later.
+    expect(msg).toMatch(/Piccadilly/);
+    expect(msg).toMatch(/fabricat/i);
+    // Send 1 (greet + save-contact) and Q1 are preserved.
+    expect(msg).toMatch(/SEND 1 — GREET \+ ROLE \+ OUTCOME \+ SAVE-CONTACT ASK/);
+    expect(msg).toMatch(/save (this number|me|my number) as Maya/i);
+    expect(msg).toMatch(/SEND 3 — Q1 LOCATION/);
+    // Hard opener + billing-leak ban (the "Manager plan's officially
+    // live" defect must be structurally forbidden).
+    expect(msg).toMatch(/first token of the message must be 'Hey \[first name\],'/);
+    expect(msg).toMatch(/HARD BAN — billing\/tier\/plan leakage/);
+    expect(msg).toMatch(/'Manager plan'/);
+    expect(msg).toMatch(/officially live/);
+    // Q-flow continuation still hands off to the normal Q2-Q6 arc.
+    expect(msg).toMatch(/Q-FLOW CONTINUATION/);
+    expect(msg).toMatch(/submit_opening_answers/);
+  });
+
+  it("Sprint 12.8: noScrapedContent=false/omitted keeps the standard 4-send kickstart (backward-compat)", () => {
+    const omitted = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    const explicitFalse = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      noScrapedContent: false,
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    for (const { jobs } of [omitted, explicitFalse]) {
+      const ks = jobs.find((j) => j.id === "0001_first_boot_kickstart")!;
+      if (ks.payload.kind !== "agentTurn") throw new Error("guard");
+      expect(ks.payload.message).toMatch(/Four messages/);
+      expect(ks.payload.message).not.toMatch(/CONTENT-BLOCKED variant/);
+    }
+  });
+
+  it("Sprint 12.8: the exact leaked literal '1.1k vs your usual 47' is scrubbed from the standard message", () => {
+    const { jobs } = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    const ks = jobs.find((j) => j.id === "0001_first_boot_kickstart")!;
+    if (ks.payload.kind !== "agentTurn") throw new Error("guard");
+    // The model was copying these exact tokens as if they were the
+    // creator's real numbers — they must not exist in the prompt at all.
+    expect(ks.payload.message).not.toContain("1.1k vs your usual 47");
+    expect(ks.payload.message).not.toContain("1.1k vs your usual");
   });
 
   it("does NOT emit the kickstart when firstBootCompletedAt is set", () => {

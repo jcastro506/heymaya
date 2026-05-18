@@ -415,7 +415,14 @@ export function buildMayaConfig(inputs: BuildInputs, now: number): MayaConfigBun
   // ---- gateway config: bootstrap + model + channel adapters ----
   const channels: GatewayConfig["channels"] = {};
   let plugins: GatewayConfig["plugins"] | undefined;
-  const clawMessengerApiKey = process.env.CLAW_MESSENGER_API_KEY;
+  // Per-creator key wins over the shared env key. The shared key is
+  // single-tenant — concurrent creators on it collide (socket theft +
+  // cross-creator inbound routing). When onboarding has provisioned a
+  // dedicated emotion-machine tenant/key for this creator, that key gives
+  // this Maya its own relay identity. Absent ⇒ shared env fallback
+  // (single-tenant smoke path stays working).
+  const clawMessengerApiKey =
+    creator.clawMessengerApiKey ?? process.env.CLAW_MESSENGER_API_KEY;
   if (clawMessengerApiKey) {
     plugins = {
       allow: ["claw-messenger"],
