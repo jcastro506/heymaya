@@ -88,6 +88,11 @@ import {
   VideoSynthWorkerError,
   type SynthesizeWorkerPost,
 } from "../../integrations/videoSynthWorker/client";
+import {
+  extractEditingFingerprint,
+  type EditingFingerprint,
+  type MultimodalCall,
+} from "./extractEditingFingerprint";
 
 void _PRICE_INPUT;
 void _PRICE_OUTPUT;
@@ -406,6 +411,85 @@ const warmthMaterialValidator = v.object({
   citationPostDates: v.optional(v.array(v.string())),
 });
 
+// Sprint A.2 — editing fingerprint validator. Mirrors the schema.ts shape
+// exactly. The synth pass extracts this in parallel with voiceFingerprint;
+// the upsert mutation forwards when present so text-only / extraction-failed
+// runs don't wipe a prior fingerprint.
+const editingFingerprintValidator = v.object({
+  pacing: v.object({
+    avgCutEverySec: v.number(),
+    consistency: v.union(
+      v.literal("tight"),
+      v.literal("loose"),
+      v.literal("mixed")
+    ),
+    hookLandsAtMs: v.number(),
+    pacingCurve: v.union(
+      v.literal("fast-throughout"),
+      v.literal("slow-burn"),
+      v.literal("fast-to-slow"),
+      v.literal("building"),
+      v.literal("irregular")
+    ),
+  }),
+  opening: v.union(
+    v.literal("face-on"),
+    v.literal("motion-shot"),
+    v.literal("text-card"),
+    v.literal("b-roll"),
+    v.literal("voice-over-still"),
+    v.literal("mixed")
+  ),
+  transitions: v.union(
+    v.literal("hard-cut"),
+    v.literal("zoom"),
+    v.literal("whip-pan"),
+    v.literal("jump-cut"),
+    v.literal("dissolve"),
+    v.literal("mixed")
+  ),
+  captions: v.object({
+    style: v.union(
+      v.literal("burned-in"),
+      v.literal("auto"),
+      v.literal("none"),
+      v.literal("mixed")
+    ),
+    position: v.union(
+      v.literal("top"),
+      v.literal("center"),
+      v.literal("bottom"),
+      v.literal("varies"),
+      v.literal("not-applicable")
+    ),
+    cadence: v.union(
+      v.literal("word-by-word"),
+      v.literal("phrase"),
+      v.literal("sentence"),
+      v.literal("not-applicable")
+    ),
+    visualDescription: v.string(),
+  }),
+  audio: v.union(
+    v.literal("original-voice"),
+    v.literal("music-driven"),
+    v.literal("trending-sound"),
+    v.literal("voiceover"),
+    v.literal("mixed")
+  ),
+  framing: v.union(
+    v.literal("fully-vertical-9-16"),
+    v.literal("horizontal-letterboxed"),
+    v.literal("square"),
+    v.literal("mixed")
+  ),
+  signatureMoves: v.array(v.string()),
+  confidence: v.number(),
+  sampleSize: v.number(),
+  citedPostIds: v.array(v.string()),
+  extractedAt: v.number(),
+});
+
 export const upsertSynthesizedPicture = internalMutation({
   args: {
     creatorId: v.id("creators"),
@@ -439,6 +523,13 @@ export const upsertSynthesizedPicture = internalMutation({
     // by USER.md so Maya naturally reads cadence gaps (target 3x/week +
     // last post 85 days ago = an obvious question, no threshold needed).
     daysSinceLastPost: v.optional(v.number()),
+    // ─── Sprint A.2 — multimodal editing fingerprint ─────────────────────
+    // Captures the creator's editing style (pacing, opening, transitions,
+    // captions, audio, framing, signature moves). The extractor runs in
+    // parallel with voice/visual synthesis. Optional + forwarded only when
+    // present so an extraction failure / thin video library doesn't wipe a
+    // prior fingerprint.
+    editingFingerprint: v.optional(editingFingerprintValidator),
   },
   handler: async (ctx, args): Promise<Id<"creatorPicture">> => {
     const existing = await ctx.db
@@ -513,6 +604,11 @@ export const upsertSynthesizedPicture = internalMutation({
     // path forwards it whenever present.
     if (args.daysSinceLastPost !== undefined) {
       synthFields.daysSinceLastPost = args.daysSinceLastPost;
+    }
+    // Sprint A.2 — editing fingerprint. Patch only when present so an
+    // extraction failure / thin library doesn't wipe a prior fingerprint.
+    if (args.editingFingerprint !== undefined) {
+      synthFields.editingFingerprint = args.editingFingerprint;
     }
 
     if (existing) {
@@ -1757,6 +1853,42 @@ const RETRY_REMINDER = `Your previous response was malformed JSON or missing req
  * for each post — caption / transcript / engagement metrics stay inside the
  * userPayloadJson where Gemini reads them as text context.
  */
+/**
+ * Sprint A.2 — collect the post list the editing-fingerprint extractor
+ * consumes. Mirrors `buildWorkerPosts` but produces the extractor's input
+ * shape (postId + videoUrl + durationSec) and skips the kind partition —
+ * the extractor only cares about whether a videoUrl is present. Posts
+ * without a usable videoUrl are filtered out by the extractor itself.
+ *
+ * Pure / deterministic — exported for unit tests.
+ */
+export function collectEditingFingerprintPosts(
+  payload: PromptPayload
+): Array<{
+  postId: string;
+  platform: string;
+  videoUrl: string | null;
+  durationSec: number | null;
+}> {
+  const out: Array<{
+    postId: string;
+    platform: string;
+    videoUrl: string | null;
+    durationSec: number | null;
+  }> = [];
+  for (const pp of payload.perPlatform) {
+    for (const post of pp.posts) {
+      out.push({
+        postId: post.postId,
+        platform: post.platform,
+        videoUrl: post.videoUrl,
+        durationSec: post.videoDurationSec,
+      });
+    }
+  }
+  return out;
+}
+
 export function buildWorkerPosts(
   payload: PromptPayload
 ): SynthesizeWorkerPost[] {
@@ -3118,6 +3250,73 @@ export function _setSynthFetchForTests(impl: typeof fetch | null): void {
   __injectedFetch = impl;
 }
 
+/**
+ * Sprint A.2 — test seam for the editing-fingerprint multimodal call. Tests
+ * inject a stub here; production leaves it `null` and the default impl falls
+ * back to the video-synth-worker (when enabled) or text-only OpenRouter.
+ *
+ * Process-global. Always reset to `null` in `afterEach` so injected mocks
+ * don't leak between tests.
+ */
+let __injectedEditingFingerprintCall: MultimodalCall | null = null;
+
+export function _setEditingFingerprintCallForTests(
+  impl: MultimodalCall | null
+): void {
+  __injectedEditingFingerprintCall = impl;
+}
+
+/**
+ * Default editing-fingerprint multimodal-call factory. Routes to the
+ * video-synth-worker (real multimodal — Gemini watches the frames) when
+ * BOTH conditions hold:
+ *
+ *   1. `USE_VIDEO_SYNTH_WORKER=true` — the worker is deployed.
+ *   2. `ENABLE_EDITING_FINGERPRINT_EXTRACT=true` — the operator opts the
+ *      editing pass in. This is an extra gate so existing worker tests
+ *      (which inject a spy on `synthesizeViaWorker` and assert one call)
+ *      don't pick up an extra fingerprint call. In production, set both
+ *      env vars; the editing pass then runs in parallel with voice synth.
+ *
+ * When either gate is off, the factory throws — the extractor catches and
+ * returns null. The patch path leaves `editingFingerprint` undefined and
+ * downstream skills teach Maya to ASK the creator about preferences instead.
+ *
+ * The factory takes the real `creatorId` so the worker's telemetry is
+ * scoped to the right tenant.
+ */
+function makeDefaultEditingFingerprintCall(
+  creatorId: Id<"creators">
+): MultimodalCall {
+  return async function defaultEditingFingerprintCall(args): Promise<{
+    content: string;
+    model: string;
+  }> {
+    if (
+      !isVideoSynthWorkerEnabled() ||
+      process.env.ENABLE_EDITING_FINGERPRINT_EXTRACT !== "true"
+    ) {
+      throw new Error(
+        "editingFingerprint: extraction not enabled (need USE_VIDEO_SYNTH_WORKER=true AND ENABLE_EDITING_FINGERPRINT_EXTRACT=true)"
+      );
+    }
+    const workerPosts: SynthesizeWorkerPost[] = args.posts.map((p) => ({
+      postId: p.postId,
+      platform: p.platform,
+      videoUrl: p.videoUrl,
+      kind: "video",
+    }));
+    const resp = await synthesizeViaWorker({
+      creatorId,
+      systemPrompt: args.systemPrompt,
+      userPayloadJson: args.userPayloadJson,
+      posts: workerPosts,
+      thinkingBudget: args.thinkingBudget,
+    });
+    return { content: resp.content, model: resp.model };
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Main action                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -3321,6 +3520,34 @@ export const synthesizeCreatorPicture = internalAction({
       };
     }
 
+    // ─── Sprint A.2 — editing fingerprint (parallel multimodal pass) ────────
+    // Kicked off here so it overlaps with the deterministic post-processing
+    // below (anchor invariant check + milestone derivation). Independent of
+    // voice synth — an extraction failure does NOT block the voice
+    // fingerprint. Awaited just before patch-row.
+    const editingFingerprintCall: MultimodalCall =
+      __injectedEditingFingerprintCall ??
+      makeDefaultEditingFingerprintCall(args.creatorId);
+    const editingFingerprintPosts = collectEditingFingerprintPosts(payload);
+    const editingFingerprintPromise: Promise<EditingFingerprint | null> =
+      extractEditingFingerprint({
+        posts: editingFingerprintPosts,
+        platform:
+          inputs.handles[0]?.platform ??
+          editingFingerprintPosts[0]?.platform ??
+          "tiktok",
+        multimodalCall: editingFingerprintCall,
+        thinkingBudget: "medium",
+      }).catch((err: unknown) => {
+        // Defense-in-depth — the extractor already swallows model errors
+        // and returns null, but we don't want a hypothetical bug here to
+        // poison the entire synthesis run.
+        console.warn(
+          `synthesizeCreatorPicture: editing fingerprint extraction threw: ${(err as Error).message}`
+        );
+        return null;
+      });
+
     // ─── Stage-aware adaptive product (Agent B) ─────────────────────────────
     // Derive the legacy nextMilestone (follower-count object) + focusArea
     // from the parsed stage. The HQ progress bar still uses the follower
@@ -3376,6 +3603,11 @@ export const synthesizeCreatorPicture = internalAction({
         severity: "blocker",
       });
     }
+
+    // Await the parallel editing-fingerprint pass before patch-row. The
+    // extractor returns null on thin-library / extraction-failure; we
+    // forward only when present so prior fingerprints aren't wiped.
+    const editingFingerprint = await editingFingerprintPromise;
 
     // Stage: patch-row
     let creatorPictureId: Id<"creatorPicture">;
@@ -3447,6 +3679,12 @@ export const synthesizeCreatorPicture = internalAction({
           // Sprint 12 Phase 1A — cadence anchor.
           ...(daysSinceLastPost !== undefined
             ? { daysSinceLastPost }
+            : {}),
+          // Sprint A.2 — editing fingerprint. Forward only when the parallel
+          // extractor returned a fingerprint (null = thin library OR model
+          // failure; in either case we leave a prior fingerprint in place).
+          ...(editingFingerprint !== null
+            ? { editingFingerprint }
             : {}),
         }
       );

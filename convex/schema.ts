@@ -37,6 +37,23 @@ export default defineSchema({
     mayaFlyAppId: v.optional(v.string()),
     mayaConfigVersion: v.optional(v.number()),
     /**
+     * Per-creator Claw Messenger identity. The shared `CLAW_MESSENGER_API_KEY`
+     * env var is single-tenant: every Maya that connects with it shares one
+     * relay account, so a second concurrent creator's Maya steals the socket
+     * and inbound routes to the wrong creator (observed 2026-05-16). True
+     * isolation requires one emotion-machine tenant + key + phone route per
+     * creator, provisioned at onboarding via the relay's `/api/tenants`,
+     * `/api/keys`, `/api/routes` REST API. When `clawMessengerApiKey` is set,
+     * `configGeneratorMaya` stamps it into that creator's bootstrap instead of
+     * the shared env key. `clawMessengerTenantId` + `clawMessengerNumber` are
+     * kept for lifecycle (revoke key / release route on account deletion) and
+     * the "save my number as Maya" UX. Absent ⇒ falls back to the shared key
+     * (single-tenant smoke path).
+     */
+    clawMessengerApiKey: v.optional(v.string()),
+    clawMessengerTenantId: v.optional(v.string()),
+    clawMessengerNumber: v.optional(v.string()),
+    /**
      * Sprint 6A — tone slider on the Profile screen. Optional + defaults to
      * the value Maya was deployed with (read off `creatorPicture` voice). This
      * field is the creator-controlled override; soul.md regen on the next
@@ -133,6 +150,16 @@ export default defineSchema({
     // Stamped after the ping fires (or is skipped on empty trend+idea).
     // If `pictureLockedAt` re-stamps, the ping does NOT re-fire.
     firstProactivePingSentAt: v.optional(v.number()),
+    // ─── Sprint C.5 — first-week calendar bootstrap idempotency cursor ──
+    // Stamped after `first_week_calendar_bootstrap` standing order
+    // successfully populates the rest of this week + next week of calendar
+    // events for the creator. The event-driven standing order fires ONCE
+    // post-calendar OAuth completion when this cursor is undefined; the
+    // Sunday `weekly_content_plan` cron takes over for ongoing weeks.
+    // Subsequent calendar reconnects (or session restarts that re-emit the
+    // calendar-connected event) do NOT re-fire because the cursor stays
+    // stamped. UTC ms epoch. Schema additive; no migration impact.
+    firstWeekCalendarBootstrappedAt: v.optional(v.number()),
     // ─── Sprint 9 — admin-flagged comp accounts ───────────────────────────
     // Operator-set flag. When true, the creator gets full Manager features
     // without a Stripe subscription. Used to onboard friend-cohort beta
@@ -944,6 +971,113 @@ export default defineSchema({
       )
     ),
     // ─── end Wave 2 (dynamic onboarding mirror) ───────────────────────────
+    /**
+     * Sprint A.2 — multimodal editing fingerprint. Populated by
+     * `convex/onboarding/maya/extractEditingFingerprint.ts` in parallel with
+     * the voice/visual synthesis pass. Captures the creator's pacing /
+     * opening / transition / caption / audio / framing patterns + signature
+     * moves, so Maya can mimic THEIR editing style from day one when she
+     * drafts cut-lists, hook proposals, or co-edits a piece.
+     *
+     * Optional: undefined when fewer than 3 posts in the synthesis input
+     * had a usable videoUrl (too thin to fingerprint — downstream skills
+     * MUST teach Maya to ASK the creator about preferences rather than
+     * forcing a style on them). All fields qualitative — the model
+     * DESCRIBES patterns, it does not precision-measure them.
+     *
+     * Citation rule (enforced in skill prompts, not at insert time):
+     *   any Maya claim about the creator's editing style cites a postId
+     *   from `citedPostIds`.
+     */
+    editingFingerprint: v.optional(
+      v.object({
+        pacing: v.object({
+          /** Typical cut frequency in seconds (e.g. 0.8, 2.5, 4.0). */
+          avgCutEverySec: v.number(),
+          /** Qualitative rhythm — model describes, doesn't measure. */
+          consistency: v.union(
+            v.literal("tight"),
+            v.literal("loose"),
+            v.literal("mixed")
+          ),
+          /** Where in the first 1500ms the hook beat lands. */
+          hookLandsAtMs: v.number(),
+          pacingCurve: v.union(
+            v.literal("fast-throughout"),
+            v.literal("slow-burn"),
+            v.literal("fast-to-slow"),
+            v.literal("building"),
+            v.literal("irregular")
+          ),
+        }),
+        opening: v.union(
+          v.literal("face-on"),
+          v.literal("motion-shot"),
+          v.literal("text-card"),
+          v.literal("b-roll"),
+          v.literal("voice-over-still"),
+          v.literal("mixed")
+        ),
+        transitions: v.union(
+          v.literal("hard-cut"),
+          v.literal("zoom"),
+          v.literal("whip-pan"),
+          v.literal("jump-cut"),
+          v.literal("dissolve"),
+          v.literal("mixed")
+        ),
+        captions: v.object({
+          style: v.union(
+            v.literal("burned-in"),
+            /** Relies on TikTok's native captions. */
+            v.literal("auto"),
+            v.literal("none"),
+            v.literal("mixed")
+          ),
+          position: v.union(
+            v.literal("top"),
+            v.literal("center"),
+            v.literal("bottom"),
+            v.literal("varies"),
+            v.literal("not-applicable")
+          ),
+          cadence: v.union(
+            v.literal("word-by-word"),
+            v.literal("phrase"),
+            v.literal("sentence"),
+            v.literal("not-applicable")
+          ),
+          /** Free-text: "bold white sans-serif with black stroke, slight bounce on emphasis". */
+          visualDescription: v.string(),
+        }),
+        audio: v.union(
+          v.literal("original-voice"),
+          v.literal("music-driven"),
+          v.literal("trending-sound"),
+          v.literal("voiceover"),
+          v.literal("mixed")
+        ),
+        framing: v.union(
+          v.literal("fully-vertical-9-16"),
+          v.literal("horizontal-letterboxed"),
+          v.literal("square"),
+          v.literal("mixed")
+        ),
+        /**
+         * Recurring beats that make this creator's content recognizable
+         * (e.g. "opens with a sip of coffee", "always ends on a stare").
+         */
+        signatureMoves: v.array(v.string()),
+        /** 0-1. Low when sample is thin or styles vary widely. */
+        confidence: v.number(),
+        /** How many posts informed this fingerprint. */
+        sampleSize: v.number(),
+        /** Platform post ids — citation firewall for any style claim. */
+        citedPostIds: v.array(v.string()),
+        /** ms epoch. */
+        extractedAt: v.number(),
+      })
+    ),
   }).index("by_creator", ["creatorId"]),
 
   aiCallLog: defineTable({
@@ -966,6 +1100,45 @@ export default defineSchema({
     .index("by_creator", ["creatorId"])
     .index("by_creator_and_ts", ["creatorId", "ts"])
     .index("by_task_tag", ["taskTag"]),
+
+  // Sprint C.6 (2026-05-13) — firewall telemetry. Every call to
+  // /lc_maya/validate_outbound_send + /lc_maya/validate_trend_citation
+  // writes one row here for audit. Lets us measure (a) hit rate of the
+  // wire-level firewall, (b) which regex patterns actually catch confab
+  // vs cause false positives, (c) whether trend-grounding tools + AGENTS.md
+  // teaching make the firewall less necessary over time.
+  //
+  // Per the operator-locked feedback rule "trust LLM judgment, no hardcoded
+  // rules": the regex firewall is band-aid territory. Before deciding whether
+  // to keep / tighten / remove it, we need data on its real catch-rate vs
+  // false-positive rate. This table is the data plane for that decision.
+  //
+  // Schema is intentionally lean — message bodies are tenant data; we keep
+  // them for a week then trim via a sweeper (future sprint). Cross-tenant
+  // gating: every row indexed by_creator + by_creator_and_observedAt.
+  firewallEvents: defineTable({
+    creatorId: v.id("creators"),
+    /** The original message that hit the firewall. Tenant data — trimmed by sweeper after 7d. */
+    message: v.string(),
+    verdict: v.union(v.literal("ok"), v.literal("blocked")),
+    /** Source endpoint — which firewall surface fired. */
+    source: v.union(
+      v.literal("validate_outbound_send"),
+      v.literal("validate_trend_citation")
+    ),
+    /** Trend-shape regex match (if any). null when no trend-shape detected OR when verdict=ok and no trend-shape claim. */
+    matchedTrendPattern: v.optional(v.string()),
+    /** Which format checks tripped (markdown-bold / numbered-list / etc.) — only on validate_outbound_send. */
+    formatCategoriesTripped: v.optional(v.array(v.string())),
+    /** Combined block reasons returned to caller. */
+    blockedReasons: v.optional(v.array(v.string())),
+    /** Platform-post URLs found in the message (if any). */
+    urlsFound: v.optional(v.array(v.string())),
+    observedAt: v.number(),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_observedAt", ["creatorId", "observedAt"])
+    .index("by_observedAt", ["observedAt"]),
 
   // ScrapeCreators response cache. Keyed by `sc:${platform}:${kind}:${handleOrId}`.
   // Per-creator scoping ensures cross-tenant isolation: every read filters by creatorId.
@@ -2361,6 +2534,146 @@ export default defineSchema({
     .index("by_creator", ["creatorId"])
     .index("by_creator_and_status", ["creatorId", "status"])
     .index("by_creator_and_created", ["creatorId", "createdAt"]),
+
+  // ─── Sprint B.2 — continuous-learning loop for editingFingerprint ─────
+  //
+  // Append-only audit-style observations of "what the creator actually
+  // published" vs "what Maya rendered / what the rolling fingerprint
+  // predicted." Sprint A.2 seeds the fingerprint at onboarding from the
+  // last 30 posts; this table closes the loop — every shipped post
+  // sharpens the fingerprint via `applyObservationsToFingerprint`.
+  //
+  // Schema decision (per Sprint B.2 spec): a NEW additive table rather
+  // than extending `creatorPicture.editingFingerprint`. The fingerprint
+  // remains the rolling synthesis (still mutated additively only); these
+  // rows are append-only deltas that drive the next synthesis pass.
+  //
+  // Each row captures qualitative deltas (model-described, not
+  // frame-accurate) for the specific axes the fingerprint covers. When a
+  // rendered variant is linked, the diff is "published vs Maya's render";
+  // otherwise it's "published vs current fingerprint."
+  editingFingerprintObservations: defineTable({
+    creatorId: v.id("creators"),
+    /** Platform post id (e.g. TikTok video id). Idempotency key candidate. */
+    publishedPostId: v.string(),
+    /** Canonical URL — citation source for any narrative Maya later emits. */
+    publishedPostUrl: v.string(),
+    /**
+     * The Maya-rendered variant this published post derived from. Optional —
+     * sometimes the creator publishes without Maya's render (manual edits).
+     * When set, deltas describe published-vs-rendered; when absent, deltas
+     * describe published-vs-current-fingerprint.
+     */
+    renderedMediaAssetId: v.optional(v.id("creatorMayaV0MediaAssets")),
+    observedAt: v.number(),
+    /** Actual published duration in ms. */
+    durationMs: v.number(),
+    /**
+     * Per-axis deltas vs the creator's current editingFingerprint (or vs the
+     * Maya-rendered variant when one is linked). Each item names the field
+     * and describes the observed-vs-expected difference qualitatively. Maya
+     * synthesizes these via Gemini multimodal against the published video.
+     */
+    deltas: v.array(
+      v.object({
+        field: v.union(
+          v.literal("pacing.avgCutEverySec"),
+          v.literal("pacing.consistency"),
+          v.literal("pacing.hookLandsAtMs"),
+          v.literal("pacing.pacingCurve"),
+          v.literal("opening"),
+          v.literal("transitions"),
+          v.literal("captions.style"),
+          v.literal("captions.position"),
+          v.literal("captions.cadence"),
+          v.literal("captions.visualDescription"),
+          v.literal("audio"),
+          v.literal("framing"),
+          v.literal("signatureMoves")
+        ),
+        /** Free-text: "0:11 setup beat" / "deadpan stare opener". */
+        observed: v.string(),
+        /** What the fingerprint or Maya's render had. */
+        expected: v.string(),
+        /** Model's one-sentence explanation. */
+        reason: v.string(),
+      })
+    ),
+    /**
+     * Whether this observation has been folded into the rolling fingerprint.
+     * Unset = unapplied; set to a ms timestamp once `applyObservationsToFingerprint`
+     * folds the row into `creatorPicture.editingFingerprint`.
+     */
+    appliedToFingerprintAt: v.optional(v.number()),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_observedAt", ["creatorId", "observedAt"])
+    .index("by_creator_and_published_post", [
+      "creatorId",
+      "publishedPostId",
+    ]),
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Sprint C.1 — Maya-authored Google Calendar events.
+  //
+  // Tracks the calendar events Maya proactively populates (taxonomy of 8
+  // kinds — trend-strike / content-block / post-publish / niche-scroll /
+  // comment-window / brand-outbox / weekly-review / brain-break). Sibling
+  // to `creatorMayaV0CalendarEvents` (which tracks every observed event,
+  // including external ones, for the read/classifier pipeline). This table
+  // is narrower — Maya-authored only — and carries the rich-cited body
+  // metadata + nudge fire stamps so heartbeat scans are cheap indexed
+  // queries (no Google round-trip per tick).
+  //
+  // Cited refs are MANDATORY when `actionable=true` (a no-cite event
+  // breaks Principle 3 "grounded or silent"). Body version + edit stamps
+  // enable diff-on-rerender so Maya can rewrite an event when context
+  // changes (e.g. trend cools, schedule shifts).
+  // ────────────────────────────────────────────────────────────────────────
+  mayaCalendarEvents: defineTable({
+    creatorId: v.id("creators"),
+    googleEventId: v.string(),
+    kind: v.union(
+      v.literal("trend-strike"),
+      v.literal("content-block"),
+      v.literal("post-publish"),
+      v.literal("niche-scroll"),
+      v.literal("comment-window"),
+      v.literal("brand-outbox"),
+      v.literal("weekly-review"),
+      v.literal("brain-break"),
+    ),
+    citedRefs: v.array(
+      v.object({
+        kind: v.union(
+          v.literal("trend"),
+          v.literal("post"),
+          v.literal("peer"),
+          v.literal("email"),
+          v.literal("brand-deal"),
+        ),
+        ref: v.string(),
+        label: v.string(),
+      }),
+    ),
+    bodyVersion: v.number(),
+    lastEditedByMaya: v.number(),
+    lastEditedByCreator: v.optional(v.number()),
+    actionable: v.boolean(),
+    sourceStandingOrderId: v.optional(v.string()),
+    // Denormalized timestamps so heartbeat scan is a cheap indexed query
+    // (avoid round-tripping to Google API every tick).
+    startTimeMs: v.number(),
+    endTimeMs: v.number(),
+    // Nudge fire stamps — one-ping-max enforcement.
+    preEventNudgeSentAt: v.optional(v.number()),
+    postEventCheckInSentAt: v.optional(v.number()),
+    preEventNudgeWaiveReason: v.optional(v.string()),
+    postEventCheckInWaiveReason: v.optional(v.string()),
+  })
+    .index("by_creator", ["creatorId"])
+    .index("by_creator_and_start", ["creatorId", "startTimeMs"])
+    .index("by_creator_and_google_event", ["creatorId", "googleEventId"]),
 
   // ────────────────────────────────────────────────────────────────────────
   // ─── Service product Sprint 0 (heymaya/service-v0) — added 2026-04-27 ──

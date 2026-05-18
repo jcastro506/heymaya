@@ -1875,3 +1875,113 @@ describe("POST /lc_maya/start_google_calendar_oauth", () => {
     expect(row).toBeNull();
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Sprint B.2 — observe_published_edit + apply_observations_to_fingerprint    */
+/*                                                                            */
+/* Smoke-coverage at the lcMayaHttp layer. Deep coverage (HAPPY +             */
+/* CROSS-TENANT + ADVERSARIAL across the action / mutation / synthesis)       */
+/* lives in `convex/creatorMayaV0/__tests__/editingFingerprintObservations    */
+/* .test.ts`.                                                                 */
+/* -------------------------------------------------------------------------- */
+
+describe("POST /lc_maya/observe_published_edit (lcMayaHttp surface)", () => {
+  beforeEach(() => {
+    _setWebhookSecretForTests(TEST_SECRET);
+  });
+  afterEach(() => {
+    _setWebhookSecretForTests(null);
+  });
+
+  it("ADVERSARIAL: missing secret → 401", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "b2a", plan: "manager" });
+    const res = await t.fetch("/lc_maya/observe_published_edit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: "wrong",
+        creatorId,
+        publishedPostId: "p",
+        publishedPostUrl: "https://x",
+      }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("ADVERSARIAL: missing publishedPostUrl → 400", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "b2b", plan: "manager" });
+    const res = await t.fetch("/lc_maya/observe_published_edit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        publishedPostId: "p",
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("ADVERSARIAL: bad thinkingBudget → 400", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "b2c", plan: "manager" });
+    const res = await t.fetch("/lc_maya/observe_published_edit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secret: TEST_SECRET,
+        creatorId,
+        publishedPostId: "p",
+        publishedPostUrl: "https://x",
+        thinkingBudget: "ultra",
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("POST /lc_maya/apply_observations_to_fingerprint (lcMayaHttp surface)", () => {
+  beforeEach(() => {
+    _setWebhookSecretForTests(TEST_SECRET);
+  });
+  afterEach(() => {
+    _setWebhookSecretForTests(null);
+  });
+
+  it("ADVERSARIAL: missing secret → 401", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "ap_a", plan: "manager" });
+    const res = await t.fetch("/lc_maya/apply_observations_to_fingerprint", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: "wrong", creatorId }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("ADVERSARIAL: missing creatorId → 400", async () => {
+    const t = convexTest(schema, modules);
+    const res = await t.fetch("/lc_maya/apply_observations_to_fingerprint", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: TEST_SECRET }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("HAPPY: no observations → 200 + noop:true (idempotent)", async () => {
+    const t = convexTest(schema, modules);
+    const creatorId = await insertCreator(t, { suffix: "ap_b", plan: "manager" });
+    const res = await t.fetch("/lc_maya/apply_observations_to_fingerprint", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret: TEST_SECRET, creatorId }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; noop?: boolean };
+    expect(body.ok).toBe(true);
+    expect(body.noop).toBe(true);
+  });
+});

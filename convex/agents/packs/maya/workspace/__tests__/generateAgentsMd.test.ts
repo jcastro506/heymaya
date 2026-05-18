@@ -45,6 +45,25 @@ describe("generateAgentsMd", () => {
     expect(a).toBe(b);
   });
 
+  it("Sprint 12.8: first-boot check is the CURRENT 6-question RESUME flow, NOT the legacy 2-Q+tone script", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // The legacy drift that caused the "second Maya" / disconnected-onboarding
+    // bug: AGENTS.md described first-boot as "2 opening Q's: goal + tone".
+    expect(md).not.toMatch(/2 opening Q's/);
+    expect(md).not.toMatch(/opening Q's: goal w\/ examples \+ tone/);
+    // Current flow + the structural never-re-greet/resume rule must be present.
+    expect(md).toMatch(/RESUME rule/);
+    expect(md).toMatch(/SIX-question/);
+    expect(md).toMatch(/do NOT re-greet/);
+    expect(md).toMatch(/second Maya/);
+    expect(md).toMatch(/Q1 location → Q2 niche/);
+    expect(md).toMatch(/PERSISTED STATE/);
+  });
+
   it("starter plan excludes every pro+ standing-order title", () => {
     const md = generateAgentsMd({
       ...BASE_INPUTS,
@@ -87,7 +106,7 @@ describe("generateAgentsMd", () => {
     expect(md).toContain("`standing-orders.md`");
   });
 
-  it("renders all 12 doc sections (operating instructions, integrated picture, date discipline, tone, platform, standing orders, chat, auto-send, plan-tier, failure modes, connected toolkits, citation)", () => {
+  it("renders all 13 doc sections (operating instructions, integrated picture, date discipline, editing fingerprint, tone, platform, standing orders, chat, auto-send, plan-tier, failure modes, connected toolkits, citation)", () => {
     const md = generateAgentsMd({
       ...BASE_INPUTS,
       plan: "manager",
@@ -97,6 +116,7 @@ describe("generateAgentsMd", () => {
       "## Operating instructions",
       "## You are ONE manager reading an integrated picture",
       "## Date discipline — cite posts by their actual posted date",
+      "## Editing fingerprint — mimic THEIR edit, don't impose a template",
       "## Tone modulation",
       "## Platform expertise",
       "## Standing orders",
@@ -110,6 +130,25 @@ describe("generateAgentsMd", () => {
     for (const heading of expected) {
       expect(md).toContain(heading);
     }
+  });
+
+  // Sprint A.2 — editing fingerprint section content checks.
+  it("editing fingerprint section names the schema fields + the citation rule + the confidence bands", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    expect(md).toContain("creatorPicture.editingFingerprint");
+    expect(md).toContain("citedPostIds");
+    expect(md).toContain("signatureMoves");
+    expect(md).toContain("confidence");
+    expect(md).toContain("avgCutEverySec");
+    // Confidence bands threshold language.
+    expect(md).toContain("confidence >= 0.7");
+    expect(md).toContain("confidence < 0.4");
+    // Forbids generic auto-editor moves when fingerprint is on file.
+    expect(md).toMatch(/OpusClip|generic cuts/);
   });
 
   it("Connected toolkits section names shipping Composio slugs + keeps TikTok on ScrapeCreators", () => {
@@ -277,5 +316,358 @@ describe("generateAgentsMd — Sprint 12 Phase 1A", () => {
     );
     expect(idxIntegrated).toBeGreaterThan(0);
     expect(idxImessage).toBeGreaterThan(idxIntegrated);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint B.1 — Follow-through protocol (promise-and-stop ban)                 */
+/* -------------------------------------------------------------------------- */
+
+describe("generateAgentsMd — Sprint B.1 follow-through protocol", () => {
+  // The live failure this section prevents: Kevin 2026-05-12 evening — Maya
+  // emitted "Nice—connection is live. Let me take a look at your calendar
+  // for the next 2 weeks and get a content plan ready for you. (Give me a
+  // few seconds to think through the ideas.)" then stopReason: "stop". Turn
+  // ended. No follow-up. The work happened only after the operator nudged.
+  it("Follow-through protocol section is present in both embed forms", () => {
+    for (const embed of [true, false]) {
+      const md = generateAgentsMd({
+        ...BASE_INPUTS,
+        plan: "manager",
+        embedStandingOrders: embed,
+      });
+      expect(md, `embed=${embed}`).toContain("## Follow-through protocol");
+    }
+  });
+
+  it("Follow-through protocol enumerates the banned promise-and-stop phrasings", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // The five canonical banned shapes from the Sprint B.1 brief.
+    const bannedShapes = [
+      "Give me a few seconds to think through",
+      "Let me take a look at",
+      "One moment while I",
+      "Pulling that up now",
+      "Working on it",
+    ];
+    for (const shape of bannedShapes) {
+      expect(md, `missing banned phrasing: ${shape}`).toContain(shape);
+    }
+    // The terminal-stop reason mention so the model recognizes the failure
+    // mode by the runtime signal.
+    expect(md).toContain("stopReason");
+  });
+
+  it("Follow-through protocol names the 3-step shape of a multi-step turn (read → do → emit)", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // The shape is enumerated 1./2./3. inside the section.
+    const sectionStart = md.indexOf("## Follow-through protocol");
+    expect(sectionStart).toBeGreaterThan(0);
+    const sectionTail = md.slice(sectionStart);
+    expect(sectionTail).toMatch(/1\.\s+Read what's needed/);
+    expect(sectionTail).toMatch(/2\.\s+Do the work/);
+    expect(sectionTail).toMatch(/3\.\s+Emit ONE final message/);
+  });
+
+  it("Follow-through protocol carries the verify-implementation-not-intent rule", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // Lifted directly from the proactive-agent SKILL.md — the artifact check
+    // is the load-bearing piece that keeps Maya honest after each tool call.
+    expect(md).toContain("Verify implementation, not intent");
+    expect(md).toMatch(/artifact/i);
+    expect(md).toContain("publicUrl");
+  });
+
+  it("Follow-through protocol points to the proactive-agent ClawHub pin for deeper protocols", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // The companion ClawHub pin (halthelobster/proactive-agent) ships the
+    // full WAL / Working Buffer / Compaction Recovery body. AGENTS.md is the
+    // short-form rule; the pin's SKILL.md is the long-form reference.
+    expect(md).toContain("halthelobster/proactive-agent");
+    expect(md).toMatch(/concepts\/in-flight/);
+  });
+
+  it("Follow-through protocol sits adjacent to the iMessage UX block (alongside the silent-abort / no-fake-busy family)", () => {
+    // Per the Sprint B.1 brief: "Place it alongside the existing iMessage UX
+    // rules / silent-abort rules." The section follows the iMessage UX block
+    // so the model reads no-fake-busy → silent-abort → Follow-through in
+    // sequence, which is the right reading order for the failure mode.
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    const idxIntegrated = md.indexOf(
+      "## You are ONE manager reading an integrated picture"
+    );
+    const idxImessage = md.indexOf("## iMessage UX rules");
+    const idxFollowThrough = md.indexOf("## Follow-through protocol");
+    expect(idxIntegrated).toBeGreaterThan(0);
+    expect(idxImessage).toBeGreaterThan(idxIntegrated);
+    // Follow-through lives after the iMessage block (where no-fake-busy
+    // and silent-abort family live) — the rule is the operational companion
+    // to those bans.
+    expect(idxFollowThrough).toBeGreaterThan(idxImessage);
+  });
+
+  it("non-embed form still fits under DEFAULT_BOOTSTRAP_MAX_CHARS after the Follow-through addition", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // Sprint B.1 — we added ~2K to AGENTS.md; non-embed must still fit the
+    // 48K cap. If this fails, the cap needs bumping to 56K per the brief.
+    // Sprint C.5 — bumped cap to 56K (from 50K) for the new "## Video link
+    // analysis (chat-driven)" section. Non-embed AGENTS.md is now ~51.2K.
+    expect(md.length).toBeLessThanOrEqual(DEFAULT_BOOTSTRAP_MAX_CHARS);
+  });
+
+  // Sibling-file scan: the follow-through enforcement language must also be
+  // present in the named standing orders (morning_brief, evening_recap,
+  // weekly_review, first_proactive_ping) so the rule fires inside each
+  // cron-driven prompt as well as the every-session AGENTS.md context.
+  it("named standing orders all carry a Follow-through enforcement sentence", async () => {
+    const { STANDING_ORDERS } = await import("../standingOrders");
+    const targets = [
+      "morning_brief",
+      "evening_recap",
+      "weekly_review",
+      "first_proactive_ping",
+    ];
+    for (const id of targets) {
+      const p = STANDING_ORDERS.find((q) => q.id === id);
+      expect(p, `missing standing order: ${id}`).toBeDefined();
+      const body = `${p!.scope}\n${p!.cronMessage ?? ""}`;
+      expect(
+        body,
+        `${id}: missing Follow-through enforcement line`
+      ).toMatch(/Follow-through enforcement/i);
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sprint C.5 — "## Video link analysis (chat-driven)" section                 */
+/*                                                                            */
+/* When the creator pastes a TikTok/IG/YouTube/X URL in chat, Maya recognizes  */
+/* the platform-post shape and routes it through the right ScrapeCreators     */
+/* endpoint + Gemini multimodal so she can compose a grounded read tied to    */
+/* `editingFingerprint`. This section is AGENTS.md teaching that turns those  */
+/* primitives on for chat-pasted links instead of the generic "nice link"     */
+/* failure mode.                                                              */
+/*                                                                            */
+/* The five mandatory categories applied:                                     */
+/*   1. Cross-tenant — section prose is shared infra, no per-tenant leaks.    */
+/*   2. Plan-tier × action — section is present in BOTH Coach and Manager     */
+/*      AGENTS.md (Maya is one product, two tiers).                           */
+/*   3. Adversarial — banned shapes named ("nice link", "let me check it      */
+/*      out", fabricated metrics, fabricated style observations).             */
+/*   4. Sibling-file scan — references tiktok.post / instagram.post /         */
+/*      youtube.video methods + editingFingerprint + citation firewall.       */
+/*   5. TODO grep — checked.                                                  */
+/* -------------------------------------------------------------------------- */
+
+describe("generateAgentsMd — Sprint C.5 video link analysis section", () => {
+  it("section header is present in both embed forms (Coach + Manager)", () => {
+    for (const embed of [true, false]) {
+      for (const plan of ["coach", "manager"] as const) {
+        const md = generateAgentsMd({
+          ...BASE_INPUTS,
+          plan,
+          embedStandingOrders: embed,
+        });
+        expect(
+          md,
+          `embed=${embed} plan=${plan}: missing "## Video link analysis (chat-driven)" header`
+        ).toContain("## Video link analysis (chat-driven)");
+      }
+    }
+  });
+
+  it("section recognizes the canonical platform-post URL patterns (TikTok / IG / YT / X / vm.tiktok / vt.tiktok / youtu.be)", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // The exact regex set lives in `isPlatformPostUrl` in lcMayaHttp.ts; the
+    // prose mirrors it so Maya recognizes the same surface.
+    expect(md).toContain("tiktok.com/@*/video/*");
+    expect(md).toContain("vm.tiktok.com/*");
+    expect(md).toContain("vt.tiktok.com/*");
+    expect(md).toContain("instagram.com/(p|reel|tv)/*");
+    expect(md).toContain("youtube.com/watch?v=*");
+    expect(md).toContain("youtube.com/shorts/*");
+    expect(md).toContain("youtu.be/*");
+    expect(md).toMatch(/twitter\.com\/\*\/status\/\*|x\.com\/\*\/status\/\*/);
+    // Cross-reference the firewall helper so a future schema rename to
+    // `isPlatformPostUrl` is caught here too.
+    expect(md).toContain("isPlatformPostUrl");
+  });
+
+  it("section names the canonical ScrapeCreators endpoint methods (tiktok.post / instagram.post / youtube.video)", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // These are the actual exported method names from
+    // convex/integrations/scrapeCreators/endpoints.ts.
+    expect(md).toContain("tiktok.post");
+    expect(md).toContain("instagram.post");
+    expect(md).toContain("youtube.video");
+  });
+
+  it("section grounds the read in `editingFingerprint` (the multimodal style anchor)", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    expect(md).toContain("editingFingerprint");
+    // Specific fingerprint fields named so the prose lines up with the schema
+    // surface in `convex/schema.ts:creatorPicture.editingFingerprint`.
+    expect(md).toContain("avgCutEverySec");
+    expect(md).toContain("signatureMoves");
+    expect(md).toContain("citedPostIds");
+    expect(md).toContain("opening");
+    expect(md).toContain("transitions");
+  });
+
+  it("section enforces the citation firewall (metrics for performance claims; citedPostIds for style claims)", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // The firewall is the load-bearing piece — every claim about the pasted
+    // post must cite the scraped metrics; every claim about the creator's
+    // style must cite their editingFingerprint.citedPostIds.
+    expect(md).toMatch(/citation\s+firewall/i);
+    expect(md).toMatch(/views\/likes\/comments\/postedAt|scraped\s+metrics/i);
+    // The "no fabricated metrics" rule.
+    expect(md).toMatch(/never\s+(estimate|invent|fabricat)/i);
+  });
+
+  it("section's banned-phrasing list includes 'nice link' and 'let me check it out'", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    expect(md).toContain("nice link");
+    expect(md).toContain("let me check it out");
+    // Plus the fabricated-metrics + fabricated-style bans.
+    expect(md).toMatch(/fabricated\s+metrics/i);
+    expect(md).toMatch(/fabricated\s+style|fabricate.*style/i);
+  });
+
+  it("section enforces Sprint B.1 follow-through (no 'give me a sec to watch this' without the actual read in the same turn)", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // The Sprint B.1 follow-through ban applies to chat-link analysis verbatim:
+    // the fetch + read + compose all happen in the same turn as the response.
+    expect(md).toMatch(/Sprint\s*B\.1/);
+    expect(md).toContain("give me a sec to watch this");
+  });
+
+  it("section sits AFTER the Calendar-event nudges section (Sprint C.3) and BEFORE the Standing orders block", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    const idxCalNudges = md.indexOf(
+      "## Calendar-event nudges (cron-driven, 4 ticks/day)"
+    );
+    const idxVideoAnalysis = md.indexOf("## Video link analysis (chat-driven)");
+    const idxStandingOrders = md.indexOf("## Standing orders");
+    expect(idxCalNudges).toBeGreaterThan(0);
+    expect(idxVideoAnalysis).toBeGreaterThan(idxCalNudges);
+    expect(idxStandingOrders).toBeGreaterThan(idxVideoAnalysis);
+  });
+
+  it("cross-tenant — section prose carries no per-tenant identifiers (creatorId / clerkUserId / Convex k_)", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    const start = md.indexOf("## Video link analysis (chat-driven)");
+    const tailStart = md.indexOf("## ", start + 1);
+    const section = md.slice(start, tailStart > 0 ? tailStart : md.length);
+    expect(section, "video-link section leaks creatorId literal").not.toMatch(
+      /creatorId\s*[:=]\s*['"]/
+    );
+    expect(section, "video-link section leaks clerkUserId").not.toMatch(
+      /clerkUserId/
+    );
+    expect(section, "video-link section leaks Convex k_ id").not.toMatch(
+      /\bk_[a-z0-9]{10,}/
+    );
+  });
+
+  it("plan-tier × action — section ships identically in Coach + Manager (Maya is one product, two tiers)", () => {
+    const coachMd = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "coach",
+      embedStandingOrders: false,
+    });
+    const managerMd = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    const sectionAnchor = "## Video link analysis (chat-driven)";
+    expect(coachMd).toContain(sectionAnchor);
+    expect(managerMd).toContain(sectionAnchor);
+    // Both tiers see the same URL recognition + endpoint routing teaching.
+    expect(coachMd).toContain("tiktok.post");
+    expect(managerMd).toContain("tiktok.post");
+  });
+
+  it("non-embed form still fits under DEFAULT_BOOTSTRAP_MAX_CHARS after the Sprint C.5 addition", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // Sprint C.5 — we added ~3K to AGENTS.md for the new section. The cap
+    // bump (50K → 56K) keeps headroom for the next addition.
+    expect(md.length).toBeLessThanOrEqual(DEFAULT_BOOTSTRAP_MAX_CHARS);
+  });
+
+  it("TODO grep — Sprint C.5 section carries no TODO/FIXME/eslint-disable without justification", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    const start = md.indexOf("## Video link analysis (chat-driven)");
+    const tailStart = md.indexOf("## ", start + 1);
+    const section = md.slice(start, tailStart > 0 ? tailStart : md.length);
+    expect(section).not.toMatch(/\bTODO\b/);
+    expect(section).not.toMatch(/\bFIXME\b/);
+    expect(section).not.toMatch(/\/\/\s*eslint-disable/);
   });
 });

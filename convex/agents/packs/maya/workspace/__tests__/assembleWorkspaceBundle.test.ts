@@ -17,6 +17,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { assembleWorkspaceBundle } from "../assembleWorkspaceBundle";
 import { BUNDLED_SKILLS } from "../skillsRegistry";
+import { HEARTBEAT_SOFT_CAP_CHARS } from "../generateHeartbeatMd";
+import {
+  CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK,
+  CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS,
+  CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILLS,
+} from "../../../../../creatorMayaV0/pinnedClawhubSkills";
 import type { Doc } from "../../../../../_generated/dataModel";
 import type { WorkspaceInputs } from "../types";
 
@@ -159,7 +165,24 @@ describe("assembleWorkspaceBundle", () => {
     // because it lists every shipped skill with sourcing).
     // Sprint 12.6+ — bumped 40K → 45K to fit timezone-discipline +
     // abort-silence rules added after the 2026-05-10 evening leak.
-    const CAP = 45_000;
+    // Sprint A.2 — bumped 45K → 48K for the editing-fingerprint section.
+    // Sprint C.2/C.3 — bumped 48K → 56K to fit the calendar-creation
+    // additions to weekly_content_plan / trend_watcher /
+    // post_publish_reaction (C.2) + the calendar-weave addition to
+    // morning_brief (C.3).
+    // Sprint C.4 — bumped 56K → 62K to fit the two new cron-driven
+    // standing orders (midday_calendar_check at 11am + afternoon_calendar_check
+    // at 3pm) that replaced the heartbeat calendar-scan check. The split
+    // standing-orders.md grew from ~53K to ~58K with the two additions.
+    // Production never actually splits (MAYA_BOOTSTRAP_MAX_CHARS=115K
+    // embeds AGENTS inline), but this defense-in-depth test forces the
+    // split path so the per-file cap is still asserted.
+    // Sprint C.5 — bumped 62K → 70K to fit the new
+    // `first_week_calendar_bootstrap` event-driven standing order (~7K of
+    // scope teaching the one-shot post-OAuth bootstrap). The split
+    // standing-orders.md grew from ~58K to ~65K with the addition.
+    // Production still embeds inline at MAYA_BOOTSTRAP_MAX_CHARS=125K.
+    const CAP = 70_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
@@ -177,10 +200,13 @@ describe("assembleWorkspaceBundle", () => {
     }
   });
 
-  it("HEARTBEAT.md fits the 2K soft cap (token-burn discipline)", () => {
+  it("HEARTBEAT.md fits the HEARTBEAT_SOFT_CAP_CHARS budget (token-burn discipline)", () => {
+    // Sprint C.3 — bumped 2_000 → 3_000 to absorb the calendar-scan check
+    // (pre-event T-30 + post-event T+45-60). Reference the exported constant
+    // so future bumps don't silently regress.
     const bundle = assembleWorkspaceBundle(baseInputs());
     const hb = bundle.files.get("HEARTBEAT.md")!;
-    expect(hb.length).toBeLessThanOrEqual(2_000);
+    expect(hb.length).toBeLessThanOrEqual(HEARTBEAT_SOFT_CAP_CHARS);
   });
 
   it("bundles every registered skill at `skills/<slug>/SKILL.md`", () => {
@@ -393,7 +419,18 @@ describe("assembleWorkspaceBundle", () => {
     // Sprint 12.7 — bumped 80K → 100K alongside the trend-grounding section
     // + chat_trend_lookup standing order. Keep this in sync with
     // MAYA_BOOTSTRAP_MAX_CHARS in configGeneratorMaya.ts.
-    const PROD_CAP = 100_000;
+    // Sprint C.3 — bumped 100K → 105K alongside the calendar-event nudge
+    // section in AGENTS.md + the calendar-weave addition to
+    // `morning_brief.scope`.
+    // Sprint C.4 — bumped 105K → 115K alongside the two new cron-driven
+    // calendar standing orders (midday_calendar_check + afternoon_calendar_check)
+    // that replaced the heartbeat calendar-scan check.
+    // Sprint C.5 — bumped 115K → 125K alongside the new
+    // `first_week_calendar_bootstrap` event-driven standing order (~7K) +
+    // the new "## Video link analysis (chat-driven)" AGENTS.md section
+    // (~3K). Keep aligned with MAYA_BOOTSTRAP_MAX_CHARS in
+    // configGeneratorMaya.ts.
+    const PROD_CAP = 125_000;
     for (const plan of ["coach", "manager"] as const) {
       const inputs = baseInputs({ plan });
       inputs.creator = { ...inputs.creator, plan };
@@ -412,6 +449,199 @@ describe("assembleWorkspaceBundle", () => {
       expect(agentsMd).toContain("### Morning brief");
       // And weekly_review (an "all"-tier program) appears in every plan.
       expect(agentsMd).toContain("### Weekly review");
+    }
+  });
+
+  it("ClawHub pin manifest carries the four MVP pins (tiktok + ffmpeg + carousel + proactive-agent)", () => {
+    // Sprint 12.7.5 (A.4) — added `g0atbot-tiktok-carousel`.
+    // Sprint B.1 — added `proactive-agent` (halthelobster/proactive-agent
+    // @ 3.1.0) as the 4th pin so Maya carries WAL / Working Buffer /
+    // Compaction Recovery / Verify Implementation patterns.
+    // The lock + slug array + skill-list must all agree.
+    expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS).toContain("tiktok");
+    expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS).toContain(
+      "ffmpeg-video-editor"
+    );
+    expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS).toContain(
+      "g0atbot-tiktok-carousel"
+    );
+    expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS).toContain(
+      "proactive-agent"
+    );
+    expect(CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS.length).toBe(4);
+
+    // Lock entries are present + agree on slug set.
+    const lockSlugs = Object.keys(CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK.skills);
+    expect(lockSlugs.sort()).toEqual(
+      [...CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS].sort()
+    );
+    expect(
+      CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK.skills["g0atbot-tiktok-carousel"]
+    ).toEqual({
+      version: "1.0.0",
+      source: "clawhub:g0atfac3/g0atbot-tiktok-carousel",
+    });
+    expect(
+      CREATOR_MAYA_V0_PINNED_CLAWHUB_LOCK.skills["proactive-agent"]
+    ).toEqual({
+      version: "3.1.0",
+      source: "clawhub:halthelobster/proactive-agent",
+    });
+
+    // Skill bodies list also has all four.
+    const bodySlugs = CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILLS.map((s) => s.slug).sort();
+    expect(bodySlugs).toEqual(
+      [...CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILL_SLUGS].sort()
+    );
+  });
+
+  it("workspace bundle ships the carousel ClawHub pin at skills/g0atbot-tiktok-carousel/SKILL.md", () => {
+    const bundle = assembleWorkspaceBundle(baseInputs());
+    const path = "skills/g0atbot-tiktok-carousel/SKILL.md";
+    expect(bundle.files.has(path)).toBe(true);
+    const skill = bundle.files.get(path)!;
+    // Frontmatter shape (name / version / description / when-to-use /
+    // plan-tier / thinking-budget / metadata.openclaw).
+    expect(skill.startsWith("---\n")).toBe(true);
+    expect(skill).toContain("name: g0atbot-tiktok-carousel");
+    expect(skill).toContain("version: 1.0.0");
+    expect(skill).toContain("description:");
+    expect(skill).toContain("when-to-use:");
+    expect(skill).toContain("plan-tier:");
+    expect(skill).toContain("thinking-budget:");
+    expect(skill).toContain("metadata:");
+    expect(skill).toContain("openclaw:");
+    // Heading present (markdown is parseable).
+    expect(skill).toContain("# TikTok Carousel Generator");
+    // Core content sections the public skill page lists.
+    expect(skill).toContain("6-slide formula");
+    expect(skill).toContain("Image prompt rules");
+    expect(skill).toContain("Text overlay rules");
+    expect(skill).toContain("hook formula");
+    expect(skill).toContain("Learning loop");
+    // Routing guidance — carousel is photo-deck sibling, NOT a video
+    // replacement. Maya needs to know when to route to the video pipeline.
+    expect(skill).toContain("maya-clip-editor");
+    expect(skill).toContain("ffmpeg-video-editor");
+  });
+
+  // Sprint C.1 — Maya-authored Google Calendar planner skill. Sibling to
+  // the new `mayaCalendarEvents` schema table + per-tier weekly cap
+  // helper. The planner SKILL.md teaches Maya the 8 event kinds, gap-
+  // finder rules, voice-applier requirement, and the 30-min popup
+  // reminder convention. Bundled alphabetically alongside the rest of
+  // the maya-* skills via scripts/sync-bundled-skills.ts.
+  it("workspace bundle ships the calendar-planner skill at skills/maya-calendar-planner/SKILL.md (Sprint C.1)", () => {
+    const bundle = assembleWorkspaceBundle(baseInputs());
+    const path = "skills/maya-calendar-planner/SKILL.md";
+    expect(bundle.files.has(path)).toBe(true);
+    const skill = bundle.files.get(path)!;
+    // Frontmatter shape.
+    expect(skill.startsWith("---\n")).toBe(true);
+    expect(skill).toContain("name: maya-calendar-planner");
+    expect(skill).toContain("description:");
+    expect(skill).toContain("when-to-use:");
+    expect(skill).toContain("plan-tier:");
+    expect(skill).toContain("thinking-budget:");
+    expect(skill).toContain("metadata:");
+    expect(skill).toContain("openclaw:");
+    // All 8 event kinds present in the taxonomy section.
+    const kinds = [
+      "trend-strike",
+      "content-block",
+      "post-publish",
+      "niche-scroll",
+      "comment-window",
+      "brand-outbox",
+      "weekly-review",
+      "brain-break",
+    ];
+    for (const kind of kinds) {
+      expect(skill, `SKILL.md missing kind=${kind}`).toContain(kind);
+    }
+    // Voice + citation gates are mandatory.
+    expect(skill).toContain("maya-voice-applier");
+    expect(skill).toContain("maya-citation-firewall");
+    // 30-min popup reminder convention.
+    expect(skill).toContain("popup");
+    expect(skill).toContain("30");
+    // References the schema table + backend file.
+    expect(skill).toContain("mayaCalendarEvents");
+  });
+
+  it("workspace bundle ships .clawhub/lock.json listing all four pinned skills", () => {
+    const bundle = assembleWorkspaceBundle(baseInputs());
+    const lockRaw = bundle.files.get(".clawhub/lock.json");
+    expect(lockRaw).toBeDefined();
+    const lock = JSON.parse(lockRaw!) as {
+      version: number;
+      skills: Record<string, { version: string; source: string }>;
+    };
+    expect(lock.version).toBe(1);
+    expect(Object.keys(lock.skills).sort()).toEqual([
+      "ffmpeg-video-editor",
+      "g0atbot-tiktok-carousel",
+      "proactive-agent",
+      "tiktok",
+    ]);
+    expect(lock.skills["g0atbot-tiktok-carousel"].version).toBe("1.0.0");
+    expect(lock.skills["proactive-agent"].version).toBe("3.1.0");
+  });
+
+  // Sprint B.1 — proactive-agent pin ships with the canonical WAL Protocol /
+  // Working Buffer / Compaction Recovery / Autonomous-vs-Prompted-Crons /
+  // Verify-Implementation-Not-Intent / Relentless-Resourcefulness body. The
+  // pin is the deeper reference for Maya's follow-through protocol section
+  // in AGENTS.md.
+  it("workspace bundle ships the proactive-agent ClawHub pin at skills/proactive-agent/SKILL.md with the real ClawHub-vendored body", () => {
+    const bundle = assembleWorkspaceBundle(baseInputs());
+    const path = "skills/proactive-agent/SKILL.md";
+    expect(bundle.files.has(path)).toBe(true);
+    const skill = bundle.files.get(path)!;
+    // Frontmatter shape — real ClawHub install has name/version/description/author.
+    expect(skill.startsWith("---\n")).toBe(true);
+    expect(skill).toContain("name: proactive-agent");
+    expect(skill).toContain("version: 3.1.0");
+    expect(skill).toContain("author: halthelobster");
+    // Heading present (markdown is parseable).
+    expect(skill).toContain("# Proactive Agent");
+    // Every load-bearing section heading the operator briefed (the canonical
+    // Hal-Stack v3.1.0 inventory).
+    const requiredSections = [
+      "## What's New in v3.1.0",
+      "## The Three Pillars",
+      "## Memory Architecture",
+      "## The WAL Protocol",
+      "## Working Buffer Protocol",
+      "## Compaction Recovery",
+      "## Unified Search Protocol",
+      "## Security Hardening",
+      "## Relentless Resourcefulness",
+      "## Self-Improvement Guardrails",
+      "## Autonomous vs Prompted Crons",
+      "## Verify Implementation, Not Intent",
+      "## Tool Migration Checklist",
+    ];
+    for (const heading of requiredSections) {
+      expect(skill, `proactive-agent SKILL.md missing section: ${heading}`).toContain(heading);
+    }
+  });
+
+  it("ClawHub pin manifest carries no per-creator references (shared infra, not tenant-scoped)", () => {
+    // Cross-tenant invariant: pinned skill content is shared across every
+    // Maya — there must be no creator/clerk/handle/tenant identifier
+    // embedded in the manifest. The lock + skill bodies are tenant-neutral
+    // strings.
+    for (const skill of CREATOR_MAYA_V0_PINNED_CLAWHUB_SKILLS) {
+      for (const [path, body] of Object.entries(skill.files)) {
+        const where = `${skill.slug}/${path}`;
+        expect(body, `${where} leaks creatorId`).not.toMatch(/creatorId/);
+        expect(body, `${where} leaks clerkUserId`).not.toMatch(/clerkUserId/);
+        // Convex IDs start with `k_` — guard against accidental fixture
+        // leakage. (The string "ko" in arbitrary prose is fine; we look
+        // for the canonical `k_` Convex prefix.)
+        expect(body, `${where} leaks a Convex k_ id`).not.toMatch(/\bk_[a-z0-9]{10,}/);
+      }
     }
   });
 });

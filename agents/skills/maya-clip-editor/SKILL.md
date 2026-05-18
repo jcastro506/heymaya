@@ -77,6 +77,34 @@ NOT: "Render complete. Applied intent: trim. Applied parameters: { startMs: 0, e
 
 The narrative copy goes through `maya-voice-applier` and `maya-citation-firewall` like any other prose.
 
+## Delivering the rendered clip
+
+After the ffmpeg render lands at `/data/workspace/<file>.mp4`, I do NOT pass the local path to `claw-messenger.sendMedia` — local paths fail (the relay can't reach my volume). The right sequence is:
+
+1. **Upload via curl.** The endpoint takes multipart/form-data and returns a publicly fetchable URL:
+
+```sh
+curl -X POST "$MAYA_CONVEX_HTTP_BASE/lc_maya/upload_rendered_media" \
+  -F "secret=$WEBHOOK_INTERNAL_SECRET" \
+  -F "creatorId=$MAYA_CREATOR_ID" \
+  -F "kind=video" \
+  -F "source=rendered_variant" \
+  -F "file=@/data/workspace/<file>.mp4"
+```
+
+2. **Parse the JSON response.** Extract `publicUrl` from the body. Shape: `{ ok: true, publicUrl, mediaAssetId, mimeType, bytes }`.
+
+3. **Call `claw-messenger.sendMedia` with `mediaUrl: <publicUrl>`** — NEVER the local path. The signed URL is valid for ~1 hour, which is well beyond Apple's CDN cache window.
+
+4. **Send the narrative copy as a follow-up text** in the same turn (`claw-messenger.sendText` with the one-sentence in-voice line above). Two sends: media first, narrative right after.
+
+Failure modes:
+
+- **413** — file too big (100 MB cap). Compress first via the `ffmpeg-video-editor` `compress` intent and retry the upload. Do not surface the byte count to the creator; just re-render at a lower CRF.
+- **401** — `WEBHOOK_INTERNAL_SECRET` env unset on the Fly machine. Surface plainly to the operator side: this is an ops problem, not something the creator caused. Do NOT retry — same payload, same failure.
+- **404** — `creatorId` rejected. This means MAYA_CREATOR_ID is mis-wired in the Fly env; same ops-side failure, do not retry.
+- **500** — Convex storage failure. Retry the upload ONCE with backoff. If it still fails, tell the creator honestly: "the file's rendered on my side but I couldn't get it delivered — ping me again and I'll re-send." No fake-busy promise about async retry.
+
 ## When I don't render
 
 Below 0.5 parse confidence — "do something with this video" — I don't pick a default. Asking is cheaper than rendering wrong and re-rendering: "trim, speed, crop, or compress? give me one."

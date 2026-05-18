@@ -15,7 +15,9 @@
 import { httpRouter } from "convex/server";
 import { voiceTranscriptHttp } from "./voice/transcriptHttp";
 import { openClawMediaIngestHttp } from "./creatorMayaV0/openClawMediaIngestHttp";
+import { uploadRenderedMediaHttp } from "./creatorMayaV0/uploadRenderedMediaHttp";
 import {
+  applyObservationsToFingerprintHttp,
   completeGoogleCalendarOAuthHttp,
   connectedAccountsHealthHttp,
   cronHeartbeatHttp,
@@ -23,6 +25,7 @@ import {
   getRecentTrendsHttp,
   lockPictureHttp,
   logTrendHttp,
+  observePublishedEditHttp,
   submitOpeningAnswersHttp,
   startGoogleCalendarOAuthHttp,
   startOAuthHttp,
@@ -69,6 +72,18 @@ http.route({
   path: "/creator-maya-v0/openclaw/media",
   method: "POST",
   handler: openClawMediaIngestHttp,
+});
+
+// Sprint A.1 — outbound media bridge. After `maya-clip-editor` renders an
+// mp4 onto the Fly machine's local volume, Maya POSTs the bytes here
+// (multipart/form-data) to land them in Convex storage and get back a
+// publicly fetchable signed URL. She then passes THAT URL to
+// `claw-messenger.sendMedia` — local volume paths can't reach the relay.
+// Sibling: `convex/creatorMayaV0/uploadRenderedMediaHttp.ts`.
+http.route({
+  path: "/lc_maya/upload_rendered_media",
+  method: "POST",
+  handler: uploadRenderedMediaHttp,
 });
 
 // `lc_maya.*` first-boot iMessage flow — see `convex/lcMaya/lcMayaHttp.ts`.
@@ -299,6 +314,25 @@ http.route({
   path: "/lc_maya/sync_wiki_observations",
   method: "POST",
   handler: syncWikiObservationsHttp,
+});
+
+// Sprint B.2 — continuous-learning loop. Maya POSTs here from the
+// `post_publish_reaction` standing order after analyzing performance:
+// watch the published video, diff against the rendered variant + the
+// current `editingFingerprint`, persist the structured observation.
+// `apply_observations_to_fingerprint` runs the rolling synthesis that
+// folds unapplied observations back into the creator's fingerprint.
+// See `convex/creatorMayaV0/editingFingerprintObservations.ts` for the
+// full contract.
+http.route({
+  path: "/lc_maya/observe_published_edit",
+  method: "POST",
+  handler: observePublishedEditHttp,
+});
+http.route({
+  path: "/lc_maya/apply_observations_to_fingerprint",
+  method: "POST",
+  handler: applyObservationsToFingerprintHttp,
 });
 
 export default http;
