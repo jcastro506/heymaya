@@ -174,6 +174,55 @@ function FeatureRail() {
         }
       />
 
+      {/* 02b — Editing (the part they dread) */}
+      <FeatureSection
+        headline={
+          <>
+            You filmed it.{" "}
+            <span className="italic text-paper-dim">
+              It&rsquo;s rotting in your camera roll because editing is the
+              wall.
+            </span>
+          </>
+        }
+        subhead={
+          <>
+            Send Maya the raw clips. She cuts them down, puts them in order,
+            picks the opening that hooks, and burns in the captions — and
+            sends back something you can post today. The part you dread turns
+            into a thing you just approve.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Wed · 8:21 PM"
+            bubbles={[
+              {
+                side: "right",
+                body: (
+                  <>
+                    shot like 6 clips at the studio, no clue what to do with
+                    them
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Sent you a <strong>22-second cut</strong> — opens on the
+                    mirror clip (your strongest hook shape), the rest of the
+                    footage runs under your voiceover, captions on. Swap
+                    anything or post it?
+                  </>
+                ),
+              },
+            ]}
+            caption="from the 6 raw clips you sent"
+          />
+        }
+      />
+
       {/* 03 — Weekly plan */}
       <FeatureSection
         headline={

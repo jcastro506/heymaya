@@ -31,9 +31,10 @@ export function Hero() {
               </span>
             </h1>
             <p className="mt-7 max-w-xl text-lg leading-relaxed text-paper-dim">
-              Maya plans your week, reads your performance, triages brand emails,
-              and tells you what to post next. Every day. In iMessage. Replaces
-              eight tools and a manager you can&rsquo;t afford yet.
+              Maya plans your week so you stay consistent, turns your raw clips
+              into something you can actually post, catches the trends that fit
+              you, and tells you what&rsquo;s working — every day, in iMessage.
+              Replaces eight tools and a manager you can&rsquo;t afford yet.
             </p>
             <div className="mt-9 flex flex-wrap items-center gap-3">
               <Link
