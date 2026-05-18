@@ -45,6 +45,25 @@ describe("generateAgentsMd", () => {
     expect(a).toBe(b);
   });
 
+  it("Sprint 12.8: first-boot check is the CURRENT 6-question RESUME flow, NOT the legacy 2-Q+tone script", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: false,
+    });
+    // The legacy drift that caused the "second Maya" / disconnected-onboarding
+    // bug: AGENTS.md described first-boot as "2 opening Q's: goal + tone".
+    expect(md).not.toMatch(/2 opening Q's/);
+    expect(md).not.toMatch(/opening Q's: goal w\/ examples \+ tone/);
+    // Current flow + the structural never-re-greet/resume rule must be present.
+    expect(md).toMatch(/RESUME rule/);
+    expect(md).toMatch(/SIX-question/);
+    expect(md).toMatch(/do NOT re-greet/);
+    expect(md).toMatch(/second Maya/);
+    expect(md).toMatch(/Q1 location → Q2 niche/);
+    expect(md).toMatch(/PERSISTED STATE/);
+  });
+
   it("starter plan excludes every pro+ standing-order title", () => {
     const md = generateAgentsMd({
       ...BASE_INPUTS,
