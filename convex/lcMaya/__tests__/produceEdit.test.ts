@@ -92,10 +92,46 @@ async function seedCreator(
   return creatorId;
 }
 
-const CLIPS = [
-  { clipId: "c1", videoUrl: "https://x/c1.mp4" },
-  { clipId: "c2", videoUrl: "https://x/c2.mp4" },
-];
+async function seedClip(
+  t: ReturnType<typeof convexTest>,
+  creatorId: Id<"creators">,
+  n: number
+): Promise<Id<"creatorMayaV0MediaAssets">> {
+  return await t.run(async (ctx) =>
+    ctx.db.insert("creatorMayaV0MediaAssets", {
+      creatorId,
+      storageUrl: `https://x/c${n}.mp4`,
+      storageBytes: 1024,
+      mimeType: "video/mp4",
+      mediaKind: "video",
+      source: "openclaw_attachment",
+      contentHash: `hash-${creatorId}-${n}`,
+      consent: { usage: "approved_for_this_request" },
+      catalog: {
+        primarySubject: `clip ${n}`,
+        visualQuality: "good",
+        creatorRelevance: "on-lane",
+        suggestedUses: ["stitch"],
+        catalogedAt: NOW,
+        catalogModel: "test",
+        catalogCostUsd: 0,
+      },
+      usageHistory: [],
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+  );
+}
+
+async function clipsFor(
+  t: ReturnType<typeof convexTest>,
+  creatorId: Id<"creators">
+): Promise<Array<{ clipId: string; mediaAssetId: Id<"creatorMayaV0MediaAssets"> }>> {
+  return [
+    { clipId: "c1", mediaAssetId: await seedClip(t, creatorId, 1) },
+    { clipId: "c2", mediaAssetId: await seedClip(t, creatorId, 2) },
+  ];
+}
 
 describe("produceEditInternal", () => {
   afterEach(() => _setVideoSynthClientForTests(null));
@@ -107,7 +143,7 @@ describe("produceEditInternal", () => {
     const r = await t.action(internal.lcMaya.produceEdit.produceEditInternal, {
       creatorId: cid,
       brief: "make a fun TikTok about NYC waking up",
-      clips: CLIPS,
+      clips: await clipsFor(t, cid),
     });
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error("guard");
@@ -125,7 +161,7 @@ describe("produceEditInternal", () => {
     const r = await t.action(internal.lcMaya.produceEdit.produceEditInternal, {
       creatorId: cid,
       brief: "x",
-      clips: CLIPS,
+      clips: await clipsFor(t, cid),
     });
     expect(r.ok).toBe(true);
   });
@@ -150,7 +186,7 @@ describe("produceEditInternal", () => {
     const r = await t.action(internal.lcMaya.produceEdit.produceEditInternal, {
       creatorId: cid,
       brief: "x",
-      clips: CLIPS,
+      clips: await clipsFor(t, cid),
     });
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("guard");
@@ -166,7 +202,7 @@ describe("produceEditInternal", () => {
     const r = await t.action(internal.lcMaya.produceEdit.produceEditInternal, {
       creatorId: cid,
       brief: "x",
-      clips: CLIPS,
+      clips: await clipsFor(t, cid),
     });
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("guard");
@@ -182,7 +218,7 @@ describe("produceEditInternal", () => {
     const r = await t.action(internal.lcMaya.produceEdit.produceEditInternal, {
       creatorId: cid,
       brief: "x",
-      clips: CLIPS,
+      clips: await clipsFor(t, cid),
     });
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("guard");
@@ -200,7 +236,7 @@ describe("produceEditInternal", () => {
     const r = await t.action(internal.lcMaya.produceEdit.produceEditInternal, {
       creatorId: cid,
       brief: "x",
-      clips: CLIPS,
+      clips: await clipsFor(t, cid),
     });
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("guard");
@@ -219,7 +255,7 @@ describe("produceEditInternal", () => {
     const r = await t.action(internal.lcMaya.produceEdit.produceEditInternal, {
       creatorId: cid,
       brief: "x",
-      clips: CLIPS,
+      clips: await clipsFor(t, cid),
     });
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("guard");
@@ -235,10 +271,26 @@ describe("produceEditInternal", () => {
     const r = await t.action(internal.lcMaya.produceEdit.produceEditInternal, {
       creatorId: cid,
       brief: "x",
-      clips: CLIPS,
+      clips: await clipsFor(t, cid),
     });
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("guard");
     expect(r.reason).toBe("worker-failed");
+  });
+
+  it("CROSS-TENANT: creator B cannot edit creator A's clips → clip-not-found", async () => {
+    _setVideoSynthClientForTests(async () => workerResp(VALID_EDL));
+    const t = convexTest(schema, modules);
+    const a = await seedCreator(t, { suffix: "ta", withPicture: true });
+    const b = await seedCreator(t, { suffix: "tb", withPicture: true });
+    const aClips = await clipsFor(t, a); // assets owned by A
+    const r = await t.action(internal.lcMaya.produceEdit.produceEditInternal, {
+      creatorId: b, // …requested as B
+      brief: "steal A's footage",
+      clips: aClips,
+    });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("guard");
+    expect(r.reason).toBe("clip-not-found");
   });
 });

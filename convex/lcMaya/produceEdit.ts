@@ -108,6 +108,7 @@ export type ProduceEditResult =
         | "no-clips"
         | "creator-not-found"
         | "no-picture"
+        | "clip-not-found"
         | "worker-failed"
         | "model-malformed"
         | "edl-invalid";
@@ -176,7 +177,10 @@ export const produceEditInternal = internalAction({
     creatorId: v.id("creators"),
     brief: v.string(),
     clips: v.array(
-      v.object({ clipId: v.string(), videoUrl: v.string() })
+      v.object({
+        clipId: v.string(),
+        mediaAssetId: v.id("creatorMayaV0MediaAssets"),
+      })
     ),
   },
   handler: async (ctx, args): Promise<ProduceEditResult> => {
@@ -204,18 +208,48 @@ export const produceEditInternal = internalAction({
       };
     }
 
+    // Server-side resolve mediaAssetId → fetchable URL, with the
+    // creator-ownership check baked in (`getCreatorMediaAssetInternal` →
+    // `requireOwnedAsset` throws on missing OR cross-tenant). The skill
+    // never handles raw URLs; cross-tenant isolation is enforced here.
+    const workerPosts: SynthesizeWorkerPost[] = [];
+    for (const c of args.clips) {
+      let storageUrl: string;
+      try {
+        const asset = await ctx.runQuery(
+          internal.creatorMayaV0.mediaAssets.getCreatorMediaAssetInternal,
+          { creatorId: args.creatorId, assetId: c.mediaAssetId }
+        );
+        storageUrl = asset.storageUrl;
+      } catch (err) {
+        return {
+          ok: false,
+          reason: "clip-not-found",
+          detail: `clip '${c.clipId}' (${c.mediaAssetId}): ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        };
+      }
+      if (!storageUrl) {
+        return {
+          ok: false,
+          reason: "clip-not-found",
+          detail: `clip '${c.clipId}' has no resolvable storage URL`,
+        };
+      }
+      workerPosts.push({
+        postId: c.clipId,
+        platform: "inbound",
+        videoUrl: storageUrl,
+        kind: "video",
+      });
+    }
+
     const userPayloadJson = JSON.stringify({
       brief: args.brief.slice(0, 4_000),
       clips: args.clips.map((c) => ({ clipId: c.clipId })),
       picture: cond,
     });
-
-    const workerPosts: SynthesizeWorkerPost[] = args.clips.map((c) => ({
-      postId: c.clipId,
-      platform: "inbound",
-      videoUrl: c.videoUrl,
-      kind: "video",
-    }));
 
     let content: string;
     let model: string;
@@ -344,7 +378,7 @@ interface ProduceEditPayload {
   secret: string;
   creatorId: string;
   brief: string;
-  clips: Array<{ clipId: string; videoUrl: string }>;
+  clips: Array<{ clipId: string; mediaAssetId: string }>;
 }
 
 function parsePayload(raw: unknown): ProduceEditPayload {
@@ -363,9 +397,9 @@ function parsePayload(raw: unknown): ProduceEditPayload {
     const cc = c as Record<string, unknown>;
     if (typeof cc.clipId !== "string" || cc.clipId.length === 0)
       throw new Error(`clips[${i}].clipId is required.`);
-    if (typeof cc.videoUrl !== "string" || cc.videoUrl.length === 0)
-      throw new Error(`clips[${i}].videoUrl is required.`);
-    return { clipId: cc.clipId, videoUrl: cc.videoUrl };
+    if (typeof cc.mediaAssetId !== "string" || cc.mediaAssetId.length === 0)
+      throw new Error(`clips[${i}].mediaAssetId is required.`);
+    return { clipId: cc.clipId, mediaAssetId: cc.mediaAssetId };
   });
   return {
     secret: o.secret,
@@ -392,7 +426,10 @@ export const produceEditHttp = httpAction(async (ctx, request) => {
     {
       creatorId: payload.creatorId as Id<"creators">,
       brief: payload.brief,
-      clips: payload.clips,
+      clips: payload.clips.map((c) => ({
+        clipId: c.clipId,
+        mediaAssetId: c.mediaAssetId as Id<"creatorMayaV0MediaAssets">,
+      })),
     }
   );
   if (result.ok) {
