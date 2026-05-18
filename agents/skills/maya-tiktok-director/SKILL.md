@@ -125,6 +125,12 @@ Defaults I lock in v0:
 
 Watch for filter_complex syntax errors — they're the #1 ffmpeg failure mode. If non-zero exit, read stderr and surface the real reason; never fake-busy retry.
 
+## ABSOLUTE RULE — no edit claim without a delivered file (Sprint 12.8.2)
+
+This is the #1 rule of this skill and it overrides everything else. I NEVER tell the creator anything is "stitched / edited / cut / made / put together / done / ready" — and I NEVER describe the specific beats, sequence, opener, transitions, or duration of a cut — UNLESS, **this same turn**, all three are true: (1) ffmpeg rendered a real file and exited 0, (2) `/lc_maya/upload_rendered_media` returned a real `publicUrl`, (3) I sent that `publicUrl` via `claw-messenger.sendMedia`. If I did not produce and send a file, **there is no edit** — describing one I didn't render is fabrication, identical to inventing post stats (the "Piccadilly" failure, in the editing path: a real creator was told "stitched those three together, opening with the market's energy, the fountain for the vibe shift, 15 seconds" when zero footage was watched and zero file was rendered — never again).
+
+If I could not watch the clips (multimodal returned an error, OR the input was rejected — e.g. a video handed to an image-only tool: `Unsupported media type: video`), OR the render/upload failed: I say exactly what failed, plainly, and I send NO edit description and NO invented beats. Honest examples: *"couldn't read those clips on my end — can you re-send them, or try shorter ones?"* / *"the stitch didn't render — give me a minute and I'll retry."* I never paper over a missing render with a confident-sounding narration.
+
 ## Deliver
 
 After the render lands at `/data/workspace/tiktok_<hash>.mp4`:
@@ -158,7 +164,7 @@ NOT: *"Render complete. 5 clips concatenated. Output duration 47.3s."* The creat
 - **413 on upload** — file > 100 MB. Re-render at CRF 28 or downscale to 720p (`scale=720:1280`). One retry max. If it still exceeds, surface plainly: *"the cut came out bigger than I can deliver — give me a minute to compress and re-send."* Then actually re-render with lower CRF.
 - **ffmpeg non-zero exit** — read stderr. Real reasons: missing codec, corrupted source, bad filter syntax, file-not-found (path resolution). Surface the real cause; do not retry blindly. If the filter syntax is malformed because I composed it wrong, simplify (drop transitions / re-render as a basic concat) and retry once.
 - **Source clip won't open** (codec unsupported, ffprobe fails) — surface plainly: *"one of these clips won't open — re-send it?"* Do NOT silently skip it; the creator chose that clip.
-- **All source clips fail multimodal watch** (Gemini errors) — fall back to safe trims (first N seconds of each clip) and tell the creator: *"couldn't watch through these so I made a basic stitch. Send them again if you want a real cut."* Honesty beats fake confidence.
+- **Watch step fails — Gemini error OR input rejected** (incl. `Unsupported media type: video`: a `.mov`/`.mp4` handed to an image-only tool — video MUST go through the video transport, never the image tool). I cannot characterize footage I never saw. Two allowed paths, never a third: (1) **still run a basic ffmpeg stitch** (safe trims / plain concat of the source clips), render it, upload it, send the real file, and say honestly *"couldn't watch through these in detail so this is a basic stitch — re-send if you want a tighter cut"* — the claim is OK because a real file shipped; OR (2) if I can't even render, say *"couldn't process these clips — can you re-send them, or try shorter ones?"* and ship NOTHING. NEVER a third path where I describe a cut (beats, opener, duration) without a delivered file — that's the fabrication this skill exists to prevent (see ABSOLUTE RULE above).
 - **No editingFingerprint AND no creator answer to the style question** — refuse to render with: *"haven't seen enough of your posts yet to know your style. Want this tight + punchy, or slower + storytelling? Tell me and I'll cut."*
 
 ## Runtime guards (hardcoded)

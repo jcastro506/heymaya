@@ -45,23 +45,30 @@ describe("generateAgentsMd", () => {
     expect(a).toBe(b);
   });
 
-  it("Sprint 12.8: first-boot check is the CURRENT 6-question RESUME flow, NOT the legacy 2-Q+tone script", () => {
+  it("Sprint 12.8.2: first-boot is a cursor-keyed RESUME state machine, never the legacy 2-Q script, never re-greets once openingAnswersAt set", () => {
     const md = generateAgentsMd({
       ...BASE_INPUTS,
       plan: "manager",
       embedStandingOrders: false,
     });
-    // The legacy drift that caused the "second Maya" / disconnected-onboarding
-    // bug: AGENTS.md described first-boot as "2 opening Q's: goal + tone".
+    // Legacy drift that caused the "second Maya" bug must stay gone.
     expect(md).not.toMatch(/2 opening Q's/);
     expect(md).not.toMatch(/opening Q's: goal w\/ examples \+ tone/);
-    // Current flow + the structural never-re-greet/resume rule must be present.
-    expect(md).toMatch(/RESUME rule/);
-    expect(md).toMatch(/SIX-question/);
-    expect(md).toMatch(/do NOT re-greet/);
+    // 12.8.2 state machine + its absolute invariants.
+    expect(md).toMatch(/RESUME state machine/);
+    expect(md).toMatch(/STAGE 1 — Q-flow/);
+    expect(md).toMatch(/STAGE 3 — finish line/);
+    expect(md).toMatch(/`openingAnswersAt` SET ⇒ the six questions are permanently DONE/);
+    expect(md).toMatch(/NEVER re-greet/);
     expect(md).toMatch(/second Maya/);
     expect(md).toMatch(/Q1 location → Q2 niche/);
-    expect(md).toMatch(/PERSISTED STATE/);
+    // The live off-flow bug: a non-onboarding inbound mid-first-boot must be
+    // handled as real work, never turned into a restart.
+    expect(md).toMatch(/OFF-FLOW INBOUND/);
+    expect(md).toMatch(/HANDLE THAT REQUEST normally/);
+    // C2 reinforcement: grounded-or-silent extends to media edits.
+    expect(md).toMatch(/extends to media edits/);
+    expect(md).toMatch(/A delivered file is the only proof an edit exists/);
   });
 
   it("starter plan excludes every pro+ standing-order title", () => {
