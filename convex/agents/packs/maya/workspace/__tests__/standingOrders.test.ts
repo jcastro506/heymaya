@@ -4,7 +4,7 @@
  * Sprint B.1 added a one-sentence Follow-through enforcement line to the
  * standing orders most likely to confab the "promise + stop" pattern:
  *   - first_proactive_ping (Day 1 first-touch)
- *   - morning_brief        (7am)
+ *   - morning_brief        (8:30am)
  *   - evening_recap        (6pm signal-conditional)
  *   - weekly_review        (Sunday 9pm)
  *
@@ -189,7 +189,7 @@ describe("standingOrders — Sprint B.1 follow-through enforcement", () => {
  * Sprint C.3 (2026-05-13) added a "Calendar weave" sub-section to the
  * `morning_brief` standing order's scope. The brief must:
  *   - Read today's `mayaCalendarEvents` BEFORE composing.
- *   - Window is 7am-11:59pm LOCAL in `creators.timezone`.
+ *   - Window is 8:30am-11:59pm LOCAL in `creators.timezone`.
  *   - Surface events inline alongside performance + email signals (not as
  *     a separate bullet block).
  *   - Never fabricate events when the day is empty.
@@ -217,12 +217,12 @@ describe("standingOrders — Sprint C.3 morning_brief calendar weave", () => {
     expect(scope).toMatch(/BEFORE composing, READ today's `mayaCalendarEvents`/);
   });
 
-  it("calendar-weave window semantics: 7am-11:59pm LOCAL in creators.timezone", () => {
+  it("calendar-weave window semantics: 8:30am-11:59pm LOCAL in creators.timezone", () => {
     const scope = pickById("morning_brief").scope;
     // Sprint 12.6 / Sprint C.3 — never compare a UTC instant directly to a
     // local-hour rule. The brief explicitly cites both the window and the
     // tz source-of-truth.
-    expect(scope, "window string missing").toContain("7am-11:59pm LOCAL");
+    expect(scope, "window string missing").toContain("8:30am-11:59pm LOCAL");
     expect(scope, "tz source missing").toContain("`creators.timezone`");
     expect(scope, "tz-conversion rule missing").toMatch(
       /never compare a UTC instant directly to a local-hour rule/
@@ -520,7 +520,7 @@ describe("standingOrders — Sprint C.2 calendar-creation wiring", () => {
 /* Sprint C.4 moves it to two cron-driven standing orders to keep COGS sane:  */
 /*   - midday_calendar_check  (11am local)                                    */
 /*   - afternoon_calendar_check (3pm local)                                   */
-/* Combined with morning_brief (7am) + evening_recap (6pm), 4 calendar-aware  */
+/* Combined with morning_brief (8:30am) + evening_recap (6pm), 4 calendar-aware */
 /* ticks per day carry the nudge surface. These tests cover the 5 mandatory  */
 /* categories for the two new entries.                                        */
 /* -------------------------------------------------------------------------- */
