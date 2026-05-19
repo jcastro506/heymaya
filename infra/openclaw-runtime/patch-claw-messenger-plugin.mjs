@@ -21,6 +21,29 @@ let sendSrc = readFileSync(sendPath, "utf8");
 let gatewaySrc = readFileSync(gatewayServerPath, "utf8");
 let deliverSrc = readFileSync(deliverRuntimePath, "utf8");
 
+// Sprint 13.1 — inbound media reliability.
+// - Raise inbound media max bytes from 10MB → 100MB so iPhone video clips
+//   don't get silently dropped.
+// - If attachments exist but downloads fail (expired URL / too-large),
+//   still dispatch an inbound envelope so Maya can respond ("I got a video
+//   but couldn't load it") instead of staying silent.
+//
+// NOTE: This is a string patch because this file runs at image build time
+// and the upstream plugin ships as JS, not TS.
+if (src.includes('saveMediaBuffer(saved.buffer, saved.contentType ?? attachment.mimeType, "inbound", 10 * 1024 * 1024)')) {
+  src = src.replaceAll(
+    'saveMediaBuffer(saved.buffer, saved.contentType ?? attachment.mimeType, "inbound", 10 * 1024 * 1024)',
+    'saveMediaBuffer(saved.buffer, saved.contentType ?? attachment.mimeType, "inbound", 100 * 1024 * 1024)'
+  );
+}
+
+if (src.includes('const rawBody = text || (allMedia.length > 0 ? "<media:image>" : "");')) {
+  src = src.replaceAll(
+    'const rawBody = text || (allMedia.length > 0 ? "<media:image>" : "");',
+    'const rawBody = text || (attachments.length > 0 ? "<media:attachment>" : "");'
+  );
+}
+
 if (src.includes("buildChannelConfigSchema, DEFAULT_ACCOUNT_ID,")) {
   src = src.replace(
     "import { buildChannelConfigSchema, DEFAULT_ACCOUNT_ID, formatPairingApproveHint, PAIRING_APPROVED_MESSAGE, } from \"openclaw/plugin-sdk\";",

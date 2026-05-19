@@ -8,6 +8,7 @@
  * Surface (Google):
  *   POST /lc_maya/calendar_list_events    — list events in a window
  *   POST /lc_maya/calendar_create_event   — create event
+ *   POST /lc_maya/calendar_create_maya_event — create Maya block + sidecar
  *   POST /lc_maya/calendar_update_event   — update event (PATCH)
  *   POST /lc_maya/calendar_delete_event   — delete event
  *
@@ -46,6 +47,12 @@ import {
   type GoogleCalendarEventUpdatePayload,
 } from "../integrations/google/calendar";
 import {
+  MAYA_CALENDAR_EVENT_KINDS,
+  renderEventBody,
+  type MayaCalendarEventCitedRef,
+  type MayaCalendarEventKind,
+} from "../creatorMayaV0/mayaCalendarEvents";
+import {
   AppleCaldavError,
   createEvent as appleCreateEvent,
   deleteEvent as appleDeleteEvent,
@@ -56,6 +63,7 @@ import {
 
 const CALENDAR_REQUIRED_SCOPE =
   "https://www.googleapis.com/auth/calendar.events";
+const MAYA_EVENT_KINDS = new Set<string>(MAYA_CALENDAR_EVENT_KINDS);
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -130,6 +138,16 @@ function googleErrToResponse(err: unknown): Response {
   if (has("refresh-failed")) {
     return jsonResponse({ error: "refresh-failed", detail: rawMsg }, 500);
   }
+  if (rawMsg.includes("Calendar cap exceeded")) {
+    return jsonResponse(
+      {
+        error: "calendar-cap-exceeded",
+        detail: rawMsg,
+        hint: "Shrink the proposed operating-week plan to fit the creator's tier.",
+      },
+      409
+    );
+  }
   if (err instanceof GoogleCalendarApiError) {
     return jsonResponse(
       {
@@ -142,6 +160,14 @@ function googleErrToResponse(err: unknown): Response {
     );
   }
   return jsonResponse({ error: rawMsg }, 500);
+}
+
+function msFromDateTime(value: string, label: string): number {
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) {
+    throw new Error(`${label} must be a valid ISO 8601 dateTime.`);
+  }
+  return ms;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -337,6 +363,223 @@ export const calendarCreateEventHttp = httpAction(async (ctx, request) => {
       payload,
     });
     return jsonResponse({ ok: true, ...result }, 200);
+  } catch (err) {
+    return googleErrToResponse(err);
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/* Google: create_maya_event                                                   */
+/* -------------------------------------------------------------------------- */
+
+interface CreateMayaCalendarEventPayload {
+  body: { secret: string; creatorId: string };
+  calendarId?: string;
+  kind: MayaCalendarEventKind;
+  citedRefs: MayaCalendarEventCitedRef[];
+  start: { dateTime: string; timeZone?: string };
+  end: { dateTime: string; timeZone?: string };
+  location?: string;
+  summary?: string;
+  description?: string;
+  context: Record<string, unknown>;
+  actionable: boolean;
+  sourceStandingOrderId?: string;
+  startMs: number;
+  endMs: number;
+}
+
+function parseCitedRefs(raw: unknown): MayaCalendarEventCitedRef[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry) => {
+    if (!entry || typeof entry !== "object") {
+      throw new Error("Each citedRef must be an object.");
+    }
+    const ref = entry as Record<string, unknown>;
+    if (
+      ref.kind !== "trend" &&
+      ref.kind !== "post" &&
+      ref.kind !== "peer" &&
+      ref.kind !== "email" &&
+      ref.kind !== "brand-deal"
+    ) {
+      throw new Error("citedRefs[].kind is invalid.");
+    }
+    if (typeof ref.ref !== "string" || ref.ref.length === 0) {
+      throw new Error("citedRefs[].ref is required.");
+    }
+    if (typeof ref.label !== "string" || ref.label.length === 0) {
+      throw new Error("citedRefs[].label is required.");
+    }
+    return { kind: ref.kind, ref: ref.ref, label: ref.label };
+  });
+}
+
+function parseMayaCalendarEventPayload(
+  raw: unknown
+): CreateMayaCalendarEventPayload {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Body must be a JSON object.");
+  }
+  const obj = raw as Record<string, unknown>;
+  const body = parseCommon(obj);
+  if (typeof obj.kind !== "string" || !MAYA_EVENT_KINDS.has(obj.kind)) {
+    throw new Error("kind must be a supported Maya calendar event kind.");
+  }
+  if (
+    !obj.start ||
+    typeof obj.start !== "object" ||
+    typeof (obj.start as { dateTime?: unknown }).dateTime !== "string"
+  ) {
+    throw new Error("start.dateTime (ISO 8601) is required.");
+  }
+  if (
+    !obj.end ||
+    typeof obj.end !== "object" ||
+    typeof (obj.end as { dateTime?: unknown }).dateTime !== "string"
+  ) {
+    throw new Error("end.dateTime (ISO 8601) is required.");
+  }
+  const start = obj.start as { dateTime: string; timeZone?: string };
+  const end = obj.end as { dateTime: string; timeZone?: string };
+  const startMs = msFromDateTime(start.dateTime, "start.dateTime");
+  const endMs = msFromDateTime(end.dateTime, "end.dateTime");
+  if (startMs >= endMs) {
+    throw new Error("start.dateTime must be before end.dateTime.");
+  }
+  const kind = obj.kind as MayaCalendarEventKind;
+  const context =
+    obj.context && typeof obj.context === "object" && !Array.isArray(obj.context)
+      ? (obj.context as Record<string, unknown>)
+      : {};
+  return {
+    body,
+    calendarId: typeof obj.calendarId === "string" ? obj.calendarId : undefined,
+    kind,
+    citedRefs: parseCitedRefs(obj.citedRefs),
+    start,
+    end,
+    location: typeof obj.location === "string" ? obj.location : undefined,
+    summary: typeof obj.summary === "string" ? obj.summary : undefined,
+    description:
+      typeof obj.description === "string" ? obj.description : undefined,
+    context,
+    actionable:
+      typeof obj.actionable === "boolean" ? obj.actionable : kind !== "brain-break",
+    sourceStandingOrderId:
+      typeof obj.sourceStandingOrderId === "string"
+        ? obj.sourceStandingOrderId
+        : undefined,
+    startMs,
+    endMs,
+  };
+}
+
+function eventPayloadForMayaBlock(
+  parsed: CreateMayaCalendarEventPayload
+): GoogleCalendarEventCreatePayload {
+  const rendered = renderEventBody({
+    kind: parsed.kind,
+    context: parsed.context,
+  });
+  return {
+    summary: parsed.summary ?? rendered.title,
+    description: parsed.description ?? rendered.description,
+    location: parsed.location,
+    start: parsed.start,
+    end: parsed.end,
+    reminders: parsed.actionable
+      ? {
+          useDefault: false,
+          overrides: [{ method: "popup", minutes: 30 }],
+        }
+      : undefined,
+  };
+}
+
+export const calendarCreateMayaEventHttp = httpAction(async (ctx, request) => {
+  let parsed: CreateMayaCalendarEventPayload;
+  try {
+    parsed = parseMayaCalendarEventPayload(await request.json());
+  } catch (err) {
+    return jsonResponse({ error: (err as Error).message }, 400);
+  }
+
+  try {
+    assertWebhookSecret(parsed.body.secret);
+  } catch {
+    return jsonResponse({ error: "unauthorized" }, 401);
+  }
+
+  try {
+    await ctx.runQuery(
+      internal.creatorMayaV0.mayaCalendarEvents
+        .preflightMayaCalendarEventInsertInternal,
+      {
+        creatorId: parsed.body.creatorId as Id<"creators">,
+        kind: parsed.kind,
+        citedRefs: parsed.citedRefs,
+        startTimeMs: parsed.startMs,
+        endTimeMs: parsed.endMs,
+        actionable: parsed.actionable,
+      }
+    );
+
+    const { accessToken } = await ctx.runAction(
+      internal.integrations.google.tokenResolver
+        .resolveGoogleAccessTokenForCreator,
+      {
+        creatorId: parsed.body.creatorId as Id<"creators">,
+        requiredScope: CALENDAR_REQUIRED_SCOPE,
+      }
+    );
+
+    const conflicts = await listCalendarEvents(accessToken, {
+      calendarId: parsed.calendarId,
+      timeMin: new Date(parsed.startMs).toISOString(),
+      timeMax: new Date(parsed.endMs).toISOString(),
+      maxResults: 10,
+    });
+    if (conflicts.items.length > 0) {
+      return jsonResponse(
+        {
+          error: "calendar-slot-conflict",
+          hint: "Pick another open gap before writing a Maya calendar block.",
+          conflictCount: conflicts.items.length,
+        },
+        409
+      );
+    }
+
+    const created = await createCalendarEvent(accessToken, {
+      calendarId: parsed.calendarId,
+      payload: eventPayloadForMayaBlock(parsed),
+    });
+
+    const sidecar = await ctx.runMutation(
+      internal.creatorMayaV0.mayaCalendarEvents.insertMayaCalendarEventInternal,
+      {
+        creatorId: parsed.body.creatorId as Id<"creators">,
+        googleEventId: created.id,
+        kind: parsed.kind,
+        citedRefs: parsed.citedRefs,
+        startTimeMs: parsed.startMs,
+        endTimeMs: parsed.endMs,
+        actionable: parsed.actionable,
+        sourceStandingOrderId: parsed.sourceStandingOrderId,
+      }
+    );
+
+    return jsonResponse(
+      {
+        ok: true,
+        googleEventId: created.id,
+        htmlLink: created.htmlLink,
+        mayaCalendarEventId: sidecar.mayaCalendarEventId,
+        deduped: sidecar.deduped,
+      },
+      200
+    );
   } catch (err) {
     return googleErrToResponse(err);
   }

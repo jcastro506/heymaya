@@ -298,6 +298,57 @@ export const insertMayaCalendarEventInternal = internalMutation({
   },
 });
 
+export const preflightMayaCalendarEventInsertInternal = internalQuery({
+  args: {
+    creatorId: v.id("creators"),
+    kind: kindValidator,
+    citedRefs: v.array(citedRefValidator),
+    startTimeMs: v.number(),
+    endTimeMs: v.number(),
+    actionable: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) {
+      throw new Error("Creator not found for Maya calendar event preflight.");
+    }
+    if (args.startTimeMs >= args.endTimeMs) {
+      throw new Error(
+        "Maya calendar event start must be strictly before end.",
+      );
+    }
+    if (args.actionable && args.citedRefs.length === 0) {
+      throw new Error(
+        "Actionable Maya calendar events require at least one cited ref " +
+          "(architectural principle: grounded or silent).",
+      );
+    }
+
+    const tier = calendarTierFromPlan(creator.plan);
+    const cap = weeklyCalendarEventCapPerKind(tier, args.kind);
+    if (cap !== "unlimited") {
+      const windowStart = args.startTimeMs - 7 * 24 * 60 * 60 * 1000;
+      const sameWeek = await ctx.db
+        .query("mayaCalendarEvents")
+        .withIndex("by_creator_and_start", (q) =>
+          q
+            .eq("creatorId", args.creatorId)
+            .gte("startTimeMs", windowStart)
+            .lte("startTimeMs", args.startTimeMs + 7 * 24 * 60 * 60 * 1000),
+        )
+        .collect();
+      const sameKindCount = sameWeek.filter((row) => row.kind === args.kind)
+        .length;
+      if (sameKindCount >= cap) {
+        throw new CalendarCapError(tier, args.kind, cap, sameKindCount);
+      }
+      return { ok: true, tier, cap, current: sameKindCount } as const;
+    }
+
+    return { ok: true, tier, cap, current: 0 } as const;
+  },
+});
+
 export const listMayaCalendarEventsForCreatorAndWindow = internalQuery({
   args: {
     creatorId: v.id("creators"),

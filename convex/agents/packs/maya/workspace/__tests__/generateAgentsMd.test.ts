@@ -324,6 +324,18 @@ describe("generateAgentsMd — Sprint 12 Phase 1A", () => {
     expect(idxIntegrated).toBeGreaterThan(0);
     expect(idxImessage).toBeGreaterThan(idxIntegrated);
   });
+
+  it("calendar-connected rule promises a creator operating week, not just post times", () => {
+    const md = generateAgentsMd({
+      ...BASE_INPUTS,
+      plan: "manager",
+      embedStandingOrders: true,
+    });
+    expect(md).toContain("Calendar-connected promise");
+    expect(md).toMatch(/not just choosing post times/i);
+    expect(md).toMatch(/filming blocks.*edit blocks.*post windows.*niche-scroll/i);
+    expect(md).toMatch(/only put the blocks you approve on your calendar/i);
+  });
 });
 
 /* -------------------------------------------------------------------------- */

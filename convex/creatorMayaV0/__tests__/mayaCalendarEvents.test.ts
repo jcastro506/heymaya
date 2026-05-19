@@ -936,6 +936,7 @@ describe("Maya calendar events — sibling-file scan", () => {
 
   it("SKILL.md names the lc_maya HTTP endpoints it depends on", () => {
     expect(SKILL_MD).toContain("/lc_maya/calendar_list_events");
+    expect(SKILL_MD).toContain("/lc_maya/calendar_create_maya_event");
     expect(SKILL_MD).toContain("/lc_maya/calendar_create_event");
     expect(SKILL_MD).toContain("/lc_maya/calendar_update_event");
     expect(SKILL_MD).toContain("/lc_maya/calendar_delete_event");
