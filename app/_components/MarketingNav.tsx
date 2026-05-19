@@ -61,6 +61,8 @@ export function MarketingNav() {
     pathname === "/business" ||
     pathname.startsWith("/business/") ||
     (!CREATOR_PRODUCT_ENABLED && onHome);
+  const isVibeCoders =
+    pathname === "/vibecoders" || pathname.startsWith("/vibecoders/");
 
   return (
     <header className="relative z-20 px-6 pt-6 sm:px-10 sm:pt-8">
@@ -75,6 +77,9 @@ export function MarketingNav() {
         <nav className="flex items-center gap-5 text-sm">
           <NavLink href="/creators" active={isCreators}>
             For Creators
+          </NavLink>
+          <NavLink href="/vibecoders" active={isVibeCoders}>
+            For VibeCoders
           </NavLink>
           <NavLink href="/business" active={isBusiness}>
             For Businesses
