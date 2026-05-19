@@ -3,8 +3,8 @@ name: maya-calendar-planner
 version: 0.1.0-sprint-c1
 description: >-
   Populate the creator's connected Google Calendar with rich, cited,
-  voice-applied events that drive proactive nudges. Eight event kinds —
-  trend-strike / content-block / post-publish / niche-scroll /
+  voice-applied events that drive proactive nudges. Nine event kinds —
+  trend-strike / content-block / edit-block / post-publish / niche-scroll /
   comment-window / brand-outbox / weekly-review / brain-break — each with
   a structured body that pulls from real surfaced data (a trend URL, a
   peer post, a drafted caption, a brand email thread). Maya is the
@@ -78,9 +78,9 @@ pick the right kind of block for that gap, write a richly-cited event
 body in the creator's voice, and ship it with a 30-min popup reminder.
 The popup is the call to action; the body is why it exists.
 
-## The 8 event kinds
+## The 9 event kinds
 
-Every event I write is one of these eight kinds. Each has its own body
+Every event I write is one of these nine kinds. Each has its own body
 template (rendered by `renderEventBody` in
 `convex/creatorMayaV0/mayaCalendarEvents.ts`) and its own per-tier
 weekly cap. The kind is load-bearing — the heartbeat scan in Sprint C.3
@@ -246,6 +246,30 @@ Reference body shape:
 > inbound brand emails so nothing time-sensitive falls through. Back to
 > the regular cadence tomorrow.
 
+### 9. `edit-block` (1-2 hours)
+
+The cut-down session after a filming block. Editing is the #1 stated
+creator pain, so it gets its own protected slot instead of "find time
+somehow" — it pairs with a `content-block`, never floats alone. Cited
+refs: at minimum a `post` ref for the footage or the planned post the
+edit feeds.
+
+Reference body shape:
+
+> Edit block — Saturday shoot cut-down
+>
+> 1-2 hour edit session. 3 clips from the filming block to cut down.
+>
+> Cutting toward: the bagel-spot POV for Wednesday's slot.
+>
+> Keep it in your edit voice: fast jump cuts, no intro, text-on-screen
+> hook (your last 3 over-indexers all opened cold).
+>
+> Footage: https://app.heymaya.app/footage/f_91…
+>
+> Get a rough cut done in one sitting — perfect is the enemy of posted.
+> Ping me when it's close and I'll do a hook + first-3-seconds pass.
+
 ## Voice rules — non-negotiable
 
 1. **Always voice-applied.** Every body I emit from `renderEventBody`
@@ -319,9 +343,10 @@ week and throws `CalendarCapError` at-or-over cap.
 
 The runtime is 2-tier (`coach` | `manager`). The cap helper maps:
 
-- `coach` → starter row (1 trend-strike/wk, 1 content-block/wk, 3
-  post-publish/wk, 2 niche-scroll/wk, 1 comment-window/wk, 1 weekly-
-  review/wk; brand-outbox + brain-break unlimited).
+- `coach` → starter row (1 trend-strike/wk, 1 content-block/wk, 1
+  edit-block/wk, 3 post-publish/wk, 2 niche-scroll/wk, 1
+  comment-window/wk, 1 weekly-review/wk; brand-outbox + brain-break
+  unlimited).
 - `manager` → studio row (everything unlimited).
 
 The middle "pro" row in the matrix is preserved for forward-compat —
@@ -372,6 +397,7 @@ heartbeat scan in Sprint C.3 also short-circuits on `actionable=false`.
 type MayaCalendarEventKind =
   | "trend-strike"
   | "content-block"
+  | "edit-block"
   | "post-publish"
   | "niche-scroll"
   | "comment-window"
