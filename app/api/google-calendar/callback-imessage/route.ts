@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const convexHttpUrl = process.env.NEXT_PUBLIC_CONVEX_HTTP_URL;
+  const convexHttpUrl = convexHttpUrlForGoogleCalendarCallback();
   const internalSecret = process.env.WEBHOOK_INTERNAL_SECRET;
   if (!convexHttpUrl || !internalSecret) {
     return renderResultPage({
@@ -249,6 +249,13 @@ function googleRedirectUri(req: NextRequest): string {
   const configuredUrl = new URL(configured);
   if (configuredUrl.host === req.nextUrl.host) return configuredUrl.toString();
   return requestRedirect.toString();
+}
+
+export function convexHttpUrlForGoogleCalendarCallback(): string | undefined {
+  return (
+    process.env.NEXT_PUBLIC_CONVEX_HTTP_URL ??
+    process.env.NEXT_PUBLIC_CONVEX_SITE_URL
+  );
 }
 
 /* -------------------------------------------------------------------------- */
