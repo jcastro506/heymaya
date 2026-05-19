@@ -9,10 +9,10 @@
  *   - waitlist (production default): "Join the Waitlist"
  *   - signup   (staging opt-in):    "Sign in" + "Sign up"
  *
- * When the creator product is suppressed (NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT
- * unset/false), `/` renders the business landing in-place, so we treat
- * `/` as a business pathname for the active-tab highlight. When the
- * creator product is on, `/` renders the creator landing instead.
+ * The creator product is the single public surface (`/` always renders the
+ * creator landing; the discontinued trades landing at `/business`
+ * redirects home). A second "For VibeCoders" vertical is in planning and
+ * will add its own tab when it ships.
  *
  * Renders client-side so usePathname() can drive the active-tab highlight
  * without burning a server roundtrip.
@@ -23,9 +23,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { LANDING_MODE } from "./landingMode";
-
-const CREATOR_PRODUCT_ENABLED =
-  process.env.NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT === "true";
 
 function NavLink({
   href,
@@ -52,15 +49,10 @@ function NavLink({
 
 export function MarketingNav() {
   const pathname = usePathname() ?? "/";
-  const onHome = pathname === "/";
   const isCreators =
+    pathname === "/" ||
     pathname === "/creators" ||
-    pathname.startsWith("/creators/") ||
-    (CREATOR_PRODUCT_ENABLED && onHome);
-  const isBusiness =
-    pathname === "/business" ||
-    pathname.startsWith("/business/") ||
-    (!CREATOR_PRODUCT_ENABLED && onHome);
+    pathname.startsWith("/creators/");
 
   return (
     <header className="relative z-20 px-6 pt-6 sm:px-10 sm:pt-8">
@@ -75,9 +67,6 @@ export function MarketingNav() {
         <nav className="flex items-center gap-5 text-sm">
           <NavLink href="/creators" active={isCreators}>
             For Creators
-          </NavLink>
-          <NavLink href="/business" active={isBusiness}>
-            For Businesses
           </NavLink>
           {LANDING_MODE === "waitlist" ? (
             <Link
