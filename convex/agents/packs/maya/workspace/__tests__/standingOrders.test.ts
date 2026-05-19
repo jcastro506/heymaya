@@ -50,14 +50,16 @@ const C2_CALENDAR_TARGETS = [
 ] as const;
 
 /**
- * The 8 canonical event kinds defined by Sprint C.1 in `mayaCalendarEvents`.
- * Any kind referenced in a standing order MUST be one of these — fabricating
- * a 9th kind is an adversarial failure mode (the planner skill would reject
- * the insert, but the prose must not even suggest it).
+ * The 9 canonical event kinds defined by Sprint C.1 in `mayaCalendarEvents`
+ * (Sprint C.6 added `edit-block`). Any kind referenced in a standing order
+ * MUST be one of these — fabricating a 10th kind is an adversarial failure
+ * mode (the planner skill would reject the insert, but the prose must not
+ * even suggest it).
  */
 const C1_EVENT_KINDS = [
   "trend-strike",
   "content-block",
+  "edit-block",
   "post-publish",
   "niche-scroll",
   "comment-window",
@@ -351,7 +353,7 @@ describe("standingOrders — Sprint C.2 calendar-creation wiring", () => {
     }
   });
 
-  it("adversarial — the three standing orders only reference event kinds from C.1's 8-kind catalog (no fabricated 9th kind)", () => {
+  it("adversarial — the three standing orders only reference event kinds from C.1's 9-kind catalog (no fabricated 10th kind)", () => {
     // The planner skill would reject an unknown kind, but the prose itself
     // must not even suggest one. Scan for the pattern `<word>-<word>` event-
     // kind shapes near the word "event" and assert each is in the allowlist.
@@ -393,7 +395,7 @@ describe("standingOrders — Sprint C.2 calendar-creation wiring", () => {
         if (/\bevent\b|\bkind[s]?\b/i.test(window)) {
           expect(
             (C1_EVENT_KINDS as ReadonlyArray<string>).includes(inner),
-            `${id}: prose references unknown event kind \`${inner}\` — not in C.1's 8-kind catalog`
+            `${id}: prose references unknown event kind \`${inner}\` — not in C.1's 9-kind catalog`
           ).toBe(true);
         }
       }
@@ -418,7 +420,7 @@ describe("standingOrders — Sprint C.2 calendar-creation wiring", () => {
   });
 
   it("adversarial — the three standing orders explicitly forbid fabricating event kinds", () => {
-    // Prose-level guardrail: each addition states the 8-kind allowlist is
+    // Prose-level guardrail: each addition states the 9-kind allowlist is
     // exhaustive. Mirrors the AGENTS.md no-fabrication contract for trends.
     for (const id of C2_CALENDAR_TARGETS) {
       const body = bodyOf(pickById(id));
@@ -890,10 +892,10 @@ describe("standingOrders — Sprint C.5 first-week calendar bootstrap", () => {
     ).toContain("/lc_maya/calendar_create_event");
   });
 
-  it("event-kind discipline — only references the 8 C.1 catalog kinds (no fabricated 9th kind)", () => {
+  it("event-kind discipline — only references the 9 C.1 catalog kinds (no fabricated 10th kind)", () => {
     // Same adversarial check the C.2 suite runs: every backtick-quoted
     // `<word>-<word>` pattern adjacent to "event" / "kind" must be in the
-    // C.1 8-kind allowlist.
+    // C.1 9-kind allowlist.
     const body = bodyOfEntry(pickEntry());
     const candidates = body.match(/`([a-z]+-[a-z]+)`/g) ?? [];
     for (const tok of candidates) {
@@ -914,7 +916,7 @@ describe("standingOrders — Sprint C.5 first-week calendar bootstrap", () => {
       if (/\bevent\b|\bkind[s]?\b/i.test(window)) {
         expect(
           (C1_EVENT_KINDS as ReadonlyArray<string>).includes(inner),
-          `first_week_calendar_bootstrap: prose references unknown event kind \`${inner}\` — not in C.1's 8-kind catalog`
+          `first_week_calendar_bootstrap: prose references unknown event kind \`${inner}\` — not in C.1's 9-kind catalog`
         ).toBe(true);
       }
     }
@@ -926,7 +928,7 @@ describe("standingOrders — Sprint C.5 first-week calendar bootstrap", () => {
       body,
       "first_week_calendar_bootstrap: missing no-fabrication clause for event kinds"
     ).toMatch(
-      /(only.*8.*C\.1.*kinds|never\s+(invent|fabricate|make up).*(kind|event))/i
+      /(only.*9.*C\.1.*kinds|never\s+(invent|fabricate|make up).*(kind|event))/i
     );
   });
 
@@ -987,8 +989,11 @@ describe("standingOrders — Sprint C.5 first-week calendar bootstrap", () => {
     expect(ping, "first_proactive_ping missing from catalog").toBeDefined();
     expect(ping!.scope).toContain("Calendar-bootstrap lookahead (Sprint C.5)");
     expect(ping!.scope).toMatch(/rest of this week\s*\+\s*next week/i);
+    // Sprint C.6 — the preview also lists `edit blocks` (the protected
+    // cut-down slot the bootstrap now proposes); it sits between
+    // content-blocks and post times in the deliverables list.
     expect(ping!.scope).toMatch(
-      /content-blocks?,?\s*post times?,?\s*scroll\/comment windows?/i
+      /content-blocks?,?\s*(edit blocks?,?\s*)?post times?,?\s*scroll\/comment windows?/i
     );
   });
 });

@@ -2616,9 +2616,10 @@ export default defineSchema({
   // ────────────────────────────────────────────────────────────────────────
   // Sprint C.1 — Maya-authored Google Calendar events.
   //
-  // Tracks the calendar events Maya proactively populates (taxonomy of 8
-  // kinds — trend-strike / content-block / post-publish / niche-scroll /
-  // comment-window / brand-outbox / weekly-review / brain-break). Sibling
+  // Tracks the calendar events Maya proactively populates (taxonomy of 9
+  // kinds — trend-strike / content-block / edit-block / post-publish /
+  // niche-scroll / comment-window / brand-outbox / weekly-review /
+  // brain-break). Sibling
   // to `creatorMayaV0CalendarEvents` (which tracks every observed event,
   // including external ones, for the read/classifier pipeline). This table
   // is narrower — Maya-authored only — and carries the rich-cited body
@@ -2642,6 +2643,7 @@ export default defineSchema({
       v.literal("brand-outbox"),
       v.literal("weekly-review"),
       v.literal("brain-break"),
+      v.literal("edit-block"),
     ),
     citedRefs: v.array(
       v.object({
