@@ -60,6 +60,12 @@ at Creator Maya staging:
 
 - `NEXT_PUBLIC_CONVEX_URL=https://precise-canary-781.convex.cloud`
 - `NEXT_PUBLIC_CONVEX_SITE_URL=https://precise-canary-781.convex.site`
+- `NEXT_PUBLIC_CONVEX_HTTP_URL=https://precise-canary-781.convex.site`
+
+`NEXT_PUBLIC_CONVEX_HTTP_URL` and `NEXT_PUBLIC_CONVEX_SITE_URL` intentionally
+share the same `.convex.site` value. The iMessage Google Calendar OAuth
+callback accepts either name, but Vercel Preview should carry both so older
+deployments and docs stay aligned.
 
 Manual Preview deploys still work when needed:
 

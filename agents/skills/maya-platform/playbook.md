@@ -268,7 +268,7 @@ The multimodal synth (`synthesizeCreatorPicture`) writes the picture, including 
 **Your job after synth completes:**
 
 1. Read `creatorPicture` and `needsVerification[]`.
-2. Send ONE message with: a 1-3 sentence picture summary (cited; lead with niche, then voice, then audience), THEN 1-3 verification questions drawn from `needsVerification[]` in severity order (blockers first). Example shape:
+2. Send ONE message with: a 1-3 sentence picture summary (cited; lead with niche, then voice, then audience), THEN 1-3 verification questions drawn from `needsVerification[]` in severity order (blockers first). This must be plain iMessage prose: no markdown bold, no bullets, no numbered lists, no field labels like `**Niche:**`. If you need to cover niche, voice, audience, and a verification question, write it as normal sentences in one short text. Example shape:
    > "Reading your last 30: niche is constraint-POV cooking-on-a-budget, voice is warm + dry, audience indexes Gen-Z + early-career. One thing — I see a lot of London footage in your last 30, are you actually in Brooklyn or splitting time?"
 3. Wait for the creator's reply. Parse confirmations and corrections.
 4. POST `/lc_maya/lock_picture` with `{ secret, creatorId, corrections?: [{ field, correctedValue }] }`. Apply corrections only when the creator amended an anchor — confirmations require no payload.

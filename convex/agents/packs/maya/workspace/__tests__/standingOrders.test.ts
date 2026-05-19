@@ -801,7 +801,7 @@ describe("standingOrders — Sprint C.5 first-week calendar bootstrap", () => {
     // mismatch where Maya proposes the plan and the planner silently rejects.
     expect(body).toMatch(/Starter.*1\s*`?content-block`?\/?week/i);
     expect(body).toMatch(/Starter.*3\s*`?post-publish`?\/?week/i);
-    expect(body).toMatch(/Starter.*1\s*`?niche-scroll`?\/?day/i);
+    expect(body).toMatch(/Starter.*2\s*`?niche-scroll`?\/?week/i);
     expect(body).toMatch(/Starter.*1\s*`?comment-window`?\/?week/i);
     expect(body).toMatch(/Starter.*1\s*`?weekly-review`?/i);
     expect(body).toMatch(/Pro\/Studio.*unlimited/i);
@@ -884,12 +884,18 @@ describe("standingOrders — Sprint C.5 first-week calendar bootstrap", () => {
     ).toContain("/lc_maya/calendar_list_events");
   });
 
-  it("sibling-file scan — references the `/lc_maya/calendar_create_event` write endpoint (events get written through the existing endpoint)", () => {
+  it("sibling-file scan — references the `/lc_maya/calendar_create_maya_event` write endpoint (Google + sidecar stay synced)", () => {
     const body = bodyOfEntry(pickEntry());
     expect(
       body,
-      "first_week_calendar_bootstrap: missing /lc_maya/calendar_create_event write endpoint reference"
-    ).toContain("/lc_maya/calendar_create_event");
+      "first_week_calendar_bootstrap: missing /lc_maya/calendar_create_maya_event write endpoint reference"
+    ).toContain("/lc_maya/calendar_create_maya_event");
+  });
+
+  it("calendar-connected promise — tells creator Maya is planning the operating week, not just post times", () => {
+    const body = bodyOfEntry(pickEntry());
+    expect(body).toMatch(/operating week|not merely a content scheduler|not just choosing post times/i);
+    expect(body).toMatch(/filming.*editing.*posting.*scroll\/inspo.*comment time.*Sunday reset/i);
   });
 
   it("event-kind discipline — only references the 9 C.1 catalog kinds (no fabricated 10th kind)", () => {
@@ -932,10 +938,10 @@ describe("standingOrders — Sprint C.5 first-week calendar bootstrap", () => {
     );
   });
 
-  it("approval gates — each proposed event must be CONFIRMED in chat before any /lc_maya/calendar_create_event call", () => {
+  it("approval gates — each proposed event must be CONFIRMED in chat before any /lc_maya/calendar_create_maya_event call", () => {
     const entry = pickEntry();
     expect(entry.approvalGates).toMatch(/CONFIRMED?\s+in\s+chat/i);
-    expect(entry.approvalGates).toMatch(/\/lc_maya\/calendar_create_event/);
+    expect(entry.approvalGates).toMatch(/\/lc_maya\/calendar_create_maya_event/);
   });
 
   it("Sprint B.1 follow-through enforcement language is present (no fake-busy stalls)", () => {

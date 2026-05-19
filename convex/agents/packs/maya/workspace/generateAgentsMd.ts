@@ -374,6 +374,10 @@ export function generateAgentsMd(inputs: AgentsMdInputs): string {
   );
   sections.push("");
   sections.push(
+    "**Calendar-connected promise: build the creator operating week.** When Calendar verifies, I explicitly tell the creator what changes: I am not just choosing post times. I am going to help map the creator work around their real week — filming blocks, edit blocks, post windows, niche-scroll / inspiration windows, comment/reply windows, and a Sunday review/reset. Optional blocks: brand-outbox, trend-strike, brain-break. Say this plainly before proposing the plan: \"Calendar's live. I'm going to map the work around your actual week — filming, editing, posting, scroll/inspo, comment time, and a Sunday reset. I'll show it first, then only put the blocks you approve on your calendar.\" This is the product promise after connect; don't hide it in implementation."
+  );
+  sections.push("");
+  sections.push(
     "**Verify before confirming connection success.** When the creator says they tapped the link / completed the flow, I do NOT assume it worked. The canonical check is `POST /lc_maya/connected_accounts_health` with `{secret, creatorId}` — returns `{ok, calendar:{connected, scopes, expiresAt}, gmail:{connected, scopes}, apple_calendar:{connected}}` in ~10ms. `calendar.connected: true` + `calendar.scopes` includes `calendar.events` → calendar is live, proceed. `calendar.connected: false` → connection didn't land, honest framing: \"doesn't look like the connection landed yet — did the redirect bring you back to a working page?\" Never confirm a connection without a 200 + a `connected: true` flag. **Do NOT use `gmail_list_inbox` or `calendar_list_events` as a verification proxy** — those require extra args (timeMin/timeMax for calendar; that's why the Kevin re-onboard verification failed with 400). They're for fetching real data, not health-checking."
   );
   sections.push("");

@@ -103,6 +103,10 @@ export interface GoogleCalendarEventCreatePayload {
   /** ISO 8601 with timezone (e.g. "2026-05-12T15:00:00-07:00"). */
   start: { dateTime: string; timeZone?: string };
   end: { dateTime: string; timeZone?: string };
+  reminders?: {
+    useDefault: boolean;
+    overrides?: Array<{ method: "popup"; minutes: number }>;
+  };
 }
 
 export interface GoogleCalendarEventUpdatePayload {

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
 
 import { MarketingNav } from "../_components/MarketingNav";
 import { primaryCtaHref, primaryCtaLabel } from "../_components/landingMode";
@@ -16,13 +15,17 @@ import { Pricing, type Billing } from "./_components/Pricing";
 /**
  * /creators — the consumer creator product landing page.
  *
- * Conversion framework (lovable.dev): hero with single primary CTA → value
- * proposition → per-feature pain-led sections → pricing → FAQ → final CTA.
+ * Conversion framework: hero → value prop → 11 pain-led feature sections →
+ * pricing → FAQ → final CTA → footer.
  *
- * Constraint: zero "AI" mentions in rendered copy. Maya is "your social media
- * manager" / "your content assistant." Assistant and Manager are autonomy-level
- * pricing tiers of one product, never two products. (Internal Plan enum value
- * stays "coach" for back-compat — see convex/lib/planFeatures.ts.)
+ * Constraint: zero "AI" mentions. Maya is "your social media manager."
+ * Language is creator-voice — no median/baseline/multiplier/CPC/exclusivity-
+ * jargon. Numbers stay; the words around them get human.
+ *
+ * Front-of-rail order is deliberately weighted toward the four daily jobs:
+ *   01 weekly plan · 02 daily reminders · 03 trends · 04 consistency.
+ * Bigger-deal behaviors (brand triage, contracts, packet) sit mid-rail.
+ * Memory + anti-sycophancy close.
  */
 export default function CreatorLanding() {
   const [billing, setBilling] = useState<Billing>("monthly");
@@ -50,13 +53,14 @@ export default function CreatorLanding() {
 
 function ValueProp() {
   return (
-    <section className="px-6 pt-24 sm:px-10 sm:pt-32">
-      <div className="mx-auto max-w-5xl text-center">
-        <p className="font-display text-3xl leading-[1.1] tracking-tight text-paper sm:text-5xl">
-          Maya is your social media manager.{" "}
+    <section className="px-6 pt-32 sm:px-10 sm:pt-44">
+      <div className="mx-auto max-w-4xl text-center">
+        <p className="font-display text-3xl leading-[1.1] tracking-[-0.02em] text-paper sm:text-5xl">
+          The week&rsquo;s plan. Today&rsquo;s shot list. What&rsquo;s
+          trending now.{" "}
           <span className="italic text-paper-dim">
-            Lives in your iMessages. Replaces eight tools and a manager you
-            can&rsquo;t afford yet.
+            Maya owns the four things you forget the second you start
+            shooting.
           </span>
         </p>
       </div>
@@ -69,28 +73,138 @@ function ValueProp() {
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 /**
- * 12 feature sections, each anchored to a creator pain point. Order is
- * deliberate — algorithm anxiety up top (most universal), tier-restricted
- * outreach mid-way (Manager value), anti-sycophancy as the closer (the
- * personality differentiator).
+ * 11 pain-led feature sections.
+ *
+ * Order is deliberate. The first four are the daily-job core — what Maya
+ * does for you, every day, that keeps you posting:
+ *   01 plans your week · 02 tells you what to do today ·
+ *   03 watches what's trending · 04 keeps you accountable.
+ * Then bigger-deal behaviors (brand triage, brand outreach, contracts,
+ * manager packet). Memory + the anti-sycophancy closer at the end.
  */
 function FeatureRail() {
   return (
     <div id="features" className="pt-12">
-      {/* 01 — Trends */}
+      {/* 01 — Weekly plan */}
       <FeatureSection
         headline={
           <>
-            The algorithm changes every week.{" "}
-            <span className="italic text-paper-dim">You can&rsquo;t catch up.</span>
+            Sunday hits and the week is{" "}
+            <span className="italic text-paper-dim">a blank wall.</span>
           </>
         }
         subhead={
           <>
-            Maya watches your niche every day and only brings up trends that
-            match what already works for you. No generic &ldquo;TikTok trends
-            today&rdquo; list. The three openings she thinks fit your last 30
-            posts, with why.
+            Sunday at 4pm, Maya texts you next week&rsquo;s plan. Three
+            TikToks, hook ideas for each, posting times that fit your
+            actual calendar. You start Monday already aimed at something.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Sun · 4:14 PM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Plan for the week of Mar 18. You&rsquo;ve got the
+                    dentist Tue morning and a wedding Sat &mdash; built
+                    around it.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    <strong>Mon 7pm</strong> · POV opener (Reel + TT)
+                    <br />
+                    <strong>Wed 6pm</strong> · process video, batch with
+                    Mon leftovers
+                    <br />
+                    <strong>Fri 11am</strong> · wedding-prep get-ready
+                    (build-up into Sat)
+                  </>
+                ),
+              },
+            ]}
+          />
+        }
+      />
+
+      {/* 02 — Daily companion (morning brief + reminders + evening recap) */}
+      <FeatureSection
+        reverse
+        headline={
+          <>
+            Maya tells you what to do today,{" "}
+            <span className="italic text-paper-dim">
+              before you even check your phone.
+            </span>
+          </>
+        }
+        subhead={
+          <>
+            7am text: what&rsquo;s worth filming, what to reply to,
+            what&rsquo;s bubbling in your niche. Mid-day if you&rsquo;re
+            falling behind on what you said you&rsquo;d do. Evening, only
+            if something real popped. No app. No dashboard. Just messages.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Mon · all day"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    Morning. Today: the POV we wrote Tuesday
+                    (you&rsquo;re free 6:30-7pm tonight), candle launch
+                    caption to schedule. Glossier comment worth reading
+                    before lunch.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    3:14pm &mdash; heads up, POV is still unfilmed. Push
+                    it to tomorrow, or are you good for tonight?
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    7:28pm &mdash; Tuesday&rsquo;s post is at 84K and
+                    climbing. Filming tomorrow&rsquo;s POV can wait if
+                    you&rsquo;re tired.
+                  </>
+                ),
+              },
+            ]}
+          />
+        }
+      />
+
+      {/* 03 — Trends */}
+      <FeatureSection
+        headline={
+          <>
+            The algorithm changes every week.{" "}
+            <span className="italic text-paper-dim">You can&rsquo;t keep up.</span>
+          </>
+        }
+        subhead={
+          <>
+            Maya watches your niche every day and only flags trends that
+            fit what already works for you. No generic &ldquo;TikTok this
+            week&rdquo; list &mdash; just the three openings she thinks
+            you should try, with why.
           </>
         }
         visual={
@@ -101,9 +215,9 @@ function FeatureRail() {
                 side: "left",
                 body: (
                   <>
-                    Caught a new POV format moving in beauty TikTok this week.
-                    34 of your peers used it, the top 3 averaged{" "}
-                    <strong>5.7×</strong> baseline.
+                    Caught a new POV format moving in beauty TikTok this
+                    week. 34 of your peers tried it &mdash; the best ones
+                    are doing <strong>way more</strong> than their usual.
                   </>
                 ),
               },
@@ -111,20 +225,64 @@ function FeatureRail() {
                 side: "left",
                 body: (
                   <>
-                    It fits your &ldquo;tried it for a week&rdquo; voice. Drafted
-                    one for the candle launch — want to see?
+                    It fits your &ldquo;tried it for a week&rdquo; voice.
+                    Wrote one for the candle launch &mdash; wanna see?
                   </>
                 ),
               },
             ]}
-            caption="seen across 34 of your peers"
           />
         }
       />
 
-      {/* 02 — Idea sparring */}
+      {/* 04 — Consistency / accountability */}
       <FeatureSection
         reverse
+        headline={
+          <>
+            You said three TikToks.{" "}
+            <span className="italic text-paper-dim">You posted one.</span>
+          </>
+        }
+        subhead={
+          <>
+            Friday at 10am, if you&rsquo;re behind on what you said
+            you&rsquo;d do, Maya tells you &mdash; with the exact unstuck.
+            Not nagging. Not flattery. The thing a real manager would say
+            at the Friday check-in.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Fri · 10:00 AM"
+            bubbles={[
+              {
+                side: "left",
+                body: (
+                  <>
+                    You said 3 TikToks this week. You&rsquo;re at 1.
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                reaction: "question",
+                body: (
+                  <>
+                    The two unfilmed are the POV ones we wrote Tuesday.
+                    Both under 90 sec. You&rsquo;re free 6:30-7pm tonight
+                    &mdash; that&rsquo;s enough for one. Want me to push
+                    the third to next Tue?
+                  </>
+                ),
+              },
+            ]}
+          />
+        }
+      />
+
+      {/* 05 — Idea sparring */}
+      <FeatureSection
         headline={
           <>
             You&rsquo;re working alone.{" "}
@@ -135,9 +293,10 @@ function FeatureRail() {
         }
         subhead={
           <>
-            Send a half-thought via iMessage. Maya sharpens it into a hook, a
-            shot list, a caption — in your voice, with three variants to pick
-            from. The notes-app graveyard becomes a working draft folder.
+            Text Maya a half-thought. She turns it into a hook, a shot
+            list, and a caption in your voice &mdash; three versions to
+            pick from. The notes-app graveyard becomes a working draft
+            folder.
           </>
         }
         visual={
@@ -152,8 +311,9 @@ function FeatureRail() {
                 side: "left",
                 body: (
                   <>
-                    Yeah — pre-flight prep is a saved-post category for your
-                    audience (12% of saves last month).
+                    Yeah &mdash; pre-flight prep is something your audience
+                    saves a lot. About 1 in 8 of your saves last month
+                    were that lane.
                   </>
                 ),
               },
@@ -162,67 +322,18 @@ function FeatureRail() {
                 body: (
                   <>
                     3 hooks: <em>&ldquo;The 4 things I do before a 9-hour
-                    flight&rdquo;</em>, <em>&ldquo;Skincare won&rsquo;t save you
-                    on this flight&rdquo;</em>, <em>&ldquo;Airport bathroom
-                    routine, ranked&rdquo;</em>. Want scripts?
+                    flight&rdquo;</em>, <em>&ldquo;Skincare won&rsquo;t
+                    save you on this flight&rdquo;</em>, <em>&ldquo;Airport
+                    bathroom routine, ranked&rdquo;</em>. Want scripts?
                   </>
                 ),
               },
             ]}
-            caption="from the last 30 days of your saves"
           />
         }
       />
 
-      {/* 03 — Weekly plan */}
-      <FeatureSection
-        headline={
-          <>
-            Sunday hits and the week is{" "}
-            <span className="italic text-paper-dim">a blank wall.</span>
-          </>
-        }
-        subhead={
-          <>
-            Sunday at 4pm, Maya drops next week&rsquo;s content arc — three
-            TikToks, hook variants for each, posting times that fit your real
-            calendar. You start Monday already aimed at something.
-          </>
-        }
-        visual={
-          <IMessageCard
-            timestamp="Sun · 4:14 PM"
-            bubbles={[
-              {
-                side: "left",
-                body: (
-                  <>
-                    Plan for week of Mar 18. You&rsquo;ve got the dentist Tue
-                    morning and a wedding Sat — built around it.
-                  </>
-                ),
-              },
-              {
-                side: "left",
-                body: (
-                  <>
-                    <strong>Mon 7pm</strong> · POV opener (Reel + TT)
-                    <br />
-                    <strong>Wed 6pm</strong> · process video, batch w/ Mon
-                    leftovers
-                    <br />
-                    <strong>Fri 11am</strong> · wedding-prep get-ready (build-up
-                    arc into Sat)
-                  </>
-                ),
-              },
-            ]}
-            caption="matched against your calendar"
-          />
-        }
-      />
-
-      {/* 04 — Performance reading */}
+      {/* 06 — Performance reading */}
       <FeatureSection
         reverse
         headline={
@@ -233,10 +344,10 @@ function FeatureRail() {
         }
         subhead={
           <>
-            Every two hours during waking hours, Maya reads what just published
-            against your last 30. She tells you why Tuesday&rsquo;s Reel hit
-            2.3× and Thursday&rsquo;s stalled — opener, length, audio, posting
-            window. Then what to do next.
+            Every couple hours, Maya checks how your new posts are doing
+            compared to your usual stuff. She tells you why Tuesday&rsquo;s
+            Reel popped and Thursday&rsquo;s stalled &mdash; opener,
+            length, sound, time of day. Then what to do next.
           </>
         }
         visual={
@@ -247,8 +358,8 @@ function FeatureRail() {
                 side: "left",
                 body: (
                   <>
-                    Tue&rsquo;s POV is at <strong>2.3×</strong> your 30-post
-                    median. Thu is at <strong>0.4×</strong>.
+                    Tue&rsquo;s POV is doing <strong>about 2x</strong> what
+                    your stuff usually hits. Thu is way under.
                   </>
                 ),
               },
@@ -257,109 +368,12 @@ function FeatureRail() {
                 body: (
                   <>
                     Same length, same niche. Tue opened on a question, Thu
-                    opened on a wide shot. Saves on the Tue post say POV-
-                    question is the lever — keep it for Sun.
+                    opened on a wide shot. People are saving the Tuesday
+                    one &mdash; keep the question opener for Sunday.
                   </>
                 ),
               },
             ]}
-            caption="against your last 30 posts, every two hours"
-          />
-        }
-      />
-
-      {/* 05 — Lives in your iMessages */}
-      <FeatureSection
-        headline={
-          <>
-            Eight tools. Seven dashboards.{" "}
-            <span className="italic text-paper-dim">
-              Your phone is a graveyard of $9.99 subscriptions.
-            </span>
-          </>
-        }
-        subhead={
-          <>
-            Morning brief at 7am. An evening text only when something
-            real surfaced — never after 8pm. Sunday plan. Weekly review.
-            All on iMessage, where you already are. No app to open, no
-            dashboard to remember the password for.
-          </>
-        }
-        visual={
-          <IMessageCard
-            timestamp="Mon · 7:02 AM"
-            bubbles={[
-              {
-                side: "left",
-                body: <>Morning. Quick read on the weekend before today gets weird.</>,
-              },
-              {
-                side: "left",
-                body: (
-                  <>
-                    Saturday&rsquo;s Reel is at <strong>180K</strong>, saves
-                    9.4%. Algorithm fuel for the next 72h. Lean into POV format
-                    Wed.
-                  </>
-                ),
-              },
-              {
-                side: "left",
-                body: (
-                  <>
-                    Glossier replied Sat night. $4K, below your floor. Drafted a
-                    counter — want to see?
-                  </>
-                ),
-              },
-            ]}
-            caption="iMessage"
-          />
-        }
-      />
-
-      {/* 06 — Accountability */}
-      <FeatureSection
-        reverse
-        headline={
-          <>
-            You said three TikToks.{" "}
-            <span className="italic text-paper-dim">You posted one.</span>
-          </>
-        }
-        subhead={
-          <>
-            Friday at 10am, if you&rsquo;re behind on what you committed to,
-            Maya tells you — specifically, with the exact unblock. Not nagging.
-            Not flattery. The thing a real manager would say at the standup.
-          </>
-        }
-        visual={
-          <IMessageCard
-            timestamp="Fri · 10:00 AM"
-            bubbles={[
-              {
-                side: "left",
-                body: (
-                  <>
-                    You committed to 3 TikToks this week. You&rsquo;re at 1.
-                  </>
-                ),
-              },
-              {
-                side: "left",
-                reaction: "question",
-                body: (
-                  <>
-                    The two unfilmed are the POV ones we drafted Tue. Both are
-                    under 90 sec. You have 6:30-7:00pm tonight clear. That&rsquo;s
-                    enough for one — want me to bump the third to next Tue?
-                  </>
-                ),
-              },
-            ]}
-            caption="matched against what you said you'd do"
           />
         }
       />
@@ -370,16 +384,17 @@ function FeatureRail() {
           <>
             Brand emails sit unanswered. You undercharge.{" "}
             <span className="italic text-paper-dim">
-              You get ghosted on a rate that was probably too low.
+              Or you get ghosted on a rate that was probably too low.
             </span>
           </>
         }
         subhead={
           <>
-            Maya reads every brand email in Gmail, drafts the reply in your
-            voice, and anchors on your minimum rate. If the deal is at or above
-            the rate you&rsquo;ve trusted her with, she sends and tells you what
-            she said. If she&rsquo;s not sure, you get the draft.
+            Maya reads every brand email in your Gmail and writes the
+            reply in your voice, with your minimum in mind. If the offer
+            is at or above what you&rsquo;ve told her you&rsquo;ll take,
+            she sends and tells you what she said. If she&rsquo;s not
+            sure, you see the draft.
           </>
         }
         visual={
@@ -390,8 +405,9 @@ function FeatureRail() {
                 side: "left",
                 body: (
                   <>
-                    Glossier — Q2 launch, 1 Reel + 3 stories, $4,000.
-                    That&rsquo;s 33% under your floor for that scope.
+                    Glossier wants 1 Reel + 3 stories for $4,000 for the
+                    spring launch. That&rsquo;s way under what you usually
+                    get for that.
                   </>
                 ),
               },
@@ -399,14 +415,14 @@ function FeatureRail() {
                 side: "left",
                 body: (
                   <>
-                    Drafted counter at $6,500 with 30-day exclusivity carved
-                    out, citing your last Glossier post (412K, 11% saves).
-                    Sending unless you say otherwise in 2h.
+                    Wrote back at $6,500, with the 30-day exclusivity
+                    carved out. Used your last Glossier post (412K, lots
+                    of saves) as the reason. Sending in 2 hours unless you
+                    say no.
                   </>
                 ),
               },
             ]}
-            caption="anchored on your $6K minimum"
           />
         }
       />
@@ -423,10 +439,10 @@ function FeatureRail() {
         }
         subhead={
           <>
-            Maya spots brands you&rsquo;d be a fit for, tracks down the right
-            person at each, and drafts the cold pitch in your voice. You see it
-            before she hits send. The pipeline you&rsquo;d build if you had
-            time, running while you film.
+            Maya spots brands that match you, tracks down the right person
+            at each, and writes the cold pitch in your voice. You see it
+            before she hits send. The pipeline you&rsquo;d build if you
+            had time, running while you film.
           </>
         }
         visual={
@@ -437,9 +453,10 @@ function FeatureRail() {
                 side: "left",
                 body: (
                   <>
-                    Spotted 3 brand fits this week: Topicals (skincare, your
-                    audience overlap is 41%), Caraway (cookware, you keep
-                    mentioning yours), Lemme (vitamins, low CPC, easy yes).
+                    Spotted 3 brands worth pitching this week. Topicals
+                    &mdash; lots of their fans already follow you. Caraway
+                    &mdash; you keep mentioning yours in posts. Lemme
+                    &mdash; small ask, easy yes.
                   </>
                 ),
               },
@@ -447,13 +464,12 @@ function FeatureRail() {
                 side: "left",
                 body: (
                   <>
-                    Drafted pitches to all three, addressed to the right brand
-                    lead at each. Want to read before I send?
+                    Wrote pitches to all three, addressed to the right
+                    person at each. Want to read before I send?
                   </>
                 ),
               },
             ]}
-            caption="matched on audience overlap"
           />
         }
       />
@@ -464,16 +480,17 @@ function FeatureRail() {
           <>
             A 14-page contract. You skim. You sign.{" "}
             <span className="italic text-paper-dim">
-              Three months later, you find out you signed away exclusivity.
+              Three months later you realize what you gave up.
             </span>
           </>
         }
         subhead={
           <>
-            Drop the PDF in chat. Maya flags the things that get creators in
-            trouble — exclusivity, who owns the content, when you actually get
-            paid, kill fees, the disclosure rules. In plain language. The
-            clauses you should push back on, and the words to push back with.
+            Drop the PDF in chat. Maya flags the stuff that gets creators
+            burned &mdash; who can post when, who keeps the footage, when
+            you actually get paid, kill fees, the disclosure rules. In
+            plain English. The things to push back on, and the words to
+            push back with.
           </>
         }
         visual={
@@ -488,82 +505,31 @@ function FeatureRail() {
                 side: "left",
                 body: (
                   <>
-                    Read it. Three flags:
+                    Read it. Three things to push back on:
                     <br />
-                    1. <strong>90-day exclusivity</strong> across the entire
-                    skincare category (industry standard for this rate is 30d
-                    same-brand).
+                    1. They want you to skip every skincare brand for{" "}
+                    <strong>90 days</strong>. Normal at this rate is 30,
+                    and only against them.
                     <br />
-                    2. <strong>IP grant is perpetual</strong> — they keep your
-                    footage forever.
+                    2. They <strong>keep your footage forever</strong>.
+                    Push for 1 year, then it reverts to you.
                     <br />
-                    3. <strong>Net-60 payment</strong>. Push to net-30.
+                    3. They wanna pay you in <strong>60 days</strong>.
+                    Push for 30.
                   </>
                 ),
               },
             ]}
-            caption="three clauses to push back on"
           />
         }
       />
 
-      {/* 10 — Manager packet */}
+      {/* 10 — Memory + voice mirror */}
       <FeatureSection
         reverse
         headline={
           <>
-            A real manager is sniffing around. They want a deck.{" "}
-            <span className="italic text-paper-dim">
-              Your follower count alone won&rsquo;t sell you.
-            </span>
-          </>
-        }
-        subhead={
-          <>
-            Quarterly, or on-demand, Maya generates a polished PDF a real
-            manager could read in five minutes. Audience, performance, brand
-            history, rate card, what&rsquo;s next. The packet you&rsquo;d hire
-            someone to build.
-          </>
-        }
-        visual={
-          <IMessageCard
-            timestamp="Q2 · on demand"
-            bubbles={[
-              {
-                side: "right",
-                body: <>UTA wants a deck. can you?</>,
-              },
-              {
-                side: "left",
-                body: (
-                  <>
-                    Yes. Pulled Q1 data — 14% follower growth, 3 brand deals
-                    closed, $34K revenue, top-saved post is the candle launch
-                    series. Generating now.
-                  </>
-                ),
-              },
-              {
-                side: "left",
-                body: (
-                  <>
-                    Packet ready: <strong>14 pages</strong>, brand-history
-                    timeline, rate card with rationale. Sent to your inbox.
-                  </>
-                ),
-              },
-            ]}
-            caption="generated · 6 min ago"
-          />
-        }
-      />
-
-      {/* 11 — Memory + voice mirror */}
-      <FeatureSection
-        headline={
-          <>
-            VAs and agencies dilute your voice.{" "}
+            VAs and agencies water down your voice.{" "}
             <span className="italic text-paper-dim">
               You felt the magic drain before your audience did.
             </span>
@@ -571,11 +537,11 @@ function FeatureRail() {
         }
         subhead={
           <>
-            Maya is built from your last 30 posts and 500 comments before she
-            sends a single message. She remembers your goals, your tone, your
-            minimum rate, your brand history, the hooks that hit and the ones
-            that didn&rsquo;t. The longer you have her, the more she sounds
-            like she knows you.
+            Maya reads your last 30 posts and 500 comments before she
+            sends a single message. She remembers your goals, your tone,
+            your minimum rate, every brand you&rsquo;ve worked with, what
+            hits and what doesn&rsquo;t. The longer she&rsquo;s with you,
+            the more she sounds like she knows you.
           </>
         }
         visual={
@@ -587,10 +553,10 @@ function FeatureRail() {
                 reaction: "love",
                 body: (
                   <>
-                    Caraway is back. They asked about a holiday push. You said
-                    in March you&rsquo;d only do them again at $8K and with
-                    creative approval — they came in at $9K and said yes to
-                    approval up front.
+                    Caraway is back. They asked about a holiday push. In
+                    March you said you&rsquo;d only do them again at $8K
+                    and with creative approval &mdash; they came in at
+                    $9K and said yes to approval.
                   </>
                 ),
               },
@@ -598,20 +564,18 @@ function FeatureRail() {
                 side: "left",
                 body: (
                   <>
-                    Drafted a yes, with the disclosure language you used last
+                    Wrote a yes with the disclosure language you used last
                     time. Send?
                   </>
                 ),
               },
             ]}
-            caption="from your March email and your minimum"
           />
         }
       />
 
-      {/* 12 — Tells the truth */}
+      {/* 11 — Tells the truth */}
       <FeatureSection
-        reverse
         headline={
           <>
             Cheerleading is{" "}
@@ -620,10 +584,10 @@ function FeatureRail() {
         }
         subhead={
           <>
-            Maya never says &ldquo;amazing post.&rdquo; If a piece underperforms,
-            she tells you plainly — with the data and what comes next. The
-            tone is tunable (supportive, strategic, tough-love). The honesty
-            isn&rsquo;t.
+            Maya never says &ldquo;amazing post.&rdquo; If something
+            flops, she tells you plainly &mdash; with what you saw and
+            what to do next. The tone is yours to set (supportive,
+            strategic, tough-love). The honesty isn&rsquo;t.
           </>
         }
         visual={
@@ -634,8 +598,9 @@ function FeatureRail() {
                 side: "left",
                 body: (
                   <>
-                    Friday&rsquo;s post underperformed. <strong>0.3×</strong>{" "}
-                    your median, lowest watch-time of the last 30.
+                    Friday&rsquo;s post flopped. About <strong>a third</strong>{" "}
+                    of your usual, and the lowest watch time you&rsquo;ve
+                    had in a month.
                   </>
                 ),
               },
@@ -644,13 +609,12 @@ function FeatureRail() {
                 body: (
                   <>
                     Opener was a 2.4-sec wide pan. Your top 5 all open on a
-                    face or a question by 0.8 sec. Don&rsquo;t boost this one —
-                    save the spend for Sunday&rsquo;s.
+                    face or a question by 0.8 sec. Don&rsquo;t boost this
+                    one &mdash; save the spend for Sunday&rsquo;s.
                   </>
                 ),
               },
             ]}
-            caption="grounded · told you the truth"
           />
         }
       />
@@ -664,39 +628,31 @@ function FeatureRail() {
 
 function FinalCta() {
   return (
-    <section className="px-6 pt-32 sm:px-10 sm:pt-40">
-      <div className="mx-auto max-w-5xl">
-        <div className="relative overflow-hidden rounded-3xl border border-[var(--hairline-strong)] bg-ink-2 px-8 py-16 text-center sm:px-16 sm:py-24">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 opacity-30"
-            style={{
-              background:
-                "radial-gradient(60% 80% at 50% 0%, rgba(214,255,61,0.18), transparent 70%)",
-            }}
-          />
-          <h2 className="relative font-display text-4xl leading-[1.05] tracking-tight text-paper sm:text-6xl">
-            Try Maya for 7 days.{" "}
-            <span className="italic text-paper-dim">
-              See if she earns the desk.
-            </span>
-          </h2>
-          <p className="relative mx-auto mt-6 max-w-xl text-paper-dim">
-            No card. Cancel anytime. If she isn&rsquo;t the manager you&rsquo;d
-            hire, walk away on day 6 with your data exported.
-          </p>
-          <div className="relative mt-9 flex flex-wrap items-center justify-center gap-3">
-            <Link
-              href={primaryCtaHref("/checkout?tier=manager&interval=monthly")}
-              className="btn btn-primary group !bg-paper !text-ink hover:!bg-white"
-            >
-              {primaryCtaLabel("Start 7 days free")}
-              <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-[1px] group-hover:translate-x-[1px]" />
-            </Link>
-            <a href="#pricing" className="btn btn-ghost">
-              See pricing
-            </a>
-          </div>
+    <section className="border-t border-[var(--hairline)] px-6 pt-32 sm:px-10 sm:pt-44">
+      <div className="mx-auto max-w-3xl text-center">
+        <h2 className="font-display text-4xl leading-[1.04] tracking-[-0.025em] text-paper sm:text-6xl">
+          Try Maya for 7 days.{" "}
+          <span className="italic text-paper-dim">
+            See if she earns the desk.
+          </span>
+        </h2>
+        <p className="mx-auto mt-6 max-w-xl text-paper-dim">
+          No card. Cancel anytime. If she isn&rsquo;t the manager
+          you&rsquo;d hire, walk away on day 6 with your data.
+        </p>
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-x-5 gap-y-3">
+          <Link
+            href={primaryCtaHref("/checkout?tier=manager&interval=monthly")}
+            className="inline-flex h-11 items-center rounded-md bg-paper px-5 text-sm font-medium text-ink transition hover:bg-white"
+          >
+            {primaryCtaLabel("Start 7 days free")}
+          </Link>
+          <a
+            href="#pricing"
+            className="text-sm text-paper-dim transition-colors hover:text-paper"
+          >
+            See pricing &rarr;
+          </a>
         </div>
       </div>
     </section>
@@ -783,7 +739,7 @@ function Footer() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  X / Twitter <ArrowUpRight className="h-3 w-3" />
+                  X / Twitter &rarr;
                 </a>
               </li>
               <li>
@@ -793,7 +749,7 @@ function Footer() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  TikTok <ArrowUpRight className="h-3 w-3" />
+                  TikTok &rarr;
                 </a>
               </li>
               <li>
@@ -803,7 +759,7 @@ function Footer() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Instagram <ArrowUpRight className="h-3 w-3" />
+                  Instagram &rarr;
                 </a>
               </li>
             </ul>

@@ -48,6 +48,7 @@ import {
   appleCalendarListCalendarsHttp,
   appleCalendarListEventsHttp,
   appleCalendarUpdateEventHttp,
+  calendarCreateMayaEventHttp,
   calendarCreateEventHttp,
   calendarDeleteEventHttp,
   calendarListEventsHttp,
@@ -281,6 +282,11 @@ http.route({
   path: "/lc_maya/calendar_create_event",
   method: "POST",
   handler: calendarCreateEventHttp,
+});
+http.route({
+  path: "/lc_maya/calendar_create_maya_event",
+  method: "POST",
+  handler: calendarCreateMayaEventHttp,
 });
 http.route({
   path: "/lc_maya/calendar_update_event",
