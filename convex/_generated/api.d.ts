@@ -149,6 +149,7 @@ import type * as lcMaya_calendarHttp from "../lcMaya/calendarHttp.js";
 import type * as lcMaya_firstProactivePing from "../lcMaya/firstProactivePing.js";
 import type * as lcMaya_gmailHttp from "../lcMaya/gmailHttp.js";
 import type * as lcMaya_lcMayaHttp from "../lcMaya/lcMayaHttp.js";
+import type * as lcMaya_produceEdit from "../lcMaya/produceEdit.js";
 import type * as lcMaya_wikiMirrorSync from "../lcMaya/wikiMirrorSync.js";
 import type * as lib_brandOutreachCaps from "../lib/brandOutreachCaps.js";
 import type * as lib_encryption from "../lib/encryption.js";
@@ -353,6 +354,7 @@ declare const fullApi: ApiFromModules<{
   "lcMaya/firstProactivePing": typeof lcMaya_firstProactivePing;
   "lcMaya/gmailHttp": typeof lcMaya_gmailHttp;
   "lcMaya/lcMayaHttp": typeof lcMaya_lcMayaHttp;
+  "lcMaya/produceEdit": typeof lcMaya_produceEdit;
   "lcMaya/wikiMirrorSync": typeof lcMaya_wikiMirrorSync;
   "lib/brandOutreachCaps": typeof lib_brandOutreachCaps;
   "lib/encryption": typeof lib_encryption;
