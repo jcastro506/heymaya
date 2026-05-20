@@ -1,40 +1,24 @@
 import type { Metadata } from "next";
-import BusinessHome from "./business/page";
 import CreatorLanding from "./creators/page";
 
 /**
- * Home (`/`). Conditional, single-source-of-truth front door:
+ * Home (`/`). The creator product is the single public surface.
  *
- *   - NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT !== "true" (v0 default):
- *       renders the service-business landing in-place. No redirect hop.
- *       CLAUDE.md prescribes this; previously a middleware 308 took
- *       /` → /business, but the redirect is now unnecessary because
- *       the home page IS the business landing.
+ * The service-business (trades) product was discontinued (2026-05-18) —
+ * Google Business Profile API access was an unworkable dependency. `/`
+ * renders the creator landing unconditionally. The trades landing at
+ * `/business` redirects here; service-business Convex tables/functions
+ * remain in the codebase (hidden, not deleted) but have no public surface.
  *
- *   - NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT === "true":
- *       renders the creator landing. `/business` continues to serve the
- *       business landing directly for visitors who want the trades pitch.
- *
- * The earlier Sprint 12.4 "split-router" hero ("Your manager before you
- * have one") read as a generic stub between two real product landings —
- * killed. The MarketingNav already exposes the cross-product choice, so
- * the picker surface lives in the nav, not a dedicated screen.
+ * A second vertical ("For VibeCoders") is in planning and will ship as its
+ * own route + nav tab when ready — it is NOT this page.
  */
-const CREATOR_PRODUCT_ENABLED =
-  process.env.NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT === "true";
-
-export const metadata: Metadata = CREATOR_PRODUCT_ENABLED
-  ? {
-      title: "HeyMaya — your AI manager in messages",
-      description:
-        "Maya helps creators decide what to post, when to make it, what deserves follow-up, and what the next move should be.",
-    }
-  : {
-      title: "HeyMaya — your AI marketing manager for the trades",
-      description:
-        "Maya turns every completed job into local marketing. Drafts review requests, GBP posts, and replies in your voice. You approve, she sends.",
-    };
+export const metadata: Metadata = {
+  title: "HeyMaya — your social media manager, in your messages",
+  description:
+    "Maya decides what to post, when to make it, what deserves follow-up, and the next move — so you can focus on creating. Lives in your iMessages.",
+};
 
 export default function Home() {
-  return CREATOR_PRODUCT_ENABLED ? <CreatorLanding /> : <BusinessHome />;
+  return <CreatorLanding />;
 }

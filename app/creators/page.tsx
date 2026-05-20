@@ -333,9 +333,56 @@ function FeatureRail() {
         }
       />
 
-      {/* 06 — Performance reading */}
+      {/* 06 — Editing */}
       <FeatureSection
         reverse
+        headline={
+          <>
+            You filmed it.{" "}
+            <span className="italic text-paper-dim">
+              It&rsquo;s rotting in your camera roll because editing is the
+              wall.
+            </span>
+          </>
+        }
+        subhead={
+          <>
+            Send Maya the raw clips. She cuts them down, puts them in
+            order, picks the opening that hooks, and sends back something
+            you can post today. The part you dread turns into a thing you
+            just approve.
+          </>
+        }
+        visual={
+          <IMessageCard
+            timestamp="Wed · 8:21 PM"
+            bubbles={[
+              {
+                side: "right",
+                body: (
+                  <>
+                    shot like 6 clips at the studio, no clue what to do
+                    with them
+                  </>
+                ),
+              },
+              {
+                side: "left",
+                body: (
+                  <>
+                    Sent you a <strong>22-second cut</strong> — opens on
+                    the mirror clip, then the voiceover carries the rest.
+                    Swap anything or post it?
+                  </>
+                ),
+              },
+            ]}
+          />
+        }
+      />
+
+      {/* 07 — Performance reading */}
+      <FeatureSection
         headline={
           <>
             A post hits. Another flops.{" "}
