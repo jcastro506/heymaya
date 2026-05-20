@@ -345,9 +345,16 @@ function buildFirstBootKickstartJob(opts: {
   // 2026-05-20 follow-up: five seconds was too tight because config is built
   // before Fly app secret updates, image launch, workspace download, and
   // gateway boot. A real redeploy took ~132s, so the job was already stale
-  // when cron started. Three minutes keeps the first-boot UX prompt while
-  // giving the deploy pipeline enough room to start the scheduler first.
-  const at = new Date(now + 180_000).toISOString();
+  // when cron started.
+  //
+  // 2026-05-20 follow-up #2: 180s was also too tight. Observed a real
+  // redeploy at 191.9s end-to-end, which made `at` ~12s in the past by
+  // the time the scheduler started — and the scheduler treated it as a
+  // missed deadline and rescheduled by +4h. Bumped to 300s (5 minutes)
+  // so even a slow ~250s deploy still lands `at` ~50s in the future.
+  // Acceptable UX trade-off: creator waits up to a couple extra minutes
+  // for the first ping in exchange for the kickstart actually firing.
+  const at = new Date(now + 300_000).toISOString();
   return {
     id: "0001_first_boot_kickstart",
     name: "0001 First-boot kickstart",
