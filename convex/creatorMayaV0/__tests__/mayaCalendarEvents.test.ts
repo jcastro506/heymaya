@@ -15,7 +15,7 @@
  *   5. TODO grep — no TODO / FIXME / unjustified eslint-disable in the
  *      new code paths.
  *
- * Plus body-templater unit coverage for each of the 8 kinds and the
+ * Plus body-templater unit coverage for each of the 9 kinds and the
  * per-tier cap helper matrix.
  */
 
@@ -245,6 +245,36 @@ describe("renderEventBody — per-kind body templates", () => {
     expect(body.description).toContain("wedding shoot");
   });
 
+  it("edit-block body cites the footage + target idea + style anchor", () => {
+    const body = renderEventBody({
+      kind: "edit-block",
+      context: {
+        editFocus: "Saturday shoot cut-down",
+        clipCount: 3,
+        targetIdea: "the bagel-spot POV for Wednesday",
+        styleAnchor: "fast jump cuts, no intro, text-on-screen hook",
+        sourceRef: "https://app.heymaya.app/footage/f_91",
+      },
+    });
+    expect(body.title).toContain("Edit block");
+    expect(body.title).toContain("Saturday shoot cut-down");
+    expect(body.description).toContain("3 clips");
+    expect(body.description).toContain("the bagel-spot POV for Wednesday");
+    expect(body.description).toContain("fast jump cuts");
+    expect(body.description).toContain(
+      "https://app.heymaya.app/footage/f_91",
+    );
+  });
+
+  it("edit-block body singularizes for a single clip", () => {
+    const body = renderEventBody({
+      kind: "edit-block",
+      context: { clipCount: 1 },
+    });
+    expect(body.description).toContain("1 clip ");
+    expect(body.description).not.toContain("1 clips");
+  });
+
   it("every kind returns non-empty title + description even with empty context", () => {
     for (const kind of MAYA_CALENDAR_EVENT_KINDS) {
       const body = renderEventBody({ kind, context: {} });
@@ -269,6 +299,7 @@ describe("weeklyCalendarEventCapPerKind — full matrix", () => {
     starter: {
       "trend-strike": 1,
       "content-block": 1,
+      "edit-block": 1,
       "post-publish": 3,
       "niche-scroll": 2,
       "comment-window": 1,
@@ -279,6 +310,7 @@ describe("weeklyCalendarEventCapPerKind — full matrix", () => {
     pro: {
       "trend-strike": 3,
       "content-block": 2,
+      "edit-block": 2,
       "post-publish": "unlimited",
       "niche-scroll": 7,
       "comment-window": 3,
@@ -289,6 +321,7 @@ describe("weeklyCalendarEventCapPerKind — full matrix", () => {
     studio: {
       "trend-strike": "unlimited",
       "content-block": "unlimited",
+      "edit-block": "unlimited",
       "post-publish": "unlimited",
       "niche-scroll": "unlimited",
       "comment-window": "unlimited",
@@ -903,6 +936,7 @@ describe("Maya calendar events — sibling-file scan", () => {
 
   it("SKILL.md names the lc_maya HTTP endpoints it depends on", () => {
     expect(SKILL_MD).toContain("/lc_maya/calendar_list_events");
+    expect(SKILL_MD).toContain("/lc_maya/calendar_create_maya_event");
     expect(SKILL_MD).toContain("/lc_maya/calendar_create_event");
     expect(SKILL_MD).toContain("/lc_maya/calendar_update_event");
     expect(SKILL_MD).toContain("/lc_maya/calendar_delete_event");

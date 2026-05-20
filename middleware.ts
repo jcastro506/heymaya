@@ -47,6 +47,7 @@ const CREATOR_HQ_PREFIXES = [
 const isPublic = createRouteMatcher([
   "/",
   "/creators",
+  "/vibecoders",
   "/creator-maya-v0(.*)",
   "/business",
   "/business-maya-v0(.*)",

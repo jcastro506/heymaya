@@ -52,6 +52,9 @@ export const MAYA_CALENDAR_EVENT_KINDS = [
   "brand-outbox",
   "weekly-review",
   "brain-break",
+  // Sprint C.6 — editing is the #1 stated creator pain; it gets its own
+  // protected slot after a filming block instead of "find time somehow".
+  "edit-block",
 ] as const;
 
 export type MayaCalendarEventKind = (typeof MAYA_CALENDAR_EVENT_KINDS)[number];
@@ -93,6 +96,7 @@ const kindValidator = v.union(
   v.literal("brand-outbox"),
   v.literal("weekly-review"),
   v.literal("brain-break"),
+  v.literal("edit-block"),
 );
 
 // ---------------------------------------------------------------------------
@@ -116,6 +120,9 @@ const CAP_MATRIX: Record<
   starter: {
     "trend-strike": 1,
     "content-block": 1,
+    // edit-block mirrors content-block's cap — one filming block earns
+    // one protected edit block at the advisory floor.
+    "edit-block": 1,
     "post-publish": 3,
     "niche-scroll": 2,
     "comment-window": 1,
@@ -126,6 +133,7 @@ const CAP_MATRIX: Record<
   pro: {
     "trend-strike": 3,
     "content-block": 2,
+    "edit-block": 2,
     "post-publish": "unlimited",
     "niche-scroll": 7,
     "comment-window": 3,
@@ -136,6 +144,7 @@ const CAP_MATRIX: Record<
   studio: {
     "trend-strike": "unlimited",
     "content-block": "unlimited",
+    "edit-block": "unlimited",
     "post-publish": "unlimited",
     "niche-scroll": "unlimited",
     "comment-window": "unlimited",
@@ -286,6 +295,57 @@ export const insertMayaCalendarEventInternal = internalMutation({
       endTimeMs: args.endTimeMs,
     });
     return { mayaCalendarEventId, deduped: false } as const;
+  },
+});
+
+export const preflightMayaCalendarEventInsertInternal = internalQuery({
+  args: {
+    creatorId: v.id("creators"),
+    kind: kindValidator,
+    citedRefs: v.array(citedRefValidator),
+    startTimeMs: v.number(),
+    endTimeMs: v.number(),
+    actionable: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) {
+      throw new Error("Creator not found for Maya calendar event preflight.");
+    }
+    if (args.startTimeMs >= args.endTimeMs) {
+      throw new Error(
+        "Maya calendar event start must be strictly before end.",
+      );
+    }
+    if (args.actionable && args.citedRefs.length === 0) {
+      throw new Error(
+        "Actionable Maya calendar events require at least one cited ref " +
+          "(architectural principle: grounded or silent).",
+      );
+    }
+
+    const tier = calendarTierFromPlan(creator.plan);
+    const cap = weeklyCalendarEventCapPerKind(tier, args.kind);
+    if (cap !== "unlimited") {
+      const windowStart = args.startTimeMs - 7 * 24 * 60 * 60 * 1000;
+      const sameWeek = await ctx.db
+        .query("mayaCalendarEvents")
+        .withIndex("by_creator_and_start", (q) =>
+          q
+            .eq("creatorId", args.creatorId)
+            .gte("startTimeMs", windowStart)
+            .lte("startTimeMs", args.startTimeMs + 7 * 24 * 60 * 60 * 1000),
+        )
+        .collect();
+      const sameKindCount = sameWeek.filter((row) => row.kind === args.kind)
+        .length;
+      if (sameKindCount >= cap) {
+        throw new CalendarCapError(tier, args.kind, cap, sameKindCount);
+      }
+      return { ok: true, tier, cap, current: sameKindCount } as const;
+    }
+
+    return { ok: true, tier, cap, current: 0 } as const;
   },
 });
 
@@ -442,6 +502,8 @@ export function renderEventBody(args: RenderEventBodyArgs): RenderedEventBody {
       return renderWeeklyReview(args.context);
     case "brain-break":
       return renderBrainBreak(args.context);
+    case "edit-block":
+      return renderEditBlock(args.context);
   }
 }
 
@@ -590,6 +652,35 @@ function renderWeeklyReview(c: RenderEventBodyContext): RenderedEventBody {
     `- 3 things that worked, 1 thing that didn't, the call for next week`,
     "",
     "Bring questions. I bring the data.",
+  ].join("\n");
+  return { title, description };
+}
+
+function renderEditBlock(c: RenderEventBodyContext): RenderedEventBody {
+  const editFocus = asStr(c.editFocus, "Edit session");
+  const clipCount = asNum(c.clipCount);
+  const targetIdea = asStr(c.targetIdea);
+  const styleAnchor = asStr(c.styleAnchor);
+  const sourceRef = asStr(c.sourceRef);
+  const title = `Edit block — ${editFocus}`;
+  const description = [
+    `1-2 hour edit session. ${
+      clipCount > 0
+        ? `${clipCount} clip${clipCount === 1 ? "" : "s"} from the filming block to cut down.`
+        : "Cut down the footage from the filming block."
+    }`,
+    "",
+    targetIdea
+      ? `Cutting toward: ${targetIdea}`
+      : `Cutting toward: the planned post (see cited refs).`,
+    "",
+    styleAnchor
+      ? `Keep it in your edit voice: ${styleAnchor}`
+      : `Keep it in your usual edit voice — pacing + cut rhythm from your recent hits.`,
+    "",
+    sourceRef ? `Footage: ${sourceRef}` : `Footage: see cited refs.`,
+    "",
+    "Get a rough cut done in one sitting — perfect is the enemy of posted. Ping me when it's close and I'll do a hook + first-3-seconds pass.",
   ].join("\n");
   return { title, description };
 }

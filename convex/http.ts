@@ -33,6 +33,7 @@ import {
   validateOutboundSendHttp,
   validateTrendCitationHttp,
 } from "./lcMaya/lcMayaHttp";
+import { produceEditHttp } from "./lcMaya/produceEdit";
 import { syncWikiObservationsHttp } from "./lcMaya/wikiMirrorSync";
 import { appleCalendarConnectHttp } from "./lcMaya/appleCalendarConnect";
 import {
@@ -47,6 +48,7 @@ import {
   appleCalendarListCalendarsHttp,
   appleCalendarListEventsHttp,
   appleCalendarUpdateEventHttp,
+  calendarCreateMayaEventHttp,
   calendarCreateEventHttp,
   calendarDeleteEventHttp,
   calendarListEventsHttp,
@@ -84,6 +86,16 @@ http.route({
   path: "/lc_maya/upload_rendered_media",
   method: "POST",
   handler: uploadRenderedMediaHttp,
+});
+
+// C1 — produce_edit: creator's raw clips + brief → one fused Gemini watch+
+// decide call (conditioned on their picture) → validated EDL the
+// maya-tiktok-director skill compiles to ffmpeg. Reuses the generic
+// video-synth-worker `/synthesize` transport. See `lcMaya/produceEdit.ts`.
+http.route({
+  path: "/lc_maya/produce_edit",
+  method: "POST",
+  handler: produceEditHttp,
 });
 
 // `lc_maya.*` first-boot iMessage flow — see `convex/lcMaya/lcMayaHttp.ts`.
@@ -270,6 +282,11 @@ http.route({
   path: "/lc_maya/calendar_create_event",
   method: "POST",
   handler: calendarCreateEventHttp,
+});
+http.route({
+  path: "/lc_maya/calendar_create_maya_event",
+  method: "POST",
+  handler: calendarCreateMayaEventHttp,
 });
 http.route({
   path: "/lc_maya/calendar_update_event",

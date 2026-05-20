@@ -2,16 +2,16 @@
 
 import type { ReactNode } from "react";
 
+import { ScrollReveal } from "./ScrollReveal";
+
 /**
- * A single pain-led feature section. Reused 12x in /creators with alternating
- * left/right layouts to keep the page reading like a magazine spread, not a
- * stamped-out feature grid.
+ * A single pain-led feature section.
  *
- * Structure (every section):
- *  - optional autonomy badge (e.g., "Manager tier")
- *  - headline (pain-first or solution-first)
- *  - subhead (1-2 sentences with concrete mechanic)
- *  - visual (typically <IMessageCard /> showing a sample Maya message)
+ * Linear/Vercel-coded restraint: hairline top border, generous breathing
+ * room, tight typography. The copy and visual columns each fade in
+ * independently on scroll via ScrollReveal — the visual gets a small
+ * extra delay so it lands a moment after the headline, giving the eye
+ * something to follow rather than a hard simultaneous reveal.
  */
 export function FeatureSection({
   headline,
@@ -27,34 +27,32 @@ export function FeatureSection({
   badge?: string;
 }) {
   return (
-    <section className="px-6 pt-24 sm:px-10 sm:pt-32">
+    <section className="border-t border-[var(--hairline)] px-6 pt-24 sm:px-10 sm:pt-32 lg:pt-40">
       <div className="mx-auto max-w-7xl">
         <div
-          className={`grid grid-cols-1 items-center gap-12 lg:grid-cols-12 lg:gap-16 ${
+          className={`grid grid-cols-1 items-center gap-12 lg:grid-cols-12 lg:gap-20 ${
             reverse ? "lg:[&>div:first-child]:order-2" : ""
           }`}
         >
           {/* Copy column */}
-          <div className="lg:col-span-6">
+          <ScrollReveal className="lg:col-span-6">
             {badge ? (
-              <div className="mb-5">
-                <span className="rounded-full bg-lime px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-ink">
-                  {badge}
-                </span>
+              <div className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
+                {badge}
               </div>
             ) : null}
-            <h3 className="font-display text-3xl leading-[1.08] tracking-tight text-paper sm:text-4xl lg:text-[2.625rem]">
+            <h3 className="font-display text-3xl leading-[1.06] tracking-[-0.02em] text-paper sm:text-4xl lg:text-[2.5rem]">
               {headline}
             </h3>
-            <div className="mt-5 max-w-xl text-base leading-relaxed text-paper-dim sm:text-[17px]">
+            <div className="mt-5 max-w-lg text-[17px] leading-relaxed text-paper-dim">
               {subhead}
             </div>
-          </div>
+          </ScrollReveal>
 
-          {/* Visual column */}
-          <div className="lg:col-span-6">
+          {/* Visual column — small extra delay so it lands after the headline */}
+          <ScrollReveal className="lg:col-span-6" delayMs={120}>
             <div className="mx-auto w-full max-w-md">{visual}</div>
-          </div>
+          </ScrollReveal>
         </div>
       </div>
     </section>

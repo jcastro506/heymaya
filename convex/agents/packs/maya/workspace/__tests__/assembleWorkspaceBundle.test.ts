@@ -545,10 +545,11 @@ describe("assembleWorkspaceBundle", () => {
     expect(skill).toContain("thinking-budget:");
     expect(skill).toContain("metadata:");
     expect(skill).toContain("openclaw:");
-    // All 8 event kinds present in the taxonomy section.
+    // All 9 event kinds present in the taxonomy section.
     const kinds = [
       "trend-strike",
       "content-block",
+      "edit-block",
       "post-publish",
       "niche-scroll",
       "comment-window",

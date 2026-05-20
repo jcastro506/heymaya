@@ -1,93 +1,69 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, Sparkles } from "lucide-react";
 
 import { primaryCtaHref, primaryCtaLabel } from "../../_components/landingMode";
 
 /**
- * Editorial hero: left-column headline + right-column "first message" receipt.
+ * Hero — Linear/Vercel-coded restraint.
  *
- * Single primary CTA — "Start 7 days free" → /checkout?tier=manager&interval=monthly.
- * Manager is the headline experience; Assistant is offered later in pricing.
- * (Internal Plan enum value stays "coach" — see convex/lib/planFeatures.ts.)
- *
- * Headline avoids the word "AI" (operator constraint). Maya is positioned as
- * ONE social media manager, with autonomy as the variable, not personality.
+ * Leads with the consistency promise (the one thing creators fear losing)
+ * and the four daily jobs Maya owns: plans the week, tells you what's
+ * trending, reminds you what to film today, flags what matters. One CTA.
+ * One flat sample message — a morning brief, the behavior every creator
+ * gets every day. Lime appears once, on the "grounded" dot.
  */
 export function Hero() {
   return (
-    <section className="relative px-6 pt-12 sm:px-10 sm:pt-20 lg:pt-28">
+    <section className="relative px-6 pt-16 sm:px-10 sm:pt-24 lg:pt-32">
       <div className="mx-auto max-w-7xl">
-        <div className="grid grid-cols-1 gap-14 lg:grid-cols-12 lg:gap-10">
+        <div className="grid grid-cols-1 gap-16 lg:grid-cols-12 lg:gap-12">
           {/* Headline column */}
           <div className="lg:col-span-7">
-            <h1 className="font-display text-[clamp(2.5rem,7vw,5.5rem)] leading-[1.02] tracking-[-0.02em] text-paper">
-              Your social media
-              <br />
-              manager.{" "}
+            <h1 className="font-display text-[clamp(2.75rem,7vw,5.25rem)] leading-[1.02] tracking-[-0.025em] text-paper">
+              Maya keeps you posting.{" "}
               <span className="italic text-paper-dim">
-                Lives in your iMessages.
+                Without thinking about it.
               </span>
             </h1>
-            <p className="mt-7 max-w-xl text-lg leading-relaxed text-paper-dim">
-              Maya plans your week so you stay consistent, turns your raw clips
-              into something you can actually post, catches the trends that fit
-              you, and tells you what&rsquo;s working — every day, in iMessage.
-              Replaces eight tools and a manager you can&rsquo;t afford yet.
+            <p className="mt-7 max-w-xl text-[17px] leading-relaxed text-paper-dim">
+              She plans your week, tells you what to film today, watches
+              what&rsquo;s trending in your niche, and texts you what
+              matters &mdash; before you have time to spiral. In iMessage,
+              like a real manager would.
             </p>
-            <div className="mt-9 flex flex-wrap items-center gap-3">
+            <div className="mt-10 flex flex-wrap items-center gap-x-5 gap-y-3">
               <Link
                 href={primaryCtaHref("/checkout?tier=manager&interval=monthly")}
-                className="btn btn-primary group !bg-paper !text-ink hover:!bg-white"
+                className="inline-flex h-11 items-center rounded-md bg-paper px-5 text-sm font-medium text-ink transition hover:bg-white"
               >
                 {primaryCtaLabel("Start 7 days free")}
-                <ArrowUpRight className="h-4 w-4 transition-transform group-hover:-translate-y-[1px] group-hover:translate-x-[1px]" />
               </Link>
-              <a href="#features" className="btn btn-ghost">
-                See what she does
-              </a>
-              <span className="ml-1 text-sm text-paper-faint">
+              <span className="text-sm text-paper-faint">
                 No card. Cancel anytime.
               </span>
             </div>
-            <p className="mt-6 font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
-              TikTok creators today · more platforms soon
-            </p>
           </div>
 
-          {/* Quote / receipt column */}
+          {/* Sample message column — a morning brief, the every-day behavior */}
           <aside className="lg:col-span-5">
-            <div className="relative">
-              {/* The little manila tag at the corner */}
-              <div className="absolute -top-3 right-6 z-10 rounded-sm bg-lime px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-ink">
-                Brief · 07:02
+            <div className="relative overflow-hidden rounded-xl border border-[var(--hairline-strong)] bg-ink-2 p-7">
+              <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
+                Maya · 7:02 am
               </div>
-              <div className="relative overflow-hidden rounded-2xl border border-[var(--hairline-strong)] bg-ink-2 p-7 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.6)]">
-                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-paper-faint">
-                  <Sparkles className="h-3.5 w-3.5 text-lime" />
-                  Maya · this morning
-                </div>
-                <p className="mt-5 font-display text-2xl italic leading-snug text-paper">
-                  &ldquo;Your &lsquo;POV: I tried…&rsquo; on Monday hit 340K.
-                  Wednesday&rsquo;s &lsquo;Day in my life&rsquo; flatlined at
-                  8K. I drafted three new POV openers for Thursday — want to
-                  see them?&rdquo;
-                </p>
-                <div className="mt-6 flex items-center justify-between border-t border-[var(--hairline)] pt-5 font-mono text-xs text-paper-faint">
-                  <span>from your last week of posts</span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-lime" />
-                    grounded
-                  </span>
-                </div>
+              <p className="mt-5 font-display text-2xl italic leading-snug text-paper">
+                &ldquo;Today: the POV we wrote Tuesday (you&rsquo;re free
+                6:30-7pm tonight) and the candle launch caption. New
+                comment from Glossier &mdash; worth reading before
+                lunch.&rdquo;
+              </p>
+              <div className="mt-7 flex items-center justify-between border-t border-[var(--hairline)] pt-5 font-mono text-[11px] uppercase tracking-[0.18em] text-paper-faint">
+                <span>your morning brief, every day</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-lime" />
+                  grounded
+                </span>
               </div>
-              {/* shadow-tile behind, rotated, for editorial feel */}
-              <div
-                aria-hidden
-                className="absolute -bottom-4 -right-4 -z-10 h-full w-full rounded-2xl border border-[var(--hairline)] bg-ink-3"
-                style={{ transform: "rotate(2.5deg)" }}
-              />
             </div>
           </aside>
         </div>
