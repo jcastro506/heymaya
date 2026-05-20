@@ -202,6 +202,56 @@ const MACHINE_GUEST: NonNullable<FlyMachineConfig["guest"]> = {
   memory_mb: 4096,
 };
 
+const CLAW_MESSENGER_COMPAT_PATCH_SCRIPT = String.raw`
+const fs = require("fs");
+const p = "/data/extensions/claw-messenger/dist/channel.js";
+if (fs.existsSync(p)) {
+  let s = fs.readFileSync(p, "utf8");
+  s = s
+    .replace(
+      'import { buildChannelConfigSchema, DEFAULT_ACCOUNT_ID, formatPairingApproveHint, PAIRING_APPROVED_MESSAGE, } from "openclaw/plugin-sdk";',
+      'import { buildChannelConfigSchema, formatPairingApproveHint, PAIRING_APPROVED_MESSAGE, } from "openclaw/plugin-sdk";\nconst DEFAULT_ACCOUNT_ID = "default";'
+    )
+    .replace(
+      "            const resolvedAccountId = account.accountId;",
+      "            const resolvedAccountId = account.accountId ?? DEFAULT_ACCOUNT_ID;\n            account.accountId = resolvedAccountId;"
+    )
+    .replaceAll(
+      'saveMediaBuffer(saved.buffer, saved.contentType ?? attachment.mimeType, "inbound", 10 * 1024 * 1024)',
+      'saveMediaBuffer(saved.buffer, saved.contentType ?? attachment.mimeType, "inbound", 100 * 1024 * 1024)'
+    )
+    .replaceAll(
+      'const rawBody = text || (allMedia.length > 0 ? "<media:image>" : "");',
+      'const rawBody = text || (attachments.length > 0 ? "<media:attachment>" : "");'
+    );
+
+  if (!s.includes("function mayaNormalizeGroupChatId(")) {
+    s = s.replace(
+      'const DEFAULT_ACCOUNT_ID = "default";',
+      'const DEFAULT_ACCOUNT_ID = "default";\nfunction mayaNormalizeGroupChatId(value) {\n  if (typeof value !== "string") return null;\n  const raw = value.trim();\n  const prefixed = raw.match(/^claw-messenger:group:(.+)$/);\n  if (prefixed?.[1]?.trim()) return prefixed[1].trim();\n  const direct = raw.match(/^group:(.+)$/);\n  return direct?.[1]?.trim() || null;\n}\nfunction mayaConfiguredGroupChatId() {\n  return mayaNormalizeGroupChatId(process.env.MAYA_CLAW_MESSENGER_DELIVERY_TO);\n}'
+    );
+    s = s.replace(
+      "                const chatId = params.chatId ?? params.chat_id;",
+      "                const chatId = params.chatId ?? params.chat_id ?? mayaNormalizeGroupChatId(Array.isArray(to) ? undefined : to) ?? mayaConfiguredGroupChatId();"
+    );
+    s = s.replace(
+      "                    if (mediaUrl) {\n                        const result = await sendMedia(ws, target, mediaUrl, text || undefined, account.preferredService);\n                        return { content: [{ type: \"text\", text: JSON.stringify({ ok: true, ...result }) }] };\n                    }\n                    const result = await sendText(ws, target, text, account.preferredService);",
+      "                    const groupChatId = mayaNormalizeGroupChatId(target);\n                    if (groupChatId) {\n                        if (mediaUrl) {\n                            const result = await sendGroupMedia(ws, groupChatId, mediaUrl, text || undefined, account.preferredService);\n                            return { content: [{ type: \"text\", text: JSON.stringify({ ok: true, ...result }) }] };\n                        }\n                        const result = await sendToGroup(ws, groupChatId, text, account.preferredService);\n                        return { content: [{ type: \"text\", text: JSON.stringify({ ok: true, ...result }) }] };\n                    }\n                    if (mediaUrl) {\n                        const result = await sendMedia(ws, target, mediaUrl, text || undefined, account.preferredService);\n                        return { content: [{ type: \"text\", text: JSON.stringify({ ok: true, ...result }) }] };\n                    }\n                    const result = await sendText(ws, target, text, account.preferredService);"
+    );
+    s = s.replace(
+      "            const result = await sendText(ws, to, text, account.preferredService);\n            return { channel: \"claw-messenger\", ...result };",
+      "            const groupChatId = mayaNormalizeGroupChatId(to) ?? mayaConfiguredGroupChatId();\n            const result = groupChatId\n                ? await sendToGroup(ws, groupChatId, text, account.preferredService)\n                : await sendText(ws, to, text, account.preferredService);\n            return { channel: \"claw-messenger\", ...result };"
+    );
+  }
+
+  fs.writeFileSync(p, s);
+}
+`.trim();
+
+function shQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 /**
  * Render the OpenClaw bootstrap config into a Fly machine config.
  *
@@ -256,6 +306,12 @@ export function machineConfigFor(
     // identify which creator's drafts are being validated against the
     // /lc_maya/validate_outbound_send endpoint.
     MAYA_CREATOR_ID: config.creatorId,
+    ...(process.env.MAYA_CLAW_MESSENGER_DELIVERY_TO?.trim()
+      ? {
+          MAYA_CLAW_MESSENGER_DELIVERY_TO:
+            process.env.MAYA_CLAW_MESSENGER_DELIVERY_TO.trim(),
+        }
+      : {}),
   };
 
   return {
@@ -335,7 +391,7 @@ function buildBootstrapShell(): string {
     // 2b. Compatibility fallback for @emotion-machine/claw-messenger 0.1.8
     // on OpenClaw 2026.4.23. The runtime image already applies this patch;
     // this guard keeps existing machines correct until every image is rebuilt.
-    'node -e \'const fs=require("fs");const p="/data/extensions/claw-messenger/dist/channel.js";if(fs.existsSync(p)){let s=fs.readFileSync(p,"utf8");s=s.replace("import { buildChannelConfigSchema, DEFAULT_ACCOUNT_ID, formatPairingApproveHint, PAIRING_APPROVED_MESSAGE, } from \\"openclaw/plugin-sdk\\";","import { buildChannelConfigSchema, formatPairingApproveHint, PAIRING_APPROVED_MESSAGE, } from \\"openclaw/plugin-sdk\\";\\nconst DEFAULT_ACCOUNT_ID = \\"default\\";").replace("            const resolvedAccountId = account.accountId;","            const resolvedAccountId = account.accountId ?? DEFAULT_ACCOUNT_ID;\\n            account.accountId = resolvedAccountId;").replaceAll("saveMediaBuffer(saved.buffer, saved.contentType ?? attachment.mimeType, \\\\\\"inbound\\\\\\", 10 * 1024 * 1024)","saveMediaBuffer(saved.buffer, saved.contentType ?? attachment.mimeType, \\\\\\"inbound\\\\\\", 100 * 1024 * 1024)").replaceAll("const rawBody = text || (allMedia.length > 0 ? \\\\\\"<media:image>\\\\\\" : \\\\\\"\\\\\\");","const rawBody = text || (attachments.length > 0 ? \\\\\\"<media:attachment>\\\\\\" : \\\\\\"\\\\\\");");fs.writeFileSync(p,s);}\'',
+    `node -e ${shQuote(CLAW_MESSENGER_COMPAT_PATCH_SCRIPT)}`,
     // 3. Download + extract the workspace tarball.
     'curl -fsSL "$MAYA_WORKSPACE_BUNDLE_URL" -o /tmp/workspace.tar',
     "tar -xf /tmp/workspace.tar -C /data/workspace",

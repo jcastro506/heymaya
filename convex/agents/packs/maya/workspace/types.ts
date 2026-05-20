@@ -46,6 +46,11 @@ export interface WorkspaceInputs {
   /** Test seam — pinned for determinism in tests. */
   now: number;
   /**
+   * Existing Claw Messenger thread target for proactive sends. When present,
+   * jobs route through that thread instead of a raw phone-number DM.
+   */
+  clawMessengerDeliveryTarget?: string;
+  /**
    * Sprint 4 — follower snapshots powering the USER.md 30-day delta line.
    * Optional for backward compatibility with pre-Sprint-4 callers; missing
    * = "no prior snapshot" rendering on every handle.

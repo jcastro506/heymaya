@@ -1061,6 +1061,8 @@ describe("machineConfigFor", () => {
     expect(initShell).toContain("/data/openclaw.json");
     expect(initShell).toContain("OPENCLAW_GATEWAY_TOKEN");
     expect(initShell).toContain(".gateway.auth");
+    expect(initShell).toContain("mayaNormalizeGroupChatId");
+    expect(initShell).toContain("mayaConfiguredGroupChatId");
     expect(initShell).toContain("openclaw gateway --allow-unconfigured");
     expect(initShell).not.toContain("--bind lan");
     expect(out.env?.OPENCLAW_STATE_DIR).toBe("/data");

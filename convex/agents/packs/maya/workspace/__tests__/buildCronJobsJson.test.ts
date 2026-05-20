@@ -276,10 +276,9 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
   // Determinism seam — pin the timestamp the kickstart embeds so the test
   // doesn't drift across runs.
   const KICKSTART_NOW = 1_730_000_000_000;
-  // Sprint 12.2 — flipped from past to near-future (KICKSTART_NOW + 5_000)
-  // so OpenClaw's scheduler arms a real timer instead of treating the job
-  // as a missed-deadline and rescheduling for at+4h.
-  const EXPECTED_AT = new Date(KICKSTART_NOW + 5_000).toISOString();
+  // Sprint 12.2 — flipped from past to near-future so OpenClaw's scheduler
+  // arms a real timer instead of treating the job as a missed deadline.
+  const EXPECTED_AT = new Date(KICKSTART_NOW + 180_000).toISOString();
 
   function freshCreator(plan: "coach" | "manager", tz = "America/Los_Angeles") {
     // firstBootCompletedAt intentionally undefined → kickstart fires.
@@ -315,6 +314,22 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     if (kickstart!.delivery?.channel !== "claw-messenger")
       throw new Error("type-narrow guard");
     expect(kickstart!.delivery.to).toBe("+15551234567");
+  });
+
+  it("routes kickstart and isolated crons through an explicit Claw Messenger thread when configured", () => {
+    const { jobs } = buildCronJobsJson({
+      creator: freshCreator("manager"),
+      clawMessengerDeliveryTarget: "group:test-chat-id",
+      firstBootKickstart: { nowMsOverride: KICKSTART_NOW },
+    });
+    const deliveredJobs = jobs.filter((j) => j.delivery?.mode === "announce");
+    expect(deliveredJobs.length).toBeGreaterThan(1);
+    for (const job of deliveredJobs) {
+      expect(job.delivery?.channel).toBe("claw-messenger");
+      if (job.delivery?.channel !== "claw-messenger")
+        throw new Error("type-narrow guard");
+      expect(job.delivery.to).toBe("group:test-chat-id");
+    }
   });
 
   it("places the kickstart entry at index 0 (lexical-first slot in jobs.json)", () => {
@@ -660,11 +675,11 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
     // Past `at` made OpenClaw's scheduler treat the job as a missed
     // deadline and reschedule it for `at + 4h` (verified in production
     // on `maya-jn71ys01`: nextWakeAtMs was 4h after the past `at`).
-    // Future `at` makes the scheduler arm a real timer for ~5 sec.
+    // Future `at` makes the scheduler arm a real timer after boot.
     expect(atMs).toBeGreaterThan(KICKSTART_NOW);
-    // But not too far in the future — must fire within ~10 sec of boot
-    // so the creator gets the kickstart promptly. Current value: 5_000.
-    expect(atMs - KICKSTART_NOW).toBeLessThanOrEqual(10_000);
+    // But not too far in the future — deploys have taken ~132 sec in the
+    // wild, so the buffer must exceed that while staying human-prompt.
+    expect(atMs - KICKSTART_NOW).toBeLessThanOrEqual(300_000);
   });
 
   it("kickstart entry is deterministic across calls with the same nowMsOverride", () => {

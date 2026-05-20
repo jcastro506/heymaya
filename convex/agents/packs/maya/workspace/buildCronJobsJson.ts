@@ -110,6 +110,13 @@ export interface BuildCronJobsJsonInputs {
     "plan" | "timezone" | "firstBootCompletedAt" | "phoneNumber"
   >;
   /**
+   * Optional explicit Claw Messenger route for proactive messages. This can be
+   * an existing group target such as `group:<chatId>`. If omitted, recurring
+   * jobs keep using OpenClaw's `last` channel behavior and first boot falls
+   * back to the creator phone number.
+   */
+  clawMessengerDeliveryTarget?: string;
+  /**
    * Optional override for the standing-orders catalog. Tests use this to
    * inject a smaller fixture; production passes nothing and gets the full
    * catalog.
@@ -209,6 +216,8 @@ export function buildCronJobsJson(inputs: BuildCronJobsJsonInputs): JobsJson {
   const { creator, catalogOverride } = inputs;
   const catalog = catalogOverride ?? STANDING_ORDERS;
   const features = planFeatures(creator);
+  const clawMessengerDeliveryTarget =
+    normalizeClawMessengerDeliveryTarget(inputs.clawMessengerDeliveryTarget);
 
   const jobs: JobSpec[] = [];
   for (const program of catalog) {
@@ -263,11 +272,13 @@ export function buildCronJobsJson(inputs: BuildCronJobsJsonInputs): JobsJson {
       payload,
       ...(program.session === "isolated"
         ? ({
-            delivery: {
-              mode: "announce",
-              channel: "last",
-              bestEffort: true,
-            },
+            delivery: clawMessengerDeliveryTarget
+              ? explicitClawMessengerDelivery(clawMessengerDeliveryTarget)
+              : {
+                  mode: "announce",
+                  channel: "last",
+                  bestEffort: true,
+                },
           } as const)
         : {}),
     });
@@ -285,6 +296,7 @@ export function buildCronJobsJson(inputs: BuildCronJobsJsonInputs): JobsJson {
   const kickstart = inputs.firstBootKickstart
     ? buildFirstBootKickstartJob({
         creator,
+        clawMessengerDeliveryTarget,
         nowMsOverride: inputs.firstBootKickstart.nowMsOverride,
         noScrapedContent: inputs.noScrapedContent === true,
       })
@@ -312,6 +324,7 @@ function buildFirstBootKickstartJob(opts: {
     Doc<"creators">,
     "plan" | "timezone" | "firstBootCompletedAt" | "phoneNumber"
   >;
+  clawMessengerDeliveryTarget?: string;
   nowMsOverride?: number;
   noScrapedContent?: boolean;
 }): JobSpec | null {
@@ -320,25 +333,21 @@ function buildFirstBootKickstartJob(opts: {
   // iMessage (no "last" channel exists on a fresh deploy). Skip if missing —
   // a kickstart with no delivery target would silently fail in claw-messenger
   // and the creator would never hear from Maya.
-  if (!opts.creator.phoneNumber) return null;
+  const deliveryTarget =
+    normalizeClawMessengerDeliveryTarget(opts.clawMessengerDeliveryTarget) ??
+    opts.creator.phoneNumber;
+  if (!deliveryTarget) return null;
   const now = opts.nowMsOverride ?? Date.now();
-  // Sprint 12.2 (2026-05-10) — set `at` 5 SECONDS IN THE FUTURE, not in
-  // the past. OpenClaw 2026.4.23's scheduler treats stale-past-`at` jobs
-  // as "missed deadlines" and reschedules them for `at + 4h` instead of
-  // firing immediately at boot. Verified in production: live machine
-  // `maya-jn71ys01` had `nextWakeAtMs: 1778430520651` (4h after the
-  // intended `at`) when we set `at = Date.now() - 1`. The earlier
-  // documentation that read `Math.max(at - now, 0) clamps to 0 →
-  // MIN_REFIRE_GAP_MS` was wrong — that path doesn't trigger for
-  // already-past `at` values; the scheduler treats them as missed-by-X
-  // and uses a 4h catch-up window. Setting `at = Date.now() + 5_000`
-  // means the scheduler sees a future job, arms the timer for ~5 sec,
-  // and fires when the timer pops. End-to-end: gateway boot (~10-15
-  // sec) + the 5-sec arm + first cron tick = first kickstart message
-  // lands ~15-20 sec after machine state hits "started." Encoded as
-  // ISO-8601 because parseAbsoluteTimeMs accepts both numeric ms and
-  // ISO strings; ISO is more debuggable in the Fly logs.
-  const at = new Date(now + 5_000).toISOString();
+  // Sprint 12.2 (2026-05-10) — set `at` in the future, not in the past.
+  // OpenClaw 2026.4.23's scheduler treats stale-past-`at` jobs as "missed
+  // deadlines" and can reschedule them hours later instead of firing at boot.
+  //
+  // 2026-05-20 follow-up: five seconds was too tight because config is built
+  // before Fly app secret updates, image launch, workspace download, and
+  // gateway boot. A real redeploy took ~132s, so the job was already stale
+  // when cron started. Three minutes keeps the first-boot UX prompt while
+  // giving the deploy pipeline enough room to start the scheduler first.
+  const at = new Date(now + 180_000).toISOString();
   return {
     id: "0001_first_boot_kickstart",
     name: "0001 First-boot kickstart",
@@ -378,10 +387,26 @@ function buildFirstBootKickstartJob(opts: {
     delivery: {
       mode: "announce",
       channel: "claw-messenger",
-      to: opts.creator.phoneNumber,
+      to: deliveryTarget,
       bestEffort: true,
     },
   };
+}
+
+function normalizeClawMessengerDeliveryTarget(
+  value: string | undefined
+): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function explicitClawMessengerDelivery(to: string) {
+  return {
+    mode: "announce",
+    channel: "claw-messenger",
+    to,
+    bestEffort: true,
+  } as const;
 }
 
 function isPlanAllowed(

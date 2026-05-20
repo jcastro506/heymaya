@@ -209,6 +209,7 @@ export function assembleWorkspaceBundle(
     picture == null || picture.model === "profile-only-fallback";
   const jobsJson = buildCronJobsJson({
     creator,
+    clawMessengerDeliveryTarget: inputs.clawMessengerDeliveryTarget,
     noScrapedContent,
     firstBootKickstart: { nowMsOverride: now },
   });
