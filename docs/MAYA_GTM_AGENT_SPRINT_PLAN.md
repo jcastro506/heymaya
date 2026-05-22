@@ -17,6 +17,19 @@ This is not a Twitter bot, not a generic social scheduler, and not a ClawGTM
 clone. ClawGTM is outbound-sales led. Maya GTM is founder-led content,
 community, and launch execution for early app builders.
 
+After reviewing Nicole's consumer-app growth playbook, add one sharper product
+principle:
+
+> Maya does not help the founder "post more." Maya turns distribution into an
+> experiment system: try formats, measure signal, double down, train repeatable
+> execution, and scale only after a channel/format proves it can create users.
+
+That matters because consumer app growth often requires very high output and
+structured iteration. A single good TikTok script is not the product. The
+product is the operating system that finds a viable distribution format, keeps
+testing variants, converts learning into the next batch, and eventually helps
+the founder recruit/train other people if UGC becomes the winning motion.
+
 ## Target User
 
 The starting ICP is:
@@ -44,10 +57,18 @@ Do not build these in V1:
 - A large dashboard that the user must maintain.
 - A brand-voice workshop.
 - A content generator that posts generic advice without evidence.
+- A full UGC creator recruiting/management platform.
+- Paid influencer marketplace workflows.
+- Internal creator training courses, quizzes, payout logic, or referral systems.
 
 Cold outbound, deliverability, CRM, LinkedIn DMs, and booked-call workflows are
 their own product. If we build them too early, Maya becomes a worse ClawGTM
 instead of a distinct GTM teammate.
+
+UGC creator operations are a likely V2 module, not a V1 dependency. V1 should
+learn which channels and content formats work for the app. Only after that
+should Maya help the founder systemize a creator bench, because recruiting
+people before knowing the winning content system creates expensive noise.
 
 ## Current Repo Fit
 
@@ -438,6 +459,75 @@ V1 stance:
 
 ## Product Surfaces
 
+## Consumer-App Virality Lessons
+
+Nicole's interview adds several requirements for ClawLaunch when the user's app
+is consumer or visually demoable:
+
+1. **Distribution strategy is part of product design.**
+   - Maya should inspect the app for viral moments, not only buyer pain.
+   - App diagnosis should include "what is innately showable in 3-10 seconds?"
+   - If the app has no visual/demo hook, Maya should say so and recommend a
+     different first channel.
+2. **Test categories, not single posts.**
+   - Maya should test a small number of distribution motions for 2-3 weeks:
+     Reddit helpful replies, TikTok/IG-style faceless demos, founder talking
+     head, face/reaction UGC, X founder-led posts, LinkedIn professional posts.
+   - Within each motion, Maya should produce variants: hooks, CTAs, proof
+     frames, demo sequences, and audience angles.
+3. **Scale only after a format wins.**
+   - Maya should not tell a founder to hire creators on day one.
+   - If a TikTok/short-form format repeatedly creates qualified signal, Maya can
+     propose a "UGC systemization" plan: creator profile, sample briefs,
+     training module outline, content bank, feedback cadence, and dashboard
+     needs.
+4. **Train the system, not just the post.**
+   - Winning assets become a content bank.
+   - Maya should keep examples of what worked, what failed, and why.
+   - Future drafts should come from the tested content bank, not generic prompt
+     generation.
+5. **Measure user signal, not vanity reach.**
+   - For consumer apps, views matter only when paired with installs, trial
+     starts, waitlist joins, comments from likely users, or creator applicants.
+   - If a format gets views but no app action, Maya should revise the CTA,
+     landing path, or app onboarding before scaling it.
+
+Add these concepts to the GTM object model:
+
+```ts
+type DistributionMotion =
+  | "reddit_helpful_reply"
+  | "x_founder_led"
+  | "linkedin_founder_led"
+  | "tiktok_faceless_demo"
+  | "tiktok_founder_talking_head"
+  | "ugc_creator_test"
+  | "paid_ads_later"
+  | "influencer_later";
+
+type FormatExperiment = {
+  motion: DistributionMotion;
+  hypothesis: string;
+  variants: Array<{
+    hook: string;
+    demoMoment?: string;
+    cta: string;
+    formatSkeleton: string;
+  }>;
+  successMetric: "qualified_replies" | "signups" | "installs" | "trials" | "creator_applicants";
+  scaleDecision: "keep_testing" | "double_down" | "revise" | "park";
+};
+```
+
+V1 implementation stance:
+
+- Build the experiment system now.
+- Build the content bank now.
+- Build TikTok scripts/shot lists now.
+- Build "UGC readiness recommendation" now.
+- Do not build the full UGC recruiting/training/creator-management system until
+  beta evidence shows it is the winning path for consumer-app users.
+
 ### Public Landing Page
 
 The current `/vibecoders` page is a useful positioning scaffold, but it reflects
@@ -670,10 +760,17 @@ Skills shipped out of the box:
 - `maya-channel-strategy-judge`: final channel scoring and gatekeeping.
 - `maya-content-format-miner`: extracts reusable structures without copying
   wording or claims.
+- `maya-distribution-motion-tester`: chooses and tracks distribution motions,
+  variants, and 2-3 week test windows.
+- `maya-viral-demo-moment-miner`: finds showable app moments, before/after
+  contrasts, screen-recording beats, and short-form hooks.
 - `maya-slop-critic`: rejects generic/unsupported content.
 - `maya-calendar-plan-builder`: converts strategy into rich calendar events.
 - `maya-approval-publisher`: approval-first publishing rules and tool routing.
 - `maya-results-reviewer`: metrics, feedback, and weekly learning loop.
+- `maya-ugc-system-advisor`: V1 advisory-only skill that decides whether the
+  app has enough proof to start recruiting UGC creators and, if so, drafts the
+  creator profile, brief template, training outline, and management cadence.
 
 Skill deployment:
 
@@ -814,6 +911,8 @@ Outputs:
 - Product summary.
 - Features.
 - Core workflow.
+- Viral/demo moments: what can be shown fast, what before/after exists, what
+  visual proof is available, and what is not visually compelling yet.
 - Strongest demo moments.
 - Pricing/onboarding friction.
 - Landing page gaps.
@@ -884,8 +983,41 @@ Outputs:
 - Best demo angle.
 - 3-5 TikTok script formats.
 - Shot-list templates.
+- Distribution-motion recommendation:
+  - faceless screen recording
+  - founder talking head
+  - reaction/face UGC later
+  - slideshow/static proof
+  - park TikTok for now
 - Recording burden.
 - Whether TikTok should be primary/secondary/parked.
+
+### Distribution Motion Agent
+
+Tools:
+
+- App Inspector output.
+- Evidence cards.
+- Content format miner.
+- Results snapshots.
+
+Outputs:
+
+- 2-3 motions to test first.
+- Variants per motion.
+- Minimum viable cadence for each motion.
+- Stop/double-down criteria.
+- Calendar tasks for the next test window.
+- Whether a UGC creator system is premature, useful soon, or ready to start.
+
+Rules:
+
+- Do not recommend scaling creator operations until at least one motion has
+  repeated signal.
+- Do not confuse "creator content" with "UGC operations." The founder can
+  record early tests manually; UGC is a scale layer after proof.
+- Consumer/visual apps may deserve TikTok/short-form earlier.
+- B2B workflow apps still need proof before TikTok becomes primary.
 
 ### LinkedIn Fit Agent
 
@@ -1227,6 +1359,9 @@ New tables:
 - `gtmChannelScores`
 - `gtmChannelDecisions`
 - `gtmContentFormats`
+- `gtmDistributionMotions`
+- `gtmFormatExperiments`
+- `gtmContentBankItems`
 - `gtmDrafts`
 - `gtmApprovals`
 - `gtmPublishedPosts`
@@ -1234,6 +1369,7 @@ New tables:
 - `gtmMetricSnapshots`
 - `gtmUserFeedback`
 - `gtmWritingProfiles`
+- `gtmUgcReadinessReports`
 - `gtmCostLedger`
 - `gtmToolCallLog`
 - `gtmResearchFixtures`
@@ -1591,7 +1727,8 @@ Exit:
 
 Goal:
 
-- Maya can evaluate X, LinkedIn, TikTok, and Reddit separately.
+- Maya can evaluate X, LinkedIn, TikTok, Reddit, and distribution motions
+  separately.
 
 Build:
 
@@ -1600,13 +1737,19 @@ Build:
 - LinkedIn Fit Agent.
 - Reddit Demand Agent v2 with subreddit-risk checks.
 - Content format mining.
+- Distribution Motion Agent.
+- Viral Demo Moment Miner.
+- UGC System Advisor in advisory-only mode.
 
 Tests:
 
 - B2B app does not blindly recommend TikTok.
 - Visual consumer app can recommend TikTok.
+- Visual consumer app identifies specific short-form motions and demo moments.
 - Reddit recommendations include risk.
 - LinkedIn recommendations require B2B/professional fit.
+- UGC recommendation is blocked until a motion has evidence or the app already
+  has strong proof/examples.
 
 Smoke:
 
@@ -1656,10 +1799,13 @@ Build:
 
 - Content format library.
 - Format mining.
+- Content bank with winning/losing examples and reusable skeletons.
 - Platform writers for X, LinkedIn, Reddit, TikTok.
 - Slop critic.
 - Claim checker/citation firewall.
 - Writing profile adaptation from feedback.
+- Distribution-motion variants: hook, body, CTA, demo moment, and success
+  metric.
 
 Tests:
 
@@ -1668,6 +1814,8 @@ Tests:
 - Unsupported claim rejection.
 - Platform-fit tests.
 - User feedback updates writing profile.
+- Winning content examples become content-bank items.
+- Future drafts cite the content-bank pattern they are using.
 
 Smoke:
 
@@ -1753,6 +1901,9 @@ Build:
 - Weekly review.
 - Writing profile updates.
 - Channel score updates.
+- Format experiment updates.
+- Content bank promotion/demotion.
+- UGC readiness report updates when a short-form motion wins.
 - Memory/wiki promotion rules.
 
 Tests:
@@ -1761,6 +1912,8 @@ Tests:
 - Weak signal does not overfit.
 - User rejection lowers pattern confidence.
 - Weekly plan changes based on evidence.
+- A high-view/low-signal post does not get marked as a winner.
+- Repeated useful signal promotes a motion to `double_down`.
 
 Smoke:
 
@@ -1850,12 +2003,15 @@ Run:
 - Required app URL/live beta.
 - Weekly human review of every final plan.
 - Track time-to-first-plan, approval rate, posts shipped, user-reported signal,
-  cost/user, retention intent.
+  cost/user, retention intent, format experiments run, winning motions found,
+  and whether Maya created at least one concrete user-acquisition signal.
 
 Success criteria:
 
 - 80% of users approve the first channel strategy.
 - 70% execute at least 3 Maya-scheduled actions in week one.
+- 60% run at least one complete distribution-motion experiment in the first 14
+  days.
 - Average COGS below target for selected price.
 - Human reviewer rates plans >= 4/5 on specificity and usefulness.
 - No unauthorized publishing.
