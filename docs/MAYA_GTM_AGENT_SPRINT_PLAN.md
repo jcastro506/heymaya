@@ -39,6 +39,8 @@ The starting ICP is:
 - They do not clearly know their ICP.
 - They do not have a repeatable distribution motion.
 - They are willing to approve content and record screen/face clips when needed.
+- They are willing to answer production-reality questions so Maya can choose
+  channels they can actually execute.
 - They are already paying for developer tools, so a $49-$99/month product is
   plausible if Maya drives real user signal.
 
@@ -52,7 +54,7 @@ Do not build these in V1:
 - A full cold-email/outbound sales product.
 - LinkedIn lead-gen automation with connection requests and DM blasting.
 - Fully autonomous social posting.
-- Instagram or Facebook posting.
+- Instagram or Facebook direct posting.
 - TikTok direct posting as a launch requirement.
 - A large dashboard that the user must maintain.
 - A brand-voice workshop.
@@ -462,6 +464,31 @@ V1 stance:
 - User records or provides clips.
 - TikTok direct publishing is V2+ after app audit and media workflow are stable.
 
+### Instagram
+
+Instagram should be planned in V1 as a visual-content reuse and validation
+channel, not as a separate automation surface.
+
+V1 stance:
+
+- Instagram Reels, carousels, Stories, and static screenshot posts are in scope
+  for planning when the user's app is visual/consumer/prosumer or the user
+  already has Instagram distribution.
+- Maya may adapt TikTok-first scripts, slideshow outlines, screenshot
+  sequences, captions, and visual briefs into Instagram variants.
+- Instagram direct posting is out of scope for V1.
+- Maya should not create a separate Instagram workload unless there is evidence
+  and production capacity. Default behavior is "create assets that can be used
+  on TikTok and Instagram," not "double the founder's posting burden."
+- If the founder has no visual assets, no willingness to create screenshots or
+  recordings, and no UGC/content budget, Maya parks TikTok/Instagram and
+  chooses a lower-production channel.
+
+Production-fit rule:
+
+> TikTok and Instagram require both market evidence and production capacity.
+> Maya cannot recommend them simply because they are popular.
+
 Research note:
 
 - TikTok Photo Mode/carousel posts are a real format, not a fallback. They can
@@ -489,8 +516,9 @@ is consumer or visually demoable:
      different first channel.
 2. **Test categories, not single posts.**
    - Maya should test a small number of distribution motions for 2-3 weeks:
-     Reddit helpful replies, TikTok/IG-style faceless demos, founder talking
-     head, face/reaction UGC, X founder-led posts, LinkedIn professional posts.
+     Reddit helpful replies, TikTok/Instagram-style faceless demos,
+     slideshow/carousel posts, founder talking head, face/reaction UGC,
+     X founder-led posts, LinkedIn professional posts.
    - Within each motion, Maya should produce variants: hooks, CTAs, proof
      frames, demo sequences, and audience angles.
 3. **Scale only after a format wins.**
@@ -700,6 +728,12 @@ The user should not maintain this. Maya updates it.
    - What counts as a win this week: feedback, signups, demos, revenue?
    - Are you willing to record your screen?
    - Are you willing to show your face?
+   - Are you willing to record your voice?
+   - Can you provide screenshots or product images for slideshow/carousel posts?
+   - Are you willing to post on TikTok or Instagram manually?
+   - Do you already have TikTok or Instagram accounts Maya can inspect?
+   - Are you open to hiring UGC creators later if a format proves itself?
+   - What is your monthly creator/content budget, if any?
    - Any audience or topic you definitely do not want Maya to target?
 7. Optional:
    - test login
@@ -752,6 +786,38 @@ Testing:
 - Assert large/unsupported files fail gracefully.
 - Assert diagnosis can be generated without asking the user for ICP.
 - Browser smoke the upload path on localhost and staging.
+
+### Production Reality Gate
+
+Maya must map every visual-channel recommendation to a production path the user
+can actually execute.
+
+Inputs:
+
+- face-camera willingness
+- voiceover willingness
+- screen-recording willingness
+- screenshot/slideshow willingness
+- ability to post manually
+- existing TikTok/Instagram accounts
+- content cadence the founder can realistically sustain
+- UGC/creator budget and openness
+- channels the founder refuses to use
+
+Decision ladder for TikTok/Instagram:
+
+1. If the user can only provide screenshots, start with slideshow/carousel,
+   screenshot sequence, and text-on-image concepts.
+2. If the user can screen-record, add faceless demo clips and screen-recorded
+   Reels/TikToks.
+3. If the user can record voice, add voiceover variants.
+4. If the user can show face, test founder talking-head only when research
+   supports it.
+5. If visual formats show customer signal and the user does not want to keep
+   producing them, Maya may recommend UGC systemization.
+6. If the user cannot provide visual assets and has no creator budget, Maya
+   parks TikTok/Instagram and chooses Reddit, X, LinkedIn, or community/search
+   motions where written execution can work.
 
 ### Web App Inspection
 
@@ -1811,6 +1877,14 @@ Build:
 - Walkthrough upload and storage.
 - Gemini video-analysis job.
 - Web app browser/headless inspection.
+- Production reality capture for visual channels:
+  - face-camera willingness
+  - voiceover willingness
+  - screen-recording willingness
+  - screenshot/slideshow willingness
+  - manual TikTok/Instagram posting willingness
+  - existing TikTok/Instagram accounts
+  - UGC/creator budget and openness
 - App diagnosis schema and `APP.md` write.
 - Minimal questions.
 - Research job creation.
@@ -1825,6 +1899,7 @@ Tests:
 - Upload file validation.
 - Gemini walkthrough output schema.
 - Web inspector broken URL/paywall/login behavior.
+- Visual channel recommendations fail when production capacity is missing.
 
 Smoke:
 
@@ -1855,6 +1930,11 @@ Build:
   - slideshow/carousel/Photo Mode
   - screenshot sequences
   - comments/transcripts where available
+- Instagram Format Planner:
+  - Reels adaptation when TikTok-style assets exist
+  - carousel/static screenshot adaptation
+  - Stories/manual handoff when useful
+  - no direct posting in V1
 - X Founder-Led Agent.
 - LinkedIn Fit Agent.
 - Competitor/Search Agent.
