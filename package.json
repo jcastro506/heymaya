@@ -17,6 +17,7 @@
     "smoke:service": "tsx scripts/service-mvp-smoke.ts",
     "smoke:creator-maya-v0": "tsx scripts/creator-maya-v0-fly-smoke.ts",
     "smoke:gtm-sprint1": "tsx scripts/gtm-sprint1-smoke.ts",
+    "smoke:gtm-readiness": "tsx scripts/gtm-readiness-smoke.ts",
     "stripe:create-creator-products": "tsx scripts/stripe/createCreatorProducts.ts"
   },
   "dependencies": {
