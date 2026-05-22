@@ -4611,5 +4611,65 @@ export default defineSchema({
   })
     .index("by_account", ["accountId"])
     .index("by_fly_app", ["flyAppId"]),
+
+  gtmBetaCohort: defineTable({
+    accountId: v.id("creators"),
+    cohortName: v.string(),
+    status: v.union(
+      v.literal("active"),
+      v.literal("completed"),
+      v.literal("removed")
+    ),
+    requiredAppUrlLive: v.boolean(),
+    startedAt: v.number(),
+    endsAt: v.number(),
+    retentionIntent: v.optional(
+      v.union(
+        v.literal("high"),
+        v.literal("medium"),
+        v.literal("low"),
+        v.literal("unknown")
+      )
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_cohort", ["cohortName"]),
+
+  gtmHumanPlanReviews: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    reviewer: v.string(),
+    specificityScore: v.number(),
+    usefulnessScore: v.number(),
+    notes: v.string(),
+    reviewedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_research_job", ["researchJobId"]),
+
+  gtmUserReportedSignals: defineTable({
+    accountId: v.id("creators"),
+    kind: v.union(
+      v.literal("reply"),
+      v.literal("signup"),
+      v.literal("demo"),
+      v.literal("feedback"),
+      v.literal("retention")
+    ),
+    message: v.string(),
+    retentionIntent: v.optional(
+      v.union(
+        v.literal("high"),
+        v.literal("medium"),
+        v.literal("low"),
+        v.literal("unknown")
+      )
+    ),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_kind", ["accountId", "kind"]),
   // ─── end ClawLaunch / Maya GTM product ────────────────────────────────
 });
