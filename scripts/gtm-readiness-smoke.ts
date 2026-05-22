@@ -9,7 +9,7 @@
  */
 
 import { convexTest } from "convex-test";
-import { readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { api } from "../convex/_generated/api";
@@ -20,6 +20,7 @@ import { interpretResults } from "../convex/gtmMaya/resultsLoop";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ADMIN_TOKEN = "gtm-readiness-smoke-admin";
+const DEFAULT_OPENCLAW_IMAGE = "registry.fly.io/heymaya-openclaw:v2026.4.23";
 
 interface Check {
   name: string;
@@ -51,6 +52,7 @@ function buildConvexModules(): Record<string, () => Promise<unknown>> {
 }
 
 async function main() {
+  loadLocalEnv();
   process.env.ADMIN_TOKEN = ADMIN_TOKEN;
   const checks: Check[] = [];
   const modules = buildConvexModules();
@@ -273,14 +275,17 @@ async function main() {
   checks.push(externalCheck("Composio publishing connections configured", [
     "COMPOSIO_API_KEY",
   ]));
-  checks.push(externalCheck("ScrapeCreators API configured", [
-    "SCRAPECREATORS_API_KEY",
-  ]));
-  checks.push(externalCheck("Fly/OpenClaw machine can be deployed", [
-    "FLY_API_TOKEN",
-    "FLY_ORG_SLUG",
-    "MAYA_OPENCLAW_IMAGE",
-  ]));
+  checks.push(
+    externalCheck("ScrapeCreators API configured", [
+      ["SCRAPE_CREATORS_API_KEY", "SCRAPECREATORS_API_KEY"],
+    ])
+  );
+  checks.push(
+    externalCheck("Fly/OpenClaw machine can be deployed", [
+      "FLY_API_TOKEN",
+      "FLY_ORG_SLUG",
+    ], `using image ${process.env.MAYA_OPENCLAW_IMAGE ?? DEFAULT_OPENCLAW_IMAGE}`)
+  );
 
   const blocked = checks.filter((check) => check.status === "blocked");
   console.log(JSON.stringify({ ok: blocked.length === 0, checks }, null, 2));
@@ -360,20 +365,56 @@ async function expectReject(promise: Promise<unknown>): Promise<void> {
   throw new Error("expected operation to reject");
 }
 
-function externalCheck(name: string, envNames: string[]): Check {
-  const missing = envNames.filter((name) => !process.env[name]);
+function externalCheck(
+  name: string,
+  envGroups: Array<string | string[]>,
+  passedDetail = "required env present"
+): Check {
+  const missing = envGroups.filter((group) => {
+    const names = Array.isArray(group) ? group : [group];
+    return !names.some((name) => Boolean(process.env[name]));
+  });
   return {
     name,
     status: missing.length === 0 ? "passed" : "blocked",
     detail:
       missing.length === 0
-        ? "required env present"
-        : `missing env: ${missing.join(", ")}`,
+        ? passedDetail
+        : `missing env: ${missing
+            .map((group) => (Array.isArray(group) ? group.join(" or ") : group))
+            .join(", ")}`,
   };
 }
 
 function hasAnyEnv(envNames: string[]): boolean {
   return envNames.some((name) => Boolean(process.env[name]));
+}
+
+function loadLocalEnv(): void {
+  for (const file of [".env.local", ".env"]) {
+    const path = join(REPO_ROOT, file);
+    if (!existsSync(path)) continue;
+    for (const rawLine of readFileSync(path, "utf8").split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+      const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+      if (!match) continue;
+      const [, key, rawValue] = match;
+      if (process.env[key]) continue;
+      process.env[key] = parseEnvValue(rawValue);
+    }
+  }
+}
+
+function parseEnvValue(rawValue: string): string {
+  const value = rawValue.trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
 }
 
 main().catch((err) => {
