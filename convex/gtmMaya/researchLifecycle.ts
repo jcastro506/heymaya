@@ -1,5 +1,10 @@
 import { v } from "convex/values";
-import { mutation, query, type MutationCtx } from "../_generated/server";
+import {
+  internalQuery,
+  mutation,
+  query,
+  type MutationCtx,
+} from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 
 const CHANNEL_PREFERENCE = v.union(
@@ -150,6 +155,31 @@ const CHANNEL_SCORE_INPUT = v.object({
     passed: v.boolean(),
     failures: v.array(v.string()),
   }),
+});
+
+export const getGtmCreatorForDeploy = internalQuery({
+  args: { clerkUserId: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    accountId: Id<"creators">;
+    agentId: Id<"gtmAgents"> | null;
+  } | null> => {
+    const creator = await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", args.clerkUserId))
+      .first();
+    if (!creator || creator.accountType !== "gtm-agent") return null;
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    return {
+      accountId: creator._id,
+      agentId: agent?._id ?? null,
+    };
+  },
 });
 
 export const startGtmOnboarding = mutation({

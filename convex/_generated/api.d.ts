@@ -170,6 +170,7 @@ import type * as onboarding_business_deployServiceMaya from "../onboarding/busin
 import type * as onboarding_business_pipeline from "../onboarding/business/pipeline.js";
 import type * as onboarding_growth_deployRiley from "../onboarding/growth/deployRiley.js";
 import type * as onboarding_growth_pipeline from "../onboarding/growth/pipeline.js";
+import type * as onboarding_gtm_deployMayaGtm from "../onboarding/gtm/deployMayaGtm.js";
 import type * as onboarding_maya_deployMaya from "../onboarding/maya/deployMaya.js";
 import type * as onboarding_maya_extractEditingFingerprint from "../onboarding/maya/extractEditingFingerprint.js";
 import type * as onboarding_maya_jobs from "../onboarding/maya/jobs.js";
@@ -378,6 +379,7 @@ declare const fullApi: ApiFromModules<{
   "onboarding/business/pipeline": typeof onboarding_business_pipeline;
   "onboarding/growth/deployRiley": typeof onboarding_growth_deployRiley;
   "onboarding/growth/pipeline": typeof onboarding_growth_pipeline;
+  "onboarding/gtm/deployMayaGtm": typeof onboarding_gtm_deployMayaGtm;
   "onboarding/maya/deployMaya": typeof onboarding_maya_deployMaya;
   "onboarding/maya/extractEditingFingerprint": typeof onboarding_maya_extractEditingFingerprint;
   "onboarding/maya/jobs": typeof onboarding_maya_jobs;
