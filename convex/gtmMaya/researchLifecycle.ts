@@ -216,6 +216,15 @@ export const setAppProfile = mutation({
     weekGoal: WEEK_GOAL,
     canRecordScreen: v.boolean(),
     canShowFace: v.boolean(),
+    canRecordVoice: v.optional(v.boolean()),
+    canProvideScreenshots: v.optional(v.boolean()),
+    canPostTikTokManually: v.optional(v.boolean()),
+    canPostInstagramManually: v.optional(v.boolean()),
+    existingTikTokUrl: v.optional(v.string()),
+    existingInstagramUrl: v.optional(v.string()),
+    openToUgcCreators: v.optional(v.boolean()),
+    creatorBudgetMonthlyUsd: v.optional(v.number()),
+    maxWeeklyVisualPosts: v.optional(v.number()),
     excludedAudiences: v.array(v.string()),
     diagnosis: v.optional(v.any()),
   },
@@ -237,6 +246,15 @@ export const setAppProfile = mutation({
         weekGoal: args.weekGoal,
         canRecordScreen: args.canRecordScreen,
         canShowFace: args.canShowFace,
+        canRecordVoice: args.canRecordVoice ?? false,
+        canProvideScreenshots: args.canProvideScreenshots ?? false,
+        canPostTikTokManually: args.canPostTikTokManually ?? false,
+        canPostInstagramManually: args.canPostInstagramManually ?? false,
+        existingTikTokUrl: normalizeOptionalUrl(args.existingTikTokUrl),
+        existingInstagramUrl: normalizeOptionalUrl(args.existingInstagramUrl),
+        openToUgcCreators: args.openToUgcCreators ?? false,
+        creatorBudgetMonthlyUsd: args.creatorBudgetMonthlyUsd,
+        maxWeeklyVisualPosts: args.maxWeeklyVisualPosts,
         excludedAudiences: args.excludedAudiences,
         diagnosis: args.diagnosis,
         updatedAt: now,
@@ -254,6 +272,15 @@ export const setAppProfile = mutation({
       weekGoal: args.weekGoal,
       canRecordScreen: args.canRecordScreen,
       canShowFace: args.canShowFace,
+      canRecordVoice: args.canRecordVoice ?? false,
+      canProvideScreenshots: args.canProvideScreenshots ?? false,
+      canPostTikTokManually: args.canPostTikTokManually ?? false,
+      canPostInstagramManually: args.canPostInstagramManually ?? false,
+      existingTikTokUrl: normalizeOptionalUrl(args.existingTikTokUrl),
+      existingInstagramUrl: normalizeOptionalUrl(args.existingInstagramUrl),
+      openToUgcCreators: args.openToUgcCreators ?? false,
+      creatorBudgetMonthlyUsd: args.creatorBudgetMonthlyUsd,
+      maxWeeklyVisualPosts: args.maxWeeklyVisualPosts,
       excludedAudiences: args.excludedAudiences,
       diagnosis: args.diagnosis,
       createdAt: now,
@@ -593,4 +620,9 @@ function isTerminalStatus(status: Doc<"gtmResearchJobs">["status"]): boolean {
     status === "cancelled" ||
     status === "needs_more_evidence"
   );
+}
+
+function normalizeOptionalUrl(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }

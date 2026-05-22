@@ -15,6 +15,15 @@ interface IntakeDraft {
   weekGoal: "feedback" | "signups" | "demos" | "revenue" | "unknown";
   canRecordScreen: boolean;
   canShowFace: boolean;
+  canRecordVoice: boolean;
+  canProvideScreenshots: boolean;
+  canPostTikTokManually: boolean;
+  canPostInstagramManually: boolean;
+  existingTikTokUrl: string;
+  existingInstagramUrl: string;
+  openToUgcCreators: boolean;
+  creatorBudgetMonthlyUsd: string;
+  maxWeeklyVisualPosts: string;
   excludedAudiences: string;
 }
 
@@ -26,6 +35,15 @@ const DEFAULT_DRAFT: IntakeDraft = {
   weekGoal: "signups",
   canRecordScreen: true,
   canShowFace: false,
+  canRecordVoice: false,
+  canProvideScreenshots: true,
+  canPostTikTokManually: true,
+  canPostInstagramManually: false,
+  existingTikTokUrl: "",
+  existingInstagramUrl: "",
+  openToUgcCreators: false,
+  creatorBudgetMonthlyUsd: "",
+  maxWeeklyVisualPosts: "3",
   excludedAudiences: "",
 };
 
@@ -89,6 +107,15 @@ function GtmOnboardingBody() {
         weekGoal: draft.weekGoal,
         canRecordScreen: draft.canRecordScreen,
         canShowFace: draft.canShowFace,
+        canRecordVoice: draft.canRecordVoice,
+        canProvideScreenshots: draft.canProvideScreenshots,
+        canPostTikTokManually: draft.canPostTikTokManually,
+        canPostInstagramManually: draft.canPostInstagramManually,
+        existingTikTokUrl: emptyToUndefined(draft.existingTikTokUrl),
+        existingInstagramUrl: emptyToUndefined(draft.existingInstagramUrl),
+        openToUgcCreators: draft.openToUgcCreators,
+        creatorBudgetMonthlyUsd: numberOrUndefined(draft.creatorBudgetMonthlyUsd),
+        maxWeeklyVisualPosts: numberOrUndefined(draft.maxWeeklyVisualPosts),
         excludedAudiences: draft.excludedAudiences
           .split(",")
           .map((item) => item.trim())
@@ -230,12 +257,107 @@ function GtmOnboardingBody() {
               }
             />
             <Toggle
+              label="I can record voiceover"
+              checked={draft.canRecordVoice}
+              onChange={(checked) =>
+                setDraft((d) => ({ ...d, canRecordVoice: checked }))
+              }
+            />
+            <Toggle
               label="I am willing to show my face"
               checked={draft.canShowFace}
               onChange={(checked) =>
                 setDraft((d) => ({ ...d, canShowFace: checked }))
               }
             />
+            <Toggle
+              label="I can provide screenshots or slides"
+              checked={draft.canProvideScreenshots}
+              onChange={(checked) =>
+                setDraft((d) => ({ ...d, canProvideScreenshots: checked }))
+              }
+            />
+            <Toggle
+              label="I will manually post on TikTok"
+              checked={draft.canPostTikTokManually}
+              onChange={(checked) =>
+                setDraft((d) => ({ ...d, canPostTikTokManually: checked }))
+              }
+            />
+            <Toggle
+              label="I will manually post on Instagram"
+              checked={draft.canPostInstagramManually}
+              onChange={(checked) =>
+                setDraft((d) => ({ ...d, canPostInstagramManually: checked }))
+              }
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="TikTok profile, if any">
+              <input
+                value={draft.existingTikTokUrl}
+                onChange={(event) =>
+                  setDraft((d) => ({
+                    ...d,
+                    existingTikTokUrl: event.target.value,
+                  }))
+                }
+                className="input"
+                placeholder="https://www.tiktok.com/@..."
+              />
+            </Field>
+            <Field label="Instagram profile, if any">
+              <input
+                value={draft.existingInstagramUrl}
+                onChange={(event) =>
+                  setDraft((d) => ({
+                    ...d,
+                    existingInstagramUrl: event.target.value,
+                  }))
+                }
+                className="input"
+                placeholder="https://www.instagram.com/..."
+              />
+            </Field>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Toggle
+              label="I am open to UGC creators later"
+              checked={draft.openToUgcCreators}
+              onChange={(checked) =>
+                setDraft((d) => ({ ...d, openToUgcCreators: checked }))
+              }
+            />
+            <Field label="Creator budget per month">
+              <input
+                type="number"
+                min="0"
+                value={draft.creatorBudgetMonthlyUsd}
+                onChange={(event) =>
+                  setDraft((d) => ({
+                    ...d,
+                    creatorBudgetMonthlyUsd: event.target.value,
+                  }))
+                }
+                className="input"
+                placeholder="0"
+              />
+            </Field>
+            <Field label="Visual posts per week">
+              <input
+                type="number"
+                min="0"
+                value={draft.maxWeeklyVisualPosts}
+                onChange={(event) =>
+                  setDraft((d) => ({
+                    ...d,
+                    maxWeeklyVisualPosts: event.target.value,
+                  }))
+                }
+                className="input"
+                placeholder="3"
+              />
+            </Field>
           </div>
           <Field label="Audiences to avoid">
             <input
@@ -290,6 +412,17 @@ function GtmOnboardingBody() {
       )}
     </Shell>
   );
+}
+
+function emptyToUndefined(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function numberOrUndefined(value: string): number | undefined {
+  if (value.trim() === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 function Shell({ children }: { children: React.ReactNode }) {

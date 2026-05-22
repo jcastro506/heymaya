@@ -16,6 +16,15 @@ const INPUT: MayaGtmWorkspaceInput = {
     founderWhy: "I built it because small teams lose customer bug context.",
     canRecordScreen: true,
     canShowFace: false,
+    canRecordVoice: true,
+    canProvideScreenshots: true,
+    canPostTikTokManually: true,
+    canPostInstagramManually: true,
+    existingTikTokUrl: "https://www.tiktok.com/@bugbrief",
+    existingInstagramUrl: "https://www.instagram.com/bugbrief",
+    openToUgcCreators: true,
+    creatorBudgetMonthlyUsd: 250,
+    maxWeeklyVisualPosts: 4,
     excludedAudiences: ["enterprise procurement"],
   },
   primaryChannel: "reddit",
@@ -47,6 +56,9 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("BOOT.md")).toContain(
       "Read APP.md, GTM.md, MEMORY.md, and USER.md"
     );
+    expect(files.get("USER.md")).toContain("Will manually post Instagram: yes");
+    expect(files.get("USER.md")).toContain("Creator/content budget: $250/month");
+    expect(files.get("GTM.md")).toContain("Do not recommend TikTok/Instagram");
   });
 
   it("bundles every GTM skill needed for research, calendar, approval, and review", () => {

@@ -51,6 +51,12 @@ export interface GtmAppContext {
   weekGoal: "feedback" | "signups" | "demos" | "revenue" | "unknown";
   canRecordScreen: boolean;
   canShowFace: boolean;
+  canRecordVoice?: boolean;
+  canProvideScreenshots?: boolean;
+  canPostTikTokManually?: boolean;
+  canPostInstagramManually?: boolean;
+  openToUgcCreators?: boolean;
+  creatorBudgetMonthlyUsd?: number;
   excludedAudiences: ReadonlyArray<string>;
 }
 
@@ -219,8 +225,10 @@ function qualityFailures(
   const failures: string[] = [];
   if (rows.length < 2) failures.push("needs at least two useful evidence cards");
   if (score < 0.55) failures.push("average evidence score is below threshold");
-  if (channel === "tiktok" && !app.canRecordScreen && !app.canShowFace) {
-    failures.push("TikTok needs either screen-recording or face-camera capacity");
+  if (channel === "tiktok" && !hasTikTokProductionPath(app)) {
+    failures.push(
+      "TikTok needs manual posting plus screen recording, screenshots, voice/face, or later UGC budget"
+    );
   }
   if (channel === "linkedin" && app.weekGoal === "feedback" && rows.length < 3) {
     failures.push("LinkedIn feedback strategy needs three buyer-context signals");
@@ -276,8 +284,8 @@ function channelRisks(
   const risks: string[] = [];
   const highRiskCount = cards.filter((card) => card.promotionRisk === "high").length;
   if (highRiskCount > 0) risks.push(`${highRiskCount} high promotion-risk signals`);
-  if (channel === "tiktok" && !app.canRecordScreen && !app.canShowFace) {
-    risks.push("requires user-created video assets");
+  if (channel === "tiktok" && !hasTikTokProductionPath(app)) {
+    risks.push("requires user-created visual assets and manual posting in V1");
   }
   if (channel === "product_hunt" && app.stage === "idea") {
     risks.push("too early for launch directory traffic");
@@ -303,10 +311,20 @@ function firstWeekTestFor(
     case "linkedin":
       return `Publish 3 practical build-in-public posts and comment on 10 buyer posts about: ${anchor}`;
     case "tiktok":
-      return `Record 3 demo scripts based on the format signal: ${anchor}`;
+      return `Create 3 manual TikTok visual tests from the format signal: ${anchor}`;
     case "product_hunt":
       return `Prepare launch copy and 20 qualified maker/community comments around: ${anchor}`;
   }
+}
+
+function hasTikTokProductionPath(app: GtmAppContext): boolean {
+  const hasVisualAssetPath =
+    app.canRecordScreen ||
+    app.canShowFace ||
+    app.canRecordVoice ||
+    app.canProvideScreenshots ||
+    Boolean(app.openToUgcCreators && (app.creatorBudgetMonthlyUsd ?? 0) > 0);
+  return Boolean(app.canPostTikTokManually && hasVisualAssetPath);
 }
 
 function minEvidenceFor(decision: GtmChannelDecision): number {

@@ -133,6 +133,28 @@ describe("GTM distribution motions", () => {
     expect(plan.variants[1].formatSkeleton).toContain("product reveal");
   });
 
+  it("parks TikTok motions when the user cannot manually post visual assets", () => {
+    const verdicts = evaluateDistributionMotions({
+      app: {
+        stage: "live-beta",
+        weekGoal: "signups",
+        canRecordScreen: true,
+        canShowFace: false,
+        canProvideScreenshots: true,
+        canPostTikTokManually: false,
+        excludedAudiences: [],
+        productType: "consumer_visual",
+      },
+      evidence: [evidence("tiktok"), evidence("tiktok")],
+    });
+
+    expect(verdicts.find((v) => v.motion === "tiktok_faceless_demo")?.status)
+      .toBe("parked");
+    expect(
+      verdicts.find((v) => v.motion === "tiktok_slideshow_carousel")?.status
+    ).toBe("parked");
+  });
+
   it("does not mark high-view low-signal posts as winners", () => {
     expect(decideExperimentScale([{ views: 80_000, likes: 2_000 }])).toBe("revise");
     expect(

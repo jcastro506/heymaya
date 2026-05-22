@@ -9,6 +9,15 @@ export interface MayaGtmWorkspaceInput {
     founderWhy?: string;
     canRecordScreen: boolean;
     canShowFace: boolean;
+    canRecordVoice?: boolean;
+    canProvideScreenshots?: boolean;
+    canPostTikTokManually?: boolean;
+    canPostInstagramManually?: boolean;
+    existingTikTokUrl?: string;
+    existingInstagramUrl?: string;
+    openToUgcCreators?: boolean;
+    creatorBudgetMonthlyUsd?: number;
+    maxWeeklyVisualPosts?: number;
     excludedAudiences: string[];
   };
   primaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "product_hunt";
@@ -148,6 +157,19 @@ ${input.app.founderWhy ?? "Not yet captured. Ask why they built this before fina
 
 - Can record screen: ${input.app.canRecordScreen ? "yes" : "no"}
 - Can show face: ${input.app.canShowFace ? "yes" : "no"}
+- Can record voice: ${input.app.canRecordVoice ? "yes" : "no"}
+- Can provide screenshots/slides: ${input.app.canProvideScreenshots ? "yes" : "no"}
+- Will manually post TikTok: ${input.app.canPostTikTokManually ? "yes" : "no"}
+- Will manually post Instagram: ${input.app.canPostInstagramManually ? "yes" : "no"}
+- Existing TikTok: ${input.app.existingTikTokUrl ?? "not connected"}
+- Existing Instagram: ${input.app.existingInstagramUrl ?? "not connected"}
+- Open to UGC creators later: ${input.app.openToUgcCreators ? "yes" : "no"}
+- Creator/content budget: ${
+    input.app.creatorBudgetMonthlyUsd === undefined
+      ? "not stated"
+      : `$${input.app.creatorBudgetMonthlyUsd}/month`
+  }
+- Weekly visual post capacity: ${input.app.maxWeeklyVisualPosts ?? "not stated"}
 - Excluded audiences: ${input.app.excludedAudiences.length ? input.app.excludedAudiences.join(", ") : "none"}
 `;
 }
@@ -190,7 +212,9 @@ This is the current GTM plan. Maya updates it only after a research job or weekl
 
 - Do not run more than two active channels in week one.
 - Do not recommend cold outbound in V1.
-- Do not recommend TikTok unless the user can record a demo, screen capture, or face-camera explanation.
+- Do not recommend TikTok/Instagram unless the user can post manually and can
+  provide screenshots, screen recordings, voiceover, face-camera clips, or a
+  later UGC budget after proof.
 - Every active channel needs a first-week test, success metric, and cited evidence.
 
 ## Weekly Learning Loop

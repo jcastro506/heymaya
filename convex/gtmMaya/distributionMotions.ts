@@ -294,19 +294,23 @@ function linkedinMotion(
 }
 
 function tiktokFacelessMotion(
-  app: { productType: string; canRecordScreen: boolean },
+  app: { productType: string; canRecordScreen: boolean; canPostTikTokManually?: boolean },
   evidence: ReadonlyArray<GtmEvidenceCard>
 ): DistributionMotionVerdict {
   const cards = cardsFor(evidence, "tiktok");
   const visual =
     app.productType === "consumer_visual" || app.productType === "prosumer";
+  const canPost = app.canPostTikTokManually ?? true;
   return {
     motion: "tiktok_faceless_demo",
-    status: visual && app.canRecordScreen && cards.length >= 2 ? "test_now" : "parked",
+    status:
+      visual && app.canRecordScreen && canPost && cards.length >= 2
+        ? "test_now"
+        : "parked",
     rationale:
-      visual && app.canRecordScreen
+      visual && app.canRecordScreen && canPost
         ? ["app can be shown with screen recordings"]
-        : ["faceless demo needs a visual product and screen-recording capacity"],
+        : ["faceless demo needs a visual product, screen-recording capacity, and manual posting"],
     risks: ["views can be misleading without install/signup tracking"],
     evidenceCardIds: ids(cards),
     minimumCadence: "3-5 short demo clips per week",
@@ -316,19 +320,23 @@ function tiktokFacelessMotion(
 }
 
 function tiktokFounderMotion(
-  app: { productType: string; canShowFace: boolean },
+  app: { productType: string; canShowFace: boolean; canPostTikTokManually?: boolean },
   evidence: ReadonlyArray<GtmEvidenceCard>
 ): DistributionMotionVerdict {
   const cards = cardsFor(evidence, "tiktok");
   const visual =
     app.productType === "consumer_visual" || app.productType === "prosumer";
+  const canPost = app.canPostTikTokManually ?? true;
   return {
     motion: "tiktok_founder_talking_head",
-    status: visual && app.canShowFace && cards.length >= 2 ? "test_now" : "parked",
+    status:
+      visual && app.canShowFace && canPost && cards.length >= 2
+        ? "test_now"
+        : "parked",
     rationale:
-      visual && app.canShowFace
+      visual && app.canShowFace && canPost
         ? ["founder can pair a clear face hook with app demo"]
-        : ["founder talking-head needs face comfort and a visual product"],
+        : ["founder talking-head needs face comfort, a visual product, and manual posting"],
     risks: ["high founder burden; should not be required if faceless works"],
     evidenceCardIds: ids(cards),
     minimumCadence: "2-3 founder clips per week",
@@ -338,18 +346,24 @@ function tiktokFounderMotion(
 }
 
 function tiktokSlideshowMotion(
-  app: { productType: string; canRecordScreen: boolean },
+  app: {
+    productType: string;
+    canProvideScreenshots?: boolean;
+    canPostTikTokManually?: boolean;
+  },
   evidence: ReadonlyArray<GtmEvidenceCard>
 ): DistributionMotionVerdict {
   const cards = cardsFor(evidence, "tiktok");
   const visual =
     app.productType === "consumer_visual" || app.productType === "prosumer";
+  const canMakeSlides = app.canProvideScreenshots ?? app.canPostTikTokManually ?? true;
+  const canPost = app.canPostTikTokManually ?? true;
   return {
     motion: "tiktok_slideshow_carousel",
-    status: visual && cards.length >= 2 ? "test_now" : "parked",
-    rationale: visual
+    status: visual && canMakeSlides && canPost && cards.length >= 2 ? "test_now" : "parked",
+    rationale: visual && canMakeSlides && canPost
       ? ["app can be explained with screenshots, steps, or before/after slides"]
-      : ["slideshow/carousel needs a visual sequence or crisp app story"],
+      : ["slideshow/carousel needs screenshots or product images plus manual posting"],
     risks: [
       "slides can get attention without installs if CTA and first screen are weak",
     ],

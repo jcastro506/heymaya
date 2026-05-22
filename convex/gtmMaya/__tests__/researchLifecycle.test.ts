@@ -33,6 +33,15 @@ describe("GTM Maya research lifecycle", () => {
         weekGoal: "signups",
         canRecordScreen: true,
         canShowFace: false,
+        canRecordVoice: true,
+        canProvideScreenshots: true,
+        canPostTikTokManually: true,
+        canPostInstagramManually: false,
+        existingTikTokUrl: "https://www.tiktok.com/@clawlaunchdemo",
+        existingInstagramUrl: "",
+        openToUgcCreators: true,
+        creatorBudgetMonthlyUsd: 300,
+        maxWeeklyVisualPosts: 4,
         excludedAudiences: [],
       }
     );
@@ -119,6 +128,15 @@ describe("GTM Maya research lifecycle", () => {
     expect(snapshot?.evidenceCount).toBe(1);
     expect(snapshot?.channelScores[0].decision).toBe("primary");
     expect(snapshot?.costTotalUsd).toBe(0.03);
+    expect(snapshot?.app?.canRecordVoice).toBe(true);
+    expect(snapshot?.app?.canProvideScreenshots).toBe(true);
+    expect(snapshot?.app?.canPostTikTokManually).toBe(true);
+    expect(snapshot?.app?.canPostInstagramManually).toBe(false);
+    expect(snapshot?.app?.existingTikTokUrl).toContain("@clawlaunchdemo");
+    expect(snapshot?.app?.existingInstagramUrl).toBeUndefined();
+    expect(snapshot?.app?.openToUgcCreators).toBe(true);
+    expect(snapshot?.app?.creatorBudgetMonthlyUsd).toBe(300);
+    expect(snapshot?.app?.maxWeeklyVisualPosts).toBe(4);
   });
 
   it("prevents one account from writing evidence or costs to another account's research job", async () => {

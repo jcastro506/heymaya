@@ -92,6 +92,7 @@ import type * as gtmMaya_contentQuality from "../gtmMaya/contentQuality.js";
 import type * as gtmMaya_distributionMotions from "../gtmMaya/distributionMotions.js";
 import type * as gtmMaya_missionBoard from "../gtmMaya/missionBoard.js";
 import type * as gtmMaya_privateBeta from "../gtmMaya/privateBeta.js";
+import type * as gtmMaya_productionReality from "../gtmMaya/productionReality.js";
 import type * as gtmMaya_researchLifecycle from "../gtmMaya/researchLifecycle.js";
 import type * as gtmMaya_researchTasks from "../gtmMaya/researchTasks.js";
 import type * as gtmMaya_researchWorker from "../gtmMaya/researchWorker.js";
@@ -314,6 +315,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/distributionMotions": typeof gtmMaya_distributionMotions;
   "gtmMaya/missionBoard": typeof gtmMaya_missionBoard;
   "gtmMaya/privateBeta": typeof gtmMaya_privateBeta;
+  "gtmMaya/productionReality": typeof gtmMaya_productionReality;
   "gtmMaya/researchLifecycle": typeof gtmMaya_researchLifecycle;
   "gtmMaya/researchTasks": typeof gtmMaya_researchTasks;
   "gtmMaya/researchWorker": typeof gtmMaya_researchWorker;

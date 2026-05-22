@@ -13,6 +13,9 @@ const APP: GtmAppContext = {
   weekGoal: "signups",
   canRecordScreen: true,
   canShowFace: false,
+  canRecordVoice: false,
+  canProvideScreenshots: true,
+  canPostTikTokManually: true,
   excludedAudiences: [],
 };
 
@@ -95,6 +98,8 @@ describe("GTM Maya channel scoring", () => {
       ...APP,
       canRecordScreen: false,
       canShowFace: false,
+      canProvideScreenshots: false,
+      canPostTikTokManually: false,
     };
     const evaluation = evaluateChannel(
       "tiktok",
@@ -104,8 +109,27 @@ describe("GTM Maya channel scoring", () => {
 
     expect(evaluation.decision).toBe("parked");
     expect(evaluation.qualityGate.failures).toContain(
-      "TikTok needs either screen-recording or face-camera capacity"
+      "TikTok needs manual posting plus screen recording, screenshots, voice/face, or later UGC budget"
     );
+  });
+
+  it("allows TikTok when the user can make screenshot slideshows and post manually", () => {
+    const screenshotApp: GtmAppContext = {
+      ...APP,
+      canRecordScreen: false,
+      canShowFace: false,
+      canRecordVoice: false,
+      canProvideScreenshots: true,
+      canPostTikTokManually: true,
+    };
+    const evaluation = evaluateChannel(
+      "tiktok",
+      [card("t1", "tiktok"), card("t2", "tiktok"), card("t3", "tiktok")],
+      screenshotApp
+    );
+
+    expect(evaluation.qualityGate.passed).toBe(true);
+    expect(evaluation.firstWeekTest).toContain("manual TikTok visual tests");
   });
 
   it("fails strategy validation when active channels are not evidence-backed", () => {
