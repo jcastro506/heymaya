@@ -454,8 +454,26 @@ V1 stance:
 
 - TikTok strategy, scripts, shot lists, screen-recording plans, captions, and
   calendar events are in scope.
+- TikTok format strategy must include more than video. Maya should evaluate
+  short videos, native Photo Mode/carousel/slideshow posts, screenshot-style
+  slides, text-on-image explainers, founder talking-head clips, faceless app
+  demos, and UGC-style patterns based on what the research shows for the app's
+  niche.
 - User records or provides clips.
 - TikTok direct publishing is V2+ after app audit and media workflow are stable.
+
+Research note:
+
+- TikTok Photo Mode/carousel posts are a real format, not a fallback. They can
+  be the best week-one recommendation for apps where a crisp visual sequence,
+  screenshots, before/after comparison, listicle, or story works better than a
+  recorded video. Maya should research whether carousels/slideshows are working
+  in the app's niche instead of assuming TikTok means video only.
+- TikTok's business docs also treat carousel/image ads as a first-class format,
+  including reuse of creative assets, multi-image sequences, and conversion
+  objectives. Sources:
+  - https://ads.tiktok.com/help/article/about-carousel-in-creative-library
+  - https://ads.tiktok.com/help/article/specifications-for-carousel-ads
 
 ## Product Surfaces
 
@@ -670,22 +688,28 @@ The user should not maintain this. Maya updates it.
 2. User connects WhatsApp or iMessage.
 3. User connects Google Calendar.
 4. User gives app URL.
-5. User answers only a few questions:
+5. User chooses app inspection path:
+   - Web app: URL, optional test login, optional product docs.
+   - Mobile app: App Store/Play Store URL if live, plus uploaded screen
+     recording walkthrough.
+   - Not yet public: uploaded walkthrough video, screenshots, landing page, or
+     demo build notes.
+6. User answers only a few questions:
    - Why did you build this?
    - Is it live/usable now?
    - What counts as a win this week: feedback, signups, demos, revenue?
    - Are you willing to record your screen?
    - Are you willing to show your face?
    - Any audience or topic you definitely do not want Maya to target?
-6. Optional:
+7. Optional:
    - test login
    - analytics
    - X/LinkedIn OAuth
    - existing social profiles
-7. Maya says she is going away to research.
-8. Mission Board shows progress.
-9. Maya texts when the plan is ready.
-10. User approves the first 7-day plan and calendar write.
+8. Maya says she is going away to research.
+9. Mission Board shows progress.
+10. Maya texts when the plan is ready.
+11. User approves the first 7-day plan and calendar write.
 
 Do not ask:
 
@@ -695,6 +719,52 @@ Do not ask:
 - "Describe your brand voice."
 
 Those are Maya's job.
+
+### Mobile Walkthrough Upload
+
+Mobile app inspection is first-class. Maya should not pretend she can inspect a
+private mobile app unless the user gives her something visual.
+
+Required build:
+
+- Upload control during onboarding for `.mp4`, `.mov`, and common mobile screen
+  recording formats.
+- Store the original file in the existing media/object storage layer.
+- Create a Gemini video-analysis job with the app URL/listing context and the
+  founder's few onboarding answers.
+- Return structured app diagnosis:
+  - core workflow
+  - user problem
+  - strongest demo moments
+  - before/after contrast
+  - visually confusing moments
+  - app screens/assets worth using in content
+  - whether faceless screen recording is enough
+  - whether founder-face or UGC-style content might help
+  - TikTok/short-form format candidates, including video and slideshow/carousel
+  - unsupported claims or missing context
+- Write the diagnosis into Convex and `APP.md`.
+
+Testing:
+
+- Use fixture walkthrough videos.
+- Assert Gemini output validates against schema.
+- Assert large/unsupported files fail gracefully.
+- Assert diagnosis can be generated without asking the user for ICP.
+- Browser smoke the upload path on localhost and staging.
+
+### Web App Inspection
+
+Web apps use browser/headless inspection:
+
+- Fetch landing page, pricing, docs/blog if available.
+- Capture screenshots of important pages.
+- Use browser automation for interactive pages when allowed.
+- Use Gemini vision/text for screenshots and page summaries.
+- Extract demo moments and content assets the same way mobile walkthroughs do.
+
+If the app cannot be reached, Maya should ask for a walkthrough upload rather
+than inventing a plan from the landing page alone.
 
 ### Async Research UX
 
@@ -754,6 +824,10 @@ Skills shipped out of the box:
   selection.
 - `maya-tiktok-demo-strategist`: TikTok app-demo format, script, and shot-list
   generation.
+- `maya-tiktok-format-researcher`: studies which TikTok formats are working for
+  the app's niche, including faceless videos, founder talking-head clips,
+  Photo Mode/carousel/slideshow posts, screenshot sequences, text-on-image
+  explainers, UGC-style hooks, sounds, comments, and CTAs.
 - `maya-linkedin-fit-researcher`: LinkedIn/B2B channel fit and founder-post
   angles.
 - `maya-competitor-researcher`: competitor/alternative positioning evidence.
@@ -791,6 +865,18 @@ Rules:
   feedback.
 - Do not store secrets in workspace files.
 - Do not let workspace memory replace Convex approvals/audit logs.
+
+Custom file note:
+
+- `APP.md` and `GTM.md` are product-specific working files. Do not assume
+  OpenClaw automatically injects them into every subagent context.
+- `AGENTS.md` and `BOOT.md` must explicitly tell Maya when to read `APP.md`,
+  `GTM.md`, `MEMORY.md`, and daily notes.
+- Subagent spawn prompts must pass the relevant app diagnosis, current
+  strategy, and research contract directly, or instruct the subagent to read the
+  exact file paths it needs.
+- Convex remains the source of truth. Workspace files are Maya's working memory
+  and operating context.
 
 ### Workspace File Responsibilities
 
@@ -884,11 +970,47 @@ owns the plan. Subagents collect evidence and return structured results.
 Default subagent constraints:
 
 - `runTimeoutSeconds`: 600-900.
-- Cheaper/medium model unless a task requires judgment.
+- Model selected by task class, not one universal model.
 - No session-spawning from leaf agents in V1.
 - Return JSON plus short summary.
 - Every claim needs source/evidence.
 - No user-facing prose from subagents.
+- Coverage checklist in every task.
+- Max tool calls and max ScrapeCreators calls in every task.
+- Quality gate before result acceptance.
+- Retry once with a targeted follow-up or stronger model when evidence is weak.
+
+Subagents must be agentic but bounded. "Keep going until satisfied" is not an
+acceptable production contract. Instead, each subagent gets:
+
+```ts
+{
+  task: "TikTok niche research",
+  model: "openrouter/google/gemini-3-flash-preview",
+  maxRuntimeSeconds: 900,
+  maxScrapeCreatorsCalls: 12,
+  coverage: [
+    "consider at least 20 candidate posts unless fewer exist",
+    "return at least 6 evidence cards",
+    "identify at least 3 distinct format patterns",
+    "include whether video, slideshow/carousel, face, faceless, or UGC-style formats are working",
+    "state exactly what evidence is weak"
+  ],
+  failBehavior: "return insufficient_evidence with missing coverage list"
+}
+```
+
+If a subagent fails coverage:
+
+1. Run one targeted follow-up using the missing evidence list.
+2. Escalate to Claude Sonnet or Gemini 3.5 Flash only if the follow-up still
+   fails and the channel/motion matters for the plan.
+3. If evidence is still weak, park the motion and tell the user why.
+
+OpenClaw model rule:
+
+- Subagents do not need to use the same model as the main Maya. Use
+  `sessions_spawn` model overrides for research cost/quality routing.
 
 Subagents:
 
@@ -899,10 +1021,14 @@ Tools:
 - OpenClaw browser.
 - Screenshot/page extraction.
 - Gemini vision/text model.
+- Gemini video model for uploaded mobile walkthroughs.
 
 Inputs:
 
 - App URL.
+- App Store/Play Store URL if mobile.
+- Uploaded mobile walkthrough video when the app is mobile/private/not easily
+  inspectable by browser.
 - Optional login/test credentials.
 - Founder note.
 
@@ -974,18 +1100,28 @@ Outputs:
 Tools:
 
 - ScrapeCreators TikTok profile/videos/search endpoints where verified.
+- ScrapeCreators TikTok video detail, transcript, comments, hashtag/search,
+  popular/trending surfaces where verified and cost-approved.
 - Google search fallback.
 - App Inspector screenshots.
+- Mobile walkthrough video analysis.
 
 Outputs:
 
 - Is the app visually demoable?
 - Best demo angle.
-- 3-5 TikTok script formats.
+- 3-5 TikTok format recommendations, which may include:
+  - faceless video demo
+  - founder talking-head demo
+  - Photo Mode/carousel/slideshow
+  - screenshot sequence with text overlays
+  - listicle/problem story
+  - UGC-style script for future generation/recruiting
 - Shot-list templates.
 - Distribution-motion recommendation:
   - faceless screen recording
   - founder talking head
+  - slideshow/carousel
   - reaction/face UGC later
   - slideshow/static proof
   - park TikTok for now
@@ -1289,28 +1425,49 @@ Default model routing:
   - weekly strategy review
   - ambiguous "why is this not working?" diagnosis
   - final user-facing summaries when nuance matters
-- `gemini-3.1-flash-lite` or `gemini-3.1-flash-lite-preview` for subagents and
-  extraction:
-  - App Inspector first-pass extraction
-  - ICP Hypothesis Agent draft hypotheses
-  - Reddit/X/TikTok/LinkedIn research subagents
+- `openrouter/google/gemini-3-flash-preview` or equivalent mid-cost agentic
+  model for default future research subagents:
+  - Reddit/X/TikTok/LinkedIn research subagents after beta-quality examples are
+    established
+  - competitor mapping
+  - query-pack iteration
+  - low/medium-risk follow-up research
+- `openrouter/~anthropic/claude-sonnet-latest` for beta/hard research:
+  - first 5-10 beta users
+  - weak or conflicting evidence
+  - subagents that failed coverage on a cheaper model
+  - high-value/complex apps where a bad first plan would damage trust
+- `gemini-3.1-flash-lite`, `deepseek`, `qwen`, or equivalent cheap models for
+  extraction and normalization:
+  - App Inspector first-pass text extraction
+  - ICP Hypothesis Agent rough hypotheses
   - evidence-card normalization
   - query-pack generation
   - slop critic first pass
   - low-risk transformations
+- Gemini multimodal/video models for:
+  - uploaded mobile walkthrough analysis
+  - selected TikTok/video analysis
+  - screenshot/app flow diagnosis
 - `gemini-3.1-pro-preview` only as a rare escalation:
   - high-stakes repositioning
   - beta user "this plan feels wrong" re-analysis
   - complex conflicting evidence where 3.5 Flash fails the quality gate
+- Claude Opus / Gemini Pro only as human-review-level escalation, not default.
 - Image/video models only for specific asset jobs.
 
 Onboarding model split:
 
-1. App Inspector: `gemini-3.1-flash-lite`
-2. Research subagents: `gemini-3.1-flash-lite`
-3. Evidence normalization: `gemini-3.1-flash-lite`
-4. Content format mining: `gemini-3.1-flash-lite`, with escalation to
-   `gemini-3.5-flash` if nuanced
+1. Web App Inspector: browser + Gemini Flash/Lite extraction, with Gemini 3.5
+   Flash if diagnosis is ambiguous.
+2. Mobile walkthrough: Gemini multimodal/video.
+3. Beta research subagents: Claude Sonnet for quality, then evaluate cheaper
+   defaults.
+4. Future default research subagents: Gemini 3 Flash or equivalent mid-cost
+   model, with Sonnet escalation on failed gates.
+5. Evidence normalization: Flash-Lite / DeepSeek / Qwen class model.
+6. Content format mining: cheap first pass, with escalation to Gemini 3.5 Flash
+   or Sonnet if nuanced.
 5. Channel Strategy Judge: `gemini-3.5-flash`
 6. First 7-day GTM plan: `gemini-3.5-flash`
 7. Slop critic: `gemini-3.1-flash-lite`
@@ -1325,6 +1482,10 @@ Current public pricing basis:
 - Gemini 3.1 Pro Preview paid tier: $2.00 per 1M input tokens and $12.00 per
   1M output tokens for prompts <=200k tokens.
   Source: https://ai.google.dev/gemini-api/docs/pricing
+- Claude Sonnet via OpenRouter should be budgeted around the current Sonnet
+  class price, roughly $3 per 1M input tokens and $15 per 1M output tokens at
+  the time checked. Use current OpenRouter pricing at runtime, not this doc, as
+  the source of truth.
 - X API is pay-per-use with per-resource reads and per-request writes.
   Source: https://docs.x.com/x-api/getting-started/pricing
 - ScrapeCreators pricing and credits must be tracked by plan; every call is
@@ -1346,6 +1507,16 @@ Hard rules:
 - Research jobs have per-user budget caps.
 - X reads are budgeted because official reads are metered.
 - A cost ledger row is written for every model/tool/public API call.
+- Model routing and escalation decisions are logged.
+- Subagent runs record model, timeout, tool-call counts, evidence count, and
+  quality-gate result.
+
+Beta policy:
+
+- Spend a few extra dollars on Sonnet-class research for the first beta users to
+  learn what excellent research output looks like.
+- After beta, run model evals on the same research fixtures and switch default
+  subagents to the cheapest model that passes quality gates.
 
 ## Convex Data Model
 
@@ -1512,6 +1683,10 @@ Week 4:
 
 ## Sprint Plan
 
+This is the canonical execution plan. It replaces the earlier 14-slice list
+with 8 end-to-end sprints that each produce a customer-visible or deployable
+piece of the product.
+
 ## Sprint Acceptance Standard
 
 Every sprint must exit through the same quality gate:
@@ -1533,7 +1708,406 @@ No sprint is complete if Maya only works in local mocks. Mocks are allowed for
 unit/integration coverage, but each sprint must also prove the current product
 can still deploy as an OpenClaw-backed Maya.
 
-### Sprint 0: Product Lock and Research Freeze
+### Sprint 1: Foundation and Data Model
+
+Goal:
+
+- Create the ClawLaunch/GTM product foundation without mutating Creator Maya,
+  Service Maya, or Riley.
+
+Build:
+
+- Product contract and decision log.
+- Feature flags and product-mode guards.
+- `convex/gtmMaya/` module folder.
+- GTM schema tables for agents, apps, research jobs, evidence, channels,
+  distribution motions, format experiments, content bank, drafts, approvals,
+  published posts, calendar events, metrics, feedback, writing profiles, UGC
+  readiness, costs, tool calls, safety, and beta instrumentation.
+- Shared account resolver.
+- Cost ledger and tool-call log.
+- Validators for evidence cards, channels, motions, format experiments,
+  approvals, and result snapshots.
+
+Tests:
+
+- Unit tests for validators and scoring.
+- Cross-tenant isolation tests.
+- Research lifecycle tests through Convex mutations and queries.
+- Cost ledger required for external/model calls.
+- Approval records cannot publish without explicit approval.
+
+Smoke:
+
+- Create test account, app, research job, evidence card, channel score,
+  distribution motion, format experiment, content bank item, approval, result,
+  and cost ledger entry.
+
+Exit:
+
+- GTM module tests pass.
+- No existing creator/service tests broken.
+
+### Sprint 2: OpenClaw Runtime and Workspace
+
+Goal:
+
+- Generate and deploy a new OpenClaw-backed Maya GTM runtime.
+
+Build:
+
+- `convex/agents/packs/maya_gtm/`.
+- Render `AGENTS.md`, `SOUL.md`, `USER.md`, `APP.md`, `GTM.md`,
+  `TOOLS.md`, `BOOT.md`, `HEARTBEAT.md`, `MEMORY.md`, `DREAMING.md`.
+- Add skill manifest and GTM skills.
+- Add per-user Fly deploy action modeled after existing deploy code.
+- Upgrade OpenClaw image/version if current pinned runtime is stale.
+- Add model-routing config:
+  - main Maya / strategy: Gemini 3.5 Flash
+  - beta hard research: Claude Sonnet via OpenRouter
+  - future default research: Gemini 3 Flash or equivalent
+  - extraction: cheap worker model
+- Make `AGENTS.md` / `BOOT.md` explicitly read custom `APP.md` and `GTM.md`
+  when needed.
+
+Tests:
+
+- Workspace file snapshot tests.
+- Required file existence tests.
+- No secret leakage tests.
+- Size budget tests.
+- Boot/heartbeat instructions mention no ScrapeCreators spend in heartbeat.
+- Subagent spawn templates include model, timeout, budget, coverage checklist,
+  and failure behavior.
+
+Smoke:
+
+- Deploy one GTM Maya to staging Fly.
+- Gateway boots.
+- Workspace files present.
+- OpenClaw can receive a direct local/gateway message.
+
+Exit:
+
+- One test GTM Maya boots on Fly.
+
+### Sprint 3: Onboarding and App Understanding
+
+Goal:
+
+- The user can connect required surfaces and Maya can understand web and mobile
+  apps before strategy starts.
+
+Build:
+
+- `/onboarding/gtm` route.
+- WhatsApp/iMessage pairing status flow.
+- Calendar OAuth reuse or Composio calendar decision.
+- App inspection path picker:
+  - web URL
+  - mobile App Store/Play Store URL
+  - uploaded walkthrough video
+  - private/not-live app with screenshots/demo notes
+- Walkthrough upload and storage.
+- Gemini video-analysis job.
+- Web app browser/headless inspection.
+- App diagnosis schema and `APP.md` write.
+- Minimal questions.
+- Research job creation.
+- Mission Board progress UI.
+
+Tests:
+
+- Onboarding state machine.
+- Calendar OAuth success/failure.
+- Messaging channel status.
+- App URL validation.
+- Upload file validation.
+- Gemini walkthrough output schema.
+- Web inspector broken URL/paywall/login behavior.
+
+Smoke:
+
+- Sign in, connect calendar/messaging, inspect one web app, upload one mobile
+  walkthrough fixture, create research job.
+- Maya sends "I am researching" message.
+
+Exit:
+
+- End-to-end intake and app diagnosis work in staging.
+
+### Sprint 4: Deep Research Engine
+
+Goal:
+
+- Maya can run bounded, agentic research across platforms and store auditable
+  evidence.
+
+Build:
+
+- OpenClaw `sessions_spawn` task templates.
+- Subagent task specs with coverage checklists and retry/escalation policy.
+- Convex result ingestion.
+- ScrapeCreators query runner with cache and cost audit.
+- Reddit Demand Agent.
+- TikTok Format Researcher:
+  - video
+  - slideshow/carousel/Photo Mode
+  - screenshot sequences
+  - comments/transcripts where available
+- X Founder-Led Agent.
+- LinkedIn Fit Agent.
+- Competitor/Search Agent.
+- ICP Hypothesis Agent.
+- Google/web fallback discovery.
+
+Tests:
+
+- Subagent prompt/output schema tests.
+- Evidence card validation.
+- Cost audit required.
+- No final strategy without evidence.
+- Subagent fails when coverage checklist is not met.
+- TikTok research does not assume video only.
+
+Smoke:
+
+- Run full research for 2 fixture apps and 1 live test app.
+- Evidence cards appear with URLs/snippets/metrics.
+
+Exit:
+
+- Research depth is visible, auditable, and cost-bounded.
+
+### Sprint 5: Strategy and Experiment Planning
+
+Goal:
+
+- Maya creates an evidence-backed 7-14 day experiment plan only when gates pass.
+
+Build:
+
+- Channel Strategy Judge.
+- Distribution Motion Agent.
+- Viral Demo Moment Miner.
+- UGC System Advisor in advisory-only mode.
+- Content format miner.
+- Strong model route for final strategy.
+- Plan confidence levels.
+- Re-research fallback when evidence is weak.
+- First 7-14 day experiment plan.
+- Calendar-ready task plan.
+
+Tests:
+
+- Fails when evidence count too low.
+- Fails generic advice.
+- Fails unsupported claims.
+- Active motions have stop/double-down criteria.
+- B2B app does not blindly recommend TikTok.
+- Visual consumer app can recommend TikTok video or slideshow/carousel when
+  evidence supports it.
+- Reddit recommendations include risk.
+- LinkedIn recommendations require B2B/professional fit.
+- UGC recommendation is blocked until a motion has evidence or the app already
+  has strong proof/examples.
+
+Smoke:
+
+- Research job completes into primary/secondary/parked motions.
+- Maya produces first 7-14 day plan with evidence references.
+
+Exit:
+
+- Final plan is grounded with evidence references and experiment criteria.
+
+### Sprint 6: Execution Loop
+
+Goal:
+
+- Maya turns strategy into executable work across calendar, messaging, drafts,
+  and approval-based publishing.
+
+Build:
+
+- Content format library.
+- Format mining.
+- Content bank with winning/losing examples and reusable skeletons.
+- Platform writers for X, LinkedIn, Reddit, TikTok.
+- Slop critic.
+- Claim checker/citation firewall.
+- Writing profile adaptation from feedback.
+- Distribution-motion variants: hook, body, CTA, demo moment, and success
+  metric.
+- 7-14 day calendar builder.
+- Rich event payloads per platform.
+- Event update/delete for Maya-owned events.
+- Timezone and availability handling.
+- "First action under 30 minutes" rule.
+- Approval message parser.
+- Approval records.
+- X publish adapter through Composio/direct wrapper.
+- LinkedIn publish adapter through Composio/direct wrapper.
+- Reddit drafts and safety warning.
+- TikTok manual tasks:
+  - scripts
+  - shot lists
+  - slideshow/carousel outlines
+  - screenshot sequence instructions
+  - captions and CTAs
+- Publish failure handling.
+- Published URL storage.
+
+Tests:
+
+- Banned phrase tests.
+- Specificity scoring tests.
+- Unsupported claim rejection.
+- Platform-fit tests.
+- Event descriptions include draft/instructions/evidence/success metric.
+- Maya only mutates Maya-owned events.
+- Calendar collision handling.
+- TikTok event includes recording/slideshow instructions, not fake auto-post.
+- Cannot publish without approval.
+- Exact approved content is published.
+- User edit changes final body.
+- X/LinkedIn tool errors become failed states.
+- Cross-tenant publish isolation.
+- Future drafts cite the content-bank pattern they are using.
+
+Smoke:
+
+- Research job writes first 7-14 day calendar for test user.
+- Publish to test/sandbox X and LinkedIn accounts if available.
+- Otherwise use mocked Composio + one staging manual live publish.
+- TikTok manual task is executable from calendar alone.
+
+Exit:
+
+- User can execute from calendar and messaging alone.
+
+### Sprint 7: Learning Loop and Mission Board
+
+Goal:
+
+- Maya learns from what happened and shows the user what she is doing.
+
+Build:
+
+- Metric refresh jobs.
+- Manual result capture when metrics unavailable.
+- Post-performance summaries.
+- Weekly review.
+- Writing profile updates.
+- Channel score updates.
+- Format experiment updates.
+- Content bank promotion/demotion.
+- UGC readiness report updates when a short-form motion wins.
+- Memory/wiki promotion rules.
+- Mission Board:
+  - progress
+  - app diagnosis
+  - evidence cards
+  - channel decisions
+  - distribution motions and active experiments
+  - week plan
+  - today tasks
+  - pending approvals
+  - results
+  - what Maya learned
+  - what she will test next
+
+Tests:
+
+- Metric refresh writes snapshots.
+- Weak signal does not overfit.
+- User rejection lowers pattern confidence.
+- Weekly plan changes based on evidence.
+- A high-view/low-signal post does not get marked as a winner.
+- Repeated useful signal promotes a motion to `double_down`.
+- UI handles loading/empty/error states.
+- No user-maintained required fields after onboarding.
+- Mobile responsive.
+
+Smoke:
+
+- Publish/dummy post, refresh metrics, produce weekly review.
+- Mission Board reflects plan, results, and next decision.
+
+Exit:
+
+- Maya visibly improves over time.
+
+### Sprint 8: Hardening and Private Beta
+
+Goal:
+
+- Make the product safe for real users and validate value.
+
+Build:
+
+- Rate limits.
+- Cost limits.
+- Error handling.
+- Admin kill switch.
+- Per-user machine health.
+- Channel reconnect flows.
+- Privacy/export/delete.
+- Audit log surfaces.
+- Gemini Omni / AI creative generation remains feature-flagged off unless API,
+  price, quality, and disclosure gates are met.
+
+Tests:
+
+- Cost cap tests.
+- API failure tests.
+- WhatsApp/iMessage disconnect tests.
+- Calendar OAuth revoke tests.
+- OpenClaw machine restart tests.
+- Subagent timeout tests.
+- Model malformed output tests.
+- Real-account OAuth revoke tests.
+
+Smoke:
+
+- Full staging beta run with 3 internal apps.
+- Simulate one failed platform connection.
+- Simulate one model malformed output.
+- Real Fly/OpenClaw deploy proof.
+- Real Calendar write proof.
+- Messaging send/receive proof.
+
+Run:
+
+- 5 users.
+- 14 days.
+- Required app URL/live beta or walkthrough.
+- Weekly human review of every final plan.
+- Track time-to-first-plan, approval rate, posts shipped, user-reported signal,
+  cost/user, retention intent, format experiments run, winning motions found,
+  and whether Maya created at least one concrete user-acquisition signal.
+
+Success criteria:
+
+- 80% of users approve the first channel/motion strategy.
+- 70% execute at least 3 Maya-scheduled actions in week one.
+- 60% run at least one complete distribution-motion experiment in the first 14
+  days.
+- Average COGS below target for selected price.
+- Human reviewer rates plans >= 4/5 on specificity and usefulness.
+- No unauthorized publishing.
+
+Exit:
+
+- Ready to decide pricing, Pro/creative scope, and broader beta rollout.
+
+## Legacy Expanded Sprint Checklist
+
+The list below is retained as a historical checklist from the earlier
+14-sprint plan. It is not the canonical execution order. Fold any useful detail
+from these legacy slices into the 8 sprints above.
+
+### Legacy Slice 0: Product Lock and Research Freeze
 
 Goal:
 
@@ -1557,7 +2131,7 @@ Exit:
 - Product scope approved.
 - V1 non-goals approved.
 
-### Sprint 1: New Namespace and Data Model
+### Legacy Slice 1: New Namespace and Data Model
 
 Goal:
 
@@ -1594,7 +2168,7 @@ Exit:
 - `pnpm/npm test` passes for GTM modules.
 - No existing creator/service tests broken.
 
-### Sprint 2: OpenClaw GTM Workspace Pack
+### Legacy Slice 2: OpenClaw GTM Workspace Pack
 
 Goal:
 
@@ -1628,7 +2202,7 @@ Exit:
 
 - One test GTM Maya boots on Fly.
 
-### Sprint 3: Messaging and Calendar Onboarding
+### Legacy Slice 3: Messaging and Calendar Onboarding
 
 Goal:
 
@@ -1660,7 +2234,7 @@ Exit:
 
 - End-to-end intake works in staging.
 
-### Sprint 4: App Inspector
+### Legacy Slice 4: App Inspector
 
 Goal:
 
@@ -1691,7 +2265,7 @@ Exit:
 
 - App diagnosis is useful without user ICP input.
 
-### Sprint 5: Research Subagents and Evidence Cards
+### Legacy Slice 5: Research Subagents and Evidence Cards
 
 Goal:
 
@@ -1723,7 +2297,7 @@ Exit:
 
 - Research depth is visible and auditable.
 
-### Sprint 6: Channel Agents
+### Legacy Slice 6: Channel Agents
 
 Goal:
 
@@ -1760,7 +2334,7 @@ Exit:
 
 - Channel selection is opinionated, not "post everywhere."
 
-### Sprint 7: Strategy Judge and Quality Gates
+### Legacy Slice 7: Strategy Judge and Quality Gates
 
 Goal:
 
@@ -1789,7 +2363,7 @@ Exit:
 
 - Final plan is grounded with evidence references.
 
-### Sprint 8: Content Quality and Anti-Slop System
+### Legacy Slice 8: Content Quality and Anti-Slop System
 
 Goal:
 
@@ -1826,7 +2400,7 @@ Exit:
 
 - Drafts are specific, grounded, and platform-native.
 
-### Sprint 9: Calendar Plan Builder
+### Legacy Slice 9: Calendar Plan Builder
 
 Goal:
 
@@ -1855,7 +2429,7 @@ Exit:
 
 - User can execute from calendar alone.
 
-### Sprint 10: Approval and Publishing
+### Legacy Slice 10: Approval and Publishing
 
 Goal:
 
@@ -1887,7 +2461,7 @@ Exit:
 
 - Approval-based X/LinkedIn publishing works.
 
-### Sprint 11: Results and Learning Loop
+### Legacy Slice 11: Results and Learning Loop
 
 Goal:
 
@@ -1923,7 +2497,7 @@ Exit:
 
 - Maya improves over time.
 
-### Sprint 12: Mission Board
+### Legacy Slice 12: Mission Board
 
 Goal:
 
@@ -1954,7 +2528,7 @@ Exit:
 
 - User can understand what Maya is doing and why.
 
-### Sprint 13: Beta Hardening
+### Legacy Slice 13: Beta Hardening
 
 Goal:
 
@@ -1990,7 +2564,7 @@ Exit:
 
 - Ready for 5-user private beta.
 
-### Sprint 14: Private Beta
+### Legacy Slice 14: Private Beta
 
 Goal:
 
@@ -2027,17 +2601,21 @@ Minimum smoke tests before customer handoff:
 - Signup and onboarding creates GTM account.
 - WhatsApp/iMessage channel can receive/send.
 - Calendar connects and writes Maya-owned event.
+- Mobile walkthrough upload stores video and produces Gemini diagnosis.
 - App URL inspection completes.
 - Research job spawns subagents and returns evidence.
-- Channel judge picks primary/secondary/parked channels.
+- Channel/motion judge picks primary/secondary/parked motions.
 - 7-day plan writes rich calendar events.
 - Approval request sent through messaging.
 - X draft approved and published in test mode.
 - LinkedIn draft approved and published in test mode.
 - Reddit draft generated with promotion-risk warning.
-- TikTok script event includes recording instructions.
+- TikTok task includes the right format for the app: recording instructions,
+  slideshow/carousel outline, screenshot sequence, or a clear reason TikTok is
+  parked.
 - Metrics refresh handles missing platform metrics.
 - Weekly review updates strategy.
+- Content bank updates from winning/losing formats.
 - Cost ledger shows every external/model call.
 - Admin can pause a user's Maya.
 
@@ -2140,9 +2718,53 @@ Run evals on:
 - Calendar richness.
 - Approval safety.
 
+## Future Pro Creative Engine
+
+Gemini Omni / Gemini Omni Flash is a future watch item for ClawLaunch Pro, not
+an MVP dependency.
+
+Current stance:
+
+- Do not depend on Gemini Omni for V1 readiness because API access, pricing,
+  latency, quality, and disclosure workflow are not yet stable enough to plan
+  against.
+- Do design the product so Maya can later generate short-form creative from app
+  screenshots, mobile walkthroughs, scripts, reference formats, and content-bank
+  winners.
+- Treat AI-generated UGC-style video as an add-on or Pro-tier capability only
+  after Maya has selected a short-form motion worth scaling.
+
+Potential Pro flow:
+
+1. Maya researches TikTok/short-form and chooses a motion.
+2. User approves the script and product assets.
+3. Maya calls Gemini Omni or another approved creative-generation provider.
+4. Generated videos/slides are returned for review.
+5. User approves and posts manually where required.
+6. Maya tracks performance and updates the content bank.
+
+Gates before shipping:
+
+- API access available.
+- Cost per generated asset known.
+- Watermark/disclosure/commercial-use requirements documented.
+- Per-user quotas and admin kill switch.
+- Generated asset quality evals.
+- No automatic posting of generated realistic/synthetic media without explicit
+  user review and platform-required disclosure.
+
+Pricing implication:
+
+- $49 beta/core plan should not include unlimited generated UGC content.
+- A future Pro plan around $99/month may include a small quota if unit costs are
+  low enough.
+- If generation costs are high, sell generated creative as metered credits or
+  add-on packs.
+
 ## Pricing Assumption
 
-Keep pricing simple at launch: one paid plan plus a small private beta cohort.
+Keep pricing simple at MVP launch: one paid plan plus a small private beta
+cohort.
 
 Recommended public price:
 
@@ -2174,6 +2796,8 @@ Future tiers only after beta data:
 - **ClawLaunch Pro** around $99/month if users need higher posting volume,
   deeper weekly research, more connected accounts, or more frequent strategy
   refresh.
+- **ClawLaunch Pro Creative** around $99/month or usage-based if Gemini
+  Omni/creative-generation costs make AI UGC-style videos viable.
 - **Agency / multi-app** custom pricing if one user manages several apps.
 
 Do not price like consumer creator Maya. This ICP already pays for development
@@ -2188,11 +2812,15 @@ is disciplined. It is not acceptable at $9.99.
    production channel?
 2. Do we use direct Google Calendar OAuth or consolidate Calendar through
    Composio sessions?
-3. Which stronger model should own final strategy judgment?
-4. What is the exact per-user onboarding research budget?
-5. Do we include X/LinkedIn OAuth during onboarding or after the first plan?
-6. Should the first beta include publishing, or start with approval/draft only
+3. What is the exact per-user onboarding research budget for beta and for
+   production?
+4. Do we include X/LinkedIn OAuth during onboarding or after the first plan?
+5. Should the first beta include publishing, or start with approval/draft only
    for one week?
-7. Do we provision a new Convex project before beta or keep additive tables on
+6. Do we provision a new Convex project before beta or keep additive tables on
    current staging?
-8. Do we rename Riley artifacts or leave them as internal reference only?
+7. Do we rename Riley artifacts or leave them as internal reference only?
+8. When Gemini Omni API access/pricing is public, does Pro Creative become a
+   tier, a metered add-on, or stay out of product?
+9. Which model wins the first research-subagent eval: Claude Sonnet, Gemini 3
+   Flash, Gemini 3.5 Flash, or another OpenRouter model?
