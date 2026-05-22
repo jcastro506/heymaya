@@ -88,6 +88,7 @@ import type * as gtmMaya_calendarPlan from "../gtmMaya/calendarPlan.js";
 import type * as gtmMaya_channelAgents from "../gtmMaya/channelAgents.js";
 import type * as gtmMaya_channelScoring from "../gtmMaya/channelScoring.js";
 import type * as gtmMaya_contentQuality from "../gtmMaya/contentQuality.js";
+import type * as gtmMaya_missionBoard from "../gtmMaya/missionBoard.js";
 import type * as gtmMaya_researchLifecycle from "../gtmMaya/researchLifecycle.js";
 import type * as gtmMaya_researchTasks from "../gtmMaya/researchTasks.js";
 import type * as gtmMaya_researchWorker from "../gtmMaya/researchWorker.js";
@@ -306,6 +307,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/channelAgents": typeof gtmMaya_channelAgents;
   "gtmMaya/channelScoring": typeof gtmMaya_channelScoring;
   "gtmMaya/contentQuality": typeof gtmMaya_contentQuality;
+  "gtmMaya/missionBoard": typeof gtmMaya_missionBoard;
   "gtmMaya/researchLifecycle": typeof gtmMaya_researchLifecycle;
   "gtmMaya/researchTasks": typeof gtmMaya_researchTasks;
   "gtmMaya/researchWorker": typeof gtmMaya_researchWorker;
