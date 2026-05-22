@@ -4502,6 +4502,8 @@ export default defineSchema({
       v.literal("tiktok_faceless_demo"),
       v.literal("tiktok_founder_talking_head"),
       v.literal("tiktok_slideshow_carousel"),
+      v.literal("instagram_reels_reuse"),
+      v.literal("instagram_carousel_reuse"),
       v.literal("ugc_creator_test"),
       v.literal("paid_ads_later"),
       v.literal("influencer_later")
@@ -4536,6 +4538,8 @@ export default defineSchema({
       v.literal("tiktok_faceless_demo"),
       v.literal("tiktok_founder_talking_head"),
       v.literal("tiktok_slideshow_carousel"),
+      v.literal("instagram_reels_reuse"),
+      v.literal("instagram_carousel_reuse"),
       v.literal("ugc_creator_test"),
       v.literal("paid_ads_later"),
       v.literal("influencer_later")
@@ -4587,6 +4591,8 @@ export default defineSchema({
       v.literal("tiktok_faceless_demo"),
       v.literal("tiktok_founder_talking_head"),
       v.literal("tiktok_slideshow_carousel"),
+      v.literal("instagram_reels_reuse"),
+      v.literal("instagram_carousel_reuse"),
       v.literal("ugc_creator_test"),
       v.literal("paid_ads_later"),
       v.literal("influencer_later")

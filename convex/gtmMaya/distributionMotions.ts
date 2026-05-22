@@ -7,6 +7,8 @@ export type DistributionMotion =
   | "tiktok_faceless_demo"
   | "tiktok_founder_talking_head"
   | "tiktok_slideshow_carousel"
+  | "instagram_reels_reuse"
+  | "instagram_carousel_reuse"
   | "ugc_creator_test"
   | "paid_ads_later"
   | "influencer_later";
@@ -99,6 +101,8 @@ export function evaluateDistributionMotions(input: {
     tiktokFacelessMotion(input.app, input.evidence),
     tiktokFounderMotion(input.app, input.evidence),
     tiktokSlideshowMotion(input.app, input.evidence),
+    instagramReelsReuseMotion(input.app, input.evidence),
+    instagramCarouselReuseMotion(input.app, input.evidence),
     ugcMotion(input.app, input.evidence),
   ];
 
@@ -374,6 +378,69 @@ function tiktokSlideshowMotion(
   };
 }
 
+function instagramReelsReuseMotion(
+  app: {
+    productType: string;
+    canRecordScreen: boolean;
+    canShowFace: boolean;
+    canPostInstagramManually?: boolean;
+  },
+  evidence: ReadonlyArray<GtmEvidenceCard>
+): DistributionMotionVerdict {
+  const cards = cardsFor(evidence, "instagram");
+  const fallbackCards = cards.length >= 2 ? cards : cardsFor(evidence, "tiktok");
+  const visual =
+    app.productType === "consumer_visual" || app.productType === "prosumer";
+  const canMakeReels = app.canRecordScreen || app.canShowFace;
+  const canPost = app.canPostInstagramManually ?? false;
+  const viable = visual && canMakeReels && canPost && fallbackCards.length >= 2;
+  return {
+    motion: "instagram_reels_reuse",
+    status: viable ? "test_later" : "parked",
+    rationale: viable
+      ? ["Instagram Reels can reuse proven TikTok/demo assets after the first tests"]
+      : ["Instagram Reels needs reusable video assets and manual posting"],
+    risks: [
+      "Instagram is a reuse lane in V1; do not let it distract from the primary experiment",
+    ],
+    evidenceCardIds: ids(fallbackCards),
+    minimumCadence: "reuse 1-2 proven short-form clips per week",
+    stopCriteria: "no profile clicks, replies, or signups after two reused clips",
+    doubleDownCriteria: "qualified replies or signups from reused Reels",
+  };
+}
+
+function instagramCarouselReuseMotion(
+  app: {
+    productType: string;
+    canProvideScreenshots?: boolean;
+    canPostInstagramManually?: boolean;
+  },
+  evidence: ReadonlyArray<GtmEvidenceCard>
+): DistributionMotionVerdict {
+  const cards = cardsFor(evidence, "instagram");
+  const fallbackCards = cards.length >= 2 ? cards : cardsFor(evidence, "tiktok");
+  const visual =
+    app.productType === "consumer_visual" || app.productType === "prosumer";
+  const canMakeCarousel = Boolean(app.canProvideScreenshots);
+  const canPost = app.canPostInstagramManually ?? false;
+  const viable = visual && canMakeCarousel && canPost && fallbackCards.length >= 2;
+  return {
+    motion: "instagram_carousel_reuse",
+    status: viable ? "test_later" : "parked",
+    rationale: viable
+      ? ["Instagram carousels can reuse screenshots from TikTok Photo Mode or product slides"]
+      : ["Instagram carousels need screenshots/product images and manual posting"],
+    risks: [
+      "static carousels need a strong first slide and tracked CTA or they become vanity content",
+    ],
+    evidenceCardIds: ids(fallbackCards),
+    minimumCadence: "reuse 1 carousel from the best screenshot/slideshow idea per week",
+    stopCriteria: "saves without qualified comments, clicks, or signups",
+    doubleDownCriteria: "qualified comments, clicks, or signups from one carousel skeleton",
+  };
+}
+
 function ugcMotion(
   app: { canRecordScreen: boolean; canShowFace: boolean },
   evidence: ReadonlyArray<GtmEvidenceCard>
@@ -418,7 +485,9 @@ function hypothesisFor(
 
 function successMetricFor(motion: DistributionMotion): ExperimentSuccessMetric {
   if (motion === "ugc_creator_test") return "creator_applicants";
-  if (motion.startsWith("tiktok")) return "installs";
+  if (motion.startsWith("tiktok") || motion.startsWith("instagram")) {
+    return "installs";
+  }
   if (motion === "linkedin_founder_led") return "qualified_replies";
   return "signups";
 }
@@ -456,6 +525,26 @@ function variantsFor(
         demoMoment: "use product screenshots as the final two slides",
         cta: "join the beta from the link",
         formatSkeleton: "listicle pain -> product reveal -> beta CTA",
+      },
+    ];
+  }
+  if (motion === "instagram_reels_reuse") {
+    return [
+      {
+        hook: "The fastest way to understand this app.",
+        demoMoment: "reuse the strongest short-form demo clip",
+        cta: "DM or comment if you want the beta link",
+        formatSkeleton: "short hook -> reused demo clip -> result -> DM/comment CTA",
+      },
+    ];
+  }
+  if (motion === "instagram_carousel_reuse") {
+    return [
+      {
+        hook: "Swipe through the before/after.",
+        demoMoment: "reuse product screenshots from the slideshow test",
+        cta: "comment beta if this is your workflow",
+        formatSkeleton: "first-slide pain -> screenshot sequence -> result -> comment CTA",
       },
     ];
   }

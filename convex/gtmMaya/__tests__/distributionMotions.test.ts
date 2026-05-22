@@ -37,12 +37,16 @@ describe("GTM distribution motions", () => {
         weekGoal: "signups",
         canRecordScreen: true,
         canShowFace: false,
+        canProvideScreenshots: true,
+        canPostInstagramManually: true,
         excludedAudiences: [],
         productType: "consumer_visual",
       },
       evidence: [
         evidence("tiktok"),
         evidence("tiktok"),
+        evidence("instagram"),
+        evidence("instagram"),
         evidence("reddit"),
         evidence("reddit"),
       ],
@@ -53,6 +57,7 @@ describe("GTM distribution motions", () => {
       (v) => v.motion === "tiktok_slideshow_carousel"
     );
     const ugc = verdicts.find((v) => v.motion === "ugc_creator_test");
+    const instagram = verdicts.find((v) => v.motion === "instagram_carousel_reuse");
 
     expect(faceless?.status).toBe("test_now");
     expect(faceless?.doubleDownCriteria).toContain("installs");
@@ -60,6 +65,8 @@ describe("GTM distribution motions", () => {
     expect(slideshow?.minimumCadence).toContain("slideshow");
     expect(ugc?.status).toBe("test_later");
     expect(ugc?.risks.join(" ")).toContain("premature");
+    expect(instagram?.status).toBe("test_later");
+    expect(instagram?.rationale.join(" ")).toContain("reuse");
   });
 
   it("parks TikTok motions for B2B tools without visual proof", () => {
@@ -153,6 +160,29 @@ describe("GTM distribution motions", () => {
     expect(
       verdicts.find((v) => v.motion === "tiktok_slideshow_carousel")?.status
     ).toBe("parked");
+  });
+
+  it("builds Instagram reuse experiments without making Instagram the primary motion", () => {
+    const verdict = evaluateDistributionMotions({
+      app: {
+        stage: "live-beta",
+        weekGoal: "signups",
+        canRecordScreen: true,
+        canShowFace: false,
+        canProvideScreenshots: true,
+        canPostInstagramManually: true,
+        excludedAudiences: [],
+        productType: "consumer_visual",
+      },
+      evidence: [evidence("instagram"), evidence("instagram")],
+    }).find((v) => v.motion === "instagram_carousel_reuse");
+
+    expect(verdict?.status).toBe("test_later");
+    const plan = buildFormatExperimentPlan(verdict!, "ClipForge");
+
+    expect(plan.motion).toBe("instagram_carousel_reuse");
+    expect(plan.variants[0].formatSkeleton).toContain("first-slide pain");
+    expect(plan.successMetric).toBe("installs");
   });
 
   it("does not mark high-view low-signal posts as winners", () => {
