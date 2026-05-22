@@ -8,6 +8,7 @@ import {
 const INPUT: MayaGtmWorkspaceInput = {
   accountEmail: "founder@clawlaunch.test",
   timezone: "America/New_York",
+  bootKickoffAtMs: Date.UTC(2026, 4, 22, 12, 0, 0),
   app: {
     name: "BugBrief",
     url: "https://bugbrief.test",
@@ -128,6 +129,7 @@ describe("Maya GTM workspace pack", () => {
   it("ships OpenClaw cron jobs that isolate heartbeat from paid research", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
     const jobs = JSON.parse(files.get("jobs.json") ?? "{}") as {
+      version?: number;
       jobs: Array<{
         id: string;
         sessionTarget: string;
@@ -138,12 +140,27 @@ describe("Maya GTM workspace pack", () => {
           timeoutSeconds?: number;
         };
         delivery?: { mode: string; bestEffort: boolean };
+        state?: Record<string, never>;
       }>;
     };
 
+    expect(jobs.version).toBe(1);
+    expect(jobs.jobs.every((job) => job.state != null)).toBe(true);
+    const bootKickoff = jobs.jobs.find(
+      (job) => job.id === "0001_gtm_boot_kickoff"
+    );
     const heartbeat = jobs.jobs.find((job) => job.id === "gtm_heartbeat");
     const weeklyReview = jobs.jobs.find((job) => job.id === "gtm_weekly_review");
 
+    expect(jobs.jobs[0]?.id).toBe("0001_gtm_boot_kickoff");
+    expect(bootKickoff).toBeTruthy();
+    expect(bootKickoff?.sessionTarget).toBe("isolated");
+    expect(bootKickoff?.payload.kind).toBe("agentTurn");
+    expect(bootKickoff?.delivery).toEqual({ mode: "none", bestEffort: true });
+    expect(bootKickoff?.payload.message).toContain("FIRST WAKE");
+    expect(bootKickoff?.payload.message).toContain("Read BOOT.md");
+    expect(bootKickoff?.payload.message).toContain("onboarding deep research");
+    expect(bootKickoff?.payload.message).toContain("maxScrapeCreatorsCalls");
     expect(heartbeat).toBeTruthy();
     expect(heartbeat?.sessionTarget).toBe("isolated");
     expect(heartbeat?.payload.kind).toBe("agentTurn");

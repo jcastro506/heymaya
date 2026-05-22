@@ -2010,7 +2010,83 @@ Exit:
 
 - Research depth is visible, auditable, and cost-bounded.
 
-### Sprint 5: Strategy and Experiment Planning
+### Sprint 5: Platform Intelligence and Capability Gating
+
+Goal:
+
+- Maya stays current on TikTok, Instagram, X, Reddit, and LinkedIn without
+  relying on static prompt lore or pretending every platform works the same.
+
+Build:
+
+- Living platform briefs for:
+  - TikTok
+  - Instagram
+  - X
+  - Reddit
+  - LinkedIn
+- Platform claim store with source URL, source kind, retrieved time,
+  published time when available, confidence, and expiry.
+- Platform refresh runs:
+  - onboarding deep research
+  - weekly niche refresh for active channels
+  - monthly platform doctrine/API/policy refresh
+- Channel recommendation gate that requires:
+  - product-specific evidence cards
+  - fresh platform brief
+  - at least three fresh cited platform claims
+  - one `what_works_now` claim
+  - one publishing/API/policy claim
+- ScrapeCreators budget/cache policy for platform research.
+- Composio/official API capability matrix:
+  - research/listening
+  - owned-account insights
+  - draft
+  - publish
+  - comment/reply
+  - approval requirement
+- Platform subagent contracts:
+  - platform scout
+  - format analyst
+  - channel strategist
+  - evidence librarian
+  - execution planner
+  - compliance guard
+- Heartbeat rule: heartbeat may detect stale briefs and queue a refresh, but
+  may not spend ScrapeCreators/search budget or silently change approved GTM
+  strategy.
+
+Tests:
+
+- Platform brief fails when stale.
+- Platform brief fails with fewer than three fresh cited claims.
+- Active channel recommendation fails without fresh platform intelligence.
+- Heartbeat queues refresh for stale active-channel briefs and spends nothing.
+- Weekly refresh cadence is used for niche strategy.
+- Monthly refresh cadence is used for platform doctrine/API/policy.
+- TikTok can be recommended for visual consumer apps only when current
+  evidence and production capacity support it.
+- Reddit recommendations include community/promotion risk evidence.
+- LinkedIn recommendations include professional/buyer-context evidence.
+- X recommendations account for API/credential/cost constraints.
+- Instagram posting is gated behind Business/Creator account capability where
+  direct publishing is used.
+
+Smoke:
+
+- Seed current briefs for TikTok, Instagram, X, Reddit, and LinkedIn.
+- Run onboarding research for one fixture app.
+- Verify Maya cannot create a final channel plan until platform briefs and
+  product evidence are both fresh.
+- Expire one active platform brief and verify heartbeat queues a refresh
+  without making external paid calls.
+
+Exit:
+
+- Maya can explain why a platform is selected, parked, or blocked using current
+  cited platform evidence plus product-specific evidence.
+
+### Sprint 6: Strategy and Experiment Planning
 
 Goal:
 
@@ -2052,7 +2128,7 @@ Exit:
 
 - Final plan is grounded with evidence references and experiment criteria.
 
-### Sprint 6: Execution Loop
+### Sprint 7: Execution Loop
 
 Goal:
 
@@ -2120,7 +2196,7 @@ Exit:
 
 - User can execute from calendar and messaging alone.
 
-### Sprint 7: Learning Loop and Mission Board
+### Sprint 8: Learning Loop and Mission Board
 
 Goal:
 
@@ -2172,7 +2248,7 @@ Exit:
 
 - Maya visibly improves over time.
 
-### Sprint 8: Hardening and Private Beta
+### Sprint 9: Hardening and Private Beta
 
 Goal:
 

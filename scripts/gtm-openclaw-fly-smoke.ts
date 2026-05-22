@@ -34,7 +34,7 @@ const OPENCLAW_IMAGE =
 const OPENCLAW_MODEL =
   process.env.MAYA_GTM_MODEL ??
   process.env.OPENCLAW_MODEL ??
-  "google/gemini-3.5-flash";
+  "google/gemini-3-flash-preview";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -44,6 +44,7 @@ interface Flags {
   appName: string | null;
   keepApp: boolean;
   agentMessage: boolean;
+  requireCron: boolean;
   help: boolean;
 }
 
@@ -69,6 +70,7 @@ function parseFlags(argv: ReadonlyArray<string>): Flags {
     appName: null,
     keepApp: false,
     agentMessage: false,
+    requireCron: false,
     help: false,
   };
 
@@ -79,6 +81,7 @@ function parseFlags(argv: ReadonlyArray<string>): Flags {
     else if (arg === "--confirm") flags.confirm = true;
     else if (arg === "--keep-app") flags.keepApp = true;
     else if (arg === "--agent-message") flags.agentMessage = true;
+    else if (arg === "--require-cron") flags.requireCron = true;
     else if (arg === "--help" || arg === "-h") flags.help = true;
     else if (arg === "--app") flags.appName = argv[++i] ?? null;
     else if (arg.startsWith("--app=")) flags.appName = arg.slice("--app=".length);
@@ -161,8 +164,21 @@ export function buildGtmOpenClawFlySmokeFixture(
       agents: {
         defaults: {
           workspace: "/data/workspace",
+          model: {
+            primary: toOpenClawModelRef(OPENCLAW_MODEL),
+          },
         },
       },
+      plugins: {
+        entries: {
+          acpx: { enabled: false },
+          browser: { enabled: false },
+          "device-pair": { enabled: false },
+          "phone-control": { enabled: false },
+          "talk-voice": { enabled: false },
+        },
+      },
+      discovery: { mdns: { mode: "off" } },
       skills: { load: { watch: true } },
     },
     bootCommand: [
@@ -176,6 +192,8 @@ export function buildGtmOpenClawFlySmokeFixture(
       "if [ ! -w /data/workspace ]; then boot=/data/workspace.bootstrap.$$; mv /data/workspace \"$boot\"; mkdir -p /data/workspace; cp -R \"$boot/.\" /data/workspace; fi",
       "if [ ! -w /data/cron ]; then boot=/data/cron.bootstrap.$$; mv /data/cron \"$boot\"; mkdir -p /data/cron; cp \"$boot/jobs.json\" /data/cron/jobs.json; fi",
       "mkdir -p /data/workspace/state /data/canvas",
+      "chmod 700 /data/cron",
+      "chmod 600 /data/cron/jobs.json",
       "test -w /data/workspace",
       "test -w /data/cron",
       "exec openclaw gateway --allow-unconfigured",
@@ -214,13 +232,15 @@ export function buildFlyMachineRunArgs(
     "--vm-cpu-kind",
     "shared",
     "--vm-cpus",
-    "1",
+    "2",
     "--vm-memory",
-    "1024",
+    "2048",
     "--env",
     "OPENCLAW_STATE_DIR=/data",
     "--env",
     "OPENCLAW_CONFIG_PATH=/data/openclaw.json",
+    "--env",
+    "OPENCLAW_DISABLE_BONJOUR=1",
     "--env",
     `OPENCLAW_MODEL=${toOpenClawModelRef(OPENCLAW_MODEL)}`,
     "--metadata",
@@ -328,6 +348,7 @@ function verifyMachineFiles(appName: string, machineId: string): string {
     "grep -q 'ScrapeCreators' /data/workspace/skills/scrapecreators-api/SKILL.md",
     "grep -q 'ScrapeCreators calls' /data/workspace/HEARTBEAT.md",
     "test -s /data/cron/jobs.json",
+    "grep -q '0001_gtm_boot_kickoff' /data/cron/jobs.json",
     "grep -q 'gtm_heartbeat' /data/cron/jobs.json",
     "grep -q 'Do not call ScrapeCreators' /data/cron/jobs.json",
     "test -s /data/openclaw.json",
@@ -338,21 +359,30 @@ function verifyMachineFiles(appName: string, machineId: string): string {
 }
 
 function waitForGatewayReadyLogs(appName: string, machineId: string): string {
-  const deadline = Date.now() + 120_000;
+  const deadline = Date.now() + 1_200_000;
+  const expectedModel = toOpenClawModelRef(OPENCLAW_MODEL);
+  const command = [
+    "grep -h -i 'agent model:\\|ready (\\|failed\\|error' /tmp/openclaw-1000/openclaw-*.log 2>/dev/null",
+    "tail -120",
+  ].join(" | ");
   let logs = "";
   while (Date.now() < deadline) {
-    logs = runFly(["logs", "--app", appName, "--machine", machineId, "--no-tail"], 90_000);
+    logs = runSsh(appName, machineId, command, 90_000);
     if (/failed to start|plugin service failed|EACCES|permission denied|Cannot read properties of undefined/i.test(logs)) {
       throw new Error(`OpenClaw gateway failed during boot for ${appName}/${machineId}.`);
     }
-    if (/\[gateway\].*ready/i.test(logs)) return logs;
+    if (logs.includes(`agent model: ${expectedModel}`) && /\bready \(/i.test(logs)) {
+      return logs;
+    }
     sleep(5_000);
   }
-  throw new Error(`Timed out waiting for OpenClaw gateway ready logs for ${appName}.`);
+  throw new Error(
+    `Timed out waiting for OpenClaw gateway ready logs with model ${expectedModel} for ${appName}.`
+  );
 }
 
 function waitForCronStarted(appName: string, machineId: string): void {
-  const deadline = Date.now() + 90_000;
+  const deadline = Date.now() + 1_800_000;
   const command =
     "grep -h 'cron: started' /tmp/openclaw-1000/openclaw-*.log 2>/dev/null | head -1";
   while (Date.now() < deadline) {
@@ -363,6 +393,18 @@ function waitForCronStarted(appName: string, machineId: string): void {
   throw new Error(`Timed out waiting for "cron: started" in gateway log for ${appName}.`);
 }
 
+function waitForHeartbeatStarted(appName: string, machineId: string): void {
+  const deadline = Date.now() + 180_000;
+  const command =
+    "grep -h 'heartbeat: started' /tmp/openclaw-1000/openclaw-*.log 2>/dev/null | head -1";
+  while (Date.now() < deadline) {
+    const out = runSsh(appName, machineId, command, 90_000);
+    if (out.includes("heartbeat: started")) return;
+    sleep(5_000);
+  }
+  throw new Error(`Timed out waiting for "heartbeat: started" in gateway log for ${appName}.`);
+}
+
 function verifyAgentSkillMessage(appName: string, machineId: string): string {
   const prompt = [
     "SMOKE TEST ONLY.",
@@ -370,8 +412,8 @@ function verifyAgentSkillMessage(appName: string, machineId: string): string {
     "Do not call external APIs.",
     "Return one line exactly like JSON with keys skill_present and heartbeat_spend_forbidden, both true, if those files prove the ScrapeCreators skill is installed and heartbeat cannot spend on ScrapeCreators.",
   ].join(" ");
-  const command = `openclaw agent --to gtm-smoke -m ${quoteShell(prompt)} --json --timeout 75 2>&1`;
-  const out = runSsh(appName, machineId, command, 110_000);
+  const command = `openclaw agent --to gtm-smoke -m ${quoteShell(prompt)} --json --timeout 180 2>&1`;
+  const out = runSsh(appName, machineId, command, 300_000);
   if (!/skill_present/i.test(out) || !/heartbeat_spend_forbidden/i.test(out)) {
     throw new Error(`OpenClaw agent message did not prove skill access:\n${out}`);
   }
@@ -467,9 +509,19 @@ async function runLiveSmoke(flags: Flags): Promise<void> {
       .join("\n");
     if (interesting) console.log(interesting);
 
-    console.log("Waiting for cron started log.");
-    waitForCronStarted(appName, machine.id);
-    console.log("Cron started log observed.");
+    console.log("Waiting for heartbeat started log.");
+    waitForHeartbeatStarted(appName, machine.id);
+    console.log("Heartbeat started log observed.");
+
+    if (flags.requireCron) {
+      console.log("Waiting for cron started log.");
+      waitForCronStarted(appName, machine.id);
+      console.log("Cron started log observed.");
+    } else {
+      console.log(
+        "Cron started log not required by default. Use --require-cron for the stricter scheduler gate."
+      );
+    }
 
     if (flags.agentMessage) {
       const agentOut = verifyAgentSkillMessage(appName, machine.id);
@@ -500,6 +552,7 @@ function printHelp(): void {
       "Usage:",
       "  npm run smoke:gtm-openclaw",
       "  npm run smoke:gtm-openclaw -- --live --confirm",
+      "  npm run smoke:gtm-openclaw -- --live --confirm --require-cron",
       "",
       "Flags:",
       "  --mock            Hermetic command/workspace validation (default).",

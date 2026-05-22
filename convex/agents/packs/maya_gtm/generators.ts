@@ -1,6 +1,11 @@
 export interface MayaGtmWorkspaceInput {
   accountEmail: string;
   timezone: string;
+  /**
+   * Test seam for the first-wake cron job. Production leaves this unset so
+   * the generated `at` time is based on deploy time.
+   */
+  bootKickoffAtMs?: number;
   app: {
     name: string;
     url: string;
@@ -335,8 +340,33 @@ If a heartbeat finds real work, it queues a bounded job and exits. It does not i
 }
 
 function renderJobs(input: MayaGtmWorkspaceInput): string {
+  const bootKickoffAt = new Date(
+    (input.bootKickoffAtMs ?? Date.now()) + 900_000
+  ).toISOString();
   const jobs = {
+    version: 1,
     jobs: [
+      {
+        id: "0001_gtm_boot_kickoff",
+        name: "0001 GTM boot kickoff",
+        description:
+          "One-shot first-wake task. Confirms the OpenClaw workspace loaded, summarizes the fake user's product context, and starts the bounded onboarding research lane without spending from heartbeat.",
+        enabled: true,
+        createdAtMs: 0,
+        updatedAtMs: 0,
+        schedule: { kind: "at", at: bootKickoffAt },
+        sessionTarget: "isolated",
+        wakeMode: "now",
+        deleteAfterRun: true,
+        payload: {
+          kind: "agentTurn",
+          lightContext: true,
+          message:
+            "FIRST WAKE: Read BOOT.md, APP.md, GTM.md, USER.md, TOOLS.md, and HEARTBEAT.md. Do not call ScrapeCreators, Gemini, broad web search, Composio, or any paid external API from this first wake. Produce a concise boot status for the gateway/session smoke: confirm the product, stage, week goal, likely first research lane, and the next bounded job Maya would queue. The next bounded job should be onboarding deep research for this product, with explicit budget fields: model, timeout_minutes, maxScrapeCreatorsCalls, maxWebSearches, coverageChecklist, and failureBehavior. If WhatsApp or another message channel is unavailable, write the status in the session only.",
+        },
+        delivery: { mode: "none", bestEffort: true },
+        state: {},
+      },
       {
         id: "gtm_heartbeat",
         name: "GTM heartbeat",
@@ -357,6 +387,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
             "AUTONOMOUS HEARTBEAT: Read HEARTBEAT.md, MEMORY.md, APP.md, and GTM.md. Check only local workspace/Convex/cache state for pending approvals, overdue calendar/result jobs, unread user messages, and open loops. Do not call ScrapeCreators, Gemini deep research, broad web search, X search, Composio publishing, or any paid external API. If real work is needed, write a bounded queued-job note and exit.",
         },
         delivery: { mode: "none", bestEffort: true },
+        state: {},
       },
       {
         id: "gtm_calendar_check",
@@ -378,6 +409,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
             "CALENDAR CHECK: Read GTM.md, USER.md, and MEMORY.md. Look for due manual-posting reminders, approvals, and calendar briefs already present in workspace/Convex. Do not run new platform research. If a TikTok warm-up task is due, remind the user to complete normal account activity and Account Check before posting cadence.",
         },
         delivery: { mode: "none", bestEffort: true },
+        state: {},
       },
       {
         id: "gtm_result_refresh",
@@ -399,6 +431,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
             "RESULT REFRESH: Read MEMORY.md and GTM.md. Review only already-recorded publish/result state. Do not call ScrapeCreators unless a separate explicit research/review job with budget exists. If results are missing after a scheduled post, ask for the link or metrics in one concise message.",
         },
         delivery: { mode: "none", bestEffort: true },
+        state: {},
       },
       {
         id: "gtm_weekly_review",
@@ -420,6 +453,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
             "WEEKLY REVIEW: Read APP.md, GTM.md, MEMORY.md, and DREAMING.md. Summarize what produced replies, signups, demos, feedback, or user edits. If new platform research is needed, create an explicit bounded research job with model, timeout, maxScrapeCreatorsCalls, maxWebSearches, coverageChecklist, and failureBehavior. Do not spend ScrapeCreators directly from this weekly cron tick.",
         },
         delivery: { mode: "none", bestEffort: true },
+        state: {},
       },
     ],
   };

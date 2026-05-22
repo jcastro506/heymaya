@@ -4467,6 +4467,115 @@ export default defineSchema({
     .index("by_account_and_source", ["accountId", "source"])
     .index("by_account_and_use", ["accountId", "recommendedUse"]),
 
+  gtmPlatformBriefs: defineTable({
+    platform: v.union(
+      v.literal("tiktok"),
+      v.literal("instagram"),
+      v.literal("x"),
+      v.literal("reddit"),
+      v.literal("linkedin")
+    ),
+    version: v.number(),
+    whatWorksNow: v.array(v.string()),
+    audienceBehavior: v.array(v.string()),
+    formatPatterns: v.array(v.string()),
+    publishingLimits: v.array(v.string()),
+    apiAccess: v.array(v.string()),
+    policyRisks: v.array(v.string()),
+    measurementModel: v.array(v.string()),
+    recommendedUseCases: v.array(v.string()),
+    avoidFor: v.array(v.string()),
+    claimIds: v.array(v.id("gtmPlatformClaims")),
+    lastReviewedAt: v.number(),
+    expiresAt: v.number(),
+    confidence: v.union(
+      v.literal("low"),
+      v.literal("medium"),
+      v.literal("high")
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_platform", ["platform"])
+    .index("by_platform_and_version", ["platform", "version"])
+    .index("by_expires_at", ["expiresAt"]),
+
+  gtmPlatformClaims: defineTable({
+    platform: v.union(
+      v.literal("tiktok"),
+      v.literal("instagram"),
+      v.literal("x"),
+      v.literal("reddit"),
+      v.literal("linkedin")
+    ),
+    claimType: v.union(
+      v.literal("what_works_now"),
+      v.literal("format_pattern"),
+      v.literal("audience_behavior"),
+      v.literal("publishing_limit"),
+      v.literal("api_access"),
+      v.literal("policy_risk"),
+      v.literal("measurement_model"),
+      v.literal("avoid_for")
+    ),
+    claim: v.string(),
+    sourceKind: v.union(
+      v.literal("official_doc"),
+      v.literal("scrapecreators"),
+      v.literal("web_search"),
+      v.literal("user_account"),
+      v.literal("third_party_analysis")
+    ),
+    sourceUrl: v.string(),
+    retrievedAt: v.number(),
+    publishedAt: v.optional(v.number()),
+    expiresAt: v.number(),
+    confidence: v.union(
+      v.literal("low"),
+      v.literal("medium"),
+      v.literal("high")
+    ),
+    createdAt: v.number(),
+  })
+    .index("by_platform", ["platform"])
+    .index("by_platform_and_type", ["platform", "claimType"])
+    .index("by_expires_at", ["expiresAt"]),
+
+  gtmPlatformRefreshRuns: defineTable({
+    platform: v.optional(
+      v.union(
+        v.literal("tiktok"),
+        v.literal("instagram"),
+        v.literal("x"),
+        v.literal("reddit"),
+        v.literal("linkedin")
+      )
+    ),
+    cadence: v.union(
+      v.literal("onboarding"),
+      v.literal("weekly"),
+      v.literal("monthly")
+    ),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+      v.literal("cancelled")
+    ),
+    sourceBudgetUsd: v.number(),
+    scrapeCreatorsCreditBudget: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    deltaSummary: v.optional(v.string()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_platform", ["platform"])
+    .index("by_status", ["status"])
+    .index("by_cadence", ["cadence"]),
+
   gtmChannelScores: defineTable({
     accountId: v.id("creators"),
     researchJobId: v.id("gtmResearchJobs"),

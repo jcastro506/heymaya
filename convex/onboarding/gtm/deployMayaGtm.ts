@@ -44,7 +44,7 @@ const OPENCLAW_IMAGE =
   "registry.fly.io/heymaya-openclaw:v2026.4.23";
 
 const MODEL_ROUTING = {
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-3.5-flash",
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-3-flash-preview",
   hardResearchBeta:
     process.env.MAYA_GTM_HARD_RESEARCH_MODEL ??
     "openrouter/anthropic/claude-sonnet-4.5",
@@ -320,6 +320,7 @@ export function buildGtmMachineConfig(input: {
       MAYA_GTM_APP_NAME: input.flyAppName,
       MAYA_WORKSPACE_BUNDLE_URL: input.workspaceBundleUrl,
       OPENCLAW_MODEL: toOpenClawModelRef(MODEL_ROUTING.mainMaya),
+      OPENCLAW_DISABLE_BONJOUR: "1",
       MAYA_GTM_MODEL_ROUTING_JSON: JSON.stringify(MODEL_ROUTING),
       MAYA_BOOTSTRAP_JSON: JSON.stringify({
         agentId: String(input.agentId),
@@ -333,8 +334,21 @@ export function buildGtmMachineConfig(input: {
           agents: {
             defaults: {
               workspace: "/data/workspace",
+              model: {
+                primary: toOpenClawModelRef(MODEL_ROUTING.mainMaya),
+              },
             },
           },
+          plugins: {
+            entries: {
+              acpx: { enabled: false },
+              browser: { enabled: false },
+              "device-pair": { enabled: false },
+              "phone-control": { enabled: false },
+              "talk-voice": { enabled: false },
+            },
+          },
+          discovery: { mdns: { mode: "off" } },
           skills: { load: { watch: true } },
         },
       }),
@@ -366,6 +380,8 @@ function buildBootstrapShell(): string {
     'curl -fsSL "$MAYA_WORKSPACE_BUNDLE_URL" -o /tmp/workspace.tar',
     "tar -xf /tmp/workspace.tar -C /data/workspace",
     "if [ -f /data/workspace/jobs.json ]; then cp /data/workspace/jobs.json /data/cron/jobs.json; fi",
+    "chmod 700 /data/cron",
+    "chmod 600 /data/cron/jobs.json",
     'echo "$MAYA_BOOTSTRAP_JSON" | jq .gatewayConfig > /data/openclaw.json',
     "exec openclaw gateway --allow-unconfigured",
   ].join(" && ");

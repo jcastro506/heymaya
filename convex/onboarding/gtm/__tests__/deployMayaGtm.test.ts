@@ -38,17 +38,33 @@ describe("Maya GTM OpenClaw deploy config", () => {
 
     const bootstrap = JSON.parse(config.env?.MAYA_BOOTSTRAP_JSON ?? "{}");
     expect(bootstrap.product).toBe("clawlaunch-gtm");
-    expect(bootstrap.modelRouting.mainMaya).toBe("google/gemini-3.5-flash");
+    expect(bootstrap.modelRouting.mainMaya).toBe("google/gemini-3-flash-preview");
     expect(bootstrap.modelRouting.hardResearchBeta).toContain("claude-sonnet");
     expect(bootstrap.directPingSmoke).toBe(true);
     expect(bootstrap.gatewayConfig).toEqual({
       gateway: { mode: "local" },
-      agents: { defaults: { workspace: "/data/workspace" } },
+      agents: {
+        defaults: {
+          workspace: "/data/workspace",
+          model: { primary: "openrouter/google/gemini-3-flash-preview" },
+        },
+      },
+      plugins: {
+        entries: {
+          acpx: { enabled: false },
+          browser: { enabled: false },
+          "device-pair": { enabled: false },
+          "phone-control": { enabled: false },
+          "talk-voice": { enabled: false },
+        },
+      },
+      discovery: { mdns: { mode: "off" } },
       skills: { load: { watch: true } },
     });
     expect(config.init?.cmd?.join(" ")).toContain(
       "cp /data/workspace/jobs.json /data/cron/jobs.json"
     );
+    expect(config.init?.cmd?.join(" ")).toContain("chmod 700 /data/cron");
   });
 
   it("uses Gemini 3.5 Flash as the default GTM OpenClaw model", () => {
@@ -58,7 +74,10 @@ describe("Maya GTM OpenClaw deploy config", () => {
       workspaceBundleUrl: "https://storage.test/workspace.tar",
     });
 
-    expect(config.env?.OPENCLAW_MODEL).toBe("openrouter/google/gemini-3.5-flash");
+    expect(config.env?.OPENCLAW_MODEL).toBe(
+      "openrouter/google/gemini-3-flash-preview"
+    );
+    expect(config.env?.OPENCLAW_DISABLE_BONJOUR).toBe("1");
     expect(config.env?.MAYA_GTM_MODEL_ROUTING_JSON).toContain(
       "futureDefaultResearch"
     );
