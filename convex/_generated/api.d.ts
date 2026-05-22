@@ -94,6 +94,8 @@ import type * as gtmMaya_missionBoard from "../gtmMaya/missionBoard.js";
 import type * as gtmMaya_privateBeta from "../gtmMaya/privateBeta.js";
 import type * as gtmMaya_productionReality from "../gtmMaya/productionReality.js";
 import type * as gtmMaya_researchLifecycle from "../gtmMaya/researchLifecycle.js";
+import type * as gtmMaya_researchQueryRunner from "../gtmMaya/researchQueryRunner.js";
+import type * as gtmMaya_researchResults from "../gtmMaya/researchResults.js";
 import type * as gtmMaya_researchTasks from "../gtmMaya/researchTasks.js";
 import type * as gtmMaya_researchWorker from "../gtmMaya/researchWorker.js";
 import type * as gtmMaya_resultsLoop from "../gtmMaya/resultsLoop.js";
@@ -318,6 +320,8 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/privateBeta": typeof gtmMaya_privateBeta;
   "gtmMaya/productionReality": typeof gtmMaya_productionReality;
   "gtmMaya/researchLifecycle": typeof gtmMaya_researchLifecycle;
+  "gtmMaya/researchQueryRunner": typeof gtmMaya_researchQueryRunner;
+  "gtmMaya/researchResults": typeof gtmMaya_researchResults;
   "gtmMaya/researchTasks": typeof gtmMaya_researchTasks;
   "gtmMaya/researchWorker": typeof gtmMaya_researchWorker;
   "gtmMaya/resultsLoop": typeof gtmMaya_resultsLoop;
