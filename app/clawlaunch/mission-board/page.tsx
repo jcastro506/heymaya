@@ -121,6 +121,8 @@ export function MissionBoard({ board }: { board: MissionBoardData }) {
           )}
         </section>
         <BoardSection title="Results" items={board.results} />
+        <BoardSection title="What Maya Learned" items={board.learnings} />
+        <BoardSection title="Next Tests" items={board.nextTests} />
       </div>
 
       <section className="border-t border-paper-faint/15 px-5 py-8 sm:px-8">

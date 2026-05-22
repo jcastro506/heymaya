@@ -84,6 +84,8 @@ describe("GTM Mission Board", () => {
     expect(board.channelDecisions[0].decision).toBe("primary");
     expect(board.todayTasks[0].label).toBe("Review approvals");
     expect(board.results[0].detail).toContain("1 signups");
+    expect(board.learnings[0].label).toBe("Signal read");
+    expect(board.nextTests[0].label).toBe("Approval first");
     expect(board.cost).toEqual({ budgetUsd: 4, spentUsd: 0.42 });
   });
 

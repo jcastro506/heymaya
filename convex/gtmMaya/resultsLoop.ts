@@ -15,6 +15,12 @@ export interface ResultInterpretation {
   recommendation: "double_down" | "iterate" | "do_not_overfit";
 }
 
+export interface LearningLoopDecision extends ResultInterpretation {
+  nextAction: string;
+  contentBankOutcome: "winner" | "loser" | "inconclusive";
+  memoryPromotionAllowed: boolean;
+}
+
 interface ResultTotals {
   replies: number;
   clicks: number;
@@ -102,5 +108,36 @@ export function interpretResults(
     signal: "weak",
     summary: `Weak signal: some engagement, but not enough customer movement to double down.`,
     recommendation: "iterate",
+  };
+}
+
+export function decideLearningLoop(
+  snapshots: Parameters<typeof interpretResults>[0]
+): LearningLoopDecision {
+  const interpretation = interpretResults(snapshots);
+  if (interpretation.recommendation === "double_down") {
+    return {
+      ...interpretation,
+      nextAction:
+        "Promote the format as a provisional winner, reuse the same demo moment, and run the next variant with one changed hook.",
+      contentBankOutcome: "winner",
+      memoryPromotionAllowed: true,
+    };
+  }
+  if (interpretation.recommendation === "iterate") {
+    return {
+      ...interpretation,
+      nextAction:
+        "Revise the hook or audience angle, keep the channel active, and require another result snapshot before changing strategy.",
+      contentBankOutcome: "inconclusive",
+      memoryPromotionAllowed: false,
+    };
+  }
+  return {
+    ...interpretation,
+    nextAction:
+      "Collect more samples before changing strategy. Do not promote this format or update memory from vanity metrics alone.",
+    contentBankOutcome: "inconclusive",
+    memoryPromotionAllowed: false,
   };
 }

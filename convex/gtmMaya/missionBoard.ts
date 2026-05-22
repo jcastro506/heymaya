@@ -1,5 +1,6 @@
 import { query } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { decideLearningLoop } from "./resultsLoop";
 
 export interface MissionBoardItem {
   label: string;
@@ -37,6 +38,8 @@ export interface MissionBoardData {
     evidenceCount: number;
   }>;
   results: MissionBoardItem[];
+  learnings: MissionBoardItem[];
+  nextTests: MissionBoardItem[];
   cost: {
     budgetUsd: number | null;
     spentUsd: number;
@@ -233,6 +236,12 @@ export function projectMissionBoard(input: {
       evidenceCount: draft.evidenceCardIds.length,
     })),
     results: resultItems({ snapshots: input.snapshots, publishedDrafts }),
+    learnings: learningItems(input.snapshots),
+    nextTests: nextTestItems({
+      snapshots: input.snapshots,
+      activeChannels,
+      pendingDraftCount: pendingDrafts.length,
+    }),
     cost: {
       budgetUsd: latestJob?.budgetUsd ?? null,
       spentUsd: latestJob?.spentUsd ?? 0,
@@ -376,6 +385,90 @@ function resultItems(input: {
       label: "Engagement",
       detail: `${totals.replies} replies and ${totals.clicks} tracked clicks.`,
       state: totals.replies + totals.clicks > 0 ? "done" : "waiting",
+    },
+  ];
+}
+
+function learningItems(
+  snapshots: Array<
+    Pick<
+      Doc<"gtmResultSnapshots">,
+      "replies" | "clicks" | "signups" | "demos" | "feedbackItems"
+    >
+  >
+): MissionBoardItem[] {
+  if (snapshots.length === 0) {
+    return [
+      {
+        label: "No learning yet",
+        detail: "Maya needs result snapshots before updating strategy or memory.",
+        state: "waiting",
+      },
+    ];
+  }
+  const decision = decideLearningLoop(snapshots);
+  return [
+    {
+      label: "Signal read",
+      detail: decision.summary,
+      state: decision.signal === "strong" ? "done" : "active",
+    },
+    {
+      label: "Memory promotion",
+      detail: decision.memoryPromotionAllowed
+        ? "This lesson is strong enough to promote into durable memory."
+        : "This lesson stays provisional until customer movement repeats.",
+      state: decision.memoryPromotionAllowed ? "done" : "waiting",
+    },
+  ];
+}
+
+function nextTestItems(input: {
+  snapshots: Array<
+    Pick<
+      Doc<"gtmResultSnapshots">,
+      "replies" | "clicks" | "signups" | "demos" | "feedbackItems"
+    >
+  >;
+  activeChannels: Array<Pick<Doc<"gtmChannelScores">, "channel" | "firstWeekTest">>;
+  pendingDraftCount: number;
+}): MissionBoardItem[] {
+  if (input.pendingDraftCount > 0) {
+    return [
+      {
+        label: "Approval first",
+        detail: "Clear pending approvals before Maya creates the next test.",
+        state: "active",
+      },
+    ];
+  }
+  if (input.activeChannels.length === 0) {
+    return [
+      {
+        label: "Pick channel",
+        detail: "Maya needs a primary channel before choosing the next test.",
+        state: "waiting",
+      },
+    ];
+  }
+  if (input.snapshots.length === 0) {
+    return input.activeChannels.map((channel) => ({
+      label: `${channel.channel} first test`,
+      detail: channel.firstWeekTest ?? "Run the first channel test and capture the result link.",
+      state: "active",
+    }));
+  }
+  const decision = decideLearningLoop(input.snapshots);
+  return [
+    {
+      label:
+        decision.recommendation === "double_down"
+          ? "Double down"
+          : decision.recommendation === "iterate"
+            ? "Revise"
+            : "Keep measuring",
+      detail: decision.nextAction,
+      state: decision.recommendation === "double_down" ? "done" : "active",
     },
   ];
 }

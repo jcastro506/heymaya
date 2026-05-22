@@ -100,6 +100,20 @@ describe("ClawLaunch Mission Board page", () => {
           state: "done",
         },
       ],
+      learnings: [
+        {
+          label: "Signal read",
+          detail: "Strong signal: 1 signup and useful feedback.",
+          state: "done",
+        },
+      ],
+      nextTests: [
+        {
+          label: "Double down",
+          detail: "Reuse the same demo moment with a new hook.",
+          state: "done",
+        },
+      ],
       cost: { budgetUsd: 3, spentUsd: 0.25 },
     };
     const Page = (await import("../mission-board/page")).default;
@@ -107,6 +121,8 @@ describe("ClawLaunch Mission Board page", () => {
 
     expect(html).toContain("BugBrief");
     expect(html).toContain("Channel Decisions");
+    expect(html).toContain("What Maya Learned");
+    expect(html).toContain("Next Tests");
     expect(html).toContain("Evidence Cards");
     expect(html).toContain("No drafts are waiting on the user right now.");
     expect(html).not.toContain("Required field");
