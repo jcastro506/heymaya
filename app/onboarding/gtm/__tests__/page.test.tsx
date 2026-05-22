@@ -58,6 +58,9 @@ describe("GTM onboarding page", () => {
     expect(html).toContain("I will manually post on TikTok");
     expect(html).toContain("I will manually post on Instagram");
     expect(html).toContain("TikTok profile, if any");
+    expect(html).toContain("TikTok account status");
+    expect(html).toContain("TikTok account age in days");
+    expect(html).toContain("I checked TikTok Account Check");
     expect(html).toContain("Instagram profile, if any");
     expect(html).toContain("I am open to UGC creators later");
     expect(html).toContain("Creator budget per month");

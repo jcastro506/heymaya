@@ -101,6 +101,7 @@ import type * as gtmMaya_researchTasks from "../gtmMaya/researchTasks.js";
 import type * as gtmMaya_researchWorker from "../gtmMaya/researchWorker.js";
 import type * as gtmMaya_resultsLoop from "../gtmMaya/resultsLoop.js";
 import type * as gtmMaya_strategyJudge from "../gtmMaya/strategyJudge.js";
+import type * as gtmMaya_tiktokWarmup from "../gtmMaya/tiktokWarmup.js";
 import type * as gtmMaya_walkthrough from "../gtmMaya/walkthrough.js";
 import type * as http from "../http.js";
 import type * as integrations_aggregators_unified_client from "../integrations/aggregators/unified/client.js";
@@ -328,6 +329,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/researchWorker": typeof gtmMaya_researchWorker;
   "gtmMaya/resultsLoop": typeof gtmMaya_resultsLoop;
   "gtmMaya/strategyJudge": typeof gtmMaya_strategyJudge;
+  "gtmMaya/tiktokWarmup": typeof gtmMaya_tiktokWarmup;
   "gtmMaya/walkthrough": typeof gtmMaya_walkthrough;
   http: typeof http;
   "integrations/aggregators/unified/client": typeof integrations_aggregators_unified_client;

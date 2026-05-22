@@ -29,6 +29,14 @@ const WEEK_GOAL = v.union(
   v.literal("unknown")
 );
 
+const TIKTOK_WARMUP_STATE = v.union(
+  v.literal("unknown"),
+  v.literal("new_needs_warmup"),
+  v.literal("warming"),
+  v.literal("ready"),
+  v.literal("restricted")
+);
+
 const RESEARCH_STATUS = v.union(
   v.literal("queued"),
   v.literal("running"),
@@ -223,6 +231,9 @@ export const setAppProfile = mutation({
     canPostInstagramManually: v.optional(v.boolean()),
     existingTikTokUrl: v.optional(v.string()),
     existingInstagramUrl: v.optional(v.string()),
+    tiktokWarmupState: v.optional(TIKTOK_WARMUP_STATE),
+    tiktokAccountAgeDays: v.optional(v.number()),
+    tiktokAccountStatusChecked: v.optional(v.boolean()),
     openToUgcCreators: v.optional(v.boolean()),
     creatorBudgetMonthlyUsd: v.optional(v.number()),
     maxWeeklyVisualPosts: v.optional(v.number()),
@@ -253,6 +264,9 @@ export const setAppProfile = mutation({
         canPostInstagramManually: args.canPostInstagramManually ?? false,
         existingTikTokUrl: normalizeOptionalUrl(args.existingTikTokUrl),
         existingInstagramUrl: normalizeOptionalUrl(args.existingInstagramUrl),
+        tiktokWarmupState: args.tiktokWarmupState ?? "unknown",
+        tiktokAccountAgeDays: args.tiktokAccountAgeDays,
+        tiktokAccountStatusChecked: args.tiktokAccountStatusChecked ?? false,
         openToUgcCreators: args.openToUgcCreators ?? false,
         creatorBudgetMonthlyUsd: args.creatorBudgetMonthlyUsd,
         maxWeeklyVisualPosts: args.maxWeeklyVisualPosts,
@@ -279,6 +293,9 @@ export const setAppProfile = mutation({
       canPostInstagramManually: args.canPostInstagramManually ?? false,
       existingTikTokUrl: normalizeOptionalUrl(args.existingTikTokUrl),
       existingInstagramUrl: normalizeOptionalUrl(args.existingInstagramUrl),
+      tiktokWarmupState: args.tiktokWarmupState ?? "unknown",
+      tiktokAccountAgeDays: args.tiktokAccountAgeDays,
+      tiktokAccountStatusChecked: args.tiktokAccountStatusChecked ?? false,
       openToUgcCreators: args.openToUgcCreators ?? false,
       creatorBudgetMonthlyUsd: args.creatorBudgetMonthlyUsd,
       maxWeeklyVisualPosts: args.maxWeeklyVisualPosts,

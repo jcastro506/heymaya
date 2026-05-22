@@ -16,6 +16,9 @@ const APP: GtmAppContext = {
   canRecordVoice: false,
   canProvideScreenshots: true,
   canPostTikTokManually: true,
+  tiktokWarmupState: "ready",
+  tiktokAccountAgeDays: 30,
+  tiktokAccountStatusChecked: true,
   excludedAudiences: [],
 };
 
@@ -130,6 +133,30 @@ describe("GTM Maya channel scoring", () => {
 
     expect(evaluation.qualityGate.passed).toBe(true);
     expect(evaluation.firstWeekTest).toContain("manual TikTok visual tests");
+  });
+
+  it("parks TikTok launch cadence when the account still needs warm-up", () => {
+    const evaluation = evaluateChannel(
+      "tiktok",
+      [card("t1", "tiktok"), card("t2", "tiktok"), card("t3", "tiktok")],
+      {
+        ...APP,
+        canRecordScreen: true,
+        canProvideScreenshots: true,
+        canPostTikTokManually: true,
+        tiktokWarmupState: "new_needs_warmup",
+        tiktokAccountAgeDays: 1,
+        tiktokAccountStatusChecked: false,
+      }
+    );
+
+    expect(evaluation.decision).toBe("parked");
+    expect(evaluation.qualityGate.failures).toContain(
+      "TikTok account needs warm-up or Account Check before launch cadence"
+    );
+    expect(evaluation.risks).toContain(
+      "start with TikTok warm-up tasks before posting cadence"
+    );
   });
 
   it("fails strategy validation when active channels are not evidence-backed", () => {

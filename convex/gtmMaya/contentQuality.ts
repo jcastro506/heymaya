@@ -1,4 +1,4 @@
-export type ContentPlatform = "reddit" | "x" | "linkedin" | "tiktok";
+export type ContentPlatform = "reddit" | "x" | "linkedin" | "tiktok" | "instagram";
 
 export interface DraftInput {
   platform: ContentPlatform;
@@ -37,6 +37,8 @@ export function draftPlatformPost(input: DraftInput): string {
       return `I built ${input.productName} because ${evidence}\n\nThe goal this week is not a big launch. It is ${input.targetAction}. If you have seen this workflow break inside a team, I would like to compare notes.`;
     case "tiktok":
       return `Hook: I built ${input.productName} because ${evidence}\nShot 1: show the broken workflow.\nShot 2: screen-record the fix.\nCaption: looking for ${input.targetAction}.`;
+    case "instagram":
+      return `Carousel/Reel brief: I built ${input.productName} because ${evidence}\nFirst frame: name the painful workflow.\nMiddle: show the product screenshot or reused demo clip.\nCaption: looking for ${input.targetAction}.`;
   }
 }
 

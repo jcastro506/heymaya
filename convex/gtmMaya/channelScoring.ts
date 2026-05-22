@@ -55,6 +55,9 @@ export interface GtmAppContext {
   canRecordVoice?: boolean;
   canProvideScreenshots?: boolean;
   canPostTikTokManually?: boolean;
+  tiktokWarmupState?: "unknown" | "new_needs_warmup" | "warming" | "ready" | "restricted";
+  tiktokAccountAgeDays?: number;
+  tiktokAccountStatusChecked?: boolean;
   canPostInstagramManually?: boolean;
   openToUgcCreators?: boolean;
   creatorBudgetMonthlyUsd?: number;
@@ -231,6 +234,11 @@ function qualityFailures(
       "TikTok needs manual posting plus screen recording, screenshots, voice/face, or later UGC budget"
     );
   }
+  if (channel === "tiktok" && needsTikTokWarmup(app)) {
+    failures.push(
+      "TikTok account needs warm-up or Account Check before launch cadence"
+    );
+  }
   if (channel === "linkedin" && app.weekGoal === "feedback" && rows.length < 3) {
     failures.push("LinkedIn feedback strategy needs three buyer-context signals");
   }
@@ -288,6 +296,9 @@ function channelRisks(
   if (channel === "tiktok" && !hasTikTokProductionPath(app)) {
     risks.push("requires user-created visual assets and manual posting in V1");
   }
+  if (channel === "tiktok" && needsTikTokWarmup(app)) {
+    risks.push("start with TikTok warm-up tasks before posting cadence");
+  }
   if (channel === "product_hunt" && app.stage === "idea") {
     risks.push("too early for launch directory traffic");
   }
@@ -326,6 +337,16 @@ function hasTikTokProductionPath(app: GtmAppContext): boolean {
     app.canProvideScreenshots ||
     Boolean(app.openToUgcCreators && (app.creatorBudgetMonthlyUsd ?? 0) > 0);
   return Boolean(app.canPostTikTokManually && hasVisualAssetPath);
+}
+
+function needsTikTokWarmup(app: GtmAppContext): boolean {
+  if (!app.canPostTikTokManually) return false;
+  if (app.tiktokWarmupState === "restricted") return true;
+  if (app.tiktokWarmupState === "ready") return false;
+  if (app.tiktokWarmupState === "new_needs_warmup" || app.tiktokWarmupState === "warming") {
+    return true;
+  }
+  return (app.tiktokAccountAgeDays ?? 0) < 7 || !app.tiktokAccountStatusChecked;
 }
 
 function minEvidenceFor(decision: GtmChannelDecision): number {

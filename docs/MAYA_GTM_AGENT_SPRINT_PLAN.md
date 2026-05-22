@@ -803,6 +803,10 @@ Inputs:
 - content cadence the founder can realistically sustain
 - UGC/creator budget and openness
 - channels the founder refuses to use
+- TikTok account warm-up state:
+  - no account / new account / currently warming / ready / restricted
+  - account age in days
+  - whether the user checked TikTok Studio Account Check
 
 Decision ladder for TikTok/Instagram:
 
@@ -818,6 +822,21 @@ Decision ladder for TikTok/Instagram:
 6. If the user cannot provide visual assets and has no creator budget, Maya
    parks TikTok/Instagram and chooses Reddit, X, LinkedIn, or community/search
    motions where written execution can work.
+
+TikTok warm-up rule:
+
+- TikTok does not publish an official warm-up timeline. Maya should not present
+  warm-up as a guaranteed algorithm hack.
+- Maya should use warm-up as an account-integrity and normal-use readiness gate:
+  profile basics, normal niche consumption, saving reference posts, no bulk
+  liking/commenting/fake engagement, no high-volume commercial posting, and
+  TikTok Studio Account Check before a real launch cadence.
+- If the account is new, unknown, warming, under 7 days old, or Account Check
+  has not been reviewed, TikTok can be researched but cannot be the immediate
+  posting cadence. Maya schedules warm-up tasks first and caps first-week
+  posting at 1-2 low-pressure tests.
+- If the account is restricted, TikTok is blocked until the user resolves the
+  account status.
 
 ### Web App Inspection
 
@@ -1884,6 +1903,7 @@ Build:
   - screenshot/slideshow willingness
   - manual TikTok/Instagram posting willingness
   - existing TikTok/Instagram accounts
+  - TikTok warm-up state, account age, and Account Check confirmation
   - UGC/creator budget and openness
 - App diagnosis schema and `APP.md` write.
 - Minimal questions.
@@ -1900,6 +1920,8 @@ Tests:
 - Gemini walkthrough output schema.
 - Web inspector broken URL/paywall/login behavior.
 - Visual channel recommendations fail when production capacity is missing.
+- TikTok launch cadence fails when the account is new/unwarmed/restricted.
+- Onboarding captures TikTok Account Check status.
 
 Smoke:
 
@@ -2030,6 +2052,7 @@ Build:
 - LinkedIn publish adapter through Composio/direct wrapper.
 - Reddit drafts and safety warning.
 - TikTok manual tasks:
+  - account warm-up tasks when the account is new/unchecked/restricted
   - scripts
   - shot lists
   - slideshow/carousel outlines
@@ -2048,6 +2071,8 @@ Tests:
 - Maya only mutates Maya-owned events.
 - Calendar collision handling.
 - TikTok event includes recording/slideshow instructions, not fake auto-post.
+- TikTok warm-up event appears before launch cadence when Account Check/warm-up
+  is not ready.
 - Cannot publish without approval.
 - Exact approved content is published.
 - User edit changes final body.

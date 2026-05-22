@@ -4335,6 +4335,17 @@ export default defineSchema({
     canPostInstagramManually: v.optional(v.boolean()),
     existingTikTokUrl: v.optional(v.string()),
     existingInstagramUrl: v.optional(v.string()),
+    tiktokWarmupState: v.optional(
+      v.union(
+        v.literal("unknown"),
+        v.literal("new_needs_warmup"),
+        v.literal("warming"),
+        v.literal("ready"),
+        v.literal("restricted")
+      )
+    ),
+    tiktokAccountAgeDays: v.optional(v.number()),
+    tiktokAccountStatusChecked: v.optional(v.boolean()),
     openToUgcCreators: v.optional(v.boolean()),
     creatorBudgetMonthlyUsd: v.optional(v.number()),
     maxWeeklyVisualPosts: v.optional(v.number()),

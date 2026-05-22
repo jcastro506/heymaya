@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSevenDayCalendarPlan,
+  placeEventsAroundBusyCalendar,
   validateCalendarEvents,
+  validateMayaCalendarMutation,
 } from "../calendarPlan";
 import type { GtmStrategyPlan } from "../strategyJudge";
 
@@ -58,6 +60,30 @@ describe("GTM calendar plan", () => {
     expect(tiktok.description).toContain("does not auto-post TikTok");
   });
 
+  it("adds TikTok warm-up tasks before launch cadence for new accounts", () => {
+    const events = buildSevenDayCalendarPlan({
+      plan: PLAN,
+      startDateIso: "2026-05-25",
+      timezone: "America/New_York",
+      productName: "ClawLaunch",
+      tiktokWarmup: {
+        canPostTikTokManually: true,
+        existingTikTokUrl: "https://www.tiktok.com/@newapp",
+        tiktokWarmupState: "new_needs_warmup",
+        tiktokAccountAgeDays: 2,
+        tiktokAccountStatusChecked: false,
+      },
+    });
+    const warmup = events.find((event) =>
+      event.title.includes("TikTok account warm-up")
+    );
+
+    expect(warmup).toBeDefined();
+    expect(warmup?.description).toContain("Account Check");
+    expect(warmup?.description).toContain("normal-use warm-up");
+    expect(validateCalendarEvents(events).passed).toBe(true);
+  });
+
   it("fails events missing evidence, success metric, or Maya ownership", () => {
     const gate = validateCalendarEvents([
       {
@@ -92,5 +118,61 @@ describe("GTM calendar plan", () => {
         "TikTok event must be a recording handoff",
       ])
     );
+  });
+
+  it("moves Maya events out of existing calendar conflicts", () => {
+    const events = buildSevenDayCalendarPlan({
+      plan: PLAN,
+      startDateIso: "2026-05-25",
+      timezone: "America/New_York",
+      productName: "ClawLaunch",
+    });
+    const placed = placeEventsAroundBusyCalendar({
+      events: [events[0]],
+      busyEvents: [
+        {
+          title: "User meeting",
+          startsAt: events[0].startsAt,
+          durationMinutes: 60,
+          owner: "user",
+        },
+      ],
+    });
+
+    expect(placed[0].startsAt).toBe("2026-05-25T10:00:00");
+    expect(validateCalendarEvents(placed).passed).toBe(true);
+  });
+
+  it("only allows update/delete mutations for Maya-owned events", () => {
+    const events = buildSevenDayCalendarPlan({
+      plan: PLAN,
+      startDateIso: "2026-05-25",
+      timezone: "America/New_York",
+      productName: "ClawLaunch",
+    });
+
+    expect(
+      validateMayaCalendarMutation({
+        operation: "update",
+        existing: {
+          title: "User meeting",
+          startsAt: "2026-05-25T09:00:00",
+          durationMinutes: 30,
+          owner: "user",
+        },
+        next: events[0],
+      }).failures
+    ).toContain("Maya may only update or delete Maya-owned events");
+    expect(
+      validateMayaCalendarMutation({
+        operation: "delete",
+        existing: {
+          title: "Maya task",
+          startsAt: "2026-05-25T09:00:00",
+          durationMinutes: 30,
+          owner: "maya",
+        },
+      }).passed
+    ).toBe(true);
   });
 });

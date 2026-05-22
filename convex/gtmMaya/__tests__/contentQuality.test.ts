@@ -25,6 +25,21 @@ describe("GTM content quality", () => {
       .toBe(true);
   });
 
+  it("drafts Instagram reuse briefs as manual carousel or Reel handoffs", () => {
+    const instagram = draftPlatformPost({
+      platform: "instagram",
+      productName: "ClawLaunch",
+      channelThesis: "reuse screenshot-led demos",
+      evidenceSnippets: evidence,
+      targetAction: "three beta signups",
+    });
+
+    expect(instagram).toContain("Carousel/Reel brief");
+    expect(instagram).toContain("product screenshot or reused demo clip");
+    expect(evaluateDraftQuality({ draft: instagram, evidenceSnippets: evidence }).passed)
+      .toBe(true);
+  });
+
   it("rejects banned AI-slop phrases", () => {
     const result = evaluateDraftQuality({
       draft:

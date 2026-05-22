@@ -168,6 +168,9 @@ export function buildResearchSkeletonEvidence(
     | "canShowFace"
     | "canProvideScreenshots"
     | "canPostTikTokManually"
+    | "tiktokWarmupState"
+    | "tiktokAccountAgeDays"
+    | "tiktokAccountStatusChecked"
   >
 ): ResearchSkeletonEvidence[] {
   const name = app.name ?? "the product";
@@ -257,6 +260,9 @@ function appContext(app: Doc<"gtmApps">): GtmAppContext {
     canRecordVoice: app.canRecordVoice,
     canProvideScreenshots: app.canProvideScreenshots,
     canPostTikTokManually: app.canPostTikTokManually,
+    tiktokWarmupState: app.tiktokWarmupState,
+    tiktokAccountAgeDays: app.tiktokAccountAgeDays,
+    tiktokAccountStatusChecked: app.tiktokAccountStatusChecked,
     canPostInstagramManually: app.canPostInstagramManually,
     openToUgcCreators: app.openToUgcCreators,
     creatorBudgetMonthlyUsd: app.creatorBudgetMonthlyUsd,

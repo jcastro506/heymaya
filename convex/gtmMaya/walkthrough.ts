@@ -216,6 +216,9 @@ export async function analyzeWalkthroughWithGemini(input: {
     | "canRecordVoice"
     | "canProvideScreenshots"
     | "canPostTikTokManually"
+    | "tiktokWarmupState"
+    | "tiktokAccountAgeDays"
+    | "tiktokAccountStatusChecked"
     | "canPostInstagramManually"
   >;
   fetchImpl: typeof fetch;
@@ -322,6 +325,9 @@ Context:
 - Can record voice: ${app.canRecordVoice ?? false}
 - Can provide screenshots: ${app.canProvideScreenshots ?? false}
 - Can manually post TikTok: ${app.canPostTikTokManually ?? false}
+- TikTok warm-up state: ${app.tiktokWarmupState ?? "unknown"}
+- TikTok account age days: ${app.tiktokAccountAgeDays ?? "unknown"}
+- TikTok Account Check reviewed: ${app.tiktokAccountStatusChecked ?? false}
 - Can manually post Instagram: ${app.canPostInstagramManually ?? false}
 
 Analyze only what is visible or clearly implied by the video. Do not infer an ICP the user did not give unless the app itself makes it obvious. Identify demo moments Maya can use for TikTok/Instagram scripts, slideshow/carousel posts, and calendar briefs.`;

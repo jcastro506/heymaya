@@ -22,6 +22,14 @@ interface IntakeDraft {
   canPostInstagramManually: boolean;
   existingTikTokUrl: string;
   existingInstagramUrl: string;
+  tiktokWarmupState:
+    | "unknown"
+    | "new_needs_warmup"
+    | "warming"
+    | "ready"
+    | "restricted";
+  tiktokAccountAgeDays: string;
+  tiktokAccountStatusChecked: boolean;
   openToUgcCreators: boolean;
   creatorBudgetMonthlyUsd: string;
   maxWeeklyVisualPosts: string;
@@ -42,6 +50,9 @@ const DEFAULT_DRAFT: IntakeDraft = {
   canPostInstagramManually: false,
   existingTikTokUrl: "",
   existingInstagramUrl: "",
+  tiktokWarmupState: "unknown",
+  tiktokAccountAgeDays: "",
+  tiktokAccountStatusChecked: false,
   openToUgcCreators: false,
   creatorBudgetMonthlyUsd: "",
   maxWeeklyVisualPosts: "3",
@@ -124,6 +135,9 @@ function GtmOnboardingBody() {
         canPostInstagramManually: draft.canPostInstagramManually,
         existingTikTokUrl: emptyToUndefined(draft.existingTikTokUrl),
         existingInstagramUrl: emptyToUndefined(draft.existingInstagramUrl),
+        tiktokWarmupState: draft.tiktokWarmupState,
+        tiktokAccountAgeDays: numberOrUndefined(draft.tiktokAccountAgeDays),
+        tiktokAccountStatusChecked: draft.tiktokAccountStatusChecked,
         openToUgcCreators: draft.openToUgcCreators,
         creatorBudgetMonthlyUsd: numberOrUndefined(draft.creatorBudgetMonthlyUsd),
         maxWeeklyVisualPosts: numberOrUndefined(draft.maxWeeklyVisualPosts),
@@ -348,6 +362,24 @@ function GtmOnboardingBody() {
                 placeholder="https://www.tiktok.com/@..."
               />
             </Field>
+            <Field label="TikTok account status">
+              <select
+                value={draft.tiktokWarmupState}
+                onChange={(event) =>
+                  setDraft((d) => ({
+                    ...d,
+                    tiktokWarmupState: event.target.value as IntakeDraft["tiktokWarmupState"],
+                  }))
+                }
+                className="input"
+              >
+                <option value="unknown">Not sure yet</option>
+                <option value="new_needs_warmup">New account</option>
+                <option value="warming">Currently warming up</option>
+                <option value="ready">Ready / already active</option>
+                <option value="restricted">Restricted or warnings</option>
+              </select>
+            </Field>
             <Field label="Instagram profile, if any">
               <input
                 value={draft.existingInstagramUrl}
@@ -361,8 +393,29 @@ function GtmOnboardingBody() {
                 placeholder="https://www.instagram.com/..."
               />
             </Field>
+            <Field label="TikTok account age in days">
+              <input
+                value={draft.tiktokAccountAgeDays}
+                onChange={(event) =>
+                  setDraft((d) => ({
+                    ...d,
+                    tiktokAccountAgeDays: event.target.value,
+                  }))
+                }
+                className="input"
+                inputMode="numeric"
+                placeholder="0"
+              />
+            </Field>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
+            <Toggle
+              label="I checked TikTok Account Check"
+              checked={draft.tiktokAccountStatusChecked}
+              onChange={(checked) =>
+                setDraft((d) => ({ ...d, tiktokAccountStatusChecked: checked }))
+              }
+            />
             <Toggle
               label="I am open to UGC creators later"
               checked={draft.openToUgcCreators}

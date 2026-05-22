@@ -39,6 +39,9 @@ describe("GTM Maya research lifecycle", () => {
         canPostInstagramManually: false,
         existingTikTokUrl: "https://www.tiktok.com/@clawlaunchdemo",
         existingInstagramUrl: "",
+        tiktokWarmupState: "warming",
+        tiktokAccountAgeDays: 3,
+        tiktokAccountStatusChecked: false,
         openToUgcCreators: true,
         creatorBudgetMonthlyUsd: 300,
         maxWeeklyVisualPosts: 4,
@@ -134,6 +137,9 @@ describe("GTM Maya research lifecycle", () => {
     expect(snapshot?.app?.canPostInstagramManually).toBe(false);
     expect(snapshot?.app?.existingTikTokUrl).toContain("@clawlaunchdemo");
     expect(snapshot?.app?.existingInstagramUrl).toBeUndefined();
+    expect(snapshot?.app?.tiktokWarmupState).toBe("warming");
+    expect(snapshot?.app?.tiktokAccountAgeDays).toBe(3);
+    expect(snapshot?.app?.tiktokAccountStatusChecked).toBe(false);
     expect(snapshot?.app?.openToUgcCreators).toBe(true);
     expect(snapshot?.app?.creatorBudgetMonthlyUsd).toBe(300);
     expect(snapshot?.app?.maxWeeklyVisualPosts).toBe(4);
