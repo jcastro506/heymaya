@@ -38,6 +38,8 @@ describe("Maya GTM OpenClaw deploy config", () => {
 
     const bootstrap = JSON.parse(config.env?.MAYA_BOOTSTRAP_JSON ?? "{}");
     expect(bootstrap.product).toBe("clawlaunch-gtm");
+    expect(bootstrap.modelRouting.mainMaya).toBe("google/gemini-3.5-flash");
+    expect(bootstrap.modelRouting.hardResearchBeta).toContain("claude-sonnet");
     expect(bootstrap.directPingSmoke).toBe(true);
     expect(bootstrap.gatewayConfig).toEqual({ gateway: { mode: "local" } });
   });
@@ -50,5 +52,8 @@ describe("Maya GTM OpenClaw deploy config", () => {
     });
 
     expect(config.env?.OPENCLAW_MODEL).toBe("google/gemini-3.5-flash");
+    expect(config.env?.MAYA_GTM_MODEL_ROUTING_JSON).toContain(
+      "futureDefaultResearch"
+    );
   });
 });

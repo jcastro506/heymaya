@@ -43,6 +43,17 @@ const OPENCLAW_IMAGE =
   process.env.MAYA_OPENCLAW_IMAGE ??
   "registry.fly.io/heymaya-openclaw:v2026.4.23";
 
+const MODEL_ROUTING = {
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-3.5-flash",
+  hardResearchBeta:
+    process.env.MAYA_GTM_HARD_RESEARCH_MODEL ??
+    "openrouter/anthropic/claude-sonnet-4.5",
+  futureDefaultResearch:
+    process.env.MAYA_GTM_RESEARCH_MODEL ?? "google/gemini-3-flash",
+  extractionWorker:
+    process.env.MAYA_GTM_EXTRACTION_MODEL ?? "google/gemini-3-flash-lite",
+};
+
 const MACHINE_GUEST: NonNullable<FlyMachineConfig["guest"]> = {
   cpu_kind: "shared",
   cpus: 1,
@@ -296,13 +307,14 @@ export function buildGtmMachineConfig(input: {
       MAYA_GTM_AGENT_ID: String(input.agentId),
       MAYA_GTM_APP_NAME: input.flyAppName,
       MAYA_WORKSPACE_BUNDLE_URL: input.workspaceBundleUrl,
-      OPENCLAW_MODEL:
-        process.env.MAYA_GTM_MODEL ?? "google/gemini-3.5-flash",
+      OPENCLAW_MODEL: MODEL_ROUTING.mainMaya,
+      MAYA_GTM_MODEL_ROUTING_JSON: JSON.stringify(MODEL_ROUTING),
       MAYA_BOOTSTRAP_JSON: JSON.stringify({
         agentId: String(input.agentId),
         product: "clawlaunch-gtm",
         flyAppName: input.flyAppName,
         workspaceBundleUrl: input.workspaceBundleUrl,
+        modelRouting: MODEL_ROUTING,
         directPingSmoke: true,
         gatewayConfig: { gateway: { mode: "local" } },
       }),

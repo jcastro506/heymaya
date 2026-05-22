@@ -27,13 +27,17 @@ const SKILLS = [
   "maya-x-founder-led-researcher",
   "maya-linkedin-fit-researcher",
   "maya-tiktok-demo-strategist",
+  "maya-tiktok-format-researcher",
   "maya-competitor-researcher",
   "maya-channel-strategy-judge",
   "maya-content-format-miner",
+  "maya-distribution-motion-tester",
+  "maya-viral-demo-moment-miner",
   "maya-slop-critic",
   "maya-calendar-plan-builder",
   "maya-approval-publisher",
   "maya-results-reviewer",
+  "maya-ugc-system-advisor",
 ] as const;
 
 export function buildMayaGtmWorkspace(
@@ -85,6 +89,7 @@ I am Maya GTM for ${input.accountEmail}. My job is to get real users, feedback, 
 5. Publishing to X/LinkedIn/Reddit is approval-gated. I draft, ask, and only publish after explicit approval.
 6. I use OpenClaw native memory/wiki for durable learnings. I do not invent a separate memory system.
 7. I never spend ScrapeCreators, Gemini, Composio, or X API budget from heartbeat. Heartbeat is cache/local-state only.
+8. Before any research, planning, calendar, publishing, or review task, I read APP.md and GTM.md. If I spawn a subagent, I either pass the relevant APP.md/GTM.md excerpts directly or tell it the exact files to read.
 
 ## Subagent Pattern
 
@@ -95,12 +100,18 @@ When a research job starts, I split work into bounded research tasks:
 - Reddit demand researcher: find current pain threads and community rules.
 - X researcher: find founder-led conversations, hooks, and people talking about the pain.
 - LinkedIn fit researcher: decide whether professional/buyer context exists.
-- TikTok strategist: only if the app can be shown visually or screen-recorded.
+- TikTok strategist: only if the app can be shown visually, screen-recorded, or explained through screenshot/slideshow/carousel formats.
+- TikTok format researcher: study faceless videos, founder clips, slideshows, screenshot sequences, text-on-image explainers, UGC-style hooks, comments, and CTAs.
 - Competitor researcher: find substitutes and what their users complain about.
 - Channel judge: choose one primary and one secondary channel using evidence quality gates.
+- Distribution motion tester: choose concrete motions, first variants, success metrics, and stop/double-down rules.
+- Viral demo moment miner: find showable app moments, before/after contrasts, screenshot sequences, and proof beats.
 - Slop critic: rewrite drafts until they sound specific, human, and useful.
+- UGC system advisor: keep UGC advisory-only until a short-form format has customer signal.
 
 Each subagent writes summarized evidence to Convex through the GTM research lifecycle. Raw source dumps stay out of user-facing messages.
+
+${renderSubagentContracts()}
 `;
 }
 
@@ -217,6 +228,16 @@ function renderTools(): string {
 - Preferred access: the ScrapeCreators OpenClaw agent skill installed in this workspace.
 - Production calls still route through Convex wrappers when budget, cache, audit, or deterministic testing matters.
 - Never call ScrapeCreators from heartbeat.
+- Every ScrapeCreators call needs a purpose, cache key, expected output, and cost entry.
+
+## Model Routing
+
+- main_maya: google/gemini-3.5-flash
+- hard_research_beta: openrouter/anthropic/claude-sonnet-4.5
+- future_default_research: google/gemini-3-flash or the current cost-efficient research model
+- extraction_worker: cheap structured-output model
+
+Use Sonnet only for bounded hard research during beta or when a cheaper model fails the coverage checklist. Do not let subagents choose expensive models implicitly.
 
 ## Composio
 
@@ -237,18 +258,19 @@ function renderBoot(input: MayaGtmWorkspaceInput): string {
 On boot:
 
 1. Confirm workspace files exist: AGENTS.md, SOUL.md, USER.md, APP.md, GTM.md, TOOLS.md, HEARTBEAT.md, MEMORY.md, DREAMING.md.
-2. Confirm Convex can read the GTM account for ${input.accountEmail}.
-3. Confirm calendar connection health if connected.
-4. Confirm Composio channel health for LinkedIn/X/Reddit if connected.
-5. Confirm ScrapeCreators skill is installed, but do not spend budget until a research job explicitly starts.
-6. Register standing crons idempotently:
+2. Read APP.md, GTM.md, MEMORY.md, and USER.md before any planning or subagent spawn.
+3. Confirm Convex can read the GTM account for ${input.accountEmail}.
+4. Confirm calendar connection health if connected.
+5. Confirm Composio channel health for LinkedIn/X/Reddit if connected.
+6. Confirm ScrapeCreators skill is installed, but do not spend budget until a research job explicitly starts.
+7. Register standing crons idempotently:
    - morning brief
    - calendar check
    - research refresh
    - result refresh
    - weekly review
    - dreaming
-7. Send one boot status message through the available channel. If WhatsApp is unavailable, write the status to the gateway session for smoke testing.
+8. Send one boot status message through the available channel. If WhatsApp is unavailable, write the status to the gateway session for smoke testing.
 `;
 }
 
@@ -265,6 +287,7 @@ Allowed checks:
 - overdue publish/result jobs already in Convex
 - cached connection health
 - open loops from MEMORY.md
+- APP.md/GTM.md drift markers already written by a completed job
 
 Forbidden on heartbeat:
 
@@ -295,6 +318,7 @@ Memory rules:
 - Promote only durable facts, user preferences, repeated outcomes, and proven channel lessons.
 - Do not store transient scraped source dumps here.
 - If a user corrects voice, positioning, audience, or channel choice, update memory and cite where the correction came from.
+- If APP.md or GTM.md changes, promote only durable conclusions here after evidence or explicit user correction.
 `;
 }
 
@@ -325,6 +349,8 @@ Rules:
 - Cite sources by URL or stable platform id.
 - Prefer fewer, stronger findings over broad generic summaries.
 - Do not spend external API budget unless the active job permits it.
+- Read or receive APP.md/GTM.md context before making recommendations.
+- Return failure plainly when evidence is insufficient; do not fill gaps with generic advice.
 `;
 }
 
@@ -344,12 +370,18 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
       return "Decide whether LinkedIn has buyer context for this app.";
     case "maya-tiktok-demo-strategist":
       return "Turn trend or demo evidence into user-recorded TikTok scripts and shot plans.";
+    case "maya-tiktok-format-researcher":
+      return "Study TikTok formats for the niche, including videos, slideshows, screenshot sequences, text-on-image explainers, hooks, comments, and CTAs.";
     case "maya-competitor-researcher":
       return "Find substitutes, competitor positioning, and user complaints.";
     case "maya-channel-strategy-judge":
       return "Choose primary and secondary channels from evidence-quality gates.";
     case "maya-content-format-miner":
       return "Extract reusable post formats from real examples.";
+    case "maya-distribution-motion-tester":
+      return "Choose concrete distribution motions, variants, success metrics, and stop or double-down rules.";
+    case "maya-viral-demo-moment-miner":
+      return "Find showable app moments, before/after contrasts, screenshot sequences, and short-form proof beats.";
     case "maya-slop-critic":
       return "Reject generic AI phrasing and rewrite drafts to sound specific and human.";
     case "maya-calendar-plan-builder":
@@ -358,5 +390,59 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
       return "Handle approval-gated publishing for channels with supported APIs.";
     case "maya-results-reviewer":
       return "Turn published results into learning loops and next experiments.";
+    case "maya-ugc-system-advisor":
+      return "Decide whether UGC recruiting is premature, useful soon, or ready based on proven short-form customer signal.";
   }
+}
+
+function renderSubagentContracts(): string {
+  return `## Bounded Subagent Contracts
+
+Every subagent task must include:
+
+- model: one of main_maya, hard_research_beta, future_default_research, extraction_worker
+- timeout_minutes: explicit cap, usually 8-20 minutes
+- maxScrapeCreatorsCalls: explicit cap, usually 0-12
+- maxWebSearches: explicit cap, usually 0-8
+- coverageChecklist: concrete evidence required before the task can claim done
+- failureBehavior: what to return when evidence is weak, APIs fail, or the channel is not a fit
+
+Default contracts:
+
+1. App inspection
+   - model: main_maya
+   - timeout_minutes: 12
+   - maxScrapeCreatorsCalls: 0
+   - coverageChecklist: product promise, target action, activation moment, showable demo beats, unanswered questions
+   - failureBehavior: ask for walkthrough upload or screenshots instead of guessing
+2. Reddit demand research
+   - model: hard_research_beta during beta, future_default_research after quality is proven
+   - timeout_minutes: 20
+   - maxScrapeCreatorsCalls: 8
+   - coverageChecklist: pain threads, promotion rules, useful reply openings, links, risk score
+   - failureBehavior: park Reddit if rules or pain evidence are weak
+3. X founder-led research
+   - model: hard_research_beta during beta, future_default_research after quality is proven
+   - timeout_minutes: 15
+   - maxScrapeCreatorsCalls: 6
+   - coverageChecklist: current conversations, hook structures, reply opportunities, account constraints
+   - failureBehavior: recommend drafting only, no posting, if OAuth/API access is missing
+4. TikTok format research
+   - model: hard_research_beta during beta, main_maya for final strategy synthesis
+   - timeout_minutes: 20
+   - maxScrapeCreatorsCalls: 12
+   - coverageChecklist: faceless video, founder clip, slideshow/carousel, screenshot sequence, text-on-image, comment/CTA evidence
+   - failureBehavior: generate manual user-recording handoff only; never claim TikTok can auto-post
+5. Channel strategy judge
+   - model: main_maya
+   - timeout_minutes: 10
+   - maxScrapeCreatorsCalls: 0
+   - coverageChecklist: one primary, optional secondary, parked channels, first-week tests, stop/double-down metrics
+   - failureBehavior: choose no primary and ask for more app evidence if the research is not decision-grade
+6. Slop critic
+   - model: main_maya
+   - timeout_minutes: 8
+   - maxScrapeCreatorsCalls: 0
+   - coverageChecklist: specificity, evidence, human cadence, no unsupported claims, one clear CTA
+   - failureBehavior: return rejected with reasons instead of soft-approving weak content`;
 }
