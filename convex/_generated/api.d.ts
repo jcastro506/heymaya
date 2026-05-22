@@ -90,6 +90,7 @@ import type * as gtmMaya_channelAgents from "../gtmMaya/channelAgents.js";
 import type * as gtmMaya_channelScoring from "../gtmMaya/channelScoring.js";
 import type * as gtmMaya_contentQuality from "../gtmMaya/contentQuality.js";
 import type * as gtmMaya_distributionMotions from "../gtmMaya/distributionMotions.js";
+import type * as gtmMaya_experimentPlanner from "../gtmMaya/experimentPlanner.js";
 import type * as gtmMaya_missionBoard from "../gtmMaya/missionBoard.js";
 import type * as gtmMaya_privateBeta from "../gtmMaya/privateBeta.js";
 import type * as gtmMaya_productionReality from "../gtmMaya/productionReality.js";
@@ -316,6 +317,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/channelScoring": typeof gtmMaya_channelScoring;
   "gtmMaya/contentQuality": typeof gtmMaya_contentQuality;
   "gtmMaya/distributionMotions": typeof gtmMaya_distributionMotions;
+  "gtmMaya/experimentPlanner": typeof gtmMaya_experimentPlanner;
   "gtmMaya/missionBoard": typeof gtmMaya_missionBoard;
   "gtmMaya/privateBeta": typeof gtmMaya_privateBeta;
   "gtmMaya/productionReality": typeof gtmMaya_productionReality;
