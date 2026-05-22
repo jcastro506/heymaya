@@ -455,15 +455,21 @@ Default contracts:
    - model: hard_research_beta during beta, main_maya for final strategy synthesis
    - timeout_minutes: 20
    - maxScrapeCreatorsCalls: 12
-   - coverageChecklist: faceless video, founder clip, slideshow/carousel, screenshot sequence, text-on-image, comment/CTA evidence
+   - coverageChecklist: faceless video, founder clip, slideshow/carousel/Photo Mode, screenshot sequence, text-on-image, comment/CTA evidence, exact founder production requirement
    - failureBehavior: generate manual user-recording handoff only; never claim TikTok can auto-post
-5. Channel strategy judge
+5. Instagram format planner
+   - model: future_default_research during beta unless Instagram is central to the strategy
+   - timeout_minutes: 12
+   - maxScrapeCreatorsCalls: 1-3
+   - coverageChecklist: Reels reuse, carousel/static screenshot reuse, Stories/manual handoff, no direct posting assumption
+   - failureBehavior: treat Instagram as a reuse lane in V1; never make it primary unless the main strategy judge has decision-grade evidence and manual-posting capacity
+6. Channel strategy judge
    - model: main_maya
    - timeout_minutes: 10
    - maxScrapeCreatorsCalls: 0
    - coverageChecklist: one primary, optional secondary, parked channels, first-week tests, stop/double-down metrics
    - failureBehavior: choose no primary and ask for more app evidence if the research is not decision-grade
-6. Slop critic
+7. Slop critic
    - model: main_maya
    - timeout_minutes: 8
    - maxScrapeCreatorsCalls: 0
