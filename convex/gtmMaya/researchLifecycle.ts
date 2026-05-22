@@ -6,6 +6,7 @@ import {
   type MutationCtx,
 } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { assertGtmSpendAllowed } from "./betaGuards";
 
 const CHANNEL_PREFERENCE = v.union(
   v.literal("whatsapp"),
@@ -381,6 +382,7 @@ export const recordCost = mutation({
   handler: async (ctx, args): Promise<Id<"gtmCostLedger">> => {
     if (args.costUsd < 0) throw new Error("costUsd cannot be negative.");
     const { creator } = await requireMyGtmAgent(ctx);
+    await assertGtmSpendAllowed(ctx, creator._id, args.costUsd);
     let job: Doc<"gtmResearchJobs"> | null = null;
     if (args.researchJobId) {
       job = await requireMyResearchJob(ctx, creator._id, args.researchJobId);

@@ -4542,5 +4542,74 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_draft", ["draftId"])
     .index("by_account_and_platform", ["accountId", "platform"]),
+
+  gtmSafetyStates: defineTable({
+    accountId: v.id("creators"),
+    adminDisabled: v.boolean(),
+    disabledReason: v.optional(v.string()),
+    dailyCostLimitUsd: v.number(),
+    monthlyCostLimitUsd: v.number(),
+    dailyApiCallLimit: v.number(),
+    updatedAt: v.number(),
+  }).index("by_account", ["accountId"]),
+
+  gtmAuditEvents: defineTable({
+    accountId: v.id("creators"),
+    actor: v.union(
+      v.literal("maya"),
+      v.literal("system"),
+      v.literal("admin"),
+      v.literal("user")
+    ),
+    eventType: v.string(),
+    severity: v.union(v.literal("info"), v.literal("warn"), v.literal("error")),
+    message: v.string(),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_type", ["accountId", "eventType"]),
+
+  gtmConnectionHealth: defineTable({
+    accountId: v.id("creators"),
+    provider: v.union(
+      v.literal("whatsapp"),
+      v.literal("imessage"),
+      v.literal("google_calendar"),
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("linkedin"),
+      v.literal("composio"),
+      v.literal("openclaw")
+    ),
+    status: v.union(
+      v.literal("connected"),
+      v.literal("disconnected"),
+      v.literal("reconnect_required"),
+      v.literal("error")
+    ),
+    failureReason: v.optional(v.string()),
+    lastCheckedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_provider", ["accountId", "provider"]),
+
+  gtmMachineHealth: defineTable({
+    accountId: v.id("creators"),
+    flyAppId: v.string(),
+    status: v.union(
+      v.literal("healthy"),
+      v.literal("unhealthy"),
+      v.literal("restarting"),
+      v.literal("unknown")
+    ),
+    lastPingAt: v.optional(v.number()),
+    restartCount: v.number(),
+    lastError: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_fly_app", ["flyAppId"]),
   // ─── end ClawLaunch / Maya GTM product ────────────────────────────────
 });
