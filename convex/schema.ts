@@ -4521,5 +4521,26 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_account_and_status", ["accountId", "status"])
     .index("by_account_and_platform", ["accountId", "platform"]),
+
+  gtmResultSnapshots: defineTable({
+    accountId: v.id("creators"),
+    draftId: v.id("gtmContentDrafts"),
+    platform: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("linkedin"),
+      v.literal("tiktok")
+    ),
+    replies: v.optional(v.number()),
+    clicks: v.optional(v.number()),
+    signups: v.optional(v.number()),
+    demos: v.optional(v.number()),
+    feedbackItems: v.optional(v.number()),
+    raw: v.optional(v.any()),
+    capturedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_draft", ["draftId"])
+    .index("by_account_and_platform", ["accountId", "platform"]),
   // ─── end ClawLaunch / Maya GTM product ────────────────────────────────
 });
