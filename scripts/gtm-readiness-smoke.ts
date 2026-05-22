@@ -9,6 +9,7 @@
  */
 
 import { convexTest } from "convex-test";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,6 +54,7 @@ function buildConvexModules(): Record<string, () => Promise<unknown>> {
 
 async function main() {
   loadLocalEnv();
+  loadConvexEnvPresence();
   process.env.ADMIN_TOKEN = ADMIN_TOKEN;
   const checks: Check[] = [];
   const modules = buildConvexModules();
@@ -206,10 +208,10 @@ async function main() {
   });
   checks.push({
     name: "Approval request sent through messaging",
-    status: hasAnyEnv(["CLAW_MESSENGER_API_KEY", "OPENCLAW_CHANNEL_URL"])
+    status: hasAnyEnv(["CLAW_MESSENGER_API_KEY"])
       ? "passed"
       : "blocked",
-    detail: "requires live messaging env for send/receive proof",
+    detail: "ClawMessenger env present; live send/receive proof still requires a paired tenant/channel",
   });
 
   await user.mutation(api.gtmMaya.resultsLoop.recordResultSnapshot, {
@@ -266,7 +268,7 @@ async function main() {
 
   checks.push(externalCheck("WhatsApp/iMessage channel can receive/send", [
     "CLAW_MESSENGER_API_KEY",
-    "OPENCLAW_CHANNEL_URL",
+    ["MAYA_CLAW_MESSENGER_DELIVERY_TO", "MAYA_CALLBACK_BASE_URL"],
   ]));
   checks.push(externalCheck("Calendar connects and writes Maya-owned event", [
     "GOOGLE_CLIENT_ID",
@@ -403,6 +405,26 @@ function loadLocalEnv(): void {
       if (process.env[key]) continue;
       process.env[key] = parseEnvValue(rawValue);
     }
+  }
+}
+
+function loadConvexEnvPresence(): void {
+  try {
+    const out = execFileSync("npx", ["convex", "env", "list"], {
+      cwd: REPO_ROOT,
+      env: { ...process.env, CONVEX_DEPLOYMENT: undefined },
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 15_000,
+    });
+    for (const line of out.split(/\r?\n/)) {
+      const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=/);
+      if (!match) continue;
+      process.env[match[1]] ??= "__present_in_convex__";
+    }
+  } catch {
+    // Local .env is sufficient for developer smoke runs; Convex env presence
+    // is only a fallback for variables intentionally stored in the deployment.
   }
 }
 
