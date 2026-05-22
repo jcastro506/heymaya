@@ -334,14 +334,14 @@ function verifyMachineFiles(appName: string, machineId: string): string {
     "test -w /data/workspace",
     "test -w /data/cron",
   ].join(" && ");
-  return runSsh(appName, machineId, command, 60_000);
+  return runSsh(appName, machineId, command, 180_000);
 }
 
 function waitForGatewayReadyLogs(appName: string, machineId: string): string {
   const deadline = Date.now() + 120_000;
   let logs = "";
   while (Date.now() < deadline) {
-    logs = runFly(["logs", "--app", appName, "--machine", machineId, "--no-tail"], 30_000);
+    logs = runFly(["logs", "--app", appName, "--machine", machineId, "--no-tail"], 90_000);
     if (/failed to start|plugin service failed|EACCES|permission denied|Cannot read properties of undefined/i.test(logs)) {
       throw new Error(`OpenClaw gateway failed during boot for ${appName}/${machineId}.`);
     }
@@ -356,7 +356,7 @@ function waitForCronStarted(appName: string, machineId: string): void {
   const command =
     "grep -h 'cron: started' /tmp/openclaw-1000/openclaw-*.log 2>/dev/null | head -1";
   while (Date.now() < deadline) {
-    const out = runSsh(appName, machineId, command, 30_000);
+    const out = runSsh(appName, machineId, command, 90_000);
     if (out.includes("cron: started")) return;
     sleep(5_000);
   }
@@ -384,19 +384,28 @@ function runSsh(
   command: string,
   timeoutMs: number
 ): string {
-  return runFly(
-    [
-      "ssh",
-      "console",
-      "--app",
-      appName,
-      "--machine",
-      machineId,
-      "--command",
-      `/bin/sh -lc ${quoteShell(command)}`,
-    ],
-    timeoutMs
-  );
+  const args = [
+    "ssh",
+    "console",
+    "--app",
+    appName,
+    "--machine",
+    machineId,
+    "--command",
+    `/bin/sh -lc ${quoteShell(command)}`,
+  ];
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return runFly(args, timeoutMs);
+    } catch (err) {
+      lastErr = err;
+      const message = (err as Error).message;
+      if (!/ETIMEDOUT|timed out|timeout/i.test(message)) throw err;
+      if (attempt < 3) sleep(5_000 * attempt);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 function quoteShell(value: string): string {
@@ -445,9 +454,11 @@ async function runLiveSmoke(flags: Flags): Promise<void> {
     if (!machine.id) throw new Error("Fly returned a machine row without id");
     console.log(`Machine started: ${machine.id} (${machine.region ?? fixture.region})`);
 
+    console.log("Verifying workspace, cron, config, and skill files on the machine.");
     const verifyOut = verifyMachineFiles(appName, machine.id).trim();
     if (verifyOut) console.log(verifyOut);
 
+    console.log("Waiting for OpenClaw gateway ready logs.");
     const logs = waitForGatewayReadyLogs(appName, machine.id);
     const interesting = logs
       .split(/\r?\n/)
@@ -456,6 +467,7 @@ async function runLiveSmoke(flags: Flags): Promise<void> {
       .join("\n");
     if (interesting) console.log(interesting);
 
+    console.log("Waiting for cron started log.");
     waitForCronStarted(appName, machine.id);
     console.log("Cron started log observed.");
 

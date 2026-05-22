@@ -18,6 +18,10 @@ import schema from "../convex/schema";
 import { buildSevenDayCalendarPlan, validateCalendarEvents } from "../convex/gtmMaya/calendarPlan";
 import { buildStrategyPlan, validateStrategyPlan } from "../convex/gtmMaya/strategyJudge";
 import { interpretResults } from "../convex/gtmMaya/resultsLoop";
+import {
+  parseWalkthroughDiagnosis,
+  validateWalkthroughFile,
+} from "../convex/gtmMaya/walkthrough";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ADMIN_TOKEN = "gtm-readiness-smoke-admin";
@@ -68,6 +72,31 @@ async function main() {
     api.gtmMaya.researchLifecycle.startGtmOnboarding,
     { channelPreference: "whatsapp", timezone: "America/New_York" }
   );
+  validateWalkthroughFile({ mimeType: "video/mp4", bytes: 2_400_000 });
+  const walkthroughDiagnosis = parseWalkthroughDiagnosis(
+    JSON.stringify({
+      coreWorkflow: "A founder imports a user problem and gets a launch plan.",
+      userProblem: "Indie builders ship products but do not know where to find first customers.",
+      strongestDemoMoments: [
+        "Paste a product URL",
+        "Maya chooses channels from cited evidence",
+        "Calendar fills with exact launch actions",
+      ],
+      beforeAfterContrast: "Before: scattered posting. After: a cited daily acquisition plan.",
+      confusingMoments: ["Pricing page is not visible in the walkthrough"],
+      contentAssets: ["Landing page hero", "Mission Board", "Calendar event details"],
+      facelessScreenRecordingEnough: true,
+      founderFaceOrUgcMightHelp: false,
+      shortFormFormatCandidates: ["TikTok slideshow", "faceless screen recording"],
+      unsupportedClaimsOrMissingContext: ["No conversion benchmark shown"],
+    })
+  );
+  checks.push({
+    name: "Mobile walkthrough can produce usable app diagnosis",
+    status: "passed",
+    detail: walkthroughDiagnosis.shortFormFormatCandidates.join(", "),
+  });
+
   const appId = await user.mutation(api.gtmMaya.researchLifecycle.setAppProfile, {
     name: "Readiness Smoke App",
     url: "https://readiness-smoke.clawlaunch.test",
@@ -76,8 +105,19 @@ async function main() {
     weekGoal: "signups",
     canRecordScreen: true,
     canShowFace: false,
+    canRecordVoice: true,
+    canProvideScreenshots: true,
+    canPostTikTokManually: true,
+    canPostInstagramManually: true,
+    tiktokWarmupState: "ready",
+    tiktokAccountAgeDays: 30,
+    tiktokAccountStatusChecked: true,
     excludedAudiences: [],
-    diagnosis: { audience: "indie builders", problem: "no first users" },
+    diagnosis: {
+      audience: "indie builders",
+      problem: "no first users",
+      walkthrough: walkthroughDiagnosis,
+    },
   });
   checks.push({
     name: "Signup and onboarding creates GTM account",
@@ -130,6 +170,13 @@ async function main() {
     status: "ready_for_review",
     phase: "complete",
   });
+  await t.mutation(api.gtmMaya.privateBeta.adminEnrollBetaUser, {
+    token: ADMIN_TOKEN,
+    accountId: start.accountId,
+    cohortName: "readiness-smoke",
+    requiredAppUrlLive: true,
+    days: 14,
+  });
 
   const snapshot = await user.query(
     api.gtmMaya.researchLifecycle.getMyGtmSnapshot,
@@ -168,6 +215,17 @@ async function main() {
     name: "7-day plan writes rich calendar events",
     status: "passed",
     detail: `${calendarEvents.length} validated events`,
+  });
+  const hasSpecificReference = calendarEvents.some((event) =>
+    `${event.title}\n${event.description}`.includes("Record a 30-second demo script manually.")
+  );
+  if (!hasSpecificReference) {
+    throw new Error("calendar plan did not preserve the specific TikTok recording brief");
+  }
+  checks.push({
+    name: "Calendar event preserves post-specific brief",
+    status: "passed",
+    detail: "event includes the exact manual recording task",
   });
   checks.push({
     name: "TikTok script event includes recording instructions",
@@ -217,6 +275,9 @@ async function main() {
   await user.mutation(api.gtmMaya.resultsLoop.recordResultSnapshot, {
     draftId: xDraft,
     platform: "x",
+    clicks: 8,
+    replies: 2,
+    signups: 1,
   });
   const learning = interpretResults([
     {
@@ -243,6 +304,33 @@ async function main() {
     status: snapshot.costTotalUsd === 0.04 ? "passed" : "blocked",
     detail: `$${snapshot.costTotalUsd}`,
   });
+  await user.mutation(api.gtmMaya.privateBeta.recordUserReportedSignal, {
+    kind: "signup",
+    message: "One test signup came from the X launch post.",
+    retentionIntent: "high",
+  });
+  await t.mutation(api.gtmMaya.privateBeta.recordHumanPlanReview, {
+    token: ADMIN_TOKEN,
+    accountId: start.accountId,
+    researchJobId: jobId,
+    reviewer: "readiness-smoke",
+    specificityScore: 5,
+    usefulnessScore: 4,
+    notes: "Fake-product plan contains evidence, channel choices, and concrete execution tasks.",
+  });
+  const betaStatus = await user.query(
+    api.gtmMaya.privateBeta.getMyPrivateBetaStatus,
+    {}
+  );
+  if (!betaStatus) throw new Error("missing private beta status");
+  if (!betaStatus.successCriteria.noUnauthorizedPublishing) {
+    throw new Error("private beta status detected unauthorized publishing");
+  }
+  checks.push({
+    name: "Private beta metrics capture signal and human review",
+    status: "passed",
+    detail: `review ${betaStatus.metrics.humanReviewAverage}, signals ${betaStatus.metrics.userReportedSignals}`,
+  });
 
   await t.mutation(api.gtmMaya.betaGuards.adminSetSafetyState, {
     token: ADMIN_TOKEN,
@@ -264,6 +352,48 @@ async function main() {
     name: "Admin can pause a user's Maya",
     status: "passed",
     detail: "cost/action guard rejected after pause",
+  });
+  await t.mutation(api.gtmMaya.betaGuards.adminSetSafetyState, {
+    token: ADMIN_TOKEN,
+    accountId: start.accountId,
+    adminDisabled: false,
+    disabledReason: undefined,
+  });
+  await user.mutation(api.gtmMaya.betaGuards.recordConnectionHealth, {
+    provider: "google_calendar",
+    status: "connected",
+  });
+  await user.mutation(api.gtmMaya.betaGuards.recordConnectionHealth, {
+    provider: "whatsapp",
+    status: "reconnect_required",
+    failureReason: "readiness smoke simulated disconnect",
+  });
+  await user.mutation(api.gtmMaya.betaGuards.recordMachineHealth, {
+    flyAppId: "readiness-smoke-openclaw",
+    status: "healthy",
+    lastPingAt: Date.now(),
+    restartCount: 0,
+  });
+  const hardening = await user.query(
+    api.gtmMaya.betaGuards.getMyBetaHardeningStatus,
+    {}
+  );
+  if (!hardening?.machine || hardening.machine.status !== "healthy") {
+    throw new Error("hardening status did not record OpenClaw machine health");
+  }
+  if (
+    !hardening.connections.some(
+      (connection) =>
+        connection.provider === "whatsapp" &&
+        connection.status === "reconnect_required"
+    )
+  ) {
+    throw new Error("hardening status did not surface simulated messaging disconnect");
+  }
+  checks.push({
+    name: "Hardening status surfaces machine and reconnect state",
+    status: "passed",
+    detail: `${hardening.connections.length} connections tracked`,
   });
 
   checks.push(externalCheck("WhatsApp/iMessage channel can receive/send", [
