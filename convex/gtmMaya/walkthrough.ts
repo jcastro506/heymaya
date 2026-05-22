@@ -276,7 +276,7 @@ export async function analyzeWalkthroughWithGemini(input: {
 }
 
 export function parseWalkthroughDiagnosis(raw: string): WalkthroughDiagnosis {
-  const parsed = JSON.parse(stripJsonFence(raw)) as Partial<WalkthroughDiagnosis>;
+  const parsed = parseDiagnosisJson(raw);
   const diagnosis: WalkthroughDiagnosis = {
     coreWorkflow: requiredString(parsed.coreWorkflow, "coreWorkflow"),
     userProblem: requiredString(parsed.userProblem, "userProblem"),
@@ -290,8 +290,14 @@ export function parseWalkthroughDiagnosis(raw: string): WalkthroughDiagnosis {
     ),
     confusingMoments: stringArray(parsed.confusingMoments),
     contentAssets: stringArray(parsed.contentAssets),
-    facelessScreenRecordingEnough: Boolean(parsed.facelessScreenRecordingEnough),
-    founderFaceOrUgcMightHelp: Boolean(parsed.founderFaceOrUgcMightHelp),
+    facelessScreenRecordingEnough: requiredBoolean(
+      parsed.facelessScreenRecordingEnough,
+      "facelessScreenRecordingEnough"
+    ),
+    founderFaceOrUgcMightHelp: requiredBoolean(
+      parsed.founderFaceOrUgcMightHelp,
+      "founderFaceOrUgcMightHelp"
+    ),
     shortFormFormatCandidates: requiredStringArray(
       parsed.shortFormFormatCandidates,
       "shortFormFormatCandidates"
@@ -301,6 +307,18 @@ export function parseWalkthroughDiagnosis(raw: string): WalkthroughDiagnosis {
     ),
   };
   return diagnosis;
+}
+
+function parseDiagnosisJson(raw: string): Partial<WalkthroughDiagnosis> {
+  try {
+    const parsed = JSON.parse(stripJsonFence(raw)) as unknown;
+    if (!isRecord(parsed)) {
+      throw new Error("not an object");
+    }
+    return parsed as Partial<WalkthroughDiagnosis>;
+  } catch {
+    throw new Error("Gemini diagnosis returned malformed JSON.");
+  }
 }
 
 function walkthroughPrompt(
@@ -348,6 +366,13 @@ function requiredStringArray(value: unknown, key: string): string[] {
   const array = stringArray(value);
   if (array.length === 0) throw new Error(`Gemini diagnosis missing ${key}.`);
   return array;
+}
+
+function requiredBoolean(value: unknown, key: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`Gemini diagnosis missing ${key}.`);
+  }
+  return value;
 }
 
 function stringArray(value: unknown): string[] {

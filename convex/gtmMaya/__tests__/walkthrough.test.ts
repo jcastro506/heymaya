@@ -43,4 +43,21 @@ describe("GTM mobile walkthrough analysis", () => {
       "Gemini diagnosis missing coreWorkflow"
     );
   });
+
+  it("rejects malformed JSON and missing boolean fields explicitly", () => {
+    expect(() => parseWalkthroughDiagnosis("not json")).toThrow(
+      "Gemini diagnosis returned malformed JSON"
+    );
+    expect(() =>
+      parseWalkthroughDiagnosis(
+        JSON.stringify({
+          coreWorkflow: "workflow",
+          userProblem: "problem",
+          strongestDemoMoments: ["moment"],
+          beforeAfterContrast: "before after",
+          shortFormFormatCandidates: ["faceless demo"],
+        })
+      )
+    ).toThrow("Gemini diagnosis missing facelessScreenRecordingEnough");
+  });
 });
