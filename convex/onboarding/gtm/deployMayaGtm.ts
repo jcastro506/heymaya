@@ -147,6 +147,9 @@ export const buildAndUploadGtmWorkspace = internalAction({
         canPostInstagramManually: row.app.canPostInstagramManually,
         existingTikTokUrl: row.app.existingTikTokUrl,
         existingInstagramUrl: row.app.existingInstagramUrl,
+        tiktokWarmupState: row.app.tiktokWarmupState,
+        tiktokAccountAgeDays: row.app.tiktokAccountAgeDays,
+        tiktokAccountStatusChecked: row.app.tiktokAccountStatusChecked,
         openToUgcCreators: row.app.openToUgcCreators,
         creatorBudgetMonthlyUsd: row.app.creatorBudgetMonthlyUsd,
         maxWeeklyVisualPosts: row.app.maxWeeklyVisualPosts,
@@ -316,7 +319,7 @@ export function buildGtmMachineConfig(input: {
       MAYA_GTM_AGENT_ID: String(input.agentId),
       MAYA_GTM_APP_NAME: input.flyAppName,
       MAYA_WORKSPACE_BUNDLE_URL: input.workspaceBundleUrl,
-      OPENCLAW_MODEL: MODEL_ROUTING.mainMaya,
+      OPENCLAW_MODEL: toOpenClawModelRef(MODEL_ROUTING.mainMaya),
       MAYA_GTM_MODEL_ROUTING_JSON: JSON.stringify(MODEL_ROUTING),
       MAYA_BOOTSTRAP_JSON: JSON.stringify({
         agentId: String(input.agentId),
@@ -325,7 +328,15 @@ export function buildGtmMachineConfig(input: {
         workspaceBundleUrl: input.workspaceBundleUrl,
         modelRouting: MODEL_ROUTING,
         directPingSmoke: true,
-        gatewayConfig: { gateway: { mode: "local" } },
+        gatewayConfig: {
+          gateway: { mode: "local" },
+          agents: {
+            defaults: {
+              workspace: "/data/workspace",
+            },
+          },
+          skills: { load: { watch: true } },
+        },
       }),
     },
     guest: MACHINE_GUEST,
@@ -354,6 +365,7 @@ function buildBootstrapShell(): string {
     "mkdir -p /data/workspace /data/cron",
     'curl -fsSL "$MAYA_WORKSPACE_BUNDLE_URL" -o /tmp/workspace.tar',
     "tar -xf /tmp/workspace.tar -C /data/workspace",
+    "if [ -f /data/workspace/jobs.json ]; then cp /data/workspace/jobs.json /data/cron/jobs.json; fi",
     'echo "$MAYA_BOOTSTRAP_JSON" | jq .gatewayConfig > /data/openclaw.json',
     "exec openclaw gateway --allow-unconfigured",
   ].join(" && ");
@@ -375,6 +387,13 @@ function collectDeploySecrets(): Record<string, string> {
     if (value) secrets[key] = value;
   }
   return secrets;
+}
+
+function toOpenClawModelRef(model: string): string {
+  if (model.includes("/")) {
+    return model.startsWith("openrouter/") ? model : `openrouter/${model}`;
+  }
+  return model;
 }
 
 function buildPosixTar(files: Map<string, string>): Uint8Array {

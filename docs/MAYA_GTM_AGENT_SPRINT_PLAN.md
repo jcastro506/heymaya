@@ -260,6 +260,27 @@ OpenClaw ownership:
 - Messaging channel delivery.
 - Tool/skill instructions.
 
+Current runtime finding, verified against `registry.fly.io/heymaya-openclaw:v2026.4.23`:
+
+- The GTM workspace must boot with a cron-safe minimal `openclaw.json`
+  (`gateway.mode=local`, `agents.defaults.workspace=/data/workspace`,
+  `skills.load.watch=true`). Adding `agents.defaults.model.primary` to
+  `openclaw.json` made the gateway reach ready but prevented cron from logging
+  `cron: started` in live Fly smoke tests.
+- `OPENCLAW_MODEL` alone did not change the logged default model on this image,
+  so GTM research/model execution must not depend on that env var until the
+  OpenClaw model-routing behavior is re-verified or upgraded.
+- Production rule for MVP: OpenClaw owns the per-user runtime, workspace,
+  skills, cron/heartbeat, and messaging surface. Convex-owned research actions
+  and model-router calls own expensive research execution and model selection.
+  OpenClaw heartbeats queue bounded work; they do not directly spend
+  ScrapeCreators/model budget.
+- Live gate: `npm run smoke:gtm-openclaw -- --live --confirm` must pass before
+  considering the OpenClaw workspace/deploy layer healthy. The direct
+  `--agent-message` extension is optional until WhatsApp/ClawMessenger
+  multi-tenant routing is available, because an unpaired direct recipient can
+  hang the CLI turn.
+
 ### ScrapeCreators
 
 Use ScrapeCreators as the public-data research layer. It is for reading public
@@ -895,6 +916,7 @@ Files:
 - `BOOT.md`: startup checklist and connection checks.
 - `MEMORY.md`: durable learned preferences/results.
 - `DREAMING.md`: nightly learning rules.
+- `jobs.json`: OpenClaw cron schedule loaded into `/data/cron/jobs.json`.
 - `skills/*/SKILL.md`: custom GTM skills.
 - `.clawhub/lock.json`: pinned external skills if any.
 
@@ -937,6 +959,8 @@ Skill deployment:
 - `assembleWorkspaceBundle` for `maya_gtm` emits them into
   `skills/<slug>/SKILL.md`.
 - OpenClaw machine receives them at deploy time as part of the workspace bundle.
+- Fly bootstrap copies workspace `jobs.json` into `/data/cron/jobs.json`, so
+  OpenClaw cron can run heartbeat/calendar/result/weekly-review jobs.
 - Every skill has a narrow contract, allowed inputs, required outputs, and
   failure behavior.
 - Shared skills are pinned/versioned. Updating a skill is a deliberate deploy,
@@ -1096,6 +1120,11 @@ OpenClaw model rule:
 
 - Subagents do not need to use the same model as the main Maya. Use
   `sessions_spawn` model overrides for research cost/quality routing.
+- Runtime caveat for OpenClaw `v2026.4.23`: do not put the default model inside
+  `openclaw.json` until a live cron smoke proves that cron still starts. In the
+  MVP, expensive research/subagent model selection is enforced through Convex
+  research jobs and model-router calls, while OpenClaw cron/heartbeat stays
+  cheap and queue-oriented.
 
 Subagents:
 

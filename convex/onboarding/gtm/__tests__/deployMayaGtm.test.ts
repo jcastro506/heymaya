@@ -41,7 +41,14 @@ describe("Maya GTM OpenClaw deploy config", () => {
     expect(bootstrap.modelRouting.mainMaya).toBe("google/gemini-3.5-flash");
     expect(bootstrap.modelRouting.hardResearchBeta).toContain("claude-sonnet");
     expect(bootstrap.directPingSmoke).toBe(true);
-    expect(bootstrap.gatewayConfig).toEqual({ gateway: { mode: "local" } });
+    expect(bootstrap.gatewayConfig).toEqual({
+      gateway: { mode: "local" },
+      agents: { defaults: { workspace: "/data/workspace" } },
+      skills: { load: { watch: true } },
+    });
+    expect(config.init?.cmd?.join(" ")).toContain(
+      "cp /data/workspace/jobs.json /data/cron/jobs.json"
+    );
   });
 
   it("uses Gemini 3.5 Flash as the default GTM OpenClaw model", () => {
@@ -51,7 +58,7 @@ describe("Maya GTM OpenClaw deploy config", () => {
       workspaceBundleUrl: "https://storage.test/workspace.tar",
     });
 
-    expect(config.env?.OPENCLAW_MODEL).toBe("google/gemini-3.5-flash");
+    expect(config.env?.OPENCLAW_MODEL).toBe("openrouter/google/gemini-3.5-flash");
     expect(config.env?.MAYA_GTM_MODEL_ROUTING_JSON).toContain(
       "futureDefaultResearch"
     );

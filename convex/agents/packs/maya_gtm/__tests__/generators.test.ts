@@ -22,6 +22,9 @@ const INPUT: MayaGtmWorkspaceInput = {
     canPostInstagramManually: true,
     existingTikTokUrl: "https://www.tiktok.com/@bugbrief",
     existingInstagramUrl: "https://www.instagram.com/bugbrief",
+    tiktokWarmupState: "warming",
+    tiktokAccountAgeDays: 3,
+    tiktokAccountStatusChecked: false,
     openToUgcCreators: true,
     creatorBudgetMonthlyUsd: 250,
     maxWeeklyVisualPosts: 4,
@@ -47,6 +50,7 @@ describe("Maya GTM workspace pack", () => {
         "HEARTBEAT.md",
         "MEMORY.md",
         "DREAMING.md",
+        "jobs.json",
       ])
     );
     expect(files.get("AGENTS.md")).toContain("Evidence before strategy");
@@ -57,6 +61,11 @@ describe("Maya GTM workspace pack", () => {
       "Read APP.md, GTM.md, MEMORY.md, and USER.md"
     );
     expect(files.get("USER.md")).toContain("Will manually post Instagram: yes");
+    expect(files.get("USER.md")).toContain("TikTok warm-up state: warming");
+    expect(files.get("USER.md")).toContain("TikTok account age days: 3");
+    expect(files.get("USER.md")).toContain(
+      "TikTok Account Check completed: no"
+    );
     expect(files.get("USER.md")).toContain("Creator/content budget: $250/month");
     expect(files.get("GTM.md")).toContain("Do not recommend TikTok/Instagram");
   });
@@ -114,6 +123,40 @@ describe("Maya GTM workspace pack", () => {
     expect(heartbeat).toContain("ScrapeCreators calls");
     expect(heartbeat).toContain("Gemini deep research");
     expect(heartbeat).toContain("X recent search");
+  });
+
+  it("ships OpenClaw cron jobs that isolate heartbeat from paid research", () => {
+    const { files } = buildMayaGtmWorkspace(INPUT);
+    const jobs = JSON.parse(files.get("jobs.json") ?? "{}") as {
+      jobs: Array<{
+        id: string;
+        sessionTarget: string;
+        payload: {
+          kind: string;
+          message: string;
+          thinking?: string;
+          timeoutSeconds?: number;
+        };
+        delivery?: { mode: string; bestEffort: boolean };
+      }>;
+    };
+
+    const heartbeat = jobs.jobs.find((job) => job.id === "gtm_heartbeat");
+    const weeklyReview = jobs.jobs.find((job) => job.id === "gtm_weekly_review");
+
+    expect(heartbeat).toBeTruthy();
+    expect(heartbeat?.sessionTarget).toBe("isolated");
+    expect(heartbeat?.payload.kind).toBe("agentTurn");
+    expect(heartbeat?.payload.thinking).toBe("off");
+    expect(heartbeat?.payload.timeoutSeconds).toBe(60);
+    expect(heartbeat?.delivery).toEqual({ mode: "none", bestEffort: true });
+    expect(heartbeat?.payload.message).toContain("Read HEARTBEAT.md");
+    expect(heartbeat?.payload.message).toContain("Do not call ScrapeCreators");
+    expect(heartbeat?.payload.message).toContain("paid external API");
+    expect(weeklyReview?.payload.message).toContain(
+      "explicit bounded research job"
+    );
+    expect(weeklyReview?.payload.message).toContain("maxScrapeCreatorsCalls");
   });
 
   it("keeps rendered workspace files inside a prompt budget", () => {
