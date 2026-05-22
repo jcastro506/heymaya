@@ -49,6 +49,7 @@ function GtmOnboardingBody() {
   const runResearchSkeleton = useMutation(
     api.gtmMaya.researchWorker.runBudgetedResearchSkeleton
   );
+  const inspectApp = useAction(api.gtmMaya.appInspector.inspectMyGtmApp);
   const deployMaya = useAction(api.onboarding.gtm.deployMayaGtm.runMyGtmDeploy);
 
   const [draft, setDraft] = useState<IntakeDraft>(DEFAULT_DRAFT);
@@ -93,6 +94,7 @@ function GtmOnboardingBody() {
           .map((item) => item.trim())
           .filter(Boolean),
       });
+      await inspectApp({ appId });
       const jobId = await createResearchJob({ appId, budgetUsd: 3 });
       await runResearchSkeleton({ researchJobId: jobId });
       setResearchJobId(String(jobId));
