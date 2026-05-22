@@ -50,7 +50,18 @@ function evaluateTikTok(input: ChannelAgentInput): ChannelAgentVerdict {
   const visualEvidence = evidenceFor(input.evidence, "tiktok").filter(
     (card) => card.recommendedUse !== "avoid"
   );
-  const visualCapacity = input.app.canRecordScreen || input.app.canShowFace;
+  const hasUserMadeVisualPath =
+    input.app.canRecordScreen ||
+    input.app.canShowFace ||
+    input.app.canRecordVoice ||
+    input.app.canProvideScreenshots;
+  const hasPaidCreatorPath =
+    input.app.openToUgcCreators &&
+    (input.app.creatorBudgetMonthlyUsd ?? 0) > 0;
+  const visualCapacity = Boolean(
+    input.app.canPostTikTokManually &&
+      (hasUserMadeVisualPath || hasPaidCreatorPath)
+  );
   const goodFit =
     input.app.productType === "consumer_visual" ||
     input.app.productType === "prosumer";
@@ -60,11 +71,15 @@ function evaluateTikTok(input: ChannelAgentInput): ChannelAgentVerdict {
     eligible,
     rationale: eligible
       ? ["visual product/demo capacity exists", "TikTok format evidence exists"]
-      : ["TikTok is parked unless the product can be shown visually"],
+      : ["TikTok is parked unless the product can be shown and posted manually"],
     risks: visualCapacity ? [] : ["user cannot currently provide video assets"],
     requiredNextEvidence: eligible
       ? []
-      : ["two visual format examples", "screen recording or face-camera constraint"],
+      : [
+          "two visual format examples",
+          "manual posting commitment",
+          "screen recording, screenshots, face-camera, or paid UGC path",
+        ],
   };
 }
 

@@ -4409,6 +4409,7 @@ export default defineSchema({
       v.literal("x"),
       v.literal("linkedin"),
       v.literal("tiktok"),
+      v.literal("instagram"),
       v.literal("competitor")
     ),
     url: v.string(),

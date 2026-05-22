@@ -34,6 +34,7 @@ const BASE: Omit<ChannelAgentInput, "channel"> = {
     weekGoal: "signups",
     canRecordScreen: true,
     canShowFace: false,
+    canPostTikTokManually: true,
     excludedAudiences: [],
     productType: "b2b_workflow",
   },
@@ -60,6 +61,7 @@ describe("GTM channel agents", () => {
         ...BASE.app,
         productType: "consumer_visual",
         canRecordScreen: true,
+        canPostTikTokManually: true,
       },
       evidence: [evidence("tiktok"), evidence("tiktok")],
     });

@@ -14,6 +14,7 @@ export type GtmEvidenceSource =
   | "x"
   | "linkedin"
   | "tiktok"
+  | "instagram"
   | "competitor";
 export type GtmEvidenceUse =
   | "strategy"
