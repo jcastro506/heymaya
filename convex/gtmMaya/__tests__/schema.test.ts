@@ -234,4 +234,162 @@ describe("GTM Maya schema", () => {
     expect(byFly?.appId).toStrictEqual(appA);
     expect(byFly?.channelPreference).toBe("whatsapp");
   });
+
+  it("stores distribution motions, format experiments, content bank items, and UGC readiness", async () => {
+    const t = convexTest(schema, modules);
+    const { accountA, jobA } = await setupTwoGtmAccounts(t);
+
+    const evidenceA = await t.run((ctx) =>
+      ctx.db.insert("gtmEvidenceCards", {
+        accountId: accountA,
+        researchJobId: jobA,
+        source: "tiktok",
+        url: "https://tiktok.test/demo-format",
+        title: "Demo format",
+        snippet: "A faceless app demo creates qualified comments.",
+        observedAt: NOW,
+        recency: "fresh",
+        engagement: { views: 32000, comments: 42 },
+        painMatch: 0.86,
+        buyerMatch: 0.78,
+        channelFit: 0.9,
+        promotionRisk: "low",
+        recommendedUse: "content_format",
+        extractedClaims: ["faceless demos can work"],
+        createdAt: NOW,
+      })
+    );
+    const motionId = await t.run((ctx) =>
+      ctx.db.insert("gtmDistributionMotions", {
+        accountId: accountA,
+        researchJobId: jobA,
+        motion: "tiktok_faceless_demo",
+        status: "test_now",
+        rationale: ["app has visual demo proof"],
+        risks: ["views need app-action tracking"],
+        evidenceCardIds: [evidenceA],
+        minimumCadence: "3 clips per week",
+        stopCriteria: "high views with no signups",
+        doubleDownCriteria: "5 signups from one format cluster",
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+    );
+    const experimentId = await t.run((ctx) =>
+      ctx.db.insert("gtmFormatExperiments", {
+        accountId: accountA,
+        researchJobId: jobA,
+        motionId,
+        motion: "tiktok_faceless_demo",
+        hypothesis: "Faceless demos can create first installs.",
+        variants: [
+          {
+            hook: "I built this because the manual version is painful.",
+            demoMoment: "before screen then one-click result",
+            cta: "comment beta",
+            formatSkeleton: "pain -> demo -> result -> CTA",
+          },
+        ],
+        successMetric: "installs",
+        scaleDecision: "keep_testing",
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+    );
+    await t.run((ctx) =>
+      ctx.db.insert("gtmContentBankItems", {
+        accountId: accountA,
+        experimentId,
+        platform: "tiktok",
+        motion: "tiktok_faceless_demo",
+        formatSkeleton: "pain -> demo -> result -> CTA",
+        hook: "I built this because the manual version is painful.",
+        cta: "comment beta",
+        demoMoment: "before screen then one-click result",
+        outcome: "winner",
+        evidence: ["2 trials and 4 installs"],
+        promotedAt: NOW,
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+    );
+    await t.run((ctx) =>
+      ctx.db.insert("gtmUgcReadinessReports", {
+        accountId: accountA,
+        researchJobId: jobA,
+        readiness: "ready",
+        reasons: ["short-form motion won"],
+        requiredProof: [],
+        creatorProfile: "Micro creator who can explain a workflow clearly.",
+        briefTemplate: "Use the proven hook and show the exact app moment.",
+        trainingOutline: ["App overview", "Winning skeleton", "Submission checklist"],
+        managementCadence: "weekly batch review",
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+    );
+    await t.run((ctx) =>
+      ctx.db.insert("gtmToolCallLog", {
+        accountId: accountA,
+        researchJobId: jobA,
+        toolName: "scrapecreators.tiktok.search",
+        provider: "scrapecreators",
+        purpose: "find proven TikTok slideshow formats",
+        status: "succeeded",
+        estimatedCostUsd: 0.018,
+        scrapeCredits: 2,
+        metadata: {
+          inputSummary: "query=beauty app before after slideshow",
+          outputSummary: "2 evidence cards promoted into motion planning",
+          externalRequestId: "sc_req_123",
+          latencyMs: 1420,
+        },
+        createdAt: NOW,
+      })
+    );
+
+    const motions = await t.run((ctx) =>
+      ctx.db
+        .query("gtmDistributionMotions")
+        .withIndex("by_account_and_motion", (q) =>
+          q.eq("accountId", accountA).eq("motion", "tiktok_faceless_demo")
+        )
+        .collect()
+    );
+    const winners = await t.run((ctx) =>
+      ctx.db
+        .query("gtmContentBankItems")
+        .withIndex("by_account_and_outcome", (q) =>
+          q.eq("accountId", accountA).eq("outcome", "winner")
+        )
+        .collect()
+    );
+    const reports = await t.run((ctx) =>
+      ctx.db
+        .query("gtmUgcReadinessReports")
+        .withIndex("by_account_and_readiness", (q) =>
+          q.eq("accountId", accountA).eq("readiness", "ready")
+        )
+        .collect()
+    );
+    const toolCalls = await t.run((ctx) =>
+      ctx.db
+        .query("gtmToolCallLog")
+        .withIndex("by_account_and_tool", (q) =>
+          q
+            .eq("accountId", accountA)
+            .eq("toolName", "scrapecreators.tiktok.search")
+        )
+        .collect()
+    );
+
+    expect(motions).toHaveLength(1);
+    expect(motions[0].minimumCadence).toContain("clips");
+    expect(winners).toHaveLength(1);
+    expect(winners[0].experimentId).toStrictEqual(experimentId);
+    expect(reports).toHaveLength(1);
+    expect(reports[0].trainingOutline).toContain("Winning skeleton");
+    expect(toolCalls).toHaveLength(1);
+    expect(toolCalls[0].estimatedCostUsd).toBeGreaterThan(0);
+  });
 });

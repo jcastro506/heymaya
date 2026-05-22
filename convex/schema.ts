@@ -4460,6 +4460,123 @@ export default defineSchema({
     .index("by_research_job", ["researchJobId"])
     .index("by_account_and_channel", ["accountId", "channel"]),
 
+  gtmDistributionMotions: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.id("gtmResearchJobs"),
+    motion: v.union(
+      v.literal("reddit_helpful_reply"),
+      v.literal("x_founder_led"),
+      v.literal("linkedin_founder_led"),
+      v.literal("tiktok_faceless_demo"),
+      v.literal("tiktok_founder_talking_head"),
+      v.literal("tiktok_slideshow_carousel"),
+      v.literal("ugc_creator_test"),
+      v.literal("paid_ads_later"),
+      v.literal("influencer_later")
+    ),
+    status: v.union(
+      v.literal("test_now"),
+      v.literal("test_later"),
+      v.literal("parked"),
+      v.literal("blocked")
+    ),
+    rationale: v.array(v.string()),
+    risks: v.array(v.string()),
+    evidenceCardIds: v.array(v.id("gtmEvidenceCards")),
+    minimumCadence: v.string(),
+    stopCriteria: v.string(),
+    doubleDownCriteria: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_account_and_motion", ["accountId", "motion"]),
+
+  gtmFormatExperiments: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    motionId: v.optional(v.id("gtmDistributionMotions")),
+    motion: v.union(
+      v.literal("reddit_helpful_reply"),
+      v.literal("x_founder_led"),
+      v.literal("linkedin_founder_led"),
+      v.literal("tiktok_faceless_demo"),
+      v.literal("tiktok_founder_talking_head"),
+      v.literal("tiktok_slideshow_carousel"),
+      v.literal("ugc_creator_test"),
+      v.literal("paid_ads_later"),
+      v.literal("influencer_later")
+    ),
+    hypothesis: v.string(),
+    variants: v.array(
+      v.object({
+        hook: v.string(),
+        demoMoment: v.optional(v.string()),
+        cta: v.string(),
+        formatSkeleton: v.string(),
+      })
+    ),
+    successMetric: v.union(
+      v.literal("qualified_replies"),
+      v.literal("signups"),
+      v.literal("installs"),
+      v.literal("trials"),
+      v.literal("creator_applicants")
+    ),
+    scaleDecision: v.union(
+      v.literal("keep_testing"),
+      v.literal("double_down"),
+      v.literal("revise"),
+      v.literal("park")
+    ),
+    resultSummary: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_motion", ["motionId"])
+    .index("by_account_and_decision", ["accountId", "scaleDecision"]),
+
+  gtmContentBankItems: defineTable({
+    accountId: v.id("creators"),
+    experimentId: v.optional(v.id("gtmFormatExperiments")),
+    platform: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("linkedin"),
+      v.literal("tiktok")
+    ),
+    motion: v.union(
+      v.literal("reddit_helpful_reply"),
+      v.literal("x_founder_led"),
+      v.literal("linkedin_founder_led"),
+      v.literal("tiktok_faceless_demo"),
+      v.literal("tiktok_founder_talking_head"),
+      v.literal("tiktok_slideshow_carousel"),
+      v.literal("ugc_creator_test"),
+      v.literal("paid_ads_later"),
+      v.literal("influencer_later")
+    ),
+    formatSkeleton: v.string(),
+    hook: v.string(),
+    cta: v.string(),
+    demoMoment: v.optional(v.string()),
+    outcome: v.union(
+      v.literal("winner"),
+      v.literal("loser"),
+      v.literal("inconclusive")
+    ),
+    evidence: v.array(v.string()),
+    promotedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_experiment", ["experimentId"])
+    .index("by_account_and_outcome", ["accountId", "outcome"]),
+
   gtmCostLedger: defineTable({
     accountId: v.id("creators"),
     researchJobId: v.optional(v.id("gtmResearchJobs")),
@@ -4488,6 +4605,42 @@ export default defineSchema({
   })
     .index("by_account", ["accountId"])
     .index("by_research_job", ["researchJobId"])
+    .index("by_account_and_provider", ["accountId", "provider"]),
+
+  gtmToolCallLog: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    toolName: v.string(),
+    provider: v.union(
+      v.literal("scrapecreators"),
+      v.literal("gemini"),
+      v.literal("openrouter"),
+      v.literal("composio"),
+      v.literal("x_api"),
+      v.literal("openclaw"),
+      v.literal("google"),
+      v.literal("other")
+    ),
+    purpose: v.string(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("called"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+      v.literal("skipped")
+    ),
+    model: v.optional(v.string()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    estimatedCostUsd: v.optional(v.number()),
+    scrapeCredits: v.optional(v.number()),
+    error: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_account_and_tool", ["accountId", "toolName"])
     .index("by_account_and_provider", ["accountId", "provider"]),
 
   gtmContentDrafts: defineTable({
@@ -4671,5 +4824,26 @@ export default defineSchema({
   })
     .index("by_account", ["accountId"])
     .index("by_account_and_kind", ["accountId", "kind"]),
+
+  gtmUgcReadinessReports: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    readiness: v.union(
+      v.literal("premature"),
+      v.literal("useful_soon"),
+      v.literal("ready")
+    ),
+    reasons: v.array(v.string()),
+    requiredProof: v.array(v.string()),
+    creatorProfile: v.optional(v.string()),
+    briefTemplate: v.optional(v.string()),
+    trainingOutline: v.optional(v.array(v.string())),
+    managementCadence: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_account_and_readiness", ["accountId", "readiness"]),
   // ─── end ClawLaunch / Maya GTM product ────────────────────────────────
 });
