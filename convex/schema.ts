@@ -4489,5 +4489,37 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_research_job", ["researchJobId"])
     .index("by_account_and_provider", ["accountId", "provider"]),
+
+  gtmContentDrafts: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    platform: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("linkedin"),
+      v.literal("tiktok")
+    ),
+    status: v.union(
+      v.literal("drafted"),
+      v.literal("approved"),
+      v.literal("published"),
+      v.literal("rejected"),
+      v.literal("failed")
+    ),
+    body: v.string(),
+    evidenceCardIds: v.array(v.id("gtmEvidenceCards")),
+    finalBody: v.optional(v.string()),
+    approvalMessageId: v.optional(v.string()),
+    approvedAt: v.optional(v.number()),
+    externalPostId: v.optional(v.string()),
+    publishedUrl: v.optional(v.string()),
+    publishedAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_status", ["accountId", "status"])
+    .index("by_account_and_platform", ["accountId", "platform"]),
   // ─── end ClawLaunch / Maya GTM product ────────────────────────────────
 });

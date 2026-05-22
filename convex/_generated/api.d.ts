@@ -83,6 +83,7 @@ import type * as dealTriage from "../dealTriage.js";
 import type * as deals from "../deals.js";
 import type * as gbp_computeHealthScore from "../gbp/computeHealthScore.js";
 import type * as gtmMaya_appInspector from "../gtmMaya/appInspector.js";
+import type * as gtmMaya_approvalPublishing from "../gtmMaya/approvalPublishing.js";
 import type * as gtmMaya_calendarPlan from "../gtmMaya/calendarPlan.js";
 import type * as gtmMaya_channelAgents from "../gtmMaya/channelAgents.js";
 import type * as gtmMaya_channelScoring from "../gtmMaya/channelScoring.js";
@@ -299,6 +300,7 @@ declare const fullApi: ApiFromModules<{
   deals: typeof deals;
   "gbp/computeHealthScore": typeof gbp_computeHealthScore;
   "gtmMaya/appInspector": typeof gtmMaya_appInspector;
+  "gtmMaya/approvalPublishing": typeof gtmMaya_approvalPublishing;
   "gtmMaya/calendarPlan": typeof gtmMaya_calendarPlan;
   "gtmMaya/channelAgents": typeof gtmMaya_channelAgents;
   "gtmMaya/channelScoring": typeof gtmMaya_channelScoring;
