@@ -84,6 +84,7 @@ import type * as deals from "../deals.js";
 import type * as gbp_computeHealthScore from "../gbp/computeHealthScore.js";
 import type * as gtmMaya_channelScoring from "../gtmMaya/channelScoring.js";
 import type * as gtmMaya_researchLifecycle from "../gtmMaya/researchLifecycle.js";
+import type * as gtmMaya_researchWorker from "../gtmMaya/researchWorker.js";
 import type * as http from "../http.js";
 import type * as integrations_aggregators_unified_client from "../integrations/aggregators/unified/client.js";
 import type * as integrations_aggregators_unified_types from "../integrations/aggregators/unified/types.js";
@@ -293,6 +294,7 @@ declare const fullApi: ApiFromModules<{
   "gbp/computeHealthScore": typeof gbp_computeHealthScore;
   "gtmMaya/channelScoring": typeof gtmMaya_channelScoring;
   "gtmMaya/researchLifecycle": typeof gtmMaya_researchLifecycle;
+  "gtmMaya/researchWorker": typeof gtmMaya_researchWorker;
   http: typeof http;
   "integrations/aggregators/unified/client": typeof integrations_aggregators_unified_client;
   "integrations/aggregators/unified/types": typeof integrations_aggregators_unified_types;

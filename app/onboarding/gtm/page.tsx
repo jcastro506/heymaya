@@ -46,6 +46,9 @@ function GtmOnboardingBody() {
   const createResearchJob = useMutation(
     api.gtmMaya.researchLifecycle.createResearchJob
   );
+  const runResearchSkeleton = useMutation(
+    api.gtmMaya.researchWorker.runBudgetedResearchSkeleton
+  );
   const deployMaya = useAction(api.onboarding.gtm.deployMayaGtm.runMyGtmDeploy);
 
   const [draft, setDraft] = useState<IntakeDraft>(DEFAULT_DRAFT);
@@ -91,6 +94,7 @@ function GtmOnboardingBody() {
           .filter(Boolean),
       });
       const jobId = await createResearchJob({ appId, budgetUsd: 3 });
+      await runResearchSkeleton({ researchJobId: jobId });
       setResearchJobId(String(jobId));
       setStage("research");
     } catch (err) {
@@ -249,21 +253,22 @@ function GtmOnboardingBody() {
             disabled={!canSubmit || busy}
             className="rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? "Saving..." : "Start research"}
+            {busy ? "Researching..." : "Start research"}
           </button>
         </section>
       )}
 
       {stage === "research" && (
         <section className="border border-paper-faint/15 bg-ink-2 p-6">
-          <h2 className="mb-3 font-display text-2xl">Research job queued</h2>
+          <h2 className="mb-3 font-display text-2xl">Research pass complete</h2>
           <p className="text-paper-dim">
             Job: <span className="font-mono text-paper">{researchJobId}</span>
           </p>
           <p className="mt-4 max-w-2xl text-paper-dim">
-            The next sprint wires the actual research worker. For now this
-            proves onboarding creates the GTM app and budgeted research job
-            without touching creator Maya.
+            The skeleton pass created evidence, channel scores, and zero-spend
+            cost ledger rows. The next adapter layer swaps in live
+            ScrapeCreators and platform research behind the same budgeted job
+            contract.
           </p>
           <button
             onClick={deploy}
