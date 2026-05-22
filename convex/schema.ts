@@ -4377,6 +4377,28 @@ export default defineSchema({
     .index("by_account_and_status", ["accountId", "status"])
     .index("by_app", ["appId"]),
 
+  gtmWalkthroughUploads: defineTable({
+    accountId: v.id("creators"),
+    appId: v.id("gtmApps"),
+    storageId: v.id("_storage"),
+    filename: v.string(),
+    mimeType: v.string(),
+    bytes: v.number(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("analyzing"),
+      v.literal("succeeded"),
+      v.literal("failed")
+    ),
+    diagnosis: v.optional(v.any()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_app", ["appId"])
+    .index("by_account_and_status", ["accountId", "status"]),
+
   gtmEvidenceCards: defineTable({
     accountId: v.id("creators"),
     researchJobId: v.id("gtmResearchJobs"),

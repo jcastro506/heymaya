@@ -166,10 +166,15 @@ export function buildResearchSkeletonEvidence(
     | "stage"
     | "canRecordScreen"
     | "canShowFace"
+    | "canProvideScreenshots"
+    | "canPostTikTokManually"
   >
 ): ResearchSkeletonEvidence[] {
   const name = app.name ?? "the product";
-  const visualFit = app.canRecordScreen || app.canShowFace;
+  const visualFit = Boolean(
+    app.canPostTikTokManually &&
+      (app.canRecordScreen || app.canShowFace || app.canProvideScreenshots)
+  );
   return [
     {
       source: "app",
@@ -249,6 +254,12 @@ function appContext(app: Doc<"gtmApps">): GtmAppContext {
     weekGoal: app.weekGoal,
     canRecordScreen: app.canRecordScreen,
     canShowFace: app.canShowFace,
+    canRecordVoice: app.canRecordVoice,
+    canProvideScreenshots: app.canProvideScreenshots,
+    canPostTikTokManually: app.canPostTikTokManually,
+    canPostInstagramManually: app.canPostInstagramManually,
+    openToUgcCreators: app.openToUgcCreators,
+    creatorBudgetMonthlyUsd: app.creatorBudgetMonthlyUsd,
     excludedAudiences: app.excludedAudiences,
   };
 }

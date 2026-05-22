@@ -33,6 +33,11 @@ vi.mock("@/convex/_generated/api", () => ({
       researchWorker: {
         runBudgetedResearchSkeleton: "runBudgetedResearchSkeleton",
       },
+      walkthrough: {
+        analyzeMyWalkthroughUpload: "analyzeMyWalkthroughUpload",
+        generateWalkthroughUploadUrl: "generateWalkthroughUploadUrl",
+        registerWalkthroughUpload: "registerWalkthroughUpload",
+      },
     },
     onboarding: {
       gtm: {
@@ -48,6 +53,7 @@ describe("GTM onboarding page", () => {
     const html = renderToString(createElement(Page));
 
     expect(html).toContain("I can record voiceover");
+    expect(html).toContain("Mobile walkthrough recording");
     expect(html).toContain("I can provide screenshots or slides");
     expect(html).toContain("I will manually post on TikTok");
     expect(html).toContain("I will manually post on Instagram");

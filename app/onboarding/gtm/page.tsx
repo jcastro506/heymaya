@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 
 type Stage = "intake" | "research" | "deploy";
 
@@ -61,6 +62,12 @@ function GtmOnboardingBody() {
     api.gtmMaya.researchLifecycle.startGtmOnboarding
   );
   const setAppProfile = useMutation(api.gtmMaya.researchLifecycle.setAppProfile);
+  const generateWalkthroughUploadUrl = useMutation(
+    api.gtmMaya.walkthrough.generateWalkthroughUploadUrl
+  );
+  const registerWalkthroughUpload = useMutation(
+    api.gtmMaya.walkthrough.registerWalkthroughUpload
+  );
   const createResearchJob = useMutation(
     api.gtmMaya.researchLifecycle.createResearchJob
   );
@@ -68,9 +75,13 @@ function GtmOnboardingBody() {
     api.gtmMaya.researchWorker.runBudgetedResearchSkeleton
   );
   const inspectApp = useAction(api.gtmMaya.appInspector.inspectMyGtmApp);
+  const analyzeWalkthrough = useAction(
+    api.gtmMaya.walkthrough.analyzeMyWalkthroughUpload
+  );
   const deployMaya = useAction(api.onboarding.gtm.deployMayaGtm.runMyGtmDeploy);
 
   const [draft, setDraft] = useState<IntakeDraft>(DEFAULT_DRAFT);
+  const [walkthroughFile, setWalkthroughFile] = useState<File | null>(null);
   const [stage, setStage] = useState<Stage>("intake");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -121,7 +132,28 @@ function GtmOnboardingBody() {
           .map((item) => item.trim())
           .filter(Boolean),
       });
-      await inspectApp({ appId });
+      if (walkthroughFile) {
+        const uploadUrl = await generateWalkthroughUploadUrl({});
+        const uploadRes = await fetch(uploadUrl, {
+          method: "POST",
+          headers: { "content-type": walkthroughFile.type },
+          body: walkthroughFile,
+        });
+        if (!uploadRes.ok) {
+          throw new Error(`walkthrough upload failed: ${uploadRes.status}`);
+        }
+        const { storageId } = (await uploadRes.json()) as { storageId: string };
+        const uploadId = await registerWalkthroughUpload({
+          appId,
+          storageId: storageId as Id<"_storage">,
+          filename: walkthroughFile.name,
+          mimeType: walkthroughFile.type,
+          bytes: walkthroughFile.size,
+        });
+        await analyzeWalkthrough({ uploadId });
+      } else {
+        await inspectApp({ appId });
+      }
       const jobId = await createResearchJob({ appId, budgetUsd: 3 });
       await runResearchSkeleton({ researchJobId: jobId });
       setResearchJobId(String(jobId));
@@ -248,6 +280,16 @@ function GtmOnboardingBody() {
               </select>
             </Field>
           </div>
+          <Field label="Mobile walkthrough recording">
+            <input
+              type="file"
+              accept="video/mp4,video/quicktime,video/x-m4v,video/webm"
+              onChange={(event) =>
+                setWalkthroughFile(event.target.files?.[0] ?? null)
+              }
+              className="input"
+            />
+          </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Toggle
               label="I can record my screen"
