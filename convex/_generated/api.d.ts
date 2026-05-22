@@ -33,6 +33,7 @@ import type * as agents_packs_maya_workspace_generateUserMd from "../agents/pack
 import type * as agents_packs_maya_workspace_skillsRegistry from "../agents/packs/maya/workspace/skillsRegistry.js";
 import type * as agents_packs_maya_workspace_standingOrders from "../agents/packs/maya/workspace/standingOrders.js";
 import type * as agents_packs_maya_workspace_types from "../agents/packs/maya/workspace/types.js";
+import type * as agents_packs_maya_gtm_generators from "../agents/packs/maya_gtm/generators.js";
 import type * as agents_packs_maya_service_anthropicSkillsManifest from "../agents/packs/maya_service/anthropicSkillsManifest.js";
 import type * as agents_packs_maya_service_buildJobsJson from "../agents/packs/maya_service/buildJobsJson.js";
 import type * as agents_packs_maya_service_clawhubManifest from "../agents/packs/maya_service/clawhubManifest.js";
@@ -240,6 +241,7 @@ declare const fullApi: ApiFromModules<{
   "agents/packs/maya/workspace/skillsRegistry": typeof agents_packs_maya_workspace_skillsRegistry;
   "agents/packs/maya/workspace/standingOrders": typeof agents_packs_maya_workspace_standingOrders;
   "agents/packs/maya/workspace/types": typeof agents_packs_maya_workspace_types;
+  "agents/packs/maya_gtm/generators": typeof agents_packs_maya_gtm_generators;
   "agents/packs/maya_service/anthropicSkillsManifest": typeof agents_packs_maya_service_anthropicSkillsManifest;
   "agents/packs/maya_service/buildJobsJson": typeof agents_packs_maya_service_buildJobsJson;
   "agents/packs/maya_service/clawhubManifest": typeof agents_packs_maya_service_clawhubManifest;
