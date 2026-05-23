@@ -44,6 +44,7 @@ interface Flags {
   appName: string | null;
   keepApp: boolean;
   agentMessage: boolean;
+  realWork: boolean;
   requireCron: boolean;
   help: boolean;
 }
@@ -63,6 +64,56 @@ export interface GtmOpenClawFlySmokeMockResult {
   fileTargets: ReadonlyArray<string>;
 }
 
+function buildGatewayConfig(): Record<string, unknown> {
+  const mainModel = toOpenClawModelRef(OPENCLAW_MODEL);
+  return {
+    gateway: { mode: "local" },
+    agents: {
+      defaults: {
+        workspace: "/data/workspace",
+        model: {
+          primary: mainModel,
+        },
+        subagents: {
+          maxConcurrent: 4,
+          maxChildrenPerAgent: 4,
+          runTimeoutSeconds: 900,
+          archiveAfterMinutes: 60,
+        },
+      },
+      list: [
+        {
+          id: "main",
+          default: true,
+          name: "Maya",
+          workspace: "/data/workspace",
+          model: mainModel,
+          subagents: { allowAgents: ["main", "hard_research_beta"] },
+          tools: { profile: "coding" },
+        },
+        {
+          id: "hard_research_beta",
+          name: "Hard Research Beta",
+          workspace: "/data/workspace",
+          model: "openrouter/anthropic/claude-sonnet-4.5",
+          tools: { profile: "coding" },
+        },
+      ],
+    },
+    plugins: {
+      entries: {
+        acpx: { enabled: false },
+        browser: { enabled: false },
+        "device-pair": { enabled: false },
+        "phone-control": { enabled: false },
+        "talk-voice": { enabled: false },
+      },
+    },
+    discovery: { mdns: { mode: "off" } },
+    skills: { load: { watch: true } },
+  };
+}
+
 function parseFlags(argv: ReadonlyArray<string>): Flags {
   const flags: Flags = {
     mode: "mock",
@@ -70,6 +121,7 @@ function parseFlags(argv: ReadonlyArray<string>): Flags {
     appName: null,
     keepApp: false,
     agentMessage: false,
+    realWork: false,
     requireCron: false,
     help: false,
   };
@@ -81,6 +133,7 @@ function parseFlags(argv: ReadonlyArray<string>): Flags {
     else if (arg === "--confirm") flags.confirm = true;
     else if (arg === "--keep-app") flags.keepApp = true;
     else if (arg === "--agent-message") flags.agentMessage = true;
+    else if (arg === "--real-work") flags.realWork = true;
     else if (arg === "--require-cron") flags.requireCron = true;
     else if (arg === "--help" || arg === "-h") flags.help = true;
     else if (arg === "--app") flags.appName = argv[++i] ?? null;
@@ -148,39 +201,51 @@ function defaultWorkspaceInput(): MayaGtmWorkspaceInput {
   };
 }
 
+function realUserWorkspaceInput(): MayaGtmWorkspaceInput {
+  return {
+    accountEmail: "founder+jam-realwork@clawlaunch.test",
+    timezone: "America/New_York",
+    app: {
+      name: "Jam",
+      url: "https://jam.dev",
+      stage: "live-beta",
+      weekGoal: "signups",
+      founderWhy:
+        "Developers and product teams lose bug context when reports are vague, missing logs, or detached from the actual user session.",
+      canRecordScreen: true,
+      canShowFace: false,
+      canRecordVoice: true,
+      canProvideScreenshots: true,
+      canPostTikTokManually: true,
+      canPostInstagramManually: true,
+      existingTikTokUrl: "not connected",
+      existingInstagramUrl: "not connected",
+      tiktokWarmupState: "new_needs_warmup",
+      tiktokAccountAgeDays: 0,
+      tiktokAccountStatusChecked: false,
+      openToUgcCreators: false,
+      creatorBudgetMonthlyUsd: 0,
+      maxWeeklyVisualPosts: 3,
+      excludedAudiences: ["enterprise procurement"],
+    },
+    primaryChannel: "reddit",
+    secondaryChannel: "x",
+  };
+}
+
 export function buildGtmOpenClawFlySmokeFixture(
   appName = `clawlaunch-gtm-smoke-${Date.now().toString(36)}`,
-  region = process.env.FLY_REGION || "iad"
+  region = process.env.FLY_REGION || "iad",
+  workspaceInput: MayaGtmWorkspaceInput = defaultWorkspaceInput()
 ): GtmOpenClawFlySmokeFixture {
-  const { files } = buildMayaGtmWorkspace(defaultWorkspaceInput());
+  const { files } = buildMayaGtmWorkspace(workspaceInput);
   const workspaceFiles = Object.fromEntries(files.entries());
   return {
     appName,
     image: OPENCLAW_IMAGE,
     region,
     workspaceFiles,
-    gatewayConfig: {
-      gateway: { mode: "local" },
-      agents: {
-        defaults: {
-          workspace: "/data/workspace",
-          model: {
-            primary: toOpenClawModelRef(OPENCLAW_MODEL),
-          },
-        },
-      },
-      plugins: {
-        entries: {
-          acpx: { enabled: false },
-          browser: { enabled: false },
-          "device-pair": { enabled: false },
-          "phone-control": { enabled: false },
-          "talk-voice": { enabled: false },
-        },
-      },
-      discovery: { mdns: { mode: "off" } },
-      skills: { load: { watch: true } },
-    },
+    gatewayConfig: buildGatewayConfig(),
     bootCommand: [
       "test -s /data/workspace/AGENTS.md",
       "test -s /data/workspace/TOOLS.md",
@@ -198,6 +263,72 @@ export function buildGtmOpenClawFlySmokeFixture(
       "test -w /data/cron",
       "exec openclaw gateway --allow-unconfigured",
     ].join(" && "),
+  };
+}
+
+function addRealWorkCronJob(
+  fixture: GtmOpenClawFlySmokeFixture,
+  atMs = Date.now() + 120_000
+): GtmOpenClawFlySmokeFixture {
+  const parsed = JSON.parse(fixture.workspaceFiles["jobs.json"] ?? "{}") as {
+    version: number;
+    jobs: Array<Record<string, unknown>>;
+  };
+  for (const job of parsed.jobs) {
+    if (job.id === "gtm_heartbeat") {
+      job.enabled = false;
+      job.description =
+        "Disabled during the first onboarding research gate so the cheap heartbeat cannot compete with long-running first research. Re-enable after onboarding research writes its completion state.";
+    }
+    if (job.id === "0001_gtm_boot_kickoff") {
+      job.enabled = false;
+      job.description =
+        "Disabled for this real-work smoke because the one-shot onboarding research job is the first-wake task under test.";
+    }
+  }
+  parsed.jobs.unshift({
+    id: "0002_onboarding_deep_research_realwork",
+    name: "0002 Onboarding deep research real work",
+    description:
+      "One-shot real-work gate. Executes the bounded onboarding research task through OpenClaw cron/gateway, not the direct CLI path.",
+    enabled: true,
+    createdAtMs: 0,
+    updatedAtMs: 0,
+    schedule: { kind: "at", at: new Date(atMs).toISOString() },
+    sessionTarget: "isolated",
+    wakeMode: "now",
+    deleteAfterRun: true,
+    payload: {
+      kind: "agentTurn",
+      lightContext: false,
+      thinking: "off",
+      timeoutSeconds: 900,
+      message: [
+        "RUN REAL WORK: Execute the bounded onboarding_deep_research job for the user in /data/workspace.",
+        "Read AGENTS.md, APP.md, GTM.md, USER.md, TOOLS.md, MEMORY.md, and relevant skill files.",
+        "Read /data/workspace/skills/scrapecreators-api/SKILL.md before platform research.",
+        "Use the ScrapeCreators API only if SCRAPECREATORS_API_KEY or SCRAPE_CREATORS_API_KEY is available; prefer SCRAPECREATORS_API_KEY and cap this smoke to 3 ScrapeCreators calls total.",
+        "Prefer ScrapeCreators /v1/reddit/search and /v1/google/search for platform evidence; do not scrape Google HTML with raw curl.",
+        "If you use sessions_spawn, call agents_list first and set agentId to hard_research_beta for hard research workers.",
+        "Use only tools actually available in this OpenClaw runtime.",
+        "If web/search/ScrapeCreators tools are not actually callable, do not fake source-backed research; return RUN_STATUS_BLOCKED with the missing tool surface and exact next engineering fix.",
+        "If tools are available, inspect the product URL and gather real evidence before strategy.",
+        "Required output sections: product_diagnosis, likely_buyers, pain_evidence, channel_recommendation, first_7_day_plan, tiktok_or_instagram_manual_handoff, calendar_briefs, next_jobs, budget_used.",
+        "For TikTok/Instagram, include manual-post constraints and account warm-up / Account Check status because this user has a new account.",
+        "Write the final research brief to /data/workspace/state/onboarding_deep_research.md if file writes are available.",
+        "End the final answer with exactly one marker: RUN_STATUS_DONE if real evidence was gathered, otherwise RUN_STATUS_BLOCKED.",
+      ].join(" "),
+    },
+    delivery: { mode: "none", bestEffort: true },
+    state: {},
+  });
+
+  return {
+    ...fixture,
+    workspaceFiles: {
+      ...fixture.workspaceFiles,
+      "jobs.json": `${JSON.stringify(parsed, null, 2)}\n`,
+    },
   };
 }
 
@@ -251,10 +382,17 @@ export function buildFlyMachineRunArgs(
     "GEMINI_API_KEY",
     "GOOGLE_GENERATIVE_AI_API_KEY",
     "OPENROUTER_API_KEY",
+    "SCRAPE_CREATORS_API_KEY",
     "SCRAPECREATORS_API_KEY",
   ]) {
     const value = process.env[key];
     if (value) args.push("--env", `${key}=${value}`);
+  }
+  if (!process.env.SCRAPE_CREATORS_API_KEY && process.env.SCRAPECREATORS_API_KEY) {
+    args.push("--env", `SCRAPE_CREATORS_API_KEY=${process.env.SCRAPECREATORS_API_KEY}`);
+  }
+  if (!process.env.SCRAPECREATORS_API_KEY && process.env.SCRAPE_CREATORS_API_KEY) {
+    args.push("--env", `SCRAPECREATORS_API_KEY=${process.env.SCRAPE_CREATORS_API_KEY}`);
   }
 
   for (const name of Object.keys(fixture.workspaceFiles).sort()) {
@@ -450,6 +588,87 @@ function runSsh(
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
+function waitForCronSessionMarker(
+  appName: string,
+  machineId: string,
+  sessionKey: string,
+  timeoutMs = 1_200_000
+): string {
+  const deadline = Date.now() + timeoutMs;
+  const command = `node -e ${quoteShell(`
+const fs = require("fs");
+const sessionsPath = "/data/agents/main/sessions/sessions.json";
+const statePath = "/data/workspace/state/onboarding_deep_research.md";
+if (fs.existsSync(statePath)) {
+  const stateText = fs.readFileSync(statePath, "utf8");
+  if (/RUN_STATUS_BLOCKED/i.test(stateText)) {
+    console.log("REALWORK_BLOCKED");
+    console.log(stateText.slice(-16000));
+    process.exit(0);
+  }
+  if (/RUN_STATUS_DONE/i.test(stateText)) {
+    console.log("REALWORK_DONE");
+    console.log(stateText.slice(-16000));
+    process.exit(0);
+  }
+}
+if (!fs.existsSync(sessionsPath)) {
+  console.log("REALWORK_PENDING: sessions file missing");
+  process.exit(0);
+}
+const sessions = JSON.parse(fs.readFileSync(sessionsPath, "utf8"));
+const entry = sessions[${JSON.stringify(sessionKey)}];
+if (!entry || !entry.sessionFile || !fs.existsSync(entry.sessionFile)) {
+  console.log("REALWORK_PENDING: session file missing");
+  process.exit(0);
+}
+const text = fs.readFileSync(entry.sessionFile, "utf8");
+const assistantText = text
+  .split(/\\r?\\n/)
+  .filter(Boolean)
+  .flatMap((line) => {
+    try {
+      const event = JSON.parse(line);
+      if (event?.message?.role !== "assistant") return [];
+      const content = event.message.content;
+      if (!Array.isArray(content)) return [];
+      return content
+        .filter((part) => part?.type === "text" && typeof part.text === "string")
+        .map((part) => part.text);
+    } catch {
+      return [];
+    }
+  })
+  .join("\\n");
+if (/RUN_STATUS_BLOCKED/i.test(assistantText)) {
+  console.log("REALWORK_BLOCKED");
+  console.log(assistantText.slice(-16000));
+  process.exit(0);
+}
+if (/RUN_STATUS_DONE/i.test(assistantText)) {
+  console.log("REALWORK_DONE");
+  console.log(assistantText.slice(-16000));
+  process.exit(0);
+}
+console.log("REALWORK_PENDING: marker missing");
+console.log(text.slice(-4000));
+process.exit(0);
+`)}`;
+
+  let lastOut = "";
+  while (Date.now() < deadline) {
+    lastOut = runSsh(appName, machineId, command, 120_000);
+    if (lastOut.includes("REALWORK_BLOCKED")) {
+      throw new Error(`Maya reported the real-work gate is blocked:\n${lastOut}`);
+    }
+    if (lastOut.includes("REALWORK_DONE")) {
+      return lastOut;
+    }
+    sleep(10_000);
+  }
+  throw new Error(`Timed out waiting for ${sessionKey} to emit RUN_STATUS_DONE. Last: ${lastOut}`);
+}
+
 function quoteShell(value: string): string {
   return `'${value.replaceAll("'", "'\"'\"'")}'`;
 }
@@ -479,7 +698,12 @@ async function runLiveSmoke(flags: Flags): Promise<void> {
   preflight(flags);
 
   const appName = flags.appName ?? `clawlaunch-gtm-smoke-${Date.now().toString(36)}`;
-  const fixture = buildGtmOpenClawFlySmokeFixture(appName);
+  let fixture = buildGtmOpenClawFlySmokeFixture(
+    appName,
+    process.env.FLY_REGION || "iad",
+    flags.realWork ? realUserWorkspaceInput() : defaultWorkspaceInput()
+  );
+  if (flags.realWork) fixture = addRealWorkCronJob(fixture);
   const org = process.env.FLY_ORG_SLUG || "personal";
   const dir = writeFixtureFiles(fixture);
   let appCreated = false;
@@ -532,6 +756,16 @@ async function runLiveSmoke(flags: Flags): Promise<void> {
       );
     }
 
+    if (flags.realWork) {
+      console.log("Waiting for real onboarding_deep_research cron agent work.");
+      const realWorkOut = waitForCronSessionMarker(
+        appName,
+        machine.id,
+        "agent:main:cron:0002_onboarding_deep_research_realwork"
+      );
+      console.log(realWorkOut.split(/\r?\n/).slice(-40).join("\n"));
+    }
+
     console.log("ClawLaunch GTM live Fly/OpenClaw smoke passed.");
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -553,6 +787,7 @@ function printHelp(): void {
       "  npm run smoke:gtm-openclaw",
       "  npm run smoke:gtm-openclaw -- --live --confirm",
       "  npm run smoke:gtm-openclaw -- --live --confirm --require-cron",
+      "  npm run smoke:gtm-openclaw -- --live --confirm --require-cron --real-work --keep-app",
       "",
       "Flags:",
       "  --mock            Hermetic command/workspace validation (default).",
@@ -562,6 +797,7 @@ function printHelp(): void {
       "  --keep-app        Do not destroy the Fly app after live mode.",
       "  --agent-message   Also send a direct OpenClaw agent turn. This requires",
       "                    model/channel routing that can complete in this runtime.",
+      "  --real-work       Deploy a real user-shaped Maya and run bounded onboarding research.",
       "  --help            Show this help.",
     ].join("\n")
   );

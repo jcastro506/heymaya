@@ -63,6 +63,56 @@ const MACHINE_GUEST: NonNullable<FlyMachineConfig["guest"]> = {
 const WAIT_TIMEOUT_MS = 90_000;
 const WAIT_INTERVAL_MS = 3_000;
 
+function buildGatewayConfig(): Record<string, unknown> {
+  const mainModel = toOpenClawModelRef(MODEL_ROUTING.mainMaya);
+  return {
+    gateway: { mode: "local" },
+    agents: {
+      defaults: {
+        workspace: "/data/workspace",
+        model: {
+          primary: mainModel,
+        },
+        subagents: {
+          maxConcurrent: 4,
+          maxChildrenPerAgent: 4,
+          runTimeoutSeconds: 900,
+          archiveAfterMinutes: 60,
+        },
+      },
+      list: [
+        {
+          id: "main",
+          default: true,
+          name: "Maya",
+          workspace: "/data/workspace",
+          model: mainModel,
+          subagents: { allowAgents: ["main", "hard_research_beta"] },
+          tools: { profile: "coding" },
+        },
+        {
+          id: "hard_research_beta",
+          name: "Hard Research Beta",
+          workspace: "/data/workspace",
+          model: toOpenClawModelRef(MODEL_ROUTING.hardResearchBeta),
+          tools: { profile: "coding" },
+        },
+      ],
+    },
+    plugins: {
+      entries: {
+        acpx: { enabled: false },
+        browser: { enabled: false },
+        "device-pair": { enabled: false },
+        "phone-control": { enabled: false },
+        "talk-voice": { enabled: false },
+      },
+    },
+    discovery: { mdns: { mode: "off" } },
+    skills: { load: { watch: true } },
+  };
+}
+
 export const getGtmAgentForDeploy = internalQuery({
   args: { agentId: v.id("gtmAgents") },
   handler: async (
@@ -329,28 +379,7 @@ export function buildGtmMachineConfig(input: {
         workspaceBundleUrl: input.workspaceBundleUrl,
         modelRouting: MODEL_ROUTING,
         directPingSmoke: true,
-        gatewayConfig: {
-          gateway: { mode: "local" },
-          agents: {
-            defaults: {
-              workspace: "/data/workspace",
-              model: {
-                primary: toOpenClawModelRef(MODEL_ROUTING.mainMaya),
-              },
-            },
-          },
-          plugins: {
-            entries: {
-              acpx: { enabled: false },
-              browser: { enabled: false },
-              "device-pair": { enabled: false },
-              "phone-control": { enabled: false },
-              "talk-voice": { enabled: false },
-            },
-          },
-          discovery: { mdns: { mode: "off" } },
-          skills: { load: { watch: true } },
-        },
+        gatewayConfig: buildGatewayConfig(),
       }),
     },
     guest: MACHINE_GUEST,
@@ -393,6 +422,7 @@ function collectDeploySecrets(): Record<string, string> {
     "CONVEX_URL",
     "CONVEX_SITE_URL",
     "COMPOSIO_API_KEY",
+    "SCRAPE_CREATORS_API_KEY",
     "SCRAPECREATORS_API_KEY",
     "GEMINI_API_KEY",
     "GOOGLE_GENERATIVE_AI_API_KEY",
@@ -401,6 +431,12 @@ function collectDeploySecrets(): Record<string, string> {
   ]) {
     const value = process.env[key];
     if (value) secrets[key] = value;
+  }
+  if (!secrets.SCRAPE_CREATORS_API_KEY && process.env.SCRAPECREATORS_API_KEY) {
+    secrets.SCRAPE_CREATORS_API_KEY = process.env.SCRAPECREATORS_API_KEY;
+  }
+  if (!secrets.SCRAPECREATORS_API_KEY && process.env.SCRAPE_CREATORS_API_KEY) {
+    secrets.SCRAPECREATORS_API_KEY = process.env.SCRAPE_CREATORS_API_KEY;
   }
   return secrets;
 }

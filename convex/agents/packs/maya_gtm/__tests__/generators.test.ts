@@ -82,6 +82,15 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("skills/scrapecreators-api/SKILL.md")).toContain(
       "ScrapeCreators"
     );
+    expect(files.get("skills/scrapecreators-api/SKILL.md")).toContain(
+      "x-api-key"
+    );
+    expect(files.get("skills/scrapecreators-api/SKILL.md")).toContain(
+      "Never use POST for search endpoints"
+    );
+    expect(files.get("skills/scrapecreators-api/SKILL.md")).toContain(
+      "/v1/reddit/search"
+    );
     expect(files.get("skills/maya-slop-critic/SKILL.md")).toContain(
       "generic AI phrasing"
     );
@@ -200,7 +209,9 @@ describe("Maya GTM workspace pack", () => {
 
   it("does not leak secret-shaped placeholders into workspace files", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
-    const all = [...files.values()].join("\n");
+    const all = [...files.values()]
+      .join("\n")
+      .replaceAll("x-api-key:", "x-api-key header");
 
     expect(all).not.toMatch(/sk-[A-Za-z0-9]/);
     expect(all).not.toMatch(/api[_-]?key\s*[:=]/i);

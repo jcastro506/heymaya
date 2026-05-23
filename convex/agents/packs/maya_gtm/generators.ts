@@ -498,6 +498,10 @@ Dreaming may propose cron changes, but any material change to posting/publishing
 }
 
 function renderSkill(slug: (typeof SKILLS)[number]): string {
+  if (slug === "scrapecreators-api") {
+    return renderScrapeCreatorsSkill();
+  }
+
   return `# ${slug}
 
 Purpose: ${skillPurpose(slug)}
@@ -510,6 +514,75 @@ Rules:
 - Do not spend external API budget unless the active job permits it.
 - Read or receive APP.md/GTM.md context before making recommendations.
 - Return failure plainly when evidence is insufficient; do not fill gaps with generic advice.
+`;
+}
+
+function renderScrapeCreatorsSkill(): string {
+  return `# scrapecreators-api
+
+Purpose: Use ScrapeCreators platform data through the approved agent-skill surface.
+
+Rules:
+
+- Produce structured notes that can become Convex evidence cards or workspace memory.
+- Cite sources by URL or stable platform id.
+- Prefer fewer, stronger findings over broad generic summaries.
+- Do not spend external API budget unless the active job permits it.
+- Read or receive APP.md/GTM.md context before making recommendations.
+- Return failure plainly when evidence is insufficient; do not fill gaps with generic advice.
+
+## API Contract
+
+- Base URL: https://api.scrapecreators.com
+- Auth: GET requests with the \`x-api-key\` header.
+- Canonical env var: \`SCRAPECREATORS_API_KEY\`.
+- Compatibility env var: \`SCRAPE_CREATORS_API_KEY\`.
+- Never use POST for search endpoints.
+- Never use \`Authorization: Bearer\` for ScrapeCreators.
+- Before a paid call, choose the smallest endpoint that answers the question.
+- Cap calls to the budget in the active job prompt.
+
+Example:
+
+\`\`\`bash
+KEY="$SCRAPECREATORS_API_KEY"
+if [ -z "$KEY" ]; then KEY="$SCRAPE_CREATORS_API_KEY"; fi
+curl -s "https://api.scrapecreators.com/v1/reddit/search?query=bug%20reporting&sort=relevance" \\
+  -H "x-api-key: $KEY"
+\`\`\`
+
+## Deep Research Endpoints
+
+- Google search: \`GET /v1/google/search?query=...\`
+- Reddit all search: \`GET /v1/reddit/search?query=...&sort=relevance\`
+- Reddit subreddit search: \`GET /v1/reddit/subreddit/search?subreddit=...&query=...\`
+- Reddit subreddit posts: \`GET /v1/reddit/subreddit?subreddit=...\`
+- TikTok keyword search: \`GET /v1/tiktok/search/keyword?query=...\`
+- TikTok top search: \`GET /v1/tiktok/search/top?query=...\`
+- TikTok hashtag search: \`GET /v1/tiktok/search/hashtag?hashtag=...\`
+- TikTok trending feed: \`GET /v1/tiktok/get-trending-feed?region=US\`
+- Instagram reels search: \`GET /v2/instagram/reels/search?query=...\`
+- YouTube search: \`GET /v1/youtube/search?query=...\`
+- YouTube shorts: \`GET /v1/youtube/channel/shorts?handle=...\`
+- Twitter/X profile: \`GET /v1/twitter/profile?handle=...\`
+- Twitter/X user tweets: \`GET /v1/twitter/user/tweets?handle=...\`
+- Twitter/X tweet details: \`GET /v1/twitter/tweet?url=...\`
+- LinkedIn company: \`GET /v1/linkedin/company?url=...\`
+- LinkedIn company posts: \`GET /v1/linkedin/company/posts?url=...\`
+- Credit balance: \`GET /v1/account/credit-balance\`
+
+## Evidence Standard
+
+For every endpoint call, save:
+
+- endpoint path
+- query params, excluding secret values
+- source URL or stable platform id
+- returned title/caption/body excerpt when available
+- engagement metrics when available
+- how it affects the channel decision
+
+If ScrapeCreators fails, report the exact endpoint, HTTP status, and likely engineering fix. Do not claim ScrapeCreators evidence was gathered if the API call failed.
 `;
 }
 

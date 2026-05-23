@@ -37,7 +37,31 @@ describe("gtm-openclaw-fly-smoke", () => {
         defaults: {
           workspace: "/data/workspace",
           model: { primary: "openrouter/google/gemini-3-flash-preview" },
+          subagents: {
+            maxConcurrent: 4,
+            maxChildrenPerAgent: 4,
+            runTimeoutSeconds: 900,
+            archiveAfterMinutes: 60,
+          },
         },
+        list: [
+          {
+            id: "main",
+            default: true,
+            name: "Maya",
+            workspace: "/data/workspace",
+            model: "openrouter/google/gemini-3-flash-preview",
+            subagents: { allowAgents: ["main", "hard_research_beta"] },
+            tools: { profile: "coding" },
+          },
+          {
+            id: "hard_research_beta",
+            name: "Hard Research Beta",
+            workspace: "/data/workspace",
+            model: "openrouter/anthropic/claude-sonnet-4.5",
+            tools: { profile: "coding" },
+          },
+        ],
       },
       plugins: {
         entries: {
