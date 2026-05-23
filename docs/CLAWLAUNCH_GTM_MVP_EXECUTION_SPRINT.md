@@ -1474,3 +1474,141 @@ For each, an L2 test asserts correct rejection/handling. Adding new ones is enco
 | S7 (orig) + gate | Hardening | Final skill lock. L4 + L5 + L6 |
 | S22 + gate | Hardening | Guardrails. L4 + L5 + L6 |
 | S12 (orig) + gate | Launch | Staging readiness. Full L5 E2E, three fixture products. L4 + L5 + L6 |
+
+---
+
+# Part IV — Maya's Launch Expertise + Multi-Project Architecture
+
+The original doc and Parts II/III give Maya the runtime + testing scaffolding to BE a launch agent. They don't make her a top-tier EXPERT at launching. And they assume one creator → one product, which is wrong for the ICP (vibe-coders ship multiple projects).
+
+Part IV adds two sprints addressing these gaps:
+
+- **S2.5** — Launch playbook research + codification. Maya gets a `PLAYBOOK.md` master + per-platform sub-playbooks grounded in real public launches (Marc Lou, Pieter Levels, Tony Dinh, indie hackers corpus). Inserted between original S2 and S3 so query-builder + workers ground against doctrine, not first-principles.
+- **S23** — Multi-project architecture + tier gating. One creator → many `gtmAgents` (each with own workspace, SOUL, MEMORY, cron, Telegram routing). Tier-gated project quotas. Inserted after S22 production guardrails, before S12 staging readiness.
+
+## Sprint 2.5 — Launch playbook research + codification
+
+Goal: Maya stops inventing launch strategy and grounds it in studied playbooks from real indie launches.
+
+Files:
+
+- New: `agents/playbook/PLAYBOOK.md` (master, ~1200-1800 lines).
+- New: `agents/playbook/reddit.md`, `agents/playbook/x.md`, `agents/playbook/tiktok.md` (~800-1200 lines each).
+- New: `agents/playbook/instagram.md`, `agents/playbook/linkedin.md` (~300-500 lines each).
+- `convex/agents/packs/maya_gtm/generators.ts` — ship all playbook files in the workspace tarball under `playbook/`.
+- `convex/agents/packs/maya_gtm/generators.ts` — update AGENTS.md to require reading PLAYBOOK.md and the relevant per-platform file BEFORE channel-judge or content-drafting subagent runs.
+- New: `convex/gtmMaya/__tests__/launchPlaybook.test.ts` — regression corpus.
+
+Steps:
+
+1. Spawn 4 research subagents in parallel against real public launches. Each writes one or more `.md` files. Citation-required — every claim either has a URL or is prefixed `(unverified, common wisdom):`.
+2. Synthesize into playbook files: master `PLAYBOOK.md` + 5 per-platform.
+3. Ship to workspace via `buildMayaGtmWorkspace`: paths `playbook/PLAYBOOK.md`, `playbook/reddit.md`, etc.
+4. Update AGENTS.md "Operating Contract" — add explicit rule: *"Before recommending a channel or drafting content, I read PLAYBOOK.md and the relevant playbook/<platform>.md. Decision rules from the playbook OVERRIDE general intuition."*
+5. Channel-judge subagent gets the playbook in its prompt: *"You have these decision rules in playbook/PLAYBOOK.md. Apply them. If your conclusion contradicts the playbook, surface the contradiction explicitly."*
+6. Build a 10-launch regression corpus: 10 known indie launches (with documented primary channel — e.g., Marc Lou → X primary, Nomad List → Reddit primary, etc.). For each, build a synthetic onboarding intake matching the founder's pre-launch context. Run Maya's channel-judge. Assert: the predicted primary is either correct OR is the documented secondary OR is in the doctrine-permitted alternates.
+7. Anti-slop checklist: lift the banned-phrase list from PLAYBOOK.md § Anti-Slop and feed it to the slop-critic skill so it has codified failure patterns to grep.
+
+Acceptance:
+
+- All 5 playbook files ship to workspace; total bundle size grows by ~30-50KB.
+- AGENTS.md updated; new sibling-file scan rule asserts the playbook section exists.
+- Regression corpus: ≥8/10 fixture launches get correct primary channel from channel-judge. Failures explainable (judge cited specific playbook rule it followed).
+- Anti-slop critic now flags the codified phrases when present in any draft.
+
+Live verification (L4):
+
+- Ship to RWTC. Trigger a fresh research job. SSH into Fly machine, `cat <workspace>/playbook/PLAYBOOK.md` — present, ≥1000 lines.
+- Ask Maya: "Walk me through the launch playbook for my product." Inspect reply. Confirms she references concrete decision rules from the playbook.
+- Run channel-judge on 3 fixture products from the corpus. Confirm picks agree with playbook doctrine.
+
+L6 operator follow-ups:
+
+- Read the synthesized PLAYBOOK.md cold. Confirms it reads as an actual launch operator wrote it, not an AI summary.
+- Spot-check 5 random source URLs from the citations. Confirms they resolve and back the claim made.
+- Read Maya's channel-judge output on one fixture. Confirm the reasoning chain references playbook rules by name.
+
+## Sprint 23 — Multi-project architecture + tier gating
+
+Goal: One creator can run ClawLaunch on multiple projects. Each project gets its own Maya with isolated workspace, SOUL.md, MEMORY.md, cron schedule, and Telegram routing. Project quotas tier-gated.
+
+Decision (per operator conversation 2026-05-23): one creator → many `gtmAgents`, each with its own Fly machine and workspace. NOT one Maya juggling N projects in shared context — that contaminates per-project SOUL/voice and breaks the "Maya actually understands MY product" moat.
+
+Files:
+
+- `convex/schema.ts` — `gtmAgents.label` (user-facing name), `gtmAgents.appId` becomes required (was optional). New table `gtmProjectQuotas` per-creator.
+- `convex/gtmMaya/projectQuota.ts` — `canCreateProject(creatorId)` consulted before every new project creation.
+- `convex/onboarding/gtm/projectCreate.ts` — new action; provisions a new gtmAgents row + appId + deploy machine for an additional project.
+- `app/clawlaunch/projects/page.tsx` — project list + "new project" CTA.
+- `app/clawlaunch/projects/[projectId]/page.tsx` — per-project mission board.
+- Per-project Telegram: either dedicated bot per project (operator burden) OR shared bot with project-tagged messages ("[ProjectX] Maya here…"). Decision pending operator.
+
+Steps:
+
+1. Schema migration: `gtmAgents.appId` → required. Backfill: every existing row has its appId set already via the deploy path, so backfill is a no-op but still verified.
+2. Project-quota table:
+   ```
+   gtmProjectQuotas:
+     accountId, tier ("free" | "starter" | "pro" | "studio"),
+     maxProjects, currentProjects, updatedAt
+   ```
+   With defaults: free=1, starter=1, pro=3, studio=10.
+3. `canCreateProject` query — server-side gate, fail-closed.
+4. `projectCreate` action — runs the full intake → deploy pipeline for a SECOND project. Reuses the creator's existing Telegram chat (project name templated in messages) unless the operator opts into a per-project bot in S23.5.
+5. Per-project workspace separation: each gtmAgents gets its own Fly app (`maya-gtm-<agentId>`), volume (`gtm_workspace_<agentId>`), workspace bundle. NO sharing — separation is the moat.
+6. Cross-project insights surface: a `/clawlaunch/insights` view that aggregates results loop data across all of a creator's projects. Studio-tier only.
+7. Tier billing wiring: Stripe products for ClawLaunch (starter/pro/studio prices). Pre-Sprint 6 of original doc's billing plan but specifically for ClawLaunch.
+
+Acceptance:
+
+- A creator can create 2nd project on Pro tier. 4th attempt rejected (cap=3).
+- Each project has its own Fly machine, own workspace, own MEMORY.md.
+- Cross-tenant isolation: project A's evidence cards cannot appear in project B's research job.
+- Mission board correctly scopes by `projectId` (no leaking).
+- Tier downgrade does NOT delete extra projects; it disables their cron + flags them "over quota — upgrade to reactivate."
+
+Live verification (L4):
+
+- Provision a fresh Pro-tier creator on staging. Create 3 projects sequentially. Confirm 4th throws 402.
+- Each project gets its own Fly machine — verify via Fly CLI.
+- Run a research job on project 2; assert evidence cards have `projectId = project2._id`. Query project 1's mission board; confirm zero leakage.
+- Downgrade creator to Starter. Confirm projects 2 + 3 cron-disabled, project 1 still active.
+- Operator's Telegram receives messages tagged `[Project1]`, `[Project2]`, `[Project3]` so they can tell which Maya is talking.
+
+L6 operator follow-ups:
+
+- Visually inspect 3 separate Fly machines, confirm distinct workspace contents per project.
+- Read 24h of Telegram traffic across 3 projects; confirm tags are clear, no message ambiguity.
+- Downgrade flow user-test: confirm project-disabled state is honest (not silently broken).
+
+## Updated implementation order (with S2.5 + S23 inserted)
+
+Inserted at the correct points relative to the order from Part II:
+
+1. D1-D6 (decisions locked).
+2. S13 — image bump + cost cap (foundation).
+3. S15 — Telegram pairing.
+4. S14 — native cron delivery.
+5. S16 — Convex ↔ Maya hook bridge.
+6. **S2.5 — launch playbook research + codification (NEW — before research stack, so Maya grounds against doctrine from day one).**
+7. S2 (orig) — ScrapeCreators wrappers.
+8. S17 — real skill installation + ClawHub pinning.
+9. S3 (orig) — query builder (now playbook-grounded).
+10. S4 (orig) — platform workers (now playbook-grounded).
+11. S20 — subagent lane.
+12. S1 (orig) — replace skeleton.
+13. S18 — heartbeat tasks block.
+14. S19 — workspace mutation pipeline.
+15. S5-S6 (orig) — evidence gates + channel judge (playbook-grounded judge).
+16. S9 (orig) — calendar OAuth + write.
+17. S8 (orig) — mission board polish.
+18. S10 (orig) — Telegram handoff.
+19. S11 (orig) — results loop.
+20. S21 — standing orders + hooks + Policy.
+21. S7 (orig) — final skill lock review.
+22. S22 — production guardrails.
+23. **S23 — multi-project + tier gating (NEW — after the single-project product is real, before staging gate).**
+24. S12 (orig) — staging readiness gate (now tests across 3 projects + 3 product types).
+
+Net: 26 sprints, 4-block structure (foundation / brain / continuity / hardening), explicit ordering with playbook insertion at the right point to make every downstream sprint smarter.
+
