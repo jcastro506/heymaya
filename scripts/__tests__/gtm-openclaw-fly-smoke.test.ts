@@ -37,6 +37,7 @@ describe("gtm-openclaw-fly-smoke", () => {
         defaults: {
           workspace: "/data/workspace",
           model: { primary: "openrouter/google/gemini-3-flash-preview" },
+          memorySearch: { enabled: false },
           subagents: {
             maxConcurrent: 4,
             maxChildrenPerAgent: 4,

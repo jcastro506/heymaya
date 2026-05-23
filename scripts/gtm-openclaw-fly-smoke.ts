@@ -66,6 +66,7 @@ export interface GtmOpenClawFlySmokeMockResult {
 
 function buildGatewayConfig(): Record<string, unknown> {
   const mainModel = toOpenClawModelRef(OPENCLAW_MODEL);
+  const memorySearch = buildMemorySearchConfig();
   return {
     gateway: { mode: "local" },
     agents: {
@@ -74,6 +75,7 @@ function buildGatewayConfig(): Record<string, unknown> {
         model: {
           primary: mainModel,
         },
+        memorySearch,
         subagents: {
           maxConcurrent: 4,
           maxChildrenPerAgent: 4,
@@ -111,6 +113,48 @@ function buildGatewayConfig(): Record<string, unknown> {
     },
     discovery: { mdns: { mode: "off" } },
     skills: { load: { watch: true } },
+  };
+}
+
+function buildMemorySearchConfig(): Record<string, unknown> {
+  const geminiKey =
+    process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (!geminiKey) {
+    return { enabled: false };
+  }
+
+  return {
+    enabled: true,
+    provider: "gemini",
+    model: "gemini-embedding-001",
+    outputDimensionality: 768,
+    fallback: "none",
+    store: {
+      path: "/data/openclaw-memory/{agentId}.sqlite",
+      vector: { enabled: true },
+      fts: { tokenizer: "unicode61" },
+    },
+    query: {
+      maxResults: 8,
+      minScore: 0.25,
+      hybrid: {
+        enabled: true,
+        vectorWeight: 0.65,
+        textWeight: 0.35,
+        temporalDecay: { enabled: true, halfLifeDays: 45 },
+      },
+    },
+    sync: {
+      onSessionStart: true,
+      onSearch: true,
+      watch: true,
+      intervalMinutes: 30,
+      sessions: {
+        deltaBytes: 100000,
+        deltaMessages: 50,
+        postCompactionForce: true,
+      },
+    },
   };
 }
 
@@ -393,6 +437,12 @@ export function buildFlyMachineRunArgs(
   }
   if (!process.env.SCRAPECREATORS_API_KEY && process.env.SCRAPE_CREATORS_API_KEY) {
     args.push("--env", `SCRAPECREATORS_API_KEY=${process.env.SCRAPE_CREATORS_API_KEY}`);
+  }
+  if (!process.env.GEMINI_API_KEY && process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    args.push("--env", `GEMINI_API_KEY=${process.env.GOOGLE_GENERATIVE_AI_API_KEY}`);
+  }
+  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY && process.env.GEMINI_API_KEY) {
+    args.push("--env", `GOOGLE_GENERATIVE_AI_API_KEY=${process.env.GEMINI_API_KEY}`);
   }
 
   for (const name of Object.keys(fixture.workspaceFiles).sort()) {
