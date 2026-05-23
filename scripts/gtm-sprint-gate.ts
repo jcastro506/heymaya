@@ -93,6 +93,15 @@ function delegateToSprint15Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint14Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S14",
+    "Native cron delivery (kill mode:none)",
+    "scripts/gtm-sprint-14-smoke.ts",
+    /Sprint 14 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -134,8 +143,10 @@ async function main(): Promise<void> {
   // ─── Sprint 15 ─────────────────────────────────────────────────────────
   sections.push(delegateToSprint15Smoke());
 
+  // ─── Sprint 14 ─────────────────────────────────────────────────────────
+  sections.push(delegateToSprint14Smoke());
+
   // ─── Sprints not yet shipped — placeholders ────────────────────────────
-  sections.push(placeholderSection("S14", "Native cron delivery (kill mode:none)"));
   sections.push(placeholderSection("S16", "Convex ↔ Maya hook bridge"));
   sections.push(
     placeholderSection("S17", "Real skill installation + ClawHub pinning")

@@ -69,6 +69,24 @@ export function resolveOpenClawImage(
   );
 }
 
+/**
+ * Sprint 14 — resolve the Convex .convex.site URL OpenClaw posts to when a
+ * cron's announce delivery fails. Pulls from MAYA_GTM_FAILURE_DESTINATION_URL
+ * if explicitly set; otherwise derives from CONVEX_SITE_URL +
+ * /lc_gtm/delivery_failure. Returns undefined if neither is set (in which
+ * case OpenClaw silently drops failures, which is bad but not blocking).
+ */
+export function resolveDeliveryFailureUrl(
+  env: Partial<Record<string, string | undefined>> = process.env
+): string | undefined {
+  if (env.MAYA_GTM_FAILURE_DESTINATION_URL) {
+    return env.MAYA_GTM_FAILURE_DESTINATION_URL;
+  }
+  const siteUrl = env.CONVEX_SITE_URL ?? env.NEXT_PUBLIC_CONVEX_SITE_URL;
+  if (!siteUrl) return undefined;
+  return `${siteUrl.replace(/\/$/, "")}/lc_gtm/delivery_failure`;
+}
+
 const MODEL_ROUTING = {
   mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-3-flash-preview",
   hardResearchBeta:
@@ -279,6 +297,14 @@ export const buildAndUploadGtmWorkspace = internalAction({
         ?.channel,
       secondaryChannel: row.channelScores.find((s) => s.decision === "secondary")
         ?.channel,
+      // Sprint 14 — native cron delivery target. When the user has paired
+      // Telegram (Sprint 15), every cron's delivery envelope becomes
+      // `mode: "announce", channel: "telegram", to: <chatId>`. Pre-pairing
+      // falls back to mode:none so the workspace bundle is still
+      // generatable mid-onboarding.
+      telegramChatId: row.agent.telegramChatId,
+      channelPreference: row.agent.channelPreference,
+      deliveryFailureDestination: resolveDeliveryFailureUrl(),
     });
     const tarBytes = buildPosixTar(files);
     const tarBuffer = tarBytes.buffer.slice(

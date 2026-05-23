@@ -4341,6 +4341,27 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_agent", ["agentId"]),
 
+  // Sprint 14 — OpenClaw POSTs here when a cron job's announce delivery
+  // fails (channel unavailable, recipient blocked the bot, etc.). Mission
+  // board surfaces these so failures don't vanish into the gateway log.
+  gtmDeliveryFailures: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    cronJobId: v.string(),
+    channel: v.string(),
+    recipient: v.string(),
+    errorClass: v.string(),
+    errorMessage: v.optional(v.string()),
+    attemptCount: v.number(),
+    firstSeenAt: v.number(),
+    lastSeenAt: v.number(),
+    retryAfterMs: v.optional(v.number()),
+    resolvedAt: v.optional(v.number()),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_cron_job", ["agentId", "cronJobId"]),
+
   gtmApps: defineTable({
     accountId: v.id("creators"),
     name: v.optional(v.string()),

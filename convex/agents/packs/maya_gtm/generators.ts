@@ -35,6 +35,23 @@ export interface MayaGtmWorkspaceInput {
   };
   primaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "product_hunt";
   secondaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "product_hunt";
+  /**
+   * Sprint 14 — native cron delivery target. When set + channelPreference is
+   * "telegram", every cron job's delivery envelope becomes
+   *   { mode: "announce", channel: "telegram", to: telegramChatId, ... }
+   * Unset = pre-pairing state; crons fall back to mode:none so messages
+   * aren't fired into the void.
+   */
+  telegramChatId?: string;
+  channelPreference?: "telegram" | "whatsapp" | "imessage" | "web";
+  /**
+   * Sprint 14 — fully-qualified Convex .convex.site URL OpenClaw POSTs to
+   * when a cron's announce delivery fails. Lets us surface delivery
+   * failures in the mission board instead of having them vanish into the
+   * gateway log. Typically:
+   *   https://<convex-deployment>.convex.site/lc_gtm/delivery_failure
+   */
+  deliveryFailureDestination?: string;
 }
 
 export interface MayaGtmWorkspaceBundle {
@@ -339,10 +356,49 @@ If a heartbeat finds real work, it queues a bounded job and exits. It does not i
 `;
 }
 
+/**
+ * Sprint 14 (Part II of CLAWLAUNCH_GTM_MVP_EXECUTION_SPRINT.md). Build the
+ * native OpenClaw delivery envelope for a cron job. We use `mode: "announce"`
+ * — OpenClaw delivers the agent's final text via the channel adapter if the
+ * agent didn't proactively call the `message` tool — and `channel: "telegram"`
+ * with the user's claimed chat id from S15 pairing.
+ *
+ * When the user has not paired Telegram yet (pre-deploy, mid-onboarding, or
+ * channelPreference != "telegram"), we fall back to `mode: "none"`. This
+ * keeps the workspace bundle generatable in tests + before pairing without
+ * silently writing the bot's "no recipient" error to OpenClaw logs.
+ *
+ * Every announce mode also carries `failureDestination` (when configured) so
+ * Convex gets a callback when delivery fails. `failureDestination` is the
+ * fully-qualified Convex .convex.site URL set on the deploying machine
+ * via env, e.g. `https://precise-canary-781.convex.site/lc_gtm/delivery_failure`.
+ */
+function buildCronDelivery(
+  input: MayaGtmWorkspaceInput
+): Record<string, unknown> {
+  if (input.telegramChatId && input.channelPreference === "telegram") {
+    const delivery: Record<string, unknown> = {
+      mode: "announce",
+      channel: "telegram",
+      to: input.telegramChatId,
+      bestEffort: true,
+    };
+    if (input.deliveryFailureDestination) {
+      delivery.failureDestination = input.deliveryFailureDestination;
+    }
+    return delivery;
+  }
+  // Pre-pairing fallback: keep mode:none until the user pairs their channel,
+  // so the workspace bundle is still generatable. Sprint 14 regression test
+  // asserts this branch is ONLY taken when telegramChatId is missing.
+  return { mode: "none", bestEffort: true };
+}
+
 function renderJobs(input: MayaGtmWorkspaceInput): string {
   const bootKickoffAt = new Date(
     (input.bootKickoffAtMs ?? Date.now()) + 900_000
   ).toISOString();
+  const delivery = buildCronDelivery(input);
   const jobs = {
     version: 1,
     jobs: [
@@ -362,9 +418,9 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
           kind: "agentTurn",
           lightContext: true,
           message:
-            "FIRST WAKE: Read BOOT.md, APP.md, GTM.md, USER.md, TOOLS.md, and HEARTBEAT.md. Do not call ScrapeCreators, Gemini, broad web search, Composio, or any paid external API from this first wake. Produce a concise boot status for the gateway/session smoke: confirm the product, stage, week goal, likely first research lane, and the next bounded job Maya would queue. The next bounded job should be onboarding deep research for this product, with explicit budget fields: model, timeout_minutes, maxScrapeCreatorsCalls, maxWebSearches, coverageChecklist, and failureBehavior. If WhatsApp or another message channel is unavailable, write the status in the session only.",
+            "FIRST WAKE: Read BOOT.md, APP.md, GTM.md, USER.md, TOOLS.md, and HEARTBEAT.md. Do not call ScrapeCreators, Gemini, broad web search, Composio, or any paid external API from this first wake. Produce a concise boot status for the gateway/session smoke: confirm the product, stage, week goal, likely first research lane, and the next bounded job Maya would queue. The next bounded job should be onboarding deep research for this product, with explicit budget fields: model, timeout_minutes, maxScrapeCreatorsCalls, maxWebSearches, coverageChecklist, and failureBehavior. Send a concise hello to the user on the configured channel so they know you've come online.",
         },
-        delivery: { mode: "none", bestEffort: true },
+        delivery,
         state: {},
       },
       {
@@ -384,9 +440,9 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
           thinking: "off",
           timeoutSeconds: 60,
           message:
-            "AUTONOMOUS HEARTBEAT: Read HEARTBEAT.md, MEMORY.md, APP.md, and GTM.md. Check only local workspace/Convex/cache state for pending approvals, overdue calendar/result jobs, unread user messages, and open loops. Do not call ScrapeCreators, Gemini deep research, broad web search, X search, Composio publishing, or any paid external API. If real work is needed, write a bounded queued-job note and exit.",
+            "AUTONOMOUS HEARTBEAT: Read HEARTBEAT.md, MEMORY.md, APP.md, and GTM.md. Check only local workspace/Convex/cache state for pending approvals, overdue calendar/result jobs, unread user messages, and open loops. Do not call ScrapeCreators, Gemini deep research, broad web search, X search, Composio publishing, or any paid external API. If real work is needed, write a bounded queued-job note and exit. If nothing is due, reply with HEARTBEAT_OK so the runner drops the message silently.",
         },
-        delivery: { mode: "none", bestEffort: true },
+        delivery,
         state: {},
       },
       {
@@ -406,9 +462,9 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
           thinking: "off",
           timeoutSeconds: 60,
           message:
-            "CALENDAR CHECK: Read GTM.md, USER.md, and MEMORY.md. Look for due manual-posting reminders, approvals, and calendar briefs already present in workspace/Convex. Do not run new platform research. If a TikTok warm-up task is due, remind the user to complete normal account activity and Account Check before posting cadence.",
+            "CALENDAR CHECK: Read GTM.md, USER.md, and MEMORY.md. Look for due manual-posting reminders, approvals, and calendar briefs already present in workspace/Convex. Do not run new platform research. If a TikTok warm-up task is due, remind the user to complete normal account activity and Account Check before posting cadence. If nothing is due, reply HEARTBEAT_OK.",
         },
-        delivery: { mode: "none", bestEffort: true },
+        delivery,
         state: {},
       },
       {
@@ -428,9 +484,9 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
           thinking: "off",
           timeoutSeconds: 60,
           message:
-            "RESULT REFRESH: Read MEMORY.md and GTM.md. Review only already-recorded publish/result state. Do not call ScrapeCreators unless a separate explicit research/review job with budget exists. If results are missing after a scheduled post, ask for the link or metrics in one concise message.",
+            "RESULT REFRESH: Read MEMORY.md and GTM.md. Review only already-recorded publish/result state. Do not call ScrapeCreators unless a separate explicit research/review job with budget exists. If results are missing after a scheduled post, ask for the link or metrics in one concise message. If everything is current, reply HEARTBEAT_OK.",
         },
-        delivery: { mode: "none", bestEffort: true },
+        delivery,
         state: {},
       },
       {
@@ -452,7 +508,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
           message:
             "WEEKLY REVIEW: Read APP.md, GTM.md, MEMORY.md, and DREAMING.md. Summarize what produced replies, signups, demos, feedback, or user edits. If new platform research is needed, create an explicit bounded research job with model, timeout, maxScrapeCreatorsCalls, maxWebSearches, coverageChecklist, and failureBehavior. Do not spend ScrapeCreators directly from this weekly cron tick.",
         },
-        delivery: { mode: "none", bestEffort: true },
+        delivery,
         state: {},
       },
     ],

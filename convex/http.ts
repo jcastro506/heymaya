@@ -55,6 +55,7 @@ import {
   calendarUpdateEventHttp,
 } from "./lcMaya/calendarHttp";
 import { telegramWebhookHttp } from "./gtmMaya/telegramWebhook";
+import { deliveryFailureHttp } from "./gtmMaya/deliveryFailures";
 
 const http = httpRouter();
 
@@ -67,6 +68,16 @@ http.route({
   path: "/telegram/webhook",
   method: "POST",
   handler: telegramWebhookHttp,
+});
+
+// Sprint 14 — OpenClaw POSTs here when a cron job's announce delivery
+// fails (channel unavailable, recipient blocked the bot, etc.). Mission
+// board surfaces these via gtmMaya.deliveryFailures.getMyDeliveryFailures.
+// Authenticated by per-agent hookToken (Bearer).
+http.route({
+  path: "/lc_gtm/delivery_failure",
+  method: "POST",
+  handler: deliveryFailureHttp,
 });
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs
