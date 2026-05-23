@@ -192,6 +192,14 @@ function run(): CoherenceIssue[] {
     "playbook/tiktok.md",
     "playbook/instagram.md",
     "playbook/linkedin.md",
+    // Sprint 17 — pinned ClawHub skill bodies (prompt-reference doctrine).
+    "clawhub-skills/reddit-readonly/SKILL.md",
+    "clawhub-skills/search-x/SKILL.md",
+    "clawhub-skills/tiktok/SKILL.md",
+    "clawhub-skills/jk-archivist-tiktok-packager/SKILL.md",
+    "clawhub-skills/instagram/SKILL.md",
+    "clawhub-skills/market-research/SKILL.md",
+    "clawhub-skills/in-depth-research/SKILL.md",
   ];
   for (const f of corpusFiles) {
     if (!keys.has(f)) {

@@ -120,6 +120,15 @@ function delegateToSprint16Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint17Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S17",
+    "Real skill installation + ClawHub pinning",
+    "scripts/gtm-sprint-17-smoke.ts",
+    /Sprint 17 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -170,10 +179,10 @@ async function main(): Promise<void> {
   // ─── Sprint 16 — hook bridge ───────────────────────────────────────────
   sections.push(delegateToSprint16Smoke());
 
+  // ─── Sprint 17 — real skill installation + ClawHub pinning ────────────
+  sections.push(delegateToSprint17Smoke());
+
   // ─── Sprints not yet shipped — placeholders ────────────────────────────
-  sections.push(
-    placeholderSection("S17", "Real skill installation + ClawHub pinning")
-  );
   sections.push(
     placeholderSection("S18", "Heartbeat tasks block (native primitive)")
   );

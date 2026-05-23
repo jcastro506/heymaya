@@ -72,6 +72,7 @@ export interface MayaGtmWorkspaceInput {
 }
 
 import { BUNDLED_PLAYBOOK_ENTRIES } from "./bundledPlaybook";
+import { PINNED_CLAWHUB_SKILLS } from "./pinnedClawhubSkills";
 
 export interface MayaGtmWorkspaceBundle {
   files: Map<string, string>;
@@ -125,6 +126,15 @@ export function buildMayaGtmWorkspace(
   // scripts/sync-bundled-playbook.ts from the canonical playbook/*.md files.
   for (const entry of BUNDLED_PLAYBOOK_ENTRIES) {
     files.set(entry.workspacePath, entry.body);
+  }
+
+  // Sprint 17 — ship the canonical SKILL.md bodies for the 7 ClawHub
+  // skills pinned in pinnedClawhubSkills.ts. These are prompt-reference
+  // docs; the multi-file companions (Python scripts, etc.) are installed
+  // at runtime via `openclaw skills install <slug>@<version>` from the
+  // first-boot hook (see buildSkillInstallCommands).
+  for (const skill of PINNED_CLAWHUB_SKILLS) {
+    files.set(`clawhub-skills/${skill.slug}/SKILL.md`, skill.body);
   }
 
   return { files };
