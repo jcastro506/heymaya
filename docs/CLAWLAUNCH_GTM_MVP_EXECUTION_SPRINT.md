@@ -784,3 +784,693 @@ Build in this order:
 13. Run staging E2E.
 
 This order gets the product honest first, then useful, then deployable.
+
+---
+
+# Part II — Runtime: From Skeleton to Continuous Executor
+
+Sprints 0-12 above describe building Maya's brain (research, evidence, channel judge, calendar, mission board). They presume the runtime layer (cron firing user-visible messages, agent calling back into Convex, skills doing real work, workspace files updating from completed research) already works. It does not. Every cron currently ticks in silence with mocked data and no callback.
+
+Part II addresses the runtime. It is additive: Sprints 13-22 plus six platform decisions (D1-D6) that lock the channel + image + bridge architecture before any further sprint work begins.
+
+## Platform decisions (lock before sprint work)
+
+These are based on verified-against-docs OpenClaw behavior, captured 2026-05-23. Disagreement must be raised before starting any sprint they affect.
+
+### D1 — Drop WhatsApp from MVP. Lead with Telegram. Defer WhatsApp to operator-mediated beta.
+
+Verified at https://docs.openclaw.ai/channels/whatsapp: WhatsApp pairing is QR-only, no token / API-key path, no programmatic provisioning. Pairing requires SSH access to the Fly machine and physically scanning a QR on the user's phone. Acceptable for one operator-handheld beta user; impossible for self-serve sign-up.
+
+Telegram (https://docs.openclaw.ai/channels/telegram) is token-based, programmatically provisionable, multi-tenant clean. Set `channels.telegram.botToken` or `TELEGRAM_BOT_TOKEN`, then `dmPolicy: "pairing"` and the user types `/start` to a deep link.
+
+Action: Update landing copy and `app/onboarding/gtm/page.tsx` channel default to Telegram. Keep WhatsApp as a Sprint-17+ adjacent path, operator-mediated only.
+
+### D2 — Drop iMessage entirely for ClawLaunch.
+
+Verified: requires macOS host with Full Disk Access and Automation entitlements. Fly machines are Linux. iMessage was a creator-product (HeyMaya) artifact. No path to native iMessage in ClawLaunch production. Strike from all docs and copy.
+
+### D3 — Bump OpenClaw image from v2026.4.23 to v2026.5.20+.
+
+About one month behind upstream. The version diff includes:
+
+- Heartbeat pollution fix (silent no-op messages were leaking into embedded context).
+- Cron legacy-store handling fixes.
+- Subagent allowlist tightening.
+- New bundled Policy plugin for channel conformance and workspace repair.
+- xAI device-code OAuth (headless-friendly).
+- Breaking: removed legacy `cat SKILL.md && printf...` skill-exec path. Our bundled-skill loader must use the `read` tool.
+
+### D4 — Convex ↔ Maya bridge is OpenClaw native webhook hooks.
+
+The original doc implies a custom HTTP surface. OpenClaw already exposes the canonical bridge at `cron.hooks.{enabled,token,path}`:
+
+| Endpoint | Use |
+|---|---|
+| `POST /hooks/agent` | Run an isolated agent turn. Body: `{ message, agentId?, deliver?, channel?, to?, model?, thinking?, timeoutSeconds? }`. Returns when queued. |
+| `POST /hooks/wake` | Wake heartbeat with a system event. Body: `{ text, mode: "now"\|"next-heartbeat" }`. Lighter than a full agent turn. |
+| `POST /hooks/<name>` | Custom hook with `cron.hooks.mappings.<name>` payload transform. |
+
+Auth: `Authorization: Bearer <token>` (per-machine secret in `hooks.token`).
+
+This is also the inverse direction we need: Convex tells Maya "research done, here are the cards" by `POST /hooks/agent` with a prompt that points her at the new evidence. No bespoke wire format.
+
+### D5 — Skills are installed at deploy time, not bundled as 7-line stubs.
+
+Verified at https://docs.openclaw.ai/tools/skills: `openclaw skills install <slug>` pulls from ClawHub registry (clawhub.ai) into `<workspace>/skills/<slug>/`. Multi-file skills (helper scripts, data files, sub-tools) are first-class. Bundling only `SKILL.md` silently drops everything else.
+
+Our current `BUNDLED_SKILLS` pattern (single-file inline) is fine for the 18 GTM stubs while they are locally authored, but as soon as we pin real ClawHub skills (Sprint 7 of the original doc), we MUST install via CLI or ship the full tree. Sprint 17 picks this up.
+
+### D6 — Workspace memory location must be on the same persistent Fly volume as `/data`.
+
+Currently `convex/onboarding/gtm/deployMayaGtm.ts:132` sets `memorySearch.store.path: "/data/openclaw-memory/{agentId}.sqlite"` — the vector index, not canonical memory. Canonical memory is markdown files in `<workspace>/MEMORY.md`, `<workspace>/memory/YYYY-MM-DD.md`, `<workspace>/DREAMS.md`. Confirm the workspace dir is on a mounted Fly volume; otherwise memory dies on machine restart.
+
+---
+
+## Sprint 13 — OpenClaw image bump + persistent workspace volume
+
+Goal: Move to v2026.5.20+ without breaking bundled skills, and confirm workspace persistence. Adds cost-cap kill switch as a foundation safety mechanism.
+
+Files:
+
+- `convex/onboarding/gtm/deployMayaGtm.ts:44` (image constant), `:130-158` (memorySearch config).
+- Fly volume config in the machine config block.
+- New: `convex/gtmMaya/costCap.ts` (kill-switch helper).
+- New: `scripts/gtm-image-smoke.ts` to verify CLI surface unchanged.
+
+Steps:
+
+1. Pull `registry.fly.io/heymaya-openclaw:v2026.5.20`. If we do not have a private build, lift from upstream `ghcr.io/openclaw/openclaw:2026.5.20`.
+2. Run `openclaw doctor` and `openclaw security audit --deep` in the new image on a throwaway Fly app. Fix any findings before pinning.
+3. Audit our bundled skill loader for the removed `cat SKILL.md && printf...` exec path. Replace any shell-cat with native `read` if present.
+4. Add a Fly volume (`fly volumes create gtm_workspace --size 1`) and mount at `/data`. Confirm `OPENCLAW_WORKSPACE_DIR` resolves under `/data` (set explicitly if not).
+5. Verify `MEMORY.md`, `memory/`, `DREAMS.md` survive a `fly machine restart`.
+6. Implement cost-cap kill switch in Convex. Required per-paid-action pre-flight: query `gtmCostLedger` sums over last hour / day / sprint, abort with 402 if cap exceeded. Caps: $3 per research job, $5/day per RWTC, $1/single smoke runaway. Override env var for emergencies.
+
+Acceptance:
+
+- New image boots, `openclaw doctor` green.
+- A test write to `<workspace>/MEMORY.md` persists across machine restart.
+- Cost kill switch rejects spend that would cross $1 ceiling on a fake account.
+- All existing GTM smoke tests pass on the new image.
+
+---
+
+## Sprint 14 — Native cron delivery (kill `mode: "none"`)
+
+Goal: Every cron job emits something user-visible by default via OpenClaw's native channel delivery, not by Maya having to remember to call the `message` tool.
+
+Files:
+
+- `convex/agents/packs/maya_gtm/generators.ts:342-457` (renderJobs).
+- `convex/agents/packs/maya_gtm/__tests__/generators.test.ts` (add delivery assertions).
+
+Steps:
+
+1. For each of the 5 GTM crons, replace `delivery: { mode: "none", bestEffort: true }` with `delivery: { mode: "announce", channel: "telegram", to: "<%= telegramChatId %>", bestEffort: true }`. `telegramChatId` is templated at workspace-build time from the user's pairing record.
+2. Boot kickoff (`0001_gtm_boot_kickoff`): keep `mode: "announce"`. Message: "Maya is online and reading your product." Proves the channel works on Day 0.
+3. Heartbeat (`gtm_heartbeat`): 30min (OpenClaw default). Use `HEARTBEAT_OK` token convention — replies ≤ 300 chars are silently dropped. `lightContext: true` + `isolatedSession: true` for cost.
+4. Calendar check, result refresh, weekly review: same `announce` pattern.
+5. Add `delivery.failureDestination` (a Convex HTTP endpoint we own) so undeliverable messages do not vanish silently.
+
+Acceptance:
+
+- Real Telegram delivery on every cron tick, or silent `HEARTBEAT_OK` for heartbeat when nothing new.
+- Workspace bundle generator never emits `delivery.mode: "none"` for any GTM cron (regression test).
+- A delivery failure writes to `failureDestination` and is visible in mission board.
+
+---
+
+## Sprint 15 — Channel provisioning at signup
+
+Goal: User leaves onboarding with a working Telegram bridge. No SSH-into-Fly required.
+
+Files:
+
+- New: `convex/integrations/telegram/` (botToken, sendStart, polling helpers).
+- New: `app/api/telegram/webhook/route.ts` if we use webhook transport.
+- `convex/onboarding/gtm/deployMayaGtm.ts` (add `TELEGRAM_BOT_TOKEN` and pairing flow to secrets).
+- `convex/agents/packs/maya_gtm/generators.ts` (USER.md gets user's telegram chat ID and bot username).
+- `app/onboarding/gtm/page.tsx` (add "Open Maya in Telegram" deep link step).
+
+Steps:
+
+1. Create one Telegram bot per environment: `@ClawLaunchBot`, `@ClawLaunchStagingBot`. Tokens in Vercel env per branch.
+2. Per-user pairing: generate one-time `pair_<token>` link → `https://t.me/ClawLaunchBot?start=pair_<token>`. User taps, Telegram delivers `/start pair_<token>` to bot, webhook resolves token → user → records `telegramChatId` on the user's `gtmAgents` row.
+3. Workspace bundle reads `telegramChatId` at deploy time and templates it into USER.md and all five cron `delivery.to` fields.
+4. Set `channels.telegram.dmPolicy: "pairing"`, `allowFrom: [<chatId>]` on the agent's gateway config so randoms cannot talk to Maya.
+5. Future multi-bot: second bot for the operator-mediated WhatsApp path (Sprint 17). One token per environment is fine for v0.
+
+Acceptance:
+
+- A fresh signup gets a Telegram deep link in onboarding.
+- Tapping it pairs within 5 seconds; Convex row updated.
+- Maya's boot kickoff message arrives in that Telegram thread within 15 min of deploy.
+- Replies from the user route back through the gateway as inbound messages and wake an agent turn.
+
+---
+
+## Sprint 16 — Convex ↔ Maya hook bridge
+
+Goal: Convex can wake Maya, push her work, and receive her callbacks without us building a custom HTTP layer.
+
+Files:
+
+- `convex/agents/packs/maya_gtm/generators.ts` (set `cron.hooks.enabled: true` + `token`).
+- `convex/onboarding/gtm/deployMayaGtm.ts` (provision `GTM_HOOK_TOKEN` per-agent, expose Fly machine's hook URL).
+- New: `convex/gtmMaya/openclaw/hookClient.ts` (typed POST helpers).
+- New: `convex/gtmMaya/openclaw/inboundCallback.ts` — Convex HTTP action Maya calls back to.
+- `convex/http.ts` (mount `/lc_gtm/research_callback` etc.).
+
+Steps:
+
+1. Per-agent hook token generated at deploy, stored encrypted in `gtmAgents.hookToken`, set as `hooks.token` in workspace `openclaw.json`.
+2. Convex → Maya helpers:
+   - `hookClient.runAgentTurn(agentId, { message, deliver?, channel?, to?, thinking? })` → `POST /hooks/agent`.
+   - `hookClient.wakeHeartbeat(agentId, { text, mode })` → `POST /hooks/wake`.
+   - Both signed with the per-agent token.
+3. Maya → Convex callbacks (`convex/http.ts`):
+   - `POST /lc_gtm/research_callback` — Maya posts research-job progress (status, partial evidence cards, cost).
+   - `POST /lc_gtm/approval_decision` — user-approved drafts received via agent turn pipe.
+   - `POST /lc_gtm/calendar_proposal` — events Maya wants to write to Google Calendar.
+   - Auth: HMAC of the per-agent token + body.
+4. Wire `researchWorker.runBudgetedResearchJob` (built in Sprint 1 of original doc) to:
+   - Phase-start: `runAgentTurn` to update APP.md and tell Maya research has begun.
+   - Phase-complete: `runAgentTurn` to give her the new evidence summary so she updates GTM.md.
+   - All idempotent (job-id keyed) so retries are safe.
+
+Acceptance:
+
+- Convex can wake Maya within 1 second.
+- Maya can post a callback into `/lc_gtm/*` and have it persist to Convex.
+- Hook auth rejects bad tokens.
+- A real research job round-trips: Convex starts → Maya reads APP.md → Convex callback writes evidence → Convex pings Maya → Maya summarizes to Telegram.
+
+---
+
+## Sprint 17 — Real skill installation + ClawHub pinning
+
+Goal: Replace the 18 seven-line stubs with real, version-pinned skills installed at deploy time.
+
+Files:
+
+- New: `convex/agents/packs/maya_gtm/pinnedClawhubSkills.ts` (lock file from Sprint 7 of original doc).
+- `convex/onboarding/gtm/deployMayaGtm.ts` (add `openclaw skills install` step before machine boot, OR ship pre-installed in image).
+- `convex/agents/packs/maya_gtm/generators.ts:500-587` (delete stub `renderSkill()` for non-local skills; keep only for purely-local ones like `maya-channel-strategy-judge`).
+- New: `agents/skills/maya-gtm/<slug>/SKILL.md` for any locally-authored skills needing real bodies (channel-strategy-judge, slop-critic, viral-demo-moment-miner, etc.).
+
+Steps:
+
+1. Create `pinnedClawhubSkills.ts` with exact lock from Sprint 7 of original doc (reddit-readonly, search-x, tiktok, jk-archivist-tiktok-packager, instagram, market-research, in-depth-research).
+2. At deploy: build a pre-install layer in the workspace bundle that, on first boot, runs `openclaw skills install <slug>@<version>` for each entry. Cache between machine restarts via persistent volume.
+3. For 17 locally-authored Maya skills: write real SKILL.md files (200+ lines each) in `agents/skills/maya-gtm/<slug>/` with concrete instructions, evidence schema, failure behaviors. Ship the whole subdirectory in the workspace tarball.
+4. Verify the SKILL.md parser caveat: single-line frontmatter only. Lint at build time.
+5. `agents.list[].skills` allowlist per-agent to lock down what GTM Maya can call (drop unused ClawHub installs).
+
+Acceptance:
+
+- Deployed workspace has 7 ClawHub skills installed + 17 locally-authored skills, all ≥ 100 lines.
+- `openclaw skills list` on the Fly machine shows all 24.
+- A test research turn confirms Maya picks the right skill for each platform.
+
+---
+
+## Sprint 18 — Heartbeat tasks block (use the native primitive)
+
+Goal: Stop hand-rolling cron throttle logic; let OpenClaw's native `tasks:` YAML in HEARTBEAT.md do interval gating.
+
+Files:
+
+- `convex/agents/packs/maya_gtm/generators.ts:314-339` (renderHeartbeat).
+
+Steps:
+
+1. Convert HEARTBEAT.md to use the documented `tasks:` block:
+
+```yaml
+tasks:
+- name: pending-approvals
+  interval: 30m
+  prompt: "Check gtmDrafts where status='pending_approval' and the user hasn't replied in 24h. Send one nudge if any. Don't repeat the nudge until 48h."
+- name: calendar-due
+  interval: 1h
+  prompt: "Check gtmCalendarEvents in the next 2h. Send a single 'you have <event> in 30m' reminder."
+- name: open-loops
+  interval: 2h
+  prompt: "Scan MEMORY.md for open loops. If anything is stale > 7d, surface it."
+- name: hourly-result-scan
+  interval: 1h
+  prompt: "If any post in the last 24h has no result captured, ask the user one short question to record it."
+```
+
+2. Drop redundant cron jobs that overlap with tasks block (calendar_check + result_refresh become tasks; only weekly_review stays as cron).
+3. Set `agents.defaults.heartbeat.activeHours.start: "09:00"`, `end: "22:00"`, in user's tz.
+4. Set `lightContext: true` + `isolatedSession: true` on heartbeat config (documented cost-savings pattern).
+5. Use `HEARTBEAT_OK` token convention: if task reply ≤ 300 chars and prefixed `HEARTBEAT_OK`, silently dropped. No spam on quiet days.
+
+Acceptance:
+
+- HEARTBEAT.md has a valid YAML `tasks:` block; OpenClaw parses it (verify with `openclaw heartbeat --dry-run`).
+- Two of the original five crons (`gtm_calendar_check`, `gtm_result_refresh`) deleted; their work now in heartbeat tasks.
+- Heartbeat fires every 30 min but silently acks most ticks.
+- User gets at most ~3 messages/day on a quiet week.
+
+---
+
+## Sprint 19 — Workspace mutation pipeline (post-research file updates)
+
+Goal: When research completes, APP.md / GTM.md / MEMORY.md actually update; not stay frozen at deploy time.
+
+Files:
+
+- New: `convex/gtmMaya/openclaw/workspaceMutator.ts`.
+- `convex/onboarding/gtm/deployMayaGtm.ts` (expose `mutateWorkspace` action that re-tars affected files + uploads).
+- New: `convex/agents/packs/maya_gtm/renderers/` (extract per-file renderers from generators.ts so they can be called individually post-deploy).
+
+Steps:
+
+1. After a research job completes, Convex calls `mutateWorkspace({ agentId, files: { "APP.md": <new>, "GTM.md": <new>, "MEMORY.md": <append> } })`.
+2. Action SSHs into the Fly machine (or uses `flyctl ssh sftp` via Fly Machines API) to overwrite the files in `<workspace>/`.
+3. Then `runAgentTurn({ message: "/new" })` to force session reset so new files are picked up (workspace bootstrap files only re-read at session boundary).
+4. Alternatively, schedule the file swap for 3:55am-4:05am local — OpenClaw's documented daily reset at 4am local picks them up automatically without forcing `/new`.
+5. MEMORY.md is append-only; never overwrite, only add at end with timestamped sections.
+6. Track `lastMutationAt` in `gtmAgents` to rate-limit (no more than 1 mutation per hour outside the 4am window).
+
+Acceptance:
+
+- A research job completing at 2pm updates APP.md/GTM.md/MEMORY.md on the Fly machine by 2:05pm + a `/new`-triggered turn that reads them.
+- Or mutations queued through 4am window land without a forced reset.
+- MEMORY.md grows over time; never overwritten.
+- Pre-mutation backups stored on the volume at `<workspace>/.backup/<timestamp>/`.
+
+---
+
+## Sprint 20 — Subagent lane for paid research
+
+Goal: Heartbeat stays cheap. Real research happens in subagents with their own model/thinking budget.
+
+Files:
+
+- `convex/agents/packs/maya_gtm/generators.ts` (subagent contracts in AGENTS.md, already partially there).
+- Workspace gateway config: `agents.defaults.subagents.{maxConcurrent, runTimeoutSeconds, maxChildrenPerAgent, maxSpawnDepth}`.
+- New: per-platform subagent definitions in workspace YAML.
+
+Steps:
+
+1. Set workspace-level subagent defaults:
+
+```json5
+{
+  subagents: {
+    maxConcurrent: 4,
+    maxChildrenPerAgent: 3,
+    maxSpawnDepth: 2,
+    runTimeoutSeconds: 900,
+    model: "google/gemini-3.5-flash"
+  }
+}
+```
+
+2. For research lanes (`reddit_research`, `tiktok_format_research`, etc.), define them as configured agents (`agents.list[]`) so `sessions_spawn({ agentId: "reddit_research" })` targets the right model/thinking/tool allowlist.
+3. Reddit + X + TikTok researcher agents get `tools.allow: ["scrapecreators-api", "web_fetch"]` + `thinking: "high"` (Sonnet 4.5 during beta per existing TOOLS.md).
+4. Channel-judge agent gets `tools.deny: ["scrapecreators-api"]` (pure synthesis) + main_maya model.
+5. Cron heartbeat at `thinking: 0` spawns research subagents at `thinking: "high"` — budget-banned parent does not block heavy child. Verified pattern via https://docs.openclaw.ai/tools/subagents.
+
+Acceptance:
+
+- Five named subagents (reddit, x, tiktok, instagram, channel-judge) registered as configured agents.
+- A real research job spawns 4 subagents in parallel, each with independent cost accounting.
+- Subagent timeouts respected (verified via test with a deliberately slow stub).
+- Heartbeat at thinking-off cannot inherit the subagent's thinking budget.
+
+---
+
+## Sprint 21 — Standing orders, hooks, and Policy plugin
+
+Goal: Codify operating rules as native OpenClaw primitives, not free-form prose buried in AGENTS.md.
+
+Files:
+
+- `convex/agents/packs/maya_gtm/generators.ts` (AGENTS.md restructured around documented standing-orders schema).
+- New: `<workspace>/hooks/<name>/HOOK.md` + `handler.ts` for `message:received` (rate-limit), `session:compact:before` (memory promotion), `command:reset` (sync state with Convex).
+- Enable v2026.5.20 Policy plugin (`plugins.policy.enabled: true`).
+
+Steps:
+
+1. Rewrite AGENTS.md to use standing-orders schema: scope / triggers / approval gates / escalation rules / execution steps / "What NOT to do." per program (research / publishing / calendar / results review).
+2. Add a `message:received` hook to debounce + queue inbound user messages with documented `messages.queue.mode: "steer"`.
+3. Add a `session:compact:before` hook that calls `lc_gtm/promote_to_memory` so important conversation state survives compaction.
+4. Enable Policy plugin for channel conformance (auto-rejects messages that violate `dmPolicy`).
+5. Add a `command:reset` hook that syncs the post-reset state back to Convex (so we know the session was reset).
+
+Acceptance:
+
+- AGENTS.md is structured per standing-orders convention; each program has its own block.
+- Hooks fire on documented events (verified by log).
+- Policy plugin enabled and `openclaw security audit --deep` passes.
+
+---
+
+## Sprint 22 — Production guardrails
+
+Goal: Security, observability, version discipline.
+
+Steps:
+
+1. Gateway: `gateway.bind: loopback` confirmed everywhere; `gateway.auth.mode: "token"` for any non-loopback bind.
+2. Run `openclaw security audit --deep` in CI on every workspace bundle change. Fail the deploy on findings.
+3. Wire OTEL: `OTEL_EXPORTER_OTLP_ENDPOINT` to our observability backend (or stdout structured logs for now).
+4. Rate-limit hook endpoints: per-IP, per-token. Reject query-string token attempts (docs confirm OpenClaw already rejects these, but our `/lc_gtm/*` mirror should too).
+5. Concurrency: pin `cron.maxConcurrentRuns: 3` per machine. `messages.queue.mode: "steer"` for inbound during active runs.
+6. Cron run-log pruning: `cron.runLog.maxBytes: "2mb"`, `keepLines: 2000` (docs defaults).
+7. Add a heartbeat that pings Convex with `openclaw doctor --json` output once a day. Convex stores it; mission board surfaces gateway health.
+8. Update path: pin v2026.5.20 + document `openclaw update --channel stable` for future bumps.
+
+Acceptance:
+
+- `openclaw security audit --deep` green.
+- Doctor output landing in Convex daily.
+- Mission board shows gateway-health row per user.
+- Concurrency caps enforced under load test (k6 or similar).
+
+---
+
+## Updated implementation order (replaces "First Implementation Order")
+
+Order matters more now. The original ordering put research workers (S1-S6) before runtime wiring. That is backwards — real research output going to `mode: "none"` cron with mocked skills is just better-quality skeleton. New order:
+
+1. D1-D6 (decisions locked in writing — Telegram primary, drop iMessage, bump image, hooks as bridge, install skills, persistent volume).
+2. S13 — image bump + persistent volume + cost-cap kill switch (foundation).
+3. S15 — Telegram pairing at signup (so we have a real channel).
+4. S14 — native cron delivery (kill `mode: "none"` everywhere).
+5. S16 — Convex ↔ Maya hook bridge.
+6. S2 (original) — GTM ScrapeCreators wrappers + fixtures.
+7. S17 — real skill installation + ClawHub pinning.
+8. S3 (original) — query builder.
+9. S4 (original) — platform workers.
+10. S20 — subagent lane.
+11. S1 (original) — replace `runBudgetedResearchSkeleton`.
+12. S18 — heartbeat tasks block.
+13. S19 — workspace mutation pipeline.
+14. S5-S6 (original) — evidence gates + channel judge.
+15. S9 (original) — calendar OAuth + write.
+16. S8 (original) — mission board polish.
+17. S10 (original, Telegram-first) — channel handoff.
+18. S11 (original) — results loop.
+19. S21 — standing orders + hooks + policy.
+20. S7 (original) — final skill lock review.
+21. S22 — production guardrails.
+22. S12 (original) — staging readiness gate.
+
+The product is honest first (S13-S17), useful second (S2 + S20 + S1 + S18), continuous third (S19 + S5-S11), then hardened (S21 + S22 + S12).
+
+---
+
+# Part III — Testing & Real-World Verification
+
+The five mandatory test categories from `CLAUDE.md` (cross-tenant isolation, plan-tier × action, adversarial inputs, sibling-file scan, TODO grep) catch correctness regressions. They do not catch: "Did the Telegram message arrive on the operator's phone?" / "Did the cron fire when expected, in the right timezone?" / "Did Maya read the new APP.md after we pushed the update?" / "Did ScrapeCreators spend stay under cap?" / "Does the message LOOK right to a human?"
+
+Each sprint must end with a real-world verification that proves the deliverable works against real OpenClaw on real Fly with real channels and real APIs — not mocks. This part defines what "done" looks like.
+
+## Testing layers
+
+| Layer | When | What it catches |
+|---|---|---|
+| L1 — Unit (vitest) | Every PR | Pure function correctness; data-shape regressions |
+| L2 — Convex-test (in-process) | Every PR | Mutation/query/action semantics; cross-tenant isolation; plan-tier × action; sibling-file coherence |
+| L3 — Fixture corpus | Every PR | 50-product fixture corpus, deterministic, no external calls. Channel-judge / evidence quality / slop critic regression net. |
+| L4 — Live smoke (per sprint) | Sprint gate | Single-sprint deliverable against real staging — real Fly, real OpenClaw, real Telegram, real ScrapeCreators. Operator-confirmed via `--live --confirm`. |
+| L5 — Sprint-gate E2E (cumulative) | Sprint gate | Full signup → onboarding → research → delivery → callback → mutation, against staging. Grows by one assertion per sprint. |
+| L6 — Operator walkthrough | Sprint gate | Human-in-the-loop. Operator's phone, operator's eyes, operator's "does this feel right." Cannot be skipped. |
+
+L1-L3 run in CI. L4 + L5 + L6 are the sprint gate and require operator presence.
+
+## The Mandatory Five — scoped to GTM tables
+
+1. **Cross-tenant isolation.** Every GTM table (`gtmApps`, `gtmAgents`, `gtmResearchJobs`, `gtmEvidenceCards`, `gtmCostLedger`, `gtmChannelScores`, `gtmDrafts`, `gtmCalendarEvents`, `gtmResultSnapshots`, plus any new tables Sprints 13-22 add) MUST be account-guarded in every query/mutation/action. Test: create account A + B, write to A, prove B cannot read or mutate A's rows even via authenticated identity. Use `convex-test` `t.withIdentity()` switching.
+
+2. **Plan-tier × action matrix.** Even with one current tier ($49 beta), enforce server-side. Test: tier=free hits paid action → 402; tier=beta hits research → 200; tier=beta with budget exhausted → 402.
+
+3. **Adversarial inputs.** Fixture corpus at `convex/gtmMaya/__tests__/fixtures/adversarial/`. Required cases: malformed product URL, oversized intake (>50KB), prompt-injection in `founderWhy`, walkthrough video that's actually a PDF, Telegram chat ID for someone else's user, repeated rapid signups, cost-ledger row with negative `costUsd`.
+
+4. **Sibling-file scan.** For the workspace bundle: AGENTS.md / SOUL.md / USER.md / APP.md / GTM.md / TOOLS.md / BOOT.md / HEARTBEAT.md / MEMORY.md / DREAMS.md / jobs.json + 24 SKILL.md files. If you change one, run `npm run scan:workspace-coherence` which asserts: every `name:` referenced in jobs.json exists as a cron entry; every skill referenced in AGENTS.md exists as a SKILL.md; every file in BOOT.md's "Confirm workspace files exist" list is actually generated; every channel referenced in TOOLS.md is allowlisted in the gateway config.
+
+5. **TODO grep.** `rg "TODO|FIXME|// eslint-disable" convex/gtmMaya convex/agents/packs/maya_gtm convex/onboarding/gtm app/clawlaunch app/onboarding/gtm` returns zero unjustified hits. Inline justification format: `// TODO(<sprint>-<owner>): <why>`.
+
+## Sprint Gate definition
+
+A sprint is "done" only when ALL of these are true:
+
+```
+L1 + L2 + L3 green in CI ........................................ tests pass
+Mandatory Five green ............................................ rules pass
+L4 live smoke green with --live --confirm ....................... real-world isolated proof
+L5 sprint-gate E2E green ........................................ no regressions
+L6 operator walkthrough complete + screenshots .................. human sanity check
+Cost ceiling for the sprint not exceeded ........................ no $ surprises
+TODO grep clean ................................................. no half-finished work
+Telemetry for the sprint deliverable visible in OTEL/Convex logs  observability proven
+```
+
+No partial credit. If L6 reveals the message reads as AI slop, the sprint is not done.
+
+## Real-World Test Creator (RWTC)
+
+A long-lived staging account that every sprint exercises. Spec:
+
+- Clerk user: `gtm-rwtc-001@heymaya.test` (single fixed identity).
+- App profile: `https://maya-rwtc.vercel.app/` (a small one-page React SaaS we control end-to-end).
+- Real Telegram chat: dedicated bot `@ClawLaunchStagingBot`, dedicated personal chat.
+- Real Google Calendar: dedicated calendar `Maya RWTC` on the operator's Google account.
+- Real Fly machine: `maya-rwtc-staging` — long-lived, redeployed per sprint.
+- Real Convex deployment: `precise-canary-781` (existing staging).
+- Hard budget: $5/day across all providers; daily Convex job tears down + recreates the account if exceeded.
+
+Why one fixed RWTC instead of throwaway: catches state-over-time bugs (Sprint 19 workspace mutation, Sprint 11 results loop) that ephemeral signups would miss. Schema migrations against RWTC also stress-test against real historical rows.
+
+Reset cadence: full RWTC nuke before each major sprint group (S13-17 = block 1, S18-22 = block 2). Soft reset (clear `gtmResearchJobs` + `gtmEvidenceCards`) before every individual sprint smoke.
+
+## Sprint-gate E2E (L5)
+
+One file: `scripts/gtm-sprint-gate.ts`. Runs `--live --confirm` only. Grows by one section per sprint. By end of S22 it does the full flow:
+
+1. Sign up as RWTC + complete intake (S15 gates Telegram pairing here).
+2. Upload walkthrough video; assert Gemini analysis lands (S3-real).
+3. Start real research job; assert all 4 platform workers fire (S4-real).
+4. Assert cost ledger sums < $3 (S1 budget).
+5. Assert evidence cards from ≥3 platforms, each with rawRef (S5).
+6. Assert primary + (≤1) secondary chosen, others parked (S6).
+7. Assert APP.md + GTM.md on Fly machine got updated (S19).
+8. Assert Maya pinged Telegram with boot status (S14 + S15).
+9. Approve a draft from the mission board (S8).
+10. Assert calendar event created with full brief (S9).
+11. Assert Telegram handoff message sent (Sprint 10 of original doc, now Telegram).
+12. Wait 35 min; assert heartbeat fired exactly once, sent ≤300-char ack or substantive update (S18).
+13. Post a result via the mission board; assert results loop interprets it (S11).
+14. Trigger weekly review at 10am simulated; assert next-week plan written to GTM.md (S19).
+
+Total runtime budget: 30 min.
+
+## Per-sprint live verification (L4)
+
+For each of the 10 new sprints. Every script lives at `scripts/gtm-sprint-{N}-smoke.ts`.
+
+### S13 — Image bump + persistent volume + cost cap
+
+- Deploy throwaway Fly app on `v2026.5.20`. Run `openclaw doctor` + `openclaw security audit --deep`. Both green.
+- Write `test-string-<ts>` to `<workspace>/MEMORY.md`. `fly machine restart`. SSH back in. Confirm string still present.
+- Run `openclaw skills list`. Confirm count matches expected.
+- Cost cap rejects spend that would cross $1 ceiling on a fake account.
+- L6: operator reads doctor + audit output, confirms no yellow warnings.
+
+### S14 — Native cron delivery
+
+- Deploy RWTC. Wait ≤15 min for boot kickoff Telegram message.
+- For each of the 5 (now 3 after S18) crons: `openclaw cron run-now <id>` via SSH. Confirm Telegram delivery within 30s.
+- Block test user in Telegram. Trigger heartbeat. Confirm `delivery.failureDestination` writes to Convex.
+- Assert workspace bundle generator emits ZERO `delivery.mode: "none"` for any GTM cron (L2 unit test).
+- L6: operator opens Telegram, sees 4 distinct messages, screenshots them, attaches to PR.
+
+### S15 — Telegram pairing
+
+- Fresh signup as brand-new Clerk user on staging.
+- Tap "Open Maya in Telegram" deep link. Assert pairing token resolves to that user within 5s.
+- Reply "hi" from Telegram. Assert inbound lands as agent turn within 10s.
+- Adversarial: try same pair token from second Telegram account → rejection. Token after expiry (15 min) → rejection. Two Clerk users to same chat ID → rejection.
+- L6: operator pairs from brand-new phone, screenshots Maya's hello-back. Confirms it reads as Maya, not generic bot copy.
+
+### S16 — Convex ↔ Maya hook bridge
+
+- From staging Convex action, `POST /hooks/agent` to RWTC machine. Agent turn runs + Telegram delivery within 60s.
+- From Convex, `POST /hooks/wake` with `mode: "now"`. Heartbeat fires immediately.
+- From Maya's session (forced agent turn), call `lc_gtm/research_callback`. Convex row written.
+- Adversarial: bad token → 401. Tampered body (HMAC mismatch) → 401. Token in query string → 401. Replay same request twice → second is idempotent.
+- Burst: 100 hook calls in 60s. Rate limit kicks in around 30/min. All rate-limited responses are 429, not silent drops.
+- L6: operator inspects 5 hook payloads + 5 callback payloads in audit log. Confirms no raw secrets leaked.
+
+### S17 — Real skill installation + ClawHub pinning
+
+- Deploy RWTC. `openclaw skills list` shows all 24 skills (7 ClawHub + 17 local).
+- Each ClawHub skill probe: 1-result call succeeds (e.g., `reddit-readonly` searches "test").
+- Each locally-authored SKILL.md ≥ 100 lines, valid single-line frontmatter, concrete instructions (not boilerplate).
+- Adversarial: invoke skill not in agent's allowlist → 403/denied.
+- Skill loader regression: zero hits for removed `cat SKILL.md && printf` exec path.
+- L6: operator reads 3 random skill bodies cold (no context). Each passes "could a new engineer follow this?"
+
+### S18 — Heartbeat tasks block
+
+- Deploy RWTC with new tasks block. `openclaw heartbeat --dry-run` parses cleanly.
+- Trigger heartbeat. Inspect log for `reason=no-tasks-due` for tasks not due; `reason=task-fired` for `pending-approvals`.
+- 24-hour run: count Telegram messages. ≤4 messages on quiet day (boot kickoff + at most 3 substantive heartbeat fires).
+- Force heartbeat where only update is `HEARTBEAT_OK`. NO Telegram message delivered.
+- Drop 2 crons (calendar_check, result_refresh). Their work now via heartbeat tasks. L5 E2E still green.
+- L6: operator inspects 24-hour Telegram thread. Messages feel like a teammate, not a spammer.
+
+### S19 — Workspace mutation pipeline
+
+- Complete real research job on RWTC. Within 5 min, SSH to Fly machine and `cat <workspace>/APP.md`. New content reflects research output.
+- Same for GTM.md. Primary/secondary channel from channel-judge run now in file.
+- `cat <workspace>/MEMORY.md`. New timestamped section appended at end. Previous content NOT overwritten.
+- Backup exists at `<workspace>/.backup/<timestamp>/` with old APP.md/GTM.md/MEMORY.md.
+- Force `/new` after mutation. Maya's next turn reads new content (ask her "what's our primary channel"; answer matches new GTM.md).
+- Schedule mutation for 3:55am. At 4:05am new content reflected without explicit reset.
+- Adversarial: 5 concurrent mutations. Only one wins; rest queue. Final state consistent.
+- L6: operator visually diffs APP.md/GTM.md/MEMORY.md before/after research run. Changes coherent.
+
+### S20 — Subagent lane
+
+- Trigger real research job. `openclaw sessions list` shows 4 subagent sessions during run.
+- Cost ledger: 4 separate rows, one per subagent, with model + token count.
+- Kill subagent mid-run via `openclaw sessions stop <id>`. Parent receives failure, partial-result handling fires.
+- Model log: heartbeat parent was `thinking: 0` while subagent was `thinking: high`. They didn't share thinking budget.
+- Subagent timeout: deliberately set 30s timeout, point at slow stub endpoint. Timeout enforced + cleanup correct.
+- L6: operator reads research output and is asked to guess whether it was 1 LLM call or 4 parallel subagents. Should clearly feel like 4.
+
+### S21 — Standing orders + hooks + Policy plugin
+
+- Each documented hook event fires: `message:received`, `session:compact:before`, `command:reset`, `gateway:startup`. Verify via `openclaw logs --filter hooks`.
+- Policy plugin: send deliberately bad inbound message (e.g., trying to invoke denied tool). Rejection logged + no agent turn fires.
+- `openclaw security audit --deep` exits green.
+- Trigger session compaction (`openclaw session compact --session-key <key>`). `lc_gtm/promote_to_memory` callback fires with right summary.
+- L6: operator reads AGENTS.md after restructure. Each program has documented standing-orders schema (scope / triggers / etc.) and is not a wall of prose.
+
+### S22 — Production guardrails
+
+- `openclaw security audit --deep` green on every PR (block merge on red).
+- OTEL traces visible in our backend. Required spans: `hooks.agent`, `cron.run`, `subagent.spawn`, `workspace.mutate`, `research.start`.
+- Attack surface: `/hooks/agent` with no token → 401. Bad token → 401. Query-string token → 401. Expired token → 401. Replay → idempotent reject.
+- Load: k6 script — 100 concurrent simulated users, each issuing 3 hook calls/min, for 5 min. p95 hook-response < 2s. No 5xx. No memory leak (Fly memory stays flat).
+- Daily `openclaw doctor --json` heartbeat to Convex. Mission board shows gateway-health for RWTC.
+- L6: operator reads load test report + security audit + 7-day OTEL dashboard. No unknown unknowns.
+
+## Continuous regression prevention
+
+The growing L5 E2E is the safety net. Every sprint adds ≥1 assertion to `scripts/gtm-sprint-gate.ts`. Before any new sprint can start, E2E must still be green against current staging.
+
+In CI, on every PR to `staging`:
+
+- L1, L2, L3, Mandatory Five → must pass.
+- L5 E2E with `--mock-channels --mock-fly` → must pass (cheap mock variant).
+
+Before merging `staging` → `main`:
+
+- Full L5 E2E with `--live --confirm` against staging RWTC → must pass with operator present.
+- Cost report for the merge: total $ spent during live E2E recorded in PR description.
+
+## Operator-blocked verifications (L6)
+
+Items only an operator can confirm. Each sprint's L6 list states the operator action explicitly. Format:
+
+> L6 task: operator opens Telegram thread, screenshots the boot kickoff message, attaches to PR description with one-sentence "looks right" or "looks wrong + why."
+
+If operator says "looks wrong," the sprint is not done — fix and re-verify, do not merge.
+
+Tools: SendUserFile for screenshots, Convex dashboard for row inspection, Fly dashboard for machine state, Google Calendar UI for event verification, OpenClaw control UI (`http://<host>:18789/`) for session/cron/skill inspection.
+
+## Cost ceilings (hard caps)
+
+| Scope | Cap |
+|---|---|
+| One research job (RWTC or real user) | $3.00 (per original doc) |
+| One sprint's L4 smoke + L5 E2E | $5.00 total |
+| RWTC per day across all sprints | $5.00 |
+| Full sprint gate (L4 + L5 + L6) for sprints 13-22 cumulative | $50.00 |
+| Any single L4 smoke runaway | $1.00 — kill switch in Convex if exceeded |
+
+Implementation: pre-flight check in every live smoke script that queries `gtmCostLedger` sum for the last hour. If > 80% of cap, abort and require manual override.
+
+## Telemetry & observability
+
+What every sprint must emit, where to find it:
+
+| Event | Where | Verifies |
+|---|---|---|
+| `hooks.agent` invocation | OTEL + `convex/lib/hookAudit.ts` | S16 wiring |
+| `cron.run` start/finish | OpenClaw `cron run history` + Convex callback log | S14, S18 |
+| `subagent.spawn` + `subagent.complete` | OTEL spans, parent-child trace | S20 |
+| `workspace.mutate` | Convex `gtmWorkspaceMutations` table | S19 |
+| `research.start` / `research.complete` / `research.fail` | OTEL + `gtmResearchJobs.phase` | S1 (original), S4 |
+| `cost.spend` | `gtmCostLedger` row per provider call | Sprint 2 budget guard |
+| `delivery.fail` | `gtmDeliveryFailures` table | S14 failureDestination |
+| `policy.reject` | OpenClaw logs + `gtmPolicyRejections` | S21 |
+| `gateway.health` (daily) | `gtmGatewayHealth` time series | S22 |
+
+Each sprint's L4 smoke must assert the relevant events are emitted with the expected shape.
+
+## Adversarial corpus
+
+`convex/gtmMaya/__tests__/fixtures/adversarial/` — committed test cases exercised by L2 and L3:
+
+- `prompt-injection-founderWhy.json`
+- `oversized-intake.json`
+- `malformed-url.json`
+- `cross-tenant-evidence.json`
+- `cost-negative.json`
+- `walkthrough-bait.json`
+- `racing-deploys.json`
+- `tampered-hook-payload.json`
+- `replay-hook.json`
+- `expired-pair-token.json`
+- `cross-pair-token.json`
+- `skill-allowlist-bypass.json`
+- `runaway-research.json`
+
+For each, an L2 test asserts correct rejection/handling. Adding new ones is encouraged.
+
+## Failure mode catalog
+
+| Failure | Action |
+|---|---|
+| L1/L2/L3 red | Fix immediately, do not proceed |
+| Mandatory Five red | Fix immediately, do not proceed |
+| L4 smoke red | Investigate root cause; if infra outage, retry with note; if code, fix |
+| L5 E2E red but L4 green | Regression — earlier sprint's deliverable broken by this sprint. Revert + re-investigate. |
+| Cost cap exceeded | Stop, investigate, never bypass the cap "to see what happens." |
+| L6 operator "looks wrong" | Code red. Don't ship "fix in follow-up." Re-verify before merge. |
+| Telemetry missing | Wire the missing event before declaring sprint done. |
+
+## Updated implementation order (with verification gates)
+
+| Step | Block | What it adds |
+|---|---|---|
+| D1-D6 | Decisions | Locked + signed off |
+| S13 + gate | Foundation | New image alive, volume persistent, cost cap active. L4 + L5 (small) + L6 |
+| S15 + gate | Foundation | Telegram pairing real. L4 + L5 + L6 |
+| S14 + gate | Foundation | Cron delivery real. L4 + L5 + L6 |
+| S16 + gate | Foundation | Hook bridge real. L4 + L5 + L6 |
+| Block-1 nuke + reset RWTC | | Clean slate before brain work |
+| S2 (orig) + S17 + gate | Brain prep | ScrapeCreators wrappers + real skills installed. L4 + L5 + L6 |
+| S3 (orig) + gate | Brain | Query builder. L4 + L5 + L6 |
+| S4 (orig) + S20 + gate | Brain | Real workers in subagent lane. L4 + L5 + L6 |
+| S1 (orig) + gate | Brain | Replace skeleton. L4 + L5 + L6 |
+| S18 + gate | Brain | Heartbeat tasks block. L4 + L5 + L6 |
+| S19 + gate | Brain | Workspace mutation. L4 + L5 + L6 |
+| S5-S6 (orig) + gate | Decisions | Evidence gates + channel judge. L4 + L5 + L6 |
+| S9 (orig) + gate | Decisions | Calendar OAuth + write. L4 + L5 + L6 |
+| S8 (orig) + gate | UX | Mission board polish. L4 + L5 + L6 |
+| S10 (orig, Telegram-first) + gate | UX | Channel handoff. L4 + L5 + L6 |
+| S11 (orig) + gate | UX | Results loop. L4 + L5 + L6 |
+| Block-2 nuke + reset RWTC | | Clean slate before hardening |
+| S21 + gate | Hardening | Standing orders + hooks + Policy. L4 + L5 + L6 |
+| S7 (orig) + gate | Hardening | Final skill lock. L4 + L5 + L6 |
+| S22 + gate | Hardening | Guardrails. L4 + L5 + L6 |
+| S12 (orig) + gate | Launch | Staging readiness. Full L5 E2E, three fixture products. L4 + L5 + L6 |
