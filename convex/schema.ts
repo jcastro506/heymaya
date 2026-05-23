@@ -102,7 +102,8 @@ export default defineSchema({
       v.union(
         v.literal("creator"),
         v.literal("service-business"),
-        v.literal("growth-agent")
+        v.literal("growth-agent"),
+        v.literal("gtm-agent")
       )
     ),
     /** Pointer to the operator's business row. Only set when accountType = "service-business". */
@@ -4275,4 +4276,732 @@ export default defineSchema({
   })
     .index("by_creator", ["creatorId"])
     .index("by_creator_and_status", ["creatorId", "status"]),
+
+  // ─── ClawLaunch / Maya GTM product — added 2026-05-22 ────────────────
+  //
+  // GTM Maya is a separate product namespace inside the shared platform repo.
+  // These tables intentionally do not reuse creator/service/Riley domain
+  // tables. Shared infra (auth, connectedAccounts, aiCallLog,
+  // scrapeCreatorsCache, Fly/OpenClaw deploy) is reused through adapters.
+  gtmAgents: defineTable({
+    accountId: v.id("creators"),
+    appId: v.optional(v.id("gtmApps")),
+    onboardingStep: v.union(
+      v.literal("intake"),
+      v.literal("connect-calendar"),
+      v.literal("connect-channel"),
+      v.literal("researching"),
+      v.literal("plan-review"),
+      v.literal("active")
+    ),
+    channelPreference: v.union(
+      v.literal("whatsapp"),
+      v.literal("imessage"),
+      v.literal("web")
+    ),
+    timezone: v.string(),
+    openClawFlyAppId: v.optional(v.string()),
+    deployedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_app", ["appId"])
+    .index("by_fly_app", ["openClawFlyAppId"]),
+
+  gtmApps: defineTable({
+    accountId: v.id("creators"),
+    name: v.optional(v.string()),
+    url: v.string(),
+    founderWhy: v.optional(v.string()),
+    stage: v.union(
+      v.literal("idea"),
+      v.literal("live-beta"),
+      v.literal("paid"),
+      v.literal("unknown")
+    ),
+    weekGoal: v.union(
+      v.literal("feedback"),
+      v.literal("signups"),
+      v.literal("demos"),
+      v.literal("revenue"),
+      v.literal("unknown")
+    ),
+    canRecordScreen: v.boolean(),
+    canShowFace: v.boolean(),
+    canRecordVoice: v.optional(v.boolean()),
+    canProvideScreenshots: v.optional(v.boolean()),
+    canPostTikTokManually: v.optional(v.boolean()),
+    canPostInstagramManually: v.optional(v.boolean()),
+    existingTikTokUrl: v.optional(v.string()),
+    existingInstagramUrl: v.optional(v.string()),
+    tiktokWarmupState: v.optional(
+      v.union(
+        v.literal("unknown"),
+        v.literal("new_needs_warmup"),
+        v.literal("warming"),
+        v.literal("ready"),
+        v.literal("restricted")
+      )
+    ),
+    tiktokAccountAgeDays: v.optional(v.number()),
+    tiktokAccountStatusChecked: v.optional(v.boolean()),
+    openToUgcCreators: v.optional(v.boolean()),
+    creatorBudgetMonthlyUsd: v.optional(v.number()),
+    maxWeeklyVisualPosts: v.optional(v.number()),
+    excludedAudiences: v.array(v.string()),
+    diagnosis: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_url", ["accountId", "url"]),
+
+  gtmResearchJobs: defineTable({
+    accountId: v.id("creators"),
+    appId: v.id("gtmApps"),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("needs_more_evidence"),
+      v.literal("ready_for_review"),
+      v.literal("failed"),
+      v.literal("cancelled")
+    ),
+    phase: v.union(
+      v.literal("app_inspection"),
+      v.literal("icp_hypotheses"),
+      v.literal("channel_research"),
+      v.literal("strategy_judge"),
+      v.literal("calendar_build"),
+      v.literal("complete")
+    ),
+    budgetUsd: v.number(),
+    spentUsd: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_status", ["accountId", "status"])
+    .index("by_app", ["appId"]),
+
+  gtmWalkthroughUploads: defineTable({
+    accountId: v.id("creators"),
+    appId: v.id("gtmApps"),
+    storageId: v.id("_storage"),
+    filename: v.string(),
+    mimeType: v.string(),
+    bytes: v.number(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("analyzing"),
+      v.literal("succeeded"),
+      v.literal("failed")
+    ),
+    diagnosis: v.optional(v.any()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_app", ["appId"])
+    .index("by_account_and_status", ["accountId", "status"]),
+
+  gtmEvidenceCards: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.id("gtmResearchJobs"),
+    source: v.union(
+      v.literal("app"),
+      v.literal("google"),
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("linkedin"),
+      v.literal("tiktok"),
+      v.literal("instagram"),
+      v.literal("competitor")
+    ),
+    url: v.string(),
+    title: v.optional(v.string()),
+    snippet: v.string(),
+    authorOrCommunity: v.optional(v.string()),
+    observedAt: v.number(),
+    recency: v.union(
+      v.literal("fresh"),
+      v.literal("recent"),
+      v.literal("old"),
+      v.literal("unknown")
+    ),
+    engagement: v.optional(
+      v.object({
+        likes: v.optional(v.number()),
+        comments: v.optional(v.number()),
+        shares: v.optional(v.number()),
+        views: v.optional(v.number()),
+      })
+    ),
+    painMatch: v.number(),
+    buyerMatch: v.number(),
+    channelFit: v.number(),
+    promotionRisk: v.union(
+      v.literal("low"),
+      v.literal("medium"),
+      v.literal("high"),
+      v.literal("unknown")
+    ),
+    recommendedUse: v.union(
+      v.literal("strategy"),
+      v.literal("reply"),
+      v.literal("content_format"),
+      v.literal("avoid"),
+      v.literal("competitor")
+    ),
+    extractedClaims: v.array(v.string()),
+    rawRef: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_account_and_source", ["accountId", "source"])
+    .index("by_account_and_use", ["accountId", "recommendedUse"]),
+
+  gtmPlatformBriefs: defineTable({
+    platform: v.union(
+      v.literal("tiktok"),
+      v.literal("instagram"),
+      v.literal("x"),
+      v.literal("reddit"),
+      v.literal("linkedin")
+    ),
+    version: v.number(),
+    whatWorksNow: v.array(v.string()),
+    audienceBehavior: v.array(v.string()),
+    formatPatterns: v.array(v.string()),
+    publishingLimits: v.array(v.string()),
+    apiAccess: v.array(v.string()),
+    policyRisks: v.array(v.string()),
+    measurementModel: v.array(v.string()),
+    recommendedUseCases: v.array(v.string()),
+    avoidFor: v.array(v.string()),
+    claimIds: v.array(v.id("gtmPlatformClaims")),
+    lastReviewedAt: v.number(),
+    expiresAt: v.number(),
+    confidence: v.union(
+      v.literal("low"),
+      v.literal("medium"),
+      v.literal("high")
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_platform", ["platform"])
+    .index("by_platform_and_version", ["platform", "version"])
+    .index("by_expires_at", ["expiresAt"]),
+
+  gtmPlatformClaims: defineTable({
+    platform: v.union(
+      v.literal("tiktok"),
+      v.literal("instagram"),
+      v.literal("x"),
+      v.literal("reddit"),
+      v.literal("linkedin")
+    ),
+    claimType: v.union(
+      v.literal("what_works_now"),
+      v.literal("format_pattern"),
+      v.literal("audience_behavior"),
+      v.literal("publishing_limit"),
+      v.literal("api_access"),
+      v.literal("policy_risk"),
+      v.literal("measurement_model"),
+      v.literal("avoid_for")
+    ),
+    claim: v.string(),
+    sourceKind: v.union(
+      v.literal("official_doc"),
+      v.literal("scrapecreators"),
+      v.literal("web_search"),
+      v.literal("user_account"),
+      v.literal("third_party_analysis")
+    ),
+    sourceUrl: v.string(),
+    retrievedAt: v.number(),
+    publishedAt: v.optional(v.number()),
+    expiresAt: v.number(),
+    confidence: v.union(
+      v.literal("low"),
+      v.literal("medium"),
+      v.literal("high")
+    ),
+    createdAt: v.number(),
+  })
+    .index("by_platform", ["platform"])
+    .index("by_platform_and_type", ["platform", "claimType"])
+    .index("by_expires_at", ["expiresAt"]),
+
+  gtmPlatformRefreshRuns: defineTable({
+    platform: v.optional(
+      v.union(
+        v.literal("tiktok"),
+        v.literal("instagram"),
+        v.literal("x"),
+        v.literal("reddit"),
+        v.literal("linkedin")
+      )
+    ),
+    cadence: v.union(
+      v.literal("onboarding"),
+      v.literal("weekly"),
+      v.literal("monthly")
+    ),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+      v.literal("cancelled")
+    ),
+    sourceBudgetUsd: v.number(),
+    scrapeCreatorsCreditBudget: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    deltaSummary: v.optional(v.string()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_platform", ["platform"])
+    .index("by_status", ["status"])
+    .index("by_cadence", ["cadence"]),
+
+  gtmChannelScores: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.id("gtmResearchJobs"),
+    channel: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("linkedin"),
+      v.literal("tiktok"),
+      v.literal("product_hunt")
+    ),
+    score: v.number(),
+    decision: v.union(
+      v.literal("primary"),
+      v.literal("secondary"),
+      v.literal("parked"),
+      v.literal("blocked")
+    ),
+    confidence: v.union(
+      v.literal("low"),
+      v.literal("medium"),
+      v.literal("high")
+    ),
+    reasons: v.array(v.string()),
+    risks: v.array(v.string()),
+    evidenceCardIds: v.array(v.id("gtmEvidenceCards")),
+    firstWeekTest: v.optional(v.string()),
+    qualityGate: v.object({
+      passed: v.boolean(),
+      failures: v.array(v.string()),
+    }),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_account_and_channel", ["accountId", "channel"]),
+
+  gtmDistributionMotions: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.id("gtmResearchJobs"),
+    motion: v.union(
+      v.literal("reddit_helpful_reply"),
+      v.literal("x_founder_led"),
+      v.literal("linkedin_founder_led"),
+      v.literal("tiktok_faceless_demo"),
+      v.literal("tiktok_founder_talking_head"),
+      v.literal("tiktok_slideshow_carousel"),
+      v.literal("instagram_reels_reuse"),
+      v.literal("instagram_carousel_reuse"),
+      v.literal("ugc_creator_test"),
+      v.literal("paid_ads_later"),
+      v.literal("influencer_later")
+    ),
+    status: v.union(
+      v.literal("test_now"),
+      v.literal("test_later"),
+      v.literal("parked"),
+      v.literal("blocked")
+    ),
+    rationale: v.array(v.string()),
+    risks: v.array(v.string()),
+    evidenceCardIds: v.array(v.id("gtmEvidenceCards")),
+    minimumCadence: v.string(),
+    stopCriteria: v.string(),
+    doubleDownCriteria: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_account_and_motion", ["accountId", "motion"]),
+
+  gtmFormatExperiments: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    motionId: v.optional(v.id("gtmDistributionMotions")),
+    motion: v.union(
+      v.literal("reddit_helpful_reply"),
+      v.literal("x_founder_led"),
+      v.literal("linkedin_founder_led"),
+      v.literal("tiktok_faceless_demo"),
+      v.literal("tiktok_founder_talking_head"),
+      v.literal("tiktok_slideshow_carousel"),
+      v.literal("instagram_reels_reuse"),
+      v.literal("instagram_carousel_reuse"),
+      v.literal("ugc_creator_test"),
+      v.literal("paid_ads_later"),
+      v.literal("influencer_later")
+    ),
+    hypothesis: v.string(),
+    variants: v.array(
+      v.object({
+        hook: v.string(),
+        demoMoment: v.optional(v.string()),
+        cta: v.string(),
+        formatSkeleton: v.string(),
+      })
+    ),
+    successMetric: v.union(
+      v.literal("qualified_replies"),
+      v.literal("signups"),
+      v.literal("installs"),
+      v.literal("trials"),
+      v.literal("creator_applicants")
+    ),
+    scaleDecision: v.union(
+      v.literal("keep_testing"),
+      v.literal("double_down"),
+      v.literal("revise"),
+      v.literal("park")
+    ),
+    resultSummary: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_motion", ["motionId"])
+    .index("by_account_and_decision", ["accountId", "scaleDecision"]),
+
+  gtmContentBankItems: defineTable({
+    accountId: v.id("creators"),
+    experimentId: v.optional(v.id("gtmFormatExperiments")),
+    platform: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("linkedin"),
+      v.literal("tiktok")
+    ),
+    motion: v.union(
+      v.literal("reddit_helpful_reply"),
+      v.literal("x_founder_led"),
+      v.literal("linkedin_founder_led"),
+      v.literal("tiktok_faceless_demo"),
+      v.literal("tiktok_founder_talking_head"),
+      v.literal("tiktok_slideshow_carousel"),
+      v.literal("instagram_reels_reuse"),
+      v.literal("instagram_carousel_reuse"),
+      v.literal("ugc_creator_test"),
+      v.literal("paid_ads_later"),
+      v.literal("influencer_later")
+    ),
+    formatSkeleton: v.string(),
+    hook: v.string(),
+    cta: v.string(),
+    demoMoment: v.optional(v.string()),
+    outcome: v.union(
+      v.literal("winner"),
+      v.literal("loser"),
+      v.literal("inconclusive")
+    ),
+    evidence: v.array(v.string()),
+    promotedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_experiment", ["experimentId"])
+    .index("by_account_and_outcome", ["accountId", "outcome"]),
+
+  gtmCostLedger: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    provider: v.union(
+      v.literal("scrapecreators"),
+      v.literal("gemini"),
+      v.literal("openrouter"),
+      v.literal("composio"),
+      v.literal("x_api"),
+      v.literal("openclaw"),
+      v.literal("other")
+    ),
+    operation: v.string(),
+    reason: v.string(),
+    costUsd: v.number(),
+    units: v.optional(v.number()),
+    cacheStatus: v.union(
+      v.literal("hit"),
+      v.literal("miss"),
+      v.literal("called"),
+      v.literal("skipped"),
+      v.literal("failed")
+    ),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_account_and_provider", ["accountId", "provider"]),
+
+  gtmToolCallLog: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    toolName: v.string(),
+    provider: v.union(
+      v.literal("scrapecreators"),
+      v.literal("gemini"),
+      v.literal("openrouter"),
+      v.literal("composio"),
+      v.literal("x_api"),
+      v.literal("openclaw"),
+      v.literal("google"),
+      v.literal("other")
+    ),
+    purpose: v.string(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("called"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+      v.literal("skipped")
+    ),
+    model: v.optional(v.string()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    estimatedCostUsd: v.optional(v.number()),
+    scrapeCredits: v.optional(v.number()),
+    error: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_account_and_tool", ["accountId", "toolName"])
+    .index("by_account_and_provider", ["accountId", "provider"]),
+
+  gtmContentDrafts: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    platform: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("linkedin"),
+      v.literal("tiktok")
+    ),
+    status: v.union(
+      v.literal("drafted"),
+      v.literal("approved"),
+      v.literal("published"),
+      v.literal("rejected"),
+      v.literal("failed")
+    ),
+    body: v.string(),
+    evidenceCardIds: v.array(v.id("gtmEvidenceCards")),
+    finalBody: v.optional(v.string()),
+    approvalMessageId: v.optional(v.string()),
+    approvedAt: v.optional(v.number()),
+    externalPostId: v.optional(v.string()),
+    publishedUrl: v.optional(v.string()),
+    publishedAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_status", ["accountId", "status"])
+    .index("by_account_and_platform", ["accountId", "platform"]),
+
+  gtmResultSnapshots: defineTable({
+    accountId: v.id("creators"),
+    draftId: v.id("gtmContentDrafts"),
+    platform: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("linkedin"),
+      v.literal("tiktok")
+    ),
+    replies: v.optional(v.number()),
+    clicks: v.optional(v.number()),
+    signups: v.optional(v.number()),
+    demos: v.optional(v.number()),
+    feedbackItems: v.optional(v.number()),
+    raw: v.optional(v.any()),
+    capturedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_draft", ["draftId"])
+    .index("by_account_and_platform", ["accountId", "platform"]),
+
+  gtmSafetyStates: defineTable({
+    accountId: v.id("creators"),
+    adminDisabled: v.boolean(),
+    disabledReason: v.optional(v.string()),
+    dailyCostLimitUsd: v.number(),
+    monthlyCostLimitUsd: v.number(),
+    dailyApiCallLimit: v.number(),
+    updatedAt: v.number(),
+  }).index("by_account", ["accountId"]),
+
+  gtmAuditEvents: defineTable({
+    accountId: v.id("creators"),
+    actor: v.union(
+      v.literal("maya"),
+      v.literal("system"),
+      v.literal("admin"),
+      v.literal("user")
+    ),
+    eventType: v.string(),
+    severity: v.union(v.literal("info"), v.literal("warn"), v.literal("error")),
+    message: v.string(),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_type", ["accountId", "eventType"]),
+
+  gtmConnectionHealth: defineTable({
+    accountId: v.id("creators"),
+    provider: v.union(
+      v.literal("whatsapp"),
+      v.literal("imessage"),
+      v.literal("google_calendar"),
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("linkedin"),
+      v.literal("composio"),
+      v.literal("openclaw")
+    ),
+    status: v.union(
+      v.literal("connected"),
+      v.literal("disconnected"),
+      v.literal("reconnect_required"),
+      v.literal("error")
+    ),
+    failureReason: v.optional(v.string()),
+    lastCheckedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_provider", ["accountId", "provider"]),
+
+  gtmMachineHealth: defineTable({
+    accountId: v.id("creators"),
+    flyAppId: v.string(),
+    status: v.union(
+      v.literal("healthy"),
+      v.literal("unhealthy"),
+      v.literal("restarting"),
+      v.literal("unknown")
+    ),
+    lastPingAt: v.optional(v.number()),
+    restartCount: v.number(),
+    lastError: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_fly_app", ["flyAppId"]),
+
+  gtmBetaCohort: defineTable({
+    accountId: v.id("creators"),
+    cohortName: v.string(),
+    status: v.union(
+      v.literal("active"),
+      v.literal("completed"),
+      v.literal("removed")
+    ),
+    requiredAppUrlLive: v.boolean(),
+    startedAt: v.number(),
+    endsAt: v.number(),
+    retentionIntent: v.optional(
+      v.union(
+        v.literal("high"),
+        v.literal("medium"),
+        v.literal("low"),
+        v.literal("unknown")
+      )
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_cohort", ["cohortName"]),
+
+  gtmHumanPlanReviews: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    reviewer: v.string(),
+    specificityScore: v.number(),
+    usefulnessScore: v.number(),
+    notes: v.string(),
+    reviewedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_research_job", ["researchJobId"]),
+
+  gtmUserReportedSignals: defineTable({
+    accountId: v.id("creators"),
+    kind: v.union(
+      v.literal("reply"),
+      v.literal("signup"),
+      v.literal("demo"),
+      v.literal("feedback"),
+      v.literal("retention")
+    ),
+    message: v.string(),
+    retentionIntent: v.optional(
+      v.union(
+        v.literal("high"),
+        v.literal("medium"),
+        v.literal("low"),
+        v.literal("unknown")
+      )
+    ),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_kind", ["accountId", "kind"]),
+
+  gtmUgcReadinessReports: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    readiness: v.union(
+      v.literal("premature"),
+      v.literal("useful_soon"),
+      v.literal("ready")
+    ),
+    reasons: v.array(v.string()),
+    requiredProof: v.array(v.string()),
+    creatorProfile: v.optional(v.string()),
+    briefTemplate: v.optional(v.string()),
+    trainingOutline: v.optional(v.array(v.string())),
+    managementCadence: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_account_and_readiness", ["accountId", "readiness"]),
+  // ─── end ClawLaunch / Maya GTM product ────────────────────────────────
 });

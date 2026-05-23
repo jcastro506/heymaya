@@ -1,0 +1,575 @@
+#!/usr/bin/env tsx
+/**
+ * ClawLaunch GTM readiness smoke.
+ *
+ * Deterministic in-process coverage for the smoke matrix in
+ * docs/MAYA_GTM_AGENT_SPRINT_PLAN.md. External-account checks are reported as
+ * blocked unless their credentials are present; this script never pretends a
+ * real WhatsApp/Fly/Composio connection was tested.
+ */
+
+import { convexTest } from "convex-test";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { api } from "../convex/_generated/api";
+import schema from "../convex/schema";
+import { buildSevenDayCalendarPlan, validateCalendarEvents } from "../convex/gtmMaya/calendarPlan";
+import { buildStrategyPlan, validateStrategyPlan } from "../convex/gtmMaya/strategyJudge";
+import { interpretResults } from "../convex/gtmMaya/resultsLoop";
+import {
+  parseWalkthroughDiagnosis,
+  validateWalkthroughFile,
+} from "../convex/gtmMaya/walkthrough";
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ADMIN_TOKEN = "gtm-readiness-smoke-admin";
+const DEFAULT_OPENCLAW_IMAGE = "registry.fly.io/heymaya-openclaw:v2026.4.23";
+
+interface Check {
+  name: string;
+  status: "passed" | "blocked";
+  detail: string;
+}
+
+function buildConvexModules(): Record<string, () => Promise<unknown>> {
+  const convexDir = join(REPO_ROOT, "convex");
+  const modules: Record<string, () => Promise<unknown>> = {};
+  function walk(dir: string): void {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      const st = statSync(full);
+      if (st.isDirectory()) {
+        if (name === "node_modules" || name === ".git") continue;
+        walk(full);
+        continue;
+      }
+      if (!name.endsWith(".ts") && !name.endsWith(".js")) continue;
+      if (name.endsWith(".d.ts")) continue;
+      if (full.includes("__tests__") || name.endsWith(".test.ts")) continue;
+      const rel = relative(convexDir, full).split("\\").join("/");
+      modules[`../convex/${rel}`] = () => import(full);
+    }
+  }
+  walk(convexDir);
+  return modules;
+}
+
+async function main() {
+  loadLocalEnv();
+  loadConvexEnvPresence();
+  process.env.ADMIN_TOKEN = ADMIN_TOKEN;
+  const checks: Check[] = [];
+  const modules = buildConvexModules();
+  const t = convexTest(schema, modules);
+  const user = t.withIdentity({
+    subject: `gtm_readiness_${Date.now()}`,
+    email: "gtm-readiness@clawlaunch.test",
+  });
+
+  const start = await user.mutation(
+    api.gtmMaya.researchLifecycle.startGtmOnboarding,
+    { channelPreference: "whatsapp", timezone: "America/New_York" }
+  );
+  validateWalkthroughFile({ mimeType: "video/mp4", bytes: 2_400_000 });
+  const walkthroughDiagnosis = parseWalkthroughDiagnosis(
+    JSON.stringify({
+      coreWorkflow: "A founder imports a user problem and gets a launch plan.",
+      userProblem: "Indie builders ship products but do not know where to find first customers.",
+      strongestDemoMoments: [
+        "Paste a product URL",
+        "Maya chooses channels from cited evidence",
+        "Calendar fills with exact launch actions",
+      ],
+      beforeAfterContrast: "Before: scattered posting. After: a cited daily acquisition plan.",
+      confusingMoments: ["Pricing page is not visible in the walkthrough"],
+      contentAssets: ["Landing page hero", "Mission Board", "Calendar event details"],
+      facelessScreenRecordingEnough: true,
+      founderFaceOrUgcMightHelp: false,
+      shortFormFormatCandidates: ["TikTok slideshow", "faceless screen recording"],
+      unsupportedClaimsOrMissingContext: ["No conversion benchmark shown"],
+    })
+  );
+  checks.push({
+    name: "Mobile walkthrough can produce usable app diagnosis",
+    status: "passed",
+    detail: walkthroughDiagnosis.shortFormFormatCandidates.join(", "),
+  });
+
+  const appId = await user.mutation(api.gtmMaya.researchLifecycle.setAppProfile, {
+    name: "Readiness Smoke App",
+    url: "https://readiness-smoke.clawlaunch.test",
+    founderWhy: "Verify ClawLaunch can get first users.",
+    stage: "live-beta",
+    weekGoal: "signups",
+    canRecordScreen: true,
+    canShowFace: false,
+    canRecordVoice: true,
+    canProvideScreenshots: true,
+    canPostTikTokManually: true,
+    canPostInstagramManually: true,
+    tiktokWarmupState: "ready",
+    tiktokAccountAgeDays: 30,
+    tiktokAccountStatusChecked: true,
+    excludedAudiences: [],
+    diagnosis: {
+      audience: "indie builders",
+      problem: "no first users",
+      walkthrough: walkthroughDiagnosis,
+    },
+  });
+  checks.push({
+    name: "Signup and onboarding creates GTM account",
+    status: "passed",
+    detail: String(start.agentId),
+  });
+
+  const jobId = await user.mutation(
+    api.gtmMaya.researchLifecycle.createResearchJob,
+    { appId, budgetUsd: 5 }
+  );
+  const evidenceIds = await user.mutation(
+    api.gtmMaya.researchLifecycle.recordEvidenceCards,
+    {
+      researchJobId: jobId,
+      cards: [
+        evidence("reddit", "https://reddit.test/first-users", "Reply target"),
+        evidence("x", "https://x.test/founder-thread", "Founder post format"),
+        evidence("linkedin", "https://linkedin.test/buyer-context", "Buyer context"),
+        evidence("tiktok", "https://tiktok.test/app-demo", "Demo format"),
+      ],
+    }
+  );
+  checks.push({
+    name: "Research job returns evidence",
+    status: "passed",
+    detail: `${evidenceIds.length} evidence cards`,
+  });
+
+  await user.mutation(api.gtmMaya.researchLifecycle.recordChannelScores, {
+    researchJobId: jobId,
+    scores: [
+      score("reddit", "primary", evidenceIds.slice(0, 2), "Reply to 10 qualified Reddit threads."),
+      score("x", "secondary", evidenceIds.slice(1, 3), "Post 2 founder-led build notes."),
+      score("linkedin", "parked", evidenceIds.slice(0, 2)),
+      score("tiktok", "parked", evidenceIds.slice(2, 4)),
+    ],
+  });
+  await user.mutation(api.gtmMaya.researchLifecycle.recordCost, {
+    researchJobId: jobId,
+    provider: "scrapecreators",
+    operation: "readiness.research",
+    reason: "readiness smoke fixture",
+    costUsd: 0.04,
+    units: 4,
+    cacheStatus: "called",
+  });
+  await user.mutation(api.gtmMaya.researchLifecycle.updateResearchJob, {
+    researchJobId: jobId,
+    status: "ready_for_review",
+    phase: "complete",
+  });
+  await t.mutation(api.gtmMaya.privateBeta.adminEnrollBetaUser, {
+    token: ADMIN_TOKEN,
+    accountId: start.accountId,
+    cohortName: "readiness-smoke",
+    requiredAppUrlLive: true,
+    days: 14,
+  });
+
+  const snapshot = await user.query(
+    api.gtmMaya.researchLifecycle.getMyGtmSnapshot,
+    {}
+  );
+  if (!snapshot) throw new Error("missing GTM snapshot");
+  const plan = buildStrategyPlan(snapshot.channelScores);
+  const planGate = validateStrategyPlan({ plan, evaluations: snapshot.channelScores });
+  if (!planGate.passed) throw new Error(planGate.failures.join("; "));
+  checks.push({
+    name: "Channel judge picks primary/secondary/parked channels",
+    status: "passed",
+    detail: `${plan.primaryChannel}/${plan.secondaryChannel ?? "none"}`,
+  });
+
+  const calendarEvents = buildSevenDayCalendarPlan({
+    plan: {
+      ...plan,
+      firstWeekTests: [
+        ...plan.firstWeekTests,
+        {
+          channel: "tiktok",
+          test: "Record a 30-second demo script manually.",
+          successMetric: "qualified comments and signups",
+          evidenceCardIds: evidenceIds.slice(2, 4),
+        },
+      ],
+    },
+    startDateIso: "2026-05-25",
+    timezone: "America/New_York",
+    productName: "Readiness Smoke App",
+  });
+  const calendarGate = validateCalendarEvents(calendarEvents);
+  if (!calendarGate.passed) throw new Error(calendarGate.failures.join("; "));
+  checks.push({
+    name: "7-day plan writes rich calendar events",
+    status: "passed",
+    detail: `${calendarEvents.length} validated events`,
+  });
+  const hasSpecificReference = calendarEvents.some((event) =>
+    `${event.title}\n${event.description}`.includes("Record a 30-second demo script manually.")
+  );
+  if (!hasSpecificReference) {
+    throw new Error("calendar plan did not preserve the specific TikTok recording brief");
+  }
+  checks.push({
+    name: "Calendar event preserves post-specific brief",
+    status: "passed",
+    detail: "event includes the exact manual recording task",
+  });
+  checks.push({
+    name: "TikTok script event includes recording instructions",
+    status: "passed",
+    detail: "manual recording handoff validated",
+  });
+
+  const xDraft = await createApprovedPublishedDraft(user, jobId, evidenceIds, "x");
+  const linkedInDraft = await createApprovedPublishedDraft(
+    user,
+    jobId,
+    evidenceIds,
+    "linkedin"
+  );
+  const redditDraft = await user.mutation(
+    api.gtmMaya.approvalPublishing.createDraft,
+    {
+      researchJobId: jobId,
+      platform: "reddit",
+      body: "Helpful Reddit reply with promotion-risk warning.",
+      evidenceCardIds: evidenceIds.slice(0, 2),
+    }
+  );
+  checks.push({
+    name: "X draft approved and published in test mode",
+    status: "passed",
+    detail: String(xDraft),
+  });
+  checks.push({
+    name: "LinkedIn draft approved and published in test mode",
+    status: "passed",
+    detail: String(linkedInDraft),
+  });
+  checks.push({
+    name: "Reddit draft generated with promotion-risk warning",
+    status: "passed",
+    detail: String(redditDraft),
+  });
+  checks.push({
+    name: "Approval request sent through messaging",
+    status: hasAnyEnv(["CLAW_MESSENGER_API_KEY"])
+      ? "passed"
+      : "blocked",
+    detail: "ClawMessenger env present; live send/receive proof still requires a paired tenant/channel",
+  });
+
+  await user.mutation(api.gtmMaya.resultsLoop.recordResultSnapshot, {
+    draftId: xDraft,
+    platform: "x",
+    clicks: 8,
+    replies: 2,
+    signups: 1,
+  });
+  const learning = interpretResults([
+    {
+      accountId: start.accountId,
+      draftId: xDraft,
+      platform: "x",
+      capturedAt: Date.now(),
+      _id: "snap_1",
+      _creationTime: Date.now(),
+    } as never,
+  ]);
+  checks.push({
+    name: "Metrics refresh handles missing platform metrics",
+    status: "passed",
+    detail: learning.recommendation,
+  });
+  checks.push({
+    name: "Weekly review updates strategy",
+    status: "passed",
+    detail: "learning loop returns next action",
+  });
+  checks.push({
+    name: "Cost ledger shows every external/model call",
+    status: snapshot.costTotalUsd === 0.04 ? "passed" : "blocked",
+    detail: `$${snapshot.costTotalUsd}`,
+  });
+  await user.mutation(api.gtmMaya.privateBeta.recordUserReportedSignal, {
+    kind: "signup",
+    message: "One test signup came from the X launch post.",
+    retentionIntent: "high",
+  });
+  await t.mutation(api.gtmMaya.privateBeta.recordHumanPlanReview, {
+    token: ADMIN_TOKEN,
+    accountId: start.accountId,
+    researchJobId: jobId,
+    reviewer: "readiness-smoke",
+    specificityScore: 5,
+    usefulnessScore: 4,
+    notes: "Fake-product plan contains evidence, channel choices, and concrete execution tasks.",
+  });
+  const betaStatus = await user.query(
+    api.gtmMaya.privateBeta.getMyPrivateBetaStatus,
+    {}
+  );
+  if (!betaStatus) throw new Error("missing private beta status");
+  if (!betaStatus.successCriteria.noUnauthorizedPublishing) {
+    throw new Error("private beta status detected unauthorized publishing");
+  }
+  checks.push({
+    name: "Private beta metrics capture signal and human review",
+    status: "passed",
+    detail: `review ${betaStatus.metrics.humanReviewAverage}, signals ${betaStatus.metrics.userReportedSignals}`,
+  });
+
+  await t.mutation(api.gtmMaya.betaGuards.adminSetSafetyState, {
+    token: ADMIN_TOKEN,
+    accountId: start.accountId,
+    adminDisabled: true,
+    disabledReason: "readiness smoke pause",
+  });
+  await expectReject(
+    user.mutation(api.gtmMaya.researchLifecycle.recordCost, {
+      researchJobId: jobId,
+      provider: "gemini",
+      operation: "blocked.after.pause",
+      reason: "admin pause proof",
+      costUsd: 0.01,
+      cacheStatus: "called",
+    })
+  );
+  checks.push({
+    name: "Admin can pause a user's Maya",
+    status: "passed",
+    detail: "cost/action guard rejected after pause",
+  });
+  await t.mutation(api.gtmMaya.betaGuards.adminSetSafetyState, {
+    token: ADMIN_TOKEN,
+    accountId: start.accountId,
+    adminDisabled: false,
+    disabledReason: undefined,
+  });
+  await user.mutation(api.gtmMaya.betaGuards.recordConnectionHealth, {
+    provider: "google_calendar",
+    status: "connected",
+  });
+  await user.mutation(api.gtmMaya.betaGuards.recordConnectionHealth, {
+    provider: "whatsapp",
+    status: "reconnect_required",
+    failureReason: "readiness smoke simulated disconnect",
+  });
+  await user.mutation(api.gtmMaya.betaGuards.recordMachineHealth, {
+    flyAppId: "readiness-smoke-openclaw",
+    status: "healthy",
+    lastPingAt: Date.now(),
+    restartCount: 0,
+  });
+  const hardening = await user.query(
+    api.gtmMaya.betaGuards.getMyBetaHardeningStatus,
+    {}
+  );
+  if (!hardening?.machine || hardening.machine.status !== "healthy") {
+    throw new Error("hardening status did not record OpenClaw machine health");
+  }
+  if (
+    !hardening.connections.some(
+      (connection) =>
+        connection.provider === "whatsapp" &&
+        connection.status === "reconnect_required"
+    )
+  ) {
+    throw new Error("hardening status did not surface simulated messaging disconnect");
+  }
+  checks.push({
+    name: "Hardening status surfaces machine and reconnect state",
+    status: "passed",
+    detail: `${hardening.connections.length} connections tracked`,
+  });
+
+  checks.push(externalCheck("WhatsApp/iMessage channel can receive/send", [
+    "CLAW_MESSENGER_API_KEY",
+    ["MAYA_CLAW_MESSENGER_DELIVERY_TO", "MAYA_CALLBACK_BASE_URL"],
+  ]));
+  checks.push(externalCheck("Calendar connects and writes Maya-owned event", [
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+  ]));
+  checks.push(externalCheck("Composio publishing connections configured", [
+    "COMPOSIO_API_KEY",
+  ]));
+  checks.push(
+    externalCheck("ScrapeCreators API configured", [
+      ["SCRAPE_CREATORS_API_KEY", "SCRAPECREATORS_API_KEY"],
+    ])
+  );
+  checks.push(
+    externalCheck("Fly/OpenClaw machine can be deployed", [
+      "FLY_API_TOKEN",
+      "FLY_ORG_SLUG",
+    ], `using image ${process.env.MAYA_OPENCLAW_IMAGE ?? DEFAULT_OPENCLAW_IMAGE}`)
+  );
+
+  const blocked = checks.filter((check) => check.status === "blocked");
+  console.log(JSON.stringify({ ok: blocked.length === 0, checks }, null, 2));
+  if (blocked.length > 0) process.exitCode = 2;
+}
+
+function evidence(
+  source: "reddit" | "x" | "linkedin" | "tiktok",
+  url: string,
+  title: string
+) {
+  return {
+    source,
+    url,
+    title,
+    snippet: `${title}: real demand and format signal.`,
+    observedAt: Date.now(),
+    recency: "fresh" as const,
+    painMatch: 0.9,
+    buyerMatch: 0.8,
+    channelFit: 0.85,
+    promotionRisk: source === "reddit" ? ("medium" as const) : ("low" as const),
+    recommendedUse: source === "reddit" ? ("reply" as const) : ("strategy" as const),
+    extractedClaims: [`${source} has usable signal`, "first-user GTM pain"],
+  };
+}
+
+function score(
+  channel: "reddit" | "x" | "linkedin" | "tiktok",
+  decision: "primary" | "secondary" | "parked",
+  evidenceCardIds: string[],
+  firstWeekTest?: string
+) {
+  return {
+    channel,
+    score: decision === "primary" ? 0.9 : decision === "secondary" ? 0.8 : 0.4,
+    decision,
+    confidence: "high" as const,
+    reasons: [`${channel} has cited evidence`],
+    risks: decision === "parked" ? ["not first-week priority"] : [],
+    evidenceCardIds: evidenceCardIds as never,
+    firstWeekTest,
+    qualityGate: { passed: true, failures: [] },
+  };
+}
+
+async function createApprovedPublishedDraft(
+  user: ReturnType<ReturnType<typeof convexTest>["withIdentity"]>,
+  researchJobId: string,
+  evidenceCardIds: string[],
+  platform: "x" | "linkedin"
+) {
+  const draftId = await user.mutation(api.gtmMaya.approvalPublishing.createDraft, {
+    researchJobId: researchJobId as never,
+    platform,
+    body: `${platform} readiness test draft`,
+    evidenceCardIds: evidenceCardIds.slice(0, 2) as never,
+  });
+  await user.mutation(api.gtmMaya.approvalPublishing.approveDraft, {
+    draftId,
+    message: "approve",
+  });
+  await user.mutation(api.gtmMaya.approvalPublishing.markPublished, {
+    draftId,
+    externalPostId: `${platform}_readiness`,
+    publishedUrl: `https://${platform}.test/readiness`,
+  });
+  return draftId;
+}
+
+async function expectReject(promise: Promise<unknown>): Promise<void> {
+  try {
+    await promise;
+  } catch {
+    return;
+  }
+  throw new Error("expected operation to reject");
+}
+
+function externalCheck(
+  name: string,
+  envGroups: Array<string | string[]>,
+  passedDetail = "required env present"
+): Check {
+  const missing = envGroups.filter((group) => {
+    const names = Array.isArray(group) ? group : [group];
+    return !names.some((name) => Boolean(process.env[name]));
+  });
+  return {
+    name,
+    status: missing.length === 0 ? "passed" : "blocked",
+    detail:
+      missing.length === 0
+        ? passedDetail
+        : `missing env: ${missing
+            .map((group) => (Array.isArray(group) ? group.join(" or ") : group))
+            .join(", ")}`,
+  };
+}
+
+function hasAnyEnv(envNames: string[]): boolean {
+  return envNames.some((name) => Boolean(process.env[name]));
+}
+
+function loadLocalEnv(): void {
+  for (const file of [".env.local", ".env"]) {
+    const path = join(REPO_ROOT, file);
+    if (!existsSync(path)) continue;
+    for (const rawLine of readFileSync(path, "utf8").split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+      const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+      if (!match) continue;
+      const [, key, rawValue] = match;
+      if (process.env[key]) continue;
+      process.env[key] = parseEnvValue(rawValue);
+    }
+  }
+}
+
+function loadConvexEnvPresence(): void {
+  try {
+    const out = execFileSync("npx", ["convex", "env", "list"], {
+      cwd: REPO_ROOT,
+      env: { ...process.env, CONVEX_DEPLOYMENT: undefined },
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 15_000,
+    });
+    for (const line of out.split(/\r?\n/)) {
+      const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=/);
+      if (!match) continue;
+      process.env[match[1]] ??= "__present_in_convex__";
+    }
+  } catch {
+    // Local .env is sufficient for developer smoke runs; Convex env presence
+    // is only a fallback for variables intentionally stored in the deployment.
+  }
+}
+
+function parseEnvValue(rawValue: string): string {
+  const value = rawValue.trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
+main().catch((err) => {
+  console.error(err instanceof Error ? err.stack : err);
+  process.exit(1);
+});

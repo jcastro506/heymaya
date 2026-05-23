@@ -53,6 +53,7 @@ const isPublic = createRouteMatcher([
   "/business-maya-v0(.*)",
   "/waitlist",
   "/growth",
+  "/clawlaunch(.*)",
   "/privacy",
   "/terms",
   "/tiktok9iwZOtsyHO9kZG4DFCD2AMpXjKs4jtyO.txt",

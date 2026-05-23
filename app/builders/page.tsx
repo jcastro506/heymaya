@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function BuildersPage() {
-  redirect("/growth");
+  redirect("/clawlaunch");
 }

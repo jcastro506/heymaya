@@ -112,6 +112,10 @@ export interface CreateAppInput {
   network?: string;
 }
 
+export interface FlyAppSummary {
+  name: string;
+}
+
 export class FlyClient {
   private readonly apiToken: string;
   private readonly defaultOrg: string | undefined;
@@ -153,6 +157,83 @@ export class FlyClient {
 
   async destroyApp(appName: string): Promise<void> {
     await this.fetchJson("DELETE", `/apps/${encodeURIComponent(appName)}`);
+  }
+
+  async listApps({ first = 100 }: { first?: number } = {}): Promise<FlyAppSummary[]> {
+    const graphqlEndpoint = "https://api.fly.io/graphql";
+    const query = `
+      query ListApps($first: Int!) {
+        viewer {
+          organizations {
+            nodes {
+              slug
+              apps(first: $first) {
+                nodes { name }
+              }
+            }
+          }
+        }
+      }
+    `;
+    const res = await this.fetchImpl(graphqlEndpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${this.apiToken}`,
+      },
+      body: JSON.stringify({ query, variables: { first } }),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new FlyError(
+        `Fly GraphQL listApps HTTP ${res.status}: ${text}`,
+        res.status,
+        text,
+        res.status >= 500 || res.status === 429
+      );
+    }
+    let parsed: {
+      data?: {
+        viewer?: {
+          organizations?: {
+            nodes?: Array<{
+              slug?: string;
+              apps?: { nodes?: Array<{ name?: string }> };
+            }>;
+          };
+        };
+      };
+      errors?: Array<{ message: string }>;
+    };
+    try {
+      parsed = JSON.parse(text) as typeof parsed;
+    } catch {
+      throw new FlyError(
+        `Fly GraphQL listApps: response not JSON: ${text}`,
+        res.status,
+        text,
+        false
+      );
+    }
+    if (parsed.errors && parsed.errors.length > 0) {
+      const msg = parsed.errors.map((e) => e.message).join("; ");
+      throw new FlyError(
+        `Fly GraphQL listApps returned errors: ${msg}`,
+        res.status,
+        text,
+        false
+      );
+    }
+    const orgs = parsed.data?.viewer?.organizations?.nodes ?? [];
+    const selected = this.defaultOrg
+      ? orgs.filter((org) => org.slug === this.defaultOrg)
+      : orgs;
+    return selected.flatMap((org) =>
+      (org.apps?.nodes ?? [])
+        .map((app) => app.name)
+        .filter((name): name is string => typeof name === "string" && name.length > 0)
+        .map((name) => ({ name }))
+    );
   }
 
   /* ---------------------------- Secrets --------------------------------- */

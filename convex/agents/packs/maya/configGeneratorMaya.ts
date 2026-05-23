@@ -66,6 +66,11 @@ import { assembleWorkspaceBundle } from "./workspace/assembleWorkspaceBundle";
 import type { JobsJson } from "./workspace/buildCronJobsJson";
 import { serializeWorkspaceBundle } from "./serializeWorkspaceBundle";
 
+function normalizeOptionalEnv(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Public types                                                                */
 /* -------------------------------------------------------------------------- */
@@ -500,6 +505,9 @@ export function buildMayaConfig(inputs: BuildInputs, now: number): MayaConfigBun
       plan: creator.plan,
       now,
       followerSnapshots: inputs.followerSnapshots,
+      clawMessengerDeliveryTarget: normalizeOptionalEnv(
+        process.env.MAYA_CLAW_MESSENGER_DELIVERY_TO
+      ),
     },
     { bootstrapMaxChars: MAYA_BOOTSTRAP_MAX_CHARS }
   );

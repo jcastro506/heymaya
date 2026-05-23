@@ -208,7 +208,18 @@ export const wipeEverything = internalAction({
     const fly = new FlyClient();
     const destroyed: string[] = [];
     const failed: string[] = [];
-    for (const appName of wipe.appNames) {
+    let appNames = wipe.appNames;
+    try {
+      const liveMayaApps = (await fly.listApps())
+        .map((app) => app.name)
+        .filter((name) => name.startsWith("maya-"));
+      appNames = Array.from(new Set([...appNames, ...liveMayaApps])).sort();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      failed.push(`listApps: ${msg}`);
+      console.error(`[wipeEverything] fly: failed to list apps: ${msg}`);
+    }
+    for (const appName of appNames) {
       try {
         await fly.destroyApp(appName);
         destroyed.push(appName);
