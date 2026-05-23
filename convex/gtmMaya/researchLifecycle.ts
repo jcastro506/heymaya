@@ -11,7 +11,9 @@ import { assertGtmSpendAllowed } from "./betaGuards";
 const CHANNEL_PREFERENCE = v.union(
   v.literal("whatsapp"),
   v.literal("imessage"),
-  v.literal("web")
+  v.literal("web"),
+  // Sprint 15 (Part II D1) — Telegram is the default ClawLaunch channel.
+  v.literal("telegram")
 );
 
 const APP_STAGE = v.union(
@@ -530,7 +532,7 @@ async function findOrCreateGtmAgent(
   args: {
     clerkUserId: string;
     email: string;
-    channelPreference: "whatsapp" | "imessage" | "web";
+    channelPreference: "whatsapp" | "imessage" | "web" | "telegram";
     timezone: string;
   }
 ): Promise<{

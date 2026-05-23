@@ -4297,17 +4297,49 @@ export default defineSchema({
     channelPreference: v.union(
       v.literal("whatsapp"),
       v.literal("imessage"),
-      v.literal("web")
+      v.literal("web"),
+      v.literal("telegram")
     ),
     timezone: v.string(),
     openClawFlyAppId: v.optional(v.string()),
     deployedAt: v.optional(v.number()),
+    // Sprint 15 (D1) — Telegram is the default ClawLaunch channel because
+    // WhatsApp is QR-only and iMessage requires a macOS host. Populated by
+    // claimPairingToken when the user taps the deep link in onboarding.
+    telegramChatId: v.optional(v.string()),
+    telegramUsername: v.optional(v.string()),
+    telegramPairedAt: v.optional(v.number()),
+    // Sprint 16 — hook bridge auth token (per-agent shared secret used by
+    // Convex actions when POSTing to the Fly machine's /hooks/agent and
+    // /hooks/wake endpoints, and by the machine when calling back into
+    // /lc_gtm/* HTTP actions). Provisioned at deploy.
+    hookToken: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_account", ["accountId"])
     .index("by_app", ["appId"])
-    .index("by_fly_app", ["openClawFlyAppId"]),
+    .index("by_fly_app", ["openClawFlyAppId"])
+    .index("by_telegram_chat", ["telegramChatId"]),
+
+  // Sprint 15 — short-lived single-use Telegram pairing tokens. Generated
+  // when the user clicks "Open Maya in Telegram" in onboarding; consumed
+  // by the bot when they tap the deep link. Atomic claim semantics: claim
+  // sets `claimedAt` + `chatId` and any subsequent claim attempt for the
+  // same token throws (one-to-one binding).
+  gtmTelegramPairingTokens: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    token: v.string(),
+    expiresAt: v.number(),
+    claimedAt: v.optional(v.number()),
+    claimedChatId: v.optional(v.string()),
+    claimedUsername: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_token", ["token"])
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"]),
 
   gtmApps: defineTable({
     accountId: v.id("creators"),

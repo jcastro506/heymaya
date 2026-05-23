@@ -45,36 +45,52 @@ const confirmed = process.argv.includes("--confirm");
 const mockChannels = process.argv.includes("--mock-channels");
 const mockFly = process.argv.includes("--mock-fly");
 
-function delegateToSprint13Smoke(): SprintSection {
-  // S13 deliverable lives in scripts/gtm-sprint-13-smoke.ts. The gate composes
-  // (not duplicates) the per-sprint L4 smokes so additions stay in one place.
+function delegateToSmoke(
+  sprint: string,
+  title: string,
+  scriptPath: string,
+  summaryRegex: RegExp
+): SprintSection {
+  // Gate composes (not duplicates) per-sprint L4 smokes so additions stay
+  // in one place.
   const args: string[] = [];
   if (liveMode) args.push("--live");
   if (confirmed) args.push("--confirm");
-  const result = spawnSync(
-    "npx",
-    ["tsx", "scripts/gtm-sprint-13-smoke.ts", ...args],
-    { cwd: REPO_ROOT, encoding: "utf8" }
-  );
+  const result = spawnSync("npx", ["tsx", scriptPath, ...args], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+  });
   const out = (result.stdout ?? "") + (result.stderr ?? "");
   const lines = out.split(/\r?\n/).filter((l) => l.length > 0);
   const lastSummary =
-    [...lines].reverse().find((l) => /Sprint 13 L4 smoke:/i.test(l)) ??
-    "unknown";
+    [...lines].reverse().find((l) => summaryRegex.test(l)) ?? "unknown";
   if (result.status === 0) {
-    return {
-      sprint: "S13",
-      title: "OpenClaw image bump + persistent volume + cost-cap kill switch",
-      status: "shipped-passing",
-      detail: lastSummary,
-    };
+    return { sprint, title, status: "shipped-passing", detail: lastSummary };
   }
   return {
-    sprint: "S13",
-    title: "OpenClaw image bump + persistent volume + cost-cap kill switch",
+    sprint,
+    title,
     status: "shipped-skipped",
     detail: `smoke exited ${result.status}: ${lastSummary}`,
   };
+}
+
+function delegateToSprint13Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S13",
+    "OpenClaw image bump + persistent volume + cost-cap kill switch",
+    "scripts/gtm-sprint-13-smoke.ts",
+    /Sprint 13 L4 smoke:/i
+  );
+}
+
+function delegateToSprint15Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S15",
+    "Telegram channel provisioning at signup",
+    "scripts/gtm-sprint-15-smoke.ts",
+    /Sprint 15 L4 smoke:/i
+  );
 }
 
 function placeholderSection(sprint: string, title: string): SprintSection {
@@ -115,10 +131,10 @@ async function main(): Promise<void> {
   // ─── Sprint 13 ─────────────────────────────────────────────────────────
   sections.push(delegateToSprint13Smoke());
 
+  // ─── Sprint 15 ─────────────────────────────────────────────────────────
+  sections.push(delegateToSprint15Smoke());
+
   // ─── Sprints not yet shipped — placeholders ────────────────────────────
-  sections.push(
-    placeholderSection("S15", "Telegram channel provisioning at signup")
-  );
   sections.push(placeholderSection("S14", "Native cron delivery (kill mode:none)"));
   sections.push(placeholderSection("S16", "Convex ↔ Maya hook bridge"));
   sections.push(

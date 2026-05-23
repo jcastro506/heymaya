@@ -54,8 +54,20 @@ import {
   calendarListEventsHttp,
   calendarUpdateEventHttp,
 } from "./lcMaya/calendarHttp";
+import { telegramWebhookHttp } from "./gtmMaya/telegramWebhook";
 
 const http = httpRouter();
+
+// Sprint 15 — Telegram Bot API webhook for ClawLaunch (Part II D1).
+// Telegram POSTs every inbound update here for pairing-token claims +
+// (later sprints) inbound user messages. Authenticated by the
+// X-Telegram-Bot-Api-Secret-Token header. See
+// convex/gtmMaya/telegramWebhook.ts for the contract.
+http.route({
+  path: "/telegram/webhook",
+  method: "POST",
+  handler: telegramWebhookHttp,
+});
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs
 // per-chunk + post-call-finalize events here with HMAC-SHA256 signature in

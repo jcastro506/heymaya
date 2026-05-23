@@ -102,7 +102,11 @@ function GtmOnboardingBody() {
   useEffect(() => {
     let cancelled = false;
     void startOnboarding({
-      channelPreference: "whatsapp",
+      // Sprint 15 (Part II D1): Telegram is the ClawLaunch channel default.
+      // WhatsApp pairing is QR-only and can't be self-served; iMessage
+      // requires a macOS host. Pairing happens after deploy via the
+      // `Open Maya in Telegram` deep link surfaced on the deploy screen.
+      channelPreference: "telegram",
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     }).catch((err: Error) => {
       if (!cancelled) setError(err.message);

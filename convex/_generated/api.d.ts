@@ -103,6 +103,8 @@ import type * as gtmMaya_researchTasks from "../gtmMaya/researchTasks.js";
 import type * as gtmMaya_researchWorker from "../gtmMaya/researchWorker.js";
 import type * as gtmMaya_resultsLoop from "../gtmMaya/resultsLoop.js";
 import type * as gtmMaya_strategyJudge from "../gtmMaya/strategyJudge.js";
+import type * as gtmMaya_telegramPairing from "../gtmMaya/telegramPairing.js";
+import type * as gtmMaya_telegramWebhook from "../gtmMaya/telegramWebhook.js";
 import type * as gtmMaya_tiktokWarmup from "../gtmMaya/tiktokWarmup.js";
 import type * as gtmMaya_walkthrough from "../gtmMaya/walkthrough.js";
 import type * as http from "../http.js";
@@ -157,6 +159,7 @@ import type * as integrations_stripe_priceIds from "../integrations/stripe/price
 import type * as integrations_stripe_products from "../integrations/stripe/products.js";
 import type * as integrations_stripe_voiceMetering from "../integrations/stripe/voiceMetering.js";
 import type * as integrations_stripe_webhooks from "../integrations/stripe/webhooks.js";
+import type * as integrations_telegram_client from "../integrations/telegram/client.js";
 import type * as integrations_twilio_client from "../integrations/twilio/client.js";
 import type * as integrations_twilio_configureWebhooks from "../integrations/twilio/configureWebhooks.js";
 import type * as integrations_twilio_provisionNumber from "../integrations/twilio/provisionNumber.js";
@@ -333,6 +336,8 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/researchWorker": typeof gtmMaya_researchWorker;
   "gtmMaya/resultsLoop": typeof gtmMaya_resultsLoop;
   "gtmMaya/strategyJudge": typeof gtmMaya_strategyJudge;
+  "gtmMaya/telegramPairing": typeof gtmMaya_telegramPairing;
+  "gtmMaya/telegramWebhook": typeof gtmMaya_telegramWebhook;
   "gtmMaya/tiktokWarmup": typeof gtmMaya_tiktokWarmup;
   "gtmMaya/walkthrough": typeof gtmMaya_walkthrough;
   http: typeof http;
@@ -387,6 +392,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/stripe/products": typeof integrations_stripe_products;
   "integrations/stripe/voiceMetering": typeof integrations_stripe_voiceMetering;
   "integrations/stripe/webhooks": typeof integrations_stripe_webhooks;
+  "integrations/telegram/client": typeof integrations_telegram_client;
   "integrations/twilio/client": typeof integrations_twilio_client;
   "integrations/twilio/configureWebhooks": typeof integrations_twilio_configureWebhooks;
   "integrations/twilio/provisionNumber": typeof integrations_twilio_provisionNumber;
