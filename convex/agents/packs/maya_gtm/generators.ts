@@ -52,6 +52,23 @@ export interface MayaGtmWorkspaceInput {
    *   https://<convex-deployment>.convex.site/lc_gtm/delivery_failure
    */
   deliveryFailureDestination?: string;
+  /**
+   * Sprint 16 — per-agent hookToken used in TWO directions:
+   *   - Convex → Maya: signed as Authorization: Bearer when POSTing to
+   *     `<gateway>/hooks/{agent,wake}`. Provisioned in
+   *     `ensureGtmAgentHookToken` before the bundle is built.
+   *   - Maya → Convex: signed as Authorization: Bearer when POSTing to
+   *     `<convexHookCallbackUrl>/lc_gtm/{research_callback,approval_decision,
+   *     calendar_proposal}`. Convex looks the agent up by token (no
+   *     agentId in the body).
+   */
+  hookToken?: string;
+  /**
+   * Sprint 16 — base URL for Convex callback endpoints (no trailing slash).
+   * Templated into TOOLS.md so Maya knows where to POST research-phase
+   * updates, approval decisions, and calendar proposals.
+   */
+  convexHookCallbackUrl?: string;
 }
 
 import { BUNDLED_PLAYBOOK_ENTRIES } from "./bundledPlaybook";
@@ -90,7 +107,7 @@ export function buildMayaGtmWorkspace(
     ["USER.md", renderUser(input)],
     ["APP.md", renderApp(input)],
     ["GTM.md", renderGtm(input)],
-    ["TOOLS.md", renderTools()],
+    ["TOOLS.md", renderTools(input)],
     ["BOOT.md", renderBoot(input)],
     ["HEARTBEAT.md", renderHeartbeat()],
     ["MEMORY.md", renderMemory(input)],
@@ -276,7 +293,49 @@ This is the current GTM plan. Maya updates it only after a research job or weekl
 `;
 }
 
-function renderTools(): string {
+function renderTools(input: MayaGtmWorkspaceInput): string {
+  const callbackBase = input.convexHookCallbackUrl;
+  const hookToken = input.hookToken;
+  const callbackSection = callbackBase && hookToken
+    ? `
+
+## Convex Callback Endpoints (Sprint 16)
+
+When I finish a research phase, the user approves/rejects a draft, or I want
+to propose calendar events for approval, I POST to one of these endpoints
+on the Convex deployment. Authentication is \`Authorization: Bearer
+<hookToken>\` (the same per-agent token Convex uses when calling me at
+/hooks/agent or /hooks/wake — bidirectional shared secret).
+
+Each request MUST include an \`idempotencyKey\` field (UUIDv4). If I retry
+the same logical operation, I reuse the same key — Convex short-circuits
+duplicates to "ok (replay)" so partial-failure recovery is safe.
+
+- \`POST ${callbackBase}/lc_gtm/research_callback\`
+  Body: \`{ idempotencyKey, researchJobId, phase, note? }\`
+  Use: tell Convex a research job advanced (phase = app_inspection,
+  icp_hypotheses, channel_research, strategy_judge, calendar_build,
+  complete). Convex refreshes APP.md/GTM.md from the new evidence.
+
+- \`POST ${callbackBase}/lc_gtm/approval_decision\`
+  Body: \`{ idempotencyKey, draftId, decision: "approved"|"rejected"|"revise", reviseNotes? }\`
+  Use: forward the user's approval decision from a Telegram reply or
+  mission board interaction.
+
+- \`POST ${callbackBase}/lc_gtm/calendar_proposal\`
+  Body: \`{ idempotencyKey, researchJobId, events: [{ title, description?, startsAtMs, endsAtMs }] }\`
+  Use: propose calendar events. Convex stamps the proposal; actual
+  Google Calendar write happens after user approval (Sprint 9).
+
+Hook token (treat as a secret — never log, never echo to the channel):
+- Token: \`${hookToken}\`
+
+When a fetch returns a non-2xx that isn't 401 (auth) or 409 (idempotency
+collision), retry with exponential backoff up to 3 times. After 3 fails,
+abort the operation and write a DREAMS.md entry so the operator sees it.
+`
+    : "";
+
   return `# TOOLS.md
 
 ## OpenClaw Native
@@ -321,7 +380,7 @@ Use Sonnet only for bounded hard research during beta or when a cheaper model fa
 
 - Calendar events must include the full post brief: platform, script, hook, angle, reference links, assets needed, approval state, and success metric.
 - Gmail is optional for account notices and summaries, not cold outbound.
-`;
+${callbackSection}`;
 }
 
 function renderBoot(input: MayaGtmWorkspaceInput): string {

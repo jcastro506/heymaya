@@ -56,6 +56,11 @@ import {
 } from "./lcMaya/calendarHttp";
 import { telegramWebhookHttp } from "./gtmMaya/telegramWebhook";
 import { deliveryFailureHttp } from "./gtmMaya/deliveryFailures";
+import {
+  approvalDecisionHttp,
+  calendarProposalHttp,
+  researchCallbackHttp,
+} from "./gtmMaya/openclaw/inboundCallback";
 
 const http = httpRouter();
 
@@ -78,6 +83,27 @@ http.route({
   path: "/lc_gtm/delivery_failure",
   method: "POST",
   handler: deliveryFailureHttp,
+});
+
+// Sprint 16 — Maya → Convex callbacks. The agent POSTs to these from
+// its OpenClaw runtime after a research turn, approval reply, or
+// calendar proposal. Bearer auth against per-agent hookToken;
+// idempotency by per-call uuid. See
+// convex/gtmMaya/openclaw/inboundCallback.ts for the full contract.
+http.route({
+  path: "/lc_gtm/research_callback",
+  method: "POST",
+  handler: researchCallbackHttp,
+});
+http.route({
+  path: "/lc_gtm/approval_decision",
+  method: "POST",
+  handler: approvalDecisionHttp,
+});
+http.route({
+  path: "/lc_gtm/calendar_proposal",
+  method: "POST",
+  handler: calendarProposalHttp,
 });
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs

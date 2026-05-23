@@ -10,6 +10,7 @@ import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { FlyClient, FlyError, type FlyMachineConfig } from "../../lib/flyClient";
 import { buildMayaGtmWorkspace } from "../../agents/packs/maya_gtm/generators";
+import { mintHookToken } from "../../gtmMaya/openclaw/hookClient";
 
 export type DeployMayaGtmStage =
   | "load-agent"
@@ -85,6 +86,23 @@ export function resolveDeliveryFailureUrl(
   const siteUrl = env.CONVEX_SITE_URL ?? env.NEXT_PUBLIC_CONVEX_SITE_URL;
   if (!siteUrl) return undefined;
   return `${siteUrl.replace(/\/$/, "")}/lc_gtm/delivery_failure`;
+}
+
+/**
+ * Sprint 16 — base URL Maya uses when POSTing /lc_gtm/{research_callback,
+ * approval_decision, calendar_proposal}. Pulls from CONVEX_SITE_URL or
+ * the explicit override env. Always returns a trailing-slash-stripped URL
+ * so workspace generator can concatenate `/lc_gtm/<route>` cleanly.
+ */
+export function resolveConvexHookCallbackBaseUrl(
+  env: Partial<Record<string, string | undefined>> = process.env
+): string | undefined {
+  if (env.MAYA_GTM_CONVEX_CALLBACK_BASE_URL) {
+    return env.MAYA_GTM_CONVEX_CALLBACK_BASE_URL.replace(/\/$/, "");
+  }
+  const siteUrl = env.CONVEX_SITE_URL ?? env.NEXT_PUBLIC_CONVEX_SITE_URL;
+  if (!siteUrl) return undefined;
+  return siteUrl.replace(/\/$/, "");
 }
 
 const MODEL_ROUTING = {
@@ -257,6 +275,30 @@ export const patchGtmAgentOnDeploySuccess = internalMutation({
   },
 });
 
+/**
+ * Sprint 16 — provision (or rotate) the per-agent hookToken before the
+ * workspace bundle is built. The token is the shared secret between the
+ * Convex deployment and the agent's OpenClaw gateway. Returns the freshly
+ * provisioned token so the caller can template it into the workspace
+ * config; subsequent re-builds read it from the gtmAgents row.
+ */
+export const ensureGtmAgentHookToken = internalMutation({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (ctx, args): Promise<string> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) throw new Error(`gtmAgent ${args.agentId} not found`);
+    if (agent.hookToken && agent.hookToken.length >= 32) {
+      return agent.hookToken;
+    }
+    const token = mintHookToken();
+    await ctx.db.patch(args.agentId, {
+      hookToken: token,
+      updatedAt: Date.now(),
+    });
+    return token;
+  },
+});
+
 export const buildAndUploadGtmWorkspace = internalAction({
   args: { agentId: v.id("gtmAgents") },
   handler: async (
@@ -268,6 +310,15 @@ export const buildAndUploadGtmWorkspace = internalAction({
       { agentId: args.agentId }
     );
     if (!row) throw new Error(`GTM agent ${args.agentId} not deployable.`);
+
+    // Sprint 16 — provision hookToken before bundling so cron.hooks.token
+    // can be templated into openclaw.json. Idempotent — re-builds keep
+    // the same token.
+    const hookToken = await ctx.runMutation(
+      internal.onboarding.gtm.deployMayaGtm.ensureGtmAgentHookToken,
+      { agentId: args.agentId }
+    );
+
     const { files } = buildMayaGtmWorkspace({
       accountEmail: row.creator.email,
       timezone: row.agent.timezone,
@@ -305,6 +356,12 @@ export const buildAndUploadGtmWorkspace = internalAction({
       telegramChatId: row.agent.telegramChatId,
       channelPreference: row.agent.channelPreference,
       deliveryFailureDestination: resolveDeliveryFailureUrl(),
+      // Sprint 16 — Convex ↔ Maya hook bridge configuration. The
+      // workspace generator templates these into openclaw.json so the
+      // gateway exposes /hooks/{agent,wake} and Maya's TOOLS.md knows
+      // where to POST /lc_gtm/* callbacks.
+      hookToken,
+      convexHookCallbackUrl: resolveConvexHookCallbackBaseUrl(),
     });
     const tarBytes = buildPosixTar(files);
     const tarBuffer = tarBytes.buffer.slice(

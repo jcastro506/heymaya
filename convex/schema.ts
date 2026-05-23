@@ -4341,6 +4341,27 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_agent", ["agentId"]),
 
+  // Sprint 16 — idempotency + audit log for Maya → Convex callbacks.
+  // Every callback (research/approval/calendar) includes an idempotency
+  // key the agent mints per logical op. Convex stamps it here on first
+  // receipt; subsequent posts with the same key short-circuit to "ok
+  // (replay)". Cross-tenant isolation: token-authenticated agentId must
+  // match this row's agentId.
+  gtmHookCallbacks: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    kind: v.union(
+      v.literal("research_callback"),
+      v.literal("approval_decision"),
+      v.literal("calendar_proposal")
+    ),
+    idempotencyKey: v.string(),
+    receivedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_idempotency_key", ["idempotencyKey"]),
+
   // Sprint 14 — OpenClaw POSTs here when a cron job's announce delivery
   // fails (channel unavailable, recipient blocked the bot, etc.). Mission
   // board surfaces these so failures don't vanish into the gateway log.
@@ -4434,6 +4455,10 @@ export default defineSchema({
     startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     failureReason: v.optional(v.string()),
+    // Sprint 16 — Maya posts /lc_gtm/research_callback with a per-phase
+    // note. Surfaced in mission board so the operator can see what Maya
+    // is thinking without reading the OpenClaw session log.
+    lastAgentNote: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

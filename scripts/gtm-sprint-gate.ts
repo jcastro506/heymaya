@@ -111,6 +111,15 @@ function delegateToSprint25Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint16Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S16",
+    "Convex ↔ Maya hook bridge",
+    "scripts/gtm-sprint-16-smoke.ts",
+    /Sprint 16 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -158,8 +167,10 @@ async function main(): Promise<void> {
   // ─── Sprint 2.5 — launch playbook codification ─────────────────────────
   sections.push(delegateToSprint25Smoke());
 
+  // ─── Sprint 16 — hook bridge ───────────────────────────────────────────
+  sections.push(delegateToSprint16Smoke());
+
   // ─── Sprints not yet shipped — placeholders ────────────────────────────
-  sections.push(placeholderSection("S16", "Convex ↔ Maya hook bridge"));
   sections.push(
     placeholderSection("S17", "Real skill installation + ClawHub pinning")
   );

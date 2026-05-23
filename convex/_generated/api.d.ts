@@ -33,6 +33,7 @@ import type * as agents_packs_maya_workspace_generateUserMd from "../agents/pack
 import type * as agents_packs_maya_workspace_skillsRegistry from "../agents/packs/maya/workspace/skillsRegistry.js";
 import type * as agents_packs_maya_workspace_standingOrders from "../agents/packs/maya/workspace/standingOrders.js";
 import type * as agents_packs_maya_workspace_types from "../agents/packs/maya/workspace/types.js";
+import type * as agents_packs_maya_gtm_bundledPlaybook from "../agents/packs/maya_gtm/bundledPlaybook.js";
 import type * as agents_packs_maya_gtm_generators from "../agents/packs/maya_gtm/generators.js";
 import type * as agents_packs_maya_service_anthropicSkillsManifest from "../agents/packs/maya_service/anthropicSkillsManifest.js";
 import type * as agents_packs_maya_service_buildJobsJson from "../agents/packs/maya_service/buildJobsJson.js";
@@ -94,6 +95,8 @@ import type * as gtmMaya_deliveryFailures from "../gtmMaya/deliveryFailures.js";
 import type * as gtmMaya_distributionMotions from "../gtmMaya/distributionMotions.js";
 import type * as gtmMaya_experimentPlanner from "../gtmMaya/experimentPlanner.js";
 import type * as gtmMaya_missionBoard from "../gtmMaya/missionBoard.js";
+import type * as gtmMaya_openclaw_hookClient from "../gtmMaya/openclaw/hookClient.js";
+import type * as gtmMaya_openclaw_inboundCallback from "../gtmMaya/openclaw/inboundCallback.js";
 import type * as gtmMaya_platformIntelligence from "../gtmMaya/platformIntelligence.js";
 import type * as gtmMaya_privateBeta from "../gtmMaya/privateBeta.js";
 import type * as gtmMaya_productionReality from "../gtmMaya/productionReality.js";
@@ -267,6 +270,7 @@ declare const fullApi: ApiFromModules<{
   "agents/packs/maya/workspace/skillsRegistry": typeof agents_packs_maya_workspace_skillsRegistry;
   "agents/packs/maya/workspace/standingOrders": typeof agents_packs_maya_workspace_standingOrders;
   "agents/packs/maya/workspace/types": typeof agents_packs_maya_workspace_types;
+  "agents/packs/maya_gtm/bundledPlaybook": typeof agents_packs_maya_gtm_bundledPlaybook;
   "agents/packs/maya_gtm/generators": typeof agents_packs_maya_gtm_generators;
   "agents/packs/maya_service/anthropicSkillsManifest": typeof agents_packs_maya_service_anthropicSkillsManifest;
   "agents/packs/maya_service/buildJobsJson": typeof agents_packs_maya_service_buildJobsJson;
@@ -328,6 +332,8 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/distributionMotions": typeof gtmMaya_distributionMotions;
   "gtmMaya/experimentPlanner": typeof gtmMaya_experimentPlanner;
   "gtmMaya/missionBoard": typeof gtmMaya_missionBoard;
+  "gtmMaya/openclaw/hookClient": typeof gtmMaya_openclaw_hookClient;
+  "gtmMaya/openclaw/inboundCallback": typeof gtmMaya_openclaw_inboundCallback;
   "gtmMaya/platformIntelligence": typeof gtmMaya_platformIntelligence;
   "gtmMaya/privateBeta": typeof gtmMaya_privateBeta;
   "gtmMaya/productionReality": typeof gtmMaya_productionReality;
