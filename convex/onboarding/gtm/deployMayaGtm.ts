@@ -38,10 +38,36 @@ export type DeployMayaGtmResult =
       durationMs: number;
     };
 
+/**
+ * OpenClaw runtime image.
+ *
+ * Sprint 13 (Part II of CLAWLAUNCH_GTM_MVP_EXECUTION_SPRINT.md) targets
+ * `v2026.5.20` for the heartbeat-pollution fix, cron legacy-store fix, and
+ * subagent allowlist tightening. The upgrade target is documented below as
+ * `OPENCLAW_IMAGE_TARGET` so smoke scripts can verify the canonical value
+ * without grepping. The default stays pinned to `v2026.4.23` until the
+ * operator has pulled v2026.5.20 into the private registry AND run
+ * `openclaw doctor` + `openclaw security audit --deep` on a throwaway Fly
+ * app. To flip, set `MAYA_GTM_OPENCLAW_IMAGE=registry.fly.io/heymaya-openclaw:v2026.5.20`
+ * on the Convex deployment. Roll back by clearing the env var.
+ */
+export const OPENCLAW_IMAGE_TARGET = "registry.fly.io/heymaya-openclaw:v2026.5.20";
+export const OPENCLAW_IMAGE_PINNED = "registry.fly.io/heymaya-openclaw:v2026.4.23";
+
 const OPENCLAW_IMAGE =
   process.env.MAYA_GTM_OPENCLAW_IMAGE ??
   process.env.MAYA_OPENCLAW_IMAGE ??
-  "registry.fly.io/heymaya-openclaw:v2026.4.23";
+  OPENCLAW_IMAGE_PINNED;
+
+export function resolveOpenClawImage(
+  env: Partial<Record<string, string | undefined>> = process.env
+): string {
+  return (
+    env.MAYA_GTM_OPENCLAW_IMAGE ??
+    env.MAYA_OPENCLAW_IMAGE ??
+    OPENCLAW_IMAGE_PINNED
+  );
+}
 
 const MODEL_ROUTING = {
   mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-3-flash-preview",
