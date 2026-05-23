@@ -185,6 +185,13 @@ function run(): CoherenceIssue[] {
     "MEMORY.md",
     "DREAMING.md",
     "jobs.json",
+    // Sprint 2.5 — launch-doctrine playbook.
+    "PLAYBOOK.md",
+    "playbook/reddit.md",
+    "playbook/x.md",
+    "playbook/tiktok.md",
+    "playbook/instagram.md",
+    "playbook/linkedin.md",
   ];
   for (const f of corpusFiles) {
     if (!keys.has(f)) {

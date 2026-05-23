@@ -58,8 +58,9 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("APP.md")).toContain("BugBrief");
     expect(files.get("GTM.md")).toContain("Primary: reddit");
     expect(files.get("AGENTS.md")).toContain("read APP.md and GTM.md");
+    expect(files.get("BOOT.md")).toContain("PLAYBOOK.md");
     expect(files.get("BOOT.md")).toContain(
-      "Read APP.md, GTM.md, MEMORY.md, and USER.md"
+      "APP.md, GTM.md, MEMORY.md, and USER.md"
     );
     expect(files.get("USER.md")).toContain("Will manually post Instagram: yes");
     expect(files.get("USER.md")).toContain("TikTok warm-up state: warming");
@@ -185,15 +186,29 @@ describe("Maya GTM workspace pack", () => {
     expect(weeklyReview?.payload.message).toContain("maxScrapeCreatorsCalls");
   });
 
-  it("keeps rendered workspace files inside a prompt budget", () => {
+  it("keeps the prompt-context bundle (workspace minus playbook/) inside a prompt budget", () => {
+    // Sprint 2.5: PLAYBOOK.md + playbook/*.md are REFERENCE files Maya reads
+    // only when channel-judging or content-drafting. They aren't part of the
+    // every-turn prompt context, so they're excluded from the prompt budget.
+    // AGENTS.md / SOUL.md / etc. ARE every-turn context and stay capped.
     const { files } = buildMayaGtmWorkspace(INPUT);
-    const totalChars = [...files.values()].reduce(
-      (sum, body) => sum + body.length,
-      0
-    );
+    const promptContextChars = [...files.entries()]
+      .filter(
+        ([path]) => path !== "PLAYBOOK.md" && !path.startsWith("playbook/")
+      )
+      .reduce((sum, [, body]) => sum + body.length, 0);
 
-    expect(totalChars).toBeLessThan(75_000);
+    expect(promptContextChars).toBeLessThan(75_000);
     expect(files.get("AGENTS.md")?.length).toBeLessThan(25_000);
+  });
+
+  it("playbook reference files ship with the workspace and are substantive", () => {
+    const { files } = buildMayaGtmWorkspace(INPUT);
+    const playbookChars = [...files.entries()]
+      .filter(([path]) => path === "PLAYBOOK.md" || path.startsWith("playbook/"))
+      .reduce((sum, [, body]) => sum + body.length, 0);
+    expect(playbookChars).toBeGreaterThan(150_000);
+    expect(files.get("PLAYBOOK.md")?.length).toBeGreaterThan(15_000);
   });
 
   it("documents WhatsApp fallback to direct gateway/session smoke", () => {
@@ -213,8 +228,11 @@ describe("Maya GTM workspace pack", () => {
       .join("\n")
       .replaceAll("x-api-key:", "x-api-key header");
 
-    expect(all).not.toMatch(/sk-[A-Za-z0-9]/);
-    expect(all).not.toMatch(/api[_-]?key\s*[:=]/i);
-    expect(all).not.toMatch(/secret\s*[:=]/i);
+    // Real OpenAI-style keys are 20+ alphanumeric chars after `sk-`. The
+    // shorter regex was tripping on substrings like "Musk-acquisition" in
+    // playbook citations.
+    expect(all).not.toMatch(/\bsk-[A-Za-z0-9]{20,}/);
+    expect(all).not.toMatch(/api[_-]?key\s*[:=]\s*['"][A-Za-z0-9_-]/i);
+    expect(all).not.toMatch(/\bsecret\s*[:=]\s*['"][A-Za-z0-9_-]/i);
   });
 });

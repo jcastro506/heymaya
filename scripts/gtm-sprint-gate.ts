@@ -102,6 +102,15 @@ function delegateToSprint14Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint25Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S2.5",
+    "Launch playbook codification (PLAYBOOK.md + per-platform)",
+    "scripts/gtm-sprint-25-smoke.ts",
+    /Sprint 2\.5 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -145,6 +154,9 @@ async function main(): Promise<void> {
 
   // ─── Sprint 14 ─────────────────────────────────────────────────────────
   sections.push(delegateToSprint14Smoke());
+
+  // ─── Sprint 2.5 — launch playbook codification ─────────────────────────
+  sections.push(delegateToSprint25Smoke());
 
   // ─── Sprints not yet shipped — placeholders ────────────────────────────
   sections.push(placeholderSection("S16", "Convex ↔ Maya hook bridge"));
