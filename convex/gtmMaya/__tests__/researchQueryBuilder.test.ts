@@ -104,13 +104,30 @@ describe("Sprint 3 — researchQueryBuilder", () => {
     expect(reddit.formatQueries).toEqual([]);
   });
 
-  it("Twitter pack uses quoted advanced-search operators from x.md § 3", () => {
+  it("Twitter pack (post-Sprint 1.3 TwitterAPI.io rewrite) — cats + short-pain + quoted-pain, NO -filter:retweets", () => {
+    // Sprint 1.3 swapped ScrapeCreators Twitter (broken phantom endpoint)
+    // for TwitterAPI.io. TwitterAPI.io's REST endpoint does NOT support
+    // X advanced-search's `-filter:retweets` operator — including it
+    // kills the query (verified 2026-05-24). Pack now relies on:
+    //   - raw category keywords (highest hit rate)
+    //   - shortened ICP-derived 2-3 word pain queries
+    //   - full quoted pain phrases (rare matches, highest signal)
+    // See convex/gtmMaya/researchQueryBuilder.ts:285-320 for the
+    // tradeoff comment block.
     const plan = buildResearchQueryPlan(baseInput);
     const twitter = plan.packs.find((p) => p.platform === "twitter")!;
-    expect(twitter.painQueries.some((q) => q.includes("-filter:retweets"))).toBe(
-      true
-    );
-    expect(twitter.painQueries.some((q) => q.includes("anyone know"))).toBe(true);
+    expect(
+      twitter.painQueries.some((q) => q.includes("-filter:retweets"))
+    ).toBe(false);
+    expect(twitter.painQueries.length).toBeGreaterThan(0);
+    // Cats must be in painQueries (highest hit rate)
+    expect(
+      twitter.painQueries.some((q) =>
+        baseInput.diagnosis.productCategoryKeywords.includes(q)
+      )
+    ).toBe(true);
+    // Competitor queries still use quoted operators (those work fine
+    // on TwitterAPI.io as substring matches)
     expect(twitter.competitorQueries.some((q) => q.includes("too expensive"))).toBe(
       true
     );

@@ -56,12 +56,18 @@ describe("Service Sprint 0 — schema-shape sibling-file scan", () => {
     // the field still load. Grep the schema source rather than running a
     // convex-test query — this is a static-shape assertion.
     //
-    // Growth-product (heymaya/growth-v0) added "growth-agent" alongside
-    // "creator" + "service-business". The literal set grew but stays
-    // additive — old rows without `accountType` still load.
+    // Growth-product added "growth-agent" and GTM/ClawLaunch added
+    // "gtm-agent" alongside the original "creator" + "service-business".
+    // The literal set keeps growing but the additive shape (optional
+    // union with creator + service-business + ...) is the invariant.
+    // Old rows without `accountType` still load.
     expect(schemaSrc).toMatch(
-      /accountType:\s*v\.optional\(\s*v\.union\(\s*v\.literal\("creator"\),\s*v\.literal\("service-business"\),\s*v\.literal\("growth-agent"\)\s*\)\s*\)/
+      /accountType:\s*v\.optional\(\s*v\.union\(/
     );
+    expect(schemaSrc).toMatch(/v\.literal\("creator"\)/);
+    expect(schemaSrc).toMatch(/v\.literal\("service-business"\)/);
+    expect(schemaSrc).toMatch(/v\.literal\("growth-agent"\)/);
+    expect(schemaSrc).toMatch(/v\.literal\("gtm-agent"\)/);
   });
 
   it("creators.businessId is additive (optional id pointer)", () => {
