@@ -138,6 +138,15 @@ function delegateToSprint2Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint3Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S3",
+    "Research query builder (per-platform PlatformQueryPacks)",
+    "scripts/gtm-sprint-3-smoke.ts",
+    /Sprint 3 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -193,6 +202,9 @@ async function main(): Promise<void> {
 
   // ─── Sprint 2 — GTM ScrapeCreators wrappers ───────────────────────────
   sections.push(delegateToSprint2Smoke());
+
+  // ─── Sprint 3 — research query builder ────────────────────────────────
+  sections.push(delegateToSprint3Smoke());
 
   // ─── Sprints not yet shipped — placeholders ────────────────────────────
   sections.push(
