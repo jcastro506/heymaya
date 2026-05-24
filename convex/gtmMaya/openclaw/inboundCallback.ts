@@ -615,6 +615,78 @@ export const draftedContentHttp = httpAction(async (ctx, request) => {
 });
 
 /**
+ * Sprint 2.4 — voice-matcher updates the draft's voiceMatchScore +
+ * slopCriticPassed fields. Called by Maya after invoking
+ * `maya-voice-matcher` on a fresh draft.
+ */
+interface UpdateDraftVoiceMatchPayload {
+  idempotencyKey: string;
+  draftId: string;
+  voiceMatchScore: number;
+  slopCriticPassed: boolean;
+  slopCriticFailures?: string[];
+  approvalStateUpdate?: "pending_approval" | "rejected";
+  userFeedback?: string;
+}
+
+export const updateDraftVoiceMatchHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: UpdateDraftVoiceMatchPayload;
+  try {
+    body = (await request.json()) as UpdateDraftVoiceMatchPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (
+    !body.idempotencyKey ||
+    !body.draftId ||
+    typeof body.voiceMatchScore !== "number" ||
+    typeof body.slopCriticPassed !== "boolean"
+  ) {
+    return new Response("missing required fields", { status: 400 });
+  }
+  if (body.voiceMatchScore < 0 || body.voiceMatchScore > 1) {
+    return new Response("voiceMatchScore must be in [0, 1]", { status: 400 });
+  }
+
+  // Re-use the existing approval-decision idempotency lane so a draft
+  // scored twice during a single research run doesn't double-write.
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "approval_decision",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") {
+    return new Response("ok (replay)", { status: 200 });
+  }
+
+  try {
+    await ctx.runMutation(
+      internal.gtmMaya.targetList.updateDraftedContentVoiceMatch,
+      {
+        agentId: auth.agentId,
+        accountId: auth.accountId,
+        draftId: body.draftId as Id<"gtmDraftedContent">,
+        voiceMatchScore: body.voiceMatchScore,
+        slopCriticPassed: body.slopCriticPassed,
+        slopCriticFailures: body.slopCriticFailures,
+        approvalStateUpdate: body.approvalStateUpdate,
+        userFeedback: body.userFeedback,
+      }
+    );
+  } catch (err) {
+    return new Response((err as Error).message, { status: 400 });
+  }
+  return new Response("ok", { status: 200 });
+});
+
+/**
  * Read endpoint Maya hits from her runtime after subagents finish — uses
  * hookToken auth (not Clerk) since she's calling from inside her own Fly
  * machine. Returns this agent's target threads only.

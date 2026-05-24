@@ -67,6 +67,9 @@ import {
   targetAccountHttp,
   draftedContentHttp,
   getMyTargetThreadsHttp,
+  // Sprint 2.4 — voice-matcher scoring update. maya-voice-matcher posts
+  // here after scoring a fresh draft on voice / slop / specificity.
+  updateDraftVoiceMatchHttp,
 } from "./gtmMaya/openclaw/inboundCallback";
 
 const http = httpRouter();
@@ -134,6 +137,14 @@ http.route({
   path: "/lc_gtm/get_my_target_threads",
   method: "GET",
   handler: getMyTargetThreadsHttp,
+});
+// Sprint 2.4 — voice-matcher scoring callback. Updates draft's
+// voiceMatchScore + slopCriticPassed + optional approvalStateUpdate
+// routing decision.
+http.route({
+  path: "/lc_gtm/update_draft_voice_match",
+  method: "POST",
+  handler: updateDraftVoiceMatchHttp,
 });
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs

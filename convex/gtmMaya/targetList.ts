@@ -385,6 +385,65 @@ export const updateDraftedContentApproval = internalMutation({
 });
 
 /**
+ * Sprint 2.4 — voice-matcher updates the draft's voiceMatchScore +
+ * slopCriticPassed + (optionally) approvalState routing decision. Called
+ * by the /lc_gtm/update_draft_voice_match HTTP endpoint after Maya runs
+ * maya-voice-matcher on a fresh draft from the deep-research subagents.
+ *
+ * The matcher routes:
+ *   - all-pass (voiceMatchScore >= 0.7 AND slopCriticPassed) → pending_approval
+ *   - voice fail or slop fail → rejected (with userFeedback) OR back to
+ *     subagent for rewrite (handled by Maya's runtime, not here)
+ *
+ * Defense-in-depth: asserts agent ownership of the draft before patching
+ * even though HTTP-layer auth already resolved the agent.
+ */
+export const updateDraftedContentVoiceMatch = internalMutation({
+  args: {
+    agentId: v.id("gtmAgents"),
+    accountId: v.id("creators"),
+    draftId: v.id("gtmDraftedContent"),
+    voiceMatchScore: v.number(),
+    slopCriticPassed: v.boolean(),
+    slopCriticFailures: v.optional(v.array(v.string())),
+    approvalStateUpdate: v.optional(
+      v.union(v.literal("pending_approval"), v.literal("rejected"))
+    ),
+    userFeedback: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    const draft = await ctx.db.get(args.draftId);
+    if (!draft)
+      throw new Error("updateDraftedContentVoiceMatch: draft not found.");
+    if (draft.agentId !== args.agentId || draft.accountId !== args.accountId) {
+      throw new Error(
+        "updateDraftedContentVoiceMatch: agent/account mismatch on draft."
+      );
+    }
+    if (args.voiceMatchScore < 0 || args.voiceMatchScore > 1) {
+      throw new Error(
+        "updateDraftedContentVoiceMatch: voiceMatchScore out of [0, 1]."
+      );
+    }
+    const patch: Partial<Doc<"gtmDraftedContent">> = {
+      voiceMatchScore: args.voiceMatchScore,
+      slopCriticPassed: args.slopCriticPassed,
+      updatedAt: Date.now(),
+    };
+    if (args.slopCriticFailures !== undefined) {
+      patch.slopCriticFailures = args.slopCriticFailures;
+    }
+    if (args.approvalStateUpdate !== undefined) {
+      patch.approvalState = args.approvalStateUpdate;
+    }
+    if (args.userFeedback !== undefined) {
+      patch.userFeedback = args.userFeedback;
+    }
+    await ctx.db.patch(args.draftId, patch);
+  },
+});
+
+/**
  * Daily heartbeat refresh: re-scrape the thread on a cadence and update
  * its metrics. Bumps lastSeenMetricsAtMs + updatedAt; doesn't touch
  * whyItFits or recommendedAction (those are subagent-owned).
