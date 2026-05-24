@@ -301,9 +301,12 @@ export const approvalDecisionHttp = httpAction(async (ctx, request) => {
 });
 
 /**
- * Calendar-event proposal callback. Maya proposes events; the actual
- * Google Calendar write happens after Sprint 9 OAuth ships. For now we
- * stamp the idempotency key so we don't double-propose.
+ * Calendar-event proposal callback. Maya proposes events; this handler
+ * writes them to Google Calendar via the connection stored in
+ * gtmCalendarConnections (Sprint 9). Each event is written sequentially
+ * (Google's per-account rate limit is generous; sequential keeps error
+ * handling simple). On success we insert one gtmCalendarEvents row per
+ * event tagged createdBy="maya" for the maya-owned deletion safeguard.
  */
 export const calendarProposalHttp = httpAction(async (ctx, request) => {
   const auth = await authenticate(ctx, request);
@@ -336,9 +339,28 @@ export const calendarProposalHttp = httpAction(async (ctx, request) => {
     return new Response("ok (replay)", { status: 200 });
   }
 
-  return new Response("ok (proposal recorded — write in Sprint 9)", {
-    status: 200,
-  });
+  // Write events via the GTM calendar connection.
+  try {
+    await ctx.runAction(
+      internal.gtmMaya.calendarWrite.writeCalendarEventsForAgent,
+      {
+        agentId: auth.agentId,
+        accountId: auth.accountId,
+        researchJobId: body.researchJobId as Id<"gtmResearchJobs">,
+        events: body.events,
+      }
+    );
+  } catch (err) {
+    console.error(
+      "[/lc_gtm/calendar_proposal] write failed:",
+      (err as Error).message
+    );
+    // Still 200 so Maya doesn't retry — the proposal idempotency key is
+    // already claimed. Operator sees the failure in the action log.
+    return new Response("ok (write failed; see logs)", { status: 200 });
+  }
+
+  return new Response("ok (events written)", { status: 200 });
 });
 
 /**

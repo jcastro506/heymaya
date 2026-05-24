@@ -174,6 +174,15 @@ function delegateToSprint20Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint9Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S9",
+    "Calendar OAuth + event write (GTM-scoped, reuses creator infra)",
+    "scripts/gtm-sprint-9-smoke.ts",
+    /Sprint 9 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -247,6 +256,7 @@ async function main(): Promise<void> {
     placeholderSection("S19", "Workspace mutation pipeline (post-research)")
   );
   sections.push(delegateToSprint20Smoke());
+  sections.push(delegateToSprint9Smoke());
   sections.push(
     placeholderSection("S21", "Standing orders + hooks + Policy plugin")
   );

@@ -4341,6 +4341,76 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_agent", ["agentId"]),
 
+  // Sprint 9 — GTM-account-scoped Google Calendar connection. Mirrors
+  // creatorMayaV0CalendarConnections (same encryption + refresh pattern)
+  // but indexed by gtmAgents.accountId. One row per GTM account (1:1
+  // with creators where accountType="gtm-agent"). Tokens encrypted via
+  // convex/lib/encryption (AES-256-GCM, ENCRYPTION_KEY env).
+  gtmCalendarConnections: defineTable({
+    accountId: v.id("creators"),
+    provider: v.literal("google"),
+    externalAccountId: v.optional(v.string()),
+    oauthAccessToken: v.optional(v.string()),   // encrypted base64(iv||ciphertext+tag)
+    oauthRefreshToken: v.optional(v.string()),  // encrypted
+    oauthExpiresAt: v.optional(v.number()),
+    oauthTokenType: v.optional(v.string()),
+    oauthScope: v.optional(v.string()),
+    timezone: v.string(),
+    scopes: v.array(v.string()),
+    connectedAt: v.number(),
+    lastSyncedAt: v.optional(v.number()),
+    status: v.union(
+      v.literal("active"),
+      v.literal("revoked"),
+      v.literal("expired")
+    ),
+  })
+    .index("by_account", ["accountId"]),
+
+  // Sprint 9 — Maya-owned calendar events written by /lc_gtm/
+  // calendar_proposal. Tagged with createdBy="maya" so updates/deletes
+  // never accidentally touch the user's other calendar entries.
+  gtmCalendarEvents: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    providerEventId: v.string(),  // Google's event id
+    htmlLink: v.optional(v.string()),
+    title: v.string(),
+    description: v.optional(v.string()),
+    startsAtMs: v.number(),
+    endsAtMs: v.number(),
+    timezone: v.optional(v.string()),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("scheduled"),
+      v.literal("completed"),
+      v.literal("cancelled")
+    ),
+    createdBy: v.literal("maya"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_provider_event", ["providerEventId"]),
+
+  // Sprint 9 — single-use Google OAuth state tokens for the GTM flow.
+  // 15-min TTL, atomic claim by the callback. Separate from
+  // oauthStateTokens (creator-side) so a leak doesn't cross-tenant.
+  gtmOauthStateTokens: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    token: v.string(),
+    provider: v.literal("google"),
+    expiresAt: v.number(),
+    claimedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_token", ["token"])
+    .index("by_account", ["accountId"]),
+
   // Sprint 16 — idempotency + audit log for Maya → Convex callbacks.
   // Every callback (research/approval/calendar) includes an idempotency
   // key the agent mints per logical op. Convex stamps it here on first
