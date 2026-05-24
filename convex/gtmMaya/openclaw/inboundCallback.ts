@@ -808,6 +808,43 @@ export const postResultSnapshotHttp = httpAction(async (ctx, request) => {
 });
 
 /**
+ * Sprint 2.10 — outbound voice-contract / slop firewall. Maya POSTs
+ * any user-facing draft message here BEFORE sendMessage. Failures
+ * return an array of specific reasons + excerpts so the rewrite has
+ * concrete targets. No idempotency check (validation is read-only).
+ */
+interface ValidateOutboundPayload {
+  text: string;
+}
+
+export const validateOutboundHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: ValidateOutboundPayload;
+  try {
+    body = (await request.json()) as ValidateOutboundPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (typeof body.text !== "string" || body.text.length === 0) {
+    return new Response("text required", { status: 400 });
+  }
+  if (body.text.length > 10000) {
+    return new Response("text too long (>10000 chars)", { status: 400 });
+  }
+
+  const result = await ctx.runAction(
+    internal.gtmMaya.outboundFirewall.validateOutbound,
+    { text: body.text }
+  );
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+/**
  * Sprint 2.7 — weekly review reads recent post results via hookToken
  * auth from Maya's runtime.
  */

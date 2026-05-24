@@ -77,6 +77,8 @@ import {
   postResultSnapshotHttp,
   // Sprint 2.7 — weekly review reads aggregated results.
   getMyRecentPostResultsHttp,
+  // Sprint 2.10 — outbound voice-contract / slop firewall.
+  validateOutboundHttp,
 } from "./gtmMaya/openclaw/inboundCallback";
 
 const http = httpRouter();
@@ -170,6 +172,13 @@ http.route({
   path: "/lc_gtm/get_my_recent_post_results",
   method: "GET",
   handler: getMyRecentPostResultsHttp,
+});
+// Sprint 2.10 — outbound voice-contract / slop firewall. Maya POSTs
+// any user-facing draft message here BEFORE sendMessage.
+http.route({
+  path: "/lc_gtm/validate_outbound",
+  method: "POST",
+  handler: validateOutboundHttp,
 });
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs
