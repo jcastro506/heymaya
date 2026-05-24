@@ -450,6 +450,155 @@ export const inspectLatestSynthQuery = internalQuery({
   },
 });
 
+/**
+ * Sprint 2.12 — parallel-safe research-only path for N=2/N=3 cross-
+ * product validation.
+ *
+ * The default `run` action wipes ALL test creators on the
+ * `TEST_CLERK_USER_ID_PREFIX` prefix, so two parallel deploys clobber
+ * each other. `runResearchOnly` takes a per-product prefix, never
+ * wipes, never deploys, and just returns the research analysis.
+ * Goal: validate channel-judge decisions across contrasting ICP
+ * shapes without burning the running Maya.
+ */
+export const runResearchOnly = internalAction({
+  args: {
+    productName: v.string(),
+    productUrl: v.string(),
+    founderWhy: v.optional(v.string()),
+    stage: v.optional(v.union(v.literal("idea"), v.literal("live-beta"), v.literal("paid"), v.literal("unknown"))),
+    weekGoal: v.optional(v.union(v.literal("feedback"), v.literal("signups"), v.literal("demos"), v.literal("revenue"), v.literal("unknown"))),
+    budgetUsd: v.optional(v.number()),
+    /** Distinguishes this aux test from the default synth + from sibling aux tests. */
+    prefixSlug: v.string(),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    ok: boolean;
+    creatorId: string;
+    appId: string;
+    researchJobId: string;
+    research: unknown;
+    prefixSlug: string;
+  }> => {
+    const clerkUserId = `test_gtm_aux_${args.prefixSlug}_${Date.now().toString(36)}`;
+    const seed = await ctx.runMutation(
+      internal._admin.realWorldDeployGtm.seedGtmAgentAndApp,
+      {
+        clerkUserId,
+        productName: args.productName,
+        productUrl: args.productUrl,
+        founderWhy: args.founderWhy,
+        stage: args.stage ?? "live-beta",
+        weekGoal: args.weekGoal ?? "signups",
+        budgetUsd: args.budgetUsd ?? 0.5,
+      }
+    );
+    console.log(
+      `[gtmAux/${args.prefixSlug}] seeded creatorId=${seed.creatorId} researchJobId=${seed.researchJobId}`
+    );
+
+    const research = await ctx.runAction(
+      internal.gtmMaya.researchWorker.runBudgetedResearchJob,
+      { researchJobId: seed.researchJobId }
+    );
+    console.log(`[gtmAux/${args.prefixSlug}] research complete`);
+
+    return {
+      ok: true,
+      creatorId: String(seed.creatorId),
+      appId: String(seed.appId),
+      researchJobId: String(seed.researchJobId),
+      research,
+      prefixSlug: args.prefixSlug,
+    };
+  },
+});
+
+export const analyzeAuxSynth = internalQuery({
+  args: { prefixSlug: v.string(), sampleSize: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<unknown> => {
+    const N = args.sampleSize ?? 5;
+    const prefix = `test_gtm_aux_${args.prefixSlug}_`;
+    const all = await ctx.db.query("creators").collect();
+    const rows = all
+      .filter((c) => c.clerkUserId.startsWith(prefix))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (rows.length === 0) return { found: false, prefix };
+    const creator = rows[0];
+
+    const jobs = await ctx.db
+      .query("gtmResearchJobs")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .collect();
+    const latest = jobs.sort((a, b) => b.createdAt - a.createdAt)[0];
+    if (!latest) return { found: true, jobs: 0 };
+
+    const cards = await ctx.db
+      .query("gtmEvidenceCards")
+      .withIndex("by_research_job", (q) => q.eq("researchJobId", latest._id))
+      .collect();
+    const scores = await ctx.db
+      .query("gtmChannelScores")
+      .withIndex("by_research_job", (q) => q.eq("researchJobId", latest._id))
+      .collect();
+
+    const bySource: Record<string, number> = {};
+    for (const c of cards) bySource[c.source] = (bySource[c.source] ?? 0) + 1;
+
+    const renderCard = (c: any) => ({
+      source: c.source,
+      url: c.url,
+      title: c.title,
+      snippet: c.snippet.slice(0, 180),
+      author: c.authorOrCommunity,
+      engagement: c.engagement,
+    });
+    const topReddit = cards
+      .filter((c) => c.source === "reddit")
+      .sort((a, b) => b.painMatch + b.buyerMatch + b.channelFit - (a.painMatch + a.buyerMatch + a.channelFit))
+      .slice(0, N)
+      .map(renderCard);
+    const topX = cards
+      .filter((c) => c.source === "x")
+      .sort((a, b) => b.painMatch + b.buyerMatch + b.channelFit - (a.painMatch + a.buyerMatch + a.channelFit))
+      .slice(0, N)
+      .map(renderCard);
+    const topHN = cards
+      .filter((c) => c.source === "google")
+      .sort((a, b) => b.painMatch + b.buyerMatch + b.channelFit - (a.painMatch + a.buyerMatch + a.channelFit))
+      .slice(0, N)
+      .map(renderCard);
+    const topTiktok = cards
+      .filter((c) => c.source === "tiktok")
+      .sort((a, b) => b.painMatch + b.buyerMatch + b.channelFit - (a.painMatch + a.buyerMatch + a.channelFit))
+      .slice(0, N)
+      .map(renderCard);
+
+    return {
+      found: true,
+      prefix,
+      creator: { _id: creator._id, plan: creator.plan },
+      researchJob: { _id: latest._id, phase: latest.phase, status: latest.status, spentUsd: latest.spentUsd },
+      channelScores: scores.map((s: any) => ({
+        channel: s.channel,
+        score: s.score,
+        decision: s.decision,
+        confidence: s.confidence,
+        summary: s.summary,
+      })),
+      totalCards: cards.length,
+      bySource,
+      topReddit,
+      topX,
+      topHN,
+      topTiktok,
+    };
+  },
+});
+
 export const patchTelegramChatId = internalMutation({
   args: { agentId: v.id("gtmAgents"), telegramChatId: v.string() },
   handler: async (ctx, args): Promise<void> => {

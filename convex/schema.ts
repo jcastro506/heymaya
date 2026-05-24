@@ -4667,6 +4667,10 @@ export default defineSchema({
     painMatch: v.number(),
     buyerMatch: v.number(),
     channelFit: v.number(),
+    // Sprint 2.13a — one-sentence LLM-emitted reason for the above
+    // scores. Optional so cards inserted before 2.13a still load.
+    // Populated by judgeCardsBatch.scoreAllCardsForProduct.
+    painLanguageReason: v.optional(v.string()),
     promotionRisk: v.union(
       v.literal("low"),
       v.literal("medium"),

@@ -15,6 +15,7 @@ import {
 } from "./channelScoring";
 import { buildResearchQueryPlan, type IcpHypothesisInput } from "./researchQueryBuilder";
 import type { PlatformResearchResult } from "./platformWorkers";
+import { scoreAllCardsForProduct } from "./judgeCardsBatch";
 
 export interface ResearchSkeletonEvidence {
   source: Doc<"gtmEvidenceCards">["source"];
@@ -381,6 +382,45 @@ export const getEvidenceCardsForScoring = internalQuery({
   },
 });
 
+/**
+ * Sprint 2.13a — patch LLM-scored painMatch / buyerMatch / channelFit
+ * + painLanguageReason onto evidence cards after scoreAllCardsForProduct
+ * returns. Bounded batch update; silently skips IDs that no longer
+ * exist (could happen if a parallel run wiped the job).
+ */
+export const patchEvidenceCardScores = internalMutation({
+  args: {
+    scores: v.array(
+      v.object({
+        cardId: v.id("gtmEvidenceCards"),
+        painMatch: v.number(),
+        buyerMatch: v.number(),
+        channelFit: v.number(),
+        reason: v.string(),
+      })
+    ),
+  },
+  handler: async (ctx, args): Promise<{ patched: number; missing: number }> => {
+    let patched = 0;
+    let missing = 0;
+    for (const s of args.scores) {
+      const row = await ctx.db.get(s.cardId);
+      if (!row) {
+        missing += 1;
+        continue;
+      }
+      await ctx.db.patch(s.cardId, {
+        painMatch: s.painMatch,
+        buyerMatch: s.buyerMatch,
+        channelFit: s.channelFit,
+        painLanguageReason: s.reason,
+      });
+      patched += 1;
+    }
+    return { patched, missing };
+  },
+});
+
 export const insertChannelScores = internalMutation({
   args: {
     researchJobId: v.id("gtmResearchJobs"),
@@ -589,13 +629,81 @@ export const runBudgetedResearchJob = internalAction({
       phase: "strategy_judge",
     });
 
-    // ── Score channels from the actual evidence (uses existing scorer).
+    // ── Sprint 2.13a: LLM per-card scoring (batched).
+    // Replaces the engagement-rank heuristic painMatch=totalSignal/100
+    // that was promoting popular-but-off-topic posts (live N=3 on
+    // 2026-05-24 showed Bezel's #1 Reddit pick was an unrelated
+    // MacBook upgrade post at 803↑ — high engagement, zero pain
+    // match). Gemini Flash Lite reads each card's text against the
+    // product's ICPs + category keywords and scores 0-1 with reason.
     const evidenceCards = await ctx.runQuery(
       internal.gtmMaya.researchWorker.getEvidenceCardsForScoring,
       { researchJobId: args.researchJobId }
     );
 
-    const scores = evaluateChannelSet(evidenceCards, appContext(app));
+    try {
+      const product = {
+        productName: app.name ?? "Untitled product",
+        productUrl: app.url,
+        founderWhy: app.founderWhy,
+        icpPainPhrases: app.keywordExpansion?.icpPainPhrases ?? [],
+        productCategoryKeywords:
+          app.keywordExpansion?.productCategoryKeywords ?? [],
+      };
+      // Skip LLM scoring if we have no product context — would just
+      // score every card 0 against an empty prompt.
+      const hasContext =
+        product.icpPainPhrases.length > 0 ||
+        product.productCategoryKeywords.length > 0;
+      if (hasContext && evidenceCards.length > 0) {
+        const cardsForScoring = evidenceCards.map((c) => ({
+          id: c.id!,
+          source: c.source,
+          title: c.title,
+          snippet: c.snippet,
+          author: undefined,
+          engagement: c.engagement,
+        }));
+        const result = await scoreAllCardsForProduct(cardsForScoring, product);
+        if (result.scores.length > 0) {
+          await ctx.runMutation(
+            internal.gtmMaya.researchWorker.patchEvidenceCardScores,
+            {
+              scores: result.scores.map((s) => ({
+                cardId: s.id as Id<"gtmEvidenceCards">,
+                painMatch: s.painMatch,
+                buyerMatch: s.buyerMatch,
+                channelFit: s.channelFit,
+                reason: s.reason,
+              })),
+            }
+          );
+        }
+        console.log(
+          `[gtm/cardScorer] scored=${result.scores.length} missing=${result.missingIds.length} batches=${result.batchCount} usage=${JSON.stringify(result.totalUsage)}`
+        );
+      } else {
+        console.log(
+          `[gtm/cardScorer] skipped — hasContext=${hasContext} cards=${evidenceCards.length}`
+        );
+      }
+    } catch (err) {
+      // LLM scoring failure shouldn't abort the whole research job —
+      // the downstream channel-judge still has the engagement-derived
+      // placeholder scores to work with (worse output, but no crash).
+      console.warn(
+        `[gtm/cardScorer] LLM scoring failed, falling back to engagement-derived scores: ${(err as Error).message}`
+      );
+    }
+
+    // Re-read cards to pick up the LLM-patched scores before the
+    // channel-judge runs.
+    const scoredCards = await ctx.runQuery(
+      internal.gtmMaya.researchWorker.getEvidenceCardsForScoring,
+      { researchJobId: args.researchJobId }
+    );
+
+    const scores = evaluateChannelSet(scoredCards, appContext(app));
 
     if (scores.length > 0) {
       await ctx.runMutation(
