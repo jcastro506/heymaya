@@ -717,10 +717,15 @@ export const runBudgetedResearchJob = internalAction({
     // decision/confidence/reasons/risks/firstWeekTest from the
     // LLM-scored cards + product context.
     //
-    // Fallback: if the LLM judge fails entirely (no decisions
-    // returned), fall back to the legacy evaluateChannelSet so we
-    // don't ship a deploy with zero channel decisions. The
-    // fallback path is logged loud so we can investigate.
+    // Sprint 2.13c: NO legacy fallback in production.
+    // Previously fell back to evaluateChannelSet on LLM judge
+    // failure, but the weighted-formula path produces wrong-shape
+    // decisions (engagement-rank, not pain-language match) that
+    // would silently ship to the operator. Cleaner failure mode:
+    // when the LLM judge returns 0 decisions, ship 0 decisions
+    // and surface a loud warning. Maya's boot_kickoff prompt
+    // handles the "no active channels" case by skipping subagent
+    // dispatch and asking the operator for guidance.
     let scores: Array<{
       channel: import("./channelScoring").GtmChannel;
       score: number;
@@ -764,9 +769,8 @@ export const runBudgetedResearchJob = internalAction({
     }
     if (scores.length === 0) {
       console.warn(
-        "[gtm/channelJudge] LLM produced 0 channel decisions; using legacy evaluateChannelSet fallback"
+        "[gtm/channelJudge] LLM produced 0 channel decisions — research job will complete with 0 channel decisions. Maya's first boot will surface this to the operator for manual review."
       );
-      scores = evaluateChannelSet(scoredCards, appContext(app));
     }
 
     if (scores.length > 0) {

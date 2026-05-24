@@ -1,3 +1,32 @@
+/**
+ * ⚠ LEGACY / TEST-SCAFFOLDING ONLY
+ *
+ * The weighted-formula channel scoring in this file (scoreEvidenceCard,
+ * evaluateChannel, evaluateChannelSet, decideChannel, confidenceFor,
+ * etc.) was replaced by the LLM channel-judge in Sprint 2.13b. Live
+ * N=3 validation (2026-05-24) showed the formula produced wrong-shape
+ * decisions on non-dev-tools products (Beehiiv → LinkedIn parked
+ * 0.00, Bezel → X parked 0.00). The LLM judge fixed both.
+ *
+ * What's still used:
+ *   - Types (GtmChannel, GtmEvidenceCard, etc.) — imported across the
+ *     codebase including by judgeChannel.ts
+ *   - evaluateChannelSet — only by runBudgetedResearchSkeleton, the
+ *     deterministic test-scaffolding mutation that provides "research
+ *     without external spend" for tests. Skeleton is NOT the
+ *     production research path. Production goes through
+ *     runBudgetedResearchJob → judgeAllChannels.
+ *
+ * DO NOT IMPORT scoreEvidenceCard / evaluateChannelSet INTO NEW
+ * PRODUCTION CODE. Use judgeChannel.ts. The functions are kept here
+ * only because deleting them would break the skeleton tests.
+ *
+ * Per [[feedback-trust-llm-judgment-no-hardcoded-rules]] — weighted
+ * heuristics are the wrong shape for "would this thread convert."
+ * Only LLM judgment with grounded product context produces useful
+ * channel decisions.
+ */
+
 export type GtmChannel =
   | "reddit"
   | "x"
