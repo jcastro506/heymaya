@@ -20,6 +20,7 @@ import {
   buildSkillInstallCommands,
   pinnedClawhubRequiredEnv,
 } from "../convex/agents/packs/maya_gtm/pinnedClawhubSkills";
+import { BUNDLED_LOCAL_SKILLS } from "../convex/agents/packs/maya_gtm/bundledLocalSkills";
 
 interface Check {
   name: string;
@@ -163,6 +164,45 @@ function checkRequiredEnv(): void {
   );
 }
 
+function checkBundledLocalSkills(): void {
+  if (BUNDLED_LOCAL_SKILLS.length !== 17) {
+    fail(
+      "local-skills-count",
+      `expected 17 bundled local Maya skills, got ${BUNDLED_LOCAL_SKILLS.length}`
+    );
+    return;
+  }
+  for (const s of BUNDLED_LOCAL_SKILLS) {
+    if (s.body.length < 800) {
+      fail(
+        "local-skill-substantive",
+        `${s.slug} body is ${s.body.length} chars; expected >800 (real SOP, not stub)`
+      );
+      return;
+    }
+    if (!s.body.includes("PLAYBOOK.md") && !s.body.includes("ScrapeCreators")) {
+      fail(
+        "local-skill-grounded",
+        `${s.slug} does not reference PLAYBOOK.md or ScrapeCreators`
+      );
+      return;
+    }
+  }
+  // Slop-critic should explicitly enumerate banned phrases.
+  const slop = BUNDLED_LOCAL_SKILLS.find((s) => s.slug === "maya-slop-critic");
+  if (!slop?.body.includes("Excited to announce") || !slop?.body.includes("supercharge")) {
+    fail(
+      "slop-critic-bans-shipped",
+      "maya-slop-critic doesn't ship the banned-phrase list"
+    );
+    return;
+  }
+  pass(
+    "bundled-local-skills",
+    `17 local Maya skills ship as real SOPs (>800 chars each, grounded in PLAYBOOK or ScrapeCreators); slop-critic ships banned-phrase list`
+  );
+}
+
 function checkInstallCommands(): void {
   const cmds = buildSkillInstallCommands();
   if (cmds.length !== 6) {
@@ -201,6 +241,7 @@ async function main(): Promise<void> {
   checkSanitization();
   checkRequiredEnv();
   checkInstallCommands();
+  checkBundledLocalSkills();
 
   const failed = checks.filter((c) => c.status === "failed");
   for (const c of checks) {

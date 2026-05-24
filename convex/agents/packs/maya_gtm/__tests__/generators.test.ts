@@ -78,7 +78,14 @@ describe("Maya GTM workspace pack", () => {
     for (const slug of mayaGtmSkillSlugs()) {
       const body = files.get(`skills/${slug}/SKILL.md`);
       expect(body).toBeTruthy();
-      expect(body).toContain("Do not spend external API budget");
+      // Sprint 17 part B: skills now ship real SOPs (>1000 chars) instead
+      // of 7-line stubs. Each must reference PLAYBOOK.md (the launch
+      // doctrine) OR cite ScrapeCreators (the read layer) so Maya
+      // grounds against shipped doctrine, not first-principles.
+      expect(body!.length).toBeGreaterThan(800);
+      const groundedReference =
+        body!.includes("PLAYBOOK.md") || body!.includes("ScrapeCreators");
+      expect(groundedReference).toBe(true);
     }
     expect(files.get("skills/scrapecreators-api/SKILL.md")).toContain(
       "ScrapeCreators"
@@ -92,8 +99,14 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("skills/scrapecreators-api/SKILL.md")).toContain(
       "/v1/reddit/search"
     );
+    // Sprint 17B real slop-critic body cites banned phrases by name, not
+    // the prior placeholder "generic AI phrasing" string. Verify the real
+    // anti-slop banned-phrase list ships.
     expect(files.get("skills/maya-slop-critic/SKILL.md")).toContain(
-      "generic AI phrasing"
+      "supercharge"
+    );
+    expect(files.get("skills/maya-slop-critic/SKILL.md")).toContain(
+      "Excited to announce"
     );
     expect(mayaGtmSkillSlugs()).toEqual(
       expect.arrayContaining([
@@ -104,7 +117,7 @@ describe("Maya GTM workspace pack", () => {
       ])
     );
     expect(files.get("skills/maya-tiktok-format-researcher/SKILL.md")).toContain(
-      "slideshows"
+      "slideshow_photo_mode"
     );
     expect(files.get("skills/maya-ugc-system-advisor/SKILL.md")).toContain(
       "premature"
@@ -186,15 +199,21 @@ describe("Maya GTM workspace pack", () => {
     expect(weeklyReview?.payload.message).toContain("maxScrapeCreatorsCalls");
   });
 
-  it("keeps the prompt-context bundle (workspace minus playbook/) inside a prompt budget", () => {
-    // Sprint 2.5: PLAYBOOK.md + playbook/*.md are REFERENCE files Maya reads
-    // only when channel-judging or content-drafting. They aren't part of the
-    // every-turn prompt context, so they're excluded from the prompt budget.
-    // AGENTS.md / SOUL.md / etc. ARE every-turn context and stay capped.
+  it("keeps the prompt-context bundle (workspace minus playbook/ + skills/*) inside a prompt budget", () => {
+    // Sprint 2.5 + 17B: PLAYBOOK.md + playbook/*.md + skills/<slug>/SKILL.md
+    // + clawhub-skills/<slug>/SKILL.md are REFERENCE files Maya reads only
+    // when the relevant operation fires (channel-judge, slop-critic,
+    // platform-specific subagent). They aren't every-turn prompt context.
+    // AGENTS.md / SOUL.md / USER.md / APP.md / GTM.md / etc. ARE every-turn
+    // context and stay capped.
     const { files } = buildMayaGtmWorkspace(INPUT);
     const promptContextChars = [...files.entries()]
       .filter(
-        ([path]) => path !== "PLAYBOOK.md" && !path.startsWith("playbook/")
+        ([path]) =>
+          path !== "PLAYBOOK.md" &&
+          !path.startsWith("playbook/") &&
+          !path.startsWith("skills/") &&
+          !path.startsWith("clawhub-skills/")
       )
       .reduce((sum, [, body]) => sum + body.length, 0);
 

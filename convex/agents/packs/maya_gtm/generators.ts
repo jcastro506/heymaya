@@ -73,6 +73,7 @@ export interface MayaGtmWorkspaceInput {
 
 import { BUNDLED_PLAYBOOK_ENTRIES } from "./bundledPlaybook";
 import { PINNED_CLAWHUB_SKILLS } from "./pinnedClawhubSkills";
+import { BUNDLED_LOCAL_SKILLS } from "./bundledLocalSkills";
 
 export interface MayaGtmWorkspaceBundle {
   files: Map<string, string>;
@@ -116,8 +117,16 @@ export function buildMayaGtmWorkspace(
     ["jobs.json", renderJobs(input)],
   ]);
 
+  // Sprint 17 part B — prefer bundled SKILL.md bodies (real, ~150-line per-skill
+  // SOPs grounded in PLAYBOOK rules) over the 7-line stubs the original
+  // generator emitted. Stubs remain as the fallback path for any skill not
+  // yet bundled (e.g. scrapecreators-api keeps its custom renderer).
+  const bundledBySlug = new Map(
+    BUNDLED_LOCAL_SKILLS.map((s) => [s.slug, s.body])
+  );
   for (const skill of SKILLS) {
-    files.set(`skills/${skill}/SKILL.md`, renderSkill(skill));
+    const bundled = bundledBySlug.get(skill);
+    files.set(`skills/${skill}/SKILL.md`, bundled ?? renderSkill(skill));
   }
 
   // Sprint 2.5 — ship the master PLAYBOOK.md + per-platform playbooks so
