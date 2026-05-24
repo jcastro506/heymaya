@@ -669,6 +669,32 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
       // (interval:1h). OpenClaw's heartbeat fires every 30 min and
       // only includes due tasks — same coverage, half the cron entries.
       {
+        id: "gtm_channel_discovery",
+        name: "Monthly GTM channel discovery",
+        description:
+          "Sprint 2.8 — monthly hunting expedition. Looks for under-explored channels (Discord communities, podcasts, niche forums, newsletters) that the initial research + weekly reviews missed. Surfaces 2-3 candidates with cited evidence for operator opt-in. Doesn't auto-add anything.",
+        enabled: true,
+        createdAtMs: 0,
+        updatedAtMs: 0,
+        // 1st of month, 10am operator-tz. Once-monthly cadence keeps
+        // the channel mix from compounding into stale silos without
+        // burning weekly attention on it.
+        schedule: { kind: "cron", expr: "0 10 1 * *", tz: input.timezone },
+        sessionTarget: "isolated",
+        wakeMode: "now",
+        payload: {
+          kind: "agentTurn",
+          // Smaller budget — pure synthesis + 1-2 grounded-search calls.
+          timeoutSeconds: 900,
+          thinking: "medium",
+          lightContext: false,
+          message:
+            "MONTHLY CHANNEL DISCOVERY — Sprint 2.8 hunting expedition. Voice-contract per SOUL.md applies throughout the external message.\n\nINTERNAL PHASE (silent).\n\n1. Read APP.md, GTM.md, MEMORY.md, USER.md, SOUL.md, PLAYBOOK.md.\n\n2. List the channels you've already tried: GTM.md active picks + any historical channels in MEMORY.md (channels that were tried + parked). Note WHY each parked channel didn't fit (per PLAYBOOK § 3 decision tree).\n\n3. Use the Gemini grounded search tool (or web_fetch fallback) to discover UNDER-EXPLORED channels for this product + niche. Specifically look for: (a) niche Discord communities (≥1k active members in the product's category, ≥10 messages/day), (b) podcasts where the buyer is a regular listener (1-2 specific shows + recent episodes that mention adjacent topics), (c) niche forums or Substack newsletters with engaged comment culture, (d) hashtag-based communities on X/IG/TikTok the operator hasn't been mining. NOT another mainstream subreddit or LinkedIn — those should already be in the channel-judge's known set.\n\n4. For each candidate, cite the source URL, give a 1-paragraph 'why this fits' (specific to the product, not generic), and note the warmup level (e.g. 'Discord requires 2 weeks of lurking + 5 substantive comments before product mention is OK').\n\n5. Cap at 2-3 candidates. Quality over quantity — operators with 5 channel proposals do none of them.\n\nEXTERNAL PHASE (the ONE Telegram message — ≤700 chars).\n\nManager voice. Required: name 2-3 channels concretely (specific Discord / podcast / forum names + URLs), one-sentence 'why this fits' per candidate in plain language, and a clear ASK ('want me to scope a 2-week warmup plan for one of these?'). HARD BANS: no maya-* slugs, no .md filenames, no 'channel proposal' as a noun, no 'gtmChannelProposals' or other internals. Read like a friend forwarding interesting links, not a quarterly report.\n\nExample: 'Hey Josh — went hunting for new rooms this month. Three worth a look: (1) Local Inference Discord (3.2k members, very active — perfect for ModelHub but needs 2 wks lurk first), (2) Latent Space podcast (recent ep on local LLM workflows — could pitch yourself as a guest), (3) r/MachineLearning's weekly self-promo thread (Saturdays, low-stakes way to test ModelHub framing). Want me to set up a 2-week warmup track for the Discord?'\n\nDo NOT add anything to the calendar from this turn — operator opt-in is required.",
+        },
+        delivery,
+        state: {},
+      },
+      {
         id: "gtm_weekly_review",
         name: "Weekly GTM review",
         description:
