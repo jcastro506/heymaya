@@ -100,6 +100,7 @@ import type * as gtmMaya_deliveryFailures from "../gtmMaya/deliveryFailures.js";
 import type * as gtmMaya_distributionMotions from "../gtmMaya/distributionMotions.js";
 import type * as gtmMaya_experimentPlanner from "../gtmMaya/experimentPlanner.js";
 import type * as gtmMaya_judgeCardsBatch from "../gtmMaya/judgeCardsBatch.js";
+import type * as gtmMaya_judgeChannel from "../gtmMaya/judgeChannel.js";
 import type * as gtmMaya_missionBoard from "../gtmMaya/missionBoard.js";
 import type * as gtmMaya_openclaw_hookClient from "../gtmMaya/openclaw/hookClient.js";
 import type * as gtmMaya_openclaw_inboundCallback from "../gtmMaya/openclaw/inboundCallback.js";
@@ -360,6 +361,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/distributionMotions": typeof gtmMaya_distributionMotions;
   "gtmMaya/experimentPlanner": typeof gtmMaya_experimentPlanner;
   "gtmMaya/judgeCardsBatch": typeof gtmMaya_judgeCardsBatch;
+  "gtmMaya/judgeChannel": typeof gtmMaya_judgeChannel;
   "gtmMaya/missionBoard": typeof gtmMaya_missionBoard;
   "gtmMaya/openclaw/hookClient": typeof gtmMaya_openclaw_hookClient;
   "gtmMaya/openclaw/inboundCallback": typeof gtmMaya_openclaw_inboundCallback;

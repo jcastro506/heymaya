@@ -16,6 +16,7 @@ import {
 import { buildResearchQueryPlan, type IcpHypothesisInput } from "./researchQueryBuilder";
 import type { PlatformResearchResult } from "./platformWorkers";
 import { scoreAllCardsForProduct } from "./judgeCardsBatch";
+import { judgeAllChannels } from "./judgeChannel";
 
 export interface ResearchSkeletonEvidence {
   source: Doc<"gtmEvidenceCards">["source"];
@@ -703,7 +704,67 @@ export const runBudgetedResearchJob = internalAction({
       { researchJobId: args.researchJobId }
     );
 
-    const scores = evaluateChannelSet(scoredCards, appContext(app));
+    // ── Sprint 2.13b: LLM channel-judge.
+    // Replaces the weighted-formula evaluateChannelSet that was
+    // picking wrong channels on non-dev-tools products (live N=3
+    // on 2026-05-24: Beehiiv → LinkedIn parked at 0.00; Bezel →
+    // X parked at 0.00; TikTok scored 0.80+ but always parked).
+    // One Gemini Flash medium-thinking call per channel decides
+    // decision/confidence/reasons/risks/firstWeekTest from the
+    // LLM-scored cards + product context.
+    //
+    // Fallback: if the LLM judge fails entirely (no decisions
+    // returned), fall back to the legacy evaluateChannelSet so we
+    // don't ship a deploy with zero channel decisions. The
+    // fallback path is logged loud so we can investigate.
+    let scores: Array<{
+      channel: import("./channelScoring").GtmChannel;
+      score: number;
+      decision: import("./channelScoring").GtmChannelDecision;
+      confidence: import("./channelScoring").GtmConfidence;
+      reasons: string[];
+      risks: string[];
+      evidenceCardIds: string[];
+      firstWeekTest?: string;
+      qualityGate: { passed: boolean; failures: string[] };
+    }> = [];
+    try {
+      const judgeProduct = {
+        productName: app.name ?? "Untitled product",
+        productUrl: app.url,
+        founderWhy: app.founderWhy,
+        icpPainPhrases: app.keywordExpansion?.icpPainPhrases ?? [],
+        productCategoryKeywords:
+          app.keywordExpansion?.productCategoryKeywords ?? [],
+        stage: app.stage,
+        weekGoal: app.weekGoal,
+      };
+      const judgeResult = await judgeAllChannels(scoredCards, judgeProduct);
+      scores = judgeResult.decisions.map((d) => ({
+        channel: d.channel,
+        score: d.score,
+        decision: d.decision,
+        confidence: d.confidence,
+        reasons: d.reasons,
+        risks: d.risks,
+        evidenceCardIds: d.evidenceCardIds,
+        firstWeekTest: d.firstWeekTest,
+        qualityGate: d.qualityGate,
+      }));
+      console.log(
+        `[gtm/channelJudge] LLM judged ${judgeResult.decisions.length}/${judgeResult.decisions.length + judgeResult.failedChannels.length} channels; failed=${judgeResult.failedChannels.join(",") || "none"}`
+      );
+    } catch (err) {
+      console.warn(
+        `[gtm/channelJudge] LLM judge fatal — falling back to weighted formulas: ${(err as Error).message}`
+      );
+    }
+    if (scores.length === 0) {
+      console.warn(
+        "[gtm/channelJudge] LLM produced 0 channel decisions; using legacy evaluateChannelSet fallback"
+      );
+      scores = evaluateChannelSet(scoredCards, appContext(app));
+    }
 
     if (scores.length > 0) {
       await ctx.runMutation(
