@@ -156,6 +156,15 @@ function delegateToSprint4Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint1Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S1",
+    "Orchestrator (replaces skeleton — Maya's brain becomes real)",
+    "scripts/gtm-sprint-1-smoke.ts",
+    /Sprint 1 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -217,6 +226,9 @@ async function main(): Promise<void> {
 
   // ─── Sprint 4 — platform workers ──────────────────────────────────────
   sections.push(delegateToSprint4Smoke());
+
+  // ─── Sprint 1 — orchestrator (replaces skeleton) ──────────────────────
+  sections.push(delegateToSprint1Smoke());
 
   // ─── Sprints not yet shipped — placeholders ────────────────────────────
   sections.push(

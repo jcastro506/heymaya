@@ -1,11 +1,20 @@
 import { v } from "convex/values";
-import { mutation } from "../_generated/server";
+import {
+  action,
+  internalAction,
+  internalMutation,
+  internalQuery,
+  mutation,
+} from "../_generated/server";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import {
   evaluateChannelSet,
   type GtmAppContext,
   type GtmEvidenceCard,
 } from "./channelScoring";
+import { buildResearchQueryPlan, type IcpHypothesisInput } from "./researchQueryBuilder";
+import type { PlatformResearchResult } from "./platformWorkers";
 
 export interface ResearchSkeletonEvidence {
   source: Doc<"gtmEvidenceCards">["source"];
@@ -269,3 +278,423 @@ function appContext(app: Doc<"gtmApps">): GtmAppContext {
     excludedAudiences: app.excludedAudiences,
   };
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Sprint 1 — runBudgetedResearchJob (replaces runBudgetedResearchSkeleton)
+//
+// The REAL research orchestrator. Calls Sprint 3 (query builder) +
+// Sprint 4 (platform workers) instead of writing canned evidence.
+// runBudgetedResearchSkeleton above is left in place for backward
+// compatibility with existing tests; production onboarding now points at
+// runBudgetedResearchJob.
+// ──────────────────────────────────────────────────────────────────────
+
+interface OrchestratorInputs {
+  job: Doc<"gtmResearchJobs">;
+  app: Doc<"gtmApps">;
+  creatorId: Id<"creators">;
+}
+
+export const getResearchJobForOrchestrator = internalQuery({
+  args: { researchJobId: v.id("gtmResearchJobs") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<OrchestratorInputs | null> => {
+    const job = await ctx.db.get(args.researchJobId);
+    if (!job) return null;
+    const app = await ctx.db.get(job.appId);
+    if (!app || app.accountId !== job.accountId) return null;
+    return { job, app, creatorId: job.accountId };
+  },
+});
+
+export const setJobPhase = internalMutation({
+  args: {
+    researchJobId: v.id("gtmResearchJobs"),
+    phase: v.union(
+      v.literal("app_inspection"),
+      v.literal("icp_hypotheses"),
+      v.literal("channel_research"),
+      v.literal("strategy_judge"),
+      v.literal("calendar_build"),
+      v.literal("complete")
+    ),
+    status: v.optional(
+      v.union(
+        v.literal("queued"),
+        v.literal("running"),
+        v.literal("needs_more_evidence"),
+        v.literal("ready_for_review"),
+        v.literal("failed"),
+        v.literal("cancelled")
+      )
+    ),
+    failureReason: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    const job = await ctx.db.get(args.researchJobId);
+    if (!job) throw new Error("research job not found");
+    const now = Date.now();
+    const patch: Partial<Doc<"gtmResearchJobs">> = {
+      phase: args.phase,
+      updatedAt: now,
+    };
+    if (args.status) patch.status = args.status;
+    if (args.status === "running" && !job.startedAt) patch.startedAt = now;
+    if (
+      args.status === "ready_for_review" ||
+      args.status === "needs_more_evidence" ||
+      args.status === "failed" ||
+      args.status === "cancelled"
+    ) {
+      patch.completedAt = now;
+    }
+    if (args.failureReason) patch.failureReason = args.failureReason;
+    await ctx.db.patch(args.researchJobId, patch);
+  },
+});
+
+export const getEvidenceCardsForScoring = internalQuery({
+  args: { researchJobId: v.id("gtmResearchJobs") },
+  handler: async (ctx, args): Promise<GtmEvidenceCard[]> => {
+    const rows = await ctx.db
+      .query("gtmEvidenceCards")
+      .withIndex("by_research_job", (q) => q.eq("researchJobId", args.researchJobId))
+      .collect();
+    return rows.map((r) => ({
+      id: String(r._id),
+      source: r.source,
+      url: r.url,
+      title: r.title,
+      snippet: r.snippet,
+      observedAt: r.observedAt,
+      recency: r.recency,
+      engagement: r.engagement ?? {},
+      painMatch: r.painMatch,
+      buyerMatch: r.buyerMatch,
+      channelFit: r.channelFit,
+      promotionRisk: r.promotionRisk,
+      recommendedUse: r.recommendedUse,
+      extractedClaims: r.extractedClaims,
+    }));
+  },
+});
+
+export const insertChannelScores = internalMutation({
+  args: {
+    researchJobId: v.id("gtmResearchJobs"),
+    scores: v.array(
+      v.object({
+        channel: v.union(
+          v.literal("reddit"),
+          v.literal("x"),
+          v.literal("linkedin"),
+          v.literal("tiktok"),
+          v.literal("product_hunt")
+        ),
+        score: v.number(),
+        decision: v.union(
+          v.literal("primary"),
+          v.literal("secondary"),
+          v.literal("parked")
+        ),
+        confidence: v.union(
+          v.literal("low"),
+          v.literal("medium"),
+          v.literal("high")
+        ),
+        reasons: v.array(v.string()),
+        risks: v.array(v.string()),
+        evidenceCardIds: v.array(v.id("gtmEvidenceCards")),
+        firstWeekTest: v.optional(v.string()),
+        qualityGate: v.object({
+          passed: v.boolean(),
+          failures: v.array(v.string()),
+        }),
+      })
+    ),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    const job = await ctx.db.get(args.researchJobId);
+    if (!job) throw new Error("research job not found");
+    const now = Date.now();
+    for (const score of args.scores) {
+      await ctx.db.insert("gtmChannelScores", {
+        accountId: job.accountId,
+        researchJobId: args.researchJobId,
+        ...score,
+        createdAt: now,
+      });
+    }
+  },
+});
+
+/**
+ * Default per-platform call budgets the orchestrator uses when launching
+ * Sprint 4 workers. These compound up to ~$0.40 worst-case across all 5
+ * platforms; well below the $3 per-research-job cap from PLAYBOOK § Cost.
+ */
+const ORCHESTRATOR_BUDGETS = {
+  reddit: 8,
+  twitter: 6,
+  tiktok: 8,
+  instagram: 4,
+  google: 4,
+  linkedin: 0, // Sprint 4 has no LinkedIn worker yet; reserve.
+};
+
+export const runBudgetedResearchJob = internalAction({
+  args: { researchJobId: v.id("gtmResearchJobs") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    status: "ready_for_review" | "needs_more_evidence" | "failed";
+    summary: string;
+    evidenceCount: number;
+    spentUsd: number;
+    perPlatformResults: PlatformResearchResult[];
+  }> => {
+    const orch = await ctx.runQuery(
+      internal.gtmMaya.researchWorker.getResearchJobForOrchestrator,
+      { researchJobId: args.researchJobId }
+    );
+    if (!orch) {
+      return {
+        status: "failed",
+        summary: "research job not found",
+        evidenceCount: 0,
+        spentUsd: 0,
+        perPlatformResults: [],
+      };
+    }
+    const { job, app, creatorId } = orch;
+
+    await ctx.runMutation(internal.gtmMaya.researchWorker.setJobPhase, {
+      researchJobId: args.researchJobId,
+      phase: "app_inspection",
+      status: "running",
+    });
+
+    // ── ICP hypotheses (placeholder until maya-icp-hypothesis runs in
+    // Maya's subagent lane). For v0.1 MVP we synthesize two starter
+    // hypotheses from the app: one X-locatable (devs/builders) and one
+    // Reddit-locatable (consumer/prosumer-leaning). channel-judge later
+    // re-weights based on real evidence.
+    const icpHypotheses: IcpHypothesisInput[] = [
+      {
+        id: "icp_x_default",
+        buyer:
+          "Indie devs or builders shipping solo products who need first users",
+        currentPain:
+          app.weekGoal === "feedback"
+            ? "shipped but no one's actually using it"
+            : "no audience, no idea how to launch",
+        currentWorkaround: "post once on Twitter or Reddit, hope for replies",
+        locatableOn: "twitter",
+      },
+      {
+        id: "icp_reddit_default",
+        buyer:
+          "Operators/prosumers in the product's category looking for a tool",
+        currentPain: `currently working around ${app.weekGoal === "signups" ? "this problem with manual workflows" : "the lack of a real solution"}`,
+        currentWorkaround: "manual workflow, spreadsheet, or paying freelancers",
+        locatableOn: "reddit",
+      },
+    ];
+
+    await ctx.runMutation(internal.gtmMaya.researchWorker.setJobPhase, {
+      researchJobId: args.researchJobId,
+      phase: "icp_hypotheses",
+    });
+
+    // ── Build the query plan (Sprint 3).
+    const productCategoryKeywords = [
+      app.name ?? "this product",
+      app.weekGoal === "feedback"
+        ? "feedback for indie tool"
+        : app.weekGoal === "signups"
+          ? "first users for SaaS"
+          : app.weekGoal === "demos"
+            ? "demo bookings indie SaaS"
+            : "first users",
+    ].filter(Boolean);
+
+    const plan = buildResearchQueryPlan({
+      diagnosis: {
+        productName: app.name ?? "Untitled",
+        productCategoryKeywords,
+        oneSentencePromise: `${app.name ?? "this product"} solves a real problem for indie builders.`,
+        showability:
+          app.canRecordScreen || app.canProvideScreenshots
+            ? "screen-recordable"
+            : "unshowable",
+        competitorMentions: [],
+        unverifiable: false,
+      },
+      icpHypotheses,
+      budgetOverrides: ORCHESTRATOR_BUDGETS,
+    });
+
+    await ctx.runMutation(internal.gtmMaya.researchWorker.setJobPhase, {
+      researchJobId: args.researchJobId,
+      phase: "channel_research",
+    });
+
+    // ── Run Sprint 4 platform workers in parallel.
+    const platformActions: Record<
+      string,
+      typeof internal.gtmMaya.platformWorkers.runRedditWorker
+    > = {
+      reddit: internal.gtmMaya.platformWorkers.runRedditWorker,
+      twitter: internal.gtmMaya.platformWorkers.runTwitterWorker,
+      tiktok: internal.gtmMaya.platformWorkers.runTikTokWorker,
+      instagram: internal.gtmMaya.platformWorkers.runInstagramWorker,
+      google: internal.gtmMaya.platformWorkers.runGoogleWorker,
+    };
+    const workerPromises: Promise<PlatformResearchResult>[] = [];
+    for (const pack of plan.packs) {
+      const action = platformActions[pack.platform];
+      if (!action) continue; // linkedin / others not yet supported in S4
+      workerPromises.push(
+        ctx.runAction(action, {
+          researchJobId: args.researchJobId,
+          accountId: creatorId,
+          pack: {
+            painQueries: pack.painQueries,
+            solutionQueries: pack.solutionQueries,
+            competitorQueries: pack.competitorQueries,
+            formatQueries: pack.formatQueries,
+            minimumEvidenceCards: pack.minimumEvidenceCards,
+            maxCalls: pack.maxCalls,
+          },
+        })
+      );
+    }
+    const perPlatformResults = await Promise.all(workerPromises);
+
+    await ctx.runMutation(internal.gtmMaya.researchWorker.setJobPhase, {
+      researchJobId: args.researchJobId,
+      phase: "strategy_judge",
+    });
+
+    // ── Score channels from the actual evidence (uses existing scorer).
+    const evidenceCards = await ctx.runQuery(
+      internal.gtmMaya.researchWorker.getEvidenceCardsForScoring,
+      { researchJobId: args.researchJobId }
+    );
+
+    const scores = evaluateChannelSet(evidenceCards, appContext(app));
+
+    if (scores.length > 0) {
+      await ctx.runMutation(
+        internal.gtmMaya.researchWorker.insertChannelScores,
+        {
+          researchJobId: args.researchJobId,
+          scores: scores.map((s) => ({
+            channel: s.channel,
+            score: s.score,
+            // Schema's decision union doesn't include "blocked"; treat
+            // blocked as parked for persistence (judge's reasons[] keeps
+            // the original rationale).
+            decision: s.decision === "blocked" ? "parked" : s.decision,
+            confidence: s.confidence,
+            reasons: s.reasons,
+            risks: s.risks,
+            evidenceCardIds: s.evidenceCardIds.map((id) => id as Id<"gtmEvidenceCards">),
+            firstWeekTest: s.firstWeekTest,
+            qualityGate: s.qualityGate,
+          })),
+        }
+      );
+    }
+
+    // ── Final status + summary.
+    const totalEvidence = evidenceCards.length;
+    const totalSpent = perPlatformResults.reduce((sum, r) => sum + r.spentUsd, 0);
+    const anyBudgetBlocked = perPlatformResults.some(
+      (r) => r.status === "budget_blocked"
+    );
+    const enoughEvidence = totalEvidence >= 8; // doctrine threshold
+
+    const status: "ready_for_review" | "needs_more_evidence" | "failed" =
+      anyBudgetBlocked && totalEvidence === 0
+        ? "failed"
+        : enoughEvidence
+          ? "ready_for_review"
+          : "needs_more_evidence";
+
+    await ctx.runMutation(internal.gtmMaya.researchWorker.setJobPhase, {
+      researchJobId: args.researchJobId,
+      phase: "complete",
+      status,
+      failureReason:
+        status === "failed"
+          ? "budget_blocked before any evidence was gathered"
+          : undefined,
+    });
+
+    return {
+      status,
+      summary: `${perPlatformResults.length} workers, ${totalEvidence} evidence cards, $${totalSpent.toFixed(4)} spent`,
+      evidenceCount: totalEvidence,
+      spentUsd: Math.round(totalSpent * 10000) / 10000,
+      perPlatformResults,
+    };
+  },
+});
+
+/**
+ * Public action the onboarding UI calls. Verifies the caller owns the
+ * research job (cross-tenant isolation), then dispatches to the internal
+ * orchestrator.
+ */
+export const runMyResearch = action({
+  args: { researchJobId: v.id("gtmResearchJobs") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    status: string;
+    summary: string;
+    evidenceCount: number;
+    spentUsd: number;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("signed-in user required");
+    const ownership = await ctx.runQuery(
+      internal.gtmMaya.researchWorker.assertOwnsResearchJob,
+      { researchJobId: args.researchJobId, clerkUserId: identity.subject }
+    );
+    if (!ownership.ok) throw new Error(ownership.reason);
+    return await ctx.runAction(
+      internal.gtmMaya.researchWorker.runBudgetedResearchJob,
+      args
+    );
+  },
+});
+
+export const assertOwnsResearchJob = internalQuery({
+  args: {
+    researchJobId: v.id("gtmResearchJobs"),
+    clerkUserId: v.string(),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: true } | { ok: false; reason: string }> => {
+    const creator = await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", args.clerkUserId))
+      .first();
+    if (!creator || creator.accountType !== "gtm-agent") {
+      return { ok: false, reason: "GTM account not found." };
+    }
+    const job = await ctx.db.get(args.researchJobId);
+    if (!job || job.accountId !== creator._id) {
+      return { ok: false, reason: "research job does not belong to caller" };
+    }
+    return { ok: true };
+  },
+});

@@ -82,9 +82,11 @@ function GtmOnboardingBody() {
   const createResearchJob = useMutation(
     api.gtmMaya.researchLifecycle.createResearchJob
   );
-  const runResearchSkeleton = useMutation(
-    api.gtmMaya.researchWorker.runBudgetedResearchSkeleton
-  );
+  // Sprint 1 — real research orchestrator (Sprint 3 + Sprint 4).
+  // Replaces the prior runBudgetedResearchSkeleton call. The skeleton
+  // mutation is kept in the Convex codebase for tests + emergency
+  // fallback but is no longer in the production onboarding path.
+  const runResearch = useAction(api.gtmMaya.researchWorker.runMyResearch);
   const inspectApp = useAction(api.gtmMaya.appInspector.inspectMyGtmApp);
   const analyzeWalkthrough = useAction(
     api.gtmMaya.walkthrough.analyzeMyWalkthroughUpload
@@ -173,7 +175,11 @@ function GtmOnboardingBody() {
         await inspectApp({ appId });
       }
       const jobId = await createResearchJob({ appId, budgetUsd: 3 });
-      await runResearchSkeleton({ researchJobId: jobId });
+      // Sprint 1: real research orchestrator. This action may take
+      // 1-3 minutes (5 platform workers in parallel, ~30 ScrapeCreators
+      // calls total at the default budget). The mission board polls
+      // gtmResearchJobs.phase for live progress.
+      void runResearch({ researchJobId: jobId });
       setResearchJobId(String(jobId));
       setStage("research");
     } catch (err) {
