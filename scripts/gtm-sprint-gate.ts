@@ -147,6 +147,15 @@ function delegateToSprint3Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint4Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S4",
+    "Platform workers (Reddit / TikTok / Twitter / IG / Google)",
+    "scripts/gtm-sprint-4-smoke.ts",
+    /Sprint 4 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -205,6 +214,9 @@ async function main(): Promise<void> {
 
   // ─── Sprint 3 — research query builder ────────────────────────────────
   sections.push(delegateToSprint3Smoke());
+
+  // ─── Sprint 4 — platform workers ──────────────────────────────────────
+  sections.push(delegateToSprint4Smoke());
 
   // ─── Sprints not yet shipped — placeholders ────────────────────────────
   sections.push(
