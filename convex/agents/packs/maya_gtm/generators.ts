@@ -435,19 +435,11 @@ On boot:
 function renderHeartbeat(): string {
   return `# HEARTBEAT.md
 
-Heartbeat is cheap and mostly does nothing.
+Heartbeat is cheap and mostly does nothing. The tasks block below uses OpenClaw's native interval gating — only tasks whose \`interval\` has elapsed are included in any given heartbeat fire.
 
-Allowed checks:
+When a task has nothing user-visible to surface, reply with the literal token \`HEARTBEAT_OK\` (and nothing else). OpenClaw drops the message silently — no Telegram spam on quiet ticks.
 
-- unread user messages
-- pending approvals already in Convex
-- upcoming calendar events already known
-- overdue publish/result jobs already in Convex
-- cached connection health
-- open loops from MEMORY.md
-- APP.md/GTM.md drift markers already written by a completed job
-
-Forbidden on heartbeat:
+## Hard forbid (every task)
 
 - ScrapeCreators calls
 - Gemini deep research
@@ -456,8 +448,42 @@ Forbidden on heartbeat:
 - Composio publishing without explicit approval
 - full strategy replanning
 
-If a heartbeat finds real work, it queues a bounded job and exits. It does not improvise an expensive workflow.
-`;
+If a heartbeat finds real work, it queues a bounded job via the Convex hook bridge (\`POST <convexHookCallbackUrl>/lc_gtm/research_callback\` with the new note) and exits.
+
+## tasks (native OpenClaw tasks block)
+
+\`\`\`yaml
+tasks:
+  - name: pending-approvals
+    interval: 30m
+    prompt: |
+      Read MEMORY.md and check Convex (via the mission-board surface) for
+      gtmDrafts in status="pending_approval" where the user hasn't replied
+      in 24h. If any, send ONE concise Telegram nudge per draft. Don't
+      repeat the nudge until 48h. If no overdue approvals, reply HEARTBEAT_OK.
+  - name: calendar-due
+    interval: 1h
+    prompt: |
+      Read GTM.md and the cached gtmCalendarEvents. If a Maya-owned event
+      is due in the next 2h and the operator hasn't already been pinged,
+      send a single "in 30 min: <event>" reminder. Otherwise reply HEARTBEAT_OK.
+  - name: open-loops
+    interval: 2h
+    prompt: |
+      Scan MEMORY.md for open loops. If anything is stale >7d, surface it
+      in one short Telegram message ("still waiting on: X"). If no stale
+      loops, reply HEARTBEAT_OK.
+  - name: hourly-result-scan
+    interval: 1h
+    prompt: |
+      Check gtmCalendarEvents in status="completed" within the last 24h
+      that have no gtmResultSnapshots row yet. If any, ask the operator
+      ONE short question to log the result. Otherwise reply HEARTBEAT_OK.
+\`\`\`
+
+## Active hours
+
+I respect the operator's quiet hours: tasks only run between 09:00 and 22:00 in the operator's timezone. OpenClaw's heartbeat \`activeHours\` config enforces this — I don't have to gate manually.`;
 }
 
 /**
@@ -549,50 +575,11 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
         delivery,
         state: {},
       },
-      {
-        id: "gtm_calendar_check",
-        name: "Calendar check",
-        description:
-          "Check already-known production events and reminders. Enrich missing briefs from cached strategy only.",
-        enabled: true,
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        schedule: { kind: "cron", expr: "0 9,15 * * *", tz: input.timezone },
-        sessionTarget: "isolated",
-        wakeMode: "now",
-        payload: {
-          kind: "agentTurn",
-          lightContext: true,
-          thinking: "off",
-          timeoutSeconds: 60,
-          message:
-            "CALENDAR CHECK: Read GTM.md, USER.md, and MEMORY.md. Look for due manual-posting reminders, approvals, and calendar briefs already present in workspace/Convex. Do not run new platform research. If a TikTok warm-up task is due, remind the user to complete normal account activity and Account Check before posting cadence. If nothing is due, reply HEARTBEAT_OK.",
-        },
-        delivery,
-        state: {},
-      },
-      {
-        id: "gtm_result_refresh",
-        name: "Result refresh",
-        description:
-          "Review cached/published result state and decide whether a deeper results job should be queued.",
-        enabled: true,
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        schedule: { kind: "cron", expr: "0 18 * * 1-6", tz: input.timezone },
-        sessionTarget: "isolated",
-        wakeMode: "now",
-        payload: {
-          kind: "agentTurn",
-          lightContext: true,
-          thinking: "off",
-          timeoutSeconds: 60,
-          message:
-            "RESULT REFRESH: Read MEMORY.md and GTM.md. Review only already-recorded publish/result state. Do not call ScrapeCreators unless a separate explicit research/review job with budget exists. If results are missing after a scheduled post, ask for the link or metrics in one concise message. If everything is current, reply HEARTBEAT_OK.",
-        },
-        delivery,
-        state: {},
-      },
+      // Sprint 18 — gtm_calendar_check + gtm_result_refresh removed.
+      // Their work now lives in HEARTBEAT.md's native `tasks:` YAML
+      // block as `calendar-due` (interval:1h) + `hourly-result-scan`
+      // (interval:1h). OpenClaw's heartbeat fires every 30 min and
+      // only includes due tasks — same coverage, half the cron entries.
       {
         id: "gtm_weekly_review",
         name: "Weekly GTM review",

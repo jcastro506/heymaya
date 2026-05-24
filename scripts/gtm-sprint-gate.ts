@@ -192,6 +192,15 @@ function delegateToSprint10Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint18Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S18",
+    "Heartbeat tasks block (native OpenClaw primitive)",
+    "scripts/gtm-sprint-18-smoke.ts",
+    /Sprint 18 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -259,14 +268,12 @@ async function main(): Promise<void> {
 
   // ─── Sprints not yet shipped — placeholders ────────────────────────────
   sections.push(
-    placeholderSection("S18", "Heartbeat tasks block (native primitive)")
-  );
-  sections.push(
     placeholderSection("S19", "Workspace mutation pipeline (post-research)")
   );
   sections.push(delegateToSprint20Smoke());
   sections.push(delegateToSprint9Smoke());
   sections.push(delegateToSprint10Smoke());
+  sections.push(delegateToSprint18Smoke());
   sections.push(
     placeholderSection("S21", "Standing orders + hooks + Policy plugin")
   );

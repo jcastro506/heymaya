@@ -229,6 +229,22 @@ export function buildGatewayConfig(): Record<string, unknown> {
           runTimeoutSeconds: 900,
           archiveAfterMinutes: 60,
         },
+        // Sprint 18 — heartbeat config. Documented cost-savings pattern
+        // from OpenClaw docs: lightContext (only HEARTBEAT.md) + an
+        // isolated fresh session per fire. Active hours respect operator
+        // tz; OpenClaw natively skips fires outside the window.
+        // tasks: YAML block lives in HEARTBEAT.md so the per-task
+        // interval gating is owned by OpenClaw, not by us.
+        heartbeat: {
+          every: "30m",
+          lightContext: true,
+          isolatedSession: true,
+          activeHours: {
+            start: "09:00",
+            end: "22:00",
+            timezone: "operator", // generators.ts templates the user's tz
+          },
+        },
       },
       list: [
         {
