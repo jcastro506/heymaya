@@ -29,7 +29,7 @@
 
 import { callOpenRouter } from "../agents/modelRouter/openRouterClient";
 
-export const CARD_SCORER_MODEL = "google/gemini-3-flash-lite";
+export const CARD_SCORER_MODEL = "google/gemini-3.1-flash-lite";
 export const BATCH_SIZE = 25;
 
 export interface CardForScoring {

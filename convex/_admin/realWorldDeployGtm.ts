@@ -603,6 +603,49 @@ export const analyzeAuxSynth = internalQuery({
   },
 });
 
+/** Sprint 2.13a.2 — debug helper. Direct call to scoreAllCardsForProduct
+ * with hardcoded inputs so we can verify the scorer works in the Convex
+ * runtime independent of the orchestrator. */
+export const debugScoreCards = internalAction({
+  args: {},
+  handler: async (_ctx): Promise<unknown> => {
+    const { scoreAllCardsForProduct } = await import("../gtmMaya/judgeCardsBatch");
+    const cards = [
+      {
+        id: "test1",
+        source: "reddit",
+        title: "Best Mac GUI for ollama?",
+        snippet: "I'm tired of CLI for local LLMs on my M3 — what's the best free desktop wrapper for ollama these days?",
+        engagement: { upvotes: 45, comments: 12 },
+      },
+      {
+        id: "test2",
+        source: "reddit",
+        title: "From 2019 Dell to MacBook Pro M5",
+        snippet: "Just switched, here's my unboxing experience",
+        engagement: { upvotes: 803, comments: 50 },
+      },
+    ];
+    const product = {
+      productName: "ModelHub",
+      productUrl: "https://studio.consciousengines.com/model-hub",
+      founderWhy: "local LLM workflows on Mac feel disjointed",
+      icpPainPhrases: ["I am tired of using the terminal for local llms"],
+      productCategoryKeywords: ["local llm desktop app mac"],
+    };
+    try {
+      const result = await scoreAllCardsForProduct(cards, product);
+      return { ok: true, result };
+    } catch (err) {
+      return {
+        ok: false,
+        error: (err as Error).message,
+        stack: (err as Error).stack?.split("\n").slice(0, 5),
+      };
+    }
+  },
+});
+
 export const patchTelegramChatId = internalMutation({
   args: { agentId: v.id("gtmAgents"), telegramChatId: v.string() },
   handler: async (ctx, args): Promise<void> => {
