@@ -210,6 +210,15 @@ function delegateToSprint19Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint22Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S22",
+    "Production readiness checks (env-var report)",
+    "scripts/gtm-sprint-22-smoke.ts",
+    /Sprint 22 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -285,7 +294,7 @@ async function main(): Promise<void> {
   sections.push(
     placeholderSection("S21", "Standing orders + hooks + Policy plugin")
   );
-  sections.push(placeholderSection("S22", "Production guardrails"));
+  sections.push(delegateToSprint22Smoke());
   // S1-S12 from the original doc come back here too once they're shipped,
   // in the order specified by Part II's "Updated implementation order".
 
