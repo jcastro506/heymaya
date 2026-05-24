@@ -22,6 +22,7 @@
     "smoke:gtm-sprint15": "tsx scripts/gtm-sprint-15-smoke.ts",
     "smoke:gtm-sprint16": "tsx scripts/gtm-sprint-16-smoke.ts",
     "smoke:gtm-sprint17": "tsx scripts/gtm-sprint-17-smoke.ts",
+    "smoke:gtm-sprint2": "tsx scripts/gtm-sprint-2-smoke.ts",
     "smoke:gtm-readiness": "tsx scripts/gtm-readiness-smoke.ts",
     "smoke:gtm-openclaw": "tsx scripts/gtm-openclaw-fly-smoke.ts",
     "smoke:gtm-sprint-gate": "tsx scripts/gtm-sprint-gate.ts",

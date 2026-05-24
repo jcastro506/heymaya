@@ -129,6 +129,15 @@ function delegateToSprint17Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint2Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S2",
+    "GTM ScrapeCreators wrappers (Reddit + TikTok + X + IG + Google)",
+    "scripts/gtm-sprint-2-smoke.ts",
+    /Sprint 2 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -181,6 +190,9 @@ async function main(): Promise<void> {
 
   // ─── Sprint 17 — real skill installation + ClawHub pinning ────────────
   sections.push(delegateToSprint17Smoke());
+
+  // ─── Sprint 2 — GTM ScrapeCreators wrappers ───────────────────────────
+  sections.push(delegateToSprint2Smoke());
 
   // ─── Sprints not yet shipped — placeholders ────────────────────────────
   sections.push(
