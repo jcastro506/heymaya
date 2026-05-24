@@ -220,6 +220,37 @@ describe("Maya GTM workspace pack", () => {
     expect(weeklyReview?.payload.message).toContain("BANS");
   });
 
+  it("Sprint 2.10 — every user-facing cron prompt mandates the validate_outbound firewall", () => {
+    // Sibling-file scan: prevent silent regression of the voice
+    // contract enforcement. boot_kickoff, gtm_channel_discovery,
+    // and gtm_weekly_review all send user-visible Telegram messages;
+    // each must instruct Maya to POST drafts through the firewall
+    // before sendMessage. (gtm_heartbeat replies HEARTBEAT_OK on
+    // quiet ticks; HEARTBEAT.md's top-of-file gate covers it for
+    // the rare task that does send a message.)
+    const { files } = buildMayaGtmWorkspace(INPUT);
+    const jobs = JSON.parse(files.get("jobs.json") ?? "{}") as {
+      jobs: Array<{ id: string; payload: { message: string } }>;
+    };
+    const userFacingIds = [
+      "0001_gtm_boot_kickoff",
+      "gtm_channel_discovery",
+      "gtm_weekly_review",
+    ];
+    for (const id of userFacingIds) {
+      const job = jobs.jobs.find((j) => j.id === id);
+      expect(job, `cron ${id} must exist`).toBeTruthy();
+      expect(
+        job!.payload.message,
+        `cron ${id} must mandate /lc_gtm/validate_outbound before sendMessage`
+      ).toContain("/lc_gtm/validate_outbound");
+      expect(
+        job!.payload.message,
+        `cron ${id} must reference Sprint 2.10 firewall framing`
+      ).toContain("MANDATORY pre-send firewall");
+    }
+  });
+
   it("keeps the prompt-context bundle (workspace minus playbook/ + skills/*) inside a prompt budget", () => {
     // Sprint 2.5 + 17B: PLAYBOOK.md + playbook/*.md + skills/<slug>/SKILL.md
     // + clawhub-skills/<slug>/SKILL.md are REFERENCE files Maya reads only
