@@ -11,6 +11,10 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import { FlyClient, FlyError, type FlyMachineConfig } from "../../lib/flyClient";
 import { buildMayaGtmWorkspace } from "../../agents/packs/maya_gtm/generators";
 import { mintHookToken } from "../../gtmMaya/openclaw/hookClient";
+import {
+  buildDeployTimeHelloText,
+  sendDirectTelegramMessage,
+} from "../../integrations/telegram/sendDirectMessage";
 
 export type DeployMayaGtmStage =
   | "load-agent"
@@ -622,6 +626,41 @@ export const deployMayaGtm = internalAction({
         );
       } catch (err) {
         return fail("wait-for-state", (err as Error).message, isRetryable(err));
+      }
+    }
+
+    // Sprint 2.11 — deploy-time Telegram hello. Bypasses OpenClaw +
+    // pi-coding-agent's ~28-min cold-start npm install so the operator
+    // gets confirmation that Maya is alive within seconds, not an hour.
+    // Best-effort: failures here don't abort the deploy (cron-driven
+    // boot_kickoff still runs the deep research + sends a real follow-up
+    // when ready ~60-90 min later).
+    if (row.agent.telegramChatId && row.app.name) {
+      try {
+        const helloText = buildDeployTimeHelloText({
+          productName: row.app.name,
+          // gtmAgents row doesn't carry a firstName today — falls back
+          // to "Hey there". When onboarding starts capturing the
+          // operator's name, plumb it through here.
+        });
+        const result = await sendDirectTelegramMessage({
+          botToken: process.env.TELEGRAM_BOT_TOKEN,
+          chatId: row.agent.telegramChatId,
+          text: helloText,
+        });
+        if (!result.ok) {
+          console.warn(
+            `[deployMayaGtm] deploy-time hello not sent (${result.reason})`,
+            result.firewallFailures
+              ? `firewall: ${JSON.stringify(result.firewallFailures)}`
+              : ""
+          );
+        }
+      } catch (err) {
+        // Don't fail the deploy — log + continue.
+        console.warn(
+          `[deployMayaGtm] deploy-time hello threw: ${(err as Error).message}`
+        );
       }
     }
 

@@ -184,6 +184,7 @@ import type * as integrations_stripe_products from "../integrations/stripe/produ
 import type * as integrations_stripe_voiceMetering from "../integrations/stripe/voiceMetering.js";
 import type * as integrations_stripe_webhooks from "../integrations/stripe/webhooks.js";
 import type * as integrations_telegram_client from "../integrations/telegram/client.js";
+import type * as integrations_telegram_sendDirectMessage from "../integrations/telegram/sendDirectMessage.js";
 import type * as integrations_twilio_client from "../integrations/twilio/client.js";
 import type * as integrations_twilio_configureWebhooks from "../integrations/twilio/configureWebhooks.js";
 import type * as integrations_twilio_provisionNumber from "../integrations/twilio/provisionNumber.js";
@@ -442,6 +443,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/stripe/voiceMetering": typeof integrations_stripe_voiceMetering;
   "integrations/stripe/webhooks": typeof integrations_stripe_webhooks;
   "integrations/telegram/client": typeof integrations_telegram_client;
+  "integrations/telegram/sendDirectMessage": typeof integrations_telegram_sendDirectMessage;
   "integrations/twilio/client": typeof integrations_twilio_client;
   "integrations/twilio/configureWebhooks": typeof integrations_twilio_configureWebhooks;
   "integrations/twilio/provisionNumber": typeof integrations_twilio_provisionNumber;
