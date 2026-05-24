@@ -143,10 +143,13 @@ describe("Maya GTM workspace pack", () => {
     const heartbeat = files.get("HEARTBEAT.md") ?? "";
 
     expect(heartbeat).toContain("Heartbeat is cheap");
-    expect(heartbeat).toContain("Forbidden on heartbeat");
+    expect(heartbeat).toContain("Hard forbid (every task)");
     expect(heartbeat).toContain("ScrapeCreators calls");
     expect(heartbeat).toContain("Gemini deep research");
     expect(heartbeat).toContain("X recent search");
+    // Sprint 2.10 — voice-contract firewall gate must be referenced for
+    // every user-visible heartbeat reply
+    expect(heartbeat).toContain("/lc_gtm/validate_outbound");
   });
 
   it("ships OpenClaw cron jobs that isolate heartbeat from paid research", () => {
