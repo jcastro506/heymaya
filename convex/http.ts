@@ -60,6 +60,13 @@ import {
   approvalDecisionHttp,
   calendarProposalHttp,
   researchCallbackHttp,
+  // Sprint 2.1 — deep-research subagent callbacks. Per-platform _research
+  // subagents POST these during the FIRST WAKE deep research phase. See
+  // inboundCallback.ts header + TOOLS.md for the wire shape.
+  targetThreadHttp,
+  targetAccountHttp,
+  draftedContentHttp,
+  getMyTargetThreadsHttp,
 } from "./gtmMaya/openclaw/inboundCallback";
 
 const http = httpRouter();
@@ -104,6 +111,29 @@ http.route({
   path: "/lc_gtm/calendar_proposal",
   method: "POST",
   handler: calendarProposalHttp,
+});
+// Sprint 2.1 — deep-research subagent callbacks. Subagents POST one row
+// per discovery; the parent agent's hookToken authenticates (subagents
+// inherit credentials via OpenClaw session context). Idempotency-keyed.
+http.route({
+  path: "/lc_gtm/target_thread",
+  method: "POST",
+  handler: targetThreadHttp,
+});
+http.route({
+  path: "/lc_gtm/target_account",
+  method: "POST",
+  handler: targetAccountHttp,
+});
+http.route({
+  path: "/lc_gtm/drafted_content",
+  method: "POST",
+  handler: draftedContentHttp,
+});
+http.route({
+  path: "/lc_gtm/get_my_target_threads",
+  method: "GET",
+  handler: getMyTargetThreadsHttp,
 });
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs

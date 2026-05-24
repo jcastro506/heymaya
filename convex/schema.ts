@@ -4473,7 +4473,14 @@ export default defineSchema({
     kind: v.union(
       v.literal("research_callback"),
       v.literal("approval_decision"),
-      v.literal("calendar_proposal")
+      v.literal("calendar_proposal"),
+      // Sprint 2.2 — deep-research subagents POST these callback kinds
+      // when they surface target-list artifacts (threads / accounts /
+      // drafts). Inbound HTTP handler in convex/gtmMaya/openclaw/
+      // inboundCallback.ts routes on this enum.
+      v.literal("target_thread"),
+      v.literal("target_account"),
+      v.literal("drafted_content")
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
@@ -5218,5 +5225,188 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_research_job", ["researchJobId"])
     .index("by_account_and_readiness", ["accountId", "readiness"]),
+
+  // Sprint 2.2 — target list: specific threads, accounts, and drafts surfaced
+  // by the deep-research subagents (Sprint 2.1). The three tables form the
+  // structured artifact the subagents write into; the mission board reads
+  // from them; the slop-critic / approval workflow (Sprint 2.10 / 2.3) walks
+  // gtmDraftedContent.approvalState. researchJobId is OPTIONAL on every row
+  // because subagents may surface targets outside a specific research job
+  // (e.g. daily heartbeat scans in Sprint 2.6 refresh metrics on threads
+  // first seen in an older job, and ad-hoc operator prompts may produce
+  // targets with no job at all).
+
+  // Specific Reddit / X / HN / LinkedIn / IG / TikTok threads where the
+  // operator's product fits as a natural reply. One row = one targeted
+  // thread; dedupe key is (accountId, platform, externalId).
+  gtmTargetThreads: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    platform: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("hn"),
+      v.literal("linkedin"),
+      v.literal("instagram"),
+      v.literal("tiktok")
+    ),
+    url: v.string(),
+    /** Platform's own ID — reddit post ID, tweet ID, HN objectID, etc. Used
+     *  as the dedupe key together with (accountId, platform) so a second
+     *  subagent surfacing the same thread updates rather than double-inserts. */
+    externalId: v.string(),
+    title: v.optional(v.string()),
+    /** Snippet of the OP, up to ~500 chars. Truncated by the subagent before write. */
+    excerpt: v.optional(v.string()),
+    author: v.optional(v.string()),
+    /** e.g. "r/LocalLLaMA" — community handle when the platform has one. */
+    subredditOrCommunity: v.optional(v.string()),
+    /** Snapshot at time of surfacing; refreshed by Sprint 2.6 daily heartbeat. */
+    currentMetrics: v.object({
+      upvotes: v.optional(v.number()),
+      comments: v.optional(v.number()),
+      likes: v.optional(v.number()),
+      shares: v.optional(v.number()),
+      views: v.optional(v.number()),
+    }),
+    lastSeenMetricsAtMs: v.number(),
+    /** Subagent's plain-language reasoning for surfacing this thread (1-3
+     *  sentences). Never reference skill slugs or pipeline jargon — this
+     *  text gets shown to the operator in the mission board. */
+    whyItFits: v.string(),
+    recommendedAction: v.union(
+      v.literal("reply"),
+      v.literal("lurk"),
+      v.literal("upvote_only"),
+      v.literal("avoid")
+    ),
+    /** Linked draft, if one's been created for this thread. */
+    draftedReplyId: v.optional(v.id("gtmDraftedContent")),
+    /** "expired" means the thread is too old to be a useful reply target now. */
+    status: v.union(
+      v.literal("queued"),
+      v.literal("replied"),
+      v.literal("dropped"),
+      v.literal("expired")
+    ),
+    /** 0-1; subagent's confidence this is a strong target. */
+    priorityScore: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_account_and_status", ["accountId", "status"])
+    .index("by_account_and_platform", ["accountId", "platform"]),
+
+  // Specific people / accounts on each platform to follow + engage with
+  // (e.g. @sabeshbharathi on X, a Reddit user who posts frequently in
+  // r/LocalLLaMA). Dedupe key is (accountId, platform, handle).
+  gtmTargetAccounts: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    platform: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("hn"),
+      v.literal("linkedin"),
+      v.literal("instagram"),
+      v.literal("tiktok")
+    ),
+    /** The @ handle or username (no leading @, normalized to lowercase by
+     *  the persistence layer for stable dedupe). */
+    handle: v.string(),
+    profileUrl: v.string(),
+    displayName: v.optional(v.string()),
+    bio: v.optional(v.string()),
+    followerCount: v.optional(v.number()),
+    /** Subagent's notes on this person's posting style / voice / recent
+     *  themes — used downstream by the draft generator (Sprint 2.4) to
+     *  match the room's tone when crafting replies. */
+    voiceAnalysis: v.optional(v.string()),
+    /** Plain-language reasoning, same rules as gtmTargetThreads.whyItFits. */
+    whyItFits: v.string(),
+    recommendedAction: v.union(
+      v.literal("follow_and_engage"),
+      v.literal("lurk"),
+      v.literal("dm"),
+      v.literal("avoid")
+    ),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("following"),
+      v.literal("dropped")
+    ),
+    priorityScore: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_account_and_platform", ["accountId", "platform"]),
+
+  // Drafts of replies, posts, threads, comments, DMs. Pre-slop-critic-cleared
+  // content the operator can tap-and-post. Never dedupes — multiple drafts
+  // per target are allowed (the operator can ask for a rewrite; revisions
+  // create a new row tied to the same targetThreadId / targetAccountId).
+  gtmDraftedContent: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    researchJobId: v.optional(v.id("gtmResearchJobs")),
+    kind: v.union(
+      v.literal("reply"),
+      v.literal("thread"),
+      v.literal("post"),
+      v.literal("comment"),
+      v.literal("dm")
+    ),
+    platform: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("hn"),
+      v.literal("linkedin"),
+      v.literal("instagram"),
+      v.literal("tiktok")
+    ),
+    /** For reply / comment kinds — links back to the thread this is targeting. */
+    targetThreadId: v.optional(v.id("gtmTargetThreads")),
+    /** For dm / specific-account engagement kinds. */
+    targetAccountId: v.optional(v.id("gtmTargetAccounts")),
+    draftText: v.string(),
+    /** For thread kind — one tweet / post per segment. */
+    draftSegments: v.optional(v.array(v.string())),
+    /** 0-1; how well this matches operator's voice. Sprint 2.4 populates. */
+    voiceMatchScore: v.optional(v.number()),
+    /** Sprint 2.10 slop-critic gate; default false until checked. */
+    slopCriticPassed: v.boolean(),
+    /** Reasons if slop-critic failed; null/undefined when not yet checked
+     *  or when passed. */
+    slopCriticFailures: v.optional(v.array(v.string())),
+    approvalState: v.union(
+      v.literal("draft"),
+      v.literal("pending_approval"),
+      v.literal("approved"),
+      v.literal("rejected"),
+      v.literal("published"),
+      v.literal("needs_revision")
+    ),
+    /** When approvalState is "rejected" or "needs_revision", the operator's
+     *  edit instruction. Feeds the rewrite path in Sprint 2.4. */
+    userFeedback: v.optional(v.string()),
+    publishedAt: v.optional(v.number()),
+    /** URL or platform-side ID of the published version, when applicable. */
+    providerPostId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_research_job", ["researchJobId"])
+    .index("by_target_thread", ["targetThreadId"])
+    .index("by_account_and_state", ["accountId", "approvalState"]),
   // ─── end ClawLaunch / Maya GTM product ────────────────────────────────
 });

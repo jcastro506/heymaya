@@ -185,7 +185,14 @@ export function buildGatewayConfig(
       id: "instagram_research",
       name: "Instagram Reuse Researcher",
       model: mainModel,
-      tools: { profile: "coding" as const, allow: ["scrapecreators-api", "instagram"] },
+      // Sprint 2.1 — added `web_fetch` so this subagent can POST to the
+      // /lc_gtm/target_thread, /lc_gtm/target_account, /lc_gtm/drafted_content
+      // callbacks during deep research. Without it the subagent has nowhere
+      // to persist its findings.
+      tools: {
+        profile: "coding" as const,
+        allow: ["scrapecreators-api", "instagram", "web_fetch"],
+      },
       subagents: { allowAgents: [] as string[] },
     },
     {
@@ -193,6 +200,20 @@ export function buildGatewayConfig(
       name: "LinkedIn Fit Researcher",
       model: mainModel,
       tools: { profile: "coding" as const, allow: ["scrapecreators-api", "web_fetch"] },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      // Sprint 2.1 — HN as a first-class subagent. Calls the Algolia HN
+      // search via web_fetch (since Sprint 2.0 stayed in
+      // platformWorkers' googleWorker for shallow Convex-side use).
+      // Maya's runtime can also hit hn.algolia.com directly via
+      // web_fetch — no API key required. Per PLAYBOOK § 3.6 HN is
+      // binary: novel-technical-thing OR don't bother; channel-judge
+      // gates whether this subagent is spawned at all.
+      id: "hn_research",
+      name: "Hacker News Demand Researcher",
+      model: mainModel,
+      tools: { profile: "coding" as const, allow: ["web_fetch"] },
       subagents: { allowAgents: [] as string[] },
     },
     {

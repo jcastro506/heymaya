@@ -181,9 +181,20 @@ describe("Maya GTM workspace pack", () => {
     expect(bootKickoff?.payload.kind).toBe("agentTurn");
     expect(bootKickoff?.delivery).toEqual({ mode: "none", bestEffort: true });
     expect(bootKickoff?.payload.message).toContain("FIRST WAKE");
-    expect(bootKickoff?.payload.message).toContain("Read BOOT.md");
-    expect(bootKickoff?.payload.message).toContain("onboarding deep research");
-    expect(bootKickoff?.payload.message).toContain("maxScrapeCreatorsCalls");
+    // Sprint 2.1 — boot_kickoff prompt rewritten for the deep-research
+    // subagent dispatch + voice-clean external Telegram message split. The
+    // old assertions ("Read BOOT.md", "onboarding deep research",
+    // "maxScrapeCreatorsCalls") were pinned to the pre-Sprint-2.1 shape;
+    // the new prompt structure has internal subagent-dispatch instructions
+    // + voice-contract examples for the user-facing message.
+    expect(bootKickoff?.payload.message).toContain("AGENTS.md");
+    expect(bootKickoff?.payload.message).toContain("subagent");
+    expect(bootKickoff?.payload.message).toContain("Voice contract");
+    expect(bootKickoff?.payload.message).toContain("/lc_gtm/target_thread");
+    // Voice-contract enforcement: prompt must include the ban list so Maya
+    // doesn't leak skill slugs / file names / pipeline terms to the user.
+    expect(bootKickoff?.payload.message).toContain("BANNED");
+    expect(bootKickoff?.payload.message).toContain("maya-*");
     expect(heartbeat).toBeTruthy();
     expect(heartbeat?.sessionTarget).toBe("isolated");
     expect(heartbeat?.payload.kind).toBe("agentTurn");

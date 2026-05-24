@@ -39,7 +39,14 @@ import type { Doc, Id } from "../../_generated/dataModel";
 const CALLBACK_KIND = v.union(
   v.literal("research_callback"),
   v.literal("approval_decision"),
-  v.literal("calendar_proposal")
+  v.literal("calendar_proposal"),
+  // Sprint 2.1 — deep-research subagent callbacks. Per-platform research
+  // subagents (reddit_research, x_research, etc.) POST one row at a time
+  // during the FIRST WAKE deep research phase. See
+  // convex/gtmMaya/targetList.ts (Sprint 2.2) for the mutation handlers.
+  v.literal("target_thread"),
+  v.literal("target_account"),
+  v.literal("drafted_content")
 );
 
 function constantTimeEqual(a: string, b: string): boolean {
@@ -361,6 +368,292 @@ export const calendarProposalHttp = httpAction(async (ctx, request) => {
   }
 
   return new Response("ok (events written)", { status: 200 });
+});
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Sprint 2.1 — Deep-research subagent callbacks.
+ *
+ * The per-platform _research subagents (reddit_research, x_research,
+ * tiktok_research, instagram_research, linkedin_research, hn_research)
+ * POST one row at a time during the FIRST WAKE deep research phase.
+ * Each row is auth-gated by the parent agent's hookToken — subagents
+ * inherit the parent's token via OpenClaw's session credentials.
+ *
+ * Routes (mounted in convex/http.ts):
+ *   POST /lc_gtm/target_thread       — a specific thread/post to engage with
+ *   POST /lc_gtm/target_account      — a specific account to follow/engage
+ *   POST /lc_gtm/drafted_content     — a pre-written reply/post/draft
+ *   POST /lc_gtm/get_my_target_threads — token-auth read of current state
+ *
+ * Mutations dispatched to convex/gtmMaya/targetList.ts (Sprint 2.2).
+ * ────────────────────────────────────────────────────────────────────── */
+
+interface TargetThreadPayload {
+  idempotencyKey: string;
+  platform: "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok";
+  url: string;
+  externalId: string;
+  title?: string;
+  excerpt?: string;
+  author?: string;
+  subredditOrCommunity?: string;
+  currentMetrics?: {
+    upvotes?: number;
+    comments?: number;
+    likes?: number;
+    shares?: number;
+    views?: number;
+  };
+  whyItFits: string;
+  recommendedAction: "reply" | "lurk" | "upvote_only" | "avoid";
+  priorityScore: number;
+  researchJobId?: string;
+}
+
+export const targetThreadHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: TargetThreadPayload;
+  try {
+    body = (await request.json()) as TargetThreadPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (
+    !body.idempotencyKey ||
+    !body.platform ||
+    !body.url ||
+    !body.externalId ||
+    !body.whyItFits ||
+    !body.recommendedAction ||
+    typeof body.priorityScore !== "number"
+  ) {
+    return new Response("missing required fields", { status: 400 });
+  }
+  if (body.priorityScore < 0 || body.priorityScore > 1) {
+    return new Response("priorityScore must be in [0, 1]", { status: 400 });
+  }
+
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "target_thread",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") {
+    return new Response("ok (replay)", { status: 200 });
+  }
+
+  try {
+    await ctx.runMutation(internal.gtmMaya.targetList.recordTargetThread, {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      researchJobId: body.researchJobId as Id<"gtmResearchJobs"> | undefined,
+      platform: body.platform,
+      url: body.url,
+      externalId: body.externalId,
+      title: body.title,
+      excerpt: body.excerpt,
+      author: body.author,
+      subredditOrCommunity: body.subredditOrCommunity,
+      currentMetrics: body.currentMetrics ?? {},
+      whyItFits: body.whyItFits,
+      recommendedAction: body.recommendedAction,
+      priorityScore: body.priorityScore,
+    });
+  } catch (err) {
+    return new Response((err as Error).message, { status: 400 });
+  }
+  return new Response("ok", { status: 200 });
+});
+
+interface TargetAccountPayload {
+  idempotencyKey: string;
+  platform: "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok";
+  handle: string;
+  profileUrl: string;
+  displayName?: string;
+  bio?: string;
+  followerCount?: number;
+  voiceAnalysis?: string;
+  whyItFits: string;
+  recommendedAction: "follow_and_engage" | "lurk" | "dm" | "avoid";
+  priorityScore: number;
+  researchJobId?: string;
+}
+
+export const targetAccountHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: TargetAccountPayload;
+  try {
+    body = (await request.json()) as TargetAccountPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (
+    !body.idempotencyKey ||
+    !body.platform ||
+    !body.handle ||
+    !body.profileUrl ||
+    !body.whyItFits ||
+    !body.recommendedAction ||
+    typeof body.priorityScore !== "number"
+  ) {
+    return new Response("missing required fields", { status: 400 });
+  }
+  if (body.priorityScore < 0 || body.priorityScore > 1) {
+    return new Response("priorityScore must be in [0, 1]", { status: 400 });
+  }
+
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "target_account",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") {
+    return new Response("ok (replay)", { status: 200 });
+  }
+
+  try {
+    await ctx.runMutation(internal.gtmMaya.targetList.recordTargetAccount, {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      researchJobId: body.researchJobId as Id<"gtmResearchJobs"> | undefined,
+      platform: body.platform,
+      handle: body.handle,
+      profileUrl: body.profileUrl,
+      displayName: body.displayName,
+      bio: body.bio,
+      followerCount: body.followerCount,
+      voiceAnalysis: body.voiceAnalysis,
+      whyItFits: body.whyItFits,
+      recommendedAction: body.recommendedAction,
+      priorityScore: body.priorityScore,
+    });
+  } catch (err) {
+    return new Response((err as Error).message, { status: 400 });
+  }
+  return new Response("ok", { status: 200 });
+});
+
+interface DraftedContentPayload {
+  idempotencyKey: string;
+  kind: "reply" | "thread" | "post" | "comment" | "dm";
+  platform: "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok";
+  targetThreadId?: string;
+  targetAccountId?: string;
+  draftText: string;
+  draftSegments?: string[];
+  researchJobId?: string;
+}
+
+export const draftedContentHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: DraftedContentPayload;
+  try {
+    body = (await request.json()) as DraftedContentPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (
+    !body.idempotencyKey ||
+    !body.kind ||
+    !body.platform ||
+    !body.draftText
+  ) {
+    return new Response("missing required fields", { status: 400 });
+  }
+  if (body.draftText.length > 12000) {
+    return new Response("draftText too long (>12000 chars)", { status: 400 });
+  }
+
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "drafted_content",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") {
+    return new Response("ok (replay)", { status: 200 });
+  }
+
+  try {
+    await ctx.runMutation(internal.gtmMaya.targetList.recordDraftedContent, {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      researchJobId: body.researchJobId as Id<"gtmResearchJobs"> | undefined,
+      kind: body.kind,
+      platform: body.platform,
+      targetThreadId: body.targetThreadId as
+        | Id<"gtmTargetThreads">
+        | undefined,
+      targetAccountId: body.targetAccountId as
+        | Id<"gtmTargetAccounts">
+        | undefined,
+      draftText: body.draftText,
+      draftSegments: body.draftSegments,
+    });
+  } catch (err) {
+    return new Response((err as Error).message, { status: 400 });
+  }
+  return new Response("ok", { status: 200 });
+});
+
+/**
+ * Read endpoint Maya hits from her runtime after subagents finish — uses
+ * hookToken auth (not Clerk) since she's calling from inside her own Fly
+ * machine. Returns this agent's target threads only.
+ */
+export const getMyTargetThreadsHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  const url = new URL(request.url);
+  const statusFilter = url.searchParams.get("status");
+  const platformFilter = url.searchParams.get("platform");
+
+  const threads = await ctx.runQuery(
+    internal.gtmMaya.targetList.listAgentTargetThreads,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      status:
+        statusFilter === "queued" ||
+        statusFilter === "replied" ||
+        statusFilter === "dropped" ||
+        statusFilter === "expired"
+          ? statusFilter
+          : undefined,
+      platform:
+        platformFilter === "reddit" ||
+        platformFilter === "x" ||
+        platformFilter === "hn" ||
+        platformFilter === "linkedin" ||
+        platformFilter === "instagram" ||
+        platformFilter === "tiktok"
+          ? platformFilter
+          : undefined,
+    }
+  );
+  return new Response(JSON.stringify({ threads }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
 });
 
 /**
