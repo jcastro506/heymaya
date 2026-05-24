@@ -165,6 +165,15 @@ function delegateToSprint1Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint20Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S20",
+    "Maya-side subagent lane (sessions_spawn config)",
+    "scripts/gtm-sprint-20-smoke.ts",
+    /Sprint 20 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -237,7 +246,7 @@ async function main(): Promise<void> {
   sections.push(
     placeholderSection("S19", "Workspace mutation pipeline (post-research)")
   );
-  sections.push(placeholderSection("S20", "Subagent lane for paid research"));
+  sections.push(delegateToSprint20Smoke());
   sections.push(
     placeholderSection("S21", "Standing orders + hooks + Policy plugin")
   );

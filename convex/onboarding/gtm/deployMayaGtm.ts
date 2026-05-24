@@ -125,9 +125,94 @@ const MACHINE_GUEST: NonNullable<FlyMachineConfig["guest"]> = {
 const WAIT_TIMEOUT_MS = 90_000;
 const WAIT_INTERVAL_MS = 3_000;
 
-function buildGatewayConfig(): Record<string, unknown> {
+export function buildGatewayConfig(): Record<string, unknown> {
   const mainModel = toOpenClawModelRef(MODEL_ROUTING.mainMaya);
+  const hardModel = toOpenClawModelRef(MODEL_ROUTING.hardResearchBeta);
+  const extractionModel = toOpenClawModelRef(MODEL_ROUTING.extractionWorker);
   const memorySearch = buildMemorySearchConfig();
+
+  // Sprint 20 — Maya-side subagent lane. Registers per-platform research
+  // subagents Maya can spawn via sessions_spawn({ agentId: "<id>" }). Each
+  // subagent has its own context + token budget; cron-heartbeat-at-
+  // thinking-0 can still spawn a thinking:high subagent for heavy work
+  // without inheriting the cron's budget ban.
+  //
+  // Naming convention matches the AGENTS.md "Subagent Pattern" section
+  // so Maya already knows the slugs by the time she reads them.
+  const SUBAGENTS = [
+    {
+      id: "reddit_research",
+      name: "Reddit Demand Researcher",
+      model: hardModel,
+      tools: { profile: "coding" as const, allow: ["scrapecreators-api", "web_fetch"] },
+      // Allow no further spawning — depth-1 max from main.
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      id: "x_research",
+      name: "X Founder-Led Researcher",
+      model: hardModel,
+      tools: { profile: "coding" as const, allow: ["scrapecreators-api", "web_fetch", "search-x"] },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      id: "tiktok_research",
+      name: "TikTok Format Researcher",
+      model: hardModel,
+      tools: { profile: "coding" as const, allow: ["scrapecreators-api", "tiktok", "web_fetch"] },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      id: "instagram_research",
+      name: "Instagram Reuse Researcher",
+      model: mainModel,
+      tools: { profile: "coding" as const, allow: ["scrapecreators-api", "instagram"] },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      id: "linkedin_research",
+      name: "LinkedIn Fit Researcher",
+      model: mainModel,
+      tools: { profile: "coding" as const, allow: ["scrapecreators-api", "web_fetch"] },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      id: "channel_judge",
+      name: "Channel Strategy Judge",
+      model: mainModel,
+      // Pure synthesis — DENY all external API tools so the judge can't
+      // burn ScrapeCreators/Gemini budget mid-decision.
+      tools: { profile: "coding" as const, deny: ["scrapecreators-api", "web_fetch", "tiktok", "search-x"] },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      id: "slop_critic",
+      name: "Slop Critic",
+      model: mainModel,
+      // Local-only — banned-phrase scan + voice match. No external calls.
+      tools: { profile: "coding" as const, deny: ["scrapecreators-api", "web_fetch"] },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      id: "extraction_worker",
+      name: "Extraction Worker",
+      // Cheap structured-output model for normalizing multimodal walkthrough
+      // analysis output into ResearchRawItem-shaped data. Per TOOLS.md.
+      model: extractionModel,
+      tools: { profile: "coding" as const },
+      subagents: { allowAgents: [] as string[] },
+    },
+  ];
+
+  // The set of subagent IDs main can spawn. hard_research_beta retained
+  // for backward compatibility with any existing standing orders that
+  // reference it.
+  const allowFromMain = [
+    "main",
+    "hard_research_beta",
+    ...SUBAGENTS.map((s) => s.id),
+  ];
+
   return {
     gateway: { mode: "local" },
     agents: {
@@ -140,6 +225,7 @@ function buildGatewayConfig(): Record<string, unknown> {
         subagents: {
           maxConcurrent: 4,
           maxChildrenPerAgent: 4,
+          maxSpawnDepth: 1,
           runTimeoutSeconds: 900,
           archiveAfterMinutes: 60,
         },
@@ -151,16 +237,21 @@ function buildGatewayConfig(): Record<string, unknown> {
           name: "Maya",
           workspace: "/data/workspace",
           model: mainModel,
-          subagents: { allowAgents: ["main", "hard_research_beta"] },
+          subagents: { allowAgents: allowFromMain },
           tools: { profile: "coding" },
         },
         {
           id: "hard_research_beta",
           name: "Hard Research Beta",
           workspace: "/data/workspace",
-          model: toOpenClawModelRef(MODEL_ROUTING.hardResearchBeta),
+          model: hardModel,
+          subagents: { allowAgents: [] },
           tools: { profile: "coding" },
         },
+        ...SUBAGENTS.map((s) => ({
+          ...s,
+          workspace: "/data/workspace",
+        })),
       ],
     },
     plugins: {
