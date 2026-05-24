@@ -555,6 +555,10 @@ export const analyzeAuxSynth = internalQuery({
       snippet: c.snippet.slice(0, 180),
       author: c.authorOrCommunity,
       engagement: c.engagement,
+      painMatch: c.painMatch,
+      buyerMatch: c.buyerMatch,
+      channelFit: c.channelFit,
+      painLanguageReason: c.painLanguageReason,
     });
     const topReddit = cards
       .filter((c) => c.source === "reddit")

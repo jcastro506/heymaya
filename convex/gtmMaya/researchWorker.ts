@@ -647,9 +647,13 @@ export const runBudgetedResearchJob = internalAction({
         productName: app.name ?? "Untitled product",
         productUrl: app.url,
         founderWhy: app.founderWhy,
-        icpPainPhrases: app.keywordExpansion?.icpPainPhrases ?? [],
-        productCategoryKeywords:
-          app.keywordExpansion?.productCategoryKeywords ?? [],
+        // Use the FRESH expansion from line 532 — `app.keywordExpansion`
+        // is whatever was on the row when we loaded it at line 513,
+        // i.e. stale-empty on the first research job for a product.
+        // Hit live 2026-05-24 on Bezel v2 — painLanguageReason was
+        // empty on every card because scorer skipped on hasContext=false.
+        icpPainPhrases: expansion.icpPainPhrases ?? [],
+        productCategoryKeywords: expansion.productCategoryKeywords ?? [],
       };
       // Skip LLM scoring if we have no product context — would just
       // score every card 0 against an empty prompt.
@@ -733,9 +737,8 @@ export const runBudgetedResearchJob = internalAction({
         productName: app.name ?? "Untitled product",
         productUrl: app.url,
         founderWhy: app.founderWhy,
-        icpPainPhrases: app.keywordExpansion?.icpPainPhrases ?? [],
-        productCategoryKeywords:
-          app.keywordExpansion?.productCategoryKeywords ?? [],
+        icpPainPhrases: expansion.icpPainPhrases ?? [],
+        productCategoryKeywords: expansion.productCategoryKeywords ?? [],
         stage: app.stage,
         weekGoal: app.weekGoal,
       };
