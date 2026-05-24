@@ -486,10 +486,10 @@ function rawItemToEvidence(
 
   return {
     source: platformToSource(platform),
-    url: item.url,
-    title: item.title ?? undefined,
-    snippet: item.excerpt ?? item.title ?? "",
-    authorOrCommunity: item.author ?? undefined,
+    url: sanitizeForConvex(item.url),
+    title: item.title ? sanitizeForConvex(item.title) : undefined,
+    snippet: sanitizeForConvex(item.excerpt ?? item.title ?? ""),
+    authorOrCommunity: item.author ? sanitizeForConvex(item.author) : undefined,
     observedAt: now,
     recency,
     engagement: {
@@ -504,8 +504,46 @@ function rawItemToEvidence(
     promotionRisk,
     recommendedUse,
     extractedClaims: [],
-    rawRef: item.rawRef,
+    rawRef: item.rawRef ? sanitizeForConvex(item.rawRef) : undefined,
   };
+}
+
+/**
+ * Sanitize scraped text for Convex argument serialization. Scraped tweets /
+ * reddit comments / google snippets sometimes contain unpaired UTF-16
+ * surrogate halves (a high surrogate without its low partner, or vice
+ * versa). JS strings allow these, JSON.stringify emits them as `\uD8XX`
+ * literals, but Convex's strict server-side JSON parser rejects them with
+ * "unexpected end of hex escape" (observed live 2026-05-24, ModelHub run).
+ *
+ * Replace each lone surrogate with U+FFFD (Unicode replacement char) and
+ * strip C0 control bytes (except \t \n \r) which can also break downstream
+ * JSON consumers. Pass-through for all other Unicode.
+ */
+function sanitizeForConvex(s: string): string {
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      // high surrogate — must be followed by low surrogate
+      const next = i + 1 < s.length ? s.charCodeAt(i + 1) : 0;
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        out += s[i]! + s[i + 1]!;
+        i++;
+      } else {
+        out += "�";
+      }
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      // lone low surrogate
+      out += "�";
+    } else if (code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) {
+      // strip C0 controls (keep tab, LF, CR)
+      // intentionally skip
+    } else {
+      out += s[i];
+    }
+  }
+  return out;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -767,7 +805,7 @@ export const runGoogleWorker = internalAction({
 // Pure exports for unit testing
 // ──────────────────────────────────────────────────────────────────────
 
-export { rawItemToEvidence, PER_CALL_COST_USD };
+export { rawItemToEvidence, PER_CALL_COST_USD, sanitizeForConvex };
 
 // (Re-export for type clarity in callers.)
 export type { ResearchRawItem };
