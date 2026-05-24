@@ -416,6 +416,10 @@ streams them in one row at a time.
   Body: \`{ idempotencyKey, draftId, voiceMatchScore (0-1), slopCriticPassed (bool), slopCriticFailures?: string[], approvalStateUpdate?: "pending_approval"|"rejected", userFeedback? }\`
   Use: after running maya-voice-matcher on a fresh draft, post the score + routing decision. Drafts that pass both gates flip to \`approvalState: "pending_approval"\` and become eligible for the calendar populator.
 
+- \`POST ${callbackBase}/lc_gtm/publish_draft\` (Sprint 2.5)
+  Body: \`{ idempotencyKey, draftId }\`
+  Use: after the operator approves a draft via Telegram reply or mission board, POST to auto-publish via Composio. Only supports platform:"x" and platform:"linkedin" — Reddit/HN stay tap-and-post per PLAYBOOK § 3.5. Returns \`{ ok, providerPostId?, providerUrl?, statusDetail }\`. On success, draft flips to \`approvalState: "published"\` with providerPostId + publishedAt. On failure, draft stays \`pending_approval\` and userFeedback captures the failure for operator visibility.
+
 Hook token (treat as a secret — never log, never echo to the channel):
 - Token: \`${hookToken}\`
 

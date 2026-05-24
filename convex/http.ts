@@ -70,6 +70,9 @@ import {
   // Sprint 2.4 — voice-matcher scoring update. maya-voice-matcher posts
   // here after scoring a fresh draft on voice / slop / specificity.
   updateDraftVoiceMatchHttp,
+  // Sprint 2.5 — Composio "Maya posts it". Maya POSTs here after
+  // operator approves a draft (via Telegram reply or mission board).
+  publishDraftHttp,
 } from "./gtmMaya/openclaw/inboundCallback";
 
 const http = httpRouter();
@@ -145,6 +148,12 @@ http.route({
   path: "/lc_gtm/update_draft_voice_match",
   method: "POST",
   handler: updateDraftVoiceMatchHttp,
+});
+// Sprint 2.5 — auto-publish approved draft via Composio (X/LinkedIn).
+http.route({
+  path: "/lc_gtm/publish_draft",
+  method: "POST",
+  handler: publishDraftHttp,
 });
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs

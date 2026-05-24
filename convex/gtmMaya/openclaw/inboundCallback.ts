@@ -687,6 +687,53 @@ export const updateDraftVoiceMatchHttp = httpAction(async (ctx, request) => {
 });
 
 /**
+ * Sprint 2.5 — publish an approved drafted_content via Composio. Maya
+ * POSTs here after the operator approves the draft (via Telegram reply
+ * or mission-board click). Reuses approval_decision idempotency lane.
+ */
+interface PublishDraftPayload {
+  idempotencyKey: string;
+  draftId: string;
+}
+
+export const publishDraftHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: PublishDraftPayload;
+  try {
+    body = (await request.json()) as PublishDraftPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (!body.idempotencyKey || !body.draftId) {
+    return new Response("missing required fields", { status: 400 });
+  }
+
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "approval_decision",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") {
+    return new Response("ok (replay)", { status: 200 });
+  }
+
+  const outcome = await ctx.runAction(
+    internal.gtmMaya.publishWorkflow.publishApprovedDraft,
+    { draftId: body.draftId as Id<"gtmDraftedContent"> }
+  );
+  return new Response(JSON.stringify(outcome), {
+    status: outcome.ok ? 200 : 200,  // always 200 — caller inspects body.ok
+    headers: { "content-type": "application/json" },
+  });
+});
+
+/**
  * Read endpoint Maya hits from her runtime after subagents finish — uses
  * hookToken auth (not Clerk) since she's calling from inside her own Fly
  * machine. Returns this agent's target threads only.

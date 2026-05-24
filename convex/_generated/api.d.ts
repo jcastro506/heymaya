@@ -107,6 +107,7 @@ import type * as gtmMaya_platformWorkers from "../gtmMaya/platformWorkers.js";
 import type * as gtmMaya_privateBeta from "../gtmMaya/privateBeta.js";
 import type * as gtmMaya_productionReadiness from "../gtmMaya/productionReadiness.js";
 import type * as gtmMaya_productionReality from "../gtmMaya/productionReality.js";
+import type * as gtmMaya_publishWorkflow from "../gtmMaya/publishWorkflow.js";
 import type * as gtmMaya_queryExpansion from "../gtmMaya/queryExpansion.js";
 import type * as gtmMaya_researchLifecycle from "../gtmMaya/researchLifecycle.js";
 import type * as gtmMaya_researchQueryBuilder from "../gtmMaya/researchQueryBuilder.js";
@@ -139,6 +140,7 @@ import type * as integrations_composio_actions_stripe from "../integrations/comp
 import type * as integrations_composio_actions_twitter from "../integrations/composio/actions/twitter.js";
 import type * as integrations_composio_client from "../integrations/composio/client.js";
 import type * as integrations_composio_oauth from "../integrations/composio/oauth.js";
+import type * as integrations_composio_publishContent from "../integrations/composio/publishContent.js";
 import type * as integrations_composio_universalRunner from "../integrations/composio/universalRunner.js";
 import type * as integrations_crm_housecallpro from "../integrations/crm/housecallpro.js";
 import type * as integrations_crm_index from "../integrations/crm/index.js";
@@ -361,6 +363,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/privateBeta": typeof gtmMaya_privateBeta;
   "gtmMaya/productionReadiness": typeof gtmMaya_productionReadiness;
   "gtmMaya/productionReality": typeof gtmMaya_productionReality;
+  "gtmMaya/publishWorkflow": typeof gtmMaya_publishWorkflow;
   "gtmMaya/queryExpansion": typeof gtmMaya_queryExpansion;
   "gtmMaya/researchLifecycle": typeof gtmMaya_researchLifecycle;
   "gtmMaya/researchQueryBuilder": typeof gtmMaya_researchQueryBuilder;
@@ -393,6 +396,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/composio/actions/twitter": typeof integrations_composio_actions_twitter;
   "integrations/composio/client": typeof integrations_composio_client;
   "integrations/composio/oauth": typeof integrations_composio_oauth;
+  "integrations/composio/publishContent": typeof integrations_composio_publishContent;
   "integrations/composio/universalRunner": typeof integrations_composio_universalRunner;
   "integrations/crm/housecallpro": typeof integrations_crm_housecallpro;
   "integrations/crm/index": typeof integrations_crm_index;
