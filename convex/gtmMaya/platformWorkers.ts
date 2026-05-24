@@ -20,6 +20,16 @@ import {
   twitterUserTweets,
   type ResearchRawItem,
 } from "./scrapeCreatorsGtmResearch";
+// Sprint 1.2 — TwitterAPI.io replaces the broken ScrapeCreators twitter
+// search path. ScrapeCreators has no Twitter keyword-search endpoint
+// (our wrapper was 404'ing silently). Apify was tried first but its free
+// tier returned `noResults: true` for every query (no residential proxies).
+// TwitterAPI.io has a real working /twitter/tweet/advanced_search at
+// $0.15/1k tweets with a sign-up trial credit. The wrapper soft-fails
+// when TWITTERAPI_IO_KEY is unset so the orchestrator still runs in
+// environments without the key. Apify wrapper preserved as a fallback
+// option in convex/integrations/apify/twitterScraper.ts.
+import { twitterApiIoSearch } from "../integrations/twitterApiIo/twitterSearch";
 import { checkAllCostCaps } from "./costCap";
 
 /**
@@ -570,7 +580,17 @@ export const runTwitterWorker = internalAction({
       platform: "twitter",
     };
     return await runWorker(wc, args.pack, async (query) => {
-      const res = await twitterSearch(client, query, { mode: "latest" });
+      // Sprint 1.2 — TwitterAPI.io primary, ScrapeCreators twitterSearch
+      // deprecated (404s on phantom endpoint), Apify abandoned (no
+      // residential proxies on free tier → noResults on every call).
+      // Soft-fails on missing TWITTERAPI_IO_KEY so the orchestrator
+      // remains runnable in environments without the key (worker just
+      // reports insufficient_evidence for that platform).
+      const res = await twitterApiIoSearch(query, {
+        queryType: "Latest",
+        maxPages: 1,
+        language: "en",
+      });
       return res.items;
     });
   },

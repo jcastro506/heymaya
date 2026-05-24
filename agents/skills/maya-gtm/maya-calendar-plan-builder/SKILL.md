@@ -15,6 +15,7 @@ Drafts aren't useful until they're scheduled with full context the operator can 
 - IF a post is replanned THEN re-run to update.
 - IF a hard launch is scheduled (PLAYBOOK § 2 Phase 3) THEN build the full launch-day event sequence.
 - IF results-reviewer recommends "double down on metric posts" THEN extend cadence.
+- **Sprint 1.2 — IF a platform skill (maya-tiktok-demo-strategist § rule 3, maya-reddit-demand-researcher § rule 1, maya-x-founder-led-researcher) returns `recommendation: "warmup_first"` with a `warmupPlan`, THEN immediately schedule each `dayBands[].actions` as `kind: "warmup_block"` events on the operator's calendar.** Warmup blocks are self-driven operator tasks (not posts) — they are approval-by-default. Do NOT wait for slop-critic, drafts, or distribution-experiment approval. The operator needs these on their calendar today, not at the end of a multi-step approval loop.
 - NEVER auto-publish — events are scheduling. Publishing is `maya-approval-publisher`.
 
 ## Required reads
@@ -41,7 +42,16 @@ Drafts aren't useful until they're scheduled with full context the operator can 
 9. **Success metric in event description.** Copy-paste from distribution-motion-tester.
 10. **Stop / double-down trigger noted.**
 11. **Native reminders.** 30 min before (push), 24h before (email).
-12. **Sidecar mayaCalendarEvents row.** Every calendar write also writes a sidecar (kind: "soft_launch_post" | "hard_launch_anchor" | "reply_window" | "engage_block" | "weekly_review") for HEARTBEAT calendar-scan check.
+12. **Sidecar gtmCalendarEvents row.** Every calendar write also writes a sidecar (kind: "warmup_block" | "engagement_block" | "soft_launch_post" | "hard_launch_anchor" | "reply_window" | "weekly_review" | "first_50_dms") for HEARTBEAT calendar-scan check.
+13. **Sprint 1.2 — warmup_block scheduling rules.** When converting a `warmupPlan` from a platform skill:
+    - One event per `dayBands` entry (NOT per action — group actions into a single block).
+    - **Default time**: 10:00am operator-local. Operator can move it; the point is the block is on the calendar.
+    - **Duration**: 30 min default for ≤4 actions, 45 min for 5+ actions.
+    - **Title format**: `[Warmup] {Platform} Day N of M — {primary action}`. Example: `[Warmup] TikTok Day 1 of 14 — Scroll 20 min niche FYP`.
+    - **Description**: full action list as a checklist + cite the playbook rule (`tiktok.md § 6` / `reddit.md § 6`). Example: `Per tiktok.md § 6 (account warm-up doctrine). Today: ☐ Scroll 20 min niche FYP at slow-thumb pace ☐ Like 10 niche posts ☐ Comment on 3 posts with substance ☐ Save 5 posts you'd actually use. Why: brand-new accounts that post commercial content on day 1 get algorithmically suppressed (tiktok.md § 13 Failure 1).`
+    - **No slop-critic gate** — these are operator self-tasks, not public content.
+    - **Reminders**: 30 min popup + 24h email (same as posts).
+    - **Approval state**: `APPROVED` (warmup is the doctrine, not optional).
 
 ## Output schema
 
@@ -50,7 +60,7 @@ interface CalendarPlan {
   events: Array<{
     googleEventId?: string;
     sidecarRowId?: string;
-    kind: "soft_launch_post" | "hard_launch_anchor" | "reply_window" | "engage_block" | "weekly_review" | "first_50_dms";
+    kind: "warmup_block" | "engagement_block" | "soft_launch_post" | "hard_launch_anchor" | "reply_window" | "weekly_review" | "first_50_dms";
     channel: string;
     titleWithApprovalPrefix: string;
     startLocal: string;

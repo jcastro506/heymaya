@@ -52,6 +52,8 @@ export const TASK_TAGS = [
   "soul_generation",
   "pre_post_scorer",
   "underperformance_diagnoser",
+  "gtm_query_expansion",
+  "gtm_claim_extraction",
 ] as const;
 
 export type TaskTag = (typeof TASK_TAGS)[number];
@@ -81,6 +83,8 @@ const DEFAULT_BUDGET: Record<TaskTag, ThinkingBudget> = {
   soul_generation: "high",
   pre_post_scorer: "high",
   underperformance_diagnoser: "high",
+  gtm_query_expansion: "medium",
+  gtm_claim_extraction: "low",
 };
 
 /**

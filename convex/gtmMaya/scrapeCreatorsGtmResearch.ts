@@ -133,59 +133,82 @@ export interface RedditSearchOptions {
   trim?: boolean;
 }
 
+// ScrapeCreators Reddit response shape (verified 2026-05-24):
+//   { success, credits_remaining, posts: [...], after }
+// Each post is FLAT (no `.data` nesting) — fields read directly off the
+// post object: { id, title, url, permalink?, author, subreddit, selftext?,
+// score?, ups?, downs?, num_comments?, created_utc, link_flair_text? }.
+// This differs from the older reddit.com JSON shape (data.children[].data)
+// that the wrappers were originally written against — older code dropped
+// every post silently because raw.data.children was always undefined.
 interface RawRedditPost {
-  data?: {
-    id?: string;
-    name?: string;
-    title?: string;
-    selftext?: string;
-    author?: string;
-    permalink?: string;
-    url?: string;
-    subreddit?: string;
-    score?: number;
-    ups?: number;
-    downs?: number;
-    num_comments?: number;
-    created_utc?: number;
-    link_flair_text?: string | null;
-  };
+  id?: string;
+  name?: string;
+  title?: string;
+  selftext?: string;
+  author?: string;
+  permalink?: string;
+  url?: string;
+  subreddit?: string;
+  score?: number;
+  ups?: number;
+  downs?: number;
+  num_comments?: number;
+  created_utc?: number;
+  link_flair_text?: string | null;
 }
 
 interface RawRedditListing {
-  data?: { children?: RawRedditPost[]; after?: string | null };
+  success?: boolean;
+  posts?: RawRedditPost[];
+  after?: string | null;
+  // Legacy reddit.com shape kept for transition; never populated by the
+  // ScrapeCreators API as of 2026-05-24.
+  data?: { children?: { data?: RawRedditPost }[]; after?: string | null };
   ok?: boolean;
 }
 
 function normalizeRedditPost(post: RawRedditPost, rawRef: string): ResearchRawItem | null {
-  const d = post.data;
-  if (!d?.id || !d.title) return null;
-  const permalink = d.permalink
-    ? `https://www.reddit.com${d.permalink}`
-    : d.url ?? `https://www.reddit.com/comments/${d.id}`;
-  const created = d.created_utc ? Math.round(d.created_utc * 1000) : null;
+  if (!post?.id || !post.title) return null;
+  const permalink = post.permalink
+    ? post.permalink.startsWith("http")
+      ? post.permalink
+      : `https://www.reddit.com${post.permalink}`
+    : post.url ?? `https://www.reddit.com/comments/${post.id}`;
+  const created = post.created_utc ? Math.round(post.created_utc * 1000) : null;
   const tags: string[] = [];
-  if (d.subreddit) tags.push(`sub:${d.subreddit}`);
-  if (d.link_flair_text) tags.push(`flair:${d.link_flair_text}`);
+  if (post.subreddit) tags.push(`sub:${post.subreddit}`);
+  if (post.link_flair_text) tags.push(`flair:${post.link_flair_text}`);
   return {
     platform: "reddit",
-    externalId: d.id,
+    externalId: post.id,
     url: permalink,
-    title: d.title,
-    excerpt: d.selftext?.slice(0, 2000) ?? null,
-    author: d.author ?? null,
+    title: post.title,
+    excerpt: post.selftext?.slice(0, 2000) ?? null,
+    author: post.author ?? null,
     createdAtMs: created,
     engagement: {
-      likes: d.score ?? d.ups ?? null,
-      comments: d.num_comments ?? null,
+      likes: post.score ?? post.ups ?? null,
+      comments: post.num_comments ?? null,
       shares: null,
       views: null,
-      upvotes: d.ups ?? null,
-      downvotes: d.downs ?? null,
+      upvotes: post.ups ?? null,
+      downvotes: post.downs ?? null,
     },
     tags,
     rawRef,
   };
+}
+
+// Helper — extracts the post list whether the response is the new flat
+// shape (`raw.posts`) or the legacy reddit.com nested shape
+// (`raw.data.children[].data`). Returns [] gracefully if neither populated.
+function redditPostsFromListing(raw: RawRedditListing): RawRedditPost[] {
+  if (Array.isArray(raw.posts) && raw.posts.length > 0) return raw.posts;
+  const legacy = raw.data?.children ?? [];
+  return legacy
+    .map((c) => c?.data)
+    .filter((p): p is RawRedditPost => Boolean(p));
 }
 
 export async function searchRedditAll(
@@ -205,14 +228,14 @@ export async function searchRedditAll(
     const raw = await client.request<RawRedditListing>("/v1/reddit/search", {
       query: params as Record<string, string | number | boolean | undefined>,
     });
-    const children = raw.data?.children ?? [];
-    const items = children
+    const posts = redditPostsFromListing(raw);
+    const items = posts
       .map((p) => normalizeRedditPost(p, rawRef))
       .filter((x): x is ResearchRawItem => x !== null);
     return {
       items,
       statusDetail: "ok",
-      nextCursor: raw.data?.after ?? undefined,
+      nextCursor: raw.after ?? raw.data?.after ?? undefined,
     };
   } catch (err) {
     return softFail("reddit", err, rawRef);
@@ -240,14 +263,14 @@ export async function searchRedditSubreddit(
       "/v1/reddit/subreddit/search",
       { query: params as Record<string, string | number | boolean | undefined> }
     );
-    const children = raw.data?.children ?? [];
-    const items = children
+    const posts = redditPostsFromListing(raw);
+    const items = posts
       .map((p) => normalizeRedditPost(p, rawRef))
       .filter((x): x is ResearchRawItem => x !== null);
     return {
       items,
       statusDetail: "ok",
-      nextCursor: raw.data?.after ?? undefined,
+      nextCursor: raw.after ?? raw.data?.after ?? undefined,
     };
   } catch (err) {
     return softFail("reddit", err, rawRef);
@@ -272,14 +295,14 @@ export async function subredditPosts(
       "/v1/reddit/subreddit",
       { query: params as Record<string, string | number | boolean | undefined> }
     );
-    const children = raw.data?.children ?? [];
-    const items = children
+    const posts = redditPostsFromListing(raw);
+    const items = posts
       .map((p) => normalizeRedditPost(p, rawRef))
       .filter((x): x is ResearchRawItem => x !== null);
     return {
       items,
       statusDetail: "ok",
-      nextCursor: raw.data?.after ?? undefined,
+      nextCursor: raw.after ?? raw.data?.after ?? undefined,
     };
   } catch (err) {
     return softFail("reddit", err, rawRef);

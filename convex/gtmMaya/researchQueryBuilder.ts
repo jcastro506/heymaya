@@ -222,20 +222,28 @@ function buildRedditPack(
     .map((h) => h.currentPain)
     .filter(Boolean);
 
-  // Reddit reply-mining patterns from reddit.md § 4 + indie-hacker
-  // conventions: "how do I", "anyone using", "alternative to", "best
-  // tool for", "frustrated with". Higher signal than topic-only.
+  // Reddit reply-mining. Priority order:
+  //   1. Quoted ICP pain phrases (highest signal — verbatim audience language)
+  //   2. Raw category keywords (work standalone on Reddit search)
+  //   3. Templated patterns ("how do I X", "best tool for X", "frustrated
+  //      with X") — these only read naturally for short single-concept
+  //      keywords like "weight loss"; with multi-word semantic phrases like
+  //      "running models on apple silicon" they're noise. Kept as filler
+  //      after higher-signal queries.
+  // Budget (maxCalls) typically caps at ~8; this order ensures the highest-
+  // signal queries fire before the budget runs out.
   const painQueries = uniqueTrimmed([
+    ...painPhrasesFromIcps.map((p) => `"${p}"`),
+    ...cats,
     ...cats.map((c) => `how do I ${c}`),
     ...cats.map((c) => `best tool for ${c}`),
-    ...painPhrasesFromIcps.map((p) => `"${p}"`),
     ...cats.map((c) => `frustrated with ${c}`),
   ]);
 
   const solutionQueries = uniqueTrimmed([
+    ...painPhrasesFromIcps.map((p) => `solution for "${p}"`),
     ...cats.map((c) => `recommendations for ${c}`),
     ...cats.map((c) => `anyone using ${c}`),
-    ...painPhrasesFromIcps.map((p) => `solution for "${p}"`),
   ]);
 
   const competitorQueries = uniqueTrimmed([
@@ -279,13 +287,26 @@ function buildTwitterPack(
     .map((h) => h.currentPain)
     .filter(Boolean);
 
-  // Twitter reply-mining queries per x.md § 3 advanced search operators.
-  // Wrap in quotes for exact phrase matching; combine with -filter:retweets.
+  // Twitter via TwitterAPI.io. Tradeoffs vs Reddit:
+  //   - X is small-format, single-tweet content. Exact-quoted long pain
+  //     phrases ("sick of switching between ollama and lm studio to test
+  //     models") almost never match verbatim — X usage is paraphrased.
+  //   - The X advanced-search `-filter:retweets` operator is NOT
+  //     supported by TwitterAPI.io's REST endpoint (verified 2026-05-24).
+  //     Including it kills the query.
+  //   - Raw category keywords work best — "ollama mac" returns dozens of
+  //     real founder tweets including ModelHub's own co-founder posting
+  //     about the pain ModelHub solves.
+  // Priority: raw cats first (proven), shortened ICP-derived 2-3 word
+  // queries next, full quoted pain phrases last (rare matches but
+  // highest signal when they hit).
+  const shortPainPhrases = painPhrasesFromIcps
+    .map((p) => p.split(/\s+/).slice(0, 3).join(" "))
+    .filter((p) => p.length >= 4);
   const painQueries = uniqueTrimmed([
-    ...cats.map((c) => `"looking for a tool that ${c}"`),
-    ...cats.map((c) => `"anyone know how to ${c}"`),
+    ...cats,
+    ...shortPainPhrases,
     ...painPhrasesFromIcps.map((p) => `"${p}"`),
-    ...cats.map((c) => `${c} -filter:retweets`),
   ]);
 
   const solutionQueries = uniqueTrimmed([

@@ -26,13 +26,36 @@ interface CalendarEventProposal {
   description?: string;
   startsAtMs: number;
   endsAtMs: number;
+  kind?: GtmCalendarEventKind;
 }
+
+// Sprint 1.2 — typed event kinds. warmup_block is the new one closing the
+// "Maya knows warmup matters but never put it on your calendar" gap; the
+// rest formalize what was previously a free-form title-prefix convention.
+const EVENT_KIND = v.union(
+  v.literal("warmup_block"),
+  v.literal("engagement_block"),
+  v.literal("soft_launch_post"),
+  v.literal("hard_launch_anchor"),
+  v.literal("reply_window"),
+  v.literal("weekly_review"),
+  v.literal("first_50_dms")
+);
+export type GtmCalendarEventKind =
+  | "warmup_block"
+  | "engagement_block"
+  | "soft_launch_post"
+  | "hard_launch_anchor"
+  | "reply_window"
+  | "weekly_review"
+  | "first_50_dms";
 
 const EVENT_INPUT = v.object({
   title: v.string(),
   description: v.optional(v.string()),
   startsAtMs: v.number(),
   endsAtMs: v.number(),
+  kind: v.optional(EVENT_KIND),
 });
 
 function toIsoWithTimezone(ms: number, timezone: string | undefined): {
@@ -107,6 +130,7 @@ export const writeCalendarEventsForAgent = internalAction({
             startsAtMs: event.startsAtMs,
             endsAtMs: event.endsAtMs,
             timezone,
+            kind: event.kind,
           }
         );
       } catch (err) {
@@ -137,6 +161,7 @@ export const persistGtmCalendarEvent = internalMutation({
     startsAtMs: v.number(),
     endsAtMs: v.number(),
     timezone: v.string(),
+    kind: v.optional(EVENT_KIND),
   },
   handler: async (ctx, args): Promise<Id<"gtmCalendarEvents">> => {
     const now = Date.now();
@@ -151,6 +176,7 @@ export const persistGtmCalendarEvent = internalMutation({
       startsAtMs: args.startsAtMs,
       endsAtMs: args.endsAtMs,
       timezone: args.timezone,
+      kind: args.kind,
       status: "scheduled",
       createdBy: "maya",
       createdAt: now,

@@ -10,6 +10,7 @@
 
 import type * as _admin_peekState from "../_admin/peekState.js";
 import type * as _admin_realWorldDeploy from "../_admin/realWorldDeploy.js";
+import type * as _admin_realWorldDeployGtm from "../_admin/realWorldDeployGtm.js";
 import type * as _test_serviceFixtures from "../_test/serviceFixtures.js";
 import type * as accountDeletion from "../accountDeletion.js";
 import type * as admin from "../admin.js";
@@ -106,6 +107,7 @@ import type * as gtmMaya_platformWorkers from "../gtmMaya/platformWorkers.js";
 import type * as gtmMaya_privateBeta from "../gtmMaya/privateBeta.js";
 import type * as gtmMaya_productionReadiness from "../gtmMaya/productionReadiness.js";
 import type * as gtmMaya_productionReality from "../gtmMaya/productionReality.js";
+import type * as gtmMaya_queryExpansion from "../gtmMaya/queryExpansion.js";
 import type * as gtmMaya_researchLifecycle from "../gtmMaya/researchLifecycle.js";
 import type * as gtmMaya_researchQueryBuilder from "../gtmMaya/researchQueryBuilder.js";
 import type * as gtmMaya_researchQueryRunner from "../gtmMaya/researchQueryRunner.js";
@@ -124,6 +126,7 @@ import type * as gtmMaya_workspaceMutator from "../gtmMaya/workspaceMutator.js";
 import type * as http from "../http.js";
 import type * as integrations_aggregators_unified_client from "../integrations/aggregators/unified/client.js";
 import type * as integrations_aggregators_unified_types from "../integrations/aggregators/unified/types.js";
+import type * as integrations_apify_twitterScraper from "../integrations/apify/twitterScraper.js";
 import type * as integrations_apollo_actions from "../integrations/apollo/actions.js";
 import type * as integrations_apollo_client from "../integrations/apollo/client.js";
 import type * as integrations_apple_caldav from "../integrations/apple/caldav.js";
@@ -177,6 +180,7 @@ import type * as integrations_telegram_client from "../integrations/telegram/cli
 import type * as integrations_twilio_client from "../integrations/twilio/client.js";
 import type * as integrations_twilio_configureWebhooks from "../integrations/twilio/configureWebhooks.js";
 import type * as integrations_twilio_provisionNumber from "../integrations/twilio/provisionNumber.js";
+import type * as integrations_twitterApiIo_twitterSearch from "../integrations/twitterApiIo/twitterSearch.js";
 import type * as integrations_unipile_client from "../integrations/unipile/client.js";
 import type * as integrations_videoSynthWorker_client from "../integrations/videoSynthWorker/client.js";
 import type * as integrations_zernio_client from "../integrations/zernio/client.js";
@@ -257,6 +261,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   "_admin/peekState": typeof _admin_peekState;
   "_admin/realWorldDeploy": typeof _admin_realWorldDeploy;
+  "_admin/realWorldDeployGtm": typeof _admin_realWorldDeployGtm;
   "_test/serviceFixtures": typeof _test_serviceFixtures;
   accountDeletion: typeof accountDeletion;
   admin: typeof admin;
@@ -353,6 +358,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/privateBeta": typeof gtmMaya_privateBeta;
   "gtmMaya/productionReadiness": typeof gtmMaya_productionReadiness;
   "gtmMaya/productionReality": typeof gtmMaya_productionReality;
+  "gtmMaya/queryExpansion": typeof gtmMaya_queryExpansion;
   "gtmMaya/researchLifecycle": typeof gtmMaya_researchLifecycle;
   "gtmMaya/researchQueryBuilder": typeof gtmMaya_researchQueryBuilder;
   "gtmMaya/researchQueryRunner": typeof gtmMaya_researchQueryRunner;
@@ -371,6 +377,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "integrations/aggregators/unified/client": typeof integrations_aggregators_unified_client;
   "integrations/aggregators/unified/types": typeof integrations_aggregators_unified_types;
+  "integrations/apify/twitterScraper": typeof integrations_apify_twitterScraper;
   "integrations/apollo/actions": typeof integrations_apollo_actions;
   "integrations/apollo/client": typeof integrations_apollo_client;
   "integrations/apple/caldav": typeof integrations_apple_caldav;
@@ -424,6 +431,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/twilio/client": typeof integrations_twilio_client;
   "integrations/twilio/configureWebhooks": typeof integrations_twilio_configureWebhooks;
   "integrations/twilio/provisionNumber": typeof integrations_twilio_provisionNumber;
+  "integrations/twitterApiIo/twitterSearch": typeof integrations_twitterApiIo_twitterSearch;
   "integrations/unipile/client": typeof integrations_unipile_client;
   "integrations/videoSynthWorker/client": typeof integrations_videoSynthWorker_client;
   "integrations/zernio/client": typeof integrations_zernio_client;

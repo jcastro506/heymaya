@@ -4381,6 +4381,22 @@ export default defineSchema({
     startsAtMs: v.number(),
     endsAtMs: v.number(),
     timezone: v.optional(v.string()),
+    // Sprint 1.2 — typed event kind so the heartbeat calendar-due task
+    // can distinguish a "warm up your TikTok account by scrolling for 20
+    // min" from a "post your hero draft" event. Optional for backwards
+    // compat with rows created before this enum existed; new writes
+    // should always set it.
+    kind: v.optional(
+      v.union(
+        v.literal("warmup_block"),
+        v.literal("engagement_block"),
+        v.literal("soft_launch_post"),
+        v.literal("hard_launch_anchor"),
+        v.literal("reply_window"),
+        v.literal("weekly_review"),
+        v.literal("first_50_dms")
+      )
+    ),
     status: v.union(
       v.literal("draft"),
       v.literal("scheduled"),
@@ -4529,6 +4545,23 @@ export default defineSchema({
     maxWeeklyVisualPosts: v.optional(v.number()),
     excludedAudiences: v.array(v.string()),
     diagnosis: v.optional(v.any()),
+    // Sprint 1.1 — cached LLM-driven keyword expansion. Maps the founder's
+    // product description into semantic keywords + audience pain phrases the
+    // research query builder can search on. Empty product names like
+    // "ModelHub" (which collides with adult content) become
+    // {productCategoryKeywords: ["local LLM Mac UI", "Ollama dashboard",
+    // "MLX manager", ...], icpPainPhrases: ["managing local LLMs across
+    // Ollama/MLX/LM Studio is fragmented", ...]}. Cached on the app row so
+    // subsequent research jobs don't re-spend on the same expansion.
+    keywordExpansion: v.optional(
+      v.object({
+        productCategoryKeywords: v.array(v.string()),
+        icpPainPhrases: v.array(v.string()),
+        version: v.string(),
+        modelUsed: v.string(),
+        createdAt: v.number(),
+      })
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

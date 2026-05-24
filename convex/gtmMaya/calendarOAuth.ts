@@ -42,8 +42,9 @@ const OAUTH_STATE_TTL_MS = 15 * 60 * 1000;
 function mintStateToken(): string {
   const buf = new Uint8Array(32);
   crypto.getRandomValues(buf);
-  return Buffer.from(buf)
-    .toString("base64")
+  let binary = "";
+  for (let i = 0; i < buf.length; i++) binary += String.fromCharCode(buf[i]);
+  return btoa(binary)
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/g, "");

@@ -477,49 +477,59 @@ export const runBudgetedResearchJob = internalAction({
       status: "running",
     });
 
-    // ── ICP hypotheses (placeholder until maya-icp-hypothesis runs in
-    // Maya's subagent lane). For v0.1 MVP we synthesize two starter
-    // hypotheses from the app: one X-locatable (devs/builders) and one
-    // Reddit-locatable (consumer/prosumer-leaning). channel-judge later
-    // re-weights based on real evidence.
-    const icpHypotheses: IcpHypothesisInput[] = [
-      {
-        id: "icp_x_default",
-        buyer:
-          "Indie devs or builders shipping solo products who need first users",
-        currentPain:
-          app.weekGoal === "feedback"
-            ? "shipped but no one's actually using it"
-            : "no audience, no idea how to launch",
-        currentWorkaround: "post once on Twitter or Reddit, hope for replies",
-        locatableOn: "twitter",
-      },
-      {
-        id: "icp_reddit_default",
-        buyer:
-          "Operators/prosumers in the product's category looking for a tool",
-        currentPain: `currently working around ${app.weekGoal === "signups" ? "this problem with manual workflows" : "the lack of a real solution"}`,
-        currentWorkaround: "manual workflow, spreadsheet, or paying freelancers",
-        locatableOn: "reddit",
-      },
-    ];
+    // ── Sprint 1.1 — LLM-driven keyword expansion. Replaces the prior
+    // syntactic seed ([app.name, weekGoal-fallback]) with semantic keywords
+    // + verbatim audience pain phrases derived from the product description.
+    // Cached on the gtmApps row; one LLM call per product, not per research
+    // job. Without this step, Reddit/X searches use the bare product name,
+    // which collides with unrelated terms (e.g. "ModelHub" matches
+    // modelhub.com, an adult site).
+    const expansionResult = await ctx.runAction(
+      internal.gtmMaya.queryExpansion.expandProductKeywords,
+      { accountId: creatorId, appId: app._id }
+    );
+    const expansion = expansionResult.expansion;
+
+    // ── ICP hypotheses now thread the LLM-generated pain phrases into the
+    // exact-quoted search queries the Sprint 3 builder generates for
+    // Reddit/X. Two starter hypotheses survive (one X-locatable, one
+    // Reddit-locatable); channel-judge re-weights based on real evidence.
+    // Spread every expansion pain phrase across a hypothesis, alternating
+    // Reddit/Twitter so both platforms get quoted-phrase queries. Falls back
+    // to the original two-hypothesis shape if expansion produced no phrases.
+    const phrases =
+      expansion.icpPainPhrases.length > 0
+        ? expansion.icpPainPhrases
+        : [
+            app.weekGoal === "feedback"
+              ? "shipped but no one's actually using it"
+              : "no audience, no idea how to launch",
+            `currently working around ${app.weekGoal === "signups" ? "this problem with manual workflows" : "the lack of a real solution"}`,
+          ];
+
+    const icpHypotheses: IcpHypothesisInput[] = phrases.map((phrase, i) => ({
+      id: `icp_${i % 2 === 0 ? "x" : "reddit"}_${i}`,
+      buyer:
+        i % 2 === 0
+          ? "Indie devs or builders shipping solo products who need first users"
+          : "Operators/prosumers in the product's category looking for a tool",
+      currentPain: phrase,
+      currentWorkaround:
+        i % 2 === 0
+          ? "post once on Twitter or Reddit, hope for replies"
+          : "manual workflow, spreadsheet, or paying freelancers",
+      locatableOn: i % 2 === 0 ? "twitter" : "reddit",
+    }));
 
     await ctx.runMutation(internal.gtmMaya.researchWorker.setJobPhase, {
       researchJobId: args.researchJobId,
       phase: "icp_hypotheses",
     });
 
-    // ── Build the query plan (Sprint 3).
-    const productCategoryKeywords = [
-      app.name ?? "this product",
-      app.weekGoal === "feedback"
-        ? "feedback for indie tool"
-        : app.weekGoal === "signups"
-          ? "first users for SaaS"
-          : app.weekGoal === "demos"
-            ? "demo bookings indie SaaS"
-            : "first users",
-    ].filter(Boolean);
+    // ── Build the query plan (Sprint 3). Use the LLM-expanded semantic
+    // keywords instead of [app.name, weekGoal-fallback]. The query builder
+    // templates these into per-platform search queries.
+    const productCategoryKeywords = expansion.productCategoryKeywords;
 
     const plan = buildResearchQueryPlan({
       diagnosis: {

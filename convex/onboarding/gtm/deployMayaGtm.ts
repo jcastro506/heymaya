@@ -122,7 +122,7 @@ const MACHINE_GUEST: NonNullable<FlyMachineConfig["guest"]> = {
   memory_mb: 1024,
 };
 
-const WAIT_TIMEOUT_MS = 90_000;
+const WAIT_TIMEOUT_MS = 180_000;
 const WAIT_INTERVAL_MS = 3_000;
 
 export function buildGatewayConfig(): Record<string, unknown> {
