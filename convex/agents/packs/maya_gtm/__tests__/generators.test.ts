@@ -204,10 +204,17 @@ describe("Maya GTM workspace pack", () => {
     expect(heartbeat?.payload.message).toContain("Read HEARTBEAT.md");
     expect(heartbeat?.payload.message).toContain("Do not call ScrapeCreators");
     expect(heartbeat?.payload.message).toContain("paid external API");
+    // Sprint 2.7 — weekly review prompt rewritten to dispatch FRESH
+    // _research subagents (not just summarize old state). Old assertions
+    // (`explicit bounded research job`, `maxScrapeCreatorsCalls`) are
+    // replaced by the new compounding-cycle vocabulary.
+    expect(weeklyReview?.payload.message).toContain("WEEKLY REVIEW");
+    expect(weeklyReview?.payload.message).toContain("compounding cycle");
+    expect(weeklyReview?.payload.message).toContain("subagent");
     expect(weeklyReview?.payload.message).toContain(
-      "explicit bounded research job"
+      "/lc_gtm/get_my_recent_post_results"
     );
-    expect(weeklyReview?.payload.message).toContain("maxScrapeCreatorsCalls");
+    expect(weeklyReview?.payload.message).toContain("BANS");
   });
 
   it("keeps the prompt-context bundle (workspace minus playbook/ + skills/*) inside a prompt budget", () => {

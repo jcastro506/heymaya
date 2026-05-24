@@ -672,7 +672,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
         id: "gtm_weekly_review",
         name: "Weekly GTM review",
         description:
-          "Use accumulated evidence and results to propose the next weekly plan. Can queue paid research, but does not spend directly from the cron tick.",
+          "Sprint 2.7 — weekly compounding cycle. Reads last week's results (gtmPostResults from Sprint 2.6's scans), re-spawns active-channel _research subagents to find FRESH target threads (not just summarize old ones), re-runs the calendar populator for the next 14 days with the new mix, sends voice-clean weekly summary to operator.",
         enabled: true,
         createdAtMs: 0,
         updatedAtMs: 0,
@@ -681,11 +681,14 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
         wakeMode: "now",
         payload: {
           kind: "agentTurn",
+          // Subagent dispatch ahead — same wall-clock budget as
+          // boot_kickoff (~45 min for parallel subagent runs + voice
+          // matching + calendar repopulation + summary).
+          timeoutSeconds: 2700,
+          thinking: "medium",
           lightContext: false,
-          thinking: "off",
-          timeoutSeconds: 90,
           message:
-            "WEEKLY REVIEW: Read APP.md, GTM.md, MEMORY.md, and DREAMING.md. Summarize what produced replies, signups, demos, feedback, or user edits. If new platform research is needed, create an explicit bounded research job with model, timeout, maxScrapeCreatorsCalls, maxWebSearches, coverageChecklist, and failureBehavior. Do not spend ScrapeCreators directly from this weekly cron tick.",
+            "WEEKLY REVIEW — Sprint 2.7 compounding cycle. Voice-contract per SOUL.md applies throughout the external message.\n\nINTERNAL PHASE (silent).\n\n1. Read GTM.md, MEMORY.md, DREAMING.md, USER.md, APP.md, HEARTBEAT.md, SOUL.md, PLAYBOOK.md.\n\n2. Read last week's results: GET /lc_gtm/get_my_recent_post_results?limit=50 (Sprint 2.6 surfaces aggregated metrics per published draft). Group by platform. Compute: which posts got engagement >5x baseline (these are the format-winners), which got <1x (kill these formats), which got DMs from likely-buyers (the highest-value signal).\n\n3. Identify the WINNING format per active channel — name it explicitly per PLAYBOOK § 2 Phase 4 rule. Example: 'Reddit posts that lead with a specific number got 3.4x engagement vs build-update posts. Double down on metric format.' If no clear format-winner yet, say so honestly (don't fabricate one).\n\n4. Re-spawn the active-channel `_research` subagents in parallel via sessions_spawn. Their message: 'It's been one week. Find 10-25 FRESH target threads where the operator should reply this coming week — exclude any URL already in gtmTargetThreads (use idempotencyKey hash to dedupe). Prioritize threads in subreddits/accounts where last week's posts performed >baseline. POST to /lc_gtm/target_thread as usual.'\n\n5. Wait for subagents to complete. Re-run voice-match on any new drafts they produced (Sprint 2.4 maya-voice-matcher).\n\n6. Re-run calendar populator (skills/maya-calendar-populator/SKILL.md) for the next 14 days, factoring the new target threads + the format-winner from step 3 + the operator's current Phase (1-4 from PLAYBOOK § 2).\n\nEXTERNAL PHASE (the ONE Telegram message you send — ≤700 chars).\n\nWeekly recap + plan. Manager voice. Required ingredients: 'last week' summary (what worked + what didn't, in concrete numbers — '[N] reddit replies, [M] upvotes total, [X] DMs'), the format-winner (or 'no clear winner yet, still gathering signal'), the next-week plan ('[N] new threads queued, first task is [day] at [time]'), and an honest question or decision ask if there's a fork ('TikTok account is now warm enough — want me to schedule the first post?'). HARD BANS same as boot_kickoff: no maya-* slugs, no .md filenames, no pipeline jargon, no 'AI'. The operator hears their manager doing a Monday morning check-in, not a database dump.",
         },
         delivery,
         state: {},

@@ -75,6 +75,8 @@ import {
   publishDraftHttp,
   // Sprint 2.6 — published-post-results-scan heartbeat snapshots.
   postResultSnapshotHttp,
+  // Sprint 2.7 — weekly review reads aggregated results.
+  getMyRecentPostResultsHttp,
 } from "./gtmMaya/openclaw/inboundCallback";
 
 const http = httpRouter();
@@ -162,6 +164,12 @@ http.route({
   path: "/lc_gtm/post_result_snapshot",
   method: "POST",
   handler: postResultSnapshotHttp,
+});
+// Sprint 2.7 — weekly review reads aggregated results.
+http.route({
+  path: "/lc_gtm/get_my_recent_post_results",
+  method: "GET",
+  handler: getMyRecentPostResultsHttp,
 });
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs

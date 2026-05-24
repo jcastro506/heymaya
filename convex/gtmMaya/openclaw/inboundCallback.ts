@@ -808,6 +808,31 @@ export const postResultSnapshotHttp = httpAction(async (ctx, request) => {
 });
 
 /**
+ * Sprint 2.7 — weekly review reads recent post results via hookToken
+ * auth from Maya's runtime.
+ */
+export const getMyRecentPostResultsHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  const url = new URL(request.url);
+  const limitParam = url.searchParams.get("limit");
+  const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+  const results = await ctx.runQuery(
+    internal.gtmMaya.postResults.listAgentRecentPostResults,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      limit: Number.isFinite(limit) ? limit : undefined,
+    }
+  );
+  return new Response(JSON.stringify({ results }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+/**
  * Read endpoint Maya hits from her runtime after subagents finish — uses
  * hookToken auth (not Clerk) since she's calling from inside her own Fly
  * machine. Returns this agent's target threads only.

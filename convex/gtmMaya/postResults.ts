@@ -124,3 +124,29 @@ export const getMyRecentPostResults = query({
       .take(limit);
   },
 });
+
+/**
+ * Sprint 2.7 — internal read for Maya's runtime (hookToken-auth via
+ * the HTTP wrapper). Returns the agent's recent snapshots ordered by
+ * snapshotAtMs desc.
+ */
+export const listAgentRecentPostResults = internalQuery({
+  args: {
+    agentId: v.id("gtmAgents"),
+    accountId: v.id("creators"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<Doc<"gtmPostResults">[]> => {
+    const limit = Math.min(Math.max(1, args.limit ?? 30), 200);
+    const rows = await ctx.db
+      .query("gtmPostResults")
+      .withIndex("by_account_and_snapshot", (q) =>
+        q.eq("accountId", args.accountId)
+      )
+      .order("desc")
+      .take(limit);
+    // Defense-in-depth: filter to this agent only (HTTP auth already
+    // resolved both IDs but the index is account-scoped, not agent-scoped).
+    return rows.filter((r) => r.agentId === args.agentId);
+  },
+});
