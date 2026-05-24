@@ -119,6 +119,7 @@ import type * as gtmMaya_telegramPairing from "../gtmMaya/telegramPairing.js";
 import type * as gtmMaya_telegramWebhook from "../gtmMaya/telegramWebhook.js";
 import type * as gtmMaya_tiktokWarmup from "../gtmMaya/tiktokWarmup.js";
 import type * as gtmMaya_walkthrough from "../gtmMaya/walkthrough.js";
+import type * as gtmMaya_workspaceMutator from "../gtmMaya/workspaceMutator.js";
 import type * as http from "../http.js";
 import type * as integrations_aggregators_unified_client from "../integrations/aggregators/unified/client.js";
 import type * as integrations_aggregators_unified_types from "../integrations/aggregators/unified/types.js";
@@ -364,6 +365,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/telegramWebhook": typeof gtmMaya_telegramWebhook;
   "gtmMaya/tiktokWarmup": typeof gtmMaya_tiktokWarmup;
   "gtmMaya/walkthrough": typeof gtmMaya_walkthrough;
+  "gtmMaya/workspaceMutator": typeof gtmMaya_workspaceMutator;
   http: typeof http;
   "integrations/aggregators/unified/client": typeof integrations_aggregators_unified_client;
   "integrations/aggregators/unified/types": typeof integrations_aggregators_unified_types;

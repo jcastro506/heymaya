@@ -201,6 +201,15 @@ function delegateToSprint18Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint19Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S19",
+    "Workspace mutation pipeline (post-research APP/GTM/MEMORY updates)",
+    "scripts/gtm-sprint-19-smoke.ts",
+    /Sprint 19 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -266,10 +275,9 @@ async function main(): Promise<void> {
   // ─── Sprint 1 — orchestrator (replaces skeleton) ──────────────────────
   sections.push(delegateToSprint1Smoke());
 
+  sections.push(delegateToSprint19Smoke());
+
   // ─── Sprints not yet shipped — placeholders ────────────────────────────
-  sections.push(
-    placeholderSection("S19", "Workspace mutation pipeline (post-research)")
-  );
   sections.push(delegateToSprint20Smoke());
   sections.push(delegateToSprint9Smoke());
   sections.push(delegateToSprint10Smoke());

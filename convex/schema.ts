@@ -4396,6 +4396,40 @@ export default defineSchema({
     .index("by_research_job", ["researchJobId"])
     .index("by_provider_event", ["providerEventId"]),
 
+  // Sprint 19 — audit log of workspace mutations. Each row records a
+  // re-generation of APP.md / GTM.md / MEMORY.md content driven by a
+  // research-job completion or weekly-review trigger. The actual Fly
+  // push happens on operator-triggered redeploy (the workspace bundle
+  // generator reads from gtmResearchJobs + gtmChannelScores to produce
+  // the new content); this table is the audit trail + change log.
+  gtmWorkspaceMutations: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    triggeredBy: v.union(
+      v.literal("research_complete"),
+      v.literal("weekly_review"),
+      v.literal("operator_manual"),
+      v.literal("memory_append")
+    ),
+    sourceResearchJobId: v.optional(v.id("gtmResearchJobs")),
+    /** Newline-delimited list of file paths that changed (e.g. "APP.md"). */
+    changedFiles: v.array(v.string()),
+    /** Short human-readable diff summary. */
+    summary: v.string(),
+    /** Pre-mutation backup blob — stored compressed by serializing the
+     *  pre-state of all changed files. Used for rollback within 7 days. */
+    backupBlobJson: v.optional(v.string()),
+    /** Whether the agent's Fly machine has actually been re-deployed
+     *  with this content. operator-triggered redeploy flips this true. */
+    deployed: v.boolean(),
+    /** ms timestamp of operator-triggered redeploy. null until pushed. */
+    deployedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_research_job", ["sourceResearchJobId"]),
+
   // Sprint 9 — single-use Google OAuth state tokens for the GTM flow.
   // 15-min TTL, atomic claim by the callback. Separate from
   // oauthStateTokens (creator-side) so a leak doesn't cross-tenant.

@@ -635,16 +635,36 @@ export const runBudgetedResearchJob = internalAction({
           : undefined,
     });
 
-    // Sprint 10 — Telegram handoff. Look up the agent that owns this
-    // account and ping Maya via the hook bridge so she summarizes the
-    // research to the user via Telegram. Best-effort; if the agent
-    // isn't deployed yet or hookToken is missing, this is a no-op.
+    // Sprint 10 + 19 — Telegram handoff + workspace mutation. Look up
+    // the agent that owns this account, persist a workspace-mutation
+    // audit row (Sprint 19; APP/GTM/MEMORY content gets regenerated on
+    // next deploy), then ping Maya via the hook bridge so she
+    // summarizes the research to the user via Telegram. Both best-effort
+    // — if the agent isn't deployed yet or hookToken is missing, the
+    // research is still persisted.
     if (status !== "failed") {
       const agent = await ctx.runQuery(
         internal.gtmMaya.researchWorker.getGtmAgentForJob,
         { accountId: creatorId }
       );
       if (agent) {
+        // Sprint 19 mutation audit (always; backup-blob optional).
+        try {
+          await ctx.runAction(
+            internal.gtmMaya.workspaceMutator.mutateWorkspaceFromResearch,
+            {
+              agentId: agent._id,
+              accountId: creatorId,
+              researchJobId: args.researchJobId,
+              trigger: "research_complete",
+            }
+          );
+        } catch (err) {
+          console.warn(
+            "[orchestrator] workspace mutation failed:",
+            (err as Error).message
+          );
+        }
         const primary = scores.find((s) => s.decision === "primary");
         const secondary = scores.find((s) => s.decision === "secondary");
         const topEvidenceUrls = evidenceCards
