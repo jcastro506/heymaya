@@ -219,6 +219,15 @@ function delegateToSprint22Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint12Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S12",
+    "Cumulative E2E (signup → research → mutation → handoff → calendar)",
+    "scripts/gtm-sprint-12-smoke.ts",
+    /Sprint 12 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -295,8 +304,8 @@ async function main(): Promise<void> {
     placeholderSection("S21", "Standing orders + hooks + Policy plugin")
   );
   sections.push(delegateToSprint22Smoke());
-  // S1-S12 from the original doc come back here too once they're shipped,
-  // in the order specified by Part II's "Updated implementation order".
+  // ─── Sprint 12 — cumulative E2E (the final gate before public test) ───
+  sections.push(delegateToSprint12Smoke());
 
   // ─── Report ────────────────────────────────────────────────────────────
   console.log("\nClawLaunch GTM Sprint Gate");
