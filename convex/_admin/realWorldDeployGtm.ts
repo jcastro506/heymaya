@@ -314,6 +314,76 @@ export const analyzeLatestSynth = internalQuery({
   },
 });
 
+/**
+ * Sprint 1.3 — direct Telegram delivery smoke. Fires a one-shot agent turn
+ * against the most-recently-deployed synth Maya with `deliver: true` so
+ * OpenClaw's native channels.telegram adapter handles delivery. If the
+ * adapter is wired correctly the operator receives a Telegram message
+ * within ~30s. If they don't, channel config is still broken (look at
+ * Fly logs).
+ */
+export const pingLatestSynthOnTelegram = internalAction({
+  args: { message: v.optional(v.string()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; status: number; body: unknown; error?: string }> => {
+    const all = await ctx.runQuery(
+      internal._admin.realWorldDeployGtm.inspectLatestSynthQuery,
+      {}
+    );
+    const found = all as {
+      found: boolean;
+      agent?: {
+        _id: string;
+        openClawFlyAppId?: string;
+        telegramChatId?: string;
+        hookTokenSet?: boolean;
+      };
+    };
+    if (!found.found || !found.agent?.openClawFlyAppId) {
+      return { ok: false, status: 0, body: null, error: "no synth agent or not deployed" };
+    }
+    if (!found.agent.telegramChatId) {
+      return { ok: false, status: 0, body: null, error: "no telegramChatId on synth agent" };
+    }
+    const agentRow = await ctx.runQuery(
+      internal.onboarding.gtm.deployMayaGtm.getGtmAgentForDeploy,
+      { agentId: found.agent._id as Id<"gtmAgents"> }
+    );
+    if (!agentRow?.agent.hookToken) {
+      return { ok: false, status: 0, body: null, error: "agent has no hookToken" };
+    }
+    const baseUrl = `https://${found.agent.openClawFlyAppId}.fly.dev/hooks`;
+    const message =
+      args.message ??
+      "Hi — this is a delivery smoke test from your Convex admin. If you see this on Telegram, the channels.telegram adapter is wired correctly.";
+    const res = await fetch(`${baseUrl}/agent`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${agentRow.agent.hookToken}`,
+      },
+      body: JSON.stringify({
+        message,
+        deliver: true,
+        channel: "telegram",
+        to: found.agent.telegramChatId,
+        thinking: "low",
+        timeoutSeconds: 60,
+      }),
+    });
+    const text = await res.text();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = text;
+    }
+    return { ok: res.ok, status: res.status, body: parsed };
+  },
+});
+
 export const inspectLatestSynth = internalAction({
   args: {},
   handler: async (ctx): Promise<unknown> => {
@@ -446,20 +516,18 @@ export const run = internalAction({
       console.log(`[gtmSynth] patched telegramChatId=${args.telegramChatId}`);
     }
 
-    let deploy: unknown = { skipped: true, reason: "deployFly=false" };
-    if (args.deployFly) {
-      console.log("[gtmSynth] deploying Fly machine via deployMayaGtm...");
-      deploy = await ctx.runAction(
-        internal.onboarding.gtm.deployMayaGtm.deployMayaGtm,
-        { agentId: seed.agentId }
-      );
-      console.log(`[gtmSynth] deploy: ${JSON.stringify(deploy)}`);
-    }
-
+    // Sprint 1.5 — research BEFORE deploy. Reason: deployMayaGtm builds the
+    // workspace tarball via buildAndUploadGtmWorkspace which reads the
+    // latest gtmResearchJobs → channelScores via getGtmAgentForDeploy.
+    // If we deploy first, the workspace bundle has empty GTM.md (no
+    // channel picks, no first-week-test) and Maya boots blind. If we
+    // research first, the workspace bundle bakes in the X-primary,
+    // Reddit-secondary decisions + cheat-sheet evidence and Maya boots
+    // already smart about the product.
     let research: unknown = { skipped: true, reason: "skipResearch=true" };
     if (!args.skipResearch) {
       console.log(
-        "[gtmSynth] running orchestrator (runBudgetedResearchJob) — burns real credits..."
+        "[gtmSynth] running orchestrator (runBudgetedResearchJob) FIRST — burns real credits..."
       );
       research = await ctx.runAction(
         internal.gtmMaya.researchWorker.runBudgetedResearchJob,
@@ -468,6 +536,18 @@ export const run = internalAction({
       console.log(`[gtmSynth] research: ${JSON.stringify(research, null, 2)}`);
     } else {
       console.log("[gtmSynth] skipResearch=true; orchestrator not invoked");
+    }
+
+    let deploy: unknown = { skipped: true, reason: "deployFly=false" };
+    if (args.deployFly) {
+      console.log(
+        "[gtmSynth] deploying Fly machine via deployMayaGtm (workspace will include any research baked above)..."
+      );
+      deploy = await ctx.runAction(
+        internal.onboarding.gtm.deployMayaGtm.deployMayaGtm,
+        { agentId: seed.agentId }
+      );
+      console.log(`[gtmSynth] deploy: ${JSON.stringify(deploy)}`);
     }
 
     return {

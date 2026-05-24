@@ -125,7 +125,26 @@ const MACHINE_GUEST: NonNullable<FlyMachineConfig["guest"]> = {
 const WAIT_TIMEOUT_MS = 180_000;
 const WAIT_INTERVAL_MS = 3_000;
 
-export function buildGatewayConfig(): Record<string, unknown> {
+export interface BuildGatewayConfigInput {
+  /**
+   * Sprint 1.3 — when set, the Telegram channel adapter is enabled with a
+   * dmPolicy allowlist scoped to this user ID. Without this, OpenClaw boots
+   * with 0 channels and the orchestrator's `delivery: { channel: telegram }`
+   * silently drops. The bot token is read from the TELEGRAM_BOT_TOKEN env
+   * var (must be present in Fly secrets via collectDeploySecrets).
+   *
+   * Pre-pairing creators get no Telegram channel — keeps the gateway config
+   * valid in test fixtures and during onboarding. The orchestrator's handoff
+   * + heartbeat tasks check for telegramChatId presence before scheduling
+   * delivery, so an unset channel just means messages are deferred until
+   * the user pairs.
+   */
+  telegramChatId?: string;
+}
+
+export function buildGatewayConfig(
+  input: BuildGatewayConfigInput = {}
+): Record<string, unknown> {
   const mainModel = toOpenClawModelRef(MODEL_ROUTING.mainMaya);
   const hardModel = toOpenClawModelRef(MODEL_ROUTING.hardResearchBeta);
   const extractionModel = toOpenClawModelRef(MODEL_ROUTING.extractionWorker);
@@ -279,6 +298,27 @@ export function buildGatewayConfig(): Record<string, unknown> {
         "talk-voice": { enabled: false },
       },
     },
+    // Sprint 1.3 — native OpenClaw Telegram channel. Without this block
+    // OpenClaw boots with 0 channels and `delivery: { channel: telegram }`
+    // is a no-op. With it, cron jobs that fire `mode: announce, channel:
+    // telegram, to: <chatId>` deliver via the bot token (read from
+    // TELEGRAM_BOT_TOKEN env). dmPolicy allowlist scoped to the paired
+    // user means inbound DMs from any other Telegram user are dropped —
+    // critical when multiple Mayas share the same staging bot token.
+    // Pre-pairing creators (no telegramChatId yet) get the channel
+    // OMITTED — cleanest behavior since handoff/heartbeat code already
+    // checks for telegramChatId presence before scheduling delivery.
+    ...(input.telegramChatId
+      ? {
+          channels: {
+            telegram: {
+              enabled: true,
+              dmPolicy: "allowlist" as const,
+              allowFrom: [Number(input.telegramChatId)].filter(Number.isFinite),
+            },
+          },
+        }
+      : {}),
     discovery: { mdns: { mode: "off" } },
     skills: { load: { watch: true } },
   };
@@ -543,6 +583,7 @@ export const deployMayaGtm = internalAction({
           agentId: args.agentId,
           flyAppName: bundle.flyAppName,
           workspaceBundleUrl: bundle.workspaceBundleUrl,
+          telegramChatId: row.agent.telegramChatId,
         }),
       });
     } catch (err) {
@@ -620,6 +661,10 @@ export function buildGtmMachineConfig(input: {
   agentId: Id<"gtmAgents"> | string;
   flyAppName: string;
   workspaceBundleUrl: string;
+  /** Sprint 1.3 — passed through to buildGatewayConfig so the OpenClaw
+   *  channels.telegram adapter is enabled with allowlist scoped to this
+   *  user. Pre-pairing agents pass undefined; the channel is omitted. */
+  telegramChatId?: string;
 }): FlyMachineConfig {
   return {
     image: OPENCLAW_IMAGE,
@@ -639,11 +684,22 @@ export function buildGtmMachineConfig(input: {
         workspaceBundleUrl: input.workspaceBundleUrl,
         modelRouting: MODEL_ROUTING,
         directPingSmoke: true,
-        gatewayConfig: buildGatewayConfig(),
+        gatewayConfig: buildGatewayConfig({
+          telegramChatId: input.telegramChatId,
+        }),
       }),
     },
     guest: MACHINE_GUEST,
     restart: { policy: "always" },
+    // Sprint 1.3 follow-up — services block intentionally omitted. OpenClaw
+    // gateway binds to 127.0.0.1:18789 by default (per creator-product
+    // deployMaya.ts:353-361); enabling public Fly routing requires both
+    // `--bind lan` AND `gateway.controlUi.allowedOrigins` in the config.
+    // The creator team deferred that to a follow-up wave. We do the same
+    // here — the days-on-days test uses the cron + heartbeat path (Maya
+    // fires from inside her own machine via OpenClaw cron daemon, then
+    // delivers via channels.telegram). Convex → Maya HTTP push remains
+    // a known-broken path until --bind lan + allowedOrigins land.
     metadata: {
       agent_id: String(input.agentId),
       kind: "maya-gtm",
@@ -667,11 +723,26 @@ function buildBootstrapShell(): string {
   return [
     "mkdir -p /data/workspace /data/cron",
     'curl -fsSL "$MAYA_WORKSPACE_BUNDLE_URL" -o /tmp/workspace.tar',
+    // Sprint 1.4 diagnostic — capture workspace state at every stage so we
+    // can see when files vanish. Bug observed 2026-05-24: 6 of 12 root .md
+    // files (AGENTS, APP, GTM, BOOT, HEARTBEAT, DREAMING) disappear between
+    // tar-extract and openclaw startup; manually re-extracting after gateway
+    // is up restores them. Hypothesis: race between tar-extract and
+    // openclaw's own workspace initialization.
+    'echo "[bootstrap] tar size: $(wc -c < /tmp/workspace.tar)"',
     "tar -xf /tmp/workspace.tar -C /data/workspace",
+    'echo "[bootstrap] post-tar root files:" && ls /data/workspace/ | sort | tr "\\n" " " && echo',
+    // Sprint 1.4 defensive — re-extract a second time after a 1s pause to
+    // overwrite any files that vanished. tar's default is to overwrite, so
+    // this is safe if all 12 files survived the first extract.
+    "sleep 1",
+    "tar -xf /tmp/workspace.tar -C /data/workspace",
+    'echo "[bootstrap] post-reextract root files:" && ls /data/workspace/ | sort | tr "\\n" " " && echo',
     "if [ -f /data/workspace/jobs.json ]; then cp /data/workspace/jobs.json /data/cron/jobs.json; fi",
     "chmod 700 /data/cron",
     "chmod 600 /data/cron/jobs.json",
     'echo "$MAYA_BOOTSTRAP_JSON" | jq .gatewayConfig > /data/openclaw.json',
+    'echo "[bootstrap] launching openclaw gateway..."',
     "exec openclaw gateway --allow-unconfigured",
   ].join(" && ");
 }
@@ -688,6 +759,18 @@ function collectDeploySecrets(): Record<string, string> {
     "GOOGLE_GENERATIVE_AI_API_KEY",
     "OPENROUTER_API_KEY",
     "ENCRYPTION_KEY",
+    // Sprint 1.3 — without TELEGRAM_BOT_TOKEN reaching the Fly machine,
+    // OpenClaw's native channels.telegram adapter can't authenticate and
+    // delivery silently fails (cron's `delivery.mode: announce, channel:
+    // telegram` drops with no recipient). Verified live 2026-05-24:
+    // synth Maya booted with 0 channels because token wasn't propagated.
+    "TELEGRAM_BOT_TOKEN",
+    // Sprint 1.1 — TwitterAPI.io is now the X keyword-search backend (the
+    // Convex-side wrapper calls it from researchWorker, but Maya's runtime
+    // skills may also reference it via the kaitoInfra/twitterapi-io skill
+    // once pinned, so secret needs to be available on the machine too).
+    "TWITTERAPI_IO_KEY",
+    "APIFY_API_TOKEN",
   ]) {
     const value = process.env[key];
     if (value) secrets[key] = value;

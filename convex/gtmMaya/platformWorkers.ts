@@ -8,7 +8,6 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { ScrapeCreatorsClient } from "../integrations/scrapeCreators/client";
 import {
-  googleSearch,
   instagramSearchReels,
   redditPostComments,
   searchRedditAll,
@@ -30,6 +29,14 @@ import {
 // environments without the key. Apify wrapper preserved as a fallback
 // option in convex/integrations/apify/twitterScraper.ts.
 import { twitterApiIoSearch } from "../integrations/twitterApiIo/twitterSearch";
+// Sprint 2.0 — Gemini grounded search replaces the broken ScrapeCreators
+// Google worker. Algolia HN search runs alongside it inside the same
+// worker so each Google query also probes Hacker News. HN cards are
+// platform:"google" (with hn:* tags for filtering) until Sprint 2.1
+// promotes HN to a first-class channel with its own subagent + enum
+// widening on gtmEvidenceCards / gtmChannelScores.
+import { geminiGroundedSearch } from "../integrations/gemini/groundedSearch";
+import { hackerNewsSearch } from "../integrations/hackerNews/algoliaSearch";
 import { checkAllCostCaps } from "./costCap";
 
 /**
@@ -88,7 +95,11 @@ const PER_CALL_COST_USD: Record<PlatformWorkerPlatform, number> = {
   tiktok: 0.015,
   twitter: 0.012,
   instagram: 0.012,
-  google: 0.005,
+  // Sprint 2.0 — Google now fans to Gemini grounded ($35/1K = ~$0.035/call)
+  // + Algolia HN (free). Bumped from the old ScrapeCreators rate (0.005)
+  // so the cost-cap pre-flight check doesn't underestimate 7x and let
+  // calls slip past budget.
+  google: 0.035,
 };
 
 // ──────────────────────────────────────────────────────────────────────
@@ -726,9 +737,28 @@ export const runGoogleWorker = internalAction({
       accountId: args.accountId,
       platform: "google",
     };
+    // Sprint 2.0 — two-source Google research: Gemini grounded search +
+    // Algolia HN. Same query string fans out to both; results merge into
+    // the platform:"google" stream. HN cards carry "hn:true" tag for
+    // downstream filtering. Dedupes by URL across the two sources.
     return await runWorker(wc, args.pack, async (query) => {
-      const res = await googleSearch(client, query);
-      return res.items;
+      const [gemini, hn] = await Promise.all([
+        geminiGroundedSearch(query, { maxOutputTokens: 1024 }),
+        hackerNewsSearch(query, {
+          sort: "relevance",
+          hitsPerPage: 10,
+          minPoints: 3,
+        }),
+      ]);
+      const merged = [...gemini.items, ...hn.items];
+      const seen = new Set<string>();
+      const dedup: typeof merged = [];
+      for (const item of merged) {
+        if (seen.has(item.url)) continue;
+        seen.add(item.url);
+        dedup.push(item);
+      }
+      return dedup;
     });
   },
 });

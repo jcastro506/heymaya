@@ -148,9 +148,11 @@ import type * as integrations_crm_quickbooks from "../integrations/crm/quickbook
 import type * as integrations_gbp_direct_client from "../integrations/gbp/direct/client.js";
 import type * as integrations_gbp_index from "../integrations/gbp/index.js";
 import type * as integrations_gbp_zernio from "../integrations/gbp/zernio.js";
+import type * as integrations_gemini_groundedSearch from "../integrations/gemini/groundedSearch.js";
 import type * as integrations_google_calendar from "../integrations/google/calendar.js";
 import type * as integrations_google_gmail from "../integrations/google/gmail.js";
 import type * as integrations_google_tokenResolver from "../integrations/google/tokenResolver.js";
+import type * as integrations_hackerNews_algoliaSearch from "../integrations/hackerNews/algoliaSearch.js";
 import type * as integrations_hunter_actions from "../integrations/hunter/actions.js";
 import type * as integrations_hunter_client from "../integrations/hunter/client.js";
 import type * as integrations_inbox_warmMining from "../integrations/inbox/warmMining.js";
@@ -399,9 +401,11 @@ declare const fullApi: ApiFromModules<{
   "integrations/gbp/direct/client": typeof integrations_gbp_direct_client;
   "integrations/gbp/index": typeof integrations_gbp_index;
   "integrations/gbp/zernio": typeof integrations_gbp_zernio;
+  "integrations/gemini/groundedSearch": typeof integrations_gemini_groundedSearch;
   "integrations/google/calendar": typeof integrations_google_calendar;
   "integrations/google/gmail": typeof integrations_google_gmail;
   "integrations/google/tokenResolver": typeof integrations_google_tokenResolver;
+  "integrations/hackerNews/algoliaSearch": typeof integrations_hackerNews_algoliaSearch;
   "integrations/hunter/actions": typeof integrations_hunter_actions;
   "integrations/hunter/client": typeof integrations_hunter_client;
   "integrations/inbox/warmMining": typeof integrations_inbox_warmMining;
