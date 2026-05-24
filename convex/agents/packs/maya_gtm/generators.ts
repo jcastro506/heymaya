@@ -420,6 +420,10 @@ streams them in one row at a time.
   Body: \`{ idempotencyKey, draftId }\`
   Use: after the operator approves a draft via Telegram reply or mission board, POST to auto-publish via Composio. Only supports platform:"x" and platform:"linkedin" — Reddit/HN stay tap-and-post per PLAYBOOK § 3.5. Returns \`{ ok, providerPostId?, providerUrl?, statusDetail }\`. On success, draft flips to \`approvalState: "published"\` with providerPostId + publishedAt. On failure, draft stays \`pending_approval\` and userFeedback captures the failure for operator visibility.
 
+- \`POST ${callbackBase}/lc_gtm/post_result_snapshot\` (Sprint 2.6)
+  Body: \`{ idempotencyKey, draftId, platform, providerPostId, metrics: { likes?, comments?, shares?, views?, upvotes?, downvotes? }, notes? }\`
+  Use: the published-post-results-scan heartbeat task POSTs one snapshot per published draft per scan (every 6h). Persists in gtmPostResults; mission-board + weekly review compute deltas from these. Snapshots that represent a ≥5x baseline jump fire an opportunistic Telegram nudge.
+
 Hook token (treat as a secret — never log, never echo to the channel):
 - Token: \`${hookToken}\`
 
@@ -539,6 +543,20 @@ tasks:
       Check gtmCalendarEvents in status="completed" within the last 24h
       that have no gtmResultSnapshots row yet. If any, ask the operator
       ONE short question to log the result. Otherwise reply HEARTBEAT_OK.
+  - name: published-post-results-scan
+    interval: 6h
+    prompt: |
+      Sprint 2.6 — for each gtmDraftedContent row with approvalState="published"
+      AND publishedAt within the last 7d, refresh metrics from the source
+      platform (X via TwitterAPI.io, Reddit via Algolia, HN via Algolia,
+      LinkedIn via Composio). Persist each snapshot via POST
+      /lc_gtm/post_result_snapshot. Compare against the prior snapshot
+      for that draft (if any) — if engagement is ≥5x the baseline OR
+      ≥50 absolute new likes/upvotes, surface ONE Telegram note to
+      operator: "Your [day-ago] post on [platform] is taking off — [N]
+      likes, [M] comments. Want me to draft a follow-up?" Otherwise
+      silent. Reply HEARTBEAT_OK after persistence regardless of surface
+      decision.
 \`\`\`
 
 ## Active hours
@@ -607,6 +625,16 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
         payload: {
           kind: "agentTurn",
           lightContext: true,
+          // Sprint 2.1 — boot_kickoff dispatches per-platform _research
+          // subagents that each take 5-15 min. Plus voice-matching every
+          // draft (Sprint 2.4) + calendar populator (Sprint 2.3) + voice-
+          // clean Telegram hello. Total realistic wall-clock: 20-40 min.
+          // Without explicit timeoutSeconds, OpenClaw defaults too low
+          // and the cron is killed mid-LLM-call (verified live 2026-05-24:
+          // model-fallback/decision logged "cron: job execution timed out").
+          // 2700s = 45 min ceiling.
+          timeoutSeconds: 2700,
+          thinking: "medium",
           message:
             "FIRST WAKE — deep research dispatch + voice-clean hello.\n\nINTERNAL PHASE (silent; no Telegram message yet).\n\n1. Read SOUL.md (voice contract — non-negotiable for the user message at the end), AGENTS.md, USER.md, APP.md, GTM.md, TOOLS.md, PLAYBOOK.md, HEARTBEAT.md.\n\n2. From GTM.md identify the active channels — those with decision='primary' or 'secondary'. For each active channel, spawn the matching `_research` subagent via `sessions_spawn` (depth-1, max 4 concurrent). Spawn ONLY for non-parked channels. Mapping: reddit → reddit_research, x → x_research, tiktok → tiktok_research, instagram → instagram_research, linkedin → linkedin_research, hn → hn_research, product_hunt → SKIP (commercial licensing required).\n\n3. Each subagent's `message` prompt (your job to compose, grounded in playbook + APP.md): tell it to read its playbook section (playbook/<channel>.md), use its allowed tools (scrapecreators-api / web_fetch / search-x / etc.) to identify 10-25 specific recent threads where the product fits as a natural reply AND 5-15 specific accounts/communities worth following. For each thread/account, POST to the Convex hook bridge — see TOOLS.md for the /lc_gtm/target_thread, /lc_gtm/target_account, /lc_gtm/drafted_content endpoints and the hookToken auth pattern. Strict requirements for each POST: plain-language `whyItFits` field (1-3 sentences, NEVER references skill slugs / .md filenames / 'evidence cards' / pipeline terms — write it as if explaining to a non-technical founder), priorityScore 0-1, status 'queued'.\n\n4. Each subagent runs 5-15 min wall-clock. Wait for all to complete via `sessions_wait` or by polling sessions list. Budget cap: maxOutputTokens 4000 per subagent.\n\n5. After all subagents return, read /lc_gtm/get_my_target_threads to confirm rows landed. Count by platform.\n\n5b. Sprint 2.4 — voice-match each fresh draft. For every gtmDraftedContent row the subagents POSTed, follow skills/maya-voice-matcher/SKILL.md to score voice + slop + specificity. POST results to /lc_gtm/update_draft_voice_match. Drafts that fail both gates can be re-spawned with edit feedback (spawn the originating _research subagent again with explicit voice samples) OR auto-rejected. Only drafts in approvalState:'pending_approval' make it to the calendar.\n\n6. Sprint 2.3 — schedule the next 14 days. Read skills/maya-calendar-populator/SKILL.md and follow it. The skill reads the target list you just verified, computes the operator's current Phase (1-4 per PLAYBOOK § 2), and emits typed calendar events (warmup_block / engagement_block / reply_window / soft_launch_post / hard_launch_anchor / first_50_dms / weekly_review). POST events to /lc_gtm/calendar_proposal — see TOOLS.md for the body schema. Default to status:'draft' (events not yet pushed to Google Calendar until operator approves). Run maya-slop-critic on every event title + description before POSTing — banned phrases will kill the calendar.\n\nEXTERNAL PHASE (the ONE Telegram message you send to the user — ≤500 chars).\n\nWrite a manager-voice hello that confirms what you found, in PLAIN LANGUAGE per SOUL.md § 'Voice contract — what NEVER leaks'. Required ingredients: greeting with user's first name (read USER.md), identity as their launch manager (NOT 'AI assistant'), the primary channel pick in everyday words ('Reddit's where your buyer hangs out'), how many target threads you queued ('I've got 23 threads worth replying to'), what's next ('your calendar's filling up; first task is tomorrow morning'). HARD BANS: any `maya-*` skill slug, any .md filename, any internal term ('evidence cards', 'subagent', 'research lane', 'boot kickoff', 'priorityScore'), any 'AI' framing of yourself, any pipeline meta-commentary. If you catch yourself writing one of those, rewrite the sentence.\n\nExamples of CORRECT external messages: 'Hey Josh — Maya here. Spent the last hour digging into ModelHub and the pattern is clear: your buyer lives on Reddit, specifically r/LocalLLaMA + r/ollama. I lined up 23 threads worth replying to over the next two weeks. Your calendar's filling up — first task is tomorrow at 10am. Want me to walk you through the week before I lock it in?' / 'Hey Sam, Maya. Done with the initial scan. X is your room (specifically the dev/AI-builder crowd). I've got 18 tweets queued where a thoughtful reply lands you in front of the right people, plus a list of 12 accounts worth following. First reply is tomorrow morning — drafted, you tap and post. Sound good?'\n\nExamples of BANNED external messages: 'Initializing IDENTITY.md...' / 'I spawned maya-reddit-demand-researcher to find evidence cards...' / 'The channel-judge selected Reddit as primary based on 80 useful evidence cards...' / 'I queued a bounded research job...' — all leak the pipeline.\n\nDo NOT call ScrapeCreators / Gemini / Composio / broad web search directly from `main`. ALL external API work is done via the spawned subagents, which have those tools allow-listed.",
         },

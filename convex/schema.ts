@@ -5408,5 +5408,45 @@ export default defineSchema({
     .index("by_research_job", ["researchJobId"])
     .index("by_target_thread", ["targetThreadId"])
     .index("by_account_and_state", ["accountId", "approvalState"]),
+
+  // Sprint 2.6 — daily heartbeat results scan. For each published
+  // gtmDraftedContent row, a heartbeat task fetches latest metrics from
+  // the source platform every 6h and persists a snapshot here. Lets the
+  // weekly review compute deltas + surface what worked / didn't.
+  // Significant changes (5x baseline) also fire an opportunistic
+  // Telegram nudge from the heartbeat task.
+  gtmPostResults: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    draftId: v.id("gtmDraftedContent"),
+    snapshotAtMs: v.number(),
+    platform: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("hn"),
+      v.literal("linkedin"),
+      v.literal("instagram"),
+      v.literal("tiktok")
+    ),
+    providerPostId: v.string(),
+    metrics: v.object({
+      likes: v.optional(v.number()),
+      comments: v.optional(v.number()),
+      shares: v.optional(v.number()),
+      views: v.optional(v.number()),
+      upvotes: v.optional(v.number()),
+      downvotes: v.optional(v.number()),
+    }),
+    // Sprint 2.6 — populated when the heartbeat task decided this
+    // snapshot represents a significant change from prior baseline
+    // and surfaced a Telegram nudge. Mission-board surfaces use this
+    // to show "Maya pinged the operator about this one".
+    surfacedToOperator: v.boolean(),
+    notes: v.optional(v.string()),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_draft", ["draftId"])
+    .index("by_account_and_snapshot", ["accountId", "snapshotAtMs"]),
   // ─── end ClawLaunch / Maya GTM product ────────────────────────────────
 });

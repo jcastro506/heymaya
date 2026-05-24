@@ -73,6 +73,8 @@ import {
   // Sprint 2.5 — Composio "Maya posts it". Maya POSTs here after
   // operator approves a draft (via Telegram reply or mission board).
   publishDraftHttp,
+  // Sprint 2.6 — published-post-results-scan heartbeat snapshots.
+  postResultSnapshotHttp,
 } from "./gtmMaya/openclaw/inboundCallback";
 
 const http = httpRouter();
@@ -154,6 +156,12 @@ http.route({
   path: "/lc_gtm/publish_draft",
   method: "POST",
   handler: publishDraftHttp,
+});
+// Sprint 2.6 — heartbeat results scan persistence (every 6h).
+http.route({
+  path: "/lc_gtm/post_result_snapshot",
+  method: "POST",
+  handler: postResultSnapshotHttp,
 });
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs

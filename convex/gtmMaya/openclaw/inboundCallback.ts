@@ -734,6 +734,80 @@ export const publishDraftHttp = httpAction(async (ctx, request) => {
 });
 
 /**
+ * Sprint 2.6 — heartbeat results scan persistence. The
+ * published-post-results-scan heartbeat task posts one snapshot per
+ * draft per scan. Reuses approval_decision idempotency lane (a draft
+ * scanned twice in 6h doesn't double-write).
+ */
+interface PostResultSnapshotPayload {
+  idempotencyKey: string;
+  draftId: string;
+  platform: "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok";
+  providerPostId: string;
+  metrics: {
+    likes?: number;
+    comments?: number;
+    shares?: number;
+    views?: number;
+    upvotes?: number;
+    downvotes?: number;
+  };
+  notes?: string;
+}
+
+export const postResultSnapshotHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: PostResultSnapshotPayload;
+  try {
+    body = (await request.json()) as PostResultSnapshotPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (
+    !body.idempotencyKey ||
+    !body.draftId ||
+    !body.platform ||
+    !body.providerPostId ||
+    !body.metrics
+  ) {
+    return new Response("missing required fields", { status: 400 });
+  }
+
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "approval_decision",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") {
+    return new Response("ok (replay)", { status: 200 });
+  }
+
+  try {
+    await ctx.runMutation(
+      internal.gtmMaya.postResults.recordPostResultSnapshot,
+      {
+        agentId: auth.agentId,
+        accountId: auth.accountId,
+        draftId: body.draftId as Id<"gtmDraftedContent">,
+        platform: body.platform,
+        providerPostId: body.providerPostId,
+        metrics: body.metrics,
+        notes: body.notes,
+      }
+    );
+  } catch (err) {
+    return new Response((err as Error).message, { status: 400 });
+  }
+  return new Response("ok", { status: 200 });
+});
+
+/**
  * Read endpoint Maya hits from her runtime after subagents finish — uses
  * hookToken auth (not Clerk) since she's calling from inside her own Fly
  * machine. Returns this agent's target threads only.

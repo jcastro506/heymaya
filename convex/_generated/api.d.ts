@@ -104,6 +104,7 @@ import type * as gtmMaya_openclaw_hookClient from "../gtmMaya/openclaw/hookClien
 import type * as gtmMaya_openclaw_inboundCallback from "../gtmMaya/openclaw/inboundCallback.js";
 import type * as gtmMaya_platformIntelligence from "../gtmMaya/platformIntelligence.js";
 import type * as gtmMaya_platformWorkers from "../gtmMaya/platformWorkers.js";
+import type * as gtmMaya_postResults from "../gtmMaya/postResults.js";
 import type * as gtmMaya_privateBeta from "../gtmMaya/privateBeta.js";
 import type * as gtmMaya_productionReadiness from "../gtmMaya/productionReadiness.js";
 import type * as gtmMaya_productionReality from "../gtmMaya/productionReality.js";
@@ -360,6 +361,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/openclaw/inboundCallback": typeof gtmMaya_openclaw_inboundCallback;
   "gtmMaya/platformIntelligence": typeof gtmMaya_platformIntelligence;
   "gtmMaya/platformWorkers": typeof gtmMaya_platformWorkers;
+  "gtmMaya/postResults": typeof gtmMaya_postResults;
   "gtmMaya/privateBeta": typeof gtmMaya_privateBeta;
   "gtmMaya/productionReadiness": typeof gtmMaya_productionReadiness;
   "gtmMaya/productionReality": typeof gtmMaya_productionReality;
