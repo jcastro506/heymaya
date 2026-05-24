@@ -114,6 +114,7 @@ import type * as gtmMaya_researchWorker from "../gtmMaya/researchWorker.js";
 import type * as gtmMaya_resultsLoop from "../gtmMaya/resultsLoop.js";
 import type * as gtmMaya_scrapeCreatorsGtmResearch from "../gtmMaya/scrapeCreatorsGtmResearch.js";
 import type * as gtmMaya_strategyJudge from "../gtmMaya/strategyJudge.js";
+import type * as gtmMaya_telegramHandoff from "../gtmMaya/telegramHandoff.js";
 import type * as gtmMaya_telegramPairing from "../gtmMaya/telegramPairing.js";
 import type * as gtmMaya_telegramWebhook from "../gtmMaya/telegramWebhook.js";
 import type * as gtmMaya_tiktokWarmup from "../gtmMaya/tiktokWarmup.js";
@@ -358,6 +359,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/resultsLoop": typeof gtmMaya_resultsLoop;
   "gtmMaya/scrapeCreatorsGtmResearch": typeof gtmMaya_scrapeCreatorsGtmResearch;
   "gtmMaya/strategyJudge": typeof gtmMaya_strategyJudge;
+  "gtmMaya/telegramHandoff": typeof gtmMaya_telegramHandoff;
   "gtmMaya/telegramPairing": typeof gtmMaya_telegramPairing;
   "gtmMaya/telegramWebhook": typeof gtmMaya_telegramWebhook;
   "gtmMaya/tiktokWarmup": typeof gtmMaya_tiktokWarmup;

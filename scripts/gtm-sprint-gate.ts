@@ -183,6 +183,15 @@ function delegateToSprint9Smoke(): SprintSection {
   );
 }
 
+function delegateToSprint10Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S10",
+    "Telegram handoff after research (orchestrator → hook → Telegram)",
+    "scripts/gtm-sprint-10-smoke.ts",
+    /Sprint 10 L4 smoke:/i
+  );
+}
+
 function placeholderSection(sprint: string, title: string): SprintSection {
   return {
     sprint,
@@ -257,6 +266,7 @@ async function main(): Promise<void> {
   );
   sections.push(delegateToSprint20Smoke());
   sections.push(delegateToSprint9Smoke());
+  sections.push(delegateToSprint10Smoke());
   sections.push(
     placeholderSection("S21", "Standing orders + hooks + Policy plugin")
   );

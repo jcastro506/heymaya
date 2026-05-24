@@ -635,6 +635,57 @@ export const runBudgetedResearchJob = internalAction({
           : undefined,
     });
 
+    // Sprint 10 — Telegram handoff. Look up the agent that owns this
+    // account and ping Maya via the hook bridge so she summarizes the
+    // research to the user via Telegram. Best-effort; if the agent
+    // isn't deployed yet or hookToken is missing, this is a no-op.
+    if (status !== "failed") {
+      const agent = await ctx.runQuery(
+        internal.gtmMaya.researchWorker.getGtmAgentForJob,
+        { accountId: creatorId }
+      );
+      if (agent) {
+        const primary = scores.find((s) => s.decision === "primary");
+        const secondary = scores.find((s) => s.decision === "secondary");
+        const topEvidenceUrls = evidenceCards
+          .slice(0, 3)
+          .map((c) => c.url)
+          .filter((u) => Boolean(u));
+        const succeededCount = perPlatformResults.filter(
+          (r) => r.status === "succeeded"
+        ).length;
+        const insufficientCount = perPlatformResults.filter(
+          (r) => r.status === "insufficient_evidence"
+        ).length;
+        try {
+          await ctx.runAction(
+            internal.gtmMaya.telegramHandoff.handoffResearchToTelegram,
+            {
+              agentId: agent._id,
+              summary: {
+                researchJobId: args.researchJobId,
+                primaryChannel: primary?.channel,
+                secondaryChannel: secondary?.channel,
+                evidenceCount: totalEvidence,
+                spentUsd: Math.round(totalSpent * 10000) / 10000,
+                status,
+                succeededPlatformCount: succeededCount,
+                insufficientPlatformCount: insufficientCount,
+                topEvidenceUrls,
+              },
+            }
+          );
+        } catch (err) {
+          // Don't fail the orchestrator on handoff failure — research is
+          // already persisted. Operator sees the failure in logs.
+          console.warn(
+            "[orchestrator] handoff failed:",
+            (err as Error).message
+          );
+        }
+      }
+    }
+
     return {
       status,
       summary: `${perPlatformResults.length} workers, ${totalEvidence} evidence cards, $${totalSpent.toFixed(4)} spent`,
@@ -642,6 +693,19 @@ export const runBudgetedResearchJob = internalAction({
       spentUsd: Math.round(totalSpent * 10000) / 10000,
       perPlatformResults,
     };
+  },
+});
+
+export const getGtmAgentForJob = internalQuery({
+  args: { accountId: v.id("creators") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<Doc<"gtmAgents"> | null> => {
+    return await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
+      .first();
   },
 });
 
