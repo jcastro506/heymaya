@@ -759,6 +759,14 @@ export function buildGtmMachineConfig(input: {
       // The creator-product deployMaya.ts uses the same env var
       // (line 295).
       OPENCLAW_PLUGIN_STAGE_DIR: "/opt/openclaw-runtime-preseed/plugin-runtime-deps",
+      // Sprint 2.15.3 — creator product sets this (deployMaya.ts:294)
+      // alongside PLUGIN_STAGE_DIR and the preseed actually loads.
+      // Without it, observed live 2026-05-25 that /data/plugin-runtime-deps
+      // stays empty even with PLUGIN_STAGE_DIR set — OpenClaw doesn't
+      // pick up the preseed, falls back to fresh npm install on
+      // first agent turn (~28 min cold-start). Pairing the two env
+      // vars matches the working creator-product behavior.
+      OPENCLAW_PREFER_PNPM: "1",
       MAYA_GTM_AGENT_ID: String(input.agentId),
       MAYA_GTM_APP_NAME: input.flyAppName,
       MAYA_WORKSPACE_BUNDLE_URL: input.workspaceBundleUrl,
