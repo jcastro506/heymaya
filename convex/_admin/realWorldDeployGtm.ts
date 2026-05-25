@@ -559,6 +559,7 @@ export const analyzeAuxSynth = internalQuery({
       buyerMatch: c.buyerMatch,
       channelFit: c.channelFit,
       painLanguageReason: c.painLanguageReason,
+      commentInsights: c.commentInsights,
     });
     const topReddit = cards
       .filter((c) => c.source === "reddit")
@@ -581,16 +582,31 @@ export const analyzeAuxSynth = internalQuery({
       .slice(0, N)
       .map(renderCard);
 
+    // App + expansion — surface so we can debug skipped-scoring paths
+    const app = await ctx.db
+      .query("gtmApps")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+
     return {
       found: true,
       prefix,
       creator: { _id: creator._id, plan: creator.plan },
+      app: app && {
+        _id: app._id,
+        name: app.name,
+        url: app.url,
+        keywordExpansion: app.keywordExpansion,
+      },
       researchJob: { _id: latest._id, phase: latest.phase, status: latest.status, spentUsd: latest.spentUsd },
+      channelScoresCount: scores.length,
       channelScores: scores.map((s: any) => ({
         channel: s.channel,
         score: s.score,
         decision: s.decision,
         confidence: s.confidence,
+        reasons: s.reasons,
+        firstWeekTest: s.firstWeekTest,
         summary: s.summary,
       })),
       totalCards: cards.length,
@@ -641,6 +657,61 @@ export const debugScoreCards = internalAction({
         ok: false,
         error: (err as Error).message,
         stack: (err as Error).stack?.split("\n").slice(0, 5),
+      };
+    }
+  },
+});
+
+/** Sprint 2.14a debug. Direct call to mineTopRedditCards on a real
+ * card from a prior research job to isolate why mining isn't firing
+ * end-to-end. */
+export const debugMineRedditComments = internalAction({
+  args: { prefixSlug: v.string() },
+  handler: async (ctx, args): Promise<unknown> => {
+    const { mineTopRedditCards } = await import("../gtmMaya/mineCommentTrees");
+    const { ScrapeCreatorsClient } = await import(
+      "../integrations/scrapeCreators/client"
+    );
+    // Pull the most recent cards from this aux run
+    const analysis = (await ctx.runQuery(
+      internal._admin.realWorldDeployGtm.analyzeAuxSynth,
+      { prefixSlug: args.prefixSlug, sampleSize: 3 }
+    )) as {
+      app?: { name?: string; url?: string; keywordExpansion?: { icpPainPhrases?: string[]; productCategoryKeywords?: string[] } };
+      topReddit?: Array<{ url: string; title?: string; snippet?: string; painMatch?: number; source?: string; _id?: string }>;
+    };
+    if (!analysis.app || !analysis.topReddit) {
+      return { ok: false, error: "no app or topReddit in analysis" };
+    }
+    const cardsForMining = analysis.topReddit.map((c, i) => ({
+      id: `dbg${i}`,
+      url: c.url,
+      title: c.title,
+      snippet: c.snippet ?? "",
+      painMatch: c.painMatch ?? 0,
+      source: c.source ?? "reddit",
+    }));
+    const scrapeKey =
+      process.env.SCRAPE_CREATORS_API_KEY ?? process.env.SCRAPECREATORS_API_KEY;
+    if (!scrapeKey) return { ok: false, error: "no scrape key" };
+    const scrapeClient = new ScrapeCreatorsClient({ apiKey: scrapeKey });
+    const product = {
+      productName: analysis.app.name ?? "Untitled",
+      productUrl: analysis.app.url ?? "",
+      icpPainPhrases: analysis.app.keywordExpansion?.icpPainPhrases ?? [],
+      productCategoryKeywords:
+        analysis.app.keywordExpansion?.productCategoryKeywords ?? [],
+    };
+    try {
+      const result = await mineTopRedditCards(cardsForMining, product, {
+        scrapeClient,
+      });
+      return { ok: true, attempted: result.attempted, succeeded: result.succeeded, results: result.results };
+    } catch (err) {
+      return {
+        ok: false,
+        error: (err as Error).message,
+        stack: (err as Error).stack?.split("\n").slice(0, 6),
       };
     }
   },

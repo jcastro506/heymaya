@@ -329,6 +329,32 @@ interface RawRedditCommentThread {
   data?: { children?: RawRedditComment[] };
 }
 
+// Sprint 2.14a — ScrapeCreators returns flat `{ success, post, comments,
+// more }` for /v1/reddit/post/comments, NOT the legacy reddit JSON
+// listing format `[post, listing]`. Original wrapper was reading
+// `thread.data.children` which always returned 0 comments — the bug
+// silently returned statusDetail:"ok" with empty items so callers had
+// no signal that comments were being dropped. Live-confirmed 2026-05-24
+// when mining all 30 cards across N=3 returned "no comments (ok)".
+interface RawScrapeCreatorsRedditComment {
+  id?: string;
+  body?: string;
+  author?: string | null;
+  score?: number;
+  ups?: number;
+  downs?: number;
+  created_utc?: number;
+  permalink?: string;
+}
+
+interface RawScrapeCreatorsRedditCommentsResponse {
+  success?: boolean;
+  post?: unknown;
+  comments?: RawScrapeCreatorsRedditComment[];
+  error?: string;
+  errorStatus?: number;
+}
+
 export async function redditPostComments(
   client: ScrapeCreatorsClient,
   postUrl: string,
@@ -341,35 +367,38 @@ export async function redditPostComments(
   };
   const rawRef = rawRefOf("reddit", "post/comments", hashParams(params));
   try {
-    // The Reddit comments endpoint returns an array of two listings:
-    // [post, comments]. We only want comments[1].
-    const raw = await client.request<RawRedditCommentThread[] | RawRedditCommentThread>(
+    const raw = await client.request<RawScrapeCreatorsRedditCommentsResponse>(
       "/v1/reddit/post/comments",
       { query: params as Record<string, string | number | boolean | undefined> }
     );
-    const thread = Array.isArray(raw) ? raw[1] : raw;
-    const children = thread?.data?.children ?? [];
+    if (raw && raw.success === false) {
+      return softFail(
+        "reddit",
+        new Error(
+          `ScrapeCreators reddit comments not_found: ${raw.error ?? "unknown"} (status ${raw.errorStatus ?? "?"})`
+        ),
+        rawRef
+      );
+    }
+    const comments = raw?.comments ?? [];
     const items: ResearchRawItem[] = [];
-    for (const c of children) {
-      const d = c.data;
-      if (!d?.id || !d.body) continue;
+    for (const c of comments) {
+      if (!c?.id || !c.body) continue;
       items.push({
         platform: "reddit",
-        externalId: d.id,
-        url: d.permalink
-          ? `https://www.reddit.com${d.permalink}`
-          : postUrl,
+        externalId: c.id,
+        url: c.permalink ? `https://www.reddit.com${c.permalink}` : postUrl,
         title: null,
-        excerpt: d.body.slice(0, 2000),
-        author: d.author ?? null,
-        createdAtMs: d.created_utc ? Math.round(d.created_utc * 1000) : null,
+        excerpt: c.body.slice(0, 2000),
+        author: c.author ?? null,
+        createdAtMs: c.created_utc ? Math.round(c.created_utc * 1000) : null,
         engagement: {
-          likes: d.score ?? d.ups ?? null,
+          likes: c.score ?? c.ups ?? null,
           comments: null,
           shares: null,
           views: null,
-          upvotes: d.ups ?? null,
-          downvotes: d.downs ?? null,
+          upvotes: c.ups ?? null,
+          downvotes: c.downs ?? null,
         },
         tags: ["comment"],
         rawRef,
