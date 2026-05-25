@@ -74,6 +74,19 @@ export interface GtmEvidenceCard {
   promotionRisk: GtmPromotionRisk;
   recommendedUse: GtmEvidenceUse;
   extractedClaims: string[];
+  /** Sprint 2.13a — LLM-emitted one-sentence reason for the scores. */
+  painLanguageReason?: string;
+  /** Sprint 2.14a — LLM-extracted summary of the comment-tree replies. */
+  commentInsights?: {
+    extractedPains: string[];
+    topCommenters: Array<{
+      author: string;
+      stance: string;
+      buyerQuality: number;
+    }>;
+    summary: string;
+    commentCount: number;
+  };
 }
 
 export interface GtmAppContext {

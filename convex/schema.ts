@@ -4671,6 +4671,31 @@ export default defineSchema({
     // scores. Optional so cards inserted before 2.13a still load.
     // Populated by judgeCardsBatch.scoreAllCardsForProduct.
     painLanguageReason: v.optional(v.string()),
+    // Sprint 2.14a — comment-tree insights for high-pain cards.
+    // After first-pass LLM scoring, the top N reddit cards by
+    // painMatch get their comment trees scraped + LLM-summarized:
+    // additional pain expressions surfaced in replies, top
+    // buyer-quality commenters with their stated context. Lets
+    // the channel-judge and Maya's per-platform subagents reason
+    // about the full conversation, not just the OP. Optional so
+    // pre-2.14a cards still load.
+    commentInsights: v.optional(
+      v.object({
+        // ≤5 distinct pain expressions found in replies (LLM-quoted)
+        extractedPains: v.array(v.string()),
+        // Up to 3 high-buyer-quality commenters
+        topCommenters: v.array(
+          v.object({
+            author: v.string(),
+            stance: v.string(),
+            buyerQuality: v.number(),
+          })
+        ),
+        // One-paragraph summary of the conversation shape
+        summary: v.string(),
+        commentCount: v.number(),
+      })
+    ),
     promotionRisk: v.union(
       v.literal("low"),
       v.literal("medium"),

@@ -17,6 +17,8 @@ import { buildResearchQueryPlan, type IcpHypothesisInput } from "./researchQuery
 import type { PlatformResearchResult } from "./platformWorkers";
 import { scoreAllCardsForProduct } from "./judgeCardsBatch";
 import { judgeAllChannels } from "./judgeChannel";
+import { mineTopRedditCards } from "./mineCommentTrees";
+import { ScrapeCreatorsClient } from "../integrations/scrapeCreators/client";
 
 export interface ResearchSkeletonEvidence {
   source: Doc<"gtmEvidenceCards">["source"];
@@ -379,6 +381,8 @@ export const getEvidenceCardsForScoring = internalQuery({
       promotionRisk: r.promotionRisk,
       recommendedUse: r.recommendedUse,
       extractedClaims: r.extractedClaims,
+      painLanguageReason: r.painLanguageReason,
+      commentInsights: r.commentInsights,
     }));
   },
 });
@@ -416,6 +420,46 @@ export const patchEvidenceCardScores = internalMutation({
         channelFit: s.channelFit,
         painLanguageReason: s.reason,
       });
+      patched += 1;
+    }
+    return { patched, missing };
+  },
+});
+
+/**
+ * Sprint 2.14a — persist comment-tree mining results onto the parent
+ * evidence cards. Atomic batch patch.
+ */
+export const patchEvidenceCardCommentInsights = internalMutation({
+  args: {
+    insights: v.array(
+      v.object({
+        cardId: v.id("gtmEvidenceCards"),
+        commentInsights: v.object({
+          extractedPains: v.array(v.string()),
+          topCommenters: v.array(
+            v.object({
+              author: v.string(),
+              stance: v.string(),
+              buyerQuality: v.number(),
+            })
+          ),
+          summary: v.string(),
+          commentCount: v.number(),
+        }),
+      })
+    ),
+  },
+  handler: async (ctx, args): Promise<{ patched: number; missing: number }> => {
+    let patched = 0;
+    let missing = 0;
+    for (const i of args.insights) {
+      const row = await ctx.db.get(i.cardId);
+      if (!row) {
+        missing += 1;
+        continue;
+      }
+      await ctx.db.patch(i.cardId, { commentInsights: i.commentInsights });
       patched += 1;
     }
     return { patched, missing };
@@ -708,6 +752,76 @@ export const runBudgetedResearchJob = internalAction({
       { researchJobId: args.researchJobId }
     );
 
+    // ── Sprint 2.14a: Reddit comment-tree mining.
+    // For the TOP N reddit cards (those that passed Sprint 2.13a's
+    // pain threshold), pull the comment trees and LLM-extract:
+    //   - additional pain expressions found in REPLIES (~50% of
+    //     buyer signal that the OP-only pipeline misses)
+    //   - top buyer-quality commenters with their stated context
+    // Patched onto the parent card's commentInsights field so the
+    // channel-judge + downstream Maya subagents see the richer
+    // conversation, not just the OP text. Skipped silently when
+    // hasContext is false or scrapeCreatorsClient is unavailable.
+    try {
+      const reddit_topn_threshold_paid = expansion;
+      if (
+        scoredCards.length > 0 &&
+        (reddit_topn_threshold_paid.icpPainPhrases.length > 0 ||
+          reddit_topn_threshold_paid.productCategoryKeywords.length > 0)
+      ) {
+        const scrapeKey =
+          process.env.SCRAPE_CREATORS_API_KEY ??
+          process.env.SCRAPECREATORS_API_KEY;
+        if (scrapeKey) {
+          const scrapeClient = new ScrapeCreatorsClient({ apiKey: scrapeKey });
+          const cardsForMining = scoredCards.map((c) => ({
+            id: c.id!,
+            url: c.url,
+            title: c.title,
+            snippet: c.snippet,
+            painMatch: c.painMatch,
+            source: c.source,
+          }));
+          const product = {
+            productName: app.name ?? "Untitled product",
+            productUrl: app.url,
+            icpPainPhrases: expansion.icpPainPhrases ?? [],
+            productCategoryKeywords: expansion.productCategoryKeywords ?? [],
+          };
+          const mineResult = await mineTopRedditCards(cardsForMining, product, {
+            scrapeClient,
+          });
+          const toPatch = mineResult.results
+            .filter((r) => r.insights !== null)
+            .map((r) => ({
+              cardId: r.cardId as Id<"gtmEvidenceCards">,
+              commentInsights: r.insights!,
+            }));
+          if (toPatch.length > 0) {
+            await ctx.runMutation(
+              internal.gtmMaya.researchWorker.patchEvidenceCardCommentInsights,
+              { insights: toPatch }
+            );
+          }
+          console.log(
+            `[gtm/commentMiner] attempted=${mineResult.attempted} succeeded=${mineResult.succeeded}`
+          );
+        } else {
+          console.log("[gtm/commentMiner] skipped — no ScrapeCreators API key");
+        }
+      }
+    } catch (err) {
+      console.warn(
+        `[gtm/commentMiner] failed (channel-judge proceeds with OP-only signal): ${(err as Error).message}`
+      );
+    }
+
+    // Re-read AGAIN to pick up commentInsights for the channel-judge.
+    const cardsWithInsights = await ctx.runQuery(
+      internal.gtmMaya.researchWorker.getEvidenceCardsForScoring,
+      { researchJobId: args.researchJobId }
+    );
+
     // ── Sprint 2.13b: LLM channel-judge.
     // Replaces the weighted-formula evaluateChannelSet that was
     // picking wrong channels on non-dev-tools products (live N=3
@@ -747,7 +861,7 @@ export const runBudgetedResearchJob = internalAction({
         stage: app.stage,
         weekGoal: app.weekGoal,
       };
-      const judgeResult = await judgeAllChannels(scoredCards, judgeProduct);
+      const judgeResult = await judgeAllChannels(cardsWithInsights, judgeProduct);
       scores = judgeResult.decisions.map((d) => ({
         channel: d.channel,
         score: d.score,

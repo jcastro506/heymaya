@@ -181,9 +181,17 @@ function buildJudgeMessages(
           ]
             .filter(Boolean)
             .join(" ");
+          // Sprint 2.14a — if comment-tree mining ran for this card,
+          // surface the extracted reply-pains + summary to the judge.
+          // ~50% of buyer signal lives in replies; OP-only would
+          // miss it.
+          const ci = c.commentInsights;
+          const insightsBlock = ci
+            ? `\n   replies (${ci.commentCount}): ${ci.summary}${ci.extractedPains.length ? "\n   reply-pains:\n     - " + ci.extractedPains.slice(0, 4).map((p) => p.slice(0, 140)).join("\n     - ") : ""}`
+            : "";
           return `${i + 1}. id=${c.id} pain=${c.painMatch.toFixed(2)} buyer=${c.buyerMatch.toFixed(2)} fit=${c.channelFit.toFixed(2)} ${engBits}
    title: ${c.title ?? "(no title)"}
-   snippet: ${c.snippet.slice(0, 220)}`;
+   snippet: ${c.snippet.slice(0, 220)}${insightsBlock}`;
         })
         .join("\n\n")
     : "(no evidence cards from this channel)";
