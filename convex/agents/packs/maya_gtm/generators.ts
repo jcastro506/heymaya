@@ -697,8 +697,8 @@ pipeline terms (subagent, research lane, priorityScore). whyItFits MUST
 be plain founder-speak.
 \`\`\`
 
-STEP 3 — ANNOUNCE + WAIT.
-POST /lc_gtm/phase_1_announce with { researchJobId, subagentsExpected: N } where N is exactly the number spawned. Then sessions_wait or poll sessions_list until all spawned subagents are completed.
+STEP 3 — ANNOUNCE + YIELD.
+POST /lc_gtm/phase_1_announce with { researchJobId, subagentsExpected: N } where N is exactly the number spawned. Then call \`sessions_yield\` to end your current turn and free up tokens while children work. OpenClaw will resume you with a follow-up message when subagents complete. DO NOT poll sessions_list — completion is push-based via OpenClaw's spawn/yield/resume machinery. \`sessions_wait\` is NOT a real tool; never reference it.
 
 STEP 4 — REVIEW + REFINE (up to 2 refinement waves, 3 total).
 Read what landed via GET /lc_gtm/get_my_target_threads. For each channel:
