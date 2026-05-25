@@ -149,4 +149,76 @@ describe("openRouterClient / callOpenRouter", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(result.content).toBe("hello back");
   });
+
+  // Sprint 2.14a.3 — 429 retry with backoff
+  it("retries 429 up to 5 attempts (1 success after 4 fails)", async () => {
+    const fetchImpl = vi.fn();
+    for (let i = 0; i < 4; i++) {
+      fetchImpl.mockResolvedValueOnce(jsonResponse({ error: "throttled" }, 429));
+    }
+    fetchImpl.mockResolvedValueOnce(jsonResponse(SAMPLE_BODY));
+    const result = await callOpenRouter({
+      model: "m",
+      messages: [{ role: "user", content: "x" }],
+      thinkingBudget: "none",
+      apiKey: "k",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      retryDelayMs: () => 0,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
+    expect(result.content).toBe("hello back");
+  });
+
+  it("gives up on 429 after 5 consecutive failures", async () => {
+    const fetchImpl = vi.fn();
+    for (let i = 0; i < 5; i++) {
+      fetchImpl.mockResolvedValueOnce(jsonResponse({ error: "throttled" }, 429));
+    }
+    await expect(
+      callOpenRouter({
+        model: "m",
+        messages: [{ role: "user", content: "x" }],
+        thinkingBudget: "none",
+        apiKey: "k",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        retryDelayMs: () => 0,
+      })
+    ).rejects.toThrow(/HTTP 429/);
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
+  });
+
+  it("5xx still uses the smaller 3-attempt budget", async () => {
+    const fetchImpl = vi.fn();
+    for (let i = 0; i < 5; i++) {
+      fetchImpl.mockResolvedValueOnce(jsonResponse({ error: "down" }, 503));
+    }
+    await expect(
+      callOpenRouter({
+        model: "m",
+        messages: [{ role: "user", content: "x" }],
+        thinkingBudget: "none",
+        apiKey: "k",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        retryDelayMs: () => 0,
+      })
+    ).rejects.toThrow(/HTTP 503/);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it("4xx (non-429) is never retried", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ error: "bad" }, 400));
+    await expect(
+      callOpenRouter({
+        model: "m",
+        messages: [{ role: "user", content: "x" }],
+        thinkingBudget: "none",
+        apiKey: "k",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        retryDelayMs: () => 0,
+      })
+    ).rejects.toThrow(/HTTP 400/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
 });

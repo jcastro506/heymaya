@@ -62,7 +62,8 @@ export class OpenRouterError extends Error {
 }
 
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
-const MAX_ATTEMPTS = 3; // initial + 2 retries
+const MAX_ATTEMPTS = 3; // initial + 2 retries for 5xx
+const MAX_ATTEMPTS_RATE_LIMITED = 5; // 429s get more chances — typically resolved by waiting
 
 function reasoningParamFor(budget: ThinkingBudget): Record<string, unknown> {
   if (budget === "none") {
@@ -74,6 +75,28 @@ function reasoningParamFor(budget: ThinkingBudget): Record<string, unknown> {
 function defaultRetryDelay(attempt: number): number {
   // exponential backoff: 200ms, 800ms
   return 200 * Math.pow(4, attempt - 1);
+}
+
+/**
+ * Sprint 2.14a.3 — Compute backoff for a 429 response. Honors
+ * `retry-after` header when present (Telegram-style: seconds as
+ * integer, or HTTP-date — we only handle the integer form which
+ * is what OpenRouter actually sends). Falls back to exponential:
+ * 1s, 4s, 16s, 30s, 30s. Capped at 30s so we don't wedge the
+ * whole research orchestrator on a single throttled call.
+ */
+function rateLimitBackoff(
+  attempt: number,
+  retryAfterHeader: string | null
+): number {
+  if (retryAfterHeader) {
+    const parsed = parseInt(retryAfterHeader, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      return Math.min(parsed * 1000, 30_000);
+    }
+  }
+  // exponential: 1s, 4s, 16s, 30s, 30s
+  return Math.min(1_000 * Math.pow(4, attempt - 1), 30_000);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -145,7 +168,11 @@ export async function callOpenRouter(
   };
 
   let lastError: OpenRouterError | null = null;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  // Sprint 2.14a.3 — use the larger budget so 429s get up to 5 tries.
+  // The 5xx loop still exits early after MAX_ATTEMPTS (3) because the
+  // retryable check below distinguishes the two.
+  const totalAttempts = MAX_ATTEMPTS_RATE_LIMITED;
+  for (let attempt = 1; attempt <= totalAttempts; attempt++) {
     let response: Response;
     try {
       response = await fetchImpl(ENDPOINT, {
@@ -160,6 +187,8 @@ export async function callOpenRouter(
         null,
         true
       );
+      // Network errors get the 5xx budget (3 attempts), not the 429
+      // budget. Avoids hammering a downed endpoint for 5 tries.
       if (attempt < MAX_ATTEMPTS) {
         await sleep(retryDelay(attempt));
         continue;
@@ -190,7 +219,12 @@ export async function callOpenRouter(
     }
 
     const text = await safeText(response);
-    const retryable = status >= 500 && status < 600;
+    // Sprint 2.14a.3 — 429 gets its own retry budget + retry-after
+    // backoff. 5xx still uses the original 3-attempt budget. 4xx
+    // (non-429) is never retried.
+    const isRateLimit = status === 429;
+    const isServerError = status >= 500 && status < 600;
+    const retryable = isRateLimit || isServerError;
     lastError = new OpenRouterError(
       `OpenRouter HTTP ${status}: ${text.slice(0, 500)}`,
       status,
@@ -200,8 +234,21 @@ export async function callOpenRouter(
     if (!retryable) {
       throw lastError;
     }
-    if (attempt < MAX_ATTEMPTS) {
-      await sleep(retryDelay(attempt));
+    const budget = isRateLimit ? MAX_ATTEMPTS_RATE_LIMITED : MAX_ATTEMPTS;
+    if (attempt < budget) {
+      // Test seam: if caller provided retryDelayMs, honor it for
+      // both 5xx and 429 (lets unit tests run with zero delay).
+      // In production, 429 uses rateLimitBackoff (honors
+      // retry-after header) and 5xx uses defaultRetryDelay.
+      const delay = opts.retryDelayMs
+        ? retryDelay(attempt)
+        : isRateLimit
+          ? rateLimitBackoff(attempt, response.headers.get("retry-after"))
+          : retryDelay(attempt);
+      await sleep(delay);
+    } else {
+      // Out of attempts for this status class.
+      throw lastError;
     }
   }
   // Exhausted retries on retryable errors.
