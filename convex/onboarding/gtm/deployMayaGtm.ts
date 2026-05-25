@@ -117,7 +117,7 @@ const MODEL_ROUTING = {
   futureDefaultResearch:
     process.env.MAYA_GTM_RESEARCH_MODEL ?? "google/gemini-3-flash",
   extractionWorker:
-    process.env.MAYA_GTM_EXTRACTION_MODEL ?? "google/gemini-3-flash-lite",
+    process.env.MAYA_GTM_EXTRACTION_MODEL ?? "google/gemini-3.1-flash-lite",
 };
 
 const MACHINE_GUEST: NonNullable<FlyMachineConfig["guest"]> = {
