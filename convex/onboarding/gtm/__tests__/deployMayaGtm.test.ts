@@ -38,7 +38,7 @@ describe("Maya GTM OpenClaw deploy config", () => {
 
     const bootstrap = JSON.parse(config.env?.MAYA_BOOTSTRAP_JSON ?? "{}");
     expect(bootstrap.product).toBe("clawlaunch-gtm");
-    expect(bootstrap.modelRouting.mainMaya).toBe("google/gemini-3-flash-preview");
+    expect(bootstrap.modelRouting.mainMaya).toBe("google/gemini-3.5-flash");
     expect(bootstrap.modelRouting.hardResearchBeta).toContain("claude-sonnet");
     expect(bootstrap.directPingSmoke).toBe(true);
     // Sprint 2.1 expanded the agent list from 2 → 11 (six platform
@@ -82,7 +82,7 @@ describe("Maya GTM OpenClaw deploy config", () => {
       (a: { id: string }) => a.id === "main"
     );
     expect(main.default).toBe(true);
-    expect(main.model).toBe("openrouter/google/gemini-3-flash-preview");
+    expect(main.model).toBe("openrouter/google/gemini-3.5-flash");
     expect(config.init?.cmd?.join(" ")).toContain(
       "cp /data/workspace/jobs.json /data/cron/jobs.json"
     );
@@ -97,7 +97,7 @@ describe("Maya GTM OpenClaw deploy config", () => {
     });
 
     expect(config.env?.OPENCLAW_MODEL).toBe(
-      "openrouter/google/gemini-3-flash-preview"
+      "openrouter/google/gemini-3.5-flash"
     );
     expect(config.env?.OPENCLAW_DISABLE_BONJOUR).toBe("1");
     expect(config.env?.MAYA_GTM_MODEL_ROUTING_JSON).toContain(

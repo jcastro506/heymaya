@@ -110,7 +110,19 @@ export function resolveConvexHookCallbackBaseUrl(
 }
 
 const MODEL_ROUTING = {
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-3-flash-preview",
+  // Sprint 2.16a — Maya's brain. Gemini 3.5 Flash is the strategist
+  // model: reads subagent outputs, judges quality, decides whether
+  // to spawn refinement waves or ship the plan. Was 3-flash-preview;
+  // operator-flagged 2026-05-25 that 3.5 is the right brain for the
+  // iterative-research-loop architecture.
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-3.5-flash",
+  // Sprint 2.16a — channel-research subagents. Gemini 3 Flash (NOT
+  // 3.5 — that's main's brain). Subagents do focused platform work
+  // (scrape, score, draft) — they don't need 3.5's strategic judgment.
+  // Cheaper, faster, plenty of headroom with thinking:medium budget
+  // injected via their prompt. Replaces the prior mix of Claude
+  // Sonnet 4.5 (10x more expensive) + scattered Gemini configs.
+  subagent: process.env.MAYA_GTM_SUBAGENT_MODEL ?? "google/gemini-3-flash",
   hardResearchBeta:
     process.env.MAYA_GTM_HARD_RESEARCH_MODEL ??
     "openrouter/anthropic/claude-sonnet-4.5",
@@ -150,6 +162,7 @@ export function buildGatewayConfig(
   input: BuildGatewayConfigInput = {}
 ): Record<string, unknown> {
   const mainModel = toOpenClawModelRef(MODEL_ROUTING.mainMaya);
+  const subagentModel = toOpenClawModelRef(MODEL_ROUTING.subagent);
   const hardModel = toOpenClawModelRef(MODEL_ROUTING.hardResearchBeta);
   const extractionModel = toOpenClawModelRef(MODEL_ROUTING.extractionWorker);
   const memorySearch = buildMemorySearchConfig();
@@ -162,11 +175,19 @@ export function buildGatewayConfig(
   //
   // Naming convention matches the AGENTS.md "Subagent Pattern" section
   // so Maya already knows the slugs by the time she reads them.
+  // Sprint 2.16a — all channel-research subagents unify on
+  // gemini-3-flash (the cheaper Gemini, NOT 3.5). Subagents do
+  // focused platform work — they don't need 3.5's strategic
+  // judgment. Was Claude Sonnet 4.5 on the heavy ones which is
+  // 10x more expensive + slower for no quality lift on focused
+  // tasks. With operator-approved `thinking: medium` budget in
+  // the subagent prompts, Gemini 3 Flash has enough headroom to
+  // do multi-step research per channel.
   const SUBAGENTS = [
     {
       id: "reddit_research",
       name: "Reddit Demand Researcher",
-      model: hardModel,
+      model: subagentModel,
       tools: { profile: "coding" as const, allow: ["scrapecreators-api", "web_fetch"] },
       // Allow no further spawning — depth-1 max from main.
       subagents: { allowAgents: [] as string[] },
@@ -174,21 +195,21 @@ export function buildGatewayConfig(
     {
       id: "x_research",
       name: "X Founder-Led Researcher",
-      model: hardModel,
+      model: subagentModel,
       tools: { profile: "coding" as const, allow: ["scrapecreators-api", "web_fetch", "search-x"] },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "tiktok_research",
       name: "TikTok Format Researcher",
-      model: hardModel,
+      model: subagentModel,
       tools: { profile: "coding" as const, allow: ["scrapecreators-api", "tiktok", "web_fetch"] },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "instagram_research",
       name: "Instagram Reuse Researcher",
-      model: mainModel,
+      model: subagentModel,
       // Sprint 2.1 — added `web_fetch` so this subagent can POST to the
       // /lc_gtm/target_thread, /lc_gtm/target_account, /lc_gtm/drafted_content
       // callbacks during deep research. Without it the subagent has nowhere
@@ -202,7 +223,7 @@ export function buildGatewayConfig(
     {
       id: "linkedin_research",
       name: "LinkedIn Fit Researcher",
-      model: mainModel,
+      model: subagentModel,
       tools: { profile: "coding" as const, allow: ["scrapecreators-api", "web_fetch"] },
       subagents: { allowAgents: [] as string[] },
     },
@@ -216,7 +237,7 @@ export function buildGatewayConfig(
       // gates whether this subagent is spawned at all.
       id: "hn_research",
       name: "Hacker News Demand Researcher",
-      model: mainModel,
+      model: subagentModel,
       tools: { profile: "coding" as const, allow: ["web_fetch"] },
       subagents: { allowAgents: [] as string[] },
     },
