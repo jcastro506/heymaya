@@ -103,9 +103,11 @@ export async function sendDirectTelegramMessage(
  *   - any internal terms (no "research lane", no "subagent")
  *   - any .md filename or maya-* skill slug
  *
- * It also sets the right expectation: "back in about an hour" — matches
- * the realistic 60-90 min wall-clock for the cron-driven research +
- * voice-match + calendar populator + follow-up message.
+ * It sets the operator's expectation honestly: "about 15-30 min" — that's
+ * the measured wall-clock for Convex-side research already done + Maya's
+ * boot turn + subagent work + phase 2 synthesis. Operator-flagged 2026-05-25
+ * that vague "back in an hour" caused them to wonder if Maya was alive;
+ * a concrete window is the fix.
  */
 export function buildDeployTimeHelloText(input: {
   firstName?: string;
@@ -115,5 +117,5 @@ export function buildDeployTimeHelloText(input: {
     input.firstName && input.firstName.trim() !== ""
       ? input.firstName.trim()
       : "there";
-  return `Hey ${name} — Maya here. I just spun up for ${input.productName}. I'm going to spend the next hour studying where your buyer actually hangs out and lining up your first two weeks of moves. I'll come back when I've got your week ready. Talk soon.`;
+  return `Hey ${name} — Maya here. Just spun up for ${input.productName}. Studying where your buyer actually hangs out + lining up your first 2 weeks of moves. End-to-end this takes me about 15-30 min — I'll send your full plan when it's ready. Sit tight.`;
 }
