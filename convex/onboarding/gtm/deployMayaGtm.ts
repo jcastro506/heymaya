@@ -448,6 +448,30 @@ export const patchGtmAgentOnDeploySuccess = internalMutation({
 });
 
 /**
+ * Sprint 2.14a.6 — trace Sprint 2.11 deploy-time hello attempts.
+ * Always called after sendDirectTelegramMessage so we know:
+ *   - was the code path reached (attemptedAt set)
+ *   - what was the result (sent / firewall_blocked / etc)
+ *   - what was the Telegram message_id on success
+ */
+export const recordDeployTimeHelloResult = internalMutation({
+  args: {
+    agentId: v.id("gtmAgents"),
+    result: v.string(),
+    messageId: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    const now = Date.now();
+    await ctx.db.patch(args.agentId, {
+      deployTimeHelloAttemptedAt: now,
+      deployTimeHelloResult: args.result.slice(0, 200),
+      deployTimeHelloMessageId: args.messageId,
+      updatedAt: now,
+    });
+  },
+});
+
+/**
  * Sprint 16 — provision (or rotate) the per-agent hookToken before the
  * workspace bundle is built. The token is the shared secret between the
  * Convex deployment and the agent's OpenClaw gateway. Returns the freshly
@@ -635,7 +659,20 @@ export const deployMayaGtm = internalAction({
     // Best-effort: failures here don't abort the deploy (cron-driven
     // boot_kickoff still runs the deep research + sends a real follow-up
     // when ready ~60-90 min later).
-    if (row.agent.telegramChatId && row.app.name) {
+    // Sprint 2.14a.6 — ALWAYS record the attempt, even when skipped due to
+    // missing telegramChatId or productName. Lets the operator see WHY the
+    // hello didn't fire instead of silent absence.
+    if (!row.agent.telegramChatId) {
+      await ctx.runMutation(
+        internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
+        { agentId: args.agentId, result: "skipped:no_telegram_chat_id" }
+      );
+    } else if (!row.app.name) {
+      await ctx.runMutation(
+        internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
+        { agentId: args.agentId, result: "skipped:no_product_name" }
+      );
+    } else {
       try {
         const helloText = buildDeployTimeHelloText({
           productName: row.app.name,
@@ -648,6 +685,14 @@ export const deployMayaGtm = internalAction({
           chatId: row.agent.telegramChatId,
           text: helloText,
         });
+        await ctx.runMutation(
+          internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
+          {
+            agentId: args.agentId,
+            result: result.reason,
+            messageId: result.messageId ?? undefined,
+          }
+        );
         if (!result.ok) {
           console.warn(
             `[deployMayaGtm] deploy-time hello not sent (${result.reason})`,
@@ -657,10 +702,17 @@ export const deployMayaGtm = internalAction({
           );
         }
       } catch (err) {
-        // Don't fail the deploy — log + continue.
-        console.warn(
-          `[deployMayaGtm] deploy-time hello threw: ${(err as Error).message}`
-        );
+        const msg = (err as Error).message;
+        // Don't fail the deploy — log + record + continue.
+        console.warn(`[deployMayaGtm] deploy-time hello threw: ${msg}`);
+        try {
+          await ctx.runMutation(
+            internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
+            { agentId: args.agentId, result: `exception:${msg.slice(0, 160)}` }
+          );
+        } catch {
+          // Best-effort; don't crash the deploy on a tracing-mutation failure.
+        }
       }
     }
 

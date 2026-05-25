@@ -612,40 +612,75 @@ function buildCronDelivery(
 }
 
 function renderJobs(input: MayaGtmWorkspaceInput): string {
-  const bootKickoffAt = new Date(
-    (input.bootKickoffAtMs ?? Date.now()) + 900_000
-  ).toISOString();
+  // Sprint 2.14a.7 — split boot into two phases to avoid 12-min
+  // LLM-call timeout. Phase 1 fires at deploy+15min (fast: spawn
+  // subagents + send short queued-hello, ~2-3 min). Phase 2 fires
+  // at deploy+60min (heavy: read subagent results + voice-match +
+  // calendar populator + research-backed message, ~10-25 min).
+  const baseMs = input.bootKickoffAtMs ?? Date.now();
+  const bootPhase1At = new Date(baseMs + 900_000).toISOString(); // +15 min
+  const bootPhase2At = new Date(baseMs + 3_600_000).toISOString(); // +60 min
   const delivery = buildCronDelivery(input);
   const jobs = {
     version: 1,
     jobs: [
       {
-        id: "0001_gtm_boot_kickoff",
-        name: "0001 GTM boot kickoff",
+        // Sprint 2.14a.7 — PHASE 1 of two-phase boot. Fast turn:
+        // spawn subagents (fire-and-forget, don't wait), send a
+        // short "research is running, back in 30-45 min" hello.
+        // Avoids the single-turn 12-min LLM timeout that killed
+        // the unified boot_kickoff live on 2026-05-25.
+        id: "0001_gtm_boot_phase_1",
+        name: "0001 GTM boot phase 1 — spawn + brief hello",
         description:
-          "One-shot first-wake task. Confirms the OpenClaw workspace loaded, summarizes the fake user's product context, and starts the bounded onboarding research lane without spending from heartbeat.",
+          "Phase 1 of split-boot: confirm workspace, dispatch per-channel research subagents (no wait), send a short voice-clean queued-hello. Designed to complete in 2-3 minutes wall-clock. Phase 2 (separate cron at deploy+60min) reads the subagent results and sends the research-backed message.",
         enabled: true,
         createdAtMs: 0,
         updatedAtMs: 0,
-        schedule: { kind: "at", at: bootKickoffAt },
+        schedule: { kind: "at", at: bootPhase1At },
         sessionTarget: "isolated",
         wakeMode: "now",
         deleteAfterRun: true,
         payload: {
           kind: "agentTurn",
           lightContext: true,
-          // Sprint 2.1 — boot_kickoff dispatches per-platform _research
-          // subagents that each take 5-15 min. Plus voice-matching every
-          // draft (Sprint 2.4) + calendar populator (Sprint 2.3) + voice-
-          // clean Telegram hello. Total realistic wall-clock: 20-40 min.
-          // Without explicit timeoutSeconds, OpenClaw defaults too low
-          // and the cron is killed mid-LLM-call (verified live 2026-05-24:
-          // model-fallback/decision logged "cron: job execution timed out").
-          // 2700s = 45 min ceiling.
-          timeoutSeconds: 2700,
+          // Tight budget — this turn should NOT exceed 5 min. Subagents
+          // run independently with their own budgets after spawn.
+          timeoutSeconds: 600,
+          thinking: "low",
+          message:
+            "FIRST WAKE — PHASE 1 (spawn + brief hello). DO NOT wait for subagent results in this turn; phase 2 handles synthesis.\n\nINTERNAL PHASE (silent).\n\n1. Read SOUL.md (voice contract), USER.md, APP.md, GTM.md, TOOLS.md briefly. Skip PLAYBOOK + HEARTBEAT — phase 2 will read them.\n\n2. From GTM.md identify active channels (decision='primary' or 'secondary'). Spawn matching `_research` subagent via `sessions_spawn` (depth-1, max 4 concurrent) for EACH active channel. Mapping: reddit → reddit_research, x → x_research, tiktok → tiktok_research, instagram → instagram_research, linkedin → linkedin_research, hn → hn_research, product_hunt → SKIP. Each subagent's prompt: tell it to identify 10-25 specific threads + 5-15 accounts and POST to /lc_gtm/target_thread, /lc_gtm/target_account, /lc_gtm/drafted_content per TOOLS.md. Strict whyItFits requirements (no slugs, no .md, no internal terms).\n\n3. DO NOT call sessions_wait. DO NOT poll subagent status. DO NOT do voice-matching or calendar populating in this turn — phase 2 covers all of that.\n\nEXTERNAL PHASE (the ONE Telegram message — ≤350 chars).\n\nWrite a SHORT manager-voice queued-hello per SOUL.md voice contract. Required: first-name greeting (USER.md), identity as launch manager (not 'AI assistant'), primary channel pick in plain words, honest timeline ('researching now, back with your plan in about an hour'). HARD BANS same as always: no maya-* slugs, no .md filenames, no internal terms (subagent / research lane / boot / priorityScore), no AI framing.\n\nExample CORRECT: 'Hey Josh — Maya. I'm in. Your buyer hangs out on Reddit (r/ollama, r/LocalLLaMA) — researching the best threads to reply to right now. Back in about an hour with your week mapped out.' / 'Hey Sam — Maya. Looking at X right now (dev/AI-builder crowd). Pulling specific tweets you should reply to + accounts worth following. Back in ~60 min with your plan.'\n\nSprint 2.10 — MANDATORY pre-send firewall: POST composed message to /lc_gtm/validate_outbound BEFORE sendMessage. Loop until ok:true.\n\nDo NOT call ScrapeCreators / Gemini / Composio / broad web search from `main`. ALL external API work runs in the spawned subagents.",
+        },
+        delivery,
+        state: {},
+      },
+      {
+        // Sprint 2.14a.7 — PHASE 2 of two-phase boot. Heavy turn:
+        // by deploy+60min the subagents spawned in phase 1 should
+        // have completed and POSTed their gtmTargetThreads /
+        // gtmDraftedContent rows. Phase 2 reads them, voice-matches,
+        // populates calendar, and sends the research-backed message.
+        id: "0002_gtm_boot_phase_2",
+        name: "0002 GTM boot phase 2 — synthesize + research-backed hello",
+        description:
+          "Phase 2 of split-boot: read subagent-produced target list, voice-match drafts, populate 14-day calendar, send the operator their research-backed plan. Runs at deploy+60min so phase 1 subagents (5-15 min each) have completed. Tight context, no fresh subagent dispatch.",
+        enabled: true,
+        createdAtMs: 0,
+        updatedAtMs: 0,
+        schedule: { kind: "at", at: bootPhase2At },
+        sessionTarget: "isolated",
+        wakeMode: "now",
+        deleteAfterRun: true,
+        payload: {
+          kind: "agentTurn",
+          lightContext: false,
+          // Phase 2 does synthesis + persistence — no waiting on
+          // subagents, no fresh research. Should complete in 5-10 min.
+          // Cap at 1200s (20 min) ceiling.
+          timeoutSeconds: 1200,
           thinking: "medium",
           message:
-            "FIRST WAKE — deep research dispatch + voice-clean hello.\n\nINTERNAL PHASE (silent; no Telegram message yet).\n\n1. Read SOUL.md (voice contract — non-negotiable for the user message at the end), AGENTS.md, USER.md, APP.md, GTM.md, TOOLS.md, PLAYBOOK.md, HEARTBEAT.md.\n\n2. From GTM.md identify the active channels — those with decision='primary' or 'secondary'. For each active channel, spawn the matching `_research` subagent via `sessions_spawn` (depth-1, max 4 concurrent). Spawn ONLY for non-parked channels. Mapping: reddit → reddit_research, x → x_research, tiktok → tiktok_research, instagram → instagram_research, linkedin → linkedin_research, hn → hn_research, product_hunt → SKIP (commercial licensing required).\n\n3. Each subagent's `message` prompt (your job to compose, grounded in playbook + APP.md): tell it to read its playbook section (playbook/<channel>.md), use its allowed tools (scrapecreators-api / web_fetch / search-x / etc.) to identify 10-25 specific recent threads where the product fits as a natural reply AND 5-15 specific accounts/communities worth following. For each thread/account, POST to the Convex hook bridge — see TOOLS.md for the /lc_gtm/target_thread, /lc_gtm/target_account, /lc_gtm/drafted_content endpoints and the hookToken auth pattern. Strict requirements for each POST: plain-language `whyItFits` field (1-3 sentences, NEVER references skill slugs / .md filenames / 'evidence cards' / pipeline terms — write it as if explaining to a non-technical founder), priorityScore 0-1, status 'queued'.\n\n4. Each subagent runs 5-15 min wall-clock. Wait for all to complete via `sessions_wait` or by polling sessions list. Budget cap: maxOutputTokens 4000 per subagent.\n\n5. After all subagents return, read /lc_gtm/get_my_target_threads to confirm rows landed. Count by platform.\n\n5b. Sprint 2.4 — voice-match each fresh draft. For every gtmDraftedContent row the subagents POSTed, follow skills/maya-voice-matcher/SKILL.md to score voice + slop + specificity. POST results to /lc_gtm/update_draft_voice_match. Drafts that fail both gates can be re-spawned with edit feedback (spawn the originating _research subagent again with explicit voice samples) OR auto-rejected. Only drafts in approvalState:'pending_approval' make it to the calendar.\n\n6. Sprint 2.3 — schedule the next 14 days. Read skills/maya-calendar-populator/SKILL.md and follow it. The skill reads the target list you just verified, computes the operator's current Phase (1-4 per PLAYBOOK § 2), and emits typed calendar events (warmup_block / engagement_block / reply_window / soft_launch_post / hard_launch_anchor / first_50_dms / weekly_review). POST events to /lc_gtm/calendar_proposal — see TOOLS.md for the body schema. Default to status:'draft' (events not yet pushed to Google Calendar until operator approves). Run maya-slop-critic on every event title + description before POSTing — banned phrases will kill the calendar.\n\nEXTERNAL PHASE (the ONE Telegram message you send to the user — ≤500 chars).\n\nWrite a manager-voice hello that confirms what you found, in PLAIN LANGUAGE per SOUL.md § 'Voice contract — what NEVER leaks'. Required ingredients: greeting with user's first name (read USER.md), identity as their launch manager (NOT 'AI assistant'), the primary channel pick in everyday words ('Reddit's where your buyer hangs out'), how many target threads you queued ('I've got 23 threads worth replying to'), what's next ('your calendar's filling up; first task is tomorrow morning'). HARD BANS: any `maya-*` skill slug, any .md filename, any internal term ('evidence cards', 'subagent', 'research lane', 'boot kickoff', 'priorityScore'), any 'AI' framing of yourself, any pipeline meta-commentary. If you catch yourself writing one of those, rewrite the sentence.\n\nExamples of CORRECT external messages: 'Hey Josh — Maya here. Spent the last hour digging into ModelHub and the pattern is clear: your buyer lives on Reddit, specifically r/LocalLLaMA + r/ollama. I lined up 23 threads worth replying to over the next two weeks. Your calendar's filling up — first task is tomorrow at 10am. Want me to walk you through the week before I lock it in?' / 'Hey Sam, Maya. Done with the initial scan. X is your room (specifically the dev/AI-builder crowd). I've got 18 tweets queued where a thoughtful reply lands you in front of the right people, plus a list of 12 accounts worth following. First reply is tomorrow morning — drafted, you tap and post. Sound good?'\n\nExamples of BANNED external messages: 'Initializing IDENTITY.md...' / 'I spawned maya-reddit-demand-researcher to find evidence cards...' / 'The channel-judge selected Reddit as primary based on 80 useful evidence cards...' / 'I queued a bounded research job...' — all leak the pipeline.\n\nSprint 2.10 — MANDATORY pre-send firewall: POST your composed external message to /lc_gtm/validate_outbound BEFORE sendMessage. If it returns ok:false with failures, rewrite each matched item out and re-validate. Loop until ok:true. This gate catches skill slugs / file names / internal terms / AI self-references / slop phrases that slipped past your draft check — operator-reported live 2026-05-24 that the first Telegram message leaked 'maya-app-inspector + maya-icp-hypothesis'. Never skip this gate.\n\nDo NOT call ScrapeCreators / Gemini / Composio / broad web search directly from `main`. ALL external API work is done via the spawned subagents, which have those tools allow-listed.",
+            "BOOT PHASE 2 — synthesize phase-1 research into operator's plan.\n\nINTERNAL PHASE (silent).\n\n1. Read SOUL.md (voice contract), AGENTS.md, USER.md, APP.md, GTM.md, TOOLS.md, PLAYBOOK.md, HEARTBEAT.md.\n\n2. Read what the phase-1 subagents produced: GET /lc_gtm/get_my_target_threads (target threads they queued) — count by platform. If zero threads landed, the subagents are still running OR they failed — fall back to a brief 'still researching, will follow up in 30 min' message and exit.\n\n3. Sprint 2.4 voice-match: for every gtmDraftedContent row in approvalState:'pending_approval', follow skills/maya-voice-matcher/SKILL.md. Score voice + slop + specificity. POST to /lc_gtm/update_draft_voice_match. Only voice-clean drafts make it to the calendar.\n\n4. Sprint 2.3 calendar populator: read skills/maya-calendar-populator/SKILL.md. Compute operator's current Phase (1-4 per PLAYBOOK § 2). Emit typed calendar events (warmup_block / engagement_block / reply_window / etc) for the next 14 days. POST to /lc_gtm/calendar_proposal as status:'draft'. Run maya-slop-critic on every event title before POSTing.\n\nEXTERNAL PHASE (the ONE Telegram message — ≤500 chars).\n\nResearch-backed manager-voice plan. Required: greeting (USER.md), primary channel pick in plain words, count of target threads queued ('I've got 23 threads worth replying to'), what's first ('first task is tomorrow at 10am'), honest ask if next-step is fork-decision. HARD BANS: no maya-* slugs, no .md filenames, no internal terms, no AI framing.\n\nExample CORRECT: 'Hey Josh — Maya. Done. Your buyer lives on Reddit (r/ollama, r/LocalLLaMA). I've lined up 23 specific threads worth replying to + 12 accounts to follow over the next 2 weeks. Your calendar's filled — first task is tomorrow at 10am. Want me to walk you through the week before I lock it in?'\n\nSprint 2.10 — MANDATORY pre-send firewall: POST composed message to /lc_gtm/validate_outbound BEFORE sendMessage. Loop until ok:true.\n\nDo NOT spawn fresh subagents in this turn — phase 1 did that. If a subagent didn't produce results, note it in the message ('Reddit subagent is still running, will follow up') and exit.",
         },
         delivery,
         state: {},

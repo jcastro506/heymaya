@@ -172,32 +172,41 @@ describe("Maya GTM workspace pack", () => {
 
     expect(jobs.version).toBe(1);
     expect(jobs.jobs.every((job) => job.state != null)).toBe(true);
-    const bootKickoff = jobs.jobs.find(
-      (job) => job.id === "0001_gtm_boot_kickoff"
+    // Sprint 2.14a.7 — boot_kickoff split into two phases to avoid
+    // 12-min single-turn LLM timeout. Phase 1 spawns + brief hello;
+    // phase 2 (at deploy+60min) reads subagent output + sends the
+    // research-backed plan.
+    const bootPhase1 = jobs.jobs.find(
+      (job) => job.id === "0001_gtm_boot_phase_1"
+    );
+    const bootPhase2 = jobs.jobs.find(
+      (job) => job.id === "0002_gtm_boot_phase_2"
     );
     const heartbeat = jobs.jobs.find((job) => job.id === "gtm_heartbeat");
     const weeklyReview = jobs.jobs.find((job) => job.id === "gtm_weekly_review");
 
-    expect(jobs.jobs[0]?.id).toBe("0001_gtm_boot_kickoff");
-    expect(bootKickoff).toBeTruthy();
-    expect(bootKickoff?.sessionTarget).toBe("isolated");
-    expect(bootKickoff?.payload.kind).toBe("agentTurn");
-    expect(bootKickoff?.delivery).toEqual({ mode: "none", bestEffort: true });
-    expect(bootKickoff?.payload.message).toContain("FIRST WAKE");
-    // Sprint 2.1 — boot_kickoff prompt rewritten for the deep-research
-    // subagent dispatch + voice-clean external Telegram message split. The
-    // old assertions ("Read BOOT.md", "onboarding deep research",
-    // "maxScrapeCreatorsCalls") were pinned to the pre-Sprint-2.1 shape;
-    // the new prompt structure has internal subagent-dispatch instructions
-    // + voice-contract examples for the user-facing message.
-    expect(bootKickoff?.payload.message).toContain("AGENTS.md");
-    expect(bootKickoff?.payload.message).toContain("subagent");
-    expect(bootKickoff?.payload.message).toContain("Voice contract");
-    expect(bootKickoff?.payload.message).toContain("/lc_gtm/target_thread");
-    // Voice-contract enforcement: prompt must include the ban list so Maya
-    // doesn't leak skill slugs / file names / pipeline terms to the user.
-    expect(bootKickoff?.payload.message).toContain("BANNED");
-    expect(bootKickoff?.payload.message).toContain("maya-*");
+    expect(jobs.jobs[0]?.id).toBe("0001_gtm_boot_phase_1");
+    expect(bootPhase1).toBeTruthy();
+    expect(bootPhase2).toBeTruthy();
+    expect(bootPhase1?.sessionTarget).toBe("isolated");
+    expect(bootPhase2?.sessionTarget).toBe("isolated");
+    // Phase 1 is fast — tight timeout, low thinking — so it can't
+    // hit the 12-min LLM-call ceiling that killed the unified boot.
+    expect(bootPhase1?.payload.timeoutSeconds).toBeLessThanOrEqual(900);
+    expect(bootPhase1?.payload.thinking).toBe("low");
+    // Phase 2 is heavy synthesis but still bounded.
+    expect(bootPhase2?.payload.timeoutSeconds).toBeLessThanOrEqual(1200);
+    expect(bootPhase2?.payload.thinking).toBe("medium");
+    expect(bootPhase1?.payload.message).toContain("PHASE 1");
+    expect(bootPhase2?.payload.message).toContain("PHASE 2");
+    expect(bootPhase1?.payload.message).toContain("subagent");
+    expect(bootPhase1?.payload.message).toContain("/lc_gtm/target_thread");
+    // Voice contract enforcement on both phases — both send user-
+    // visible Telegram messages.
+    expect(bootPhase1?.payload.message).toContain("BANS");
+    expect(bootPhase2?.payload.message).toContain("BANS");
+    expect(bootPhase1?.payload.message).toContain("validate_outbound");
+    expect(bootPhase2?.payload.message).toContain("validate_outbound");
     expect(heartbeat).toBeTruthy();
     expect(heartbeat?.sessionTarget).toBe("isolated");
     expect(heartbeat?.payload.kind).toBe("agentTurn");
@@ -233,7 +242,8 @@ describe("Maya GTM workspace pack", () => {
       jobs: Array<{ id: string; payload: { message: string } }>;
     };
     const userFacingIds = [
-      "0001_gtm_boot_kickoff",
+      "0001_gtm_boot_phase_1",
+      "0002_gtm_boot_phase_2",
       "gtm_channel_discovery",
       "gtm_weekly_review",
     ];

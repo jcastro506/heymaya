@@ -429,6 +429,9 @@ export const inspectLatestSynthQuery = internalQuery({
         deployedAt: agent.deployedAt,
         telegramChatId: agent.telegramChatId,
         hookTokenSet: Boolean(agent.hookToken),
+        deployTimeHelloAttemptedAt: agent.deployTimeHelloAttemptedAt,
+        deployTimeHelloResult: agent.deployTimeHelloResult,
+        deployTimeHelloMessageId: agent.deployTimeHelloMessageId,
       },
       app: app && {
         _id: app._id,

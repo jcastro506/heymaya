@@ -119,31 +119,28 @@ describe("Sprint 2 — Reddit wrappers", () => {
     expect(res.items).toEqual([]);
   });
 
-  it("redditPostComments normalizes thread shape", async () => {
-    const client = clientWithJson([
-      { data: { children: [] } }, // post
-      {
-        data: {
-          children: [
-            {
-              kind: "t1",
-              data: {
-                id: "c1",
-                body: "I'd recommend Reddit reply mining over posts.",
-                author: "vet_indie",
-                permalink: "/r/SaaS/comments/abc/x/c1/",
-                score: 12,
-                ups: 14,
-                downs: 2,
-                created_utc: 1700001000,
-                link_id: "t3_abc",
-                parent_id: "t3_abc",
-              },
-            },
-          ],
+  it("redditPostComments normalizes ScrapeCreators flat shape (Sprint 2.14a.1)", async () => {
+    // ScrapeCreators returns { success, post, comments: [...], more }
+    // with flat comment objects (not the legacy reddit listing
+    // wrapping). Wrapper rewritten in 2.14a.1.
+    const client = clientWithJson({
+      success: true,
+      credits_remaining: 9999,
+      post: {},
+      comments: [
+        {
+          id: "c1",
+          body: "I'd recommend Reddit reply mining over posts.",
+          author: "vet_indie",
+          permalink: "/r/SaaS/comments/abc/x/c1/",
+          score: 12,
+          ups: 14,
+          downs: 2,
+          created_utc: 1700001000,
         },
-      },
-    ]);
+      ],
+      more: null,
+    });
     const res = await redditPostComments(
       client,
       "https://www.reddit.com/r/SaaS/comments/abc/x/"
@@ -152,6 +149,21 @@ describe("Sprint 2 — Reddit wrappers", () => {
     expect(res.items[0]?.tags).toContain("comment");
     expect(res.items[0]?.excerpt).toContain("reply mining");
     expect(res.items[0]?.engagement.upvotes).toBe(14);
+  });
+
+  it("redditPostComments soft-fails on success:false (404 not_found)", async () => {
+    const client = clientWithJson({
+      success: false,
+      error: "not_found",
+      errorStatus: 404,
+      message: "Post not found",
+    });
+    const res = await redditPostComments(
+      client,
+      "https://www.reddit.com/r/badpath/comments/000/x/"
+    );
+    expect(res.items).toEqual([]);
+    expect(res.statusDetail).toMatch(/not_found/);
   });
 
   it("soft-fails Reddit on 4xx instead of throwing", async () => {

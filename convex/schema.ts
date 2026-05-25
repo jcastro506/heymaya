@@ -4314,6 +4314,15 @@ export default defineSchema({
     // /hooks/wake endpoints, and by the machine when calling back into
     // /lc_gtm/* HTTP actions). Provisioned at deploy.
     hookToken: v.optional(v.string()),
+    // Sprint 2.14a.6 — trace whether the Sprint 2.11 deploy-time hello
+    // actually fired. Live 2026-05-25 deploy showed diagnostic ping
+    // landing fine but the deploy-time hello did NOT. Without these
+    // fields we have no way to tell whether the code path was reached,
+    // failed firewall, hit Telegram API error, etc. Populated by
+    // deployMayaGtm.ts immediately after sendDirectTelegramMessage.
+    deployTimeHelloAttemptedAt: v.optional(v.number()),
+    deployTimeHelloResult: v.optional(v.string()), // "sent" | "firewall_blocked" | "missing_credentials" | "telegram_<status>" | "exception:<msg>"
+    deployTimeHelloMessageId: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
