@@ -846,6 +846,160 @@ export const auditMayaClaims = internalQuery({
   },
 });
 
+/**
+ * Sprint 2.15.7 — full grading view. Pulls everything needed to
+ * judge Maya's output end-to-end:
+ *   - channel decisions (LLM judge reasoning)
+ *   - top reddit picks with commentInsights (LLM-scored)
+ *   - top X picks with painLanguageReason
+ *   - top HN picks
+ *   - drafted content (the actual replies Maya wrote)
+ *   - calendar events Maya populated (or didn't)
+ *   - target accounts she's tracking
+ *   - cost breakdown
+ *   - pipeline health
+ *
+ * Call: `npx convex run _admin/realWorldDeployGtm:gradeLatestSynth '{}'`
+ */
+export const gradeLatestSynth = internalQuery({
+  args: { sampleSize: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<unknown> => {
+    const N = args.sampleSize ?? 8;
+    const all = await ctx.db.query("creators").collect();
+    const rows = all
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (rows.length === 0) return { found: false };
+    const creator = rows[0];
+
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    const app = agent?.appId ? await ctx.db.get(agent.appId) : null;
+    const jobs = app
+      ? await ctx.db.query("gtmResearchJobs").withIndex("by_app", (q) => q.eq("appId", app._id)).collect()
+      : [];
+    const latestJob = jobs.sort((a, b) => b.createdAt - a.createdAt)[0];
+
+    const channelScores = latestJob
+      ? await ctx.db
+          .query("gtmChannelScores")
+          .withIndex("by_research_job", (q) => q.eq("researchJobId", latestJob._id))
+          .collect()
+      : [];
+
+    const targetThreads = await ctx.db
+      .query("gtmTargetThreads")
+      .withIndex("by_account_and_platform", (q) => q.eq("accountId", creator._id))
+      .collect();
+    const targetAccounts = await ctx.db
+      .query("gtmTargetAccounts")
+      .withIndex("by_account_and_platform", (q) => q.eq("accountId", creator._id))
+      .collect();
+    const drafts = await ctx.db
+      .query("gtmDraftedContent")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .collect();
+    const calendar = await ctx.db
+      .query("gtmCalendarEvents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .collect();
+    const evidenceCards = latestJob
+      ? await ctx.db
+          .query("gtmEvidenceCards")
+          .withIndex("by_research_job", (q) => q.eq("researchJobId", latestJob._id))
+          .collect()
+      : [];
+
+    // Top reddit/X cards by combined LLM scores
+    const sortByLlm = (a: any, b: any) =>
+      (b.painMatch + b.buyerMatch + b.channelFit) -
+      (a.painMatch + a.buyerMatch + a.channelFit);
+    const topReddit = evidenceCards
+      .filter((c) => c.source === "reddit")
+      .sort(sortByLlm)
+      .slice(0, N)
+      .map((c) => ({
+        url: c.url,
+        title: c.title,
+        snippet: c.snippet.slice(0, 200),
+        painMatch: c.painMatch,
+        buyerMatch: c.buyerMatch,
+        painLanguageReason: c.painLanguageReason,
+        commentInsights: c.commentInsights,
+      }));
+    const topX = evidenceCards
+      .filter((c) => c.source === "x")
+      .sort(sortByLlm)
+      .slice(0, N)
+      .map((c) => ({
+        author: c.authorOrCommunity,
+        url: c.url,
+        snippet: c.snippet.slice(0, 200),
+        painLanguageReason: c.painLanguageReason,
+      }));
+
+    const calendarByDay: Record<string, number> = {};
+    for (const e of calendar) {
+      const day = new Date(e.startsAtMs ?? e._creationTime).toISOString().slice(0, 10);
+      calendarByDay[day] = (calendarByDay[day] ?? 0) + 1;
+    }
+
+    return {
+      product: {
+        name: app?.name,
+        url: app?.url,
+        founderWhy: app?.founderWhy,
+      },
+      cost: latestJob && {
+        scraping: latestJob.spentUsd,
+        llm: latestJob.spentUsdLlm,
+        total: (latestJob.spentUsd ?? 0) + (latestJob.spentUsdLlm ?? 0),
+        breakdown: latestJob.spentUsdLlmByStage,
+      },
+      pipelineHealth: latestJob && {
+        cardsScored: `${latestJob.cardsScoredCount ?? 0}/${latestJob.cardsExpectedCount ?? 0}`,
+        commentsMined: `${latestJob.commentsMinedCount ?? 0}/${latestJob.commentsAttemptedCount ?? 0}`,
+        subagents: `${latestJob.subagentsCompleted ?? 0}/${latestJob.subagentsExpected ?? 0}`,
+        phase2Triggered: latestJob.phase2TriggeredAt
+          ? `yes (${latestJob.phase2TriggerSource})`
+          : "no",
+      },
+      channelDecisions: channelScores.map((c: any) => ({
+        channel: c.channel,
+        score: c.score,
+        decision: c.decision,
+        confidence: c.confidence,
+        reasons: c.reasons,
+        firstWeekTest: c.firstWeekTest,
+      })),
+      mayaActivity: {
+        targetThreads: targetThreads.length,
+        targetAccounts: targetAccounts.length,
+        drafts: drafts.length,
+        calendarEvents: calendar.length,
+        calendarByDay,
+      },
+      topReddit,
+      topX,
+      sampleDrafts: drafts.slice(0, 5).map((d: any) => ({
+        platform: d.platform,
+        text: (d.text ?? "").slice(0, 300),
+        approvalState: d.approvalState,
+        voiceMatchScore: d.voiceMatchScore,
+      })),
+      sampleCalendar: calendar.slice(0, 10).map((e: any) => ({
+        kind: e.kind,
+        startsAtMs: e.startsAtMs,
+        startsAtIso: e.startsAtMs ? new Date(e.startsAtMs).toISOString() : null,
+        title: e.title,
+        description: (e.description ?? "").slice(0, 200),
+      })),
+    };
+  },
+});
+
 export const patchTelegramChatId = internalMutation({
   args: { agentId: v.id("gtmAgents"), telegramChatId: v.string() },
   handler: async (ctx, args): Promise<void> => {
