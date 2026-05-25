@@ -54,25 +54,24 @@ function makeScrapeClient(
       const urlParam = new URL(url).searchParams.get("url") ?? "";
       const cardId = urlParam.split("/").pop()!;
       const comments = responses.get(cardId) ?? [];
-      // Reddit /v1/reddit/post/comments returns [post, comments]
-      const body = JSON.stringify([
-        { data: { children: [] } },
-        {
-          data: {
-            children: comments.map((c, i) => ({
-              data: {
-                id: `c${cardId}_${i}`,
-                body: c.body,
-                author: c.author,
-                score: c.score,
-                ups: c.score,
-                permalink: `/r/test/comments/${cardId}/_/c${i}`,
-              },
-              kind: "t1",
-            })),
-          },
-        },
-      ]);
+      // Sprint 2.14a.1 — ScrapeCreators returns flat
+      // { success, post, comments, more } not the legacy reddit
+      // listing format.
+      const body = JSON.stringify({
+        success: true,
+        credits_remaining: 9999,
+        post: {},
+        comments: comments.map((c, i) => ({
+          id: `c${cardId}_${i}`,
+          body: c.body,
+          author: c.author,
+          score: c.score,
+          ups: c.score,
+          downs: 0,
+          permalink: `/r/test/comments/${cardId}/_/c${i}`,
+        })),
+        more: null,
+      });
       return new Response(body, { status: 200 });
     }) as unknown as typeof fetch,
   });

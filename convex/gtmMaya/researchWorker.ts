@@ -393,6 +393,38 @@ export const getEvidenceCardsForScoring = internalQuery({
  * returns. Bounded batch update; silently skips IDs that no longer
  * exist (could happen if a parallel run wiped the job).
  */
+/**
+ * Sprint 2.14a.4 — record pipeline health on the research job row.
+ * Surfaces "did the LLM scorer + comment miner actually run, or did
+ * we fall back to engagement-only scoring?" so the operator + Maya's
+ * boot_kickoff prompt can both see degradation rather than assuming
+ * everything worked when the orchestrator returns ok.
+ */
+export const recordPipelineHealth = internalMutation({
+  args: {
+    researchJobId: v.id("gtmResearchJobs"),
+    cardsScoredCount: v.optional(v.number()),
+    cardsExpectedCount: v.optional(v.number()),
+    commentsMinedCount: v.optional(v.number()),
+    commentsAttemptedCount: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    const job = await ctx.db.get(args.researchJobId);
+    if (!job) return;
+    const patch: Record<string, number> = {};
+    if (args.cardsScoredCount !== undefined)
+      patch.cardsScoredCount = args.cardsScoredCount;
+    if (args.cardsExpectedCount !== undefined)
+      patch.cardsExpectedCount = args.cardsExpectedCount;
+    if (args.commentsMinedCount !== undefined)
+      patch.commentsMinedCount = args.commentsMinedCount;
+    if (args.commentsAttemptedCount !== undefined)
+      patch.commentsAttemptedCount = args.commentsAttemptedCount;
+    if (Object.keys(patch).length === 0) return;
+    await ctx.db.patch(args.researchJobId, patch);
+  },
+});
+
 export const patchEvidenceCardScores = internalMutation({
   args: {
     scores: v.array(
@@ -759,10 +791,27 @@ export const runBudgetedResearchJob = internalAction({
             }
           );
         }
+        // Sprint 2.14a.4 — record degradation signal
+        await ctx.runMutation(
+          internal.gtmMaya.researchWorker.recordPipelineHealth,
+          {
+            researchJobId: args.researchJobId,
+            cardsScoredCount: result.scores.length,
+            cardsExpectedCount: evidenceCards.length,
+          }
+        );
         console.log(
-          `[gtm/cardScorer] scored=${result.scores.length} missing=${result.missingIds.length} batches=${result.batchCount} usage=${JSON.stringify(result.totalUsage)}`
+          `[gtm/cardScorer] scored=${result.scores.length}/${evidenceCards.length} missing=${result.missingIds.length} batches=${result.batchCount} usage=${JSON.stringify(result.totalUsage)}`
         );
       } else {
+        await ctx.runMutation(
+          internal.gtmMaya.researchWorker.recordPipelineHealth,
+          {
+            researchJobId: args.researchJobId,
+            cardsScoredCount: 0,
+            cardsExpectedCount: evidenceCards.length,
+          }
+        );
         console.log(
           `[gtm/cardScorer] skipped — hasContext=${hasContext} cards=${evidenceCards.length}`
         );
@@ -834,6 +883,14 @@ export const runBudgetedResearchJob = internalAction({
               { insights: toPatch }
             );
           }
+          await ctx.runMutation(
+            internal.gtmMaya.researchWorker.recordPipelineHealth,
+            {
+              researchJobId: args.researchJobId,
+              commentsMinedCount: mineResult.succeeded,
+              commentsAttemptedCount: mineResult.attempted,
+            }
+          );
           console.log(
             `[gtm/commentMiner] attempted=${mineResult.attempted} succeeded=${mineResult.succeeded}`
           );

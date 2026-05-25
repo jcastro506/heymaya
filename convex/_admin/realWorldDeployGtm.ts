@@ -598,7 +598,16 @@ export const analyzeAuxSynth = internalQuery({
         url: app.url,
         keywordExpansion: app.keywordExpansion,
       },
-      researchJob: { _id: latest._id, phase: latest.phase, status: latest.status, spentUsd: latest.spentUsd },
+      researchJob: {
+        _id: latest._id,
+        phase: latest.phase,
+        status: latest.status,
+        spentUsd: latest.spentUsd,
+        cardsScoredCount: latest.cardsScoredCount,
+        cardsExpectedCount: latest.cardsExpectedCount,
+        commentsMinedCount: latest.commentsMinedCount,
+        commentsAttemptedCount: latest.commentsAttemptedCount,
+      },
       channelScoresCount: scores.length,
       channelScores: scores.map((s: any) => ({
         channel: s.channel,

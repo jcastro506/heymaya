@@ -4603,6 +4603,18 @@ export default defineSchema({
     // note. Surfaced in mission board so the operator can see what Maya
     // is thinking without reading the OpenClaw session log.
     lastAgentNote: v.optional(v.string()),
+    // Sprint 2.14a.4 — LLM-pipeline degradation tracking. cards*Count
+    // captures how thoroughly the LLM scorer + miner ran. When ratio is
+    // <0.5, downstream channel-judge has been operating on engagement-
+    // derived placeholder scores rather than LLM pain-language match
+    // — output quality is degraded even if decisions look right.
+    // Surfaced via analyze* admin queries + (eventually) Maya's
+    // boot_kickoff so the operator sees pipeline health, not just
+    // completion. Optional fields so pre-2.14a.4 jobs still load.
+    cardsScoredCount: v.optional(v.number()),
+    cardsExpectedCount: v.optional(v.number()),
+    commentsMinedCount: v.optional(v.number()),
+    commentsAttemptedCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
