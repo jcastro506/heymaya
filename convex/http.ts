@@ -82,6 +82,8 @@ import {
   // Sprint 2.14a.10 — event-driven phase 2 trigger plumbing.
   phase1AnnounceHttp,
   subagentCompleteHttp,
+  // Sprint 2.16b — progressive update channel.
+  sendUpdateHttp,
 } from "./gtmMaya/openclaw/inboundCallback";
 
 const http = httpRouter();
@@ -195,6 +197,14 @@ http.route({
   path: "/lc_gtm/subagent_complete",
   method: "POST",
   handler: subagentCompleteHttp,
+});
+// Sprint 2.16b — Maya posts progress updates during her iterative
+// research loop. Routes through Sprint 2.10 outbound firewall then
+// relays to Telegram via direct Bot API. POST { text: string }.
+http.route({
+  path: "/lc_gtm/send_update",
+  method: "POST",
+  handler: sendUpdateHttp,
 });
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs

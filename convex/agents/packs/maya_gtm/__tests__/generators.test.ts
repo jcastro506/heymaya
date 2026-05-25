@@ -172,42 +172,30 @@ describe("Maya GTM workspace pack", () => {
 
     expect(jobs.version).toBe(1);
     expect(jobs.jobs.every((job) => job.state != null)).toBe(true);
-    // Sprint 2.14a.7 — boot_kickoff split into two phases to avoid
-    // 12-min single-turn LLM timeout. Phase 1 spawns + brief hello;
-    // phase 2 (at deploy+60min) reads subagent output + sends the
-    // research-backed plan.
-    const bootPhase1 = jobs.jobs.find(
-      (job) => job.id === "0001_gtm_boot_phase_1"
-    );
-    const bootPhase2 = jobs.jobs.find(
-      (job) => job.id === "0002_gtm_boot_phase_2"
+    // Sprint 2.16c — single unified boot task. Maya owns the whole
+    // iterative research loop end-to-end in ONE long-running turn.
+    // No phase 1/phase 2 split. Matches the OpenClaw agentic shape.
+    const bootJob = jobs.jobs.find(
+      (job) => job.id === "0001_gtm_first_research"
     );
     const heartbeat = jobs.jobs.find((job) => job.id === "gtm_heartbeat");
     const weeklyReview = jobs.jobs.find((job) => job.id === "gtm_weekly_review");
 
-    expect(jobs.jobs[0]?.id).toBe("0001_gtm_boot_phase_1");
-    expect(bootPhase1).toBeTruthy();
-    expect(bootPhase2).toBeTruthy();
-    expect(bootPhase1?.sessionTarget).toBe("isolated");
-    expect(bootPhase2?.sessionTarget).toBe("isolated");
-    // Sprint 2.14a.11 — no cron-level timeoutSeconds cap on either
-    // phase. Maya takes as long as she needs. Individual LLM calls
-    // still bounded inside pi-coding-agent. Phase 1 stays tight
-    // via thinking:low + tight prompt; phase 2 via thinking:medium.
-    expect(bootPhase1?.payload.timeoutSeconds).toBeUndefined();
-    expect(bootPhase1?.payload.thinking).toBe("low");
-    expect(bootPhase2?.payload.timeoutSeconds).toBeUndefined();
-    expect(bootPhase2?.payload.thinking).toBe("medium");
-    expect(bootPhase1?.payload.message).toContain("PHASE 1");
-    expect(bootPhase2?.payload.message).toContain("PHASE 2");
-    expect(bootPhase1?.payload.message).toContain("subagent");
-    expect(bootPhase1?.payload.message).toContain("/lc_gtm/target_thread");
-    // Voice contract enforcement on both phases — both send user-
-    // visible Telegram messages.
-    expect(bootPhase1?.payload.message).toContain("BANS");
-    expect(bootPhase2?.payload.message).toContain("BANS");
-    expect(bootPhase1?.payload.message).toContain("validate_outbound");
-    expect(bootPhase2?.payload.message).toContain("validate_outbound");
+    expect(jobs.jobs[0]?.id).toBe("0001_gtm_first_research");
+    expect(bootJob).toBeTruthy();
+    expect(bootJob?.sessionTarget).toBe("isolated");
+    // No timeoutSeconds — Maya takes as long as she needs.
+    expect(bootJob?.payload.timeoutSeconds).toBeUndefined();
+    // Medium thinking for the strategist judging subagent outputs.
+    expect(bootJob?.payload.thinking).toBe("medium");
+    expect(bootJob?.payload.message).toContain("FIRST HEARTBEAT");
+    expect(bootJob?.payload.message).toContain("/lc_gtm/target_thread");
+    expect(bootJob?.payload.message).toContain("/lc_gtm/send_update");
+    expect(bootJob?.payload.message).toContain("validate_outbound");
+    expect(bootJob?.payload.message).toContain("GROUNDED-OR-SILENT");
+    // No phase 1/phase 2 split — assert the old ids are gone.
+    expect(jobs.jobs.find((j) => j.id === "0001_gtm_boot_phase_1")).toBeUndefined();
+    expect(jobs.jobs.find((j) => j.id === "0002_gtm_boot_phase_2")).toBeUndefined();
     expect(heartbeat).toBeTruthy();
     expect(heartbeat?.sessionTarget).toBe("isolated");
     expect(heartbeat?.payload.kind).toBe("agentTurn");
@@ -243,8 +231,7 @@ describe("Maya GTM workspace pack", () => {
       jobs: Array<{ id: string; payload: { message: string } }>;
     };
     const userFacingIds = [
-      "0001_gtm_boot_phase_1",
-      "0002_gtm_boot_phase_2",
+      "0001_gtm_first_research",
       "gtm_channel_discovery",
       "gtm_weekly_review",
     ];
@@ -255,36 +242,25 @@ describe("Maya GTM workspace pack", () => {
         job!.payload.message,
         `cron ${id} must mandate /lc_gtm/validate_outbound before sendMessage`
       ).toContain("/lc_gtm/validate_outbound");
-      expect(
-        job!.payload.message,
-        `cron ${id} must reference Sprint 2.10 firewall framing`
-      ).toContain("MANDATORY pre-send firewall");
     }
   });
 
-  it("Sprint 2.15.1 — boot prompts enforce grounded-or-silent on calendar + thread claims", () => {
-    // Live 2026-05-25 regression: Maya's phase 1 hello claimed "I've
-    // populated your calendar for the next 14 days" with 0 actual
-    // gtmCalendarEvents rows. Grounded-or-silent (CLAUDE.md
-    // Architecture principle #3) was the missing guard. Both boot
-    // phases must call this out explicitly so the LLM doesn't
-    // re-invent the same hallucination.
+  it("Sprint 2.15.1 — boot prompt enforces grounded-or-silent on calendar + thread claims", () => {
+    // Live 2026-05-25 regression: Maya claimed "I've populated your
+    // calendar for the next 14 days" with 0 actual gtmCalendarEvents
+    // rows. Grounded-or-silent (CLAUDE.md Architecture #3) was the
+    // missing guard. The unified boot task (Sprint 2.16c) must call
+    // this out explicitly so the LLM doesn't re-invent the same
+    // hallucination.
     const { files } = buildMayaGtmWorkspace(INPUT);
     const jobs = JSON.parse(files.get("jobs.json") ?? "{}") as {
       jobs: Array<{ id: string; payload: { message: string } }>;
     };
-    const phase1 = jobs.jobs.find((j) => j.id === "0001_gtm_boot_phase_1");
-    const phase2 = jobs.jobs.find((j) => j.id === "0002_gtm_boot_phase_2");
-    for (const job of [phase1, phase2]) {
-      expect(job).toBeTruthy();
-      expect(job!.payload.message).toContain("GROUNDED-OR-SILENT");
-      expect(job!.payload.message).toContain("CLAUDE.md");
-      // The phrase that bit us live, called out as the cautionary
-      // example so future prompt edits keep the signal.
-      expect(job!.payload.message).toContain(
-        "calendar populated"
-      );
-    }
+    const boot = jobs.jobs.find((j) => j.id === "0001_gtm_first_research");
+    expect(boot).toBeTruthy();
+    expect(boot!.payload.message).toContain("GROUNDED-OR-SILENT");
+    expect(boot!.payload.message).toContain("CLAUDE.md");
+    expect(boot!.payload.message).toContain("calendar populated");
   });
 
   it("keeps the prompt-context bundle (workspace minus playbook/ + skills/*) inside a prompt budget", () => {

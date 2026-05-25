@@ -69,6 +69,23 @@ function constantTimeEqual(a: string, b: string): boolean {
  * over hookToken comparison via a full table scan (small N — one row per
  * deployed agent — acceptable).
  */
+/**
+ * Sprint 2.16b — Maya's send_update endpoint needs the agent's
+ * telegramChatId to relay her progress message. Internal query
+ * because authenticate() already validated the hookToken.
+ */
+export const getAgentForSendUpdate = internalQuery({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ telegramChatId: string | undefined } | null> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return null;
+    return { telegramChatId: agent.telegramChatId };
+  },
+});
+
 export const resolveAgentFromHookToken = internalQuery({
   args: { presentedToken: v.string() },
   handler: async (
@@ -903,6 +920,83 @@ export const subagentCompleteHttp = httpAction(async (ctx, request) => {
       expected: result.expected,
       readyToFirePhase2: result.readyToFirePhase2,
       alreadyTriggered: result.alreadyTriggered,
+    }),
+    { status: 200, headers: { "content-type": "application/json" } }
+  );
+});
+
+/**
+ * Sprint 2.16b — Maya's progress-update channel. She POSTs here at
+ * milestones during her iterative research loop ("done with reddit,
+ * going deeper on r/ollama") so the operator sees life over 30-90
+ * min instead of one big delivery at the end.
+ *
+ * Body: { text: string } — Maya's voice-clean message.
+ * Auth: hookToken (same as other /lc_gtm/* endpoints).
+ * Pipeline: outboundFirewall (Sprint 2.10) → sendDirectTelegramMessage
+ * → Telegram Bot API. Failures return { ok:false, reason } so Maya
+ * can decide whether to rewrite or skip the update.
+ */
+export const sendUpdateHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: { text?: string };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (typeof body.text !== "string" || body.text.length === 0) {
+    return new Response("text required", { status: 400 });
+  }
+  if (body.text.length > 1500) {
+    // Telegram has a 4K limit but progress updates should stay terse.
+    return new Response("text too long (>1500 chars)", { status: 400 });
+  }
+
+  // Firewall first.
+  const firewall = await ctx.runAction(
+    internal.gtmMaya.outboundFirewall.validateOutbound,
+    { text: body.text }
+  );
+  if (!firewall.ok) {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        reason: "firewall_blocked",
+        failures: firewall.failures,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  }
+
+  // Get the agent's telegramChatId.
+  const agent = await ctx.runQuery(
+    internal.gtmMaya.openclaw.inboundCallback.getAgentForSendUpdate,
+    { agentId: auth.agentId }
+  );
+  if (!agent || !agent.telegramChatId) {
+    return new Response(
+      JSON.stringify({ ok: false, reason: "no_telegram_chat_id" }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  }
+
+  // Send via Telegram Bot API.
+  const { sendDirectTelegramMessage } = await import(
+    "../../integrations/telegram/sendDirectMessage"
+  );
+  const result = await sendDirectTelegramMessage({
+    botToken: process.env.TELEGRAM_BOT_TOKEN,
+    chatId: agent.telegramChatId,
+    text: body.text,
+  });
+  return new Response(
+    JSON.stringify({
+      ok: result.ok,
+      reason: result.reason,
+      messageId: result.messageId ?? undefined,
     }),
     { status: 200, headers: { "content-type": "application/json" } }
   );

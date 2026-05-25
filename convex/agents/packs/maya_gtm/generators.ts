@@ -612,84 +612,113 @@ function buildCronDelivery(
 }
 
 function renderJobs(input: MayaGtmWorkspaceInput): string {
-  // Sprint 2.14a.9 — fire phase 1 IMMEDIATELY (30 sec after deploy
-  // so the Fly machine has time to fully boot). Was deploy+15min
-  // which was arbitrary buffer from the original heavy single-turn
-  // boot. With pre-installed deps (Sprint 2.14a.8) phase 1 starts
-  // working within seconds of cron fire.
-  //
-  // Sprint 2.14a.10 — phase 2 fires when subagents complete, not
-  // on a hardcoded timer. We keep bootPhase2At as a SAFETY-NET
-  // far-future schedule (2 hours) so the cron eventually runs even
-  // if the subagent_complete callback never fires; the wake hook
-  // fires it earlier when ready.
+  // Sprint 2.16c — UNIFIED boot. No phase_1/phase_2 split. Maya wakes
+  // ONCE 30 sec after machine boot, does the entire iterative research
+  // loop in a single long-running turn: spawn subagents → wait →
+  // review → spawn refinement waves → populate calendar → final
+  // message. The two-phase split (Sprint 2.14a.7) was a workaround
+  // for an LLM-timeout issue we've since removed (Sprint 2.14a.11).
+  // It also forced unnatural splits in Maya's reasoning. Single
+  // long turn matches the OpenClaw agentic shape the operator
+  // wants.
   const baseMs = input.bootKickoffAtMs ?? Date.now();
-  const bootPhase1At = new Date(baseMs + 30_000).toISOString(); // +30 sec
-  const bootPhase2At = new Date(baseMs + 7_200_000).toISOString(); // +2 hr safety net
+  const bootAt = new Date(baseMs + 30_000).toISOString(); // +30 sec
   const delivery = buildCronDelivery(input);
   const jobs = {
     version: 1,
     jobs: [
       {
-        // Sprint 2.14a.7 — PHASE 1 of two-phase boot. Fast turn:
-        // spawn subagents (fire-and-forget, don't wait), send a
-        // short "research is running, back in 30-45 min" hello.
-        // Avoids the single-turn 12-min LLM timeout that killed
-        // the unified boot_kickoff live on 2026-05-25.
-        id: "0001_gtm_boot_phase_1",
-        name: "0001 GTM boot phase 1 — spawn + brief hello",
+        // Sprint 2.16c — single unified boot task. Maya wakes once
+        // 30 sec after machine boot, does the entire iterative
+        // research loop, populates calendar, sends final message.
+        // No phase_1/phase_2 split. This is the OpenClaw shape:
+        // one long-running agent turn that owns the work end-to-end.
+        id: "0001_gtm_first_research",
+        name: "0001 GTM first research — iterative loop, end-to-end",
         description:
-          "Phase 1 of split-boot: confirm workspace, dispatch per-channel research subagents (no wait), send a short voice-clean queued-hello. Designed to complete in 2-3 minutes wall-clock. Phase 2 (separate cron at deploy+60min) reads the subagent results and sends the research-backed message.",
+          "Maya's first heartbeat. Spawns per-channel _research subagents, reviews their outputs, dispatches refinement waves until confident, populates 14-day calendar, sends final research-backed plan. Single long-running turn (30-90 min wall-clock). Sends progress updates via /lc_gtm/send_update so the operator sees life during the work.",
         enabled: true,
         createdAtMs: 0,
         updatedAtMs: 0,
-        schedule: { kind: "at", at: bootPhase1At },
-        sessionTarget: "isolated",
-        wakeMode: "now",
-        deleteAfterRun: true,
-        payload: {
-          kind: "agentTurn",
-          lightContext: true,
-          // Sprint 2.14a.11 — no cron-level timeoutSeconds cap.
-          // Maya takes as long as she needs. Individual LLM calls
-          // still bounded by pi-coding-agent + OpenRouter inner
-          // timeouts. Phase 1 should still finish in ~2-5 min via
-          // its tight prompt (spawn + brief hello, no waits) but
-          // the hard wall is removed.
-          thinking: "low",
-          message:
-            "FIRST WAKE — PHASE 1 (spawn + brief hello). DO NOT wait for subagent results in this turn; phase 2 handles synthesis.\n\nINTERNAL PHASE (silent).\n\n1. Read SOUL.md (voice contract), USER.md, APP.md, GTM.md, TOOLS.md briefly. Skip PLAYBOOK + HEARTBEAT — phase 2 will read them.\n\n2. From GTM.md identify active channels (decision='primary' or 'secondary'). Spawn matching `_research` subagent via `sessions_spawn` (depth-1, max 4 concurrent) for EACH active channel. Mapping: reddit → reddit_research, x → x_research, tiktok → tiktok_research, instagram → instagram_research, linkedin → linkedin_research, hn → hn_research, product_hunt → SKIP. Each subagent's prompt MUST include: (a) tell it to identify 10-25 specific threads + 5-15 accounts and POST to /lc_gtm/target_thread, /lc_gtm/target_account, /lc_gtm/drafted_content per TOOLS.md (strict whyItFits requirements — no slugs, no .md, no internal terms); (b) **at the very end of its work, POST to /lc_gtm/subagent_complete with body {\"researchJobId\":\"<current_research_job_id_from_GTM.md>\",\"platform\":\"<its_channel>\"} via the hookToken auth pattern**. This is the event-driven phase-2 trigger — without it phase 2 waits up to 2hr for the safety-net cron.\n\n3. After all subagents are spawned, **announce the count to Convex**: POST /lc_gtm/phase_1_announce with body {\"researchJobId\":\"<id>\",\"subagentsExpected\":<N>} where N is exactly the number of subagents you spawned. This tells Convex when to fire phase 2 (when subagentsCompleted == N).\n\n4. DO NOT call sessions_wait. DO NOT poll subagent status. DO NOT do voice-matching or calendar populating in this turn — phase 2 covers all of that.\n\nEXTERNAL PHASE (the ONE Telegram message — ≤350 chars).\n\nWrite a SHORT manager-voice queued-hello per SOUL.md voice contract. Required: first-name greeting (USER.md), identity as launch manager (not 'AI assistant'), primary channel pick in plain words, honest timeline ('researching now, back with your plan when ready'). HARD BANS same as always: no maya-* slugs, no .md filenames, no internal terms (subagent / research lane / boot / priorityScore), no AI framing.\n\nGROUNDED-OR-SILENT — load-bearing rule per CLAUDE.md § 'Architecture principles' #3: NEVER claim work you haven't completed in THIS turn. Phase 1 has NOT yet: (a) populated the operator's calendar — gtmCalendarEvents rows aren't written here; (b) lined up specific threads/drafts — those come from subagents who haven't reported yet; (c) scheduled a 'first task tomorrow at 10am' — no calendar event exists. You may say 'researching now / will come back with specifics when ready'. You may NOT say 'I've populated your calendar' or 'I've queued 23 threads' or 'first task is tomorrow at 10am' — those are future state. Operator-reported live regression 2026-05-25: Maya claimed 'calendar populated for the next 14 days' with 0 actual gtmCalendarEvents rows. Don't repeat that.\n\nExample CORRECT: 'Hey Josh — Maya. I'm in. Your buyer hangs out on Reddit (r/ollama, r/LocalLLaMA) — researching the best threads to reply to right now. Back with your week as soon as the research lands.' / 'Hey Sam — Maya. Looking at X right now (dev/AI-builder crowd). Pulling specific tweets you should reply to + accounts worth following. Back with your plan once research is done.'\n\nExample BANNED (grounded-or-silent violation): 'I've populated your calendar for the next 14 days. First task is tomorrow at 10am.' (no calendar events exist) / 'I've queued 23 specific threads.' (subagents haven't returned yet) / 'I've drafted replies for you.' (no drafts written yet).\n\nSprint 2.10 — MANDATORY pre-send firewall: POST composed message to /lc_gtm/validate_outbound BEFORE sendMessage. Loop until ok:true.\n\nDo NOT call ScrapeCreators / Gemini / Composio / broad web search from `main`. ALL external API work runs in the spawned subagents.",
-        },
-        delivery,
-        state: {},
-      },
-      {
-        // Sprint 2.14a.7 — PHASE 2 of two-phase boot. Heavy turn:
-        // by deploy+60min the subagents spawned in phase 1 should
-        // have completed and POSTed their gtmTargetThreads /
-        // gtmDraftedContent rows. Phase 2 reads them, voice-matches,
-        // populates calendar, and sends the research-backed message.
-        id: "0002_gtm_boot_phase_2",
-        name: "0002 GTM boot phase 2 — synthesize + research-backed hello",
-        description:
-          "Phase 2 of split-boot: read subagent-produced target list, voice-match drafts, populate 14-day calendar, send the operator their research-backed plan. Runs at deploy+60min so phase 1 subagents (5-15 min each) have completed. Tight context, no fresh subagent dispatch.",
-        enabled: true,
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        schedule: { kind: "at", at: bootPhase2At },
+        schedule: { kind: "at", at: bootAt },
         sessionTarget: "isolated",
         wakeMode: "now",
         deleteAfterRun: true,
         payload: {
           kind: "agentTurn",
           lightContext: false,
-          // Sprint 2.14a.11 — no cron-level timeoutSeconds cap.
-          // Phase 2 does synthesis + voice-matching + calendar
-          // populator — takes as long as the work takes. Individual
-          // LLM calls still bounded inside pi-coding-agent.
+          // No timeoutSeconds. This turn runs as long as Maya needs to
+          // do the work. Individual LLM calls still bounded by
+          // pi-coding-agent + OpenRouter inner timeouts.
           thinking: "medium",
-          message:
-            "BOOT PHASE 2 — synthesize phase-1 research into operator's plan.\n\nSAFETY-NET IDEMPOTENCY: Phase 2 may have already been triggered event-driven (subagent completion → webhook → runAgentTurn) before this cron fired. Before doing any work, GET the research-job-row's phase2TriggeredAt (via /lc_gtm/get_my_target_threads is closest signal — if you see populated drafts AND a 'phase 2 ran already' note in MEMORY.md, exit silently). If unsure, proceed — the work is idempotent and re-running just re-sends a near-identical voice-clean message which Maya's outbound firewall + per-day-pace heuristic can dedupe at delivery time.\n\nINTERNAL PHASE (silent).\n\n1. Read SOUL.md (voice contract), AGENTS.md, USER.md, APP.md, GTM.md, TOOLS.md, PLAYBOOK.md, HEARTBEAT.md.\n\n2. Read what the phase-1 subagents produced: GET /lc_gtm/get_my_target_threads (target threads they queued) — count by platform. If zero threads landed, the subagents are still running OR they failed — fall back to a brief 'still researching, will follow up in 30 min' message and exit.\n\n3. Sprint 2.4 voice-match: for every gtmDraftedContent row in approvalState:'pending_approval', follow skills/maya-voice-matcher/SKILL.md. Score voice + slop + specificity. POST to /lc_gtm/update_draft_voice_match. Only voice-clean drafts make it to the calendar.\n\n4. Sprint 2.3 calendar populator: read skills/maya-calendar-populator/SKILL.md. Compute operator's current Phase (1-4 per PLAYBOOK § 2). Emit typed calendar events (warmup_block / engagement_block / reply_window / etc) for the next 14 days. POST to /lc_gtm/calendar_proposal as status:'draft'. Run maya-slop-critic on every event title before POSTing.\n\nEXTERNAL PHASE (the ONE Telegram message — ≤500 chars).\n\nResearch-backed manager-voice plan. Required: greeting (USER.md), primary channel pick in plain words, count of target threads ACTUALLY queued (count from /lc_gtm/get_my_target_threads — never invent), what's first IF AND ONLY IF you successfully wrote calendar events in step 4 above. HARD BANS: no maya-* slugs, no .md filenames, no internal terms, no AI framing.\n\nGROUNDED-OR-SILENT — load-bearing rule per CLAUDE.md § 'Architecture principles' #3: every quantitative claim MUST be backed by a DB write you just made in this turn (calendar count from step 4's /lc_gtm/calendar_proposal POSTs; thread count from /lc_gtm/get_my_target_threads). If step 4 skipped because the populator failed or returned 0 events, you may NOT say 'your calendar's filled' or 'first task is at X'. Say honestly: 'I queued [N] threads but calendar populator hit [reason] — want me to retry the calendar separately?'. Operator-reported live regression 2026-05-25: claimed 'calendar populated for 14 days' with 0 actual gtmCalendarEvents rows. Voice contract + grounded-or-silent BOTH must pass.\n\nExample CORRECT (when calendar IS populated): 'Hey Josh — Maya. Done. Your buyer lives on Reddit (r/ollama, r/LocalLLaMA). I've lined up 42 specific threads + 18 accounts to follow over the next 2 weeks. Your calendar's filled with 14 events — first task is Tuesday at 10am. Want me to walk you through the week before I lock it in?'\n\nExample CORRECT (when calendar populator failed): 'Hey Josh — Maya. Research is in: 42 reddit threads + 18 accounts queued in your dashboard. Calendar populator hit an error scheduling them — want me to retry it? In the meantime I've got the priority threads ready when you are.'\n\nSprint 2.10 — MANDATORY pre-send firewall: POST composed message to /lc_gtm/validate_outbound BEFORE sendMessage. Loop until ok:true.\n\nDo NOT spawn fresh subagents in this turn — phase 1 did that. If a subagent didn't produce results, note it in the message ('Reddit subagent is still running, will follow up') and exit.",
+          message: `FIRST HEARTBEAT — you just came online. You are Maya, the operator's launch manager. Your one job in this turn is to research the operator's product end-to-end and deliver a complete 14-day plan with a populated calendar + drafted replies. Take as long as you need. Send progress updates along the way.
+
+CONTEXT FILES (read first):
+1. Read SOUL.md (voice contract — load-bearing for every user-facing message)
+2. Read USER.md (operator's name, timezone, goals)
+3. Read APP.md (the product)
+4. Read GTM.md (channel decisions from initial scrape + the research job id you'll reference)
+5. Read PLAYBOOK.md (per-channel etiquette + slop ban list)
+6. Read AGENTS.md (subagent dispatch pattern)
+7. Read TOOLS.md (which /lc_gtm/* endpoints are available + the hookToken auth pattern)
+
+STEP 1 — INTRODUCTORY HELLO (within first 2 min of waking).
+POST a brief voice-clean intro to /lc_gtm/send_update with body { "text": "Hey [name] — Maya. I'm in. Going to spend the next 30-60 min researching your buyer + building your week. I'll send updates as I work." }. Validate against SOUL.md voice contract first. The text MUST be plain-language manager voice, NOT mention subagents/slugs/files.
+
+STEP 2 — INITIAL SUBAGENT WAVE.
+From GTM.md identify active channels (decision='primary' or 'secondary'). For EACH active channel, spawn the matching _research subagent via sessions_spawn (depth-1, max 4 concurrent). Mapping: reddit → reddit_research, x → x_research, tiktok → tiktok_research, instagram → instagram_research, linkedin → linkedin_research, hn → hn_research, product_hunt → SKIP.
+
+For each subagent, compose its prompt with this contract (literally copy these instructions into the subagent's message):
+\`\`\`
+You are the <channel> research subagent. Your concrete deliverable:
+identify 15 high-buyer-intent threads where this product fits as a natural
+reply, plus 5 accounts/communities worth following. For each thread:
+score painMatch (0-1: does this person express the pain the product solves),
+buyerMatch (0-1: are they a plausible buyer), channelFit (0-1: does it make
+sense to reply here).
+
+For each thread, POST to /lc_gtm/target_thread with body
+{ researchJobId, platform, externalId, url, title, snippet, painMatch,
+  buyerMatch, channelFit, whyItFits } using hookToken Bearer auth per
+TOOLS.md.
+
+For each account, POST to /lc_gtm/target_account.
+
+If you can draft a natural reply for any thread, POST to
+/lc_gtm/drafted_content { researchJobId, targetThreadId, platform, body,
+approvalState: "pending_approval" }.
+
+You are done when: (a) you have 15 threads OR (b) you've exhausted your
+search budget. POST /lc_gtm/subagent_complete with { researchJobId,
+platform: "<your channel>" } as the LAST thing you do.
+
+Banned in every field: skill slugs (maya-*), .md filenames, internal
+pipeline terms (subagent, research lane, priorityScore). whyItFits MUST
+be plain founder-speak.
+\`\`\`
+
+STEP 3 — ANNOUNCE + WAIT.
+POST /lc_gtm/phase_1_announce with { researchJobId, subagentsExpected: N } where N is exactly the number spawned. Then sessions_wait or poll sessions_list until all spawned subagents are completed.
+
+STEP 4 — REVIEW + REFINE (up to 2 refinement waves, 3 total).
+Read what landed via GET /lc_gtm/get_my_target_threads. For each channel:
+- If the channel returned <10 threads with (painMatch + buyerMatch) >= 1.4 average, OR confidence is shaky, spawn a refinement subagent: "Dig deeper into [specific subreddit / specific account]. Find more high-buyer-intent threads in this narrower scope."
+- If you're not convinced any channel pick is right, spawn one channel_judge subagent to re-judge with the new data.
+Send a progress update via /lc_gtm/send_update at each major milestone. Example: "Done with the first reddit pass — got 18 strong threads from r/ollama. Going deeper on r/LocalLLaMA next."
+
+STEP 5 — POPULATE CALENDAR.
+Read skills/maya-calendar-populator/SKILL.md. Compute operator's current Phase (1-4 per PLAYBOOK § 2). Emit typed calendar events (warmup_block / engagement_block / reply_window / etc) for the next 14 days. POST to /lc_gtm/calendar_proposal as status:"draft". Run skills/maya-slop-critic on every event title before POSTing.
+
+STEP 6 — FINAL RESEARCH-BACKED MESSAGE.
+Compose the operator's final plan message (≤500 chars). Manager voice per SOUL.md. Required: greeting (USER.md), primary channel pick in plain words, count of target threads ACTUALLY queued (count from /lc_gtm/get_my_target_threads — never invent), what's first IF AND ONLY IF you successfully wrote calendar events. POST to /lc_gtm/validate_outbound first. Loop until ok:true. Then sendMessage to Telegram.
+
+GROUNDED-OR-SILENT (load-bearing per CLAUDE.md § Architecture #3): every quantitative claim in EVERY message you send must be backed by a DB write you actually completed this turn. If a step failed, say so honestly ("Calendar populator hit X, want me to retry?"). Operator-reported regression 2026-05-25: previous Maya claimed "calendar populated for 14 days" with 0 actual gtmCalendarEvents rows. Don't repeat that.
+
+VOICE CONTRACT (load-bearing): no maya-* slugs, no .md filenames, no internal terms (subagent / research lane / boot / priorityScore / phase 1 / phase 2 / "I'm spawning"), no AI/LLM framing. Manager voice only. Use /lc_gtm/validate_outbound BEFORE every sendMessage AND before every /lc_gtm/send_update call.
+
+DO NOT call ScrapeCreators / Gemini / Composio / broad web search from main. ALL external API work runs in spawned subagents.
+
+You'll keep working until step 6 completes. That's the contract.`,
         },
         delivery,
         state: {},
