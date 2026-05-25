@@ -212,6 +212,8 @@ export interface ScoreBatchResult {
   usage: {
     inputTokens: number;
     outputTokens: number;
+    /** Sprint 2.15.4 — exact USD cost from OpenRouter (null if BYOK). */
+    costUsd: number;
   };
 }
 
@@ -226,7 +228,7 @@ export async function scoreCardsBatch(
   opts?: { apiKey?: string; fetchImpl?: typeof fetch }
 ): Promise<ScoreBatchResult> {
   if (cards.length === 0) {
-    return { scores: [], missingIds: [], usage: { inputTokens: 0, outputTokens: 0 } };
+    return { scores: [], missingIds: [], usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
   }
   const apiKey = opts?.apiKey ?? process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
@@ -281,6 +283,7 @@ export async function scoreCardsBatch(
     usage: {
       inputTokens: completion.usage.inputTokens,
       outputTokens: completion.usage.outputTokens,
+      costUsd: completion.usage.costUsd ?? 0,
     },
   };
 }
@@ -304,7 +307,7 @@ export async function scoreAllCardsForProduct(
 ): Promise<{
   scores: CardScore[];
   missingIds: string[];
-  totalUsage: { inputTokens: number; outputTokens: number };
+  totalUsage: { inputTokens: number; outputTokens: number; costUsd: number };
   batchCount: number;
 }> {
   const size = opts?.batchSize ?? BATCH_SIZE;
@@ -319,6 +322,7 @@ export async function scoreAllCardsForProduct(
   const allMissingIds: string[] = [];
   let totalIn = 0;
   let totalOut = 0;
+  let totalCost = 0;
 
   // Bounded-concurrency runner — process batches in chunks of `concurrency`
   for (let i = 0; i < batches.length; i += concurrency) {
@@ -338,7 +342,7 @@ export async function scoreAllCardsForProduct(
           return {
             scores: [] as CardScore[],
             missingIds: batch.map((c) => c.id),
-            usage: { inputTokens: 0, outputTokens: 0 },
+            usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
           };
         })
       )
@@ -348,13 +352,14 @@ export async function scoreAllCardsForProduct(
       allMissingIds.push(...r.missingIds);
       totalIn += r.usage.inputTokens;
       totalOut += r.usage.outputTokens;
+      totalCost += r.usage.costUsd ?? 0;
     }
   }
 
   return {
     scores: allScores,
     missingIds: allMissingIds,
-    totalUsage: { inputTokens: totalIn, outputTokens: totalOut },
+    totalUsage: { inputTokens: totalIn, outputTokens: totalOut, costUsd: totalCost },
     batchCount: batches.length,
   };
 }

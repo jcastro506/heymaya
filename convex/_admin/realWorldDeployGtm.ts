@@ -481,7 +481,23 @@ export const inspectLatestSynthQuery = internalQuery({
         founderWhy: app.founderWhy,
         keywordExpansion: app.keywordExpansion,
       },
-      jobs: jobs.map((j) => ({ _id: j._id, status: j.status, phase: j.phase, spentUsd: j.spentUsd, lastAgentNote: j.lastAgentNote })),
+      jobs: jobs.map((j) => ({
+        _id: j._id,
+        status: j.status,
+        phase: j.phase,
+        spentUsd: j.spentUsd,
+        // Sprint 2.15.4 — LLM cost from OpenRouter usage.cost field
+        // (separate from spentUsd which is scraping API costs).
+        spentUsdLlm: j.spentUsdLlm,
+        spentUsdLlmByStage: j.spentUsdLlmByStage,
+        spentUsdTotal:
+          (j.spentUsd ?? 0) + (j.spentUsdLlm ?? 0),
+        cardsScoredCount: j.cardsScoredCount,
+        cardsExpectedCount: j.cardsExpectedCount,
+        commentsMinedCount: j.commentsMinedCount,
+        commentsAttemptedCount: j.commentsAttemptedCount,
+        lastAgentNote: j.lastAgentNote,
+      })),
       // Sprint 2.15.2 — real activity (what Maya actually wrote).
       mayaActivity: {
         gtmTargetThreads: { count: targetThreads.length, byPlatform: threadsByPlatform },

@@ -395,6 +395,34 @@ export const getEvidenceCardsForScoring = internalQuery({
  * exist (could happen if a parallel run wiped the job).
  */
 /**
+ * Sprint 2.15.4 — persist aggregated LLM cost from a research run.
+ * spentUsdLlm = total across all stages. spentUsdLlmByStage =
+ * per-stage breakdown (keywordExpansion / cardScorer / commentMiner
+ * / channelJudge). OpenRouter returns exact USD per call so the
+ * sum here matches the operator's OpenRouter dashboard for this run.
+ */
+export const recordLlmCost = internalMutation({
+  args: {
+    researchJobId: v.id("gtmResearchJobs"),
+    spentUsdLlm: v.number(),
+    spentUsdLlmByStage: v.object({
+      keywordExpansion: v.number(),
+      cardScorer: v.number(),
+      commentMiner: v.number(),
+      channelJudge: v.number(),
+    }),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    const job = await ctx.db.get(args.researchJobId);
+    if (!job) return;
+    await ctx.db.patch(args.researchJobId, {
+      spentUsdLlm: args.spentUsdLlm,
+      spentUsdLlmByStage: args.spentUsdLlmByStage,
+    });
+  },
+});
+
+/**
  * Sprint 2.14a.10 — record how many subagents phase 1 spawned.
  * Called via /lc_gtm/phase_1_announce. Idempotent — re-announcing
  * just overwrites (e.g. if phase 1 re-fires after a transient
@@ -765,6 +793,17 @@ export const runBudgetedResearchJob = internalAction({
     }
     const { job, app, creatorId } = orch;
 
+    // Sprint 2.15.4 — LLM cost tracker. Aggregated across all stages
+    // (keyword expansion, card scorer, comment miner, channel judge)
+    // and persisted on gtmResearchJobs.spentUsdLlm at the end.
+    // OpenRouter returns exact cost per call via usage.cost.
+    const llmCost = {
+      keywordExpansion: 0,
+      cardScorer: 0,
+      commentMiner: 0,
+      channelJudge: 0,
+    };
+
     // Sprint 2.14a.2 — safety net. Live observed: ModelHub v6/v7
     // intermittently left research jobs stuck at status:"running"
     // phase:"strategy_judge" because an uncaught throw (likely
@@ -977,6 +1016,7 @@ export const runBudgetedResearchJob = internalAction({
             cardsExpectedCount: evidenceCards.length,
           }
         );
+        llmCost.cardScorer = result.totalUsage.costUsd;
         console.log(
           `[gtm/cardScorer] scored=${result.scores.length}/${evidenceCards.length} missing=${result.missingIds.length} batches=${result.batchCount} usage=${JSON.stringify(result.totalUsage)}`
         );
@@ -1068,8 +1108,9 @@ export const runBudgetedResearchJob = internalAction({
               commentsAttemptedCount: mineResult.attempted,
             }
           );
+          llmCost.commentMiner = mineResult.costUsd;
           console.log(
-            `[gtm/commentMiner] attempted=${mineResult.attempted} succeeded=${mineResult.succeeded}`
+            `[gtm/commentMiner] attempted=${mineResult.attempted} succeeded=${mineResult.succeeded} costUsd=${mineResult.costUsd.toFixed(6)}`
           );
         } else {
           console.log("[gtm/commentMiner] skipped — no ScrapeCreators API key");
@@ -1138,8 +1179,9 @@ export const runBudgetedResearchJob = internalAction({
         firstWeekTest: d.firstWeekTest,
         qualityGate: d.qualityGate,
       }));
+      llmCost.channelJudge = judgeResult.costUsd;
       console.log(
-        `[gtm/channelJudge] LLM judged ${judgeResult.decisions.length}/${judgeResult.decisions.length + judgeResult.failedChannels.length} channels; failed=${judgeResult.failedChannels.join(",") || "none"}`
+        `[gtm/channelJudge] LLM judged ${judgeResult.decisions.length}/${judgeResult.decisions.length + judgeResult.failedChannels.length} channels; failed=${judgeResult.failedChannels.join(",") || "none"} costUsd=${judgeResult.costUsd.toFixed(6)}`
       );
     } catch (err) {
       console.warn(
@@ -1269,6 +1311,34 @@ export const runBudgetedResearchJob = internalAction({
           );
         }
       }
+    }
+
+    // Sprint 2.15.4 — persist aggregated LLM cost on the research
+    // job row so analyze* queries surface exactly how much we spent
+    // per stage. Excludes platform-scraping cost (spentUsd) which
+    // is tracked separately. Excludes keywordExpansion until we
+    // plumb cost through callMaya.
+    const totalLlmCost =
+      llmCost.keywordExpansion +
+      llmCost.cardScorer +
+      llmCost.commentMiner +
+      llmCost.channelJudge;
+    try {
+      await ctx.runMutation(
+        internal.gtmMaya.researchWorker.recordLlmCost,
+        {
+          researchJobId: args.researchJobId,
+          spentUsdLlm: totalLlmCost,
+          spentUsdLlmByStage: llmCost,
+        }
+      );
+      console.log(
+        `[gtm/llmCost] total=$${totalLlmCost.toFixed(6)} scorer=$${llmCost.cardScorer.toFixed(6)} miner=$${llmCost.commentMiner.toFixed(6)} judge=$${llmCost.channelJudge.toFixed(6)}`
+      );
+    } catch (err) {
+      console.warn(
+        `[gtm/llmCost] persist failed: ${(err as Error).message}`
+      );
     }
 
     // Mark normal completion so the safety-net catch below doesn't

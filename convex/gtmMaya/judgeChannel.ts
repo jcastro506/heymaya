@@ -62,6 +62,8 @@ export interface JudgeChannelDecisionRow {
     passed: boolean;
     failures: string[];
   };
+  /** Sprint 2.15.4 — USD cost of this channel's LLM call. */
+  costUsd?: number;
 }
 
 const CHANNEL_DESCRIPTIONS: Record<GtmChannel, string> = {
@@ -304,6 +306,7 @@ export async function judgeChannel(
       passed: qg.passed === true,
       failures: asStringArray(qg.failures, 4),
     },
+    costUsd: completion.usage.costUsd ?? 0,
   };
 }
 
@@ -324,6 +327,7 @@ export async function judgeAllChannels(
 ): Promise<{
   decisions: JudgeChannelDecisionRow[];
   failedChannels: GtmChannel[];
+  costUsd: number;
 }> {
   const CHANNEL_SOURCE: Record<GtmChannel, GtmEvidenceCard["source"]> = {
     reddit: "reddit",
@@ -364,9 +368,14 @@ export async function judgeAllChannels(
 
   const decisions: JudgeChannelDecisionRow[] = [];
   const failedChannels: GtmChannel[] = [];
+  let costUsd = 0;
   for (const r of results) {
-    if (r.ok) decisions.push(r.row);
-    else failedChannels.push(r.channel);
+    if (r.ok) {
+      decisions.push(r.row);
+      costUsd += r.row.costUsd ?? 0;
+    } else {
+      failedChannels.push(r.channel);
+    }
   }
-  return { decisions, failedChannels };
+  return { decisions, failedChannels, costUsd };
 }

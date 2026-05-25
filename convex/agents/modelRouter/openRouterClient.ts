@@ -27,6 +27,12 @@ export interface OpenRouterUsage {
   inputTokens: number;
   outputTokens: number;
   thinkingTokens: number;
+  /** Sprint 2.15.4 — exact USD cost from OpenRouter response when
+   * `usage.include` is set in the request. Null if OpenRouter
+   * didn't return cost (some BYOK providers don't). Cents-precision
+   * preserved (e.g. 0.00000175 for a 2-token Flash Lite call).
+   * Optional for backward-compat with pre-2.15.4 fixtures. */
+  costUsd?: number | null;
 }
 
 export interface OpenRouterCompletion {
@@ -113,6 +119,9 @@ interface OpenRouterRawUsage {
   };
   // Some providers nest under `reasoning_tokens` directly.
   reasoning_tokens?: number;
+  // Sprint 2.15.4 — exact USD cost when usage.include=true was set in
+  // the request. Available on hosted providers; null on BYOK paths.
+  cost?: number;
 }
 
 interface OpenRouterRawResponse {
@@ -141,6 +150,7 @@ function parseUsage(usage: OpenRouterRawUsage | undefined): OpenRouterUsage {
     inputTokens,
     outputTokens,
     thinkingTokens: reasoningTokens,
+    costUsd: typeof usage?.cost === "number" ? usage.cost : null,
   };
 }
 
@@ -158,6 +168,11 @@ export async function callOpenRouter(
       ? { max_tokens: opts.maxOutputTokens }
       : {}),
     stream: false,
+    // Sprint 2.15.4 — ask OpenRouter to include exact USD cost in
+    // the usage block. Available on hosted providers, null on BYOK
+    // paths. Captured into OpenRouterUsage.costUsd; aggregated per
+    // research run on gtmResearchJobs.spentUsdLlm.
+    usage: { include: true },
   };
 
   const headers = {

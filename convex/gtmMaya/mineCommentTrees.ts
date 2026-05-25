@@ -63,6 +63,8 @@ export interface MiningResult {
   insights: CommentInsights | null;
   /** Reason mining was skipped or failed (informational) */
   skipReason?: string;
+  /** Sprint 2.15.4 — USD cost of this card's LLM extraction call. */
+  costUsd?: number;
 }
 
 const MINER_PROMPT = `\
@@ -276,9 +278,14 @@ ${comments
       cardId: card.id,
       insights: null,
       skipReason: "LLM response not normalizable",
+      costUsd: completion.usage.costUsd ?? 0,
     };
   }
-  return { cardId: card.id, insights };
+  return {
+    cardId: card.id,
+    insights,
+    costUsd: completion.usage.costUsd ?? 0,
+  };
 }
 
 /**
@@ -306,6 +313,7 @@ export async function mineTopRedditCards(
   results: MiningResult[];
   attempted: number;
   succeeded: number;
+  costUsd: number;
 }> {
   const topN = opts.topN ?? DEFAULT_TOP_N;
   const concurrency = opts.concurrency ?? 3;
@@ -335,5 +343,6 @@ export async function mineTopRedditCards(
   }
 
   const succeeded = results.filter((r) => r.insights !== null).length;
-  return { results, attempted: eligible.length, succeeded };
+  const costUsd = results.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+  return { results, attempted: eligible.length, succeeded, costUsd };
 }

@@ -4636,6 +4636,21 @@ export default defineSchema({
     subagentsCompleted: v.optional(v.number()),
     phase2TriggeredAt: v.optional(v.number()),
     phase2TriggerSource: v.optional(v.string()), // "subagent_complete" | "safety_net_cron"
+    // Sprint 2.15.4 — aggregated USD cost of all LLM calls in this
+    // research run (keyword expansion + card scorer + comment miner
+    // + channel judge). Separate from spentUsd which tracks
+    // scraping API costs only. Populated from OpenRouter's
+    // usage.cost field on each call. Null if OpenRouter didn't
+    // return cost (BYOK paths).
+    spentUsdLlm: v.optional(v.number()),
+    spentUsdLlmByStage: v.optional(
+      v.object({
+        keywordExpansion: v.optional(v.number()),
+        cardScorer: v.optional(v.number()),
+        commentMiner: v.optional(v.number()),
+        channelJudge: v.optional(v.number()),
+      })
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
