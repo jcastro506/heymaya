@@ -21,8 +21,14 @@ describe("gtm-openclaw-fly-smoke", () => {
       "ScrapeCreators calls"
     );
     expect(fixture.workspaceFiles["jobs.json"]).toContain("gtm_heartbeat");
+    // Sprint 2.14a.7 — boot_kickoff was split into two phases. The
+    // unified id "0001_gtm_boot_kickoff" was replaced by
+    // "0001_gtm_boot_phase_1" + "0002_gtm_boot_phase_2".
     expect(fixture.workspaceFiles["jobs.json"]).toContain(
-      "0001_gtm_boot_kickoff"
+      "0001_gtm_boot_phase_1"
+    );
+    expect(fixture.workspaceFiles["jobs.json"]).toContain(
+      "0002_gtm_boot_phase_2"
     );
     expect(fixture.workspaceFiles["jobs.json"]).toContain("FIRST WAKE");
     expect(fixture.workspaceFiles["jobs.json"]).toContain(

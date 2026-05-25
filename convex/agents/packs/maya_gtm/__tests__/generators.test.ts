@@ -262,6 +262,31 @@ describe("Maya GTM workspace pack", () => {
     }
   });
 
+  it("Sprint 2.15.1 — boot prompts enforce grounded-or-silent on calendar + thread claims", () => {
+    // Live 2026-05-25 regression: Maya's phase 1 hello claimed "I've
+    // populated your calendar for the next 14 days" with 0 actual
+    // gtmCalendarEvents rows. Grounded-or-silent (CLAUDE.md
+    // Architecture principle #3) was the missing guard. Both boot
+    // phases must call this out explicitly so the LLM doesn't
+    // re-invent the same hallucination.
+    const { files } = buildMayaGtmWorkspace(INPUT);
+    const jobs = JSON.parse(files.get("jobs.json") ?? "{}") as {
+      jobs: Array<{ id: string; payload: { message: string } }>;
+    };
+    const phase1 = jobs.jobs.find((j) => j.id === "0001_gtm_boot_phase_1");
+    const phase2 = jobs.jobs.find((j) => j.id === "0002_gtm_boot_phase_2");
+    for (const job of [phase1, phase2]) {
+      expect(job).toBeTruthy();
+      expect(job!.payload.message).toContain("GROUNDED-OR-SILENT");
+      expect(job!.payload.message).toContain("CLAUDE.md");
+      // The phrase that bit us live, called out as the cautionary
+      // example so future prompt edits keep the signal.
+      expect(job!.payload.message).toContain(
+        "calendar populated"
+      );
+    }
+  });
+
   it("keeps the prompt-context bundle (workspace minus playbook/ + skills/*) inside a prompt budget", () => {
     // Sprint 2.5 + 17B: PLAYBOOK.md + playbook/*.md + skills/<slug>/SKILL.md
     // + clawhub-skills/<slug>/SKILL.md are REFERENCE files Maya reads only

@@ -418,6 +418,45 @@ export const inspectLatestSynthQuery = internalQuery({
           .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
           .collect()
       : [];
+
+    // Sprint 2.15.2 — surface REAL Maya activity counts. Previously
+    // mutationsCount=1 was the only signal and it was misleading:
+    // gtmWorkspaceMutations tracks bundle-rebuild events, NOT
+    // Maya's research output. Live 2026-05-25 showed
+    // mutationsCount=1 while Maya had actually written 42 target
+    // threads + 18 accounts + 24 drafts. Real activity counts make
+    // her work visible without a separate audit call.
+    const targetThreads = await ctx.db
+      .query("gtmTargetThreads")
+      .withIndex("by_account_and_platform", (q) =>
+        q.eq("accountId", creator._id)
+      )
+      .collect();
+    const targetAccounts = await ctx.db
+      .query("gtmTargetAccounts")
+      .withIndex("by_account_and_platform", (q) =>
+        q.eq("accountId", creator._id)
+      )
+      .collect();
+    const drafts = await ctx.db
+      .query("gtmDraftedContent")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .collect();
+    const calendar = await ctx.db
+      .query("gtmCalendarEvents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .collect();
+    const threadsByPlatform: Record<string, number> = {};
+    for (const t of targetThreads) {
+      const k = t.platform ?? "unknown";
+      threadsByPlatform[k] = (threadsByPlatform[k] ?? 0) + 1;
+    }
+    const calendarByKind: Record<string, number> = {};
+    for (const e of calendar) {
+      const k = e.kind ?? "unknown";
+      calendarByKind[k] = (calendarByKind[k] ?? 0) + 1;
+    }
+
     return {
       found: true,
       creator: { _id: creator._id, plan: creator.plan, accountType: creator.accountType },
@@ -443,6 +482,15 @@ export const inspectLatestSynthQuery = internalQuery({
         keywordExpansion: app.keywordExpansion,
       },
       jobs: jobs.map((j) => ({ _id: j._id, status: j.status, phase: j.phase, spentUsd: j.spentUsd, lastAgentNote: j.lastAgentNote })),
+      // Sprint 2.15.2 — real activity (what Maya actually wrote).
+      mayaActivity: {
+        gtmTargetThreads: { count: targetThreads.length, byPlatform: threadsByPlatform },
+        gtmTargetAccounts: { count: targetAccounts.length },
+        gtmDraftedContent: { count: drafts.length },
+        gtmCalendarEvents: { count: calendar.length, byKind: calendarByKind },
+      },
+      // Kept for backward compat with prior scripts; semantically just
+      // a workspace-rebuild counter, not Maya's research output.
       mutationsCount: mutations.length,
       mutationsByTarget: mutations.reduce<Record<string, number>>((acc, m: any) => {
         const k = m.targetPath ?? "?";
@@ -726,6 +774,59 @@ export const debugMineRedditComments = internalAction({
         stack: (err as Error).stack?.split("\n").slice(0, 6),
       };
     }
+  },
+});
+
+/** Sprint 2.15 grounded-or-silent audit. Counts actual rows Maya
+ * may have written (target threads, drafts, calendar events) for
+ * the latest synth creator. Used to verify "I queued 23 threads"
+ * type claims in her boot hello. */
+export const auditMayaClaims = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    const all = await ctx.db.query("creators").collect();
+    const testRows = all
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (testRows.length === 0) return { found: false };
+    const creator = testRows[0];
+
+    const targetThreads = await ctx.db
+      .query("gtmTargetThreads")
+      .withIndex("by_account_and_platform", (q) => q.eq("accountId", creator._id))
+      .collect();
+    const drafts = await ctx.db
+      .query("gtmDraftedContent")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .collect();
+    const calendar = await ctx.db
+      .query("gtmCalendarEvents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .collect();
+    const targetAccounts = await ctx.db
+      .query("gtmTargetAccounts")
+      .withIndex("by_account_and_platform", (q) => q.eq("accountId", creator._id))
+      .collect();
+
+    const threadsByPlatform: Record<string, number> = {};
+    for (const t of targetThreads) {
+      const k = t.platform ?? "unknown";
+      threadsByPlatform[k] = (threadsByPlatform[k] ?? 0) + 1;
+    }
+    const calendarByKind: Record<string, number> = {};
+    for (const e of calendar) {
+      const k = e.kind ?? "unknown";
+      calendarByKind[k] = (calendarByKind[k] ?? 0) + 1;
+    }
+
+    return {
+      found: true,
+      creator: { _id: creator._id, plan: creator.plan },
+      gtmTargetThreads: { count: targetThreads.length, byPlatform: threadsByPlatform },
+      gtmTargetAccounts: { count: targetAccounts.length },
+      gtmDraftedContent: { count: drafts.length },
+      gtmCalendarEvents: { count: calendar.length, byKind: calendarByKind },
+    };
   },
 });
 

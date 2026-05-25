@@ -653,68 +653,35 @@ export const deployMayaGtm = internalAction({
       }
     }
 
-    // Sprint 2.11 — deploy-time Telegram hello. Bypasses OpenClaw +
-    // pi-coding-agent's ~28-min cold-start npm install so the operator
-    // gets confirmation that Maya is alive within seconds, not an hour.
-    // Best-effort: failures here don't abort the deploy (cron-driven
-    // boot_kickoff still runs the deep research + sends a real follow-up
-    // when ready ~60-90 min later).
-    // Sprint 2.14a.6 — ALWAYS record the attempt, even when skipped due to
-    // missing telegramChatId or productName. Lets the operator see WHY the
-    // hello didn't fire instead of silent absence.
-    if (!row.agent.telegramChatId) {
-      await ctx.runMutation(
-        internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-        { agentId: args.agentId, result: "skipped:no_telegram_chat_id" }
-      );
-    } else if (!row.app.name) {
-      await ctx.runMutation(
-        internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-        { agentId: args.agentId, result: "skipped:no_product_name" }
-      );
-    } else {
-      try {
-        const helloText = buildDeployTimeHelloText({
-          productName: row.app.name,
-          // gtmAgents row doesn't carry a firstName today — falls back
-          // to "Hey there". When onboarding starts capturing the
-          // operator's name, plumb it through here.
-        });
-        const result = await sendDirectTelegramMessage({
-          botToken: process.env.TELEGRAM_BOT_TOKEN,
-          chatId: row.agent.telegramChatId,
-          text: helloText,
-        });
-        await ctx.runMutation(
-          internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-          {
-            agentId: args.agentId,
-            result: result.reason,
-            messageId: result.messageId ?? undefined,
-          }
-        );
-        if (!result.ok) {
-          console.warn(
-            `[deployMayaGtm] deploy-time hello not sent (${result.reason})`,
-            result.firewallFailures
-              ? `firewall: ${JSON.stringify(result.firewallFailures)}`
-              : ""
-          );
-        }
-      } catch (err) {
-        const msg = (err as Error).message;
-        // Don't fail the deploy — log + record + continue.
-        console.warn(`[deployMayaGtm] deploy-time hello threw: ${msg}`);
-        try {
-          await ctx.runMutation(
-            internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-            { agentId: args.agentId, result: `exception:${msg.slice(0, 160)}` }
-          );
-        } catch {
-          // Best-effort; don't crash the deploy on a tracing-mutation failure.
-        }
+    // Sprint 2.15 — Convex-side hardcoded deploy hello REMOVED.
+    //
+    // The Sprint 2.11 deploy-time hello was a band-aid that sent a
+    // hardcoded "I just spun up for X" message via Telegram Bot API
+    // directly. It worked, but violated the architectural principle
+    // [[feedback-trust-llm-judgment-no-hardcoded-rules]]: Maya's
+    // first user-visible message should come FROM MAYA, not from
+    // Convex. Live 2026-05-25 deploy showed the duplicate-hello
+    // problem — operator received both the Convex hardcoded text
+    // AND Maya's own research-backed message.
+    //
+    // Maya's boot_phase_1 cron (fires at deploy+30sec, Sprint 2.14a.9)
+    // is her first turn. She reads SOUL.md + AGENTS.md + GTM.md and
+    // composes + sends her own first message. Sprint 2.10 firewall
+    // gates voice-contract violations. Sprint 2.15.1 grounded-or-silent
+    // mandate stops her from claiming things she hasn't done.
+    //
+    // The deployTimeHello* fields on gtmAgents are kept as breadcrumbs
+    // — recordDeployTimeHelloResult is still callable for any future
+    // boot-time signaling path (e.g. an immediate webhook to OpenClaw
+    // /hooks/wake instead of waiting for cron). Today's deploy
+    // records "skipped:sprint_2_15_replaced_by_boot_cron".
+    await ctx.runMutation(
+      internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
+      {
+        agentId: args.agentId,
+        result: "skipped:sprint_2_15_replaced_by_boot_cron",
       }
-    }
+    );
 
     try {
       await ctx.runMutation(
