@@ -190,12 +190,13 @@ describe("Maya GTM workspace pack", () => {
     expect(bootPhase2).toBeTruthy();
     expect(bootPhase1?.sessionTarget).toBe("isolated");
     expect(bootPhase2?.sessionTarget).toBe("isolated");
-    // Phase 1 is fast — tight timeout, low thinking — so it can't
-    // hit the 12-min LLM-call ceiling that killed the unified boot.
-    expect(bootPhase1?.payload.timeoutSeconds).toBeLessThanOrEqual(900);
+    // Sprint 2.14a.11 — no cron-level timeoutSeconds cap on either
+    // phase. Maya takes as long as she needs. Individual LLM calls
+    // still bounded inside pi-coding-agent. Phase 1 stays tight
+    // via thinking:low + tight prompt; phase 2 via thinking:medium.
+    expect(bootPhase1?.payload.timeoutSeconds).toBeUndefined();
     expect(bootPhase1?.payload.thinking).toBe("low");
-    // Phase 2 is heavy synthesis but still bounded.
-    expect(bootPhase2?.payload.timeoutSeconds).toBeLessThanOrEqual(1200);
+    expect(bootPhase2?.payload.timeoutSeconds).toBeUndefined();
     expect(bootPhase2?.payload.thinking).toBe("medium");
     expect(bootPhase1?.payload.message).toContain("PHASE 1");
     expect(bootPhase2?.payload.message).toContain("PHASE 2");

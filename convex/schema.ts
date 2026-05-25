@@ -4624,6 +4624,18 @@ export default defineSchema({
     cardsExpectedCount: v.optional(v.number()),
     commentsMinedCount: v.optional(v.number()),
     commentsAttemptedCount: v.optional(v.number()),
+    // Sprint 2.14a.10 — event-driven boot phase 2 triggering. Phase 1
+    // announces how many subagents it spawned via
+    // /lc_gtm/phase_1_announce. Each subagent POSTs
+    // /lc_gtm/subagent_complete when done. When completed >= expected,
+    // Convex triggers phase 2 IMMEDIATELY via OpenClaw's runAgentTurn
+    // hook — no waiting for an arbitrary +60min timer. phase2TriggeredAt
+    // is the idempotency key so the safety-net cron at +2hr exits
+    // early if event-driven path already fired.
+    subagentsExpected: v.optional(v.number()),
+    subagentsCompleted: v.optional(v.number()),
+    phase2TriggeredAt: v.optional(v.number()),
+    phase2TriggerSource: v.optional(v.string()), // "subagent_complete" | "safety_net_cron"
     createdAt: v.number(),
     updatedAt: v.number(),
   })

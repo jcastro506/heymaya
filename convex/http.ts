@@ -79,6 +79,9 @@ import {
   getMyRecentPostResultsHttp,
   // Sprint 2.10 — outbound voice-contract / slop firewall.
   validateOutboundHttp,
+  // Sprint 2.14a.10 — event-driven phase 2 trigger plumbing.
+  phase1AnnounceHttp,
+  subagentCompleteHttp,
 } from "./gtmMaya/openclaw/inboundCallback";
 
 const http = httpRouter();
@@ -179,6 +182,19 @@ http.route({
   path: "/lc_gtm/validate_outbound",
   method: "POST",
   handler: validateOutboundHttp,
+});
+// Sprint 2.14a.10 — event-driven phase 2 trigger plumbing. Phase 1
+// announces subagent count once; each subagent POSTs complete; when
+// completed reaches expected, Convex fires phase 2 via webhook.
+http.route({
+  path: "/lc_gtm/phase_1_announce",
+  method: "POST",
+  handler: phase1AnnounceHttp,
+});
+http.route({
+  path: "/lc_gtm/subagent_complete",
+  method: "POST",
+  handler: subagentCompleteHttp,
 });
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs

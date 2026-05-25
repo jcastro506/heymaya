@@ -817,6 +817,97 @@ interface ValidateOutboundPayload {
   text: string;
 }
 
+/**
+ * Sprint 2.14a.10 — phase 1 announces how many subagents it spawned.
+ * Body: { researchJobId: string, subagentsExpected: number }.
+ * Subagents are responsible for POSTing /lc_gtm/subagent_complete
+ * when done; we count down from this number to trigger phase 2.
+ */
+export const phase1AnnounceHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: { researchJobId?: string; subagentsExpected?: number };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (!body.researchJobId || typeof body.subagentsExpected !== "number") {
+    return new Response("researchJobId + subagentsExpected required", {
+      status: 400,
+    });
+  }
+  if (body.subagentsExpected < 0 || body.subagentsExpected > 50) {
+    return new Response("subagentsExpected out of range (0-50)", {
+      status: 400,
+    });
+  }
+
+  const result = await ctx.runMutation(
+    internal.gtmMaya.researchWorker.recordSubagentsExpected,
+    {
+      researchJobId: body.researchJobId as Id<"gtmResearchJobs">,
+      count: body.subagentsExpected,
+    }
+  );
+  return new Response(JSON.stringify(result), {
+    status: result.ok ? 200 : 404,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+/**
+ * Sprint 2.14a.10 — subagent completion signal. Body:
+ * { researchJobId: string, platform?: string }. Increments the
+ * completed counter; when count >= expected, schedules phase 2
+ * trigger immediately (no waiting for the +2hr safety-net cron).
+ */
+export const subagentCompleteHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: { researchJobId?: string; platform?: string };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (!body.researchJobId) {
+    return new Response("researchJobId required", { status: 400 });
+  }
+
+  const result = await ctx.runMutation(
+    internal.gtmMaya.researchWorker.incrementSubagentsCompleted,
+    { researchJobId: body.researchJobId as Id<"gtmResearchJobs"> }
+  );
+
+  if (result.readyToFirePhase2) {
+    // Schedule (fire-and-forget) — actions can't await actions, and
+    // we don't want the subagent's HTTP response gated on the
+    // phase-2 webhook round-trip.
+    await ctx.scheduler.runAfter(
+      0,
+      internal.gtmMaya.researchWorker.triggerPhase2,
+      {
+        researchJobId: body.researchJobId as Id<"gtmResearchJobs">,
+        source: "subagent_complete",
+      }
+    );
+  }
+
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      completed: result.completed,
+      expected: result.expected,
+      readyToFirePhase2: result.readyToFirePhase2,
+      alreadyTriggered: result.alreadyTriggered,
+    }),
+    { status: 200, headers: { "content-type": "application/json" } }
+  );
+});
+
 export const validateOutboundHttp = httpAction(async (ctx, request) => {
   const auth = await authenticate(ctx, request);
   if (!auth.ok) return new Response(auth.reason, { status: auth.status });

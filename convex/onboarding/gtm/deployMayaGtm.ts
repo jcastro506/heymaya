@@ -783,6 +783,15 @@ export function buildGtmMachineConfig(input: {
     env: {
       OPENCLAW_STATE_DIR: "/data",
       OPENCLAW_CONFIG_PATH: "/data/openclaw.json",
+      // Sprint 2.14a.8 — point OpenClaw at the pre-installed
+      // pi-coding-agent + Bedrock SDK + companions baked into the
+      // Docker image at /opt/openclaw-runtime-preseed (Dockerfile
+      // lines 62-80). Without this, OpenClaw npm-installs the deps
+      // on first agent turn — observed ~28 min cold-start latency
+      // live on 2026-05-25 that triggered the 12-min LLM timeout.
+      // The creator-product deployMaya.ts uses the same env var
+      // (line 295).
+      OPENCLAW_PLUGIN_STAGE_DIR: "/opt/openclaw-runtime-preseed/plugin-runtime-deps",
       MAYA_GTM_AGENT_ID: String(input.agentId),
       MAYA_GTM_APP_NAME: input.flyAppName,
       MAYA_WORKSPACE_BUNDLE_URL: input.workspaceBundleUrl,

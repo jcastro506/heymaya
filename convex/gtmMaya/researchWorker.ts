@@ -19,6 +19,7 @@ import { scoreAllCardsForProduct } from "./judgeCardsBatch";
 import { judgeAllChannels } from "./judgeChannel";
 import { mineTopRedditCards } from "./mineCommentTrees";
 import { ScrapeCreatorsClient } from "../integrations/scrapeCreators/client";
+import { fireBootPhase2Webhook } from "./phase2Trigger";
 
 export interface ResearchSkeletonEvidence {
   source: Doc<"gtmEvidenceCards">["source"];
@@ -393,6 +394,182 @@ export const getEvidenceCardsForScoring = internalQuery({
  * returns. Bounded batch update; silently skips IDs that no longer
  * exist (could happen if a parallel run wiped the job).
  */
+/**
+ * Sprint 2.14a.10 — record how many subagents phase 1 spawned.
+ * Called via /lc_gtm/phase_1_announce. Idempotent — re-announcing
+ * just overwrites (e.g. if phase 1 re-fires after a transient
+ * failure, the count is whatever the latest call said).
+ */
+export const recordSubagentsExpected = internalMutation({
+  args: {
+    researchJobId: v.id("gtmResearchJobs"),
+    count: v.number(),
+  },
+  handler: async (ctx, args): Promise<{ ok: boolean }> => {
+    const job = await ctx.db.get(args.researchJobId);
+    if (!job) return { ok: false };
+    await ctx.db.patch(args.researchJobId, {
+      subagentsExpected: Math.max(0, Math.floor(args.count)),
+      // Reset completed count when expected is announced, so
+      // re-announce doesn't carry stale completions.
+      subagentsCompleted: 0,
+    });
+    return { ok: true };
+  },
+});
+
+/**
+ * Sprint 2.14a.10 — increment subagentsCompleted. Called via
+ * /lc_gtm/subagent_complete. Returns whether all expected
+ * subagents are now done (ready to trigger phase 2).
+ *
+ * Atomically claims the phase2 trigger right when the count
+ * transitions from N-1 → N (where N = subagentsExpected). This
+ * avoids double-triggering when multiple subagents complete in
+ * the same instant.
+ */
+export const incrementSubagentsCompleted = internalMutation({
+  args: {
+    researchJobId: v.id("gtmResearchJobs"),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    completed: number;
+    expected: number;
+    readyToFirePhase2: boolean;
+    alreadyTriggered: boolean;
+  }> => {
+    const job = await ctx.db.get(args.researchJobId);
+    if (!job) {
+      return {
+        completed: 0,
+        expected: 0,
+        readyToFirePhase2: false,
+        alreadyTriggered: false,
+      };
+    }
+    const expected = job.subagentsExpected ?? 0;
+    const completed = (job.subagentsCompleted ?? 0) + 1;
+    await ctx.db.patch(args.researchJobId, {
+      subagentsCompleted: completed,
+    });
+    const alreadyTriggered = Boolean(job.phase2TriggeredAt);
+    // Ready when: expected was announced (>0), we've reached it,
+    // and phase 2 hasn't already been triggered.
+    const readyToFirePhase2 =
+      expected > 0 && completed >= expected && !alreadyTriggered;
+    return {
+      completed,
+      expected,
+      readyToFirePhase2,
+      alreadyTriggered,
+    };
+  },
+});
+
+/**
+ * Sprint 2.14a.10 — load Fly app name + hookToken + telegramChatId
+ * for an active research job's agent. Needed by the phase 2 trigger
+ * action which can't run a mutation/query directly.
+ */
+export const getPhase2TriggerContext = internalQuery({
+  args: { researchJobId: v.id("gtmResearchJobs") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    flyAppName: string | undefined;
+    hookToken: string | undefined;
+    telegramChatId: string | undefined;
+  } | null> => {
+    const job = await ctx.db.get(args.researchJobId);
+    if (!job) return null;
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", job.accountId))
+      .first();
+    if (!agent) return null;
+    return {
+      flyAppName: agent.openClawFlyAppId,
+      hookToken: agent.hookToken,
+      telegramChatId: agent.telegramChatId,
+    };
+  },
+});
+
+/**
+ * Sprint 2.14a.10 — fire boot phase 2 via OpenClaw runAgentTurn
+ * webhook. Called when all subagents have completed OR by the
+ * safety-net cron at deploy+2hr. Idempotent: claims the trigger
+ * via a transactional mutation first; if already claimed, no-op.
+ */
+export const triggerPhase2 = internalAction({
+  args: {
+    researchJobId: v.id("gtmResearchJobs"),
+    source: v.union(
+      v.literal("subagent_complete"),
+      v.literal("safety_net_cron")
+    ),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    fired: boolean;
+    reason: string;
+  }> => {
+    const claim = await ctx.runMutation(
+      internal.gtmMaya.researchWorker.claimPhase2Trigger,
+      { researchJobId: args.researchJobId, source: args.source }
+    );
+    if (!claim.claimed) {
+      return { fired: false, reason: "already_triggered" };
+    }
+    const context = await ctx.runQuery(
+      internal.gtmMaya.researchWorker.getPhase2TriggerContext,
+      { researchJobId: args.researchJobId }
+    );
+    if (!context) {
+      return { fired: false, reason: "context_not_found" };
+    }
+    const result = await fireBootPhase2Webhook({
+      flyAppName: context.flyAppName ?? "",
+      hookToken: context.hookToken ?? "",
+      telegramChatId: context.telegramChatId,
+      source: args.source,
+    });
+    console.log(
+      `[gtm/phase2Trigger] source=${args.source} fired=${result.fired} reason=${result.reason} webhookStatus=${result.webhookStatus}`
+    );
+    return { fired: result.fired, reason: result.reason };
+  },
+});
+
+/**
+ * Sprint 2.14a.10 — atomic claim of the phase 2 trigger right.
+ * Returns true only on the first call; subsequent calls return false
+ * (someone else already claimed). Caller MUST check the return value
+ * before actually firing the webhook.
+ */
+export const claimPhase2Trigger = internalMutation({
+  args: {
+    researchJobId: v.id("gtmResearchJobs"),
+    source: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ claimed: boolean }> => {
+    const job = await ctx.db.get(args.researchJobId);
+    if (!job) return { claimed: false };
+    if (job.phase2TriggeredAt) return { claimed: false };
+    await ctx.db.patch(args.researchJobId, {
+      phase2TriggeredAt: Date.now(),
+      phase2TriggerSource: args.source.slice(0, 40),
+    });
+    return { claimed: true };
+  },
+});
+
 /**
  * Sprint 2.14a.4 — record pipeline health on the research job row.
  * Surfaces "did the LLM scorer + comment miner actually run, or did

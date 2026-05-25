@@ -106,6 +106,7 @@ import type * as gtmMaya_missionBoard from "../gtmMaya/missionBoard.js";
 import type * as gtmMaya_openclaw_hookClient from "../gtmMaya/openclaw/hookClient.js";
 import type * as gtmMaya_openclaw_inboundCallback from "../gtmMaya/openclaw/inboundCallback.js";
 import type * as gtmMaya_outboundFirewall from "../gtmMaya/outboundFirewall.js";
+import type * as gtmMaya_phase2Trigger from "../gtmMaya/phase2Trigger.js";
 import type * as gtmMaya_platformIntelligence from "../gtmMaya/platformIntelligence.js";
 import type * as gtmMaya_platformWorkers from "../gtmMaya/platformWorkers.js";
 import type * as gtmMaya_postResults from "../gtmMaya/postResults.js";
@@ -368,6 +369,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/openclaw/hookClient": typeof gtmMaya_openclaw_hookClient;
   "gtmMaya/openclaw/inboundCallback": typeof gtmMaya_openclaw_inboundCallback;
   "gtmMaya/outboundFirewall": typeof gtmMaya_outboundFirewall;
+  "gtmMaya/phase2Trigger": typeof gtmMaya_phase2Trigger;
   "gtmMaya/platformIntelligence": typeof gtmMaya_platformIntelligence;
   "gtmMaya/platformWorkers": typeof gtmMaya_platformWorkers;
   "gtmMaya/postResults": typeof gtmMaya_postResults;
