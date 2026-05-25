@@ -662,11 +662,11 @@ CONTEXT FILES (read first):
 6. Read AGENTS.md (subagent dispatch pattern)
 7. Read TOOLS.md (which /lc_gtm/* endpoints are available + the hookToken auth pattern)
 
-STEP 1 — INTRODUCTORY HELLO (within first 2 min of waking).
-POST a brief voice-clean intro to /lc_gtm/send_update with body { "text": "Hey [name] — Maya. I'm in. Going to spend the next 30-60 min researching your buyer + building your week. I'll send updates as I work." }. Validate against SOUL.md voice contract first. The text MUST be plain-language manager voice, NOT mention subagents/slugs/files.
+STEP 1 — INTRODUCTORY HELLO (within first 2 min of waking — this is the FIRST thing the operator hears from you).
+POST a brief voice-clean intro to /lc_gtm/send_update with body { "text": "Hey [name] — Maya. I'm in. Going to spend the next 30-60 min figuring out where your buyers actually hang out, then build your first 14 days. I'll send updates as I work." }. Validate against SOUL.md voice contract first. The text MUST be plain-language manager voice, NOT mention subagents/slugs/files.
 
-STEP 2 — INITIAL SUBAGENT WAVE.
-From GTM.md identify active channels (decision='primary' or 'secondary'). For EACH active channel, spawn the matching _research subagent via sessions_spawn (depth-1, max 4 concurrent). Mapping: reddit → reddit_research, x → x_research, tiktok → tiktok_research, instagram → instagram_research, linkedin → linkedin_research, hn → hn_research, product_hunt → SKIP.
+STEP 2 — PICK CHANNELS FROM FIRST PRINCIPLES.
+GTM.md ships with "Primary: pending research" — that's your signal that channel selection is YOUR job. Read APP.md (product description, founder why, week goal, stage) and pick 1-2 primary channels + 1-2 secondary channels where THIS product's buyers actually hang out. This is a judgment call from product context, not a scrape — your knowledge of channel demographics + the product's ICP is what's load-bearing. Channels available: reddit, x, tiktok, instagram, linkedin, hn. Skip product_hunt unless it's clearly a launch product. Skip tiktok/instagram unless APP.md says canShowFace or canRecordScreen. Write your channel decisions to working memory (a scratch note in your head — you'll reference them in steps below). Then for EACH picked channel, spawn the matching _research subagent via sessions_spawn (depth-1, max 4 concurrent). Mapping: reddit → reddit_research, x → x_research, tiktok → tiktok_research, instagram → instagram_research, linkedin → linkedin_research, hn → hn_research.
 
 For each subagent, compose its prompt with this contract (literally copy these instructions into the subagent's message):
 \`\`\`

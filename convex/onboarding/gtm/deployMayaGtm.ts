@@ -696,53 +696,17 @@ export const deployMayaGtm = internalAction({
     //
     // recordDeployTimeHelloResult is still called for the trace
     // breadcrumb (Sprint 2.14a.6).
-    if (!row.agent.telegramChatId) {
-      await ctx.runMutation(
-        internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-        { agentId: args.agentId, result: "skipped:no_telegram_chat_id" }
-      );
-    } else if (!row.app.name) {
-      await ctx.runMutation(
-        internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-        { agentId: args.agentId, result: "skipped:no_product_name" }
-      );
-    } else {
-      try {
-        const helloText = buildDeployTimeHelloText({
-          productName: row.app.name,
-        });
-        const result = await sendDirectTelegramMessage({
-          botToken: process.env.TELEGRAM_BOT_TOKEN,
-          chatId: row.agent.telegramChatId,
-          text: helloText,
-        });
-        await ctx.runMutation(
-          internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-          {
-            agentId: args.agentId,
-            result: result.reason,
-            messageId: result.messageId ?? undefined,
-          }
-        );
-        if (!result.ok) {
-          console.warn(
-            `[deployMayaGtm] deploy-time hello not sent (${result.reason})`,
-            result.firewallFailures
-              ? `firewall: ${JSON.stringify(result.firewallFailures)}`
-              : ""
-          );
-        }
-      } catch (err) {
-        const msg = (err as Error).message;
-        console.warn(`[deployMayaGtm] deploy-time hello threw: ${msg}`);
-        try {
-          await ctx.runMutation(
-            internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-            { agentId: args.agentId, result: `exception:${msg.slice(0, 160)}` }
-          );
-        } catch {}
-      }
-    }
+    // Sprint 2.16f — deploy-time Telegram hello deleted. Maya now owns
+    // her own greeting via STEP 1 of the boot prompt — within ~2 min of
+    // wake she POSTs an introductory voice-clean message to
+    // /lc_gtm/send_update. Having Convex send a hardcoded hello AND
+    // Maya send hers led to duplicate "Hey Josh" messages + confused
+    // expectations. Maya's hello is also research-aware (says what
+    // she's about to do), so it's strictly better.
+    await ctx.runMutation(
+      internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
+      { agentId: args.agentId, result: "skipped:maya_owns_hello_in_boot_prompt" }
+    );
 
     try {
       await ctx.runMutation(

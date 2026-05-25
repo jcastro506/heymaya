@@ -1066,27 +1066,20 @@ export const run = internalAction({
       console.log(`[gtmSynth] patched telegramChatId=${args.telegramChatId}`);
     }
 
-    // Sprint 1.5 — research BEFORE deploy. Reason: deployMayaGtm builds the
-    // workspace tarball via buildAndUploadGtmWorkspace which reads the
-    // latest gtmResearchJobs → channelScores via getGtmAgentForDeploy.
-    // If we deploy first, the workspace bundle has empty GTM.md (no
-    // channel picks, no first-week-test) and Maya boots blind. If we
-    // research first, the workspace bundle bakes in the X-primary,
-    // Reddit-secondary decisions + cheat-sheet evidence and Maya boots
-    // already smart about the product.
-    let research: unknown = { skipped: true, reason: "skipResearch=true" };
-    if (!args.skipResearch) {
-      console.log(
-        "[gtmSynth] running orchestrator (runBudgetedResearchJob) FIRST — burns real credits..."
-      );
-      research = await ctx.runAction(
-        internal.gtmMaya.researchWorker.runBudgetedResearchJob,
-        { researchJobId: seed.researchJobId }
-      );
-      console.log(`[gtmSynth] research: ${JSON.stringify(research, null, 2)}`);
-    } else {
-      console.log("[gtmSynth] skipResearch=true; orchestrator not invoked");
-    }
+    // Sprint 2.16f — Convex no longer runs research before deploy. Maya
+    // owns her own research loop end-to-end (per OpenClaw-native pattern
+    // verified against the 2026.4.23 runtime). The previous orchestrator
+    // (runBudgetedResearchJob) was belt-and-suspenders scaffolding from
+    // when we didn't trust the agent to do its own work. With the
+    // sessions_yield + LLM idle-timeout fixes (Sprint 2.16g/2.16h) Maya
+    // wakes up, reads APP.md, picks channels from product context,
+    // spawns _research subagents, and synthesizes the plan herself.
+    // GTM.md ships as "pending research" — that's Maya's signal that
+    // it's her job.
+    const research = {
+      skipped: true,
+      reason: "Sprint 2.16f — Maya owns research loop natively",
+    };
 
     let deploy: unknown = { skipped: true, reason: "deployFly=false" };
     if (args.deployFly) {
