@@ -70,6 +70,12 @@ describe("Maya GTM OpenClaw deploy config", () => {
       maxChildrenPerAgent: 4,
       runTimeoutSeconds: 900,
     });
+    // Sprint 2.16h — LLM idle watchdog bumped from default 120s to 300s so
+    // slow Gemini 3.5 Flash thinking turns don't trip "LLM request timed
+    // out" mid-stream.
+    expect(bootstrap.gatewayConfig.agents.defaults.llm).toEqual({
+      idleTimeoutSeconds: 300,
+    });
     // main + hard_research_beta must always exist; platform research
     // subagents are gated by enabled channels but main + beta are
     // always on.

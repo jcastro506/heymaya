@@ -287,6 +287,12 @@ export function buildGatewayConfig(
           primary: mainModel,
         },
         memorySearch,
+        // Sprint 2.16h — extend LLM idle-watchdog from default ~120s to 300s.
+        // Gemini 3.5 Flash with high thinking on multi-step prompts can pause
+        // mid-stream past 120s; pi-coding-agent then aborts and the agent
+        // surfaces "LLM request timed out" to the user. OpenClaw runtime
+        // error message names this exact key as the fix.
+        llm: { idleTimeoutSeconds: 300 },
         subagents: {
           maxConcurrent: 4,
           maxChildrenPerAgent: 4,
