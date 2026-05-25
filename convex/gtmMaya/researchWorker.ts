@@ -556,11 +556,42 @@ export const runBudgetedResearchJob = internalAction({
     }
     const { job, app, creatorId } = orch;
 
+    // Sprint 2.14a.2 — safety net. Live observed: ModelHub v6/v7
+    // intermittently left research jobs stuck at status:"running"
+    // phase:"strategy_judge" because an uncaught throw (likely
+    // OpenRouter rate-limit under concurrent load) bypassed the
+    // final setJobPhase("complete") call. The jobs were never
+    // ineligible for retry / monitoring. Trap any uncaught throw
+    // here and force-finalize as "failed" so the row never gets
+    // stranded.
+    let _finalized = false;
+    const forceFinalizeOnError = async (err: unknown): Promise<void> => {
+      if (_finalized) return;
+      _finalized = true;
+      try {
+        await ctx.runMutation(internal.gtmMaya.researchWorker.setJobPhase, {
+          researchJobId: args.researchJobId,
+          phase: "complete",
+          status: "failed",
+          failureReason: `orchestrator exception: ${(err as Error)?.message ?? "unknown"}`.slice(
+            0,
+            400
+          ),
+        });
+      } catch (mutErr) {
+        console.warn(
+          `[gtm/orchestrator] force-finalize mutation itself failed: ${(mutErr as Error).message}`
+        );
+      }
+    };
+
     await ctx.runMutation(internal.gtmMaya.researchWorker.setJobPhase, {
       researchJobId: args.researchJobId,
       phase: "app_inspection",
       status: "running",
     });
+
+    try {
 
     // ── Sprint 1.1 — LLM-driven keyword expansion. Replaces the prior
     // syntactic seed ([app.name, weekGoal-fallback]) with semantic keywords
@@ -1006,6 +1037,9 @@ export const runBudgetedResearchJob = internalAction({
       }
     }
 
+    // Mark normal completion so the safety-net catch below doesn't
+    // re-finalize as "failed" after a clean run.
+    _finalized = true;
     return {
       status,
       summary: `${perPlatformResults.length} workers, ${totalEvidence} evidence cards, $${totalSpent.toFixed(4)} spent`,
@@ -1013,6 +1047,21 @@ export const runBudgetedResearchJob = internalAction({
       spentUsd: Math.round(totalSpent * 10000) / 10000,
       perPlatformResults,
     };
+
+    } catch (err) {
+      // Sprint 2.14a.2 safety net: ensure the research job never
+      // sits at status:"running" if the orchestrator hits an
+      // uncaught throw (observed live on ModelHub v6/v7,
+      // probably OpenRouter rate-limit). Force-finalize so the
+      // row is queryable + the deploy can fall through to "no
+      // research decisions; manual review" instead of hanging.
+      console.error(
+        `[gtm/orchestrator] uncaught exception, force-finalizing as failed: ${(err as Error).message}`
+      );
+      await forceFinalizeOnError(err);
+      // Re-throw so the caller sees the failure.
+      throw err;
+    }
   },
 });
 
