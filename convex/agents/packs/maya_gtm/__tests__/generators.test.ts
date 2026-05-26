@@ -230,8 +230,16 @@ describe("Maya GTM workspace pack", () => {
     expect(heartbeat?.payload.timeoutSeconds).toBe(60);
     expect(heartbeat?.delivery).toEqual({ mode: "none", bestEffort: true });
     expect(heartbeat?.payload.message).toContain("Read HEARTBEAT.md");
-    expect(heartbeat?.payload.message).toContain("Do not call ScrapeCreators");
+    // Sprint 2.16k-3 — case-changed to uppercase "Do NOT" as part of the
+    // strict-token-or-silent rewrite. The forbidden-API spend list is the
+    // same set, just emphasized differently.
+    expect(heartbeat?.payload.message).toContain("Do NOT call ScrapeCreators");
     expect(heartbeat?.payload.message).toContain("paid external API");
+    // Sprint 2.16k-3 — must enforce literal-token-only reply to stop the
+    // 2026-05-26 leak where the model wrote out reasoning then said
+    // "HEARTBEAT_OK" and the whole reasoning chain reached Telegram.
+    expect(heartbeat?.payload.message).toContain("ENTIRE reply MUST be exactly the literal");
+    expect(heartbeat?.payload.message).toContain("12 characters and nothing else");
     // Sprint 2.7 — weekly review prompt rewritten to dispatch FRESH
     // _research subagents (not just summarize old state). Old assertions
     // (`explicit bounded research job`, `maxScrapeCreatorsCalls`) are

@@ -122,7 +122,13 @@ const MODEL_ROUTING = {
   // Cheaper, faster, plenty of headroom with thinking:medium budget
   // injected via their prompt. Replaces the prior mix of Claude
   // Sonnet 4.5 (10x more expensive) + scattered Gemini configs.
-  subagent: process.env.MAYA_GTM_SUBAGENT_MODEL ?? "google/gemini-3-flash",
+  // Sprint 2.16k-1 — bumped from gemini-3-flash to gemini-3.5-flash
+  // (same as main brain). Prior model satisficed on subagent contracts
+  // and returned empty (observed 2026-05-26: reddit/x/tiktok/instagram
+  // subagents ran 119-165s with $0 ScrapeCreators spend, zero callbacks).
+  // gemini-3.5-flash with concrete URL patterns in the spawn contract
+  // is the minimum viable subagent capability.
+  subagent: process.env.MAYA_GTM_SUBAGENT_MODEL ?? "google/gemini-3.5-flash",
   hardResearchBeta:
     process.env.MAYA_GTM_HARD_RESEARCH_MODEL ??
     "openrouter/anthropic/claude-sonnet-4.5",

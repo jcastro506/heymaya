@@ -737,30 +737,67 @@ STEP C — SPAWN ≤3 SUBAGENTS.
 
 For each picked lane, spawn the matching _research subagent via sessions_spawn (depth-1). Subagent mapping: reddit → reddit_research, x → x_research, tiktok → tiktok_research, instagram → instagram_research, linkedin → linkedin_research, hn → hn_research.
 
-For each subagent, compose its prompt with this contract (literally copy these instructions into the subagent's message):
+For each subagent, compose its prompt with this contract — copy these instructions LITERALLY into the subagent's message, substituting <channel> + <search-endpoint-url> + <example-query> for the platform you're spawning:
+
 \`\`\`
-You are the <channel> research subagent. Your concrete deliverable:
-identify 15 high-buyer-intent threads where this product fits as a natural
-reply, plus 5 accounts/communities worth following. For each thread:
-score painMatch (0-1), buyerMatch (0-1), channelFit (0-1).
+You are the <channel> research subagent. Your concrete deliverable: 15 high-buyer-intent threads where this product fits as a natural reply, plus 5 accounts/communities worth following.
 
-For each thread, POST to /lc_gtm/target_thread with body
-{ researchJobId, platform, externalId, url, title, snippet, painMatch,
-  buyerMatch, channelFit, whyItFits } using hookToken Bearer auth per
-TOOLS.md.
+STEP 1 — SEARCH (use web_fetch, NOT a magic tool).
 
-For each account, POST to /lc_gtm/target_account.
+Pull the operator's product context from APP.md (you have the workspace mounted). Generate 5-8 SEARCH QUERIES that match the operator's PAIN POINT in buying language — not generic feature words.
 
-If you can draft a natural reply for any thread, POST to
-/lc_gtm/drafted_content { researchJobId, targetThreadId, platform, body,
-approvalState: "pending_approval" }.
+Bad query: "AI tools" / "productivity"
+Good query: "how do I get users for my dev tool" / "shipped a feature but no one noticed" / "GitHub release notes alternative"
 
-You are done when: (a) you have 15 threads OR (b) you've exhausted your
-search budget. POST /lc_gtm/subagent_complete with { researchJobId,
-platform: "<your channel>" } as the LAST thing you do.
+STEP 2 — FETCH SOURCES (web_fetch the ScrapeCreators API).
 
-Banned in every field: skill slugs (maya-*), .md filenames, internal
-pipeline terms. whyItFits MUST be plain founder-speak.
+Endpoint by channel (substituted at spawn-time):
+  reddit    → https://api.scrapecreators.com/v1/reddit/search?query=<URLencoded>
+  x         → https://api.scrapecreators.com/v1/twitter/search?query=<URLencoded>
+  tiktok    → https://api.scrapecreators.com/v1/tiktok/search/keyword?query=<URLencoded>
+  instagram → https://api.scrapecreators.com/v1/instagram/search?query=<URLencoded>
+  linkedin  → https://api.scrapecreators.com/v1/linkedin/search?query=<URLencoded>
+  hn        → https://hn.algolia.com/api/v1/search?query=<URLencoded>&tags=story (no API key)
+
+Auth header for ScrapeCreators: \`x-api-key: $SCRAPECREATORS_API_KEY\` (the env var is already on this machine — use it directly).
+
+Example web_fetch call:
+  web_fetch({
+    url: "https://api.scrapecreators.com/v1/reddit/search?query=" + encodeURIComponent("shipped my saas no users"),
+    headers: { "x-api-key": process.env.SCRAPECREATORS_API_KEY }
+  })
+
+Make AT LEAST 3 web_fetch calls (one per query) before you score anything. If you make fewer than 3, you don't have enough evidence and the channel-judge will reject your output.
+
+STEP 3 — SCORE EACH THREAD.
+
+For every thread that came back, score:
+  - painMatch (0-1): does this person express the pain the product solves?
+  - buyerMatch (0-1): are they a plausible buyer (vs. tire-kicker, vs. competitor)?
+  - channelFit (0-1): does it make sense to reply here (subreddit etiquette / X reply norms / etc.)?
+
+STEP 4 — PERSIST RESULTS.
+
+For each scored thread, web_fetch POST to https://<convexSite>/lc_gtm/target_thread with:
+  - method: POST
+  - headers: { Authorization: "Bearer " + hookToken, Content-Type: "application/json" }
+  - body: { researchJobId, platform, externalId, url, title, snippet, painMatch, buyerMatch, channelFit, whyItFits }
+
+(The hookToken value is in TOOLS.md. The convexSite base URL is in TOOLS.md too — DO NOT guess these values, read them from the file.)
+
+For each high-value account that showed up across threads (e.g., a subreddit moderator who always answers earnestly, a builder on X with engaged followers), POST similarly to /lc_gtm/target_account.
+
+If you can draft a natural reply to a thread, POST to /lc_gtm/drafted_content { researchJobId, targetThreadId, platform, body, approvalState: "pending_approval" }. Drafts MUST be in the operator's voice per SOUL.md; do not push slop.
+
+STEP 5 — SIGNAL DONE.
+
+POST to /lc_gtm/subagent_complete with { researchJobId, platform: "<your channel>" } as the ABSOLUTE LAST thing you do. This is what triggers Maya's plan synthesis. If you don't POST this, the operator never gets a plan.
+
+You are done when: (a) you persisted 15 thread rows OR (b) you've made 8+ web_fetch calls and exhausted query variations.
+
+Banned in every persisted field: skill slugs (maya-*), .md filenames, internal pipeline terms (subagent, research lane, priorityScore, phase 1, phase 2). \`whyItFits\` MUST be plain founder-speak — what would the operator say to a friend about why this thread matters.
+
+If you're tempted to skip web_fetch and just "reason" about what threads exist — STOP. That returns empty and the loop dies. The operator is watching for real evidence. Make the API calls.
 \`\`\`
 
 STEP D — ANNOUNCE + YIELD.
@@ -799,7 +836,15 @@ This turn ends after STEP D yields. Hello + three lanes + spawn + yield. That's 
           thinking: "off",
           timeoutSeconds: 60,
           message:
-            "AUTONOMOUS HEARTBEAT: Read HEARTBEAT.md, MEMORY.md, APP.md, and GTM.md. Check only local workspace/Convex/cache state for pending approvals, overdue calendar/result jobs, unread user messages, and open loops. Do not call ScrapeCreators, Gemini deep research, broad web search, X search, Composio publishing, or any paid external API. If real work is needed, write a bounded queued-job note and exit. If nothing is due, reply with HEARTBEAT_OK so the runner drops the message silently.",
+            // Sprint 2.16k-3 — operator-reported 2026-05-26 leak: a heartbeat
+            // tick reasoned out loud ("This is clear! The workspace is
+            // currently configured with several jobs under jobs.json...") and
+            // ended with "HEARTBEAT_OK". OpenClaw's announce-mode delivery
+            // only drops the message silently if the agent's ENTIRE reply IS
+            // LITERALLY just "HEARTBEAT_OK" — anything else gets delivered to
+            // Telegram raw, bypassing /lc_gtm/validate_outbound. Hammer the
+            // token-only constraint until the model stops narrating.
+            "AUTONOMOUS HEARTBEAT — strict token-or-silent reply.\n\nRead HEARTBEAT.md, MEMORY.md, APP.md, and GTM.md. Check only local workspace/Convex/cache state for pending approvals, overdue calendar/result jobs, unread user messages, and open loops. Do NOT call ScrapeCreators, Gemini deep research, broad web search, X search, Composio publishing, or any paid external API. If real work is needed, write a bounded queued-job note and exit.\n\n**REPLY RULES (load-bearing — voice contract leak observed 2026-05-26):**\n\nIf nothing is due, your ENTIRE reply MUST be exactly the literal 12-character string:\n\nHEARTBEAT_OK\n\nNo preamble. No reasoning. No \"I will...\". No \"Let me check...\". No \"This is clear!\". No \"Therefore...\". No quoting your own instructions back. No closing remark. The 12 characters and nothing else.\n\nIf something IS due and you have something to say to the operator, POST your composed message to /lc_gtm/send_update with the appropriate messageClass ('tactical' for status updates, 'accountability' for nudges, 'strategic' for plan-level claims with evidence_ids). NEVER write user-facing prose as your direct reply — direct replies go via announce-mode delivery and bypass the voice firewall.\n\nIf you reply with anything other than the literal token \"HEARTBEAT_OK\" AND you didn't POST to /lc_gtm/send_update, you have leaked internal pipeline reasoning to the operator. That is a hard voice-contract violation.",
         },
         delivery,
         state: {},
