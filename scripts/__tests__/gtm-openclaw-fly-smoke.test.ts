@@ -22,9 +22,8 @@ describe("gtm-openclaw-fly-smoke", () => {
     // markers. Old "Heartbeat is cheap / ScrapeCreators calls" forbid-list
     // wording replaced by per-state-task prompts.
     expect(fixture.workspaceFiles["HEARTBEAT.md"]).toContain("state-hello");
-    expect(fixture.workspaceFiles["HEARTBEAT.md"]).toContain(
-      "/lc_gtm/validate_outbound"
-    );
+    // Sprint 2.16u-fix8 — firewall removed; voice contract now in SOUL.md.
+    expect(fixture.workspaceFiles["HEARTBEAT.md"]).toContain("SOUL.md");
     // Boot cron and heartbeat cron are GONE — only scheduled events
     // (weekly review, monthly channel discovery) live in jobs.json.
     expect(fixture.workspaceFiles["jobs.json"]).not.toContain("gtm_heartbeat");

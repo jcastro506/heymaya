@@ -68,7 +68,12 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("BOOT.md")).toContain("APP.md");
     expect(files.get("BOOT.md")).toContain("operator may reply");
     expect(files.get("BOOT.md")).toContain("/lc_gtm/send_update");
-    expect(files.get("BOOT.md")).toContain("/lc_gtm/validate_outbound");
+    // Sprint 2.16u-fix8 — voice firewall removed per operator: "I hate
+    // hardcoded string blockers. Get rid of all of that and just add
+    // it to her prompt where appropriate." Voice contract now lives in
+    // SOUL.md "What I never say" section, enforced by Maya's judgment.
+    expect(files.get("BOOT.md")).toContain('SOUL.md');
+    expect(files.get("SOUL.md")).toContain("never identify as an AI");
     expect(files.get("USER.md")).toContain("Will manually post Instagram: yes");
     expect(files.get("USER.md")).toContain("TikTok warm-up state: warming");
     expect(files.get("USER.md")).toContain("TikTok account age days: 3");
@@ -176,9 +181,9 @@ describe("Maya GTM workspace pack", () => {
     // quiet ticks — silent ticks are the common case once the state
     // machine has progressed past plan-synthesis.
     expect(heartbeat).toContain("HEARTBEAT_OK");
-    // Voice-contract firewall gate must still apply to every
-    // user-visible message the state-* tasks send.
-    expect(heartbeat).toContain("/lc_gtm/validate_outbound");
+    // Sprint 2.16u-fix8 — voice firewall removed; HEARTBEAT.md now
+    // references SOUL.md voice contract for inline self-check.
+    expect(heartbeat).toContain("SOUL.md");
     // Strategic sends still need evidence_ids — guard mentioned for
     // the state-plan-synthesis task.
     expect(heartbeat).toContain("evidence_ids");
@@ -251,13 +256,13 @@ describe("Maya GTM workspace pack", () => {
     expect(channelDiscovery).toBeTruthy();
   });
 
-  it("Sprint 2.10 — every user-facing cron prompt mandates the validate_outbound firewall", () => {
+  it("Sprint 2.16u-fix8 — every user-facing cron prompt references SOUL.md for voice (firewall removed)", () => {
     // Sibling-file scan: prevent silent regression of the voice
-    // contract enforcement. Sprint 2.16u removed the boot cron so the
-    // remaining user-facing crons are gtm_channel_discovery and
-    // gtm_weekly_review; both must instruct Maya to POST drafts through
-    // the firewall before sendMessage. HEARTBEAT.md's state-* tasks
-    // have their own firewall gate at the top of the file.
+    // contract enforcement. The hardcoded validate_outbound firewall
+    // was ripped out in Sprint 2.16u-fix8 — Maya now self-checks
+    // against SOUL.md's "What I never say" ban list before send.
+    // Each user-facing cron prompt must still REFERENCE SOUL.md so
+    // Maya knows where the contract lives.
     const { files } = buildMayaGtmWorkspace(INPUT);
     const jobs = JSON.parse(files.get("jobs.json") ?? "{}") as {
       jobs: Array<{ id: string; payload: { message: string } }>;
@@ -268,8 +273,8 @@ describe("Maya GTM workspace pack", () => {
       expect(job, `cron ${id} must exist`).toBeTruthy();
       expect(
         job!.payload.message,
-        `cron ${id} must mandate /lc_gtm/validate_outbound before sendMessage`
-      ).toContain("/lc_gtm/validate_outbound");
+        `cron ${id} must reference SOUL.md voice contract before sendMessage`
+      ).toContain("SOUL.md");
     }
   });
 

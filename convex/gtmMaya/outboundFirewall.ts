@@ -87,6 +87,19 @@ const BANNED_INTERNAL_TERMS = [
 // Sprint 2.10 — AI references — Maya is "your launch manager," not
 // "your AI assistant" (per feedback_no_ai_in_marketing_copy memory,
 // extended to operator-facing runtime output).
+//
+// Sprint 2.16u-fix7 — DROPPED bare "LLM" / "language model" /
+// "large language model". The matcher is `indexOf` (substring match
+// anywhere), so the bare terms blocked legit product-domain language
+// like "local LLM workflows" (ModelHub's literal domain). Verified
+// failure 2026-05-26: Maya tried to send "complaining about
+// disjointed local LLM workflows" and validate_outbound returned
+// firewall_blocked:ai_reference:LLM — looped forever, never sent.
+//
+// The intent of this list is self-references ("I'm an AI",
+// "as a language model") — not any mention of LLM/AI in product or
+// market context. Replaced bare terms with their SELF-REFERENCE
+// patterns so product-domain mentions go through.
 const BANNED_AI_REFERENCES = [
   "as an AI",
   "I am an AI",
@@ -95,9 +108,13 @@ const BANNED_AI_REFERENCES = [
   "AI manager",
   "AI agent",
   "your AI",
-  "language model",
-  "large language model",
-  "LLM",
+  "as an LLM",
+  "I am an LLM",
+  "I'm an LLM",
+  "as a language model",
+  "I am a language model",
+  "I'm a language model",
+  "as a large language model",
 ];
 
 // PLAYBOOK § 6 slop ban list — partial; canonical list lives in

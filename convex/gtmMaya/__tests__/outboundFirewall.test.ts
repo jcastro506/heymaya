@@ -173,12 +173,57 @@ describe("validateOutboundText — voice-contract + slop firewall", () => {
   it("recognizes operator-voice content that uses platform jargon as ok", () => {
     // PLAYBOOK § 6 doesn't ban legitimate platform terms — "Reddit",
     // "subreddit", "tweet", "thread" are fine; "subagent" / "boot kickoff"
-    // are implementation-internals and banned. Note: even "LLM" is banned
-    // (AI self-reference), so this clean example avoids it.
+    // are implementation-internals and banned.
     const text =
       "Reddit's where your buyer lives. Specifically r/LocalLlama — most active subreddit for local-model enthusiasts. I'll have drafts ready for the M5 hardware war thread by tomorrow.";
     const result = validateOutboundText(text);
     expect(result.ok).toBe(true);
     expect(result.failures).toEqual([]);
+  });
+
+  it("Sprint 2.16u-fix7 — does NOT block product-domain mentions of LLM/AI/language model", () => {
+    // Verified live regression 2026-05-26: Maya tried to send
+    // "complaining about disjointed local LLM workflows" (literally
+    // describing ModelHub's domain) and validate_outbound returned
+    // firewall_blocked:ai_reference:LLM. Bare "LLM" / "language model"
+    // were too coarse — they belong in self-reference patterns
+    // ("as an LLM", "I'm a language model") not as standalone substring
+    // matches that catch every product-domain mention.
+    const productDomainMessages = [
+      "I saw your note about local LLM workflows on Mac feeling disjointed.",
+      "ModelHub helps with local language model management.",
+      "There's a thread about large language model performance on M3 Macs.",
+      "AI tools for developers — pricing matters here.",
+      "Reddit's r/LocalLLaMA is full of LLM enthusiasts.",
+    ];
+    for (const text of productDomainMessages) {
+      const result = validateOutboundText(text);
+      expect(result.ok, `should allow: ${text}`).toBe(true);
+      expect(result.failures).toEqual([]);
+    }
+  });
+
+  it("Sprint 2.16u-fix7 — still catches self-reference patterns (as an LLM, I'm a language model)", () => {
+    // The self-reference patterns are what we actually want to ban
+    // (Maya never identifies as an AI/LLM to the operator). Verify
+    // the more-targeted patterns still trip.
+    const selfRefMessages = [
+      { text: "Hey, as an LLM I can help with that.", matched: "as an LLM" },
+      { text: "I'm an LLM trained to help you launch.", matched: "I'm an LLM" },
+      {
+        text: "Hey Josh — as a language model, I can read the page for you.",
+        matched: "as a language model",
+      },
+    ];
+    for (const { text, matched } of selfRefMessages) {
+      const result = validateOutboundText(text);
+      expect(result.ok, `should block: ${text}`).toBe(false);
+      expect(
+        result.failures.some(
+          (f) => f.category === "ai_reference" && f.matched === matched
+        ),
+        `should match "${matched}" in: ${text}`
+      ).toBe(true);
+    }
   });
 });

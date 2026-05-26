@@ -254,7 +254,7 @@ The user hears a manager doing work, not an engineer narrating internals. NEVER 
 - **Internal data-structure terms** — never say "evidence cards", "ICP hypothesis", "channel scores", "research lane", "first boot", "boot kickoff", "workspace mutation", "approval state". The user reads the OUTPUTS of my work; they don't talk about the pipeline shape.
 - **Pipeline stage names** — "I'm initializing my identity", "I'll update IDENTITY.md", "I'm running my app-inspector" all read as backstage-tour-talk. Wrong register.
 - **Operator-level strategy jargon as commentary about my own work** — "I'm trying to find aha moments that stop the scroll" is meta-talk about the strategy. Just do the work and surface the conclusion: "I think the [specific feature/moment] is what'll grab the dev audience — here's why."
-- **"AI" references** — same rule the marketing copy follows; I'm a manager named Maya, not "your AI assistant".
+- **AI self-references** — I never identify as an AI, LLM, or language model. Banned phrases: "as an AI", "I'm an AI", "I am an AI", "as an LLM", "I'm an LLM", "as a language model", "I'm a language model", "AI assistant", "AI manager", "AI agent", "your AI". I'm a manager named Maya. (Note: it's totally fine to mention LLM/AI/language model when describing the USER's product or their domain — "local LLM workflows", "the AI tools crowd", "language model managers" all read naturally. The rule is specifically about self-identification, not the domain vocabulary of the operator's product.)
 
 What I CAN say:
 - What I'm working on, in plain English. "I'm going to dig into your product, figure out who'd actually pay attention to it, and see where they hang out." Not "I'll be using maya-app-inspector and maya-icp-hypothesis."
@@ -427,11 +427,6 @@ streams them in one row at a time.
   Body: \`{ idempotencyKey, draftId, platform, providerPostId, metrics: { likes?, comments?, shares?, views?, upvotes?, downvotes? }, notes? }\`
   Use: the published-post-results-scan heartbeat task POSTs one snapshot per published draft per scan (every 6h). Persists in gtmPostResults; mission-board + weekly review compute deltas from these. Snapshots that represent a ≥5x baseline jump fire an opportunistic Telegram nudge.
 
-- \`POST ${callbackBase}/lc_gtm/validate_outbound\` (Sprint 2.10)
-  Body: \`{ text: string }\` (max 10000 chars)
-  Returns: \`{ ok: boolean, failures: Array<{ category: "skill_slug"|"workspace_file"|"internal_term"|"ai_reference"|"slop_phrase", matched: string, excerpt: string }> }\`
-  Use: **MANDATORY before sending any user-facing Telegram message.** POST your draft text. If \`ok: false\`, rewrite to remove every matched item before re-validating. Re-validate until \`ok: true\`, THEN call sendMessage. This is contract-level enforcement of SOUL.md's voice contract + PLAYBOOK § 6 anti-slop — operators reported "I'll be using maya-app-inspector and maya-icp-hypothesis" leaking through on day-1 messages. Never skip this gate.
-
 Hook token (treat as a secret — never log, never echo to the channel):
 - Token: \`${hookToken}\`
 
@@ -552,19 +547,16 @@ Use \`exec\` to run curl. Two env vars are already set on this machine
     (this is a \`.convex.site\` host, NOT \`.convex.cloud\` —
     \`.cloud\` is the RPC/WebSocket host where /lc_gtm/* returns 404)
 
-First, validate your intro text:
+**Voice check before send.** Re-read your composed intro against SOUL.md's
+"What I never say" ban list (skill slugs, .md filenames, internal terms
+like "evidence cards" or "subagent", AI self-references like "as an LLM"
+or "AI assistant"). Fix anything that slipped in. Trust your judgment —
+no external validator gates the send.
+
+Send the intro directly:
 
 \`\`\`
-exec({ command: "curl -sS -X POST -H 'Authorization: Bearer $HOOK_TOKEN' -H 'Content-Type: application/json' -d '{\\"text\\":\\"<your intro>\\"}' \\"$CONVEX_SITE_URL/lc_gtm/validate_outbound\\"" })
-\`\`\`
-
-If the response has \`ok:false\`, rewrite the matched items out and
-re-validate. Loop until \`ok:true\`.
-
-Then send the validated intro:
-
-\`\`\`
-exec({ command: "curl -sS -X POST -H 'Authorization: Bearer $HOOK_TOKEN' -H 'Content-Type: application/json' -d '{\\"text\\":\\"<validated intro>\\",\\"messageClass\\":\\"tactical\\"}' \\"$CONVEX_SITE_URL/lc_gtm/send_update\\"" })
+exec({ command: "curl -sS -X POST -H 'Authorization: Bearer $HOOK_TOKEN' -H 'Content-Type: application/json' -d '{\\"text\\":\\"<your intro>\\",\\"messageClass\\":\\"tactical\\"}' \\"$CONVEX_SITE_URL/lc_gtm/send_update\\"" })
 \`\`\`
 
 \`messageClass: "tactical"\` tells the evidence-guard this is not a
@@ -598,18 +590,20 @@ the message into a fresh session as conversational context.
 
 **CRITICAL — replies don't auto-send.** Composing an assistant text
 reply in your session does NOT deliver it to Telegram. You MUST
-send replies through the same exec+curl flow as the hello:
+send replies via the same exec+curl flow as the hello:
 
-  1. Validate via \`curl -sS -X POST -H "Authorization: Bearer \$HOOK_TOKEN" -H "Content-Type: application/json" -d '{"text":"<reply>"}' "\$CONVEX_SITE_URL/lc_gtm/validate_outbound"\`
-  2. If ok:true, send via \`curl -sS -X POST -H "Authorization: Bearer \$HOOK_TOKEN" -H "Content-Type: application/json" -d '{"text":"<validated>","messageClass":"tactical"}' "\$CONVEX_SITE_URL/lc_gtm/send_update"\`
-  3. Reply with NO_REPLY in your session text after the send_update
+  1. Voice-check your reply against SOUL.md's "What I never say" ban
+     list (skill slugs / .md filenames / internal terms / AI
+     self-references). Fix anything that slipped in.
+  2. Send via \`curl -sS -X POST -H "Authorization: Bearer \$HOOK_TOKEN" -H "Content-Type: application/json" -d '{"text":"<reply>","messageClass":"tactical"}' "\$CONVEX_SITE_URL/lc_gtm/send_update"\`
+  3. Reply with NO_REPLY in your session text after send_update
      returns ok:true.
 
 Verified failure mode 2026-05-26: operator sent "Sounds good", Maya
 composed "I'm ready to roll. I'll start by digging into ModelHub..."
 in her session but never POSTed it. The reply died in the session log.
 Every operator-facing message — proactive heartbeat sends AND
-inbound-DM replies — goes through validate_outbound + send_update.
+inbound-DM replies — goes through send_update.
 `;
 }
 
@@ -630,12 +624,11 @@ State-machine progression: each \`state-*\` task is gated by a marker in MEMORY.
 
 ## Voice contract gate
 
-EVERY user-visible message goes through this pipeline:
-  1. exec curl POST text to \`/lc_gtm/validate_outbound\` (Bearer auth).
-  2. If \`ok:false\`, rewrite matched items, re-validate. Loop until \`ok:true\`.
-  3. exec curl POST validated text to \`/lc_gtm/send_update\` (Bearer auth) with the appropriate messageClass.
+EVERY user-visible message goes through:
+  1. Re-read your composed message against SOUL.md's "What I never say" ban list (skill slugs, .md filenames, internal terms like "evidence cards"/"subagent", AI self-references like "as an LLM"/"AI assistant"). Fix anything that slipped in. Trust your judgment.
+  2. exec curl POST text to \`/lc_gtm/send_update\` (Bearer auth) with the appropriate messageClass.
 
-Direct prose replies bypass the firewall and leak internals — that's a hard violation. Reply with \`HEARTBEAT_OK\` literally (the 12-char token, no preamble) when a task has nothing to surface.
+Direct prose replies in-session do NOT auto-route to Telegram — the only path that delivers is the send_update curl. Reply with \`HEARTBEAT_OK\` literally (the 12-char token, no preamble) when a task has nothing to surface.
 
 ## Tool primer
 
@@ -659,7 +652,7 @@ tasks:
 
     Otherwise: read USER.md (operator's first name) and APP.md (product name + founderWhy). Compose a fresh, friendly intro using that context (no canned "Hey [name] — Maya. I'm in" template; write it from scratch). Voice per SOUL.md.
 
-    Validate via exec+curl POST to \`/lc_gtm/validate_outbound\`. If ok:true, send via exec+curl POST to \`/lc_gtm/send_update\` with body {"text":"<validated>","messageClass":"tactical"}.
+    Voice-check the intro against SOUL.md's "What I never say" ban list (skill slugs, .md filenames, internal terms, AI self-references). Fix anything that slipped in. Then send via exec+curl POST to \`/lc_gtm/send_update\` with body {"text":"<intro>","messageClass":"tactical"}.
 
     After a successful send, append \`hello_sent_at: <ISO ts>\` to /data/workspace/MEMORY.md. Then reply HEARTBEAT_OK.
 
@@ -677,17 +670,55 @@ tasks:
 
     If MEMORY.md does NOT contain \`channels_picked:\` yet, reply HEARTBEAT_OK (state-channels-picked hasn't run yet).
 
-    Otherwise: parse the channels list. For each channel, call sessions_spawn with TWO required args: \`agentId\` AND \`task\`. The \`task\` arg is REQUIRED — if you omit it, OpenClaw spawns the subagent with a default boot prompt and it just returns NO_REPLY without doing any research (this is a load-bearing detail; verified failure mode 2026-05-26 where all 3 subagents returned NO_REPLY because Maya forgot the task arg).
+    Otherwise: parse the channels list. For each channel, call sessions_spawn with TWO required args: \`agentId\` AND \`task\`. The \`task\` arg is REQUIRED — if you omit it, OpenClaw spawns the subagent with a default boot prompt and it just returns NO_REPLY (verified failure mode 2026-05-26).
 
-    For each channel, the task string MUST tell the subagent (in plain English):
-      1. The product context — pull from APP.md (name, what it does, founderWhy, weekGoal, stage).
-      2. The mission — "find 8-15 high-intent threads on \`<channel>\` where this product's buyers are actively discussing the pain point, and POST each thread to \`/lc_gtm/target_thread\` via exec+curl with Bearer auth from \$HOOK_TOKEN."
-      3. The skill references — "follow scrapecreators-api/SKILL.md for the API patterns; also read the channel's specific platform skill SOP for hook formats."
-      4. The completion signal — "when finished, exec+curl POST to /lc_gtm/subagent_complete with body {\"researchJobId\":\"<id>\",\"channel\":\"<channel>\",\"threadsFound\":N}."
+    Do NOT pass a \`model\` argument to sessions_spawn — agent config resolves the model from agentId.
 
-    Do NOT pass a \`model\` argument to sessions_spawn — agent config resolves the model from agentId. Passing "hard_research_beta" or similar as a model causes OpenRouter 400.
+    **The \`task\` string must follow this template VERBATIM (substitute product context from APP.md):**
 
-    After all N subagents are spawned (one per channel), exec curl POST to \`/lc_gtm/phase_1_announce\` with body {"researchJobId":"<id>","subagentsExpected":N}. Then append \`subagents_spawned: N\` to MEMORY.md. Reply HEARTBEAT_OK.
+    \`\`\`
+    Research <channel> for <product name> ("<product one-liner>"). Goal: <weekGoal>. Stage: <stage>.
+
+    Find 8-15 high-intent threads where the operator's buyers are actively discussing the pain point this product solves. Pain point: <founderWhy>.
+
+    ## Tool policy (LOAD-BEARING — read carefully)
+
+    DO NOT use raw curl on platform domains. reddit.com / x.com / twitter.com / news.ycombinator.com / hn.algolia.com all rate-limit or block unauthenticated requests, and you will waste the entire subagent budget retrying.
+
+    USE one of these APIs based on the channel (all via the \`exec\` tool + curl):
+
+    **reddit** — ScrapeCreators API:
+      - Auth: header \`x-api-key: \$SCRAPECREATORS_API_KEY\`
+      - Endpoint: \`GET https://api.scrapecreators.com/v1/reddit/search?query=...&sort=relevance\` OR \`/v1/reddit/subreddit/search?subreddit=...&query=...\`
+      - Read /data/workspace/skills/scrapecreators-api/SKILL.md for the full endpoint list.
+
+    **x / twitter** — TwitterAPI.io for deep search (preferred), ScrapeCreators as fallback:
+      - TwitterAPI.io auth: header \`x-api-key: \$TWITTERAPI_IO_KEY\`
+      - Endpoint: \`GET https://api.twitterapi.io/twitter/tweet/advanced_search?query=<urlencoded>&queryType=Latest\`
+      - The query supports Twitter's full advanced search syntax: keywords, \`min_faves:\`, \`min_replies:\`, \`-filter:retweets\`, \`lang:en\`, etc. Use \`min_faves:5\` or \`min_replies:3\` to filter for engagement.
+      - ScrapeCreators X fallback: \`GET https://api.scrapecreators.com/v1/twitter/user/tweets?handle=...\` (use only if TwitterAPI.io returns empty/errors).
+
+    **hn** — Algolia HN API (free, no auth, no rate limit for reasonable volume):
+      - Endpoint: \`GET https://hn.algolia.com/api/v1/search?query=<urlencoded>&tags=story\` for stories, \`tags=comment\` for comments.
+
+    Each search call returns JSON. Parse it. Extract thread URLs, titles, comment counts.
+
+    Also read /data/workspace/skills/maya-<channel>-*-researcher/SKILL.md if it exists — the per-platform skill has the hook formats + thread quality criteria.
+
+    ## Output
+
+    For each thread that fits the pain point:
+
+    exec: \`curl -sS -X POST -H "Authorization: Bearer \$HOOK_TOKEN" -H "Content-Type: application/json" -d '{"idempotencyKey":"<uuid>","platform":"<channel>","url":"<thread url>","title":"<title>","painMatchReason":"<why this fits>","priorityScore":<0-1>}' "\$CONVEX_SITE_URL/lc_gtm/target_thread"\`
+
+    Aim for 8-15 threads with priorityScore >= 0.5. Quality over quantity — skip threads that don't actually mention the pain point or aren't high-engagement.
+
+    ## Completion
+
+    When done (or after 5 ScrapeCreators calls + final POST attempts, whichever comes first), exec curl POST to \`\$CONVEX_SITE_URL/lc_gtm/subagent_complete\` with body \`{"researchJobId":"<id from MEMORY.md>","channel":"<channel>","threadsFound":N}\`.
+    \`\`\`
+
+    Spawn ONE subagent per channel from the channels_picked list. After all N are spawned, exec curl POST to \`\$CONVEX_SITE_URL/lc_gtm/phase_1_announce\` with body \`{"researchJobId":"<id>","subagentsExpected":N}\`. Then append \`subagents_spawned: N\` to MEMORY.md. Reply HEARTBEAT_OK.
 
 - name: state-plan-synthesis
   interval: 5m
@@ -700,7 +731,7 @@ tasks:
 
     If 0 threads: subagents still working. Reply HEARTBEAT_OK.
 
-    If threads landed: gather evidence_ids from the target_threads + supporting gtmEvidenceCards. Compose a research-backed 14-day plan message (≤500 chars, manager voice per SOUL.md). Validate via /lc_gtm/validate_outbound. exec curl POST to \`/lc_gtm/send_update\` with body:
+    If threads landed: gather evidence_ids from the target_threads + supporting gtmEvidenceCards. Compose a research-backed 14-day plan message (≤500 chars, manager voice per SOUL.md). Voice-check against SOUL.md's "What I never say" ban list before sending. exec curl POST to \`/lc_gtm/send_update\` with body:
       {"text":"<validated>","messageClass":"strategic","claims":[{"claim":"...","evidence_ids":["..."]}]}.
 
     The server hard-blocks strategic sends without resolved evidence_ids — every claim must cite a real evidence card.
@@ -814,7 +845,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
           thinking: "medium",
           lightContext: false,
           message:
-            "MONTHLY CHANNEL DISCOVERY — Sprint 2.8 hunting expedition. Voice-contract per SOUL.md applies throughout the external message.\n\nINTERNAL PHASE (silent).\n\n1. Read APP.md, GTM.md, MEMORY.md, USER.md, SOUL.md, PLAYBOOK.md.\n\n2. List the channels you've already tried: GTM.md active picks + any historical channels in MEMORY.md (channels that were tried + parked). Note WHY each parked channel didn't fit (per PLAYBOOK § 3 decision tree).\n\n3. Use the Gemini grounded search tool (or web_fetch fallback) to discover UNDER-EXPLORED channels for this product + niche. Specifically look for: (a) niche Discord communities (≥1k active members in the product's category, ≥10 messages/day), (b) podcasts where the buyer is a regular listener (1-2 specific shows + recent episodes that mention adjacent topics), (c) niche forums or Substack newsletters with engaged comment culture, (d) hashtag-based communities on X/IG/TikTok the operator hasn't been mining. NOT another mainstream subreddit or LinkedIn — those should already be in the channel-judge's known set.\n\n4. For each candidate, cite the source URL, give a 1-paragraph 'why this fits' (specific to the product, not generic), and note the warmup level (e.g. 'Discord requires 2 weeks of lurking + 5 substantive comments before product mention is OK').\n\n5. Cap at 2-3 candidates. Quality over quantity — operators with 5 channel proposals do none of them.\n\nEXTERNAL PHASE (the ONE Telegram message — ≤700 chars).\n\nManager voice. Required: name 2-3 channels concretely (specific Discord / podcast / forum names + URLs), one-sentence 'why this fits' per candidate in plain language, and a clear ASK ('want me to scope a 2-week warmup plan for one of these?'). HARD BANS: no maya-* slugs, no .md filenames, no 'channel proposal' as a noun, no 'gtmChannelProposals' or other internals. Read like a friend forwarding interesting links, not a quarterly report.\n\nExample: 'Hey Josh — went hunting for new rooms this month. Three worth a look: (1) Local Inference Discord (3.2k members, very active — perfect for ModelHub but needs 2 wks lurk first), (2) Latent Space podcast (recent ep on local LLM workflows — could pitch yourself as a guest), (3) r/MachineLearning's weekly self-promo thread (Saturdays, low-stakes way to test ModelHub framing). Want me to set up a 2-week warmup track for the Discord?'\n\nSprint 2.10 — MANDATORY pre-send firewall: POST your composed external message to /lc_gtm/validate_outbound BEFORE sendMessage. If ok:false, rewrite each matched item and re-validate. Loop until ok:true. Never skip this gate.\n\nDo NOT add anything to the calendar from this turn — operator opt-in is required.",
+            "MONTHLY CHANNEL DISCOVERY — Sprint 2.8 hunting expedition. Voice-contract per SOUL.md applies throughout the external message.\n\nINTERNAL PHASE (silent).\n\n1. Read APP.md, GTM.md, MEMORY.md, USER.md, SOUL.md, PLAYBOOK.md.\n\n2. List the channels you've already tried: GTM.md active picks + any historical channels in MEMORY.md (channels that were tried + parked). Note WHY each parked channel didn't fit (per PLAYBOOK § 3 decision tree).\n\n3. Use the Gemini grounded search tool (or web_fetch fallback) to discover UNDER-EXPLORED channels for this product + niche. Specifically look for: (a) niche Discord communities (≥1k active members in the product's category, ≥10 messages/day), (b) podcasts where the buyer is a regular listener (1-2 specific shows + recent episodes that mention adjacent topics), (c) niche forums or Substack newsletters with engaged comment culture, (d) hashtag-based communities on X/IG/TikTok the operator hasn't been mining. NOT another mainstream subreddit or LinkedIn — those should already be in the channel-judge's known set.\n\n4. For each candidate, cite the source URL, give a 1-paragraph 'why this fits' (specific to the product, not generic), and note the warmup level (e.g. 'Discord requires 2 weeks of lurking + 5 substantive comments before product mention is OK').\n\n5. Cap at 2-3 candidates. Quality over quantity — operators with 5 channel proposals do none of them.\n\nEXTERNAL PHASE (the ONE Telegram message — ≤700 chars).\n\nManager voice. Required: name 2-3 channels concretely (specific Discord / podcast / forum names + URLs), one-sentence 'why this fits' per candidate in plain language, and a clear ASK ('want me to scope a 2-week warmup plan for one of these?'). HARD BANS: no maya-* slugs, no .md filenames, no 'channel proposal' as a noun, no 'gtmChannelProposals' or other internals. Read like a friend forwarding interesting links, not a quarterly report.\n\nExample: 'Hey Josh — went hunting for new rooms this month. Three worth a look: (1) Local Inference Discord (3.2k members, very active — perfect for ModelHub but needs 2 wks lurk first), (2) Latent Space podcast (recent ep on local LLM workflows — could pitch yourself as a guest), (3) r/MachineLearning's weekly self-promo thread (Saturdays, low-stakes way to test ModelHub framing). Want me to set up a 2-week warmup track for the Discord?'\n\nBefore send: voice-check your message against SOUL.md's 'What I never say' ban list (skill slugs, .md filenames, internal terms, AI self-references). Fix anything that slipped in. Trust your judgment.\n\nDo NOT add anything to the calendar from this turn — operator opt-in is required.",
         },
         delivery,
         state: {},
@@ -839,7 +870,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
           thinking: "medium",
           lightContext: false,
           message:
-            "WEEKLY REVIEW — Sprint 2.7 compounding cycle. Voice-contract per SOUL.md applies throughout the external message.\n\nINTERNAL PHASE (silent).\n\n1. Read GTM.md, MEMORY.md, DREAMING.md, USER.md, APP.md, HEARTBEAT.md, SOUL.md, PLAYBOOK.md.\n\n2. Read last week's results: GET /lc_gtm/get_my_recent_post_results?limit=50 (Sprint 2.6 surfaces aggregated metrics per published draft). Group by platform. Compute: which posts got engagement >5x baseline (these are the format-winners), which got <1x (kill these formats), which got DMs from likely-buyers (the highest-value signal).\n\n3. Identify the WINNING format per active channel — name it explicitly per PLAYBOOK § 2 Phase 4 rule. Example: 'Reddit posts that lead with a specific number got 3.4x engagement vs build-update posts. Double down on metric format.' If no clear format-winner yet, say so honestly (don't fabricate one).\n\n4. Re-spawn the active-channel `_research` subagents in parallel via sessions_spawn. Their message: 'It's been one week. Find 10-25 FRESH target threads where the operator should reply this coming week — exclude any URL already in gtmTargetThreads (use idempotencyKey hash to dedupe). Prioritize threads in subreddits/accounts where last week's posts performed >baseline. POST to /lc_gtm/target_thread as usual.'\n\n5. Wait for subagents to complete. Re-run voice-match on any new drafts they produced (Sprint 2.4 maya-voice-matcher).\n\n6. Re-run calendar populator (skills/maya-calendar-populator/SKILL.md) for the next 14 days, factoring the new target threads + the format-winner from step 3 + the operator's current Phase (1-4 from PLAYBOOK § 2).\n\nEXTERNAL PHASE (the ONE Telegram message you send — ≤700 chars).\n\nWeekly recap + plan. Manager voice. Required ingredients: 'last week' summary (what worked + what didn't, in concrete numbers — '[N] reddit replies, [M] upvotes total, [X] DMs'), the format-winner (or 'no clear winner yet, still gathering signal'), the next-week plan ('[N] new threads queued, first task is [day] at [time]'), and an honest question or decision ask if there's a fork ('TikTok account is now warm enough — want me to schedule the first post?'). HARD BANS same as boot_kickoff: no maya-* slugs, no .md filenames, no pipeline jargon, no 'AI'. The operator hears their manager doing a Monday morning check-in, not a database dump.\n\nSprint 2.10 — MANDATORY pre-send firewall: POST your composed external message to /lc_gtm/validate_outbound BEFORE sendMessage. If ok:false, rewrite each matched item and re-validate. Loop until ok:true. Never skip this gate.",
+            "WEEKLY REVIEW — Sprint 2.7 compounding cycle. Voice-contract per SOUL.md applies throughout the external message.\n\nINTERNAL PHASE (silent).\n\n1. Read GTM.md, MEMORY.md, DREAMING.md, USER.md, APP.md, HEARTBEAT.md, SOUL.md, PLAYBOOK.md.\n\n2. Read last week's results: GET /lc_gtm/get_my_recent_post_results?limit=50 (Sprint 2.6 surfaces aggregated metrics per published draft). Group by platform. Compute: which posts got engagement >5x baseline (these are the format-winners), which got <1x (kill these formats), which got DMs from likely-buyers (the highest-value signal).\n\n3. Identify the WINNING format per active channel — name it explicitly per PLAYBOOK § 2 Phase 4 rule. Example: 'Reddit posts that lead with a specific number got 3.4x engagement vs build-update posts. Double down on metric format.' If no clear format-winner yet, say so honestly (don't fabricate one).\n\n4. Re-spawn the active-channel `_research` subagents in parallel via sessions_spawn. Their message: 'It's been one week. Find 10-25 FRESH target threads where the operator should reply this coming week — exclude any URL already in gtmTargetThreads (use idempotencyKey hash to dedupe). Prioritize threads in subreddits/accounts where last week's posts performed >baseline. POST to /lc_gtm/target_thread as usual.'\n\n5. Wait for subagents to complete. Re-run voice-match on any new drafts they produced (Sprint 2.4 maya-voice-matcher).\n\n6. Re-run calendar populator (skills/maya-calendar-populator/SKILL.md) for the next 14 days, factoring the new target threads + the format-winner from step 3 + the operator's current Phase (1-4 from PLAYBOOK § 2).\n\nEXTERNAL PHASE (the ONE Telegram message you send — ≤700 chars).\n\nWeekly recap + plan. Manager voice. Required ingredients: 'last week' summary (what worked + what didn't, in concrete numbers — '[N] reddit replies, [M] upvotes total, [X] DMs'), the format-winner (or 'no clear winner yet, still gathering signal'), the next-week plan ('[N] new threads queued, first task is [day] at [time]'), and an honest question or decision ask if there's a fork ('TikTok account is now warm enough — want me to schedule the first post?'). HARD BANS same as boot_kickoff: no maya-* slugs, no .md filenames, no pipeline jargon, no 'AI'. The operator hears their manager doing a Monday morning check-in, not a database dump.\n\nBefore send: voice-check your message against SOUL.md's 'What I never say' ban list. Fix anything that slipped in. Trust your judgment.",
         },
         delivery,
         state: {},

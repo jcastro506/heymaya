@@ -446,6 +446,16 @@ export function buildGatewayConfig(
               enabled: true,
               dmPolicy: "allowlist" as const,
               allowFrom: [Number(input.telegramChatId)].filter(Number.isFinite),
+              // Sprint 2.16u-fix6 — suppress OpenClaw's "Working... •
+              // read from APP.md • tool: read • exec fetch url, curl ..."
+              // progress-draft relay. The operator should only see Maya's
+              // final voice-clean messages, never internal tool calls.
+              // streaming.mode:"off" hides progress drafts entirely; only
+              // the agent's final reply (or proactive sendMessage) lands
+              // in the channel. See /tmp/openclaw-latest/docs/concepts/
+              // progress-drafts.md for the full mode matrix
+              // (off | partial | block | progress).
+              streaming: { mode: "off" as const },
             },
           },
         }
