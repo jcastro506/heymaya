@@ -4413,6 +4413,12 @@ export default defineSchema({
       v.literal("cancelled")
     ),
     createdBy: v.literal("maya"),
+    // ─── Evidence-vault fields — additive, optional for back-compat ─────
+    // Explicit citation of the cards that justified scheduling this event.
+    evidenceCardIds: v.optional(v.array(v.id("gtmEvidenceCards"))),
+    // What success looks like for this task (e.g., "5 replies, 1 DM").
+    successMetric: v.optional(v.string()),
+    // ─── end evidence-vault fields ──────────────────────────────────────
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -4759,12 +4765,59 @@ export default defineSchema({
     ),
     extractedClaims: v.array(v.string()),
     rawRef: v.optional(v.string()),
+    // ─── Evidence-vault fields — additive, optional for back-compat ─────
+    // SHA-256 hex of `canonicalUrl + snippet`, used for cross-job dedup.
+    contentHash: v.optional(v.string()),
+    // Normalized URL (lowercase host, strip query params except meaningful
+    // ones, no trailing slash). Distinct from `url` which is the raw URL.
+    canonicalUrl: v.optional(v.string()),
+    // Explicit retrieval timestamp ms (separate from existing `observedAt`).
+    retrievedAt: v.optional(v.number()),
+    // Source publish time ms if available.
+    publishedAt: v.optional(v.number()),
+    // Semantic freshness for vault reads (distinct from the existing
+    // bucketed `recency` enum which includes "unknown").
+    freshnessStatus: v.optional(
+      v.union(
+        v.literal("fresh"),
+        v.literal("recent"),
+        v.literal("stale")
+      )
+    ),
+    // Cross-job memory — did a prior job keep, reject, or supersede this card?
+    previousVerdict: v.optional(
+      v.union(
+        v.literal("kept"),
+        v.literal("rejected"),
+        v.literal("superseded")
+      )
+    ),
+    // ─── end evidence-vault fields ──────────────────────────────────────
     createdAt: v.number(),
   })
     .index("by_account", ["accountId"])
     .index("by_research_job", ["researchJobId"])
     .index("by_account_and_source", ["accountId", "source"])
-    .index("by_account_and_use", ["accountId", "recommendedUse"]),
+    .index("by_account_and_use", ["accountId", "recommendedUse"])
+    .index("by_account_platform_canonicalUrl", ["accountId", "source", "canonicalUrl"]),
+
+  // Evidence-vault sibling — synthesized buyer-segment summaries derived
+  // from a research job's evidence cards. One row per (researchJob, segment).
+  // Cited via `evidenceCardIds` for grounded skill consumption.
+  gtmBuyerSegments: defineTable({
+    accountId: v.id("creators"),
+    researchJobId: v.id("gtmResearchJobs"),
+    segmentName: v.string(),
+    pains: v.array(v.string()),
+    jobsToBeDone: v.array(v.string()),
+    buyingTriggers: v.array(v.string()),
+    likelyChannels: v.array(v.string()),
+    confidence: v.number(), // 0-1
+    evidenceCardIds: v.optional(v.array(v.id("gtmEvidenceCards"))),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_research_job", ["researchJobId"]),
 
   gtmPlatformBriefs: defineTable({
     platform: v.union(
@@ -5477,6 +5530,10 @@ export default defineSchema({
     publishedAt: v.optional(v.number()),
     /** URL or platform-side ID of the published version, when applicable. */
     providerPostId: v.optional(v.string()),
+    // ─── Evidence-vault field — additive, optional for back-compat ──────
+    // Explicit citation of the cards that justified this draft.
+    evidenceCardIds: v.optional(v.array(v.id("gtmEvidenceCards"))),
+    // ─── end evidence-vault field ───────────────────────────────────────
     createdAt: v.number(),
     updatedAt: v.number(),
   })

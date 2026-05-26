@@ -931,17 +931,33 @@ export const subagentCompleteHttp = httpAction(async (ctx, request) => {
  * going deeper on r/ollama") so the operator sees life over 30-90
  * min instead of one big delivery at the end.
  *
- * Body: { text: string } — Maya's voice-clean message.
+ * Body: {
+ *   text: string,
+ *   messageClass?: "strategic" | "tactical" | "accountability",
+ *   claims?: Array<{ claim: string, evidence_ids: string[] }>,
+ * }
+ *
+ * Sprint 2.16j — evidence-guard added. Strategic messages MUST carry
+ * `claims` (array can be empty only if `messageClass === "tactical"`
+ * or "accountability"). Every evidence_id is resolved to a real
+ * gtmEvidenceCards row owned by this agent's account. Hard block on
+ * any failure — Maya rewrites with real evidence, drops the claim,
+ * or sends the degraded "checking sources" fallback per her prompt.
+ *
  * Auth: hookToken (same as other /lc_gtm/* endpoints).
- * Pipeline: outboundFirewall (Sprint 2.10) → sendDirectTelegramMessage
- * → Telegram Bot API. Failures return { ok:false, reason } so Maya
- * can decide whether to rewrite or skip the update.
+ * Pipeline: evidenceGuard (Sprint 2.16j, strategic only)
+ *        → outboundFirewall (Sprint 2.10, all messages)
+ *        → sendDirectTelegramMessage → Telegram Bot API.
  */
 export const sendUpdateHttp = httpAction(async (ctx, request) => {
   const auth = await authenticate(ctx, request);
   if (!auth.ok) return new Response(auth.reason, { status: auth.status });
 
-  let body: { text?: string };
+  let body: {
+    text?: string;
+    messageClass?: string;
+    claims?: Array<{ claim?: string; evidence_ids?: string[] }>;
+  };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -955,7 +971,49 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
     return new Response("text too long (>1500 chars)", { status: 400 });
   }
 
-  // Firewall first.
+  // Sprint 2.16j — evidence guard for strategic messages. Defaults to
+  // strategic on ambiguity (under-classifying defeats the moat).
+  const { classifyMessage } = await import("../evidenceGuard");
+  const messageClass = classifyMessage(body.messageClass);
+
+  if (messageClass === "strategic") {
+    const normalizedClaims = (body.claims ?? []).map((c) => ({
+      claim: typeof c.claim === "string" ? c.claim : "",
+      evidence_ids: Array.isArray(c.evidence_ids) ? c.evidence_ids : [],
+    }));
+
+    if (normalizedClaims.length === 0) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: "evidence_required",
+          message:
+            "Strategic messages require at least one claim with evidence_ids. " +
+            "If this is a tactical/accountability message, pass messageClass: 'tactical'.",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
+
+    const guard = await ctx.runAction(
+      internal.gtmMaya.evidenceGuard.validateClaims,
+      { accountId: auth.accountId, claims: normalizedClaims }
+    );
+    if (!guard.ok) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          reason: "evidence_blocked",
+          failures: guard.failures,
+          claimsCount: guard.claimsCount,
+          evidenceCount: guard.evidenceCount,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
+  }
+
+  // Firewall after evidence guard.
   const firewall = await ctx.runAction(
     internal.gtmMaya.outboundFirewall.validateOutbound,
     { text: body.text }
