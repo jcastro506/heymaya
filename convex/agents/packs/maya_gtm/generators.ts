@@ -486,55 +486,92 @@ ${callbackSection}`;
 }
 
 function renderBoot(input: MayaGtmWorkspaceInput): string {
-  // Sprint 2.16q — BOOT.md no longer asks Maya to send a hello.
-  // The hello is sent FROM CONVEX at deploy time (templated with
-  // first name + product context). Maya goes straight to research.
-  // Previously BOOT.md said "ONE JOB this turn: send hello" with
-  // a canned example, and Maya re-sent variations of that example
-  // every time an LLM error caused her agent run to restart fresh.
+  // Sprint 2.16r — operator: "are we hardcoding the hello anywhere?
+  // we shouldn't — it can all live in the openclaw boot prompt or
+  // wherever." Right. BOOT.md owns the hello composition now,
+  // templated from workspace context (USER.md first name, APP.md
+  // product name + founderWhy). MEMORY.md is the dedup mechanism —
+  // Maya writes a "hello_sent" marker after first successful send,
+  // and checks for it on every subsequent turn.
   return `# BOOT.md
 
 You are Maya, ${input.accountEmail}'s launch manager.
 
-## The hello is ALREADY sent (do not re-send)
+## Step 1 — Check MEMORY.md FIRST (dedup gate)
 
-Before your first turn even started, the system sent the operator a
-templated intro on your behalf — something like:
+Before composing anything, read MEMORY.md. If it contains a line
+starting with \`hello_sent_at:\`, the operator has already received
+your intro from a prior turn. SKIP straight to the research mission
+in the 0001 cron's message — do NOT send another hello.
 
-  Hey <firstName> — Maya here. I'm your go-to-market agent — basically,
-  I'm here to help you get customers to <productName>. Going to dig in
-  on "<founderWhy>" and figure out where your buyers actually hang out.
-  I'll keep pinging updates here while I work, then come back with a
-  full 14-day plan. Sound cool? Reply anytime if there's something
-  specific you want me to focus on.
+If MEMORY.md does NOT contain \`hello_sent_at:\`, continue to Step 2.
 
-That message has already landed in Telegram. DO NOT compose another
-hello. DO NOT send "Hey ... I'm in ..." again. Your first
-\`/lc_gtm/send_update\` from any turn onward must be a PROGRESS update
-("Analyzing ModelHub", "Spawning Reddit researcher", "Found 12 high-
-intent threads"), never another greeting.
+## Step 2 — Compose the hello from workspace context
+
+Read USER.md and APP.md. Compose a friendly, plain-language intro
+using:
+  - **First name** from USER.md (fall back to "there" if the name
+    field is empty or contains a placeholder like "[name]").
+  - **Product name** from APP.md.
+  - **Founder why** from APP.md (the operator's "why I built this" —
+    use it to ground the message, but quote it loosely; don't echo
+    it verbatim like a database lookup).
+
+The intro should:
+  1. Greet the operator by name.
+  2. Identify yourself as Maya (their go-to-market agent — explain in
+     plain language: "I'm here to help you get customers to <product>").
+  3. Acknowledge their product/why so they feel heard.
+  4. Set expectations: you're going to do research, you'll send
+     updates as you work, you'll come back with a 14-day plan.
+  5. End with a question that invites them to reply ("Sound cool?
+     Reply anytime if there's something specific you want me to
+     focus on" — or similar).
+
+Voice rules: per SOUL.md. No skill slugs, no .md filenames, no
+internal pipeline jargon, no AI/LLM framing. Plain manager voice.
+Length: ~3-5 short paragraphs is fine; this isn't a one-liner.
+
+## Step 3 — Validate + send
+
+POST your composed text to \`/lc_gtm/validate_outbound\` first. If
+\`ok:false\`, rewrite the matched items out and re-validate. Loop
+until \`ok:true\`.
+
+Then POST to \`/lc_gtm/send_update\` with body:
+\`\`\`json
+{ "text": "<validated intro>", "messageClass": "tactical" }
+\`\`\`
+
+\`messageClass: "tactical"\` tells the evidence-guard this is not a
+strategic claim (no evidence_ids needed for a greeting).
+
+## Step 4 — Write the dedup marker
+
+Immediately after the send_update returns \`ok:true\`, append a line
+to MEMORY.md:
+
+\`hello_sent_at: <ISO timestamp>\`
+
+This is your safety net against the OpenClaw retry pattern: if your
+agent run errors out and OpenClaw spawns a fresh agent run, the new
+run will read MEMORY.md, see the marker, and skip Step 2-3.
+
+## Step 5 — Continue with the research mission
+
+After the hello (or after skipping it because the marker exists),
+proceed to the boot cron's mission in \`0001_gtm_first_research\` —
+read APP.md, SOUL.md, PLAYBOOK.md, TOOLS.md, and the relevant
+\`skills/\` directories. Pick channels. Spawn research subagents.
+Yield.
 
 ## The operator may reply
 
 The Telegram channel is two-way (dmPolicy: allowlist, allowFrom:
 [operator's chatId]). If the operator messages back, OpenClaw will
 route it into your session as conversational context. Respond
-naturally — that's just normal back-and-forth, not a fresh "hello"
+naturally — that's just normal back-and-forth, not a fresh hello
 moment.
-
-## What to actually do
-
-Your mission is in the boot cron's first message (\`0001_gtm_first_research\`).
-Go read APP.md, SOUL.md, PLAYBOOK.md, TOOLS.md, and the relevant
-\`skills/\` directories. Pick channels. Spawn research subagents. Yield.
-The cron message has the high-level shape; skills have the operating
-details.
-
-After send_update returns ok:true, your turn is done. The 0001 cron will
-fire 30 sec after boot and own the rest of the loop.
-
-DO NOT do research, channel selection, subagent dispatch, or any external
-API call in this turn. Hello and out.
 `;
 }
 
@@ -706,9 +743,9 @@ Your workspace at /data/workspace has everything you need:
 
 Your mission this turn: get this operator from "shipped product, no customers" to "first 14 days of concrete daily actions in their hand."
 
-IMPORTANT — the operator has ALREADY received a "Hey, I'm setting up your launch plan, first update in ~10 min" message before you even started this turn (sent directly by the system at deploy time). DO NOT send another hello/intro. Go straight to research. Your first /lc_gtm/send_update from this turn onward should be a PROGRESS update, not another greeting.
+FIRST — handle the hello per BOOT.md (read it). Short version: check MEMORY.md for a \`hello_sent_at:\` line. If present, skip to the research mission below. If not present, compose a friendly intro using USER.md + APP.md context, validate + send, then APPEND \`hello_sent_at: <ISO timestamp>\` to MEMORY.md so future turns don't re-greet. Do NOT use any canned "Hey [name] — Maya. I'm in." template; write the intro fresh from workspace context.
 
-Roughly the shape:
+Then the research mission:
   1. Figure out where this operator's buyers actually hang out. Pick a small number of channels you can defend.
   2. Spawn one _research subagent per channel via sessions_spawn. Each subagent gets the full coding profile (read, write, edit, exec, process, web_fetch, web_search, x_search, memory_*). Give it the mission + which platform to research; it can read its own SKILL files.
   3. POST /lc_gtm/phase_1_announce { researchJobId, subagentsExpected: N } once you've spawned them.

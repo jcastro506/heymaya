@@ -58,19 +58,17 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("APP.md")).toContain("BugBrief");
     expect(files.get("GTM.md")).toContain("Primary: reddit");
     expect(files.get("AGENTS.md")).toContain("read APP.md and GTM.md");
-    // Sprint 2.16q — BOOT.md no longer asks Maya to send a hello. The
-    // hello is sent FROM CONVEX at deploy time (templated with first
-    // name + product context). Maya goes straight to research. Old
-    // BOOT.md said "ONE JOB: send hello" with a canned example, and
-    // Maya re-sent variations every time an LLM error restarted her
-    // agent run.
-    expect(files.get("BOOT.md")).toContain("hello is ALREADY sent");
-    expect(files.get("BOOT.md")).toContain("DO NOT compose another");
+    // Sprint 2.16r — BOOT.md owns hello composition. Maya reads USER.md
+    // + APP.md, writes a unique intro, and appends a `hello_sent_at:`
+    // marker to MEMORY.md so future turns skip the greeting. No more
+    // hardcoded Convex hello.
+    expect(files.get("BOOT.md")).toContain("MEMORY.md FIRST");
+    expect(files.get("BOOT.md")).toContain("hello_sent_at:");
+    expect(files.get("BOOT.md")).toContain("USER.md");
+    expect(files.get("BOOT.md")).toContain("APP.md");
     expect(files.get("BOOT.md")).toContain("operator may reply");
-    expect(files.get("BOOT.md")).toContain("skills/");
-    // BOOT.md must still tell Maya about /lc_gtm/send_update so she
-    // knows where to send PROGRESS updates (not hellos).
     expect(files.get("BOOT.md")).toContain("/lc_gtm/send_update");
+    expect(files.get("BOOT.md")).toContain("/lc_gtm/validate_outbound");
     expect(files.get("USER.md")).toContain("Will manually post Instagram: yes");
     expect(files.get("USER.md")).toContain("TikTok warm-up state: warming");
     expect(files.get("USER.md")).toContain("TikTok account age days: 3");

@@ -748,74 +748,23 @@ export const deployMayaGtm = internalAction({
       }
     }
 
-    // Sprint 2.16q — RE-RESTORED deploy-time hello.
+    // Sprint 2.16r — REVERTED Sprint 2.16q hardcoded Convex hello.
+    // Operator: "are we hardcoding the hello anywhere? we shouldn't —
+    // it can all live in the openclaw boot prompt." Right call. The
+    // hardcoded Convex hello had Maya's intro tone baked into deploy
+    // pipeline strings, which is the wrong layer.
     //
-    // Sprint 2.16f deleted it on the theory "Maya owns her own hello."
-    // Live 2026-05-26 testing showed the cost: every LLM error in
-    // Maya's boot cron causes OpenClaw to spawn a fresh agent run
-    // with NO memory of prior runs. Each fresh run reads BOOT.md +
-    // cron prompt, sees "ONE JOB: send hello," and sends another
-    // hello variant. Operator received 3-6 hello messages per deploy.
-    //
-    // Sending the hello FROM CONVEX at deploy time bypasses Maya for
-    // this one concern. She doesn't need to send a hello because the
-    // operator already received one before her first agent turn even
-    // started. Her boot prompt (Sprint 2.16q updates) instructs her
-    // to SKIP the hello step entirely — go straight to research.
-    //
-    // Per-deploy: one hello, sent from Convex, never re-fires on
-    // agent retry/restart.
-    //
-    // Templated unique-per-user hello using the operator's first name
-    // + product details from onboarding. Plain-language role ("here to
-    // help you get customers"), grounded in what they shared, ends
-    // with a question that invites a reply (the Telegram channel
-    // supports two-way messaging — dmPolicy:"allowlist" with allowFrom
-    // routes the operator's responses to Maya's session).
-    const fullName = row.creator.displayName ?? "";
-    const firstName = fullName.split(/\s+/)[0]?.trim() || "there";
-    const productName = row.app.name ?? "your product";
-    const founderWhy = (row.app.founderWhy ?? "").trim();
-    const founderWhyClause = founderWhy
-      ? `Going to dig in on "${founderWhy}" and figure out where your buyers actually hang out.`
-      : `Going to figure out where your buyers actually hang out.`;
-    const helloText =
-      `Hey ${firstName} — Maya here. I'm your go-to-market agent — basically, I'm here to help you get customers to ${productName}.\n\n` +
-      `${founderWhyClause} I'll keep pinging updates here while I work, then come back with a full 14-day plan.\n\n` +
-      `Sound cool? Reply anytime if there's something specific you want me to focus on.`;
-    const helloChatId = row.agent.telegramChatId;
-    if (helloChatId) {
-      try {
-        const result = await sendDirectTelegramMessage({
-          botToken: process.env.TELEGRAM_BOT_TOKEN,
-          chatId: helloChatId,
-          text: helloText,
-        });
-        await ctx.runMutation(
-          internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-          {
-            agentId: args.agentId,
-            result: result.ok
-              ? "sent"
-              : `telegram_${result.reason ?? "unknown"}`,
-            messageId: result.messageId ?? undefined,
-          }
-        );
-      } catch (err) {
-        await ctx.runMutation(
-          internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-          {
-            agentId: args.agentId,
-            result: `exception:${(err as Error).message}`.slice(0, 200),
-          }
-        );
-      }
-    } else {
-      await ctx.runMutation(
-        internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-        { agentId: args.agentId, result: "skipped:no_telegram_chat_id" }
-      );
-    }
+    // Now the hello composition lives back in BOOT.md, where Maya
+    // reads workspace context (USER.md first name, APP.md product
+    // name + founderWhy) and writes the intro herself ONCE per
+    // deploy. BOOT.md tells her to write a "hello_sent" marker to
+    // MEMORY.md immediately after; subsequent turns read MEMORY.md
+    // first and skip if marker present. That gives "trust the agent"
+    // + "only once" without a hardcoded template in Convex.
+    await ctx.runMutation(
+      internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
+      { agentId: args.agentId, result: "skipped:maya_owns_hello_in_boot_prompt" }
+    );
 
     try {
       await ctx.runMutation(
