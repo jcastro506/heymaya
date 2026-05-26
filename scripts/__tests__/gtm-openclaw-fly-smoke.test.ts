@@ -17,27 +17,24 @@ describe("gtm-openclaw-fly-smoke", () => {
     expect(fixture.workspaceFiles["TOOLS.md"]).toContain(
       "ScrapeCreators OpenClaw agent skill"
     );
+    // Sprint 2.16u — HEARTBEAT.md is now THE state machine driving boot
+    // work (hello → channels → subagents → plan-synth) via MEMORY.md
+    // markers. Old "Heartbeat is cheap / ScrapeCreators calls" forbid-list
+    // wording replaced by per-state-task prompts.
+    expect(fixture.workspaceFiles["HEARTBEAT.md"]).toContain("state-hello");
     expect(fixture.workspaceFiles["HEARTBEAT.md"]).toContain(
-      "ScrapeCreators calls"
+      "/lc_gtm/validate_outbound"
     );
-    expect(fixture.workspaceFiles["jobs.json"]).toContain("gtm_heartbeat");
-    // Sprint 2.16c — boot collapsed back into a single unified task
-    // owning the whole iterative research loop end-to-end. Was split
-    // into phase_1 + phase_2 in 2.14a.7; the split was a workaround
-    // for a timeout we've since removed.
-    expect(fixture.workspaceFiles["jobs.json"]).toContain(
+    // Boot cron and heartbeat cron are GONE — only scheduled events
+    // (weekly review, monthly channel discovery) live in jobs.json.
+    expect(fixture.workspaceFiles["jobs.json"]).not.toContain("gtm_heartbeat");
+    expect(fixture.workspaceFiles["jobs.json"]).not.toContain(
       "0001_gtm_first_research"
     );
-    // Sprint 2.16m — barebones boot cron. One-paragraph mission +
-    // workspace inventory + roughly-this-shape numbered hints. Trusts
-    // the .md files and skills/ to carry the operating details.
+    expect(fixture.workspaceFiles["jobs.json"]).toContain("gtm_weekly_review");
     expect(fixture.workspaceFiles["jobs.json"]).toContain(
-      "You are Maya, the operator's launch manager"
+      "gtm_channel_discovery"
     );
-    expect(fixture.workspaceFiles["jobs.json"]).toContain(
-      "Your workspace at /data/workspace"
-    );
-    expect(fixture.workspaceFiles["jobs.json"]).toContain("Trust your skills");
     expect(
       fixture.workspaceFiles["skills/scrapecreators-api/SKILL.md"]
     ).toContain("ScrapeCreators");

@@ -161,7 +161,10 @@ function run(): CoherenceIssue[] {
     });
     return issues;
   }
-  const requiredJobIds = ["0001_gtm_boot_kickoff", "gtm_heartbeat", "gtm_weekly_review"];
+  // Sprint 2.16u — boot cron + gtm_heartbeat cron dropped (HEARTBEAT.md
+  // state machine now drives boot work). Only real scheduled-event crons
+  // remain in jobs.json.
+  const requiredJobIds = ["gtm_weekly_review", "gtm_channel_discovery"];
   for (const id of requiredJobIds) {
     if (!jobs.ids.has(id)) {
       issues.push({

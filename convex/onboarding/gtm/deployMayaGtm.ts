@@ -339,7 +339,16 @@ export function buildGatewayConfig(
         // tasks: YAML block lives in HEARTBEAT.md so the per-task
         // interval gating is owned by OpenClaw, not by us.
         heartbeat: {
-          every: "30m",
+          // Sprint 2.16u — was "30m". Bumped to "5m" so HEARTBEAT.md
+          // state-machine tasks (state-hello → state-channels-picked →
+          // state-subagents-dispatched → state-plan-synthesis) progress
+          // fast on a fresh deploy. Each state-* task has its own
+          // `interval: 5m` in HEARTBEAT.md, so every heartbeat tick
+          // checks them. Once MEMORY.md markers are set, the state-*
+          // tasks no-op cheaply with HEARTBEAT_OK. Steady-state
+          // maintenance tasks (pending-approvals 30m, calendar-due 1h,
+          // etc.) have their own per-task intervals that gate firing.
+          every: "5m",
           lightContext: true,
           isolatedSession: true,
           activeHours: {
@@ -402,9 +411,11 @@ export function buildGatewayConfig(
     // Sprint 2.16j — enable internal hook runtime so BOOT.md fires
     // on gateway startup as a real native primitive (not just a
     // workspace file Maya happens to read). BOOT.md owns the hello;
-    // the 0001_gtm_first_research cron owns the research dispatch.
-    // Splitting the two stops the model from satisficing after STEP 1
-    // of a single dense 6-step prompt.
+    // Sprint 2.16u — HEARTBEAT.md state machine owns everything after
+    // that (channel pick → subagents → plan synth), gated by MEMORY.md
+    // markers. The boot cron that used to dispatch research was deleted
+    // in Sprint 2.16u because OpenClaw cron is for scheduled events,
+    // not continuous work-toward-a-goal loops.
     //
     // `hooks` is a TOP-LEVEL config key per OpenClaw 2026.4.23 zod
     // schema (sibling of `gateway`, `agents`, `plugins`) — NOT a key

@@ -48,14 +48,19 @@ function fixtureInput() {
 function checkHeartbeatMdHasTasksBlock(): void {
   const { files } = buildMayaGtmWorkspace(fixtureInput());
   const hb = files.get("HEARTBEAT.md") ?? "";
+  // Sprint 2.16u — HEARTBEAT.md is the state machine. State-* tasks
+  // own boot work; pending-approvals / calendar-due / open-loops /
+  // published-results-scan are steady-state maintenance.
   const required = [
     "```yaml",
     "tasks:",
+    "name: state-hello",
+    "name: state-channels-picked",
+    "name: state-subagents-dispatched",
+    "name: state-plan-synthesis",
     "name: pending-approvals",
-    "interval: 30m",
     "name: calendar-due",
     "name: open-loops",
-    "name: hourly-result-scan",
     "HEARTBEAT_OK",
   ];
   for (const r of required) {
@@ -76,14 +81,26 @@ function checkRedundantCronsRemoved(): void {
     jobs?: Array<{ id?: string }>;
   };
   const ids = (jobs.jobs ?? []).map((j) => j.id);
-  if (ids.includes("gtm_calendar_check") || ids.includes("gtm_result_refresh")) {
+  // Sprint 2.16u — boot_kickoff + gtm_heartbeat crons both removed
+  // (HEARTBEAT.md state machine + agents.defaults.heartbeat.every:"5m"
+  // own continuous work-toward-a-goal). Cron is reserved for real
+  // scheduled events (weekly review, monthly channel discovery).
+  const dropped = [
+    "gtm_calendar_check",
+    "gtm_result_refresh",
+    "0001_gtm_boot_kickoff",
+    "0001_gtm_first_research",
+    "gtm_heartbeat",
+  ];
+  const lingering = dropped.filter((d) => ids.includes(d));
+  if (lingering.length > 0) {
     fail(
       "redundant-crons-removed",
-      `jobs.json still ships dropped cron IDs: ${ids.join(", ")}`
+      `jobs.json still ships dropped cron IDs: ${lingering.join(", ")}`
     );
     return;
   }
-  const required = ["0001_gtm_boot_kickoff", "gtm_heartbeat", "gtm_weekly_review"];
+  const required = ["gtm_weekly_review", "gtm_channel_discovery"];
   for (const r of required) {
     if (!ids.includes(r)) {
       fail("required-crons-still-present", `jobs.json missing '${r}'`);
@@ -92,7 +109,7 @@ function checkRedundantCronsRemoved(): void {
   }
   pass(
     "cron-set-reduced",
-    `jobs.json now ships exactly the 3 required crons (boot_kickoff + heartbeat + weekly_review); calendar_check + result_refresh moved into HEARTBEAT.md tasks`
+    `jobs.json now ships only real scheduled-event crons (weekly_review + channel_discovery); boot + heartbeat moved into HEARTBEAT.md state machine`
   );
 }
 

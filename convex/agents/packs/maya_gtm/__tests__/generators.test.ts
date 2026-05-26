@@ -151,21 +151,55 @@ describe("Maya GTM workspace pack", () => {
     expect(agents).toContain("slideshow/carousel");
   });
 
-  it("keeps heartbeat cheap and forbids external spend", () => {
+  it("HEARTBEAT.md is a state machine gated by MEMORY.md markers (Sprint 2.16u)", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
     const heartbeat = files.get("HEARTBEAT.md") ?? "";
 
-    expect(heartbeat).toContain("Heartbeat is cheap");
-    expect(heartbeat).toContain("Hard forbid (every task)");
-    expect(heartbeat).toContain("ScrapeCreators calls");
-    expect(heartbeat).toContain("Gemini deep research");
-    expect(heartbeat).toContain("X recent search");
-    // Sprint 2.10 — voice-contract firewall gate must be referenced for
-    // every user-visible heartbeat reply
+    // State-machine tasks — each gated by a MEMORY.md marker so they
+    // run exactly once on the path from boot to steady state.
+    expect(heartbeat).toContain("state-hello");
+    expect(heartbeat).toContain("state-channels-picked");
+    expect(heartbeat).toContain("state-subagents-dispatched");
+    expect(heartbeat).toContain("state-plan-synthesis");
+    expect(heartbeat).toContain("hello_sent_at:");
+    expect(heartbeat).toContain("channels_picked:");
+    expect(heartbeat).toContain("subagents_spawned:");
+    expect(heartbeat).toContain("plan_sent_at:");
+    // Steady-state maintenance tasks (these survived from the old
+    // HEARTBEAT.md — same per-task interval gating just with explicit
+    // markers + state progression now at the top).
+    expect(heartbeat).toContain("pending-approvals");
+    expect(heartbeat).toContain("calendar-due");
+    expect(heartbeat).toContain("open-loops");
+    expect(heartbeat).toContain("published-results-scan");
+    // HEARTBEAT_OK literal-token reply pattern still required for
+    // quiet ticks — silent ticks are the common case once the state
+    // machine has progressed past plan-synthesis.
+    expect(heartbeat).toContain("HEARTBEAT_OK");
+    // Voice-contract firewall gate must still apply to every
+    // user-visible message the state-* tasks send.
     expect(heartbeat).toContain("/lc_gtm/validate_outbound");
+    // Strategic sends still need evidence_ids — guard mentioned for
+    // the state-plan-synthesis task.
+    expect(heartbeat).toContain("evidence_ids");
   });
 
-  it("ships OpenClaw cron jobs that isolate heartbeat from paid research", () => {
+  it("Sprint 2.16u — jobs.json carries ONLY scheduled events (no boot cron, no heartbeat cron)", () => {
+    // Sprint 2.16u: dropped `0001_gtm_first_research` boot cron and
+    // `gtm_heartbeat` cron. Per OpenClaw docs (/automation/index.md +
+    // /gateway/heartbeat.md), cron is for exact-timing scheduled events;
+    // continuous "work toward a goal" loops live in HEARTBEAT.md's
+    // `tasks:` block with per-task interval gating + heartbeatTaskState
+    // persistence across restarts.
+    //
+    // Boot work (hello → channel pick → subagent dispatch → plan synth)
+    // now lives in HEARTBEAT.md as a MEMORY.md-marker-gated state
+    // machine. The native heartbeat (agents.defaults.heartbeat.every:
+    // "5m") drives it.
+    //
+    // The two crons that REMAIN are real scheduled events:
+    //   - gtm_weekly_review (Mondays 10am, week-over-week refresh)
+    //   - gtm_channel_discovery (1st of month, new-channel hunt)
     const { files } = buildMayaGtmWorkspace(INPUT);
     const jobs = JSON.parse(files.get("jobs.json") ?? "{}") as {
       version?: number;
@@ -185,77 +219,23 @@ describe("Maya GTM workspace pack", () => {
 
     expect(jobs.version).toBe(1);
     expect(jobs.jobs.every((job) => job.state != null)).toBe(true);
-    // Sprint 2.16j — three-turn architecture:
-    //   1. BOOT.md (native one-shot on gateway startup) — hello only
-    //   2. 0001_gtm_first_research cron — pick ≤3 lanes, spawn subagents, yield
-    //   3. Push-resume phase 2 (PHASE_2_PROMPT_BODY in phase2Trigger.ts)
-    //      fires when /lc_gtm/subagent_complete count meets expected
-    //      — synthesize, calendar build, evidence-guarded send.
-    //
-    // The boot cron is the SECOND turn; BOOT.md is the first. This test
-    // covers turn 2 (the cron); BOOT.md is asserted in the workspace
-    // file test above; PHASE_2_PROMPT_BODY has its own test file.
-    const bootJob = jobs.jobs.find(
-      (job) => job.id === "0001_gtm_first_research"
-    );
-    const heartbeat = jobs.jobs.find((job) => job.id === "gtm_heartbeat");
-    const weeklyReview = jobs.jobs.find((job) => job.id === "gtm_weekly_review");
 
-    expect(jobs.jobs[0]?.id).toBe("0001_gtm_first_research");
-    expect(bootJob).toBeTruthy();
-    expect(bootJob?.sessionTarget).toBe("isolated");
-    // No timeoutSeconds — Maya takes as long as she needs to dispatch.
-    expect(bootJob?.payload.timeoutSeconds).toBeUndefined();
-    // Medium thinking for the judgment-call channel pick.
-    expect(bootJob?.payload.thinking).toBe("medium");
-    // Sprint 2.16m (barebones) prompt: a one-paragraph mission +
-    // workspace inventory + roughly-this-shape numbered hints. No
-    // forcing functions, no embedded URL patterns, no detailed
-    // subagent contract template. Trusts the .md files and skills/
-    // to carry the operating details.
-    expect(bootJob?.payload.message).toContain("You are Maya, the operator's launch manager");
-    expect(bootJob?.payload.message).toContain("Your workspace at /data/workspace");
-    expect(bootJob?.payload.message).toContain("Trust your skills");
-    // Must still tell Maya about the key callback endpoints + the
-    // sessions_yield pattern that wakes phase 2 via push-resume.
-    expect(bootJob?.payload.message).toContain("/lc_gtm/send_update");
-    expect(bootJob?.payload.message).toContain("/lc_gtm/phase_1_announce");
-    expect(bootJob?.payload.message).toContain("/lc_gtm/subagent_complete");
-    expect(bootJob?.payload.message).toContain("sessions_spawn");
-    expect(bootJob?.payload.message).toContain("sessions_yield");
-    // Must still name the tactical vs strategic messageClass distinction
-    // so Maya doesn't trip the evidence-guard with claims-less strategic
-    // sends.
-    expect(bootJob?.payload.message).toContain('messageClass: "tactical"');
-    expect(bootJob?.payload.message).toContain('messageClass: "strategic"');
-    // Push-resume architecture (subagent_complete → runAgentTurn webhook)
-    // owns phase 2. The cron no longer carries old phase ids.
-    expect(jobs.jobs.find((j) => j.id === "0001_gtm_boot_phase_1")).toBeUndefined();
-    expect(jobs.jobs.find((j) => j.id === "0002_gtm_boot_phase_2")).toBeUndefined();
-    expect(heartbeat).toBeTruthy();
-    expect(heartbeat?.sessionTarget).toBe("isolated");
-    expect(heartbeat?.payload.kind).toBe("agentTurn");
-    // Sprint 2.16l — bumped from "off" to "minimal" because
-    // gemini-3.5-flash via OpenRouter rejects thinking:off at the
-    // API level. "minimal" is the cheapest accepted thinking budget.
-    expect(heartbeat?.payload.thinking).toBe("minimal");
-    expect(heartbeat?.payload.timeoutSeconds).toBe(60);
-    expect(heartbeat?.delivery).toEqual({ mode: "none", bestEffort: true });
-    expect(heartbeat?.payload.message).toContain("Read HEARTBEAT.md");
-    // Sprint 2.16k-3 — case-changed to uppercase "Do NOT" as part of the
-    // strict-token-or-silent rewrite. The forbidden-API spend list is the
-    // same set, just emphasized differently.
-    expect(heartbeat?.payload.message).toContain("Do NOT call ScrapeCreators");
-    expect(heartbeat?.payload.message).toContain("paid external API");
-    // Sprint 2.16k-3 — must enforce literal-token-only reply to stop the
-    // 2026-05-26 leak where the model wrote out reasoning then said
-    // "HEARTBEAT_OK" and the whole reasoning chain reached Telegram.
-    expect(heartbeat?.payload.message).toContain("ENTIRE reply MUST be exactly the literal");
-    expect(heartbeat?.payload.message).toContain("12 characters and nothing else");
-    // Sprint 2.7 — weekly review prompt rewritten to dispatch FRESH
-    // _research subagents (not just summarize old state). Old assertions
-    // (`explicit bounded research job`, `maxScrapeCreatorsCalls`) are
-    // replaced by the new compounding-cycle vocabulary.
+    // Boot cron + heartbeat cron must both be GONE.
+    expect(
+      jobs.jobs.find((j) => j.id === "0001_gtm_first_research")
+    ).toBeUndefined();
+    expect(jobs.jobs.find((j) => j.id === "gtm_heartbeat")).toBeUndefined();
+    expect(
+      jobs.jobs.find((j) => j.id === "0001_gtm_boot_phase_1")
+    ).toBeUndefined();
+    expect(
+      jobs.jobs.find((j) => j.id === "0002_gtm_boot_phase_2")
+    ).toBeUndefined();
+
+    // Weekly review survives — it's a real exact-timing scheduled event
+    // (Mondays 10am), and still drives the compounding cycle.
+    const weeklyReview = jobs.jobs.find((j) => j.id === "gtm_weekly_review");
+    expect(weeklyReview).toBeTruthy();
     expect(weeklyReview?.payload.message).toContain("WEEKLY REVIEW");
     expect(weeklyReview?.payload.message).toContain("compounding cycle");
     expect(weeklyReview?.payload.message).toContain("subagent");
@@ -263,25 +243,26 @@ describe("Maya GTM workspace pack", () => {
       "/lc_gtm/get_my_recent_post_results"
     );
     expect(weeklyReview?.payload.message).toContain("BANS");
+
+    // Channel discovery survives too — monthly hunt for new channels.
+    const channelDiscovery = jobs.jobs.find(
+      (j) => j.id === "gtm_channel_discovery"
+    );
+    expect(channelDiscovery).toBeTruthy();
   });
 
   it("Sprint 2.10 — every user-facing cron prompt mandates the validate_outbound firewall", () => {
     // Sibling-file scan: prevent silent regression of the voice
-    // contract enforcement. boot_kickoff, gtm_channel_discovery,
-    // and gtm_weekly_review all send user-visible Telegram messages;
-    // each must instruct Maya to POST drafts through the firewall
-    // before sendMessage. (gtm_heartbeat replies HEARTBEAT_OK on
-    // quiet ticks; HEARTBEAT.md's top-of-file gate covers it for
-    // the rare task that does send a message.)
+    // contract enforcement. Sprint 2.16u removed the boot cron so the
+    // remaining user-facing crons are gtm_channel_discovery and
+    // gtm_weekly_review; both must instruct Maya to POST drafts through
+    // the firewall before sendMessage. HEARTBEAT.md's state-* tasks
+    // have their own firewall gate at the top of the file.
     const { files } = buildMayaGtmWorkspace(INPUT);
     const jobs = JSON.parse(files.get("jobs.json") ?? "{}") as {
       jobs: Array<{ id: string; payload: { message: string } }>;
     };
-    const userFacingIds = [
-      "0001_gtm_first_research",
-      "gtm_channel_discovery",
-      "gtm_weekly_review",
-    ];
+    const userFacingIds = ["gtm_channel_discovery", "gtm_weekly_review"];
     for (const id of userFacingIds) {
       const job = jobs.jobs.find((j) => j.id === id);
       expect(job, `cron ${id} must exist`).toBeTruthy();
@@ -290,38 +271,6 @@ describe("Maya GTM workspace pack", () => {
         `cron ${id} must mandate /lc_gtm/validate_outbound before sendMessage`
       ).toContain("/lc_gtm/validate_outbound");
     }
-  });
-
-  it("Sprint 2.16m — barebones boot cron trusts skills + server enforcement instead of prompt forcing functions", () => {
-    // Sprint 2.16j put hard "DO NOT" instructions in the boot cron prompt
-    // to prevent regressions like the 2026-05-25 "I populated your
-    // calendar with 0 events" hallucination. Sprint 2.16m moves that
-    // enforcement OUT of the prompt and TRUSTS:
-    //   - the server-side evidence-guard (no strategic send without claims)
-    //   - the voice firewall (/lc_gtm/validate_outbound)
-    //   - the rich workspace .md files (PLAYBOOK, SOUL, AGENTS, skills/)
-    //
-    // The prompt now just gives Maya the mission + workspace inventory
-    // + the messageClass distinction. If she tries to send a strategic
-    // message without claims, the server returns 400 and she has to
-    // adapt — but the constraint isn't blanketed across the prompt.
-    const { files } = buildMayaGtmWorkspace(INPUT);
-    const jobs = JSON.parse(files.get("jobs.json") ?? "{}") as {
-      jobs: Array<{ id: string; payload: { message: string } }>;
-    };
-    const boot = jobs.jobs.find((j) => j.id === "0001_gtm_first_research");
-    expect(boot).toBeTruthy();
-    // Tactical vs strategic distinction stays — that's how she knows
-    // the evidence-guard rules.
-    expect(boot!.payload.message).toContain('messageClass: "tactical"');
-    expect(boot!.payload.message).toContain('messageClass: "strategic"');
-    // Workspace inventory is the new load-bearing scaffold — Maya
-    // navigates via these references, not via inline instructions.
-    expect(boot!.payload.message).toContain("APP.md");
-    expect(boot!.payload.message).toContain("SOUL.md");
-    expect(boot!.payload.message).toContain("PLAYBOOK.md");
-    expect(boot!.payload.message).toContain("skills/");
-    expect(boot!.payload.message).toContain("scrapecreators-api/SKILL.md");
   });
 
   it("keeps the prompt-context bundle (workspace minus playbook/ + skills/*) inside a prompt budget", () => {

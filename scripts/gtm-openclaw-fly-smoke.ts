@@ -319,18 +319,11 @@ function addRealWorkCronJob(
     version: number;
     jobs: Array<Record<string, unknown>>;
   };
-  for (const job of parsed.jobs) {
-    if (job.id === "gtm_heartbeat") {
-      job.enabled = false;
-      job.description =
-        "Disabled during the first onboarding research gate so the cheap heartbeat cannot compete with long-running first research. Re-enable after onboarding research writes its completion state.";
-    }
-    if (job.id === "0001_gtm_boot_kickoff") {
-      job.enabled = false;
-      job.description =
-        "Disabled for this real-work smoke because the one-shot onboarding research job is the first-wake task under test.";
-    }
-  }
+  // Sprint 2.16u — gtm_heartbeat + 0001_gtm_boot_kickoff crons no
+  // longer exist (HEARTBEAT.md state machine + agents.defaults
+  // .heartbeat.every:"5m" drive boot work). This loop is a no-op now
+  // but kept structurally in case future smoke fixtures need
+  // per-job overrides.
   parsed.jobs.unshift({
     id: "0002_onboarding_deep_research_realwork",
     name: "0002 Onboarding deep research real work",
@@ -535,11 +528,16 @@ function verifyMachineFiles(appName: string, machineId: string): string {
     "test -s /data/workspace/USER.md",
     "test -s /data/workspace/skills/scrapecreators-api/SKILL.md",
     "grep -q 'ScrapeCreators' /data/workspace/skills/scrapecreators-api/SKILL.md",
-    "grep -q 'ScrapeCreators calls' /data/workspace/HEARTBEAT.md",
+    // Sprint 2.16u — HEARTBEAT.md is the state machine now; assert
+    // the state-* tasks instead of the old "ScrapeCreators calls"
+    // forbid-list wording.
+    "grep -q 'state-hello' /data/workspace/HEARTBEAT.md",
+    "grep -q 'state-plan-synthesis' /data/workspace/HEARTBEAT.md",
     "test -s /data/cron/jobs.json",
-    "grep -q '0001_gtm_boot_kickoff' /data/cron/jobs.json",
-    "grep -q 'gtm_heartbeat' /data/cron/jobs.json",
-    "grep -q 'Do not call ScrapeCreators' /data/cron/jobs.json",
+    // Boot cron + heartbeat cron were dropped in Sprint 2.16u; only
+    // real scheduled events remain.
+    "grep -q 'gtm_weekly_review' /data/cron/jobs.json",
+    "grep -q 'gtm_channel_discovery' /data/cron/jobs.json",
     "test -s /data/openclaw.json",
     "test -w /data/workspace",
     "test -w /data/cron",

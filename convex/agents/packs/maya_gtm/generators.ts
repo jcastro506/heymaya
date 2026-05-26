@@ -504,8 +504,9 @@ You are Maya, ${input.accountEmail}'s launch manager.
 
 Before composing anything, read MEMORY.md. If it contains a line
 starting with \`hello_sent_at:\`, the operator has already received
-your intro from a prior turn. SKIP straight to the research mission
-in the 0001 cron's message — do NOT send another hello.
+your intro from a prior turn. END this turn — do NOT send another
+hello. (HEARTBEAT.md's state machine will pick up where you left
+off on the next tick.)
 
 If MEMORY.md does NOT contain \`hello_sent_at:\`, continue to Step 2.
 
@@ -576,13 +577,14 @@ This is your safety net against the OpenClaw retry pattern: if your
 agent run errors out and OpenClaw spawns a fresh agent run, the new
 run will read MEMORY.md, see the marker, and skip Step 2-3.
 
-## Step 5 — Continue with the research mission
+## Step 5 — End this turn; HEARTBEAT.md drives everything else
 
-After the hello (or after skipping it because the marker exists),
-proceed to the boot cron's mission in \`0001_gtm_first_research\` —
-read APP.md, SOUL.md, PLAYBOOK.md, TOOLS.md, and the relevant
-\`skills/\` directories. Pick channels. Spawn research subagents.
-Yield.
+Once the hello is sent (or skipped because the marker exists), END
+this turn. Do NOT start the research mission inline. HEARTBEAT.md
+is the state machine — on the next heartbeat tick (~5 min), the
+\`state-channels-picked\` task fires, then \`state-subagents-dispatched\`,
+then \`state-plan-synthesis\`. Each task is MEMORY.md-marker-gated so
+they run exactly once. You don't need to drive that flow from here.
 
 ## The operator may reply
 
@@ -595,75 +597,111 @@ moment.
 }
 
 function renderHeartbeat(): string {
+  // Sprint 2.16u — HEARTBEAT.md is now THE state machine that drives
+  // Maya's launch work. The 0001_gtm_first_research boot cron is gone
+  // (per OpenClaw /automation/index.md + /gateway/heartbeat.md: cron is
+  // for exact-timing scheduled events; heartbeat is for continuous
+  // work-toward-a-goal with per-task interval gating). State-machine
+  // progression: state-hello → state-channels-picked →
+  // state-subagents-dispatched → state-plan-synthesis → steady state.
+  // Each state-* task is gated by a marker in MEMORY.md.
   return `# HEARTBEAT.md
 
-Heartbeat is cheap and mostly does nothing. The tasks block below uses OpenClaw's native interval gating — only tasks whose \`interval\` has elapsed are included in any given heartbeat fire.
+This is the state machine for Maya's launch work between heartbeat ticks. Each task has an \`interval:\` — only due tasks fire on a given tick. The agent's \`heartbeatTaskState\` (managed by OpenClaw) persists per-task last-run timestamps across restarts, so progress survives errors.
 
-When a task has nothing user-visible to surface, reply with the literal token \`HEARTBEAT_OK\` (and nothing else). OpenClaw drops the message silently — no Telegram spam on quiet ticks.
+State-machine progression: each \`state-*\` task is gated by a marker in MEMORY.md. If the marker is present, the task no-ops with \`HEARTBEAT_OK\`. The state machine moves forward exactly when MEMORY.md markers are missing. Once all four state-* markers are set, only the maintenance tasks (\`pending-approvals\`, \`calendar-due\`, etc.) continue firing.
 
-## Hard forbid (every task)
+## Voice contract gate
 
-- ScrapeCreators calls
-- Gemini deep research
-- broad web search
-- X recent search
-- Composio publishing without explicit approval
-- full strategy replanning
+EVERY user-visible message goes through this pipeline:
+  1. exec curl POST text to \`/lc_gtm/validate_outbound\` (Bearer auth).
+  2. If \`ok:false\`, rewrite matched items, re-validate. Loop until \`ok:true\`.
+  3. exec curl POST validated text to \`/lc_gtm/send_update\` (Bearer auth) with the appropriate messageClass.
 
-If a heartbeat finds real work, it queues a bounded job via the Convex hook bridge (\`POST <convexHookCallbackUrl>/lc_gtm/research_callback\` with the new note) and exits.
+Direct prose replies bypass the firewall and leak internals — that's a hard violation. Reply with \`HEARTBEAT_OK\` literally (the 12-char token, no preamble) when a task has nothing to surface.
 
-## Voice contract gate (every user-visible message)
+## Tool primer
 
-Before ANY task below calls \`sendMessage\` or replies with anything except \`HEARTBEAT_OK\`, the composed message MUST be POSTed to \`<convexHookCallbackUrl>/lc_gtm/validate_outbound\` first. If the response is \`ok:false\`, rewrite each matched item out and re-validate. Loop until \`ok:true\`. This is the Sprint 2.10 firewall — catches skill slugs / .md filenames / pipeline jargon / AI self-references / slop phrases. Operator-reported live regression on 2026-05-24 (first message leaked "maya-app-inspector + maya-icp-hypothesis"); never skip the gate.
+\`web_fetch\` is GET-only and does NOT accept custom headers. DO NOT use it for \`/lc_gtm/*\` endpoints (they require POST + Bearer auth). Use \`exec\` to run curl with \`$HOOK_TOKEN\` env var. TOOLS.md has the convexSite base URL.
 
 ## tasks (native OpenClaw tasks block)
 
 \`\`\`yaml
 tasks:
+  # ─── state machine (gated by MEMORY.md markers) ──────────────
+  - name: state-hello
+    interval: 5m
+    prompt: |
+      Read /data/workspace/MEMORY.md. If it contains a line starting with \`hello_sent_at:\`, reply HEARTBEAT_OK.
+
+      Otherwise: read USER.md (operator's first name) and APP.md (product name + founderWhy). Compose a fresh, friendly intro using that context (no canned "Hey [name] — Maya. I'm in" template; write it from scratch). Voice per SOUL.md.
+
+      Validate via exec+curl POST to \`/lc_gtm/validate_outbound\`. If ok:true, send via exec+curl POST to \`/lc_gtm/send_update\` with body {"text":"<validated>","messageClass":"tactical"}.
+
+      After a successful send, append \`hello_sent_at: <ISO ts>\` to /data/workspace/MEMORY.md. Then reply HEARTBEAT_OK.
+
+  - name: state-channels-picked
+    interval: 5m
+    prompt: |
+      Read MEMORY.md. If it contains \`channels_picked:\`, reply HEARTBEAT_OK.
+
+      Otherwise: read APP.md (product, founderWhy, weekGoal, stage, can-record-screen/face flags). Pick at most 3 channel lanes (from reddit/x/tiktok/instagram/linkedin/hn) that this product's buyers actually use. PLAYBOOK.md has the decision logic per channel. Append \`channels_picked: [channel1, channel2, ...]\` to MEMORY.md. Do NOT spawn subagents yet — that's the next task. Reply HEARTBEAT_OK after writing.
+
+  - name: state-subagents-dispatched
+    interval: 5m
+    prompt: |
+      Read MEMORY.md. If it contains \`subagents_spawned:\`, reply HEARTBEAT_OK.
+
+      If MEMORY.md does NOT contain \`channels_picked:\` yet, reply HEARTBEAT_OK (state-channels-picked hasn't run yet).
+
+      Otherwise: parse the channels list. For each channel, sessions_spawn the matching subagent with agentId "<channel>_research" (DO NOT pass a model arg — agent config handles model resolution; passing "hard_research_beta" or similar as a model causes OpenRouter 400). Each subagent's task should reference scrapecreators-api/SKILL.md for the API patterns + the channel's per-platform skill SOP.
+
+      After spawning N subagents, exec curl POST to \`/lc_gtm/phase_1_announce\` with body {"researchJobId":"<id>","subagentsExpected":N}. Then append \`subagents_spawned: N\` to MEMORY.md. Reply HEARTBEAT_OK.
+
+  - name: state-plan-synthesis
+    interval: 5m
+    prompt: |
+      Read MEMORY.md. If it contains \`plan_sent_at:\`, reply HEARTBEAT_OK (steady state).
+
+      If MEMORY.md does NOT contain \`subagents_spawned:\` yet, reply HEARTBEAT_OK (state-subagents-dispatched hasn't run).
+
+      exec curl GET \`/lc_gtm/get_my_target_threads\`. Count the rows returned.
+
+      If 0 threads: subagents still working. Reply HEARTBEAT_OK.
+
+      If threads landed: gather evidence_ids from the target_threads + supporting gtmEvidenceCards. Compose a research-backed 14-day plan message (≤500 chars, manager voice per SOUL.md). Validate via /lc_gtm/validate_outbound. exec curl POST to \`/lc_gtm/send_update\` with body:
+        {"text":"<validated>","messageClass":"strategic","claims":[{"claim":"...","evidence_ids":["..."]}]}.
+
+      The server hard-blocks strategic sends without resolved evidence_ids — every claim must cite a real evidence card.
+
+      After success, append \`plan_sent_at: <ISO ts>\` to MEMORY.md. Reply HEARTBEAT_OK.
+
+  # ─── steady-state maintenance ──────────────────────────────
   - name: pending-approvals
     interval: 30m
     prompt: |
-      Read MEMORY.md and check Convex (via the mission-board surface) for
-      gtmDrafts in status="pending_approval" where the user hasn't replied
-      in 24h. If any, send ONE concise Telegram nudge per draft. Don't
-      repeat the nudge until 48h. If no overdue approvals, reply HEARTBEAT_OK.
+      exec curl GET to fetch gtmDraftedContent rows in approvalState:"pending_approval". If any haven't been pinged in 24h, send ONE concise reminder per draft (via /lc_gtm/send_update with messageClass:"accountability"). Don't re-nudge within 48h of the prior nudge. Otherwise reply HEARTBEAT_OK.
+
   - name: calendar-due
     interval: 1h
     prompt: |
-      Read GTM.md and the cached gtmCalendarEvents. If a Maya-owned event
-      is due in the next 2h and the operator hasn't already been pinged,
-      send a single "in 30 min: <event>" reminder. Otherwise reply HEARTBEAT_OK.
+      exec curl GET gtmCalendarEvents. If a Maya-owned event is due in the next 2h and the operator hasn't been pinged, send ONE reminder via /lc_gtm/send_update messageClass:"tactical". Otherwise reply HEARTBEAT_OK.
+
   - name: open-loops
     interval: 2h
     prompt: |
-      Scan MEMORY.md for open loops. If anything is stale >7d, surface it
-      in one short Telegram message ("still waiting on: X"). If no stale
-      loops, reply HEARTBEAT_OK.
-  - name: hourly-result-scan
-    interval: 1h
-    prompt: |
-      Check gtmCalendarEvents in status="completed" within the last 24h
-      that have no gtmResultSnapshots row yet. If any, ask the operator
-      ONE short question to log the result. Otherwise reply HEARTBEAT_OK.
-  - name: published-post-results-scan
+      Scan MEMORY.md for open loops. If anything is stale >7d, surface it in ONE short message via /lc_gtm/send_update. Otherwise reply HEARTBEAT_OK.
+
+  - name: published-results-scan
     interval: 6h
     prompt: |
-      Sprint 2.6 — for each gtmDraftedContent row with approvalState="published"
-      AND publishedAt within the last 7d, refresh metrics from the source
-      platform (X via TwitterAPI.io, Reddit via Algolia, HN via Algolia,
-      LinkedIn via Composio). Persist each snapshot via POST
-      /lc_gtm/post_result_snapshot. Compare against the prior snapshot
-      for that draft (if any) — if engagement is ≥5x the baseline OR
-      ≥50 absolute new likes/upvotes, surface ONE Telegram note to
-      operator: "Your [day-ago] post on [platform] is taking off — [N]
-      likes, [M] comments. Want me to draft a follow-up?" Otherwise
-      silent. Reply HEARTBEAT_OK after persistence regardless of surface
-      decision.
+      For each gtmDraftedContent with approvalState:"published" AND publishedAt within 7d, refresh metrics from the source platform (X via TwitterAPI.io, Reddit via Algolia, HN via Algolia, LinkedIn via Composio). Persist each snapshot via exec curl POST \`/lc_gtm/post_result_snapshot\`. If engagement ≥5x baseline OR ≥50 absolute new likes/upvotes, surface ONE note to operator. Otherwise reply HEARTBEAT_OK.
 \`\`\`
 
 ## Active hours
 
-I respect the operator's quiet hours: tasks only run between 09:00 and 22:00 in the operator's timezone. OpenClaw's heartbeat \`activeHours\` config enforces this — I don't have to gate manually.`;
+Tasks only run between 09:00 and 22:00 in the operator's timezone (operator-tz configured at deploy time). OpenClaw's heartbeat \`activeHours\` config enforces this — we don't gate manually inside task prompts.
+`;
 }
 
 /**
@@ -705,116 +743,27 @@ function buildCronDelivery(
 }
 
 function renderJobs(input: MayaGtmWorkspaceInput): string {
-  // Sprint 2.16c — UNIFIED boot. No phase_1/phase_2 split. Maya wakes
-  // ONCE 30 sec after machine boot, does the entire iterative research
-  // loop in a single long-running turn: spawn subagents → wait →
-  // review → spawn refinement waves → populate calendar → final
-  // message. The two-phase split (Sprint 2.14a.7) was a workaround
-  // for an LLM-timeout issue we've since removed (Sprint 2.14a.11).
-  // It also forced unnatural splits in Maya's reasoning. Single
-  // long turn matches the OpenClaw agentic shape the operator
-  // wants.
-  const baseMs = input.bootKickoffAtMs ?? Date.now();
-  const bootAt = new Date(baseMs + 30_000).toISOString(); // +30 sec
+  // Sprint 2.16u — REMOVED 0001_gtm_first_research boot cron and the
+  // separate gtm_heartbeat cron. Per OpenClaw docs
+  // (/automation/index.md + /gateway/heartbeat.md), cron is reserved
+  // for exact-timing scheduled events (daily reports, weekly reviews,
+  // monthly hunts). Continuous "do work toward a goal" loops belong in
+  // heartbeat with HEARTBEAT.md's `tasks:` block — interval-based
+  // per-task gating, heartbeatTaskState persists across restarts, only
+  // due tasks fire each tick, no LLM call when nothing is due.
+  //
+  // Boot work (hello, channel pick, subagent dispatch, plan synth) is
+  // now a state machine in HEARTBEAT.md gated by MEMORY.md markers.
+  // The native OpenClaw heartbeat at agents.defaults.heartbeat.every
+  // drives it.
+  //
+  // Crons that REMAIN are real scheduled events:
+  //   - gtm_weekly_review: Sundays 10am — week-over-week refresh
+  //   - gtm_channel_discovery: 1st of month — new-channels hunt
   const delivery = buildCronDelivery(input);
   const jobs = {
     version: 1,
     jobs: [
-      {
-        // Sprint 2.16c — single unified boot task. Maya wakes once
-        // 30 sec after machine boot, does the entire iterative
-        // research loop, populates calendar, sends final message.
-        // No phase_1/phase_2 split. This is the OpenClaw shape:
-        // one long-running agent turn that owns the work end-to-end.
-        id: "0001_gtm_first_research",
-        name: "0001 GTM first research — channel pick + subagent dispatch",
-        description:
-          "Maya's first research turn. ONE job this turn: read product context, pick ≤3 channel lanes from first principles, spawn matching _research subagents, yield. The push-resume phase 2 (fires via /lc_gtm/subagent_complete) owns plan synthesis + send. Sprint 2.16j — split off the dense 6-step prompt that caused the empty-completion bug.",
-        enabled: true,
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        schedule: { kind: "at", at: bootAt },
-        sessionTarget: "isolated",
-        wakeMode: "now",
-        deleteAfterRun: true,
-        payload: {
-          kind: "agentTurn",
-          lightContext: false,
-          // No timeoutSeconds. This turn runs until Maya yields after
-          // spawning subagents — typically 1-3 min. Individual LLM
-          // calls still bounded by pi-coding-agent + OpenRouter inner
-          // timeouts.
-          thinking: "medium",
-          message: `You are Maya, the operator's launch manager. You just came online.
-
-Your workspace at /data/workspace has everything you need:
-  - APP.md — the operator's product
-  - USER.md — the operator's context (name, timezone, week goal)
-  - SOUL.md — your voice contract (read this; it's load-bearing)
-  - PLAYBOOK.md — the launch doctrine (HOW to do launch work, per channel)
-  - TOOLS.md — the Convex callbacks you can POST to (hookToken auth + convexSite URL are here)
-  - AGENTS.md — subagent dispatch patterns
-  - GTM.md — channel decisions worksheet (mostly empty for you to fill in)
-  - skills/ — detailed how-tos including:
-      • scrapecreators-api/SKILL.md (full API docs for 27+ platforms — read this before calling any external API)
-      • maya-reddit-demand-researcher, maya-x-founder-led-researcher, maya-tiktok-format-researcher, etc.
-      • maya-channel-strategy-judge, maya-calendar-populator, maya-slop-critic, maya-voice-matcher
-
-Your mission this turn: get this operator from "shipped product, no customers" to "first 14 days of concrete daily actions in their hand."
-
-FIRST — handle the hello per BOOT.md (read it). Short version: check MEMORY.md for a \`hello_sent_at:\` line. If present, skip to the research mission below. If not present, compose a friendly intro using USER.md + APP.md context, validate + send, then APPEND \`hello_sent_at: <ISO timestamp>\` to MEMORY.md so future turns don't re-greet. Do NOT use any canned "Hey [name] — Maya. I'm in." template; write the intro fresh from workspace context.
-
-Then the research mission:
-  1. Figure out where this operator's buyers actually hang out. Pick a small number of channels you can defend.
-  2. Spawn one _research subagent per channel via sessions_spawn. Each subagent gets the full coding profile (read, write, edit, exec, process, web_fetch, web_search, x_search, memory_*). Give it the mission + which platform to research; it can read its own SKILL files.
-  3. POST /lc_gtm/phase_1_announce { researchJobId, subagentsExpected: N } once you've spawned them.
-  4. sessions_yield. A follow-up turn fires automatically when subagents POST /lc_gtm/subagent_complete — that turn synthesizes the 14-day plan and sends the operator a research-backed message.
-
-Take as long as you need. Send PROGRESS updates with messageClass: "tactical" as you work — never re-introduce yourself, never say "I'm in" or "I'm Maya" again. Just report what you're doing concretely ("Analyzing ModelHub", "Spawning Reddit researcher", "Found 12 high-intent threads"). Before every /lc_gtm/send_update, POST your text to /lc_gtm/validate_outbound first — if ok:false, rewrite and re-validate. Strategic claims (channel picks, thread counts, calendar promises) require evidence_ids and go in phase 2 with messageClass: "strategic" + claims[]; the server enforces this.
-
-Trust your skills. They have the URL patterns, scoring rubrics, and voice rules. Don't reinvent.`,
-        },
-        delivery,
-        state: {},
-      },
-      {
-        id: "gtm_heartbeat",
-        name: "GTM heartbeat",
-        description:
-          "Cheap liveness and local-state check. Must never call ScrapeCreators, Gemini deep research, broad web search, or Composio publishing.",
-        enabled: true,
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        schedule: { kind: "cron", expr: "*/30 * * * *", tz: input.timezone },
-        sessionTarget: "isolated",
-        wakeMode: "now",
-        payload: {
-          kind: "agentTurn",
-          lightContext: true,
-          // Sprint 2.16l — was "off" but gemini-3.5-flash via OpenRouter
-          // rejects thinking:off with HTTP 400 ("Reasoning is mandatory
-          // for this endpoint"). "minimal" is the cheapest accepted level.
-          thinking: "minimal",
-          timeoutSeconds: 60,
-          message:
-            // Sprint 2.16k-3 — operator-reported 2026-05-26 leak: a heartbeat
-            // tick reasoned out loud ("This is clear! The workspace is
-            // currently configured with several jobs under jobs.json...") and
-            // ended with "HEARTBEAT_OK". OpenClaw's announce-mode delivery
-            // only drops the message silently if the agent's ENTIRE reply IS
-            // LITERALLY just "HEARTBEAT_OK" — anything else gets delivered to
-            // Telegram raw, bypassing /lc_gtm/validate_outbound. Hammer the
-            // token-only constraint until the model stops narrating.
-            "AUTONOMOUS HEARTBEAT — strict token-or-silent reply.\n\nRead HEARTBEAT.md, MEMORY.md, APP.md, and GTM.md. Check only local workspace/Convex/cache state for pending approvals, overdue calendar/result jobs, unread user messages, and open loops. Do NOT call ScrapeCreators, Gemini deep research, broad web search, X search, Composio publishing, or any paid external API. If real work is needed, write a bounded queued-job note and exit.\n\n**REPLY RULES (load-bearing — voice contract leak observed 2026-05-26):**\n\nIf nothing is due, your ENTIRE reply MUST be exactly the literal 12-character string:\n\nHEARTBEAT_OK\n\nNo preamble. No reasoning. No \"I will...\". No \"Let me check...\". No \"This is clear!\". No \"Therefore...\". No quoting your own instructions back. No closing remark. The 12 characters and nothing else.\n\nIf something IS due and you have something to say to the operator, POST your composed message to /lc_gtm/send_update with the appropriate messageClass ('tactical' for status updates, 'accountability' for nudges, 'strategic' for plan-level claims with evidence_ids). NEVER write user-facing prose as your direct reply — direct replies go via announce-mode delivery and bypass the voice firewall.\n\nIf you reply with anything other than the literal token \"HEARTBEAT_OK\" AND you didn't POST to /lc_gtm/send_update, you have leaked internal pipeline reasoning to the operator. That is a hard voice-contract violation.",
-        },
-        delivery,
-        state: {},
-      },
-      // Sprint 18 — gtm_calendar_check + gtm_result_refresh removed.
-      // Their work now lives in HEARTBEAT.md's native `tasks:` YAML
-      // block as `calendar-due` (interval:1h) + `hourly-result-scan`
-      // (interval:1h). OpenClaw's heartbeat fires every 30 min and
-      // only includes due tasks — same coverage, half the cron entries.
       {
         id: "gtm_channel_discovery",
         name: "Monthly GTM channel discovery",
