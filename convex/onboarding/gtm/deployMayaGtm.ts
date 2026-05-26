@@ -352,6 +352,15 @@ export function buildGatewayConfig(
         "device-pair": { enabled: false },
         "phone-control": { enabled: false },
         "talk-voice": { enabled: false },
+        // Sprint 2.16j — disable plugins whose runtime deps install
+        // DURING the first agent turn. Observed 2026-05-26 deploy:
+        // microsoft (node-edge-tts@1.2.10) takes ~5 min to install at
+        // runtime; it starts AFTER gateway-ready, blocking the 0001
+        // cron's first agent turn so it never produces output. Until
+        // Sprint 2.16i preseed is extended to include these in the
+        // Docker image, disable them at the gateway-config level.
+        microsoft: { enabled: false },
+        "voice-call": { enabled: false },
       },
     },
     // Sprint 2.16j — enable internal hook runtime so BOOT.md fires
