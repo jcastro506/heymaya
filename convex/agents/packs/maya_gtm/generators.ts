@@ -543,14 +543,19 @@ The \`/lc_gtm/*\` endpoints are POST-only and require Bearer auth.
 use it for these endpoints. It will return 404 and your intro will
 silently fail to land.
 
-Use \`exec\` to run curl. The hookToken value is in TOOLS.md
-(\`$HOOK_TOKEN\` env var on this machine). The convexSite base URL is
-also in TOOLS.md.
+Use \`exec\` to run curl. Two env vars are already set on this machine
+(do NOT hardcode URLs, do NOT substitute \`.convex.cloud\` for
+\`.convex.site\` — that's a training-data trap that 404s every call):
+
+  - \`$HOOK_TOKEN\` — Bearer auth token
+  - \`$CONVEX_SITE_URL\` — base URL for /lc_gtm/* endpoints
+    (this is a \`.convex.site\` host, NOT \`.convex.cloud\` —
+    \`.cloud\` is the RPC/WebSocket host where /lc_gtm/* returns 404)
 
 First, validate your intro text:
 
 \`\`\`
-exec({ command: "curl -sS -X POST -H 'Authorization: Bearer $HOOK_TOKEN' -H 'Content-Type: application/json' -d '{\\"text\\":\\"<your intro>\\"}' '<convexSite>/lc_gtm/validate_outbound'" })
+exec({ command: "curl -sS -X POST -H 'Authorization: Bearer $HOOK_TOKEN' -H 'Content-Type: application/json' -d '{\\"text\\":\\"<your intro>\\"}' \\"$CONVEX_SITE_URL/lc_gtm/validate_outbound\\"" })
 \`\`\`
 
 If the response has \`ok:false\`, rewrite the matched items out and
@@ -559,12 +564,11 @@ re-validate. Loop until \`ok:true\`.
 Then send the validated intro:
 
 \`\`\`
-exec({ command: "curl -sS -X POST -H 'Authorization: Bearer $HOOK_TOKEN' -H 'Content-Type: application/json' -d '{\\"text\\":\\"<validated intro>\\",\\"messageClass\\":\\"tactical\\"}' '<convexSite>/lc_gtm/send_update'" })
+exec({ command: "curl -sS -X POST -H 'Authorization: Bearer $HOOK_TOKEN' -H 'Content-Type: application/json' -d '{\\"text\\":\\"<validated intro>\\",\\"messageClass\\":\\"tactical\\"}' \\"$CONVEX_SITE_URL/lc_gtm/send_update\\"" })
 \`\`\`
 
 \`messageClass: "tactical"\` tells the evidence-guard this is not a
-strategic claim (no evidence_ids needed for a greeting). The hookToken
-and convexSite values are in TOOLS.md — read them; do not guess.
+strategic claim (no evidence_ids needed for a greeting).
 
 ## Step 4 — Write the dedup marker
 
@@ -622,7 +626,12 @@ Direct prose replies bypass the firewall and leak internals — that's a hard vi
 
 ## Tool primer
 
-\`web_fetch\` is GET-only and does NOT accept custom headers. DO NOT use it for \`/lc_gtm/*\` endpoints (they require POST + Bearer auth). Use \`exec\` to run curl with \`$HOOK_TOKEN\` env var. TOOLS.md has the convexSite base URL.
+\`web_fetch\` is GET-only and does NOT accept custom headers. DO NOT use it for \`/lc_gtm/*\` endpoints (they require POST + Bearer auth). Use \`exec\` to run curl with these env vars (already exported on this machine — do NOT hardcode URLs or hostnames):
+
+  - \`$HOOK_TOKEN\` — Bearer auth token
+  - \`$CONVEX_SITE_URL\` — base URL for /lc_gtm/* (this is a \`.convex.site\` host; \`.convex.cloud\` is the WRONG host and 404s every call — do not substitute)
+
+Example: \`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/send_update"\`
 
 ## tasks
 
