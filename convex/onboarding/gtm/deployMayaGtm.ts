@@ -746,33 +746,73 @@ export const deployMayaGtm = internalAction({
       }
     }
 
-    // Sprint 2.15.4 — RESTORED Sprint 2.11 deploy-time hello.
+    // Sprint 2.16q — RE-RESTORED deploy-time hello.
     //
-    // Live 2026-05-25 testing: the Sprint 2.15 architecture (Maya's
-    // boot_phase_1 cron sends the first message instead of Convex)
-    // is blocked by preseed-loading bugs we haven't fully diagnosed
-    // — boot_phase_1 hangs for 15+ min in some deploys. Pro product
-    // needs sub-30-sec confirmation that Maya is alive.
+    // Sprint 2.16f deleted it on the theory "Maya owns her own hello."
+    // Live 2026-05-26 testing showed the cost: every LLM error in
+    // Maya's boot cron causes OpenClaw to spawn a fresh agent run
+    // with NO memory of prior runs. Each fresh run reads BOOT.md +
+    // cron prompt, sees "ONE JOB: send hello," and sends another
+    // hello variant. Operator received 3-6 hello messages per deploy.
     //
-    // For now: send the hardcoded Convex-side hello AT deploy time.
-    // Maya's boot cron still fires + sends her own research-backed
-    // message later, but operator gets immediate confirmation. The
-    // dual-message pattern is acceptable as a temporary fix until
-    // Sprint 2.16 (event-driven Maya-authored fast hello).
+    // Sending the hello FROM CONVEX at deploy time bypasses Maya for
+    // this one concern. She doesn't need to send a hello because the
+    // operator already received one before her first agent turn even
+    // started. Her boot prompt (Sprint 2.16q updates) instructs her
+    // to SKIP the hello step entirely — go straight to research.
     //
-    // recordDeployTimeHelloResult is still called for the trace
-    // breadcrumb (Sprint 2.14a.6).
-    // Sprint 2.16f — deploy-time Telegram hello deleted. Maya now owns
-    // her own greeting via STEP 1 of the boot prompt — within ~2 min of
-    // wake she POSTs an introductory voice-clean message to
-    // /lc_gtm/send_update. Having Convex send a hardcoded hello AND
-    // Maya send hers led to duplicate "Hey Josh" messages + confused
-    // expectations. Maya's hello is also research-aware (says what
-    // she's about to do), so it's strictly better.
-    await ctx.runMutation(
-      internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-      { agentId: args.agentId, result: "skipped:maya_owns_hello_in_boot_prompt" }
-    );
+    // Per-deploy: one hello, sent from Convex, never re-fires on
+    // agent retry/restart.
+    //
+    // Templated unique-per-user hello using the operator's first name
+    // + product details from onboarding. Plain-language role ("here to
+    // help you get customers"), grounded in what they shared, ends
+    // with a question that invites a reply (the Telegram channel
+    // supports two-way messaging — dmPolicy:"allowlist" with allowFrom
+    // routes the operator's responses to Maya's session).
+    const fullName = row.creator.displayName ?? "";
+    const firstName = fullName.split(/\s+/)[0]?.trim() || "there";
+    const productName = row.app.name ?? "your product";
+    const founderWhy = (row.app.founderWhy ?? "").trim();
+    const founderWhyClause = founderWhy
+      ? `Going to dig in on "${founderWhy}" and figure out where your buyers actually hang out.`
+      : `Going to figure out where your buyers actually hang out.`;
+    const helloText =
+      `Hey ${firstName} — Maya here. I'm your go-to-market agent — basically, I'm here to help you get customers to ${productName}.\n\n` +
+      `${founderWhyClause} I'll keep pinging updates here while I work, then come back with a full 14-day plan.\n\n` +
+      `Sound cool? Reply anytime if there's something specific you want me to focus on.`;
+    if (input.telegramChatId) {
+      try {
+        const result = await sendDirectTelegramMessage({
+          botToken: process.env.TELEGRAM_BOT_TOKEN,
+          chatId: input.telegramChatId,
+          text: helloText,
+        });
+        await ctx.runMutation(
+          internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
+          {
+            agentId: args.agentId,
+            result: result.ok
+              ? "sent"
+              : `telegram_${result.reason ?? "unknown"}`,
+            messageId: result.messageId ?? undefined,
+          }
+        );
+      } catch (err) {
+        await ctx.runMutation(
+          internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
+          {
+            agentId: args.agentId,
+            result: `exception:${(err as Error).message}`.slice(0, 200),
+          }
+        );
+      }
+    } else {
+      await ctx.runMutation(
+        internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
+        { agentId: args.agentId, result: "skipped:no_telegram_chat_id" }
+      );
+    }
 
     try {
       await ctx.runMutation(

@@ -715,14 +715,15 @@ Your workspace at /data/workspace has everything you need:
 
 Your mission this turn: get this operator from "shipped product, no customers" to "first 14 days of concrete daily actions in their hand."
 
-Roughly that means:
-  1. Send the operator a voice-clean hello via POST /lc_gtm/send_update { text, messageClass: "tactical" } so they see life immediately. Validate against SOUL.md voice contract (the firewall at /lc_gtm/validate_outbound will reject leaks).
-  2. Figure out where this operator's buyers actually hang out. Pick a small number of channels you can defend.
-  3. Spawn one _research subagent per channel via sessions_spawn. Each subagent gets the full coding profile (read, write, edit, exec, process, web_fetch, web_search, x_search, memory_*). Give it the mission + which platform to research; it can read its own SKILL files.
-  4. POST /lc_gtm/phase_1_announce { researchJobId, subagentsExpected: N } once you've spawned them.
-  5. sessions_yield. A follow-up turn fires automatically when subagents POST /lc_gtm/subagent_complete — that turn synthesizes the 14-day plan and sends the operator a research-backed message.
+IMPORTANT — the operator has ALREADY received a "Hey, I'm setting up your launch plan, first update in ~10 min" message before you even started this turn (sent directly by the system at deploy time). DO NOT send another hello/intro. Go straight to research. Your first /lc_gtm/send_update from this turn onward should be a PROGRESS update, not another greeting.
 
-Take as long as you need. Send progress updates with messageClass: "tactical" as you work — the operator wants to see you're alive. Strategic claims (channel picks, thread counts, calendar promises) require evidence_ids and go in phase 2 with messageClass: "strategic" + claims[]; the server enforces this.
+Roughly the shape:
+  1. Figure out where this operator's buyers actually hang out. Pick a small number of channels you can defend.
+  2. Spawn one _research subagent per channel via sessions_spawn. Each subagent gets the full coding profile (read, write, edit, exec, process, web_fetch, web_search, x_search, memory_*). Give it the mission + which platform to research; it can read its own SKILL files.
+  3. POST /lc_gtm/phase_1_announce { researchJobId, subagentsExpected: N } once you've spawned them.
+  4. sessions_yield. A follow-up turn fires automatically when subagents POST /lc_gtm/subagent_complete — that turn synthesizes the 14-day plan and sends the operator a research-backed message.
+
+Take as long as you need. Send PROGRESS updates with messageClass: "tactical" as you work — never re-introduce yourself, never say "I'm in" or "I'm Maya" again. Just report what you're doing concretely ("Analyzing ModelHub", "Spawning Reddit researcher", "Found 12 high-intent threads"). Before every /lc_gtm/send_update, POST your text to /lc_gtm/validate_outbound first — if ok:false, rewrite and re-validate. Strategic claims (channel picks, thread counts, calendar promises) require evidence_ids and go in phase 2 with messageClass: "strategic" + claims[]; the server enforces this.
 
 Trust your skills. They have the URL patterns, scoring rubrics, and voice rules. Don't reinvent.`,
         },
