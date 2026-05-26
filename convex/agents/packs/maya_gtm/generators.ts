@@ -803,27 +803,59 @@ function buildCronDelivery(
 }
 
 function renderJobs(input: MayaGtmWorkspaceInput): string {
-  // Sprint 2.16u — REMOVED 0001_gtm_first_research boot cron and the
-  // separate gtm_heartbeat cron. Per OpenClaw docs
-  // (/automation/index.md + /gateway/heartbeat.md), cron is reserved
-  // for exact-timing scheduled events (daily reports, weekly reviews,
-  // monthly hunts). Continuous "do work toward a goal" loops belong in
-  // heartbeat with HEARTBEAT.md's `tasks:` block — interval-based
-  // per-task gating, heartbeatTaskState persists across restarts, only
-  // due tasks fire each tick, no LLM call when nothing is due.
+  // Sprint 2.16u-fix11 — RE-ADDED the kickstart one-shot cron.
   //
-  // Boot work (hello, channel pick, subagent dispatch, plan synth) is
-  // now a state machine in HEARTBEAT.md gated by MEMORY.md markers.
-  // The native OpenClaw heartbeat at agents.defaults.heartbeat.every
-  // drives it.
+  // Sprint 2.16u dropped both boot crons thinking HEARTBEAT.md's
+  // tasks: block would replace them. It doesn't reliably — the
+  // heartbeat scheduler "started" log line consistently appears, but
+  // task ticks fail to fire within the expected 5m window
+  // (observed across multiple machines: ws78fmnh3aw3eb31js, ws76445...,
+  // ws7f92...). Worse, even when ticks DO fire, the first tick is at
+  // gateway_ready + 5m, so the operator waits 5+ min for any signal.
   //
-  // Crons that REMAIN are real scheduled events:
-  //   - gtm_weekly_review: Sundays 10am — week-over-week refresh
+  // The prior creator app (Sprint 9.6, commit b3e65d0) solved this
+  // with a one-shot "kickstart" cron — schedule.kind:"at", wakeMode:
+  // "now", deleteAfterRun:true. OpenClaw's native scheduler fires it
+  // ~180s after deploy regardless of heartbeat behavior. That's the
+  // deterministic boot-trigger mechanism.
+  //
+  // HEARTBEAT.md still owns continuous state-machine progression
+  // (channels-picked → subagents-dispatched → plan-synthesis); the
+  // kickstart only handles the first hello.
+  //
+  // Other crons that remain (real scheduled events):
+  //   - gtm_weekly_review: Mondays 10am — week-over-week refresh
   //   - gtm_channel_discovery: 1st of month — new-channels hunt
   const delivery = buildCronDelivery(input);
+  // Default: deploy time + 180s. Tests pass a fixed bootKickoffAtMs
+  // via the input seam so the workspace bundle is deterministic.
+  const kickstartAtMs = (input.bootKickoffAtMs ?? Date.now()) + 180_000;
   const jobs = {
     version: 1,
     jobs: [
+      {
+        id: "0001_kickstart",
+        name: "First-boot kickstart (one-shot)",
+        description:
+          "Sprint 2.16u-fix11 — fires ~180s after deploy, delivers Maya's intro to the paired Telegram channel, then deletes itself. This is the deterministic boot-trigger; HEARTBEAT.md's state machine owns everything after.",
+        enabled: true,
+        createdAtMs: 0,
+        updatedAtMs: 0,
+        schedule: { kind: "at" as const, at: new Date(kickstartAtMs).toISOString() },
+        sessionTarget: "isolated" as const,
+        wakeMode: "now" as const,
+        deleteAfterRun: true,
+        payload: {
+          kind: "agentTurn" as const,
+          timeoutSeconds: 300,
+          thinking: "medium" as const,
+          lightContext: false,
+          message:
+            "FIRST-BOOT KICKSTART. Send Maya's first message to the operator.\n\n1. Read USER.md (operator first name) and APP.md (product name + founderWhy). Compose a friendly, plain-language intro grounded in those files. Voice per SOUL.md — manager voice, no skill slugs, no .md filenames, no internal pipeline jargon, no AI self-references.\n\nThe intro should: (a) greet the operator by name, (b) identify yourself as Maya — their go-to-market launch manager, (c) acknowledge their product/why so they feel heard, (d) set expectations: you're going to dig in, send updates as you find things, come back with a 14-day plan, (e) end with a question that invites them to reply.\n\n2. Length: 3-5 short paragraphs. Read aloud — sound like a capable manager, not a database lookup.\n\n3. Voice-check against SOUL.md's 'What I never say' ban list before sending. Fix anything that slipped in.\n\n4. Send via the OpenClaw message tool (action=send, channel=telegram, target=<operator chatId from delivery config>) OR — if message tool is unavailable in this isolated cron session — via exec+curl POST to $CONVEX_SITE_URL/lc_gtm/send_update with body {\"text\":\"<intro>\",\"messageClass\":\"tactical\"}, Bearer $HOOK_TOKEN auth.\n\n5. After successful send, append `hello_sent_at: <ISO ts>` to /data/workspace/MEMORY.md. This blocks HEARTBEAT.md's state-hello task from re-sending on its next tick.\n\n6. Reply NO_REPLY in your session text after the send. HEARTBEAT.md will pick up state-channels-picked → state-subagents-dispatched → state-plan-synthesis on its 5-minute cadence.",
+        },
+        delivery,
+        state: {},
+      },
       {
         id: "gtm_channel_discovery",
         name: "Monthly GTM channel discovery",

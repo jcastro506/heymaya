@@ -225,7 +225,8 @@ describe("Maya GTM workspace pack", () => {
     expect(jobs.version).toBe(1);
     expect(jobs.jobs.every((job) => job.state != null)).toBe(true);
 
-    // Boot cron + heartbeat cron must both be GONE.
+    // The OLD heavy boot crons stay GONE — they orchestrated 45-min
+    // research turns that held main session captive (Sprint 2.16u).
     expect(
       jobs.jobs.find((j) => j.id === "0001_gtm_first_research")
     ).toBeUndefined();
@@ -236,6 +237,23 @@ describe("Maya GTM workspace pack", () => {
     expect(
       jobs.jobs.find((j) => j.id === "0002_gtm_boot_phase_2")
     ).toBeUndefined();
+
+    // Sprint 2.16u-fix11 — kickstart one-shot cron RE-ADDED (lightweight,
+    // single message, deletes after run). Fires ~180s after deploy via
+    // OpenClaw native scheduler. Replaces unreliable heartbeat-driven hello.
+    const kickstart = jobs.jobs.find((j) => j.id === "0001_kickstart");
+    expect(kickstart, "kickstart cron must exist").toBeTruthy();
+    expect(kickstart?.sessionTarget).toBe("isolated");
+    expect((kickstart as unknown as { wakeMode?: string }).wakeMode).toBe(
+      "now"
+    );
+    expect(
+      (kickstart as unknown as { deleteAfterRun?: boolean }).deleteAfterRun
+    ).toBe(true);
+    expect(kickstart?.payload.message).toContain("FIRST-BOOT KICKSTART");
+    expect(kickstart?.payload.message).toContain("SOUL.md");
+    expect(kickstart?.payload.message).toContain("hello_sent_at");
+    expect(kickstart?.payload.message).toContain("/lc_gtm/send_update");
 
     // Weekly review survives — it's a real exact-timing scheduled event
     // (Mondays 10am), and still drives the compounding cycle.

@@ -34,6 +34,10 @@ describe("gtm-openclaw-fly-smoke", () => {
     expect(fixture.workspaceFiles["jobs.json"]).toContain(
       "gtm_channel_discovery"
     );
+    // Sprint 2.16u-fix11 — kickstart one-shot cron deterministically
+    // fires Maya's hello ~180s after deploy.
+    expect(fixture.workspaceFiles["jobs.json"]).toContain("0001_kickstart");
+    expect(fixture.workspaceFiles["jobs.json"]).toContain("FIRST-BOOT KICKSTART");
     expect(
       fixture.workspaceFiles["skills/scrapecreators-api/SKILL.md"]
     ).toContain("ScrapeCreators");
