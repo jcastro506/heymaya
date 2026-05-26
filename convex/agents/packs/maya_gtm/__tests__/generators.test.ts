@@ -58,18 +58,19 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("APP.md")).toContain("BugBrief");
     expect(files.get("GTM.md")).toContain("Primary: reddit");
     expect(files.get("AGENTS.md")).toContain("read APP.md and GTM.md");
-    // Sprint 2.16j — BOOT.md is now a real native one-shot that sends
-    // hello and exits. It reads USER.md + SOUL.md and posts to
-    // /lc_gtm/send_update with messageClass: "tactical" (no claims
-    // required for the hello).
-    expect(files.get("BOOT.md")).toContain("USER.md");
-    expect(files.get("BOOT.md")).toContain("SOUL.md");
+    // Sprint 2.16q — BOOT.md no longer asks Maya to send a hello. The
+    // hello is sent FROM CONVEX at deploy time (templated with first
+    // name + product context). Maya goes straight to research. Old
+    // BOOT.md said "ONE JOB: send hello" with a canned example, and
+    // Maya re-sent variations every time an LLM error restarted her
+    // agent run.
+    expect(files.get("BOOT.md")).toContain("hello is ALREADY sent");
+    expect(files.get("BOOT.md")).toContain("DO NOT compose another");
+    expect(files.get("BOOT.md")).toContain("operator may reply");
+    expect(files.get("BOOT.md")).toContain("skills/");
+    // BOOT.md must still tell Maya about /lc_gtm/send_update so she
+    // knows where to send PROGRESS updates (not hellos).
     expect(files.get("BOOT.md")).toContain("/lc_gtm/send_update");
-    expect(files.get("BOOT.md")).toContain("/lc_gtm/validate_outbound");
-    expect(files.get("BOOT.md")).toContain('messageClass": "tactical"');
-    // BOOT.md must NOT instruct Maya to do research, channel selection,
-    // or any external API work in this turn — that's the 0001 cron's job.
-    expect(files.get("BOOT.md")).toContain("Hello and out.");
     expect(files.get("USER.md")).toContain("Will manually post Instagram: yes");
     expect(files.get("USER.md")).toContain("TikTok warm-up state: warming");
     expect(files.get("USER.md")).toContain("TikTok account age days: 3");
