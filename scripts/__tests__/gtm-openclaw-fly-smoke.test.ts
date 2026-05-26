@@ -12,7 +12,7 @@ describe("gtm-openclaw-fly-smoke", () => {
       "iad"
     );
 
-    expect(fixture.image).toBe("registry.fly.io/heymaya-openclaw:v2026.4.23");
+    expect(fixture.image).toBe("registry.fly.io/heymaya-openclaw:v2026.4.24");
     expect(fixture.workspaceFiles["AGENTS.md"]).toContain("Maya GTM");
     expect(fixture.workspaceFiles["TOOLS.md"]).toContain(
       "ScrapeCreators OpenClaw agent skill"
@@ -123,7 +123,7 @@ describe("gtm-openclaw-fly-smoke", () => {
     );
     expect(args.slice(-5)).toEqual([
       "--",
-      "registry.fly.io/heymaya-openclaw:v2026.4.23",
+      "registry.fly.io/heymaya-openclaw:v2026.4.24",
       "/bin/sh",
       "-lc",
       fixture.bootCommand,

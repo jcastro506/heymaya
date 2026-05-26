@@ -13,9 +13,14 @@
 #   flyctl auth docker
 #   docker buildx build --platform linux/amd64 \
 #     --build-arg OPENCLAW_VERSION=2026.4.23 \
-#     -t registry.fly.io/heymaya-openclaw:v2026.4.23 \
+#     -t registry.fly.io/heymaya-openclaw:v2026.4.24 \
 #     -t registry.fly.io/heymaya-openclaw:latest \
 #     --push infra/openclaw-runtime/
+#
+# v2026.4.24 — same OpenClaw npm package (2026.4.23) but removes the
+# patch-claw-messenger-plugin.mjs `gateway_start` strip. Restores the
+# bundled `boot-md` hook that fires BOOT.md on gateway-ready, giving
+# Maya instant-on-boot messaging like the prior creator app.
 #
 # Layout contract (consumed by `convex/onboarding/business/deployServiceMaya.ts`):
 #   The deploy passes `OPENCLAW_STATE_DIR=/data` on the machine env. The

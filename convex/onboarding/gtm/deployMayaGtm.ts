@@ -57,7 +57,13 @@ export type DeployMayaGtmResult =
  * on the Convex deployment. Roll back by clearing the env var.
  */
 export const OPENCLAW_IMAGE_TARGET = "registry.fly.io/heymaya-openclaw:v2026.5.20";
-export const OPENCLAW_IMAGE_PINNED = "registry.fly.io/heymaya-openclaw:v2026.4.23";
+// Sprint 2.16u-fix10 — bumped pinned tag to v2026.4.24. Same upstream
+// OpenClaw npm package (2026.4.23) but removes the
+// patch-claw-messenger-plugin.mjs gateway_start strip, so the bundled
+// boot-md hook fires BOOT.md on gateway-ready (instant-hello). The
+// 2026.5.20 upgrade is still pending the doctor + audit pass per the
+// note above.
+export const OPENCLAW_IMAGE_PINNED = "registry.fly.io/heymaya-openclaw:v2026.4.24";
 
 const OPENCLAW_IMAGE =
   process.env.MAYA_GTM_OPENCLAW_IMAGE ??

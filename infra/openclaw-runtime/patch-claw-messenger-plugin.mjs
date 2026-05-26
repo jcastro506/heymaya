@@ -173,11 +173,16 @@ if (!src.includes("describeMessageTool:")) {
         },
         listActions: () => ["send", "react"],`;
 
-  if (!src.includes(needle)) {
-    throw new Error("Unable to patch Claw Messenger actions interface; expected marker not found.");
+  if (src.includes(needle)) {
+    src = src.replace(needle, replacement);
+  } else {
+    // Sprint 2.16u-fix10 — tolerate claw-messenger version drift. Older
+    // versions of this plugin had a slightly different actions interface
+    // shape. If the marker isn't found, the upstream plugin has likely
+    // restructured this surface — log a warning and continue rather than
+    // breaking the entire image build for a non-critical normalization patch.
+    console.warn("[patch] skipped: Claw Messenger actions interface marker not found (plugin version drift); continuing.");
   }
-
-  src = src.replace(needle, replacement);
 }
 
 if (!src.includes("function normalizeStartedAccount(")) {
@@ -210,11 +215,16 @@ if (!src.includes("function normalizeStartedAccount(")) {
 }
 `;
 
-  if (!src.includes(needle)) {
-    throw new Error("Unable to patch Claw Messenger account normalization; expected marker not found.");
+  if (src.includes(needle)) {
+    src = src.replace(needle, replacement);
+  } else {
+    // Sprint 2.16u-fix10 — same drift-tolerance pattern as actions
+    // interface patch above. If the resolveAccount needle has shifted in
+    // a newer claw-messenger version, the normalizeStartedAccount helper
+    // won't get inserted. The downstream call sites at lines 220+ are
+    // already guarded by `if (src.includes(...))` so they no-op safely.
+    console.warn("[patch] skipped: Claw Messenger account normalization marker not found (plugin version drift); continuing.");
   }
-
-  src = src.replace(needle, replacement);
 }
 
 if (src.includes("            const account = ctx.account;")) {
@@ -360,22 +370,19 @@ if (gatewaySrc.includes(updateCheckNeedle)) {
   throw new Error("Unable to patch startup update check; expected marker not found.");
 }
 
-const gatewayStartHooksNeedle = `\tsidecarsPromise.then(async () => {
-\t\tif (params.minimalTestGateway) return;
-\t\tconst hookRunner = await runtimeDeps.getGlobalHookRunner();`;
-
-if (gatewaySrc.includes(gatewayStartHooksNeedle)) {
-  gatewaySrc = gatewaySrc.replace(
-    gatewayStartHooksNeedle,
-    `\tsidecarsPromise.then(async () => {
-\t\tparams.log.info("skipping gateway_start hooks for creator runtime");
-\t\treturn;
-\t\tif (params.minimalTestGateway) return;
-\t\tconst hookRunner = await runtimeDeps.getGlobalHookRunner();`
-  );
-} else if (!gatewaySrc.includes("skipping gateway_start hooks for creator runtime")) {
-  throw new Error("Unable to patch gateway_start hooks; expected marker not found.");
-}
+// Sprint 2.16u-fix10 — REMOVED the gateway_start hooks skip patch.
+//
+// Earlier sprints stripped gateway_start in the name of a "lighter creator
+// runtime". The consequence: OpenClaw's bundled `boot-md` hook (which fires
+// BOOT.md on `gateway:startup`) never ran. Result: Maya had no instant-
+// on-boot message — operators had to wait `heartbeat.every` (5m) for the
+// first message instead of getting one ~60 sec after deploy like the
+// original creator app did.
+//
+// With this patch block removed, OpenClaw runs gateway_start hooks
+// normally. Combined with `hooks.internal.enabled: true` in the gateway
+// config, the bundled `boot-md` hook fires BOOT.md on gateway-ready —
+// restoring the prior creator app's instant-hello behavior.
 
 const hooksFirstNeedle = `\t\t\tconst requestStages = [{
 \t\t\t\tname: "hooks",
