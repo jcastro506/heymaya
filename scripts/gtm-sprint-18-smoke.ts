@@ -51,8 +51,9 @@ function checkHeartbeatMdHasTasksBlock(): void {
   // Sprint 2.16u — HEARTBEAT.md is the state machine. State-* tasks
   // own boot work; pending-approvals / calendar-due / open-loops /
   // published-results-scan are steady-state maintenance.
+  // Sprint 2.16u-fix — tasks: block is BARE (no code fence) per
+  // OpenClaw /gateway/heartbeat.md so the parser actually picks it up.
   const required = [
-    "```yaml",
     "tasks:",
     "name: state-hello",
     "name: state-channels-picked",

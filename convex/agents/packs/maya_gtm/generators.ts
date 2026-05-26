@@ -624,79 +624,78 @@ Direct prose replies bypass the firewall and leak internals — that's a hard vi
 
 \`web_fetch\` is GET-only and does NOT accept custom headers. DO NOT use it for \`/lc_gtm/*\` endpoints (they require POST + Bearer auth). Use \`exec\` to run curl with \`$HOOK_TOKEN\` env var. TOOLS.md has the convexSite base URL.
 
-## tasks (native OpenClaw tasks block)
+## tasks
 
-\`\`\`yaml
+OpenClaw parses this block natively (see /gateway/heartbeat.md). Format is BARE (no code fence, top-level list at column 0) so the parser picks it up.
+
 tasks:
-  # ─── state machine (gated by MEMORY.md markers) ──────────────
-  - name: state-hello
-    interval: 5m
-    prompt: |
-      Read /data/workspace/MEMORY.md. If it contains a line starting with \`hello_sent_at:\`, reply HEARTBEAT_OK.
 
-      Otherwise: read USER.md (operator's first name) and APP.md (product name + founderWhy). Compose a fresh, friendly intro using that context (no canned "Hey [name] — Maya. I'm in" template; write it from scratch). Voice per SOUL.md.
+- name: state-hello
+  interval: 5m
+  prompt: |
+    Read /data/workspace/MEMORY.md. If it contains a line starting with \`hello_sent_at:\`, reply HEARTBEAT_OK.
 
-      Validate via exec+curl POST to \`/lc_gtm/validate_outbound\`. If ok:true, send via exec+curl POST to \`/lc_gtm/send_update\` with body {"text":"<validated>","messageClass":"tactical"}.
+    Otherwise: read USER.md (operator's first name) and APP.md (product name + founderWhy). Compose a fresh, friendly intro using that context (no canned "Hey [name] — Maya. I'm in" template; write it from scratch). Voice per SOUL.md.
 
-      After a successful send, append \`hello_sent_at: <ISO ts>\` to /data/workspace/MEMORY.md. Then reply HEARTBEAT_OK.
+    Validate via exec+curl POST to \`/lc_gtm/validate_outbound\`. If ok:true, send via exec+curl POST to \`/lc_gtm/send_update\` with body {"text":"<validated>","messageClass":"tactical"}.
 
-  - name: state-channels-picked
-    interval: 5m
-    prompt: |
-      Read MEMORY.md. If it contains \`channels_picked:\`, reply HEARTBEAT_OK.
+    After a successful send, append \`hello_sent_at: <ISO ts>\` to /data/workspace/MEMORY.md. Then reply HEARTBEAT_OK.
 
-      Otherwise: read APP.md (product, founderWhy, weekGoal, stage, can-record-screen/face flags). Pick at most 3 channel lanes (from reddit/x/tiktok/instagram/linkedin/hn) that this product's buyers actually use. PLAYBOOK.md has the decision logic per channel. Append \`channels_picked: [channel1, channel2, ...]\` to MEMORY.md. Do NOT spawn subagents yet — that's the next task. Reply HEARTBEAT_OK after writing.
+- name: state-channels-picked
+  interval: 5m
+  prompt: |
+    Read MEMORY.md. If it contains \`channels_picked:\`, reply HEARTBEAT_OK.
 
-  - name: state-subagents-dispatched
-    interval: 5m
-    prompt: |
-      Read MEMORY.md. If it contains \`subagents_spawned:\`, reply HEARTBEAT_OK.
+    Otherwise: read APP.md (product, founderWhy, weekGoal, stage, can-record-screen/face flags). Pick at most 3 channel lanes (from reddit/x/tiktok/instagram/linkedin/hn) that this product's buyers actually use. PLAYBOOK.md has the decision logic per channel. Append \`channels_picked: [channel1, channel2, ...]\` to MEMORY.md. Do NOT spawn subagents yet — that's the next task. Reply HEARTBEAT_OK after writing.
 
-      If MEMORY.md does NOT contain \`channels_picked:\` yet, reply HEARTBEAT_OK (state-channels-picked hasn't run yet).
+- name: state-subagents-dispatched
+  interval: 5m
+  prompt: |
+    Read MEMORY.md. If it contains \`subagents_spawned:\`, reply HEARTBEAT_OK.
 
-      Otherwise: parse the channels list. For each channel, sessions_spawn the matching subagent with agentId "<channel>_research" (DO NOT pass a model arg — agent config handles model resolution; passing "hard_research_beta" or similar as a model causes OpenRouter 400). Each subagent's task should reference scrapecreators-api/SKILL.md for the API patterns + the channel's per-platform skill SOP.
+    If MEMORY.md does NOT contain \`channels_picked:\` yet, reply HEARTBEAT_OK (state-channels-picked hasn't run yet).
 
-      After spawning N subagents, exec curl POST to \`/lc_gtm/phase_1_announce\` with body {"researchJobId":"<id>","subagentsExpected":N}. Then append \`subagents_spawned: N\` to MEMORY.md. Reply HEARTBEAT_OK.
+    Otherwise: parse the channels list. For each channel, sessions_spawn the matching subagent with agentId "<channel>_research" (DO NOT pass a model arg — agent config handles model resolution; passing "hard_research_beta" or similar as a model causes OpenRouter 400). Each subagent's task should reference scrapecreators-api/SKILL.md for the API patterns + the channel's per-platform skill SOP.
 
-  - name: state-plan-synthesis
-    interval: 5m
-    prompt: |
-      Read MEMORY.md. If it contains \`plan_sent_at:\`, reply HEARTBEAT_OK (steady state).
+    After spawning N subagents, exec curl POST to \`/lc_gtm/phase_1_announce\` with body {"researchJobId":"<id>","subagentsExpected":N}. Then append \`subagents_spawned: N\` to MEMORY.md. Reply HEARTBEAT_OK.
 
-      If MEMORY.md does NOT contain \`subagents_spawned:\` yet, reply HEARTBEAT_OK (state-subagents-dispatched hasn't run).
+- name: state-plan-synthesis
+  interval: 5m
+  prompt: |
+    Read MEMORY.md. If it contains \`plan_sent_at:\`, reply HEARTBEAT_OK (steady state).
 
-      exec curl GET \`/lc_gtm/get_my_target_threads\`. Count the rows returned.
+    If MEMORY.md does NOT contain \`subagents_spawned:\` yet, reply HEARTBEAT_OK (state-subagents-dispatched hasn't run).
 
-      If 0 threads: subagents still working. Reply HEARTBEAT_OK.
+    exec curl GET \`/lc_gtm/get_my_target_threads\`. Count the rows returned.
 
-      If threads landed: gather evidence_ids from the target_threads + supporting gtmEvidenceCards. Compose a research-backed 14-day plan message (≤500 chars, manager voice per SOUL.md). Validate via /lc_gtm/validate_outbound. exec curl POST to \`/lc_gtm/send_update\` with body:
-        {"text":"<validated>","messageClass":"strategic","claims":[{"claim":"...","evidence_ids":["..."]}]}.
+    If 0 threads: subagents still working. Reply HEARTBEAT_OK.
 
-      The server hard-blocks strategic sends without resolved evidence_ids — every claim must cite a real evidence card.
+    If threads landed: gather evidence_ids from the target_threads + supporting gtmEvidenceCards. Compose a research-backed 14-day plan message (≤500 chars, manager voice per SOUL.md). Validate via /lc_gtm/validate_outbound. exec curl POST to \`/lc_gtm/send_update\` with body:
+      {"text":"<validated>","messageClass":"strategic","claims":[{"claim":"...","evidence_ids":["..."]}]}.
 
-      After success, append \`plan_sent_at: <ISO ts>\` to MEMORY.md. Reply HEARTBEAT_OK.
+    The server hard-blocks strategic sends without resolved evidence_ids — every claim must cite a real evidence card.
 
-  # ─── steady-state maintenance ──────────────────────────────
-  - name: pending-approvals
-    interval: 30m
-    prompt: |
-      exec curl GET to fetch gtmDraftedContent rows in approvalState:"pending_approval". If any haven't been pinged in 24h, send ONE concise reminder per draft (via /lc_gtm/send_update with messageClass:"accountability"). Don't re-nudge within 48h of the prior nudge. Otherwise reply HEARTBEAT_OK.
+    After success, append \`plan_sent_at: <ISO ts>\` to MEMORY.md. Reply HEARTBEAT_OK.
 
-  - name: calendar-due
-    interval: 1h
-    prompt: |
-      exec curl GET gtmCalendarEvents. If a Maya-owned event is due in the next 2h and the operator hasn't been pinged, send ONE reminder via /lc_gtm/send_update messageClass:"tactical". Otherwise reply HEARTBEAT_OK.
+- name: pending-approvals
+  interval: 30m
+  prompt: |
+    exec curl GET to fetch gtmDraftedContent rows in approvalState:"pending_approval". If any haven't been pinged in 24h, send ONE concise reminder per draft (via /lc_gtm/send_update with messageClass:"accountability"). Don't re-nudge within 48h of the prior nudge. Otherwise reply HEARTBEAT_OK.
 
-  - name: open-loops
-    interval: 2h
-    prompt: |
-      Scan MEMORY.md for open loops. If anything is stale >7d, surface it in ONE short message via /lc_gtm/send_update. Otherwise reply HEARTBEAT_OK.
+- name: calendar-due
+  interval: 1h
+  prompt: |
+    exec curl GET gtmCalendarEvents. If a Maya-owned event is due in the next 2h and the operator hasn't been pinged, send ONE reminder via /lc_gtm/send_update messageClass:"tactical". Otherwise reply HEARTBEAT_OK.
 
-  - name: published-results-scan
-    interval: 6h
-    prompt: |
-      For each gtmDraftedContent with approvalState:"published" AND publishedAt within 7d, refresh metrics from the source platform (X via TwitterAPI.io, Reddit via Algolia, HN via Algolia, LinkedIn via Composio). Persist each snapshot via exec curl POST \`/lc_gtm/post_result_snapshot\`. If engagement ≥5x baseline OR ≥50 absolute new likes/upvotes, surface ONE note to operator. Otherwise reply HEARTBEAT_OK.
-\`\`\`
+- name: open-loops
+  interval: 2h
+  prompt: |
+    Scan MEMORY.md for open loops. If anything is stale >7d, surface it in ONE short message via /lc_gtm/send_update. Otherwise reply HEARTBEAT_OK.
+
+- name: published-results-scan
+  interval: 6h
+  prompt: |
+    For each gtmDraftedContent with approvalState:"published" AND publishedAt within 7d, refresh metrics from the source platform (X via TwitterAPI.io, Reddit via Algolia, HN via Algolia, LinkedIn via Composio). Persist each snapshot via exec curl POST \`/lc_gtm/post_result_snapshot\`. If engagement ≥5x baseline OR ≥50 absolute new likes/upvotes, surface ONE note to operator. Otherwise reply HEARTBEAT_OK.
 
 ## Active hours
 
