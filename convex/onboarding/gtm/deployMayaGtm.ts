@@ -115,31 +115,28 @@ const MODEL_ROUTING = {
   // to spawn refinement waves or ship the plan. Was 3-flash-preview;
   // operator-flagged 2026-05-25 that 3.5 is the right brain for the
   // iterative-research-loop architecture.
-  // Sprint 2.16o — operator caught it: `google/gemini-3-flash` is
-  // NOT a valid OpenRouter model ID (confirmed by curl-ing
-  // https://openrouter.ai/api/v1/models). Real options are
-  // gemini-2.0-flash-001, gemini-2.5-flash, gemini-3-flash-PREVIEW,
-  // gemini-3.1-flash-lite, gemini-3.5-flash. The "subagent empty
-  // completion" bug we debugged for 8 deploys was likely caused by
-  // every subagent's first LLM call hitting "400 not a valid model
-  // ID" and dying silently. We were calling a non-existent model.
+  // Sprint 2.16p — operator floor: minimum Gemini 3. `gemini-3-flash`
+  // (no -preview) doesn't exist on OpenRouter — the real Gemini 3
+  // Flash ID is `google/gemini-3-flash-preview`. If this still hits
+  // the "reasoning is mandatory" gate that 3.5-flash has, the next
+  // move is anthropic/claude-sonnet-4.5 (no reasoning gate, $3/M in,
+  // $15/M out, 1M ctx). Per-cron-payload thinking is set to "medium"
+  // in generators.ts boot cron.
   //
-  // gemini-2.5-flash is the latest STABLE (non-preview) Gemini Flash
-  // that should not have the "reasoning is mandatory" gate that
-  // 3.5-flash has. 1M context, fast, cheap.
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-2.5-flash",
+  // Operator-approved alternatives (set via env var override):
+  //   MAYA_GTM_MODEL=anthropic/claude-sonnet-4.5  (premium, no gate)
+  //   MAYA_GTM_MODEL=anthropic/claude-sonnet-4.6  (newer Sonnet)
+  //   MAYA_GTM_MODEL=anthropic/claude-haiku-4.5   (cheaper Claude)
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-3-flash-preview",
   // Sprint 2.16a — channel-research subagents. Gemini 3 Flash (NOT
   // 3.5 — that's main's brain). Subagents do focused platform work
   // (scrape, score, draft) — they don't need 3.5's strategic judgment.
   // Cheaper, faster, plenty of headroom with thinking:medium budget
   // injected via their prompt. Replaces the prior mix of Claude
   // Sonnet 4.5 (10x more expensive) + scattered Gemini configs.
-  // Sprint 2.16o — same fix as mainMaya above. `google/gemini-3-flash`
-  // is NOT a valid OpenRouter model ID. Subagents have been silently
-  // failing on "400 model not valid" every time they tried to make
-  // their first LLM call, which explains the entire "empty completion"
-  // bug class we've debugged for 8+ deploys.
-  subagent: process.env.MAYA_GTM_SUBAGENT_MODEL ?? "google/gemini-2.5-flash",
+  // Sprint 2.16p — same model as main brain. Both research and main
+  // get the same baseline capability.
+  subagent: process.env.MAYA_GTM_SUBAGENT_MODEL ?? "google/gemini-3-flash-preview",
   hardResearchBeta:
     process.env.MAYA_GTM_HARD_RESEARCH_MODEL ??
     "openrouter/anthropic/claude-sonnet-4.5",
