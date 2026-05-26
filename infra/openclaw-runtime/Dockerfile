@@ -69,13 +69,16 @@ RUN RUNTIME_ROOT="$(node -e 'const fs=require("node:fs");const path=require("nod
        @aws-sdk/credential-provider-node@3.972.33 \
        @aws/bedrock-token-generator@^1.1.0 \
        @clack/prompts@^1.2.0 \
+       @grammyjs/runner@^2.0.3 \
+       @grammyjs/transformer-throttler@^1.2.1 \
        @mariozechner/pi-ai@0.70.0 \
        @mariozechner/pi-coding-agent@0.70.0 \
        ajv@^8.18.0 \
+       grammy@^1.42.0 \
        typebox@1.1.28 \
        ws@^8.20.0 \
        zod@^4.3.6 \
-    && node -e 'const fs=require("node:fs");const root=process.argv[1];const specs=["@anthropic-ai/sdk@0.90.0","@aws-sdk/client-bedrock-runtime@3.1033.0","@aws-sdk/client-bedrock@3.1033.0","@aws-sdk/credential-provider-node@3.972.33","@aws/bedrock-token-generator@^1.1.0","@clack/prompts@^1.2.0","@mariozechner/pi-ai@0.70.0","@mariozechner/pi-coding-agent@0.70.0","ajv@^8.18.0","typebox@1.1.28","ws@^8.20.0","zod@^4.3.6"].sort();fs.writeFileSync(`${root}/.openclaw-runtime-deps.json`,`${JSON.stringify({specs},null,2)}\n`);' "$RUNTIME_ROOT" \
+    && node -e 'const fs=require("node:fs");const root=process.argv[1];const specs=["@anthropic-ai/sdk@0.90.0","@aws-sdk/client-bedrock-runtime@3.1033.0","@aws-sdk/client-bedrock@3.1033.0","@aws-sdk/credential-provider-node@3.972.33","@aws/bedrock-token-generator@^1.1.0","@clack/prompts@^1.2.0","@grammyjs/runner@^2.0.3","@grammyjs/transformer-throttler@^1.2.1","@mariozechner/pi-ai@0.70.0","@mariozechner/pi-coding-agent@0.70.0","ajv@^8.18.0","grammy@^1.42.0","typebox@1.1.28","ws@^8.20.0","zod@^4.3.6"].sort();fs.writeFileSync(`${root}/.openclaw-runtime-deps.json`,`${JSON.stringify({specs},null,2)}\n`);' "$RUNTIME_ROOT" \
     && rm -rf "$RUNTIME_ROOT"/.npm \
     && chown -R node:node /opt/openclaw-runtime-preseed
 
