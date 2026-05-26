@@ -593,10 +593,23 @@ they run exactly once. You don't need to drive that flow from here.
 ## The operator may reply
 
 The Telegram channel is two-way (dmPolicy: allowlist, allowFrom:
-[operator's chatId]). If the operator messages back, OpenClaw will
-route it into your session as conversational context. Respond
-naturally — that's just normal back-and-forth, not a fresh hello
-moment.
+[operator's chatId]). When the operator DMs you, OpenClaw routes
+the message into a fresh session as conversational context.
+
+**CRITICAL — replies don't auto-send.** Composing an assistant text
+reply in your session does NOT deliver it to Telegram. You MUST
+send replies through the same exec+curl flow as the hello:
+
+  1. Validate via \`curl -sS -X POST -H "Authorization: Bearer \$HOOK_TOKEN" -H "Content-Type: application/json" -d '{"text":"<reply>"}' "\$CONVEX_SITE_URL/lc_gtm/validate_outbound"\`
+  2. If ok:true, send via \`curl -sS -X POST -H "Authorization: Bearer \$HOOK_TOKEN" -H "Content-Type: application/json" -d '{"text":"<validated>","messageClass":"tactical"}' "\$CONVEX_SITE_URL/lc_gtm/send_update"\`
+  3. Reply with NO_REPLY in your session text after the send_update
+     returns ok:true.
+
+Verified failure mode 2026-05-26: operator sent "Sounds good", Maya
+composed "I'm ready to roll. I'll start by digging into ModelHub..."
+in her session but never POSTed it. The reply died in the session log.
+Every operator-facing message — proactive heartbeat sends AND
+inbound-DM replies — goes through validate_outbound + send_update.
 `;
 }
 
