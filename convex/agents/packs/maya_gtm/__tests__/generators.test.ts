@@ -203,22 +203,26 @@ describe("Maya GTM workspace pack", () => {
     expect(bootJob?.payload.timeoutSeconds).toBeUndefined();
     // Medium thinking for the judgment-call channel pick.
     expect(bootJob?.payload.thinking).toBe("medium");
-    // Sprint 2.16j prompt: "BOOT — first turn ... Two jobs this turn:
-    // (1) send the operator a voice-clean hello, (2) pick channel lanes
-    // and spawn research." Hello + dispatch in one turn (BOOT.md is
-    // unused as a native hook — OpenClaw's "creator runtime" skips
-    // gateway_start hooks without a custom plugin).
-    expect(bootJob?.payload.message).toContain("BOOT — first turn");
-    expect(bootJob?.payload.message).toContain("send the operator a voice-clean hello");
-    expect(bootJob?.payload.message).toContain("HARD CAP: 3 lanes");
-    expect(bootJob?.payload.message).toContain("/lc_gtm/target_thread");
+    // Sprint 2.16m (barebones) prompt: a one-paragraph mission +
+    // workspace inventory + roughly-this-shape numbered hints. No
+    // forcing functions, no embedded URL patterns, no detailed
+    // subagent contract template. Trusts the .md files and skills/
+    // to carry the operating details.
+    expect(bootJob?.payload.message).toContain("You are Maya, the operator's launch manager");
+    expect(bootJob?.payload.message).toContain("Your workspace at /data/workspace");
+    expect(bootJob?.payload.message).toContain("Trust your skills");
+    // Must still tell Maya about the key callback endpoints + the
+    // sessions_yield pattern that wakes phase 2 via push-resume.
     expect(bootJob?.payload.message).toContain("/lc_gtm/send_update");
-    expect(bootJob?.payload.message).toContain("validate_outbound");
-    // This turn does NOT send the strategic plan — that's phase 2.
-    // Only tactical messages (e.g., clarification questions on vague
-    // positioning) are allowed here.
-    expect(bootJob?.payload.message).toContain('messageClass: "tactical"');
+    expect(bootJob?.payload.message).toContain("/lc_gtm/phase_1_announce");
+    expect(bootJob?.payload.message).toContain("/lc_gtm/subagent_complete");
+    expect(bootJob?.payload.message).toContain("sessions_spawn");
     expect(bootJob?.payload.message).toContain("sessions_yield");
+    // Must still name the tactical vs strategic messageClass distinction
+    // so Maya doesn't trip the evidence-guard with claims-less strategic
+    // sends.
+    expect(bootJob?.payload.message).toContain('messageClass: "tactical"');
+    expect(bootJob?.payload.message).toContain('messageClass: "strategic"');
     // Push-resume architecture (subagent_complete → runAgentTurn webhook)
     // owns phase 2. The cron no longer carries old phase ids.
     expect(jobs.jobs.find((j) => j.id === "0001_gtm_boot_phase_1")).toBeUndefined();
@@ -283,27 +287,36 @@ describe("Maya GTM workspace pack", () => {
     }
   });
 
-  it("Sprint 2.16j — boot cron forbids strategic claims (calendar/thread/channel)", () => {
-    // Live 2026-05-25 regression: Maya claimed "I've populated your
-    // calendar for the next 14 days" with 0 actual gtmCalendarEvents
-    // rows in phase 1. Sprint 2.16j's fix is structural: phase 1 is
-    // research dispatch ONLY (no synthesis, no plan, no calendar) —
-    // strategic claims require evidence_ids that don't exist until
-    // subagents complete in phase 2. Server-side evidence-guard blocks
-    // strategic messages from the boot cron entirely; the prompt must
-    // tell Maya to send only tactical messages this turn.
+  it("Sprint 2.16m — barebones boot cron trusts skills + server enforcement instead of prompt forcing functions", () => {
+    // Sprint 2.16j put hard "DO NOT" instructions in the boot cron prompt
+    // to prevent regressions like the 2026-05-25 "I populated your
+    // calendar with 0 events" hallucination. Sprint 2.16m moves that
+    // enforcement OUT of the prompt and TRUSTS:
+    //   - the server-side evidence-guard (no strategic send without claims)
+    //   - the voice firewall (/lc_gtm/validate_outbound)
+    //   - the rich workspace .md files (PLAYBOOK, SOUL, AGENTS, skills/)
+    //
+    // The prompt now just gives Maya the mission + workspace inventory
+    // + the messageClass distinction. If she tries to send a strategic
+    // message without claims, the server returns 400 and she has to
+    // adapt — but the constraint isn't blanketed across the prompt.
     const { files } = buildMayaGtmWorkspace(INPUT);
     const jobs = JSON.parse(files.get("jobs.json") ?? "{}") as {
       jobs: Array<{ id: string; payload: { message: string } }>;
     };
     const boot = jobs.jobs.find((j) => j.id === "0001_gtm_first_research");
     expect(boot).toBeTruthy();
-    // Phase 1 = dispatch, not delivery.
-    expect(boot!.payload.message).toContain("DO NOT send the operator the plan");
-    expect(boot!.payload.message).toContain("DO NOT populate calendar");
-    expect(boot!.payload.message).toContain("DO NOT review subagent results");
-    expect(boot!.payload.message).toContain("DO NOT send a strategic message");
-    expect(boot!.payload.message).toContain("Only tactical updates are allowed");
+    // Tactical vs strategic distinction stays — that's how she knows
+    // the evidence-guard rules.
+    expect(boot!.payload.message).toContain('messageClass: "tactical"');
+    expect(boot!.payload.message).toContain('messageClass: "strategic"');
+    // Workspace inventory is the new load-bearing scaffold — Maya
+    // navigates via these references, not via inline instructions.
+    expect(boot!.payload.message).toContain("APP.md");
+    expect(boot!.payload.message).toContain("SOUL.md");
+    expect(boot!.payload.message).toContain("PLAYBOOK.md");
+    expect(boot!.payload.message).toContain("skills/");
+    expect(boot!.payload.message).toContain("scrapecreators-api/SKILL.md");
   });
 
   it("keeps the prompt-context bundle (workspace minus playbook/ + skills/*) inside a prompt budget", () => {
