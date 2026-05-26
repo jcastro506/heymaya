@@ -253,7 +253,14 @@ describe("Maya GTM workspace pack", () => {
     expect(kickstart?.payload.message).toContain("FIRST-BOOT KICKSTART");
     expect(kickstart?.payload.message).toContain("SOUL.md");
     expect(kickstart?.payload.message).toContain("hello_sent_at");
-    expect(kickstart?.payload.message).toContain("/lc_gtm/send_update");
+    // Sprint 2.16u-fix12 — kickstart uses OpenClaw native message tool
+    // (action=send, channel=telegram) via the cron's delivery config,
+    // NOT exec+curl. Faster + native + uses channel adapter routing.
+    expect(kickstart?.payload.message).toContain("message` tool");
+    // lightContext is critical for fast agent turn (matches creator app)
+    expect(
+      (kickstart?.payload as { lightContext?: boolean }).lightContext
+    ).toBe(true);
 
     // Weekly review survives — it's a real exact-timing scheduled event
     // (Mondays 10am), and still drives the compounding cycle.

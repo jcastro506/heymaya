@@ -827,9 +827,30 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
   //   - gtm_weekly_review: Mondays 10am — week-over-week refresh
   //   - gtm_channel_discovery: 1st of month — new-channels hunt
   const delivery = buildCronDelivery(input);
-  // Default: deploy time + 180s. Tests pass a fixed bootKickoffAtMs
-  // via the input seam so the workspace bundle is deterministic.
-  const kickstartAtMs = (input.bootKickoffAtMs ?? Date.now()) + 180_000;
+  // Sprint 2.16u-fix12 — matches the working creator app pattern at
+  // convex/agents/packs/maya/workspace/buildCronJobsJson.ts:357. Operator
+  // pointed out the prior creator app got an instant hello (~60 sec)
+  // while our fix11 took 19 min. Two specific bugs caused that:
+  //
+  //   1. `+ 180_000` (3 min) was too tight. Real Maya deploys take
+  //      ~190-260s end-to-end (image pull + bootstrap + plugin install +
+  //      gateway-ready). By the time OpenClaw's scheduler starts, our
+  //      `at` was in the PAST → scheduler treats it as missed-deadline
+  //      and reschedules out of channel-connect window (~6 min penalty).
+  //      Bumped to 300s (5 min) so even a slow ~250s deploy lands `at`
+  //      with ~50s buffer in the future.
+  //
+  //   2. `lightContext: false` (the default) was loading the FULL 200KB
+  //      workspace bundle into the kickstart agent turn (PLAYBOOK.md
+  //      alone is 150K chars + all skills). Each tool call re-ingested
+  //      that. Result: 10-minute agent turn for a simple hello compose.
+  //      Creator app uses `lightContext: true` — only HEARTBEAT.md and
+  //      the payload message land in context. ~60 sec turn instead of
+  //      10 min.
+  //
+  // Tests pass a fixed bootKickoffAtMs via the input seam so the
+  // workspace bundle is deterministic.
+  const kickstartAtMs = (input.bootKickoffAtMs ?? Date.now()) + 300_000;
   const jobs = {
     version: 1,
     jobs: [
@@ -849,9 +870,14 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
           kind: "agentTurn" as const,
           timeoutSeconds: 300,
           thinking: "medium" as const,
-          lightContext: false,
+          // Sprint 2.16u-fix12 — lightContext:true skips the full
+          // workspace bundle (PLAYBOOK.md / skills / etc) and only
+          // injects HEARTBEAT.md + the payload message. Critical for
+          // fast turn time. Matches creator app at
+          // convex/agents/packs/maya/workspace/buildCronJobsJson.ts:392.
+          lightContext: true as const,
           message:
-            "FIRST-BOOT KICKSTART. Send Maya's first message to the operator.\n\n1. Read USER.md (operator first name) and APP.md (product name + founderWhy). Compose a friendly, plain-language intro grounded in those files. Voice per SOUL.md — manager voice, no skill slugs, no .md filenames, no internal pipeline jargon, no AI self-references.\n\nThe intro should: (a) greet the operator by name, (b) identify yourself as Maya — their go-to-market launch manager, (c) acknowledge their product/why so they feel heard, (d) set expectations: you're going to dig in, send updates as you find things, come back with a 14-day plan, (e) end with a question that invites them to reply.\n\n2. Length: 3-5 short paragraphs. Read aloud — sound like a capable manager, not a database lookup.\n\n3. Voice-check against SOUL.md's 'What I never say' ban list before sending. Fix anything that slipped in.\n\n4. Send via the OpenClaw message tool (action=send, channel=telegram, target=<operator chatId from delivery config>) OR — if message tool is unavailable in this isolated cron session — via exec+curl POST to $CONVEX_SITE_URL/lc_gtm/send_update with body {\"text\":\"<intro>\",\"messageClass\":\"tactical\"}, Bearer $HOOK_TOKEN auth.\n\n5. After successful send, append `hello_sent_at: <ISO ts>` to /data/workspace/MEMORY.md. This blocks HEARTBEAT.md's state-hello task from re-sending on its next tick.\n\n6. Reply NO_REPLY in your session text after the send. HEARTBEAT.md will pick up state-channels-picked → state-subagents-dispatched → state-plan-synthesis on its 5-minute cadence.",
+            "FIRST-BOOT KICKSTART. Send Maya's first message to the operator. Tool to use: `message` (action=send, channel=telegram). The channel adapter handles delivery — you do NOT need exec+curl.\n\n1. Read /data/workspace/USER.md (operator first name + first-name-only convention) and /data/workspace/APP.md (product name + founderWhy + weekGoal). Read /data/workspace/SOUL.md for voice rules.\n\n2. Compose a friendly intro grounded in those files:\n   (a) greet operator by FIRST NAME (never full name),\n   (b) identify yourself as Maya — their launch manager (NOT 'your AI assistant', NOT 'your AI agent'),\n   (c) acknowledge their product + the founderWhy so they feel heard,\n   (d) set expectations: you're going to dig in, send updates as you find things, come back with a 14-day plan,\n   (e) end with one short question that invites them to reply.\n\n   Length: 3-5 short paragraphs. Voice per SOUL.md — no skill slugs, no .md filenames, no 'evidence cards' / 'subagent' / internal terms.\n\n3. Call the OpenClaw `message` tool: action='send', channel='telegram', target=<operator chatId from delivery.to>. The message tool delivers natively via the channel adapter (NO curl needed for the kickstart since delivery is already configured on this cron).\n\n4. After the message tool returns success, append `hello_sent_at: <ISO ts>` to /data/workspace/MEMORY.md so HEARTBEAT.md's state-hello task skips on its next tick.\n\n5. Reply with the literal token NO_REPLY in your session text. HEARTBEAT.md state machine picks up the rest (channels-picked → subagents-dispatched → plan-synthesis) on its 5-minute cadence.",
         },
         delivery,
         state: {},
