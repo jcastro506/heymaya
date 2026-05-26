@@ -491,7 +491,7 @@ export const getGtmAgentForDeploy = internalQuery({
     args
   ): Promise<{
     agent: Doc<"gtmAgents">;
-    creator: Pick<Doc<"creators">, "_id" | "email">;
+    creator: Pick<Doc<"creators">, "_id" | "email" | "displayName">;
     app: Doc<"gtmApps">;
     channelScores: Doc<"gtmChannelScores">[];
   } | null> => {
@@ -517,7 +517,9 @@ export const getGtmAgentForDeploy = internalQuery({
       : [];
     return {
       agent,
-      creator: { _id: creator._id, email: creator.email },
+      // Sprint 2.16q — include displayName for the deploy-time hello
+      // template ("Hey <firstName> — Maya here ...").
+      creator: { _id: creator._id, email: creator.email, displayName: creator.displayName },
       app,
       channelScores,
     };
@@ -781,11 +783,12 @@ export const deployMayaGtm = internalAction({
       `Hey ${firstName} — Maya here. I'm your go-to-market agent — basically, I'm here to help you get customers to ${productName}.\n\n` +
       `${founderWhyClause} I'll keep pinging updates here while I work, then come back with a full 14-day plan.\n\n` +
       `Sound cool? Reply anytime if there's something specific you want me to focus on.`;
-    if (input.telegramChatId) {
+    const helloChatId = row.agent.telegramChatId;
+    if (helloChatId) {
       try {
         const result = await sendDirectTelegramMessage({
           botToken: process.env.TELEGRAM_BOT_TOKEN,
-          chatId: input.telegramChatId,
+          chatId: helloChatId,
           text: helloText,
         });
         await ctx.runMutation(
