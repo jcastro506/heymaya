@@ -532,19 +532,35 @@ Voice rules: per SOUL.md. No skill slugs, no .md filenames, no
 internal pipeline jargon, no AI/LLM framing. Plain manager voice.
 Length: ~3-5 short paragraphs is fine; this isn't a one-liner.
 
-## Step 3 — Validate + send
+## Step 3 — Validate + send (TOOL CHOICE IS LOAD-BEARING)
 
-POST your composed text to \`/lc_gtm/validate_outbound\` first. If
-\`ok:false\`, rewrite the matched items out and re-validate. Loop
-until \`ok:true\`.
+The \`/lc_gtm/*\` endpoints are POST-only and require Bearer auth.
+\`web_fetch\` is GET-only and does NOT accept custom headers — DO NOT
+use it for these endpoints. It will return 404 and your intro will
+silently fail to land.
 
-Then POST to \`/lc_gtm/send_update\` with body:
-\`\`\`json
-{ "text": "<validated intro>", "messageClass": "tactical" }
+Use \`exec\` to run curl. The hookToken value is in TOOLS.md
+(\`$HOOK_TOKEN\` env var on this machine). The convexSite base URL is
+also in TOOLS.md.
+
+First, validate your intro text:
+
+\`\`\`
+exec({ command: "curl -sS -X POST -H 'Authorization: Bearer $HOOK_TOKEN' -H 'Content-Type: application/json' -d '{\\"text\\":\\"<your intro>\\"}' '<convexSite>/lc_gtm/validate_outbound'" })
+\`\`\`
+
+If the response has \`ok:false\`, rewrite the matched items out and
+re-validate. Loop until \`ok:true\`.
+
+Then send the validated intro:
+
+\`\`\`
+exec({ command: "curl -sS -X POST -H 'Authorization: Bearer $HOOK_TOKEN' -H 'Content-Type: application/json' -d '{\\"text\\":\\"<validated intro>\\",\\"messageClass\\":\\"tactical\\"}' '<convexSite>/lc_gtm/send_update'" })
 \`\`\`
 
 \`messageClass: "tactical"\` tells the evidence-guard this is not a
-strategic claim (no evidence_ids needed for a greeting).
+strategic claim (no evidence_ids needed for a greeting). The hookToken
+and convexSite values are in TOOLS.md — read them; do not guess.
 
 ## Step 4 — Write the dedup marker
 
