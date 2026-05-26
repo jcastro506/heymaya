@@ -305,14 +305,14 @@ export function buildGatewayConfig(
         // surfaces "LLM request timed out" to the user. OpenClaw runtime
         // error message names this exact key as the fix.
         llm: { idleTimeoutSeconds: 300 },
-        // Sprint 2.16l — gemini-3.5-flash via OpenRouter REQUIRES reasoning
-        // (rejects `thinking: "off"` at the API level with HTTP 400
-        // "Reasoning is mandatory for this endpoint"). Observed across
-        // multiple deploys: agent runs error out, OpenClaw auto-retries
-        // with minimal, but every single LLM call eats a 400 + retry
-        // round-trip. Set thinking: "minimal" explicitly so the first
-        // call always succeeds.
-        thinking: "minimal" as const,
+        // Sprint 2.16l — attempted `thinking: "minimal"` at this level
+        // to avoid OpenRouter's "Reasoning is mandatory" 400 + auto-retry
+        // round-trip on every LLM call with gemini-3.5-flash. But the
+        // OpenClaw schema rejected it: "agents.defaults: Unrecognized
+        // key: thinking". `thinking` is a per-payload field, not a
+        // global default. Each cron's payload already sets it correctly.
+        // The 400-then-auto-retry-with-minimal is annoying-but-not-fatal:
+        // OpenClaw self-heals.
         subagents: {
           // Sprint 2.16j — bumped 4 → 8 per external-architect review.
           // We cap research lanes at 3 in the boot prompt, so 8 leaves
