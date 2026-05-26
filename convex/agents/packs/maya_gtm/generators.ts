@@ -655,9 +655,17 @@ tasks:
 
     If MEMORY.md does NOT contain \`channels_picked:\` yet, reply HEARTBEAT_OK (state-channels-picked hasn't run yet).
 
-    Otherwise: parse the channels list. For each channel, sessions_spawn the matching subagent with agentId "<channel>_research" (DO NOT pass a model arg — agent config handles model resolution; passing "hard_research_beta" or similar as a model causes OpenRouter 400). Each subagent's task should reference scrapecreators-api/SKILL.md for the API patterns + the channel's per-platform skill SOP.
+    Otherwise: parse the channels list. For each channel, call sessions_spawn with TWO required args: \`agentId\` AND \`task\`. The \`task\` arg is REQUIRED — if you omit it, OpenClaw spawns the subagent with a default boot prompt and it just returns NO_REPLY without doing any research (this is a load-bearing detail; verified failure mode 2026-05-26 where all 3 subagents returned NO_REPLY because Maya forgot the task arg).
 
-    After spawning N subagents, exec curl POST to \`/lc_gtm/phase_1_announce\` with body {"researchJobId":"<id>","subagentsExpected":N}. Then append \`subagents_spawned: N\` to MEMORY.md. Reply HEARTBEAT_OK.
+    For each channel, the task string MUST tell the subagent (in plain English):
+      1. The product context — pull from APP.md (name, what it does, founderWhy, weekGoal, stage).
+      2. The mission — "find 8-15 high-intent threads on \`<channel>\` where this product's buyers are actively discussing the pain point, and POST each thread to \`/lc_gtm/target_thread\` via exec+curl with Bearer auth from \$HOOK_TOKEN."
+      3. The skill references — "follow scrapecreators-api/SKILL.md for the API patterns; also read the channel's specific platform skill SOP for hook formats."
+      4. The completion signal — "when finished, exec+curl POST to /lc_gtm/subagent_complete with body {\"researchJobId\":\"<id>\",\"channel\":\"<channel>\",\"threadsFound\":N}."
+
+    Do NOT pass a \`model\` argument to sessions_spawn — agent config resolves the model from agentId. Passing "hard_research_beta" or similar as a model causes OpenRouter 400.
+
+    After all N subagents are spawned (one per channel), exec curl POST to \`/lc_gtm/phase_1_announce\` with body {"researchJobId":"<id>","subagentsExpected":N}. Then append \`subagents_spawned: N\` to MEMORY.md. Reply HEARTBEAT_OK.
 
 - name: state-plan-synthesis
   interval: 5m
@@ -699,7 +707,7 @@ tasks:
 
 ## Active hours
 
-Tasks only run between 09:00 and 22:00 in the operator's timezone (operator-tz configured at deploy time). OpenClaw's heartbeat \`activeHours\` config enforces this — we don't gate manually inside task prompts.
+24/7 in the current build (Sprint 2.16u-fix2). Heartbeat runs continuously every 5m; state-* tasks no-op cheaply once their MEMORY.md marker is set, so off-hours ticks are essentially free.
 `;
 }
 

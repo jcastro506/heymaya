@@ -351,11 +351,13 @@ export function buildGatewayConfig(
           every: "5m",
           lightContext: true,
           isolatedSession: true,
-          activeHours: {
-            start: "09:00",
-            end: "22:00",
-            timezone: "operator", // generators.ts templates the user's tz
-          },
+          // Sprint 2.16u-fix2 — REMOVED activeHours because timezone was
+          // shipping as the literal string "operator" (never templated to
+          // a real IANA tz). OpenClaw silently fails closed when the tz
+          // can't be resolved, suppressing every heartbeat tick. The 5m
+          // cadence and the state-* tasks' MEMORY.md-marker gates already
+          // handle the "don't spam idle ticks" concern — activeHours was
+          // a nice-to-have we can re-enable once we wire real tz through.
         },
       },
       list: [

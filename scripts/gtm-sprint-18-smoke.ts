@@ -132,10 +132,14 @@ function checkGatewayHeartbeatConfig(): void {
     fail("gateway-heartbeat", "gateway config has no agents.defaults.heartbeat");
     return;
   }
-  if (hb.every !== "30m") {
+  // Sprint 2.16u — heartbeat cadence bumped 30m→5m so state-* tasks
+  // progress fast. Sprint 2.16u-fix2 — activeHours dropped (timezone
+  // was shipping as the literal string "operator" instead of a real
+  // IANA tz, causing OpenClaw to silently suppress every heartbeat).
+  if (hb.every !== "5m") {
     fail(
       "gateway-heartbeat-every",
-      `expected heartbeat.every=30m, got ${hb.every}`
+      `expected heartbeat.every=5m, got ${hb.every}`
     );
     return;
   }
@@ -153,20 +157,16 @@ function checkGatewayHeartbeatConfig(): void {
     );
     return;
   }
-  if (
-    !hb.activeHours ||
-    !hb.activeHours.start ||
-    !hb.activeHours.end
-  ) {
+  if (hb.activeHours) {
     fail(
       "gateway-heartbeat-active-hours",
-      "expected heartbeat.activeHours with start + end"
+      "expected heartbeat.activeHours to be REMOVED (Sprint 2.16u-fix2)"
     );
     return;
   }
   pass(
     "gateway-heartbeat-config",
-    `heartbeat every=30m, lightContext=true, isolatedSession=true, activeHours=${hb.activeHours.start}-${hb.activeHours.end}`
+    "heartbeat every=5m, lightContext=true, isolatedSession=true, activeHours=removed"
   );
 }
 
