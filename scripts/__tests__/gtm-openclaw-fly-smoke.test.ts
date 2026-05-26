@@ -28,9 +28,12 @@ describe("gtm-openclaw-fly-smoke", () => {
     expect(fixture.workspaceFiles["jobs.json"]).toContain(
       "0001_gtm_first_research"
     );
-    expect(fixture.workspaceFiles["jobs.json"]).toContain("FIRST HEARTBEAT");
+    // Sprint 2.16j — boot cron prompt opens with RESEARCH DISPATCH
+    // (was FIRST HEARTBEAT). Hello moved to BOOT.md as a native one-shot.
+    expect(fixture.workspaceFiles["jobs.json"]).toContain("RESEARCH DISPATCH");
+    expect(fixture.workspaceFiles["jobs.json"]).toContain("HARD CAP: 3 lanes");
     expect(fixture.workspaceFiles["jobs.json"]).toContain(
-      "Do not call ScrapeCreators"
+      "subagents do all external work"
     );
     expect(
       fixture.workspaceFiles["skills/scrapecreators-api/SKILL.md"]
@@ -43,7 +46,8 @@ describe("gtm-openclaw-fly-smoke", () => {
           model: { primary: "openrouter/google/gemini-3-flash-preview" },
           memorySearch: { enabled: false },
           subagents: {
-            maxConcurrent: 4,
+            // Sprint 2.16j — bumped 4 → 8 per external-architect review.
+            maxConcurrent: 8,
             maxChildrenPerAgent: 4,
             runTimeoutSeconds: 900,
             archiveAfterMinutes: 60,

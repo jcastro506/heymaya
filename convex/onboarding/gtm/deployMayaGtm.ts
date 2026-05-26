@@ -294,11 +294,26 @@ export function buildGatewayConfig(
         // error message names this exact key as the fix.
         llm: { idleTimeoutSeconds: 300 },
         subagents: {
-          maxConcurrent: 4,
+          // Sprint 2.16j — bumped 4 → 8 per external-architect review.
+          // We cap research lanes at 3 in the boot prompt, so 8 leaves
+          // headroom for refinement waves + parallel weekly-review fans
+          // without queuing.
+          maxConcurrent: 8,
           maxChildrenPerAgent: 4,
           maxSpawnDepth: 1,
           runTimeoutSeconds: 900,
           archiveAfterMinutes: 60,
+        },
+        // Sprint 2.16j — enable internal hook runtime so BOOT.md fires
+        // on gateway startup as a real native primitive (not just a
+        // workspace file Maya happens to read). BOOT.md owns the hello;
+        // the 0001_gtm_first_research cron owns the research dispatch.
+        // Splitting the two stops the model from satisficing after STEP 1
+        // of a single dense 6-step prompt.
+        hooks: {
+          internal: {
+            enabled: true,
+          },
         },
         // Sprint 18 — heartbeat config. Documented cost-savings pattern
         // from OpenClaw docs: lightContext (only HEARTBEAT.md) + an

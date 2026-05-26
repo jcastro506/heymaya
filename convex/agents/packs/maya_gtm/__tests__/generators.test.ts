@@ -58,10 +58,18 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("APP.md")).toContain("BugBrief");
     expect(files.get("GTM.md")).toContain("Primary: reddit");
     expect(files.get("AGENTS.md")).toContain("read APP.md and GTM.md");
-    expect(files.get("BOOT.md")).toContain("PLAYBOOK.md");
-    expect(files.get("BOOT.md")).toContain(
-      "APP.md, GTM.md, MEMORY.md, and USER.md"
-    );
+    // Sprint 2.16j — BOOT.md is now a real native one-shot that sends
+    // hello and exits. It reads USER.md + SOUL.md and posts to
+    // /lc_gtm/send_update with messageClass: "tactical" (no claims
+    // required for the hello).
+    expect(files.get("BOOT.md")).toContain("USER.md");
+    expect(files.get("BOOT.md")).toContain("SOUL.md");
+    expect(files.get("BOOT.md")).toContain("/lc_gtm/send_update");
+    expect(files.get("BOOT.md")).toContain("/lc_gtm/validate_outbound");
+    expect(files.get("BOOT.md")).toContain('messageClass": "tactical"');
+    // BOOT.md must NOT instruct Maya to do research, channel selection,
+    // or any external API work in this turn — that's the 0001 cron's job.
+    expect(files.get("BOOT.md")).toContain("Hello and out.");
     expect(files.get("USER.md")).toContain("Will manually post Instagram: yes");
     expect(files.get("USER.md")).toContain("TikTok warm-up state: warming");
     expect(files.get("USER.md")).toContain("TikTok account age days: 3");
@@ -172,9 +180,16 @@ describe("Maya GTM workspace pack", () => {
 
     expect(jobs.version).toBe(1);
     expect(jobs.jobs.every((job) => job.state != null)).toBe(true);
-    // Sprint 2.16c — single unified boot task. Maya owns the whole
-    // iterative research loop end-to-end in ONE long-running turn.
-    // No phase 1/phase 2 split. Matches the OpenClaw agentic shape.
+    // Sprint 2.16j — three-turn architecture:
+    //   1. BOOT.md (native one-shot on gateway startup) — hello only
+    //   2. 0001_gtm_first_research cron — pick ≤3 lanes, spawn subagents, yield
+    //   3. Push-resume phase 2 (PHASE_2_PROMPT_BODY in phase2Trigger.ts)
+    //      fires when /lc_gtm/subagent_complete count meets expected
+    //      — synthesize, calendar build, evidence-guarded send.
+    //
+    // The boot cron is the SECOND turn; BOOT.md is the first. This test
+    // covers turn 2 (the cron); BOOT.md is asserted in the workspace
+    // file test above; PHASE_2_PROMPT_BODY has its own test file.
     const bootJob = jobs.jobs.find(
       (job) => job.id === "0001_gtm_first_research"
     );
@@ -184,16 +199,24 @@ describe("Maya GTM workspace pack", () => {
     expect(jobs.jobs[0]?.id).toBe("0001_gtm_first_research");
     expect(bootJob).toBeTruthy();
     expect(bootJob?.sessionTarget).toBe("isolated");
-    // No timeoutSeconds — Maya takes as long as she needs.
+    // No timeoutSeconds — Maya takes as long as she needs to dispatch.
     expect(bootJob?.payload.timeoutSeconds).toBeUndefined();
-    // Medium thinking for the strategist judging subagent outputs.
+    // Medium thinking for the judgment-call channel pick.
     expect(bootJob?.payload.thinking).toBe("medium");
-    expect(bootJob?.payload.message).toContain("FIRST HEARTBEAT");
+    // Sprint 2.16j prompt opens with RESEARCH DISPATCH (was FIRST
+    // HEARTBEAT in 2.16c). The first turn (hello) is owned by BOOT.md.
+    expect(bootJob?.payload.message).toContain("RESEARCH DISPATCH");
+    expect(bootJob?.payload.message).toContain("HARD CAP: 3 lanes");
     expect(bootJob?.payload.message).toContain("/lc_gtm/target_thread");
     expect(bootJob?.payload.message).toContain("/lc_gtm/send_update");
     expect(bootJob?.payload.message).toContain("validate_outbound");
-    expect(bootJob?.payload.message).toContain("GROUNDED-OR-SILENT");
-    // No phase 1/phase 2 split — assert the old ids are gone.
+    // This turn does NOT send the strategic plan — that's phase 2.
+    // Only tactical messages (e.g., clarification questions on vague
+    // positioning) are allowed here.
+    expect(bootJob?.payload.message).toContain('messageClass: "tactical"');
+    expect(bootJob?.payload.message).toContain("sessions_yield");
+    // Push-resume architecture (subagent_complete → runAgentTurn webhook)
+    // owns phase 2. The cron no longer carries old phase ids.
     expect(jobs.jobs.find((j) => j.id === "0001_gtm_boot_phase_1")).toBeUndefined();
     expect(jobs.jobs.find((j) => j.id === "0002_gtm_boot_phase_2")).toBeUndefined();
     expect(heartbeat).toBeTruthy();
@@ -245,22 +268,27 @@ describe("Maya GTM workspace pack", () => {
     }
   });
 
-  it("Sprint 2.15.1 — boot prompt enforces grounded-or-silent on calendar + thread claims", () => {
+  it("Sprint 2.16j — boot cron forbids strategic claims (calendar/thread/channel)", () => {
     // Live 2026-05-25 regression: Maya claimed "I've populated your
     // calendar for the next 14 days" with 0 actual gtmCalendarEvents
-    // rows. Grounded-or-silent (CLAUDE.md Architecture #3) was the
-    // missing guard. The unified boot task (Sprint 2.16c) must call
-    // this out explicitly so the LLM doesn't re-invent the same
-    // hallucination.
+    // rows in phase 1. Sprint 2.16j's fix is structural: phase 1 is
+    // research dispatch ONLY (no synthesis, no plan, no calendar) —
+    // strategic claims require evidence_ids that don't exist until
+    // subagents complete in phase 2. Server-side evidence-guard blocks
+    // strategic messages from the boot cron entirely; the prompt must
+    // tell Maya to send only tactical messages this turn.
     const { files } = buildMayaGtmWorkspace(INPUT);
     const jobs = JSON.parse(files.get("jobs.json") ?? "{}") as {
       jobs: Array<{ id: string; payload: { message: string } }>;
     };
     const boot = jobs.jobs.find((j) => j.id === "0001_gtm_first_research");
     expect(boot).toBeTruthy();
-    expect(boot!.payload.message).toContain("GROUNDED-OR-SILENT");
-    expect(boot!.payload.message).toContain("CLAUDE.md");
-    expect(boot!.payload.message).toContain("calendar populated");
+    // Phase 1 = dispatch, not delivery.
+    expect(boot!.payload.message).toContain("DO NOT send the operator the plan");
+    expect(boot!.payload.message).toContain("DO NOT populate calendar");
+    expect(boot!.payload.message).toContain("DO NOT review subagent results");
+    expect(boot!.payload.message).toContain("DO NOT send a strategic message");
+    expect(boot!.payload.message).toContain("Only tactical updates are allowed");
   });
 
   it("keeps the prompt-context bundle (workspace minus playbook/ + skills/*) inside a prompt budget", () => {
@@ -294,12 +322,13 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("PLAYBOOK.md")?.length).toBeGreaterThan(15_000);
   });
 
-  it("documents WhatsApp fallback to direct gateway/session smoke", () => {
+  it("documents direct gateway/session smoke fallback for pre-pairing", () => {
+    // Sprint 2.16j: BOOT.md no longer carries the WhatsApp fallback
+    // checklist (BOOT.md is now hello-only). The smoke-test fallback
+    // documentation lives in TOOLS.md, where Maya looks when she needs
+    // to send a status outside the paired channel.
     const { files } = buildMayaGtmWorkspace(INPUT);
 
-    expect(files.get("BOOT.md")).toContain(
-      "If WhatsApp is unavailable, write the status to the gateway session"
-    );
     expect(files.get("TOOLS.md")).toContain(
       "Direct gateway/session pings for smoke tests"
     );

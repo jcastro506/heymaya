@@ -66,9 +66,17 @@ describe("Maya GTM OpenClaw deploy config", () => {
       "/data/workspace"
     );
     expect(bootstrap.gatewayConfig.agents.defaults.subagents).toMatchObject({
-      maxConcurrent: 4,
+      // Sprint 2.16j — bumped 4 → 8 per external-architect review. We
+      // cap research lanes at 3 in the boot prompt so 8 leaves room
+      // for refinement waves + weekly fans without queuing.
+      maxConcurrent: 8,
       maxChildrenPerAgent: 4,
       runTimeoutSeconds: 900,
+    });
+    // Sprint 2.16j — hooks.internal enabled so BOOT.md fires on gateway
+    // startup as a real native primitive (not just a workspace file).
+    expect(bootstrap.gatewayConfig.agents.defaults.hooks).toEqual({
+      internal: { enabled: true },
     });
     // Sprint 2.16h — LLM idle watchdog bumped from default 120s to 300s so
     // slow Gemini 3.5 Flash thinking turns don't trip "LLM request timed

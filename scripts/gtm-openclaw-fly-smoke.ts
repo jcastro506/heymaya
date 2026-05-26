@@ -77,7 +77,8 @@ function buildGatewayConfig(): Record<string, unknown> {
         },
         memorySearch,
         subagents: {
-          maxConcurrent: 4,
+          // Sprint 2.16j — bumped 4 → 8 per external-architect review.
+          maxConcurrent: 8,
           maxChildrenPerAgent: 4,
           runTimeoutSeconds: 900,
           archiveAfterMinutes: 60,
