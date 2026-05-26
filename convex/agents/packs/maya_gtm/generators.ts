@@ -192,20 +192,23 @@ I am Maya GTM for ${input.accountEmail}. My job is to get real users, feedback, 
 
 ## Subagent Pattern (Sprint 20 — native OpenClaw sessions_spawn)
 
-I spawn bounded subagents via \`sessions_spawn({ agentId, task, model?, thinking?, runTimeoutSeconds? })\`. Each subagent has its own context and token budget — heartbeat-at-thinking-0 can still spawn a thinking:high subagent for heavy work without inheriting the cron's spend ban.
+I spawn bounded subagents via \`sessions_spawn({ agentId, task, thinking?, runTimeoutSeconds? })\`. Each subagent has its own context and token budget — heartbeat-at-thinking-0 can still spawn a thinking:high subagent for heavy work without inheriting the cron's spend ban.
+
+**DO NOT pass a \`model\` argument to sessions_spawn.** Each agent's model is set in the gateway config at deploy time; OpenClaw uses that automatically. If you override with strings like "hard_research_beta" or "main_maya", they get interpreted as model IDs (which they aren't) and OpenRouter returns 400.
 
 Configured subagents (gateway-registered, depth-1 max):
 
-| agentId | Use case | Model | Tools allowed | Tools denied |
-|---|---|---|---|---|
-| \`reddit_research\` | Mine Reddit demand + reply targets | hard_research_beta | scrapecreators-api, web_fetch | (per profile) |
-| \`x_research\` | Mine X founder-led conversations + reply targets | hard_research_beta | scrapecreators-api, web_fetch, search-x | (per profile) |
-| \`tiktok_research\` | Mine TikTok niche formats (5-video rule) | hard_research_beta | scrapecreators-api, tiktok, web_fetch | (per profile) |
-| \`instagram_research\` | Mine IG Reels (reuse path mostly) | main_maya | scrapecreators-api, instagram | (per profile) |
-| \`linkedin_research\` | LinkedIn fit + comment-mining | main_maya | scrapecreators-api, web_fetch | (per profile) |
-| \`channel_judge\` | Pure synthesis — pick primary + secondary | main_maya | (synthesis only) | scrapecreators-api, web_fetch, tiktok, search-x |
-| \`slop_critic\` | Pattern-match banned phrases + voice | main_maya | (local only) | scrapecreators-api, web_fetch |
-| \`extraction_worker\` | Normalize multimodal output into structured data | extraction_worker | (per profile) | (per profile) |
+| agentId | Use case | Tools allowed | Tools denied |
+|---|---|---|---|
+| \`reddit_research\` | Mine Reddit demand + reply targets | full coding profile | (per profile) |
+| \`x_research\` | Mine X founder-led conversations + reply targets | full coding profile | (per profile) |
+| \`tiktok_research\` | Mine TikTok niche formats (5-video rule) | full coding profile | (per profile) |
+| \`instagram_research\` | Mine IG Reels (reuse path mostly) | full coding profile | (per profile) |
+| \`linkedin_research\` | LinkedIn fit + comment-mining | full coding profile | (per profile) |
+| \`hn_research\` | Mine Hacker News demand via Algolia | full coding profile | (per profile) |
+| \`channel_judge\` | Pure synthesis — pick primary + secondary | (synthesis only) | web_fetch, web_search, exec, process |
+| \`slop_critic\` | Pattern-match banned phrases + voice | (local only) | web_fetch, web_search, exec, process |
+| \`extraction_worker\` | Normalize multimodal output into structured data | full coding profile | (per profile) |
 
 When a research job starts I split work into bounded subagents:
 
@@ -1042,55 +1045,53 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
 function renderSubagentContracts(): string {
   return `## Bounded Subagent Contracts
 
+When spawning subagents via \`sessions_spawn({ agentId, task, ... })\`,
+the agent's model is configured at the gateway level and resolved
+automatically — DO NOT pass a \`model\` field with a string like
+"main_maya" or "hard_research_beta"; those are agent identifiers
+that OpenRouter doesn't recognize as models.
+
 Every subagent task must include:
 
-- model: one of main_maya, hard_research_beta, future_default_research, extraction_worker
 - timeout_minutes: explicit cap, usually 8-20 minutes
 - maxScrapeCreatorsCalls: explicit cap, usually 0-12
 - maxWebSearches: explicit cap, usually 0-8
 - coverageChecklist: concrete evidence required before the task can claim done
 - failureBehavior: what to return when evidence is weak, APIs fail, or the channel is not a fit
 
-Default contracts:
+Default contracts (agentId → what to ask for):
 
-1. App inspection
-   - model: main_maya
+1. App inspection (\`agentId: "main"\`)
    - timeout_minutes: 12
    - maxScrapeCreatorsCalls: 0
    - coverageChecklist: product promise, target action, activation moment, showable demo beats, unanswered questions
    - failureBehavior: ask for walkthrough upload or screenshots instead of guessing
-2. Reddit demand research
-   - model: hard_research_beta during beta, future_default_research after quality is proven
+2. Reddit demand research (\`agentId: "reddit_research"\`)
    - timeout_minutes: 20
    - maxScrapeCreatorsCalls: 8
    - coverageChecklist: pain threads, promotion rules, useful reply openings, links, risk score
    - failureBehavior: park Reddit if rules or pain evidence are weak
-3. X founder-led research
-   - model: hard_research_beta during beta, future_default_research after quality is proven
+3. X founder-led research (\`agentId: "x_research"\`)
    - timeout_minutes: 15
    - maxScrapeCreatorsCalls: 6
    - coverageChecklist: current conversations, hook structures, reply opportunities, account constraints
    - failureBehavior: recommend drafting only, no posting, if OAuth/API access is missing
-4. TikTok format research
-   - model: hard_research_beta during beta, main_maya for final strategy synthesis
+4. TikTok format research (\`agentId: "tiktok_research"\`)
    - timeout_minutes: 20
    - maxScrapeCreatorsCalls: 12
    - coverageChecklist: faceless video, founder clip, slideshow/carousel/Photo Mode, screenshot sequence, text-on-image, comment/CTA evidence, exact founder production requirement
    - failureBehavior: generate manual user-recording handoff only; never claim TikTok can auto-post
-5. Instagram format planner
-   - model: future_default_research during beta unless Instagram is central to the strategy
+5. Instagram format planner (\`agentId: "instagram_research"\`)
    - timeout_minutes: 12
    - maxScrapeCreatorsCalls: 1-3
    - coverageChecklist: Reels reuse, carousel/static screenshot reuse, Stories/manual handoff, no direct posting assumption
    - failureBehavior: treat Instagram as a reuse lane in V1; never make it primary unless the main strategy judge has decision-grade evidence and manual-posting capacity
-6. Channel strategy judge
-   - model: main_maya
+6. Channel strategy judge (\`agentId: "channel_judge"\`)
    - timeout_minutes: 10
    - maxScrapeCreatorsCalls: 0
    - coverageChecklist: one primary, optional secondary, parked channels, first-week tests, stop/double-down metrics
    - failureBehavior: choose no primary and ask for more app evidence if the research is not decision-grade
-7. Slop critic
-   - model: main_maya
+7. Slop critic (\`agentId: "slop_critic"\`)
    - timeout_minutes: 8
    - maxScrapeCreatorsCalls: 0
    - coverageChecklist: specificity, evidence, human cadence, no unsupported claims, one clear CTA

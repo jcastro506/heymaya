@@ -136,7 +136,13 @@ describe("Maya GTM workspace pack", () => {
     const agents = files.get("AGENTS.md") ?? "";
 
     expect(agents).toContain("Bounded Subagent Contracts");
-    expect(agents).toContain("model: one of main_maya");
+    // Sprint 2.16t — removed `model: main_maya` style references because
+    // those aliases were being passed as model IDs to sessions_spawn and
+    // OpenRouter rejected them ("openrouter/hard_research_beta is not a
+    // valid model ID"). Now the contracts use `agentId: "..."` and the
+    // gateway-configured model resolves automatically.
+    expect(agents).toContain("DO NOT pass a `model` argument");
+    expect(agents).toContain('agentId: "reddit_research"');
     expect(agents).toContain("timeout_minutes");
     expect(agents).toContain("maxScrapeCreatorsCalls");
     expect(agents).toContain("coverageChecklist");
