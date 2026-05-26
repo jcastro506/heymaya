@@ -304,17 +304,6 @@ export function buildGatewayConfig(
           runTimeoutSeconds: 900,
           archiveAfterMinutes: 60,
         },
-        // Sprint 2.16j — enable internal hook runtime so BOOT.md fires
-        // on gateway startup as a real native primitive (not just a
-        // workspace file Maya happens to read). BOOT.md owns the hello;
-        // the 0001_gtm_first_research cron owns the research dispatch.
-        // Splitting the two stops the model from satisficing after STEP 1
-        // of a single dense 6-step prompt.
-        hooks: {
-          internal: {
-            enabled: true,
-          },
-        },
         // Sprint 18 — heartbeat config. Documented cost-savings pattern
         // from OpenClaw docs: lightContext (only HEARTBEAT.md) + an
         // isolated fresh session per fire. Active hours respect operator
@@ -363,6 +352,23 @@ export function buildGatewayConfig(
         "device-pair": { enabled: false },
         "phone-control": { enabled: false },
         "talk-voice": { enabled: false },
+      },
+    },
+    // Sprint 2.16j — enable internal hook runtime so BOOT.md fires
+    // on gateway startup as a real native primitive (not just a
+    // workspace file Maya happens to read). BOOT.md owns the hello;
+    // the 0001_gtm_first_research cron owns the research dispatch.
+    // Splitting the two stops the model from satisficing after STEP 1
+    // of a single dense 6-step prompt.
+    //
+    // `hooks` is a TOP-LEVEL config key per OpenClaw 2026.4.23 zod
+    // schema (sibling of `gateway`, `agents`, `plugins`) — NOT a key
+    // under `agents.defaults`. The first 2.16j deploy attempt placed
+    // it under `agents.defaults` and the gateway rejected the config
+    // with "agents.defaults: Unrecognized key: hooks".
+    hooks: {
+      internal: {
+        enabled: true,
       },
     },
     // Sprint 1.3 — native OpenClaw Telegram channel. Without this block

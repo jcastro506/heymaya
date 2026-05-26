@@ -73,9 +73,11 @@ describe("Maya GTM OpenClaw deploy config", () => {
       maxChildrenPerAgent: 4,
       runTimeoutSeconds: 900,
     });
-    // Sprint 2.16j — hooks.internal enabled so BOOT.md fires on gateway
-    // startup as a real native primitive (not just a workspace file).
-    expect(bootstrap.gatewayConfig.agents.defaults.hooks).toEqual({
+    // Sprint 2.16j — hooks.internal.enabled at TOP LEVEL of config
+    // (sibling of `agents`, `plugins`, `gateway`) per OpenClaw 2026.4.23
+    // schema. BOOT.md fires on gateway startup as a real native primitive
+    // (not just a workspace file).
+    expect(bootstrap.gatewayConfig.hooks).toEqual({
       internal: { enabled: true },
     });
     // Sprint 2.16h — LLM idle watchdog bumped from default 120s to 300s so

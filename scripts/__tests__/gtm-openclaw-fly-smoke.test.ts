@@ -28,9 +28,11 @@ describe("gtm-openclaw-fly-smoke", () => {
     expect(fixture.workspaceFiles["jobs.json"]).toContain(
       "0001_gtm_first_research"
     );
-    // Sprint 2.16j — boot cron prompt opens with RESEARCH DISPATCH
-    // (was FIRST HEARTBEAT). Hello moved to BOOT.md as a native one-shot.
-    expect(fixture.workspaceFiles["jobs.json"]).toContain("RESEARCH DISPATCH");
+    // Sprint 2.16j — boot cron prompt opens with "BOOT — first turn".
+    // Maya does hello + research dispatch in the same focused turn
+    // (BOOT.md is a workspace file Maya reads, not a native hook —
+    // OpenClaw skips gateway_start hooks without a custom plugin).
+    expect(fixture.workspaceFiles["jobs.json"]).toContain("BOOT — first turn");
     expect(fixture.workspaceFiles["jobs.json"]).toContain("HARD CAP: 3 lanes");
     expect(fixture.workspaceFiles["jobs.json"]).toContain(
       "subagents do all external work"

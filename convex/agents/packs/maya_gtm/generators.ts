@@ -698,7 +698,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
           // calls still bounded by pi-coding-agent + OpenRouter inner
           // timeouts.
           thinking: "medium",
-          message: `RESEARCH DISPATCH — you just sent the operator hello (via BOOT.md). Now ONE focused job: pick channel lanes and spawn research. That's it. The plan synthesis happens in a follow-up turn when your subagents complete.
+          message: `BOOT — first turn, you just came online. Two jobs this turn: (1) send the operator a voice-clean hello so they see life immediately, then (2) pick channel lanes and spawn research subagents, then yield. Plan synthesis happens in a follow-up turn when your subagents complete.
 
 CONTEXT (read in this order):
 1. SOUL.md — voice contract (every user-visible message goes through /lc_gtm/validate_outbound)
@@ -707,7 +707,15 @@ CONTEXT (read in this order):
 4. PLAYBOOK.md — per-channel etiquette + slop ban list
 5. TOOLS.md — which /lc_gtm/* endpoints are available + hookToken auth pattern
 
-STEP A — PICK ≤3 LANES FROM FIRST PRINCIPLES.
+STEP A — SEND HELLO FIRST (within first 2 min of waking).
+
+Compose a brief voice-clean intro (≤140 chars). Required: greeting using the operator's name if USER.md has one (fall back to "there" if the name field is empty or contains a placeholder like "[name]"), the fact that you're in, and one concrete commitment about what's about to happen (find their buyers, build their first 14 days). Do NOT promise an exact timeline.
+
+POST your composed text to /lc_gtm/validate_outbound first. Loop until ok:true. Then POST to /lc_gtm/send_update with body { "text": "<validated>", "messageClass": "tactical" }. The tactical class tells the evidence-guard this is not a strategic claim and skips evidence requirement — you have no evidence yet, that's what research is about to gather.
+
+Example (correct): "Hey Josh — Maya. I'm in. Going to figure out where your buyers actually hang out, then build your first 14 days. I'll send updates as I work."
+
+STEP B — PICK ≤3 LANES FROM FIRST PRINCIPLES.
 
 This is judgment from product context, not a scrape. Channels available: reddit, x, tiktok, instagram, linkedin, hn. Skip product_hunt unless it's clearly a launch product. Skip tiktok/instagram unless APP.md says canShowFace or canRecordScreen.
 
@@ -725,7 +733,7 @@ Pattern for creator-tool / consumer products with visual demo:
 
 If APP.md positioning is too vague to defend a lane pick, send ONE clarification question via /lc_gtm/send_update { text, messageClass: "tactical" } and EXIT. Don't dispatch research on a hunch.
 
-STEP B — SPAWN ≤3 SUBAGENTS.
+STEP C — SPAWN ≤3 SUBAGENTS.
 
 For each picked lane, spawn the matching _research subagent via sessions_spawn (depth-1). Subagent mapping: reddit → reddit_research, x → x_research, tiktok → tiktok_research, instagram → instagram_research, linkedin → linkedin_research, hn → hn_research.
 
@@ -755,7 +763,7 @@ Banned in every field: skill slugs (maya-*), .md filenames, internal
 pipeline terms. whyItFits MUST be plain founder-speak.
 \`\`\`
 
-STEP C — ANNOUNCE + YIELD.
+STEP D — ANNOUNCE + YIELD.
 
 POST /lc_gtm/phase_1_announce with { researchJobId, subagentsExpected: N } where N is exactly the number spawned (≤3). Then call \`sessions_yield\` to end your current turn. OpenClaw will resume you with a follow-up message when subagents complete — that follow-up turn owns plan synthesis + send (phase 2). DO NOT poll sessions_list. \`sessions_wait\` is NOT a real tool; never reference it.
 
@@ -769,7 +777,7 @@ WHAT YOU DO NOT DO THIS TURN:
 
 VOICE CONTRACT (every user-visible message): no maya-* slugs, no .md filenames, no internal terms (subagent / research lane / phase 1 / phase 2 / priorityScore), no AI/LLM framing. POST to /lc_gtm/validate_outbound BEFORE every /lc_gtm/send_update call.
 
-This turn ends after STEP C yields. Three lanes, spawn, yield. That's the contract.`,
+This turn ends after STEP D yields. Hello + three lanes + spawn + yield. That's the contract.`,
         },
         delivery,
         state: {},

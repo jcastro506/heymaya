@@ -203,9 +203,13 @@ describe("Maya GTM workspace pack", () => {
     expect(bootJob?.payload.timeoutSeconds).toBeUndefined();
     // Medium thinking for the judgment-call channel pick.
     expect(bootJob?.payload.thinking).toBe("medium");
-    // Sprint 2.16j prompt opens with RESEARCH DISPATCH (was FIRST
-    // HEARTBEAT in 2.16c). The first turn (hello) is owned by BOOT.md.
-    expect(bootJob?.payload.message).toContain("RESEARCH DISPATCH");
+    // Sprint 2.16j prompt: "BOOT — first turn ... Two jobs this turn:
+    // (1) send the operator a voice-clean hello, (2) pick channel lanes
+    // and spawn research." Hello + dispatch in one turn (BOOT.md is
+    // unused as a native hook — OpenClaw's "creator runtime" skips
+    // gateway_start hooks without a custom plugin).
+    expect(bootJob?.payload.message).toContain("BOOT — first turn");
+    expect(bootJob?.payload.message).toContain("send the operator a voice-clean hello");
     expect(bootJob?.payload.message).toContain("HARD CAP: 3 lanes");
     expect(bootJob?.payload.message).toContain("/lc_gtm/target_thread");
     expect(bootJob?.payload.message).toContain("/lc_gtm/send_update");
