@@ -226,7 +226,10 @@ describe("Maya GTM workspace pack", () => {
     expect(heartbeat).toBeTruthy();
     expect(heartbeat?.sessionTarget).toBe("isolated");
     expect(heartbeat?.payload.kind).toBe("agentTurn");
-    expect(heartbeat?.payload.thinking).toBe("off");
+    // Sprint 2.16l — bumped from "off" to "minimal" because
+    // gemini-3.5-flash via OpenRouter rejects thinking:off at the
+    // API level. "minimal" is the cheapest accepted thinking budget.
+    expect(heartbeat?.payload.thinking).toBe("minimal");
     expect(heartbeat?.payload.timeoutSeconds).toBe(60);
     expect(heartbeat?.delivery).toEqual({ mode: "none", bestEffort: true });
     expect(heartbeat?.payload.message).toContain("Read HEARTBEAT.md");

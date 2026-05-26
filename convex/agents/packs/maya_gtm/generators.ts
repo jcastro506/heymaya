@@ -737,67 +737,56 @@ STEP C — SPAWN ≤3 SUBAGENTS.
 
 For each picked lane, spawn the matching _research subagent via sessions_spawn (depth-1). Subagent mapping: reddit → reddit_research, x → x_research, tiktok → tiktok_research, instagram → instagram_research, linkedin → linkedin_research, hn → hn_research.
 
-For each subagent, compose its prompt with this contract — copy these instructions LITERALLY into the subagent's message, substituting <channel> + <search-endpoint-url> + <example-query> for the platform you're spawning:
+For each subagent, compose its prompt with this contract — copy these instructions LITERALLY into the subagent's message, substituting <channel> + <search-endpoint-url> for the platform you're spawning:
 
 \`\`\`
 You are the <channel> research subagent. Your concrete deliverable: 15 high-buyer-intent threads where this product fits as a natural reply, plus 5 accounts/communities worth following.
 
-STEP 1 — SEARCH (use web_fetch, NOT a magic tool).
+TOOL PRIMER (load-bearing — six prior deploys failed because the subagent picked the wrong tool):
 
-Pull the operator's product context from APP.md (you have the workspace mounted). Generate 5-8 SEARCH QUERIES that match the operator's PAIN POINT in buying language — not generic feature words.
+- \`web_fetch\` is GET-only and does NOT accept custom headers. Use it for KEYLESS or query-string-auth GETs (e.g. HN Algolia: https://hn.algolia.com/api/v1/search?query=...).
+- For ScrapeCreators (requires \`x-api-key\` header), use \`exec\` to run curl:
+    exec({ command: "curl -sS -H \\"x-api-key: $SCRAPECREATORS_API_KEY\\" 'https://api.scrapecreators.com/v1/reddit/search?query=' + <urlencoded>" })
+  \`$SCRAPECREATORS_API_KEY\` is set in the machine env — bash will substitute it. Do NOT echo the key value back to the operator.
+- For POSTing to /lc_gtm/* callbacks (requires Bearer auth), use \`exec\` with curl too:
+    exec({ command: "curl -sS -X POST -H 'Authorization: Bearer <hookToken>' -H 'Content-Type: application/json' -d '<jsonbody>' 'https://<convexSite>/lc_gtm/target_thread'" })
+  The hookToken and convexSite values are in TOOLS.md in your workspace. Read them; don't guess.
 
-Bad query: "AI tools" / "productivity"
-Good query: "how do I get users for my dev tool" / "shipped a feature but no one noticed" / "GitHub release notes alternative"
+STEP 1 — UNDERSTAND THE PRODUCT.
+Read APP.md from your workspace. Note the operator's pain point, week goal, and product positioning.
 
-STEP 2 — FETCH SOURCES (web_fetch the ScrapeCreators API).
+STEP 2 — GENERATE QUERIES.
+Generate 5-8 search queries that match buying-pain language, NOT generic feature words.
+  Bad: "AI tools" / "productivity"
+  Good: "how do I get users for my dev tool" / "shipped a feature but no one noticed"
 
-Endpoint by channel (substituted at spawn-time):
-  reddit    → https://api.scrapecreators.com/v1/reddit/search?query=<URLencoded>
-  x         → https://api.scrapecreators.com/v1/twitter/search?query=<URLencoded>
-  tiktok    → https://api.scrapecreators.com/v1/tiktok/search/keyword?query=<URLencoded>
-  instagram → https://api.scrapecreators.com/v1/instagram/search?query=<URLencoded>
-  linkedin  → https://api.scrapecreators.com/v1/linkedin/search?query=<URLencoded>
-  hn        → https://hn.algolia.com/api/v1/search?query=<URLencoded>&tags=story (no API key)
+STEP 3 — FETCH SOURCES.
+Channel → endpoint:
+  reddit    → https://api.scrapecreators.com/v1/reddit/search?query=<urlencoded>     (use exec+curl, x-api-key header)
+  x         → https://api.scrapecreators.com/v1/twitter/search?query=<urlencoded>    (use exec+curl, x-api-key header)
+  tiktok    → https://api.scrapecreators.com/v1/tiktok/search/keyword?query=<urlencoded>  (use exec+curl, x-api-key header)
+  instagram → https://api.scrapecreators.com/v1/instagram/search?query=<urlencoded>  (use exec+curl, x-api-key header)
+  linkedin  → https://api.scrapecreators.com/v1/linkedin/search?query=<urlencoded>   (use exec+curl, x-api-key header)
+  hn        → https://hn.algolia.com/api/v1/search?query=<urlencoded>&tags=story     (use web_fetch — no key needed)
 
-Auth header for ScrapeCreators: \`x-api-key: $SCRAPECREATORS_API_KEY\` (the env var is already on this machine — use it directly).
+Parse JSON responses. If a query returns nothing, try a different one. Burn through your 5-8 queries before giving up.
 
-Example web_fetch call:
-  web_fetch({
-    url: "https://api.scrapecreators.com/v1/reddit/search?query=" + encodeURIComponent("shipped my saas no users"),
-    headers: { "x-api-key": process.env.SCRAPECREATORS_API_KEY }
-  })
+STEP 4 — SCORE EACH THREAD.
+For every thread you found, score painMatch / buyerMatch / channelFit (each 0-1).
 
-Make AT LEAST 3 web_fetch calls (one per query) before you score anything. If you make fewer than 3, you don't have enough evidence and the channel-judge will reject your output.
+STEP 5 — PERSIST RESULTS (this is where the loop dies if you skip it).
+For each scored thread, exec curl POST to https://<convexSite>/lc_gtm/target_thread with Bearer auth and a JSON body containing { researchJobId, platform, externalId, url, title, snippet, painMatch, buyerMatch, channelFit, whyItFits }.
 
-STEP 3 — SCORE EACH THREAD.
+For each high-value account: same pattern, /lc_gtm/target_account.
 
-For every thread that came back, score:
-  - painMatch (0-1): does this person express the pain the product solves?
-  - buyerMatch (0-1): are they a plausible buyer (vs. tire-kicker, vs. competitor)?
-  - channelFit (0-1): does it make sense to reply here (subreddit etiquette / X reply norms / etc.)?
+If you draft a reply, same pattern, /lc_gtm/drafted_content with approvalState: "pending_approval". Voice per SOUL.md.
 
-STEP 4 — PERSIST RESULTS.
+STEP 6 — SIGNAL DONE.
+ABSOLUTE LAST STEP — exec curl POST to /lc_gtm/subagent_complete with { researchJobId, platform: "<your channel>" }. This is what wakes Maya's plan synthesis. Without it, the loop is dead.
 
-For each scored thread, web_fetch POST to https://<convexSite>/lc_gtm/target_thread with:
-  - method: POST
-  - headers: { Authorization: "Bearer " + hookToken, Content-Type: "application/json" }
-  - body: { researchJobId, platform, externalId, url, title, snippet, painMatch, buyerMatch, channelFit, whyItFits }
+Banned in persisted fields: skill slugs (maya-*), .md filenames, internal pipeline terms (subagent / research lane / priorityScore / phase 1 / phase 2). \`whyItFits\` MUST be founder-speak — what would the operator say to a friend about why this thread matters.
 
-(The hookToken value is in TOOLS.md. The convexSite base URL is in TOOLS.md too — DO NOT guess these values, read them from the file.)
-
-For each high-value account that showed up across threads (e.g., a subreddit moderator who always answers earnestly, a builder on X with engaged followers), POST similarly to /lc_gtm/target_account.
-
-If you can draft a natural reply to a thread, POST to /lc_gtm/drafted_content { researchJobId, targetThreadId, platform, body, approvalState: "pending_approval" }. Drafts MUST be in the operator's voice per SOUL.md; do not push slop.
-
-STEP 5 — SIGNAL DONE.
-
-POST to /lc_gtm/subagent_complete with { researchJobId, platform: "<your channel>" } as the ABSOLUTE LAST thing you do. This is what triggers Maya's plan synthesis. If you don't POST this, the operator never gets a plan.
-
-You are done when: (a) you persisted 15 thread rows OR (b) you've made 8+ web_fetch calls and exhausted query variations.
-
-Banned in every persisted field: skill slugs (maya-*), .md filenames, internal pipeline terms (subagent, research lane, priorityScore, phase 1, phase 2). \`whyItFits\` MUST be plain founder-speak — what would the operator say to a friend about why this thread matters.
-
-If you're tempted to skip web_fetch and just "reason" about what threads exist — STOP. That returns empty and the loop dies. The operator is watching for real evidence. Make the API calls.
+You have as long as you need. Quality > speed. But the loop only progresses when /lc_gtm/subagent_complete fires — don't exit without it.
 \`\`\`
 
 STEP D — ANNOUNCE + YIELD.
@@ -833,7 +822,10 @@ This turn ends after STEP D yields. Hello + three lanes + spawn + yield. That's 
         payload: {
           kind: "agentTurn",
           lightContext: true,
-          thinking: "off",
+          // Sprint 2.16l — was "off" but gemini-3.5-flash via OpenRouter
+          // rejects thinking:off with HTTP 400 ("Reasoning is mandatory
+          // for this endpoint"). "minimal" is the cheapest accepted level.
+          thinking: "minimal",
           timeoutSeconds: 60,
           message:
             // Sprint 2.16k-3 — operator-reported 2026-05-26 leak: a heartbeat

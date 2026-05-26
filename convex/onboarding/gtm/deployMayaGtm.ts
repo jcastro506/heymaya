@@ -189,12 +189,26 @@ export function buildGatewayConfig(
   // tasks. With operator-approved `thinking: medium` budget in
   // the subagent prompts, Gemini 3 Flash has enough headroom to
   // do multi-step research per channel.
+  // Sprint 2.16l — research subagents get the FULL coding profile by
+  // omitting `tools.allow` (which is RESTRICTIVE in OpenClaw, not
+  // additive). Prior config `allow: ["scrapecreators-api", "web_fetch"]`
+  // restricted the subagent to only web_fetch (the fake "scrapecreators-
+  // api"/"search-x"/"tiktok"/"instagram" entries got stripped silently
+  // with a warning — they're not real tool IDs). That meant subagents
+  // had NO tool that could POST with Bearer auth to /lc_gtm/* callbacks
+  // — they tried web_fetch (GET-only) on POST endpoints, got 404s, gave
+  // up, returned empty. Six deploys deep, that was the real bug.
+  //
+  // Full coding profile gives them: read, write, edit, exec, process,
+  // web_fetch, web_search, x_search, memory_*, sessions_*. With `exec`
+  // they can curl with auth headers; with web_fetch they can do GETs
+  // (e.g. HN Algolia search, ScrapeCreators GET endpoints).
   const SUBAGENTS = [
     {
       id: "reddit_research",
       name: "Reddit Demand Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const, allow: ["scrapecreators-api", "web_fetch"] },
+      tools: { profile: "coding" as const },
       // Allow no further spawning — depth-1 max from main.
       subagents: { allowAgents: [] as string[] },
     },
@@ -202,66 +216,58 @@ export function buildGatewayConfig(
       id: "x_research",
       name: "X Founder-Led Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const, allow: ["scrapecreators-api", "web_fetch", "search-x"] },
+      tools: { profile: "coding" as const },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "tiktok_research",
       name: "TikTok Format Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const, allow: ["scrapecreators-api", "tiktok", "web_fetch"] },
+      tools: { profile: "coding" as const },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "instagram_research",
       name: "Instagram Reuse Researcher",
       model: subagentModel,
-      // Sprint 2.1 — added `web_fetch` so this subagent can POST to the
-      // /lc_gtm/target_thread, /lc_gtm/target_account, /lc_gtm/drafted_content
-      // callbacks during deep research. Without it the subagent has nowhere
-      // to persist its findings.
-      tools: {
-        profile: "coding" as const,
-        allow: ["scrapecreators-api", "instagram", "web_fetch"],
-      },
+      tools: { profile: "coding" as const },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "linkedin_research",
       name: "LinkedIn Fit Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const, allow: ["scrapecreators-api", "web_fetch"] },
+      tools: { profile: "coding" as const },
       subagents: { allowAgents: [] as string[] },
     },
     {
-      // Sprint 2.1 — HN as a first-class subagent. Calls the Algolia HN
-      // search via web_fetch (since Sprint 2.0 stayed in
-      // platformWorkers' googleWorker for shallow Convex-side use).
-      // Maya's runtime can also hit hn.algolia.com directly via
-      // web_fetch — no API key required. Per PLAYBOOK § 3.6 HN is
-      // binary: novel-technical-thing OR don't bother; channel-judge
-      // gates whether this subagent is spawned at all.
+      // HN via Algolia search — no API key required, GET-only.
+      // Full coding profile here too so subagent can choose web_fetch
+      // for the GET or curl-via-exec if needed.
       id: "hn_research",
       name: "Hacker News Demand Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const, allow: ["web_fetch"] },
+      tools: { profile: "coding" as const },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "channel_judge",
       name: "Channel Strategy Judge",
       model: mainModel,
-      // Pure synthesis — DENY all external API tools so the judge can't
-      // burn ScrapeCreators/Gemini budget mid-decision.
-      tools: { profile: "coding" as const, deny: ["scrapecreators-api", "web_fetch", "tiktok", "search-x"] },
+      // Pure synthesis — deny network-egress tools so the judge can't
+      // burn external API budget mid-decision. (Removed fake
+      // "scrapecreators-api"/"tiktok"/"search-x" entries which were
+      // stripped silently anyway.)
+      tools: { profile: "coding" as const, deny: ["web_fetch", "web_search", "exec", "process"] },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "slop_critic",
       name: "Slop Critic",
       model: mainModel,
-      // Local-only — banned-phrase scan + voice match. No external calls.
-      tools: { profile: "coding" as const, deny: ["scrapecreators-api", "web_fetch"] },
+      // Local-only — banned-phrase scan + voice match. Deny network
+      // and exec so it can't accidentally make HTTP/shell calls.
+      tools: { profile: "coding" as const, deny: ["web_fetch", "web_search", "exec", "process"] },
       subagents: { allowAgents: [] as string[] },
     },
     {
@@ -299,6 +305,14 @@ export function buildGatewayConfig(
         // surfaces "LLM request timed out" to the user. OpenClaw runtime
         // error message names this exact key as the fix.
         llm: { idleTimeoutSeconds: 300 },
+        // Sprint 2.16l — gemini-3.5-flash via OpenRouter REQUIRES reasoning
+        // (rejects `thinking: "off"` at the API level with HTTP 400
+        // "Reasoning is mandatory for this endpoint"). Observed across
+        // multiple deploys: agent runs error out, OpenClaw auto-retries
+        // with minimal, but every single LLM call eats a 400 + retry
+        // round-trip. Set thinking: "minimal" explicitly so the first
+        // call always succeeds.
+        thinking: "minimal" as const,
         subagents: {
           // Sprint 2.16j — bumped 4 → 8 per external-architect review.
           // We cap research lanes at 3 in the boot prompt, so 8 leaves
