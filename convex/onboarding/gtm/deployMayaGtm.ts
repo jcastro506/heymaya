@@ -115,20 +115,34 @@ const MODEL_ROUTING = {
   // to spawn refinement waves or ship the plan. Was 3-flash-preview;
   // operator-flagged 2026-05-25 that 3.5 is the right brain for the
   // iterative-research-loop architecture.
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-3.5-flash",
+  // Sprint 2.16n — REVERTED main brain too. Same OpenRouter
+  // reasoning-required 400 was hitting Maya's main turn (observed
+  // 2026-05-26 10th deploy: main agent errored repeatedly on
+  // boot-* runIds with "Reasoning is mandatory"). gemini-3-flash
+  // doesn't have that gate. If she needs more thinking budget per
+  // turn, the cron payload's thinking:"medium" can be raised later.
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-3-flash",
   // Sprint 2.16a — channel-research subagents. Gemini 3 Flash (NOT
   // 3.5 — that's main's brain). Subagents do focused platform work
   // (scrape, score, draft) — they don't need 3.5's strategic judgment.
   // Cheaper, faster, plenty of headroom with thinking:medium budget
   // injected via their prompt. Replaces the prior mix of Claude
   // Sonnet 4.5 (10x more expensive) + scattered Gemini configs.
-  // Sprint 2.16k-1 — bumped from gemini-3-flash to gemini-3.5-flash
-  // (same as main brain). Prior model satisficed on subagent contracts
-  // and returned empty (observed 2026-05-26: reddit/x/tiktok/instagram
-  // subagents ran 119-165s with $0 ScrapeCreators spend, zero callbacks).
-  // gemini-3.5-flash with concrete URL patterns in the spawn contract
-  // is the minimum viable subagent capability.
-  subagent: process.env.MAYA_GTM_SUBAGENT_MODEL ?? "google/gemini-3.5-flash",
+  // Sprint 2.16n — REVERTED back to gemini-3-flash. Sprint 2.16k-1
+  // bumped this to gemini-3.5-flash on the assumption that the
+  // satisficing/empty-completion bug was model-strength. Sprint 2.16l
+  // proved the real bug was restrictive tools.allow (subagents had no
+  // tool to POST with Bearer auth). 3.5-flash introduced a NEW bug:
+  // OpenRouter rejects every LLM call with HTTP 400 "Reasoning is
+  // mandatory" because our thinking config doesn't propagate as a
+  // reasoning-enabled flag for this model. OpenClaw auto-retries but
+  // the retry also fails — subagents create sessions but their first
+  // LLM call errors out, so they never produce output.
+  //
+  // gemini-3-flash has no reasoning-required gate. With Sprint 2.16l's
+  // full coding profile (incl. exec), this is the proper bare-bones
+  // test of the architecture.
+  subagent: process.env.MAYA_GTM_SUBAGENT_MODEL ?? "google/gemini-3-flash",
   hardResearchBeta:
     process.env.MAYA_GTM_HARD_RESEARCH_MODEL ??
     "openrouter/anthropic/claude-sonnet-4.5",

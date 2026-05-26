@@ -38,7 +38,14 @@ describe("Maya GTM OpenClaw deploy config", () => {
 
     const bootstrap = JSON.parse(config.env?.MAYA_BOOTSTRAP_JSON ?? "{}");
     expect(bootstrap.product).toBe("clawlaunch-gtm");
-    expect(bootstrap.modelRouting.mainMaya).toBe("google/gemini-3.5-flash");
+    // Sprint 2.16n — reverted from "google/gemini-3.5-flash" to
+    // "google/gemini-3-flash". 3.5-flash via OpenRouter rejects every
+    // call with HTTP 400 "Reasoning is mandatory" because our thinking
+    // config doesn't propagate as a reasoning-enabled flag. 3-flash
+    // has no such gate and was working fine before the Sprint 2.16k-1
+    // bump (the satisficing bug we attributed to model strength was
+    // actually the restrictive tools.allow that Sprint 2.16l fixed).
+    expect(bootstrap.modelRouting.mainMaya).toBe("google/gemini-3-flash");
     expect(bootstrap.modelRouting.hardResearchBeta).toContain("claude-sonnet");
     expect(bootstrap.directPingSmoke).toBe(true);
     // Sprint 2.1 expanded the agent list from 2 → 11 (six platform
@@ -100,14 +107,18 @@ describe("Maya GTM OpenClaw deploy config", () => {
       (a: { id: string }) => a.id === "main"
     );
     expect(main.default).toBe(true);
-    expect(main.model).toBe("openrouter/google/gemini-3.5-flash");
+    // Sprint 2.16n — reverted (see mainMaya note above).
+    expect(main.model).toBe("openrouter/google/gemini-3-flash");
     expect(config.init?.cmd?.join(" ")).toContain(
       "cp /data/workspace/jobs.json /data/cron/jobs.json"
     );
     expect(config.init?.cmd?.join(" ")).toContain("chmod 700 /data/cron");
   });
 
-  it("uses Gemini 3.5 Flash as the default GTM OpenClaw model", () => {
+  it("uses Gemini 3 Flash as the default GTM OpenClaw model", () => {
+    // Sprint 2.16n — reverted from 3.5-flash to 3-flash. See
+    // mainMaya note in test above for the OpenRouter 400 reasoning-
+    // required regression that drove the revert.
     const config = buildGtmMachineConfig({
       agentId: "agent",
       flyAppName: "clawlaunch-agent",
@@ -115,7 +126,7 @@ describe("Maya GTM OpenClaw deploy config", () => {
     });
 
     expect(config.env?.OPENCLAW_MODEL).toBe(
-      "openrouter/google/gemini-3.5-flash"
+      "openrouter/google/gemini-3-flash"
     );
     expect(config.env?.OPENCLAW_DISABLE_BONJOUR).toBe("1");
     expect(config.env?.MAYA_GTM_MODEL_ROUTING_JSON).toContain(
