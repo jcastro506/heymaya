@@ -346,21 +346,29 @@ export function buildGatewayConfig(
       ],
     },
     plugins: {
+      // Sprint 2.16j — restrictive allowlist per external-architect
+      // recommendation. `plugins.allow` is deny-by-default: any plugin
+      // not listed here cannot load (and therefore cannot install
+      // runtime deps). This is the canonical OpenClaw way to skip
+      // unused channel/voice/microsoft-style plugins entirely.
+      //
+      // Why not just plugins.entries.<id>.enabled: false? Known
+      // OpenClaw bug (issue against 2026.4.22): doctor-bundled-plugin-
+      // runtime-deps still installed disabled-channel dependencies via
+      // a health path that forced includeConfiguredChannels: true.
+      //
+      // Plugin IDs verified against /tmp/openclaw-source plugin
+      // registry (grep "pluginId:") — only the ones actually
+      // registered as plugins. cron/taskflow/hooks/run/openrouter
+      // are built-in subsystems, NOT plugins, so don't need allowing.
+      // (openrouter auto-enables via model config; verified by reading
+      // /data/openclaw.json after gateway start.)
+      allow: ["telegram"],
       entries: {
-        acpx: { enabled: false },
-        browser: { enabled: false },
-        "device-pair": { enabled: false },
-        "phone-control": { enabled: false },
-        "talk-voice": { enabled: false },
-        // Sprint 2.16j — disable plugins whose runtime deps install
-        // DURING the first agent turn. Observed 2026-05-26 deploy:
-        // microsoft (node-edge-tts@1.2.10) takes ~5 min to install at
-        // runtime; it starts AFTER gateway-ready, blocking the 0001
-        // cron's first agent turn so it never produces output. Until
-        // Sprint 2.16i preseed is extended to include these in the
-        // Docker image, disable them at the gateway-config level.
-        microsoft: { enabled: false },
-        "voice-call": { enabled: false },
+        // Keep telegram explicitly enabled. Channel-config in
+        // `channels.telegram` (lower in this config) does the actual
+        // dmPolicy + allowFrom wiring; this just confirms enablement.
+        telegram: { enabled: true },
       },
     },
     // Sprint 2.16j — enable internal hook runtime so BOOT.md fires

@@ -51,12 +51,14 @@ describe("Maya GTM OpenClaw deploy config", () => {
     expect(bootstrap.gatewayConfig).toMatchObject({
       gateway: { mode: "local" },
       plugins: {
+        // Sprint 2.16j v3 — switched from `enabled: false` stubs for
+        // every disabled plugin to a restrictive `plugins.allow`
+        // allowlist (deny-by-default). External-architect cited known
+        // OpenClaw bug where doctor-bundled-plugin-runtime-deps still
+        // installed disabled-channel deps via a health path.
+        allow: ["telegram"],
         entries: {
-          acpx: { enabled: false },
-          browser: { enabled: false },
-          "device-pair": { enabled: false },
-          "phone-control": { enabled: false },
-          "talk-voice": { enabled: false },
+          telegram: { enabled: true },
         },
       },
       discovery: { mdns: { mode: "off" } },
