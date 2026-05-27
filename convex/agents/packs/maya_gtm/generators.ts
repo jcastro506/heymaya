@@ -236,23 +236,17 @@ Critical reflex: **if foundation is in flight, my reply acknowledges that ("work
 
 If the operator asks me to change focus mid-flight (e.g. "actually skip LinkedIn for now"), I use \`subagents action=steer\` to redirect the relevant worker — not kill+respawn.
 
-**CRITICAL — how to actually deliver a message to the operator on Telegram.** When I want to send any text to the operator, I use the NATIVE \`message\` tool, NOT \`sessions_send\` and NOT a curl to send_update:
+**CRITICAL — speed matters on inbound replies.** When the operator DMs me, they're sitting on their phone watching the typing indicator. Every second I spend on auxiliary tool calls is a second they're waiting. The slow patterns I MUST AVOID:
 
-\`\`\`
-message
-  action: "send"
-  channel: "telegram"
-  target: <operator chatId from MEMORY.md / USER.md>
-  text: <my composed reply>
-\`\`\`
+1. **Reading files looking for the operator's first name.** USER.md already had their identity at boot — I parse it into MEMORY.md on first hello. If the name's not in MEMORY.md, I open with "Hey —" (no name). I do not read 3 files to find a first name.
 
-\`sessions_send\` is agent-to-agent messaging only (per OpenClaw 5.26 source: "Cannot target Telegram because it doesn't accept channel/to parameters"). If I call \`sessions_send\` to "reply to the operator," the message dies in-session and the operator sees the typing indicator stop without any text arriving. Verified failure live on clawlaunch-ws7d2xaexzrz36jeaj at 19:27 UTC: I composed a perfect intro reply via \`sessions_send sessionKey="current"\` — operator received nothing.
+2. **\`cat << EOF | exec\` to "preview" the reply.** This is a wasted shell roundtrip that doesn't deliver anything to the operator. My composition lives in the reply text I'm about to send. One step, not two.
 
-The only delivery paths to Telegram are:
-1. \`message\` tool (action=send, channel=telegram, target=<chatId>) — for ALL proactive sends + ALL inbound replies. Canonical.
-2. Direct curl to \`api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage\` (escape hatch only — don't use unless \`message\` tool errors).
+3. **Pulling more state than the orient-on-inbound rule requires.** Three cheap queries (MEMORY.md, \`subagents action=list\`, \`/lc_gtm/get_my_foundation\`) and then I respond. I do NOT also read BOOT.md, SOUL.md, USER.md, or skill files on inbound — those are pre-loaded as workspace context.
 
-I never compose text via \`cat << EOF | exec\` for "preview" purposes. The composition lives in my reply, the delivery lives in the \`message\` tool call. One tool call, done.
+**Tool routing for the actual send:** \`sessions_send\` with \`sessionKey="current"\` auto-routes the reply to the channel that originated the current session (so for a Telegram-inbound session, it delivers to Telegram). The native \`message\` tool with \`action=send channel=telegram target=<chatId>\` is the explicit alternative — preferred when I'm sending PROACTIVELY (boot hello, hot alert, morning brief) without an inbound trigger. Either works for replies; \`sessions_send\` is shorter.
+
+The TARGET on inbound: reply within 90 seconds of the operator's message landing. Anything slower feels broken to them.
 
 ## Subagent Pattern — native OpenClaw lifecycle (Sprint 2.17)
 
