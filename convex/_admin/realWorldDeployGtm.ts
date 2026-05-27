@@ -1173,6 +1173,81 @@ export const tailLatestMaya = internalAction({
   },
 });
 
+export const peekFoundationState = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    const all = await ctx.db.query("creators").collect();
+    const tests = all
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (tests.length === 0) return { found: false };
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", tests[0]._id))
+      .first();
+    if (!agent) return { found: true, agent: null };
+
+    const [
+      buyerMap,
+      competitiveMap,
+      channelScorecard,
+      contentAngles,
+      relationshipTargets,
+      actionLog,
+    ] = await Promise.all([
+      ctx.db
+        .query("gtmBuyerMap")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .first(),
+      ctx.db
+        .query("gtmCompetitiveMap")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+      ctx.db
+        .query("gtmChannelScorecard")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+      ctx.db
+        .query("gtmContentAngles")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+      ctx.db
+        .query("gtmRelationshipTargets")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+      ctx.db
+        .query("gtmActionLog")
+        .withIndex("by_agent_and_sent", (q) => q.eq("agentId", agent._id))
+        .order("desc")
+        .take(10),
+    ]);
+
+    return {
+      agentId: agent._id,
+      flyAppId: agent.openClawFlyAppId,
+      buyerMap: buyerMap
+        ? {
+            icpDescription: buyerMap.icpDescription,
+            buyerJourneyStageCount: buyerMap.buyerJourneyStages.length,
+            intentPhraseCount: buyerMap.intentPhrases.length,
+            trustedVoiceCount: buyerMap.trustedVoices.length,
+            synthesizedAt: new Date(buyerMap.synthesizedAt).toISOString(),
+          }
+        : null,
+      competitiveMapCount: competitiveMap.length,
+      channelScorecardCount: channelScorecard.length,
+      betChannels: channelScorecard.filter((r) => r.bet).map((r) => r.channel),
+      contentAnglesCount: contentAngles.length,
+      relationshipTargetsCount: relationshipTargets.length,
+      recentActions: actionLog.map((r) => ({
+        kind: r.kind,
+        summary: r.summary,
+        sentAt: new Date(r.sentAt).toISOString(),
+      })),
+    };
+  },
+});
+
 export const peekLatestApp = internalQuery({
   args: {},
   handler: async (ctx): Promise<unknown> => {

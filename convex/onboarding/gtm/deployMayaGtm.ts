@@ -58,14 +58,17 @@ export type DeployMayaGtmResult =
  * app. To flip, set `MAYA_GTM_OPENCLAW_IMAGE=registry.fly.io/heymaya-openclaw:v2026.5.20`
  * on the Convex deployment. Roll back by clearing the env var.
  */
-export const OPENCLAW_IMAGE_TARGET = "registry.fly.io/heymaya-openclaw:v2026.5.20";
-// Sprint 2.16u-fix16 — VANILLA OpenClaw startup. v2026.4.26 strips all
-// five "creator runtime" optimization patches (prewarm / post-channel
-// sidecars / update check / maintenance timers / channel health monitor).
-// Those saved ~5 sec at boot but broke the bundled boot-md hook. Now
-// gateway:startup → boot-md → BOOT.md fires canonically, no cron needed.
+export const OPENCLAW_IMAGE_TARGET = "registry.fly.io/heymaya-openclaw:v2026.5.26";
+// Sprint 2.18 — upgraded npm package 2026.4.23 → 2026.5.26 for the
+// HEARTBEAT.md prose-drop fix (5.12), stream-establishment idle-timer
+// fix (5.12, fixes the X subagent jam), multi-agent heartbeat
+// Promise.all fan-out (5.12), Telegram ENETDOWN transient handling
+// (5.26), dedicated agent:<id>:boot session (no main-session
+// pollution), and subagent context default trim. The image is fully
+// VANILLA — no patch-claw-messenger-plugin patches (file kept in
+// source for reference; not copied into image). See Dockerfile.
 export const OPENCLAW_IMAGE_PINNED =
-  "registry.fly.io/heymaya-openclaw@sha256:dd4fd47d15e641c726fc9e3914b2dbd967d07bbdc806e80e6b8743978b68deed";
+  "registry.fly.io/heymaya-openclaw@sha256:49fa411e417ffe260789a9ea8d62a0122b54ee904995fca35e2a82a73c4bc7a2";
 
 const OPENCLAW_IMAGE =
   process.env.MAYA_GTM_OPENCLAW_IMAGE ??
@@ -198,7 +201,9 @@ export function buildGatewayConfig(
 ): Record<string, unknown> {
   const mainModel = toOpenClawModelRef(MODEL_ROUTING.mainMaya);
   const subagentModel = toOpenClawModelRef(MODEL_ROUTING.subagent);
-  const hardModel = toOpenClawModelRef(MODEL_ROUTING.hardResearchBeta);
+  // Sprint 2.18 — hardModel const dropped; hard_research_beta is no
+  // longer a configured agent. The MODEL_ROUTING.hardResearchBeta
+  // entry stays in the routing table for narrative / cost docs.
   const extractionModel = toOpenClawModelRef(MODEL_ROUTING.extractionWorker);
   const memorySearch = buildMemorySearchConfig();
 
@@ -370,14 +375,15 @@ export function buildGatewayConfig(
     },
   ];
 
-  // The set of subagent IDs main can spawn. hard_research_beta retained
-  // for backward compatibility with any existing standing orders that
-  // reference it.
-  const allowFromMain = [
-    "main",
-    "hard_research_beta",
-    ...SUBAGENTS.map((s) => s.id),
-  ];
+  // The set of subagent IDs main can spawn. Sprint 2.18 — removed
+  // `hard_research_beta` from this list since it is no longer a
+  // configured agent in agents.list[]. Per 5.26 changelog: "require
+  // explicit subagent allowlist targets to be configured agents so
+  // stale deleted-agent ids are omitted from agents_list and rejected
+  // by sessions_spawn." Bundled skills that mention hard_research_beta
+  // in their cost-discipline notes are stale narrative — they never
+  // actually invoked it.
+  const allowFromMain = ["main", ...SUBAGENTS.map((s) => s.id)];
 
   return {
     gateway: { mode: "local" },
@@ -441,14 +447,13 @@ export function buildGatewayConfig(
           subagents: { allowAgents: allowFromMain },
           tools: { profile: "coding" },
         },
-        {
-          id: "hard_research_beta",
-          name: "Hard Research Beta",
-          workspace: "/data/workspace",
-          model: hardModel,
-          subagents: { allowAgents: [] },
-          tools: { profile: "coding" },
-        },
+        // Sprint 2.18 — hard_research_beta REMOVED from agents.list[].
+        // boot-md iterates listAgentIds(cfg) and runs BOOT.md FOR EACH
+        // entry. Two top-level agents meant BOOT.md was running twice
+        // (once for main, once for hard_research_beta with its different
+        // tools/model). hard_research_beta is still callable from main
+        // via the `allowFromMain` allowlist below — it just isn't a
+        // top-level agent that bootstraps its own session.
         ...SUBAGENTS.map((s) => ({
           ...s,
           workspace: "/data/workspace",

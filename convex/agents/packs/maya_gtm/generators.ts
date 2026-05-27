@@ -725,20 +725,29 @@ inbound-DM replies — goes through send_update.
 }
 
 function renderHeartbeat(): string {
-  // Sprint 2.17 manager-mode pivot: HEARTBEAT.md is short. BOOT.md +
-  // self-scheduled crons drive behavior; native subagents lifecycle
-  // (list/kill/steer) handles worker management. HEARTBEAT only covers
-  // out-of-band recovery for situations the cron + boot path can't catch.
+  // Sprint 2.18 — HEARTBEAT.md fuller shape. Heartbeat is the recurring
+  // poller; cron is exact-time delivery; BOOT.md is one-shot at gateway
+  // startup. Heartbeat tasks do interval-based polling work that crons
+  // can't (because they need to react to state, not fire on a clock).
+  //
+  // Per OpenClaw 2026.5.12 fix: prose OUTSIDE the `tasks:` block now
+  // reaches the model on every heartbeat dispatch — so the voice
+  // contract + tool primer below are actually load-bearing context for
+  // Maya during heartbeat ticks. In 4.x they were silently dropped when
+  // a `tasks:` block was present.
   return `# HEARTBEAT.md
 
-Maya's out-of-band recovery loop. The primary cadence runs via
-self-scheduled crons (morning brief 7am, evening recap 8pm, weekly
-review Sunday 6pm, monthly reset 1st-6am). BOOT.md handles foundation
-+ continuous routing on gateway restart. Native session lifecycle
-tools (\`subagents list/kill/steer\`) handle worker management.
+Maya's recurring polling loop. Runs every 5 minutes by default;
+individual tasks fire at their own intervals (30m / 1h / 2h / 4h / 6h).
+The primary cadence runs via self-scheduled crons (morning brief 7am,
+evening recap 8pm, weekly review Sunday 6pm, monthly reset 1st-6am).
+BOOT.md handles the one-shot first-hello + foundation/continuous
+routing on gateway startup.
 
-Heartbeat exists for: recovering from missed cadence, surfacing stale
-open loops, refreshing published-post metrics for the feedback loop.
+Heartbeat is where Maya does the work that doesn't fit a clock: watch
+for new buyer-pain threads in active channels, sweep stuck research
+workers, refresh post-publish results, scan for inbound replies to
+owned posts, surface stale open loops to the operator.
 
 ## Voice contract gate
 
@@ -793,6 +802,91 @@ tasks:
     4. Append \`last_morning_brief_at: <ISO ts>\`.
 
     Otherwise reply HEARTBEAT_OK.
+
+- name: continuous-research-watchdog
+  interval: 4h
+  prompt: |
+    Look for fresh buyer-pain threads in the bet channels. This is the
+    interval-based discovery loop that complements the cron-driven
+    morning brief.
+
+    1. Read foundation via exec curl GET to
+       \`$CONVEX_SITE_URL/lc_gtm/get_my_foundation\`. If \`buyerMap\` is
+       null, foundation hasn't completed yet — reply HEARTBEAT_OK and
+       wait for BOOT.md to finish foundation.
+
+    2. Read \`/data/workspace/skills/maya-continuous-research/SKILL.md\`
+       for the framework.
+
+    3. For each bet=true channel in \`channelScorecard\`, check the
+       freshest queued thread via GET
+       \`$CONVEX_SITE_URL/lc_gtm/get_my_target_threads?status=queued\`.
+       If the freshest thread is >4h old, time to refresh: spawn the
+       matching per-channel worker (reddit_research / x_research /
+       hn_research) with a task string per the skill (mandate
+       painQuote, postedAt, velocityScore, etc.).
+
+    4. \`sessions_yield\`. Workers run.
+
+    5. On resume, use \`subagents action=list\` to see worker state.
+       Kill anything stuck >5 min via \`subagents action=kill\`.
+       Steer thin-output workers via \`subagents action=steer\`.
+
+    6. New threads land in Convex via \`/lc_gtm/target_thread\` POSTs.
+       Reply HEARTBEAT_OK — no operator message yet (the hot-alert
+       task surfaces if a T1 shows up).
+
+- name: hot-alert
+  interval: 30m
+  prompt: |
+    Operator-facing alert for time-sensitive opportunities. Surface
+    only when ALL of these are true:
+      - A target thread has \`tier: "T1"\` AND \`status: "queued"\`.
+      - \`postedAt\` is within the last 4 hours (engagement window).
+      - We haven't already alerted the operator about this thread
+        (check \`gtmActionLog\` for a \`hot_alert\` row with this
+        thread's ID in linkedEntities).
+
+    Read recent queued T1s via exec curl GET to
+    \`$CONVEX_SITE_URL/lc_gtm/get_my_target_threads?status=queued\`.
+    Filter for tier=T1 + fresh + not-yet-alerted.
+
+    For each, send ONE message via send_update messageClass:"tactical".
+    Include the thread URL + one-sentence why-it-fits + the drafted
+    reply text. Voice-check per SOUL.md before send.
+
+    POST \`/lc_gtm/action_logged\` kind:"hot_alert" with the thread
+    ID in linkedEntities so we don't double-alert.
+
+    If nothing qualifies, reply HEARTBEAT_OK.
+
+- name: inbound-triage
+  interval: 2h
+  prompt: |
+    Poll for replies / DMs / mentions to owned posts. Operator
+    shouldn't have to scan their own inbox.
+
+    Read \`/data/workspace/skills/maya-inbound-triage/SKILL.md\` for
+    the classification framework (BUYER / SUPPORTER / NOISE / HOSTILE).
+
+    For each gtmDraftedContent in approvalState:"published" within the
+    last 7d, fetch fresh engagement metrics from the source platform
+    (ScrapeCreators for Reddit / TikTok / IG, TwitterAPI.io for X,
+    Algolia HN for HN). Look for NEW replies / quote tweets / DMs
+    that weren't there on the last scan.
+
+    For each new inbound:
+      1. Classify per the skill.
+      2. If BUYER or SUPPORTER, draft a reply in operator's voice.
+      3. Voice-check the draft against SOUL.md.
+      4. Surface ONE message per inbound via send_update with the
+         classification, link, and drafted reply.
+      5. POST \`/lc_gtm/action_logged\` kind:"inbound_triage".
+
+    NOISE never gets surfaced (just logged). HOSTILE escalates only
+    if velocity is high (>5 upvotes in 1h on the hostile reply).
+
+    If nothing new, reply HEARTBEAT_OK.
 
 - name: pending-approvals
   interval: 30m

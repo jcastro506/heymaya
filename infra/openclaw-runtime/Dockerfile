@@ -12,18 +12,34 @@
 # Build + push:
 #   flyctl auth docker
 #   docker buildx build --platform linux/amd64 \
-#     --build-arg OPENCLAW_VERSION=2026.4.23 \
-#     -t registry.fly.io/heymaya-openclaw:v2026.4.26 \
+#     --build-arg OPENCLAW_VERSION=2026.5.26 \
+#     -t registry.fly.io/heymaya-openclaw:v2026.5.26 \
 #     -t registry.fly.io/heymaya-openclaw:latest \
 #     --push infra/openclaw-runtime/
 #
-# v2026.4.26 — VANILLA OpenClaw startup. Removed all five "creator runtime"
-# optimization patches (prewarm skip / post-channel sidecars early-return /
-# update check skip / maintenance timers skip / channel health monitor
-# skip). Those patches saved ~5 sec at boot but broke the bundled boot-md
-# hook (verified across multiple deploys: hook loaded but never executed
-# BOOT.md). Vanilla flow: gateway:startup → boot-md → BOOT.md → message tool
-# → Telegram. This is what the canonical OpenClaw docs describe.
+# Sprint 2.18 — upgraded 2026.4.23 → 2026.5.26 for these load-bearing fixes:
+# - 5.12: HEARTBEAT.md prose outside `tasks:` block no longer silently
+#         dropped — directly fixes our case (voice + tool primer prose
+#         above the tasks block was getting lost in 4.x).
+# - 5.12: Stream-establishment idle-timer fix — SDK requests stuck at
+#         TCP/TLS handshake or before first response byte no longer
+#         hang indefinitely (the X subagent jam we hit).
+# - 5.12: Multi-agent heartbeat Promise.all fan-out — one busy agent no
+#         longer starves siblings sequentially.
+# - 5.12: skipWhenBusy scoped per-agent lane — single stuck subagent on
+#         one agent no longer disables every other agent's heartbeat.
+# - 5.14: sessions_spawn task delivered as first visible [Subagent Task]
+#         message instead of hidden in system prompt — debuggable.
+# - 5.26: Subagent bootstrap context defaults to AGENTS.md + TOOLS.md
+#         only — lean worker prompts.
+# - 5.26: Telegram ENETDOWN treated as transient pre-connect failure —
+#         flaky Fly→Telegram retries correctly.
+# - 5.26: Boot handler runs in dedicated `agent:<id>:boot` session (not
+#         main) with suppressPromptPersistence — no transcript pollution.
+#
+# Still VANILLA OpenClaw startup. No "creator runtime" optimization
+# patches. The bundled boot-md hook fires on gateway:startup → reads
+# BOOT.md → runs the agent command → message tool delivers to Telegram.
 #
 # Layout contract (consumed by `convex/onboarding/business/deployServiceMaya.ts`):
 #   The deploy passes `OPENCLAW_STATE_DIR=/data` on the machine env. The
@@ -46,7 +62,7 @@ RUN apt-get update \
 # the skill teaches Maya FFmpeg syntax but every `bash` invocation against
 # `ffmpeg` fails with "executable file not found in $PATH".
 
-ARG OPENCLAW_VERSION=2026.4.23
+ARG OPENCLAW_VERSION=2026.5.26
 RUN npm install -g openclaw@${OPENCLAW_VERSION} \
     && openclaw --version
 
@@ -60,8 +76,22 @@ RUN mkdir -p /opt/openclaw-seed \
     && rm -rf /opt/openclaw-seed/.npm /opt/openclaw-seed/logs /tmp/openclaw-seed-home \
     && chown -R node:node /opt/openclaw-seed
 
-COPY patch-claw-messenger-plugin.mjs /usr/local/bin/patch-claw-messenger-plugin.mjs
-RUN node /usr/local/bin/patch-claw-messenger-plugin.mjs
+# Sprint 2.18 — patch-claw-messenger-plugin.mjs NO LONGER RUNS.
+#
+# The script was written against the 2026.4.x claw-messenger layout
+# (`/opt/openclaw-seed/extensions/claw-messenger/dist/channel.js`). The
+# 2026.5.26 plugin reorganized that layout and the targeted markers no
+# longer exist. Rather than chase moving targets across plugin versions,
+# we go fully vanilla per `feedback_vanilla_openclaw_no_startup_patches`:
+# vanilla OpenClaw + vanilla plugin. The original patches were:
+#   1. Slop firewall — already removed from Convex in 2.16u-fix8 ("hate
+#      hardcoded string blockers"); SOUL.md owns voice now.
+#   2. Channel lifetime patches — verified obsolete in 5.x lifecycle.
+#   3. HTTP probes-before-hooks — vanilla 5.26 already places probes
+#      ahead of hook handlers (5.12 stream-establishment fix area).
+#   4. Plugin version drift tolerance — ironic; was for upgrades like
+#      this one. Empty target now.
+# File kept in source for historical reference; not copied into image.
 
 # OpenClaw auto-enables the provider plugin that owns the configured primary
 # model, then installs bundled runtime deps into OPENCLAW_STATE_DIR on first

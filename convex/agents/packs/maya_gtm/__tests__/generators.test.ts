@@ -173,15 +173,16 @@ describe("Maya GTM workspace pack", () => {
     expect(agents).toContain("slideshow/carousel");
   });
 
-  it("HEARTBEAT.md is the out-of-band recovery loop, not the primary launch driver", () => {
+  it("HEARTBEAT.md is the recurring polling loop with full task coverage", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
     const heartbeat = files.get("HEARTBEAT.md") ?? "";
 
-    // Sprint 2.17 Phase C — HEARTBEAT collapses to recovery only. The
-    // primary cadence (morning brief / evening recap / weekly review)
-    // runs via self-scheduled crons added by BOOT step 4. Worker
-    // lifecycle uses native subagents tools, not heartbeat polling.
-    expect(heartbeat).toContain("out-of-band recovery");
+    // Sprint 2.18 — HEARTBEAT.md fuller shape. With OpenClaw 5.12's
+    // prose-not-dropped fix in place, both the framing prose AND the
+    // task block reach the model. Heartbeat does interval-based
+    // polling work; cron does exact-time delivery; BOOT.md does
+    // one-shot startup.
+    expect(heartbeat).toContain("recurring polling loop");
     expect(heartbeat).toContain("self-scheduled crons");
 
     // launch-watchdog is GONE — BOOT.md now routes foundation vs
@@ -190,8 +191,11 @@ describe("Maya GTM workspace pack", () => {
     expect(heartbeat).not.toContain("state-hello");
     expect(heartbeat).not.toContain("state-channels-picked");
 
-    // New recovery + maintenance tasks.
+    // Full task surface: recovery + polling + maintenance.
     expect(heartbeat).toContain("missed-cadence");
+    expect(heartbeat).toContain("continuous-research-watchdog");
+    expect(heartbeat).toContain("hot-alert");
+    expect(heartbeat).toContain("inbound-triage");
     expect(heartbeat).toContain("pending-approvals");
     expect(heartbeat).toContain("calendar-due");
     expect(heartbeat).toContain("open-loops");
@@ -202,11 +206,13 @@ describe("Maya GTM workspace pack", () => {
     expect(heartbeat).toContain("subagents action=list");
     expect(heartbeat).toContain("subagents\n    action=kill");
 
-    // missed-cadence references the manager-mode markers.
+    // Manager-mode markers + endpoints heartbeat consults.
     expect(heartbeat).toContain("foundation_completed_at:");
     expect(heartbeat).toContain("last_morning_brief_at:");
+    expect(heartbeat).toContain("/lc_gtm/get_my_foundation");
+    expect(heartbeat).toContain("/lc_gtm/get_my_target_threads");
 
-    // Existing-state primitives still in play.
+    // Voice contract + primitives.
     expect(heartbeat).toContain("HEARTBEAT_OK");
     expect(heartbeat).toContain("SOUL.md");
     expect(heartbeat).toContain("$CONVEX_SITE_URL");
