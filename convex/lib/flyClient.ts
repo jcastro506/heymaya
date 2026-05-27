@@ -159,6 +159,88 @@ export class FlyClient {
     await this.fetchJson("DELETE", `/apps/${encodeURIComponent(appName)}`);
   }
 
+  /**
+   * Sprint 2.16u-fix17 — Fly apps created via the machines API don't get
+   * public DNS automatically. We need a shared IPv4 + dedicated IPv6 so
+   * Telegram can resolve `<appName>.fly.dev` and POST webhook updates.
+   *
+   * Uses Fly's GraphQL mutation (flyctl internal). Shared IPv4 is free
+   * and unique per app.
+   */
+  async allocateSharedV4(appName: string): Promise<void> {
+    const graphqlEndpoint = "https://api.fly.io/graphql";
+    const query = `
+      mutation AllocateSharedV4($appId: ID!) {
+        allocateIpAddress(input: {appId: $appId, type: shared_v4}) {
+          app { id }
+        }
+      }
+    `;
+    const res = await this.fetchImpl(graphqlEndpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${this.apiToken}`,
+      },
+      body: JSON.stringify({ query, variables: { appId: appName } }),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new FlyError(
+        `Fly allocateSharedV4 HTTP ${res.status}: ${text}`,
+        res.status,
+        text,
+        res.status >= 500
+      );
+    }
+    const parsed = JSON.parse(text) as { errors?: Array<{ message: string }> };
+    if (parsed.errors && parsed.errors.length > 0) {
+      throw new FlyError(
+        `Fly allocateSharedV4 errors: ${parsed.errors.map((e) => e.message).join("; ")}`,
+        res.status,
+        text,
+        false
+      );
+    }
+  }
+
+  async allocateV6(appName: string): Promise<void> {
+    const graphqlEndpoint = "https://api.fly.io/graphql";
+    const query = `
+      mutation AllocateV6($appId: ID!) {
+        allocateIpAddress(input: {appId: $appId, type: v6}) {
+          app { id }
+        }
+      }
+    `;
+    const res = await this.fetchImpl(graphqlEndpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${this.apiToken}`,
+      },
+      body: JSON.stringify({ query, variables: { appId: appName } }),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new FlyError(
+        `Fly allocateV6 HTTP ${res.status}: ${text}`,
+        res.status,
+        text,
+        res.status >= 500
+      );
+    }
+    const parsed = JSON.parse(text) as { errors?: Array<{ message: string }> };
+    if (parsed.errors && parsed.errors.length > 0) {
+      throw new FlyError(
+        `Fly allocateV6 errors: ${parsed.errors.map((e) => e.message).join("; ")}`,
+        res.status,
+        text,
+        false
+      );
+    }
+  }
+
   async listApps({ first = 100 }: { first?: number } = {}): Promise<FlyAppSummary[]> {
     const graphqlEndpoint = "https://api.fly.io/graphql";
     const query = `

@@ -759,6 +759,22 @@ export const deployMayaGtm = internalAction({
       return fail("set-secrets", (err as Error).message, isRetryable(err));
     }
 
+    // Sprint 2.16u-fix17 — allocate public IPs so <flyApp>.fly.dev resolves.
+    // Apps created via machines API have no public DNS by default. Telegram
+    // setWebhook needs to resolve the host to register the URL.
+    if (row.agent.telegramChatId) {
+      try {
+        await fly.allocateSharedV4(bundle.flyAppName);
+        await fly.allocateV6(bundle.flyAppName);
+      } catch (err) {
+        // Idempotent — if IPs are already allocated, ignore "already exists"
+        const msg = (err as Error).message;
+        if (!msg.includes("already") && !msg.includes("duplicate")) {
+          return fail("allocate-ips", msg, isRetryable(err));
+        }
+      }
+    }
+
     // Sprint 2.16u-fix17 — mint a per-machine webhook secret. OpenClaw's
     // telegram channel uses this to verify incoming webhook signatures
     // (X-Telegram-Bot-Api-Secret-Token header). 32 hex bytes is plenty.
