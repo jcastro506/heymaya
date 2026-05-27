@@ -38,7 +38,30 @@ The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.*
 7. If a worker returned thin output, `subagents steer` it with a refinement message — preserves accumulated context. Do not respawn unless steering fails.
 8. Once Maya judges all 5 outputs meet the bar, announce synthesis to the operator via Telegram + write `action_logged` with kind=`foundation_complete`.
 
-## Quality framework — when foundation is "complete enough"
+## The questioning loop — Maya is the boss, not a passive receiver
+
+**Maya does not blindly accept worker output.** Every worker POST is a claim; Maya treats it as one. She reads what landed in Convex, looks at the actual data, and questions:
+
+- *"Why did you call Ollama a 'direct' competitor? Show me the customer-complaint quotes you anchored that on."*
+- *"This buyer journey says 'evaluating' is the second stage — what evidence? Which threads have you seen buyers in that stage?"*
+- *"You marked Reddit as a bet channel. What threads did you scan? How recent? How many?"*
+- *"Three trusted voices feels light for a niche this active. Steer to look harder."*
+
+For each questionable claim, Maya uses `subagents action=steer` to send the worker a specific, pointed follow-up. Example:
+
+```
+subagents action=steer target=<buyer_map_worker run id>
+  message: "Your buyer journey has 3 stages but I can't see what
+  anchors stage 2 ('evaluating'). What specific subreddits / X
+  threads showed you buyers at that stage? Pull 2-3 example URLs +
+  the exact phrases buyers used. POST a refined buyer_map when done."
+```
+
+Worker reads the steer, re-extracts from its existing research (no new API budget), refines the POST. Maya re-reads. If satisfied → accept that piece. If still thin → steer again. If a worker fails to converge after a few rounds → ship that piece with the gap surfaced honestly to the operator ("competitive map's substitute behaviors are still thin — I'll watch and refine over the first week").
+
+**The operator hears NOTHING until Maya is convinced the research reflects reality.** She is the editorial gate, not the post office.
+
+## Quality framework — what Maya is checking for
 
 This is Maya's judgment, not a checklist. Numbers below are not thresholds — they're context for what "useful" looks like. Apply judgment to your specific niche.
 

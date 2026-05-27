@@ -121,32 +121,40 @@ export function resolveConvexHookCallbackBaseUrl(
 }
 
 const MODEL_ROUTING = {
-  // Sprint 2.16u-fix14 — Maya's boot/orchestration brain. Live Fly smoke
-  // showed Gemini 3 Flash Preview can sit inside the BOOT.md agent turn for
-  // minutes with no session transcript, which recreates the exact "no hello
-  // for 5 minutes" failure. Use Sonnet for the main operator so startup,
-  // subagent fan-out, synthesis, and recovery are reliable. Research lanes
-  // can stay on cheaper Gemini until evidence says otherwise.
+  // Sprint 2.18 — operator-specified model stack. The architecture is
+  // "intelligent boss + capable workers in a questioning loop":
   //
-  // Operator-approved alternatives (set via env var override):
-  //   MAYA_GTM_MODEL=anthropic/claude-sonnet-4.5  (premium, no gate)
-  //   MAYA_GTM_MODEL=anthropic/claude-sonnet-4.6  (newer Sonnet)
-  //   MAYA_GTM_MODEL=anthropic/claude-haiku-4.5   (cheaper Claude)
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "anthropic/claude-sonnet-4.5",
-  // Sprint 2.16a — channel-research subagents. Gemini 3 Flash (NOT
-  // 3.5 — that's main's brain). Subagents do focused platform work
-  // (scrape, score, draft) — they don't need 3.5's strategic judgment.
-  // Cheaper, faster, plenty of headroom with thinking:medium budget
-  // injected via their prompt. Replaces the prior mix of Claude
-  // Sonnet 4.5 (10x more expensive) + scattered Gemini configs.
-  // Sprint 2.16p — same model as main brain. Both research and main
-  // get the same baseline capability.
-  subagent: process.env.MAYA_GTM_SUBAGENT_MODEL ?? "google/gemini-3-flash-preview",
+  //  Main Maya is the chief. She has vast judgment. Workers research
+  //  for minutes if they need; they report findings to Maya. Maya
+  //  questions: "why did you call this a direct competitor? show me
+  //  the quotes. that's thin — go get more from r/X specifically."
+  //  Workers go back. Loop until Maya is satisfied the research
+  //  reflects reality. Only then does she write the synthesis to
+  //  the operator. Maya never accepts blindly.
+  //
+  // Main Maya = google/gemini-3.5-flash (the new 3.5 just shipped on
+  //   OpenRouter — strong reasoning, long context, fast).
+  // Workers = google/gemini-3.5-flash too. Operator: "her subagents
+  //   could also be Gemini 3.5 with medium thinking level." Same
+  //   capability ceiling, thinking budget set per spawn payload.
+  //
+  // Env-var overrides remain so we can swap without code redeploys.
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-3.5-flash",
+  // Sprint 2.18 — workers on 3.5 too. Replaced gemini-3-flash-preview
+  // (a literal preview that we hit instability on — stream stalls,
+  // 8-retry validation bounce loops). 3.5 Flash is GA on OpenRouter
+  // with stronger structured-output discipline. Thinking level set
+  // per-payload at sessions_spawn time, not here.
+  subagent:
+    process.env.MAYA_GTM_SUBAGENT_MODEL ?? "google/gemini-3.5-flash",
+  // hard_research_beta is no longer a configured agent (Sprint 2.18 #3
+  // removed it from agents.list). Routing entry retained for
+  // narrative + future re-enablement; not actually used.
   hardResearchBeta:
     process.env.MAYA_GTM_HARD_RESEARCH_MODEL ??
-    "openrouter/anthropic/claude-sonnet-4.5",
+    "google/gemini-3.5-flash",
   futureDefaultResearch:
-    process.env.MAYA_GTM_RESEARCH_MODEL ?? "google/gemini-3-flash",
+    process.env.MAYA_GTM_RESEARCH_MODEL ?? "google/gemini-3.5-flash",
   extractionWorker:
     process.env.MAYA_GTM_EXTRACTION_MODEL ?? "google/gemini-3.1-flash-lite",
 };

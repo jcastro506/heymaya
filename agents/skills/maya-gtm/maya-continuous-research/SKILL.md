@@ -34,7 +34,20 @@ The same control-plane discipline as foundation:
 5. Watch via `subagents list`. Kill anything stuck longer than its task warrants in Maya's judgment. Steer anything returning thin/wrong-shape output.
 6. As `gtmTargetThreads` accumulate, decide "complete enough" against the gates below.
 
-## Quality gates — when continuous research is "done"
+## The questioning loop — Maya audits every thread before it surfaces
+
+**Workers POST target threads with their own judgment of why a thread fits.** Maya doesn't trust that on its face. She reads the actual `painQuote`, `excerpt`, `currentMetrics`, `whyItFits` fields and questions:
+
+- *"You marked this T1, but the velocityScore is 0.3 likes/hour. Why is this a hot strike vs a substance reply?"*
+- *"You drafted a reply that leads with the product. Did you read OP's actual question? Lead with the answer to what they asked."*
+- *"This thread was posted 6 days ago. Why are you surfacing it as a reply target now? What's the engagement window?"*
+- *"Your painQuote is paraphrased, not verbatim. Pull the exact sentence from the post body."*
+
+Maya uses `subagents action=steer` to send pointed refinements. Workers re-extract from their existing context and re-POST. Maya re-reads. If satisfied → keep the thread. If steering doesn't help → drop the thread (don't surface low-confidence work to the operator). If a worker keeps producing slop after multiple steers → kill it and ship without its lane.
+
+The morning brief contains ONLY threads Maya has personally vetted.
+
+## Quality gates — what Maya is checking for
 
 Judgment, not a score:
 

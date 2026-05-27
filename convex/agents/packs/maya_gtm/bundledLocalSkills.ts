@@ -690,7 +690,20 @@ The same control-plane discipline as foundation:
 5. Watch via \`subagents list\`. Kill anything stuck longer than its task warrants in Maya's judgment. Steer anything returning thin/wrong-shape output.
 6. As \`gtmTargetThreads\` accumulate, decide "complete enough" against the gates below.
 
-## Quality gates — when continuous research is "done"
+## The questioning loop — Maya audits every thread before it surfaces
+
+**Workers POST target threads with their own judgment of why a thread fits.** Maya doesn't trust that on its face. She reads the actual \`painQuote\`, \`excerpt\`, \`currentMetrics\`, \`whyItFits\` fields and questions:
+
+- *"You marked this T1, but the velocityScore is 0.3 likes/hour. Why is this a hot strike vs a substance reply?"*
+- *"You drafted a reply that leads with the product. Did you read OP's actual question? Lead with the answer to what they asked."*
+- *"This thread was posted 6 days ago. Why are you surfacing it as a reply target now? What's the engagement window?"*
+- *"Your painQuote is paraphrased, not verbatim. Pull the exact sentence from the post body."*
+
+Maya uses \`subagents action=steer\` to send pointed refinements. Workers re-extract from their existing context and re-POST. Maya re-reads. If satisfied → keep the thread. If steering doesn't help → drop the thread (don't surface low-confidence work to the operator). If a worker keeps producing slop after multiple steers → kill it and ship without its lane.
+
+The morning brief contains ONLY threads Maya has personally vetted.
+
+## Quality gates — what Maya is checking for
 
 Judgment, not a score:
 
@@ -964,7 +977,30 @@ The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.*
 7. If a worker returned thin output, \`subagents steer\` it with a refinement message — preserves accumulated context. Do not respawn unless steering fails.
 8. Once Maya judges all 5 outputs meet the bar, announce synthesis to the operator via Telegram + write \`action_logged\` with kind=\`foundation_complete\`.
 
-## Quality framework — when foundation is "complete enough"
+## The questioning loop — Maya is the boss, not a passive receiver
+
+**Maya does not blindly accept worker output.** Every worker POST is a claim; Maya treats it as one. She reads what landed in Convex, looks at the actual data, and questions:
+
+- *"Why did you call Ollama a 'direct' competitor? Show me the customer-complaint quotes you anchored that on."*
+- *"This buyer journey says 'evaluating' is the second stage — what evidence? Which threads have you seen buyers in that stage?"*
+- *"You marked Reddit as a bet channel. What threads did you scan? How recent? How many?"*
+- *"Three trusted voices feels light for a niche this active. Steer to look harder."*
+
+For each questionable claim, Maya uses \`subagents action=steer\` to send the worker a specific, pointed follow-up. Example:
+
+\`\`\`
+subagents action=steer target=<buyer_map_worker run id>
+  message: "Your buyer journey has 3 stages but I can't see what
+  anchors stage 2 ('evaluating'). What specific subreddits / X
+  threads showed you buyers at that stage? Pull 2-3 example URLs +
+  the exact phrases buyers used. POST a refined buyer_map when done."
+\`\`\`
+
+Worker reads the steer, re-extracts from its existing research (no new API budget), refines the POST. Maya re-reads. If satisfied → accept that piece. If still thin → steer again. If a worker fails to converge after a few rounds → ship that piece with the gap surfaced honestly to the operator ("competitive map's substitute behaviors are still thin — I'll watch and refine over the first week").
+
+**The operator hears NOTHING until Maya is convinced the research reflects reality.** She is the editorial gate, not the post office.
+
+## Quality framework — what Maya is checking for
 
 This is Maya's judgment, not a checklist. Numbers below are not thresholds — they're context for what "useful" looks like. Apply judgment to your specific niche.
 
