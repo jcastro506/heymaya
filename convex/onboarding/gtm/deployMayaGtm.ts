@@ -139,7 +139,16 @@ const MODEL_ROUTING = {
   //   capability ceiling, thinking budget set per spawn payload.
   //
   // Env-var overrides remain so we can swap without code redeploys.
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-3.5-flash",
+  // Sprint 2.18 #12 — Main Maya moved from gemini-3.5-flash to
+  // claude-sonnet-4.6. Verified live failure mode on
+  // clawlaunch-ws71zfg6c5p6w6k4sn: gemini-3.5-flash returned a
+  // successful `stopReason: "stop"` with `content: []` and 0 output
+  // tokens after a 27K-token context build-up — OpenClaw surfaced
+  // that to Telegram as "Agent couldn't generate a response." This
+  // is a Gemini-specific failure mode on long-context multi-step
+  // reasoning. Sonnet 4.6 doesn't share it. Workers stay on gemini
+  // 3.5 (they don't accumulate long context).
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "anthropic/claude-sonnet-4.6",
   // Sprint 2.18 — workers on 3.5 too. Replaced gemini-3-flash-preview
   // (a literal preview that we hit instability on — stream stalls,
   // 8-retry validation bounce loops). 3.5 Flash is GA on OpenRouter
