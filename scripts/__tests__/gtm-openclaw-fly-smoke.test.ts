@@ -37,10 +37,11 @@ describe("gtm-openclaw-fly-smoke", () => {
     expect(fixture.workspaceFiles["jobs.json"]).toContain(
       "gtm_channel_discovery"
     );
-    // Sprint 2.16u-fix14 — kickstart cron RE-ADDED. boot-md hook on our
-    // patched OpenClaw 2026.4.23 image doesn't reliably fire BOOT.md.
+    // Sprint 2.16u-fix14 — kickstart cron RE-ADDED. Sprint 2.16u-fix15
+    // stripped its prompt to JUST the hello (was timing out at 362s when
+    // it tried to do hello + launch workflow + subagents in one turn).
     expect(fixture.workspaceFiles["jobs.json"]).toContain("0001_kickstart");
-    expect(fixture.workspaceFiles["jobs.json"]).toContain("FIRST-BOOT KICKSTART");
+    expect(fixture.workspaceFiles["jobs.json"]).toContain("hello_sent_at");
     expect(
       fixture.workspaceFiles["skills/scrapecreators-api/SKILL.md"]
     ).toContain("ScrapeCreators");

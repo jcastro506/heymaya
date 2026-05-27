@@ -246,11 +246,16 @@ describe("Maya GTM workspace pack", () => {
     expect(
       (kickstart as unknown as { deleteAfterRun?: boolean }).deleteAfterRun
     ).toBe(true);
-    expect(kickstart?.payload.message).toContain("FIRST-BOOT KICKSTART");
+    // Sprint 2.16u-fix15 — kickstart is now JUST the hello. Launch
+    // workflow moved to HEARTBEAT.md watchdog (fix14's prompt packed
+    // too much into one 5-min cron turn and got timed out at 362s).
     expect(kickstart?.payload.message).toContain("SOUL.md");
     expect(kickstart?.payload.message).toContain("hello_sent_at");
-    expect(kickstart?.payload.message).toContain("launch_flow_started_at");
-    expect(kickstart?.payload.message).toContain("sessions_spawn");
+    expect(kickstart?.payload.message).toContain("message tool");
+    // Explicit non-assertions: kickstart MUST NOT spawn subagents or
+    // claim launch_flow here — those are HEARTBEAT.md's job now.
+    expect(kickstart?.payload.message).not.toContain("sessions_spawn");
+    expect(kickstart?.payload.message).not.toContain("phase_1_announce");
     expect(
       (kickstart?.payload as { lightContext?: boolean }).lightContext,
       "lightContext: true matches creator app pattern for fast agent turn"
