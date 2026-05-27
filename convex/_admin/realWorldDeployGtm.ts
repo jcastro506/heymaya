@@ -1173,6 +1173,84 @@ export const tailLatestMaya = internalAction({
   },
 });
 
+export const peekFoundationDetails = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    const all = await ctx.db.query("creators").collect();
+    const tests = all
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (tests.length === 0) return { found: false };
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", tests[0]._id))
+      .first();
+    if (!agent) return { found: true };
+
+    const competitive = await ctx.db
+      .query("gtmCompetitiveMap")
+      .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+      .collect();
+    const angles = await ctx.db
+      .query("gtmContentAngles")
+      .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+      .collect();
+    const channels = await ctx.db
+      .query("gtmChannelScorecard")
+      .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+      .collect();
+    const threads = await ctx.db
+      .query("gtmTargetThreads")
+      .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+      .collect();
+    const calendar = await ctx.db
+      .query("gtmCalendarEvents")
+      .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+      .collect();
+
+    return {
+      competitorSample: competitive.slice(0, 3).map((c) => ({
+        name: c.competitorName,
+        kind: c.kind,
+        positioning: c.positioning?.slice(0, 200),
+        complaintCount: c.complaints?.length ?? 0,
+        sampleComplaint: c.complaints?.[0],
+        vulnerabilities: c.vulnerabilities?.slice(0, 3),
+      })),
+      angleSample: angles.slice(0, 3).map((a: any) => ({
+        angle: a.angle?.slice(0, 200),
+        painCitation: a.painCitation,
+        hooks: a.hookVariants?.slice(0, 2),
+      })),
+      channelBets: channels
+        .filter((c) => c.bet)
+        .map((c) => ({
+          channel: c.channel,
+          unlock: c.uniqueUnlock?.slice(0, 200),
+          fit: { aud: c.audienceFit, cad: c.cadenceFit },
+        })),
+      threadSample: threads.slice(0, 3).map((t: any) => ({
+        platform: t.platform,
+        url: t.url,
+        title: t.title,
+        painQuote: t.painQuote?.slice(0, 200),
+        draftReply: t.draftReply?.slice(0, 250),
+        recommendedAction: t.recommendedAction,
+      })),
+      calendarSample: calendar.slice(0, 3).map((e: any) => ({
+        title: e.title,
+        kind: e.kind,
+        descriptionLen: e.description?.length ?? 0,
+        descriptionFirst200: e.description?.slice(0, 200),
+        scheduledAt: e.scheduledAt
+          ? new Date(e.scheduledAt).toISOString()
+          : undefined,
+      })),
+      calendarTotal: calendar.length,
+    };
+  },
+});
+
 export const peekFoundationState = internalQuery({
   args: {},
   handler: async (ctx): Promise<unknown> => {
@@ -1361,8 +1439,13 @@ export const peekResearchLanded = internalQuery({
 export const destroyAllClawlaunchApps = internalAction({
   args: {},
   handler: async (
-    _ctx
-  ): Promise<{ destroyed: string[]; failed: string[]; listed: number }> => {
+    ctx
+  ): Promise<{
+    destroyed: string[];
+    failed: string[];
+    listed: number;
+    tokensRotated: number;
+  }> => {
     const { FlyClient } = await import("../lib/flyClient");
     const fly = new FlyClient();
     const all = await fly.listApps({ first: 500 });
@@ -1385,6 +1468,39 @@ export const destroyAllClawlaunchApps = internalAction({
         console.error(`[destroyAllClawlaunchApps] failed ${name}: ${msg}`);
       }
     }
-    return { destroyed, failed, listed: all.length };
+    // Security: an agent whose Fly machine is destroyed must lose its
+    // hookToken. Otherwise the per-agent shared secret keeps authenticating
+    // Convex POSTs (and worse — could be leaked to the operator's Telegram
+    // history, as happened on run #10, 2026-05-27). Force the next deploy to
+    // mint a fresh token by clearing the existing one.
+    const tokensRotated = await ctx.runMutation(
+      internal._admin.realWorldDeployGtm.rotateHookTokensForDestroyedApps,
+      { destroyedAppNames: destroyed }
+    );
+    return { destroyed, failed, listed: all.length, tokensRotated };
+  },
+});
+
+export const rotateHookTokensForDestroyedApps = internalMutation({
+  args: { destroyedAppNames: v.array(v.string()) },
+  handler: async (ctx, args): Promise<number> => {
+    let rotated = 0;
+    for (const appName of args.destroyedAppNames) {
+      const agent = await ctx.db
+        .query("gtmAgents")
+        .withIndex("by_fly_app", (q) => q.eq("openClawFlyAppId", appName))
+        .first();
+      if (agent && agent.hookToken) {
+        await ctx.db.patch(agent._id, {
+          hookToken: undefined,
+          updatedAt: Date.now(),
+        });
+        rotated += 1;
+        console.log(
+          `[rotateHookTokensForDestroyedApps] cleared hookToken for ${appName}`
+        );
+      }
+    }
+    return rotated;
   },
 });
