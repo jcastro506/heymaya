@@ -9,6 +9,7 @@ const INPUT: MayaGtmWorkspaceInput = {
   accountEmail: "founder@clawlaunch.test",
   timezone: "America/New_York",
   bootKickoffAtMs: Date.UTC(2026, 4, 22, 12, 0, 0),
+  activeResearchJobId: "job_test_123",
   app: {
     name: "BugBrief",
     url: "https://bugbrief.test",
@@ -66,8 +67,13 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("BOOT.md")).toContain("hello_sent_at:");
     expect(files.get("BOOT.md")).toContain("USER.md");
     expect(files.get("BOOT.md")).toContain("APP.md");
+    expect(files.get("BOOT.md")).toContain("gateway:startup");
+    expect(files.get("BOOT.md")).toContain("message` tool");
+    expect(files.get("BOOT.md")).toContain("launch_flow_started_at:");
+    expect(files.get("BOOT.md")).toContain("sessions_spawn");
+    expect(files.get("BOOT.md")).toContain("sessions_yield");
+    expect(files.get("BOOT.md")).toContain("/lc_gtm/phase_1_announce");
     expect(files.get("BOOT.md")).toContain("operator may reply");
-    expect(files.get("BOOT.md")).toContain("/lc_gtm/send_update");
     // Sprint 2.16u-fix8 — voice firewall removed per operator: "I hate
     // hardcoded string blockers. Get rid of all of that and just add
     // it to her prompt where appropriate." Voice contract now lives in
@@ -156,53 +162,43 @@ describe("Maya GTM workspace pack", () => {
     expect(agents).toContain("slideshow/carousel");
   });
 
-  it("HEARTBEAT.md is a state machine gated by MEMORY.md markers (Sprint 2.16u)", () => {
+  it("HEARTBEAT.md is a watchdog, not the primary launch state machine", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
     const heartbeat = files.get("HEARTBEAT.md") ?? "";
 
-    // State-machine tasks — each gated by a MEMORY.md marker so they
-    // run exactly once on the path from boot to steady state.
-    expect(heartbeat).toContain("state-hello");
-    expect(heartbeat).toContain("state-channels-picked");
-    expect(heartbeat).toContain("state-subagents-dispatched");
-    expect(heartbeat).toContain("state-plan-synthesis");
-    expect(heartbeat).toContain("hello_sent_at:");
-    expect(heartbeat).toContain("channels_picked:");
-    expect(heartbeat).toContain("subagents_spawned:");
-    expect(heartbeat).toContain("plan_sent_at:");
-    // Steady-state maintenance tasks (these survived from the old
-    // HEARTBEAT.md — same per-task interval gating just with explicit
-    // markers + state progression now at the top).
+    expect(heartbeat).toContain("watchdog loop");
+    expect(heartbeat).toContain("BOOT.md starts the launch workflow");
+    expect(heartbeat).toContain("launch-watchdog");
+    expect(heartbeat).not.toContain("state-hello");
+    expect(heartbeat).not.toContain("state-channels-picked");
+    expect(heartbeat).not.toContain("state-subagents-dispatched");
+    expect(heartbeat).not.toContain("state-plan-synthesis");
+    expect(heartbeat).toContain("launch_flow_started_at:");
+    expect(heartbeat).toContain("subagents are still running");
+    // Steady-state maintenance tasks.
     expect(heartbeat).toContain("pending-approvals");
     expect(heartbeat).toContain("calendar-due");
     expect(heartbeat).toContain("open-loops");
     expect(heartbeat).toContain("published-results-scan");
     // HEARTBEAT_OK literal-token reply pattern still required for
-    // quiet ticks — silent ticks are the common case once the state
-    // machine has progressed past plan-synthesis.
+    // quiet ticks — silent ticks are the common case when the watchdog
+    // finds no stuck launch, pending approval, due calendar item, or result.
     expect(heartbeat).toContain("HEARTBEAT_OK");
     // Sprint 2.16u-fix8 — voice firewall removed; HEARTBEAT.md now
     // references SOUL.md voice contract for inline self-check.
     expect(heartbeat).toContain("SOUL.md");
     // Strategic sends still need evidence_ids — guard mentioned for
-    // the state-plan-synthesis task.
+    // watchdog recovery and phase synthesis.
     expect(heartbeat).toContain("evidence_ids");
   });
 
-  it("Sprint 2.16u — jobs.json carries ONLY scheduled events (no boot cron, no heartbeat cron)", () => {
-    // Sprint 2.16u: dropped `0001_gtm_first_research` boot cron and
-    // `gtm_heartbeat` cron. Per OpenClaw docs (/automation/index.md +
-    // /gateway/heartbeat.md), cron is for exact-timing scheduled events;
-    // continuous "work toward a goal" loops live in HEARTBEAT.md's
-    // `tasks:` block with per-task interval gating + heartbeatTaskState
-    // persistence across restarts.
+  it("jobs.json carries only exact scheduled events; boot work is native BOOT.md", () => {
+    // OpenClaw docs split the primitives clearly: BOOT.md starts the
+    // launch on gateway startup, heartbeat monitors/retries, cron is for
+    // exact scheduled events. The first hello must not wait on a +300s
+    // one-shot cron.
     //
-    // Boot work (hello → channel pick → subagent dispatch → plan synth)
-    // now lives in HEARTBEAT.md as a MEMORY.md-marker-gated state
-    // machine. The native heartbeat (agents.defaults.heartbeat.every:
-    // "5m") drives it.
-    //
-    // The two crons that REMAIN are real scheduled events:
+    // The two crons that remain are real scheduled events:
     //   - gtm_weekly_review (Mondays 10am, week-over-week refresh)
     //   - gtm_channel_discovery (1st of month, new-channel hunt)
     const { files } = buildMayaGtmWorkspace(INPUT);
@@ -238,29 +234,7 @@ describe("Maya GTM workspace pack", () => {
       jobs.jobs.find((j) => j.id === "0002_gtm_boot_phase_2")
     ).toBeUndefined();
 
-    // Sprint 2.16u-fix11 — kickstart one-shot cron RE-ADDED (lightweight,
-    // single message, deletes after run). Fires ~180s after deploy via
-    // OpenClaw native scheduler. Replaces unreliable heartbeat-driven hello.
-    const kickstart = jobs.jobs.find((j) => j.id === "0001_kickstart");
-    expect(kickstart, "kickstart cron must exist").toBeTruthy();
-    expect(kickstart?.sessionTarget).toBe("isolated");
-    expect((kickstart as unknown as { wakeMode?: string }).wakeMode).toBe(
-      "now"
-    );
-    expect(
-      (kickstart as unknown as { deleteAfterRun?: boolean }).deleteAfterRun
-    ).toBe(true);
-    expect(kickstart?.payload.message).toContain("FIRST-BOOT KICKSTART");
-    expect(kickstart?.payload.message).toContain("SOUL.md");
-    expect(kickstart?.payload.message).toContain("hello_sent_at");
-    // Sprint 2.16u-fix12 — kickstart uses OpenClaw native message tool
-    // (action=send, channel=telegram) via the cron's delivery config,
-    // NOT exec+curl. Faster + native + uses channel adapter routing.
-    expect(kickstart?.payload.message).toContain("message` tool");
-    // lightContext is critical for fast agent turn (matches creator app)
-    expect(
-      (kickstart?.payload as { lightContext?: boolean }).lightContext
-    ).toBe(true);
+    expect(jobs.jobs.find((j) => j.id === "0001_kickstart")).toBeUndefined();
 
     // Weekly review survives — it's a real exact-timing scheduled event
     // (Mondays 10am), and still drives the compounding cycle.

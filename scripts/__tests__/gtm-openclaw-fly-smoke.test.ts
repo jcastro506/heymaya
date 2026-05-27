@@ -12,16 +12,19 @@ describe("gtm-openclaw-fly-smoke", () => {
       "iad"
     );
 
-    expect(fixture.image).toBe("registry.fly.io/heymaya-openclaw:v2026.4.24");
+    expect(fixture.image).toBe(
+      "registry.fly.io/heymaya-openclaw@sha256:7b53d73a3c2c40f47865c508bddffccd2fbc21d28bd7ac938ed080fb2a24764d"
+    );
     expect(fixture.workspaceFiles["AGENTS.md"]).toContain("Maya GTM");
     expect(fixture.workspaceFiles["TOOLS.md"]).toContain(
       "ScrapeCreators OpenClaw agent skill"
     );
-    // Sprint 2.16u — HEARTBEAT.md is now THE state machine driving boot
-    // work (hello → channels → subagents → plan-synth) via MEMORY.md
-    // markers. Old "Heartbeat is cheap / ScrapeCreators calls" forbid-list
-    // wording replaced by per-state-task prompts.
-    expect(fixture.workspaceFiles["HEARTBEAT.md"]).toContain("state-hello");
+    // BOOT.md starts launch work immediately; HEARTBEAT.md is now only
+    // the watchdog/recovery loop.
+    expect(fixture.workspaceFiles["BOOT.md"]).toContain("gateway:startup");
+    expect(fixture.workspaceFiles["BOOT.md"]).toContain("sessions_spawn");
+    expect(fixture.workspaceFiles["HEARTBEAT.md"]).toContain("launch-watchdog");
+    expect(fixture.workspaceFiles["HEARTBEAT.md"]).not.toContain("state-hello");
     // Sprint 2.16u-fix8 — firewall removed; voice contract now in SOUL.md.
     expect(fixture.workspaceFiles["HEARTBEAT.md"]).toContain("SOUL.md");
     // Boot cron and heartbeat cron are GONE — only scheduled events
@@ -34,10 +37,9 @@ describe("gtm-openclaw-fly-smoke", () => {
     expect(fixture.workspaceFiles["jobs.json"]).toContain(
       "gtm_channel_discovery"
     );
-    // Sprint 2.16u-fix11 — kickstart one-shot cron deterministically
-    // fires Maya's hello ~180s after deploy.
-    expect(fixture.workspaceFiles["jobs.json"]).toContain("0001_kickstart");
-    expect(fixture.workspaceFiles["jobs.json"]).toContain("FIRST-BOOT KICKSTART");
+    // First hello is BOOT.md/native hook work, not a +300s cron.
+    expect(fixture.workspaceFiles["jobs.json"]).not.toContain("0001_kickstart");
+    expect(fixture.workspaceFiles["jobs.json"]).not.toContain("FIRST-BOOT KICKSTART");
     expect(
       fixture.workspaceFiles["skills/scrapecreators-api/SKILL.md"]
     ).toContain("ScrapeCreators");
@@ -46,7 +48,7 @@ describe("gtm-openclaw-fly-smoke", () => {
       agents: {
         defaults: {
           workspace: "/data/workspace",
-          model: { primary: "openrouter/google/gemini-3-flash-preview" },
+          model: { primary: "openrouter/anthropic/claude-sonnet-4.5" },
           memorySearch: { enabled: false },
           subagents: {
             // Sprint 2.16j — bumped 4 → 8 per external-architect review.
@@ -62,7 +64,7 @@ describe("gtm-openclaw-fly-smoke", () => {
             default: true,
             name: "Maya",
             workspace: "/data/workspace",
-            model: "openrouter/google/gemini-3-flash-preview",
+            model: "openrouter/anthropic/claude-sonnet-4.5",
             subagents: { allowAgents: ["main", "hard_research_beta"] },
             tools: { profile: "coding" },
           },
@@ -123,11 +125,11 @@ describe("gtm-openclaw-fly-smoke", () => {
     expect(args).toContain("OPENCLAW_CONFIG_PATH=/data/openclaw.json");
     expect(args).toContain("OPENCLAW_DISABLE_BONJOUR=1");
     expect(args).toContain(
-      "OPENCLAW_MODEL=openrouter/google/gemini-3-flash-preview"
+      "OPENCLAW_MODEL=openrouter/anthropic/claude-sonnet-4.5"
     );
     expect(args.slice(-5)).toEqual([
       "--",
-      "registry.fly.io/heymaya-openclaw:v2026.4.24",
+      "registry.fly.io/heymaya-openclaw@sha256:7b53d73a3c2c40f47865c508bddffccd2fbc21d28bd7ac938ed080fb2a24764d",
       "/bin/sh",
       "-lc",
       fixture.bootCommand,

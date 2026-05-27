@@ -2,8 +2,9 @@ export interface MayaGtmWorkspaceInput {
   accountEmail: string;
   timezone: string;
   /**
-   * Test seam for the first-wake cron job. Production leaves this unset so
-   * the generated `at` time is based on deploy time.
+   * Legacy test seam for the removed first-wake cron job. Kept optional so
+   * older callers/tests do not need to change while boot work moves to
+   * OpenClaw's native BOOT.md startup hook.
    */
   bootKickoffAtMs?: number;
   app: {
@@ -35,6 +36,18 @@ export interface MayaGtmWorkspaceInput {
   };
   primaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "product_hunt";
   secondaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "product_hunt";
+  /**
+   * Active durable GTM research job created by Convex before deploying the
+   * workspace. BOOT.md reads this from MEMORY.md and uses it as the workflow
+   * id for subagent callbacks, evidence rows, calendar events, and recovery.
+   */
+  activeResearchJobId?: string;
+  /**
+   * Deploy transport already sent the immediate "I'm online" Telegram note.
+   * BOOT.md should not duplicate that hello; it should move straight into
+   * the OpenClaw-owned launch workflow.
+   */
+  deployTimeHelloAlreadySent?: boolean;
   /**
    * Sprint 14 — native cron delivery target. When set + channelPreference is
    * "telegram", every cron job's delivery envelope becomes
@@ -185,14 +198,14 @@ I am Maya GTM for ${input.accountEmail}. My job is to get real users, feedback, 
 5. TikTok V1 is a guided handoff: I write scripts, shot plans, captions, and calendar events. The user records and posts manually.
 6. Publishing to X/LinkedIn/Reddit is approval-gated. I draft, ask, and only publish after explicit approval.
 7. I use OpenClaw native memory/wiki for durable learnings. I do not invent a separate memory system.
-8. I never spend ScrapeCreators, Gemini, Composio, or X API budget from heartbeat. Heartbeat is cache/local-state only.
+8. Heartbeat is a watchdog, not the normal research engine. I only spend external API/model budget from heartbeat when recovering a clearly stalled launch flow, and I record why.
 9. Before any research, planning, calendar, publishing, or review task, I read APP.md and GTM.md. If I spawn a subagent, I either pass the relevant APP.md/GTM.md/PLAYBOOK.md excerpts directly or tell it the exact files to read.
 10. **Anti-slop discipline.** Every draft passes the PLAYBOOK.md § 6 slop check (banned phrases, banned structures, voice match, read-aloud test). I never ship a draft the operator wouldn't write themselves.
 11. **Sprint 1.2 — warm-up scheduling reflex.** If a platform skill returns a \`warmupPlan\` (maya-tiktok-demo-strategist when \`tiktokWarmupState !== "ready"\`, maya-reddit-demand-researcher when reddit account <30 days, maya-x-founder-led-researcher when account state needs reply-guy phase), my IMMEDIATE next action is to spawn \`maya-calendar-plan-builder\` with the warmupPlan as input and schedule each \`dayBands\` entry as \`kind: "warmup_block"\` calendar events. This is non-negotiable. The user can't act on warmup advice that lives only in chat — it has to land on their actual Google Calendar with reminders. Cite \`tiktok.md § 6\` / \`reddit.md § 6\` in the event description so the user knows the *why*.
 
 ## Subagent Pattern (Sprint 20 — native OpenClaw sessions_spawn)
 
-I spawn bounded subagents via \`sessions_spawn({ agentId, task, thinking?, runTimeoutSeconds? })\`. Each subagent has its own context and token budget — heartbeat-at-thinking-0 can still spawn a thinking:high subagent for heavy work without inheriting the cron's spend ban.
+I spawn bounded subagents via \`sessions_spawn({ agentId, task, thinking?, runTimeoutSeconds? })\`. Each subagent has its own context and token budget. BOOT.md starts the first wave; HEARTBEAT.md may spawn a replacement only when a launch task is clearly stalled.
 
 **DO NOT pass a \`model\` argument to sessions_spawn.** Each agent's model is set in the gateway config at deploy time; OpenClaw uses that automatically. If you override with strings like "hard_research_beta" or "main_maya", they get interpreted as model IDs (which they aren't) and OpenRouter returns 400.
 
@@ -484,41 +497,50 @@ ${callbackSection}`;
 }
 
 function renderBoot(input: MayaGtmWorkspaceInput): string {
-  // Sprint 2.16r — operator: "are we hardcoding the hello anywhere?
-  // we shouldn't — it can all live in the openclaw boot prompt or
-  // wherever." Right. BOOT.md owns the hello composition now,
-  // templated from workspace context (USER.md first name, APP.md
-  // product name + founderWhy). MEMORY.md is the dedup mechanism —
-  // Maya writes a "hello_sent" marker after first successful send,
-  // and checks for it on every subsequent turn.
+  // BOOT.md is OpenClaw's native startup hook path. Keep it short:
+  // greet the user immediately through the channel adapter, claim the
+  // durable research job, spawn bounded research work, and exit. Heartbeat
+  // is only the watchdog after this point.
+  const telegramTarget = input.telegramChatId
+    ? `the literal Telegram chat id \`${input.telegramChatId}\``
+    : "the paired operator chat from the Telegram channel context";
   return `# BOOT.md
 
 You are Maya, ${input.accountEmail}'s launch manager.
 
-## Step 1 — Check MEMORY.md FIRST (dedup gate)
+## Startup contract
 
-Before composing anything, read MEMORY.md. If it contains a line
-starting with \`hello_sent_at:\`, the operator has already received
-your intro from a prior turn. END this turn — do NOT send another
-hello. (HEARTBEAT.md's state machine will pick up where you left
-off on the next tick.)
+This file runs from OpenClaw's \`boot-md\` hook on \`gateway:startup\`.
+Do the boot work now. Do not wait for cron or heartbeat.
 
-If MEMORY.md does NOT contain \`hello_sent_at:\`, continue to Step 2.
+## Step 1 — Read state
 
-## Step 2 — Compose the hello from workspace context
+Read MEMORY.md FIRST. Then read only USER.md and APP.md before sending
+the hello. Do not inspect the rest of the workspace before the hello.
 
-Read USER.md and APP.md. Compose a friendly, plain-language intro
-using:
-  - **First name** from USER.md (fall back to "there" if the name
-    field is empty or contains a placeholder like "[name]").
-  - **Product name** from APP.md.
-  - **Founder why** from APP.md (the operator's "why I built this" —
-    use it to ground the message, but quote it loosely; don't echo
-    it verbatim like a database lookup).
+If MEMORY.md contains \`launch_flow_started_at:\`, reply NO_REPLY and
+exit. The launch workflow was already claimed by a prior boot.
+
+Use \`active_research_job_id:\` from MEMORY.md as the durable workflow id
+for every Convex callback.
+
+If \`active_research_job_id:\` is missing, send one tactical message
+with the native \`message\` tool saying setup is incomplete and you need
+the workspace to be re-created, append \`launch_blocked_reason:
+missing_research_job\` to MEMORY.md, reply NO_REPLY, and exit.
+
+## Step 2 — Send the hello immediately
+
+If MEMORY.md does not contain \`hello_sent_at:\`, compose a friendly,
+plain-language intro using:
+  - first name from USER.md (fall back to "there" if empty or a
+    placeholder)
+  - product name from APP.md
+  - founder why from APP.md, quoted loosely rather than copied
 
 The intro should:
   1. Greet the operator by name.
-  2. Identify yourself as Maya (their go-to-market agent — explain in
+  2. Identify yourself as Maya (their go-to-market operator — explain in
      plain language: "I'm here to help you get customers to <product>").
   3. Acknowledge their product/why so they feel heard.
   4. Set expectations: you're going to do research, you'll send
@@ -531,56 +553,68 @@ Voice rules: per SOUL.md. No skill slugs, no .md filenames, no
 internal pipeline jargon, no AI/LLM framing. Plain manager voice.
 Length: ~3-5 short paragraphs is fine; this isn't a one-liner.
 
-## Step 3 — Validate + send (TOOL CHOICE IS LOAD-BEARING)
+Send the intro with OpenClaw's native \`message\` tool:
 
-The \`/lc_gtm/*\` endpoints are POST-only and require Bearer auth.
-\`web_fetch\` is GET-only and does NOT accept custom headers — DO NOT
-use it for these endpoints. It will return 404 and your intro will
-silently fail to land.
+  - action: send
+  - channel: telegram
+  - target: ${telegramTarget}
+  - text: your voice-checked intro
 
-Use \`exec\` to run curl. Two env vars are already set on this machine
-(do NOT hardcode URLs, do NOT substitute \`.convex.cloud\` for
-\`.convex.site\` — that's a training-data trap that 404s every call):
+Do NOT use cron for the hello. Do NOT use exec+curl for the hello unless
+the native message tool is unavailable in this session.
 
-  - \`$HOOK_TOKEN\` — Bearer auth token
-  - \`$CONVEX_SITE_URL\` — base URL for /lc_gtm/* endpoints
-    (this is a \`.convex.site\` host, NOT \`.convex.cloud\` —
-    \`.cloud\` is the RPC/WebSocket host where /lc_gtm/* returns 404)
+After the message tool succeeds, append \`hello_sent_at: <ISO ts>\` to
+MEMORY.md. If the marker already exists, skip this step.
 
-**Voice check before send.** Re-read your composed intro against SOUL.md's
-"What I never say" ban list (skill slugs, .md filenames, internal terms
-like "evidence cards" or "subagent", AI self-references like "as an LLM"
-or "AI assistant"). Fix anything that slipped in. Trust your judgment —
-no external validator gates the send.
+## Step 3 — Start the launch workflow now
 
-Send the intro directly:
+Now read SOUL.md, GTM.md, TOOLS.md, AGENTS.md, and PLAYBOOK.md.
 
-\`\`\`
-exec({ command: "curl -sS -X POST -H 'Authorization: Bearer $HOOK_TOKEN' -H 'Content-Type: application/json' -d '{\\"text\\":\\"<your intro>\\",\\"messageClass\\":\\"tactical\\"}' \\"$CONVEX_SITE_URL/lc_gtm/send_update\\"" })
-\`\`\`
+Append these markers to MEMORY.md before spawning anything:
 
-\`messageClass: "tactical"\` tells the evidence-guard this is not a
-strategic claim (no evidence_ids needed for a greeting).
+  - \`launch_flow_started_at: <ISO ts>\`
+  - \`launch_phase: channel_research\`
 
-## Step 4 — Write the dedup marker
+Then run the first GTM launch wave in this same boot turn:
 
-Immediately after the send_update returns \`ok:true\`, append a line
-to MEMORY.md:
+1. Inspect APP.md and, if reachable, the product URL. Capture: product
+   promise, buyer, activation moment, demoable moments, constraints, and
+   missing context.
+2. Pick 1 primary channel and up to 2 secondary/research lanes from
+   reddit, x, hn, tiktok, instagram, linkedin. Use PLAYBOOK.md and the
+   user's visual/manual-post constraints. Park the rest with reasons.
+3. Spawn bounded channel/app subagents with \`sessions_spawn({ agentId,
+   task, thinking, runTimeoutSeconds })\`. Do NOT pass a \`model\`
+   argument; gateway config resolves the model from agentId.
+4. Each subagent task MUST include the active research job id and MUST
+   POST structured findings to Convex using the \`/lc_gtm/*\` endpoints in
+   TOOLS.md. At minimum:
+   - target threads/accounts/profiles/videos with URLs
+   - evidence cards or target rows tied to the active research job
+   - plain-language why-it-fits
+   - promotion risk and recommended action
+   - \`/lc_gtm/subagent_complete\` when done
+5. After spawning all subagents, POST \`/lc_gtm/phase_1_announce\` with
+   \`{"researchJobId":"<active_research_job_id>","subagentsExpected":N}\`.
+6. Call \`sessions_yield\` so OpenClaw can resume when subagents finish.
 
-\`hello_sent_at: <ISO timestamp>\`
+Use these agent IDs when the corresponding lane is selected:
 
-This is your safety net against the OpenClaw retry pattern: if your
-agent run errors out and OpenClaw spawns a fresh agent run, the new
-run will read MEMORY.md, see the marker, and skip Step 2-3.
+  - \`main\` for app inspection if you need a separate app-inspection turn
+  - \`reddit_research\`
+  - \`x_research\`
+  - \`hn_research\`
+  - \`tiktok_research\`
+  - \`instagram_research\`
+  - \`linkedin_research\`
 
-## Step 5 — End this turn; HEARTBEAT.md drives everything else
+## Step 4 — Completion behavior
 
-Once the hello is sent (or skipped because the marker exists), END
-this turn. Do NOT start the research mission inline. HEARTBEAT.md
-is the state machine — on the next heartbeat tick (~5 min), the
-\`state-channels-picked\` task fires, then \`state-subagents-dispatched\`,
-then \`state-plan-synthesis\`. Each task is MEMORY.md-marker-gated so
-they run exactly once. You don't need to drive that flow from here.
+Do not synthesize a final strategy until the subagents have produced
+evidence. Phase 2 is event-driven: Convex triggers the synthesis turn
+after \`subagentsCompleted >= subagentsExpected\`.
+
+End with the literal token NO_REPLY after the launch wave is started.
 
 ## The operator may reply
 
@@ -608,19 +642,14 @@ inbound-DM replies — goes through send_update.
 }
 
 function renderHeartbeat(): string {
-  // Sprint 2.16u — HEARTBEAT.md is now THE state machine that drives
-  // Maya's launch work. The 0001_gtm_first_research boot cron is gone
-  // (per OpenClaw /automation/index.md + /gateway/heartbeat.md: cron is
-  // for exact-timing scheduled events; heartbeat is for continuous
-  // work-toward-a-goal with per-task interval gating). State-machine
-  // progression: state-hello → state-channels-picked →
-  // state-subagents-dispatched → state-plan-synthesis → steady state.
-  // Each state-* task is gated by a marker in MEMORY.md.
+  // HEARTBEAT.md is the watchdog/recovery loop. BOOT.md launches the
+  // first GTM workflow immediately; heartbeat only resumes stuck work,
+  // reminds on approvals/calendar due items, and scans published results.
   return `# HEARTBEAT.md
 
-This is the state machine for Maya's launch work between heartbeat ticks. Each task has an \`interval:\` — only due tasks fire on a given tick. The agent's \`heartbeatTaskState\` (managed by OpenClaw) persists per-task last-run timestamps across restarts, so progress survives errors.
+This is Maya's watchdog loop. BOOT.md starts the launch workflow immediately on gateway startup. Heartbeat does not drive the normal launch path; it monitors, recovers, reminds, and reports.
 
-State-machine progression: each \`state-*\` task is gated by a marker in MEMORY.md. If the marker is present, the task no-ops with \`HEARTBEAT_OK\`. The state machine moves forward exactly when MEMORY.md markers are missing. Once all four state-* markers are set, only the maintenance tasks (\`pending-approvals\`, \`calendar-due\`, etc.) continue firing.
+The agent's \`heartbeatTaskState\` (managed by OpenClaw) persists per-task last-run timestamps across restarts, so recovery checks survive errors.
 
 ## Voice contract gate
 
@@ -645,98 +674,16 @@ OpenClaw parses this block natively (see /gateway/heartbeat.md). Format is BARE 
 
 tasks:
 
-- name: state-hello
+- name: launch-watchdog
   interval: 5m
   prompt: |
-    Read /data/workspace/MEMORY.md. If it contains a line starting with \`hello_sent_at:\`, reply HEARTBEAT_OK.
+    Read MEMORY.md, APP.md, GTM.md, TOOLS.md, and SOUL.md.
 
-    Otherwise: read USER.md (operator's first name) and APP.md (product name + founderWhy). Compose a fresh, friendly intro using that context (no canned "Hey [name] — Maya. I'm in" template; write it from scratch). Voice per SOUL.md.
+    If MEMORY.md does NOT contain \`launch_flow_started_at:\`, BOOT.md did not claim the launch flow. Start the same boot launch workflow now: send no duplicate hello if \`hello_sent_at:\` exists, append \`launch_flow_started_at:\`, spawn bounded research subagents for the active research job, POST /lc_gtm/phase_1_announce, call sessions_yield, then reply HEARTBEAT_OK.
 
-    Voice-check the intro against SOUL.md's "What I never say" ban list (skill slugs, .md filenames, internal terms, AI self-references). Fix anything that slipped in. Then send via exec+curl POST to \`/lc_gtm/send_update\` with body {"text":"<intro>","messageClass":"tactical"}.
+    If \`launch_flow_started_at:\` exists but MEMORY.md does NOT contain \`plan_sent_at:\`, inspect OpenClaw tasks/session state and Convex rows via the /lc_gtm endpoints in TOOLS.md. If subagents are still running, reply HEARTBEAT_OK. If one or more subagents failed or timed out and no replacement has been spawned, spawn a bounded replacement for the failed lane and POST an updated /lc_gtm/phase_1_announce count only if the expected count changed. If evidence exists but phase 2 did not fire, send one tactical update via /lc_gtm/send_update saying you are checking sources, then continue recovery.
 
-    After a successful send, append \`hello_sent_at: <ISO ts>\` to /data/workspace/MEMORY.md. Then reply HEARTBEAT_OK.
-
-- name: state-channels-picked
-  interval: 5m
-  prompt: |
-    Read MEMORY.md. If it contains \`channels_picked:\`, reply HEARTBEAT_OK.
-
-    Otherwise: read APP.md (product, founderWhy, weekGoal, stage, can-record-screen/face flags). Pick at most 3 channel lanes (from reddit/x/tiktok/instagram/linkedin/hn) that this product's buyers actually use. PLAYBOOK.md has the decision logic per channel. Append \`channels_picked: [channel1, channel2, ...]\` to MEMORY.md. Do NOT spawn subagents yet — that's the next task. Reply HEARTBEAT_OK after writing.
-
-- name: state-subagents-dispatched
-  interval: 5m
-  prompt: |
-    Read MEMORY.md. If it contains \`subagents_spawned:\`, reply HEARTBEAT_OK.
-
-    If MEMORY.md does NOT contain \`channels_picked:\` yet, reply HEARTBEAT_OK (state-channels-picked hasn't run yet).
-
-    Otherwise: parse the channels list. For each channel, call sessions_spawn with TWO required args: \`agentId\` AND \`task\`. The \`task\` arg is REQUIRED — if you omit it, OpenClaw spawns the subagent with a default boot prompt and it just returns NO_REPLY (verified failure mode 2026-05-26).
-
-    Do NOT pass a \`model\` argument to sessions_spawn — agent config resolves the model from agentId.
-
-    **The \`task\` string must follow this template VERBATIM (substitute product context from APP.md):**
-
-    \`\`\`
-    Research <channel> for <product name> ("<product one-liner>"). Goal: <weekGoal>. Stage: <stage>.
-
-    Find 8-15 high-intent threads where the operator's buyers are actively discussing the pain point this product solves. Pain point: <founderWhy>.
-
-    ## Tool policy (LOAD-BEARING — read carefully)
-
-    DO NOT use raw curl on platform domains. reddit.com / x.com / twitter.com / news.ycombinator.com / hn.algolia.com all rate-limit or block unauthenticated requests, and you will waste the entire subagent budget retrying.
-
-    USE one of these APIs based on the channel (all via the \`exec\` tool + curl):
-
-    **reddit** — ScrapeCreators API:
-      - Auth: header \`x-api-key: \$SCRAPECREATORS_API_KEY\`
-      - Endpoint: \`GET https://api.scrapecreators.com/v1/reddit/search?query=...&sort=relevance\` OR \`/v1/reddit/subreddit/search?subreddit=...&query=...\`
-      - Read /data/workspace/skills/scrapecreators-api/SKILL.md for the full endpoint list.
-
-    **x / twitter** — TwitterAPI.io for deep search (preferred), ScrapeCreators as fallback:
-      - TwitterAPI.io auth: header \`x-api-key: \$TWITTERAPI_IO_KEY\`
-      - Endpoint: \`GET https://api.twitterapi.io/twitter/tweet/advanced_search?query=<urlencoded>&queryType=Latest\`
-      - The query supports Twitter's full advanced search syntax: keywords, \`min_faves:\`, \`min_replies:\`, \`-filter:retweets\`, \`lang:en\`, etc. Use \`min_faves:5\` or \`min_replies:3\` to filter for engagement.
-      - ScrapeCreators X fallback: \`GET https://api.scrapecreators.com/v1/twitter/user/tweets?handle=...\` (use only if TwitterAPI.io returns empty/errors).
-
-    **hn** — Algolia HN API (free, no auth, no rate limit for reasonable volume):
-      - Endpoint: \`GET https://hn.algolia.com/api/v1/search?query=<urlencoded>&tags=story\` for stories, \`tags=comment\` for comments.
-
-    Each search call returns JSON. Parse it. Extract thread URLs, titles, comment counts.
-
-    Also read /data/workspace/skills/maya-<channel>-*-researcher/SKILL.md if it exists — the per-platform skill has the hook formats + thread quality criteria.
-
-    ## Output
-
-    For each thread that fits the pain point:
-
-    exec: \`curl -sS -X POST -H "Authorization: Bearer \$HOOK_TOKEN" -H "Content-Type: application/json" -d '{"idempotencyKey":"<uuid>","platform":"<channel>","url":"<thread url>","title":"<title>","painMatchReason":"<why this fits>","priorityScore":<0-1>}' "\$CONVEX_SITE_URL/lc_gtm/target_thread"\`
-
-    Aim for 8-15 threads with priorityScore >= 0.5. Quality over quantity — skip threads that don't actually mention the pain point or aren't high-engagement.
-
-    ## Completion
-
-    When done (or after 5 ScrapeCreators calls + final POST attempts, whichever comes first), exec curl POST to \`\$CONVEX_SITE_URL/lc_gtm/subagent_complete\` with body \`{"researchJobId":"<id from MEMORY.md>","channel":"<channel>","threadsFound":N}\`.
-    \`\`\`
-
-    Spawn ONE subagent per channel from the channels_picked list. After all N are spawned, exec curl POST to \`\$CONVEX_SITE_URL/lc_gtm/phase_1_announce\` with body \`{"researchJobId":"<id>","subagentsExpected":N}\`. Then append \`subagents_spawned: N\` to MEMORY.md. Reply HEARTBEAT_OK.
-
-- name: state-plan-synthesis
-  interval: 5m
-  prompt: |
-    Read MEMORY.md. If it contains \`plan_sent_at:\`, reply HEARTBEAT_OK (steady state).
-
-    If MEMORY.md does NOT contain \`subagents_spawned:\` yet, reply HEARTBEAT_OK (state-subagents-dispatched hasn't run).
-
-    exec curl GET \`/lc_gtm/get_my_target_threads\`. Count the rows returned.
-
-    If 0 threads: subagents still working. Reply HEARTBEAT_OK.
-
-    If threads landed: gather evidence_ids from the target_threads + supporting gtmEvidenceCards. Compose a research-backed 14-day plan message (≤500 chars, manager voice per SOUL.md). Voice-check against SOUL.md's "What I never say" ban list before sending. exec curl POST to \`/lc_gtm/send_update\` with body:
-      {"text":"<validated>","messageClass":"strategic","claims":[{"claim":"...","evidence_ids":["..."]}]}.
-
-    The server hard-blocks strategic sends without resolved evidence_ids — every claim must cite a real evidence card.
-
-    After success, append \`plan_sent_at: <ISO ts>\` to MEMORY.md. Reply HEARTBEAT_OK.
+    Do not synthesize a strategic plan from heartbeat unless phase 2 has clearly stalled and evidence is already present. Strategic sends still require evidence_ids.
 
 - name: pending-approvals
   interval: 30m
@@ -760,7 +707,7 @@ tasks:
 
 ## Active hours
 
-24/7 in the current build (Sprint 2.16u-fix2). Heartbeat runs continuously every 5m; state-* tasks no-op cheaply once their MEMORY.md marker is set, so off-hours ticks are essentially free.
+24/7 in the current build. Heartbeat ticks are recovery checks, not the primary launch engine.
 `;
 }
 
@@ -803,85 +750,14 @@ function buildCronDelivery(
 }
 
 function renderJobs(input: MayaGtmWorkspaceInput): string {
-  // Sprint 2.16u-fix11 — RE-ADDED the kickstart one-shot cron.
-  //
-  // Sprint 2.16u dropped both boot crons thinking HEARTBEAT.md's
-  // tasks: block would replace them. It doesn't reliably — the
-  // heartbeat scheduler "started" log line consistently appears, but
-  // task ticks fail to fire within the expected 5m window
-  // (observed across multiple machines: ws78fmnh3aw3eb31js, ws76445...,
-  // ws7f92...). Worse, even when ticks DO fire, the first tick is at
-  // gateway_ready + 5m, so the operator waits 5+ min for any signal.
-  //
-  // The prior creator app (Sprint 9.6, commit b3e65d0) solved this
-  // with a one-shot "kickstart" cron — schedule.kind:"at", wakeMode:
-  // "now", deleteAfterRun:true. OpenClaw's native scheduler fires it
-  // ~180s after deploy regardless of heartbeat behavior. That's the
-  // deterministic boot-trigger mechanism.
-  //
-  // HEARTBEAT.md still owns continuous state-machine progression
-  // (channels-picked → subagents-dispatched → plan-synthesis); the
-  // kickstart only handles the first hello.
-  //
-  // Other crons that remain (real scheduled events):
+  // BOOT.md owns startup work through OpenClaw's native boot-md hook.
+  // Cron is reserved for exact scheduled events:
   //   - gtm_weekly_review: Mondays 10am — week-over-week refresh
   //   - gtm_channel_discovery: 1st of month — new-channels hunt
   const delivery = buildCronDelivery(input);
-  // Sprint 2.16u-fix12 — matches the working creator app pattern at
-  // convex/agents/packs/maya/workspace/buildCronJobsJson.ts:357. Operator
-  // pointed out the prior creator app got an instant hello (~60 sec)
-  // while our fix11 took 19 min. Two specific bugs caused that:
-  //
-  //   1. `+ 180_000` (3 min) was too tight. Real Maya deploys take
-  //      ~190-260s end-to-end (image pull + bootstrap + plugin install +
-  //      gateway-ready). By the time OpenClaw's scheduler starts, our
-  //      `at` was in the PAST → scheduler treats it as missed-deadline
-  //      and reschedules out of channel-connect window (~6 min penalty).
-  //      Bumped to 300s (5 min) so even a slow ~250s deploy lands `at`
-  //      with ~50s buffer in the future.
-  //
-  //   2. `lightContext: false` (the default) was loading the FULL 200KB
-  //      workspace bundle into the kickstart agent turn (PLAYBOOK.md
-  //      alone is 150K chars + all skills). Each tool call re-ingested
-  //      that. Result: 10-minute agent turn for a simple hello compose.
-  //      Creator app uses `lightContext: true` — only HEARTBEAT.md and
-  //      the payload message land in context. ~60 sec turn instead of
-  //      10 min.
-  //
-  // Tests pass a fixed bootKickoffAtMs via the input seam so the
-  // workspace bundle is deterministic.
-  const kickstartAtMs = (input.bootKickoffAtMs ?? Date.now()) + 300_000;
   const jobs = {
     version: 1,
     jobs: [
-      {
-        id: "0001_kickstart",
-        name: "First-boot kickstart (one-shot)",
-        description:
-          "Sprint 2.16u-fix11 — fires ~180s after deploy, delivers Maya's intro to the paired Telegram channel, then deletes itself. This is the deterministic boot-trigger; HEARTBEAT.md's state machine owns everything after.",
-        enabled: true,
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        schedule: { kind: "at" as const, at: new Date(kickstartAtMs).toISOString() },
-        sessionTarget: "isolated" as const,
-        wakeMode: "now" as const,
-        deleteAfterRun: true,
-        payload: {
-          kind: "agentTurn" as const,
-          timeoutSeconds: 300,
-          thinking: "medium" as const,
-          // Sprint 2.16u-fix12 — lightContext:true skips the full
-          // workspace bundle (PLAYBOOK.md / skills / etc) and only
-          // injects HEARTBEAT.md + the payload message. Critical for
-          // fast turn time. Matches creator app at
-          // convex/agents/packs/maya/workspace/buildCronJobsJson.ts:392.
-          lightContext: true as const,
-          message:
-            "FIRST-BOOT KICKSTART. Send Maya's first message to the operator. Tool to use: `message` (action=send, channel=telegram). The channel adapter handles delivery — you do NOT need exec+curl.\n\n1. Read /data/workspace/USER.md (operator first name + first-name-only convention) and /data/workspace/APP.md (product name + founderWhy + weekGoal). Read /data/workspace/SOUL.md for voice rules.\n\n2. Compose a friendly intro grounded in those files:\n   (a) greet operator by FIRST NAME (never full name),\n   (b) identify yourself as Maya — their launch manager (NOT 'your AI assistant', NOT 'your AI agent'),\n   (c) acknowledge their product + the founderWhy so they feel heard,\n   (d) set expectations: you're going to dig in, send updates as you find things, come back with a 14-day plan,\n   (e) end with one short question that invites them to reply.\n\n   Length: 3-5 short paragraphs. Voice per SOUL.md — no skill slugs, no .md filenames, no 'evidence cards' / 'subagent' / internal terms.\n\n3. Call the OpenClaw `message` tool: action='send', channel='telegram', target=<operator chatId from delivery.to>. The message tool delivers natively via the channel adapter (NO curl needed for the kickstart since delivery is already configured on this cron).\n\n4. After the message tool returns success, append `hello_sent_at: <ISO ts>` to /data/workspace/MEMORY.md so HEARTBEAT.md's state-hello task skips on its next tick.\n\n5. Reply with the literal token NO_REPLY in your session text. HEARTBEAT.md state machine picks up the rest (channels-picked → subagents-dispatched → plan-synthesis) on its 5-minute cadence.",
-        },
-        delivery,
-        state: {},
-      },
       {
         id: "gtm_channel_discovery",
         name: "Monthly GTM channel discovery",
@@ -949,6 +825,8 @@ Initial durable facts:
 - URL: ${input.app.url}
 - Stage: ${input.app.stage}
 - Goal: ${input.app.weekGoal}
+${input.activeResearchJobId ? `- active_research_job_id: ${input.activeResearchJobId}\n` : ""}
+${input.deployTimeHelloAlreadySent ? "- hello_sent_at: deploy_time_hello\n" : ""}
 
 Memory rules:
 

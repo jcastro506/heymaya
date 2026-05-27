@@ -48,17 +48,12 @@ function fixtureInput() {
 function checkHeartbeatMdHasTasksBlock(): void {
   const { files } = buildMayaGtmWorkspace(fixtureInput());
   const hb = files.get("HEARTBEAT.md") ?? "";
-  // Sprint 2.16u — HEARTBEAT.md is the state machine. State-* tasks
-  // own boot work; pending-approvals / calendar-due / open-loops /
-  // published-results-scan are steady-state maintenance.
+  // HEARTBEAT.md is the watchdog. BOOT.md owns startup and launch.
   // Sprint 2.16u-fix — tasks: block is BARE (no code fence) per
   // OpenClaw /gateway/heartbeat.md so the parser actually picks it up.
   const required = [
     "tasks:",
-    "name: state-hello",
-    "name: state-channels-picked",
-    "name: state-subagents-dispatched",
-    "name: state-plan-synthesis",
+    "name: launch-watchdog",
     "name: pending-approvals",
     "name: calendar-due",
     "name: open-loops",
@@ -72,7 +67,7 @@ function checkHeartbeatMdHasTasksBlock(): void {
   }
   pass(
     "heartbeat-tasks-block",
-    `HEARTBEAT.md ships the documented OpenClaw tasks: YAML with all 4 tasks + HEARTBEAT_OK token convention`
+    `HEARTBEAT.md ships watchdog/maintenance tasks + HEARTBEAT_OK token convention`
   );
 }
 
@@ -82,9 +77,8 @@ function checkRedundantCronsRemoved(): void {
     jobs?: Array<{ id?: string }>;
   };
   const ids = (jobs.jobs ?? []).map((j) => j.id);
-  // Sprint 2.16u — boot_kickoff + gtm_heartbeat crons both removed
-  // (HEARTBEAT.md state machine + agents.defaults.heartbeat.every:"5m"
-  // own continuous work-toward-a-goal). Cron is reserved for real
+  // Startup/launch work moved to BOOT.md and heartbeat is watchdog-only.
+  // Cron is reserved for real
   // scheduled events (weekly review, monthly channel discovery).
   const dropped = [
     "gtm_calendar_check",
@@ -110,7 +104,7 @@ function checkRedundantCronsRemoved(): void {
   }
   pass(
     "cron-set-reduced",
-    `jobs.json now ships only real scheduled-event crons (weekly_review + channel_discovery); boot + heartbeat moved into HEARTBEAT.md state machine`
+    `jobs.json now ships only real scheduled-event crons (weekly_review + channel_discovery); boot work lives in BOOT.md`
   );
 }
 
@@ -132,8 +126,8 @@ function checkGatewayHeartbeatConfig(): void {
     fail("gateway-heartbeat", "gateway config has no agents.defaults.heartbeat");
     return;
   }
-  // Sprint 2.16u — heartbeat cadence bumped 30m→5m so state-* tasks
-  // progress fast. Sprint 2.16u-fix2 — activeHours dropped (timezone
+  // Heartbeat cadence is 5m so the watchdog catches stuck launches fast.
+  // Sprint 2.16u-fix2 — activeHours dropped (timezone
   // was shipping as the literal string "operator" instead of a real
   // IANA tz, causing OpenClaw to silently suppress every heartbeat).
   if (hb.every !== "5m") {

@@ -331,7 +331,15 @@ const actualSidecarsAfterChannelsNeedle = `\tif (internalHooksConfigured || awai
 if (gatewaySrc.includes(actualSidecarsAfterChannelsNeedle)) {
   gatewaySrc = gatewaySrc.replace(
     actualSidecarsAfterChannelsNeedle,
-    `\tparams.log.info("skipping optional post-channel sidecars for creator runtime");
+    `\tif (internalHooksConfigured || await hasGatewayStartupInternalHookListeners()) setTimeout(() => {
+\t\timport("./internal-hooks-UC389sgW.js").then(({ createInternalHookEvent, triggerInternalHook }) => {
+\t\t\ttriggerInternalHook(createInternalHookEvent("gateway", "startup", "gateway:startup", {
+\t\t\t\tcfg: params.cfg,
+\t\t\t\tdeps: params.deps,
+\t\t\t\tworkspaceDir: params.defaultWorkspaceDir
+\t\t\t}));
+\t\t}, 250);
+\tparams.log.info("skipping optional post-channel sidecars for creator runtime");
 \treturn { pluginServices: null };
 \tlet pluginServices = null;`
   );

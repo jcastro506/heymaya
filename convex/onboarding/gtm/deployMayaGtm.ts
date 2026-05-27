@@ -57,13 +57,14 @@ export type DeployMayaGtmResult =
  * on the Convex deployment. Roll back by clearing the env var.
  */
 export const OPENCLAW_IMAGE_TARGET = "registry.fly.io/heymaya-openclaw:v2026.5.20";
-// Sprint 2.16u-fix10 — bumped pinned tag to v2026.4.24. Same upstream
-// OpenClaw npm package (2026.4.23) but removes the
-// patch-claw-messenger-plugin.mjs gateway_start strip, so the bundled
-// boot-md hook fires BOOT.md on gateway-ready (instant-hello). The
-// 2026.5.20 upgrade is still pending the doctor + audit pass per the
-// note above.
-export const OPENCLAW_IMAGE_PINNED = "registry.fly.io/heymaya-openclaw:v2026.4.24";
+// Sprint 2.16u-fix13 — bumped pinned tag to v2026.4.25. Same upstream
+// OpenClaw npm package (2026.4.23), but the creator-runtime patch now
+// preserves the gateway:startup internal-hook trigger before skipping
+// optional post-channel sidecars. That lets bundled boot-md fire BOOT.md
+// on gateway-ready. The 2026.5.20 upgrade is still pending the doctor +
+// audit pass per the note above.
+export const OPENCLAW_IMAGE_PINNED =
+  "registry.fly.io/heymaya-openclaw@sha256:7b53d73a3c2c40f47865c508bddffccd2fbc21d28bd7ac938ed080fb2a24764d";
 
 const OPENCLAW_IMAGE =
   process.env.MAYA_GTM_OPENCLAW_IMAGE ??
@@ -116,24 +117,18 @@ export function resolveConvexHookCallbackBaseUrl(
 }
 
 const MODEL_ROUTING = {
-  // Sprint 2.16a — Maya's brain. Gemini 3.5 Flash is the strategist
-  // model: reads subagent outputs, judges quality, decides whether
-  // to spawn refinement waves or ship the plan. Was 3-flash-preview;
-  // operator-flagged 2026-05-25 that 3.5 is the right brain for the
-  // iterative-research-loop architecture.
-  // Sprint 2.16p — operator floor: minimum Gemini 3. `gemini-3-flash`
-  // (no -preview) doesn't exist on OpenRouter — the real Gemini 3
-  // Flash ID is `google/gemini-3-flash-preview`. If this still hits
-  // the "reasoning is mandatory" gate that 3.5-flash has, the next
-  // move is anthropic/claude-sonnet-4.5 (no reasoning gate, $3/M in,
-  // $15/M out, 1M ctx). Per-cron-payload thinking is set to "medium"
-  // in generators.ts boot cron.
+  // Sprint 2.16u-fix14 — Maya's boot/orchestration brain. Live Fly smoke
+  // showed Gemini 3 Flash Preview can sit inside the BOOT.md agent turn for
+  // minutes with no session transcript, which recreates the exact "no hello
+  // for 5 minutes" failure. Use Sonnet for the main operator so startup,
+  // subagent fan-out, synthesis, and recovery are reliable. Research lanes
+  // can stay on cheaper Gemini until evidence says otherwise.
   //
   // Operator-approved alternatives (set via env var override):
   //   MAYA_GTM_MODEL=anthropic/claude-sonnet-4.5  (premium, no gate)
   //   MAYA_GTM_MODEL=anthropic/claude-sonnet-4.6  (newer Sonnet)
   //   MAYA_GTM_MODEL=anthropic/claude-haiku-4.5   (cheaper Claude)
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-3-flash-preview",
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "anthropic/claude-sonnet-4.5",
   // Sprint 2.16a — channel-research subagents. Gemini 3 Flash (NOT
   // 3.5 — that's main's brain). Subagents do focused platform work
   // (scrape, score, draft) — they don't need 3.5's strategic judgment.
@@ -338,32 +333,22 @@ export function buildGatewayConfig(
           runTimeoutSeconds: 900,
           archiveAfterMinutes: 60,
         },
-        // Sprint 18 — heartbeat config. Documented cost-savings pattern
-        // from OpenClaw docs: lightContext (only HEARTBEAT.md) + an
-        // isolated fresh session per fire. Active hours respect operator
-        // tz; OpenClaw natively skips fires outside the window.
-        // tasks: YAML block lives in HEARTBEAT.md so the per-task
-        // interval gating is owned by OpenClaw, not by us.
+        // Heartbeat is the watchdog/recovery lane. BOOT.md owns the
+        // first launch workflow on gateway startup; heartbeat checks for
+        // stalled flows, pending approvals, due calendar events, and
+        // result scans.
         heartbeat: {
-          // Sprint 2.16u — was "30m". Bumped to "5m" so HEARTBEAT.md
-          // state-machine tasks (state-hello → state-channels-picked →
-          // state-subagents-dispatched → state-plan-synthesis) progress
-          // fast on a fresh deploy. Each state-* task has its own
-          // `interval: 5m` in HEARTBEAT.md, so every heartbeat tick
-          // checks them. Once MEMORY.md markers are set, the state-*
-          // tasks no-op cheaply with HEARTBEAT_OK. Steady-state
-          // maintenance tasks (pending-approvals 30m, calendar-due 1h,
-          // etc.) have their own per-task intervals that gate firing.
+          // 5m keeps stuck boot/launch detection quick without making
+          // heartbeat the primary launch engine.
           every: "5m",
           lightContext: true,
           isolatedSession: true,
           // Sprint 2.16u-fix2 — REMOVED activeHours because timezone was
           // shipping as the literal string "operator" (never templated to
           // a real IANA tz). OpenClaw silently fails closed when the tz
-          // can't be resolved, suppressing every heartbeat tick. The 5m
-          // cadence and the state-* tasks' MEMORY.md-marker gates already
-          // handle the "don't spam idle ticks" concern — activeHours was
-          // a nice-to-have we can re-enable once we wire real tz through.
+          // can't be resolved, suppressing every heartbeat tick. Active
+          // hours are a nice-to-have we can re-enable once real timezone
+          // wiring is guaranteed.
         },
       },
       list: [
@@ -416,14 +401,10 @@ export function buildGatewayConfig(
         telegram: { enabled: true },
       },
     },
-    // Sprint 2.16j — enable internal hook runtime so BOOT.md fires
-    // on gateway startup as a real native primitive (not just a
-    // workspace file Maya happens to read). BOOT.md owns the hello;
-    // Sprint 2.16u — HEARTBEAT.md state machine owns everything after
-    // that (channel pick → subagents → plan synth), gated by MEMORY.md
-    // markers. The boot cron that used to dispatch research was deleted
-    // in Sprint 2.16u because OpenClaw cron is for scheduled events,
-    // not continuous work-toward-a-goal loops.
+    // Enable internal hook runtime so BOOT.md fires on gateway startup
+    // as a real native primitive (not just a workspace file Maya happens
+    // to read). BOOT.md owns the immediate hello and first GTM launch
+    // wave. HEARTBEAT.md is only the watchdog/recovery lane.
     //
     // `hooks` is a TOP-LEVEL config key per OpenClaw 2026.4.23 zod
     // schema (sibling of `gateway`, `agents`, `plugins`) — NOT a key
@@ -523,6 +504,7 @@ export const getGtmAgentForDeploy = internalQuery({
     creator: Pick<Doc<"creators">, "_id" | "email" | "displayName">;
     app: Doc<"gtmApps">;
     channelScores: Doc<"gtmChannelScores">[];
+    latestResearchJobId?: Id<"gtmResearchJobs">;
   } | null> => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent) return null;
@@ -550,6 +532,7 @@ export const getGtmAgentForDeploy = internalQuery({
       // template ("Hey <firstName> — Maya here ...").
       creator: { _id: creator._id, email: creator.email, displayName: creator.displayName },
       app,
+      latestResearchJobId: latestJob?._id,
       channelScores,
     };
   },
@@ -668,6 +651,9 @@ export const buildAndUploadGtmWorkspace = internalAction({
         ?.channel,
       secondaryChannel: row.channelScores.find((s) => s.decision === "secondary")
         ?.channel,
+      activeResearchJobId: row.latestResearchJobId
+        ? String(row.latestResearchJobId)
+        : undefined,
       // Sprint 14 — native cron delivery target. When the user has paired
       // Telegram (Sprint 15), every cron's delivery envelope becomes
       // `mode: "announce", channel: "telegram", to: <chatId>`. Pre-pairing
@@ -956,7 +942,9 @@ function buildBootstrapShell(): string {
   ].join(" && ");
 }
 
-function collectDeploySecrets(): Record<string, string> {
+export function collectDeploySecrets(
+  env: Partial<Record<string, string | undefined>> = process.env
+): Record<string, string> {
   const secrets: Record<string, string> = {};
   for (const key of [
     "CONVEX_URL",
@@ -981,20 +969,30 @@ function collectDeploySecrets(): Record<string, string> {
     "TWITTERAPI_IO_KEY",
     "APIFY_API_TOKEN",
   ]) {
-    const value = process.env[key];
+    const value = env[key];
     if (value) secrets[key] = value;
   }
-  if (!secrets.SCRAPE_CREATORS_API_KEY && process.env.SCRAPECREATORS_API_KEY) {
-    secrets.SCRAPE_CREATORS_API_KEY = process.env.SCRAPECREATORS_API_KEY;
+  if (!secrets.SCRAPE_CREATORS_API_KEY && env.SCRAPECREATORS_API_KEY) {
+    secrets.SCRAPE_CREATORS_API_KEY = env.SCRAPECREATORS_API_KEY;
   }
-  if (!secrets.SCRAPECREATORS_API_KEY && process.env.SCRAPE_CREATORS_API_KEY) {
-    secrets.SCRAPECREATORS_API_KEY = process.env.SCRAPE_CREATORS_API_KEY;
+  if (!secrets.SCRAPECREATORS_API_KEY && env.SCRAPE_CREATORS_API_KEY) {
+    secrets.SCRAPECREATORS_API_KEY = env.SCRAPE_CREATORS_API_KEY;
   }
-  if (!secrets.GEMINI_API_KEY && process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    secrets.GEMINI_API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (!secrets.GEMINI_API_KEY && env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    secrets.GEMINI_API_KEY = env.GOOGLE_GENERATIVE_AI_API_KEY;
   }
-  if (!secrets.GOOGLE_GENERATIVE_AI_API_KEY && process.env.GEMINI_API_KEY) {
-    secrets.GOOGLE_GENERATIVE_AI_API_KEY = process.env.GEMINI_API_KEY;
+  if (!secrets.GOOGLE_GENERATIVE_AI_API_KEY && env.GEMINI_API_KEY) {
+    secrets.GOOGLE_GENERATIVE_AI_API_KEY = env.GEMINI_API_KEY;
+  }
+  const stage = (env.CONVEX_DEPLOYMENT ?? "").includes("precise-canary-781")
+    ? "staging"
+    : "production";
+  const stageTelegramToken =
+    stage === "staging"
+      ? env.TELEGRAM_BOT_TOKEN_STAGING
+      : env.TELEGRAM_BOT_TOKEN_PRODUCTION;
+  if (stageTelegramToken) {
+    secrets.TELEGRAM_BOT_TOKEN = stageTelegramToken;
   }
   return secrets;
 }

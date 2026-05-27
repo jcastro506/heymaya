@@ -30,11 +30,11 @@ import {
 const OPENCLAW_IMAGE =
   process.env.MAYA_GTM_OPENCLAW_IMAGE ??
   process.env.MAYA_OPENCLAW_IMAGE ??
-  "registry.fly.io/heymaya-openclaw:v2026.4.24";
+  "registry.fly.io/heymaya-openclaw@sha256:7b53d73a3c2c40f47865c508bddffccd2fbc21d28bd7ac938ed080fb2a24764d";
 const OPENCLAW_MODEL =
   process.env.MAYA_GTM_MODEL ??
   process.env.OPENCLAW_MODEL ??
-  "google/gemini-3-flash-preview";
+  "anthropic/claude-sonnet-4.5";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -528,11 +528,10 @@ function verifyMachineFiles(appName: string, machineId: string): string {
     "test -s /data/workspace/USER.md",
     "test -s /data/workspace/skills/scrapecreators-api/SKILL.md",
     "grep -q 'ScrapeCreators' /data/workspace/skills/scrapecreators-api/SKILL.md",
-    // Sprint 2.16u — HEARTBEAT.md is the state machine now; assert
-    // the state-* tasks instead of the old "ScrapeCreators calls"
-    // forbid-list wording.
-    "grep -q 'state-hello' /data/workspace/HEARTBEAT.md",
-    "grep -q 'state-plan-synthesis' /data/workspace/HEARTBEAT.md",
+    // BOOT.md starts launch work; HEARTBEAT.md is the watchdog.
+    "grep -q 'gateway:startup' /data/workspace/BOOT.md",
+    "grep -q 'sessions_spawn' /data/workspace/BOOT.md",
+    "grep -q 'launch-watchdog' /data/workspace/HEARTBEAT.md",
     "test -s /data/cron/jobs.json",
     // Boot cron + heartbeat cron were dropped in Sprint 2.16u; only
     // real scheduled events remain.

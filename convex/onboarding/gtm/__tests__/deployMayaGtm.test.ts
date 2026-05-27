@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildGtmMachineConfig,
+  collectDeploySecrets,
   flyAppNameForGtmAgent,
 } from "../deployMayaGtm";
 
@@ -38,13 +39,7 @@ describe("Maya GTM OpenClaw deploy config", () => {
 
     const bootstrap = JSON.parse(config.env?.MAYA_BOOTSTRAP_JSON ?? "{}");
     expect(bootstrap.product).toBe("clawlaunch-gtm");
-    // Sprint 2.16o — operator caught that gemini-3-flash isn't a valid
-    // OpenRouter model ID (curl'd /api/v1/models to confirm). Real
-    // current models are gemini-2.0-flash-001, gemini-2.5-flash,
-    // gemini-3-flash-PREVIEW, gemini-3.1-flash-lite, gemini-3.5-flash.
-    // gemini-2.5-flash is the latest stable (non-preview) Flash; no
-    // "reasoning is mandatory" gate. This is the real model ID.
-    expect(bootstrap.modelRouting.mainMaya).toBe("google/gemini-3-flash-preview");
+    expect(bootstrap.modelRouting.mainMaya).toBe("anthropic/claude-sonnet-4.5");
     expect(bootstrap.modelRouting.hardResearchBeta).toContain("claude-sonnet");
     expect(bootstrap.directPingSmoke).toBe(true);
     // Sprint 2.1 expanded the agent list from 2 → 11 (six platform
@@ -106,20 +101,14 @@ describe("Maya GTM OpenClaw deploy config", () => {
       (a: { id: string }) => a.id === "main"
     );
     expect(main.default).toBe(true);
-    // Sprint 2.16o — real OpenRouter model ID (see mainMaya note above).
-    expect(main.model).toBe("openrouter/google/gemini-3-flash-preview");
+    expect(main.model).toBe("openrouter/anthropic/claude-sonnet-4.5");
     expect(config.init?.cmd?.join(" ")).toContain(
       "cp /data/workspace/jobs.json /data/cron/jobs.json"
     );
     expect(config.init?.cmd?.join(" ")).toContain("chmod 700 /data/cron");
   });
 
-  it("uses Gemini 3 Flash Preview as the default GTM OpenClaw model", () => {
-    // Sprint 2.16p — operator floor: minimum Gemini 3 with medium
-    // thinking. The real ID for "Gemini 3 Flash" on OpenRouter is
-    // `google/gemini-3-flash-preview` (the bare `gemini-3-flash`
-    // doesn't exist; we tried that in 2.16n and Maya relayed the
-    // 400 "not a valid model ID" verbatim).
+  it("uses Sonnet as the default GTM OpenClaw model", () => {
     const config = buildGtmMachineConfig({
       agentId: "agent",
       flyAppName: "clawlaunch-agent",
@@ -127,11 +116,35 @@ describe("Maya GTM OpenClaw deploy config", () => {
     });
 
     expect(config.env?.OPENCLAW_MODEL).toBe(
-      "openrouter/google/gemini-3-flash-preview"
+      "openrouter/anthropic/claude-sonnet-4.5"
     );
     expect(config.env?.OPENCLAW_DISABLE_BONJOUR).toBe("1");
     expect(config.env?.MAYA_GTM_MODEL_ROUTING_JSON).toContain(
       "futureDefaultResearch"
     );
+  });
+
+  it("maps env-specific Telegram bot tokens into the Fly secret name OpenClaw reads", () => {
+    expect(
+      collectDeploySecrets({
+        CONVEX_DEPLOYMENT: "dev:precise-canary-781",
+        TELEGRAM_BOT_TOKEN_STAGING: "staging-token",
+        TELEGRAM_BOT_TOKEN: "global-token",
+      }).TELEGRAM_BOT_TOKEN
+    ).toBe("staging-token");
+
+    expect(
+      collectDeploySecrets({
+        CONVEX_DEPLOYMENT: "dev:precise-canary-781",
+        TELEGRAM_BOT_TOKEN_STAGING: "staging-token",
+      }).TELEGRAM_BOT_TOKEN
+    ).toBe("staging-token");
+
+    expect(
+      collectDeploySecrets({
+        CONVEX_DEPLOYMENT: "prod:whatever",
+        TELEGRAM_BOT_TOKEN_PRODUCTION: "prod-token",
+      }).TELEGRAM_BOT_TOKEN
+    ).toBe("prod-token");
   });
 });

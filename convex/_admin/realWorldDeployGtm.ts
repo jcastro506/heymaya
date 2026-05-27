@@ -1104,3 +1104,126 @@ export const run = internalAction({
     };
   },
 });
+
+/**
+ * Sprint 2.16f — quick Fly machine status inspector for the latest GTM
+ * test creator. Returns machine state + recent events so we can see
+ * whether the machine is alive, crashed, still installing deps, etc.
+ *
+ * Usage:
+ *   npx convex run _admin/realWorldDeployGtm:inspectLatestFlyMachine
+ */
+export const inspectLatestFlyMachine = internalAction({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{
+    flyAppId?: string;
+    machines: Array<{
+      id: string;
+      state: string;
+      events: string;
+    }>;
+  }> => {
+    const latest = await ctx.runQuery(
+      internal._admin.realWorldDeployGtm.findLatestGtmTestAgent,
+      {}
+    );
+    if (!latest?.flyAppId) return { machines: [] };
+    const { FlyClient } = await import("../lib/flyClient");
+    const fly = new FlyClient();
+    const machines = await fly.listMachines(latest.flyAppId);
+    const results = await Promise.all(
+      machines.map(async (m) => ({
+        id: m.id,
+        state: m.state,
+        events: await fly
+          .machineLogs(latest.flyAppId!, m.id, { sinceSec: 1800 })
+          .catch((e: Error) => `events-fetch-error: ${e.message}`),
+      }))
+    );
+    return { flyAppId: latest.flyAppId, machines: results };
+  },
+});
+
+/**
+ * Sprint 2.16f — fetch actual stdout/stderr logs from the latest Maya
+ * via Fly GraphQL. Same surface as `flyctl logs -a <app>`.
+ *
+ * Usage:
+ *   npx convex run _admin/realWorldDeployGtm:tailLatestMaya '{"limit":200}'
+ */
+export const tailLatestMaya = internalAction({
+  args: { limit: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ flyAppId?: string; logs: string }> => {
+    const latest = await ctx.runQuery(
+      internal._admin.realWorldDeployGtm.findLatestGtmTestAgent,
+      {}
+    );
+    if (!latest?.flyAppId) return { logs: "" };
+    const { FlyClient } = await import("../lib/flyClient");
+    const fly = new FlyClient();
+    const logs = await fly
+      .recentLogs(latest.flyAppId, { limit: args.limit ?? 200 })
+      .catch((e: Error) => `logs-fetch-error: ${e.message}`);
+    return { flyAppId: latest.flyAppId, logs };
+  },
+});
+
+export const findLatestGtmTestAgent = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<{ flyAppId?: string } | null> => {
+    const all = await ctx.db.query("creators").collect();
+    const tests = all
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (tests.length === 0) return null;
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", tests[0]._id))
+      .first();
+    return { flyAppId: agent?.openClawFlyAppId };
+  },
+});
+
+/**
+ * Sprint 2.16f — nuke every clawlaunch-* Fly app. Use when starting from
+ * a known-clean slate: kills orphaned Maya machines whose Convex DB rows
+ * have already been wiped. Pairs with `run` (which wipes Convex rows).
+ *
+ * Usage:
+ *   npx convex run _admin/realWorldDeployGtm:destroyAllClawlaunchApps
+ */
+export const destroyAllClawlaunchApps = internalAction({
+  args: {},
+  handler: async (
+    _ctx
+  ): Promise<{ destroyed: string[]; failed: string[]; listed: number }> => {
+    const { FlyClient } = await import("../lib/flyClient");
+    const fly = new FlyClient();
+    const all = await fly.listApps({ first: 500 });
+    const targets = all
+      .map((a) => a.name)
+      .filter((n) => n.startsWith("clawlaunch-"));
+    console.log(
+      `[destroyAllClawlaunchApps] listed ${all.length} apps, ${targets.length} match clawlaunch-*`
+    );
+    const destroyed: string[] = [];
+    const failed: string[] = [];
+    for (const name of targets) {
+      try {
+        await fly.destroyApp(name);
+        destroyed.push(name);
+        console.log(`[destroyAllClawlaunchApps] destroyed ${name}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        failed.push(`${name}: ${msg}`);
+        console.error(`[destroyAllClawlaunchApps] failed ${name}: ${msg}`);
+      }
+    }
+    return { destroyed, failed, listed: all.length };
+  },
+});

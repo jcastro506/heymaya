@@ -87,10 +87,12 @@ function checkOpenClawImageConstants(): void {
     );
     return;
   }
-  if (OPENCLAW_IMAGE_PINNED !== "registry.fly.io/heymaya-openclaw:v2026.4.23") {
+  const expectedPinned =
+    "registry.fly.io/heymaya-openclaw@sha256:7b53d73a3c2c40f47865c508bddffccd2fbc21d28bd7ac938ed080fb2a24764d";
+  if (OPENCLAW_IMAGE_PINNED !== expectedPinned) {
     fail(
       "openclaw-image-pinned",
-      `OPENCLAW_IMAGE_PINNED is "${OPENCLAW_IMAGE_PINNED}"; expected "registry.fly.io/heymaya-openclaw:v2026.4.23"`
+      `OPENCLAW_IMAGE_PINNED is "${OPENCLAW_IMAGE_PINNED}"; expected "${expectedPinned}"`
     );
     return;
   }

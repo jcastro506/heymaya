@@ -425,6 +425,94 @@ export class FlyClient {
       .join("\n");
   }
 
+  /**
+   * Sprint 2.16f — fetch actual stdout/stderr log lines from a Fly app via
+   * the GraphQL `vmLogs` query (the same surface flyctl now uses since
+   * `app.logs` was deprecated). Returns the last N log lines as a single
+   * newline-separated string, sufficient for one-shot debugging.
+   */
+  async recentLogs(
+    appName: string,
+    { limit = 200, vmId }: { limit?: number; vmId?: string } = {}
+  ): Promise<string> {
+    const graphqlEndpoint = "https://api.fly.io/graphql";
+    const query = `
+      query VmLogs($appName: String!, $vmId: String) {
+        app(name: $appName) {
+          vmLogs(vmId: $vmId) {
+            nodes {
+              timestamp
+              message
+              level
+              instance
+              region
+            }
+          }
+        }
+      }
+    `;
+    const res = await this.fetchImpl(graphqlEndpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${this.apiToken}`,
+      },
+      body: JSON.stringify({
+        query,
+        variables: { appName, vmId },
+      }),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new FlyError(
+        `Fly GraphQL recentLogs HTTP ${res.status}: ${text}`,
+        res.status,
+        text,
+        res.status >= 500 || res.status === 429
+      );
+    }
+    let parsed: {
+      data?: {
+        app?: {
+          vmLogs?: {
+            nodes?: Array<{
+              timestamp?: string;
+              message?: string;
+              level?: string;
+              instance?: string;
+              region?: string;
+            }>;
+          };
+        };
+      };
+      errors?: Array<{ message: string }>;
+    };
+    try {
+      parsed = JSON.parse(text) as typeof parsed;
+    } catch {
+      throw new FlyError(
+        `Fly GraphQL recentLogs: response not JSON: ${text}`,
+        res.status,
+        text,
+        false
+      );
+    }
+    if (parsed.errors && parsed.errors.length > 0) {
+      const msg = parsed.errors.map((e) => e.message).join("; ");
+      throw new FlyError(
+        `Fly GraphQL recentLogs returned errors: ${msg}`,
+        res.status,
+        text,
+        false
+      );
+    }
+    const nodes = parsed.data?.app?.vmLogs?.nodes ?? [];
+    const sliced = limit > 0 ? nodes.slice(-limit) : nodes;
+    return sliced
+      .map((n) => `[${n.timestamp ?? ""}] [${n.level ?? "info"}] ${n.message ?? ""}`)
+      .join("\n");
+  }
+
   /* ----------------------------- Internals ------------------------------- */
 
   private async fetchJson(
