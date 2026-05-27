@@ -121,6 +121,19 @@ const SKILLS = [
   // before the calendar-populator picks it up as actionable. Failed
   // drafts get re-spawned with edit feedback or auto-rejected.
   "maya-voice-matcher",
+  // ─── Sprint 2.17 — Manager-mode skill bundle ───────────────────────
+  // BOOT.md routes on /lc_gtm/get_my_foundation: empty → invoke
+  // maya-foundation-research, populated → invoke maya-continuous-research
+  // + maya-morning-brief. The 5-gate output critic runs over every
+  // user-facing send. Cadence skills (evening/weekly) are read by their
+  // respective self-scheduled crons added in BOOT step 4.
+  "maya-foundation-research",
+  "maya-continuous-research",
+  "maya-output-critic",
+  "maya-morning-brief",
+  "maya-evening-recap",
+  "maya-weekly-review",
+  "maya-inbound-triage",
 ] as const;
 
 export function buildMayaGtmWorkspace(
@@ -604,9 +617,15 @@ Then orchestrate:
    — never raw curl on platform domains), and the worker's quality bar
    per the foundation-research skill.
 
-3. \`sessions_yield\`.
+3. **Send a "researching now" placeholder via the \`message\` tool**
+   so the operator knows you're working. One short message, plain
+   voice, e.g. "Digging into your market right now — back in about
+   10-15 min with what I find." No emojis. No "I've kicked off X
+   workflows." Just the human update.
 
-4. When you resume, use \`subagents action=list\` to see worker state.
+4. \`sessions_yield\`.
+
+5. When you resume, use \`subagents action=list\` to see worker state.
    For each worker:
    - If \`finished\` and the corresponding Convex table has at least the
      minimum-quality output (per skill gates), accept.
@@ -615,27 +634,27 @@ Then orchestrate:
    - If \`finished\` but output is thin/wrong-shape,
      \`subagents action=steer target=<id> message="<refinement>"\`.
 
-5. Poll \`$CONVEX_SITE_URL/lc_gtm/get_my_foundation\` between checks to
+6. Poll \`$CONVEX_SITE_URL/lc_gtm/get_my_foundation\` between checks to
    see what's landed.
 
-6. When you judge all 5 outputs complete enough (per the skill's
+7. When you judge all 5 outputs complete enough (per the skill's
    quality framework), compose the synthesis message per the skill's
    output template and send via the \`message\` tool.
 
-7. POST \`$CONVEX_SITE_URL/lc_gtm/action_logged\` with
+8. POST \`$CONVEX_SITE_URL/lc_gtm/action_logged\` with
    \`kind: "foundation_complete"\`.
 
-8. Append \`foundation_completed_at: <ISO ts>\` to MEMORY.md.
+9. Append \`foundation_completed_at: <ISO ts>\` to MEMORY.md.
 
-9. Set up the daily cadence: schedule morning brief, evening recap,
-   and weekly review crons via the native \`cron action=add\` tool. Use
-   USER.md timezone. Schedule:
-   - morning_brief: \`0 7 * * *\` operator local
-   - evening_recap: \`0 20 * * *\` operator local
-   - weekly_review: \`0 18 * * 0\` operator local (Sunday 6pm)
-   - monthly_reset: \`0 6 1 * *\` operator local (1st of month, 6am)
+10. Set up the daily cadence: schedule morning brief, evening recap,
+    and weekly review crons via the native \`cron action=add\` tool. Use
+    USER.md timezone. Schedule:
+    - morning_brief: \`0 7 * * *\` operator local
+    - evening_recap: \`0 20 * * *\` operator local
+    - weekly_review: \`0 18 * * 0\` operator local (Sunday 6pm)
+    - monthly_reset: \`0 6 1 * *\` operator local (1st of month, 6am)
 
-10. Reply NO_REPLY.
+11. Reply NO_REPLY.
 
 ### Path B — Foundation exists (\`buyerMap !== null\`)
 

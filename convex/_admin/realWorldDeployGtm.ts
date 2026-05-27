@@ -1190,6 +1190,66 @@ export const findLatestGtmTestAgent = internalQuery({
 });
 
 /**
+ * Live triage helper — dump latest agent's gtmTargetThreads counts by platform,
+ * plus the freshest 5 thread rows so we can confirm what actually made it to
+ * Convex when Maya appears stuck. Pairs with flyctl logs.
+ */
+export const peekResearchLanded = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    const all = await ctx.db.query("creators").collect();
+    const tests = all
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (tests.length === 0) return { found: false };
+    const creator = tests[0];
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    if (!agent) return { found: true, agent: null };
+
+    const threads = await ctx.db
+      .query("gtmTargetThreads")
+      .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+      .collect();
+    const byPlatform: Record<string, number> = {};
+    for (const t of threads) {
+      byPlatform[t.platform] = (byPlatform[t.platform] ?? 0) + 1;
+    }
+
+    const events = await ctx.db
+      .query("gtmCalendarEvents")
+      .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+      .collect();
+
+    const latest = threads
+      .sort((a, b) => b._creationTime - a._creationTime)
+      .map((t: any) => ({
+        platform: t.platform,
+        url: t.url,
+        title: t.title,
+        excerpt: t.excerpt,
+        whyItFits: t.whyItFits,
+        painMatchReason: t.painMatchReason,
+        recommendedAction: t.recommendedAction,
+        priorityScore: t.priorityScore,
+        currentMetrics: t.currentMetrics,
+        community: t.subredditOrCommunity,
+      }));
+
+    return {
+      agentId: agent._id,
+      flyAppId: agent.openClawFlyAppId,
+      threadTotal: threads.length,
+      threadsByPlatform: byPlatform,
+      calendarEventTotal: events.length,
+      latestThreads: latest,
+    };
+  },
+});
+
+/**
  * Sprint 2.16f — nuke every clawlaunch-* Fly app. Use when starting from
  * a known-clean slate: kills orphaned Maya machines whose Convex DB rows
  * have already been wiped. Pairs with `run` (which wipes Convex rows).

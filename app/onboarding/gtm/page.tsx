@@ -218,12 +218,15 @@ function GtmOnboardingBody() {
           ClawLaunch onboarding
         </p>
         <h1 className="font-display text-4xl tracking-tight sm:text-5xl">
-          Give Maya the product. She will go research the launch plan.
+          Give Maya the product. She'll build your GTM operating model.
         </h1>
         <p className="mt-5 max-w-2xl text-paper-dim">
-          This V1 keeps onboarding short. Maya infers likely customers from the
-          product, runs a budgeted research job, then comes back with one
-          primary channel, one secondary channel, and a calendar plan.
+          Onboarding is short. After you finish here, Maya does ~10-15 min of
+          deep market research — your ICP, the competitive landscape, where
+          your buyers hang out, narrative angles you can run from, and the
+          specific accounts worth building relationships with. Then she
+          starts a daily cadence: morning brief, evening recap, weekly
+          strategy review.
         </p>
       </div>
 
