@@ -992,30 +992,51 @@ Then orchestrate:
 
 ### Phase 4 — synthesis + single approve ask
 
-14. NOW compose the synthesis message per
-    \`maya-foundation-research/SKILL.md\` "Synthesis message" template.
-    The message includes the calendar preview ("5 events queued for
-    your calendar this week: …") and a single ask: "Approve and I'll
-    lock them in. Or tell me which to swap."
+**HARD GATE — synthesis is the LAST thing I do, not a summary of my
+plans.** Before I touch the \`message\` tool, the database state MUST
+match every claim I'm about to make. Sending a "5 events queued"
+message when the calendar table is empty is fabrication — the
+operator approves my prose and finds nothing actually scheduled. That
+destroys trust permanently. Verified-live failure 2026-05-27 run #13.
 
-15. **Verify before sending**: at this point Convex MUST have
-    populated calendar events. Exec curl GET to
-    \`$CONVEX_SITE_URL/lc_gtm/get_my_foundation\` to confirm the
-    operating model + a non-empty list of \`gtmCalendarEvents\`. If the
-    calendar is empty, DO NOT send the synthesis — go back to Phase
-    3 and assemble. The operator should never receive a "plan"
-    message that doesn't have actionable events queued.
+14. **Pre-synthesis state check** — exec curl GET to
+    \`$CONVEX_SITE_URL/lc_gtm/get_my_foundation\` with Bearer
+    \`$HOOK_TOKEN\`. Parse the response. Verify ALL of:
+    a. \`buyerMap\` is non-null (or surface gap honestly in
+       synthesis IF I judged it acceptable to ship partial)
+    b. \`gtmCalendarEvents.length >= 5\` for active-launch mode (per
+       maya-calendar-populator/SKILL.md § 3 phase-2 minimums)
+    c. For every \`gtmTargetThreads\` row I plan to reference in
+       synthesis: \`painQuote !== null\` AND \`draftReply !== null\`.
 
-16. Send the synthesis via the \`message\` tool (action=send,
+15. **If any check fails, I do not send the synthesis.** Specifically:
+    - calendarTotal === 0 → route back to Phase 3 (read
+      maya-calendar-populator SKILL.md, build the events, POST them)
+    - any referenced thread has \`draftReply === null\` → route back
+      to Phase 2.5 (read excerpt, compose reply in operator voice,
+      re-POST target_thread with same idempotencyKey)
+    Then re-run step 14. I do not get to "skip ahead" because I'm
+    confident in my context — the database is the source of truth.
+
+16. **Only after step 14 passes ALL checks** do I compose the
+    synthesis per \`maya-foundation-research/SKILL.md\` "Synthesis
+    message" template. The calendar preview I include MUST reflect
+    what get_my_foundation returned — not what I plan to do, not
+    what I would have done, what is actually in
+    \`gtmCalendarEvents\` right now. Same for "all replies are
+    written" — only say that if I just verified every kept thread
+    has a draftReply.
+
+17. Send the synthesis via the \`message\` tool (action=send,
     channel=telegram, target=<chatId>).
 
-17. POST \`$CONVEX_SITE_URL/lc_gtm/action_logged\` with
+18. POST \`$CONVEX_SITE_URL/lc_gtm/action_logged\` with
     \`kind: "foundation_complete"\` and a summary.
 
-18. Append \`foundation_completed_at: <ISO ts>\` and
+19. Append \`foundation_completed_at: <ISO ts>\` and
     \`plan_proposed_at: <ISO ts>\` to MEMORY.md.
 
-19. Set up the daily cadence: schedule morning brief, evening recap,
+20. Set up the daily cadence: schedule morning brief, evening recap,
     and weekly review crons via the native \`cron action=add\` tool.
     Use USER.md timezone. Schedule:
     - morning_brief: \`0 7 * * *\` operator local
@@ -1023,7 +1044,7 @@ Then orchestrate:
     - weekly_review: \`0 18 * * 0\` operator local (Sunday 6pm)
     - monthly_reset: \`0 6 1 * *\` operator local (1st of month, 6am)
 
-20. Reply NO_REPLY. When operator approves via Telegram reply, Maya
+21. Reply NO_REPLY. When operator approves via Telegram reply, Maya
     confirms in one short message ("Locked. First action 10:30
     tomorrow.") — calendar events are already in Convex; nothing
     else to spawn.
