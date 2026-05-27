@@ -472,6 +472,120 @@ streams them in one row at a time.
   Body: \`{ idempotencyKey, draftId, platform, providerPostId, metrics: { likes?, comments?, shares?, views?, upvotes?, downvotes? }, notes? }\`
   Use: the published-post-results-scan heartbeat task POSTs one snapshot per published draft per scan (every 6h). Persists in gtmPostResults; mission-board + weekly review compute deltas from these. Snapshots that represent a ≥5x baseline jump fire an opportunistic Telegram nudge.
 
+Sprint 2.17 Phase A — manager-mode foundation + continuous endpoints.
+The foundation_* endpoints accept the 5 outputs Maya's foundation
+workers produce at onboarding + monthly refresh. The continuous
+endpoints accept what the daily continuous-research workers + main
+Maya produce on cadence. Workers, this is your contract — read it
+carefully, populate the fields, POST.
+
+- \`POST ${callbackBase}/lc_gtm/foundation_buyer_map\`
+  Body: \`{ idempotencyKey, icpDescription: string, buyerJourneyStages: [{ stage: string, whereTheyHangOut: string, intentLanguage: string }], intentPhrases: string[], trustedVoices: [{ handle: string, platform: string, whyTrusted: string }] }\`
+  Use: the singleton-per-agent buyer map. Singleton = the upsert
+  overwrites the prior row in place each pass. Required: icpDescription
+  reads like a specific person (not a category). Other arrays default
+  to empty if you can't fill them (Maya will steer).
+
+- \`POST ${callbackBase}/lc_gtm/foundation_competitor\`
+  Body: \`{ idempotencyKey, competitorKey?: string, competitorName: string, kind: "direct"|"adjacent"|"substitute", url?: string, pricing?: string, positioning: string, complaints: [{ quote: string, sourceUrl: string }], vulnerabilities: string[] }\`
+  Use: one POST per competitor. competitorKey auto-derives from
+  competitorName if omitted. Each complaint MUST quote a real post +
+  URL — no inferred complaints, ever.
+
+- \`POST ${callbackBase}/lc_gtm/foundation_channel_scorecard\`
+  Body: \`{ idempotencyKey, channel: "reddit"|"x"|"hn"|"linkedin"|"youtube"|"tiktok"|"instagram"|"threads"|"podcasts"|"newsletters"|"discord"|"blog", audienceFit?: number 0-1, cadenceFit?: number 0-1, uniqueUnlock: string, bet?: boolean, notes?: string }\`
+  Use: one POST per channel. Scores default to 0.5 if missing; bet
+  defaults false. Bets are where the buyer lives AND the operator can
+  realistically feed (per USER.md capacity).
+
+- \`POST ${callbackBase}/lc_gtm/foundation_content_angle\`
+  Body: \`{ idempotencyKey, angleKey?: string, angle: string, painCitation: { quote: string, sourceUrl: string }, hookVariants: string[] (>= 1), voiceCheck?: string }\`
+  Use: one POST per narrative angle. angleKey auto-derives. painCitation
+  defaults to empty stub but Maya will steer if so.
+
+- \`POST ${callbackBase}/lc_gtm/foundation_relationship_target\`
+  Body: \`{ idempotencyKey, platform: "reddit"|"x"|"hn"|"linkedin"|"instagram"|"tiktok"|"youtube"|"threads", handle: string, displayName?: string, profileUrl?: string, whyThem: string, engagementPlan?: string, cadence?: "weekly"|"monthly"|"as_they_post", status?: "prospect"|"warming"|"engaged"|"reciprocal"|"dropped" }\`
+  Use: one POST per account-relationship target. profileUrl
+  auto-derives if missing.
+
+- \`POST ${callbackBase}/lc_gtm/competitor_move\`
+  Body: \`{ idempotencyKey, competitorName: string, moveKind: "feature_ship"|"campaign"|"milestone"|"pricing_change"|"partnership"|"incident", summary?: string, sourceUrl: string, observedAt?: number (ms epoch, defaults now), recommendedCounter?: string }\`
+
+- \`POST ${callbackBase}/lc_gtm/niche_pulse_signal\`
+  Body: \`{ idempotencyKey, pulseKind: "new_community"|"rising_account"|"rising_keyword"|"rising_topic"|"declining_signal", name: string, platform?: string, evidenceUrl: string, momentumSignal?: string, observedAt?: number, relevance?: "act_now"|"monitor"|"noise" }\`
+
+- \`POST ${callbackBase}/lc_gtm/action_logged\`
+  Body: \`{ idempotencyKey, kind: "morning_brief"|"evening_recap"|"weekly_review"|"monthly_reset"|"hot_alert"|"inbound_triage"|"calendar_event_created"|"draft_proposed"|"foundation_complete"|"competitor_move_alert"|"niche_pulse_alert"|"other", summary: string, linkedEntities?: [{entityKind, entityId}], sentAt?: number, userResponse?: "pending"|"acknowledged"|"acted"|"ignored"|"dismissed", outcomeNotes?: string }\`
+  Use: Maya writes one row per user-facing output for the feedback loop.
+
+- \`POST ${callbackBase}/lc_gtm/learning_extracted\`
+  Body: \`{ idempotencyKey, learningKey?: string, learningKind: "timing"|"channel_priority"|"voice_angle"|"community_quality"|"format_preference"|"hook_pattern"|"other", learning: string, confidenceScore: number 0-1, evidenceCount?: number, retired?: boolean }\`
+  Use: weekly review writes patterns Maya has identified.
+
+- \`GET ${callbackBase}/lc_gtm/get_my_foundation\`
+  Returns: \`{ buyerMap, competitiveMap[], channelScorecard[], contentAngles[], relationshipTargets[] }\`. Use this to check what's already landed before deciding whether to spawn fresh.
+
+- \`GET ${callbackBase}/lc_gtm/get_my_niche_learnings\`
+  Returns: \`{ learnings[] }\`. Morning brief reads this to weight surfacing.
+
+## External Research APIs — USE THESE, NOT RAW CURL
+
+**Hard rule:** never curl raw platform domains (reddit.com, x.com,
+twitter.com, news.ycombinator.com). They block unauthenticated
+scrapers and you'll waste the entire subagent budget on retries.
+Use these wrapped APIs instead:
+
+- **Reddit / TikTok / Instagram / LinkedIn / YouTube**: ScrapeCreators API.
+  Base: \`https://api.scrapecreators.com\`
+  Auth header: \`x-api-key: $SCRAPECREATORS_API_KEY\` (env var, exported on the machine)
+  Reddit endpoints:
+    - \`GET /v1/reddit/search?query=...&sort=relevance\`
+    - \`GET /v1/reddit/subreddit/search?subreddit=...&query=...\`
+    - \`GET /v1/reddit/subreddit?subreddit=...\` (top posts)
+  TikTok / Instagram: see \`/data/workspace/skills/scrapecreators-api/SKILL.md\`.
+
+- **X (Twitter)**: TwitterAPI.io
+  Endpoint: \`GET https://api.twitterapi.io/twitter/tweet/advanced_search?query=<urlencoded>&queryType=Latest\`
+  Auth header: \`x-api-key: $TWITTERAPI_IO_KEY\`
+  Use Twitter search syntax: \`min_faves:5\`, \`min_replies:3\`, \`-filter:retweets lang:en\`.
+
+- **Hacker News**: Algolia HN API (free, no auth)
+  Endpoint: \`GET https://hn.algolia.com/api/v1/search?query=<urlencoded>&tags=story\` (or \`tags=comment\` for comments)
+
+- **Cross-platform / web pages**: \`web_fetch\` tool (GET-only, no custom headers — useless for our Convex endpoints which need Bearer auth).
+- **Cross-platform / search**: \`web_search\` tool for grounded discovery.
+
+## Environment variables exported on this machine
+
+Subagents and main both have these in their env:
+- \`HOOK_TOKEN\` — the bearer token for \`/lc_gtm/*\` POSTs. Treat as a
+  secret; never log or echo to the channel. Use as
+  \`-H "Authorization: Bearer $HOOK_TOKEN"\` in curl.
+- \`CONVEX_SITE_URL\` — base URL for \`/lc_gtm/*\` (a \`.convex.site\` host;
+  \`.convex.cloud\` is the WRONG host and 404s every call).
+- \`SCRAPECREATORS_API_KEY\` — ScrapeCreators API key.
+- \`TWITTERAPI_IO_KEY\` — TwitterAPI.io API key.
+- \`OPENCLAW_GATEWAY_TOKEN\` — gateway auth (do not use from agent code).
+- \`TELEGRAM_BOT_TOKEN\` — do not use directly; use the native \`message\` tool.
+
+## Canonical patterns — copy these verbatim, adjust the body
+
+POST to a Convex endpoint:
+\`\`\`
+curl -sS -X POST \\
+  -H "Authorization: Bearer $HOOK_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"idempotencyKey":"<uuid>", ...rest of body...}' \\
+  "$CONVEX_SITE_URL/lc_gtm/foundation_buyer_map"
+\`\`\`
+
+GET from ScrapeCreators (Reddit example):
+\`\`\`
+curl -sS \\
+  -H "x-api-key: $SCRAPECREATORS_API_KEY" \\
+  "https://api.scrapecreators.com/v1/reddit/search?query=ollama+disk+bloat&sort=relevance"
+\`\`\`
+
 Hook token (treat as a secret — never log, never echo to the channel):
 - Token: \`${hookToken}\`
 
