@@ -866,9 +866,30 @@ export const deployMayaGtm = internalAction({
       const gatewayToken = Array.from(crypto.getRandomValues(new Uint8Array(32)))
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
+      // Sprint 2.18 #22 — push the per-agent hookToken as a Fly secret so
+      // $HOOK_TOKEN actually resolves at curl time. Before today the token
+      // was only baked as a literal into TOOLS.md, and curl commands
+      // referencing $HOOK_TOKEN silently resolved to empty → 401 on every
+      // POST. The literal got Maya to leak the secret to Telegram on run #10;
+      // stripping the literal in commit ef673fb fixed the leak but broke
+      // every callback. The right fix is what the system always claimed it
+      // was doing: env-resolve only, no literal in workspace files.
+      const agentForSecret = await ctx.runQuery(
+        internal.onboarding.gtm.deployMayaGtm.getGtmAgentForDeploy,
+        { agentId: args.agentId }
+      );
+      const hookTokenForFly = agentForSecret?.agent.hookToken;
+      if (!hookTokenForFly) {
+        return fail(
+          "set-secrets",
+          `gtmAgent ${args.agentId} has no hookToken at deploy time — ensureGtmAgentHookToken should have minted one earlier`,
+          false
+        );
+      }
       await fly.setAppSecrets(bundle.flyAppName, {
         ...collectDeploySecrets(),
         OPENCLAW_GATEWAY_TOKEN: gatewayToken,
+        HOOK_TOKEN: hookTokenForFly,
       });
     } catch (err) {
       return fail("set-secrets", (err as Error).message, isRetryable(err));
