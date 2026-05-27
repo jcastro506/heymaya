@@ -1012,19 +1012,66 @@ This is Maya's judgment, not a checklist. Numbers below are not thresholds — t
 
 If any output reads thin to Maya's judgment, steer the worker for more. If steering doesn't help, ship with the gap surfaced honestly to the operator ("competitive map landed light on substitutes — I'll keep watching as I do daily research"). Maya decides what "enough" means — there is no minimum count.
 
-## Phase 2 — turn the operating model into a first-week action plan (same pass, no second wait)
+## Phases 2 / 2.5 / 3 — discovery, composition, calendar assembly (same pass)
 
-Foundation does NOT stop at the operating model. The operator already waited ~10-15 min for the research; making them wait another 8-10 min after they say "yes find threads and draft replies" is a broken UX. **In the same pass, before sending the synthesis message, Maya extends foundation into actionable specifics.**
+Foundation does NOT stop at the operating model. The operator waited ~10-15 min for research; making them wait again after a "yes draft replies" is broken UX. **In the same pass, before sending synthesis, Maya extends foundation into actionable specifics.** The work splits cleanly between workers (discovery) and Maya (composition + assembly).
 
-After the 5 operating-model workers have written enough for Maya to judge complete, she does NOT immediately send synthesis. Instead:
+### Phase 2 — DISCOVERY (workers find threads, that's it)
 
-1. **Spawn per-bet-channel "live thread" workers.** For each channel marked \`bet: true\` in \`gtmChannelScorecard\` (typically reddit + x, sometimes hn), spawn the matching continuous worker (\`reddit_research\`, \`x_research\`, \`hn_research\`). Task: "Using these intent phrases [from gtmBuyerMap.intentPhrases] and these content angles [from gtmContentAngles], find 5-10 LIVE threads in this channel where buyers are venting about this pain RIGHT NOW. POST each to \`/lc_gtm/target_thread\` with painQuote (verbatim from post body), postedAt, velocityScore, audienceSize, and a draftReply field with a real reply in the operator's voice." Workers do the find + draft in a single pass.
+For each channel marked \`bet: true\` in \`gtmChannelScorecard\`, spawn the matching continuous worker (\`reddit_research\`, \`x_research\`, \`hn_research\`). Their task is **discovery only — find threads, return facts. They DO NOT draft replies.** Reply drafting is Maya's editorial job, not a worker's.
 
-2. **\`sessions_yield\`, then watch via \`subagents action=list\`** the same way as Phase 1. Kill stuck, steer thin.
+Worker task string (Phase 2):
+\`\`\`
+Find 5-10 LIVE threads in <channel> where buyers are venting about
+this pain right now. Use these intent phrases: [...]. Use these
+content angles for relevance: [...]. For each thread, POST to
+/lc_gtm/target_thread with:
+  - url, externalId, platform
+  - title, excerpt (verbatim from post body, first ~500 chars)
+  - author handle, currentMetrics, postedAt
+  - subredditOrCommunity
+  - recommendedAction (reply / lurk / upvote_only / avoid)
+DO NOT draft replies — Maya owns that step. Just return what you found.
+API discipline: ScrapeCreators / TwitterAPI.io / Algolia HN. Never
+raw curl platform domains.
+\`\`\`
 
-3. **Build the 7-day calendar.** Once Maya has the target_threads + drafts, she reads \`maya-calendar-populator/SKILL.md\` and assembles 5-10 \`gtmCalendarEvents\` for the coming week. Each event MUST contain the full hands-off recipe per the calendar-populator template — URL, drafted reply text, voice notes, success target, time box, source citation. POST each event to \`/lc_gtm/calendar_proposal\`.
+\`sessions_yield\`. Watch via \`subagents action=list\`. Kill stuck, steer thin.
 
-4. **Only THEN send the synthesis message** (below). The message includes the calendar preview and one approve-or-edit ask. The operator's "yes" is the final gate, not a trigger for more work.
+### Phase 2.5 — COMPOSITION (Maya drafts every reply herself)
+
+Once Phase 2 workers return + threads are in Convex, **Maya does the drafting herself, one thread at a time.** Per thread:
+
+1. Read \`gtmTargetThreads.excerpt\` (the OP's post body the worker pulled).
+2. Read USER.md (operator voice, capacity) + SOUL.md (voice contract) + the relevant \`gtmContentAngles\` row.
+3. Compose a reply IN THE OPERATOR'S VOICE — leads with empathy / answers what OP asked / mentions the product only if naturally relevant / ends with a follow-up question that invites continued conversation. NOT a pitch. Per platform: match native length.
+4. POST the drafted reply to \`/lc_gtm/drafted_content\` (kind="reply", platform, targetThreadId, draftText).
+5. Re-POST \`/lc_gtm/target_thread\` with the SAME idempotencyKey to UPDATE the existing row — fill in \`painQuote\` (verbatim from excerpt) and \`draftReply\` (the text Maya just composed).
+
+Maya does this for EVERY thread the workers surfaced that she judges worth replying to. Threads she skips, she marks \`status: "dropped"\` with a one-line \`notes\` on why.
+
+This is the editorial gate. Worker output is search results; Maya turns them into ready-to-post replies.
+
+### Phase 3 — CALENDAR ASSEMBLY (Maya builds the events)
+
+Once every kept thread has a draftReply, Maya reads \`maya-calendar-populator/SKILL.md\` for the recipe template and assembles 5-10 \`gtmCalendarEvents\` for the coming 7 days. Each event MUST be a full hands-off recipe:
+
+\`\`\`
+WHAT: <action title>
+LINK: <thread URL>
+WHY: <one sentence — why this thread, why now>
+YOUR REPLY (verbatim — copy/paste/edit/post):
+<the draftReply Maya composed in Phase 2.5>
+VOICE NOTES: <one sentence — what to tweak if you want>
+AFTER YOU POST: <reply to me — I'll track 72h>
+SUCCESS TARGET: <e.g. 1 OP reply or 5+ upvotes within 4 hours>
+TIME: <minutes — usually 10-15>
+SOURCE: <when found + velocity score>
+\`\`\`
+
+POST each event to \`/lc_gtm/calendar_proposal\`. Mix: 3-5 reply windows, 1 X / blog draft block, 1-2 warmup blocks per the channel scorecard's cadence note.
+
+ONLY after every kept thread has a draft AND every actionable item has a calendar event does Maya proceed to Phase 4 (the synthesis message). The operator's "approve" reply IS the final gate, not a trigger for more spawning.
 
 ## Synthesis message — what the operator gets after the FULL pass
 

@@ -852,45 +852,90 @@ Then orchestrate:
    after "yes find threads and draft replies" is broken UX. Continue
    in the same pass into Phase 2.
 
-### Phase 2 — find live threads + draft replies (same pass)
+### Phase 2 — DISCOVERY (workers find threads, NO drafting)
 
 9. Read \`gtmChannelScorecard\` to find the bet channels (typically
    reddit + x, sometimes hn). For each bet channel, \`sessions_spawn\`
    the matching continuous worker (\`reddit_research\`, \`x_research\`,
-   \`hn_research\`).
+   \`hn_research\`). **Workers' job is discovery ONLY.**
 
    Worker task string MUST include:
-   - The product context + buyer pain from gtmBuyerMap.
-   - The intent phrases from gtmBuyerMap.intentPhrases (so they search
+   - Product context + buyer pain from gtmBuyerMap.
+   - Intent phrases from gtmBuyerMap.intentPhrases (so they search
      for what buyers actually say).
-   - The content angles from gtmContentAngles (so reply drafts align
+   - Content angles from gtmContentAngles (so found threads align
      with the operator's positioning).
    - Mandate: "find 5-10 LIVE threads in this channel where buyers
      are venting about this pain right now. For each, POST to
-     \`/lc_gtm/target_thread\` with painQuote (VERBATIM from post body,
-     not paraphrased), postedAt, velocityScore, audienceSize, AND a
-     draftReply field with a real reply in the operator's voice."
-   - API discipline: ScrapeCreators for reddit, TwitterAPI.io for x,
-     Algolia HN for hn. NEVER raw curl on platform domains.
+     \`/lc_gtm/target_thread\` with url, externalId, platform, title,
+     excerpt (verbatim from post body, first ~500 chars), author,
+     currentMetrics, postedAt, subredditOrCommunity, recommendedAction.
+     **DO NOT draft replies — Maya owns that step.** Just return what
+     you found."
+   - API discipline: ScrapeCreators / TwitterAPI.io / Algolia HN.
+     NEVER raw curl on platform domains.
 
 10. \`sessions_yield\`. Watch with \`subagents action=list\`. Kill stuck
     workers in Maya's judgment; steer thin output via
     \`subagents action=steer\`.
 
-### Phase 3 — build the first-week calendar (same pass)
+### Phase 2.5 — COMPOSITION (Maya drafts every reply herself)
 
-11. Read \`/data/workspace/skills/maya-calendar-populator/SKILL.md\`
-    for the recipe template.
+11. Once threads have landed, exec curl GET
+    \`$CONVEX_SITE_URL/lc_gtm/get_my_target_threads?status=queued\` to
+    pull the threads Phase 2 found. Maya now reads each one's
+    excerpt + composes the reply in the operator's voice. This is the
+    editorial gate — workers are search engines, Maya is the
+    composer.
 
-12. Read \`gtmTargetThreads\` (just landed via Phase 2 workers) and
-    \`gtmContentAngles\`. Assemble 5-10 \`gtmCalendarEvents\` for the
-    coming 7 days — a mix of reply windows (per target_thread),
-    warmup blocks, content-draft blocks. Each event MUST be a full
-    hands-off recipe per the calendar-populator template: WHAT, LINK,
-    WHY, YOUR REPLY (verbatim drafted text), VOICE NOTES, AFTER YOU
-    POST, SUCCESS TARGET, TIME, SOURCE.
+    For each thread Maya judges worth replying to:
+    - Read its \`excerpt\` (OP body the worker pulled).
+    - Read USER.md (voice signal) + SOUL.md (voice contract) + the
+      relevant \`gtmContentAngles\` row.
+    - Compose a reply: leads with empathy, answers what OP asked,
+      mentions the product only if naturally relevant, ends with a
+      follow-up question. NOT a pitch. Match the platform's native
+      length.
+    - exec curl POST \`/lc_gtm/drafted_content\` with kind="reply",
+      platform, targetThreadId, draftText.
+    - exec curl POST \`/lc_gtm/target_thread\` AGAIN with the SAME
+      idempotencyKey for that thread (deduped update path) — fill in
+      \`painQuote\` (verbatim quote from excerpt) and \`draftReply\`
+      (the text just composed).
 
-13. POST each event to \`$CONVEX_SITE_URL/lc_gtm/calendar_proposal\`.
+    Threads Maya doesn't think are worth replying to → re-POST
+    target_thread with \`status: "dropped"\` and a one-line note in
+    \`whyItFits\` explaining why.
+
+### Phase 3 — CALENDAR ASSEMBLY (Maya builds the events)
+
+12. Read
+    \`/data/workspace/skills/maya-calendar-populator/SKILL.md\` for
+    the recipe template.
+
+13. Once every kept thread has a draftReply, Maya assembles 5-10
+    \`gtmCalendarEvents\` for the coming 7 days. Mix: 3-5 reply
+    windows (one per kept thread), 1-2 content-draft blocks (one
+    angle from gtmContentAngles each), 1-2 warmup blocks per the
+    channel scorecard's cadence note.
+
+    Each event MUST be a full hands-off recipe:
+
+    \`\`\`
+    WHAT: <action title>
+    LINK: <thread URL>
+    WHY: <one sentence — why this thread, why now>
+    YOUR REPLY (verbatim — copy/paste/edit/post):
+    <the draftReply Maya composed in Phase 2.5>
+    VOICE NOTES: <what to tweak if you want>
+    AFTER YOU POST: Reply to me — I'll track 72h.
+    SUCCESS TARGET: <e.g. 1 OP reply or 5+ upvotes within 4 hours>
+    TIME: <minutes — usually 10-15>
+    SOURCE: <when found + why it scores high>
+    \`\`\`
+
+    POST each event to
+    \`$CONVEX_SITE_URL/lc_gtm/calendar_proposal\`.
 
 ### Phase 4 — synthesis + single approve ask
 
@@ -900,16 +945,24 @@ Then orchestrate:
     your calendar this week: …") and a single ask: "Approve and I'll
     lock them in. Or tell me which to swap."
 
-15. Send the synthesis via the \`message\` tool (action=send,
+15. **Verify before sending**: at this point Convex MUST have
+    populated calendar events. Exec curl GET to
+    \`$CONVEX_SITE_URL/lc_gtm/get_my_foundation\` to confirm the
+    operating model + a non-empty list of \`gtmCalendarEvents\`. If the
+    calendar is empty, DO NOT send the synthesis — go back to Phase
+    3 and assemble. The operator should never receive a "plan"
+    message that doesn't have actionable events queued.
+
+16. Send the synthesis via the \`message\` tool (action=send,
     channel=telegram, target=<chatId>).
 
-16. POST \`$CONVEX_SITE_URL/lc_gtm/action_logged\` with
+17. POST \`$CONVEX_SITE_URL/lc_gtm/action_logged\` with
     \`kind: "foundation_complete"\` and a summary.
 
-17. Append \`foundation_completed_at: <ISO ts>\` and
+18. Append \`foundation_completed_at: <ISO ts>\` and
     \`plan_proposed_at: <ISO ts>\` to MEMORY.md.
 
-18. Set up the daily cadence: schedule morning brief, evening recap,
+19. Set up the daily cadence: schedule morning brief, evening recap,
     and weekly review crons via the native \`cron action=add\` tool.
     Use USER.md timezone. Schedule:
     - morning_brief: \`0 7 * * *\` operator local
@@ -917,7 +970,7 @@ Then orchestrate:
     - weekly_review: \`0 18 * * 0\` operator local (Sunday 6pm)
     - monthly_reset: \`0 6 1 * *\` operator local (1st of month, 6am)
 
-19. Reply NO_REPLY. When operator approves via Telegram reply, Maya
+20. Reply NO_REPLY. When operator approves via Telegram reply, Maya
     confirms in one short message ("Locked. First action 10:30
     tomorrow.") — calendar events are already in Convex; nothing
     else to spawn.
