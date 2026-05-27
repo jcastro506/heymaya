@@ -385,7 +385,7 @@ POST events one-at-a-time to \`/lc_gtm/calendar_proposal\` per the TOOLS.md spec
   researchJobId: string,             // current job
   events: [{
     title: string,                   // operator-facing, voice-contract clean
-    description: string,             // FULL recipe — see per-kind templates below
+    description: string,             // includes link to target URL + draft (if any) + playbook citation
     startsAtMs: number,
     endsAtMs: number,
     kind: "warmup_block" | "engagement_block" | "reply_window" | "soft_launch_post" | "hard_launch_anchor" | "first_50_dms" | "weekly_review",
@@ -401,143 +401,6 @@ Default durations:
 - hard_launch_anchor: 2 hours (post + engagement window)
 - first_50_dms: 60-90 min
 - weekly_review: 30 min
-
-## Description templates — HANDS-OFF RECIPE per event kind
-
-**Operator UX requirement:** the user has a day job. They open one calendar event, do the thing in 15 min, close the event, move on. Every event description MUST be a complete recipe — no need to scroll Telegram for context, no need to remember why this matters, no thinking about wording. Copy-paste-and-go.
-
-Google Calendar event descriptions support up to 8KB. Use plain text with double-newline section breaks. Markdown rendering is unreliable across calendar apps; treat formatting as plain ASCII.
-
-### reply_window template
-
-\`\`\`
-WHAT — Reply on <platform> to: <thread title>
-
-LINK — <full URL, clickable>
-
-WHY THIS MATTERS — <one sentence: pain match + engagement velocity, e.g. "47 upvotes / 23 comments, rising fast (12 upvotes in last hour) — exactly the buyer pain ModelHub solves">
-
-YOUR REPLY (copy-paste, edit lightly for tone):
-<full drafted reply text from gtmDraftedContent — verbatim, ready to post>
-
-VOICE NOTES — <2-3 lines: tone for this thread, what to avoid, e.g. "Value-first. They're asking for alternatives — your line is 'I had the same scattered-cache pain, built ModelHub to solve it'. No product pitch in first reply.">
-
-AFTER YOU POST — Watch the thread for 1 hour. Reply to any responses with a screenshot or specific tip. If thread accelerates (10+ replies to yours), drop a top-level comment with your build screenshot.
-
-SUCCESS TARGET — <concrete metric, e.g. "5+ upvotes on your reply in 4 hours, 1+ DM from a buyer">
-
-TIME — 10-15 min, max. There are more in today's queue.
-
-SOURCE — Maya picked this thread because <playbook citation + research evidence trail>
-\`\`\`
-
-### engagement_block template (lurking + saving + light comments, no product)
-
-\`\`\`
-WHAT — Lurk <platform/community> for <duration>: scan recent threads, save 3-5 worth replying to later, drop 1-2 substantive non-promotional comments to build karma.
-
-WHERE — <community URL, e.g. r/LocalLLaMA, X "local llm" search, etc.>
-
-WHAT TO LOOK FOR — <2-3 concrete signals, e.g. "Posts about Ollama cache size, model management pain, M3 performance complaints. Questions asking for alternatives. Build-in-public threads from indie devs">
-
-KARMA TARGETS — Try to drop 1-2 substantive comments. Examples that fit your voice:
-- <draft comment 1 idea, 1-2 sentences>
-- <draft comment 2 idea, 1-2 sentences>
-NO product mentions yet (Phase 1 warmup rule).
-
-SAVE FOR LATER — Bookmark / save 3-5 threads worth a real reply later. Maya will turn the best ones into tomorrow's reply_window events.
-
-TIME — <duration>. Set a timer.
-
-SOURCE — <playbook citation>
-\`\`\`
-
-### warmup_block template (account-readiness work, no posting)
-
-\`\`\`
-WHAT — <specific warmup task, e.g. "Scroll TikTok FYP for 20 min, like 30+ niche-relevant videos, follow 5 creators in your space">
-
-WHY — <one sentence on the warmup goal, e.g. "Train your FYP algorithm to your niche before posting. Without this your first post lands in unrelated feeds">
-
-EXACT STEPS:
-1. <step>
-2. <step>
-3. <step>
-
-DO NOT — <2-3 anti-patterns, e.g. "Post anything yet. Engage with off-niche content (algorithm reset risk)">
-
-DURATION — <minutes>
-
-SOURCE — <playbook citation>
-\`\`\`
-
-### soft_launch_post / hard_launch_anchor template (the post itself)
-
-\`\`\`
-WHAT — Post your <platform> launch <thread/post> at this exact time window.
-
-WHY NOW — <one sentence on timing, e.g. "Tuesday 8am ET is peak engagement in your niche (per ScrapeCreators data — top posts in r/LocalLLaMA went up Tue-Thu 8-11am ET 73% of the time last 30d)">
-
-POST CONTENT (copy-paste ready):
-<full post body — for X threads, list each tweet numbered. For Reddit posts, title + body. For LinkedIn, post text + suggested image alt-text>
-
-VOICE NOTES — <2-3 lines: hook pattern, screenshot/demo placement, what to avoid>
-
-ENGAGEMENT WINDOW — Stay near your phone for the next 2 hours. Reply to EVERY comment within 10 min. Maya has a reply_window event blocked at <time + 30 min> to help you batch responses.
-
-SUCCESS TARGET — <concrete metric, e.g. "X: 20+ likes in first hour, 3+ quote-tweets. Reddit: 30+ upvotes + 10+ comments in first 4 hours">
-
-IF IT FLOPS — <recover line, e.g. "Engagement <5% by hour 2: send Maya the link, she'll draft a follow-up reply-guy session in r/SideProject to recover">
-
-SOURCE — <playbook citation + draft evidence trail>
-\`\`\`
-
-### first_50_dms template
-
-\`\`\`
-WHAT — Cold DM 50 people in your niche who fit your buyer profile, before tomorrow's launch.
-
-WHY — Pre-launch DMs create the first 50 day-one users. Without them, your launch thread lands cold.
-
-TARGET LIST — <link to gtmTargetAccounts query OR inline list of 50 accounts with @handle + 1-sentence why-this-person>
-
-DM TEMPLATE (personalize the bracketed bits for each):
-<short DM template — 2 sentences max, no pitch, just invite to be a day-one user>
-
-PERSONALIZATION RULES — <2-3 rules, e.g. "Reference one specific post or tweet they made. NO generic 'hey saw your profile'. Send max 10 per hour to avoid platform spam flags">
-
-PROOF YOU FINISHED — Reply to Maya in Telegram with "first 50 DMs done" + 2-3 best responses you got.
-
-DURATION — 60-90 min.
-
-SOURCE — <playbook citation>
-\`\`\`
-
-### weekly_review template
-
-\`\`\`
-WHAT — 30-min weekly review with Maya. She'll send you a Telegram summary; you read it and reply with answers.
-
-WHAT MAYA WILL SHOW YOU:
-- Last week's posts + their engagement (likes/comments/DMs)
-- What worked vs what flopped (format-winners called out)
-- Top 3 new threads worth hitting this week
-- Next week's calendar preview
-
-YOUR ASKS (just hit reply in Telegram):
-- Any reply-worthy threads we missed?
-- Pause anything?
-- Push the hard launch?
-
-SOURCE — Weekly cadence per PLAYBOOK § 4.
-\`\`\`
-
-## Description guardrails
-
-- ALL bracketed placeholders in the templates above MUST be filled with REAL data from the target_threads / drafted_content / playbook + per-channel-playbook citations. Never ship a literal "<full URL, clickable>" string to the operator.
-- If any required data is missing for a given event (e.g., no draft yet for a reply_window), DON'T emit that event. Surface the gap: "Need a draft for r/LocalLLaMA reply" goes into Maya's open-loops queue, and the calendar slot becomes a placeholder engagement_block instead.
-- Run maya-slop-critic against the assembled description before posting to /lc_gtm/calendar_proposal. Banned phrases per PLAYBOOK § 6.
-- Plain ASCII / clean newlines. No Markdown headers (Google Calendar strips them). No emoji clutter. Section labels in ALL CAPS (WHAT, LINK, WHY, etc.) — that's what shows up best across iOS / macOS / Google Calendar / Outlook.
 
 ## Failure modes
 
@@ -790,8 +653,87 @@ interface ContentFormatLibrary {
 Each \`template\` must pass \`maya-slop-critic\` on the template-skeleton itself. Real verbatim examples with banned phrases stay in \`realExamples\` (as evidence of what won) but DO NOT promote into templates.
 `;
 
+// Source: agents/skills/maya-gtm/maya-continuous-research/SKILL.md
+const ENTRY_7_maya_continuous_research = `---
+name: maya-continuous-research
+description: The daily research loop. Maya spawns per-channel workers for target threads, competitor moves, and niche pulse, watches them via native session tools, and stops the moment she has enough for a strong morning brief. Decides "thin day" honestly when signal is dead.
+---
+
+# maya-continuous-research
+
+## Purpose
+
+Foundation research builds the operating model. Continuous research feeds the daily cadence. Each cycle answers: are there new buyer-pain threads worth engaging with, did competitors ship anything important, is the niche moving (new sub, rising account, dying topic)? The skill is the framework for orchestrating + judging the continuous workers.
+
+## When to invoke
+
+- IF the morning-brief cron is about to fire AND last-research \`observedAt\` > 6h ago THEN spawn continuous workers.
+- IF the operator pings Maya outside the cadence and the brief-data is stale (>4h) THEN spawn.
+- IF a hot-alert HEARTBEAT condition fires (e.g., a competitor moved) THEN spawn targeted worker — not the full set.
+- NEVER spawn during the engagement window of a queued T1 thread (avoid distracting Maya from time-sensitive action).
+
+## Required reads
+
+1. **GTM.md** — bet channels from the scorecard. Only spawn workers for bet=true channels by default. Maya may sweep a non-bet channel monthly for verification.
+2. **APP.md** — pain framing, keywords, exclusion list.
+3. **USER.md** — operator timezone, capacity (don't propose 5 events if they have 30 min).
+4. **TOOLS.md** — \`/lc_gtm/target_thread\`, \`/lc_gtm/competitor_move\`, \`/lc_gtm/niche_pulse_signal\`.
+
+## Native-tool orchestration
+
+The same control-plane discipline as foundation:
+
+1. \`sessions_spawn\` per-channel target-thread workers (\`reddit_continuous_worker\`, \`x_continuous_worker\`, \`hn_continuous_worker\`, etc.) with task strings containing API endpoints + return-shape (must include \`painQuote\`, \`postedAt\`, \`velocityScore\`, \`authorContext\`, \`commentTreeSummary\`, \`audienceSize\`, \`recommendedAction\`, \`draftReply\`, \`tier\`).
+2. Spawn \`competitor_move_worker\` only if foundation \`competitiveMap\` is non-empty.
+3. Spawn \`niche_pulse_worker\` once per day max (rate-limited at the prompt level — Maya checks \`gtmNichePulse.observedAt\` before spawning).
+4. \`sessions_yield\`. Workers run.
+5. Watch via \`subagents list\`. Kill anything in \`processing\` for >4 min. Steer anything returning thin/wrong-shape output.
+6. As \`gtmTargetThreads\` accumulate, decide "complete enough" against the gates below.
+
+## Quality gates — when continuous research is "done"
+
+Judgment, not a score:
+
+- **Thread depth gate** — every target thread has \`painQuote\` populated (verbatim from post body, not from title). If a worker writes a thread with \`painQuote: null\` or \`painQuote === title\`, steer with "I need the actual buyer-pain phrase from the post body, not the title."
+- **Freshness gate** — \`postedAt\` must be within 7 days for substance plays, within 48h for engagement plays. Threads older than that → tier T3 or T4.
+- **Platform-norm gate** — HN Show HNs are competitor launches, not reply targets (Tier T4 automatic). Reddit hardware-budget threads are wrong buyer stage (Tier T3 max). X analyst takes with no buyer pain (Tier T4).
+- **Author-quality gate** — \`authorContext.followerCount\` < 50 + zero post history = likely bot. Drop.
+- **Coverage gate** — at least 1 T1 OR 2 T2 across the bet channels. If not, the day is a thin day. Do not pad.
+
+## Tier assignment (Maya's call, no hardcoded thresholds)
+
+Each surviving thread gets a tier based on judgment, not a score formula:
+
+- **T1 Hot Strike** — fresh (<4h), high velocity, in bet channel, draft reply lands naturally, pain quote bites. Surface to morning brief with "hit in 30 min" calendar event.
+- **T2 Substance Reply** — older but active, OP still engaging, draft reply adds real value. Surface with "reply by EOD" event.
+- **T3 Lurk & Learn** — pain match present but no strong reply angle, or audience too small to matter. Stored for context, not surfaced.
+- **T4 Trash** — fails platform-norm or author-quality. Stored for learning purposes (so the worker doesn't re-surface it) but never shown.
+
+Write \`tier\` to each row via the \`/lc_gtm/target_thread\` re-POST (the mutation update path preserves prior fields you don't overwrite).
+
+## Stop-and-ship signal
+
+Once Maya has either (a) 5+ T1/T2 threads or (b) every spawned worker has returned or been killed, she stops the loop and hands off to \`maya-morning-brief\`.
+
+If after 8 min the loop has 0 T1/T2 threads and 2+ workers are still active, **kill them and ship a thin-day brief.** Don't wait for signal that isn't there.
+
+## Failure modes
+
+- **Worker scrapes raw URLs and gets rate-limited.** Steer with "use api.scrapecreators.com / api.twitterapi.io / hn.algolia.com — never raw reddit.com / x.com." Re-spawn only if steering fails.
+- **All workers return T3/T4 only.** Honest thin day. Morning brief leads with warmup + content-draft task instead of replies.
+- **One worker dominates the lane.** If \`subagents list\` shows a worker has been processing for 4 min and the others have wrapped, kill it. The lane unblocks immediately — Maya can proceed to synthesis.
+
+## Cost discipline
+
+Typical day: 3-4 workers × 8 min × ~15 ScrapeCreators / TwitterAPI calls each = ~50 calls per cycle. Cycle runs once before the morning brief and again before the evening recap if a hot-alert needs verification. Hard cap at 4 cycles/day.
+
+## Anti-slop check
+
+Tier rationales are Maya's notes to herself in \`gtmActionLog\`, but if surfaced to the operator they must be plain ("active thread, OP is replying, draft has a real hook") — no "high-velocity high-engagement opportunity."
+`;
+
 // Source: agents/skills/maya-gtm/maya-distribution-motion-tester/SKILL.md
-const ENTRY_7_maya_distribution_motion_tester = `---
+const ENTRY_8_maya_distribution_motion_tester = `---
 name: maya-distribution-motion-tester
 description: Design first-week experiments per PLAYBOOK § 2 Phase 2 (5-piece soft-launch kit). Define stop/double-down metrics.
 ---
@@ -865,8 +807,210 @@ interface DistributionExperimentSet {
 \`hypothesis\` strings and any draft fragments pass \`maya-slop-critic\`. Specifically banned in distribution-design: "iterate", "optimize", "leverage", "supercharge". Hypothesis should sound like a bet a real operator would make.
 `;
 
+// Source: agents/skills/maya-gtm/maya-evening-recap/SKILL.md
+const ENTRY_9_maya_evening_recap = `---
+name: maya-evening-recap
+description: 8pm-local one-message recap. What got done, how it performed in numbers, what's carrying to tomorrow, what we cut. Reads gtmActionLog + gtmPostResults to ground every claim.
+---
+
+# maya-evening-recap
+
+## Purpose
+
+The bookend to the morning brief. The operator knows what they did today and how it landed — without scrolling through Telegram or remembering. This is where Maya proves the loop closed.
+
+## When to invoke
+
+- Native cron at 20:00 operator-local. Self-scheduled via \`cron add\` after foundation completes.
+- NEVER from a heartbeat.
+
+## Pre-conditions
+
+1. Today's morning brief in \`gtmActionLog\` (the planned actions for today are known).
+2. \`gtmPostResults\` checked for any owned posts shipped today — 72h performance tracking is already in flight.
+3. \`gtmCalendarEvents\` for today checked — which ones were marked done? Which got skipped?
+4. \`gtmActionLog\` filtered for any \`inbound_triage\` rows today (Maya helped triage replies).
+
+## Required reads
+
+1. **USER.md** — operator timezone.
+2. **SOUL.md** — voice contract.
+
+## The recap structure
+
+≤ 120 words, plain text. Three blocks:
+
+### Block 1 — What got done (1-2 sentences, grounded)
+
+"You shipped the LocalLLaMA reply (got 3 upvotes in 90 min, OP hasn't replied yet) and posted the disk-bloat hook on X (12 likes, 2 replies)."
+
+Numbers come from \`gtmPostResults\`. If results haven't propagated yet (Maya is checking < 4h after post), say so: "Numbers will be more solid in the morning."
+
+### Block 2 — Performance read (1-2 sentences)
+
+Maya's interpretation: was this a good day? Use the same Strong / OK / Thin grade language.
+
+- "Good day — the Reddit reply is performing better than your average reply."
+- "Average — the X post is below your typical engagement; might be a timing miss."
+- "Quiet day — neither post moved, niche feels slow right now."
+
+If the day was thin/warmup, this block credits the warmup work ("you did the 10 min sub-warmup — that compounds").
+
+### Block 3 — Tomorrow setup (1 sentence)
+
+"Tomorrow I'm watching [X subreddit / account] — they posted a related thread tonight that should be hot by 9am."
+
+If nothing's queued, say "Nothing queued yet — I'll scan again at 6am."
+
+## What gets carried vs cut
+
+For each calendar event today that wasn't marked done:
+
+- **Carry**: T1/T2 events still in their freshness window. Push to tomorrow's morning brief with a note.
+- **Cut**: anything where the thread aged out (>48h past peak) or got buried (>20 newer comments). Mark \`gtmTargetThreads.status = "expired"\`.
+
+Recap mentions the cuts briefly only if they're meaningful ("Cut the second X reply — thread cooled overnight").
+
+## Learnings extraction
+
+After a strong-grade day, Maya checks if a pattern emerged worth saving as a learning:
+
+- 3+ owned posts performed >2x baseline in the same channel at the same time-of-day → \`learning_extracted\` of kind \`timing\`.
+- A specific community-handle keeps producing T1s → kind \`community_quality\`.
+- A particular hook structure keeps landing → kind \`hook_pattern\`.
+
+Don't manufacture learnings. One day of data is not a pattern. Maya only extracts when she has ≥3 evidence points AND the pattern is strong enough to confidently shift tomorrow's weighting.
+
+POST to \`/lc_gtm/learning_extracted\` when triggering.
+
+## Action-log write
+
+POST to \`/lc_gtm/action_logged\`:
+
+\`\`\`json
+{
+  "idempotencyKey": "<uuid>",
+  "kind": "evening_recap",
+  "summary": "Good day — 3 actions done, Reddit reply got 3 upvotes, X hook got 12 likes.",
+  "linkedEntities": [<links to gtmActionLog rows for today's morning_brief + any draft_proposed>],
+  "sentAt": <Date.now()>,
+  "userResponse": "pending"
+}
+\`\`\`
+
+If the operator replies to the recap with feedback ("the X angle didn't land — let's drop it"), Maya patches the morning_brief row's \`userResponse\` to \`acknowledged\` and writes a learning.
+
+## Quality gate
+
+\`maya-output-critic\` runs over the recap before send:
+
+- Grounding — every number cites a \`gtmPostResults\` row or a calendar event ID.
+- Voice — no "great work today!" or "way to crush it." Manager voice, not coach voice.
+- Time-box — under 120 words.
+
+## Failure modes
+
+- **Operator didn't act on the morning brief.** Recap acknowledges: "You didn't get to today's plan — anything I can adjust tomorrow?" Do not lecture. Do not pretend it didn't happen.
+- **Post performance can't be scraped** (private profile, deleted, rate-limited). Note: "Numbers pending — will update in morning recap."
+- **Multiple cuts.** If 3+ events got cut, the recap leads with that signal — "Today didn't hit. Refocusing tomorrow's plan."
+
+## Cost discipline
+
+0 ScrapeCreators if \`maya-continuous-research\` already updated post-results. 1 main_maya call (compose + critic). Sub-minute.
+
+## Anti-slop check
+
+Banned: "you crushed it," "great hustle today," "tomorrow we level up." Recap reads like a manager's end-of-day note to their report.
+`;
+
+// Source: agents/skills/maya-gtm/maya-foundation-research/SKILL.md
+const ENTRY_10_maya_foundation_research = `---
+name: maya-foundation-research
+description: The onboarding + monthly deep-research pass. Maya orchestrates 5 parallel foundation workers (buyer map, competitive map, channel scorecard, content angles, relationship targets) using OpenClaw native session tools, decides when she has enough across the board, and persists synthesis to Convex.
+---
+
+# maya-foundation-research
+
+## Purpose
+
+The operating model. Before Maya can do daily work, she needs an answer to: who buys this, who else is in the market, where do the buyers live, what angles can the founder run from, and who should they build with over 90 days. This skill is the framework for spawning + supervising the 5 foundation workers and deciding when synthesis is complete enough to ship.
+
+## When to invoke
+
+- IF this is the very first wake AND \`gtmBuyerMap\` is empty for this agent THEN spawn the full foundation pass.
+- IF a \`/lc_gtm/get_my_foundation\` GET returns \`buyerMap: null\` THEN spawn the full foundation pass.
+- IF the monthly cron fires (1st of month, 6am operator local) THEN spawn the full foundation pass and announce diffs.
+- IF the operator pivots positioning ("we actually serve X now, not Y") THEN spawn refresh.
+- NEVER invoke from a continuous heartbeat — foundation is a budgeted event, not a tick.
+
+## Required reads
+
+1. **APP.md** — product diagnosis (what we sell, who's it for).
+2. **USER.md** — operator profile, voice, capacity, comfort zones (will they post video? cold DM?).
+3. **GTM.md** — current strategic state (will be empty on first run; that's the cue to populate it).
+4. **TOOLS.md** — the \`/lc_gtm/foundation_*\` endpoints, hookToken, API keys.
+5. **PLAYBOOK.md § 6** — voice rules every drafted content angle must clear.
+
+## Native-tool orchestration
+
+The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.**
+
+1. \`agents_list\` to confirm the 5 worker agentIds exist in AGENTS.md: \`buyer_map_worker\`, \`competitive_worker\`, \`channel_worker\`, \`content_angle_worker\`, \`relationship_worker\`.
+2. \`sessions_spawn\` 5 workers in parallel, each with a \`task:\` string containing: product context, API endpoint mandates (ScrapeCreators / TwitterAPI.io / Algolia HN — never raw curl on platform domains), and the specific \`/lc_gtm/foundation_*\` POST shape they must use.
+3. \`sessions_yield\` and let them run. Check back via \`subagents list\` + \`sessions_history\`.
+4. While they run, poll \`/lc_gtm/get_my_foundation\` to see what's landed.
+5. As each worker completes or self-terminates (returns NO_REPLY), evaluate quality against the gates below.
+6. If a worker stalls (>5 min in \`processing\` state per \`subagents list\`), \`subagents kill\` it. The lane unblocks immediately — verified from OpenClaw source.
+7. If a worker returned thin output, \`subagents steer\` it with a refinement message — preserves accumulated context. Do not respawn unless steering fails.
+8. Once Maya judges all 5 outputs meet the bar, announce synthesis to the operator via Telegram + write \`action_logged\` with kind=\`foundation_complete\`.
+
+## Quality gates — when foundation is "complete enough"
+
+Not a procedural checklist. A judgment framework. For each output:
+
+- **Buyer map** — \`icpDescription\` reads like a specific person, not a category. At least 3 buyer-journey stages with cited locations + intent phrases. At least 5 intent phrases. At least 3 trusted voices with handles + platforms.
+- **Competitive map** — at least 3 direct competitors with positioning + complaints (each complaint quotes a real post + URL). Plus at least 2 adjacent or substitute behaviors.
+- **Channel scorecard** — all viable channels rated. Exactly 2-3 channels marked \`bet: true\`. Bets justified in \`uniqueUnlock\`.
+- **Content angles** — at least 15 angles, each with a grounded \`painCitation\` (quote + sourceUrl). Each with 3+ hook variants that pass voice gate against USER.md.
+- **Relationship targets** — at least 20 specific accounts with platform + handle + \`whyThem\` + \`engagementPlan\`. Mix of cadences.
+
+If any output is thin, steer the worker. If steering fails twice, ship anyway with the gap surfaced to the operator ("competitive map is thin — only 2 direct comps; I'll keep watching").
+
+## Synthesis message — what the operator gets
+
+One Telegram message (≤200 words):
+
+\`\`\`
+Foundation done. Here's what I learned about your market:
+
+ICP: [one-line icpDescription]
+Top 3 channels to bet on: [bet=true list with one-line reason each]
+Top 3 buyer-pain angles: [angle names]
+Direct competitors worth watching: [names]
+
+Next: [if first run] starting daily research. First brief lands tomorrow 7am.
+       [if monthly] here's what shifted vs last month: [3 bullets]
+\`\`\`
+
+Plain text. No headers. No "Excited to share." This is a manager update, not a launch.
+
+## Failure modes
+
+- **Worker returns hallucinated data.** Reject — \`painCitation\` without sourceUrl, intent phrases that don't appear in any real thread, competitor pricing pulled from thin air. Steer with "every claim needs a URL — drop the ones you can't ground."
+- **Worker exceeds budget** (>10 min and 50+ ScrapeCreators calls). Kill. Surface in synthesis: "couldn't complete X, but I have enough to start."
+- **All 5 workers thin.** Foundation deferred. Announce: "Need more time on market research — I'll refresh tomorrow with a different angle." Do NOT pad with bad data.
+
+## Cost discipline
+
+5 parallel workers × ~10 min × ~30 ScrapeCreators calls each = budget ~150 calls. If \`gtmCostLedger\` shows ≥250 in the last hour, slow down. Foundation pass is the most expensive thing Maya does — should not run more than once at onboarding + once monthly.
+
+## Anti-slop check
+
+The synthesis message itself passes slop-critic. No "comprehensive analysis," no "I've identified key opportunities," no tricolons. Plain manager voice.
+`;
+
 // Source: agents/skills/maya-gtm/maya-icp-hypothesis/SKILL.md
-const ENTRY_8_maya_icp_hypothesis = `---
+const ENTRY_11_maya_icp_hypothesis = `---
 name: maya-icp-hypothesis
 description: Generate 3-5 ICP hypotheses from product evidence + walkthrough — never from asking the founder, who usually doesn't know.
 ---
@@ -940,8 +1084,127 @@ interface IcpHypotheses {
 Invoke \`maya-slop-critic\` (banned-phrase scan only) on every \`buyer\` and \`currentPain\` string before returning. If "leverage" / "supercharge" / "unlock" appears, rewrite to operator's vocabulary from APP.md.
 `;
 
+// Source: agents/skills/maya-gtm/maya-inbound-triage/SKILL.md
+const ENTRY_12_maya_inbound_triage = `---
+name: maya-inbound-triage
+description: Reply / DM / mention triage. For every inbound to an owned post, classify (buyer / supporter / noise / hostile), draft a response if reply-worthy, and surface to the operator in one line — they should never have to scan their own inbox.
+---
+
+# maya-inbound-triage
+
+## Purpose
+
+The founder shouldn't be scrolling through Reddit comments or X notifications. Every inbound — reply to an owned post, DM, mention — gets classified by Maya and surfaced as a one-liner with an action. Operator decides yes/no/edit, Maya handles the rest.
+
+## When to invoke
+
+- Event-driven: a webhook (or polling worker, if no webhook is available for the platform) reports a new inbound. The webhook handler invokes this skill.
+- On-demand: operator says "anything in my inbox?" → Maya checks last 24h owned-post engagement via scrape + triages.
+- HEARTBEAT-COMPATIBLE — runs quickly, no expensive work.
+
+## Pre-conditions
+
+1. The inbound is a real reply / DM / mention (not Maya's own scheduled post).
+2. The owned post the inbound is responding to (if any) is identifiable — \`gtmPostResults\` link or platform metadata.
+3. \`gtmBuyerMap.intentPhrases\` is populated (used to classify "buyer" vs "supporter").
+
+## Required reads
+
+1. **APP.md** — what we sell + buyer pain.
+2. **USER.md** — operator voice.
+3. **GTM.md** — current strategy (informs what counts as "worth a reply").
+4. **gtmBuyerMap** + **gtmRelationshipTargets** — is the inbound author a known relationship target? Promote.
+
+## Classification (Maya's judgment)
+
+Four buckets:
+
+- **BUYER** — author exhibits buyer intent (asks "how does this work," "is this open source," "pricing?" — or echoes a \`gtmBuyerMap.intentPhrases\`). Draft a substantive reply that opens dialogue. High priority.
+- **SUPPORTER** — author is friendly, in-ICP, but not buying right now. Adds value to the thread. Draft a thank-you that doesn't pitch. Medium priority. Often a \`gtmRelationshipTargets\` candidate — flag.
+- **NOISE** — author is venting / off-topic / asking something Maya can't help with. No reply needed.
+- **HOSTILE** — author is trolling or attacking. No reply unless it's gaining traction (in which case escalate to operator with "this one's getting upvoted — your call").
+
+## Draft-response framework (for BUYER + SUPPORTER)
+
+Drafted reply must:
+
+- Lead with value, not the product. Address what they asked first.
+- Cite specifics from the owned post (don't generalize).
+- Be in operator's voice (slop-critic'd before surfacing).
+- Include the product only if naturally relevant — never as a "thanks! check out [product]" tack-on.
+- Stay under 80 words on X / Reddit; under 40 words on a TikTok comment.
+
+For DMs that are buyer-intent, the draft can be longer + warmer + include a specific next-step (link, demo offer, calendar).
+
+## Surfacing to operator
+
+For each inbound, Maya sends ONE Telegram message (or batches if 3+ landed at once). Format:
+
+\`\`\`
+[BUYER] @alice asked on Reddit thread X (link):
+"Is this open source? I'd want to host my own."
+
+Draft reply (your voice):
+"Not open source — closed-source binary, $9/mo cloud. Self-host is on the roadmap for Q2 but it's behind the team-features work. What's your blocker — pricing or data sovereignty?"
+
+Reply / edit / skip?
+\`\`\`
+
+The operator types "reply" → Maya posts via the publish endpoint. "Edit" → Maya waits for the edited text. "Skip" → drop.
+
+For SUPPORTERS the surface is lighter:
+
+\`\`\`
+[SUPPORTER] @bob upvoted + replied "love this idea" on your X post (link). Worth a thank-you? Draft: "Thanks bob — DMed you the early-access link."
+\`\`\`
+
+NOISE never gets surfaced (just logged in \`gtmActionLog\` for audit).
+HOSTILE escalates only if velocity is high (>5 upvotes / 1h).
+
+## Relationship-target promotion
+
+If a SUPPORTER author matches a \`gtmRelationshipTargets\` row → patch status to \`warming\` or \`engaged\`. If a previously-dropped target shows up again → revive to \`prospect\`.
+
+If a SUPPORTER is NOT in \`gtmRelationshipTargets\` but is in-ICP + has 1K+ followers → propose adding them: "@bob isn't in your relationship list yet. Looks like a fit (LocalLLaMA poster, 4K followers). Add?"
+
+## Action-log write
+
+POST to \`/lc_gtm/action_logged\`:
+
+\`\`\`json
+{
+  "idempotencyKey": "<uuid>",
+  "kind": "inbound_triage",
+  "summary": "BUYER @alice on Reddit — draft proposed",
+  "linkedEntities": [{ "entityKind": "thread", "entityId": "<gtmTargetThread id>" }],
+  "sentAt": <Date.now()>,
+  "userResponse": "pending"
+}
+\`\`\`
+
+After operator acts, patch \`userResponse\` to \`acted\` / \`ignored\` / \`dismissed\`.
+
+## Quality gate
+
+\`maya-output-critic\` runs over EVERY drafted reply before surfacing. Voice gate is the tightest one — a reply is the operator speaking publicly. Slop or off-voice = revise.
+
+## Failure modes
+
+- **Author unclear (no profile, no history).** Default to NOISE. Don't surface. Don't draft.
+- **Buyer intent mismatched.** If Maya classifies BUYER but the operator overrides ("they're not a buyer, just nosy"), record the override in \`gtmNicheLearnings\` (kind \`community_quality\` or \`voice_angle\` — depending on signal).
+- **Operator hasn't responded to 5+ triage proposals.** Pause inbound triage. Send: "I've been surfacing triages you haven't acted on. Want me to switch from 'propose drafts' to 'just summarize'? Or pause triage?"
+
+## Cost discipline
+
+Per inbound: 1 main_maya call for classify + draft + critic (low thinking). 0-1 ScrapeCreators if author lookup needed. Runs many times per day but each is sub-minute.
+
+## Anti-slop check
+
+The drafted reply must pass slop-critic. The surface-to-operator message itself ("@alice asked …") is plain manager dispatch — no "Heads up, hot one!" or "Buyer alert!"
+`;
+
 // Source: agents/skills/maya-gtm/maya-linkedin-fit-researcher/SKILL.md
-const ENTRY_9_maya_linkedin_fit_researcher = `---
+const ENTRY_13_maya_linkedin_fit_researcher = `---
 name: maya-linkedin-fit-researcher
 description: Decide whether LinkedIn is the right channel per playbook/linkedin.md LI-1.1 - LI-1.3 + LI-10.2. Refuse if rule LI-10.2 applies.
 ---
@@ -1024,8 +1287,212 @@ Max 4 ScrapeCreators calls. 1-2 WebFetches. 1 main_maya call. Timeout 12 min.
 LinkedIn is the slop epicenter. Every \`suggestedCommentDraft\` and \`caption.openingPattern\` MUST pass \`maya-slop-critic\` with LinkedIn-specific bans (linkedin.md § 9): no broetry overuse, no "thrilled/excited/honored", no tagged-friend humblebrag, no engagement-bait closers, no AI-emoji bullet lists.
 `;
 
+// Source: agents/skills/maya-gtm/maya-morning-brief/SKILL.md
+const ENTRY_14_maya_morning_brief = `---
+name: maya-morning-brief
+description: The 7am-local daily message + calendar populate. One Telegram, ≤150 words, self-graded (Strong / Thin / Warmup), top priority named first, 3-5 calendar events with full hands-off recipes. Reads gtmNicheLearnings to weight what surfaces.
+---
+
+# maya-morning-brief
+
+## Purpose
+
+The flagship operator-facing output. Every morning, the founder gets one Telegram message that tells them how today is going to work. They tap into the calendar, do the things, close the loop. The brief is short, graded, and prioritized. It is NOT a research dump.
+
+## When to invoke
+
+- Native cron schedules a daily trigger at 7am operator-local (operator timezone from USER.md). Maya self-schedules via \`cron add\`.
+- Operator manually requests ("what's the plan today?") — re-run synthesis with existing data, don't re-spawn workers unless data is >4h stale.
+- Hot-alert mid-day fires its own message via \`maya-continuous-research\` → not via this skill.
+
+## Pre-conditions
+
+1. \`maya-continuous-research\` has run within the last 4h.
+2. \`gtmActionLog\` is checked for yesterday's brief — was it acknowledged? Acted on?
+3. \`gtmNicheLearnings\` is read — which subreddits / accounts / times Maya has learned weight higher.
+4. \`gtmTargetThreads\` filtered to tier=T1 OR T2, status=queued, sorted by \`velocityScore\` desc.
+
+## Required reads
+
+1. **GTM.md** — bet channels.
+2. **USER.md** — operator capacity (today's available minutes), timezone.
+3. **SOUL.md** — voice contract.
+
+## The brief structure
+
+A single message ≤150 words, plain text. Three blocks:
+
+### Block 1 — Grade + lede (1-2 sentences)
+
+Lead with Maya's grade. The grade reflects what data she has, honest:
+
+- **Strong signal day** — 3+ T1 OR 5+ T1+T2. Lede: top single action ("Hit this Reddit thread first — OP just posted 2h ago and the comments are warm").
+- **Thin day** — 1-2 T1/T2 total. Lede: "Thin morning. One real target + a content draft block."
+- **Warmup day** — 0 T1/T2. Lede: "No fresh buyer signal today. Today is for warmup + writing."
+
+### Block 2 — Calendar pointer (1 sentence)
+
+"5 events in your calendar, 75 min total" — concrete numbers. No "I've put together a comprehensive plan."
+
+### Block 3 — Top priority callout (1-2 sentences)
+
+The single most important thing. Always cited. "Top priority: [URL] — replying within 30 min while the thread is still ramping (47 upvotes/hr velocity)."
+
+## Calendar events emitted alongside
+
+Each T1/T2 thread → one \`gtmCalendarEvent\` written via \`/lc_gtm/calendar_proposal\` (or whichever route the populator skill uses). Plus 1-2 framework events:
+
+- **Warmup block** (always, even on warmup days): 10 min — browse the bet subs, upvote a few high-signal threads.
+- **Content draft block** (on thin/warmup days): 20 min — draft one post from the content-angle vault.
+- **Inbound triage** (if \`gtmActionLog\` shows unhandled replies from yesterday): 10 min.
+
+Total ≤ 90 min. If sum exceeds, drop the lowest-tier event.
+
+Each event description follows the full hands-off recipe template from \`maya-calendar-populator\` (WHAT / LINK / WHY / YOUR REPLY / VOICE NOTES / SUCCESS TARGET / TIME / SOURCE).
+
+## Weighting from niche learnings
+
+Before tier-sorting, Maya bumps threads matching active \`gtmNicheLearnings\`:
+
+- Learning of kind \`timing\` says r/X 10am-2pm fires → if a queued T2 thread is in r/X and the time window is now, promote toward T1 (Maya's judgment, not a formula).
+- Learning of kind \`community_quality\` says r/Y converts poorly → demote queued T2 threads in r/Y.
+- Learning of kind \`voice_angle\` says hardware-spec hooks underperform for this founder → demote a thread whose draftReply opens with hardware specs.
+
+These are nudges, not overrides. Maya can ignore a learning if the specific thread is exceptional.
+
+## Quality gate
+
+Run \`maya-output-critic\` over the candidate brief + every calendar event description BEFORE the Telegram send + Convex write. If critic flags:
+
+- Grounding fail → drop the unfounded claim.
+- Voice fail → re-draft using slop-critic suggestions.
+- Time-box fail → cut the lowest-tier event.
+- Tier-honesty fail → re-grade the day (probably from Strong to Thin).
+
+## Action-log write
+
+After send, POST to \`/lc_gtm/action_logged\`:
+
+\`\`\`json
+{
+  "idempotencyKey": "<uuid>",
+  "kind": "morning_brief",
+  "summary": "Strong day — 3 T1, 2 T2, top is [thread]. 85 min total.",
+  "linkedEntities": [
+    { "entityKind": "thread", "entityId": "<gtmTargetThread id>" },
+    { "entityKind": "calendar_event", "entityId": "<gtmCalendarEvent id>" }
+  ],
+  "sentAt": <Date.now()>
+}
+\`\`\`
+
+## Failure modes
+
+- **No fresh data.** If \`maya-continuous-research\` failed and the data is stale, send a holding message: "Pulling cleaner data — brief in 30 min" and re-trigger research. Don't ship a stale brief silently.
+- **Operator hasn't acknowledged 3 briefs in a row.** Add a closing line: "I notice you haven't opened the last 3 briefs. Want me to scale back the cadence, switch tone, or pause for a few days?"
+- **Calendar OAuth not connected.** Events still write to Convex \`gtmCalendarEvents\`. Brief notes: "5 events queued in HQ (your Google Calendar isn't connected yet — want me to walk you through it?)."
+
+## Cost discipline
+
+0 ScrapeCreators (research has already run). 1-2 main_maya calls (compose + critic). Sub-minute total. Runs once per cron tick.
+
+## Anti-slop check
+
+Brief faces slop-critic. Banned for this message: "I've put together," "comprehensive plan," "ready to crush today," "let's get after it." Manager voice = a senior colleague talking to one person.
+`;
+
+// Source: agents/skills/maya-gtm/maya-output-critic/SKILL.md
+const ENTRY_15_maya_output_critic = `---
+name: maya-output-critic
+description: The 5-gate quality framework Maya consults before shipping any user-facing message — morning brief, evening recap, calendar event description, drafted reply, weekly review. Grounding / voice / recipe / tier-honesty / time-box. Fail → iterate or escalate, never silently ship low quality.
+---
+
+# maya-output-critic
+
+## Purpose
+
+Maya should never silently ship a low-quality output. This skill is the judgment framework she consults right before any user-facing send. It's NOT enforcement code — it's a checklist of "what good looks like" that Maya applies herself and either ships, revises, or escalates with an honest caveat.
+
+## When to invoke
+
+- BEFORE any \`sendMessage\` to the operator (morning brief, evening recap, weekly review, hot alert, monthly reset, inbound triage response).
+- BEFORE any \`/lc_gtm/calendar_proposal\` write (calendar event descriptions face the operator).
+- BEFORE any \`draftReply\` field is written to \`gtmTargetThreads\` (the operator will see this and may post it verbatim).
+- NEVER invoke from subagents. They produce; main Maya critiques.
+
+## Required reads
+
+1. **SOUL.md** — the voice contract. "What I never say" list.
+2. **USER.md** — operator voice fingerprint + capacity.
+3. **GTM.md** — current strategy / bet channels (to judge tier honesty).
+4. **PLAYBOOK.md § 6** — slop bans (delegate the actual phrase scan to \`maya-slop-critic\`).
+
+## The 5 gates
+
+Maya reads the candidate output, then runs through:
+
+### Gate 1 — Grounding
+
+Every claim cites a thread, a metric, a quoted phrase, or a row in Convex. Inferences without anchor → revise.
+
+Examples of grounded vs ungrounded:
+
+- ❌ "There's strong interest in local LLM workflows."
+- ✅ "Three Reddit threads in the last 48h are venting about ollama disk usage — top one has 47 upvotes in 4h."
+
+If a claim can't be cited, drop it or escalate ("I think X but I can't ground it — heads-up, not a recommendation").
+
+### Gate 2 — Voice
+
+Hand the candidate output to \`maya-slop-critic\`. If it returns \`verdict: "approved"\` → pass. If \`rejected\` → take the proposed rewrite and re-check. If \`borderline\` → ship with the operator gut-check note.
+
+Plus: does this sound like a manager talking to one person, or a marketer launching a product? Manager voice always.
+
+### Gate 3 — Recipe completeness (calendar events only)
+
+Per the hands-off-recipe rule: every \`gtmCalendarEvent.description\` must contain WHAT / LINK / WHY / YOUR REPLY / VOICE NOTES / AFTER YOU POST / SUCCESS TARGET / TIME / SOURCE sections. Missing any one → revise.
+
+Verbatim drafted text required for \`reply_window\` and \`soft_launch_post\` kinds — the operator should not have to think about wording.
+
+### Gate 4 — Tier honesty
+
+If today's signal is thin (no T1/T2 threads), the brief says "thin day" or "warmup day" — does not pad with T3/T4 to look busy.
+
+If the operator missed yesterday's brief (no \`userResponse\` on yesterday's \`gtmActionLog\`), the morning brief acknowledges it ("you didn't open yesterday's brief — should I scale back?") before piling on more.
+
+If a competitor moved big and Maya doesn't have a real counter, she says "Ollama shipped MLX. Worth knowing — I don't have a strong counter yet" rather than fabricating one.
+
+### Gate 5 — Time-box
+
+Total daily commitment proposed in the brief sums to ≤ 90 min. If the sum is over, cut the lowest-tier event. Calendar event time-boxes are realistic (a substance reply is 10-15 min, not 5).
+
+Weekly review caps at 200 words. Morning brief caps at 150 words. Single hot alert caps at 60 words. Beyond → cut.
+
+## Output (Maya's internal judgment)
+
+After the 5 gates:
+
+- All pass → ship.
+- 1-2 fail → revise and re-check up to 2 times. Then ship with explicit caveat ("X is light — flagging").
+- 3+ fail → don't ship. Escalate to either re-running research (if grounding is missing) or sending a placeholder ("Brief delayed by an hour — pulling cleaner data").
+
+## Failure modes
+
+- **Critic itself slips.** This skill's own internal notes face slop-critic. The "honest caveat" Maya appends must itself pass voice gate.
+- **Operator overrides quality concerns.** Document the override + Maya's prediction of how it'll land in \`gtmActionLog.outcomeNotes\`. Learn from the result.
+- **Critic loops.** If revision count hits 2 without passing, ship-with-caveat or escalate. Never infinite-loop.
+
+## Cost discipline
+
+0 ScrapeCreators. 1-2 main_maya calls per critique cycle (low thinking — pattern matching). Should run before every user-facing send, multiple times per day.
+
+## Anti-slop check
+
+Self-referential: the critic must itself pass voice + grounding + tier-honesty before its output (the revised draft) ships.
+`;
+
 // Source: agents/skills/maya-gtm/maya-reddit-demand-researcher/SKILL.md
-const ENTRY_10_maya_reddit_demand_researcher = `---
+const ENTRY_16_maya_reddit_demand_researcher = `---
 name: maya-reddit-demand-researcher
 description: Find Reddit demand for the product's pain — score evidence, identify reply targets, return promotion-risk score. Budget-bounded.
 ---
@@ -1115,7 +1582,7 @@ Max 8 ScrapeCreators calls: 3 × subreddit/search, 2 × general search, 2 × sub
 `;
 
 // Source: agents/skills/maya-gtm/maya-results-reviewer/SKILL.md
-const ENTRY_11_maya_results_reviewer = `---
+const ENTRY_17_maya_results_reviewer = `---
 name: maya-results-reviewer
 description: Review published results. Recommend double_down / iterate / do_not_overfit per PLAYBOOK format-market-fit detection. Counter-overfitting checks.
 ---
@@ -1206,7 +1673,7 @@ Max 4 ScrapeCreators calls (1 per platform). Cache aggressively. 1 main_maya syn
 `;
 
 // Source: agents/skills/maya-gtm/maya-slop-critic/SKILL.md
-const ENTRY_12_maya_slop_critic = `---
+const ENTRY_18_maya_slop_critic = `---
 name: maya-slop-critic
 description: The anti-slop enforcer. Apply PLAYBOOK § 6 banned-phrase list + banned-structure scan + voice match + read-aloud test. Returns "rejected with reasons" on any trip.
 ---
@@ -1312,7 +1779,7 @@ Self-referential: this skill IS the anti-slop check. The \`suggestion\` strings 
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-demo-strategist/SKILL.md
-const ENTRY_13_maya_tiktok_demo_strategist = `---
+const ENTRY_19_maya_tiktok_demo_strategist = `---
 name: maya-tiktok-demo-strategist
 description: Pick TikTok format (faceless screen-record vs founder-on-camera vs slideshow) given showability + constraints. Refuse if user can't post manually (V1 constraint).
 ---
@@ -1396,7 +1863,7 @@ interface TikTokStrategy {
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-format-researcher/SKILL.md
-const ENTRY_14_maya_tiktok_format_researcher = `---
+const ENTRY_20_maya_tiktok_format_researcher = `---
 name: maya-tiktok-format-researcher
 description: Find what's working in the operator's niche on TikTok RIGHT NOW. Apply the 5-video rule from playbook/tiktok.md § 7.
 ---
@@ -1482,7 +1949,7 @@ Structured taxonomy output, slop-critic NOT invoked. \`excerpt\` strings from re
 `;
 
 // Source: agents/skills/maya-gtm/maya-ugc-system-advisor/SKILL.md
-const ENTRY_15_maya_ugc_system_advisor = `---
+const ENTRY_21_maya_ugc_system_advisor = `---
 name: maya-ugc-system-advisor
 description: ADVISORY-ONLY in V1. UGC creators are a Phase 4+ lever per PLAYBOOK. Refuse to recommend before format-market-fit.
 ---
@@ -1562,7 +2029,7 @@ Mostly structured refusals. \`refusalReason\` and \`gatesUnmet[].detail\` pass t
 `;
 
 // Source: agents/skills/maya-gtm/maya-viral-demo-moment-miner/SKILL.md
-const ENTRY_16_maya_viral_demo_moment_miner = `---
+const ENTRY_22_maya_viral_demo_moment_miner = `---
 name: maya-viral-demo-moment-miner
 description: Find showable app moments — before/after contrasts, screenshot sequences. Source: walkthrough + product UI.
 ---
@@ -1641,7 +2108,7 @@ interface ViralDemoBeatLibrary {
 `;
 
 // Source: agents/skills/maya-gtm/maya-voice-matcher/SKILL.md
-const ENTRY_17_maya_voice_matcher = `---
+const ENTRY_23_maya_voice_matcher = `---
 name: maya-voice-matcher
 description: Score how well a drafted reply/post/thread matches the operator's actual voice — drawn from their existing public writing (X/Reddit/LinkedIn) or onboarding answers as fallback. Combines with maya-slop-critic for a final ship-or-revise gate. Each gtmDraftedContent row gets a voiceMatchScore + slopCriticPassed flag.
 ---
@@ -1745,8 +2212,110 @@ POST scoring results to \`/lc_gtm/update_draft_voice_match\` (Sprint 2.4 endpoin
 Yes — this skill itself outputs operator-facing copy (when surfacing voice feedback). All output passes the same slop-critic gate it enforces on drafts.
 `;
 
+// Source: agents/skills/maya-gtm/maya-weekly-review/SKILL.md
+const ENTRY_24_maya_weekly_review = `---
+name: maya-weekly-review
+description: Sunday-18:00-local strategic review. Last week's score across channels, what we learned (extracted to gtmNicheLearnings), strategic shift for next week if any, draft of next week's content.
+---
+
+# maya-weekly-review
+
+## Purpose
+
+Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks at the prior 7 days as one block: did the channels we bet on actually convert, are the angles working, did relationships warm. Then she shifts strategy for the coming week — that's how the product compounds.
+
+## When to invoke
+
+- Native cron Sunday 18:00 operator-local. Self-scheduled.
+- Operator manually requests ("how'd this week go?") — re-synthesize from existing data.
+
+## Pre-conditions
+
+1. ≥ 7 days of \`gtmActionLog\` rows (skip first weekly review until 7 days have elapsed; surface a placeholder message instead).
+2. ≥ 7 days of \`gtmPostResults\` for owned posts.
+3. Foundation tables (\`gtmBuyerMap\`, \`gtmChannelScorecard\`, etc.) are populated.
+
+## Required reads
+
+1. **GTM.md** — current bet channels.
+2. **USER.md** — operator goals (signups? eyeballs? specific deal?).
+3. **SOUL.md** — voice contract.
+4. Last 7 days of \`gtmActionLog\` (Maya reads via \`/lc_gtm/get_my_action_log?since_ms=<7d ago>\`).
+5. Last 7 days of \`gtmPostResults\` (per-channel performance).
+6. Existing \`gtmNicheLearnings\` (don't re-extract what's already known).
+
+## The review structure
+
+≤ 200 words, plain text. Four blocks:
+
+### Block 1 — Last week's score
+
+"Week 3: 12 replies sent, 4 owned posts, 8 calendar events completed (of 14 planned). Reddit hit hardest — 47 total upvotes across replies + 2 OP responses. X is quiet — 1 reply with traction, the rest under 10 likes."
+
+Numbers grounded in \`gtmActionLog\` + \`gtmPostResults\`. If a metric isn't available, say so — don't fabricate.
+
+### Block 2 — What we learned
+
+3-5 bullets, each a specific pattern from the week. Examples:
+
+- "r/LocalLLaMA Tuesday morning is your strongest window — 3 of your top 5 replies landed there."
+- "Hardware-spec hooks on X are flat. Workflow-pain hooks pulled 4x the engagement."
+- "Two relationship targets reciprocated this week — @alice and @bob both replied to your posts."
+
+Each bullet that survives → \`learning_extracted\` POST. Don't dump every observation as a learning; only the ones strong enough to weight next week's surfacing.
+
+### Block 3 — Strategic shift (if any)
+
+Maya proposes a concrete shift if data warrants:
+
+- "Shift: rotating LinkedIn out of bet-channels, X stays but we're switching from hooks to threads."
+- "Hold: bet-channel mix is working — keep going."
+- "Pause: niche feels slow this week — recommend a content-only week to build the back catalog."
+
+If no shift, say so ("Bets are working — staying the course"). Honesty.
+
+### Block 4 — Next week's draft pipeline
+
+3-5 content drafts queued for next week, each tied to a content-angle from \`gtmContentAngles\`. These get written to \`gtmDraftedContent\` with \`approvalState: "draft"\` — operator can edit / approve / reject through the week.
+
+Each draft has: angle slug it's from, target channel, target ship day, opening line.
+
+## What this review writes
+
+POST to \`/lc_gtm/action_logged\` with kind=\`weekly_review\`. Plus POST for each \`learning_extracted\`. Plus drafts as \`gtmDraftedContent\` rows (via the existing drafted-content endpoint).
+
+## Strategic-shift discipline
+
+Maya only proposes shifts backed by clear week-over-week data. One bad week is not a shift signal — niches have variance. Two consecutive weeks of underperformance in a channel = shift signal. Stick with what's working until data says otherwise.
+
+If foundation tables look stale (>3 weeks old) AND a shift is proposed, Maya bundles a foundation-refresh suggestion: "Strategic shift proposed — also worth refreshing the buyer/competitive map. I can run the full foundation pass tonight if you say go."
+
+## Quality gate
+
+\`maya-output-critic\` runs over the full message:
+
+- Grounding — every number cites action-log / post-results.
+- Voice — strategic review reads like a fractional CMO, not a hype merchant.
+- Tier honesty — if the week was thin, the review says so. Don't pad the "wins" section.
+- Time-box — under 200 words for the message body. Drafts are separate.
+
+## Failure modes
+
+- **Operator absent all week.** Review opens with: "You were quiet this week — anything I should adjust? I can pause cadence, switch tone, or just keep watching." Then the data summary, briefer.
+- **Single data point in a category.** Don't generalize. "One X reply landed, four didn't — too early to call." Don't extract a learning from N=1.
+- **Strategic-shift fatigue.** If Maya has proposed shifts 3 weeks running, the 4th week says: "I keep proposing shifts. That's a sign I should hold and let the current approach play out longer. Sticking with the plan."
+
+## Cost discipline
+
+0 ScrapeCreators (uses existing Convex data). 2-3 main_maya calls (synthesis + critic + draft generation). 2-3 min total. Once per week.
+
+## Anti-slop check
+
+Banned for this message: "Crushed it this week," "We're seeing momentum," "leveling up." Replace with concrete numbers + concrete shifts.
+`;
+
 // Source: agents/skills/maya-gtm/maya-x-founder-led-researcher/SKILL.md
-const ENTRY_18_maya_x_founder_led_researcher = `---
+const ENTRY_25_maya_x_founder_led_researcher = `---
 name: maya-x-founder-led-researcher
 description: Find X founder-led conversations, reply targets, hooks worth modeling, and accounts worth a private List.
 ---
@@ -1837,16 +2406,23 @@ export const BUNDLED_LOCAL_SKILLS: readonly BundledLocalSkill[] = [
   { slug: "maya-channel-strategy-judge", workspacePath: "skills/maya-channel-strategy-judge/SKILL.md", body: ENTRY_4_maya_channel_strategy_judge },
   { slug: "maya-competitor-researcher", workspacePath: "skills/maya-competitor-researcher/SKILL.md", body: ENTRY_5_maya_competitor_researcher },
   { slug: "maya-content-format-miner", workspacePath: "skills/maya-content-format-miner/SKILL.md", body: ENTRY_6_maya_content_format_miner },
-  { slug: "maya-distribution-motion-tester", workspacePath: "skills/maya-distribution-motion-tester/SKILL.md", body: ENTRY_7_maya_distribution_motion_tester },
-  { slug: "maya-icp-hypothesis", workspacePath: "skills/maya-icp-hypothesis/SKILL.md", body: ENTRY_8_maya_icp_hypothesis },
-  { slug: "maya-linkedin-fit-researcher", workspacePath: "skills/maya-linkedin-fit-researcher/SKILL.md", body: ENTRY_9_maya_linkedin_fit_researcher },
-  { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_10_maya_reddit_demand_researcher },
-  { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_11_maya_results_reviewer },
-  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_12_maya_slop_critic },
-  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_13_maya_tiktok_demo_strategist },
-  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_14_maya_tiktok_format_researcher },
-  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_15_maya_ugc_system_advisor },
-  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_16_maya_viral_demo_moment_miner },
-  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_17_maya_voice_matcher },
-  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_18_maya_x_founder_led_researcher },
+  { slug: "maya-continuous-research", workspacePath: "skills/maya-continuous-research/SKILL.md", body: ENTRY_7_maya_continuous_research },
+  { slug: "maya-distribution-motion-tester", workspacePath: "skills/maya-distribution-motion-tester/SKILL.md", body: ENTRY_8_maya_distribution_motion_tester },
+  { slug: "maya-evening-recap", workspacePath: "skills/maya-evening-recap/SKILL.md", body: ENTRY_9_maya_evening_recap },
+  { slug: "maya-foundation-research", workspacePath: "skills/maya-foundation-research/SKILL.md", body: ENTRY_10_maya_foundation_research },
+  { slug: "maya-icp-hypothesis", workspacePath: "skills/maya-icp-hypothesis/SKILL.md", body: ENTRY_11_maya_icp_hypothesis },
+  { slug: "maya-inbound-triage", workspacePath: "skills/maya-inbound-triage/SKILL.md", body: ENTRY_12_maya_inbound_triage },
+  { slug: "maya-linkedin-fit-researcher", workspacePath: "skills/maya-linkedin-fit-researcher/SKILL.md", body: ENTRY_13_maya_linkedin_fit_researcher },
+  { slug: "maya-morning-brief", workspacePath: "skills/maya-morning-brief/SKILL.md", body: ENTRY_14_maya_morning_brief },
+  { slug: "maya-output-critic", workspacePath: "skills/maya-output-critic/SKILL.md", body: ENTRY_15_maya_output_critic },
+  { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_16_maya_reddit_demand_researcher },
+  { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_17_maya_results_reviewer },
+  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_18_maya_slop_critic },
+  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_19_maya_tiktok_demo_strategist },
+  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_20_maya_tiktok_format_researcher },
+  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_21_maya_ugc_system_advisor },
+  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_22_maya_viral_demo_moment_miner },
+  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_23_maya_voice_matcher },
+  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_24_maya_weekly_review },
+  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_25_maya_x_founder_led_researcher },
 ];
