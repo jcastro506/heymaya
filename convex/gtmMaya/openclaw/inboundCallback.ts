@@ -454,20 +454,31 @@ export const targetThreadHttp = httpAction(async (ctx, request) => {
   } catch {
     return new Response("bad json", { status: 400 });
   }
-  if (
-    !body.idempotencyKey ||
-    !body.platform ||
-    !body.url ||
-    !body.externalId ||
-    !body.whyItFits ||
-    !body.recommendedAction ||
-    typeof body.priorityScore !== "number"
-  ) {
+  // Sprint 2.18 #8 — relaxed validation. Mandatory: idempotencyKey +
+  // platform (enum) + url + externalId (the identity quartet that
+  // makes dedupe + scoping safe). Everything else has a default — if
+  // the worker forgot to populate whyItFits/recommendedAction/
+  // priorityScore, we accept the row with stubs and let Maya's
+  // judgment layer (maya-continuous-research SKILL.md gates) catch
+  // and steer for more. Hard gates here force workers into 8-retry
+  // bounce loops; loose gates + skill-level judgment matches the
+  // "trust the LLM" rule.
+  if (!body.idempotencyKey || !body.platform || !body.url || !body.externalId) {
     return new Response("missing required fields", { status: 400 });
   }
-  if (body.priorityScore < 0 || body.priorityScore > 1) {
-    return new Response("priorityScore must be in [0, 1]", { status: 400 });
-  }
+  // priorityScore: clamp into [0,1] instead of rejecting. Anything
+  // outside the range likely means the LLM hallucinated a normalized
+  // value — clamp is safer than reject.
+  const priorityScore =
+    typeof body.priorityScore === "number"
+      ? Math.max(0, Math.min(1, body.priorityScore))
+      : 0.5;
+  const whyItFits = body.whyItFits || "pending — Maya to fill in synthesis";
+  const recommendedAction =
+    body.recommendedAction &&
+    ["reply", "lurk", "upvote_only", "avoid"].includes(body.recommendedAction)
+      ? body.recommendedAction
+      : "lurk";
 
   const claim = await ctx.runMutation(
     internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
@@ -495,9 +506,9 @@ export const targetThreadHttp = httpAction(async (ctx, request) => {
       author: body.author,
       subredditOrCommunity: body.subredditOrCommunity,
       currentMetrics: body.currentMetrics ?? {},
-      whyItFits: body.whyItFits,
-      recommendedAction: body.recommendedAction,
-      priorityScore: body.priorityScore,
+      whyItFits,
+      recommendedAction,
+      priorityScore,
     });
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });
@@ -530,20 +541,21 @@ export const targetAccountHttp = httpAction(async (ctx, request) => {
   } catch {
     return new Response("bad json", { status: 400 });
   }
-  if (
-    !body.idempotencyKey ||
-    !body.platform ||
-    !body.handle ||
-    !body.profileUrl ||
-    !body.whyItFits ||
-    !body.recommendedAction ||
-    typeof body.priorityScore !== "number"
-  ) {
+  // Sprint 2.18 #8 — relaxed validation (see target_thread comment).
+  if (!body.idempotencyKey || !body.platform || !body.handle) {
     return new Response("missing required fields", { status: 400 });
   }
-  if (body.priorityScore < 0 || body.priorityScore > 1) {
-    return new Response("priorityScore must be in [0, 1]", { status: 400 });
-  }
+  const priorityScore =
+    typeof body.priorityScore === "number"
+      ? Math.max(0, Math.min(1, body.priorityScore))
+      : 0.5;
+  const whyItFits = body.whyItFits || "pending — Maya to fill in synthesis";
+  const recommendedAction =
+    body.recommendedAction &&
+    ["follow_and_engage", "lurk", "dm", "avoid"].includes(body.recommendedAction)
+      ? body.recommendedAction
+      : "lurk";
+  const profileUrl = body.profileUrl ?? `https://${body.platform}/${body.handle}`;
 
   const claim = await ctx.runMutation(
     internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
@@ -565,14 +577,14 @@ export const targetAccountHttp = httpAction(async (ctx, request) => {
       researchJobId: body.researchJobId as Id<"gtmResearchJobs"> | undefined,
       platform: body.platform,
       handle: body.handle,
-      profileUrl: body.profileUrl,
+      profileUrl,
       displayName: body.displayName,
       bio: body.bio,
       followerCount: body.followerCount,
       voiceAnalysis: body.voiceAnalysis,
-      whyItFits: body.whyItFits,
-      recommendedAction: body.recommendedAction,
-      priorityScore: body.priorityScore,
+      whyItFits,
+      recommendedAction,
+      priorityScore,
     });
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });

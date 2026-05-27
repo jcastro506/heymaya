@@ -46,13 +46,18 @@ export const foundationBuyerMapHttp = httpAction(async (ctx, request) => {
   } catch {
     return new Response("bad json", { status: 400 });
   }
+  // Sprint 2.18 — relaxed validation. Only idempotencyKey +
+  // icpDescription are truly required; the rest default to [].
+  // Maya's judgment layer (per maya-foundation-research SKILL.md
+  // quality gates) catches thin output and steers the worker for
+  // more — we don't enforce shape strictly at the HTTP edge.
+  // Verified live: worker bounced 8+ times against strict validation
+  // because the original task prompt's field enumeration was
+  // ambiguous (intentPhrases is top-level vs nested in stages).
   if (
     !body.idempotencyKey ||
     typeof body.icpDescription !== "string" ||
-    !body.icpDescription.trim() ||
-    !Array.isArray(body.buyerJourneyStages) ||
-    !Array.isArray(body.intentPhrases) ||
-    !Array.isArray(body.trustedVoices)
+    !body.icpDescription.trim()
   ) {
     return new Response("missing required fields", { status: 400 });
   }
@@ -73,9 +78,11 @@ export const foundationBuyerMapHttp = httpAction(async (ctx, request) => {
       accountId: auth.accountId,
       agentId: auth.agentId,
       icpDescription: body.icpDescription,
-      buyerJourneyStages: body.buyerJourneyStages,
-      intentPhrases: body.intentPhrases,
-      trustedVoices: body.trustedVoices,
+      buyerJourneyStages: Array.isArray(body.buyerJourneyStages)
+        ? body.buyerJourneyStages
+        : [],
+      intentPhrases: Array.isArray(body.intentPhrases) ? body.intentPhrases : [],
+      trustedVoices: Array.isArray(body.trustedVoices) ? body.trustedVoices : [],
     });
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });
@@ -107,18 +114,22 @@ export const foundationCompetitorHttp = httpAction(async (ctx, request) => {
   } catch {
     return new Response("bad json", { status: 400 });
   }
+  // Sprint 2.18 — relaxed validation, see foundationBuyerMapHttp note.
   if (
     !body.idempotencyKey ||
-    !body.competitorKey ||
     !body.competitorName ||
     !body.kind ||
     !["direct", "adjacent", "substitute"].includes(body.kind) ||
-    typeof body.positioning !== "string" ||
-    !Array.isArray(body.complaints) ||
-    !Array.isArray(body.vulnerabilities)
+    typeof body.positioning !== "string"
   ) {
     return new Response("missing required fields", { status: 400 });
   }
+  // Derive competitorKey from competitorName if missing — workers can
+  // forget the lowercase-slug field but always have a name.
+  const competitorKey = (body.competitorKey ?? body.competitorName)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
   const claim = await ctx.runMutation(
     internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
@@ -135,14 +146,16 @@ export const foundationCompetitorHttp = httpAction(async (ctx, request) => {
     await ctx.runMutation(internal.gtmMaya.managerStore.upsertCompetitor, {
       accountId: auth.accountId,
       agentId: auth.agentId,
-      competitorKey: body.competitorKey.toLowerCase().trim(),
+      competitorKey,
       competitorName: body.competitorName,
       kind: body.kind,
       url: body.url,
       pricing: body.pricing,
       positioning: body.positioning,
-      complaints: body.complaints,
-      vulnerabilities: body.vulnerabilities,
+      complaints: Array.isArray(body.complaints) ? body.complaints : [],
+      vulnerabilities: Array.isArray(body.vulnerabilities)
+        ? body.vulnerabilities
+        : [],
     });
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });
@@ -191,16 +204,20 @@ export const foundationChannelScorecardHttp = httpAction(async (ctx, request) =>
   } catch {
     return new Response("bad json", { status: 400 });
   }
+  // Sprint 2.18 — relaxed: only channel + uniqueUnlock are mandatory.
+  // Scores default to 0.5 if missing, bet defaults to false.
   if (
     !body.idempotencyKey ||
     !isChannel(body.channel) ||
-    typeof body.audienceFit !== "number" ||
-    typeof body.cadenceFit !== "number" ||
-    typeof body.uniqueUnlock !== "string" ||
-    typeof body.bet !== "boolean"
+    typeof body.uniqueUnlock !== "string"
   ) {
     return new Response("missing required fields", { status: 400 });
   }
+  const audienceFit =
+    typeof body.audienceFit === "number" ? body.audienceFit : 0.5;
+  const cadenceFit =
+    typeof body.cadenceFit === "number" ? body.cadenceFit : 0.5;
+  const bet = typeof body.bet === "boolean" ? body.bet : false;
 
   const claim = await ctx.runMutation(
     internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
@@ -220,10 +237,10 @@ export const foundationChannelScorecardHttp = httpAction(async (ctx, request) =>
         accountId: auth.accountId,
         agentId: auth.agentId,
         channel: body.channel,
-        audienceFit: body.audienceFit,
-        cadenceFit: body.cadenceFit,
+        audienceFit,
+        cadenceFit,
         uniqueUnlock: body.uniqueUnlock,
-        bet: body.bet,
+        bet,
         notes: body.notes,
       }
     );
@@ -254,17 +271,25 @@ export const foundationContentAngleHttp = httpAction(async (ctx, request) => {
   } catch {
     return new Response("bad json", { status: 400 });
   }
+  // Sprint 2.18 — relaxed: angle + at least one hook variant.
+  // angleKey derived from angle if missing. painCitation defaults to
+  // a minimal stub if the worker forgot it — Maya's gate will catch.
   if (
     !body.idempotencyKey ||
-    !body.angleKey ||
     !body.angle ||
-    !body.painCitation?.quote ||
-    !body.painCitation?.sourceUrl ||
     !Array.isArray(body.hookVariants) ||
     body.hookVariants.length === 0
   ) {
     return new Response("missing required fields", { status: 400 });
   }
+  const angleKey =
+    body.angleKey ??
+    body.angle
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60);
+  const painCitation = body.painCitation ?? { quote: "", sourceUrl: "" };
 
   const claim = await ctx.runMutation(
     internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
@@ -281,9 +306,9 @@ export const foundationContentAngleHttp = httpAction(async (ctx, request) => {
     await ctx.runMutation(internal.gtmMaya.managerStore.upsertContentAngle, {
       accountId: auth.accountId,
       agentId: auth.agentId,
-      angleKey: body.angleKey.toLowerCase().trim(),
+      angleKey,
       angle: body.angle,
-      painCitation: body.painCitation,
+      painCitation,
       hookVariants: body.hookVariants,
       voiceCheck: body.voiceCheck,
     });
@@ -335,16 +360,23 @@ export const foundationRelationshipHttp = httpAction(async (ctx, request) => {
   } catch {
     return new Response("bad json", { status: 400 });
   }
+  // Sprint 2.18 — relaxed: platform + handle + whyThem are mandatory.
+  // engagementPlan + cadence default to stubs if missing — Maya's gate
+  // catches sparse relationship rows on synthesis.
   if (
     !body.idempotencyKey ||
     !isRelationshipPlatform(body.platform) ||
     !body.handle ||
-    !body.whyThem ||
-    !body.engagementPlan ||
-    !["weekly", "monthly", "as_they_post"].includes(body.cadence)
+    !body.whyThem
   ) {
     return new Response("missing required fields", { status: 400 });
   }
+  const engagementPlan =
+    body.engagementPlan ?? "Reply weekly + retweet/quote when relevant.";
+  const cadence =
+    body.cadence && ["weekly", "monthly", "as_they_post"].includes(body.cadence)
+      ? body.cadence
+      : "weekly";
 
   const claim = await ctx.runMutation(
     internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
@@ -368,8 +400,8 @@ export const foundationRelationshipHttp = httpAction(async (ctx, request) => {
         displayName: body.displayName,
         profileUrl: body.profileUrl,
         whyThem: body.whyThem,
-        engagementPlan: body.engagementPlan,
-        cadence: body.cadence,
+        engagementPlan,
+        cadence,
         status: body.status,
       }
     );
@@ -416,16 +448,18 @@ export const competitorMoveHttp = httpAction(async (ctx, request) => {
   } catch {
     return new Response("bad json", { status: 400 });
   }
+  // Sprint 2.18 #8 — relaxed: competitorName + moveKind + sourceUrl required.
   if (
     !body.idempotencyKey ||
     !body.competitorName ||
     !(COMPETITOR_MOVE_KINDS as readonly string[]).includes(body.moveKind) ||
-    !body.summary ||
-    !body.sourceUrl ||
-    typeof body.observedAt !== "number"
+    !body.sourceUrl
   ) {
     return new Response("missing required fields", { status: 400 });
   }
+  const summary = body.summary || `${body.competitorName} ${body.moveKind}`;
+  const observedAt =
+    typeof body.observedAt === "number" ? body.observedAt : Date.now();
 
   const claim = await ctx.runMutation(
     internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
@@ -446,9 +480,9 @@ export const competitorMoveHttp = httpAction(async (ctx, request) => {
         agentId: auth.agentId,
         competitorName: body.competitorName,
         moveKind: body.moveKind,
-        summary: body.summary,
+        summary,
         sourceUrl: body.sourceUrl,
-        observedAt: body.observedAt,
+        observedAt,
         recommendedCounter: body.recommendedCounter,
       }
     );
@@ -494,17 +528,22 @@ export const nichePulseSignalHttp = httpAction(async (ctx, request) => {
   } catch {
     return new Response("bad json", { status: 400 });
   }
+  // Sprint 2.18 #8 — relaxed: pulseKind + name + evidenceUrl required.
   if (
     !body.idempotencyKey ||
     !(PULSE_KINDS as readonly string[]).includes(body.pulseKind) ||
     !body.name ||
-    !body.evidenceUrl ||
-    !body.momentumSignal ||
-    typeof body.observedAt !== "number" ||
-    !["act_now", "monitor", "noise"].includes(body.relevance)
+    !body.evidenceUrl
   ) {
     return new Response("missing required fields", { status: 400 });
   }
+  const momentumSignal = body.momentumSignal || "pending — Maya to fill in";
+  const observedAtNiche =
+    typeof body.observedAt === "number" ? body.observedAt : Date.now();
+  const relevance =
+    body.relevance && ["act_now", "monitor", "noise"].includes(body.relevance)
+      ? body.relevance
+      : "monitor";
 
   const claim = await ctx.runMutation(
     internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
@@ -525,9 +564,9 @@ export const nichePulseSignalHttp = httpAction(async (ctx, request) => {
       name: body.name,
       platform: body.platform,
       evidenceUrl: body.evidenceUrl,
-      momentumSignal: body.momentumSignal,
-      observedAt: body.observedAt,
-      relevance: body.relevance,
+      momentumSignal,
+      observedAt: observedAtNiche,
+      relevance,
     });
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });
@@ -585,20 +624,18 @@ export const actionLoggedHttp = httpAction(async (ctx, request) => {
   } catch {
     return new Response("bad json", { status: 400 });
   }
-  if (
-    !body.idempotencyKey ||
-    !isActionKind(body.kind) ||
-    !body.summary ||
-    typeof body.sentAt !== "number"
-  ) {
+  // Sprint 2.18 #8 — relaxed: kind + summary required. sentAt defaults to
+  // now if missing. Invalid userResponse is coerced to "pending"
+  // (the existing default in the mutation), no rejection.
+  if (!body.idempotencyKey || !isActionKind(body.kind) || !body.summary) {
     return new Response("missing required fields", { status: 400 });
   }
-  if (
-    body.userResponse !== undefined &&
-    !(ACTION_RESPONSES as readonly string[]).includes(body.userResponse)
-  ) {
-    return new Response("invalid userResponse", { status: 400 });
-  }
+  const sentAt = typeof body.sentAt === "number" ? body.sentAt : Date.now();
+  const userResponse =
+    body.userResponse &&
+    (ACTION_RESPONSES as readonly string[]).includes(body.userResponse)
+      ? body.userResponse
+      : undefined; // mutation defaults to "pending"
 
   const claim = await ctx.runMutation(
     internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
@@ -618,8 +655,8 @@ export const actionLoggedHttp = httpAction(async (ctx, request) => {
       kind: body.kind,
       summary: body.summary,
       linkedEntities: body.linkedEntities,
-      sentAt: body.sentAt,
-      userResponse: body.userResponse,
+      sentAt,
+      userResponse,
       outcomeNotes: body.outcomeNotes,
     });
   } catch (err) {
@@ -664,15 +701,25 @@ export const learningExtractedHttp = httpAction(async (ctx, request) => {
   } catch {
     return new Response("bad json", { status: 400 });
   }
+  // Sprint 2.18 #8 — relaxed: learningKind + learning required.
+  // learningKey derives from `learning` if missing. confidenceScore
+  // clamps into [0,1], defaults to 0.5 if non-numeric.
   if (
     !body.idempotencyKey ||
-    !body.learningKey ||
     !isLearningKind(body.learningKind) ||
-    !body.learning ||
-    typeof body.confidenceScore !== "number"
+    !body.learning
   ) {
     return new Response("missing required fields", { status: 400 });
   }
+  const learningKey = (body.learningKey ?? body.learning)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  const confidenceScore =
+    typeof body.confidenceScore === "number"
+      ? Math.max(0, Math.min(1, body.confidenceScore))
+      : 0.5;
 
   const claim = await ctx.runMutation(
     internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
@@ -689,10 +736,10 @@ export const learningExtractedHttp = httpAction(async (ctx, request) => {
     await ctx.runMutation(internal.gtmMaya.managerStore.upsertNicheLearning, {
       accountId: auth.accountId,
       agentId: auth.agentId,
-      learningKey: body.learningKey.toLowerCase().trim(),
+      learningKey,
       learningKind: body.learningKind,
       learning: body.learning,
-      confidenceScore: body.confidenceScore,
+      confidenceScore,
       evidenceCount: body.evidenceCount,
       retired: body.retired,
     });

@@ -28,7 +28,7 @@ The bookend to the morning brief. The operator knows what they did today and how
 
 ## The recap structure
 
-≤ 120 words, plain text. Three blocks:
+As tight as Maya can make it while still useful. Three blocks:
 
 ### Block 1 — What got done (1-2 sentences, grounded)
 
@@ -57,7 +57,7 @@ If nothing's queued, say "Nothing queued yet — I'll scan again at 6am."
 For each calendar event today that wasn't marked done:
 
 - **Carry**: T1/T2 events still in their freshness window. Push to tomorrow's morning brief with a note.
-- **Cut**: anything where the thread aged out (>48h past peak) or got buried (>20 newer comments). Mark `gtmTargetThreads.status = "expired"`.
+- **Cut**: anything where the thread aged out (past peak, no realistic engagement window left) or got buried (heavy newer comments since surfacing). Mark `gtmTargetThreads.status = "expired"`. Maya judges "aged out" vs "still active."
 
 Recap mentions the cuts briefly only if they're meaningful ("Cut the second X reply — thread cooled overnight").
 
@@ -65,7 +65,7 @@ Recap mentions the cuts briefly only if they're meaningful ("Cut the second X re
 
 After a strong-grade day, Maya checks if a pattern emerged worth saving as a learning:
 
-- 3+ owned posts performed >2x baseline in the same channel at the same time-of-day → `learning_extracted` of kind `timing`.
+- A clear pattern across multiple owned posts in the same channel at the same time-of-day, performing meaningfully above baseline → `learning_extracted` of kind `timing`. Maya decides when she has enough evidence to call it a pattern; one or two posts isn't.
 - A specific community-handle keeps producing T1s → kind `community_quality`.
 - A particular hook structure keeps landing → kind `hook_pattern`.
 
@@ -96,7 +96,7 @@ If the operator replies to the recap with feedback ("the X angle didn't land —
 
 - Grounding — every number cites a `gtmPostResults` row or a calendar event ID.
 - Voice — no "great work today!" or "way to crush it." Manager voice, not coach voice.
-- Time-box — under 120 words.
+- Time-box — as tight as it can be while useful, operator reads on phone.
 
 ## Failure modes
 

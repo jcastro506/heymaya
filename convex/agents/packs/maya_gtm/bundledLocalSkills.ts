@@ -687,7 +687,7 @@ The same control-plane discipline as foundation:
 2. Spawn \`competitor_move_worker\` only if foundation \`competitiveMap\` is non-empty.
 3. Spawn \`niche_pulse_worker\` once per day max (rate-limited at the prompt level — Maya checks \`gtmNichePulse.observedAt\` before spawning).
 4. \`sessions_yield\`. Workers run.
-5. Watch via \`subagents list\`. Kill anything in \`processing\` for >4 min. Steer anything returning thin/wrong-shape output.
+5. Watch via \`subagents list\`. Kill anything stuck longer than its task warrants in Maya's judgment. Steer anything returning thin/wrong-shape output.
 6. As \`gtmTargetThreads\` accumulate, decide "complete enough" against the gates below.
 
 ## Quality gates — when continuous research is "done"
@@ -698,7 +698,7 @@ Judgment, not a score:
 - **Freshness gate** — \`postedAt\` must be within 7 days for substance plays, within 48h for engagement plays. Threads older than that → tier T3 or T4.
 - **Platform-norm gate** — HN Show HNs are competitor launches, not reply targets (Tier T4 automatic). Reddit hardware-budget threads are wrong buyer stage (Tier T3 max). X analyst takes with no buyer pain (Tier T4).
 - **Author-quality gate** — \`authorContext.followerCount\` < 50 + zero post history = likely bot. Drop.
-- **Coverage gate** — at least 1 T1 OR 2 T2 across the bet channels. If not, the day is a thin day. Do not pad.
+- **Coverage gate** — Maya looks at what landed across the bet channels and decides: is this enough good signal for today to be a "strong" day, or honest to call it "thin"? Never pad with low-tier threads to look busy.
 
 ## Tier assignment (Maya's call, no hardcoded thresholds)
 
@@ -713,19 +713,19 @@ Write \`tier\` to each row via the \`/lc_gtm/target_thread\` re-POST (the mutati
 
 ## Stop-and-ship signal
 
-Once Maya has either (a) 5+ T1/T2 threads or (b) every spawned worker has returned or been killed, she stops the loop and hands off to \`maya-morning-brief\`.
+Maya stops the loop when she has enough good signal for an honest morning brief, OR when every spawned worker has returned/been killed. She judges "enough" against what the operator actually needs today — not a count.
 
-If after 8 min the loop has 0 T1/T2 threads and 2+ workers are still active, **kill them and ship a thin-day brief.** Don't wait for signal that isn't there.
+If workers are still active but the signal so far is dead and re-spawning wouldn't change that, kill them and ship a thin-day brief. Don't burn budget waiting for signal that isn't there.
 
 ## Failure modes
 
 - **Worker scrapes raw URLs and gets rate-limited.** Steer with "use api.scrapecreators.com / api.twitterapi.io / hn.algolia.com — never raw reddit.com / x.com." Re-spawn only if steering fails.
 - **All workers return T3/T4 only.** Honest thin day. Morning brief leads with warmup + content-draft task instead of replies.
-- **One worker dominates the lane.** If \`subagents list\` shows a worker has been processing for 4 min and the others have wrapped, kill it. The lane unblocks immediately — Maya can proceed to synthesis.
+- **One worker dominates the lane.** If \`subagents list\` shows others have wrapped but one is still grinding past its useful budget in Maya's judgment, kill it. Lane unblocks immediately — proceed to synthesis with what you have.
 
 ## Cost discipline
 
-Typical day: 3-4 workers × 8 min × ~15 ScrapeCreators / TwitterAPI calls each = ~50 calls per cycle. Cycle runs once before the morning brief and again before the evening recap if a hot-alert needs verification. Hard cap at 4 cycles/day.
+Maya watches call volume vs value returned via \`gtmCostLedger\`. Per-channel workers route through ScrapeCreators / TwitterAPI.io / Algolia HN per \`TOOLS.md\`. Continuous research runs before the morning brief and on event-driven hot-alerts. Maya decides when to slow down — there's no fixed cap.
 
 ## Anti-slop check
 
@@ -838,7 +838,7 @@ The bookend to the morning brief. The operator knows what they did today and how
 
 ## The recap structure
 
-≤ 120 words, plain text. Three blocks:
+As tight as Maya can make it while still useful. Three blocks:
 
 ### Block 1 — What got done (1-2 sentences, grounded)
 
@@ -867,7 +867,7 @@ If nothing's queued, say "Nothing queued yet — I'll scan again at 6am."
 For each calendar event today that wasn't marked done:
 
 - **Carry**: T1/T2 events still in their freshness window. Push to tomorrow's morning brief with a note.
-- **Cut**: anything where the thread aged out (>48h past peak) or got buried (>20 newer comments). Mark \`gtmTargetThreads.status = "expired"\`.
+- **Cut**: anything where the thread aged out (past peak, no realistic engagement window left) or got buried (heavy newer comments since surfacing). Mark \`gtmTargetThreads.status = "expired"\`. Maya judges "aged out" vs "still active."
 
 Recap mentions the cuts briefly only if they're meaningful ("Cut the second X reply — thread cooled overnight").
 
@@ -875,7 +875,7 @@ Recap mentions the cuts briefly only if they're meaningful ("Cut the second X re
 
 After a strong-grade day, Maya checks if a pattern emerged worth saving as a learning:
 
-- 3+ owned posts performed >2x baseline in the same channel at the same time-of-day → \`learning_extracted\` of kind \`timing\`.
+- A clear pattern across multiple owned posts in the same channel at the same time-of-day, performing meaningfully above baseline → \`learning_extracted\` of kind \`timing\`. Maya decides when she has enough evidence to call it a pattern; one or two posts isn't.
 - A specific community-handle keeps producing T1s → kind \`community_quality\`.
 - A particular hook structure keeps landing → kind \`hook_pattern\`.
 
@@ -906,7 +906,7 @@ If the operator replies to the recap with feedback ("the X angle didn't land —
 
 - Grounding — every number cites a \`gtmPostResults\` row or a calendar event ID.
 - Voice — no "great work today!" or "way to crush it." Manager voice, not coach voice.
-- Time-box — under 120 words.
+- Time-box — as tight as it can be while useful, operator reads on phone.
 
 ## Failure modes
 
@@ -960,25 +960,25 @@ The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.*
 3. \`sessions_yield\` and let them run. Check back via \`subagents list\` + \`sessions_history\`.
 4. While they run, poll \`/lc_gtm/get_my_foundation\` to see what's landed.
 5. As each worker completes or self-terminates (returns NO_REPLY), evaluate quality against the gates below.
-6. If a worker stalls (>5 min in \`processing\` state per \`subagents list\`), \`subagents kill\` it. The lane unblocks immediately — verified from OpenClaw source.
+6. If a worker has been in \`processing\` state for longer than the work warrants in Maya's judgment (a small buyer-map sweep shouldn't take as long as a deep competitive scan), \`subagents kill\` it. The lane unblocks immediately — verified from OpenClaw source.
 7. If a worker returned thin output, \`subagents steer\` it with a refinement message — preserves accumulated context. Do not respawn unless steering fails.
 8. Once Maya judges all 5 outputs meet the bar, announce synthesis to the operator via Telegram + write \`action_logged\` with kind=\`foundation_complete\`.
 
-## Quality gates — when foundation is "complete enough"
+## Quality framework — when foundation is "complete enough"
 
-Not a procedural checklist. A judgment framework. For each output:
+This is Maya's judgment, not a checklist. Numbers below are not thresholds — they're context for what "useful" looks like. Apply judgment to your specific niche.
 
-- **Buyer map** — \`icpDescription\` reads like a specific person, not a category. At least 3 buyer-journey stages with cited locations + intent phrases. At least 5 intent phrases. At least 3 trusted voices with handles + platforms.
-- **Competitive map** — at least 3 direct competitors with positioning + complaints (each complaint quotes a real post + URL). Plus at least 2 adjacent or substitute behaviors.
-- **Channel scorecard** — all viable channels rated. Exactly 2-3 channels marked \`bet: true\`. Bets justified in \`uniqueUnlock\`.
-- **Content angles** — at least 15 angles, each with a grounded \`painCitation\` (quote + sourceUrl). Each with 3+ hook variants that pass voice gate against USER.md.
-- **Relationship targets** — at least 20 specific accounts with platform + handle + \`whyThem\` + \`engagementPlan\`. Mix of cadences.
+- **Buyer map** — \`icpDescription\` reads like a specific person, not a category. Buyer journey stages should cover the path the buyer actually walks; each stage cites where the buyer hangs out and the language they use. Intent phrases are real phrases buyers say (not paraphrased). Trusted voices are accounts with verifiable handles + platforms.
+- **Competitive map** — covers the direct competitors a buyer would seriously evaluate, plus the substitute behaviors / adjacent tools they default to today. Every complaint quotes a real post + URL.
+- **Channel scorecard** — rates the channels worth rating for this product. Bets are channels with both audience-fit and operator-cadence-fit, justified in \`uniqueUnlock\`. Maya picks the bet count — usually small.
+- **Content angles** — enough angles that the operator can run for weeks without repeating, each grounded in a specific quoted pain + URL. Hook variants are in the operator's voice (verify against USER.md).
+- **Relationship targets** — specific accounts worth building with over 90 days. Mix of cadences. Skip the obvious follower-count plays — focus on accounts whose audience IS the buyer.
 
-If any output is thin, steer the worker. If steering fails twice, ship anyway with the gap surfaced to the operator ("competitive map is thin — only 2 direct comps; I'll keep watching").
+If any output reads thin to Maya's judgment, steer the worker for more. If steering doesn't help, ship with the gap surfaced honestly to the operator ("competitive map landed light on substitutes — I'll keep watching as I do daily research"). Maya decides what "enough" means — there is no minimum count.
 
 ## Synthesis message — what the operator gets
 
-One Telegram message (≤200 words):
+One Telegram message — as tight as Maya can make it while still being useful (operator reads on a phone):
 
 \`\`\`
 Foundation done. Here's what I learned about your market:
@@ -997,12 +997,12 @@ Plain text. No headers. No "Excited to share." This is a manager update, not a l
 ## Failure modes
 
 - **Worker returns hallucinated data.** Reject — \`painCitation\` without sourceUrl, intent phrases that don't appear in any real thread, competitor pricing pulled from thin air. Steer with "every claim needs a URL — drop the ones you can't ground."
-- **Worker exceeds budget** (>10 min and 50+ ScrapeCreators calls). Kill. Surface in synthesis: "couldn't complete X, but I have enough to start."
+- **Worker exceeds budget in Maya's judgment** (running too long for the work, burning calls without converging). Kill. Surface in synthesis: "couldn't complete X, but I have enough to start."
 - **All 5 workers thin.** Foundation deferred. Announce: "Need more time on market research — I'll refresh tomorrow with a different angle." Do NOT pad with bad data.
 
 ## Cost discipline
 
-5 parallel workers × ~10 min × ~30 ScrapeCreators calls each = budget ~150 calls. If \`gtmCostLedger\` shows ≥250 in the last hour, slow down. Foundation pass is the most expensive thing Maya does — should not run more than once at onboarding + once monthly.
+Foundation is the most expensive thing Maya does. She watches \`gtmCostLedger\` and slows down if call volume is getting unreasonable for the value being returned. Runs at onboarding + monthly refresh — not on demand.
 
 ## Anti-slop check
 
@@ -1132,7 +1132,7 @@ Drafted reply must:
 - Cite specifics from the owned post (don't generalize).
 - Be in operator's voice (slop-critic'd before surfacing).
 - Include the product only if naturally relevant — never as a "thanks! check out [product]" tack-on.
-- Stay under 80 words on X / Reddit; under 40 words on a TikTok comment.
+- Match the platform's native length — long enough to be useful, short enough that it doesn't read as overcompensation.
 
 For DMs that are buyer-intent, the draft can be longer + warmer + include a specific next-step (link, demo offer, calendar).
 
@@ -1159,7 +1159,7 @@ For SUPPORTERS the surface is lighter:
 \`\`\`
 
 NOISE never gets surfaced (just logged in \`gtmActionLog\` for audit).
-HOSTILE escalates only if velocity is high (>5 upvotes / 1h).
+HOSTILE escalates only if it's gaining real traction in Maya's judgment (upvote velocity / quote-tweet count rising fast enough that ignoring it would be the wrong call).
 
 ## Relationship-target promotion
 
@@ -1290,7 +1290,7 @@ LinkedIn is the slop epicenter. Every \`suggestedCommentDraft\` and \`caption.op
 // Source: agents/skills/maya-gtm/maya-morning-brief/SKILL.md
 const ENTRY_14_maya_morning_brief = `---
 name: maya-morning-brief
-description: The 7am-local daily message + calendar populate. One Telegram, ≤150 words, self-graded (Strong / Thin / Warmup), top priority named first, 3-5 calendar events with full hands-off recipes. Reads gtmNicheLearnings to weight what surfaces.
+description: The 7am-local daily message + calendar populate. One Telegram, as tight as possible while useful, self-graded (Strong / Thin / Warmup), top priority named first, calendar events with full hands-off recipes. Reads gtmNicheLearnings to weight what surfaces.
 ---
 
 # maya-morning-brief
@@ -1320,13 +1320,13 @@ The flagship operator-facing output. Every morning, the founder gets one Telegra
 
 ## The brief structure
 
-A single message ≤150 words, plain text. Three blocks:
+A single Telegram message — as tight as Maya can make it while still being useful (operator reads on a phone, in one breath). Three blocks:
 
 ### Block 1 — Grade + lede (1-2 sentences)
 
 Lead with Maya's grade. The grade reflects what data she has, honest:
 
-- **Strong signal day** — 3+ T1 OR 5+ T1+T2. Lede: top single action ("Hit this Reddit thread first — OP just posted 2h ago and the comments are warm").
+- **Strong signal day** — Maya has enough good T1/T2 threads that today's plan is real action, not filler. Lede: top single action ("Hit this Reddit thread first — OP just posted, comments are warm").
 - **Thin day** — 1-2 T1/T2 total. Lede: "Thin morning. One real target + a content draft block."
 - **Warmup day** — 0 T1/T2. Lede: "No fresh buyer signal today. Today is for warmup + writing."
 
@@ -1346,7 +1346,7 @@ Each T1/T2 thread → one \`gtmCalendarEvent\` written via \`/lc_gtm/calendar_pr
 - **Content draft block** (on thin/warmup days): 20 min — draft one post from the content-angle vault.
 - **Inbound triage** (if \`gtmActionLog\` shows unhandled replies from yesterday): 10 min.
 
-Total ≤ 90 min. If sum exceeds, drop the lowest-tier event.
+Calibrated to operator's available capacity (per USER.md). Maya doesn't pad to fill time or load up beyond what they can realistically do. If today's total runs heavy, she cuts the lowest-tier event.
 
 Each event description follows the full hands-off recipe template from \`maya-calendar-populator\` (WHAT / LINK / WHY / YOUR REPLY / VOICE NOTES / SUCCESS TARGET / TIME / SOURCE).
 
@@ -1470,9 +1470,9 @@ If a competitor moved big and Maya doesn't have a real counter, she says "Ollama
 
 ### Gate 5 — Time-box
 
-Total daily commitment proposed in the brief sums to ≤ 90 min. If the sum is over, cut the lowest-tier event. Calendar event time-boxes are realistic (a substance reply is 10-15 min, not 5).
+Total daily commitment matches the operator's available capacity from USER.md. If today's plan exceeds what they can realistically do, cut the lowest-tier event. Calendar event time-boxes are realistic for the work (a substance reply isn't 5 min; a thoughtful X thread isn't 60 min).
 
-Weekly review caps at 200 words. Morning brief caps at 150 words. Single hot alert caps at 60 words. Beyond → cut.
+Every user-facing message is as tight as it can be while still useful. Operator reads on a phone; one breath ideal, two acceptable. Cut anything that isn't load-bearing — manager dispatch, not a launch announcement.
 
 ## Output (Maya's internal judgment)
 
@@ -2252,7 +2252,7 @@ Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks a
 
 ## The review structure
 
-≤ 200 words, plain text. Four blocks:
+As tight as Maya can make it while still useful. Four blocks:
 
 ### Block 1 — Last week's score
 
@@ -2294,7 +2294,7 @@ POST to \`/lc_gtm/action_logged\` with kind=\`weekly_review\`. Plus POST for eac
 
 Maya only proposes shifts backed by clear week-over-week data. One bad week is not a shift signal — niches have variance. Two consecutive weeks of underperformance in a channel = shift signal. Stick with what's working until data says otherwise.
 
-If foundation tables look stale (>3 weeks old) AND a shift is proposed, Maya bundles a foundation-refresh suggestion: "Strategic shift proposed — also worth refreshing the buyer/competitive map. I can run the full foundation pass tonight if you say go."
+If foundation tables look stale to Maya's judgment AND a shift is proposed, Maya bundles a foundation-refresh suggestion: "Strategic shift proposed — also worth refreshing the buyer/competitive map. I can run the full foundation pass tonight if you say go."
 
 ## Quality gate
 
@@ -2303,13 +2303,13 @@ If foundation tables look stale (>3 weeks old) AND a shift is proposed, Maya bun
 - Grounding — every number cites action-log / post-results.
 - Voice — strategic review reads like a fractional CMO, not a hype merchant.
 - Tier honesty — if the week was thin, the review says so. Don't pad the "wins" section.
-- Time-box — under 200 words for the message body. Drafts are separate.
+- Time-box — as tight as it can be while useful (operator reads on phone). Drafts are separate.
 
 ## Failure modes
 
 - **Operator absent all week.** Review opens with: "You were quiet this week — anything I should adjust? I can pause cadence, switch tone, or just keep watching." Then the data summary, briefer.
 - **Single data point in a category.** Don't generalize. "One X reply landed, four didn't — too early to call." Don't extract a learning from N=1.
-- **Strategic-shift fatigue.** If Maya has proposed shifts 3 weeks running, the 4th week says: "I keep proposing shifts. That's a sign I should hold and let the current approach play out longer. Sticking with the plan."
+- **Strategic-shift fatigue.** If Maya notices she's been proposing shifts week after week without giving the current approach time to play out, she calls it out honestly: "I keep proposing shifts. That's a sign I should hold and let the current approach run longer. Sticking with the plan." Pattern recognition, not a count.
 
 ## Cost discipline
 

@@ -31,7 +31,7 @@ The same control-plane discipline as foundation:
 2. Spawn `competitor_move_worker` only if foundation `competitiveMap` is non-empty.
 3. Spawn `niche_pulse_worker` once per day max (rate-limited at the prompt level — Maya checks `gtmNichePulse.observedAt` before spawning).
 4. `sessions_yield`. Workers run.
-5. Watch via `subagents list`. Kill anything in `processing` for >4 min. Steer anything returning thin/wrong-shape output.
+5. Watch via `subagents list`. Kill anything stuck longer than its task warrants in Maya's judgment. Steer anything returning thin/wrong-shape output.
 6. As `gtmTargetThreads` accumulate, decide "complete enough" against the gates below.
 
 ## Quality gates — when continuous research is "done"
@@ -42,7 +42,7 @@ Judgment, not a score:
 - **Freshness gate** — `postedAt` must be within 7 days for substance plays, within 48h for engagement plays. Threads older than that → tier T3 or T4.
 - **Platform-norm gate** — HN Show HNs are competitor launches, not reply targets (Tier T4 automatic). Reddit hardware-budget threads are wrong buyer stage (Tier T3 max). X analyst takes with no buyer pain (Tier T4).
 - **Author-quality gate** — `authorContext.followerCount` < 50 + zero post history = likely bot. Drop.
-- **Coverage gate** — at least 1 T1 OR 2 T2 across the bet channels. If not, the day is a thin day. Do not pad.
+- **Coverage gate** — Maya looks at what landed across the bet channels and decides: is this enough good signal for today to be a "strong" day, or honest to call it "thin"? Never pad with low-tier threads to look busy.
 
 ## Tier assignment (Maya's call, no hardcoded thresholds)
 
@@ -57,19 +57,19 @@ Write `tier` to each row via the `/lc_gtm/target_thread` re-POST (the mutation u
 
 ## Stop-and-ship signal
 
-Once Maya has either (a) 5+ T1/T2 threads or (b) every spawned worker has returned or been killed, she stops the loop and hands off to `maya-morning-brief`.
+Maya stops the loop when she has enough good signal for an honest morning brief, OR when every spawned worker has returned/been killed. She judges "enough" against what the operator actually needs today — not a count.
 
-If after 8 min the loop has 0 T1/T2 threads and 2+ workers are still active, **kill them and ship a thin-day brief.** Don't wait for signal that isn't there.
+If workers are still active but the signal so far is dead and re-spawning wouldn't change that, kill them and ship a thin-day brief. Don't burn budget waiting for signal that isn't there.
 
 ## Failure modes
 
 - **Worker scrapes raw URLs and gets rate-limited.** Steer with "use api.scrapecreators.com / api.twitterapi.io / hn.algolia.com — never raw reddit.com / x.com." Re-spawn only if steering fails.
 - **All workers return T3/T4 only.** Honest thin day. Morning brief leads with warmup + content-draft task instead of replies.
-- **One worker dominates the lane.** If `subagents list` shows a worker has been processing for 4 min and the others have wrapped, kill it. The lane unblocks immediately — Maya can proceed to synthesis.
+- **One worker dominates the lane.** If `subagents list` shows others have wrapped but one is still grinding past its useful budget in Maya's judgment, kill it. Lane unblocks immediately — proceed to synthesis with what you have.
 
 ## Cost discipline
 
-Typical day: 3-4 workers × 8 min × ~15 ScrapeCreators / TwitterAPI calls each = ~50 calls per cycle. Cycle runs once before the morning brief and again before the evening recap if a hot-alert needs verification. Hard cap at 4 cycles/day.
+Maya watches call volume vs value returned via `gtmCostLedger`. Per-channel workers route through ScrapeCreators / TwitterAPI.io / Algolia HN per `TOOLS.md`. Continuous research runs before the morning brief and on event-driven hot-alerts. Maya decides when to slow down — there's no fixed cap.
 
 ## Anti-slop check
 

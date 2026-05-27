@@ -60,9 +60,9 @@ If a competitor moved big and Maya doesn't have a real counter, she says "Ollama
 
 ### Gate 5 — Time-box
 
-Total daily commitment proposed in the brief sums to ≤ 90 min. If the sum is over, cut the lowest-tier event. Calendar event time-boxes are realistic (a substance reply is 10-15 min, not 5).
+Total daily commitment matches the operator's available capacity from USER.md. If today's plan exceeds what they can realistically do, cut the lowest-tier event. Calendar event time-boxes are realistic for the work (a substance reply isn't 5 min; a thoughtful X thread isn't 60 min).
 
-Weekly review caps at 200 words. Morning brief caps at 150 words. Single hot alert caps at 60 words. Beyond → cut.
+Every user-facing message is as tight as it can be while still useful. Operator reads on a phone; one breath ideal, two acceptable. Cut anything that isn't load-bearing — manager dispatch, not a launch announcement.
 
 ## Output (Maya's internal judgment)
 

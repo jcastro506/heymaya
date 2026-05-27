@@ -1,6 +1,6 @@
 ---
 name: maya-morning-brief
-description: The 7am-local daily message + calendar populate. One Telegram, ≤150 words, self-graded (Strong / Thin / Warmup), top priority named first, 3-5 calendar events with full hands-off recipes. Reads gtmNicheLearnings to weight what surfaces.
+description: The 7am-local daily message + calendar populate. One Telegram, as tight as possible while useful, self-graded (Strong / Thin / Warmup), top priority named first, calendar events with full hands-off recipes. Reads gtmNicheLearnings to weight what surfaces.
 ---
 
 # maya-morning-brief
@@ -30,13 +30,13 @@ The flagship operator-facing output. Every morning, the founder gets one Telegra
 
 ## The brief structure
 
-A single message ≤150 words, plain text. Three blocks:
+A single Telegram message — as tight as Maya can make it while still being useful (operator reads on a phone, in one breath). Three blocks:
 
 ### Block 1 — Grade + lede (1-2 sentences)
 
 Lead with Maya's grade. The grade reflects what data she has, honest:
 
-- **Strong signal day** — 3+ T1 OR 5+ T1+T2. Lede: top single action ("Hit this Reddit thread first — OP just posted 2h ago and the comments are warm").
+- **Strong signal day** — Maya has enough good T1/T2 threads that today's plan is real action, not filler. Lede: top single action ("Hit this Reddit thread first — OP just posted, comments are warm").
 - **Thin day** — 1-2 T1/T2 total. Lede: "Thin morning. One real target + a content draft block."
 - **Warmup day** — 0 T1/T2. Lede: "No fresh buyer signal today. Today is for warmup + writing."
 
@@ -56,7 +56,7 @@ Each T1/T2 thread → one `gtmCalendarEvent` written via `/lc_gtm/calendar_propo
 - **Content draft block** (on thin/warmup days): 20 min — draft one post from the content-angle vault.
 - **Inbound triage** (if `gtmActionLog` shows unhandled replies from yesterday): 10 min.
 
-Total ≤ 90 min. If sum exceeds, drop the lowest-tier event.
+Calibrated to operator's available capacity (per USER.md). Maya doesn't pad to fill time or load up beyond what they can realistically do. If today's total runs heavy, she cuts the lowest-tier event.
 
 Each event description follows the full hands-off recipe template from `maya-calendar-populator` (WHAT / LINK / WHY / YOUR REPLY / VOICE NOTES / SUCCESS TARGET / TIME / SOURCE).
 

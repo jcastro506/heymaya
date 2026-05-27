@@ -34,25 +34,25 @@ The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.*
 3. `sessions_yield` and let them run. Check back via `subagents list` + `sessions_history`.
 4. While they run, poll `/lc_gtm/get_my_foundation` to see what's landed.
 5. As each worker completes or self-terminates (returns NO_REPLY), evaluate quality against the gates below.
-6. If a worker stalls (>5 min in `processing` state per `subagents list`), `subagents kill` it. The lane unblocks immediately — verified from OpenClaw source.
+6. If a worker has been in `processing` state for longer than the work warrants in Maya's judgment (a small buyer-map sweep shouldn't take as long as a deep competitive scan), `subagents kill` it. The lane unblocks immediately — verified from OpenClaw source.
 7. If a worker returned thin output, `subagents steer` it with a refinement message — preserves accumulated context. Do not respawn unless steering fails.
 8. Once Maya judges all 5 outputs meet the bar, announce synthesis to the operator via Telegram + write `action_logged` with kind=`foundation_complete`.
 
-## Quality gates — when foundation is "complete enough"
+## Quality framework — when foundation is "complete enough"
 
-Not a procedural checklist. A judgment framework. For each output:
+This is Maya's judgment, not a checklist. Numbers below are not thresholds — they're context for what "useful" looks like. Apply judgment to your specific niche.
 
-- **Buyer map** — `icpDescription` reads like a specific person, not a category. At least 3 buyer-journey stages with cited locations + intent phrases. At least 5 intent phrases. At least 3 trusted voices with handles + platforms.
-- **Competitive map** — at least 3 direct competitors with positioning + complaints (each complaint quotes a real post + URL). Plus at least 2 adjacent or substitute behaviors.
-- **Channel scorecard** — all viable channels rated. Exactly 2-3 channels marked `bet: true`. Bets justified in `uniqueUnlock`.
-- **Content angles** — at least 15 angles, each with a grounded `painCitation` (quote + sourceUrl). Each with 3+ hook variants that pass voice gate against USER.md.
-- **Relationship targets** — at least 20 specific accounts with platform + handle + `whyThem` + `engagementPlan`. Mix of cadences.
+- **Buyer map** — `icpDescription` reads like a specific person, not a category. Buyer journey stages should cover the path the buyer actually walks; each stage cites where the buyer hangs out and the language they use. Intent phrases are real phrases buyers say (not paraphrased). Trusted voices are accounts with verifiable handles + platforms.
+- **Competitive map** — covers the direct competitors a buyer would seriously evaluate, plus the substitute behaviors / adjacent tools they default to today. Every complaint quotes a real post + URL.
+- **Channel scorecard** — rates the channels worth rating for this product. Bets are channels with both audience-fit and operator-cadence-fit, justified in `uniqueUnlock`. Maya picks the bet count — usually small.
+- **Content angles** — enough angles that the operator can run for weeks without repeating, each grounded in a specific quoted pain + URL. Hook variants are in the operator's voice (verify against USER.md).
+- **Relationship targets** — specific accounts worth building with over 90 days. Mix of cadences. Skip the obvious follower-count plays — focus on accounts whose audience IS the buyer.
 
-If any output is thin, steer the worker. If steering fails twice, ship anyway with the gap surfaced to the operator ("competitive map is thin — only 2 direct comps; I'll keep watching").
+If any output reads thin to Maya's judgment, steer the worker for more. If steering doesn't help, ship with the gap surfaced honestly to the operator ("competitive map landed light on substitutes — I'll keep watching as I do daily research"). Maya decides what "enough" means — there is no minimum count.
 
 ## Synthesis message — what the operator gets
 
-One Telegram message (≤200 words):
+One Telegram message — as tight as Maya can make it while still being useful (operator reads on a phone):
 
 ```
 Foundation done. Here's what I learned about your market:
@@ -71,12 +71,12 @@ Plain text. No headers. No "Excited to share." This is a manager update, not a l
 ## Failure modes
 
 - **Worker returns hallucinated data.** Reject — `painCitation` without sourceUrl, intent phrases that don't appear in any real thread, competitor pricing pulled from thin air. Steer with "every claim needs a URL — drop the ones you can't ground."
-- **Worker exceeds budget** (>10 min and 50+ ScrapeCreators calls). Kill. Surface in synthesis: "couldn't complete X, but I have enough to start."
+- **Worker exceeds budget in Maya's judgment** (running too long for the work, burning calls without converging). Kill. Surface in synthesis: "couldn't complete X, but I have enough to start."
 - **All 5 workers thin.** Foundation deferred. Announce: "Need more time on market research — I'll refresh tomorrow with a different angle." Do NOT pad with bad data.
 
 ## Cost discipline
 
-5 parallel workers × ~10 min × ~30 ScrapeCreators calls each = budget ~150 calls. If `gtmCostLedger` shows ≥250 in the last hour, slow down. Foundation pass is the most expensive thing Maya does — should not run more than once at onboarding + once monthly.
+Foundation is the most expensive thing Maya does. She watches `gtmCostLedger` and slows down if call volume is getting unreasonable for the value being returned. Runs at onboarding + monthly refresh — not on demand.
 
 ## Anti-slop check
 

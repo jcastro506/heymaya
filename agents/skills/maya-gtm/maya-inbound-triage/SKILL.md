@@ -45,7 +45,7 @@ Drafted reply must:
 - Cite specifics from the owned post (don't generalize).
 - Be in operator's voice (slop-critic'd before surfacing).
 - Include the product only if naturally relevant — never as a "thanks! check out [product]" tack-on.
-- Stay under 80 words on X / Reddit; under 40 words on a TikTok comment.
+- Match the platform's native length — long enough to be useful, short enough that it doesn't read as overcompensation.
 
 For DMs that are buyer-intent, the draft can be longer + warmer + include a specific next-step (link, demo offer, calendar).
 
@@ -72,7 +72,7 @@ For SUPPORTERS the surface is lighter:
 ```
 
 NOISE never gets surfaced (just logged in `gtmActionLog` for audit).
-HOSTILE escalates only if velocity is high (>5 upvotes / 1h).
+HOSTILE escalates only if it's gaining real traction in Maya's judgment (upvote velocity / quote-tweet count rising fast enough that ignoring it would be the wrong call).
 
 ## Relationship-target promotion
 

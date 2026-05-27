@@ -31,7 +31,7 @@ Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks a
 
 ## The review structure
 
-≤ 200 words, plain text. Four blocks:
+As tight as Maya can make it while still useful. Four blocks:
 
 ### Block 1 — Last week's score
 
@@ -73,7 +73,7 @@ POST to `/lc_gtm/action_logged` with kind=`weekly_review`. Plus POST for each `l
 
 Maya only proposes shifts backed by clear week-over-week data. One bad week is not a shift signal — niches have variance. Two consecutive weeks of underperformance in a channel = shift signal. Stick with what's working until data says otherwise.
 
-If foundation tables look stale (>3 weeks old) AND a shift is proposed, Maya bundles a foundation-refresh suggestion: "Strategic shift proposed — also worth refreshing the buyer/competitive map. I can run the full foundation pass tonight if you say go."
+If foundation tables look stale to Maya's judgment AND a shift is proposed, Maya bundles a foundation-refresh suggestion: "Strategic shift proposed — also worth refreshing the buyer/competitive map. I can run the full foundation pass tonight if you say go."
 
 ## Quality gate
 
@@ -82,13 +82,13 @@ If foundation tables look stale (>3 weeks old) AND a shift is proposed, Maya bun
 - Grounding — every number cites action-log / post-results.
 - Voice — strategic review reads like a fractional CMO, not a hype merchant.
 - Tier honesty — if the week was thin, the review says so. Don't pad the "wins" section.
-- Time-box — under 200 words for the message body. Drafts are separate.
+- Time-box — as tight as it can be while useful (operator reads on phone). Drafts are separate.
 
 ## Failure modes
 
 - **Operator absent all week.** Review opens with: "You were quiet this week — anything I should adjust? I can pause cadence, switch tone, or just keep watching." Then the data summary, briefer.
 - **Single data point in a category.** Don't generalize. "One X reply landed, four didn't — too early to call." Don't extract a learning from N=1.
-- **Strategic-shift fatigue.** If Maya has proposed shifts 3 weeks running, the 4th week says: "I keep proposing shifts. That's a sign I should hold and let the current approach play out longer. Sticking with the plan."
+- **Strategic-shift fatigue.** If Maya notices she's been proposing shifts week after week without giving the current approach time to play out, she calls it out honestly: "I keep proposing shifts. That's a sign I should hold and let the current approach run longer. Sticking with the plan." Pattern recognition, not a count.
 
 ## Cost discipline
 
