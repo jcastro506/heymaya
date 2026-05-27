@@ -394,12 +394,17 @@ export function buildGatewayConfig(
           primary: mainModel,
         },
         memorySearch,
-        // Sprint 2.16h — extend LLM idle-watchdog from default ~120s to 300s.
-        // Gemini 3.5 Flash with high thinking on multi-step prompts can pause
-        // mid-stream past 120s; pi-coding-agent then aborts and the agent
-        // surfaces "LLM request timed out" to the user. OpenClaw runtime
-        // error message names this exact key as the fix.
-        llm: { idleTimeoutSeconds: 300 },
+        // Sprint 2.18 — `llm.idleTimeoutSeconds` REMOVED. The whole `llm`
+        // sub-key was valid in 4.23 (added Sprint 2.16h to extend the
+        // idle-watchdog from 120s → 300s for Gemini 3.5 Flash high-thinking
+        // streams) but 5.x dropped it from the schema. OpenClaw 5.12's
+        // stream-establishment idle-timer fix (catch SDK requests stuck at
+        // TCP/TLS handshake) supersedes the per-config tunable — idle
+        // detection now races against the same internal watchdog with no
+        // user-facing knob. Verified via /tmp/openclaw-inspect diff:
+        // `idleTimeoutSeconds` exists in 4.23 types.agent-defaults.d.ts:481
+        // but is absent from 5.26 types.agent-defaults.d.ts. Live deploy
+        // failed with "agents.defaults: Invalid input" until removed.
         // Sprint 2.16l — attempted `thinking: "minimal"` at this level
         // to avoid OpenRouter's "Reasoning is mandatory" 400 + auto-retry
         // round-trip on every LLM call with gemini-3.5-flash. But the
@@ -821,7 +826,22 @@ export const deployMayaGtm = internalAction({
     }
 
     try {
-      await fly.setAppSecrets(bundle.flyAppName, collectDeploySecrets());
+      // Sprint 2.18 — mint a per-deploy OPENCLAW_GATEWAY_TOKEN. OpenClaw
+      // 2026.5.x refuses to start the gateway in container environments
+      // without explicit auth ("Refusing to bind gateway to <bind>
+      // without auth"). The 4.x flow auto-generated and persisted a
+      // token in gateway.auth.token; 5.x removed that for security and
+      // requires the operator to supply credentials. We mint a fresh
+      // 32-byte hex token per deploy and inject as env so the runtime
+      // satisfies the auth check without us baking a secret into the
+      // openclaw.json that lives on the volume.
+      const gatewayToken = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      await fly.setAppSecrets(bundle.flyAppName, {
+        ...collectDeploySecrets(),
+        OPENCLAW_GATEWAY_TOKEN: gatewayToken,
+      });
     } catch (err) {
       return fail("set-secrets", (err as Error).message, isRetryable(err));
     }
@@ -1124,7 +1144,15 @@ function buildBootstrapShell(): string {
     "chmod 600 /data/cron/jobs.json",
     'echo "$MAYA_BOOTSTRAP_JSON" | jq .gatewayConfig > /data/openclaw.json',
     'echo "[bootstrap] launching openclaw gateway..."',
-    "exec openclaw gateway --allow-unconfigured",
+    // Sprint 2.18 — `--bind lan` is REQUIRED in OpenClaw 2026.5.x
+    // container environments. Without it, the gateway defaults to
+    // bind=auto (0.0.0.0) and 5.x refuses to start with "Refusing to
+    // bind gateway to auto without auth." (security hardening, no
+    // longer auto-generates a token). We bind to LAN-only since the
+    // gateway is internal to the Fly machine — the Telegram webhook
+    // is the only public surface, and that's listening on a separate
+    // port via the channel config.
+    "exec openclaw gateway --bind lan --allow-unconfigured",
   ].join(" && ");
 }
 
