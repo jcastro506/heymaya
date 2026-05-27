@@ -1173,6 +1173,32 @@ export const tailLatestMaya = internalAction({
   },
 });
 
+export const peekLatestApp = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    const all = await ctx.db.query("creators").collect();
+    const tests = all
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (tests.length === 0) return null;
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", tests[0]._id))
+      .first();
+    if (!agent?.appId) return null;
+    const app = await ctx.db.get(agent.appId);
+    return {
+      productName: (app as { name?: string } | null)?.name,
+      productUrl: (app as { url?: string } | null)?.url,
+      founderWhy: (app as { founderWhy?: string } | null)?.founderWhy,
+      stage: (app as { stage?: string } | null)?.stage,
+      weekGoal: (app as { weekGoal?: string } | null)?.weekGoal,
+      telegramChatId: agent.telegramChatId,
+      flyAppId: agent.openClawFlyAppId,
+    };
+  },
+});
+
 export const findLatestGtmTestAgent = internalQuery({
   args: {},
   handler: async (ctx): Promise<{ flyAppId?: string } | null> => {

@@ -1139,6 +1139,20 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
       return "Turn the deep-research target list into 14 days of typed calendar events mapped to the operator's current PLAYBOOK phase. Schedules reply windows, warmup blocks, soft launch posts, and engagement windows with links to target threads + drafts.";
     case "maya-voice-matcher":
       return "Score every drafted reply/post/thread on voice match + slop-critic + specificity. Drafts that fail go back to the originating subagent with edit feedback or get auto-rejected. The pre-publish quality gate.";
+    case "maya-foundation-research":
+      return "Orchestrate the 5-worker foundation pass (buyer map, competitive map, channel scorecard, content angles, relationship targets) via native subagents lifecycle. Decide complete-enough, write to gtmBuyerMap et al, announce synthesis.";
+    case "maya-continuous-research":
+      return "Daily target-thread discovery via per-channel workers. Native subagents list/kill/steer to manage them. Tier T1-T4 per Maya's judgment. Stop-and-ship at 5+ T1/T2 or 8min ceiling.";
+    case "maya-output-critic":
+      return "The 5-gate judgment framework Maya consults before every user-facing send: grounding / voice / recipe / tier-honesty / time-box. Iterate-or-ship-with-caveat, never silently low-quality.";
+    case "maya-morning-brief":
+      return "7am-local daily Telegram brief. ≤150 words, self-graded (Strong/Thin/Warmup). Reads gtmNicheLearnings to weight surfacing. Writes today's gtmCalendarEvents with full hands-off recipes.";
+    case "maya-evening-recap":
+      return "20:00-local one-message recap. What got done grounded in gtmPostResults, performance read, tomorrow setup, learning extraction when ≥3 evidence points support a pattern.";
+    case "maya-weekly-review":
+      return "Sunday-18:00 strategic review. Last week's score, learnings (write to gtmNicheLearnings), strategic shift if 2+ weeks of consistent signal, next-week content drafts.";
+    case "maya-inbound-triage":
+      return "Event-driven reply/DM/mention triage. Classify BUYER / SUPPORTER / NOISE / HOSTILE, draft a reply for the first two, surface one-liner to operator with reply/edit/skip controls.";
   }
 }
 
