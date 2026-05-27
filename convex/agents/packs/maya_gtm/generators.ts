@@ -827,24 +827,81 @@ Then orchestrate:
 7. Poll \`$CONVEX_SITE_URL/lc_gtm/get_my_foundation\` between checks to
    see what's landed.
 
-8. When you judge all 5 outputs complete enough (per the skill's
-   quality framework), compose the synthesis message per the skill's
-   output template and send via the \`message\` tool.
+8. When you judge all 5 operating-model outputs complete enough (per
+   the skill's quality framework), **DO NOT send the synthesis yet.**
+   The operator already waited for Phase 1. Making them wait again
+   after "yes find threads and draft replies" is broken UX. Continue
+   in the same pass into Phase 2.
 
-9. POST \`$CONVEX_SITE_URL/lc_gtm/action_logged\` with
-   \`kind: "foundation_complete"\`.
+### Phase 2 — find live threads + draft replies (same pass)
 
-10. Append \`foundation_completed_at: <ISO ts>\` to MEMORY.md.
+9. Read \`gtmChannelScorecard\` to find the bet channels (typically
+   reddit + x, sometimes hn). For each bet channel, \`sessions_spawn\`
+   the matching continuous worker (\`reddit_research\`, \`x_research\`,
+   \`hn_research\`).
 
-11. Set up the daily cadence: schedule morning brief, evening recap,
-    and weekly review crons via the native \`cron action=add\` tool. Use
-    USER.md timezone. Schedule:
+   Worker task string MUST include:
+   - The product context + buyer pain from gtmBuyerMap.
+   - The intent phrases from gtmBuyerMap.intentPhrases (so they search
+     for what buyers actually say).
+   - The content angles from gtmContentAngles (so reply drafts align
+     with the operator's positioning).
+   - Mandate: "find 5-10 LIVE threads in this channel where buyers
+     are venting about this pain right now. For each, POST to
+     \`/lc_gtm/target_thread\` with painQuote (VERBATIM from post body,
+     not paraphrased), postedAt, velocityScore, audienceSize, AND a
+     draftReply field with a real reply in the operator's voice."
+   - API discipline: ScrapeCreators for reddit, TwitterAPI.io for x,
+     Algolia HN for hn. NEVER raw curl on platform domains.
+
+10. \`sessions_yield\`. Watch with \`subagents action=list\`. Kill stuck
+    workers in Maya's judgment; steer thin output via
+    \`subagents action=steer\`.
+
+### Phase 3 — build the first-week calendar (same pass)
+
+11. Read \`/data/workspace/skills/maya-calendar-populator/SKILL.md\`
+    for the recipe template.
+
+12. Read \`gtmTargetThreads\` (just landed via Phase 2 workers) and
+    \`gtmContentAngles\`. Assemble 5-10 \`gtmCalendarEvents\` for the
+    coming 7 days — a mix of reply windows (per target_thread),
+    warmup blocks, content-draft blocks. Each event MUST be a full
+    hands-off recipe per the calendar-populator template: WHAT, LINK,
+    WHY, YOUR REPLY (verbatim drafted text), VOICE NOTES, AFTER YOU
+    POST, SUCCESS TARGET, TIME, SOURCE.
+
+13. POST each event to \`$CONVEX_SITE_URL/lc_gtm/calendar_proposal\`.
+
+### Phase 4 — synthesis + single approve ask
+
+14. NOW compose the synthesis message per
+    \`maya-foundation-research/SKILL.md\` "Synthesis message" template.
+    The message includes the calendar preview ("5 events queued for
+    your calendar this week: …") and a single ask: "Approve and I'll
+    lock them in. Or tell me which to swap."
+
+15. Send the synthesis via the \`message\` tool (action=send,
+    channel=telegram, target=<chatId>).
+
+16. POST \`$CONVEX_SITE_URL/lc_gtm/action_logged\` with
+    \`kind: "foundation_complete"\` and a summary.
+
+17. Append \`foundation_completed_at: <ISO ts>\` and
+    \`plan_proposed_at: <ISO ts>\` to MEMORY.md.
+
+18. Set up the daily cadence: schedule morning brief, evening recap,
+    and weekly review crons via the native \`cron action=add\` tool.
+    Use USER.md timezone. Schedule:
     - morning_brief: \`0 7 * * *\` operator local
     - evening_recap: \`0 20 * * *\` operator local
     - weekly_review: \`0 18 * * 0\` operator local (Sunday 6pm)
     - monthly_reset: \`0 6 1 * *\` operator local (1st of month, 6am)
 
-11. Reply NO_REPLY.
+19. Reply NO_REPLY. When operator approves via Telegram reply, Maya
+    confirms in one short message ("Locked. First action 10:30
+    tomorrow.") — calendar events are already in Convex; nothing
+    else to spawn.
 
 ### Path B — Foundation exists (\`buyerMap !== null\`)
 

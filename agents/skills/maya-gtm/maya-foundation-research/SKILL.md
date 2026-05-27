@@ -73,23 +73,45 @@ This is Maya's judgment, not a checklist. Numbers below are not thresholds — t
 
 If any output reads thin to Maya's judgment, steer the worker for more. If steering doesn't help, ship with the gap surfaced honestly to the operator ("competitive map landed light on substitutes — I'll keep watching as I do daily research"). Maya decides what "enough" means — there is no minimum count.
 
-## Synthesis message — what the operator gets
+## Phase 2 — turn the operating model into a first-week action plan (same pass, no second wait)
+
+Foundation does NOT stop at the operating model. The operator already waited ~10-15 min for the research; making them wait another 8-10 min after they say "yes find threads and draft replies" is a broken UX. **In the same pass, before sending the synthesis message, Maya extends foundation into actionable specifics.**
+
+After the 5 operating-model workers have written enough for Maya to judge complete, she does NOT immediately send synthesis. Instead:
+
+1. **Spawn per-bet-channel "live thread" workers.** For each channel marked `bet: true` in `gtmChannelScorecard` (typically reddit + x, sometimes hn), spawn the matching continuous worker (`reddit_research`, `x_research`, `hn_research`). Task: "Using these intent phrases [from gtmBuyerMap.intentPhrases] and these content angles [from gtmContentAngles], find 5-10 LIVE threads in this channel where buyers are venting about this pain RIGHT NOW. POST each to `/lc_gtm/target_thread` with painQuote (verbatim from post body), postedAt, velocityScore, audienceSize, and a draftReply field with a real reply in the operator's voice." Workers do the find + draft in a single pass.
+
+2. **`sessions_yield`, then watch via `subagents action=list`** the same way as Phase 1. Kill stuck, steer thin.
+
+3. **Build the 7-day calendar.** Once Maya has the target_threads + drafts, she reads `maya-calendar-populator/SKILL.md` and assembles 5-10 `gtmCalendarEvents` for the coming week. Each event MUST contain the full hands-off recipe per the calendar-populator template — URL, drafted reply text, voice notes, success target, time box, source citation. POST each event to `/lc_gtm/calendar_proposal`.
+
+4. **Only THEN send the synthesis message** (below). The message includes the calendar preview and one approve-or-edit ask. The operator's "yes" is the final gate, not a trigger for more work.
+
+## Synthesis message — what the operator gets after the FULL pass
 
 One Telegram message — as tight as Maya can make it while still being useful (operator reads on a phone):
 
 ```
-Foundation done. Here's what I learned about your market:
+Done. Here's the picture + the first week's plan ready for your calendar.
 
-ICP: [one-line icpDescription]
-Top 3 channels to bet on: [bet=true list with one-line reason each]
-Top 3 buyer-pain angles: [angle names]
-Direct competitors worth watching: [names]
+Who's actually buying this: [one-sentence persona, named if possible — e.g.
+"a Mac dev running 3-5 local tools at once, 60-80GB of models on their SSD"]
 
-Next: [if first run] starting daily research. First brief lands tomorrow 7am.
-       [if monthly] here's what shifted vs last month: [3 bullets]
+Real pain (verbatim from threads): "[direct quote with sourceUrl]"
+
+Where to play week one: [bet channels with one-line rationale each]
+
+The wedge vs incumbents: [one sentence — what you do that they don't]
+
+5 events queued for your calendar this week:
+• [day, time]: [event title, one-line what + where]
+• [day, time]: [event title]
+• …
+
+Approve and I'll lock them in. Or tell me which to swap.
 ```
 
-Plain text. No headers. No "Excited to share." This is a manager update, not a launch.
+Plain text. No headers. No "Excited to share." This is a manager update with the complete proposal, not a multi-stage handoff. The operator's reply is the ONLY remaining gate.
 
 ## Failure modes
 
