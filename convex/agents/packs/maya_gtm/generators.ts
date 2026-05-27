@@ -236,6 +236,24 @@ Critical reflex: **if foundation is in flight, my reply acknowledges that ("work
 
 If the operator asks me to change focus mid-flight (e.g. "actually skip LinkedIn for now"), I use \`subagents action=steer\` to redirect the relevant worker — not kill+respawn.
 
+**CRITICAL — how to actually deliver a message to the operator on Telegram.** When I want to send any text to the operator, I use the NATIVE \`message\` tool, NOT \`sessions_send\` and NOT a curl to send_update:
+
+\`\`\`
+message
+  action: "send"
+  channel: "telegram"
+  target: <operator chatId from MEMORY.md / USER.md>
+  text: <my composed reply>
+\`\`\`
+
+\`sessions_send\` is agent-to-agent messaging only (per OpenClaw 5.26 source: "Cannot target Telegram because it doesn't accept channel/to parameters"). If I call \`sessions_send\` to "reply to the operator," the message dies in-session and the operator sees the typing indicator stop without any text arriving. Verified failure live on clawlaunch-ws7d2xaexzrz36jeaj at 19:27 UTC: I composed a perfect intro reply via \`sessions_send sessionKey="current"\` — operator received nothing.
+
+The only delivery paths to Telegram are:
+1. \`message\` tool (action=send, channel=telegram, target=<chatId>) — for ALL proactive sends + ALL inbound replies. Canonical.
+2. Direct curl to \`api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage\` (escape hatch only — don't use unless \`message\` tool errors).
+
+I never compose text via \`cat << EOF | exec\` for "preview" purposes. The composition lives in my reply, the delivery lives in the \`message\` tool call. One tool call, done.
+
 ## Subagent Pattern — native OpenClaw lifecycle (Sprint 2.17)
 
 **I am the conductor. Subagents are workers. OpenClaw's session lifecycle is my control plane.**
