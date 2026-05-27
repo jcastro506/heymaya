@@ -21,9 +21,11 @@ export type DeployMayaGtmStage =
   | "generate-workspace"
   | "upload-bundle"
   | "create-app"
+  | "allocate-ips"
   | "set-secrets"
   | "create-machine"
   | "wait-for-state"
+  | "set-telegram-webhook"
   | "patch-agent"
   | "complete";
 
@@ -303,6 +305,66 @@ export function buildGatewayConfig(
       // Cheap structured-output model for normalizing multimodal walkthrough
       // analysis output into ResearchRawItem-shaped data. Per TOOLS.md.
       model: extractionModel,
+      tools: { profile: "coding" as const },
+      subagents: { allowAgents: [] as string[] },
+    },
+    // ─── Sprint 2.17 Phase C — Manager-mode workers ────────────────────
+    // Five foundation workers, spawned once at onboarding + monthly. They
+    // populate gtmBuyerMap / CompetitiveMap / ChannelScorecard /
+    // ContentAngles / RelationshipTargets via /lc_gtm/foundation_*
+    // endpoints. Maya orchestrates with native session tools
+    // (subagents list/kill/steer) — see SKILL.md maya-foundation-research.
+    {
+      id: "buyer_map_worker",
+      name: "Buyer Map Researcher",
+      model: subagentModel,
+      tools: { profile: "coding" as const },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      id: "competitive_worker",
+      name: "Competitive Map Researcher",
+      model: subagentModel,
+      tools: { profile: "coding" as const },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      id: "channel_worker",
+      name: "Channel Scorecard Researcher",
+      model: subagentModel,
+      tools: { profile: "coding" as const },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      id: "content_angle_worker",
+      name: "Content Angle Vault Researcher",
+      model: subagentModel,
+      tools: { profile: "coding" as const },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      id: "relationship_worker",
+      name: "Relationship Target Researcher",
+      model: subagentModel,
+      tools: { profile: "coding" as const },
+      subagents: { allowAgents: [] as string[] },
+    },
+    // Continuous-mode workers, spawned daily before the morning brief.
+    // Map competitor moves + niche pulse. The per-channel continuous
+    // workers reuse reddit_research / x_research / hn_research above —
+    // Maya's task strings differentiate "foundation pass" vs
+    // "continuous pass" semantics.
+    {
+      id: "competitor_move_worker",
+      name: "Competitor Move Watcher",
+      model: subagentModel,
+      tools: { profile: "coding" as const },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      id: "niche_pulse_worker",
+      name: "Niche Pulse Watcher",
+      model: subagentModel,
       tools: { profile: "coding" as const },
       subagents: { allowAgents: [] as string[] },
     },
@@ -783,6 +845,52 @@ export const deployMayaGtm = internalAction({
           .map((b) => b.toString(16).padStart(2, "0"))
           .join("")
       : undefined;
+
+    // Sprint 2.16u-fix18 — register the Telegram webhook from CONVEX,
+    // not from OpenClaw on Fly. Fly's outbound network to api.telegram.org
+    // is unreliable; setWebhook from inside the Fly machine fails with
+    // "Network request for 'setWebhook' failed!" (verified live
+    // 2026-05-27 on clawlaunch-ws74j011acjqk48b7s).
+    //
+    // Convex's network → api.telegram.org IS reliable (verified earlier
+    // — direct sendMessage curl from Convex worked instantly with
+    // message_id 129). So we register the webhook here once, idempotent.
+    if (row.agent.telegramChatId && telegramWebhookSecret) {
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
+      if (!botToken) {
+        return fail(
+          "set-telegram-webhook",
+          "TELEGRAM_BOT_TOKEN env var missing — required for Sprint 2.16u-fix18 webhook registration",
+          false
+        );
+      }
+      const webhookUrl = `https://${bundle.flyAppName}.fly.dev/telegram-webhook`;
+      try {
+        const swRes = await fetch(
+          `https://api.telegram.org/bot${botToken}/setWebhook`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              url: webhookUrl,
+              secret_token: telegramWebhookSecret,
+              drop_pending_updates: true,
+            }),
+          }
+        );
+        const swBody = (await swRes.json()) as { ok?: boolean; description?: string };
+        if (!swRes.ok || !swBody.ok) {
+          return fail(
+            "set-telegram-webhook",
+            `Telegram setWebhook returned ${swRes.status}: ${swBody.description ?? "unknown"}`,
+            swRes.status >= 500
+          );
+        }
+        console.log(`[deployMayaGtm] registered Telegram webhook → ${webhookUrl}`);
+      } catch (err) {
+        return fail("set-telegram-webhook", (err as Error).message, true);
+      }
+    }
 
     let machine;
     try {

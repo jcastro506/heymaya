@@ -69,11 +69,22 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("BOOT.md")).toContain("APP.md");
     expect(files.get("BOOT.md")).toContain("gateway:startup");
     expect(files.get("BOOT.md")).toContain("message` tool");
-    expect(files.get("BOOT.md")).toContain("launch_flow_started_at:");
     expect(files.get("BOOT.md")).toContain("sessions_spawn");
     expect(files.get("BOOT.md")).toContain("sessions_yield");
-    expect(files.get("BOOT.md")).toContain("/lc_gtm/phase_1_announce");
-    expect(files.get("BOOT.md")).toContain("operator may reply");
+    // Sprint 2.17 Phase C — BOOT routes on foundation existence:
+    // empty → invoke maya-foundation-research skill, populated →
+    // invoke maya-continuous-research + maya-morning-brief.
+    expect(files.get("BOOT.md")).toContain("/lc_gtm/get_my_foundation");
+    expect(files.get("BOOT.md")).toContain("maya-foundation-research");
+    expect(files.get("BOOT.md")).toContain("maya-continuous-research");
+    expect(files.get("BOOT.md")).toContain("foundation_completed_at:");
+    expect(files.get("BOOT.md")).toContain("last_morning_brief_at:");
+    // Native lifecycle tools — BOOT delegates worker mgmt to subagents.
+    expect(files.get("BOOT.md")).toContain("subagents action=list");
+    expect(files.get("BOOT.md")).toContain("subagents action=kill");
+    expect(files.get("BOOT.md")).toContain("subagents action=steer");
+    // Self-schedules its own cadence via native cron.
+    expect(files.get("BOOT.md")).toContain("cron action=add");
     // Sprint 2.16u-fix8 — voice firewall removed per operator: "I hate
     // hardcoded string blockers. Get rid of all of that and just add
     // it to her prompt where appropriate." Voice contract now lives in
@@ -162,43 +173,43 @@ describe("Maya GTM workspace pack", () => {
     expect(agents).toContain("slideshow/carousel");
   });
 
-  it("HEARTBEAT.md is a watchdog, not the primary launch state machine", () => {
+  it("HEARTBEAT.md is the out-of-band recovery loop, not the primary launch driver", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
     const heartbeat = files.get("HEARTBEAT.md") ?? "";
 
-    expect(heartbeat).toContain("watchdog loop");
-    expect(heartbeat).toContain("BOOT.md starts the launch workflow");
-    expect(heartbeat).toContain("launch-watchdog");
+    // Sprint 2.17 Phase C — HEARTBEAT collapses to recovery only. The
+    // primary cadence (morning brief / evening recap / weekly review)
+    // runs via self-scheduled crons added by BOOT step 4. Worker
+    // lifecycle uses native subagents tools, not heartbeat polling.
+    expect(heartbeat).toContain("out-of-band recovery");
+    expect(heartbeat).toContain("self-scheduled crons");
+
+    // launch-watchdog is GONE — BOOT.md now routes foundation vs
+    // continuous itself; heartbeat doesn't drive launch.
+    expect(heartbeat).not.toContain("launch-watchdog");
     expect(heartbeat).not.toContain("state-hello");
     expect(heartbeat).not.toContain("state-channels-picked");
-    expect(heartbeat).not.toContain("state-subagents-dispatched");
-    expect(heartbeat).not.toContain("state-plan-synthesis");
-    expect(heartbeat).toContain("launch_flow_started_at:");
-    // Sprint MVP step 4 — watchdog now spawns subagents with PROPER
-    // task strings that mandate ScrapeCreators/TwitterAPI.io/Algolia HN
-    // and POSTing findings to /lc_gtm/target_thread.
-    expect(heartbeat).toContain("task` (REQUIRED string");
-    expect(heartbeat).toContain("api.scrapecreators.com");
-    expect(heartbeat).toContain("api.twitterapi.io");
-    expect(heartbeat).toContain("hn.algolia.com");
-    expect(heartbeat).toContain("/lc_gtm/target_thread");
-    expect(heartbeat).toContain("/lc_gtm/subagent_complete");
-    expect(heartbeat).toContain("velocityScore");
-    // Steady-state maintenance tasks.
+
+    // New recovery + maintenance tasks.
+    expect(heartbeat).toContain("missed-cadence");
     expect(heartbeat).toContain("pending-approvals");
     expect(heartbeat).toContain("calendar-due");
     expect(heartbeat).toContain("open-loops");
     expect(heartbeat).toContain("published-results-scan");
-    // HEARTBEAT_OK literal-token reply pattern still required for
-    // quiet ticks — silent ticks are the common case when the watchdog
-    // finds no stuck launch, pending approval, due calendar item, or result.
+    // Stuck-worker sweep uses native lifecycle: subagents kill clears
+    // the gateway lane immediately per OpenClaw source.
+    expect(heartbeat).toContain("stuck-worker-sweep");
+    expect(heartbeat).toContain("subagents action=list");
+    expect(heartbeat).toContain("subagents\n    action=kill");
+
+    // missed-cadence references the manager-mode markers.
+    expect(heartbeat).toContain("foundation_completed_at:");
+    expect(heartbeat).toContain("last_morning_brief_at:");
+
+    // Existing-state primitives still in play.
     expect(heartbeat).toContain("HEARTBEAT_OK");
-    // Sprint 2.16u-fix8 — voice firewall removed; HEARTBEAT.md now
-    // references SOUL.md voice contract for inline self-check.
     expect(heartbeat).toContain("SOUL.md");
-    // Strategic sends still need evidence_ids — guard mentioned for
-    // watchdog recovery and phase synthesis.
-    expect(heartbeat).toContain("evidence_ids");
+    expect(heartbeat).toContain("$CONVEX_SITE_URL");
   });
 
   it("jobs.json carries only exact scheduled events; boot work is native BOOT.md", () => {
