@@ -677,13 +677,58 @@ tasks:
 - name: launch-watchdog
   interval: 5m
   prompt: |
-    Read MEMORY.md, APP.md, GTM.md, TOOLS.md, and SOUL.md.
+    Read MEMORY.md. If \`launch_flow_started_at:\` is ALREADY set, reply HEARTBEAT_OK. (Recovery only — only fire when the launch hasn't started.)
 
-    If MEMORY.md does NOT contain \`launch_flow_started_at:\`, BOOT.md did not claim the launch flow. Start the same boot launch workflow now: send no duplicate hello if \`hello_sent_at:\` exists, append \`launch_flow_started_at:\`, spawn bounded research subagents for the active research job, POST /lc_gtm/phase_1_announce, call sessions_yield, then reply HEARTBEAT_OK.
+    Otherwise: kick off the launch workflow NOW.
 
-    If \`launch_flow_started_at:\` exists but MEMORY.md does NOT contain \`plan_sent_at:\`, inspect OpenClaw tasks/session state and Convex rows via the /lc_gtm endpoints in TOOLS.md. If subagents are still running, reply HEARTBEAT_OK. If one or more subagents failed or timed out and no replacement has been spawned, spawn a bounded replacement for the failed lane and POST an updated /lc_gtm/phase_1_announce count only if the expected count changed. If evidence exists but phase 2 did not fire, send one tactical update via /lc_gtm/send_update saying you are checking sources, then continue recovery.
+    1. Read APP.md (product, founderWhy, weekGoal, stage, can-record-screen/face flags). Read PLAYBOOK.md briefly for channel decision logic. Read \`active_research_job_id:\` from MEMORY.md.
 
-    Do not synthesize a strategic plan from heartbeat unless phase 2 has clearly stalled and evidence is already present. Strategic sends still require evidence_ids.
+    2. Pick 1 primary + up to 2 secondary research channels from {reddit, x, hn, tiktok, instagram, linkedin}. Use PLAYBOOK.md decision logic + the operator's visual/manual-post constraints in USER.md (skip TikTok/Instagram if can-record-screen/face=false).
+
+    3. Append to MEMORY.md: \`launch_flow_started_at: <ISO ts>\`, \`launch_phase: channel_research\`, \`channels_picked: [primary, secondary1, secondary2]\`.
+
+    4. For EACH picked channel, call sessions_spawn with TWO required args: \`agentId\` (e.g. "reddit_research") AND \`task\` (REQUIRED string — without it, OpenClaw spawns with the default boot prompt and subagent does nothing). DO NOT pass a \`model\` arg.
+
+    **The \`task\` string MUST follow this template VERBATIM (substitute product context from APP.md + active_research_job_id from MEMORY.md):**
+
+    \`\`\`
+    Research <channel> for <product name> ("<product one-liner from APP.md>"). Goal: <weekGoal>. Stage: <stage>. Pain point this product solves: <founderWhy>. Active research job: <active_research_job_id>.
+
+    Find 8-15 high-intent threads/accounts where the operator's buyers are actively discussing this pain. Score on ENGAGEMENT VELOCITY (likes/hour, comments/hour), not just absolute likes — rising threads are more valuable than already-viral ones.
+
+    ## Tool policy (LOAD-BEARING — read carefully)
+
+    DO NOT use raw curl on platform domains. reddit.com / x.com / twitter.com / news.ycombinator.com all rate-limit or block unauthenticated requests — you will waste the entire subagent budget retrying.
+
+    USE the appropriate API for this channel via exec + curl:
+      - reddit: ScrapeCreators API. Auth header \`x-api-key: \$SCRAPECREATORS_API_KEY\`. Endpoints: \`GET https://api.scrapecreators.com/v1/reddit/search?query=...&sort=relevance\` OR \`/v1/reddit/subreddit/search?subreddit=...&query=...\` OR \`/v1/reddit/subreddit?subreddit=...\` for top posts. Read /data/workspace/skills/scrapecreators-api/SKILL.md for full endpoint list.
+      - x / twitter: TwitterAPI.io. Auth header \`x-api-key: \$TWITTERAPI_IO_KEY\`. Endpoint: \`GET https://api.twitterapi.io/twitter/tweet/advanced_search?query=<urlencoded>&queryType=Latest\`. Use Twitter advanced search syntax: \`min_faves:5\` or \`min_replies:3\` to filter for engagement; \`-filter:retweets lang:en\` to clean noise.
+      - hn: Algolia HN API (free, no auth). \`GET https://hn.algolia.com/api/v1/search?query=<urlencoded>&tags=story\` for stories, \`tags=comment\` for comments.
+      - tiktok / instagram: ScrapeCreators API \`/v1/tiktok/*\` or \`/v2/instagram/*\` endpoints (read scrapecreators-api/SKILL.md). Pull keyword/hashtag search results + top videos + comments for the top 3-5.
+
+    Also read /data/workspace/skills/maya-<channel>-*-researcher/SKILL.md if it exists — per-platform skill has hook formats + thread-quality criteria.
+
+    ## Output — POST every finding to Convex
+
+    For EACH thread/account that fits the pain point, exec curl POST to \`\$CONVEX_SITE_URL/lc_gtm/target_thread\` with Bearer auth from \$HOOK_TOKEN. Body:
+    \`{"researchJobId":"<active_research_job_id>","idempotencyKey":"<uuid>","platform":"<channel>","url":"<thread/account URL>","title":"<title or excerpt>","engagementMetrics":{"likes":N,"comments":N,"hoursOld":N},"velocityScore":<0-1 — rising>peaked>flat>,"painMatchReason":"<why this fits this product>","recommendedAction":"reply_with_context|lurk|dm|avoid","priorityScore":<0-1>}\`
+
+    Aim for 8-15 results with priorityScore >= 0.5. Quality over quantity — skip results that don't actually mention the pain point or aren't high-engagement.
+
+    ## Completion
+
+    When done (or after 8 API calls + final POSTs, whichever comes first), exec curl POST to \`\$CONVEX_SITE_URL/lc_gtm/subagent_complete\` with body \`{"researchJobId":"<active_research_job_id>","channel":"<channel>","threadsFound":N,"accountsFound":N}\`.
+
+    Reply NO_REPLY.
+    \`\`\`
+
+    5. After spawning all N subagents, exec curl POST to \`\$CONVEX_SITE_URL/lc_gtm/phase_1_announce\` with body \`{"researchJobId":"<active_research_job_id>","subagentsExpected":N}\` (Bearer auth from \$HOOK_TOKEN).
+
+    6. Append \`subagents_spawned: N\` to MEMORY.md.
+
+    7. Call sessions_yield to let subagents run. Reply HEARTBEAT_OK.
+
+    Phase 2 synthesis (calendar populator + 14-day plan delivery) fires when Convex sees all subagents_complete callbacks land. Strategic sends still require evidence_ids — phase 2 will pass them.
 
 - name: pending-approvals
   interval: 30m

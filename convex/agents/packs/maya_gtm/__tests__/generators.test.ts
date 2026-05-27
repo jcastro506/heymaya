@@ -174,7 +174,16 @@ describe("Maya GTM workspace pack", () => {
     expect(heartbeat).not.toContain("state-subagents-dispatched");
     expect(heartbeat).not.toContain("state-plan-synthesis");
     expect(heartbeat).toContain("launch_flow_started_at:");
-    expect(heartbeat).toContain("subagents are still running");
+    // Sprint MVP step 4 — watchdog now spawns subagents with PROPER
+    // task strings that mandate ScrapeCreators/TwitterAPI.io/Algolia HN
+    // and POSTing findings to /lc_gtm/target_thread.
+    expect(heartbeat).toContain("task` (REQUIRED string");
+    expect(heartbeat).toContain("api.scrapecreators.com");
+    expect(heartbeat).toContain("api.twitterapi.io");
+    expect(heartbeat).toContain("hn.algolia.com");
+    expect(heartbeat).toContain("/lc_gtm/target_thread");
+    expect(heartbeat).toContain("/lc_gtm/subagent_complete");
+    expect(heartbeat).toContain("velocityScore");
     // Steady-state maintenance tasks.
     expect(heartbeat).toContain("pending-approvals");
     expect(heartbeat).toContain("calendar-due");

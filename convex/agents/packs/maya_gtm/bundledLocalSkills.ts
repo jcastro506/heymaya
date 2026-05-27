@@ -385,7 +385,7 @@ POST events one-at-a-time to \`/lc_gtm/calendar_proposal\` per the TOOLS.md spec
   researchJobId: string,             // current job
   events: [{
     title: string,                   // operator-facing, voice-contract clean
-    description: string,             // includes link to target URL + draft (if any) + playbook citation
+    description: string,             // FULL recipe — see per-kind templates below
     startsAtMs: number,
     endsAtMs: number,
     kind: "warmup_block" | "engagement_block" | "reply_window" | "soft_launch_post" | "hard_launch_anchor" | "first_50_dms" | "weekly_review",
@@ -401,6 +401,143 @@ Default durations:
 - hard_launch_anchor: 2 hours (post + engagement window)
 - first_50_dms: 60-90 min
 - weekly_review: 30 min
+
+## Description templates — HANDS-OFF RECIPE per event kind
+
+**Operator UX requirement:** the user has a day job. They open one calendar event, do the thing in 15 min, close the event, move on. Every event description MUST be a complete recipe — no need to scroll Telegram for context, no need to remember why this matters, no thinking about wording. Copy-paste-and-go.
+
+Google Calendar event descriptions support up to 8KB. Use plain text with double-newline section breaks. Markdown rendering is unreliable across calendar apps; treat formatting as plain ASCII.
+
+### reply_window template
+
+\`\`\`
+WHAT — Reply on <platform> to: <thread title>
+
+LINK — <full URL, clickable>
+
+WHY THIS MATTERS — <one sentence: pain match + engagement velocity, e.g. "47 upvotes / 23 comments, rising fast (12 upvotes in last hour) — exactly the buyer pain ModelHub solves">
+
+YOUR REPLY (copy-paste, edit lightly for tone):
+<full drafted reply text from gtmDraftedContent — verbatim, ready to post>
+
+VOICE NOTES — <2-3 lines: tone for this thread, what to avoid, e.g. "Value-first. They're asking for alternatives — your line is 'I had the same scattered-cache pain, built ModelHub to solve it'. No product pitch in first reply.">
+
+AFTER YOU POST — Watch the thread for 1 hour. Reply to any responses with a screenshot or specific tip. If thread accelerates (10+ replies to yours), drop a top-level comment with your build screenshot.
+
+SUCCESS TARGET — <concrete metric, e.g. "5+ upvotes on your reply in 4 hours, 1+ DM from a buyer">
+
+TIME — 10-15 min, max. There are more in today's queue.
+
+SOURCE — Maya picked this thread because <playbook citation + research evidence trail>
+\`\`\`
+
+### engagement_block template (lurking + saving + light comments, no product)
+
+\`\`\`
+WHAT — Lurk <platform/community> for <duration>: scan recent threads, save 3-5 worth replying to later, drop 1-2 substantive non-promotional comments to build karma.
+
+WHERE — <community URL, e.g. r/LocalLLaMA, X "local llm" search, etc.>
+
+WHAT TO LOOK FOR — <2-3 concrete signals, e.g. "Posts about Ollama cache size, model management pain, M3 performance complaints. Questions asking for alternatives. Build-in-public threads from indie devs">
+
+KARMA TARGETS — Try to drop 1-2 substantive comments. Examples that fit your voice:
+- <draft comment 1 idea, 1-2 sentences>
+- <draft comment 2 idea, 1-2 sentences>
+NO product mentions yet (Phase 1 warmup rule).
+
+SAVE FOR LATER — Bookmark / save 3-5 threads worth a real reply later. Maya will turn the best ones into tomorrow's reply_window events.
+
+TIME — <duration>. Set a timer.
+
+SOURCE — <playbook citation>
+\`\`\`
+
+### warmup_block template (account-readiness work, no posting)
+
+\`\`\`
+WHAT — <specific warmup task, e.g. "Scroll TikTok FYP for 20 min, like 30+ niche-relevant videos, follow 5 creators in your space">
+
+WHY — <one sentence on the warmup goal, e.g. "Train your FYP algorithm to your niche before posting. Without this your first post lands in unrelated feeds">
+
+EXACT STEPS:
+1. <step>
+2. <step>
+3. <step>
+
+DO NOT — <2-3 anti-patterns, e.g. "Post anything yet. Engage with off-niche content (algorithm reset risk)">
+
+DURATION — <minutes>
+
+SOURCE — <playbook citation>
+\`\`\`
+
+### soft_launch_post / hard_launch_anchor template (the post itself)
+
+\`\`\`
+WHAT — Post your <platform> launch <thread/post> at this exact time window.
+
+WHY NOW — <one sentence on timing, e.g. "Tuesday 8am ET is peak engagement in your niche (per ScrapeCreators data — top posts in r/LocalLLaMA went up Tue-Thu 8-11am ET 73% of the time last 30d)">
+
+POST CONTENT (copy-paste ready):
+<full post body — for X threads, list each tweet numbered. For Reddit posts, title + body. For LinkedIn, post text + suggested image alt-text>
+
+VOICE NOTES — <2-3 lines: hook pattern, screenshot/demo placement, what to avoid>
+
+ENGAGEMENT WINDOW — Stay near your phone for the next 2 hours. Reply to EVERY comment within 10 min. Maya has a reply_window event blocked at <time + 30 min> to help you batch responses.
+
+SUCCESS TARGET — <concrete metric, e.g. "X: 20+ likes in first hour, 3+ quote-tweets. Reddit: 30+ upvotes + 10+ comments in first 4 hours">
+
+IF IT FLOPS — <recover line, e.g. "Engagement <5% by hour 2: send Maya the link, she'll draft a follow-up reply-guy session in r/SideProject to recover">
+
+SOURCE — <playbook citation + draft evidence trail>
+\`\`\`
+
+### first_50_dms template
+
+\`\`\`
+WHAT — Cold DM 50 people in your niche who fit your buyer profile, before tomorrow's launch.
+
+WHY — Pre-launch DMs create the first 50 day-one users. Without them, your launch thread lands cold.
+
+TARGET LIST — <link to gtmTargetAccounts query OR inline list of 50 accounts with @handle + 1-sentence why-this-person>
+
+DM TEMPLATE (personalize the bracketed bits for each):
+<short DM template — 2 sentences max, no pitch, just invite to be a day-one user>
+
+PERSONALIZATION RULES — <2-3 rules, e.g. "Reference one specific post or tweet they made. NO generic 'hey saw your profile'. Send max 10 per hour to avoid platform spam flags">
+
+PROOF YOU FINISHED — Reply to Maya in Telegram with "first 50 DMs done" + 2-3 best responses you got.
+
+DURATION — 60-90 min.
+
+SOURCE — <playbook citation>
+\`\`\`
+
+### weekly_review template
+
+\`\`\`
+WHAT — 30-min weekly review with Maya. She'll send you a Telegram summary; you read it and reply with answers.
+
+WHAT MAYA WILL SHOW YOU:
+- Last week's posts + their engagement (likes/comments/DMs)
+- What worked vs what flopped (format-winners called out)
+- Top 3 new threads worth hitting this week
+- Next week's calendar preview
+
+YOUR ASKS (just hit reply in Telegram):
+- Any reply-worthy threads we missed?
+- Pause anything?
+- Push the hard launch?
+
+SOURCE — Weekly cadence per PLAYBOOK § 4.
+\`\`\`
+
+## Description guardrails
+
+- ALL bracketed placeholders in the templates above MUST be filled with REAL data from the target_threads / drafted_content / playbook + per-channel-playbook citations. Never ship a literal "<full URL, clickable>" string to the operator.
+- If any required data is missing for a given event (e.g., no draft yet for a reply_window), DON'T emit that event. Surface the gap: "Need a draft for r/LocalLLaMA reply" goes into Maya's open-loops queue, and the calendar slot becomes a placeholder engagement_block instead.
+- Run maya-slop-critic against the assembled description before posting to /lc_gtm/calendar_proposal. Banned phrases per PLAYBOOK § 6.
+- Plain ASCII / clean newlines. No Markdown headers (Google Calendar strips them). No emoji clutter. Section labels in ALL CAPS (WHAT, LINK, WHY, etc.) — that's what shows up best across iOS / macOS / Google Calendar / Outlook.
 
 ## Failure modes
 
