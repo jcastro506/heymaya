@@ -170,6 +170,25 @@ export interface BuildGatewayConfigInput {
    * the user pairs.
    */
   telegramChatId?: string;
+  /**
+   * Sprint 2.16u-fix17 — webhook mode for Telegram. Per OpenClaw
+   * docs/channels/telegram.md, "Default is long polling. For webhook mode set
+   * channels.telegram.webhookUrl and channels.telegram.webhookSecret."
+   *
+   * Long polling on Fly machines has hit 4-12 minute stalls every deploy
+   * because Fly's outbound network path to api.telegram.org is unreliable.
+   * Webhook mode flips the direction — Telegram pushes updates to a public
+   * URL on our Fly machine, no polling required.
+   *
+   * For our per-user product (one bot per user, one Fly machine per user),
+   * each bot has a unique webhook URL pointing at its dedicated Fly machine.
+   * No multi-tenant relay needed.
+   *
+   * webhookUrl is `https://<flyAppName>.fly.dev/telegram-webhook`.
+   * webhookSecret is a 32-byte hex per machine for Telegram signature verify.
+   */
+  telegramWebhookUrl?: string;
+  telegramWebhookSecret?: string;
 }
 
 export function buildGatewayConfig(
@@ -432,16 +451,24 @@ export function buildGatewayConfig(
               enabled: true,
               dmPolicy: "allowlist" as const,
               allowFrom: [Number(input.telegramChatId)].filter(Number.isFinite),
-              // Sprint 2.16u-fix6 — suppress OpenClaw's "Working... •
-              // read from APP.md • tool: read • exec fetch url, curl ..."
-              // progress-draft relay. The operator should only see Maya's
-              // final voice-clean messages, never internal tool calls.
-              // streaming.mode:"off" hides progress drafts entirely; only
-              // the agent's final reply (or proactive sendMessage) lands
-              // in the channel. See /tmp/openclaw-latest/docs/concepts/
-              // progress-drafts.md for the full mode matrix
-              // (off | partial | block | progress).
               streaming: { mode: "off" as const },
+              // Sprint 2.16u-fix17 — webhook mode to bypass Fly's flaky
+              // outbound long-poll path to api.telegram.org. Per
+              // docs/channels/telegram.md "Long polling vs webhook":
+              //   set channels.telegram.webhookUrl + webhookSecret;
+              //   optional webhookPath (default /telegram-webhook),
+              //   webhookHost (default 127.0.0.1 — we override to
+              //   0.0.0.0 so Fly's public proxy can route to it),
+              //   webhookPort (default 8787).
+              ...(input.telegramWebhookUrl && input.telegramWebhookSecret
+                ? {
+                    webhookUrl: input.telegramWebhookUrl,
+                    webhookSecret: input.telegramWebhookSecret,
+                    webhookHost: "0.0.0.0" as const,
+                    webhookPort: 8787,
+                    webhookPath: "/telegram-webhook" as const,
+                  }
+                : {}),
             },
           },
         }
@@ -732,6 +759,15 @@ export const deployMayaGtm = internalAction({
       return fail("set-secrets", (err as Error).message, isRetryable(err));
     }
 
+    // Sprint 2.16u-fix17 — mint a per-machine webhook secret. OpenClaw's
+    // telegram channel uses this to verify incoming webhook signatures
+    // (X-Telegram-Bot-Api-Secret-Token header). 32 hex bytes is plenty.
+    const telegramWebhookSecret = row.agent.telegramChatId
+      ? Array.from(crypto.getRandomValues(new Uint8Array(32)))
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("")
+      : undefined;
+
     let machine;
     try {
       machine = await fly.createMachine({
@@ -742,6 +778,7 @@ export const deployMayaGtm = internalAction({
           flyAppName: bundle.flyAppName,
           workspaceBundleUrl: bundle.workspaceBundleUrl,
           telegramChatId: row.agent.telegramChatId,
+          telegramWebhookSecret,
         }),
       });
     } catch (err) {
@@ -841,6 +878,11 @@ export function buildGtmMachineConfig(input: {
    *  channels.telegram adapter is enabled with allowlist scoped to this
    *  user. Pre-pairing agents pass undefined; the channel is omitted. */
   telegramChatId?: string;
+  /** Sprint 2.16u-fix17 — webhook secret. Random 32-byte hex per machine
+   *  used for Telegram signature verification. Convex deploy action mints
+   *  this + passes it down; OpenClaw config uses it; setWebhook registers
+   *  it with Telegram. Per docs/channels/telegram.md webhook mode. */
+  telegramWebhookSecret?: string;
 }): FlyMachineConfig {
   return {
     image: OPENCLAW_IMAGE,
@@ -880,20 +922,36 @@ export function buildGtmMachineConfig(input: {
         directPingSmoke: true,
         gatewayConfig: buildGatewayConfig({
           telegramChatId: input.telegramChatId,
+          // Sprint 2.16u-fix17 — webhook URL is deterministic from the
+          // Fly app name. Telegram POSTs to https://<app>.fly.dev:443/
+          // telegram-webhook → Fly proxy → internal 8787 → OpenClaw.
+          telegramWebhookUrl: input.telegramWebhookSecret
+            ? `https://${input.flyAppName}.fly.dev/telegram-webhook`
+            : undefined,
+          telegramWebhookSecret: input.telegramWebhookSecret,
         }),
       }),
     },
     guest: MACHINE_GUEST,
     restart: { policy: "always" },
-    // Sprint 1.3 follow-up — services block intentionally omitted. OpenClaw
-    // gateway binds to 127.0.0.1:18789 by default (per creator-product
-    // deployMaya.ts:353-361); enabling public Fly routing requires both
-    // `--bind lan` AND `gateway.controlUi.allowedOrigins` in the config.
-    // The creator team deferred that to a follow-up wave. We do the same
-    // here — the days-on-days test uses the cron + heartbeat path (Maya
-    // fires from inside her own machine via OpenClaw cron daemon, then
-    // delivers via channels.telegram). Convex → Maya HTTP push remains
-    // a known-broken path until --bind lan + allowedOrigins land.
+    // Sprint 2.16u-fix17 — services block exposes OpenClaw's Telegram
+    // webhook port (8787) publicly so Telegram can push updates to this
+    // machine. Per docs/channels/telegram.md "Long polling vs webhook":
+    // webhookHost:0.0.0.0 + webhookPort:8787 + Fly proxy → https://<flyApp>.fly.dev
+    // routes external 443 traffic to internal 8787.
+    //
+    // Gateway WebSocket port (18789) stays loopback-only (no controlUi
+    // exposure on the public internet — only the webhook surface).
+    services: [
+      {
+        protocol: "tcp" as const,
+        internal_port: 8787,
+        ports: [
+          { port: 443, handlers: ["tls" as const, "http" as const] },
+          { port: 80, handlers: ["http" as const] },
+        ],
+      },
+    ],
     metadata: {
       agent_id: String(input.agentId),
       kind: "maya-gtm",
