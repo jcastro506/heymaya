@@ -57,14 +57,13 @@ export type DeployMayaGtmResult =
  * on the Convex deployment. Roll back by clearing the env var.
  */
 export const OPENCLAW_IMAGE_TARGET = "registry.fly.io/heymaya-openclaw:v2026.5.20";
-// Sprint 2.16u-fix13 — bumped pinned tag to v2026.4.25. Same upstream
-// OpenClaw npm package (2026.4.23), but the creator-runtime patch now
-// preserves the gateway:startup internal-hook trigger before skipping
-// optional post-channel sidecars. That lets bundled boot-md fire BOOT.md
-// on gateway-ready. The 2026.5.20 upgrade is still pending the doctor +
-// audit pass per the note above.
+// Sprint 2.16u-fix16 — VANILLA OpenClaw startup. v2026.4.26 strips all
+// five "creator runtime" optimization patches (prewarm / post-channel
+// sidecars / update check / maintenance timers / channel health monitor).
+// Those saved ~5 sec at boot but broke the bundled boot-md hook. Now
+// gateway:startup → boot-md → BOOT.md fires canonically, no cron needed.
 export const OPENCLAW_IMAGE_PINNED =
-  "registry.fly.io/heymaya-openclaw@sha256:7b53d73a3c2c40f47865c508bddffccd2fbc21d28bd7ac938ed080fb2a24764d";
+  "registry.fly.io/heymaya-openclaw@sha256:dd4fd47d15e641c726fc9e3914b2dbd967d07bbdc806e80e6b8743978b68deed";
 
 const OPENCLAW_IMAGE =
   process.env.MAYA_GTM_OPENCLAW_IMAGE ??

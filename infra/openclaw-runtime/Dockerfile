@@ -13,14 +13,17 @@
 #   flyctl auth docker
 #   docker buildx build --platform linux/amd64 \
 #     --build-arg OPENCLAW_VERSION=2026.4.23 \
-#     -t registry.fly.io/heymaya-openclaw:v2026.4.25 \
+#     -t registry.fly.io/heymaya-openclaw:v2026.4.26 \
 #     -t registry.fly.io/heymaya-openclaw:latest \
 #     --push infra/openclaw-runtime/
 #
-# v2026.4.25 — same OpenClaw npm package (2026.4.23) but preserves the
-# `gateway:startup` internal-hook trigger while still skipping optional
-# post-channel sidecars. Restores bundled `boot-md` execution of BOOT.md
-# on gateway-ready.
+# v2026.4.26 — VANILLA OpenClaw startup. Removed all five "creator runtime"
+# optimization patches (prewarm skip / post-channel sidecars early-return /
+# update check skip / maintenance timers skip / channel health monitor
+# skip). Those patches saved ~5 sec at boot but broke the bundled boot-md
+# hook (verified across multiple deploys: hook loaded but never executed
+# BOOT.md). Vanilla flow: gateway:startup → boot-md → BOOT.md → message tool
+# → Telegram. This is what the canonical OpenClaw docs describe.
 #
 # Layout contract (consumed by `convex/onboarding/business/deployServiceMaya.ts`):
 #   The deploy passes `OPENCLAW_STATE_DIR=/data` on the machine env. The

@@ -30,7 +30,7 @@ import {
 const OPENCLAW_IMAGE =
   process.env.MAYA_GTM_OPENCLAW_IMAGE ??
   process.env.MAYA_OPENCLAW_IMAGE ??
-  "registry.fly.io/heymaya-openclaw@sha256:7b53d73a3c2c40f47865c508bddffccd2fbc21d28bd7ac938ed080fb2a24764d";
+  "registry.fly.io/heymaya-openclaw@sha256:dd4fd47d15e641c726fc9e3914b2dbd967d07bbdc806e80e6b8743978b68deed";
 const OPENCLAW_MODEL =
   process.env.MAYA_GTM_MODEL ??
   process.env.OPENCLAW_MODEL ??

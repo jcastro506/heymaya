@@ -13,7 +13,7 @@ describe("gtm-openclaw-fly-smoke", () => {
     );
 
     expect(fixture.image).toBe(
-      "registry.fly.io/heymaya-openclaw@sha256:7b53d73a3c2c40f47865c508bddffccd2fbc21d28bd7ac938ed080fb2a24764d"
+      "registry.fly.io/heymaya-openclaw@sha256:dd4fd47d15e641c726fc9e3914b2dbd967d07bbdc806e80e6b8743978b68deed"
     );
     expect(fixture.workspaceFiles["AGENTS.md"]).toContain("Maya GTM");
     expect(fixture.workspaceFiles["TOOLS.md"]).toContain(
@@ -131,7 +131,7 @@ describe("gtm-openclaw-fly-smoke", () => {
     );
     expect(args.slice(-5)).toEqual([
       "--",
-      "registry.fly.io/heymaya-openclaw@sha256:7b53d73a3c2c40f47865c508bddffccd2fbc21d28bd7ac938ed080fb2a24764d",
+      "registry.fly.io/heymaya-openclaw@sha256:dd4fd47d15e641c726fc9e3914b2dbd967d07bbdc806e80e6b8743978b68deed",
       "/bin/sh",
       "-lc",
       fixture.bootCommand,
