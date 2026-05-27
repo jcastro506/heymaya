@@ -892,25 +892,28 @@ function buildCronDelivery(
 }
 
 function renderJobs(input: MayaGtmWorkspaceInput): string {
-  // Sprint 2.16u-fix14 — RE-ADDED kickstart cron because the
-  // gateway:startup hook path doesn't reliably fire BOOT.md in our
-  // patched OpenClaw 2026.4.23 image. Verified failure: deploy
-  // clawlaunch-ws7ft6d76yq9d8xq7h fired "skipping optional post-channel
-  // sidecars" (our patch ran), but NO [gateway/boot] log activity and
-  // zero session files written. boot-md is loaded as one of the 4
-  // bundled hook handlers but never executes BOOT.md.
+  // Sprint 2.17 Phase E — jobs.json reduces to ONE deploy-time cron:
+  // 0001_kickstart (one-shot hello, 300s after deploy). All behavioral
+  // cadence is now Maya's runtime decision — she calls `cron
+  // action=add` in BOOT.md Step 4 Path A after foundation completes,
+  // using the operator's timezone from USER.md:
+  //   - morning_brief: 0 7 * * *
+  //   - evening_recap: 0 20 * * *
+  //   - weekly_review: 0 18 * * 0 (Sunday 6pm)
+  //   - monthly_reset: 0 6 1 * * (1st of month, 6am — includes
+  //                                channel-discovery refresh inside
+  //                                the foundation pass)
   //
-  // The kickstart cron is the proven pattern from the creator app
-  // (commit b3e65d0, Sprint 9.6 — convex/agents/packs/maya/workspace/
-  // buildCronJobsJson.ts:357). OpenClaw's native scheduler fires it
-  // reliably. With Sonnet 4.5 + lightContext:true, the agent turn that
-  // sends the hello should be ~30-90 sec instead of the 10 min we saw
-  // earlier on Gemini 3 Flash Preview with full workspace context.
+  // The old deploy-time gtm_weekly_review (Mondays 10am) and
+  // gtm_channel_discovery (1st of month, 10am) crons are gone — they
+  // baked operator-timezone assumptions and prompt strategy at deploy
+  // time, which is precisely the rigidity manager-mode is removing.
   //
-  // Cron jobs:
-  //   - 0001_kickstart: one-shot, fires deploy+300s, sends hello + starts research
-  //   - gtm_weekly_review: Mondays 10am — week-over-week refresh
-  //   - gtm_channel_discovery: 1st of month — new-channels hunt
+  // The kickstart cron stays as a deploy safety net: if BOOT.md's
+  // gateway:startup hook somehow doesn't fire, the kickstart sends
+  // hello at +300s so the operator isn't left waiting silently.
+  // HEARTBEAT.md missed-cadence task catches the foundation/morning-brief
+  // recovery cases.
   const delivery = buildCronDelivery(input);
   const kickstartAtMs = (input.bootKickoffAtMs ?? Date.now()) + 300_000;
   const telegramTarget = input.telegramChatId ?? "operator";
@@ -954,57 +957,13 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
         delivery,
         state: {},
       },
-      {
-        id: "gtm_channel_discovery",
-        name: "Monthly GTM channel discovery",
-        description:
-          "Sprint 2.8 — monthly hunting expedition. Looks for under-explored channels (Discord communities, podcasts, niche forums, newsletters) that the initial research + weekly reviews missed. Surfaces 2-3 candidates with cited evidence for operator opt-in. Doesn't auto-add anything.",
-        enabled: true,
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        // 1st of month, 10am operator-tz. Once-monthly cadence keeps
-        // the channel mix from compounding into stale silos without
-        // burning weekly attention on it.
-        schedule: { kind: "cron", expr: "0 10 1 * *", tz: input.timezone },
-        sessionTarget: "isolated",
-        wakeMode: "now",
-        payload: {
-          kind: "agentTurn",
-          // Smaller budget — pure synthesis + 1-2 grounded-search calls.
-          timeoutSeconds: 900,
-          thinking: "medium",
-          lightContext: false,
-          message:
-            "MONTHLY CHANNEL DISCOVERY — Sprint 2.8 hunting expedition. Voice-contract per SOUL.md applies throughout the external message.\n\nINTERNAL PHASE (silent).\n\n1. Read APP.md, GTM.md, MEMORY.md, USER.md, SOUL.md, PLAYBOOK.md.\n\n2. List the channels you've already tried: GTM.md active picks + any historical channels in MEMORY.md (channels that were tried + parked). Note WHY each parked channel didn't fit (per PLAYBOOK § 3 decision tree).\n\n3. Use the Gemini grounded search tool (or web_fetch fallback) to discover UNDER-EXPLORED channels for this product + niche. Specifically look for: (a) niche Discord communities (≥1k active members in the product's category, ≥10 messages/day), (b) podcasts where the buyer is a regular listener (1-2 specific shows + recent episodes that mention adjacent topics), (c) niche forums or Substack newsletters with engaged comment culture, (d) hashtag-based communities on X/IG/TikTok the operator hasn't been mining. NOT another mainstream subreddit or LinkedIn — those should already be in the channel-judge's known set.\n\n4. For each candidate, cite the source URL, give a 1-paragraph 'why this fits' (specific to the product, not generic), and note the warmup level (e.g. 'Discord requires 2 weeks of lurking + 5 substantive comments before product mention is OK').\n\n5. Cap at 2-3 candidates. Quality over quantity — operators with 5 channel proposals do none of them.\n\nEXTERNAL PHASE (the ONE Telegram message — ≤700 chars).\n\nManager voice. Required: name 2-3 channels concretely (specific Discord / podcast / forum names + URLs), one-sentence 'why this fits' per candidate in plain language, and a clear ASK ('want me to scope a 2-week warmup plan for one of these?'). HARD BANS: no maya-* slugs, no .md filenames, no 'channel proposal' as a noun, no 'gtmChannelProposals' or other internals. Read like a friend forwarding interesting links, not a quarterly report.\n\nExample: 'Hey Josh — went hunting for new rooms this month. Three worth a look: (1) Local Inference Discord (3.2k members, very active — perfect for ModelHub but needs 2 wks lurk first), (2) Latent Space podcast (recent ep on local LLM workflows — could pitch yourself as a guest), (3) r/MachineLearning's weekly self-promo thread (Saturdays, low-stakes way to test ModelHub framing). Want me to set up a 2-week warmup track for the Discord?'\n\nBefore send: voice-check your message against SOUL.md's 'What I never say' ban list (skill slugs, .md filenames, internal terms, AI self-references). Fix anything that slipped in. Trust your judgment.\n\nDo NOT add anything to the calendar from this turn — operator opt-in is required.",
-        },
-        delivery,
-        state: {},
-      },
-      {
-        id: "gtm_weekly_review",
-        name: "Weekly GTM review",
-        description:
-          "Sprint 2.7 — weekly compounding cycle. Reads last week's results (gtmPostResults from Sprint 2.6's scans), re-spawns active-channel _research subagents to find FRESH target threads (not just summarize old ones), re-runs the calendar populator for the next 14 days with the new mix, sends voice-clean weekly summary to operator.",
-        enabled: true,
-        createdAtMs: 0,
-        updatedAtMs: 0,
-        schedule: { kind: "cron", expr: "0 10 * * 1", tz: input.timezone },
-        sessionTarget: "isolated",
-        wakeMode: "now",
-        payload: {
-          kind: "agentTurn",
-          // Subagent dispatch ahead — same wall-clock budget as
-          // boot_kickoff (~45 min for parallel subagent runs + voice
-          // matching + calendar repopulation + summary).
-          timeoutSeconds: 2700,
-          thinking: "medium",
-          lightContext: false,
-          message:
-            "WEEKLY REVIEW — Sprint 2.7 compounding cycle. Voice-contract per SOUL.md applies throughout the external message.\n\nINTERNAL PHASE (silent).\n\n1. Read GTM.md, MEMORY.md, DREAMING.md, USER.md, APP.md, HEARTBEAT.md, SOUL.md, PLAYBOOK.md.\n\n2. Read last week's results: GET /lc_gtm/get_my_recent_post_results?limit=50 (Sprint 2.6 surfaces aggregated metrics per published draft). Group by platform. Compute: which posts got engagement >5x baseline (these are the format-winners), which got <1x (kill these formats), which got DMs from likely-buyers (the highest-value signal).\n\n3. Identify the WINNING format per active channel — name it explicitly per PLAYBOOK § 2 Phase 4 rule. Example: 'Reddit posts that lead with a specific number got 3.4x engagement vs build-update posts. Double down on metric format.' If no clear format-winner yet, say so honestly (don't fabricate one).\n\n4. Re-spawn the active-channel `_research` subagents in parallel via sessions_spawn. Their message: 'It's been one week. Find 10-25 FRESH target threads where the operator should reply this coming week — exclude any URL already in gtmTargetThreads (use idempotencyKey hash to dedupe). Prioritize threads in subreddits/accounts where last week's posts performed >baseline. POST to /lc_gtm/target_thread as usual.'\n\n5. Wait for subagents to complete. Re-run voice-match on any new drafts they produced (Sprint 2.4 maya-voice-matcher).\n\n6. Re-run calendar populator (skills/maya-calendar-populator/SKILL.md) for the next 14 days, factoring the new target threads + the format-winner from step 3 + the operator's current Phase (1-4 from PLAYBOOK § 2).\n\nEXTERNAL PHASE (the ONE Telegram message you send — ≤700 chars).\n\nWeekly recap + plan. Manager voice. Required ingredients: 'last week' summary (what worked + what didn't, in concrete numbers — '[N] reddit replies, [M] upvotes total, [X] DMs'), the format-winner (or 'no clear winner yet, still gathering signal'), the next-week plan ('[N] new threads queued, first task is [day] at [time]'), and an honest question or decision ask if there's a fork ('TikTok account is now warm enough — want me to schedule the first post?'). HARD BANS same as boot_kickoff: no maya-* slugs, no .md filenames, no pipeline jargon, no 'AI'. The operator hears their manager doing a Monday morning check-in, not a database dump.\n\nBefore send: voice-check your message against SOUL.md's 'What I never say' ban list. Fix anything that slipped in. Trust your judgment.",
-        },
-        delivery,
-        state: {},
-      },
+      // Sprint 2.17 Phase E — gtm_channel_discovery and gtm_weekly_review
+      // intentionally removed. Maya self-schedules her own daily, weekly,
+      // and monthly cadence via `cron action=add` in BOOT.md Step 4
+      // after foundation completes, using the operator's actual timezone.
+      // The monthly_reset cron runs maya-foundation-research again
+      // (subsuming the prior channel-discovery surface); the weekly_review
+      // cron runs maya-weekly-review on Sunday 18:00 operator local.
     ],
   };
 

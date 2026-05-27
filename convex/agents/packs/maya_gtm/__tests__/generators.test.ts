@@ -212,15 +212,13 @@ describe("Maya GTM workspace pack", () => {
     expect(heartbeat).toContain("$CONVEX_SITE_URL");
   });
 
-  it("jobs.json carries only exact scheduled events; boot work is native BOOT.md", () => {
-    // OpenClaw docs split the primitives clearly: BOOT.md starts the
-    // launch on gateway startup, heartbeat monitors/retries, cron is for
-    // exact scheduled events. The first hello must not wait on a +300s
-    // one-shot cron.
-    //
-    // The two crons that remain are real scheduled events:
-    //   - gtm_weekly_review (Mondays 10am, week-over-week refresh)
-    //   - gtm_channel_discovery (1st of month, new-channel hunt)
+  it("jobs.json carries only the deploy-safety-net kickstart; cadence is Maya-scheduled at runtime", () => {
+    // Sprint 2.17 Phase E — jobs.json drops gtm_channel_discovery +
+    // gtm_weekly_review. Maya self-schedules her own behavioral cadence
+    // via `cron action=add` in BOOT step 4 (morning/evening/weekly/
+    // monthly) using the operator's timezone. The kickstart cron
+    // stays as a safety net so the operator gets the hello at +300s
+    // even if the gateway:startup hook misfires.
     const { files } = buildMayaGtmWorkspace(INPUT);
     const jobs = JSON.parse(files.get("jobs.json") ?? "{}") as {
       version?: number;
@@ -281,45 +279,45 @@ describe("Maya GTM workspace pack", () => {
       "lightContext: true matches creator app pattern for fast agent turn"
     ).toBe(true);
 
-    // Weekly review survives — it's a real exact-timing scheduled event
-    // (Mondays 10am), and still drives the compounding cycle.
-    const weeklyReview = jobs.jobs.find((j) => j.id === "gtm_weekly_review");
-    expect(weeklyReview).toBeTruthy();
-    expect(weeklyReview?.payload.message).toContain("WEEKLY REVIEW");
-    expect(weeklyReview?.payload.message).toContain("compounding cycle");
-    expect(weeklyReview?.payload.message).toContain("subagent");
-    expect(weeklyReview?.payload.message).toContain(
-      "/lc_gtm/get_my_recent_post_results"
-    );
-    expect(weeklyReview?.payload.message).toContain("BANS");
+    // Sprint 2.17 Phase E — weekly review and channel discovery are
+    // GONE from baked jobs.json. Maya schedules them at runtime via
+    // `cron action=add` in BOOT step 4 using operator timezone, with
+    // skill prompts (maya-weekly-review on Sunday 18:00,
+    // maya-foundation-research monthly reset on the 1st at 06:00).
+    expect(
+      jobs.jobs.find((j) => j.id === "gtm_weekly_review"),
+      "weekly review must NOT be baked into deploy-time jobs.json"
+    ).toBeUndefined();
+    expect(
+      jobs.jobs.find((j) => j.id === "gtm_channel_discovery"),
+      "channel discovery must NOT be baked into deploy-time jobs.json"
+    ).toBeUndefined();
 
-    // Channel discovery survives too — monthly hunt for new channels.
-    const channelDiscovery = jobs.jobs.find(
-      (j) => j.id === "gtm_channel_discovery"
-    );
-    expect(channelDiscovery).toBeTruthy();
+    // jobs.json now contains exactly one job: the kickstart safety net.
+    expect(jobs.jobs).toHaveLength(1);
+    expect(jobs.jobs[0].id).toBe("0001_kickstart");
   });
 
-  it("Sprint 2.16u-fix8 — every user-facing cron prompt references SOUL.md for voice (firewall removed)", () => {
+  it("Sprint 2.16u-fix8 — kickstart cron references SOUL.md for voice (firewall removed)", () => {
     // Sibling-file scan: prevent silent regression of the voice
     // contract enforcement. The hardcoded validate_outbound firewall
     // was ripped out in Sprint 2.16u-fix8 — Maya now self-checks
     // against SOUL.md's "What I never say" ban list before send.
-    // Each user-facing cron prompt must still REFERENCE SOUL.md so
-    // Maya knows where the contract lives.
+    //
+    // Sprint 2.17 Phase E — the only deploy-baked user-facing cron
+    // is the kickstart safety net. Maya-scheduled crons inherit voice
+    // discipline from the skill files (maya-morning-brief etc.) that
+    // their cron-add prompts will reference.
     const { files } = buildMayaGtmWorkspace(INPUT);
     const jobs = JSON.parse(files.get("jobs.json") ?? "{}") as {
       jobs: Array<{ id: string; payload: { message: string } }>;
     };
-    const userFacingIds = ["gtm_channel_discovery", "gtm_weekly_review"];
-    for (const id of userFacingIds) {
-      const job = jobs.jobs.find((j) => j.id === id);
-      expect(job, `cron ${id} must exist`).toBeTruthy();
-      expect(
-        job!.payload.message,
-        `cron ${id} must reference SOUL.md voice contract before sendMessage`
-      ).toContain("SOUL.md");
-    }
+    const kickstart = jobs.jobs.find((j) => j.id === "0001_kickstart");
+    expect(kickstart, "kickstart cron must exist").toBeTruthy();
+    expect(
+      kickstart!.payload.message,
+      "kickstart must reference SOUL.md voice contract before sendMessage"
+    ).toContain("SOUL.md");
   });
 
   it("keeps the prompt-context bundle (workspace minus playbook/ + skills/*) inside a prompt budget", () => {
