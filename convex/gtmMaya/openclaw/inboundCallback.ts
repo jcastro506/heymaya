@@ -46,7 +46,20 @@ const CALLBACK_KIND = v.union(
   // convex/gtmMaya/targetList.ts (Sprint 2.2) for the mutation handlers.
   v.literal("target_thread"),
   v.literal("target_account"),
-  v.literal("drafted_content")
+  v.literal("drafted_content"),
+  // Sprint 2.17 Phase A — manager-mode foundation + continuous callbacks.
+  // Each new write surface gets its own kind so idempotency keys are
+  // scoped per-endpoint (a buyer-map write and an action-log write can
+  // share a UUID without colliding).
+  v.literal("foundation_buyer_map"),
+  v.literal("foundation_competitor"),
+  v.literal("foundation_channel_scorecard"),
+  v.literal("foundation_content_angle"),
+  v.literal("foundation_relationship_target"),
+  v.literal("competitor_move"),
+  v.literal("niche_pulse_signal"),
+  v.literal("action_logged"),
+  v.literal("learning_extracted")
 );
 
 function constantTimeEqual(a: string, b: string): boolean {
@@ -215,7 +228,11 @@ type CallbackPayload =
   | ApprovalDecisionPayload
   | CalendarProposalPayload;
 
-async function authenticate(
+// Exported so Sprint 2.17 manager-mode HTTP handlers in a sibling file
+// can reuse the same bearer-token → agent resolution path. The
+// signature is stable: returns a discriminated union with either the
+// resolved agentId+accountId or a 401 status + reason.
+export async function authenticate(
   ctx: ActionCtx,
   request: Request
 ): Promise<

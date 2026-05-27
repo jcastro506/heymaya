@@ -132,6 +132,34 @@ export const recordTargetThread = internalMutation({
     whyItFits: v.string(),
     recommendedAction: THREAD_ACTION,
     priorityScore: v.number(),
+    // Sprint 2.17 Phase A — manager-mode depth fields (all optional for
+    // backward compat with pre-2.17 subagents).
+    painQuote: v.optional(v.string()),
+    postedAt: v.optional(v.number()),
+    velocityScore: v.optional(v.number()),
+    authorContext: v.optional(
+      v.object({
+        followerCount: v.optional(v.number()),
+        accountAgeMs: v.optional(v.number()),
+        recentPostSummary: v.optional(v.string()),
+      })
+    ),
+    commentTreeSummary: v.optional(
+      v.object({
+        topComments: v.array(v.string()),
+        opIsReplying: v.optional(v.boolean()),
+      })
+    ),
+    audienceSize: v.optional(v.number()),
+    draftReply: v.optional(v.string()),
+    tier: v.optional(
+      v.union(
+        v.literal("T1"),
+        v.literal("T2"),
+        v.literal("T3"),
+        v.literal("T4")
+      )
+    ),
   },
   handler: async (ctx, args): Promise<Id<"gtmTargetThreads">> => {
     await assertAgentBelongsToAccount(ctx, args.accountId, args.agentId);
@@ -161,6 +189,18 @@ export const recordTargetThread = internalMutation({
         whyItFits: args.whyItFits,
         recommendedAction: args.recommendedAction,
         priorityScore: args.priorityScore,
+        // Only patch the new fields when the caller supplied them —
+        // preserve existing values otherwise. A re-surface that didn't
+        // re-extract pain quote shouldn't blank out a prior one.
+        painQuote: args.painQuote ?? existing.painQuote,
+        postedAt: args.postedAt ?? existing.postedAt,
+        velocityScore: args.velocityScore ?? existing.velocityScore,
+        authorContext: args.authorContext ?? existing.authorContext,
+        commentTreeSummary:
+          args.commentTreeSummary ?? existing.commentTreeSummary,
+        audienceSize: args.audienceSize ?? existing.audienceSize,
+        draftReply: args.draftReply ?? existing.draftReply,
+        tier: args.tier ?? existing.tier,
         updatedAt: now,
       });
       return existing._id;
@@ -182,6 +222,14 @@ export const recordTargetThread = internalMutation({
       recommendedAction: args.recommendedAction,
       status: "queued",
       priorityScore: args.priorityScore,
+      painQuote: args.painQuote,
+      postedAt: args.postedAt,
+      velocityScore: args.velocityScore,
+      authorContext: args.authorContext,
+      commentTreeSummary: args.commentTreeSummary,
+      audienceSize: args.audienceSize,
+      draftReply: args.draftReply,
+      tier: args.tier,
       createdAt: now,
       updatedAt: now,
     });

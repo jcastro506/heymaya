@@ -4495,7 +4495,19 @@ export default defineSchema({
       // inboundCallback.ts routes on this enum.
       v.literal("target_thread"),
       v.literal("target_account"),
-      v.literal("drafted_content")
+      v.literal("drafted_content"),
+      // Sprint 2.17 Phase A — manager-mode callbacks. Each new write
+      // surface gets its own kind so idempotency keys are scoped
+      // per-endpoint. Handlers live in managerCallbacks.ts.
+      v.literal("foundation_buyer_map"),
+      v.literal("foundation_competitor"),
+      v.literal("foundation_channel_scorecard"),
+      v.literal("foundation_content_angle"),
+      v.literal("foundation_relationship_target"),
+      v.literal("competitor_move"),
+      v.literal("niche_pulse_signal"),
+      v.literal("action_logged"),
+      v.literal("learning_extracted")
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
@@ -5422,6 +5434,46 @@ export default defineSchema({
     ),
     /** 0-1; subagent's confidence this is a strong target. */
     priorityScore: v.number(),
+    // Sprint 2.17 Phase A — manager-mode depth fields. All optional so
+    // existing rows continue to validate. Subagents in 2.17+ are
+    // expected to populate every one; Maya's output critic drops T4 and
+    // surfaces T1/T2 in the morning brief.
+    /** Verbatim quote from the post body that proves the buyer signal.
+     *  Anchors the "grounded or silent" rule — never null on new rows. */
+    painQuote: v.optional(v.string()),
+    /** Original post timestamp (ms epoch). Drives freshness gate + velocity. */
+    postedAt: v.optional(v.number()),
+    /** Likes-per-hour (or platform-equivalent) at time of surfacing. */
+    velocityScore: v.optional(v.number()),
+    /** Author context to confirm real-buyer vs bot/meme. */
+    authorContext: v.optional(
+      v.object({
+        followerCount: v.optional(v.number()),
+        accountAgeMs: v.optional(v.number()),
+        recentPostSummary: v.optional(v.string()),
+      })
+    ),
+    /** Top replies + whether OP is engaging. Drives "alive vs dead" judgment. */
+    commentTreeSummary: v.optional(
+      v.object({
+        topComments: v.array(v.string()),
+        opIsReplying: v.optional(v.boolean()),
+      })
+    ),
+    /** Subreddit subscribers / community member count / followers count. */
+    audienceSize: v.optional(v.number()),
+    /** Maya's drafted reply text (when recommendedAction === "reply"). */
+    draftReply: v.optional(v.string()),
+    /** Maya's classification — T1 hot strike → T4 trash. T4 still persists
+     *  for learning purposes but never surfaces in the morning brief. */
+    tier: v.optional(
+      v.union(
+        v.literal("T1"),
+        v.literal("T2"),
+        v.literal("T3"),
+        v.literal("T4")
+      )
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -5582,5 +5634,339 @@ export default defineSchema({
     .index("by_agent", ["agentId"])
     .index("by_draft", ["draftId"])
     .index("by_account_and_snapshot", ["accountId", "snapshotAtMs"]),
+
+  // ─── Sprint 2.17 — Manager-mode foundation tables ─────────────────────
+  // The five outputs of the foundation-research pass (onboarding +
+  // monthly refresh). Each is its own table because:
+  //   - cardinality differs (buyer_map is 1-per-agent, the others are
+  //     N-per-agent)
+  //   - update cadences differ at the row level
+  //   - read paths in skills are scoped per-output ("read buyer map" vs
+  //     "scan competitive map")
+  // All carry agentId + accountId for tenant scoping; populated only by
+  // /lc_gtm/foundation_* endpoints (token-derived agentId).
+
+  /** Singleton-per-agent ICP definition + buyer journey + language.
+   *  Refreshed monthly. The whole row is overwritten each pass — we
+   *  don't try to merge with prior. Foundation research is a fresh
+   *  re-synthesis each time. */
+  gtmBuyerMap: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    /** 1-3 paragraph ICP description in plain language. */
+    icpDescription: v.string(),
+    /** Buyer journey stages — where they hang out, what language signals
+     *  high intent at each stage. */
+    buyerJourneyStages: v.array(
+      v.object({
+        stage: v.string(),
+        whereTheyHangOut: v.string(),
+        intentLanguage: v.string(),
+      })
+    ),
+    /** Search phrases / post titles / DM openers that signal a buyer in-market. */
+    intentPhrases: v.array(v.string()),
+    /** People (influencers, podcasters, account-leaders) the ICP trusts. */
+    trustedVoices: v.array(
+      v.object({
+        handle: v.string(),
+        platform: v.string(),
+        whyTrusted: v.string(),
+      })
+    ),
+    synthesizedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"]),
+
+  /** Multi-row per agent — one per competitor / adjacent tool /
+   *  substitute behavior we want to track. Dedupe key:
+   *  (agentId, competitorKey). competitorKey is lowercased competitor
+   *  name OR substitute-behavior slug. */
+  gtmCompetitiveMap: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    /** Lowercased, kebab-or-snake-cased name. Stable dedupe handle. */
+    competitorKey: v.string(),
+    /** Display-cased name. */
+    competitorName: v.string(),
+    kind: v.union(
+      v.literal("direct"),
+      v.literal("adjacent"),
+      v.literal("substitute")
+    ),
+    url: v.optional(v.string()),
+    pricing: v.optional(v.string()),
+    positioning: v.string(),
+    /** Customer complaints quoted from real threads. Grounding. */
+    complaints: v.array(
+      v.object({
+        quote: v.string(),
+        sourceUrl: v.string(),
+      })
+    ),
+    vulnerabilities: v.array(v.string()),
+    synthesizedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_agent_and_key", ["agentId", "competitorKey"])
+    .index("by_agent_and_kind", ["agentId", "kind"]),
+
+  /** Per-channel scorecard. Dedupe key: (agentId, channel). */
+  gtmChannelScorecard: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    channel: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("hn"),
+      v.literal("linkedin"),
+      v.literal("youtube"),
+      v.literal("tiktok"),
+      v.literal("instagram"),
+      v.literal("threads"),
+      v.literal("podcasts"),
+      v.literal("newsletters"),
+      v.literal("discord"),
+      v.literal("blog")
+    ),
+    /** 0-1: how well does the buyer live on this channel. */
+    audienceFit: v.number(),
+    /** 0-1: does the founder have bandwidth to feed this channel. */
+    cadenceFit: v.number(),
+    /** Plain-language description of what this channel uniquely does. */
+    uniqueUnlock: v.string(),
+    /** Top 2-3 channels Maya bets on each get bet=true. */
+    bet: v.boolean(),
+    notes: v.optional(v.string()),
+    synthesizedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_agent_and_channel", ["agentId", "channel"])
+    .index("by_agent_and_bet", ["agentId", "bet"]),
+
+  /** Multi-row per agent — 20-30 narrative angles + hook variants. */
+  gtmContentAngles: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    /** Stable slug for dedupe — kebab-cased short name. */
+    angleKey: v.string(),
+    /** The angle in plain language. */
+    angle: v.string(),
+    /** Grounding citation — quote + source URL. */
+    painCitation: v.object({
+      quote: v.string(),
+      sourceUrl: v.string(),
+    }),
+    /** 3-5 hook openers in founder's voice. */
+    hookVariants: v.array(v.string()),
+    /** Free-text on tone/voice match for the founder. */
+    voiceCheck: v.optional(v.string()),
+    /** How many times Maya has used this angle in drafts. */
+    usageCount: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    synthesizedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_agent_and_key", ["agentId", "angleKey"]),
+
+  /** 20-50 specific accounts to build relationships with. Dedupe key:
+   *  (agentId, platform, lowercased handle). */
+  gtmRelationshipTargets: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    platform: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("hn"),
+      v.literal("linkedin"),
+      v.literal("instagram"),
+      v.literal("tiktok"),
+      v.literal("youtube"),
+      v.literal("threads")
+    ),
+    /** Always lowercased before write. */
+    handle: v.string(),
+    displayName: v.optional(v.string()),
+    profileUrl: v.optional(v.string()),
+    /** Why this person matters — audience overlap, voice fit, etc. */
+    whyThem: v.string(),
+    /** Maya's plan for building with them. */
+    engagementPlan: v.string(),
+    cadence: v.union(
+      v.literal("weekly"),
+      v.literal("monthly"),
+      v.literal("as_they_post")
+    ),
+    status: v.union(
+      v.literal("prospect"),
+      v.literal("warming"),
+      v.literal("engaged"),
+      v.literal("reciprocal"),
+      v.literal("dropped")
+    ),
+    lastTouchAt: v.optional(v.number()),
+    synthesizedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_agent_and_platform", ["agentId", "platform"])
+    .index("by_agent_and_status", ["agentId", "status"]),
+
+  // ─── Sprint 2.17 — Manager-mode continuous tables ─────────────────────
+
+  /** Competitor moves observed in the wild. Dedupe key:
+   *  (agentId, competitiveMapId, sourceUrl). */
+  gtmCompetitorMoves: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    /** Soft link — competitiveMapId may be null if the move is from a
+     *  competitor not yet in the map. Maya can backfill. */
+    competitiveMapId: v.optional(v.id("gtmCompetitiveMap")),
+    competitorName: v.string(),
+    moveKind: v.union(
+      v.literal("feature_ship"),
+      v.literal("campaign"),
+      v.literal("milestone"),
+      v.literal("pricing_change"),
+      v.literal("partnership"),
+      v.literal("incident")
+    ),
+    summary: v.string(),
+    sourceUrl: v.string(),
+    observedAt: v.number(),
+    /** Maya's proposed counter-move. */
+    recommendedCounter: v.optional(v.string()),
+    respondedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_agent_and_observed", ["agentId", "observedAt"])
+    .index("by_competitive_map", ["competitiveMapId"]),
+
+  /** Emerging communities, accounts, keywords, or topics. */
+  gtmNichePulse: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    pulseKind: v.union(
+      v.literal("new_community"),
+      v.literal("rising_account"),
+      v.literal("rising_keyword"),
+      v.literal("rising_topic"),
+      v.literal("declining_signal")
+    ),
+    name: v.string(),
+    platform: v.optional(v.string()),
+    evidenceUrl: v.string(),
+    momentumSignal: v.string(),
+    observedAt: v.number(),
+    /** Maya's grade — does this matter enough to act on. */
+    relevance: v.union(
+      v.literal("act_now"),
+      v.literal("monitor"),
+      v.literal("noise")
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_agent_and_observed", ["agentId", "observedAt"])
+    .index("by_agent_and_relevance", ["agentId", "relevance"]),
+
+  /** Every Maya output → one row. Drives the feedback loop. */
+  gtmActionLog: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    kind: v.union(
+      v.literal("morning_brief"),
+      v.literal("evening_recap"),
+      v.literal("weekly_review"),
+      v.literal("monthly_reset"),
+      v.literal("hot_alert"),
+      v.literal("inbound_triage"),
+      v.literal("calendar_event_created"),
+      v.literal("draft_proposed"),
+      v.literal("foundation_complete"),
+      v.literal("competitor_move_alert"),
+      v.literal("niche_pulse_alert"),
+      v.literal("other")
+    ),
+    summary: v.string(),
+    /** Soft references — we don't enforce FK because rows may be deleted
+     *  or live in different tables. Maya populates the kind so consumers
+     *  know what to look up. */
+    linkedEntities: v.optional(
+      v.array(
+        v.object({
+          entityKind: v.string(),
+          entityId: v.string(),
+        })
+      )
+    ),
+    sentAt: v.number(),
+    /** Maya updates this as feedback arrives — operator replied, did the
+     *  thing, ignored, etc. */
+    userResponse: v.union(
+      v.literal("pending"),
+      v.literal("acknowledged"),
+      v.literal("acted"),
+      v.literal("ignored"),
+      v.literal("dismissed")
+    ),
+    outcomeNotes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_agent_and_sent", ["agentId", "sentAt"])
+    .index("by_agent_and_kind", ["agentId", "kind"]),
+
+  /** What Maya has learned about this niche over time. The compounding
+   *  surface — week 4 brief reads this to weight what surfaces.
+   *  Dedupe key: (agentId, learningKey). */
+  gtmNicheLearnings: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    /** Stable slug. */
+    learningKey: v.string(),
+    learningKind: v.union(
+      v.literal("timing"),
+      v.literal("channel_priority"),
+      v.literal("voice_angle"),
+      v.literal("community_quality"),
+      v.literal("format_preference"),
+      v.literal("hook_pattern"),
+      v.literal("other")
+    ),
+    learning: v.string(),
+    /** Number of data points supporting this learning. */
+    evidenceCount: v.number(),
+    /** 0-1: how confident Maya is in this learning. */
+    confidenceScore: v.number(),
+    firstObservedAt: v.number(),
+    lastReinforcedAt: v.number(),
+    /** Set when the learning is contradicted by newer evidence. Maya
+     *  may revive a retired learning if it re-emerges. */
+    retired: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_agent_and_key", ["agentId", "learningKey"])
+    .index("by_agent_and_kind", ["agentId", "learningKind"])
+    .index("by_agent_and_retired", ["agentId", "retired"]),
+
   // ─── end ClawLaunch / Maya GTM product ────────────────────────────────
 });

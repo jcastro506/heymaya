@@ -85,6 +85,25 @@ import {
   // Sprint 2.16b — progressive update channel.
   sendUpdateHttp,
 } from "./gtmMaya/openclaw/inboundCallback";
+// Sprint 2.17 Phase A — manager-mode HTTP handlers (foundation +
+// continuous research + action log + niche learnings). Auth shares the
+// hookToken path with inboundCallback.ts.
+import {
+  foundationBuyerMapHttp,
+  foundationCompetitorHttp,
+  foundationChannelScorecardHttp,
+  foundationContentAngleHttp,
+  foundationRelationshipHttp,
+  competitorMoveHttp,
+  nichePulseSignalHttp,
+  actionLoggedHttp,
+  learningExtractedHttp,
+  getMyFoundationHttp,
+  getMyCompetitorMovesHttp,
+  getMyNichePulseHttp,
+  getMyActionLogHttp,
+  getMyNicheLearningsHttp,
+} from "./gtmMaya/openclaw/managerCallbacks";
 
 const http = httpRouter();
 
@@ -205,6 +224,87 @@ http.route({
   path: "/lc_gtm/send_update",
   method: "POST",
   handler: sendUpdateHttp,
+});
+
+// ─── Sprint 2.17 Phase A — manager-mode routes ──────────────────────
+// Foundation research write surfaces. Each is hookToken-authed and
+// idempotency-keyed. Subagents POST one row at a time during the
+// onboarding + monthly foundation pass.
+http.route({
+  path: "/lc_gtm/foundation_buyer_map",
+  method: "POST",
+  handler: foundationBuyerMapHttp,
+});
+http.route({
+  path: "/lc_gtm/foundation_competitor",
+  method: "POST",
+  handler: foundationCompetitorHttp,
+});
+http.route({
+  path: "/lc_gtm/foundation_channel_scorecard",
+  method: "POST",
+  handler: foundationChannelScorecardHttp,
+});
+http.route({
+  path: "/lc_gtm/foundation_content_angle",
+  method: "POST",
+  handler: foundationContentAngleHttp,
+});
+http.route({
+  path: "/lc_gtm/foundation_relationship_target",
+  method: "POST",
+  handler: foundationRelationshipHttp,
+});
+
+// Continuous research + feedback-loop write surfaces. Maya / her
+// continuous workers POST these throughout the daily cadence.
+http.route({
+  path: "/lc_gtm/competitor_move",
+  method: "POST",
+  handler: competitorMoveHttp,
+});
+http.route({
+  path: "/lc_gtm/niche_pulse_signal",
+  method: "POST",
+  handler: nichePulseSignalHttp,
+});
+http.route({
+  path: "/lc_gtm/action_logged",
+  method: "POST",
+  handler: actionLoggedHttp,
+});
+http.route({
+  path: "/lc_gtm/learning_extracted",
+  method: "POST",
+  handler: learningExtractedHttp,
+});
+
+// Read endpoints — Maya curl-GETs these on BOOT / morning brief /
+// weekly review to pull her own state. Auth same as POST surface.
+http.route({
+  path: "/lc_gtm/get_my_foundation",
+  method: "GET",
+  handler: getMyFoundationHttp,
+});
+http.route({
+  path: "/lc_gtm/get_my_competitor_moves",
+  method: "GET",
+  handler: getMyCompetitorMovesHttp,
+});
+http.route({
+  path: "/lc_gtm/get_my_niche_pulse",
+  method: "GET",
+  handler: getMyNichePulseHttp,
+});
+http.route({
+  path: "/lc_gtm/get_my_action_log",
+  method: "GET",
+  handler: getMyActionLogHttp,
+});
+http.route({
+  path: "/lc_gtm/get_my_niche_learnings",
+  method: "GET",
+  handler: getMyNicheLearningsHttp,
 });
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs
