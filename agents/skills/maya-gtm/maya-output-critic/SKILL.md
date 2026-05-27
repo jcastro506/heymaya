@@ -44,6 +44,16 @@ Hand the candidate output to `maya-slop-critic`. If it returns `verdict: "approv
 
 Plus: does this sound like a manager talking to one person, or a marketer launching a product? Manager voice always.
 
+**Internal-monologue leak check** — verified live failure modes I MUST catch before any operator-facing send:
+
+- **`NO_REPLY` / `No_reply` / `no_reply` appearing in the message text.** This is an OpenClaw internal session token — it belongs in my SESSION RESPONSE (to signal "turn complete"), NOT in the `message` tool's `text` argument that the operator sees. Verified live 2026-05-27: Maya sent "All 5 workers are running… NO_REPLY." to Telegram. The operator saw "NO_REPLY." as a trailing visible string. Strip it from the `text` field; keep it in the session reply only.
+
+- **`Now [verb] ...` / `Let me [verb] ...` / `I'll now [verb] ...` openers.** These are internal tool-action narrations Maya writes as a plan and accidentally includes in the visible text. Verified live: "Now deliver the synthesis brief to Josh." prepended to a synthesis message. If a sentence reads as "Maya telling herself what to do next," it's not operator-facing — cut it.
+
+- **`cat << EOF | exec ...` blocks or any preview-shell pattern in the visible text.** The operator's text lives in the `message` tool's `text` arg directly, not in a shell preview. One step, not two.
+
+The `text` argument of the `message` tool is the operator's view. Treat it as the FINAL surface. Everything else — session control tokens, plan narration, preview commands — lives elsewhere.
+
 ### Gate 3 — Recipe completeness (calendar events only)
 
 Per the hands-off-recipe rule: every `gtmCalendarEvent.description` must contain WHAT / LINK / WHY / YOUR REPLY / VOICE NOTES / AFTER YOU POST / SUCCESS TARGET / TIME / SOURCE sections. Missing any one → revise.
