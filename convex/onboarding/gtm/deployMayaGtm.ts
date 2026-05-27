@@ -431,6 +431,17 @@ export function buildGatewayConfig(
           maxSpawnDepth: 1,
           runTimeoutSeconds: 900,
           archiveAfterMinutes: 60,
+          // Sprint 2.18 #10 — default thinking="medium" for all spawned
+          // workers. Per operator spec: "her subagents could also be
+          // Gemini 3.5 with medium thinking level." Without this, the
+          // session record shows `thinkingLevel: "off"` and workers
+          // bypass reasoning entirely — they grep node_modules to
+          // discover endpoint schemas instead of inferring from the
+          // task brief + TOOLS.md. Verified live 2026-05-27 on
+          // clawlaunch-ws78m7y8p6qvv7hhpq: buyer_map_worker spent ~6 min
+          // grep'ing /usr/local/lib/node_modules/openclaw/ for
+          // "foundation_buyer_map" rather than POSTing.
+          thinking: "medium",
         },
         // Heartbeat is the watchdog/recovery lane. BOOT.md owns the
         // first launch workflow on gateway startup; heartbeat checks for
