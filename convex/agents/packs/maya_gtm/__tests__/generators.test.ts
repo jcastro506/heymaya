@@ -234,7 +234,27 @@ describe("Maya GTM workspace pack", () => {
       jobs.jobs.find((j) => j.id === "0002_gtm_boot_phase_2")
     ).toBeUndefined();
 
-    expect(jobs.jobs.find((j) => j.id === "0001_kickstart")).toBeUndefined();
+    // Sprint 2.16u-fix14 — kickstart RE-ADDED. boot-md hook didn't reliably
+    // fire BOOT.md on our patched OpenClaw 2026.4.23 image (verified failure
+    // 2026-05-27: hooks loaded, "skipping optional post-channel sidecars"
+    // line fired, but no [gateway/boot] log or session files). Cron is the
+    // proven mechanism from the creator app.
+    const kickstart = jobs.jobs.find((j) => j.id === "0001_kickstart");
+    expect(kickstart, "kickstart cron must exist").toBeTruthy();
+    expect(kickstart?.sessionTarget).toBe("isolated");
+    expect((kickstart as unknown as { wakeMode?: string }).wakeMode).toBe("now");
+    expect(
+      (kickstart as unknown as { deleteAfterRun?: boolean }).deleteAfterRun
+    ).toBe(true);
+    expect(kickstart?.payload.message).toContain("FIRST-BOOT KICKSTART");
+    expect(kickstart?.payload.message).toContain("SOUL.md");
+    expect(kickstart?.payload.message).toContain("hello_sent_at");
+    expect(kickstart?.payload.message).toContain("launch_flow_started_at");
+    expect(kickstart?.payload.message).toContain("sessions_spawn");
+    expect(
+      (kickstart?.payload as { lightContext?: boolean }).lightContext,
+      "lightContext: true matches creator app pattern for fast agent turn"
+    ).toBe(true);
 
     // Weekly review survives — it's a real exact-timing scheduled event
     // (Mondays 10am), and still drives the compounding cycle.

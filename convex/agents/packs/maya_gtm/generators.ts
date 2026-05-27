@@ -750,14 +750,58 @@ function buildCronDelivery(
 }
 
 function renderJobs(input: MayaGtmWorkspaceInput): string {
-  // BOOT.md owns startup work through OpenClaw's native boot-md hook.
-  // Cron is reserved for exact scheduled events:
+  // Sprint 2.16u-fix14 — RE-ADDED kickstart cron because the
+  // gateway:startup hook path doesn't reliably fire BOOT.md in our
+  // patched OpenClaw 2026.4.23 image. Verified failure: deploy
+  // clawlaunch-ws7ft6d76yq9d8xq7h fired "skipping optional post-channel
+  // sidecars" (our patch ran), but NO [gateway/boot] log activity and
+  // zero session files written. boot-md is loaded as one of the 4
+  // bundled hook handlers but never executes BOOT.md.
+  //
+  // The kickstart cron is the proven pattern from the creator app
+  // (commit b3e65d0, Sprint 9.6 — convex/agents/packs/maya/workspace/
+  // buildCronJobsJson.ts:357). OpenClaw's native scheduler fires it
+  // reliably. With Sonnet 4.5 + lightContext:true, the agent turn that
+  // sends the hello should be ~30-90 sec instead of the 10 min we saw
+  // earlier on Gemini 3 Flash Preview with full workspace context.
+  //
+  // Cron jobs:
+  //   - 0001_kickstart: one-shot, fires deploy+300s, sends hello + starts research
   //   - gtm_weekly_review: Mondays 10am — week-over-week refresh
   //   - gtm_channel_discovery: 1st of month — new-channels hunt
   const delivery = buildCronDelivery(input);
+  const kickstartAtMs = (input.bootKickoffAtMs ?? Date.now()) + 300_000;
+  const telegramTarget = input.telegramChatId ?? "operator";
   const jobs = {
     version: 1,
     jobs: [
+      {
+        id: "0001_kickstart",
+        name: "First-boot kickstart (one-shot)",
+        description:
+          "Sprint 2.16u-fix14 — fires ~300s after deploy via OpenClaw's native scheduler. Sends Maya's intro to the paired Telegram channel + starts the GTM launch workflow in a single bounded turn. Self-deletes after run.",
+        enabled: true,
+        createdAtMs: 0,
+        updatedAtMs: 0,
+        schedule: { kind: "at" as const, at: new Date(kickstartAtMs).toISOString() },
+        sessionTarget: "isolated" as const,
+        wakeMode: "now" as const,
+        deleteAfterRun: true,
+        payload: {
+          kind: "agentTurn" as const,
+          timeoutSeconds: 300,
+          thinking: "medium" as const,
+          // Critical: lightContext skips the full ~200KB workspace bundle
+          // (PLAYBOOK.md / all skills / etc) and only injects HEARTBEAT.md
+          // and the payload message. Matches creator app at
+          // convex/agents/packs/maya/workspace/buildCronJobsJson.ts:392.
+          lightContext: true as const,
+          message:
+            `FIRST-BOOT KICKSTART. You are Maya, the operator's launch manager. Send the first message to the operator NOW. Native message tool: action=send, channel=telegram, target=${telegramTarget}.\n\n1. Read /data/workspace/USER.md and /data/workspace/APP.md briefly. Read /data/workspace/SOUL.md for voice rules.\n\n2. Compose a friendly, plain-language intro:\n   - greet operator by FIRST NAME from USER.md (first name only, never full name)\n   - identify yourself as Maya — their launch manager (NOT "your AI assistant", NOT "your AI agent")\n   - acknowledge their product + the founderWhy so they feel heard\n   - set expectations: you're going to dig in, send updates as you find things, come back with a 14-day plan\n   - end with one short question inviting reply\n\n   Length: 3-5 short paragraphs. Voice per SOUL.md — no skill slugs, no .md filenames, no internal terms like "evidence cards"/"subagent", no self-references like "as an LLM" / "AI assistant".\n\n3. Call OpenClaw's native message tool: action='send', channel='telegram', target=${telegramTarget}, text=<your intro>.\n\n4. After the message tool returns success, append \`hello_sent_at: <ISO ts>\` to /data/workspace/MEMORY.md.\n\n5. Read /data/workspace/MEMORY.md. The active_research_job_id is already there. Append \`launch_flow_started_at: <ISO ts>\` and \`launch_phase: channel_research\` to MEMORY.md.\n\n6. Now start the launch workflow: read APP.md, GTM.md, PLAYBOOK.md briefly. Pick 1 primary + up to 2 secondary research channels (from reddit, x, hn, tiktok, instagram, linkedin) based on PLAYBOOK.md decision logic and the operator's visual/manual-post constraints in USER.md. For each picked channel, sessions_spawn the matching <channel>_research subagent with a SPECIFIC task string. The task MUST tell the subagent to use the ScrapeCreators API (Reddit) / TwitterAPI.io (X) / Algolia HN API (HN) — NOT raw curl on platform domains. Read /data/workspace/skills/scrapecreators-api/SKILL.md for endpoint patterns. The task MUST instruct the subagent to POST findings to $CONVEX_SITE_URL/lc_gtm/target_thread with the active_research_job_id, then POST /lc_gtm/subagent_complete when done.\n\n7. After all subagents spawned, exec curl POST to $CONVEX_SITE_URL/lc_gtm/phase_1_announce with body {"researchJobId":"<active_research_job_id>","subagentsExpected":N}. Bearer auth from $HOOK_TOKEN.\n\n8. Append \`subagents_spawned: N\` to MEMORY.md. Reply NO_REPLY. Phase 2 synthesis fires when subagents complete (Convex push-resume).`,
+        },
+        delivery,
+        state: {},
+      },
       {
         id: "gtm_channel_discovery",
         name: "Monthly GTM channel discovery",
