@@ -708,6 +708,141 @@ describe("Sprint 2.17 — gtmNicheLearnings", () => {
   });
 });
 
+// ───────────────────── feedback-loop integration ─────────────────────
+
+describe("Sprint 2.17 Phase F — feedback loop integration", () => {
+  it("simulates a week of action logs → learning extracted → next brief weights surface", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId, accountId } = await setupAgent(t, "u_fb_loop");
+
+    // Simulate 7 days of morning briefs landing, each acted on.
+    const dayMs = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    for (let day = 7; day >= 1; day--) {
+      await t.mutation(internal.gtmMaya.managerStore.recordActionLog, {
+        accountId,
+        agentId,
+        kind: "morning_brief",
+        summary: `Day ${day}: 3 T1 threads queued`,
+        sentAt: now - day * dayMs,
+        userResponse: "acted",
+      });
+      await t.mutation(internal.gtmMaya.managerStore.recordActionLog, {
+        accountId,
+        agentId,
+        kind: "evening_recap",
+        summary: `Day ${day}: 2 of 3 done, Reddit reply got 47 upvotes`,
+        sentAt: now - day * dayMs + 13 * 60 * 60 * 1000,
+        userResponse: "acknowledged",
+      });
+    }
+
+    // Weekly review extracts a learning from the action log pattern.
+    await t.mutation(internal.gtmMaya.managerStore.upsertNicheLearning, {
+      accountId,
+      agentId,
+      learningKey: "reddit-localllama-tuesday-10am",
+      learningKind: "timing",
+      learning:
+        "r/LocalLLaMA Tuesday 10am-2pm operator local = highest reply rate (3 of last 4 strong-engagement replies in this window).",
+      confidenceScore: 0.78,
+    });
+    await t.mutation(internal.gtmMaya.managerStore.upsertNicheLearning, {
+      accountId,
+      agentId,
+      learningKey: "workflow-pain-hook-wins",
+      learningKind: "voice_angle",
+      learning:
+        "Workflow-pain hooks outperform hardware-spec hooks ~4:1 in X engagement.",
+      confidenceScore: 0.82,
+    });
+
+    // Weekly review reinforces an existing learning with new evidence.
+    await t.mutation(internal.gtmMaya.managerStore.upsertNicheLearning, {
+      accountId,
+      agentId,
+      learningKey: "reddit-localllama-tuesday-10am",
+      learningKind: "timing",
+      learning:
+        "r/LocalLLaMA Tuesday 10am-2pm reinforced — week 2 also saw strongest reply.",
+      confidenceScore: 0.88,
+    });
+
+    // Maya extracts a retired learning that turned out wrong.
+    await t.mutation(internal.gtmMaya.managerStore.upsertNicheLearning, {
+      accountId,
+      agentId,
+      learningKey: "hn-show-replies-work",
+      learningKind: "channel_priority",
+      learning:
+        "Show HN replies — TURNED OUT WRONG, got flagged by mods; never use.",
+      confidenceScore: 0.05,
+      retired: true,
+    });
+
+    // Next morning brief: Maya curl-GETs /lc_gtm/get_my_niche_learnings
+    // and gets ACTIVE learnings only.
+    const active = await t.query(
+      internal.gtmMaya.managerStore.listNicheLearnings,
+      { agentId }
+    );
+    expect(active).toHaveLength(2);
+    const timingLearning = active.find(
+      (l) => l.learningKey === "reddit-localllama-tuesday-10am"
+    );
+    expect(timingLearning).toBeTruthy();
+    expect(timingLearning?.evidenceCount).toBe(2); // auto-incremented
+    expect(timingLearning?.confidenceScore).toBeCloseTo(0.88);
+
+    // And she can read her recent action log to gauge operator
+    // engagement with prior briefs.
+    const recent = await t.query(
+      internal.gtmMaya.managerStore.listActionLog,
+      { agentId, sinceMs: now - 8 * dayMs }
+    );
+    expect(recent).toHaveLength(14); // 7 brief + 7 recap
+    const briefs = recent.filter((r) => r.kind === "morning_brief");
+    expect(briefs).toHaveLength(7);
+    expect(briefs.every((b) => b.userResponse === "acted")).toBe(true);
+  });
+
+  it("retired learnings come back via listNicheLearnings{includeRetired:true} for audit", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId, accountId } = await setupAgent(t, "u_fb_retired");
+
+    await t.mutation(internal.gtmMaya.managerStore.upsertNicheLearning, {
+      accountId,
+      agentId,
+      learningKey: "good",
+      learningKind: "timing",
+      learning: "still active",
+      confidenceScore: 0.8,
+    });
+    await t.mutation(internal.gtmMaya.managerStore.upsertNicheLearning, {
+      accountId,
+      agentId,
+      learningKey: "outdated",
+      learningKind: "timing",
+      learning: "retired after re-evaluation",
+      confidenceScore: 0.2,
+      retired: true,
+    });
+
+    const def = await t.query(
+      internal.gtmMaya.managerStore.listNicheLearnings,
+      { agentId }
+    );
+    expect(def).toHaveLength(1);
+    expect(def[0].learningKey).toBe("good");
+
+    const audit = await t.query(
+      internal.gtmMaya.managerStore.listNicheLearnings,
+      { agentId, includeRetired: true }
+    );
+    expect(audit).toHaveLength(2);
+  });
+});
+
 // ───────────────────── target_thread extension ─────────────────────
 
 describe("Sprint 2.17 — gtmTargetThreads new optional fields", () => {

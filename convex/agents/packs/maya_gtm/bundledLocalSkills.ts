@@ -1352,7 +1352,13 @@ Each event description follows the full hands-off recipe template from \`maya-ca
 
 ## Weighting from niche learnings
 
-Before tier-sorting, Maya bumps threads matching active \`gtmNicheLearnings\`:
+Before tier-sorting, Maya does an exec curl GET to
+\\\`$CONVEX_SITE_URL/lc_gtm/get_my_niche_learnings\\\` with Bearer auth.
+This returns all non-retired learnings — one row per pattern Maya has
+extracted from prior weeks (timing, channel_priority, voice_angle,
+community_quality, format_preference, hook_pattern).
+
+Bump threads matching active \`gtmNicheLearnings\`:
 
 - Learning of kind \`timing\` says r/X 10am-2pm fires → if a queued T2 thread is in r/X and the time window is now, promote toward T1 (Maya's judgment, not a formula).
 - Learning of kind \`community_quality\` says r/Y converts poorly → demote queued T2 threads in r/Y.
