@@ -458,20 +458,51 @@ duplicates to "ok (replay)" so partial-failure recovery is safe.
   Use: propose calendar events. Convex stamps the proposal; actual
   Google Calendar write happens after user approval (Sprint 9).
 
-Sprint 2.1 — Deep-research subagent callbacks. The per-platform
+────────────────────────────────────────────────────────────────────
+WHICH ENDPOINT? Read this first.
+
+I write to one of two endpoint families depending on which pass I'm in.
+
+**FOUNDATION PASS** (runs at onboarding + monthly refresh).
+Workers: buyer_map_worker, competitive_worker, channel_worker,
+content_angle_worker, relationship_worker.
+Goal: build the operating model (one-shot).
+→ POST to \`/lc_gtm/foundation_*\` endpoints (see Sprint 2.17 Phase A
+section below). The 5 foundation_* writes populate gtmBuyerMap /
+gtmCompetitiveMap / gtmChannelScorecard / gtmContentAngles /
+gtmRelationshipTargets — the foundation tables Maya reads at every
+morning brief.
+
+**CONTINUOUS / DAILY PASS** (runs every morning before brief).
+Workers: reddit_research, x_research, hn_research, tiktok_research,
+instagram_research, linkedin_research.
+Goal: find this morning's buyer-pain threads + accounts + drafts.
+→ POST to \`/lc_gtm/target_thread\`, \`/lc_gtm/target_account\`,
+\`/lc_gtm/drafted_content\` (see Sprint 2.1 section below). These
+write to gtmTargetThreads / gtmTargetAccounts / gtmDraftedContent —
+the daily lists that drive each morning's brief.
+
+**Do NOT mix them.** A foundation worker hitting target_account
+silently writes to the wrong table — the foundation pass shows
+zero relationship targets while data accumulates in the wrong
+place. Read the section that matches the pass you're running for.
+────────────────────────────────────────────────────────────────────
+
+Sprint 2.1 — Continuous / daily subagent callbacks. The per-platform
 _research subagents (reddit_research, x_research, tiktok_research,
 instagram_research, linkedin_research, hn_research) POST their outputs
-to these endpoints during the FIRST WAKE deep research phase. Each
-subagent finds specific threads/accounts/draft opportunities and
-streams them in one row at a time.
+to these endpoints during the DAILY continuous-research phase (NOT
+the foundation pass — those use the foundation_* endpoints below).
+Each subagent finds specific threads/accounts/draft opportunities
+and streams them in one row at a time.
 
 - \`POST ${callbackBase}/lc_gtm/target_thread\`
   Body: \`{ idempotencyKey, platform: "reddit"|"x"|"hn"|"linkedin"|"instagram"|"tiktok", url, externalId, title?, excerpt?, author?, subredditOrCommunity?, currentMetrics: { upvotes?, comments?, likes?, shares?, views? }, whyItFits, recommendedAction: "reply"|"lurk"|"upvote_only"|"avoid", priorityScore }\`
-  Use: a specific thread/post the operator should engage with. \`whyItFits\` must be 1-3 plain-language sentences a non-technical founder would understand — NEVER reference skill slugs, .md filenames, or pipeline terms. Idempotency key: hash of (platform, externalId).
+  Use: a specific thread/post the operator should engage with TODAY (daily continuous mode, NOT foundation pass). \`whyItFits\` must be 1-3 plain-language sentences a non-technical founder would understand — NEVER reference skill slugs, .md filenames, or pipeline terms. Idempotency key: hash of (platform, externalId).
 
 - \`POST ${callbackBase}/lc_gtm/target_account\`
   Body: \`{ idempotencyKey, platform, handle, profileUrl, displayName?, bio?, followerCount?, voiceAnalysis?, whyItFits, recommendedAction: "follow_and_engage"|"lurk"|"dm"|"avoid", priorityScore }\`
-  Use: a specific person to follow + engage with on the platform.
+  Use: a specific person to follow + engage with on the platform (daily continuous mode). For the FOUNDATION pass's relationship targets — long-term accounts to build with over 90 days — POST to \`/lc_gtm/foundation_relationship_target\` instead.
 
 - \`POST ${callbackBase}/lc_gtm/drafted_content\`
   Body: \`{ idempotencyKey, kind: "reply"|"thread"|"post"|"comment"|"dm", platform, targetThreadId?, targetAccountId?, draftText, draftSegments?: string[] }\`
