@@ -1,13 +1,13 @@
 ---
 name: maya-reddit-demand-researcher
-description: Find Reddit demand for the product's pain — score evidence, identify reply targets, return promotion-risk score. Budget-bounded.
+description: Find Reddit buyer intent for the product's pain — surface reply targets ranked by purchase signal, map the live comment tree for follow-up questions, return promotion-risk score. Budget-bounded.
 ---
 
 # maya-reddit-demand-researcher
 
 ## Purpose
 
-Reddit is the highest-conversion buyer-intent channel for indie products IF the operator is a real participant. This skill finds threads expressing the pain, subreddits where the buyer hangs out, reply-mining opportunities, and a hard risk score for the operator's account state. It refuses to recommend Reddit when warmup math doesn't work.
+Reddit is the highest-conversion buyer-intent channel for indie products IF the operator is a real participant. This skill finds threads where a buyer is actively describing the product's pain and seeking a solution, subreddits where those buyers concentrate, and reply-mining opportunities ranked by purchase-conversion potential — not vanity metrics. It refuses to recommend Reddit when warmup math doesn't work.
 
 ## When to invoke
 
@@ -31,8 +31,8 @@ Reddit is the highest-conversion buyer-intent channel for indie products IF the 
 3. **Domain age check (§ 8.14).** IF `app.domain` < 30 days old THEN `domainRiskElevated: true`.
 4. **Subreddit selection.** 2-3 candidate subs per ICP. From reddit.md § 1 or niche subs the founder already participates in. NEVER recommend r/marketing, r/programming, r/technology, r/AskReddit for product mention (§ 8.12).
 5. **Funnel-stage tagging.** Awareness / consideration / decision per reddit.md § 1. Decision-stage subs (r/Notion, r/Obsidian) are reply-only.
-6. **The 5-thread floor.** A sub is only worth recommending if ≥5 buyer-intent threads in last 60 days.
-7. **Reply-target quality bar.** Threads (a) <7 days old, (b) OP asked a pain-related question, (c) product is a credible answer within 1 degree of fit. § 4 + § 8.10.
+6. **Subreddit evidence floor.** A sub is only worth recommending if there is genuinely enough buyer-pain signal to justify sending the operator there — judge by whether the found threads contain people actively describing the product's exact problem and seeking a solution, not by a raw count. If the first page of results is thin or stale, search deeper until you can make a confident judgment; stop when you are confident, not at a fixed page limit.
+7. **Reply-target quality bar.** Threads where (a) the thread still feels alive — OP is still responding, new comments are arriving, the conversation has not gone cold — (b) OP or a commenter asked a pain-related question, and (c) the product is a credible answer within one degree of fit. § 4 + § 8.10. A recent-but-dead thread is theater; deprioritize it. Before surfacing any thread as a reply target, check whether the post or its key comments were removed by moderators; a removed thread is a wasted reply — tier it down or drop it.
 8. **r/SaaS 60-day clock.** IF recommending r/SaaS main-feed THEN flag the cost and recommend weekly feedback thread unless operator's narrative is unusually strong.
 9. **r/IndieHackers SHOW IH one-shot.** Only if `app.stage === "shipped"` AND operator has a metric/testimonial.
 10. **Live-product check (§ 8.9).** IF `app.stage === "pre-launch"` AND only waitlist exists THEN remove r/SideProject from candidates. Substitute r/AlphaAndBetaUsers.
@@ -56,38 +56,52 @@ interface RedditDemandReport {
     flairRequired: string | null;
     evidenceThreadCount: number;
   }>;
-  evidenceCards: Array<{ threadUrl: string; sub: string; title: string; upvotes: number; ageHours: number; painSnippet: string; productFit: "direct" | "adjacent" | "weak" }>;
+  evidenceCards: Array<{
+    threadUrl: string;
+    sub: string;
+    title: string;
+    ageHours: number;
+    buyerIntentSignal: string; // why this counts as buyer intent — active problem-seeker, not just a lurker
+    painSnippet: string;      // VERBATIM quote from the thread
+    productFit: "direct" | "adjacent" | "weak";
+    threadAlive: boolean;     // OP still responding / new comments arriving
+    modRemoved: boolean;      // post or key comments removed by mods
+  }>;
   replyTargets: Array<{
     threadUrl: string;
     sub: string;
     opQuestion: string;
+    buyerIntentRationale: string; // why this person is likely a buyer, not just curious
+    conversionPath: string;       // honest, non-spammy path to try the product that fits the reply context
     suggestedFramework: "been-there-done-that" | "counterintuitive" | "tactical-playbook" | "tool-neutral-recommendation" | "quiet-authority";
     mentionRecommended: boolean;
-    /** Sprint 2.30 — when the highest-value reply target is a COMMENT,
-     *  not the OP. Populated when the comment-tree mining found a
-     *  follow-up question the OP didn't ask but a commenter did, where
-     *  the product is a credible answer. Drives "reply to that
+    /** When the highest-value reply target is a COMMENT, not the OP.
+     *  Populated when comment-tree mining finds a follow-up question
+     *  the OP never answered and the product addresses directly —
+     *  highest-intent target in the thread. Drives "reply to that
      *  comment's question, not OP's" routing. */
     commentReplyTarget?: {
       commentId: string;
       author?: string;
       excerpt: string;
-      whyBetter: string;
+      whyHigherIntent: string; // why this comment beats the OP as a reply target
     };
   }>;
-  /** Sprint 2.30 — per-thread comment-tree intel. Maya pulls this from
-   *  the Reddit `/comments/<id>.json` endpoint via ScrapeCreators (or
-   *  the public JSON fallback) and scores each surfaced comment
-   *  against 5 mining kinds. The morning_brief reads this to pick the
+  /** Per-thread full comment-tree intel. Maya descends the entire
+   *  comment tree — including nested replies — before declaring a
+   *  reply target. The sharpest buyer language (pain restated in
+   *  visceral terms, competitor named, workaround rejected) and the
+   *  highest-intent follow-up questions routinely sit deeper than the
+   *  top-voted comments. The morning_brief uses this to pick the
    *  single best reply target across (a) the OP question and (b) the
-   *  best mineable comment. */
+   *  best mineable comment deeper in the tree. */
   commentMining: Array<{
     threadUrl: string;
     minedComments: Array<{
       commentId: string;
       author?: string;
       body: string;
-      score?: number;
+      nestingDepth: number;  // 0 = top-level, 1 = reply to top-level, etc.
       kind: "buyer_intent" | "pain_restatement" | "competitor_mention" | "op_rejection" | "high_velocity";
       competitorName?: string;
       whyMineable: string;
@@ -107,20 +121,21 @@ interface RedditDemandReport {
 - **ScrapeCreators Reddit endpoint fails.** Return HTTP status; do NOT degrade to training-data recommendations.
 - **Domain blacklist detected.** `domainBlacklisted: true` + recommend domain change (reddit.md § 6).
 
-## Comment-tree mining (Sprint 2.30 — mandatory for every replyTarget)
+## Comment-tree mining (mandatory for every replyTarget)
 
-For each thread in `replyTargets` (and any T1/T2-tier evidenceCard), Maya descends the comment tree before declaring the reply target:
+For each thread in `replyTargets` (and any direct/adjacent `evidenceCard`), Maya descends the **full** comment tree — including all nested reply chains — before declaring the reply target. Do not stop at top-level comments. The sharpest buyer language and the highest-intent follow-up questions routinely sit in nested replies that never bubbled to the top.
 
-1. **Fetch the comments endpoint.** Use ScrapeCreators Reddit comments endpoint OR the public `<thread_url>.json` (no auth, polite UA). Pull at minimum the top 10 comments by score.
-2. **Score each comment** against the 5 mining kinds:
-   - `buyer_intent` — a commenter asked a follow-up question the product directly answers (often higher signal than OP's original question).
-   - `pain_restatement` — a comment that articulates the buyer's pain in better, more visceral language than OP did (steal this for the lede).
-   - `competitor_mention` — a specific competitor named ("I use ToolX for this") — set `competitorName`. Drives differentiation drafting.
-   - `op_rejection` — OP responded "tried that, didn't work" — flags what NOT to suggest.
-   - `high_velocity` — >20 upvotes accumulated in <2h since the comment was posted (thread is hot RIGHT NOW).
-3. **Emit `commentMining[]`** with the scored comments, AND populate `commentReplyTarget` on the corresponding `replyTarget` entry when the best target is a comment, not OP.
+1. **Fetch the comments endpoint.** Use ScrapeCreators Reddit comments endpoint OR the public `<thread_url>.json` (no auth, polite UA). Pull the full tree. If the thread is large, go as deep as needed until you are confident you have seen all subtrees that could contain the five mining kinds below.
+2. **Mine the full tree** against the 5 kinds at every nesting level:
+   - `buyer_intent` — a commenter asked a follow-up question that the product directly answers and that OP never addressed. This is typically the **highest-intent reply target in the thread** because the person is still actively seeking a solution. Note the nesting depth; a question buried three levels deep that went unanswered for days is a better target than a top-level comment that already has five replies.
+   - `pain_restatement` — a comment that re-articulates the buyer's pain in sharper, more visceral language than OP did. Mine the VERBATIM phrasing; it becomes the lede of the drafted reply.
+   - `competitor_mention` — a commenter names a specific competitor or alternative ("I've been using ToolX but it keeps breaking because…"). Set `competitorName`. Drives differentiation angle in the draft.
+   - `op_rejection` — OP (or another commenter) explicitly said a class of solution "didn't work" or "I already tried X." Flags what NOT to recommend in the reply.
+   - `high_velocity` — a comment that has gathered unusual traction relative to the thread's typical engagement pace and its own age, judged by whether it reads as a thread that is actively heating up right now, not just one that happened to be posted recently.
+3. **Emit `commentMining[]`** with the scored comments including `nestingDepth`, AND populate `commentReplyTarget` on the corresponding `replyTarget` entry when the best reply target is a comment, not OP.
+4. **Follow-up-question routing.** When a `buyer_intent` comment surfaces an unanswered question, that comment — not OP's original post — becomes the primary reply target. Surface this clearly in `commentReplyTarget.whyHigherIntent`.
 
-Skipping this on T1/T2 threads is a failure — `maya-continuous-research` will steer the worker to re-run mining before accepting the output.
+Skipping full-tree descent on direct/adjacent threads is a failure — `maya-continuous-research` will steer the worker to re-run mining before accepting the output.
 
 ## Cost discipline
 
@@ -128,4 +143,8 @@ Max 8 ScrapeCreators calls: 3 × subreddit/search, 2 × general search, 2 × sub
 
 ## Anti-slop check
 
-`painSnippet` and `opQuestion` are VERBATIM from Reddit. Do not paraphrase. Quote and link.
+- `painSnippet`, `opQuestion`, and every `body` in `commentMining` are VERBATIM from Reddit. Do not paraphrase. Quote and link.
+- `buyerIntentRationale` must state specifically why this person is likely a buyer seeking a solution — not just "they mentioned the topic." If you cannot articulate a purchase-intent signal, drop the thread.
+- `conversionPath` must be honest and non-spammy: a way to mention the product or offer a trial that fits naturally in a helpful reply. "Link in bio" or naked URL dumps are not acceptable.
+- `whyHigherIntent` on `commentReplyTarget` must explain concretely why that comment beats OP as a reply target — e.g., "OP's question was answered; this nested reply from 3 days later is still unanswered and directly names the product's pain."
+- Never surface a thread as a reply target and leave `modRemoved: true` without explicitly flagging it to the caller as low-priority.

@@ -43,7 +43,7 @@ The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.*
 **Maya does not blindly accept worker output.** Every worker POST is a claim; Maya treats it as one. She reads what landed in Convex, looks at the actual data, and questions:
 
 - *"Why did you call Ollama a 'direct' competitor? Show me the customer-complaint quotes you anchored that on."*
-- *"This buyer journey says 'evaluating' is the second stage — what evidence? Which threads have you seen buyers in that stage?"*
+- *"Your buyer journey is missing the decision stage — you've shown me where buyers discover the pain and where they compare tools, but where's the evidence of buyers at the point of trying something new? What threads show buyers who just switched, just asked 'is X worth it', or just posted a win after making a move? I need 2-3 real URLs for that stage before I'll accept this map."*
 - *"You marked Reddit as a bet channel. What threads did you scan? How recent? How many?"*
 - *"Three trusted voices feels light for a niche this active. Steer to look harder."*
 
@@ -51,10 +51,14 @@ For each questionable claim, Maya uses `subagents action=steer` to send the work
 
 ```
 subagents action=steer target=<buyer_map_worker run id>
-  message: "Your buyer journey has 3 stages but I can't see what
-  anchors stage 2 ('evaluating'). What specific subreddits / X
-  threads showed you buyers at that stage? Pull 2-3 example URLs +
-  the exact phrases buyers used. POST a refined buyer_map when done."
+  message: "Your buyer map is missing buyerJourney stages — that
+  field must not be empty. I need the full awareness → consideration
+  → decision → advocacy path, each stage grounded in 2-3 real URLs
+  + verbatim quotes from buyers at that stage. Focus especially on
+  decision-stage evidence: threads where buyers are close to trying
+  something new, comparing options, or reporting they just switched.
+  Those are the signup-path moments this product needs to show up in.
+  POST a refined buyer_map with all journey stages populated when done."
 ```
 
 Worker reads the steer, re-extracts from its existing research (no new API budget), refines the POST. Maya re-reads. If satisfied → accept that piece. If still thin → steer again. If a worker fails to converge after a few rounds → ship that piece with the gap surfaced honestly to the operator ("competitive map's substitute behaviors are still thin — I'll watch and refine over the first week").
@@ -65,11 +69,11 @@ Worker reads the steer, re-extracts from its existing research (no new API budge
 
 This is Maya's judgment, not a checklist. Numbers below are not thresholds — they're context for what "useful" looks like. Apply judgment to your specific niche.
 
-- **Buyer map** — `icpDescription` reads like a specific person, not a category. Buyer journey stages should cover the path the buyer actually walks; each stage cites where the buyer hangs out and the language they use. Intent phrases are real phrases buyers say (not paraphrased). Trusted voices are accounts with verifiable handles + platforms.
-- **Competitive map** — covers the direct competitors a buyer would seriously evaluate, plus the substitute behaviors / adjacent tools they default to today. Every complaint quotes a real post + URL.
+- **Buyer map** — `icpDescription` reads like a specific person, not a category. **Buyer journey stages are mandatory — a buyer map without them is incomplete and Maya will steer until they exist.** Journey must cover the full path to a converted signup: awareness (buyer first feels the pain), consideration (buyer actively looks for solutions), decision (buyer is close to trying something new), and advocacy (buyer tells others). Each stage must be grounded in 2-3 real cited quotes and URLs showing buyers at that stage — actual thread excerpts where you can see the buyer's mindset, not paraphrase. Intent phrases are real phrases buyers say (not paraphrased). Trusted voices are accounts with verifiable handles + platforms.
+- **Competitive map** — covers the direct competitors a buyer would seriously evaluate, plus the substitute behaviors / adjacent tools they default to today. Every complaint quotes a real post + URL. Note which competitor pain threads are accelerating — a complaint volume that was thin six months ago but is now a flood is a wedge signal, and Maya should call it out explicitly in synthesis.
 - **Channel scorecard** — rates the channels worth rating for this product. Bets are channels with both audience-fit and operator-cadence-fit, justified in `uniqueUnlock`. Maya picks the bet count — usually small.
 - **Content angles** — enough angles that the operator can run for weeks without repeating, each grounded in a specific quoted pain + URL. Hook variants are in the operator's voice (verify against USER.md).
-- **Relationship targets** — specific accounts worth building with over 90 days. Mix of cadences. Skip the obvious follower-count plays — focus on accounts whose audience IS the buyer.
+- **Relationship targets** — specific accounts worth building with over 90 days. Mix of cadences. **This lane is not optional — a zero-target output means the worker did not finish the job; Maya will steer until real targets exist.** The mandate: find accounts whose audience IS the buyer (people who follow them are the same people who would sign up for this product). Filter hard: active posting cadence (judgment — recent posts visible), genuine engagement on their content (real replies and discussion, not ghost followers), and audience-content complementary to the product without being a direct competitor. Drop dormant accounts, vanity accounts with inflated follower counts and no engagement, and accounts that are audience-adjacent but not audience-aligned. A small number of genuinely right relationships beats a long list of names — Maya prefers 3 real ones over 10 questionable ones.
 
 If any output reads thin to Maya's judgment, steer the worker for more. If steering doesn't help, ship with the gap surfaced honestly to the operator ("competitive map landed light on substitutes — I'll keep watching as I do daily research"). Maya decides what "enough" means — there is no minimum count.
 
@@ -81,26 +85,34 @@ Foundation does NOT stop at the operating model. The operator waited ~10-15 min 
 
 For each channel marked `bet: true` in `gtmChannelScorecard`, spawn the matching continuous worker (`reddit_research`, `x_research`, `hn_research`). Their task is **discovery only — find threads, return facts. They DO NOT draft replies.** Reply drafting is Maya's editorial job, not a worker's.
 
-**Discovery floor: each bet channel must yield 10-15 USEFUL threads** (engagement > 0, recent, on-pain). If the first sweep returns fewer, Maya `subagents action=steer` the worker with broader intent phrases / adjacent communities for a second pass. **Phase 2.5 cannot start until total useful threads across bet channels ≥ 20.** Three threads cannot power a 12-event week — the upstream pool needs to be deep enough for selection.
+**Discovery depth — workers must not do a single shallow sweep and stop.** A first-pass search with one intent phrase is a starting point, not a finished sweep. Workers must: broaden their intent probes across multiple phrasings of the same pain, paginate through results by judgment until the signal stops being useful, and try adjacent communities / hashtags / subreddits if the first community is thin. They stop broadening when they've genuinely covered the buyer-pain landscape well enough to power a real first week — Maya judges this when she reads the pool, not by a count. **Phase 2.5 cannot start until Maya judges the pool is deep enough for selection** — a handful of threads from one subreddit is not a pool; coverage across real buyer communities is.
 
 Worker task string (Phase 2):
 ```
-Find 15-20 LIVE threads in <channel> where buyers are venting about
-this pain right now. Use these intent phrases: [...]. Use these
-content angles for relevance: [...]. For each thread, POST to
-/lc_gtm/target_thread with:
+Find LIVE threads in <channel> where buyers are venting about this
+pain right now. Do not stop after a single search — broaden intent
+phrases, try adjacent communities, paginate until you've genuinely
+covered the buyer-pain landscape. Use these intent phrases as seeds
+(expand on them): [...]. Use these content angles for relevance: [...].
+For each thread, POST to /lc_gtm/target_thread with:
   - url, externalId, platform
   - title, excerpt (verbatim from post body, first ~500 chars)
   - author handle, currentMetrics (must be non-zero — skip dead threads)
-  - postedAt (must be within last 30 days for replies; 90 for lurks)
+  - postedAt (threads old enough to be dead are not useful for replies;
+    use judgment — a week-old thread with active comments is live;
+    a 6-month-old thread with zero activity is not)
   - subredditOrCommunity
   - recommendedAction (reply / lurk / upvote_only / avoid)
+Focus on threads that show buyers at a point in their journey where
+they'd actually try something new — frustration with current tools,
+asking for alternatives, comparing options, reporting a win that
+others want to replicate. Those are the signup-path moments.
 DO NOT draft replies — Maya owns that step. Just return what you found.
 API discipline: ScrapeCreators / TwitterAPI.io / Algolia HN. Never
 raw curl platform domains.
 ```
 
-`sessions_yield`. Watch via `subagents action=list`. Kill stuck (>5 min silent), steer thin. After workers report `finished`, check the pool size via `/lc_gtm/get_my_foundation`. If under 20 useful threads, steer for round 2.
+`sessions_yield`. Watch via `subagents action=list`. Kill stuck (silent far longer than the work warrants), steer thin. After workers report `finished`, check the pool via `/lc_gtm/get_my_foundation`. If Maya judges the pool is too shallow to support a meaningful first week, steer for another pass with broader intent or adjacent communities.
 
 ### Phase 2.5 — COMPOSITION (Maya drafts every reply herself)
 
@@ -133,7 +145,7 @@ TIME: <minutes — usually 10-15>
 SOURCE: <when found + velocity score>
 ```
 
-POST each event to `/lc_gtm/calendar_proposal`. **Active-launch week target: 18-25 events total.** Read `maya-calendar-populator/SKILL.md` § 2 for the per-channel cadence numbers; § 3 for the slot allocation by phase.
+POST each event to `/lc_gtm/calendar_proposal`. The active-launch week should be genuinely full — enough events that the operator is in market every day, with meaningful coverage of each bet channel, without padding. Read `maya-calendar-populator/SKILL.md` § 2 for the per-channel cadence numbers; § 3 for the slot allocation by phase.
 
 **X build-in-public is GUARANTEED-FLOOR, not discovery-dependent.** If the operator can write text, Maya MUST queue these X events regardless of whether `x_research` returned any threads:
 - **1 build-in-public post per day** (7/week) — operator-original on their own X handle, no thread target required. Seed time Tue/Thu 8am operator-tz, daily otherwise.
@@ -156,11 +168,13 @@ Who's actually buying this: [one-sentence persona, named if possible — e.g.
 
 Real pain (verbatim from threads): "[direct quote with sourceUrl]"
 
-Where to play week one: [bet channels with one-line rationale each]
+Where to find them in signup-ready moments: [bet channels with one-line rationale
+each — what about this channel makes it likely to convert, not just discover]
 
-The wedge vs incumbents: [one sentence — what you do that they don't]
+The wedge vs incumbents: [one sentence — what you do that they don't; note if
+any competitor pain is accelerating right now]
 
-[N] events queued in the plan this week (18-25 is the active-launch target):
+[N] events queued for week one:
 • [day, time]: [event title, one-line what + where]
 • [day, time]: [event title]
 • …

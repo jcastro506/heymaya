@@ -25,20 +25,20 @@ V1 of ClawLaunch does NOT auto-post to TikTok (tiktok.md § 12). This skill pick
 
 ## Decision rules
 
-1. **tiktok.md rule 1 — V1 manual-post gate.** IF `canPostTikTokManually !== true` THEN `recommendation: "park_tiktok"`.
-2. **tiktok.md rule 2 — restricted-state block.** IF `tiktokWarmupState === "restricted"` THEN return resolve-Account-Check instructions.
-3. **tiktok.md rule 3 — warmup gate.** IF `tiktokAccountAgeDays < 14` OR state !== "ready" THEN return warmup sequence (§ 6).
+1. **tiktok.md rule 1 — V1 manual-post gate.** IF `canPostTikTokManually !== true` THEN `recommendation: "park_tiktok"`. This is a hard platform constraint: ClawLaunch V1 does not have TikTok API posting rights; the operator must post from their own account. No workaround exists.
+2. **tiktok.md rule 2 — restricted-state block.** IF `tiktokWarmupState === "restricted"` THEN return resolve-Account-Check instructions. Restricted accounts cannot post; resolve first.
+3. **tiktok.md rule 3 — warmup gate.** IF `tiktokAccountAgeDays < 14` OR state !== "ready" THEN return warmup sequence (§ 6). TikTok's own risk system suppresses new accounts; warming is a platform reality, not a discretionary suggestion.
 4. **tiktok.md rule 4 — unshowable + no-slideshow refuse.** IF showability === "unshowable" AND operator refuses slideshow THEN park.
-5. **tiktok.md rule 5 — faceless default.** IF product has clear UI moment ≤10s OR before/after THEN default faceless screen-record for first 10 launch posts. Cite Cal AI / Daze / Pushscroll.
+5. **tiktok.md rule 5 — faceless default.** IF product has a clear UI moment that lands quickly OR a meaningful before/after transformation THEN default faceless screen-record for launch posts. Cite Cal AI / Daze / Pushscroll as proof-of-concept. Operator familiarity and comfort with screen-recording matters — confirm before recommending.
 6. **tiktok.md rule 6 — camera-shy routing.** IF `onCameraOk === false` AND showable THEN faceless screen-record only.
-7. **tiktok.md rule 7 — slideshow for text-heavy niches.** Dev tools / B2B / finance / education niches over-indexing on carousels → Photo Mode primary.
-8. **tiktok.md rule 8 — talking-head trust products.** Agency / coaching / consulting AND operator comfortable on camera → founder talking-head.
-9. **tiktok.md rule 10 — "link in bio" ban.** Shot plan and CTA NEVER include "link in bio". Substitute search-by-name / pinned-comment / DM-keyword.
-10. **tiktok.md rule 11 — 5-video format rule.** Chosen format must have ≥5 winning examples in operator's niche (verified by `maya-tiktok-format-researcher`). If <5, `formatConfidence: "low"`.
-11. **tiktok.md rule 13 — Personal Account preference.** First 30-60 days, Personal Account > Business Account (full music catalog).
-12. **tiktok.md rule 15 — cadence cap.** 1-2/day for <30d accounts, 2-3/day for warmed. Never >4/day.
-13. **Length sweet spot.** 22-28 seconds for first 10 hero posts. Carousel default 6 slides.
-14. **Safe zones.** Every shot plan places text/CTA inside central safe zone (≥150px top, ≥250px bottom, ≥130px right).
+7. **tiktok.md rule 7 — slideshow for text-heavy niches.** When niche research (format-researcher output) shows dev tools / B2B / finance / education content over-indexing on carousels, Photo Mode is primary. Let the research data lead; don't assume by niche label alone.
+8. **tiktok.md rule 8 — talking-head trust products.** Agency / coaching / consulting products where the founder IS the credibility signal — if operator is comfortable on camera AND niche research confirms talking-head formats get traction, recommend founder talking-head.
+9. **tiktok.md rule 10 — "link in bio" ban.** Shot plan and CTA NEVER include "link in bio". Choose between search-by-name, pinned-comment URL, and DM-keyword based on what makes the most sense for how a viewer would act on this specific product: if the product is searchable by a distinctive name, search-by-name removes friction most cleanly; if the product needs context (landing page, demo video), pinned-comment with a URL is stronger; if the goal is a conversation (consultative product, waitlist), DM-keyword builds intent-qualified leads. Pick the one that creates the shortest path from "I just watched this" to "I'm trying it."
+10. **tiktok.md rule 11 — format confidence.** Chosen format must be supported by evidence from `maya-tiktok-format-researcher` showing clear recurrence in the niche. If format-researcher returned `confidence: "insufficient_evidence"`, set `formatConfidence: "low"` and flag `formatResearchNeeded: true` before committing to a format.
+11. **tiktok.md rule 13 — Personal Account preference.** First 30-60 days, Personal Account > Business Account (full music catalog). This is a platform-behavior reality: Business Accounts have a restricted commercial sound library.
+12. **tiktok.md rule 15 — cadence cap.** For accounts under 30 days old: post conservatively, 1-2/day ceiling. For warmed accounts: 2-3/day comfortable ceiling. Hard cap 4/day regardless — above this, TikTok's risk system flags accounts. These caps are platform-behavior constraints, not style preferences.
+13. **Length judgment.** Lead with the format-researcher's length distribution for the niche. Short-form (under 30s) works best for demo-cold-opens and pattern-interrupts; slightly longer works when the before/after requires setup. Don't impose a number — use the niche's revealed preference as the anchor.
+14. **Safe zones.** Every shot plan keeps key text and CTA elements clear of TikTok's persistent UI overlay zones (bottom of frame, right edge). Exact pixel values vary by device; the goal is ensuring nothing load-bearing gets obscured. Use judgment to confirm beats are centered in the safe area.
 15. **No polished-ad recommendation.** No logo intros, motion graphics, lower-thirds (tiktok.md § 13 Failure 5). Authenticity > polish.
 
 ## Output schema

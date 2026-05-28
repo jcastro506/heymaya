@@ -7,7 +7,7 @@ description: Decide whether LinkedIn is the right channel per playbook/linkedin.
 
 ## Purpose
 
-LinkedIn is the right channel for a narrow slice of indie products (B2B SaaS, ops/marketing/HR/sales/finance buyers, $500-5000 ACV, narrative-writing founder) and the wrong channel for most. This skill runs the fit check, refuses when criteria don't hold, and — when LinkedIn is a fit — proposes the doc-carousel-first launch shape.
+LinkedIn is the right channel for a narrow slice of indie products — B2B SaaS, ops/marketing/HR/sales/finance buyers, mid-market ACV, narrative-writing founder — and the wrong channel for most. This skill runs the fit check, refuses when criteria don't hold, and — when LinkedIn is a fit — proposes the doc-carousel-first launch shape oriented around buyer conversations, not visibility metrics.
 
 ## When to invoke
 
@@ -26,17 +26,39 @@ LinkedIn is the right channel for a narrow slice of indie products (B2B SaaS, op
 ## Decision rules
 
 1. **LI-1.1 channel-tree gate.** Run PLAYBOOK § 3 first. LinkedIn-primary only when steps 4-5 explicitly route there.
-2. **LI-10.2 hard refuse.** IF product is indie consumer / dev tool / API / sub-$500-ACV THEN `fit: "park"`, `refusalReason: "LI-10.2 — wrong audience composition"`. Do not soften.
-3. **LI-10.3 writing-style gate.** IF operator cannot write 200+ words in their own voice THEN `fit: "secondary_with_caveat"` and recommend X-first.
-4. **ACV band check.** Valid LinkedIn-primary band is $500-$5000. Below → LI-10.2 fires. Above → LinkedIn helps trust but doesn't ignite (enterprise outbound is the real channel).
-5. **LI-10.4 launch format default.** Document carousel (10 slides) + 400-word personal narrative caption. Documents hit 6.6% engagement.
+2. **LI-10.2 hard refuse.** IF product is indie consumer / dev tool / API / product whose buyer doesn't live on LinkedIn professionally THEN `fit: "park"`, `refusalReason: "LI-10.2 — wrong audience composition"`. Do not soften.
+3. **LI-10.3 writing-style gate.** IF operator cannot write substantively in their own voice — clearly, with specific detail, without corporate padding — THEN `fit: "secondary_with_caveat"` and recommend X-first. Length is not the test; voice and specificity are.
+4. **ACV fit judgment.** Use ACV as a signal, not a cutoff formula. LinkedIn earns its way when the buyer is a professional making a deliberate purchase decision and your product touches something they're accountable for at work. Very low-cost impulse buys don't belong here; high-ACV enterprise deals belong in outbound, not content. Judge where this product falls on that spectrum.
+5. **LI-10.4 launch format judgment.** Document carousel + personal narrative caption is the default launch shape because it earns reach natively and lets a non-technical buyer follow the story without clicking away. Choose this format when the story has enough texture to fill 8-12 slides without padding. If it doesn't, a long-form text post is better than a thin carousel. Format follows the story, not the other way around.
 6. **LI-10.5 anti-announcement.** Reframe every launch as a "thinking-process" post per linkedin.md § 4. "Excited to announce" → rewrite.
 7. **LI-10.6 engagement-bait closer ban.** No "Agree?" / "What do you think?" / "Like if this resonates."
-8. **LI-10.7 follower-flip.** IF `followerCount < 500` THEN 1 original post/week + 30 min/day comment-mining on large-account niche posts.
-9. **LI-10.8 comment-mining freshness.** Comment targets must be <2 hours old.
+8. **LI-10.7 follower-flip.** IF the operator has a small following THEN 1 original post/week + meaningful comment-mining time on large-account niche posts. Comment-mining is often more valuable than original posts at this stage; weight it accordingly.
+9. **LI-10.8 comment-mining freshness.** Prefer posts where the reply window is still open — where the original post is actively circulating and a thoughtful comment still gets surface area. Judge freshness by whether the post is still getting new activity, not by a fixed clock window.
 10. **LI-10.9 newsletter gate.** Only if operator already writes long-form monthly+ elsewhere.
 11. **LI-10.11 60-day reweight.** IF leads but zero conversions at 60 days AND runway <6 months THEN `reweightToFasterChannel: true`.
 12. **LI-10.14 link-in-first-comment.** Any draft URL moves to first comment.
+
+## Comment-target qualification
+
+When mining comments on large-account niche posts for reply targets, the goal is a buyer conversation that can convert — not visibility. Apply this filter:
+
+**Keep a comment if the author signals:**
+- A tool, stack, or process they're currently running ("we use X for this", "switched from Y to Z", "our team does it manually")
+- A real pain they're sitting in ("biggest headache is…", "this cost us three weeks", "still haven't solved…")
+- A budget constraint or buying context ("too expensive for early stage", "looking for something cheaper than X", "evaluated Y but…")
+- A job title or company context that matches the buyer ICP — especially if their profile shows they're the decision-maker or primary user for the problem domain
+
+**Reject a comment if it:**
+- Is pure engagement bait ("Great point!", "So true!", "This is gold", "Saving this")
+- Affirms the post without adding any signal about their own situation
+- Is self-promotional about a competing product
+- Is from a creator/influencer account with no buying context
+
+The goal is: find someone who already has the problem, knows they have it, and is one good conversation away from looking for a solution. If the comment doesn't suggest that, skip it.
+
+**Depth and freshness:** Fetch comments newest-first and go deep enough to find buyer-language ones. Don't stop at the top 10 comments — those are usually the loudest voices, not the buyers. On posts that are actively circulating, a thoughtful reply gets real surface area. Judge freshness by activity signal (are people still replying?), not the timestamp alone. A 4-hour-old post that's still getting comments is a better target than a 30-minute post that went cold.
+
+**Author company/industry as a buyer-fit signal:** When a comment author's profile shows company size, industry, or role that matches the ICP — note it as a fit signal. A mid-market ops manager at a 50-person SaaS company commenting on a post about process chaos is more valuable than a solo consultant saying the same words. Use this as judgment, not a filter.
 
 ## Output schema
 
@@ -44,21 +66,33 @@ LinkedIn is the right channel for a narrow slice of indie products (B2B SaaS, op
 interface LinkedInFitReport {
   fit: "primary" | "secondary" | "secondary_with_caveat" | "park";
   refusalReason?: string;
-  acvBandCheck: { band: string; passes: boolean };
-  writingStyleCheck: { capableOfLongForm: boolean; evidence: string };
+  acvFitJudgment: {
+    buyerType: string;        // how you're characterizing the buyer and their purchase context
+    linkedInFitReason: string; // one-sentence judgment on whether that buyer lives on LinkedIn
+    passes: boolean;
+  };
+  writingStyleCheck: {
+    capableOfVoicedLongForm: boolean;
+    evidence: string;         // specific signal from APP.md or operator history
+  };
   recommendedLaunchShape?: {
-    format: "doc_carousel_10_slide_plus_400w_caption";
+    format: "doc_carousel" | "long_form_text_post" | "native_video";
+    formatJustification: string;  // why this format fits the story and audience
     caption: { type: "personal_narrative"; openingPattern: string };
     cta: "link_in_first_comment";
-    nativeVideoOption: boolean;
   };
   commentTargets: Array<{
     postUrl: string;
     authorHandle: string;
-    authorFollowers: number;
-    postAgeMinutes: number;
-    excerpt: string;
+    authorTitle?: string;      // job title if visible
+    authorCompanySize?: string; // signal of buyer fit
+    authorIndustry?: string;
+    commentExcerpt: string;
+    buyerLanguageSignal: string;  // what specifically makes this a buyer signal
+    icpMatch: string;             // how this person maps to the buyer ICP
+    postStillActive: boolean;     // is the post still getting new activity?
     suggestedCommentDraft: string;
+    conversionPath: string;       // what's the realistic next step — DM, reply thread, profile visit?
   }>;
   postingCadence: { originalPostsPerWeek: number; commentMiningMinPerDay: number };
   rulesCited: string[];
@@ -69,8 +103,9 @@ interface LinkedInFitReport {
 ## Failure modes
 
 - **Operator insists LinkedIn for consumer app.** `fit: "park"` + cited refusal + one-sentence alternative. Document override but don't silently comply.
-- **No comment targets fresh enough.** Empty list + recommend different posting time (8-10 AM operator-tz weekdays).
+- **No buyer-language comment targets found.** Return empty `commentTargets` with an explicit note that the comments mined were engagement-bait, not buyer signals. Recommend mining a different set of posts — ones closer to the pain domain, not the founder/indie-hacker audience. Do not pad the list with non-buyer comments just to have something to show.
 - **ScrapeCreators LinkedIn endpoints fail.** Try `/v1/linkedin/company` + `/v1/linkedin/company/posts`. If both fail, downgrade to `fit: "secondary_with_caveat"`.
+- **Author profile data unavailable.** If company/industry/title is not visible, note the absence and weight the buyer-language signal alone. Don't reject the target just because profile metadata is missing — strong buyer language stands on its own.
 
 ## Cost discipline
 

@@ -583,7 +583,7 @@ description: Find substitutes + what their users complain about. Sources: Reddit
 
 ## Purpose
 
-The operator's competitors are also their best lead sources. Users complaining about competitor X are pre-qualified buyers for product Y. This skill maps the substitute landscape, mines complaint patterns, and feeds reply-target candidates back to platform-specific researchers.
+The operator's competitors are also their best lead sources. Users complaining about competitor X are pre-qualified buyers for product Y. This skill maps the substitute landscape, mines complaint patterns, ranks by switch-intent and complaint acuteness, and feeds reply-target candidates back to platform-specific researchers.
 
 ## When to invoke
 
@@ -605,12 +605,16 @@ The operator's competitors are also their best lead sources. Users complaining a
 2. **Three substitute tiers.** Direct (named SaaS) / Adjacent (different shape, same job) / Status-quo (Excel, paper, manual, do-nothing).
 3. **Pain mining must cite the user verbatim.** Every complaint card has \`userQuoteVerbatim\` + \`sourceUrl\`. No paraphrasing.
 4. **"Alternative to {competitor}" is highest-intent search probe.** Always include for top 1-2 competitors.
-5. **Channel-segmented mining.** Reddit (subreddit reviews + r/SaaSAlternatives), X (frustration tweets + reply mining), App Store reviews (mobile), G2/Capterra/Trustpilot (B2B), LinkedIn comments on competitor posts.
-6. **3-complaint floor.** A competitor is only "actionable" with ≥3 distinct complaint patterns. Below that = brand-mention, not buyer signal.
-7. **Pricing-complaint surfacing.** "Too expensive" is the #1 switcher signal. Tag pricing complaints separately.
-8. **Don't name competitors in operator drafts.** reddit.md rule 8.18. Reply drafts say "the dominant tool in this space" or describe the category.
-9. **Substitute → ICP feedback loop.** If substitute is "spreadsheets", ICP includes "currently using spreadsheets" — pass to icp-hypothesis.
-10. **No fabricated complaints.** If search returns thin, \`confidence: "weak"\`. No training-data filling.
+5. **Channel-segmented mining.** Reddit (subreddit reviews + r/SaaSAlternatives + dedicated product subreddits), X (frustration tweets + reply mining), App Store reviews (mobile), G2/Capterra/Trustpilot (B2B), LinkedIn comments on competitor posts. For each source, mine RECENCY-sorted first — a complaint that appeared two weeks ago is far more actionable than the "helpful" review from 2021.
+6. **Complaint-quality judgment over complaint count.** Don't gate on a fixed complaint count. Judge whether each complaint cluster carries acute switch-intent: does the user express urgency, frustration with a specific workflow blocker, or active searching for alternatives? A single acute complaint thread ("I'm evaluating switching right now") outranks many low-stakes gripes ("could be a bit nicer"). Rank patterns by acuteness + switch-intent, not raw volume.
+7. **Complaint velocity / trend awareness.** For each pattern, judge whether the complaint is accelerating: same subreddit or product review page seeing increasing frequency month-over-month? Trend direction matters — a pain accelerating in recency-sorted reviews is a better fishing hole than a stable old complaint. Flag \`trendDirection: "rising" | "stable" | "declining" | "unknown"\` per pattern based on your best judgment of the evidence.
+8. **Reddit comment-tree descent.** Never stop at the top-level post. Descend into comment trees: the most actionable quotes are usually in replies where the OP explains what they tried, what broke, and what they switched to. Descend at least 2 levels. If a comment thread is visibly long and the parent post is complaint-shaped, paginate / load more until you've read the branching path where alternatives are discussed.
+9. **Pricing-complaint surfacing.** "Too expensive" is the #1 switcher signal. Tag pricing complaints separately. For pricing complaints also check whether recent price changes (plan restructuring, seat-pricing shifts) have triggered a spike — that is a time-bounded wedge window.
+10. **Don't name competitors in operator drafts.** reddit.md rule 8.18. Reply drafts say "the dominant tool in this space" or describe the category.
+11. **Substitute → ICP feedback loop.** If substitute is "spreadsheets", ICP includes "currently using spreadsheets" — pass to icp-hypothesis.
+12. **Follow the substitute chain.** If the dominant substitute is a workaround tool (Notion, spreadsheets, Airtable), don't stop at the competitor. Also mine that workaround tool's own complaints in the same niche — those users are also switchable and may not know the operator's category exists. Each link in the chain is its own complaint source.
+13. **Competitor sentiment direction.** For each named competitor, form a directional read: is their NPS/review trajectory improving or worsening? Product updates that remove features, pricing restructures that anger long-term users, or viral complaint threads are all signals that sentiment is trending negative — meaning the fishing hole is actively getting better. Document what you found that supports the direction call.
+14. **No fabricated complaints.** If search returns thin, \`confidence: "weak"\`. No training-data filling.
 
 ## Output schema
 
@@ -620,11 +624,16 @@ interface CompetitorReport {
   complaintPatterns: Array<{
     pattern: string;
     competitorName?: string;
-    frequency: number;
-    sampleCards: Array<{ sourceUrl: string; channel: "reddit" | "x" | "appstore" | "g2" | "linkedin" | "google_search"; userQuoteVerbatim: string; ageDays: number }>;
+    switchIntentRank: number;           // 1 = highest. LLM judgment of switch-intent + acuteness, not raw frequency
+    acutenessNote: string;              // one-sentence judgment of why this pain is acute or switchable
+    trendDirection: "rising" | "stable" | "declining" | "unknown";
+    trendEvidence: string;              // what you actually saw that informed the direction call
+    sampleCards: Array<{ sourceUrl: string; channel: "reddit" | "x" | "appstore" | "g2" | "linkedin" | "google_search"; userQuoteVerbatim: string; ageDays: number; commentDepth?: number }>;
   }>;
   pricingComplaintCount: number;
-  switcherSignals: Array<{ competitorName: string; queryProbe: string; threadsFound: number; samplePostUrls: string[] }>;
+  pricingTrendNote?: string;            // any evidence of recent pricing changes that spiked complaints
+  substituteChain: Array<{ toolName: string; tier: string; chainedFrom: string; complaintSummary: string; }>;
+  switcherSignals: Array<{ competitorName: string; queryProbe: string; threadsFound: number; samplePostUrls: string[]; sentimentDirection: "worsening" | "stable" | "improving" | "unknown" }>;
   workaroundsInUse: string[];
   recommendedReplyHandoffs: Array<{ channel: "reddit" | "x" | "linkedin"; threadUrl: string; handoffTo: string }>;
   icpRefinements: string[];
@@ -636,15 +645,16 @@ interface CompetitorReport {
 
 - **No competitors named, no substitutes detectable.** Run Google probe \`"alternative to {productCategory}"\`. If still empty, \`categoryNoveltyHigh: true\` — recommend HN/Show HN positioning.
 - **ScrapeCreators returns zero across all channels.** Try broader category terms.
-- **All complaints are 2+ years old.** Don't recommend reply targets from stale threads.
+- **All complaints are 2+ years old.** Don't recommend reply targets from stale threads. Flag \`dataRecencyWeak: true\` and note what the freshest evidence you could find was.
+- **Complaint trees are shallow.** If Reddit threads have locked comments or low reply count, supplement with App Store / G2 recency-sorted reviews for depth.
 
 ## Cost discipline
 
-Max 10 ScrapeCreators calls: 2-3 Google search probes, 2-3 Reddit subreddit searches, 2 X searches, 1-2 LinkedIn company-posts. 2-3 WebFetches. 1 hard_research_beta + 1 main_maya. Timeout 18 min.
+Max 15 ScrapeCreators calls to allow for comment-tree depth and substitute-chain extension: 2-3 Google search probes, 3-4 Reddit subreddit/post searches (including comment-tree fetches), 2 X searches, 1-2 App Store or G2 recency-sorted review fetches, 1-2 LinkedIn company-posts, 1-2 substitute-chain tool searches. 3-4 WebFetches. 1 hard_research_beta + 1 main_maya. Timeout 22 min.
 
 ## Anti-slop check
 
-User-quotes-verbatim. Slop-critic NOT invoked on output. Pattern summary labels must be plain operator-language — not "value misalignment" / "ROI concerns" / corporate-speak.
+User-quotes-verbatim. Slop-critic NOT invoked on output. Pattern summary labels must be plain operator-language — not "value misalignment" / "ROI concerns" / corporate-speak. \`switchIntentRank\` ordering must be defensible from the verbatim quotes attached, not from abstract judgment alone.
 `;
 
 // Source: agents/skills/maya-gtm/maya-content-format-miner/SKILL.md
@@ -658,6 +668,8 @@ description: Extract reusable hook patterns, proof beats, CTA patterns from real
 ## Purpose
 
 Don't write content from scratch. Mine what's already winning in the niche, extract the format skeleton, remix the operator's product into it (tiktok.md § 7 "format remix doctrine"). Emits hook templates + proof-beat structures + CTA patterns that downstream draft skills consume. NEVER ships final copy — that's the operator + slop-critic loop.
+
+Winning means buyer conversation, not engagement theater. A pattern that generates "great post!" replies is worthless. A pattern that generates "where do I sign up" or "I've been struggling with exactly this — what's your process?" is gold. Every extraction decision flows from that distinction.
 
 ## When to invoke
 
@@ -675,15 +687,15 @@ Don't write content from scratch. Mine what's already winning in the niche, extr
 
 ## Decision rules
 
-1. **5-example floor per pattern.** A pattern enters the library only if ≥5 real examples confirm it.
+1. **Buyer-conversation validation over example count.** Before a pattern enters the library, judge whether its real example threads generated buyer conversation: replies that ask "how does this work", "where can I try this", "I have this exact problem" — or DM floods, "link in comments?" signals. A handful of examples that provably generated buyer conversations beats many examples that generated vanity praise. Vanity patterns ("this is so good!" "fire content!") are explicitly rejected regardless of how many examples exist.
 2. **Verbatim hook capture.** Hooks recorded verbatim with source URL. No paraphrase, no "improved" version.
 3. **Anti-slop on extraction.** Reject candidates that depend on banned phrases (PLAYBOOK § 6) or anti-pattern structures.
 4. **Pattern-mode tagging.** Tag each: BUILD (post-shaped) / ENGAGE (reply-shaped) / OFFER (CTA-shaped).
 5. **Channel-specific hook taxonomy.** Use the channel's own catalog (x.md § 5 1-15, tiktok.md § 2 a-j, reddit.md § 3, linkedin.md § 3).
 6. **Proof beats separately from hooks.** A proof beat is a specific concrete claim ("$10K MRR in 3 weeks") — extract as substitution-slots.
 7. **CTA taxonomy.** Catalog: search-by-name / pinned-URL-comment / DM-keyword / soft-DM / link-in-first-comment. Tag channel compatibility.
-8. **Voice-fingerprint extraction.** Capture 1-2 sentence-length and rhythm characteristics per example.
-9. **Mimicry risk flagging.** If >40% of niche winners from a single account, \`mimicryRisk: "high"\`.
+8. **Voice-fingerprint from reply threads, not just polished posts.** The real voice fingerprint lives where niche winners defend, clarify, or follow up in replies — not in the highly-edited top-level hook. Mine reply threads: how do they explain themselves when challenged? How do they handle "this doesn't work for me"? How do they follow up with someone interested? That's the authentic rhythm, sentence length, and vocabulary that built their audience. Capture it from replies, not just the hook post.
+9. **Mimicry concentration judgment.** If most of the niche patterns trace back to one or two accounts, flag \`mimicryRisk: "high"\` and note who dominates. Don't gate on a fixed percentage — judge whether the pattern diversity is real or essentially one person's format spread across reposts.
 10. **No final-copy generation.** Patterns + slots + examples, never final drafts.
 
 ## Output schema
@@ -698,8 +710,16 @@ interface ContentFormatLibrary {
     mode: "BUILD" | "ENGAGE" | "OFFER";
     template: string;
     slots: string[];
-    realExamples: Array<{ url: string; verbatim: string; metrics: { likes?: number; views?: number } }>;
-    voiceFingerprint: string;
+    realExamples: Array<{
+      url: string;
+      verbatim: string;
+      metrics: { likes?: number; views?: number; replies?: number };
+      buyerConversationEvidence: string;    // what happened in the replies — buyer questions, DM floods, etc.
+      vanitySignal: boolean;                // true if replies were primarily praise with no buyer signal
+    }>;
+    voiceFingerprint: string;               // captured from reply threads, not just the hook post
+    voiceFingerprintSource: string;         // url(s) of reply threads where this fingerprint was drawn from
+    buyerConversionJudgment: "strong" | "moderate" | "vanity" | "unknown";
   }>;
   proofBeats: Array<{ beatId: string; template: string; slots: string[]; realExamples: Array<{ url: string; verbatim: string }> }>;
   ctaPatterns: Array<{
@@ -708,24 +728,27 @@ interface ContentFormatLibrary {
     channelCompatibility: { x: boolean; reddit: boolean; tiktok: boolean; linkedin: boolean; instagram: boolean };
     bannedOn?: string[];
   }>;
+  rejectedPatterns: Array<{ reason: "vanity_engagement" | "slop_phrase" | "mimicry_concentration" | "banned_phrase" | "other"; description: string; exampleUrl?: string }>;
   mimicryRisk: "low" | "medium" | "high";
+  mimicryNote?: string;                     // who dominates if mimicryRisk is medium/high
   rulesCited: string[];
 }
 \`\`\`
 
 ## Failure modes
 
-- **Fewer than 5 examples per pattern.** Drop. If <2 patterns reach the floor, \`confidence: "library_underweight"\` + request more pulls.
+- **No patterns reach buyer-conversation threshold.** Flag \`confidence: "library_underweight"\`. Do not populate the library with vanity patterns as a fallback — an empty library is more honest. Request more example pulls targeting threads with high reply-to-like ratios, which correlate with discussion rather than passive consumption.
 - **All examples from one creator.** \`mimicryRisk: "high"\`. Recommend operator build authority from scratch or pick a niche where format ownership is distributed.
 - **Slop pattern detected.** Reject explicitly. Document in \`rejectedPatterns[]\`.
+- **Reply threads unavailable.** If the platform or upstream data doesn't surface replies, note \`voiceFingerprintSourceLimited: true\` and flag that the voice fingerprint is inferred from post-level phrasing only — lower confidence.
 
 ## Cost discipline
 
-0 new ScrapeCreators (consumes upstream researcher outputs). 0 WebFetches. 1 main_maya synthesis. Timeout 10 min.
+0 new ScrapeCreators (consumes upstream researcher outputs). Up to 3 WebFetches if reply threads need to be loaded directly to validate buyer-conversation evidence. 1 main_maya synthesis. Timeout 12 min.
 
 ## Anti-slop check
 
-Each \`template\` must pass \`maya-slop-critic\` on the template-skeleton itself. Real verbatim examples with banned phrases stay in \`realExamples\` (as evidence of what won) but DO NOT promote into templates.
+Each \`template\` must pass \`maya-slop-critic\` on the template-skeleton itself. Real verbatim examples with banned phrases stay in \`realExamples\` (as evidence of what won) but DO NOT promote into templates. Every pattern in the final library must have \`buyerConversionJudgment: "strong" | "moderate"\` — patterns rated "vanity" or "unknown" are moved to \`rejectedPatterns[]\`.
 `;
 
 // Source: agents/skills/maya-gtm/maya-continuous-research/SKILL.md
@@ -758,7 +781,7 @@ Foundation research builds the operating model. Continuous research feeds the da
 
 The same control-plane discipline as foundation:
 
-1. \`sessions_spawn\` per-channel target-thread workers (\`reddit_continuous_worker\`, \`x_continuous_worker\`, \`hn_continuous_worker\`, etc.) with task strings containing API endpoints + return-shape (must include \`painQuote\`, \`postedAt\`, \`velocityScore\`, \`authorContext\`, \`commentTreeSummary\`, \`audienceSize\`, \`recommendedAction\`, \`draftReply\`, \`tier\`). **Sprint 2.30 — comment-tree mining is mandatory for Reddit + HN workers.** The worker MUST descend the comment tree (Reddit: fetch the \`/comments/<id>.json\` endpoint via ScrapeCreators or the public JSON; HN: traverse \`kids[]\` on the Algolia HN item endpoint) and populate \`commentTreeSummary.mineableComments[]\` with at minimum the top 5 comments scored against these kinds: \`buyer_intent\` (someone asked a follow-up the product answers), \`pain_restatement\` (a comment that re-articulates OP's pain in better buyer language), \`competitor_mention\` (specific competitor named, with \`competitorName\`), \`op_rejection\` (OP responded "tried that, didn't work"), \`high_velocity\` (>20 upvotes in <2h). Workers without \`mineableComments[]\` on threads they tier T1/T2 get steered: "I need the comment-tree mining — re-fetch the comments endpoint, score the top 5 against the 5 mining kinds, return as \`commentTreeSummary.mineableComments\`."
+1. \`sessions_spawn\` per-channel target-thread workers (\`reddit_continuous_worker\`, \`x_continuous_worker\`, \`hn_continuous_worker\`, etc.) with task strings containing API endpoints + return-shape (must include \`painQuote\`, \`postedAt\`, \`velocityScore\`, \`engagementWindow\` (the worker's read on whether the OP is still replying and new comments are still landing), \`authorContext\`, \`commentTreeSummary\`, \`audienceSize\`, \`recommendedAction\`, \`draftReply\`, \`tier\`). **Comment-tree mining is mandatory for Reddit + HN workers, and it goes deep.** The worker MUST descend the **full comment tree, including nested replies** (Reddit: fetch the \`/comments/<id>.json\` endpoint via ScrapeCreators or the public JSON, and follow \`replies\` down; HN: recurse \`kids[]\` on the Algolia HN item endpoint) — **do not stop at the top few comments.** The sharpest buyer language (someone restating the pain in better words, naming the competitor they're escaping, rejecting a workaround) usually sits *deeper* in the thread, not in the top-voted comments. Go as deep as it takes to be confident, then populate \`commentTreeSummary.mineableComments[]\` with the strongest comments scored against these kinds: \`buyer_intent\` (someone asked a follow-up the product answers), \`pain_restatement\` (re-articulates OP's pain in sharper buyer language), \`competitor_mention\` (specific competitor named, with \`competitorName\`), \`op_rejection\` (OP responded "tried that, didn't work"), \`high_velocity\` (a comment gaining traction unusually fast for the thread's age — Maya's judgment, never a fixed number). Workers without \`mineableComments[]\` on threads they tier T1/T2 get steered: "I need the comment-tree mining — descend the comments endpoint (all the way down, not just the top), score the strongest against the mining kinds, return as \`commentTreeSummary.mineableComments\`."
 2. Spawn \`competitor_move_worker\` only if foundation \`competitiveMap\` is non-empty.
 3. Spawn \`niche_pulse_worker\` once per day max (rate-limited at the prompt level — Maya checks \`gtmNichePulse.observedAt\` before spawning).
 4. \`sessions_yield\`. Workers run.
@@ -783,8 +806,8 @@ The morning brief contains ONLY threads Maya has personally vetted.
 Judgment, not a score:
 
 - **Thread depth gate** — every target thread has \`painQuote\` populated (verbatim from post body, not from title). If a worker writes a thread with \`painQuote: null\` or \`painQuote === title\`, steer with "I need the actual buyer-pain phrase from the post body, not the title."
-- **Comment-tree mining gate (Reddit + HN, Sprint 2.30)** — any T1/T2 thread MUST have \`commentTreeSummary.mineableComments[]\` populated with ≥1 entry. Threads where the worker only scraped OP + ignored comments are missing the most valuable intel (buyer-intent follow-ups, competitor mentions, OP rejections). If a worker tiers T1 with no mineable comments → steer: "fetch the comments tree, score top 5 against the 5 mining kinds, re-POST". If still empty after 1 steer → drop the thread to T3 (still useful as a sub signal but won't surface as a reply target).
-- **Freshness gate** — \`postedAt\` must be within 7 days for substance plays, within 48h for engagement plays. Threads older than that → tier T3 or T4.
+- **Comment-tree mining gate (Reddit + HN)** — any T1/T2 thread MUST have \`commentTreeSummary.mineableComments[]\` carrying at least one *substantive* buyer signal (\`buyer_intent\`, \`pain_restatement\`, \`competitor_mention\`, or \`op_rejection\`). A thread whose only mined signal is \`high_velocity\` is loud but not necessarily a buyer conversation — it caps at T3 unless Maya sees a real reply angle. Threads where the worker only scraped OP + ignored comments are missing the most valuable intel. If a worker tiers T1/T2 with no mineable comments → steer: "descend the comments tree (all the way, not just the top), score the strongest against the mining kinds, re-POST". If still empty after 1 steer → drop to T3.
+- **Freshness + engagement-window gate** — age matters (\`postedAt\` within ~7 days for substance plays, ~48h for engagement plays), but the sharper question is whether the thread is *still alive*: is the OP still replying, are new comments still landing? A 5-day-old thread where the OP is actively answering today beats a 12-hour-old thread that already went quiet. A thread that's gone cold (OP absent, comments stalled) drops to T3 even if it's recent — replying into a dead thread is theater.
 - **Platform-norm gate** — HN Show HNs are competitor launches, not reply targets (Tier T4 automatic). Reddit hardware-budget threads are wrong buyer stage (Tier T3 max). X analyst takes with no buyer pain (Tier T4).
 - **Author-quality gate** — \`authorContext.followerCount\` < 50 + zero post history = likely bot. Drop.
 - **Coverage gate** — Maya looks at what landed across the bet channels and decides: is this enough good signal for today to be a "strong" day, or honest to call it "thin"? Never pad with low-tier threads to look busy.
@@ -1076,7 +1099,7 @@ The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.*
 **Maya does not blindly accept worker output.** Every worker POST is a claim; Maya treats it as one. She reads what landed in Convex, looks at the actual data, and questions:
 
 - *"Why did you call Ollama a 'direct' competitor? Show me the customer-complaint quotes you anchored that on."*
-- *"This buyer journey says 'evaluating' is the second stage — what evidence? Which threads have you seen buyers in that stage?"*
+- *"Your buyer journey is missing the decision stage — you've shown me where buyers discover the pain and where they compare tools, but where's the evidence of buyers at the point of trying something new? What threads show buyers who just switched, just asked 'is X worth it', or just posted a win after making a move? I need 2-3 real URLs for that stage before I'll accept this map."*
 - *"You marked Reddit as a bet channel. What threads did you scan? How recent? How many?"*
 - *"Three trusted voices feels light for a niche this active. Steer to look harder."*
 
@@ -1084,10 +1107,14 @@ For each questionable claim, Maya uses \`subagents action=steer\` to send the wo
 
 \`\`\`
 subagents action=steer target=<buyer_map_worker run id>
-  message: "Your buyer journey has 3 stages but I can't see what
-  anchors stage 2 ('evaluating'). What specific subreddits / X
-  threads showed you buyers at that stage? Pull 2-3 example URLs +
-  the exact phrases buyers used. POST a refined buyer_map when done."
+  message: "Your buyer map is missing buyerJourney stages — that
+  field must not be empty. I need the full awareness → consideration
+  → decision → advocacy path, each stage grounded in 2-3 real URLs
+  + verbatim quotes from buyers at that stage. Focus especially on
+  decision-stage evidence: threads where buyers are close to trying
+  something new, comparing options, or reporting they just switched.
+  Those are the signup-path moments this product needs to show up in.
+  POST a refined buyer_map with all journey stages populated when done."
 \`\`\`
 
 Worker reads the steer, re-extracts from its existing research (no new API budget), refines the POST. Maya re-reads. If satisfied → accept that piece. If still thin → steer again. If a worker fails to converge after a few rounds → ship that piece with the gap surfaced honestly to the operator ("competitive map's substitute behaviors are still thin — I'll watch and refine over the first week").
@@ -1098,11 +1125,11 @@ Worker reads the steer, re-extracts from its existing research (no new API budge
 
 This is Maya's judgment, not a checklist. Numbers below are not thresholds — they're context for what "useful" looks like. Apply judgment to your specific niche.
 
-- **Buyer map** — \`icpDescription\` reads like a specific person, not a category. Buyer journey stages should cover the path the buyer actually walks; each stage cites where the buyer hangs out and the language they use. Intent phrases are real phrases buyers say (not paraphrased). Trusted voices are accounts with verifiable handles + platforms.
-- **Competitive map** — covers the direct competitors a buyer would seriously evaluate, plus the substitute behaviors / adjacent tools they default to today. Every complaint quotes a real post + URL.
+- **Buyer map** — \`icpDescription\` reads like a specific person, not a category. **Buyer journey stages are mandatory — a buyer map without them is incomplete and Maya will steer until they exist.** Journey must cover the full path to a converted signup: awareness (buyer first feels the pain), consideration (buyer actively looks for solutions), decision (buyer is close to trying something new), and advocacy (buyer tells others). Each stage must be grounded in 2-3 real cited quotes and URLs showing buyers at that stage — actual thread excerpts where you can see the buyer's mindset, not paraphrase. Intent phrases are real phrases buyers say (not paraphrased). Trusted voices are accounts with verifiable handles + platforms.
+- **Competitive map** — covers the direct competitors a buyer would seriously evaluate, plus the substitute behaviors / adjacent tools they default to today. Every complaint quotes a real post + URL. Note which competitor pain threads are accelerating — a complaint volume that was thin six months ago but is now a flood is a wedge signal, and Maya should call it out explicitly in synthesis.
 - **Channel scorecard** — rates the channels worth rating for this product. Bets are channels with both audience-fit and operator-cadence-fit, justified in \`uniqueUnlock\`. Maya picks the bet count — usually small.
 - **Content angles** — enough angles that the operator can run for weeks without repeating, each grounded in a specific quoted pain + URL. Hook variants are in the operator's voice (verify against USER.md).
-- **Relationship targets** — specific accounts worth building with over 90 days. Mix of cadences. Skip the obvious follower-count plays — focus on accounts whose audience IS the buyer.
+- **Relationship targets** — specific accounts worth building with over 90 days. Mix of cadences. **This lane is not optional — a zero-target output means the worker did not finish the job; Maya will steer until real targets exist.** The mandate: find accounts whose audience IS the buyer (people who follow them are the same people who would sign up for this product). Filter hard: active posting cadence (judgment — recent posts visible), genuine engagement on their content (real replies and discussion, not ghost followers), and audience-content complementary to the product without being a direct competitor. Drop dormant accounts, vanity accounts with inflated follower counts and no engagement, and accounts that are audience-adjacent but not audience-aligned. A small number of genuinely right relationships beats a long list of names — Maya prefers 3 real ones over 10 questionable ones.
 
 If any output reads thin to Maya's judgment, steer the worker for more. If steering doesn't help, ship with the gap surfaced honestly to the operator ("competitive map landed light on substitutes — I'll keep watching as I do daily research"). Maya decides what "enough" means — there is no minimum count.
 
@@ -1114,26 +1141,34 @@ Foundation does NOT stop at the operating model. The operator waited ~10-15 min 
 
 For each channel marked \`bet: true\` in \`gtmChannelScorecard\`, spawn the matching continuous worker (\`reddit_research\`, \`x_research\`, \`hn_research\`). Their task is **discovery only — find threads, return facts. They DO NOT draft replies.** Reply drafting is Maya's editorial job, not a worker's.
 
-**Discovery floor: each bet channel must yield 10-15 USEFUL threads** (engagement > 0, recent, on-pain). If the first sweep returns fewer, Maya \`subagents action=steer\` the worker with broader intent phrases / adjacent communities for a second pass. **Phase 2.5 cannot start until total useful threads across bet channels ≥ 20.** Three threads cannot power a 12-event week — the upstream pool needs to be deep enough for selection.
+**Discovery depth — workers must not do a single shallow sweep and stop.** A first-pass search with one intent phrase is a starting point, not a finished sweep. Workers must: broaden their intent probes across multiple phrasings of the same pain, paginate through results by judgment until the signal stops being useful, and try adjacent communities / hashtags / subreddits if the first community is thin. They stop broadening when they've genuinely covered the buyer-pain landscape well enough to power a real first week — Maya judges this when she reads the pool, not by a count. **Phase 2.5 cannot start until Maya judges the pool is deep enough for selection** — a handful of threads from one subreddit is not a pool; coverage across real buyer communities is.
 
 Worker task string (Phase 2):
 \`\`\`
-Find 15-20 LIVE threads in <channel> where buyers are venting about
-this pain right now. Use these intent phrases: [...]. Use these
-content angles for relevance: [...]. For each thread, POST to
-/lc_gtm/target_thread with:
+Find LIVE threads in <channel> where buyers are venting about this
+pain right now. Do not stop after a single search — broaden intent
+phrases, try adjacent communities, paginate until you've genuinely
+covered the buyer-pain landscape. Use these intent phrases as seeds
+(expand on them): [...]. Use these content angles for relevance: [...].
+For each thread, POST to /lc_gtm/target_thread with:
   - url, externalId, platform
   - title, excerpt (verbatim from post body, first ~500 chars)
   - author handle, currentMetrics (must be non-zero — skip dead threads)
-  - postedAt (must be within last 30 days for replies; 90 for lurks)
+  - postedAt (threads old enough to be dead are not useful for replies;
+    use judgment — a week-old thread with active comments is live;
+    a 6-month-old thread with zero activity is not)
   - subredditOrCommunity
   - recommendedAction (reply / lurk / upvote_only / avoid)
+Focus on threads that show buyers at a point in their journey where
+they'd actually try something new — frustration with current tools,
+asking for alternatives, comparing options, reporting a win that
+others want to replicate. Those are the signup-path moments.
 DO NOT draft replies — Maya owns that step. Just return what you found.
 API discipline: ScrapeCreators / TwitterAPI.io / Algolia HN. Never
 raw curl platform domains.
 \`\`\`
 
-\`sessions_yield\`. Watch via \`subagents action=list\`. Kill stuck (>5 min silent), steer thin. After workers report \`finished\`, check the pool size via \`/lc_gtm/get_my_foundation\`. If under 20 useful threads, steer for round 2.
+\`sessions_yield\`. Watch via \`subagents action=list\`. Kill stuck (silent far longer than the work warrants), steer thin. After workers report \`finished\`, check the pool via \`/lc_gtm/get_my_foundation\`. If Maya judges the pool is too shallow to support a meaningful first week, steer for another pass with broader intent or adjacent communities.
 
 ### Phase 2.5 — COMPOSITION (Maya drafts every reply herself)
 
@@ -1166,7 +1201,7 @@ TIME: <minutes — usually 10-15>
 SOURCE: <when found + velocity score>
 \`\`\`
 
-POST each event to \`/lc_gtm/calendar_proposal\`. **Active-launch week target: 18-25 events total.** Read \`maya-calendar-populator/SKILL.md\` § 2 for the per-channel cadence numbers; § 3 for the slot allocation by phase.
+POST each event to \`/lc_gtm/calendar_proposal\`. The active-launch week should be genuinely full — enough events that the operator is in market every day, with meaningful coverage of each bet channel, without padding. Read \`maya-calendar-populator/SKILL.md\` § 2 for the per-channel cadence numbers; § 3 for the slot allocation by phase.
 
 **X build-in-public is GUARANTEED-FLOOR, not discovery-dependent.** If the operator can write text, Maya MUST queue these X events regardless of whether \`x_research\` returned any threads:
 - **1 build-in-public post per day** (7/week) — operator-original on their own X handle, no thread target required. Seed time Tue/Thu 8am operator-tz, daily otherwise.
@@ -1189,11 +1224,13 @@ Who's actually buying this: [one-sentence persona, named if possible — e.g.
 
 Real pain (verbatim from threads): "[direct quote with sourceUrl]"
 
-Where to play week one: [bet channels with one-line rationale each]
+Where to find them in signup-ready moments: [bet channels with one-line rationale
+each — what about this channel makes it likely to convert, not just discover]
 
-The wedge vs incumbents: [one sentence — what you do that they don't]
+The wedge vs incumbents: [one sentence — what you do that they don't; note if
+any competitor pain is accelerating right now]
 
-[N] events queued in the plan this week (18-25 is the active-launch target):
+[N] events queued for week one:
 • [day, time]: [event title, one-line what + where]
 • [day, time]: [event title]
 • …
@@ -1432,7 +1469,7 @@ description: Decide whether LinkedIn is the right channel per playbook/linkedin.
 
 ## Purpose
 
-LinkedIn is the right channel for a narrow slice of indie products (B2B SaaS, ops/marketing/HR/sales/finance buyers, $500-5000 ACV, narrative-writing founder) and the wrong channel for most. This skill runs the fit check, refuses when criteria don't hold, and — when LinkedIn is a fit — proposes the doc-carousel-first launch shape.
+LinkedIn is the right channel for a narrow slice of indie products — B2B SaaS, ops/marketing/HR/sales/finance buyers, mid-market ACV, narrative-writing founder — and the wrong channel for most. This skill runs the fit check, refuses when criteria don't hold, and — when LinkedIn is a fit — proposes the doc-carousel-first launch shape oriented around buyer conversations, not visibility metrics.
 
 ## When to invoke
 
@@ -1451,17 +1488,39 @@ LinkedIn is the right channel for a narrow slice of indie products (B2B SaaS, op
 ## Decision rules
 
 1. **LI-1.1 channel-tree gate.** Run PLAYBOOK § 3 first. LinkedIn-primary only when steps 4-5 explicitly route there.
-2. **LI-10.2 hard refuse.** IF product is indie consumer / dev tool / API / sub-$500-ACV THEN \`fit: "park"\`, \`refusalReason: "LI-10.2 — wrong audience composition"\`. Do not soften.
-3. **LI-10.3 writing-style gate.** IF operator cannot write 200+ words in their own voice THEN \`fit: "secondary_with_caveat"\` and recommend X-first.
-4. **ACV band check.** Valid LinkedIn-primary band is $500-$5000. Below → LI-10.2 fires. Above → LinkedIn helps trust but doesn't ignite (enterprise outbound is the real channel).
-5. **LI-10.4 launch format default.** Document carousel (10 slides) + 400-word personal narrative caption. Documents hit 6.6% engagement.
+2. **LI-10.2 hard refuse.** IF product is indie consumer / dev tool / API / product whose buyer doesn't live on LinkedIn professionally THEN \`fit: "park"\`, \`refusalReason: "LI-10.2 — wrong audience composition"\`. Do not soften.
+3. **LI-10.3 writing-style gate.** IF operator cannot write substantively in their own voice — clearly, with specific detail, without corporate padding — THEN \`fit: "secondary_with_caveat"\` and recommend X-first. Length is not the test; voice and specificity are.
+4. **ACV fit judgment.** Use ACV as a signal, not a cutoff formula. LinkedIn earns its way when the buyer is a professional making a deliberate purchase decision and your product touches something they're accountable for at work. Very low-cost impulse buys don't belong here; high-ACV enterprise deals belong in outbound, not content. Judge where this product falls on that spectrum.
+5. **LI-10.4 launch format judgment.** Document carousel + personal narrative caption is the default launch shape because it earns reach natively and lets a non-technical buyer follow the story without clicking away. Choose this format when the story has enough texture to fill 8-12 slides without padding. If it doesn't, a long-form text post is better than a thin carousel. Format follows the story, not the other way around.
 6. **LI-10.5 anti-announcement.** Reframe every launch as a "thinking-process" post per linkedin.md § 4. "Excited to announce" → rewrite.
 7. **LI-10.6 engagement-bait closer ban.** No "Agree?" / "What do you think?" / "Like if this resonates."
-8. **LI-10.7 follower-flip.** IF \`followerCount < 500\` THEN 1 original post/week + 30 min/day comment-mining on large-account niche posts.
-9. **LI-10.8 comment-mining freshness.** Comment targets must be <2 hours old.
+8. **LI-10.7 follower-flip.** IF the operator has a small following THEN 1 original post/week + meaningful comment-mining time on large-account niche posts. Comment-mining is often more valuable than original posts at this stage; weight it accordingly.
+9. **LI-10.8 comment-mining freshness.** Prefer posts where the reply window is still open — where the original post is actively circulating and a thoughtful comment still gets surface area. Judge freshness by whether the post is still getting new activity, not by a fixed clock window.
 10. **LI-10.9 newsletter gate.** Only if operator already writes long-form monthly+ elsewhere.
 11. **LI-10.11 60-day reweight.** IF leads but zero conversions at 60 days AND runway <6 months THEN \`reweightToFasterChannel: true\`.
 12. **LI-10.14 link-in-first-comment.** Any draft URL moves to first comment.
+
+## Comment-target qualification
+
+When mining comments on large-account niche posts for reply targets, the goal is a buyer conversation that can convert — not visibility. Apply this filter:
+
+**Keep a comment if the author signals:**
+- A tool, stack, or process they're currently running ("we use X for this", "switched from Y to Z", "our team does it manually")
+- A real pain they're sitting in ("biggest headache is…", "this cost us three weeks", "still haven't solved…")
+- A budget constraint or buying context ("too expensive for early stage", "looking for something cheaper than X", "evaluated Y but…")
+- A job title or company context that matches the buyer ICP — especially if their profile shows they're the decision-maker or primary user for the problem domain
+
+**Reject a comment if it:**
+- Is pure engagement bait ("Great point!", "So true!", "This is gold", "Saving this")
+- Affirms the post without adding any signal about their own situation
+- Is self-promotional about a competing product
+- Is from a creator/influencer account with no buying context
+
+The goal is: find someone who already has the problem, knows they have it, and is one good conversation away from looking for a solution. If the comment doesn't suggest that, skip it.
+
+**Depth and freshness:** Fetch comments newest-first and go deep enough to find buyer-language ones. Don't stop at the top 10 comments — those are usually the loudest voices, not the buyers. On posts that are actively circulating, a thoughtful reply gets real surface area. Judge freshness by activity signal (are people still replying?), not the timestamp alone. A 4-hour-old post that's still getting comments is a better target than a 30-minute post that went cold.
+
+**Author company/industry as a buyer-fit signal:** When a comment author's profile shows company size, industry, or role that matches the ICP — note it as a fit signal. A mid-market ops manager at a 50-person SaaS company commenting on a post about process chaos is more valuable than a solo consultant saying the same words. Use this as judgment, not a filter.
 
 ## Output schema
 
@@ -1469,21 +1528,33 @@ LinkedIn is the right channel for a narrow slice of indie products (B2B SaaS, op
 interface LinkedInFitReport {
   fit: "primary" | "secondary" | "secondary_with_caveat" | "park";
   refusalReason?: string;
-  acvBandCheck: { band: string; passes: boolean };
-  writingStyleCheck: { capableOfLongForm: boolean; evidence: string };
+  acvFitJudgment: {
+    buyerType: string;        // how you're characterizing the buyer and their purchase context
+    linkedInFitReason: string; // one-sentence judgment on whether that buyer lives on LinkedIn
+    passes: boolean;
+  };
+  writingStyleCheck: {
+    capableOfVoicedLongForm: boolean;
+    evidence: string;         // specific signal from APP.md or operator history
+  };
   recommendedLaunchShape?: {
-    format: "doc_carousel_10_slide_plus_400w_caption";
+    format: "doc_carousel" | "long_form_text_post" | "native_video";
+    formatJustification: string;  // why this format fits the story and audience
     caption: { type: "personal_narrative"; openingPattern: string };
     cta: "link_in_first_comment";
-    nativeVideoOption: boolean;
   };
   commentTargets: Array<{
     postUrl: string;
     authorHandle: string;
-    authorFollowers: number;
-    postAgeMinutes: number;
-    excerpt: string;
+    authorTitle?: string;      // job title if visible
+    authorCompanySize?: string; // signal of buyer fit
+    authorIndustry?: string;
+    commentExcerpt: string;
+    buyerLanguageSignal: string;  // what specifically makes this a buyer signal
+    icpMatch: string;             // how this person maps to the buyer ICP
+    postStillActive: boolean;     // is the post still getting new activity?
     suggestedCommentDraft: string;
+    conversionPath: string;       // what's the realistic next step — DM, reply thread, profile visit?
   }>;
   postingCadence: { originalPostsPerWeek: number; commentMiningMinPerDay: number };
   rulesCited: string[];
@@ -1494,8 +1565,9 @@ interface LinkedInFitReport {
 ## Failure modes
 
 - **Operator insists LinkedIn for consumer app.** \`fit: "park"\` + cited refusal + one-sentence alternative. Document override but don't silently comply.
-- **No comment targets fresh enough.** Empty list + recommend different posting time (8-10 AM operator-tz weekdays).
+- **No buyer-language comment targets found.** Return empty \`commentTargets\` with an explicit note that the comments mined were engagement-bait, not buyer signals. Recommend mining a different set of posts — ones closer to the pain domain, not the founder/indie-hacker audience. Do not pad the list with non-buyer comments just to have something to show.
 - **ScrapeCreators LinkedIn endpoints fail.** Try \`/v1/linkedin/company\` + \`/v1/linkedin/company/posts\`. If both fail, downgrade to \`fit: "secondary_with_caveat"\`.
+- **Author profile data unavailable.** If company/industry/title is not visible, note the absence and weight the buyer-language signal alone. Don't reject the target just because profile metadata is missing — strong buyer language stands on its own.
 
 ## Cost discipline
 
@@ -1747,14 +1819,14 @@ Self-referential: the critic must itself pass voice + grounding + tier-honesty b
 // Source: agents/skills/maya-gtm/maya-reddit-demand-researcher/SKILL.md
 const ENTRY_16_maya_reddit_demand_researcher = `---
 name: maya-reddit-demand-researcher
-description: Find Reddit demand for the product's pain — score evidence, identify reply targets, return promotion-risk score. Budget-bounded.
+description: Find Reddit buyer intent for the product's pain — surface reply targets ranked by purchase signal, map the live comment tree for follow-up questions, return promotion-risk score. Budget-bounded.
 ---
 
 # maya-reddit-demand-researcher
 
 ## Purpose
 
-Reddit is the highest-conversion buyer-intent channel for indie products IF the operator is a real participant. This skill finds threads expressing the pain, subreddits where the buyer hangs out, reply-mining opportunities, and a hard risk score for the operator's account state. It refuses to recommend Reddit when warmup math doesn't work.
+Reddit is the highest-conversion buyer-intent channel for indie products IF the operator is a real participant. This skill finds threads where a buyer is actively describing the product's pain and seeking a solution, subreddits where those buyers concentrate, and reply-mining opportunities ranked by purchase-conversion potential — not vanity metrics. It refuses to recommend Reddit when warmup math doesn't work.
 
 ## When to invoke
 
@@ -1778,8 +1850,8 @@ Reddit is the highest-conversion buyer-intent channel for indie products IF the 
 3. **Domain age check (§ 8.14).** IF \`app.domain\` < 30 days old THEN \`domainRiskElevated: true\`.
 4. **Subreddit selection.** 2-3 candidate subs per ICP. From reddit.md § 1 or niche subs the founder already participates in. NEVER recommend r/marketing, r/programming, r/technology, r/AskReddit for product mention (§ 8.12).
 5. **Funnel-stage tagging.** Awareness / consideration / decision per reddit.md § 1. Decision-stage subs (r/Notion, r/Obsidian) are reply-only.
-6. **The 5-thread floor.** A sub is only worth recommending if ≥5 buyer-intent threads in last 60 days.
-7. **Reply-target quality bar.** Threads (a) <7 days old, (b) OP asked a pain-related question, (c) product is a credible answer within 1 degree of fit. § 4 + § 8.10.
+6. **Subreddit evidence floor.** A sub is only worth recommending if there is genuinely enough buyer-pain signal to justify sending the operator there — judge by whether the found threads contain people actively describing the product's exact problem and seeking a solution, not by a raw count. If the first page of results is thin or stale, search deeper until you can make a confident judgment; stop when you are confident, not at a fixed page limit.
+7. **Reply-target quality bar.** Threads where (a) the thread still feels alive — OP is still responding, new comments are arriving, the conversation has not gone cold — (b) OP or a commenter asked a pain-related question, and (c) the product is a credible answer within one degree of fit. § 4 + § 8.10. A recent-but-dead thread is theater; deprioritize it. Before surfacing any thread as a reply target, check whether the post or its key comments were removed by moderators; a removed thread is a wasted reply — tier it down or drop it.
 8. **r/SaaS 60-day clock.** IF recommending r/SaaS main-feed THEN flag the cost and recommend weekly feedback thread unless operator's narrative is unusually strong.
 9. **r/IndieHackers SHOW IH one-shot.** Only if \`app.stage === "shipped"\` AND operator has a metric/testimonial.
 10. **Live-product check (§ 8.9).** IF \`app.stage === "pre-launch"\` AND only waitlist exists THEN remove r/SideProject from candidates. Substitute r/AlphaAndBetaUsers.
@@ -1803,38 +1875,52 @@ interface RedditDemandReport {
     flairRequired: string | null;
     evidenceThreadCount: number;
   }>;
-  evidenceCards: Array<{ threadUrl: string; sub: string; title: string; upvotes: number; ageHours: number; painSnippet: string; productFit: "direct" | "adjacent" | "weak" }>;
+  evidenceCards: Array<{
+    threadUrl: string;
+    sub: string;
+    title: string;
+    ageHours: number;
+    buyerIntentSignal: string; // why this counts as buyer intent — active problem-seeker, not just a lurker
+    painSnippet: string;      // VERBATIM quote from the thread
+    productFit: "direct" | "adjacent" | "weak";
+    threadAlive: boolean;     // OP still responding / new comments arriving
+    modRemoved: boolean;      // post or key comments removed by mods
+  }>;
   replyTargets: Array<{
     threadUrl: string;
     sub: string;
     opQuestion: string;
+    buyerIntentRationale: string; // why this person is likely a buyer, not just curious
+    conversionPath: string;       // honest, non-spammy path to try the product that fits the reply context
     suggestedFramework: "been-there-done-that" | "counterintuitive" | "tactical-playbook" | "tool-neutral-recommendation" | "quiet-authority";
     mentionRecommended: boolean;
-    /** Sprint 2.30 — when the highest-value reply target is a COMMENT,
-     *  not the OP. Populated when the comment-tree mining found a
-     *  follow-up question the OP didn't ask but a commenter did, where
-     *  the product is a credible answer. Drives "reply to that
+    /** When the highest-value reply target is a COMMENT, not the OP.
+     *  Populated when comment-tree mining finds a follow-up question
+     *  the OP never answered and the product addresses directly —
+     *  highest-intent target in the thread. Drives "reply to that
      *  comment's question, not OP's" routing. */
     commentReplyTarget?: {
       commentId: string;
       author?: string;
       excerpt: string;
-      whyBetter: string;
+      whyHigherIntent: string; // why this comment beats the OP as a reply target
     };
   }>;
-  /** Sprint 2.30 — per-thread comment-tree intel. Maya pulls this from
-   *  the Reddit \`/comments/<id>.json\` endpoint via ScrapeCreators (or
-   *  the public JSON fallback) and scores each surfaced comment
-   *  against 5 mining kinds. The morning_brief reads this to pick the
+  /** Per-thread full comment-tree intel. Maya descends the entire
+   *  comment tree — including nested replies — before declaring a
+   *  reply target. The sharpest buyer language (pain restated in
+   *  visceral terms, competitor named, workaround rejected) and the
+   *  highest-intent follow-up questions routinely sit deeper than the
+   *  top-voted comments. The morning_brief uses this to pick the
    *  single best reply target across (a) the OP question and (b) the
-   *  best mineable comment. */
+   *  best mineable comment deeper in the tree. */
   commentMining: Array<{
     threadUrl: string;
     minedComments: Array<{
       commentId: string;
       author?: string;
       body: string;
-      score?: number;
+      nestingDepth: number;  // 0 = top-level, 1 = reply to top-level, etc.
       kind: "buyer_intent" | "pain_restatement" | "competitor_mention" | "op_rejection" | "high_velocity";
       competitorName?: string;
       whyMineable: string;
@@ -1854,20 +1940,21 @@ interface RedditDemandReport {
 - **ScrapeCreators Reddit endpoint fails.** Return HTTP status; do NOT degrade to training-data recommendations.
 - **Domain blacklist detected.** \`domainBlacklisted: true\` + recommend domain change (reddit.md § 6).
 
-## Comment-tree mining (Sprint 2.30 — mandatory for every replyTarget)
+## Comment-tree mining (mandatory for every replyTarget)
 
-For each thread in \`replyTargets\` (and any T1/T2-tier evidenceCard), Maya descends the comment tree before declaring the reply target:
+For each thread in \`replyTargets\` (and any direct/adjacent \`evidenceCard\`), Maya descends the **full** comment tree — including all nested reply chains — before declaring the reply target. Do not stop at top-level comments. The sharpest buyer language and the highest-intent follow-up questions routinely sit in nested replies that never bubbled to the top.
 
-1. **Fetch the comments endpoint.** Use ScrapeCreators Reddit comments endpoint OR the public \`<thread_url>.json\` (no auth, polite UA). Pull at minimum the top 10 comments by score.
-2. **Score each comment** against the 5 mining kinds:
-   - \`buyer_intent\` — a commenter asked a follow-up question the product directly answers (often higher signal than OP's original question).
-   - \`pain_restatement\` — a comment that articulates the buyer's pain in better, more visceral language than OP did (steal this for the lede).
-   - \`competitor_mention\` — a specific competitor named ("I use ToolX for this") — set \`competitorName\`. Drives differentiation drafting.
-   - \`op_rejection\` — OP responded "tried that, didn't work" — flags what NOT to suggest.
-   - \`high_velocity\` — >20 upvotes accumulated in <2h since the comment was posted (thread is hot RIGHT NOW).
-3. **Emit \`commentMining[]\`** with the scored comments, AND populate \`commentReplyTarget\` on the corresponding \`replyTarget\` entry when the best target is a comment, not OP.
+1. **Fetch the comments endpoint.** Use ScrapeCreators Reddit comments endpoint OR the public \`<thread_url>.json\` (no auth, polite UA). Pull the full tree. If the thread is large, go as deep as needed until you are confident you have seen all subtrees that could contain the five mining kinds below.
+2. **Mine the full tree** against the 5 kinds at every nesting level:
+   - \`buyer_intent\` — a commenter asked a follow-up question that the product directly answers and that OP never addressed. This is typically the **highest-intent reply target in the thread** because the person is still actively seeking a solution. Note the nesting depth; a question buried three levels deep that went unanswered for days is a better target than a top-level comment that already has five replies.
+   - \`pain_restatement\` — a comment that re-articulates the buyer's pain in sharper, more visceral language than OP did. Mine the VERBATIM phrasing; it becomes the lede of the drafted reply.
+   - \`competitor_mention\` — a commenter names a specific competitor or alternative ("I've been using ToolX but it keeps breaking because…"). Set \`competitorName\`. Drives differentiation angle in the draft.
+   - \`op_rejection\` — OP (or another commenter) explicitly said a class of solution "didn't work" or "I already tried X." Flags what NOT to recommend in the reply.
+   - \`high_velocity\` — a comment that has gathered unusual traction relative to the thread's typical engagement pace and its own age, judged by whether it reads as a thread that is actively heating up right now, not just one that happened to be posted recently.
+3. **Emit \`commentMining[]\`** with the scored comments including \`nestingDepth\`, AND populate \`commentReplyTarget\` on the corresponding \`replyTarget\` entry when the best reply target is a comment, not OP.
+4. **Follow-up-question routing.** When a \`buyer_intent\` comment surfaces an unanswered question, that comment — not OP's original post — becomes the primary reply target. Surface this clearly in \`commentReplyTarget.whyHigherIntent\`.
 
-Skipping this on T1/T2 threads is a failure — \`maya-continuous-research\` will steer the worker to re-run mining before accepting the output.
+Skipping full-tree descent on direct/adjacent threads is a failure — \`maya-continuous-research\` will steer the worker to re-run mining before accepting the output.
 
 ## Cost discipline
 
@@ -1875,7 +1962,11 @@ Max 8 ScrapeCreators calls: 3 × subreddit/search, 2 × general search, 2 × sub
 
 ## Anti-slop check
 
-\`painSnippet\` and \`opQuestion\` are VERBATIM from Reddit. Do not paraphrase. Quote and link.
+- \`painSnippet\`, \`opQuestion\`, and every \`body\` in \`commentMining\` are VERBATIM from Reddit. Do not paraphrase. Quote and link.
+- \`buyerIntentRationale\` must state specifically why this person is likely a buyer seeking a solution — not just "they mentioned the topic." If you cannot articulate a purchase-intent signal, drop the thread.
+- \`conversionPath\` must be honest and non-spammy: a way to mention the product or offer a trial that fits naturally in a helpful reply. "Link in bio" or naked URL dumps are not acceptable.
+- \`whyHigherIntent\` on \`commentReplyTarget\` must explain concretely why that comment beats OP as a reply target — e.g., "OP's question was answered; this nested reply from 3 days later is still unanswered and directly names the product's pain."
+- Never surface a thread as a reply target and leave \`modRemoved: true\` without explicitly flagging it to the caller as low-priority.
 `;
 
 // Source: agents/skills/maya-gtm/maya-results-reviewer/SKILL.md
@@ -2103,20 +2194,20 @@ V1 of ClawLaunch does NOT auto-post to TikTok (tiktok.md § 12). This skill pick
 
 ## Decision rules
 
-1. **tiktok.md rule 1 — V1 manual-post gate.** IF \`canPostTikTokManually !== true\` THEN \`recommendation: "park_tiktok"\`.
-2. **tiktok.md rule 2 — restricted-state block.** IF \`tiktokWarmupState === "restricted"\` THEN return resolve-Account-Check instructions.
-3. **tiktok.md rule 3 — warmup gate.** IF \`tiktokAccountAgeDays < 14\` OR state !== "ready" THEN return warmup sequence (§ 6).
+1. **tiktok.md rule 1 — V1 manual-post gate.** IF \`canPostTikTokManually !== true\` THEN \`recommendation: "park_tiktok"\`. This is a hard platform constraint: ClawLaunch V1 does not have TikTok API posting rights; the operator must post from their own account. No workaround exists.
+2. **tiktok.md rule 2 — restricted-state block.** IF \`tiktokWarmupState === "restricted"\` THEN return resolve-Account-Check instructions. Restricted accounts cannot post; resolve first.
+3. **tiktok.md rule 3 — warmup gate.** IF \`tiktokAccountAgeDays < 14\` OR state !== "ready" THEN return warmup sequence (§ 6). TikTok's own risk system suppresses new accounts; warming is a platform reality, not a discretionary suggestion.
 4. **tiktok.md rule 4 — unshowable + no-slideshow refuse.** IF showability === "unshowable" AND operator refuses slideshow THEN park.
-5. **tiktok.md rule 5 — faceless default.** IF product has clear UI moment ≤10s OR before/after THEN default faceless screen-record for first 10 launch posts. Cite Cal AI / Daze / Pushscroll.
+5. **tiktok.md rule 5 — faceless default.** IF product has a clear UI moment that lands quickly OR a meaningful before/after transformation THEN default faceless screen-record for launch posts. Cite Cal AI / Daze / Pushscroll as proof-of-concept. Operator familiarity and comfort with screen-recording matters — confirm before recommending.
 6. **tiktok.md rule 6 — camera-shy routing.** IF \`onCameraOk === false\` AND showable THEN faceless screen-record only.
-7. **tiktok.md rule 7 — slideshow for text-heavy niches.** Dev tools / B2B / finance / education niches over-indexing on carousels → Photo Mode primary.
-8. **tiktok.md rule 8 — talking-head trust products.** Agency / coaching / consulting AND operator comfortable on camera → founder talking-head.
-9. **tiktok.md rule 10 — "link in bio" ban.** Shot plan and CTA NEVER include "link in bio". Substitute search-by-name / pinned-comment / DM-keyword.
-10. **tiktok.md rule 11 — 5-video format rule.** Chosen format must have ≥5 winning examples in operator's niche (verified by \`maya-tiktok-format-researcher\`). If <5, \`formatConfidence: "low"\`.
-11. **tiktok.md rule 13 — Personal Account preference.** First 30-60 days, Personal Account > Business Account (full music catalog).
-12. **tiktok.md rule 15 — cadence cap.** 1-2/day for <30d accounts, 2-3/day for warmed. Never >4/day.
-13. **Length sweet spot.** 22-28 seconds for first 10 hero posts. Carousel default 6 slides.
-14. **Safe zones.** Every shot plan places text/CTA inside central safe zone (≥150px top, ≥250px bottom, ≥130px right).
+7. **tiktok.md rule 7 — slideshow for text-heavy niches.** When niche research (format-researcher output) shows dev tools / B2B / finance / education content over-indexing on carousels, Photo Mode is primary. Let the research data lead; don't assume by niche label alone.
+8. **tiktok.md rule 8 — talking-head trust products.** Agency / coaching / consulting products where the founder IS the credibility signal — if operator is comfortable on camera AND niche research confirms talking-head formats get traction, recommend founder talking-head.
+9. **tiktok.md rule 10 — "link in bio" ban.** Shot plan and CTA NEVER include "link in bio". Choose between search-by-name, pinned-comment URL, and DM-keyword based on what makes the most sense for how a viewer would act on this specific product: if the product is searchable by a distinctive name, search-by-name removes friction most cleanly; if the product needs context (landing page, demo video), pinned-comment with a URL is stronger; if the goal is a conversation (consultative product, waitlist), DM-keyword builds intent-qualified leads. Pick the one that creates the shortest path from "I just watched this" to "I'm trying it."
+10. **tiktok.md rule 11 — format confidence.** Chosen format must be supported by evidence from \`maya-tiktok-format-researcher\` showing clear recurrence in the niche. If format-researcher returned \`confidence: "insufficient_evidence"\`, set \`formatConfidence: "low"\` and flag \`formatResearchNeeded: true\` before committing to a format.
+11. **tiktok.md rule 13 — Personal Account preference.** First 30-60 days, Personal Account > Business Account (full music catalog). This is a platform-behavior reality: Business Accounts have a restricted commercial sound library.
+12. **tiktok.md rule 15 — cadence cap.** For accounts under 30 days old: post conservatively, 1-2/day ceiling. For warmed accounts: 2-3/day comfortable ceiling. Hard cap 4/day regardless — above this, TikTok's risk system flags accounts. These caps are platform-behavior constraints, not style preferences.
+13. **Length judgment.** Lead with the format-researcher's length distribution for the niche. Short-form (under 30s) works best for demo-cold-opens and pattern-interrupts; slightly longer works when the before/after requires setup. Don't impose a number — use the niche's revealed preference as the anchor.
+14. **Safe zones.** Every shot plan keeps key text and CTA elements clear of TikTok's persistent UI overlay zones (bottom of frame, right edge). Exact pixel values vary by device; the goal is ensuring nothing load-bearing gets obscured. Use judgment to confirm beats are centered in the safe area.
 15. **No polished-ad recommendation.** No logo intros, motion graphics, lower-thirds (tiktok.md § 13 Failure 5). Authenticity > polish.
 
 ## Output schema
@@ -2162,20 +2253,22 @@ interface TikTokStrategy {
 // Source: agents/skills/maya-gtm/maya-tiktok-format-researcher/SKILL.md
 const ENTRY_20_maya_tiktok_format_researcher = `---
 name: maya-tiktok-format-researcher
-description: Find what's working in the operator's niche on TikTok RIGHT NOW. Apply the 5-video rule from playbook/tiktok.md § 7.
+description: Find what's working in the operator's niche on TikTok RIGHT NOW. Identify the format that clearly recurs across the strongest recent videos in the niche (tiktok.md § 7).
 ---
 
 # maya-tiktok-format-researcher
 
 ## Purpose
 
-TikTok rewards format-remix, not content-copy. This skill mines the operator's niche on TikTok to find the dominant winning format — hook structure, length, on-screen-text style, music, CTA pattern — and certifies it via the 5-video rule (tiktok.md § 7). Demo-strategist consumes the output to pick faceless / talking-head / slideshow with confidence.
+TikTok rewards format-remix, not content-copy. This skill mines the operator's niche on TikTok to find the dominant winning format — hook structure, length, on-screen-text style, music, CTA pattern — and certifies it by identifying clear recurrence across the strongest recent videos in the niche (tiktok.md § 7). Demo-strategist consumes the output to pick faceless / talking-head / slideshow with confidence.
+
+A format that goes viral but pulls the wrong audience is actively harmful. The goal is buyer-pull: formats that produce comments like "where do I get this", "does it do X", or "finally" from people who look like your target buyer. Raw view count is a vanity metric; retention momentum (the algorithm continuing to push a video after the first day) + buyer-language in comments together tell you whether a format converts audience into pipeline.
 
 ## When to invoke
 
 - IF \`maya-tiktok-demo-strategist\` returned \`formatResearchNeeded: true\` THEN run.
 - IF channel-judge is weighing TikTok and \`formatConfidence\` is unknown THEN run.
-- IF results-reviewer detects operator's current TikTok format underperforming (<5K views over 5 posts) THEN re-run.
+- IF results-reviewer detects operator's current TikTok format underperforming THEN re-run.
 - NEVER from heartbeat; most ScrapeCreators-intensive skill (cap 12 calls).
 
 ## Required reads
@@ -2187,16 +2280,18 @@ TikTok rewards format-remix, not content-copy. This skill mines the operator's n
 
 ## Decision rules
 
-1. **5-video rule (tiktok.md § 7).** A format is "winning" only if ≥5 of top 20 videos for a niche keyword share a hook structure.
-2. **Top-by-keyword sampling.** For each candidate keyword, pull top 20 via \`/v1/tiktok/search/top\`. Catalog hook + length + format + sound + CTA.
-3. **Recency filter.** Discard videos >90 days old; algorithm drift makes them weak signals.
-4. **Diversity check.** If top 20 are all from 1-2 accounts, surface \`nicheCreatorConcentration: "high"\`.
-5. **Format taxonomy.** Tag each video: \`faceless_screen_record\`, \`founder_talking_head\`, \`slideshow_photo_mode\`, \`mixed\`. Aggregate.
-6. **Hook taxonomy.** Tag each hook against tiktok.md § 2 catalog (pattern-interrupt, outcome-promise, question, demo-cold-open, pain-validation, proof-first, POV, contrarian, before/after, comment-bait).
-7. **Length sampling.** Median + p25/p75 per niche.
-8. **Sound velocity.** Flag any audio appearing in ≥3 videos in last 7 days — accelerating niche sound (tiktok.md § 10 — 12-24h sweet spot).
-9. **CTA pattern.** Aggregate: search-by-name / pinned-comment / DM-keyword. Refuse "link in bio" recommendations.
-10. **No recommendation without ≥5 confirming videos.** If no format hits 5, \`confidence: "insufficient_evidence"\`.
+1. **Format recurrence (tiktok.md § 7).** A format is "winning" when it clearly recurs across a meaningful share of the strongest recent videos in the niche — not because it hits an arbitrary count threshold, but because you can see the same hook structure, visual rhythm, and CTA pattern playing out independently across multiple creators. One viral outlier is noise; convergent behavior across creators is signal.
+2. **Retention + watch-momentum over raw views.** Prefer formats that show signs of sustained algorithmic push (high share-to-view ratio, comments arriving days after publish, reuse by multiple creators) over formats with a single spike. A moderate-reach format that keeps getting distributed beats a flash-in-the-pan hit.
+3. **Top-by-keyword sampling + deep pagination.** For each candidate keyword, pull the top batch via \`/v1/tiktok/search/top\`. If the niche signal is thin (few results, dominated by one creator, or mostly ads), paginate deeper and try adjacent keywords before concluding \`insufficient_evidence\`. Don't let a shallow first-page pull misrepresent a niche that does have signal.
+4. **Recency judgment.** Prefer recent videos — algorithm drift is real. How recent "recent enough" is depends on how fast-moving the niche is: a trend-driven niche goes stale in weeks; a utility/tool niche has slower drift. Use judgment; don't mechanically discard by calendar date.
+5. **Diversity check.** If the top results are dominated by 1-2 accounts, surface \`nicheCreatorConcentration: "high"\`. Convergent behavior across many independent creators is a more reliable signal than one prolific account.
+6. **Format taxonomy.** Tag each video: \`faceless_screen_record\`, \`founder_talking_head\`, \`slideshow_photo_mode\`, \`mixed\`. Aggregate.
+7. **Hook taxonomy.** Tag each hook against tiktok.md § 2 catalog (pattern-interrupt, outcome-promise, question, demo-cold-open, pain-validation, proof-first, POV, contrarian, before/after, comment-bait).
+8. **Length sampling.** Median + p25/p75 per niche.
+9. **Sound velocity.** Flag audio that appears to be accelerating — spreading fast across multiple unrelated accounts in the niche — as a potential early-adoption opportunity (tiktok.md § 10 — 12-24h sweet spot). Also flag sounds you see spreading to competitor products: if a sound already has market saturation in the niche, its uplift window may be closing.
+10. **CTA pattern.** Aggregate: search-by-name / pinned-comment / DM-keyword. Refuse "link in bio" recommendations.
+11. **Buyer-language comment mining.** For the top confirming videos in the identified format, pull comments and scan for buyer-language signals: intent phrases ("where do I get this", "how do I sign up", "does it work with X"), problem-validation phrases ("I've been looking for this", "finally"), and objection phrases ("is it free", "how much"). A format with strong buyer-language in comments ranks above a format with the same reach and no buyer-language. Surface the best-signal comment excerpts verbatim in \`buyerLanguageExamples\`.
+12. **No recommendation without clear evidence.** If no format shows clear recurrence across independent creators, \`confidence: "insufficient_evidence"\`. Do not force a recommendation from thin data.
 
 ## Output schema
 
@@ -2211,6 +2306,8 @@ interface TikTokFormatResearch {
     p25LengthSec: number;
     p75LengthSec: number;
     nicheCreatorConcentration: "low" | "medium" | "high";
+    retentionMomentumSignal: string; // qualitative description of sustained-push evidence
+    buyerPullRating: "strong" | "moderate" | "weak" | "unknown"; // based on comment mining
   };
   hookPatternCounts: Record<string, number>;
   formatCounts: Record<string, number>;
@@ -2220,11 +2317,13 @@ interface TikTokFormatResearch {
     artist?: string;
     usageLast7d: number;
     firstSeenHoursAgo: number;
-    velocityVerdict: "pre_peak_0_24h" | "early_24_72h" | "post_peak_skip";
+    velocityVerdict: "pre_peak_0_24h" | "early_24_72h" | "post_peak_skip" | "competitor_saturated";
   }>;
   exampleVideos: Array<{ url: string; handle: string; views: number; likes: number; durationSec: number; format: string; hookPattern: string; ctaPattern: string; soundId?: string; excerpt?: string }>;
+  buyerLanguageExamples: Array<{ videoUrl: string; comment: string; signalType: "intent" | "problem_validation" | "objection" | "buyer_adjacent" }>;
   ctaTaxonomy: Record<"search_by_name" | "pinned_comment" | "dm_keyword" | "other", number>;
   searchQueriesUsed: string[];
+  paginationDepth: string; // describe how many pages / adjacent keywords were tried
   rulesCited: string[];
 }
 \`\`\`
@@ -2234,7 +2333,7 @@ interface TikTokFormatResearch {
 - **Niche has no English-language TikTok activity.** \`confidence: "insufficient_evidence"\`. Recommend channel-judge demote TikTok.
 - **ScrapeCreators returns zero results.** Check param shape (tiktok.md § 7). If still empty, request operator-narrowed keywords.
 - **All top videos are paid ads.** \`topResultsAreAds: true\`. Recommend broader keyword.
-- **Single creator dominates >50%.** \`nicheCreatorConcentration: "high"\` — remix risky.
+- **A single creator is behind most of the winning examples.** \`nicheCreatorConcentration: "high"\` — remix risky (you'd be copying one person, not a format the niche has converged on).
 
 ## Cost discipline
 
@@ -2335,7 +2434,9 @@ description: Find showable app moments — before/after contrasts, screenshot se
 
 ## Purpose
 
-TikTok / Reels / native LinkedIn video rewards a specific kind of moment: a UI change a stranger can comprehend in 2 seconds. Cal AI's "point camera at food → calories appear" is the textbook example (tiktok.md § 1). This skill mines the operator's product for those moments.
+TikTok / Reels / native LinkedIn video rewards a specific kind of moment: a UI change a stranger can comprehend almost immediately, without context, without audio. Cal AI's "point camera at food → calories appear" is the textbook example (tiktok.md § 1). This skill mines the operator's product for those moments.
+
+The goal is not to showcase features — it is to find the activation moment: the instant where a viewer thinks "I want to try that." That moment is almost always a transformation (before → after), a reveal (input → surprising output), or a relief (problem → gone). Rank beats by how powerfully they create that want-to-try reaction in a cold viewer, not by how much functionality they demonstrate.
 
 ## When to invoke
 
@@ -2354,16 +2455,17 @@ TikTok / Reels / native LinkedIn video rewards a specific kind of moment: a UI c
 
 ## Decision rules
 
-1. **The 10-second comprehension rule.** Every demo beat is a UI change a stranger can comprehend in <10 seconds without audio.
-2. **Before/after > before-only.** Beats with explicit before→after framing rank higher.
-3. **Output-object detection.** If product produces an interesting output standalone (image, video, code, doc), the output IS a demo beat.
-4. **Mute-test.** Every beat readable with sound off (~85% of social video watched without sound initially).
-5. **Hook moment in frame 1.** No "let me explain" intro. Demo opens with the action.
-6. **Safe-zone awareness.** Bottom 250px / right 130px are TikTok UI overlay zones — de-rank beats with key UI there.
-7. **3-beat minimum, 7-beat maximum.** Below 3 = nothing to mine; above 7 = over-shopping. Return top 5 by rank.
-8. **Anti-feature-list.** "1. opens app, 2. shows dashboard" fails. Beats represent moments of *change* the viewer can react to.
-9. **Pre-launch products.** IF \`app.stage === "pre-launch"\` AND only mockups exist THEN mark beats \`mockupOnly: true\` — fake-demo TikToks worked for Pushscroll but operator must disclose if asked.
-10. **Citation-firewall.** Each beat describes a real observable change. If operator says "the app does X" but walkthrough doesn't show X, do NOT mine X. Mark \`unverifiable: true\`.
+1. **Comprehension speed as judgment, not stopwatch.** Every demo beat is a UI change a cold stranger can comprehend quickly — ideally within a few seconds — without audio. The standard is: could someone who has never heard of this product understand what just happened? If you need to answer "yes but only if they watch it twice," the beat fails. Speed of comprehension matters; the specific threshold depends on the complexity of the change.
+2. **Before/after > before-only.** Beats with explicit before→after framing rank higher. The contrast is what makes a stranger stop scrolling.
+3. **Output-object detection.** If the product produces an interesting output that stands alone (image, video, code, doc, chart), the output IS the demo beat. Show the output first; let the viewer reverse-engineer the value.
+4. **Mute-test.** Every beat must communicate with sound off — the majority of social video is watched muted, especially on first scroll. If a beat requires audio to be understood, it is a weak beat unless founder talking-head is the chosen format.
+5. **Activation-moment prioritization.** Rank beats by how strongly they produce the "I want to try this" reaction. Transformation beats (something changes), relief beats (problem disappears), and reveal beats (unexpected output appears) outrank informational beats (feature described or listed). The viewer's emotional reaction — not how much the product does — determines rank.
+6. **Hook moment in frame 1.** No "let me explain" intro. The change or reveal is already happening when the video starts. Context comes after, if at all.
+7. **Safe-zone awareness.** TikTok's persistent UI elements (like/comment/share, video info bar) cover the bottom and right edges of the frame. De-rank beats where the key UI change happens in those overlay zones — a viewer may never see it. The goal is that the load-bearing visual is clearly in the unobscured center of frame. Don't need exact pixels; use judgment to confirm nothing critical is in the danger zones.
+8. **Beat count judgment.** Produce enough beats to give demo-strategist real options — typically 3 to 7 is the useful range. Below that there's nothing to work with; above that you're padding. Return the top ranked beats, not everything you found.
+9. **Anti-feature-list.** "Opens app → navigates to dashboard → shows settings" is a tutorial, not a demo beat. Beats represent moments of *change* the viewer can have a reaction to. No reaction = no beat.
+10. **Pre-launch products.** IF \`app.stage === "pre-launch"\` AND only mockups exist THEN mark beats \`mockupOnly: true\` — mockup-based demos have worked (Pushscroll precedent) but operator must disclose if directly asked.
+11. **Citation-firewall.** Each beat describes a real observable change grounded in the walkthrough or screenshots provided. If operator claims "the app does X" but it isn't visible in any provided material, do NOT mine X as a beat. Mark \`unverifiable: true\` and ask for a recording that shows it.
 
 ## Output schema
 
@@ -2637,7 +2739,7 @@ description: Find X founder-led conversations, reply targets, hooks worth modeli
 
 ## Purpose
 
-For technical / indie / B2B SaaS / dev-tool products, X is the highest-leverage cold-start channel — but ~80% of pre-1K-follower acquisition comes from replies, not posts (x.md § 3). This skill finds buyer-intent reply targets, models hook patterns, and proposes a 20-40-handle private List.
+For technical / indie / B2B SaaS / dev-tool products, X is the highest-leverage cold-start channel — but ~80% of pre-1K-follower acquisition comes from replies, not posts (x.md § 3). This skill finds buyer-intent reply targets, models hook patterns from both original posts AND winning replies in the niche, and proposes a 20-40-handle private List. The primary output goal is tracked signups, not likes.
 
 ## When to invoke
 
@@ -2658,15 +2760,32 @@ For technical / indie / B2B SaaS / dev-tool products, X is the highest-leverage 
 1. **x.md rule 1.** Target buyer consumer/lifestyle/local → demote X to secondary. Push to TikTok/IG.
 2. **x.md rule 2.** Dev-tools/B2B SaaS/AI → X primary, especially below $5K MRR.
 3. **Follower-phase routing.** <100 followers = Phase 1 reply-guy routine (x.md § 4). 100-500 = Phase 2 (1 build-update/day + replies). 500+ = launch ramp.
-4. **x.md rule 10 reply-target quality bar.** ≥5 likes on OP tweet, <48h old, OP has >50 followers, OP not a bot. Skip if any miss.
-5. **Sweet-spot timing.** Prefer 10-50 likes, <6h old, <20 existing replies (x.md § 3).
-6. **x.md rule 9 first-reply NO-URL.** No URL in first reply. URL goes in follow-up if OP engages.
-7. **Three-paragraph reply structure required.** Validation → value-add → soft mention. Product mention in paragraph 1 = regenerate.
-8. **List composition.** 20-40 accounts in niche, 5K-100K followers each, posting weekly+. From x.md § 1 + ScrapeCreators discovery. Do NOT auto-follow.
-9. **Hook modeling.** Pull 3-5 high-engagement hooks; map to x.md § 5 (1-15). Reject if matches anti-patterns (§ 7) or hype-language (rule 11).
-10. **Black-Magic platform-risk reminder.** IF operator's product depends on free X API access THEN \`platformRiskWarning: true\` (x.md § 11 Failure 4).
-11. **Account silence recovery.** IF \`lastPostAgeDays > 7\` THEN first action = value-add reply, not build-update post.
-12. **Citation-firewall on numbers.** Every number Maya quotes must come from a fresh ScrapeCreators call or operator-confirmed state.
+4. **x.md rule 10 reply-target quality bar.** OP tweet must show genuine human engagement, OP must be an active real account with a real following, and the tweet must be recent enough that a reply still surfaces to the OP's notifications. Skip bots, obvious spam, accounts with no real following.
+5. **Buyer-intent over vanity engagement.** A tweet with modest likes that describes the exact problem this product solves — "I've tried six tools for this and nothing works", "is there anything that does X?", "what do you use for Y?" — outranks a high-like tweet celebrating a win with no purchase signal. Judge intent first, engagement second.
+6. **Underserved tweets over crowded threads.** Prefer tweets that are getting real traction but have few existing replies — your reply stands out, the OP is more likely to see and respond, the conversation is still open. A tweet already buried under 40 replies from founders is a worse bet than a newer tweet with 3 replies and clear momentum. This is a judgment call, not a threshold.
+7. **Velocity + OP-active window.** Prefer tweets whose engagement is still building — likes and replies still accumulating — over tweets that peaked hours ago and went quiet. Stronger signal still: the OP is actively replying to others in that thread right now. A live conversation is worth far more than a stalled one. Use twitterapi.io advanced_search cursor pagination to go deeper when the first page yields few high-quality targets; don't stop at page one.
+8. **x.md rule 9 first-reply NO-URL.** No URL in first reply. URL goes in follow-up only if OP engages back.
+9. **Three-paragraph reply structure required.** Validation → value-add → soft mention. The soft mention in paragraph 3 must leave a genuine, low-friction path to try the product when it's a natural fit — not a pitch, a door left open. Product mention in paragraph 1 = regenerate.
+10. **List composition.** 20-40 accounts in niche, posting weekly+. From x.md § 1 + ScrapeCreators discovery. Do NOT auto-follow.
+11. **Hook modeling — include winning replies.** Pull 3-5 high-engagement hooks from the 20-40 target accounts; map to x.md § 5 (1-15). Crucially, also mine the replies those accounts wrote that performed well — the founder-voice pattern that lands in this niche shows up in successful replies, not just original posts. Extract reply patterns (how they open, how they disagree, how they validate, what makes readers click "see more") and use those patterns to inform draftReply. Reject hooks that match anti-patterns (§ 7) or hype-language (rule 11).
+12. **Black-Magic platform-risk reminder.** IF operator's product depends on free X API access THEN \`platformRiskWarning: true\` (x.md § 11 Failure 4). State this plainly: X has unilaterally repriced API access multiple times; any strategy that routes users from X into a product that itself needs the X API carries compounded dependency risk.
+13. **Account silence recovery.** IF \`lastPostAgeDays > 7\` THEN first action = value-add reply, not build-update post.
+14. **Citation-firewall on numbers.** Every number Maya quotes must come from a fresh ScrapeCreators call or operator-confirmed state.
+
+## Buyer-intent query strategy
+
+When building \`searchQueries\`, weight heavily toward problem-statement and tool-seeking signals. Good query forms:
+
+- \`"is there a tool that" [niche keyword]\`
+- \`"what do you use for" [workflow this product replaces]\`
+- \`"I've tried" [competitor or category] "and"\`
+- \`"anyone else struggling with" [pain point]\`
+- \`"looking for something that" [outcome this product delivers]\`
+- \`"nothing works for" [pain category]\`
+
+These surface people actively in the buying mindset — describing the problem, asking for recommendations, expressing frustration with alternatives. They are the highest-value reply targets. Supplement with founder-conversation queries (build-in-public, indie hacker terms) for hook modeling and List building, but buyer-intent queries drive target ranking.
+
+When the first twitterapi.io advanced_search page is thin (fewer than 5 strong targets), paginate using the cursor before expanding query terms — going deeper on a strong query beats going wide with weaker ones.
 
 ## Output schema
 
@@ -2683,13 +2802,36 @@ interface XResearchReport {
     ageHours: number;
     existingReplies: number;
     opText: string;
+    buyerIntentSignal: string;       // why this tweet signals purchase intent or high-quality conversation
+    conversationMomentum: "live" | "building" | "stalled";  // OP still active / engagement still growing / peaked
     matchesIcp: string;
-    draftReply: { p1: string; p2: string; p3SoftMention: string };
+    draftReply: {
+      p1: string;                    // validation — mirror their specific situation
+      p2: string;                    // value-add — something genuinely useful, no pitch
+      p3SoftMention: string;         // soft mention — door left open to try product, not a push
+    };
+    signupPathNote: string;          // plain note on how this reply, if OP bites, leads to a tryable next step
     urlInFollowupOnly: true;
   }>;
-  hookExamples: Array<{ tweetUrl: string; handle: string; likes: number; hookText: string; pattern: string; whyItWorks: string }>;
-  recommendedList: Array<{ handle: string; nicheFit: string; followerCount: number; postingCadence: "daily" | "weekly" | "monthly"; source: "x.md-anchor" | "scrapecreators-discovery" }>;
+  hookExamples: Array<{
+    tweetUrl: string;
+    handle: string;
+    likes: number;
+    hookText: string;
+    pattern: string;
+    whyItWorks: string;
+    sourceType: "original_post" | "reply";   // winning replies included, not just original posts
+    replyContext?: string;                    // if sourceType=reply: what thread/OP they were responding to
+  }>;
+  recommendedList: Array<{
+    handle: string;
+    nicheFit: string;
+    followerCount: number;
+    postingCadence: "daily" | "weekly" | "monthly";
+    source: "x.md-anchor" | "scrapecreators-discovery";
+  }>;
   searchQueries: string[];
+  paginationNote?: string;           // note if cursor pagination was used or if deeper pagination is recommended
   platformRiskWarning?: boolean;
   parkReasons?: string[];
 }
@@ -2699,7 +2841,8 @@ interface XResearchReport {
 
 - **Operator <100 followers + wants a launch thread.** Refuse. Return Phase 1 routine + ClearNoteLab failure citation (x.md § 11 Failure 1).
 - **Niche has no English-language activity on X.** Park. Surface to channel-judge.
-- **All reply targets are from other founders.** Skip-launch risk. Re-query with sharpened ICP probes.
+- **All reply targets are from other founders.** Skip-launch risk. Re-query with sharpened buyer-intent probes (see Buyer-intent query strategy above).
+- **All top results are high-like but zero purchase signal.** Shift query strategy toward problem-statement forms before giving up on the channel.
 - **ScrapeCreators X endpoints fail.** Fall back to \`mvanhorn/xai\` Grok search if budget allows. Cap Grok at 5 calls/user/day.
 
 ## Cost discipline
@@ -2708,7 +2851,7 @@ Max 6 ScrapeCreators calls. Grok max 3 calls if invoked. 1 hard_research_beta + 
 
 ## Anti-slop check
 
-Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before this skill returns. Specifically ban hype emoji, "Great post!" / "So true!", "Excited to share". Mirror operator's last-5 authentic-post voice.
+Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before this skill returns. Specifically ban hype emoji, "Great post!" / "So true!", "Excited to share". Mirror operator's last-5 authentic-post voice. The p3 soft mention must read like a founder being honest with a peer, not a salesperson leaving a card.
 `;
 
 export const BUNDLED_LOCAL_SKILLS: readonly BundledLocalSkill[] = [
