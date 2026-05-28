@@ -758,7 +758,7 @@ Foundation research builds the operating model. Continuous research feeds the da
 
 The same control-plane discipline as foundation:
 
-1. \`sessions_spawn\` per-channel target-thread workers (\`reddit_continuous_worker\`, \`x_continuous_worker\`, \`hn_continuous_worker\`, etc.) with task strings containing API endpoints + return-shape (must include \`painQuote\`, \`postedAt\`, \`velocityScore\`, \`authorContext\`, \`commentTreeSummary\`, \`audienceSize\`, \`recommendedAction\`, \`draftReply\`, \`tier\`).
+1. \`sessions_spawn\` per-channel target-thread workers (\`reddit_continuous_worker\`, \`x_continuous_worker\`, \`hn_continuous_worker\`, etc.) with task strings containing API endpoints + return-shape (must include \`painQuote\`, \`postedAt\`, \`velocityScore\`, \`authorContext\`, \`commentTreeSummary\`, \`audienceSize\`, \`recommendedAction\`, \`draftReply\`, \`tier\`). **Sprint 2.30 — comment-tree mining is mandatory for Reddit + HN workers.** The worker MUST descend the comment tree (Reddit: fetch the \`/comments/<id>.json\` endpoint via ScrapeCreators or the public JSON; HN: traverse \`kids[]\` on the Algolia HN item endpoint) and populate \`commentTreeSummary.mineableComments[]\` with at minimum the top 5 comments scored against these kinds: \`buyer_intent\` (someone asked a follow-up the product answers), \`pain_restatement\` (a comment that re-articulates OP's pain in better buyer language), \`competitor_mention\` (specific competitor named, with \`competitorName\`), \`op_rejection\` (OP responded "tried that, didn't work"), \`high_velocity\` (>20 upvotes in <2h). Workers without \`mineableComments[]\` on threads they tier T1/T2 get steered: "I need the comment-tree mining — re-fetch the comments endpoint, score the top 5 against the 5 mining kinds, return as \`commentTreeSummary.mineableComments\`."
 2. Spawn \`competitor_move_worker\` only if foundation \`competitiveMap\` is non-empty.
 3. Spawn \`niche_pulse_worker\` once per day max (rate-limited at the prompt level — Maya checks \`gtmNichePulse.observedAt\` before spawning).
 4. \`sessions_yield\`. Workers run.
@@ -783,6 +783,7 @@ The morning brief contains ONLY threads Maya has personally vetted.
 Judgment, not a score:
 
 - **Thread depth gate** — every target thread has \`painQuote\` populated (verbatim from post body, not from title). If a worker writes a thread with \`painQuote: null\` or \`painQuote === title\`, steer with "I need the actual buyer-pain phrase from the post body, not the title."
+- **Comment-tree mining gate (Reddit + HN, Sprint 2.30)** — any T1/T2 thread MUST have \`commentTreeSummary.mineableComments[]\` populated with ≥1 entry. Threads where the worker only scraped OP + ignored comments are missing the most valuable intel (buyer-intent follow-ups, competitor mentions, OP rejections). If a worker tiers T1 with no mineable comments → steer: "fetch the comments tree, score top 5 against the 5 mining kinds, re-POST". If still empty after 1 steer → drop the thread to T3 (still useful as a sub signal but won't surface as a reply target).
 - **Freshness gate** — \`postedAt\` must be within 7 days for substance plays, within 48h for engagement plays. Threads older than that → tier T3 or T4.
 - **Platform-norm gate** — HN Show HNs are competitor launches, not reply targets (Tier T4 automatic). Reddit hardware-budget threads are wrong buyer stage (Tier T3 max). X analyst takes with no buyer pain (Tier T4).
 - **Author-quality gate** — \`authorContext.followerCount\` < 50 + zero post history = likely bot. Drop.
@@ -1809,6 +1810,35 @@ interface RedditDemandReport {
     opQuestion: string;
     suggestedFramework: "been-there-done-that" | "counterintuitive" | "tactical-playbook" | "tool-neutral-recommendation" | "quiet-authority";
     mentionRecommended: boolean;
+    /** Sprint 2.30 — when the highest-value reply target is a COMMENT,
+     *  not the OP. Populated when the comment-tree mining found a
+     *  follow-up question the OP didn't ask but a commenter did, where
+     *  the product is a credible answer. Drives "reply to that
+     *  comment's question, not OP's" routing. */
+    commentReplyTarget?: {
+      commentId: string;
+      author?: string;
+      excerpt: string;
+      whyBetter: string;
+    };
+  }>;
+  /** Sprint 2.30 — per-thread comment-tree intel. Maya pulls this from
+   *  the Reddit \`/comments/<id>.json\` endpoint via ScrapeCreators (or
+   *  the public JSON fallback) and scores each surfaced comment
+   *  against 5 mining kinds. The morning_brief reads this to pick the
+   *  single best reply target across (a) the OP question and (b) the
+   *  best mineable comment. */
+  commentMining: Array<{
+    threadUrl: string;
+    minedComments: Array<{
+      commentId: string;
+      author?: string;
+      body: string;
+      score?: number;
+      kind: "buyer_intent" | "pain_restatement" | "competitor_mention" | "op_rejection" | "high_velocity";
+      competitorName?: string;
+      whyMineable: string;
+    }>;
   }>;
   promotionRiskScore: 0 | 1 | 2 | 3 | 4 | 5;
   riskFlags: string[];
@@ -1824,9 +1854,24 @@ interface RedditDemandReport {
 - **ScrapeCreators Reddit endpoint fails.** Return HTTP status; do NOT degrade to training-data recommendations.
 - **Domain blacklist detected.** \`domainBlacklisted: true\` + recommend domain change (reddit.md § 6).
 
+## Comment-tree mining (Sprint 2.30 — mandatory for every replyTarget)
+
+For each thread in \`replyTargets\` (and any T1/T2-tier evidenceCard), Maya descends the comment tree before declaring the reply target:
+
+1. **Fetch the comments endpoint.** Use ScrapeCreators Reddit comments endpoint OR the public \`<thread_url>.json\` (no auth, polite UA). Pull at minimum the top 10 comments by score.
+2. **Score each comment** against the 5 mining kinds:
+   - \`buyer_intent\` — a commenter asked a follow-up question the product directly answers (often higher signal than OP's original question).
+   - \`pain_restatement\` — a comment that articulates the buyer's pain in better, more visceral language than OP did (steal this for the lede).
+   - \`competitor_mention\` — a specific competitor named ("I use ToolX for this") — set \`competitorName\`. Drives differentiation drafting.
+   - \`op_rejection\` — OP responded "tried that, didn't work" — flags what NOT to suggest.
+   - \`high_velocity\` — >20 upvotes accumulated in <2h since the comment was posted (thread is hot RIGHT NOW).
+3. **Emit \`commentMining[]\`** with the scored comments, AND populate \`commentReplyTarget\` on the corresponding \`replyTarget\` entry when the best target is a comment, not OP.
+
+Skipping this on T1/T2 threads is a failure — \`maya-continuous-research\` will steer the worker to re-run mining before accepting the output.
+
 ## Cost discipline
 
-Max 8 ScrapeCreators calls: 3 × subreddit/search, 2 × general search, 2 × subreddit details, 1 reserve. 1 main_maya synthesis. Timeout 20 min.
+Max 8 ScrapeCreators calls: 3 × subreddit/search, 2 × general search, 2 × subreddit details, 1 reserve. Comment-tree mining adds 1 call per thread that gets to T1/T2 (typically 2-3 threads per run, so +2-3 calls). 1 main_maya synthesis. Timeout 20 min.
 
 ## Anti-slop check
 

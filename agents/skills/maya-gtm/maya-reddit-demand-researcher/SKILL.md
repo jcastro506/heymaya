@@ -63,6 +63,35 @@ interface RedditDemandReport {
     opQuestion: string;
     suggestedFramework: "been-there-done-that" | "counterintuitive" | "tactical-playbook" | "tool-neutral-recommendation" | "quiet-authority";
     mentionRecommended: boolean;
+    /** Sprint 2.30 — when the highest-value reply target is a COMMENT,
+     *  not the OP. Populated when the comment-tree mining found a
+     *  follow-up question the OP didn't ask but a commenter did, where
+     *  the product is a credible answer. Drives "reply to that
+     *  comment's question, not OP's" routing. */
+    commentReplyTarget?: {
+      commentId: string;
+      author?: string;
+      excerpt: string;
+      whyBetter: string;
+    };
+  }>;
+  /** Sprint 2.30 — per-thread comment-tree intel. Maya pulls this from
+   *  the Reddit `/comments/<id>.json` endpoint via ScrapeCreators (or
+   *  the public JSON fallback) and scores each surfaced comment
+   *  against 5 mining kinds. The morning_brief reads this to pick the
+   *  single best reply target across (a) the OP question and (b) the
+   *  best mineable comment. */
+  commentMining: Array<{
+    threadUrl: string;
+    minedComments: Array<{
+      commentId: string;
+      author?: string;
+      body: string;
+      score?: number;
+      kind: "buyer_intent" | "pain_restatement" | "competitor_mention" | "op_rejection" | "high_velocity";
+      competitorName?: string;
+      whyMineable: string;
+    }>;
   }>;
   promotionRiskScore: 0 | 1 | 2 | 3 | 4 | 5;
   riskFlags: string[];
@@ -78,9 +107,24 @@ interface RedditDemandReport {
 - **ScrapeCreators Reddit endpoint fails.** Return HTTP status; do NOT degrade to training-data recommendations.
 - **Domain blacklist detected.** `domainBlacklisted: true` + recommend domain change (reddit.md § 6).
 
+## Comment-tree mining (Sprint 2.30 — mandatory for every replyTarget)
+
+For each thread in `replyTargets` (and any T1/T2-tier evidenceCard), Maya descends the comment tree before declaring the reply target:
+
+1. **Fetch the comments endpoint.** Use ScrapeCreators Reddit comments endpoint OR the public `<thread_url>.json` (no auth, polite UA). Pull at minimum the top 10 comments by score.
+2. **Score each comment** against the 5 mining kinds:
+   - `buyer_intent` — a commenter asked a follow-up question the product directly answers (often higher signal than OP's original question).
+   - `pain_restatement` — a comment that articulates the buyer's pain in better, more visceral language than OP did (steal this for the lede).
+   - `competitor_mention` — a specific competitor named ("I use ToolX for this") — set `competitorName`. Drives differentiation drafting.
+   - `op_rejection` — OP responded "tried that, didn't work" — flags what NOT to suggest.
+   - `high_velocity` — >20 upvotes accumulated in <2h since the comment was posted (thread is hot RIGHT NOW).
+3. **Emit `commentMining[]`** with the scored comments, AND populate `commentReplyTarget` on the corresponding `replyTarget` entry when the best target is a comment, not OP.
+
+Skipping this on T1/T2 threads is a failure — `maya-continuous-research` will steer the worker to re-run mining before accepting the output.
+
 ## Cost discipline
 
-Max 8 ScrapeCreators calls: 3 × subreddit/search, 2 × general search, 2 × subreddit details, 1 reserve. 1 main_maya synthesis. Timeout 20 min.
+Max 8 ScrapeCreators calls: 3 × subreddit/search, 2 × general search, 2 × subreddit details, 1 reserve. Comment-tree mining adds 1 call per thread that gets to T1/T2 (typically 2-3 threads per run, so +2-3 calls). 1 main_maya synthesis. Timeout 20 min.
 
 ## Anti-slop check
 

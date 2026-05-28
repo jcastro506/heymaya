@@ -872,6 +872,27 @@ describe("Sprint 2.17 — gtmTargetThreads new optional fields", () => {
       commentTreeSummary: {
         topComments: ["Try LM Studio", "Build your own", "Use llama.cpp directly"],
         opIsReplying: true,
+        // Sprint 2.30 — mineable comments populated by worker after
+        // descending the comment tree.
+        mineableComments: [
+          {
+            commentId: "c_123",
+            author: "u_sicilian_pony",
+            body: "Has anyone tried something that just lets you swap models without restarting the whole stack?",
+            score: 42,
+            kind: "buyer_intent",
+            whyMineable: "Follow-up question OP didn't ask — this is the actual reply target.",
+          },
+          {
+            commentId: "c_124",
+            author: "u_other",
+            body: "I use LM Studio for this, works fine.",
+            score: 18,
+            kind: "competitor_mention",
+            competitorName: "LM Studio",
+            whyMineable: "Direct competitor named — drives differentiation drafting.",
+          },
+        ],
       },
       audienceSize: 240000,
       draftReply:

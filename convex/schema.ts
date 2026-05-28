@@ -5477,11 +5477,43 @@ export default defineSchema({
         recentPostSummary: v.optional(v.string()),
       })
     ),
-    /** Top replies + whether OP is engaging. Drives "alive vs dead" judgment. */
+    /** Top replies + whether OP is engaging. Drives "alive vs dead"
+     *  judgment. Sprint 2.30 enrichment: `mineableComments[]` carries
+     *  per-comment intel (reply targets, pain restatements, competitor
+     *  mentions, OP rejections, high-velocity threads). Maya's workers
+     *  populate this in addition to `topComments` so the morning_brief
+     *  can lead with the BEST comment-anchored reply target, not just
+     *  the OP. */
     commentTreeSummary: v.optional(
       v.object({
         topComments: v.array(v.string()),
         opIsReplying: v.optional(v.boolean()),
+        /** Sprint 2.30 — per-comment mining intel. Each entry is one
+         *  comment the worker judged actionable. `kind` carries WHY it
+         *  matters; the morning_brief weighs T1/T2 partly on whether
+         *  any `buyer_intent` comments exist. */
+        mineableComments: v.optional(
+          v.array(
+            v.object({
+              commentId: v.string(),
+              author: v.optional(v.string()),
+              body: v.string(),
+              score: v.optional(v.number()),
+              postedAtMs: v.optional(v.number()),
+              kind: v.union(
+                v.literal("buyer_intent"),
+                v.literal("pain_restatement"),
+                v.literal("competitor_mention"),
+                v.literal("op_rejection"),
+                v.literal("high_velocity")
+              ),
+              /** When kind=competitor_mention, the named competitor. */
+              competitorName: v.optional(v.string()),
+              /** Maya's note on WHY this comment is mineable. */
+              whyMineable: v.optional(v.string()),
+            })
+          )
+        ),
       })
     ),
     /** Subreddit subscribers / community member count / followers count. */

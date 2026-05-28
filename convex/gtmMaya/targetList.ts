@@ -148,6 +148,26 @@ export const recordTargetThread = internalMutation({
       v.object({
         topComments: v.array(v.string()),
         opIsReplying: v.optional(v.boolean()),
+        mineableComments: v.optional(
+          v.array(
+            v.object({
+              commentId: v.string(),
+              author: v.optional(v.string()),
+              body: v.string(),
+              score: v.optional(v.number()),
+              postedAtMs: v.optional(v.number()),
+              kind: v.union(
+                v.literal("buyer_intent"),
+                v.literal("pain_restatement"),
+                v.literal("competitor_mention"),
+                v.literal("op_rejection"),
+                v.literal("high_velocity")
+              ),
+              competitorName: v.optional(v.string()),
+              whyMineable: v.optional(v.string()),
+            })
+          )
+        ),
       })
     ),
     audienceSize: v.optional(v.number()),
