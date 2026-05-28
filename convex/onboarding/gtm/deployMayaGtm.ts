@@ -148,21 +148,25 @@ const MODEL_ROUTING = {
   // is a Gemini-specific failure mode on long-context multi-step
   // reasoning. Sonnet 4.6 doesn't share it. Workers stay on gemini
   // 3.5 (they don't accumulate long context).
-  // Sprint 2.18 #46 — Gemma 4 26B A4B for Main Maya. Operator pick
-  // after benchmark review:
-  //   - $0.06 in / $0.33 out per M (~17x cheaper than Haiku 4.5)
-  //   - 256K context, native function calling, configurable thinking
-  //   - MULTIMODAL — text + images + video up to 60s @ 1fps (unlocks
-  //     Sprint 2.20 TikTok/IG video watching natively)
-  //   - τ2-bench agentic tool use: 86.4% (Gemma's strength is agents)
-  //   - Apache 2.0 open-source, paid OpenRouter for stable throughput
-  // Workers stay on Gemini 3 Flash Preview ($0.50/$3). Expected
-  // onboarding cost: ~$0.30-0.50 per run.
+  // Sprint 2.18 #49 — REVERTED Gemma 4 26B A4B → Haiku 4.5.
   //
-  // Fallbacks via env override if Gemma 4 stalls on long orchestration:
-  //   MAYA_GTM_MODEL=anthropic/claude-haiku-4.5     ($1/$5)
-  //   MAYA_GTM_MODEL=anthropic/claude-sonnet-4.6    ($3/$15)
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemma-4-26b-a4b-it",
+  // Gemma 4 failure mode 2026-05-28 run #26: leaked entire
+  // chain-of-thought to Telegram as the operator-visible message
+  // body. Multi-paragraph internal monologue ("thought / The user
+  // said / Wait I should / Response structure / I'll just act")
+  // shipped verbatim to the operator. Root cause: Gemma 4's
+  // "configurable thinking/reasoning mode" inlines reasoning tokens
+  // with output. Unlike Anthropic models which separate
+  // thinking/output by default, Gemma 4's reasoning trace IS the
+  // output stream. OpenRouter doesn't expose a "reasoning.hidden"
+  // flag to suppress it for Gemma.
+  //
+  // Multimodal still desired for Sprint 2.20 (TikTok/IG video
+  // watching). Plan: use Gemini 2.5/3 Flash Vision or Gemma 4 26B
+  // A4B as a DEDICATED multimodal subagent spawned by Main Maya,
+  // not as the orchestrator. Workers don't message operators
+  // directly, so their reasoning leak is harmless.
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "anthropic/claude-haiku-4.5",
   // Sprint 2.18 #42 — workers DOWNGRADED from gemini-3.5-flash to
   // gemini-3-flash-preview. Per OpenRouter pricing (verified 2026-05-28):
   //   gemini-3.5-flash:  $1.50 in / $9 out per M
