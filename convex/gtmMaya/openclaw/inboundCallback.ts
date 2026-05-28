@@ -1063,6 +1063,13 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
     text?: string;
     messageClass?: string;
     claims?: Array<{ claim?: string; evidence_ids?: string[] }>;
+    // Sprint 2.28 — operator-facing-message critic gate. Maya self-
+    // declares whether she ran maya-output-critic's 5 gates before
+    // this send (grounding / voice / recipe / tier-honesty / time-box).
+    // Strategic messages REQUIRE criticPassed === true; tactical
+    // (e.g. mid-pass progress ping) treats false as warning not block.
+    criticPassed?: boolean;
+    criticReasons?: string[];
   };
   try {
     body = (await request.json()) as typeof body;
@@ -1081,6 +1088,35 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
   // strategic on ambiguity (under-classifying defeats the moat).
   const { classifyMessage } = await import("../evidenceGuard");
   const messageClass = classifyMessage(body.messageClass);
+
+  // Sprint 2.28 — output-critic gate. Strategic messages MUST have
+  // criticPassed=true (Maya declares she ran the 5-gate framework).
+  // Tactical messages can be sent with criticPassed=false but we log
+  // the gap. This is data-plane enforcement of an otherwise prompt-
+  // level discipline rule.
+  if (messageClass === "strategic" && body.criticPassed !== true) {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        reason: "critic_not_passed",
+        message:
+          "Strategic messages require criticPassed=true. Run maya-output-critic's 5 gates (grounding/voice/recipe/tier-honesty/time-box) and re-send. If this is tactical (mid-pass progress ping, ack), set messageClass: 'tactical'.",
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  }
+  // Audit log — structured console line so operators / ops scripts
+  // can grep for critic-passed state. Future: dedicated audit table.
+  console.log(
+    JSON.stringify({
+      event: "send_update.send_attempt",
+      agentId: auth.agentId,
+      messageClass,
+      criticPassed: body.criticPassed ?? false,
+      criticReasonsCount: (body.criticReasons ?? []).length,
+      textLength: body.text.length,
+    })
+  );
 
   if (messageClass === "strategic") {
     const normalizedClaims = (body.claims ?? []).map((c) => ({
@@ -1147,12 +1183,28 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
     );
   }
 
-  // Send via Telegram Bot API.
+  // Send via Telegram Bot API. Sprint 2.26 — prefer per-tenant bot
+  // token; fall back to shared env var for dev/test deploys only.
+  const { resolveBotForAgent } = await import("../telegramBotPerTenant");
+  const resolvedBot = await resolveBotForAgent(
+    ctx as { runQuery: <T>(ref: unknown, args: unknown) => Promise<T> },
+    auth.agentId,
+    {
+      sharedToken: process.env.TELEGRAM_BOT_TOKEN,
+      sharedUsername: process.env.TELEGRAM_BOT_USERNAME,
+    }
+  );
+  if (!resolvedBot.token) {
+    return new Response(
+      JSON.stringify({ ok: false, reason: "no_telegram_bot_configured" }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  }
   const { sendDirectTelegramMessage } = await import(
     "../../integrations/telegram/sendDirectMessage"
   );
   const result = await sendDirectTelegramMessage({
-    botToken: process.env.TELEGRAM_BOT_TOKEN,
+    botToken: resolvedBot.token,
     chatId: agent.telegramChatId,
     text: body.text,
   });

@@ -1481,6 +1481,27 @@ export const destroyAllClawlaunchApps = internalAction({
   },
 });
 
+export const rotateAllHookTokens = internalMutation({
+  args: {},
+  handler: async (ctx): Promise<{ rotated: number; total: number }> => {
+    const agents = await ctx.db.query("gtmAgents").collect();
+    let rotated = 0;
+    for (const agent of agents) {
+      if (agent.hookToken) {
+        await ctx.db.patch(agent._id, {
+          hookToken: undefined,
+          updatedAt: Date.now(),
+        });
+        rotated += 1;
+      }
+    }
+    console.log(
+      `[rotateAllHookTokens] rotated ${rotated} of ${agents.length} gtmAgents`
+    );
+    return { rotated, total: agents.length };
+  },
+});
+
 export const rotateHookTokensForDestroyedApps = internalMutation({
   args: { destroyedAppNames: v.array(v.string()) },
   handler: async (ctx, args): Promise<number> => {

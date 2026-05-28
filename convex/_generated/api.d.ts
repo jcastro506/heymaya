@@ -96,6 +96,7 @@ import type * as gtmMaya_channelAgents from "../gtmMaya/channelAgents.js";
 import type * as gtmMaya_channelScoring from "../gtmMaya/channelScoring.js";
 import type * as gtmMaya_contentQuality from "../gtmMaya/contentQuality.js";
 import type * as gtmMaya_costCap from "../gtmMaya/costCap.js";
+import type * as gtmMaya_costLedger from "../gtmMaya/costLedger.js";
 import type * as gtmMaya_deliveryFailures from "../gtmMaya/deliveryFailures.js";
 import type * as gtmMaya_distributionMotions from "../gtmMaya/distributionMotions.js";
 import type * as gtmMaya_evidenceGuard from "../gtmMaya/evidenceGuard.js";
@@ -118,6 +119,7 @@ import type * as gtmMaya_productionReadiness from "../gtmMaya/productionReadines
 import type * as gtmMaya_productionReality from "../gtmMaya/productionReality.js";
 import type * as gtmMaya_publishWorkflow from "../gtmMaya/publishWorkflow.js";
 import type * as gtmMaya_queryExpansion from "../gtmMaya/queryExpansion.js";
+import type * as gtmMaya_recordPublished from "../gtmMaya/recordPublished.js";
 import type * as gtmMaya_researchLifecycle from "../gtmMaya/researchLifecycle.js";
 import type * as gtmMaya_researchQueryBuilder from "../gtmMaya/researchQueryBuilder.js";
 import type * as gtmMaya_researchQueryRunner from "../gtmMaya/researchQueryRunner.js";
@@ -128,6 +130,7 @@ import type * as gtmMaya_resultsLoop from "../gtmMaya/resultsLoop.js";
 import type * as gtmMaya_scrapeCreatorsGtmResearch from "../gtmMaya/scrapeCreatorsGtmResearch.js";
 import type * as gtmMaya_strategyJudge from "../gtmMaya/strategyJudge.js";
 import type * as gtmMaya_targetList from "../gtmMaya/targetList.js";
+import type * as gtmMaya_telegramBotPerTenant from "../gtmMaya/telegramBotPerTenant.js";
 import type * as gtmMaya_telegramHandoff from "../gtmMaya/telegramHandoff.js";
 import type * as gtmMaya_telegramPairing from "../gtmMaya/telegramPairing.js";
 import type * as gtmMaya_telegramWebhook from "../gtmMaya/telegramWebhook.js";
@@ -362,6 +365,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/channelScoring": typeof gtmMaya_channelScoring;
   "gtmMaya/contentQuality": typeof gtmMaya_contentQuality;
   "gtmMaya/costCap": typeof gtmMaya_costCap;
+  "gtmMaya/costLedger": typeof gtmMaya_costLedger;
   "gtmMaya/deliveryFailures": typeof gtmMaya_deliveryFailures;
   "gtmMaya/distributionMotions": typeof gtmMaya_distributionMotions;
   "gtmMaya/evidenceGuard": typeof gtmMaya_evidenceGuard;
@@ -384,6 +388,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/productionReality": typeof gtmMaya_productionReality;
   "gtmMaya/publishWorkflow": typeof gtmMaya_publishWorkflow;
   "gtmMaya/queryExpansion": typeof gtmMaya_queryExpansion;
+  "gtmMaya/recordPublished": typeof gtmMaya_recordPublished;
   "gtmMaya/researchLifecycle": typeof gtmMaya_researchLifecycle;
   "gtmMaya/researchQueryBuilder": typeof gtmMaya_researchQueryBuilder;
   "gtmMaya/researchQueryRunner": typeof gtmMaya_researchQueryRunner;
@@ -394,6 +399,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/scrapeCreatorsGtmResearch": typeof gtmMaya_scrapeCreatorsGtmResearch;
   "gtmMaya/strategyJudge": typeof gtmMaya_strategyJudge;
   "gtmMaya/targetList": typeof gtmMaya_targetList;
+  "gtmMaya/telegramBotPerTenant": typeof gtmMaya_telegramBotPerTenant;
   "gtmMaya/telegramHandoff": typeof gtmMaya_telegramHandoff;
   "gtmMaya/telegramPairing": typeof gtmMaya_telegramPairing;
   "gtmMaya/telegramWebhook": typeof gtmMaya_telegramWebhook;

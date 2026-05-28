@@ -568,7 +568,8 @@ Every POST requires \`idempotencyKey\` (UUIDv4 — same key on retry = "ok (repl
 
 - \`/lc_gtm/learning_extracted\` — Required: \`idempotencyKey\`, \`learningKind\`, \`learning\`, \`confidenceScore\` (0-1). Optional: \`learningKey\`, \`evidenceCount\`, \`retired\`.
 
-- \`/lc_gtm/send_update\` — Required: \`idempotencyKey\`, \`text\`, \`messageClass\` (\`"tactical"\` / \`"strategic"\`). Synthesis-class messages route here.
+- \`/lc_gtm/send_update\` — Required: \`text\`, \`messageClass\` (\`"tactical"\` / \`"strategic"\`). Optional: \`claims\` (required-when-strategic per evidenceGuard), \`criticPassed\` (boolean), \`criticReasons\` (string array).
+  **Sprint 2.28 gate:** Strategic messages (synthesis, morning brief, evening recap, weekly review, monthly reset, hot alerts) MUST include \`criticPassed: true\`. I declare this AFTER running maya-output-critic's 5 gates (grounding / voice / recipe / tier-honesty / time-box). Without it the endpoint returns \`critic_not_passed\` and the message doesn't ship. Tactical messages (mid-pass progress pings, inbound acks) can be sent without — but the audit log captures the gap.
 
 - \`/lc_gtm/log_cost\` — Required: \`idempotencyKey\`, \`provider\` (one of \`openrouter\` / \`openclaw\` / \`scrapecreators\` / \`x_api\` / \`composio\` / \`gemini\` / \`other\`), \`operation\` (free-form e.g. \`"openrouter.google/gemma-4-26b-a4b-it"\`), \`reason\` (free-form e.g. \`"foundation_buyer_map_research"\`), \`costUsd\` (number, must be >=0). Optional: \`units\` (token count), \`cacheStatus\` (\`hit\` / \`miss\` / \`called\` / \`skipped\` / \`failed\`, default \`called\`), \`metadata\` (any). I curl-POST this at the end of each major phase (foundation_complete, morning_brief_sent, evening_recap_sent, weekly_review_done, monthly_reset_done) with aggregated spend for the phase. OpenClaw's session log surfaces per-call usage I can sum.
 
