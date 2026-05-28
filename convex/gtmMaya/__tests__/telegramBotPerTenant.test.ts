@@ -190,6 +190,85 @@ describe("Sprint 2.26 — setPersonalTelegramBot + getDecryptedBotToken", () => 
   });
 });
 
+describe("Sprint 2.26b — validateAndSetPersonalTelegramBot action", () => {
+  it("rejects token that fails getMe validation", async () => {
+    // Action's network fetch hits real api.telegram.org with a fake
+    // token — Telegram returns 401, validateBotToken throws. We catch
+    // here and confirm propagation.
+    const t = convexTest(schema, modules);
+    await setupAgent(t, "u_botaction_invalid");
+    const authed = t.withIdentity({
+      subject: "u_botaction_invalid",
+      email: "u_botaction_invalid@clawlaunch.test",
+    });
+
+    // Replace global fetch for this test only — pretend Telegram
+    // rejected the token with 401.
+    const originalFetch = global.fetch;
+    global.fetch = (async () =>
+      new Response("Unauthorized", { status: 401 })) as typeof fetch;
+
+    try {
+      await expect(
+        authed.action(
+          api.gtmMaya.telegramBotPerTenant.validateAndSetPersonalTelegramBot,
+          { botToken: "1:not-a-real-token-just-shape" }
+        )
+      ).rejects.toThrow(/getMe HTTP 401/);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("happy path: validates + stores + persists username", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId } = await setupAgent(t, "u_botaction_ok");
+    const authed = t.withIdentity({
+      subject: "u_botaction_ok",
+      email: "u_botaction_ok@clawlaunch.test",
+    });
+
+    // Mock Telegram getMe to return a valid bot identity.
+    const originalFetch = global.fetch;
+    global.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          ok: true,
+          result: {
+            id: 999_888,
+            is_bot: true,
+            first_name: "My GTM Maya",
+            username: "my_gtm_maya_bot",
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )) as typeof fetch;
+
+    try {
+      const result = await authed.action(
+        api.gtmMaya.telegramBotPerTenant.validateAndSetPersonalTelegramBot,
+        { botToken: "1234567890:AA-validated-token" }
+      );
+      expect(result.ok).toBe(true);
+      expect(result.botUsername).toBe("my_gtm_maya_bot");
+      expect(result.botFirstName).toBe("My GTM Maya");
+
+      // Agent row has the encrypted token + the validated username.
+      const agent = await t.run((ctx) => ctx.db.get(agentId));
+      expect(agent?.telegramBotToken).toBeTruthy();
+      expect(agent?.telegramBotToken).not.toBe(
+        "1234567890:AA-validated-token"
+      );
+      expect(agent?.telegramBotUsername).toBe("my_gtm_maya_bot");
+      expect(agent?.telegramBotIdentityCheckedAt).toBeGreaterThan(
+        Date.now() - 10_000
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+});
+
 describe("Sprint 2.26 — resolveBotForAgent priority", () => {
   it("prefers per-tenant over shared fallback when both exist", async () => {
     const t = convexTest(schema, modules);

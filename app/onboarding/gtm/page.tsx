@@ -92,6 +92,12 @@ function GtmOnboardingBody() {
     api.gtmMaya.walkthrough.analyzeMyWalkthroughUpload
   );
   const deployMaya = useAction(api.onboarding.gtm.deployMayaGtm.runMyGtmDeploy);
+  // Sprint 2.26b — operator pastes their personal Telegram bot token
+  // (from BotFather). Action validates via getMe, encrypts, stores on
+  // gtmAgents row, then deploy reads it back via internal query.
+  const setPersonalTelegramBot = useAction(
+    api.gtmMaya.telegramBotPerTenant.validateAndSetPersonalTelegramBot
+  );
 
   const [draft, setDraft] = useState<IntakeDraft>(DEFAULT_DRAFT);
   const [walkthroughFile, setWalkthroughFile] = useState<File | null>(null);
@@ -100,6 +106,16 @@ function GtmOnboardingBody() {
   const [busy, setBusy] = useState(false);
   const [researchJobId, setResearchJobId] = useState<string | null>(null);
   const [deployResult, setDeployResult] = useState<string | null>(null);
+  // Sprint 2.26b — Telegram bot state. Operator can connect their own
+  // bot from BotFather OR opt into the shared dev fallback.
+  const [botToken, setBotToken] = useState("");
+  const [botStatus, setBotStatus] = useState<
+    | { kind: "idle" }
+    | { kind: "validating" }
+    | { kind: "connected"; username: string }
+    | { kind: "error"; message: string }
+    | { kind: "shared_fallback" }
+  >({ kind: "idle" });
 
   useEffect(() => {
     let cancelled = false;
@@ -186,6 +202,21 @@ function GtmOnboardingBody() {
       setError((err as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function connectBot() {
+    setBotStatus({ kind: "validating" });
+    try {
+      const result = await setPersonalTelegramBot({
+        botToken: botToken.trim(),
+      });
+      setBotStatus({ kind: "connected", username: result.botUsername });
+    } catch (err) {
+      setBotStatus({
+        kind: "error",
+        message: (err as Error).message || "validation failed",
+      });
     }
   }
 
@@ -502,9 +533,84 @@ function GtmOnboardingBody() {
             ScrapeCreators and platform research behind the same budgeted job
             contract.
           </p>
+
+          {/* Sprint 2.26b — Telegram bot setup gate. Operator either
+              connects their own bot from BotFather (recommended for
+              production) or uses the shared dev fallback (testing). */}
+          <div className="mt-6 border border-paper-faint/15 bg-ink p-5">
+            <h3 className="mb-2 font-display text-lg">
+              Connect your Telegram bot
+            </h3>
+            <p className="text-sm text-paper-dim">
+              Your Maya lives in Telegram. Create your own bot (free, takes
+              ~60 seconds) so messages route to YOU, not a shared dev bot.
+            </p>
+
+            {botStatus.kind === "connected" ? (
+              <div className="mt-4 rounded border border-lime/30 bg-lime/10 p-3 text-sm">
+                Connected as{" "}
+                <span className="font-mono">@{botStatus.username}</span>
+              </div>
+            ) : botStatus.kind === "shared_fallback" ? (
+              <div className="mt-4 rounded border border-paper-faint/15 bg-ink-2 p-3 text-sm text-paper-dim">
+                Using shared dev bot. Fine for testing — connect your own
+                later from /profile.
+              </div>
+            ) : (
+              <>
+                <ol className="mt-4 list-decimal space-y-1 pl-5 text-sm text-paper-dim">
+                  <li>
+                    Open Telegram, search{" "}
+                    <span className="font-mono text-paper">@BotFather</span>
+                  </li>
+                  <li>
+                    Send{" "}
+                    <span className="font-mono text-paper">/newbot</span>,
+                    pick a name + handle
+                  </li>
+                  <li>Copy the token BotFather sends back</li>
+                  <li>Paste it below — we validate + encrypt it</li>
+                </ol>
+                <div className="mt-4 flex gap-2">
+                  <input
+                    type="password"
+                    placeholder="1234567890:ABC-XYZ-bot-token-here"
+                    value={botToken}
+                    onChange={(event) => setBotToken(event.target.value)}
+                    className="input flex-1 font-mono text-xs"
+                    disabled={botStatus.kind === "validating"}
+                  />
+                  <button
+                    onClick={connectBot}
+                    disabled={
+                      botStatus.kind === "validating" ||
+                      botToken.trim().length < 20
+                    }
+                    className="rounded-full bg-paper px-5 py-2 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {botStatus.kind === "validating"
+                      ? "Validating..."
+                      : "Connect"}
+                  </button>
+                </div>
+                {botStatus.kind === "error" && (
+                  <p className="mt-2 text-sm text-red-400">
+                    {botStatus.message}
+                  </p>
+                )}
+                <button
+                  onClick={() => setBotStatus({ kind: "shared_fallback" })}
+                  className="mt-3 text-xs text-paper-dim underline"
+                >
+                  Skip — use shared dev bot for testing
+                </button>
+              </>
+            )}
+          </div>
+
           <button
             onClick={deploy}
-            disabled={busy}
+            disabled={busy || botStatus.kind === "idle"}
             className="mt-6 rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? "Deploying..." : "Deploy Maya"}

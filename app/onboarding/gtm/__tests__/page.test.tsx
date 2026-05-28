@@ -32,11 +32,16 @@ vi.mock("@/convex/_generated/api", () => ({
       },
       researchWorker: {
         runBudgetedResearchSkeleton: "runBudgetedResearchSkeleton",
+        runMyResearch: "runMyResearch",
       },
       walkthrough: {
         analyzeMyWalkthroughUpload: "analyzeMyWalkthroughUpload",
         generateWalkthroughUploadUrl: "generateWalkthroughUploadUrl",
         registerWalkthroughUpload: "registerWalkthroughUpload",
+      },
+      telegramBotPerTenant: {
+        validateAndSetPersonalTelegramBot:
+          "validateAndSetPersonalTelegramBot",
       },
     },
     onboarding: {

@@ -38,10 +38,12 @@
 
 import { v } from "convex/values";
 import {
+  action,
   internalMutation,
   internalQuery,
   mutation,
 } from "../_generated/server";
+import { api, internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { encrypt, decrypt } from "../lib/encryption";
 
@@ -153,6 +155,88 @@ export const setPersonalTelegramBot = mutation({
       botUsername: "(pending validation — will be confirmed at deploy)",
       botFirstName: "(pending)",
     };
+  },
+});
+
+/**
+ * Sprint 2.26b — operator-facing ACTION wrapper that validates the
+ * bot token via Telegram getMe BEFORE storing it. The onboarding UI
+ * calls this from the "Connect your Telegram bot" step.
+ *
+ * Flow:
+ *   1. Resolve Clerk identity → creator → agent.
+ *   2. Call validateBotToken (real fetch to api.telegram.org/getMe).
+ *   3. If validation passes, encrypt + store + record validated identity.
+ *   4. Return botUsername to the UI so the operator sees "@your_bot connected".
+ *
+ * Errors are thrown as plain JS Errors with operator-readable messages.
+ */
+export const validateAndSetPersonalTelegramBot = action({
+  args: { botToken: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: true; botUsername: string; botFirstName: string }> => {
+    // Validate FIRST — no point storing a broken token.
+    const validated = await validateBotToken(args.botToken);
+    if (!validated.ok) {
+      throw new Error("Bot token rejected by Telegram");
+    }
+
+    // Now resolve the agent + store. We can't call the mutation directly
+    // from here because the mutation reads Clerk identity from ctx;
+    // actions inherit it, so we runMutation into a helper that does
+    // the same auth check + then patches with the validated identity.
+    await ctx.runMutation(
+      api.gtmMaya.telegramBotPerTenant.setPersonalTelegramBot,
+      { botToken: args.botToken }
+    );
+    // Find the agent for the current identity again (in the action
+    // ctx) so we can attach the validated username. We need an
+    // identity-aware query for this.
+    const identityInfo = await ctx.runQuery(
+      internal.gtmMaya.telegramBotPerTenant.getMyAgentForBotSetup,
+      {}
+    );
+    if (identityInfo.agentId) {
+      await ctx.runMutation(
+        internal.gtmMaya.telegramBotPerTenant.persistValidatedBotIdentity,
+        {
+          agentId: identityInfo.agentId,
+          botUsername: validated.username,
+        }
+      );
+    }
+    return {
+      ok: true,
+      botUsername: validated.username,
+      botFirstName: validated.firstName,
+    };
+  },
+});
+
+/**
+ * Internal query — resolves Clerk identity to the operator's agent
+ * row. Used by validateAndSetPersonalTelegramBot to attach validated
+ * bot identity after storing the token.
+ */
+export const getMyAgentForBotSetup = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<{ agentId: Id<"gtmAgents"> | null }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { agentId: null };
+    const creator = await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first();
+    if (!creator || creator.accountType !== "gtm-agent") {
+      return { agentId: null };
+    }
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    return { agentId: agent?._id ?? null };
   },
 });
 
