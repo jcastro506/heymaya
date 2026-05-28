@@ -93,46 +93,56 @@ describe("Maya GTM workspace pack", () => {
         "BOOT.md",
         "HEARTBEAT.md",
         "MEMORY.md",
-        "DREAMING.md",
+        "DREAMS.md",
         "jobs.json",
       ])
     );
-    expect(files.get("AGENTS.md")).toContain("Evidence before strategy");
+    expect(files.get("AGENTS.md")).toContain("My constitution");
+    expect(files.get("AGENTS.md")).toContain("The database is truth.");
     expect(files.get("APP.md")).toContain("BugBrief");
     expect(files.get("GTM.md")).toContain("Primary: reddit");
-    expect(files.get("AGENTS.md")).toContain("read APP.md and GTM.md");
-    // Sprint 2.16r — BOOT.md owns hello composition. Maya reads USER.md
-    // + APP.md, writes a unique intro, and appends a `hello_sent_at:`
-    // marker to MEMORY.md so future turns skip the greeting. No more
-    // hardcoded Convex hello.
-    expect(files.get("BOOT.md")).toContain("MEMORY.md FIRST");
-    expect(files.get("BOOT.md")).toContain("hello_sent_at:");
-    expect(files.get("BOOT.md")).toContain("USER.md");
-    expect(files.get("BOOT.md")).toContain("APP.md");
-    expect(files.get("BOOT.md")).toContain("gateway:startup");
-    expect(files.get("BOOT.md")).toContain("message` tool");
-    expect(files.get("BOOT.md")).toContain("sessions_spawn");
-    expect(files.get("BOOT.md")).toContain("sessions_yield");
-    // Sprint 2.17 Phase C — BOOT routes on foundation existence:
-    // empty → invoke maya-foundation-research skill, populated →
-    // invoke maya-continuous-research + maya-morning-brief.
-    expect(files.get("BOOT.md")).toContain("/lc_gtm/get_my_foundation");
-    expect(files.get("BOOT.md")).toContain("maya-foundation-research");
-    expect(files.get("BOOT.md")).toContain("maya-continuous-research");
-    expect(files.get("BOOT.md")).toContain("foundation_completed_at:");
-    expect(files.get("BOOT.md")).toContain("last_morning_brief_at:");
-    // Native lifecycle tools — BOOT delegates worker mgmt to subagents.
-    expect(files.get("BOOT.md")).toContain("subagents action=list");
-    expect(files.get("BOOT.md")).toContain("subagents action=kill");
-    expect(files.get("BOOT.md")).toContain("subagents action=steer");
-    // Self-schedules its own cadence via native cron.
-    expect(files.get("BOOT.md")).toContain("cron action=add");
+    // Sprint A (trust & stability) — BOOT.md is the slim routing file:
+    // read MEMORY.md's append-only lifecycle log, send the hello if no
+    // `hello_sent_at:` line exists yet, route on foundation, then yield.
+    // It deliberately does NOT inline the foundation procedure, subagent
+    // management, or cron scheduling — those live in the skills /
+    // HEARTBEAT / native tools. "This file is the routing decision and
+    // nothing more."
+    const boot = files.get("BOOT.md") ?? "";
+    expect(boot).toContain("MEMORY.md FIRST");
+    expect(boot).toContain("lifecycle log");
+    expect(boot).toContain("hello_sent_at:");
+    expect(boot).toContain("foundation_started_at");
+    expect(boot).toContain("foundation_completed_at:");
+    expect(boot).toContain("USER.md");
+    expect(boot).toContain("APP.md");
+    expect(boot).toContain("maya-foundation-research");
+    expect(boot).toContain("sessions_yield");
+    // Sprint A append-only contract: BOOT must instruct APPEND, never
+    // edit, so the OpenClaw exact-match edit tool cannot fail on marker
+    // drift (the "Could not find the exact text in MEMORY.md" bug class).
+    expect(boot).toMatch(/APPEND a .*hello_sent_at/);
+    expect(boot).toContain("never edit an existing line");
     // Sprint 2.16u-fix8 — voice firewall removed per operator: "I hate
     // hardcoded string blockers. Get rid of all of that and just add
     // it to her prompt where appropriate." Voice contract now lives in
     // SOUL.md "What I never say" section, enforced by Maya's judgment.
-    expect(files.get("BOOT.md")).toContain('SOUL.md');
-    expect(files.get("SOUL.md")).toContain("never identify as an AI");
+    expect(boot).toContain('SOUL.md');
+    // Sprint A — MEMORY.md ships an append-only lifecycle log, not the
+    // old exact-match placeholder lines (`<set this when…>` / `<updated
+    // by … cron>`) that the edit tool would choke on. Assert the old
+    // fragile placeholders are gone.
+    const memory = files.get("MEMORY.md") ?? "";
+    expect(memory).toContain("APPEND-ONLY");
+    expect(memory).toContain("lifecycle log");
+    expect(memory).not.toContain("<set this when");
+    expect(memory).not.toContain("<updated by");
+    // SOUL.md's AI self-reference ban was reworded from "never identify as
+    // an AI" to the "AI self-references" banned-phrase entry (which spells
+    // out "the ban is on self-identification"). Same intent: Maya never
+    // identifies herself as an AI.
+    expect(files.get("SOUL.md")).toContain("AI self-references");
+    expect(files.get("SOUL.md")).toContain("self-identification");
     expect(files.get("USER.md")).toContain("Will manually post Instagram: yes");
     expect(files.get("USER.md")).toContain("TikTok warm-up state: warming");
     expect(files.get("USER.md")).toContain("TikTok account age days: 3");
@@ -205,7 +215,9 @@ describe("Maya GTM workspace pack", () => {
     // OpenRouter rejected them ("openrouter/hard_research_beta is not a
     // valid model ID"). Now the contracts use `agentId: "..."` and the
     // gateway-configured model resolves automatically.
-    expect(agents).toContain("DO NOT pass a `model` argument");
+    // Reworded "argument" -> "field" (the contract now says "DO NOT pass a
+    // `model` field"); same intent — no model alias passed to sessions_spawn.
+    expect(agents).toContain("DO NOT pass a `model` field");
     expect(agents).toContain('agentId: "reddit_research"');
     expect(agents).toContain("timeout_minutes");
     expect(agents).toContain("maxScrapeCreatorsCalls");
@@ -219,13 +231,18 @@ describe("Maya GTM workspace pack", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
     const heartbeat = files.get("HEARTBEAT.md") ?? "";
 
-    // Sprint 2.18 — HEARTBEAT.md fuller shape. With OpenClaw 5.12's
-    // prose-not-dropped fix in place, both the framing prose AND the
-    // task block reach the model. Heartbeat does interval-based
-    // polling work; cron does exact-time delivery; BOOT.md does
-    // one-shot startup.
-    expect(heartbeat).toContain("recurring polling loop");
-    expect(heartbeat).toContain("self-scheduled crons");
+    // HEARTBEAT.md was slimmed in a later sprint to a thin cadence + ping
+    // spec. It is still the recurring polling loop, just expressed through
+    // its tick framing and an explicit interval cadence rather than the old
+    // "recurring polling loop" header and labeled task list. Assert the
+    // current wording that proves the same loop: it ticks, defaults silent,
+    // and polls on an interval (5 min during research, ~30 min in compound
+    // mode). See "possibly-dropped functionality" in the realignment report
+    // for the labeled task entries that no longer ship in this file.
+    expect(heartbeat).toContain("Tick. Mostly silent.");
+    expect(heartbeat).toContain("## Cadence");
+    expect(heartbeat).toContain("every 5 min");
+    expect(heartbeat).toContain("~30 min between ticks");
 
     // launch-watchdog is GONE — BOOT.md now routes foundation vs
     // continuous itself; heartbeat doesn't drive launch.
@@ -233,31 +250,25 @@ describe("Maya GTM workspace pack", () => {
     expect(heartbeat).not.toContain("state-hello");
     expect(heartbeat).not.toContain("state-channels-picked");
 
-    // Full task surface: recovery + polling + maintenance.
-    expect(heartbeat).toContain("missed-cadence");
-    expect(heartbeat).toContain("continuous-research-watchdog");
-    expect(heartbeat).toContain("hot-alert");
-    expect(heartbeat).toContain("inbound-triage");
-    expect(heartbeat).toContain("pending-approvals");
-    expect(heartbeat).toContain("calendar-due");
-    expect(heartbeat).toContain("open-loops");
-    expect(heartbeat).toContain("published-results-scan");
-    // Stuck-worker sweep uses native lifecycle: subagents kill clears
-    // the gateway lane immediately per OpenClaw source.
-    expect(heartbeat).toContain("stuck-worker-sweep");
-    expect(heartbeat).toContain("subagents action=list");
-    expect(heartbeat).toContain("subagents\n    action=kill");
+    // Ping-worthy task surface — the labeled slugs (hot-alert,
+    // inbound-triage, calendar-due, stuck-worker-sweep) were replaced by
+    // plain-English ping triggers under "## When to actually ping". Assert
+    // the current wording that proves each trigger still exists.
+    // hot-alert -> "5x its 1h baseline"
+    expect(heartbeat).toContain("5x its 1h baseline");
+    // inbound-triage -> unanswered inbound DM trigger
+    expect(heartbeat).toContain("Inbound DM that I haven't responded to");
+    // calendar-due -> queued calendar event needing action soon
+    expect(heartbeat).toContain("queued calendar event in the next 30 min");
+    // stuck-worker-sweep -> worker silent >5 min surfaced + adjusted
+    expect(heartbeat).toContain("worker has been silent >5 min");
 
-    // Manager-mode markers + endpoints heartbeat consults.
+    // Manager-mode marker the heartbeat still keys off.
     expect(heartbeat).toContain("foundation_completed_at:");
-    expect(heartbeat).toContain("last_morning_brief_at:");
-    expect(heartbeat).toContain("/lc_gtm/get_my_foundation");
-    expect(heartbeat).toContain("/lc_gtm/get_my_target_threads");
 
     // Voice contract + primitives.
     expect(heartbeat).toContain("HEARTBEAT_OK");
     expect(heartbeat).toContain("SOUL.md");
-    expect(heartbeat).toContain("$CONVEX_SITE_URL");
   });
 
   it("jobs.json carries only the deploy-safety-net kickstart; cadence is Maya-scheduled at runtime", () => {
@@ -318,6 +329,18 @@ describe("Maya GTM workspace pack", () => {
     expect(kickstart?.payload.message).toContain("SOUL.md");
     expect(kickstart?.payload.message).toContain("hello_sent_at");
     expect(kickstart?.payload.message).toContain("message tool");
+    // Sprint A — idempotency: the kickstart is a SAFETY NET that must
+    // read MEMORY.md and no-op if BOOT.md already sent the hello, so a
+    // successful gateway:startup hello is never followed by a duplicate.
+    expect(kickstart?.payload.message).toContain("IDEMPOTENCY CHECK FIRST");
+    expect(kickstart?.payload.message).toMatch(
+      /If ANY line begins with .*hello_sent_at/
+    );
+    expect(kickstart?.payload.message).toContain("STOP");
+    // Sprint A — reconciled hello spec: short (1-3 sentences), and the
+    // stale "14-day plan" line (contradicts the locked rolling-7-day
+    // decision) is gone.
+    expect(kickstart?.payload.message).not.toContain("14-day");
     // Explicit non-assertions: kickstart MUST NOT spawn subagents or
     // claim launch_flow here — those are HEARTBEAT.md's job now.
     expect(kickstart?.payload.message).not.toContain("sessions_spawn");
@@ -399,16 +422,24 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("PLAYBOOK.md")?.length).toBeGreaterThan(15_000);
   });
 
-  it("documents direct gateway/session smoke fallback for pre-pairing", () => {
+  it("documents the proactive out-of-band send path in TOOLS.md", () => {
     // Sprint 2.16j: BOOT.md no longer carries the WhatsApp fallback
-    // checklist (BOOT.md is now hello-only). The smoke-test fallback
-    // documentation lives in TOOLS.md, where Maya looks when she needs
-    // to send a status outside the paired channel.
+    // checklist (BOOT.md is now hello-only). TOOLS.md is where Maya looks
+    // when she needs to send a status outside an inbound trigger.
+    //
+    // The old "Direct gateway/session pings for smoke tests" section (a
+    // direct-gateway smoke/pre-pairing ping) no longer ships in TOOLS.md —
+    // see "possibly-dropped functionality" in the realignment report. The
+    // current file documents the same underlying intent (send a message
+    // when there is NO inbound trigger to reply to) via the PROACTIVE
+    // delivery path: a curl POST to /lc_gtm/send_update that Convex forwards
+    // to Telegram. Assert that proactive out-of-band path is documented.
     const { files } = buildMayaGtmWorkspace(INPUT);
+    const tools = files.get("TOOLS.md") ?? "";
 
-    expect(files.get("TOOLS.md")).toContain(
-      "Direct gateway/session pings for smoke tests"
-    );
+    expect(tools).toContain("(PROACTIVE)");
+    expect(tools).toContain("/lc_gtm/send_update");
+    expect(tools).toContain("without an inbound trigger");
   });
 
   it("does not leak secret-shaped placeholders into workspace files", () => {
