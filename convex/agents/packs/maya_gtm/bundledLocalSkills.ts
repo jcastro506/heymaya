@@ -371,7 +371,7 @@ The PRINCIPLE everywhere: replies + native engagement compound 5-150x faster tha
 **LinkedIn** ([source](https://buffer.com/resources/how-often-to-post-on-linkedin/), [source](https://pipelineroad.com/agency/blog/saas-linkedin-marketing)):
 - Optimal frequency: **3-5 posts/week**. Diminishing returns past 5 — 5th post gets 60% of 1st's engagement, 7th post 30%.
 - Best windows: Tue-Thu 7-8:30am local. Tue/Wed = highest. Friday -20-30% below midweek. Weekends dead for B2B.
-- Engagement format: text-only outperforms images on LinkedIn (counterintuitive). Native video 312% better than YouTube links. PDF carousels = strong dwell time.
+- Engagement format: text-only outperforms images on LinkedIn (counterintuitive). Native video performs much better than external video links. PDF carousels = strong dwell time.
 - Founder posts about product-development process = 3.4x engagement of third-party industry reports. Employee content = 8x company-page content.
 - Hashtags: 3-5 niche. Reply to every comment within first hour.
 - Phase 2 weekly cadence: **3 posts** (Tue + Thu + one flex day, founder build-in-public format) + **2-3 comment-engagement slots/week** (15 min, reply on others' posts in niche). Only schedule if LinkedIn is a bet channel.
@@ -2061,7 +2061,7 @@ interface TikTokStrategy {
 - **Operator wants TikTok but \`canPostTikTokManually !== true\`.** Park. No shot plan. Cite § 12.
 - **Account in \`restricted\`.** Return resolve-Studio-Account-Check instructions only.
 - **Niche has no winning examples.** \`formatResearchNeeded: true\`. Run \`maya-tiktok-format-researcher\` first.
-- **Showability disagreement.** IF operator insists TikTok for unshowable + won't do slideshow THEN park + cite rule 4 + offer X/LinkedIn/YouTube.
+- **Showability disagreement.** IF operator insists TikTok for unshowable + won't do slideshow THEN park + cite rule 4 + offer X / LinkedIn / Reddit instead.
 
 ## Cost discipline
 

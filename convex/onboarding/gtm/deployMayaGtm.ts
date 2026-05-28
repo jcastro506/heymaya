@@ -148,21 +148,21 @@ const MODEL_ROUTING = {
   // is a Gemini-specific failure mode on long-context multi-step
   // reasoning. Sonnet 4.6 doesn't share it. Workers stay on gemini
   // 3.5 (they don't accumulate long context).
-  // Sprint 2.18 #45 — Haiku 4.5 for Main Maya. Operator-predicted
-  // architecture: intelligent main + cheap workers. Validated across
-  // runs #16, #17, #22 — cheap main (Gemini Flash, DeepSeek V4 Flash)
-  // CAN do foundation orchestration but fails at:
-  //   - Phase 2.5 composition (drafting replies in operator voice)
-  //   - Phase 3 calendar assembly
-  //   - Self-recovery from stuck workers (5-min kill rule ignored)
-  //   - Voice contract adherence (recites worker names verbatim)
-  //   - Session lock discipline (4.6-min lock holds → operator
-  //     inbound messages timeout with "Something went wrong")
+  // Sprint 2.18 #46 — Gemma 4 26B A4B for Main Maya. Operator pick
+  // after benchmark review:
+  //   - $0.06 in / $0.33 out per M (~17x cheaper than Haiku 4.5)
+  //   - 256K context, native function calling, configurable thinking
+  //   - MULTIMODAL — text + images + video up to 60s @ 1fps (unlocks
+  //     Sprint 2.20 TikTok/IG video watching natively)
+  //   - τ2-bench agentic tool use: 86.4% (Gemma's strength is agents)
+  //   - Apache 2.0 open-source, paid OpenRouter for stable throughput
+  // Workers stay on Gemini 3 Flash Preview ($0.50/$3). Expected
+  // onboarding cost: ~$0.30-0.50 per run.
   //
-  // Haiku 4.5: $1/$5 per M, Anthropic-grade reasoning + voice
-  // discipline, ~3x cheaper than Sonnet 4.6. Workers stay on cheap
-  // Gemini 3 Flash Preview. Expected total ~$5-7/onboarding.
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "anthropic/claude-haiku-4.5",
+  // Fallbacks via env override if Gemma 4 stalls on long orchestration:
+  //   MAYA_GTM_MODEL=anthropic/claude-haiku-4.5     ($1/$5)
+  //   MAYA_GTM_MODEL=anthropic/claude-sonnet-4.6    ($3/$15)
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemma-4-26b-a4b-it",
   // Sprint 2.18 #42 — workers DOWNGRADED from gemini-3.5-flash to
   // gemini-3-flash-preview. Per OpenRouter pricing (verified 2026-05-28):
   //   gemini-3.5-flash:  $1.50 in / $9 out per M

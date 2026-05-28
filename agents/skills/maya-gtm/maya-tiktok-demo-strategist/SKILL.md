@@ -70,7 +70,7 @@ interface TikTokStrategy {
 - **Operator wants TikTok but `canPostTikTokManually !== true`.** Park. No shot plan. Cite § 12.
 - **Account in `restricted`.** Return resolve-Studio-Account-Check instructions only.
 - **Niche has no winning examples.** `formatResearchNeeded: true`. Run `maya-tiktok-format-researcher` first.
-- **Showability disagreement.** IF operator insists TikTok for unshowable + won't do slideshow THEN park + cite rule 4 + offer X/LinkedIn/YouTube.
+- **Showability disagreement.** IF operator insists TikTok for unshowable + won't do slideshow THEN park + cite rule 4 + offer X / LinkedIn / Reddit instead.
 
 ## Cost discipline
 

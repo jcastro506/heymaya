@@ -507,7 +507,7 @@ Every POST requires \`idempotencyKey\` (UUIDv4 — same key on retry = "ok (repl
   Optional: \`competitorKey\` (auto-slugged from name if missing), \`url\`, \`pricing\`, \`complaints[]\` (array, NOT \`complaint\` singular — items: \`{ quote, sourceUrl }\`), \`vulnerabilities[]\` (string array).
 
 - \`/lc_gtm/foundation_channel_scorecard\`
-  Required: **\`idempotencyKey\`**, **\`channel\`** (one of \`reddit\` / \`x\` / \`hn\` / \`linkedin\` / \`tiktok\` / \`instagram\` / \`youtube\` / \`podcasts\` / \`newsletters\` / \`discord\` / \`blog\`), **\`uniqueUnlock\`** (string).
+  Required: **\`idempotencyKey\`**, **\`channel\`** (one of \`reddit\` / \`x\` / \`hn\` / \`linkedin\` / \`tiktok\` / \`instagram\` / \`threads\` / \`podcasts\` / \`newsletters\` / \`discord\` / \`blog\`), **\`uniqueUnlock\`** (string).
   Optional: \`audienceFit\` (0-1, default 0.5), \`cadenceFit\` (0-1, default 0.5), \`bet\` (bool, default false), \`notes\`.
 
 - \`/lc_gtm/foundation_content_angle\`
@@ -944,8 +944,6 @@ curl -s "https://api.scrapecreators.com/v1/reddit/search?query=bug%20reporting&s
 - TikTok hashtag search: \`GET /v1/tiktok/search/hashtag?hashtag=...\`
 - TikTok trending feed: \`GET /v1/tiktok/get-trending-feed?region=US\`
 - Instagram reels search: \`GET /v2/instagram/reels/search?query=...\`
-- YouTube search: \`GET /v1/youtube/search?query=...\`
-- YouTube shorts: \`GET /v1/youtube/channel/shorts?handle=...\`
 - Twitter/X profile: \`GET /v1/twitter/profile?handle=...\`
 - Twitter/X user tweets: \`GET /v1/twitter/user/tweets?handle=...\`
 - Twitter/X tweet details: \`GET /v1/twitter/tweet?url=...\`

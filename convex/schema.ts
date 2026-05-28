@@ -5718,12 +5718,12 @@ export default defineSchema({
   gtmChannelScorecard: defineTable({
     accountId: v.id("creators"),
     agentId: v.id("gtmAgents"),
+    // Sprint 2.18 #46 — YouTube REMOVED. Operator: not in scope.
     channel: v.union(
       v.literal("reddit"),
       v.literal("x"),
       v.literal("hn"),
       v.literal("linkedin"),
-      v.literal("youtube"),
       v.literal("tiktok"),
       v.literal("instagram"),
       v.literal("threads"),
@@ -5781,6 +5781,7 @@ export default defineSchema({
   gtmRelationshipTargets: defineTable({
     accountId: v.id("creators"),
     agentId: v.id("gtmAgents"),
+    // Sprint 2.18 #46 — YouTube REMOVED. Operator: not in scope.
     platform: v.union(
       v.literal("reddit"),
       v.literal("x"),
@@ -5788,7 +5789,6 @@ export default defineSchema({
       v.literal("linkedin"),
       v.literal("instagram"),
       v.literal("tiktok"),
-      v.literal("youtube"),
       v.literal("threads")
     ),
     /** Always lowercased before write. */

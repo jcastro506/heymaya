@@ -155,12 +155,14 @@ export const upsertCompetitor = internalMutation({
 
 // ───────────────────── Foundation: channel scorecard ─────────────────────
 
+// Sprint 2.18 #46 — YouTube REMOVED. Operator scoped product to
+// TikTok / IG / LinkedIn / X / Reddit / HN / Threads / podcasts /
+// newsletters / Discord / blog.
 const CHANNEL = v.union(
   v.literal("reddit"),
   v.literal("x"),
   v.literal("hn"),
   v.literal("linkedin"),
-  v.literal("youtube"),
   v.literal("tiktok"),
   v.literal("instagram"),
   v.literal("threads"),
@@ -282,7 +284,6 @@ const RELATIONSHIP_PLATFORM = v.union(
   v.literal("linkedin"),
   v.literal("instagram"),
   v.literal("tiktok"),
-  v.literal("youtube"),
   v.literal("threads")
 );
 const RELATIONSHIP_CADENCE = v.union(

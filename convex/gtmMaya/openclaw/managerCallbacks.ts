@@ -165,12 +165,15 @@ export const foundationCompetitorHttp = httpAction(async (ctx, request) => {
 
 // ───────────────────── Foundation: channel scorecard ─────────────────────
 
+// Sprint 2.18 #46 — YouTube REMOVED from supported channels. Operator
+// directive 2026-05-28: "we're not gonna focus on YouTube." Strip
+// across product surface: schema enum, channel scorecard validator,
+// playbook references, skills, TOOLS.md docs.
 const CHANNEL_VALUES = [
   "reddit",
   "x",
   "hn",
   "linkedin",
-  "youtube",
   "tiktok",
   "instagram",
   "threads",
@@ -327,7 +330,6 @@ const RELATIONSHIP_PLATFORM_VALUES = [
   "linkedin",
   "instagram",
   "tiktok",
-  "youtube",
   "threads",
 ] as const;
 type RelationshipPlatform = (typeof RELATIONSHIP_PLATFORM_VALUES)[number];
