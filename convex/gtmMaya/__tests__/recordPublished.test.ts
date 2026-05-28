@@ -193,7 +193,13 @@ describe("Sprint 2.27 — pollAndRecordPostMetrics (stub v1)", () => {
       shares: 0,
       views: 0,
     });
-    expect(snapshot?.notes).toMatch(/no_oauth|Sprint 2.27b/);
+    // Sprint 2.27b — reddit now goes through public JSON path; in
+    // test env without a mocked fetch the network attempt fails and
+    // we get the "fetch failed" note (or "needs_oauth" for non-reddit
+    // platforms). Both are valid stub states.
+    expect(snapshot?.notes).toMatch(
+      /needs_oauth|fetch failed|reddit_public_json/
+    );
   });
 });
 

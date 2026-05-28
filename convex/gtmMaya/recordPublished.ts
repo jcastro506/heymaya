@@ -150,6 +150,110 @@ export const recordDraftPublished = internalMutation({
  * Soft-fail per call: if fetch errors, persist a snapshot with empty
  * metrics + note so the review window isn't completely lost.
  */
+/**
+ * Sprint 2.27b — Reddit metric fetch via public JSON (no OAuth).
+ *
+ * Reddit exposes post metrics through the public `<post_url>/.json`
+ * endpoint with no auth required. We use a polite UA string + 5s
+ * timeout. Returns null if the post is deleted/private/rate-limited;
+ * caller logs zeros + a note.
+ *
+ * `providerPostId` is expected to be either:
+ *   - a full URL (https://reddit.com/r/sub/comments/abc/title)
+ *   - a t3_<id> fullname (we'll reconstruct via search)
+ */
+export async function fetchRedditMetrics(
+  providerPostIdOrUrl: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<{ likes: number; comments: number; views: number } | null> {
+  // Reddit's JSON endpoint accepts either the full thread URL with
+  // .json or a t3_id via the listing route.
+  let url: string;
+  if (providerPostIdOrUrl.startsWith("http")) {
+    url = providerPostIdOrUrl.replace(/\/?$/, "") + "/.json";
+  } else {
+    // t3_xxx → resolve via the by_id listing.
+    url = `https://www.reddit.com/by_id/${providerPostIdOrUrl}/.json`;
+  }
+  try {
+    const res = await fetchImpl(url, {
+      headers: {
+        "user-agent": "heymaya/maya-results-poller/0.1 (+https://heymaya.com)",
+      },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as unknown;
+    // Listing response → data.children[0].data carries the post.
+    // by_id route also returns a listing.
+    let post: { ups?: number; num_comments?: number; view_count?: number } | undefined;
+    if (
+      typeof json === "object" &&
+      json !== null &&
+      "data" in (json as object)
+    ) {
+      const data = (json as { data?: { children?: Array<{ data?: object }> } })
+        .data;
+      const first = data?.children?.[0]?.data;
+      if (first) post = first as typeof post;
+    } else if (Array.isArray(json)) {
+      // Single-thread URL returns [postListing, commentsListing].
+      const listing = json[0] as
+        | { data?: { children?: Array<{ data?: object }> } }
+        | undefined;
+      const first = listing?.data?.children?.[0]?.data;
+      if (first) post = first as typeof post;
+    }
+    if (!post) return null;
+    return {
+      likes: typeof post.ups === "number" ? post.ups : 0,
+      comments: typeof post.num_comments === "number" ? post.num_comments : 0,
+      views: typeof post.view_count === "number" ? post.view_count : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sprint 2.27b — HN metric fetch via Algolia HN API (no OAuth).
+ *
+ * `providerPostId` expected to be the HN numeric item id (as a string).
+ */
+export async function fetchHnMetrics(
+  providerPostId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<{ likes: number; comments: number; views: number } | null> {
+  const url = `https://hn.algolia.com/api/v1/items/${providerPostId}`;
+  try {
+    const res = await fetchImpl(url, {
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) return null;
+    const item = (await res.json()) as {
+      points?: number;
+      children?: Array<{ id: number }>;
+    };
+    // Algolia returns the whole comment tree under children; the count
+    // is the recursive descendant total.
+    const countComments = (node: { children?: Array<{ id: number }> }): number => {
+      if (!node.children) return 0;
+      let total = node.children.length;
+      for (const c of node.children) {
+        total += countComments(c as { children?: Array<{ id: number }> });
+      }
+      return total;
+    };
+    return {
+      likes: typeof item.points === "number" ? item.points : 0,
+      comments: countComments(item),
+      views: 0, // HN doesn't expose views.
+    };
+  } catch {
+    return null;
+  }
+}
+
 export const pollAndRecordPostMetrics = internalAction({
   args: {
     agentId: v.id("gtmAgents"),
@@ -164,16 +268,31 @@ export const pollAndRecordPostMetrics = internalAction({
     ),
   },
   handler: async (ctx, args): Promise<{ snapshotId: Id<"gtmPostResults"> }> => {
-    // Sprint 2.27 v1 — STUB: fetch is not wired yet (needs Composio
-    // OAuth per-operator in 2.27b). Persist zeros + a note so we have
-    // a row to compare deltas against once the real fetcher lands.
-    const metrics = {
-      likes: 0,
-      comments: 0,
-      shares: 0,
-      views: 0,
-    };
-    const notes = `auto_poll:${args.window} — metric fetch not yet wired (Sprint 2.27b pending Composio OAuth)`;
+    // Sprint 2.27b — real metric fetch for Reddit + HN (no OAuth path).
+    // Other platforms still return zeros + "needs_oauth" note until
+    // Composio social OAuth wiring lands (Sprint 2.27c).
+    let metrics = { likes: 0, comments: 0, shares: 0, views: 0 };
+    let notes: string;
+
+    if (args.platform === "reddit") {
+      const fetched = await fetchRedditMetrics(args.providerPostId);
+      if (fetched) {
+        metrics = { ...metrics, ...fetched };
+        notes = `auto_poll:${args.window} via reddit_public_json`;
+      } else {
+        notes = `auto_poll:${args.window} — reddit fetch failed (deleted/private/rate-limited)`;
+      }
+    } else if (args.platform === "hn") {
+      const fetched = await fetchHnMetrics(args.providerPostId);
+      if (fetched) {
+        metrics = { ...metrics, ...fetched };
+        notes = `auto_poll:${args.window} via algolia_hn`;
+      } else {
+        notes = `auto_poll:${args.window} — hn fetch failed`;
+      }
+    } else {
+      notes = `auto_poll:${args.window} — needs_oauth (Composio Sprint 2.27c)`;
+    }
 
     const snapshotId = await ctx.runMutation(
       internal.gtmMaya.postResults.recordPostResultSnapshot,
