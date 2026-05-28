@@ -4528,7 +4528,10 @@ export default defineSchema({
       v.literal("competitor_move"),
       v.literal("niche_pulse_signal"),
       v.literal("action_logged"),
-      v.literal("learning_extracted")
+      v.literal("learning_extracted"),
+      // Sprint 2.29 — Maya posts here after writing to memory/YYYY-MM-DD.md
+      // or DREAMS.md on Fly disk, so the operator UI can ledger writes.
+      v.literal("memory_written")
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
@@ -5958,6 +5961,49 @@ export default defineSchema({
     .index("by_agent", ["agentId"])
     .index("by_agent_and_sent", ["agentId", "sentAt"])
     .index("by_agent_and_kind", ["agentId", "kind"]),
+
+  /** Sprint 2.29 — Maya's audit trail of writes to her Fly-mounted
+   *  workspace memory files: memory/YYYY-MM-DD.md (daily working memory)
+   *  and DREAMS.md (longer-horizon hypotheses). The actual content lives
+   *  on Fly disk; this table captures WHEN/WHERE/HOW-MUCH so the
+   *  operator HQ can surface "Maya wrote to memory at 7:02am" + cost
+   *  attribution flows through it.
+   *  Dedupe key: idempotencyKey (matching gtmHookCallbacks pattern). */
+  gtmMemoryWrites: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    /** Idempotency for retries — same uuid will resolve to the same row. */
+    idempotencyKey: v.string(),
+    /** Which file got written. */
+    target: v.union(
+      v.literal("daily_memory"),       // memory/YYYY-MM-DD.md
+      v.literal("dreams"),              // DREAMS.md
+      v.literal("memory_index")         // MEMORY.md
+    ),
+    /** ISO-8601 date string YYYY-MM-DD when target is daily_memory; null otherwise. */
+    dateSlot: v.optional(v.string()),
+    /** What action was logged on the target — append/replace/strike. */
+    op: v.union(
+      v.literal("append"),
+      v.literal("replace_section"),
+      v.literal("strike")
+    ),
+    /** Optional section name within the file. */
+    section: v.optional(v.string()),
+    /** Bytes written (approximate, for cost transparency). */
+    bytes: v.optional(v.number()),
+    /** Short human-readable summary of what got written, for the
+     *  operator UI ("Maya wrote: 2 new hypotheses, 1 retired"). */
+    summary: v.optional(v.string()),
+    /** Which skill triggered the write (morning_brief / evening_recap /
+     *  weekly_review / monthly_reset / inbound_triage). */
+    triggeredBy: v.string(),
+    writtenAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_agent_and_written", ["agentId", "writtenAt"])
+    .index("by_agent_and_target", ["agentId", "target"])
+    .index("by_idempotency", ["idempotencyKey"]),
 
   /** What Maya has learned about this niche over time. The compounding
    *  surface — week 4 brief reads this to weight what surfaces.

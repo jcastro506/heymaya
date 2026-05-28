@@ -25,6 +25,24 @@ The bookend to the morning brief. The operator knows what they did today and how
 
 1. **USER.md** — operator timezone.
 2. **SOUL.md** — voice contract.
+3. **memory/{today}.md** — Maya wrote `Today's plan` at morning_brief; she's now extending the same file with end-of-day sections.
+
+## Write triggers (after send)
+
+After Telegram delivery succeeds and `/lc_gtm/action_logged` has been posted, append these sections to `memory/{today}.md` using the OpenClaw filesystem tool:
+
+1. **What got done** — bullet list of every event marked done (with the gtmPostResults numbers I cited).
+2. **Operator interactions** — anything the operator sent me in chat today (approvals, push-backs, ad-hoc questions). One line per interaction.
+3. **Notable observations** — threads that blew up unexpectedly, competitor moves I clocked, drafts that flopped vs landed.
+4. **Tomorrow's adjustment** — what I'm changing for tomorrow's brief based on today's signal. THIS is the section morning_brief reads tomorrow.
+
+If today's day-grade was Strong, also do a DREAMS.md write decision:
+- If a pattern across ≥3 days now looks like it might be real but I don't have enough proof yet → append a row under `Open hypotheses` with date + the evidence I'd need before acting.
+- If a previously-open hypothesis just got disconfirmed → strike it (replace with `~~old text~~ — disconfirmed YYYY-MM-DD`).
+
+POST `/lc_gtm/memory_written` (idempotent uuid per write) after each successful write so Convex ledger tracks it.
+
+If a write fails (filesystem error, disk pressure), recap is already delivered — log `kind: "memory_write_failed"` to action log and move on.
 
 ## The recap structure
 

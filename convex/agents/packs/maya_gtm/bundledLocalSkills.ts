@@ -923,6 +923,24 @@ The bookend to the morning brief. The operator knows what they did today and how
 
 1. **USER.md** — operator timezone.
 2. **SOUL.md** — voice contract.
+3. **memory/{today}.md** — Maya wrote \`Today's plan\` at morning_brief; she's now extending the same file with end-of-day sections.
+
+## Write triggers (after send)
+
+After Telegram delivery succeeds and \`/lc_gtm/action_logged\` has been posted, append these sections to \`memory/{today}.md\` using the OpenClaw filesystem tool:
+
+1. **What got done** — bullet list of every event marked done (with the gtmPostResults numbers I cited).
+2. **Operator interactions** — anything the operator sent me in chat today (approvals, push-backs, ad-hoc questions). One line per interaction.
+3. **Notable observations** — threads that blew up unexpectedly, competitor moves I clocked, drafts that flopped vs landed.
+4. **Tomorrow's adjustment** — what I'm changing for tomorrow's brief based on today's signal. THIS is the section morning_brief reads tomorrow.
+
+If today's day-grade was Strong, also do a DREAMS.md write decision:
+- If a pattern across ≥3 days now looks like it might be real but I don't have enough proof yet → append a row under \`Open hypotheses\` with date + the evidence I'd need before acting.
+- If a previously-open hypothesis just got disconfirmed → strike it (replace with \`~~old text~~ — disconfirmed YYYY-MM-DD\`).
+
+POST \`/lc_gtm/memory_written\` (idempotent uuid per write) after each successful write so Convex ledger tracks it.
+
+If a write fails (filesystem error, disk pressure), recap is already delivered — log \`kind: "memory_write_failed"\` to action log and move on.
 
 ## The recap structure
 
@@ -1517,6 +1535,20 @@ The flagship operator-facing output. Every morning, the founder gets one Telegra
 1. **GTM.md** — bet channels.
 2. **USER.md** — operator capacity (today's available minutes), timezone.
 3. **SOUL.md** — voice contract.
+4. **memory/{yesterday}.md** — \`Tomorrow's adjustment\` section. If yesterday's evening_recap wrote a calibration note ("operator skipped X events; tomorrow I'm cutting the warmup block to 5 min"), this brief enacts it. If the file doesn't exist (fresh deploy / Maya was offline), skip silently.
+5. **DREAMS.md** — \`Drift watch\` section. If a drift hunch is active that contradicts today's plan, flag it inline ("Watching this — DREAMS.md note: r/MacStudio underperformed last week, want to validate by week's end").
+
+## Write triggers (after send)
+
+After Telegram delivery succeeds and \`/lc_gtm/action_logged\` has been posted:
+
+1. **memory/{today}.md** — append to \`Today's plan\` section. Lines:
+   - Grade emitted (Strong / Thin / Warmup) + lede sentence.
+   - Top-priority entity (thread id + URL).
+   - Total event count + minute estimate.
+2. POST \`/lc_gtm/memory_written\` (idempotent on a uuid per memory write) so Convex tracks the write in \`gtmMemoryWrites\` and the operator UI can show "Maya wrote to memory at 7:02am".
+
+If the write to memory fails (Fly disk pressure, write_file errored), do NOT block — the brief is already delivered. Log to action log under \`kind: "memory_write_failed"\` so it surfaces in next morning's diagnostics.
 
 ## The brief structure
 
@@ -2503,6 +2535,22 @@ Each draft has: angle slug it's from, target channel, target ship day, opening l
 ## What this review writes
 
 POST to \`/lc_gtm/action_logged\` with kind=\`weekly_review\`. Plus POST for each \`learning_extracted\`. Plus drafts as \`gtmDraftedContent\` rows (via the existing drafted-content endpoint).
+
+## DREAMS.md write triggers (end of weekly review)
+
+Weekly review is the canonical write window for \`DREAMS.md\`. After the review message ships and learnings are POSTed:
+
+1. **Open hypotheses** — scan the week for patterns I noticed but lack ≥3 evidence points for. Each hypothesis gets one row with:
+   - Date emitted.
+   - Hunch in one sentence.
+   - The evidence threshold I'd need before promoting it to a \`learning_extracted\` (e.g., "2 more weeks of r/MacStudio outperforming r/LocalLLaMA at >1.5x reply rate").
+2. **Drift watch** — anything I'm worried might be drifting without proof yet (operator engagement dropping, voice shifts in the niche, ROI tilts).
+3. **Counter-overfitting flags** — single viral hits or one-week wins I should NOT generalize from. "r/X had a single 200-upvote thread this week — not a format, not a learning."
+4. **Graduations + retirements** — when a previously-open hypothesis just met its evidence threshold, strike it from DREAMS.md and write the corresponding \`learning_extracted\`. When a hypothesis got disconfirmed, strike with \`~~~~ — disconfirmed YYYY-MM-DD\`.
+
+After each DREAMS.md write, POST \`/lc_gtm/memory_written\` (idempotent uuid) so the operator UI can show "Maya updated DREAMS.md — 2 new hypotheses, 1 retired".
+
+If a DREAMS.md write fails (filesystem error), do NOT block the weekly review — log \`kind: "memory_write_failed"\` to action log.
 
 ## Strategic-shift discipline
 

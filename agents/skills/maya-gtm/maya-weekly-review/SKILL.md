@@ -69,6 +69,22 @@ Each draft has: angle slug it's from, target channel, target ship day, opening l
 
 POST to `/lc_gtm/action_logged` with kind=`weekly_review`. Plus POST for each `learning_extracted`. Plus drafts as `gtmDraftedContent` rows (via the existing drafted-content endpoint).
 
+## DREAMS.md write triggers (end of weekly review)
+
+Weekly review is the canonical write window for `DREAMS.md`. After the review message ships and learnings are POSTed:
+
+1. **Open hypotheses** — scan the week for patterns I noticed but lack ≥3 evidence points for. Each hypothesis gets one row with:
+   - Date emitted.
+   - Hunch in one sentence.
+   - The evidence threshold I'd need before promoting it to a `learning_extracted` (e.g., "2 more weeks of r/MacStudio outperforming r/LocalLLaMA at >1.5x reply rate").
+2. **Drift watch** — anything I'm worried might be drifting without proof yet (operator engagement dropping, voice shifts in the niche, ROI tilts).
+3. **Counter-overfitting flags** — single viral hits or one-week wins I should NOT generalize from. "r/X had a single 200-upvote thread this week — not a format, not a learning."
+4. **Graduations + retirements** — when a previously-open hypothesis just met its evidence threshold, strike it from DREAMS.md and write the corresponding `learning_extracted`. When a hypothesis got disconfirmed, strike with `~~~~ — disconfirmed YYYY-MM-DD`.
+
+After each DREAMS.md write, POST `/lc_gtm/memory_written` (idempotent uuid) so the operator UI can show "Maya updated DREAMS.md — 2 new hypotheses, 1 retired".
+
+If a DREAMS.md write fails (filesystem error), do NOT block the weekly review — log `kind: "memory_write_failed"` to action log.
+
 ## Strategic-shift discipline
 
 Maya only proposes shifts backed by clear week-over-week data. One bad week is not a shift signal — niches have variance. Two consecutive weeks of underperformance in a channel = shift signal. Stick with what's working until data says otherwise.

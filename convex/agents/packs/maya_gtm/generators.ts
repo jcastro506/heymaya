@@ -575,6 +575,8 @@ Every POST requires \`idempotencyKey\` (UUIDv4 — same key on retry = "ok (repl
 
 - \`/lc_gtm/record_published\` — Required: \`idempotencyKey\`, \`draftId\`, \`providerPostId\` (platform-side post id or URL), \`platform\` (\`reddit\` / \`x\` / \`hn\` / \`linkedin\` / \`instagram\` / \`tiktok\`). Optional: \`permalink\` (full URL), \`postedAtMs\` (defaults to now). When operator says "I posted!" I curl-POST this. It (a) flips the draft to \`approvalState:"published"\` and (b) auto-schedules T+2h / T+24h / T+7d engagement polls. The polls write \`gtmPostResults\` snapshots that maya-results-reviewer reads weekly.
 
+- \`/lc_gtm/memory_written\` — Required: \`idempotencyKey\`, \`target\` (\`daily_memory\` / \`dreams\` / \`memory_index\`), \`op\` (\`append\` / \`replace_section\` / \`strike\`), \`triggeredBy\` (the skill that initiated, e.g. \`maya-morning-brief\`). Optional: \`dateSlot\` (\`YYYY-MM-DD\`, required when target=\`daily_memory\`), \`section\`, \`bytes\`, \`summary\` (short human line for operator UI). I curl-POST this AFTER each successful filesystem write to \`memory/{YYYY-MM-DD}.md\` or \`DREAMS.md\`. The actual content stays on Fly disk; this endpoint is the audit trail so operator HQ can show "Maya updated memory at 7:02am". Write-triggers per skill: morning_brief writes \`Today's plan\`; evening_recap writes \`What got done / Operator interactions / Notable observations / Tomorrow's adjustment\`; weekly_review writes DREAMS.md hypotheses + retirements.
+
 **Reads (GET, no body):**
 - \`/lc_gtm/get_my_foundation\` — returns \`{ buyerMap, competitiveMap[], channelScorecard[], contentAngles[], relationshipTargets[], gtmCalendarEvents[], gtmTargetThreads[] }\`.
 - \`/lc_gtm/get_my_niche_learnings\` — returns \`{ learnings[] }\`.

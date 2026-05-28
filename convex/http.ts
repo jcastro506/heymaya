@@ -107,6 +107,7 @@ import {
   logCostHttp,
   recordPublishedHttp,
 } from "./gtmMaya/openclaw/managerCallbacks";
+import { memoryWrittenHttp } from "./gtmMaya/memoryLedger";
 
 const http = httpRouter();
 
@@ -335,6 +336,14 @@ http.route({
   path: "/lc_gtm/record_published",
   method: "POST",
   handler: recordPublishedHttp,
+});
+// Sprint 2.29 — Maya writes to memory/YYYY-MM-DD.md or DREAMS.md on
+// Fly disk natively, then POSTs here so Convex captures an audit trail
+// (gtmMemoryWrites) for the operator HQ to surface.
+http.route({
+  path: "/lc_gtm/memory_written",
+  method: "POST",
+  handler: memoryWrittenHttp,
 });
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs

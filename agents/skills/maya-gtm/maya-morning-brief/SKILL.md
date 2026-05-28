@@ -27,6 +27,20 @@ The flagship operator-facing output. Every morning, the founder gets one Telegra
 1. **GTM.md** — bet channels.
 2. **USER.md** — operator capacity (today's available minutes), timezone.
 3. **SOUL.md** — voice contract.
+4. **memory/{yesterday}.md** — `Tomorrow's adjustment` section. If yesterday's evening_recap wrote a calibration note ("operator skipped X events; tomorrow I'm cutting the warmup block to 5 min"), this brief enacts it. If the file doesn't exist (fresh deploy / Maya was offline), skip silently.
+5. **DREAMS.md** — `Drift watch` section. If a drift hunch is active that contradicts today's plan, flag it inline ("Watching this — DREAMS.md note: r/MacStudio underperformed last week, want to validate by week's end").
+
+## Write triggers (after send)
+
+After Telegram delivery succeeds and `/lc_gtm/action_logged` has been posted:
+
+1. **memory/{today}.md** — append to `Today's plan` section. Lines:
+   - Grade emitted (Strong / Thin / Warmup) + lede sentence.
+   - Top-priority entity (thread id + URL).
+   - Total event count + minute estimate.
+2. POST `/lc_gtm/memory_written` (idempotent on a uuid per memory write) so Convex tracks the write in `gtmMemoryWrites` and the operator UI can show "Maya wrote to memory at 7:02am".
+
+If the write to memory fails (Fly disk pressure, write_file errored), do NOT block — the brief is already delivered. Log to action log under `kind: "memory_write_failed"` so it surfaces in next morning's diagnostics.
 
 ## The brief structure
 
