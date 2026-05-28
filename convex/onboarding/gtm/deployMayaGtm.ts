@@ -1022,46 +1022,17 @@ export const deployMayaGtm = internalAction({
       }
     }
 
-    // Sprint 2.18 #36 — RESTORED a minimal deploy-time stub hello as a
-    // safety net. Sprint 2.16r removed the hardcoded Convex hello at
-    // operator request ("hello belongs in BOOT.md, not deploy"). That
-    // was right architecturally but it removed the only guaranteed
-    // first-contact path. Verified live 2026-05-28 run #15: Maya wrote
-    // `hello_sent_at` to MEMORY.md without calling the message tool —
-    // operator got NO communication after 20+ min.
+    // Sprint 2.18 #37 — Convex stub hello REMOVED again. Verified live
+    // 2026-05-28 run #16: Maya's BOOT.md hello path works correctly
+    // with the canonical workspace reorg. Operator: "we don't need
+    // the convex anything anymore. Everything OpenClaw should be
+    // handled by OpenClaw." Pure agent-driven architecture.
     //
-    // The fix: deploy sends a TINY status stub ("setting up your
-    // account — back in ~10-15 min with the picture"). NOT the rich
-    // hello — that still belongs to Maya, comes from BOOT.md, fires
-    // a minute later in her voice with the operator's name + product
-    // context. The stub is two sentences max; it exists so the
-    // operator never sits in silence after a deploy.
-    let stubResult = "skipped:no_telegram";
-    let stubMessageId: number | undefined;
-    if (row.agent.telegramChatId) {
-      try {
-        const stubText = `Maya here. Setting up your account for ${row.app.name ?? "your product"} — back to you in ~10-15 min with the picture and this week's plan.`;
-        const stage = (process.env.CONVEX_DEPLOYMENT ?? "").includes("precise-canary-781")
-          ? "staging"
-          : "production";
-        const botToken = stage === "staging"
-          ? process.env.TELEGRAM_BOT_TOKEN_STAGING
-          : (process.env.TELEGRAM_BOT_TOKEN_PRODUCTION ?? process.env.TELEGRAM_BOT_TOKEN);
-        const hello = await sendDirectTelegramMessage({
-          botToken,
-          chatId: row.agent.telegramChatId,
-          text: stubText,
-        });
-        stubResult = hello.ok ? "stub_sent" : (hello.reason ?? "telegram_unknown");
-        stubMessageId = hello.messageId ?? undefined;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        stubResult = `exception:${msg.slice(0, 100)}`;
-      }
-    }
+    // If Maya's hello regresses again, fix the agent prompt — not
+    // by adding hardcoded text in the deploy layer.
     await ctx.runMutation(
       internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-      { agentId: args.agentId, result: stubResult, messageId: stubMessageId }
+      { agentId: args.agentId, result: "skipped:openclaw_owns_hello" }
     );
 
     try {
