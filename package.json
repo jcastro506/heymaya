@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:matrix": "vitest run convex/gtmMaya/__tests__/multiProductMatrix.test.ts",
     "convex:dev": "convex dev --once",
     "convex:staging": "CONVEX_DEPLOYMENT=dev:precise-canary-781 convex dev --once",
     "smoke": "tsx scripts/mvp-smoke.ts",
