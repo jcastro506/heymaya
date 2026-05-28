@@ -162,21 +162,26 @@ const MODEL_ROUTING = {
   // MAYA_GTM_MODEL=anthropic/claude-sonnet-4.6 if testing reveals
   // capability gaps.
   mainMaya: process.env.MAYA_GTM_MODEL ?? "deepseek/deepseek-v4-flash",
-  // Sprint 2.18 — workers on 3.5 too. Replaced gemini-3-flash-preview
-  // (a literal preview that we hit instability on — stream stalls,
-  // 8-retry validation bounce loops). 3.5 Flash is GA on OpenRouter
-  // with stronger structured-output discipline. Thinking level set
-  // per-payload at sessions_spawn time, not here.
+  // Sprint 2.18 #42 — workers DOWNGRADED from gemini-3.5-flash to
+  // gemini-3-flash-preview. Per OpenRouter pricing (verified 2026-05-28):
+  //   gemini-3.5-flash:  $1.50 in / $9 out per M
+  //   gemini-3-flash-preview: $0.50 in / $3 out per M  ← 3x cheaper
+  // Operator: "we need them to be just Gemini 3 flash to stay low."
+  // The Sprint 2.16a comment cited instability with 3-flash-preview
+  // (stream stalls, validation bounce loops) — that was the OLD
+  // preview snapshot months ago. Re-trying it now since OpenRouter
+  // pricing makes the cost difference meaningful at our call volume.
+  // If instability returns, fall back via env override.
   subagent:
-    process.env.MAYA_GTM_SUBAGENT_MODEL ?? "google/gemini-3.5-flash",
+    process.env.MAYA_GTM_SUBAGENT_MODEL ?? "google/gemini-3-flash-preview",
   // hard_research_beta is no longer a configured agent (Sprint 2.18 #3
   // removed it from agents.list). Routing entry retained for
   // narrative + future re-enablement; not actually used.
   hardResearchBeta:
     process.env.MAYA_GTM_HARD_RESEARCH_MODEL ??
-    "google/gemini-3.5-flash",
+    "google/gemini-3-flash-preview",
   futureDefaultResearch:
-    process.env.MAYA_GTM_RESEARCH_MODEL ?? "google/gemini-3.5-flash",
+    process.env.MAYA_GTM_RESEARCH_MODEL ?? "google/gemini-3-flash-preview",
   extractionWorker:
     process.env.MAYA_GTM_EXTRACTION_MODEL ?? "google/gemini-3.1-flash-lite",
 };
