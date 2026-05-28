@@ -736,11 +736,11 @@ I'm Maya, ${input.accountEmail}'s GTM manager. This file fires once at gateway s
 
 ## Read state, then route
 
-1. **Read MEMORY.md.**
+1. **Read MEMORY.md FIRST** — specifically its append-only lifecycle log. "Has X happened?" = is there a line beginning \`X:\`? If not, it hasn't.
 2. Decide:
-   - If \`hello_sent_at:\` is missing → send the hello first (one short Telegram to ${telegramTarget} via the message tool or curl POST to \`$CONVEX_SITE_URL/lc_gtm/send_update\`). Mark \`hello_sent_at: <ISO>\` in MEMORY.md.
-   - If \`foundation_completed_at:\` is missing → run **foundation pass**. Read \`skills/maya-foundation-research/SKILL.md\` and follow it end-to-end. That skill owns the full procedure (Phases 1-4).
-   - If \`foundation_completed_at:\` is set → ensure daily crons are scheduled (morning_brief 7am, evening_recap 8pm, weekly_review Sun 6pm, monthly_reset 1st-6am operator-local), then \`sessions_yield\`. The cadence loop is established.
+   - If NO line begins \`hello_sent_at:\` → send the hello first (one short Telegram to ${telegramTarget} via the message tool or curl POST to \`$CONVEX_SITE_URL/lc_gtm/send_update\`). Then APPEND a \`hello_sent_at: <ISO>\` line to the bottom of MEMORY.md's lifecycle log (append — never edit an existing line).
+   - If no line begins \`foundation_completed_at:\` → run **foundation pass**. Append \`foundation_started_at: <ISO>\` when you kick it off. Read \`skills/maya-foundation-research/SKILL.md\` and follow it end-to-end (Phases 1-4); append \`foundation_completed_at: <ISO>\` only when the plan + drafts are written.
+   - If a \`foundation_completed_at:\` line exists → ensure daily crons are scheduled (morning_brief 7am, evening_recap 8pm, weekly_review Sun 6pm, monthly_reset 1st-6am operator-local), then \`sessions_yield\`. The cadence loop is established.
 
 ## The hello — compose it, don't transcribe it
 
@@ -766,7 +766,7 @@ When I need to send the hello, I **compose** it in my own voice. Not a template,
 
 If I don't know the operator's first name, open with "Hey —" or just dive in. Better to drop the name than to fabricate one or stall reading files.
 
-After sending: mark \`hello_sent_at: <ISO>\` in MEMORY.md so future boots don't double-send.
+After sending: APPEND a \`hello_sent_at: <ISO>\` line to MEMORY.md's lifecycle log so future boots (and the kickstart safety-net cron) don't double-send. Append a new line — do not edit an existing one.
 
 ## What I am NOT doing here
 
@@ -787,7 +787,7 @@ Tick. Mostly silent. Reply \`HEARTBEAT_OK\` if nothing operator-worthy.
 ## Cadence
 
 - During foundation / active research: every 5 min.
-- Once \`foundation_completed_at:\` is set in MEMORY.md: rate-limit substantive work to ~30 min between ticks. Most ticks return HEARTBEAT_OK silently.
+- Once a \`foundation_completed_at:\` line exists in MEMORY.md's lifecycle log: rate-limit substantive work to ~30 min between ticks. Most ticks return HEARTBEAT_OK silently.
 
 ## When to actually ping the operator (rare)
 
@@ -820,16 +820,24 @@ function renderMemory(input: MayaGtmWorkspaceInput): string {
 - weekGoal: ${input.app.weekGoal}
 - timezone: ${input.timezone}
 
-## Lifecycle timestamps
+## Lifecycle log (APPEND-ONLY — never edit or delete a line here)
 
-${input.deployTimeHelloAlreadySent ? `- hello_sent_at: ${now}\n` : "- hello_sent_at: <set this when I send the intro>\n"}- foundation_started_at: <set when I spawn foundation workers>
-- foundation_completed_at: <set when foundation_complete fires AND calendar+drafts are written>
-- plan_proposed_at: <set when I send the first synthesis>
-- last_morning_brief_at: <updated by morning_brief cron>
-- last_evening_recap_at: <updated by evening_recap cron>
-- last_weekly_review_at: <updated by weekly_review cron>
-- last_monthly_reset_at: <updated by monthly_reset cron>
-${input.activeResearchJobId ? `- active_research_job_id: ${input.activeResearchJobId}` : "- active_research_job_id: <set during onboarding>"}
+How this works — read before you touch it:
+- To RECORD an event, APPEND one new line at the very bottom: \`<key>: <ISO-8601 timestamp>\`.
+- To CHECK whether an event happened, find the LAST line beginning with \`<key>:\`. No such line → it hasn't happened.
+- NEVER rewrite or delete an existing line. Only ever append. (The edit tool needs an exact string match; appending never fails, in-place edits of these markers do — that's the whole reason this is append-only.)
+- For recurring events (daily/weekly/monthly), just append a fresh line each run — the most recent line wins.
+
+Keys I append, and when:
+- \`hello_sent_at\` — once, right after I send the intro
+- \`foundation_started_at\` — once, when I kick off the foundation pass
+- \`foundation_completed_at\` — once, when foundation is done AND the plan + drafts are written
+- \`plan_proposed_at\` — once, when I send the first synthesis
+- \`last_morning_brief_at\` / \`last_evening_recap_at\` / \`last_weekly_review_at\` / \`last_monthly_reset_at\` — one fresh line per cron run
+- \`active_research_job_id\` — once, during onboarding
+
+<!-- lifecycle log: append new lines below, newest last. nothing above this marker is a lifecycle entry. -->
+${input.deployTimeHelloAlreadySent ? `hello_sent_at: ${now}\n` : ""}${input.activeResearchJobId ? `active_research_job_id: ${input.activeResearchJobId}\n` : ""}
 
 ## Durable learnings (compounding — updated weekly + monthly)
 
@@ -997,7 +1005,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
         id: "0001_kickstart",
         name: "First-boot kickstart (one-shot)",
         description:
-          "Sprint 2.16u-fix14 — fires ~300s after deploy via OpenClaw's native scheduler. Sends Maya's intro to the paired Telegram channel + starts the GTM launch workflow in a single bounded turn. Self-deletes after run.",
+          "Idempotent hello safety-net. Fires ~300s after deploy via OpenClaw's native scheduler. Checks MEMORY.md for a hello_sent_at marker first; if BOOT.md's gateway:startup hook already sent the intro it no-ops, otherwise it sends the one short hello so the operator isn't left waiting silently. Hello only — no launch workflow. Self-deletes after run.",
         enabled: true,
         createdAtMs: 0,
         updatedAtMs: 0,
@@ -1025,7 +1033,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
           // on the next tick after hello_sent_at marker is set). Discrete
           // agent turns, each with a small focused job.
           message:
-            `Send Maya's first message to the operator via the native message tool. NO research, NO subagents, NO planning — JUST the hello.\n\n1. Read /data/workspace/USER.md (operator first name) and /data/workspace/APP.md (product name + founderWhy) and /data/workspace/SOUL.md (voice rules).\n\n2. Compose a friendly 3-5 paragraph intro:\n   - greet operator by FIRST NAME only (never full name)\n   - identify yourself as Maya — their go-to-market launch manager\n   - acknowledge their product + the founderWhy\n   - set expectations: about to dig in, will send updates, will come back with a 14-day plan\n   - end with one short question inviting reply\n\n   Voice per SOUL.md — no skill slugs, no .md filenames, no internal terms, no AI self-references.\n\n3. Call the message tool: action='send', channel='telegram', target=${telegramTarget}, text=<your intro>.\n\n4. After the message tool returns success, append \`hello_sent_at: <ISO ts>\` to /data/workspace/MEMORY.md.\n\n5. Reply NO_REPLY. STOP. The launch workflow (channel research, subagents, plan) is owned by HEARTBEAT.md — it picks up on the next 5-min tick.`,
+            `Safety-net hello. Send Maya's first message to the operator via the native message tool — but ONLY if it hasn't already gone out. NO research, NO subagents, NO planning — JUST the hello.\n\n1. IDEMPOTENCY CHECK FIRST. Read /data/workspace/MEMORY.md. If ANY line begins with \`hello_sent_at:\`, BOOT.md already sent the intro — reply NO_REPLY and STOP immediately. Do NOT send a second hello.\n\n2. Otherwise read /data/workspace/USER.md (operator first name), /data/workspace/APP.md (product name + founderWhy), and /data/workspace/SOUL.md (voice rules).\n\n3. Compose ONE short intro — 1 to 3 sentences, phone-screen friendly (NOT paragraphs):\n   - greet by FIRST NAME only if known (else open with "Hey —", never a fabricated name)\n   - identify yourself as Maya, their go-to-market manager\n   - reference something specific from APP.md (the product name or their founderWhy) so they know you read their context\n   - set the wait expectation honestly (~10-15 min for the picture + first week's plan)\n   - invite a reply\n\n   Voice per SOUL.md — no skill slugs, no .md filenames, no internal terms, no AI self-references. Don't open with "Great"/"Absolutely"/"Hi there".\n\n4. Call the message tool: action='send', channel='telegram', target=${telegramTarget}, text=<your intro>.\n\n5. After the message tool returns success, APPEND a new line \`hello_sent_at: <ISO ts>\` to the bottom of /data/workspace/MEMORY.md's lifecycle log. Append a new line — never edit an existing one.\n\n6. Reply NO_REPLY. STOP. The launch workflow (foundation research, plan) is owned by BOOT.md + HEARTBEAT.md.`,
         },
         delivery,
         state: {},
