@@ -148,20 +148,21 @@ const MODEL_ROUTING = {
   // is a Gemini-specific failure mode on long-context multi-step
   // reasoning. Sonnet 4.6 doesn't share it. Workers stay on gemini
   // 3.5 (they don't accumulate long context).
-  // Sprint 2.18 #40 — DeepSeek V4 Flash for testing.
-  // - deepseek/deepseek-v4-flash: $0.10 in / $0.20 out per M
-  // - 284B MoE / 13B activated, 1M context
-  // - EXPLICITLY designed for agent workflows per OpenRouter:
-  //   "well suited for coding assistants, chat systems, and agent
-  //    workflows where responsiveness and cost efficiency are important"
-  // - Reasoning levels: high / xhigh (defaults to working reasoning)
-  // - Native function calling + structured outputs
-  // - ~150x cheaper than Sonnet 4.6 ($3/$15)
+  // Sprint 2.18 #45 — Haiku 4.5 for Main Maya. Operator-predicted
+  // architecture: intelligent main + cheap workers. Validated across
+  // runs #16, #17, #22 — cheap main (Gemini Flash, DeepSeek V4 Flash)
+  // CAN do foundation orchestration but fails at:
+  //   - Phase 2.5 composition (drafting replies in operator voice)
+  //   - Phase 3 calendar assembly
+  //   - Self-recovery from stuck workers (5-min kill rule ignored)
+  //   - Voice contract adherence (recites worker names verbatim)
+  //   - Session lock discipline (4.6-min lock holds → operator
+  //     inbound messages timeout with "Something went wrong")
   //
-  // Sonnet stays available as fallback via env override
-  // MAYA_GTM_MODEL=anthropic/claude-sonnet-4.6 if testing reveals
-  // capability gaps.
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "deepseek/deepseek-v4-flash",
+  // Haiku 4.5: $1/$5 per M, Anthropic-grade reasoning + voice
+  // discipline, ~3x cheaper than Sonnet 4.6. Workers stay on cheap
+  // Gemini 3 Flash Preview. Expected total ~$5-7/onboarding.
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "anthropic/claude-haiku-4.5",
   // Sprint 2.18 #42 — workers DOWNGRADED from gemini-3.5-flash to
   // gemini-3-flash-preview. Per OpenRouter pricing (verified 2026-05-28):
   //   gemini-3.5-flash:  $1.50 in / $9 out per M
