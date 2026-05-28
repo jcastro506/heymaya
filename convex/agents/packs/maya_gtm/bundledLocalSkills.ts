@@ -1179,7 +1179,7 @@ The wedge vs incumbents: [one sentence — what you do that they don't]
 • [day, time]: [event title]
 • …
 
-Approve and I'll lock them in. Or tell me which to swap.
+First action's [day, time]. I've already locked it in your calendar. Tell me if you want any of the rest swapped.
 \`\`\`
 
 Plain text. No headers. No "Excited to share." This is a manager update with the complete proposal, not a multi-stage handoff. The operator's reply is the ONLY remaining gate.
