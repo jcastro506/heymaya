@@ -849,6 +849,126 @@ export const getMyNicheLearningsHttp = httpAction(async (ctx, request) => {
   });
 });
 
+// ───────────────────── Cost ledger (Sprint 2.25) ─────────────────────
+
+/**
+ * Sprint 2.25 — Maya logs her own spend after each major phase.
+ *
+ * Maya's foundation pass + heartbeat + cron work runs INSIDE OpenClaw
+ * on the Fly machine, calling OpenRouter directly. Those calls bypass
+ * our Convex callOpenRouter wrapper, so we can't auto-capture cost.
+ *
+ * Workaround: Maya curls THIS endpoint at the end of each phase with
+ * her own self-reported usage + cost numbers. OpenClaw's session log
+ * surfaces token counts and (when usage.include=true) cost USD per
+ * call. Maya aggregates per phase and POSTs.
+ *
+ * Body:
+ *   { idempotencyKey, provider, operation, reason, costUsd,
+ *     units?, cacheStatus?, metadata? }
+ *
+ * Required: idempotencyKey, provider, operation, reason, costUsd.
+ * Optional: units (token count), cacheStatus (defaults "called"),
+ * metadata (free-form blob for forensics).
+ *
+ * Cross-tenant safety: agentId + accountId come from the
+ * authenticated hookToken — body never names them.
+ */
+interface LogCostPayload {
+  idempotencyKey: string;
+  provider:
+    | "openrouter"
+    | "openclaw"
+    | "scrapecreators"
+    | "x_api"
+    | "composio"
+    | "gemini"
+    | "other";
+  operation: string;
+  reason: string;
+  costUsd: number;
+  units?: number;
+  cacheStatus?: "hit" | "miss" | "called" | "skipped" | "failed";
+  metadata?: Record<string, unknown>;
+}
+
+const COST_PROVIDERS = new Set([
+  "openrouter",
+  "openclaw",
+  "scrapecreators",
+  "x_api",
+  "composio",
+  "gemini",
+  "other",
+]);
+const CACHE_STATUSES = new Set(["hit", "miss", "called", "skipped", "failed"]);
+
+export const logCostHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: LogCostPayload;
+  try {
+    body = (await request.json()) as LogCostPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (
+    !body.idempotencyKey ||
+    !body.provider ||
+    !COST_PROVIDERS.has(body.provider) ||
+    !body.operation ||
+    !body.reason ||
+    typeof body.costUsd !== "number"
+  ) {
+    return new Response("missing required fields", { status: 400 });
+  }
+  if (body.costUsd < 0) {
+    return new Response("costUsd cannot be negative", { status: 400 });
+  }
+  const cacheStatus =
+    body.cacheStatus && CACHE_STATUSES.has(body.cacheStatus)
+      ? body.cacheStatus
+      : "called";
+
+  // Idempotency-key dedupe via gtmHookCallbacks. Reuse "action_logged"
+  // kind since cost-log is a fire-and-forget side observation, not a
+  // first-class callback type. (We could add a new kind if we want
+  // separate analytics — not worth it for v1.)
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "action_logged",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") {
+    return new Response("ok (replay)", { status: 200 });
+  }
+
+  try {
+    await ctx.runMutation(internal.gtmMaya.costLedger.recordGtmCostInternal, {
+      accountId: auth.accountId,
+      provider: body.provider,
+      operation: body.operation,
+      reason: body.reason,
+      costUsd: body.costUsd,
+      units: body.units,
+      cacheStatus,
+      metadata: body.metadata,
+    });
+  } catch (err) {
+    console.error(
+      "[/lc_gtm/log_cost] recordGtmCostInternal failed:",
+      (err as Error).message
+    );
+    return new Response("ok (cost not recorded; see logs)", { status: 200 });
+  }
+  return new Response(`ok (cost=${body.costUsd} recorded)`, { status: 200 });
+});
+
 // ───────────────────── Helpers ─────────────────────
 
 function parseIntParam(raw: string | null): number | undefined {

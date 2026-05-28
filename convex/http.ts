@@ -104,6 +104,7 @@ import {
   getMyNichePulseHttp,
   getMyActionLogHttp,
   getMyNicheLearningsHttp,
+  logCostHttp,
 } from "./gtmMaya/openclaw/managerCallbacks";
 
 const http = httpRouter();
@@ -317,6 +318,15 @@ http.route({
   path: "/lc_gtm/get_my_niche_learnings",
   method: "GET",
   handler: getMyNicheLearningsHttp,
+});
+// Sprint 2.25 — cost ledger write endpoint. Maya (in OpenClaw on Fly)
+// curl-POSTs cost data here after each major phase / call so the
+// operator can see per-onboarding spend in Convex without us needing
+// to wrap every OpenClaw model call.
+http.route({
+  path: "/lc_gtm/log_cost",
+  method: "POST",
+  handler: logCostHttp,
 });
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs
