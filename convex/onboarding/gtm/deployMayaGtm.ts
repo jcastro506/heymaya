@@ -148,7 +148,15 @@ const MODEL_ROUTING = {
   // is a Gemini-specific failure mode on long-context multi-step
   // reasoning. Sonnet 4.6 doesn't share it. Workers stay on gemini
   // 3.5 (they don't accumulate long context).
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "anthropic/claude-sonnet-4.6",
+  // Sprint 2.18 #36 — TEST-MODE COST CUT. Sonnet 4.6 at $3/$15 per M
+  // burned ~$20-25 per onboarding pass. While iterating on Maya's
+  // behavioral wiring, switch Main Maya to Gemini 3.5 Flash at
+  // $0.075/$0.30 per M — ~40x cheaper. We pay the capability drop
+  // (less deep reasoning, more brittle long-context handling), but
+  // the current bugs are prompt-quality + agent-discipline issues,
+  // not "needs more reasoning power". Revert to Sonnet 4.6 once the
+  // foundation→synthesis loop is solid end-to-end.
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemini-3.5-flash",
   // Sprint 2.18 — workers on 3.5 too. Replaced gemini-3-flash-preview
   // (a literal preview that we hit instability on — stream stalls,
   // 8-retry validation bounce loops). 3.5 Flash is GA on OpenRouter
@@ -1014,22 +1022,46 @@ export const deployMayaGtm = internalAction({
       }
     }
 
-    // Sprint 2.16r — REVERTED Sprint 2.16q hardcoded Convex hello.
-    // Operator: "are we hardcoding the hello anywhere? we shouldn't —
-    // it can all live in the openclaw boot prompt." Right call. The
-    // hardcoded Convex hello had Maya's intro tone baked into deploy
-    // pipeline strings, which is the wrong layer.
+    // Sprint 2.18 #36 — RESTORED a minimal deploy-time stub hello as a
+    // safety net. Sprint 2.16r removed the hardcoded Convex hello at
+    // operator request ("hello belongs in BOOT.md, not deploy"). That
+    // was right architecturally but it removed the only guaranteed
+    // first-contact path. Verified live 2026-05-28 run #15: Maya wrote
+    // `hello_sent_at` to MEMORY.md without calling the message tool —
+    // operator got NO communication after 20+ min.
     //
-    // Now the hello composition lives back in BOOT.md, where Maya
-    // reads workspace context (USER.md first name, APP.md product
-    // name + founderWhy) and writes the intro herself ONCE per
-    // deploy. BOOT.md tells her to write a "hello_sent" marker to
-    // MEMORY.md immediately after; subsequent turns read MEMORY.md
-    // first and skip if marker present. That gives "trust the agent"
-    // + "only once" without a hardcoded template in Convex.
+    // The fix: deploy sends a TINY status stub ("setting up your
+    // account — back in ~10-15 min with the picture"). NOT the rich
+    // hello — that still belongs to Maya, comes from BOOT.md, fires
+    // a minute later in her voice with the operator's name + product
+    // context. The stub is two sentences max; it exists so the
+    // operator never sits in silence after a deploy.
+    let stubResult = "skipped:no_telegram";
+    let stubMessageId: number | undefined;
+    if (row.agent.telegramChatId) {
+      try {
+        const stubText = `Maya here. Setting up your account for ${row.app.name ?? "your product"} — back to you in ~10-15 min with the picture and this week's plan.`;
+        const stage = (process.env.CONVEX_DEPLOYMENT ?? "").includes("precise-canary-781")
+          ? "staging"
+          : "production";
+        const botToken = stage === "staging"
+          ? process.env.TELEGRAM_BOT_TOKEN_STAGING
+          : (process.env.TELEGRAM_BOT_TOKEN_PRODUCTION ?? process.env.TELEGRAM_BOT_TOKEN);
+        const hello = await sendDirectTelegramMessage({
+          botToken,
+          chatId: row.agent.telegramChatId,
+          text: stubText,
+        });
+        stubResult = hello.ok ? "stub_sent" : (hello.reason ?? "telegram_unknown");
+        stubMessageId = hello.messageId ?? undefined;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        stubResult = `exception:${msg.slice(0, 100)}`;
+      }
+    }
     await ctx.runMutation(
       internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-      { agentId: args.agentId, result: "skipped:maya_owns_hello_in_boot_prompt" }
+      { agentId: args.agentId, result: stubResult, messageId: stubMessageId }
     );
 
     try {
