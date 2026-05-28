@@ -1174,15 +1174,25 @@ Where to play week one: [bet channels with one-line rationale each]
 
 The wedge vs incumbents: [one sentence — what you do that they don't]
 
-5 events queued for your calendar this week:
+[N] events queued in the plan this week (18-25 is the active-launch target):
 • [day, time]: [event title, one-line what + where]
 • [day, time]: [event title]
 • …
 
-First action's [day, time]. I've already locked it in your calendar. Tell me if you want any of the rest swapped.
+First action's [day, time]. Plan's locked in my view — pushing to your Google Calendar now. Tell me if you want any swapped.
 \`\`\`
 
-Plain text. No headers. No "Excited to share." This is a manager update with the complete proposal, not a multi-stage handoff. The operator's reply is the ONLY remaining gate.
+Plain text. No headers. No "Excited to share." This is a manager update with the complete proposal, not a multi-stage handoff.
+
+## Phase 5 — push to Google Calendar (Sprint 2.22)
+
+After sending the synthesis, Maya immediately POSTs to \`/lc_gtm/approve_calendar\` (no operator action needed — default-to-acting per AGENTS.md non-negotiable #7). Three response cases:
+
+1. **\`ok (pushed=N failed=M)\`** — events landed on operator's Google Calendar. Done.
+2. **\`needs_oauth\`** — operator hasn't connected Google Calendar yet. Maya sends ONE follow-up message: *"To put these on your actual Google Calendar, connect it once here: \`<convex.site>/lc_maya/start_google_calendar_oauth\`. They live in our system either way — connecting just makes them show up in your calendar app."*
+3. **\`ok (push failed)\`** — log it. Maya tells operator if it's a high-impact failure ("first 3 events landed; last 2 had API errors — re-trying tonight"). Otherwise stays quiet.
+
+The events stored in \`gtmCalendarEvents\` (status: "draft") persist regardless. Operator can always trigger a re-push later. The operator NEVER blocks on this — Maya keeps moving forward on the daily cadence even if Google Calendar isn't connected yet.
 
 ## Failure modes
 

@@ -4383,7 +4383,12 @@ export default defineSchema({
     accountId: v.id("creators"),
     agentId: v.id("gtmAgents"),
     researchJobId: v.optional(v.id("gtmResearchJobs")),
-    providerEventId: v.string(),  // Google's event id
+    // Sprint 2.22 — providerEventId now OPTIONAL. Draft events (status
+    // "draft") are stored before Google Calendar push, so they don't
+    // have a Google event id yet. After operator approval, the push
+    // succeeds and providerEventId is filled + status flips to
+    // "scheduled".
+    providerEventId: v.optional(v.string()),
     htmlLink: v.optional(v.string()),
     title: v.string(),
     description: v.optional(v.string()),
@@ -4489,6 +4494,8 @@ export default defineSchema({
       v.literal("research_callback"),
       v.literal("approval_decision"),
       v.literal("calendar_proposal"),
+      // Sprint 2.22 — operator-approved Google Calendar push.
+      v.literal("calendar_approval"),
       // Sprint 2.2 — deep-research subagents POST these callback kinds
       // when they surface target-list artifacts (threads / accounts /
       // drafts). Inbound HTTP handler in convex/gtmMaya/openclaw/

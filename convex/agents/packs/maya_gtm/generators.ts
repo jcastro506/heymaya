@@ -561,7 +561,8 @@ Every POST requires \`idempotencyKey\` (UUIDv4 — same key on retry = "ok (repl
 
 - \`/lc_gtm/drafted_content\` — Required: \`idempotencyKey\`, \`kind\` (\`"reply"\` / \`"post"\` / \`"thread"\`), \`platform\`, \`draftText\`. Optional: \`targetThreadId\`.
 
-- \`/lc_gtm/calendar_proposal\` — Required: \`idempotencyKey\`, \`events\` (array). Each event needs: \`kind\`, \`title\`, \`description\`, \`startsAtMs\`, \`endsAtMs\`. Optional per event: \`targetThreadId\`, \`draftedReplyId\`.
+- \`/lc_gtm/calendar_proposal\` — STORE events as DRAFTS in Convex (does NOT push to operator's Google Calendar yet). Required: \`idempotencyKey\`, \`events\` (array). Each event needs: \`kind\`, \`title\`, \`description\`, \`startsAtMs\`, \`endsAtMs\`. Optional per event: \`targetThreadId\`, \`draftedReplyId\`. Always succeeds regardless of Google Calendar OAuth state. I call this at end of Phase 3.
+- \`/lc_gtm/approve_calendar\` — PUSH all draft events to operator's Google Calendar. Required: \`idempotencyKey\`. No events body — server reads all current drafts for the agent and pushes them. Response cases: \`ok (pushed=N failed=M)\` = success / \`needs_oauth\` = operator must connect Google Calendar at \`/lc_maya/start_google_calendar_oauth\` first. I call this AFTER the operator approves the synthesis message.
 
 - \`/lc_gtm/action_logged\` — Required: \`idempotencyKey\`, \`kind\`, \`summary\`. Optional: any context fields.
 

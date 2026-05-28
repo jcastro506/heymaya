@@ -58,6 +58,7 @@ import { telegramWebhookHttp } from "./gtmMaya/telegramWebhook";
 import { deliveryFailureHttp } from "./gtmMaya/deliveryFailures";
 import {
   approvalDecisionHttp,
+  approveCalendarHttp,
   calendarProposalHttp,
   researchCallbackHttp,
   // Sprint 2.1 — deep-research subagent callbacks. Per-platform _research
@@ -147,6 +148,17 @@ http.route({
   path: "/lc_gtm/calendar_proposal",
   method: "POST",
   handler: calendarProposalHttp,
+});
+// Sprint 2.22 — operator-approval-gated Google Calendar push. Maya
+// POSTs to this endpoint AFTER the operator approves the synthesis.
+// Reads all draft gtmCalendarEvents for this agent and pushes them to
+// the operator's connected Google Calendar. Returns needsOAuth:true
+// if Google Calendar isn't connected yet — Maya prompts operator to
+// connect via /lc_maya/start_google_calendar_oauth.
+http.route({
+  path: "/lc_gtm/approve_calendar",
+  method: "POST",
+  handler: approveCalendarHttp,
 });
 // Sprint 2.1 — deep-research subagent callbacks. Subagents POST one row
 // per discovery; the parent agent's hookToken authenticates (subagents

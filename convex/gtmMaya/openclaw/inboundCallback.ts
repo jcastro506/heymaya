@@ -40,6 +40,8 @@ const CALLBACK_KIND = v.union(
   v.literal("research_callback"),
   v.literal("approval_decision"),
   v.literal("calendar_proposal"),
+  // Sprint 2.22 — operator-approved Google Calendar push.
+  v.literal("calendar_approval"),
   // Sprint 2.1 — deep-research subagent callbacks. Per-platform research
   // subagents (reddit_research, x_research, etc.) POST one row at a time
   // during the FIRST WAKE deep research phase. See
@@ -380,10 +382,13 @@ export const calendarProposalHttp = httpAction(async (ctx, request) => {
     return new Response("ok (replay)", { status: 200 });
   }
 
-  // Write events via the GTM calendar connection.
+  // Sprint 2.22 — STORE-ONLY. Don't push to Google Calendar yet —
+  // that happens via /lc_gtm/approve_calendar after operator approves.
+  // This decoupling means draft events persist regardless of OAuth
+  // state (previously: no OAuth = silent drop).
   try {
-    await ctx.runAction(
-      internal.gtmMaya.calendarWrite.writeCalendarEventsForAgent,
+    const result = await ctx.runAction(
+      internal.gtmMaya.calendarWrite.storeProposedCalendarEvents,
       {
         agentId: auth.agentId,
         accountId: auth.accountId,
@@ -391,17 +396,89 @@ export const calendarProposalHttp = httpAction(async (ctx, request) => {
         events: body.events,
       }
     );
+    return new Response(
+      `ok (${result.stored} events stored as draft; awaiting approval)`,
+      { status: 200 }
+    );
   } catch (err) {
     console.error(
-      "[/lc_gtm/calendar_proposal] write failed:",
+      "[/lc_gtm/calendar_proposal] store failed:",
       (err as Error).message
     );
-    // Still 200 so Maya doesn't retry — the proposal idempotency key is
-    // already claimed. Operator sees the failure in the action log.
-    return new Response("ok (write failed; see logs)", { status: 200 });
+    return new Response("ok (store failed; see logs)", { status: 200 });
+  }
+});
+
+/**
+ * Sprint 2.22 — operator-approval gate before Google Calendar push.
+ *
+ * Maya POSTs to this endpoint AFTER the operator approves the
+ * synthesis. Reads all draft gtmCalendarEvents for this agent and
+ * pushes them to the operator's connected Google Calendar.
+ *
+ * Request body: { idempotencyKey } — no events array, since drafts
+ *   are looked up server-side by agentId.
+ *
+ * Response cases:
+ *   200 ok pushed:N        — success
+ *   200 needs_oauth        — operator must connect Google Calendar
+ *                            via /lc_maya/start_google_calendar_oauth
+ *   200 no_drafts          — nothing to push (idempotent / already pushed)
+ *   400 missing fields     — malformed request
+ *   401/403 auth           — invalid hookToken
+ *
+ * The 200 + needs_oauth shape lets Maya gracefully tell the operator
+ * "your calendar isn't connected yet" instead of erroring.
+ */
+interface ApproveCalendarPayload {
+  idempotencyKey: string;
+}
+export const approveCalendarHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: ApproveCalendarPayload;
+  try {
+    body = (await request.json()) as ApproveCalendarPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (!body.idempotencyKey) {
+    return new Response("missing required fields", { status: 400 });
   }
 
-  return new Response("ok (events written)", { status: 200 });
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "calendar_approval",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") {
+    return new Response("ok (replay)", { status: 200 });
+  }
+
+  try {
+    const result = await ctx.runAction(
+      internal.gtmMaya.calendarWrite.pushApprovedCalendarEvents,
+      { agentId: auth.agentId, accountId: auth.accountId }
+    );
+    if (result.needsOAuth) {
+      return new Response("needs_oauth", { status: 200 });
+    }
+    return new Response(
+      `ok (pushed=${result.pushed} failed=${result.failed})`,
+      { status: 200 }
+    );
+  } catch (err) {
+    console.error(
+      "[/lc_gtm/approve_calendar] push failed:",
+      (err as Error).message
+    );
+    return new Response("ok (push failed; see logs)", { status: 200 });
+  }
 });
 
 /* ──────────────────────────────────────────────────────────────────────
