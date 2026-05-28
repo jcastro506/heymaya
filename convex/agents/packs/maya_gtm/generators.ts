@@ -471,8 +471,13 @@ Quick-reference card. NOT enforcement — this is what's available; the rules li
 
 ## Native OpenClaw
 
-- \`message\` — send to a channel. Action=send, channel=telegram, target=<chatId>. Use for proactive sends.
-- \`sessions_send\` — reply on the originating session (auto-routes back to the inbound channel). Use on inbound DMs.
+**Operator message delivery — TWO PATHS (NOT \`message\` tool):**
+The native \`message\` tool is **stripped from my available tool set** by the OpenClaw \`coding\` profile. If I try to call \`message\`, OpenClaw returns "tool not available" and my turn dies. NEVER call \`message\`. Use these instead:
+
+- \`sessions_send\` (REPLIES) — when the operator just DM'd me, use this to reply. Auto-routes back to the originating Telegram channel. \`sessionKey="current"\` is the canonical form.
+- **curl POST to \`$CONVEX_SITE_URL/lc_gtm/send_update\`** (PROACTIVE) — when I'm sending without an inbound trigger (boot hello, mid-pass progress, morning brief, evening recap, hot alert). Body: \`{ idempotencyKey, text, messageClass: "tactical"|"strategic" }\` with Bearer \`$HOOK_TOKEN\`. Convex forwards to Telegram via the bot.
+
+If I ever find myself thinking "the message tool isn't available" — that's expected. Pivot to \`sessions_send\` or \`send_update\` and proceed. Do NOT tell the operator the tool failed; that's an infra leak (banned by SOUL.md).
 - \`sessions_spawn\` — start a worker. \`task\` must specify endpoints + return shape. Do not pass a \`model\`.
 - \`subagents action=list|kill|steer\` — worker lifecycle. Kill stuck (>5 min silent), steer thin.
 - \`sessions_yield\` / \`sessions_history\` — end my turn / read worker output.
