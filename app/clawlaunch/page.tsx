@@ -530,7 +530,7 @@ function ChannelPane({
   mockup,
 }: ChannelPaneProps) {
   return (
-    <article className="border-b border-[#0a0a0a]/10 py-28 sm:py-40 lg:py-48 last:border-b-0">
+    <article className="border-b border-[#0a0a0a]/10 py-28 first:pt-6 sm:py-40 sm:first:pt-10 lg:py-48 lg:first:pt-12 last:border-b-0">
       <RevealOnView>
         <div className="grid grid-cols-12 gap-x-8 gap-y-12 lg:gap-y-0">
           {/* LEFT — text */}
@@ -617,7 +617,7 @@ function Channels() {
           </RevealOnView>
         </div>
 
-        <div className="mt-20 sm:mt-28">
+        <div className="mt-10 sm:mt-14">
           <ChannelPane
             logo={<RedditLogo className="size-11" />}
             name="Reddit."
@@ -683,42 +683,44 @@ const WEEK_ROWS: Array<{
 }> = [
   {
     day: "Mon",
-    time: "07:00",
+    time: "7:00a",
     ping: true,
-    title: "Morning brief",
-    body: "Graded Strong / Thin / Warmup. Top priority named. Five calendar events queued with full hands-off recipes.",
+    title: "Your morning text",
+    body: "One short message: the two or three things worth doing today, and the single one that matters most. The writing's already done — you approve, you post, you get back to building.",
   },
   {
     day: "Mon",
-    time: "09:30",
-    title: "First reply lands",
-    body: "Drafted overnight. You approve, post, get on with your day.",
+    time: "11:20a",
+    title: "Replies, ready to send",
+    body: "She's been reading the places your future users hang out and found the conversations where they're describing the exact problem your app solves. Each one comes with a reply that sounds like you — not an ad. You just hit send.",
   },
   {
     day: "Tue",
-    time: "06:45",
-    title: "Niche scan refresh",
-    body: "Workers run quietly. New high-velocity threads slot into today's calendar — never replacing, only adding.",
-  },
-  {
-    day: "Tue",
-    time: "20:00",
+    time: "8:00p",
     ping: true,
-    title: "Evening recap",
-    body: "What got done, what landed, what flopped. Tomorrow's brief writes itself from this.",
+    title: "Evening check-in",
+    body: "What went out today, and how it's actually doing. This morning's post is pulling comments; one reply already got a “where can I try this?” And when something flops, she tells you straight — no spin.",
   },
   {
     day: "Wed",
-    time: "07:00",
-    title: "Hot alert (sometimes)",
-    body: "A thread is ramping. 47 upvotes/hr. She bumps it ahead of the morning queue. You decide if you want in.",
+    time: "2:15p",
+    ping: true,
+    title: "Something's catching",
+    body: "A post is moving faster than usual. She pings you while it's still hot — “this one's taking off, worth jumping back in?” You decide whether to ride it.",
+  },
+  {
+    day: "Thu",
+    time: "4:40p",
+    ping: true,
+    title: "A real buyer shows up",
+    body: "A comment lands that reads like a customer, not a fan — “wait, how much is this?” She catches it, drafts your answer, hands it over in one line. You never go digging through notifications to find it.",
   },
   {
     day: "Sun",
-    time: "18:00",
+    time: "6:00p",
     ping: true,
-    title: "Weekly review",
-    body: "Last week's score across channels. What we learned. The strategic shift, if there is one. Drafts queued for the new week.",
+    title: "The week, reviewed",
+    body: "How last week really went — what worked, what didn't, and what she figured out about your audience. Then next week's plan, already drafted. You start Monday knowing exactly what's happening.",
   },
 ];
 
