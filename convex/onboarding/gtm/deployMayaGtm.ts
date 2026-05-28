@@ -148,25 +148,22 @@ const MODEL_ROUTING = {
   // is a Gemini-specific failure mode on long-context multi-step
   // reasoning. Sonnet 4.6 doesn't share it. Workers stay on gemini
   // 3.5 (they don't accumulate long context).
-  // Sprint 2.18 #49 — REVERTED Gemma 4 26B A4B → Haiku 4.5.
+  // Sprint 2.18 #50 — RE-RESTORED Gemma 4 26B A4B with reasoning
+  // hidden. Operator after #49 revert: "stick to Gemma 4 it's ok.
+  // Can you research if we can not show that though."
   //
-  // Gemma 4 failure mode 2026-05-28 run #26: leaked entire
-  // chain-of-thought to Telegram as the operator-visible message
-  // body. Multi-paragraph internal monologue ("thought / The user
-  // said / Wait I should / Response structure / I'll just act")
-  // shipped verbatim to the operator. Root cause: Gemma 4's
-  // "configurable thinking/reasoning mode" inlines reasoning tokens
-  // with output. Unlike Anthropic models which separate
-  // thinking/output by default, Gemma 4's reasoning trace IS the
-  // output stream. OpenRouter doesn't expose a "reasoning.hidden"
-  // flag to suppress it for Gemma.
+  // Found the fix in OpenClaw docs (concepts/messages.md +
+  // gateway/config-agents.md):
+  //   agents.list[].reasoningDefault: "off"
+  // controls reasoning visibility per agent. Model still reasons
+  // internally (better orchestration) but reasoning tokens DO NOT
+  // appear in operator-facing output stream.
+  // Applied on the "main" agent below (see agents.list).
   //
-  // Multimodal still desired for Sprint 2.20 (TikTok/IG video
-  // watching). Plan: use Gemini 2.5/3 Flash Vision or Gemma 4 26B
-  // A4B as a DEDICATED multimodal subagent spawned by Main Maya,
-  // not as the orchestrator. Workers don't message operators
-  // directly, so their reasoning leak is harmless.
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "anthropic/claude-haiku-4.5",
+  // Plus OpenRouter passthrough `reasoning: { exclude: true }` is
+  // added below via agents.defaults.models params for the model
+  // route — provider-side cost saver (don't pay for hidden tokens).
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemma-4-26b-a4b-it",
   // Sprint 2.18 #42 — workers DOWNGRADED from gemini-3.5-flash to
   // gemini-3-flash-preview. Per OpenRouter pricing (verified 2026-05-28):
   //   gemini-3.5-flash:  $1.50 in / $9 out per M
@@ -519,14 +516,18 @@ export function buildGatewayConfig(
           model: mainModel,
           subagents: { allowAgents: allowFromMain },
           tools: { profile: "coding" },
+          // Sprint 2.18 #50 — hide reasoning tokens from operator-
+          // facing output. Per OpenClaw docs: agents.list[].
+          // reasoningDefault: "off" overrides the global default
+          // and blocks reasoning from being emitted to channels.
+          // Critical for Gemma 4 which inlines reasoning with output.
+          // Model still reasons internally — gateway just doesn't
+          // forward the reasoning content to Telegram.
+          reasoningDefault: "off" as const,
           // Sprint 2.18 #38 attempted thinking:"medium" here — OpenClaw
-          // schema REJECTED it at the per-agent entry level same way
-          // Sprint 2.16l learned it's rejected at agents.defaults level:
-          //   "agents.list.0: Invalid input"
-          // Gateway refused to start on run #17. `thinking` is per-
-          // session-payload only — Maya invokes it explicitly per
-          // sessions_spawn call, OR the model has reasoning baked in
-          // (Sonnet 4.6) and uses it automatically.
+          // schema REJECTED it at the per-agent entry level. `thinking`
+          // is per-session-payload only — Maya invokes it explicitly
+          // per sessions_spawn call.
         },
         // Sprint 2.18 — hard_research_beta REMOVED from agents.list[].
         // boot-md iterates listAgentIds(cfg) and runs BOOT.md FOR EACH
