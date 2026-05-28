@@ -4309,6 +4309,20 @@ export default defineSchema({
     telegramChatId: v.optional(v.string()),
     telegramUsername: v.optional(v.string()),
     telegramPairedAt: v.optional(v.number()),
+    // Sprint 2.26 — per-operator Telegram bot. Multi-tenant architecture:
+    // each operator creates their own bot via BotFather, pastes the token
+    // here during onboarding. Bot is wired to THEIR Fly machine's
+    // /telegram-webhook URL. Without this, every Maya shares a single
+    // bot (testing convenience only — hard pre-launch blocker for prod).
+    //   telegramBotToken: encrypted (lib/encryption.encrypt) — NEVER store
+    //     plaintext. Decrypt at deploy time when setting as Fly secret.
+    //   telegramBotUsername: the @handle of the bot (e.g. "mayagtm_jsmith_bot")
+    //     used for the pairing deep link https://t.me/<username>?start=pair_<token>
+    //   telegramBotIdentityCheckedAt: unix ms of last getMe() validation —
+    //     so we can detect revoked tokens before deploy.
+    telegramBotToken: v.optional(v.string()),
+    telegramBotUsername: v.optional(v.string()),
+    telegramBotIdentityCheckedAt: v.optional(v.number()),
     // Sprint 16 — hook bridge auth token (per-agent shared secret used by
     // Convex actions when POSTing to the Fly machine's /hooks/agent and
     // /hooks/wake endpoints, and by the machine when calling back into

@@ -946,11 +946,39 @@ export const deployMayaGtm = internalAction({
           false
         );
       }
+      // Sprint 2.26 — per-operator Telegram bot. If the operator has
+      // pasted their own bot token (via setPersonalTelegramBot), use it.
+      // Otherwise fall back to the shared dev/test bot in env (multi-
+      // tenant prod hardening will surface this as a productionReadiness
+      // warning).
+      const personalBot = await ctx.runQuery(
+        internal.gtmMaya.telegramBotPerTenant.getDecryptedBotToken,
+        { agentId: args.agentId }
+      );
+      const sharedTelegramSecrets = collectDeploySecrets();
+      const telegramBotToken =
+        personalBot.token ?? sharedTelegramSecrets.TELEGRAM_BOT_TOKEN;
       await fly.setAppSecrets(bundle.flyAppName, {
-        ...collectDeploySecrets(),
+        ...sharedTelegramSecrets,
         OPENCLAW_GATEWAY_TOKEN: gatewayToken,
         HOOK_TOKEN: hookTokenForFly,
+        ...(telegramBotToken
+          ? { TELEGRAM_BOT_TOKEN: telegramBotToken }
+          : {}),
       });
+      if (personalBot.token) {
+        console.log(
+          `[deployMayaGtm] using per-tenant Telegram bot for agent ${args.agentId} (source: per_tenant)`
+        );
+      } else if (sharedTelegramSecrets.TELEGRAM_BOT_TOKEN) {
+        console.warn(
+          `[deployMayaGtm] using shared Telegram bot fallback for agent ${args.agentId} — operator should call setPersonalTelegramBot before prod`
+        );
+      } else {
+        console.warn(
+          `[deployMayaGtm] NO Telegram bot token for agent ${args.agentId} — outbound delivery will fail`
+        );
+      }
     } catch (err) {
       return fail("set-secrets", (err as Error).message, isRetryable(err));
     }
