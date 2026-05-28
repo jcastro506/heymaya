@@ -148,22 +148,20 @@ const MODEL_ROUTING = {
   // is a Gemini-specific failure mode on long-context multi-step
   // reasoning. Sonnet 4.6 doesn't share it. Workers stay on gemini
   // 3.5 (they don't accumulate long context).
-  // Sprint 2.18 #39 — REVERTED back to Sonnet 4.6. Sprint #36 tried
-  // Gemini 3.5 Flash for cost ($0.075/$0.30 vs $3/$15, ~40x cheaper).
-  // Run #16 showed 1/5 foundation rows by T+6m vs Sonnet 4.6's 4/5
-  // (cheap model can't orchestrate at the same throughput). Sprint
-  // #38 then tried to add explicit thinking:"medium" to Main Maya's
-  // agents.list entry — OpenClaw schema rejected it, gateway refused
-  // to start, run #17 was a complete null. Without a working way to
-  // enable reasoning on Gemini Flash for Main Maya, the cheap path
-  // isn't viable. Sonnet has reasoning baked in by default.
+  // Sprint 2.18 #40 — DeepSeek V4 Flash for testing.
+  // - deepseek/deepseek-v4-flash: $0.10 in / $0.20 out per M
+  // - 284B MoE / 13B activated, 1M context
+  // - EXPLICITLY designed for agent workflows per OpenRouter:
+  //   "well suited for coding assistants, chat systems, and agent
+  //    workflows where responsiveness and cost efficiency are important"
+  // - Reasoning levels: high / xhigh (defaults to working reasoning)
+  // - Native function calling + structured outputs
+  // - ~150x cheaper than Sonnet 4.6 ($3/$15)
   //
-  // Cost-saving paths to explore later:
-  //   - Haiku 4.5 ($1/$5, 3x cheaper, reasoning baked in)
-  //   - Gemini 2.5 Pro (middle tier, may not need explicit thinking)
-  //   - Per-session-payload thinking flag (set when Maya spawns each
-  //     orchestration step — invasive change to skill prompts)
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "anthropic/claude-sonnet-4.6",
+  // Sonnet stays available as fallback via env override
+  // MAYA_GTM_MODEL=anthropic/claude-sonnet-4.6 if testing reveals
+  // capability gaps.
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "deepseek/deepseek-v4-flash",
   // Sprint 2.18 — workers on 3.5 too. Replaced gemini-3-flash-preview
   // (a literal preview that we hit instability on — stream stalls,
   // 8-retry validation bounce loops). 3.5 Flash is GA on OpenRouter
@@ -1037,43 +1035,15 @@ export const deployMayaGtm = internalAction({
       }
     }
 
-    // Sprint 2.18 #39 — Convex stub hello RESTORED as safety net.
-    // Sprint #37 removed it at operator request ("everything OpenClaw
-    // should be handled by OpenClaw"). Architecturally pure, but
-    // runs #15 + #17 each failed to deliver any operator message:
-    //   #15: Maya fabricated `hello_sent_at` in MEMORY.md without
-    //        calling the message tool
-    //   #17: gateway crash-loop from bad thinking config, agent
-    //        never booted
-    // Operator silence after deploy is worse than a slightly
-    // redundant double-message. Keep the stub minimal so it doesn't
-    // shout over Maya's real hello, but always fire it.
-    let stubResult = "skipped:no_telegram";
-    let stubMessageId: number | undefined;
-    if (row.agent.telegramChatId) {
-      try {
-        const stubText = `Maya here. Setting up your account for ${row.app.name ?? "your product"} — back to you in ~10-15 min with the picture and this week's plan.`;
-        const stage = (process.env.CONVEX_DEPLOYMENT ?? "").includes("precise-canary-781")
-          ? "staging"
-          : "production";
-        const botToken = stage === "staging"
-          ? process.env.TELEGRAM_BOT_TOKEN_STAGING
-          : (process.env.TELEGRAM_BOT_TOKEN_PRODUCTION ?? process.env.TELEGRAM_BOT_TOKEN);
-        const hello = await sendDirectTelegramMessage({
-          botToken,
-          chatId: row.agent.telegramChatId,
-          text: stubText,
-        });
-        stubResult = hello.ok ? "stub_sent" : (hello.reason ?? "telegram_unknown");
-        stubMessageId = hello.messageId ?? undefined;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        stubResult = `exception:${msg.slice(0, 100)}`;
-      }
-    }
+    // Sprint 2.18 #40 — Convex stub hello PERMANENTLY REMOVED.
+    // Operator (twice — Sprint #37 + #40): "Convex should never send
+    // messages to the operator. Only when Maya boots up via OpenClaw."
+    // This is an architectural invariant, not a tunable. If Maya
+    // doesn't send the hello, fix Maya's prompt — never substitute
+    // Convex-side hardcoded text.
     await ctx.runMutation(
       internal.onboarding.gtm.deployMayaGtm.recordDeployTimeHelloResult,
-      { agentId: args.agentId, result: stubResult, messageId: stubMessageId }
+      { agentId: args.agentId, result: "skipped:openclaw_owns_all_operator_comms" }
     );
 
     try {
