@@ -188,10 +188,21 @@ const MODEL_ROUTING = {
     process.env.MAYA_GTM_EXTRACTION_MODEL ?? "google/gemini-3.1-flash-lite",
 };
 
+// Sprint 2.18 #51 — bumped from shared-cpu-1x:1024MB to
+// shared-cpu-2x:2048MB. Runs #22 (DeepSeek V4 Flash) and #28
+// (Gemma 4) both hit:
+//   - eventLoopDelayP99=3.9s (4-sec event-loop lag)
+//   - eventLoopUtilization=1.0 (100% saturated)
+//   - SessionWriteLockTimeoutError / EmbeddedAttemptSessionTakeoverError
+//     when operator inbounds collided with Maya's mid-turn locks
+// Root cause: 1 CPU = Maya + active worker = 100% saturation, no
+// headroom for inbound message processing. Doubling to 2 CPUs +
+// doubling memory gives the gateway room to handle inbounds while
+// Maya is mid-think. ~$5/mo per active Maya additional cost.
 const MACHINE_GUEST: NonNullable<FlyMachineConfig["guest"]> = {
   cpu_kind: "shared",
-  cpus: 1,
-  memory_mb: 1024,
+  cpus: 2,
+  memory_mb: 2048,
 };
 
 const WAIT_TIMEOUT_MS = 180_000;
