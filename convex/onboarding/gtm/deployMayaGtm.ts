@@ -486,7 +486,14 @@ export function buildGatewayConfig(
           maxConcurrent: 8,
           maxChildrenPerAgent: 4,
           maxSpawnDepth: 1,
-          runTimeoutSeconds: 900,
+          // Sprint 2.32 — raised 900 → 1500. The deepened research skills
+          // (full comment-tree descent, pagination, substitute-chain mining,
+          // buyer-language comment scans) legitimately need more wall-clock
+          // than the old 15-min cap allowed; competitor/foundation workers
+          // now budget ~20-22 min. Maya still kills stuck workers via
+          // `subagents kill` in her judgment, so the higher ceiling only
+          // helps genuinely-deep digs finish instead of being guillotined.
+          runTimeoutSeconds: 1500,
           archiveAfterMinutes: 60,
           // Sprint 2.18 #10 — default thinking="medium" for all spawned
           // workers. Per operator spec: "her subagents could also be
@@ -691,6 +698,7 @@ export const getGtmAgentForDeploy = internalQuery({
     app: Doc<"gtmApps">;
     channelScores: Doc<"gtmChannelScores">[];
     latestResearchJobId?: Id<"gtmResearchJobs">;
+    walkthroughVideoUrl?: string;
   } | null> => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent) return null;
@@ -699,6 +707,18 @@ export const getGtmAgentForDeploy = internalQuery({
     if (!agent.appId) return null;
     const app = await ctx.db.get(agent.appId);
     if (!app || app.accountId !== creator._id) return null;
+    // Sprint 2.32 — surface the founder's walkthrough video so Maya can watch
+    // it herself on boot (full-migration direction: OpenClaw owns digestion,
+    // not a Convex-side Gemini pass). Storage URL is resolved here because the
+    // workspace generator can't reach Convex storage.
+    const latestWalkthrough = await ctx.db
+      .query("gtmWalkthroughUploads")
+      .withIndex("by_app", (q) => q.eq("appId", app._id))
+      .collect()
+      .then((rows) => rows.sort((a, b) => b.createdAt - a.createdAt)[0]);
+    const walkthroughVideoUrl = latestWalkthrough
+      ? (await ctx.storage.getUrl(latestWalkthrough.storageId)) ?? undefined
+      : undefined;
     const latestJob = await ctx.db
       .query("gtmResearchJobs")
       .withIndex("by_app", (q) => q.eq("appId", app._id))
@@ -720,6 +740,7 @@ export const getGtmAgentForDeploy = internalQuery({
       app,
       latestResearchJobId: latestJob?._id,
       channelScores,
+      walkthroughVideoUrl,
     };
   },
 });
@@ -833,6 +854,15 @@ export const buildAndUploadGtmWorkspace = internalAction({
         maxWeeklyVisualPosts: row.app.maxWeeklyVisualPosts,
         excludedAudiences: row.app.excludedAudiences,
       },
+      // Sprint 2.32 — hand the digested product understanding (URL inspection
+      // + walkthrough-video Gemini analysis, merged on gtmApps.diagnosis) into
+      // the workspace so APP.md boots with a real product picture instead of an
+      // empty "Research To Fill" stub. Previously computed at onboarding and
+      // silently dropped here.
+      appDiagnosis: row.app.diagnosis,
+      // Sprint 2.32 — the founder's walkthrough video, for Maya to watch
+      // herself on boot rather than relying on a Convex-side pre-digest.
+      walkthroughVideoUrl: row.walkthroughVideoUrl,
       primaryChannel: row.channelScores.find((s) => s.decision === "primary")
         ?.channel,
       secondaryChannel: row.channelScores.find((s) => s.decision === "secondary")

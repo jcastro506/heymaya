@@ -37,6 +37,48 @@ const INPUT: MayaGtmWorkspaceInput = {
 };
 
 describe("Maya GTM workspace pack", () => {
+  it("renders digested onboarding diagnosis into APP.md", () => {
+    const { files } = buildMayaGtmWorkspace({
+      ...INPUT,
+      walkthroughVideoUrl: "https://files.convex.test/walkthrough.mp4",
+      appDiagnosis: {
+        summary: {
+          productPromise: "Capture customer bug context in one click.",
+          likelyAudience: ["indie SaaS founders", "small support teams"],
+          visibleFeatures: ["session replay", "one-click report"],
+        },
+        walkthrough: {
+          userProblem: "Bug reports arrive with no reproduction context.",
+          coreWorkflow: "User clicks the widget; a contextful report is filed.",
+          strongestDemoMoments: [
+            "the one-click capture",
+            "the auto-filled repro steps",
+          ],
+          shortFormFormatCandidates: ["before/after of a messy bug report"],
+          facelessScreenRecordingEnough: true,
+        },
+      },
+    });
+    const app = files.get("APP.md") ?? "";
+    expect(app).toContain("Digested at onboarding");
+    expect(app).toContain("Capture customer bug context in one click.");
+    expect(app).toContain("Bug reports arrive with no reproduction context.");
+    expect(app).toContain("the one-click capture");
+    expect(app).toContain("indie SaaS founders");
+    // Maya is told to digest the product herself, and given the video.
+    expect(app).toContain("See the product yourself");
+    expect(app).toContain("https://files.convex.test/walkthrough.mp4");
+
+    // Without a diagnosis APP.md falls back to the bare stub (no leaked
+    // "Digested" header), so the agent knows it must research from scratch —
+    // but the "see it yourself" instruction is always present.
+    const bare = buildMayaGtmWorkspace(INPUT).files.get("APP.md") ?? "";
+    expect(bare).not.toContain("Digested at onboarding");
+    expect(bare).toContain("Plain-English diagnosis");
+    expect(bare).toContain("See the product yourself");
+    expect(bare).not.toContain("https://files.convex.test/walkthrough.mp4");
+  });
+
   it("renders the required OpenClaw workspace files", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
 

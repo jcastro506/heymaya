@@ -168,6 +168,12 @@ function GtmOnboardingBody() {
           .map((item) => item.trim())
           .filter(Boolean),
       });
+      // Always crawl the site for a landing-page diagnosis. Even mobile apps
+      // have a landing/store URL worth reading. This must run BEFORE the
+      // walkthrough analysis: persistAppDiagnosis REPLACES gtmApps.diagnosis,
+      // while analyzeWalkthrough MERGES its result under `.walkthrough` — so
+      // inspecting first preserves both signals; the reverse order clobbers.
+      await inspectApp({ appId });
       if (walkthroughFile) {
         const uploadUrl = await generateWalkthroughUploadUrl({});
         const uploadRes = await fetch(uploadUrl, {
@@ -187,8 +193,6 @@ function GtmOnboardingBody() {
           bytes: walkthroughFile.size,
         });
         await analyzeWalkthrough({ uploadId });
-      } else {
-        await inspectApp({ appId });
       }
       const jobId = await createResearchJob({ appId, budgetUsd: 3 });
       // Sprint 1: real research orchestrator. This action may take

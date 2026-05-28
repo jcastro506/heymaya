@@ -34,6 +34,42 @@ export interface MayaGtmWorkspaceInput {
     maxWeeklyVisualPosts?: number;
     excludedAudiences: string[];
   };
+  /**
+   * Digested product understanding captured at onboarding, threaded into
+   * APP.md so the agent boots already knowing the product instead of an empty
+   * "Research To Fill" stub. Shape mirrors `gtmApps.diagnosis`: the
+   * AppDiagnosis from URL inspection (under `summary`) merged with the Gemini
+   * WalkthroughDiagnosis (under `walkthrough`). All fields optional/defensive
+   * because the column is stored as `any` and either source may be absent.
+   */
+  appDiagnosis?: {
+    summary?: {
+      productPromise?: string;
+      likelyAudience?: string[];
+      visibleFeatures?: string[];
+      conversionSurface?: string[];
+      missingContext?: string[];
+    };
+    walkthrough?: {
+      coreWorkflow?: string;
+      userProblem?: string;
+      strongestDemoMoments?: string[];
+      beforeAfterContrast?: string;
+      confusingMoments?: string[];
+      contentAssets?: string[];
+      facelessScreenRecordingEnough?: boolean;
+      founderFaceOrUgcMightHelp?: boolean;
+      shortFormFormatCandidates?: string[];
+      unsupportedClaimsOrMissingContext?: string[];
+    };
+  };
+  /**
+   * Signed URL to the founder's walkthrough video (if they uploaded one at
+   * onboarding). Handed to Maya so she can watch it herself on boot and form
+   * her own product understanding — the full-migration direction where
+   * OpenClaw owns digestion instead of a Convex-side Gemini pass.
+   */
+  walkthroughVideoUrl?: string;
   primaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "product_hunt";
   secondaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "product_hunt";
   /**
@@ -438,27 +474,115 @@ ${input.app.founderWhy ?? "Not yet captured. Ask why they built this before fina
 }
 
 function renderApp(input: MayaGtmWorkspaceInput): string {
-  return `# APP.md
+  const url = input.appDiagnosis?.summary;
+  const w = input.appDiagnosis?.walkthrough;
+  const hasDigest = Boolean(
+    (url && (url.productPromise || url.likelyAudience?.length || url.visibleFeatures?.length)) ||
+      (w && (w.userProblem || w.coreWorkflow || w.strongestDemoMoments?.length))
+  );
 
-Maya maintains the current app picture here. This file is updated after onboarding research and weekly review.
+  const lines: string[] = [
+    "# APP.md",
+    "",
+    hasDigest
+      ? "Maya's working picture of the product. The **Digested at onboarding** section below is a strong prior built from the founder's site + walkthrough video — treat it as a hypothesis to confirm with real audience research, not gospel. Update after the foundation pass and each weekly review."
+      : "Maya's working picture of the product. No onboarding digest was available, so research it from scratch. Update after the foundation pass and each weekly review.",
+    "",
+    "## Known App",
+    "",
+    `- Name: ${input.app.name}`,
+    `- URL: ${input.app.url}`,
+    `- Stage: ${input.app.stage}`,
+    `- Weekly goal: ${input.app.weekGoal}`,
+  ];
+  if (input.app.founderWhy) {
+    lines.push(`- Why they built it: ${input.app.founderWhy}`);
+  }
 
-## Known App
+  // Maya owns product digestion — she forms her OWN understanding rather than
+  // trusting a pre-chewed summary. (Full-migration direction.)
+  lines.push(
+    "",
+    "## See the product yourself (before any channel research)",
+    "",
+    "Build your own understanding first — don't run on someone else's summary:",
+    `- Read the site yourself with web_fetch on ${input.app.url} and its key pages (pricing, docs, about). Pull the real one-sentence promise, exactly who it's for, and the activation moment.`
+  );
+  if (input.walkthroughVideoUrl) {
+    lines.push(
+      `- Watch the founder's walkthrough video: ${input.walkthroughVideoUrl} — the clearest signal of what the product does and which moments are showable. Spawn a worker for the multimodal pass if you need one.`
+    );
+  }
+  lines.push(
+    "- Write what you learn back into this file: the promise, the problem it kills, the showable demo moments, and your first buyer hypothesis. That's the spine of every channel decision.",
+    ...(hasDigest
+      ? [
+          "- A quick automated pre-scan is under **Digested at onboarding** below — use it as a hint, then confirm or correct it against what you see yourself.",
+        ]
+      : [])
+  );
 
-- Name: ${input.app.name}
-- URL: ${input.app.url}
-- Stage: ${input.app.stage}
-- Weekly goal: ${input.app.weekGoal}
+  if (hasDigest) {
+    lines.push(
+      "",
+      "## Digested at onboarding (strong prior — verify in research)",
+      ""
+    );
+    if (w?.userProblem) lines.push(`- **Problem it solves:** ${w.userProblem}`);
+    if (url?.productPromise)
+      lines.push(`- **Landing-page promise:** ${url.productPromise}`);
+    if (w?.coreWorkflow)
+      lines.push(`- **Core workflow (from walkthrough):** ${w.coreWorkflow}`);
+    if (w?.beforeAfterContrast)
+      lines.push(`- **Before → after:** ${w.beforeAfterContrast}`);
+    if (url?.likelyAudience?.length)
+      lines.push(`- **Likely audience (from site):** ${url.likelyAudience.join(", ")}`);
+    if (url?.visibleFeatures?.length)
+      lines.push(`- **Visible features:** ${url.visibleFeatures.join(", ")}`);
+    if (url?.conversionSurface?.length)
+      lines.push(`- **Conversion surface (CTAs):** ${url.conversionSurface.join(", ")}`);
+    if (w?.strongestDemoMoments?.length) {
+      lines.push("- **Showable demo moments (≤10s each, from walkthrough):**");
+      for (const m of w.strongestDemoMoments.slice(0, 7)) lines.push(`  - ${m}`);
+    }
+    if (w?.shortFormFormatCandidates?.length)
+      lines.push(
+        `- **Short-form angle candidates:** ${w.shortFormFormatCandidates.join("; ")}`
+      );
+    if (w?.contentAssets?.length)
+      lines.push(`- **Reusable content assets:** ${w.contentAssets.join("; ")}`);
+    if (typeof w?.facelessScreenRecordingEnough === "boolean")
+      lines.push(
+        `- **Faceless screen-recording enough?** ${w.facelessScreenRecordingEnough ? "yes" : "no"}`
+      );
+    if (w?.founderFaceOrUgcMightHelp)
+      lines.push("- **Founder face / UGC might help:** yes");
 
-## Research To Fill
+    const gaps = [
+      ...(url?.missingContext ?? []),
+      ...(w?.unsupportedClaimsOrMissingContext ?? []),
+      ...(w?.confusingMoments ?? []),
+    ];
+    if (gaps.length) {
+      lines.push("- **Gaps / unverified / confusing (resolve in research):**");
+      for (const g of gaps.slice(0, 8)) lines.push(`  - ${g}`);
+    }
+  }
 
-- Plain-English diagnosis
-- Likely buyers
-- Pain intensity
-- Existing substitutes
-- Fastest proof path
-- Activation moment
-- Screens or workflows worth showing
-`;
+  lines.push("", "## Research To Confirm / Fill", "");
+  if (!hasDigest) lines.push("- Plain-English diagnosis");
+  lines.push(
+    hasDigest
+      ? "- Likely buyers — validate the audience guess above against real communities"
+      : "- Likely buyers",
+    "- Pain intensity (find verbatim complaints)",
+    "- Existing substitutes + their complaints",
+    "- Fastest proof path",
+    "- Activation moment",
+    "- Screens or workflows worth showing",
+    ""
+  );
+  return lines.join("\n");
 }
 
 function renderGtm(input: MayaGtmWorkspaceInput): string {
