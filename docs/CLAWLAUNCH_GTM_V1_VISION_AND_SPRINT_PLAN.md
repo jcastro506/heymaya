@@ -2,6 +2,8 @@
 
 **Status:** Canonical planning doc. Written 2026-05-28 after a full 5-agent audit of the GTM codebase against a first-principles product vision. This is the restart artifact — read it top to bottom to resume work.
 
+**Revised 2026-05-28 (later session):** Sprint A ✅ DONE (firewall already shipped Sprint 2.28; MEMORY.md append-only + idempotent hello fixed, commits `572fd15`+`3e76569`). Added scope from operator working-session: **Sprint H — YouTube** (ScrapeCreators), **Sprint I — Native Voice Fidelity** (anti-AI-slop), **Sprint J — Self-Improving Skills** (two-layered), **content-attribute learning** + **research-depth verification checkpoint** folded into Sprint C, and an **analytics-tiering** locked decision (MVP = public scrape + own attribution, no OAuth; deep platform analytics = post-MVP per-platform upgrade — *operator to confirm OAuth direction*). See §4 + §6.
+
 **Product:** ClawLaunch — an OpenClaw-run autonomous GTM agent ("Maya") for **non-technical "vibe coder" founders** (shipped on Lovable/Bolt/Replit/v0/Cursor, have a 9-5, zero marketing instinct, can't get users). Active code: `convex/gtmMaya/*`, `convex/agents/packs/maya_gtm/*`, `convex/onboarding/gtm/*`, `agents/skills/maya-gtm/*`, `app/onboarding/gtm/*`, `gtm*` tables in `convex/schema.ts`. **The creator-product and service-product code are LEGACY — ignore them.**
 
 ---
@@ -57,12 +59,16 @@ If it nails those three it's a growth manager. If it just writes posts, it's a t
 - **twitterapi.io + ScrapeCreators = curl/exec, not MCP** (deep digs need arbitrary query composition + cursor pagination; `claude mcp add` only wires Claude Code, not OpenClaw). Adopt ScrapeCreators' **official agent-skill** (richer pagination/comment/quirk docs).
 - **Platform algorithm intelligence is SHARED + monthly-refreshed (out-of-the-box).** Ship a baseline of each platform's current algorithm + what's working; refresh ~monthly via native `web_search` (rides the existing `monthly_reset` cron) into a shared platform-knowledge file the per-channel skills reference for format/timing/draft decisions. This is **shared infra** (same for all agents) — NOT per-customer niche research. The per-app venue/niche discovery (above) stays per-customer; the *algorithm/best-practice state* is shared.
 - **Voice/tone:** manager texting a founder; anti-sycophantic; never leaks infra; signups-not-likes orientation in every drafted reply (non-spammy, earn trust on Reddit/HN).
+- **Analytics tiering — MVP needs NO platform OAuth.** Three tiers of "what's working": **Tier 1 public engagement** (likes/comments/views/upvotes — scraped, no OAuth; near-complete on Reddit/HN, vanity-surface on TikTok/IG/YT/X/LI), **Tier 2 owner-only platform analytics** (reach/impressions/watch-time/retention/CTR/traffic-source/followers-per-post — genuinely impossible without per-platform OAuth), **Tier 3 our own attribution** (UTM + our redirect → click → signup — OURS, no OAuth, Sprint C). The North Star (signups) rides Tier 3, so **MVP = Tier 1 + Tier 3, no OAuth.** Tier 2 (deep diagnostics, esp. video retention/CTR) is a **post-MVP, optional, per-platform "connect your account" upgrade** (friendliest first: YouTube/X; hardest: TikTok/IG app-review). Tier 2's absence softens Sprint F's positioning-vs-distribution call (reach is owner-only — proxy with public views). *[Recommended/working decision — operator to confirm OAuth direction.]*
+- **"Non-AI" content = native-voice fidelity, NOT detector-dodging.** There is no reliable platform AI-detector demoting text as a ranking signal (detectors are noisy; platforms don't run them at scale). The real penalties: Reddit/HN **community + mod rejection** (also a founder-account ban risk), and TikTok/IG/YT **engagement starvation** of generic content. So the target is content that reads as a real person from the niche wrote it — via grounding in specifics, founder voice-match, **style-exemplar few-shot from real top-performing native posts in the exact venue**, and a structural+lexical AI-tell critic. Never promise "undetectable"; promise native + grounded. (Sprint I.)
+- **Captions are not a separate system** — produced by the per-channel drafting stack. Each per-channel skill must encode that platform's caption craft (TikTok hook-line + hashtags; IG story + CTA; YouTube title=CTR lever + description SEO; Reddit title-is-everything; X = the post; LinkedIn hook + "link in first comment"). Kept current by platform-algo-intelligence; learned by content-attribute learning. Folded into Sprint I.
+- **Self-improving skills are two-layered with a hard safety boundary.** Shared `playbook.md`/`skill.md` must NOT be autonomously rewritten by a single agent (one bad self-edit poisons the whole fleet). **Layer 1 (autonomous, per-tenant, safe):** DREAMS.md = the nursery for proposed improvements/hypotheses → validated against THIS customer's outcomes → promoted to MEMORY.md durable learnings → fed forward (Sprint C loop). **Layer 2 (governed, cross-tenant):** agents emit *proposed* improvements → aggregate cross-tenant (Sprint G) → A/B-verified against outcomes → **gated merge** into shared skills. **Core contracts (firewall, evidence/grounding rules, safety gates) are NEVER self-editable.** (Sprint J.)
 
 ---
 
 ## 5. Current state — consolidated audit (HAVE / PARTIAL / MISSING)
 
-**HAVE (the thinking layers, good):** deep multi-channel research (now deepened — see §8), product digestion → APP.md, ICP hypotheses, channel-strategy judge, drafting + voice-match + slop/output critics, content engine breadth, proactive cadence (morning 7am / evening 8pm / weekly Sun / monthly), anti-sycophancy enforcement (`outboundFirewall.ts` term list exists), approval state machine, `gtmRelationshipTargets` table, `gtmPostResults` engagement snapshots.
+**HAVE (the thinking layers, good):** deep multi-channel research (now deepened — see §8), product digestion → APP.md, ICP hypotheses, channel-strategy judge, drafting + voice-match + slop/output critics, content engine breadth, proactive cadence (morning 7am / evening 8pm / weekly Sun / monthly), anti-sycophancy enforcement (`outboundFirewall.ts` wired server-side fail-closed at send time, Sprint 2.28), approval state machine, `gtmRelationshipTargets` table, `gtmPostResults` engagement snapshots.
 
 **PARTIAL / MISSING (the operating-system layers — the work):**
 - **Attribution: ENTIRELY MISSING** — no UTM, no link-wrap/redirect, no click/signup capture, no PostHog. `gtmPostResults` even *dropped* the `signups` field the legacy table had. The loop optimizes vanity.
@@ -82,11 +88,12 @@ If it nails those three it's a growth manager. If it just writes posts, it's a t
 
 ## 6. The sprint plan
 
-**Sprint A — Trust & Stability** *(ship first; trust is breaking now)*
-- Wire the EXISTING `convex/gtmMaya/outboundFirewall.ts` into the server-side `/lc_gtm/send_update` path → every outbound message validated server-side; no infra term ("Convex", endpoints) or raw tool-error ("Edit failed") ever reaches Telegram. **Fail-closed, not prose** (today the firewall is a utility that's never called at send time — that's the whole leak).
-- Fix MEMORY.md write fragility — replace seeded placeholder lines (`hello_sent_at: <set this when…>`) with stable header-anchored / append-only markers + read-before-edit. (Root cause: OpenClaw edit tool requires exact-string match; placeholder drift across heartbeat ticks → "Could not find the exact text in MEMORY.md".)
-- One **idempotent** hello, intro guaranteed **before** synthesis — dedupe BOOT.md hello vs the `0001_kickstart` cron (which currently sends unconditionally 300s post-deploy). Use an idempotency marker.
-- *(Parallel)* main-brain model A/B: Gemma-4-26B vs a stronger model for operator-facing voice + synthesis quality.
+**Sprint A — Trust & Stability** *(ship first; trust is breaking now)* — ✅ **DONE (2026-05-28, commits `572fd15`+`3e76569`)**
+- ~~Wire the firewall server-side into `/lc_gtm/send_update`~~ → **ALREADY SHIPPED in Sprint 2.28** (this doc was stale): `sendUpdateHttp` (`convex/gtmMaya/openclaw/inboundCallback.ts:1159`) calls `validateOutbound` fail-closed before relaying to Telegram, after a critic gate + evidence guard. No action needed.
+- ✅ MEMORY.md write fragility — replaced the seeded `<set this when…>` / `<updated by … cron>` placeholders with a single **APPEND-ONLY lifecycle log** (read = last line with `key:` prefix; record = append; no in-place marker edit ever fails again).
+- ✅ One **idempotent** hello — `0001_kickstart` cron now does an idempotency check FIRST (reads MEMORY.md, no-ops if a `hello_sent_at:` line exists) and only sends otherwise; reconciled the two hello specs to short + rolling-week (dropped the stale "14-day" spec).
+- *(Parallel, still open)* main-brain model A/B: Gemma-4-26B vs a stronger model for operator-facing voice + synthesis quality.
+- *(Carry-forward from the test-realignment pass)* the slimmed `HEARTBEAT.md` dropped some recovery/maintenance tasks — **restore `missed-cadence` recovery in Sprint C, `published-results-scan` in Sprint C/E** rather than treat as silent regressions.
 
 **Sprint B — The Plan, Reframed** *(the founder's actual experience)*
 - North Star contract: map goal → concrete target ("first 100 signups by Day 30"); store on `gtmApps` (`northStarMetric`/`northStarDeadlineMs`); render in GTM.md; track.
@@ -99,6 +106,8 @@ If it nails those three it's a growth manager. If it just writes posts, it's a t
 - Make `weekly_review` **regenerate the rolling 7-day plan + re-weight bet channels/angles from the week's data** (kill the one-way ratchet), with counter-overfitting discipline (≥repeated signal, 2-week rule for big shifts); **move to Sun 7pm**.
 - Make T+2h/24h/7d result polls actually fire on a schedule (not just heartbeat read).
 - North-Star status (on-track/at-risk) in the weekly review.
+- **Content-attribute learning (the "grow with the user" mechanism).** Today the results-reviewer only correlates a coarse `formatPatternId` → engagement. Add **structured attribute tags on every draft/post** (hook type, format, tone, length, face/no-face, caption style, posting time — Maya's own tags, no extra API) so the reviewer correlates *attributes → outcomes* ("punchy 0-3s hooks convert 4x explainer intros"), not just format. Same table work as attribution; this is what makes the closed loop genuinely adaptive + feeds the data moat.
+- **Research-depth verification checkpoint (gated on operator spend approval).** Before building D+ on top, run ONE real ClawLaunch deploy graded purely on research breadth + depth — does it actually fill `buyerJourneyStages` + `mineableComments`, or leave them empty like the last live run? Catches the capacity-≠-fill gap early.
 
 **Sprint D — Launch Orchestration**
 - Warm-up gating at calendar-generation → kills the 48h-cold-launch bug (`accountCreatedAt`+audience-floor+days-in-phase before emitting `hard_launch`/Show HN).
@@ -119,19 +128,38 @@ If it nails those three it's a growth manager. If it just writes posts, it's a t
 **Sprint G — Moat Infrastructure** *(the data moat; depends on C)*
 - App-archetype tagging at onboarding + privacy-safe cross-tenant aggregated-learnings store → per-archetype playbooks that warm-start new customers + benchmarks.
 
+**Sprint H — YouTube as a first-class platform** *(added 2026-05-28)*
+- Read layer: ScrapeCreators YouTube API (`/v1/youtube/channel`, `/channel-videos`, `/channel/shorts`, `/video`, `/video/transcript`, `/video/comments` ~1k top + ~7k newer, `/comment/replies`, `/search`, `/search/hashtag`, `/shorts/trending`) — all public-data (Tier 1; no Studio analytics without OAuth). Transcripts are gold for buyer-language mining.
+- Schema: add `"youtube"` to platform/channel enums on `gtmTargetThreads`, `gtmDraftedContent`, `gtmPostResults`, `gtmResultSnapshots`, `gtmChannelScores` (additive, back-compat).
+- `maya-youtube-researcher` skill (mirrors the deepened per-channel researchers: comment+transcript mining, venue spread, judgment-only, signups-not-likes); add YT endpoints to `scrapecreators-api` skill + re-sync bundle.
+- Strategy/planning: YouTube in channel-scoring; lane = **Brief only, no UGC** (Shorts = video-Brief like TikTok; long-form = founder-led outline). 5 mandatory test categories + enum round-trip.
+
+**Sprint I — Native Voice Fidelity** *(added 2026-05-28; the anti-"AI slop" sprint — see §4 decision)*
+- **Style-exemplar grounding (the big lever):** research captures top-performing *human* native posts per venue → fed into drafting as few-shot voice/register anchors (match cadence/vocab/length/format; never copy content). Compounds with content-attribute learning + feeds the data moat.
+- **Deepen slop-critic → AI-tell critic:** beyond banned phrases, catch *structural* tells (em-dash overuse, tidy tricolons, "it's not X it's Y," uniform rhythm, over-hedging, zero opinion, suspicious tidiness, no specifics). LLM-judgment, not regex.
+- **Voice-match strengthening:** condition on the founder's own real posts where they exist + venue exemplars.
+- **Final human-pass critic + rewrite loop:** "would a real person in this community have written this?" → rewrite until it passes.
+- **Explicit per-channel caption craft** (TikTok/IG/YouTube-title/Reddit-title/X/LinkedIn conventions — see §4).
+- *(Optional, signal-only)* AI-detector as an A/B *signal*, never a gate.
+
+**Sprint J — Self-Improving Skills** *(added 2026-05-28; two-layered, see §4 safety boundary)*
+- **Layer 1 (autonomous, per-tenant):** DREAMS.md as the nursery for proposed improvements/hypotheses → validated against THIS customer's outcomes → promoted to MEMORY.md durable learnings → fed forward (overlaps the Sprint C loop). This is the "grow with the user" mechanism.
+- **Layer 2 (governed, cross-tenant; depends on G):** agents emit *proposed* shared-skill improvements grounded in outcomes → aggregate cross-tenant → **A/B-verified** → **gated merge** into shared skills.
+- **Core contracts (firewall, evidence/grounding, safety gates) are NEVER self-editable.** No autonomous per-agent rewriting of shared skills.
+
 **Parallel / ongoing hygiene**
 - Convex→OpenClaw migration (delete-after-verify) of legacy agentic Convex code (`appInspector` regex heuristics, `judgeCardsBatch`, `mineCommentTrees`, `walkthrough` Gemini, etc. — ~13 files; Maya owns reasoning natively).
 - Adopt official ScrapeCreators agent-skill.
 
-**Recommended sequence: A → B → C first.** A (a leaking/memory-dropping agent can't be trusted), B (the founder's experience + a goal to optimize), C (attribution = foundation of the loop AND the data moat). D–G = depth/defensibility.
+**Recommended sequence: A ✅ → B → C first.** A done (trust restored). B (the founder's experience + a goal to optimize), C (attribution + content-attribute learning = foundation of the loop AND the data moat). **D–G = depth/defensibility. H (YouTube), I (Native Voice), J (Self-Improving Skills) are added scope** — I is high-leverage and can come early (it sharpens every draft from day one); H slots wherever platform priority dictates; J Layer 2 depends on G. The per-user compounding loop the operator cares about ("doubles down on what works, learns the founder's voice/posting/on-camera style") = Sprint C close-the-loop + content-attribute learning + Sprint J Layer 1 (DREAMS→MEMORY feed-forward), all per-tenant and safe.
 
 ---
 
-## 7. The 3 stability bugs — root causes + fixes (Sprint A)
+## 7. The 3 stability bugs — root causes + fixes (Sprint A) — ✅ ALL RESOLVED (2026-05-28)
 
-1. **MEMORY.md edit failures.** OpenClaw's edit tool is exact str-replace. `renderMemory` (generators.ts ~810-832) seeds placeholder lines like `hello_sent_at: <set this when I send the intro>`; across 3+ main sessions (boot + heartbeat ticks) one tick tries to replace text a prior tick already changed → *"Could not find the exact text in MEMORY.md."* **Fix:** header-anchored/append-only markers, read-before-edit.
-2. **Infra leaks** ("locked in Convex", "📝 Edit: in MEMORY.md failed" reaching Telegram). `outboundFirewall.ts` has the banned-term list (Convex, endpoints, tool-errors) **but is never called at send time** (it's prose-contract only). **Fix:** call it server-side in `/lc_gtm/send_update` before forwarding to Telegram — fail-closed.
-3. **Double / out-of-order hello.** BOTH `BOOT.md` (generators.ts ~729-779) and the `0001_kickstart` cron (~967-1044, fires +300s, sends unconditionally) send the hello; no idempotency. Seeded placeholder marker also makes BOOT misjudge "already sent" and skip the intro → synthesis went out *before* the intro in the live test. **Fix:** one idempotent path; intro before synthesis.
+1. ✅ **MEMORY.md edit failures.** OpenClaw's edit tool is exact str-replace. `renderMemory` seeded placeholder lines like `hello_sent_at: <set this when I send the intro>`; across boot + heartbeat ticks one tick tries to replace text a prior tick already changed → *"Could not find the exact text in MEMORY.md."* **Fixed:** replaced placeholders with a single **APPEND-ONLY lifecycle log** (read = last line with `key:` prefix; record = append). No in-place marker edit ever again.
+2. ✅ **Infra leaks.** `outboundFirewall.ts` has the banned-term list but the doc claimed it was never called at send time. **Already shipped (Sprint 2.28):** `sendUpdateHttp` (`inboundCallback.ts:1159`) calls `validateOutbound` fail-closed before forwarding to Telegram. No action was needed.
+3. ✅ **Double / out-of-order hello.** BOTH `BOOT.md` and the `0001_kickstart` cron (fired +300s, sent **unconditionally**) sent the hello; no idempotency. **Fixed:** kickstart now does an idempotency check FIRST (no-ops if a `hello_sent_at:` line exists); BOOT routes hello-before-foundation; specs reconciled to short + rolling-week.
 
 ---
 
