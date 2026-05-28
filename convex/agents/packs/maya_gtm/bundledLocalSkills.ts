@@ -287,27 +287,27 @@ Event titles and descriptions are operator-facing. Run \`maya-slop-critic\` on e
 // Source: agents/skills/maya-gtm/maya-calendar-populator/SKILL.md
 const ENTRY_3_maya_calendar_populator = `---
 name: maya-calendar-populator
-description: After deep-research subagents land target threads + accounts + drafts, generate the next 14 days of calendar events on Google Calendar (provisional, status="draft") mapped to the operator's current phase of the PLAYBOOK 4-phase arc. Each event links to a target thread + draft + cites the playbook rule.
+description: After deep-research subagents land target threads + accounts + drafts, generate the rolling 7-day plan (today through Sunday) of calendar events on Google Calendar (provisional, status="draft") mapped to the operator's current phase of the PLAYBOOK 4-phase arc. Each event links to a target thread + draft + cites the playbook rule. Not a 14-day dump — a tight rolling week, regenerated weekly.
 ---
 
 # maya-calendar-populator
 
 ## Purpose
 
-The deep-research subagents (reddit_research, x_research, etc.) surface specific target threads + accounts + drafts. This skill turns those raw artifacts into a real **calendar** — 14 days of scheduled, time-blocked work the operator can actually do. Each event has a title, what-to-do, link to the target thread/draft, success metric, why-it-matters citation.
+The deep-research subagents (reddit_research, x_research, etc.) surface specific target threads + accounts + drafts. This skill turns those raw artifacts into a real **calendar** — the rolling next 7 days (today→Sunday) of scheduled, time-blocked work the operator can actually do, regenerated each week (NOT a 14-day dump). Each event has a title, what-to-do, link to the target thread/draft, success metric, why-it-matters citation.
 
 Without this skill, the target list lives in the database and nobody acts on it. With it, the operator opens Google Calendar and sees their week.
 
 ## When to invoke
 
 - IF deep-research subagents have just completed AND \`/lc_gtm/get_my_target_threads\` returned >0 rows THEN run. This is the canonical first invocation, right at the end of FIRST WAKE.
-- IF weekly review (\`gtm_weekly_review\` cron) ran AND new target threads were surfaced THEN refresh rolling next-14-days.
+- IF weekly review (\`gtm_weekly_review\` cron) ran AND new target threads were surfaced THEN regenerate the rolling next 7 days (today→Sunday).
 - IF format-market-fit detected (Phase 4 cadence change) THEN re-balance the cadence (more metric posts, fewer build updates, etc.).
 - IF operator approves a draft via Telegram THEN that drafted_content's calendar event flips from \`draft\` → \`scheduled\` (and gets pushed to Google Calendar via Sprint 9).
 
 ## Required reads
 
-1. **PLAYBOOK.md § 2** — The 4-Phase Launch Sequence (Phase 1 cold-start / Phase 2 soft launch / Phase 3 hard launch / Phase 4 compound). Determines the SHAPE of the 14 days.
+1. **PLAYBOOK.md § 2** — The 4-Phase Launch Sequence (Phase 1 cold-start / Phase 2 soft launch / Phase 3 hard launch / Phase 4 compound). Determines the SHAPE of the rolling 7-day plan.
 2. **PLAYBOOK.md § 4** — BUILD / ENGAGE / OFFER triad ratios. Determines the MIX of event kinds per platform.
 3. **APP.md + USER.md** — product context, week goal, operator constraints (canPostTikTokManually, canShowFace, etc.).
 4. **GTM.md** — active channel picks. Only generates calendar events for primary + secondary channels.
@@ -447,7 +447,7 @@ Maya checks before slotting hard_launch_anchor or soft_launch_post events. Skip 
 
 If primary channel has unmet Phase-1 audience minimum (PLAYBOOK § 2):
 - ALL post-kind events get pushed to Phase 1 schedule (no posts until warmup done)
-- 14-day calendar is exclusively warmup_block + engagement_block + reply_window (replies allowed during warmup if they're substantive, not promotional)
+- the rolling 7-day calendar is exclusively warmup_block + engagement_block + reply_window (replies allowed during warmup if they're substantive, not promotional) — the warmup PERIOD still runs its full 2-4 weeks; we just plan it a rolling week at a time
 - Maya signals to user: "We're in warmup. No public product mentions yet. Tomorrow's first task is X."
 
 ## Output
@@ -481,7 +481,7 @@ Default durations:
 
 - **No target threads landed.** This skill is no-op. Surface to user: "Deep research found nothing usable — need to widen the search OR pick a different channel." Push retry to next research cycle.
 - **Calendar OAuth not connected.** Events still get drafted (status:draft). Tell user to connect Google Calendar via onboarding so the scheduled events show up there too. The Telegram nudge cron still works without Google Calendar.
-- **Phase 1 floor unmet on ALL channels.** Pure warmup mode for 14 days. Maya is explicit about this in the user message: "Your accounts need 2-4 weeks of warmup before launch. Here's the plan."
+- **Phase 1 floor unmet on ALL channels.** Pure warmup mode — the rolling 7-day plan is all warmup. Maya is explicit that the warmup PERIOD runs longer: "Your accounts need 2-4 weeks of warmup before launch. Here's this week's plan."
 - **Operator overrides Phase 1 + insists on launching.** Document the override per AGENTS.md operating contract rule 1. Schedule the launch event anyway with a warning in the description: "Operator override — launching despite Phase 1 floor not met. Recover path: if engagement <1%, repositioning required."
 
 ## Cost discipline

@@ -52,7 +52,7 @@ INTERNAL PHASE (silent).
 
 3. Sprint 2.4 voice-match: for every gtmDraftedContent row in approvalState:'pending_approval', follow skills/maya-voice-matcher/SKILL.md. Score voice + slop + specificity. POST to /lc_gtm/update_draft_voice_match. Only voice-clean drafts make it to the calendar.
 
-4. Sprint 2.3 calendar populator: read skills/maya-calendar-populator/SKILL.md. Compute operator's current Phase (1-4 per PLAYBOOK § 2). Emit typed calendar events (warmup_block / engagement_block / reply_window / etc) for the next 14 days. POST to /lc_gtm/calendar_proposal as status:'draft'. Run maya-slop-critic on every event title before POSTing.
+4. Sprint 2.3 calendar populator: read skills/maya-calendar-populator/SKILL.md. Compute operator's current Phase (1-4 per PLAYBOOK § 2). Emit typed calendar events (warmup_block / engagement_block / reply_window / etc) for the rolling next 7 days (today→Sunday) — a tight rolling week regenerated weekly, NOT a 14-day dump. POST to /lc_gtm/calendar_proposal as status:'draft'. Run maya-slop-critic on every event title before POSTing.
 
 5. **EVIDENCE PREP** (Sprint 2.16j — load-bearing for STEP 6).
 For the strategic plan message you're about to send, identify ≤3 concrete claims you intend to make. For each claim, gather the evidence_ids that justify it:

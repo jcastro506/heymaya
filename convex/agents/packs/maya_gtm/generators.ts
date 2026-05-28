@@ -147,8 +147,9 @@ const SKILLS = [
   "maya-approval-publisher",
   "maya-results-reviewer",
   "maya-ugc-system-advisor",
-  // Sprint 2.3 — turns deep-research target list into 14 days of typed
-  // calendar events mapped to PLAYBOOK § 2 phase. Invoked at end of
+  // Sprint 2.3 — turns deep-research target list into the rolling 7-day
+  // plan (today→Sunday) of typed calendar events mapped to PLAYBOOK § 2
+  // phase (regenerated weekly, not a 14-day dump). Invoked at end of
   // FIRST WAKE after subagents land target threads, and again on the
   // weekly_review cron. Status:"draft" until operator approves.
   "maya-calendar-populator",
@@ -1178,7 +1179,7 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
     case "maya-ugc-system-advisor":
       return "Decide whether UGC recruiting is premature, useful soon, or ready based on proven short-form customer signal.";
     case "maya-calendar-populator":
-      return "Turn the deep-research target list into 14 days of typed calendar events mapped to the operator's current PLAYBOOK phase. Schedules reply windows, warmup blocks, soft launch posts, and engagement windows with links to target threads + drafts.";
+      return "Turn the deep-research target list into the rolling 7-day plan (today→Sunday) of typed calendar events mapped to the operator's current PLAYBOOK phase — a tight rolling week regenerated weekly, NOT a 14-day dump. Schedules reply windows, warmup blocks, soft launch posts, and engagement windows with links to target threads + drafts.";
     case "maya-voice-matcher":
       return "Score every drafted reply/post/thread on voice match + slop-critic + specificity. Drafts that fail go back to the originating subagent with edit feedback or get auto-rejected. The pre-publish quality gate.";
     case "maya-foundation-research":
