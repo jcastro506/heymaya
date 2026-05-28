@@ -504,6 +504,18 @@ export function buildGatewayConfig(
           model: mainModel,
           subagents: { allowAgents: allowFromMain },
           tools: { profile: "coding" },
+          // Sprint 2.18 #38 — explicit thinking for Main Maya. Without
+          // this, Gemini 3.5 Flash defaults to thinkingLevel="off"
+          // (the same regression Sprint 2.16l hit on subagents). Main
+          // Maya is the orchestrator — she needs to reason about which
+          // worker to spawn next, when to kill/steer, how to compose
+          // synthesis. With thinking off, she picks the first plausible
+          // tool call rather than the right one — verified live on
+          // run #16 where only 1/5 foundation workers had reported by
+          // T+6m on cheap-model Gemini Flash main. With Sonnet 4.6 the
+          // same setup hit 4/5 at T+5m (reasoning baked into the model
+          // by default).
+          thinking: "medium",
         },
         // Sprint 2.18 — hard_research_beta REMOVED from agents.list[].
         // boot-md iterates listAgentIds(cfg) and runs BOOT.md FOR EACH
