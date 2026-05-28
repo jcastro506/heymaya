@@ -407,6 +407,23 @@ export function buildGatewayConfig(
     agents: {
       defaults: {
         workspace: "/data/workspace",
+        // Sprint 2.18 #35 — raise bootstrap-injection cap from default
+        // 12K → 30K. Per OpenClaw docs (concepts/agent-workspace.md):
+        // "Large bootstrap files are truncated when injected; adjust
+        // limits with agents.defaults.bootstrapMaxChars (default 12000)
+        // and bootstrapTotalMaxChars (default 60000)." Verified live
+        // 2026-05-27 run #14: BOOT.md=15K, TOOLS.md=17K, AGENTS.md=14.5K
+        // all silently truncated to 12K, dropping end-of-file content
+        // including the synthesis hard gate and several step
+        // procedures. Raising to 30K per-file leaves total under 60K cap
+        // (current sum 57.5K → ~57.5K still, no change to total since
+        // none exceed 30K). With the canonical reorg, files should be
+        // much smaller anyway — this is safety net.
+        bootstrapMaxChars: 30000,
+        // Skip OpenClaw's first-run Q&A — Convex onboarding already
+        // collected identity + user preferences + timezone. IDENTITY.md
+        // is rendered by our own template.
+        skipBootstrap: true,
         model: {
           primary: mainModel,
         },

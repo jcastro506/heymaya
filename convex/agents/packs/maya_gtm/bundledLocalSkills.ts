@@ -1095,15 +1095,18 @@ Foundation does NOT stop at the operating model. The operator waited ~10-15 min 
 
 For each channel marked \`bet: true\` in \`gtmChannelScorecard\`, spawn the matching continuous worker (\`reddit_research\`, \`x_research\`, \`hn_research\`). Their task is **discovery only — find threads, return facts. They DO NOT draft replies.** Reply drafting is Maya's editorial job, not a worker's.
 
+**Discovery floor: each bet channel must yield 10-15 USEFUL threads** (engagement > 0, recent, on-pain). If the first sweep returns fewer, Maya \`subagents action=steer\` the worker with broader intent phrases / adjacent communities for a second pass. **Phase 2.5 cannot start until total useful threads across bet channels ≥ 20.** Three threads cannot power a 12-event week — the upstream pool needs to be deep enough for selection.
+
 Worker task string (Phase 2):
 \`\`\`
-Find 5-10 LIVE threads in <channel> where buyers are venting about
+Find 15-20 LIVE threads in <channel> where buyers are venting about
 this pain right now. Use these intent phrases: [...]. Use these
 content angles for relevance: [...]. For each thread, POST to
 /lc_gtm/target_thread with:
   - url, externalId, platform
   - title, excerpt (verbatim from post body, first ~500 chars)
-  - author handle, currentMetrics, postedAt
+  - author handle, currentMetrics (must be non-zero — skip dead threads)
+  - postedAt (must be within last 30 days for replies; 90 for lurks)
   - subredditOrCommunity
   - recommendedAction (reply / lurk / upvote_only / avoid)
 DO NOT draft replies — Maya owns that step. Just return what you found.
@@ -1111,7 +1114,7 @@ API discipline: ScrapeCreators / TwitterAPI.io / Algolia HN. Never
 raw curl platform domains.
 \`\`\`
 
-\`sessions_yield\`. Watch via \`subagents action=list\`. Kill stuck, steer thin.
+\`sessions_yield\`. Watch via \`subagents action=list\`. Kill stuck (>5 min silent), steer thin. After workers report \`finished\`, check the pool size via \`/lc_gtm/get_my_foundation\`. If under 20 useful threads, steer for round 2.
 
 ### Phase 2.5 — COMPOSITION (Maya drafts every reply herself)
 
@@ -1144,7 +1147,14 @@ TIME: <minutes — usually 10-15>
 SOURCE: <when found + velocity score>
 \`\`\`
 
-POST each event to \`/lc_gtm/calendar_proposal\`. Mix: 3-5 reply windows, 1 X / blog draft block, 1-2 warmup blocks per the channel scorecard's cadence note.
+POST each event to \`/lc_gtm/calendar_proposal\`. **Active-launch week target: 18-25 events total.** Read \`maya-calendar-populator/SKILL.md\` § 2 for the per-channel cadence numbers; § 3 for the slot allocation by phase.
+
+**X build-in-public is GUARANTEED-FLOOR, not discovery-dependent.** If the operator can write text, Maya MUST queue these X events regardless of whether \`x_research\` returned any threads:
+- **1 build-in-public post per day** (7/week) — operator-original on their own X handle, no thread target required. Seed time Tue/Thu 8am operator-tz, daily otherwise.
+- **4-5 reply-mining engagement blocks** (15-30 min each) — operator browses X for 15 min finding 5-10 conversations to add to. No specific thread target — opportunistic.
+- **2 longer-form threads per week** (Tue + Thu mornings) — a learning or decision from the week, 4-6 tweets.
+
+That's 13-14 X events/week alone, before adding Reddit replies, HN comments, or anything else from discovery. **Without these, the plan is structurally too thin** — the discovered-threads pool is one input channel, not the menu.
 
 ONLY after every kept thread has a draft AND every actionable item has a calendar event does Maya proceed to Phase 4 (the synthesis message). The operator's "approve" reply IS the final gate, not a trigger for more spawning.
 
