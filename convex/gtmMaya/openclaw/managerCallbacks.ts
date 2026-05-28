@@ -16,6 +16,7 @@
 
 import { httpAction } from "../../_generated/server";
 import { internal } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
 import { authenticate } from "./inboundCallback";
 
 // ───────────────────── Foundation: buyer map ─────────────────────
@@ -967,6 +968,98 @@ export const logCostHttp = httpAction(async (ctx, request) => {
     return new Response("ok (cost not recorded; see logs)", { status: 200 });
   }
   return new Response(`ok (cost=${body.costUsd} recorded)`, { status: 200 });
+});
+
+// ───────────────────── Record published post (Sprint 2.27) ─────────────────────
+
+/**
+ * Sprint 2.27 — /lc_gtm/record_published.
+ *
+ * Maya calls this when the operator confirms they posted (e.g., reply
+ * on a calendar event: "I posted!"). Flips the draft to status:
+ * "published", schedules engagement polls at T+2h, T+24h, T+7d.
+ *
+ * Body: { idempotencyKey, draftId, providerPostId, platform,
+ *         permalink?, postedAtMs? }
+ *
+ * Required: idempotencyKey, draftId, providerPostId, platform.
+ * Optional: permalink (full URL to the post), postedAtMs (default now).
+ */
+interface RecordPublishedPayload {
+  idempotencyKey: string;
+  draftId: string;
+  providerPostId: string;
+  platform: "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok";
+  permalink?: string;
+  postedAtMs?: number;
+}
+
+const PUBLISHED_PLATFORMS = new Set([
+  "reddit",
+  "x",
+  "hn",
+  "linkedin",
+  "instagram",
+  "tiktok",
+]);
+
+export const recordPublishedHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: RecordPublishedPayload;
+  try {
+    body = (await request.json()) as RecordPublishedPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (
+    !body.idempotencyKey ||
+    !body.draftId ||
+    !body.providerPostId ||
+    !body.platform ||
+    !PUBLISHED_PLATFORMS.has(body.platform)
+  ) {
+    return new Response("missing required fields", { status: 400 });
+  }
+
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "action_logged",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") {
+    return new Response("ok (replay)", { status: 200 });
+  }
+
+  try {
+    const result = await ctx.runMutation(
+      internal.gtmMaya.recordPublished.recordDraftPublished,
+      {
+        agentId: auth.agentId,
+        accountId: auth.accountId,
+        draftId: body.draftId as Id<"gtmDraftedContent">,
+        providerPostId: body.providerPostId,
+        platform: body.platform,
+        permalink: body.permalink,
+        postedAtMs: body.postedAtMs,
+      }
+    );
+    return new Response(
+      `ok (draft ${result.draftId} published; polls scheduled)`,
+      { status: 200 }
+    );
+  } catch (err) {
+    console.error(
+      "[/lc_gtm/record_published] failed:",
+      (err as Error).message
+    );
+    return new Response(`error: ${(err as Error).message}`, { status: 400 });
+  }
 });
 
 // ───────────────────── Helpers ─────────────────────

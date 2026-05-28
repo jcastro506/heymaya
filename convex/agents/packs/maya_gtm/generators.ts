@@ -572,6 +572,8 @@ Every POST requires \`idempotencyKey\` (UUIDv4 — same key on retry = "ok (repl
 
 - \`/lc_gtm/log_cost\` — Required: \`idempotencyKey\`, \`provider\` (one of \`openrouter\` / \`openclaw\` / \`scrapecreators\` / \`x_api\` / \`composio\` / \`gemini\` / \`other\`), \`operation\` (free-form e.g. \`"openrouter.google/gemma-4-26b-a4b-it"\`), \`reason\` (free-form e.g. \`"foundation_buyer_map_research"\`), \`costUsd\` (number, must be >=0). Optional: \`units\` (token count), \`cacheStatus\` (\`hit\` / \`miss\` / \`called\` / \`skipped\` / \`failed\`, default \`called\`), \`metadata\` (any). I curl-POST this at the end of each major phase (foundation_complete, morning_brief_sent, evening_recap_sent, weekly_review_done, monthly_reset_done) with aggregated spend for the phase. OpenClaw's session log surfaces per-call usage I can sum.
 
+- \`/lc_gtm/record_published\` — Required: \`idempotencyKey\`, \`draftId\`, \`providerPostId\` (platform-side post id or URL), \`platform\` (\`reddit\` / \`x\` / \`hn\` / \`linkedin\` / \`instagram\` / \`tiktok\`). Optional: \`permalink\` (full URL), \`postedAtMs\` (defaults to now). When operator says "I posted!" I curl-POST this. It (a) flips the draft to \`approvalState:"published"\` and (b) auto-schedules T+2h / T+24h / T+7d engagement polls. The polls write \`gtmPostResults\` snapshots that maya-results-reviewer reads weekly.
+
 **Reads (GET, no body):**
 - \`/lc_gtm/get_my_foundation\` — returns \`{ buyerMap, competitiveMap[], channelScorecard[], contentAngles[], relationshipTargets[], gtmCalendarEvents[], gtmTargetThreads[] }\`.
 - \`/lc_gtm/get_my_niche_learnings\` — returns \`{ learnings[] }\`.

@@ -201,7 +201,8 @@ describe("Sprint 2.26 — resolveBotForAgent priority", () => {
     );
 
     // Run the action context to call resolveBotForAgent.
-    const ctx = { runQuery: t.query.bind(t) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ctx = { runQuery: t.query.bind(t) as any };
     const resolved = await resolveBotForAgent(ctx, agentId, {
       sharedToken: "shared:fallback-token",
       sharedUsername: "shared_bot",
@@ -214,7 +215,8 @@ describe("Sprint 2.26 — resolveBotForAgent priority", () => {
     const t = convexTest(schema, modules);
     const { agentId } = await setupAgent(t, "u_bot_fb");
 
-    const ctx = { runQuery: t.query.bind(t) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ctx = { runQuery: t.query.bind(t) as any };
     const resolved = await resolveBotForAgent(ctx, agentId, {
       sharedToken: "shared:dev-token",
       sharedUsername: "dev_bot",
@@ -228,7 +230,8 @@ describe("Sprint 2.26 — resolveBotForAgent priority", () => {
     const t = convexTest(schema, modules);
     const { agentId } = await setupAgent(t, "u_bot_none");
 
-    const ctx = { runQuery: t.query.bind(t) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ctx = { runQuery: t.query.bind(t) as any };
     const resolved = await resolveBotForAgent(ctx, agentId, {});
     expect(resolved.token).toBe(null);
     expect(resolved.source).toBe("none");

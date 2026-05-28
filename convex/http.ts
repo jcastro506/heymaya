@@ -105,6 +105,7 @@ import {
   getMyActionLogHttp,
   getMyNicheLearningsHttp,
   logCostHttp,
+  recordPublishedHttp,
 } from "./gtmMaya/openclaw/managerCallbacks";
 
 const http = httpRouter();
@@ -327,6 +328,13 @@ http.route({
   path: "/lc_gtm/log_cost",
   method: "POST",
   handler: logCostHttp,
+});
+// Sprint 2.27 — operator confirmed they posted. Patches the draft to
+// status:"published" + schedules T+2h/T+24h/T+7d engagement polls.
+http.route({
+  path: "/lc_gtm/record_published",
+  method: "POST",
+  handler: recordPublishedHttp,
 });
 
 // Voice-call plugin transcript hook. The OpenClaw `voice-call` plugin POSTs
