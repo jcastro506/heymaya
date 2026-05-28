@@ -478,28 +478,55 @@ curl -sS -X POST \\
   "${callbackBase}/lc_gtm/<endpoint>"
 \`\`\`
 
-## Convex endpoints
+## Convex endpoints — EXACT FIELD NAMES MATTER
+
+Every POST requires \`idempotencyKey\` (UUIDv4 — same key on retry = "ok (replay)" instead of duplicate row). Required fields are bold; the rest are optional.
 
 **Foundation (POST, one-shot at onboarding + monthly):**
-- \`/lc_gtm/foundation_buyer_map\` — \`{ icpDescription, intentPhrases[], trustedVoices[], buyerJourney[] }\`
-- \`/lc_gtm/foundation_competitor\` — \`{ name, kind: "direct"|"adjacent"|"substitute", positioning, vulnerabilities[], complaint }\`
-- \`/lc_gtm/foundation_channel_scorecard\` — \`{ channel, audienceFit 0-1, cadenceFit 0-1, uniqueUnlock, bet?: boolean }\`
-- \`/lc_gtm/foundation_content_angle\` — \`{ angle, hooks[], painCitation: { quote, sourceUrl } }\`
-- \`/lc_gtm/foundation_relationship_target\` — \`{ platform, handle, whyThem, engagementPlan, cadence }\`
+
+- \`/lc_gtm/foundation_buyer_map\`
+  Required: **\`idempotencyKey\`**, **\`icpDescription\`** (non-empty string).
+  Optional: \`buyerJourney[]\`, \`intentPhrases[]\`, \`trustedVoices[]\`, \`painPatterns[]\`.
+
+- \`/lc_gtm/foundation_competitor\`
+  Required: **\`idempotencyKey\`**, **\`competitorName\`** (NOT \`name\`), **\`kind\`** (one of \`"direct"\` / \`"adjacent"\` / \`"substitute"\`), **\`positioning\`** (string).
+  Optional: \`competitorKey\` (auto-slugged from name if missing), \`url\`, \`pricing\`, \`complaints[]\` (array, NOT \`complaint\` singular — items: \`{ quote, sourceUrl }\`), \`vulnerabilities[]\` (string array).
+
+- \`/lc_gtm/foundation_channel_scorecard\`
+  Required: **\`idempotencyKey\`**, **\`channel\`** (one of \`reddit\` / \`x\` / \`hn\` / \`linkedin\` / \`tiktok\` / \`instagram\` / \`youtube\` / \`podcasts\` / \`newsletters\` / \`discord\` / \`blog\`), **\`uniqueUnlock\`** (string).
+  Optional: \`audienceFit\` (0-1, default 0.5), \`cadenceFit\` (0-1, default 0.5), \`bet\` (bool, default false), \`notes\`.
+
+- \`/lc_gtm/foundation_content_angle\`
+  Required: **\`idempotencyKey\`**, **\`hookVariants\`** (non-empty string array).
+  Optional: \`angle\` / \`angleKey\` (slug), \`painCitation: { quote, sourceUrl }\`, \`format\`, \`stage\`.
+
+- \`/lc_gtm/foundation_relationship_target\`
+  Required: **\`idempotencyKey\`**, **\`handle\`** (string), **\`whyThem\`** (string).
+  Optional: \`platform\`, \`displayName\`, \`profileUrl\`, \`engagementPlan\` (default: "Reply weekly + retweet/quote when relevant."), \`cadence\` (\`"weekly"\` / \`"monthly"\` / \`"as_they_post"\`).
 
 **Continuous (POST, daily research):**
-- \`/lc_gtm/target_thread\` — \`{ platform, url, externalId, title, excerpt, author, currentMetrics, postedAt, recommendedAction, painQuote?, draftReply? }\` (re-POST with same idempotencyKey to UPDATE in place — Phase 2.5 fills painQuote + draftReply)
-- \`/lc_gtm/competitor_move\` — competitor shipped feature / pricing / campaign
-- \`/lc_gtm/niche_pulse_signal\` — emerging community / account / topic
-- \`/lc_gtm/drafted_content\` — \`{ kind: "reply"|"post"|"thread", platform, targetThreadId?, draftText }\`
-- \`/lc_gtm/calendar_proposal\` — \`{ events: [{ kind, title, description, startsAtMs, endsAtMs, targetThreadId?, draftedReplyId? }] }\`
-- \`/lc_gtm/action_logged\` — record an operator-facing event happened
-- \`/lc_gtm/learning_extracted\` — durable pattern (weekly_review writes here)
-- \`/lc_gtm/send_update\` — outbound to operator with state-check (synthesis-class messages route here)
 
-**Reads (GET):**
-- \`/lc_gtm/get_my_foundation\` — current operating model + calendar + thread counts
-- \`/lc_gtm/get_my_niche_learnings\` — durable patterns from prior weeks
+- \`/lc_gtm/target_thread\` — Required: \`idempotencyKey\`, \`platform\`, \`url\`, \`externalId\`. Optional: \`title\`, \`excerpt\` (verbatim OP body, ~500 chars), \`author\`, \`currentMetrics\`, \`postedAt\`, \`subredditOrCommunity\`, \`recommendedAction\`, \`painQuote\`, \`draftReply\`, \`priorityScore\` (0-1), \`whyItFits\`. Re-POST same idempotencyKey to UPDATE — Phase 2.5 fills painQuote + draftReply this way.
+
+- \`/lc_gtm/competitor_move\` — Required: \`idempotencyKey\`, \`competitorName\`, \`moveKind\`, \`sourceUrl\`. Optional: \`summary\`, \`observedAt\`.
+
+- \`/lc_gtm/niche_pulse_signal\` — Required: \`idempotencyKey\`, \`name\`, \`evidenceUrl\`. Optional: \`relevance\` (\`act_now\` / \`monitor\` / \`noise\`), \`momentumSignal\`, \`observedAt\`.
+
+- \`/lc_gtm/drafted_content\` — Required: \`idempotencyKey\`, \`kind\` (\`"reply"\` / \`"post"\` / \`"thread"\`), \`platform\`, \`draftText\`. Optional: \`targetThreadId\`.
+
+- \`/lc_gtm/calendar_proposal\` — Required: \`idempotencyKey\`, \`events\` (array). Each event needs: \`kind\`, \`title\`, \`description\`, \`startsAtMs\`, \`endsAtMs\`. Optional per event: \`targetThreadId\`, \`draftedReplyId\`.
+
+- \`/lc_gtm/action_logged\` — Required: \`idempotencyKey\`, \`kind\`, \`summary\`. Optional: any context fields.
+
+- \`/lc_gtm/learning_extracted\` — Required: \`idempotencyKey\`, \`learningKind\`, \`learning\`, \`confidenceScore\` (0-1). Optional: \`learningKey\`, \`evidenceCount\`, \`retired\`.
+
+- \`/lc_gtm/send_update\` — Required: \`idempotencyKey\`, \`text\`, \`messageClass\` (\`"tactical"\` / \`"strategic"\`). Synthesis-class messages route here.
+
+**Reads (GET, no body):**
+- \`/lc_gtm/get_my_foundation\` — returns \`{ buyerMap, competitiveMap[], channelScorecard[], contentAngles[], relationshipTargets[], gtmCalendarEvents[], gtmTargetThreads[] }\`.
+- \`/lc_gtm/get_my_niche_learnings\` — returns \`{ learnings[] }\`.
+
+If I get **"missing required fields"** on a POST, I check this exact list — the validator wants the bolded fields, with exact names (e.g. \`competitorName\` NOT \`name\`, \`hookVariants\` NOT \`hooks\`, \`complaints[]\` NOT \`complaint\`). Don't paraphrase the field names.
 
 ## External research — wrapped APIs only
 
