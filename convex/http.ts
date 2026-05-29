@@ -118,6 +118,7 @@ import {
   recordConversionHttp,
 } from "./gtmMaya/attribution";
 import { memoryWrittenHttp } from "./gtmMaya/memoryLedger";
+import { reviewMediaHttp } from "./gtmMaya/contentReview";
 
 const http = httpRouter();
 
@@ -190,6 +191,14 @@ http.route({
   path: "/lc_gtm/drafted_content",
   method: "POST",
   handler: draftedContentHttp,
+});
+// S13 — user-submitted content review. Maya hands a directly-downloadable
+// media URL (resolved from a Telegram attachment via getFile); the worker
+// watches it (Gemini multimodal) and returns structured editor feedback.
+http.route({
+  path: "/lc_gtm/review_media",
+  method: "POST",
+  handler: reviewMediaHttp,
 });
 http.route({
   path: "/lc_gtm/get_my_target_threads",

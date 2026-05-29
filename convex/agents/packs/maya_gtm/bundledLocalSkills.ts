@@ -811,8 +811,69 @@ interface ContentFormatLibrary {
 Each \`template\` must pass \`maya-slop-critic\` on the template-skeleton itself — including the structural AI-tell pass (no tidy tricolons, "it's not X it's Y", em-dash cadence, uniform rhythm baked into a template). Real verbatim examples with banned phrases stay in \`realExamples\` (as evidence of what won) but DO NOT promote into templates. Every pattern in the final library must have \`buyerConversionJudgment: "strong" | "moderate"\` — patterns rated "vanity" or "unknown" are moved to \`rejectedPatterns[]\`. \`styleExemplars[].verbatim\` is a voice/register reference only — never copy an exemplar's content into a draft; drop any exemplar that itself reads templated/AI.
 `;
 
+// Source: agents/skills/maya-gtm/maya-content-reviewer/SKILL.md
+const ENTRY_7_maya_content_reviewer = `---
+name: maya-content-reviewer
+description: When the founder sends me a finished/edited post, video, or image to review, I actually WATCH it (multimodal) and give specific, honest editor feedback — hook, pacing, what to cut, caption/keyword placement — then offer the next step (approve → post / one-tap hand-off). Not generic praise; grounded in what I actually saw.
+---
+
+# maya-content-reviewer
+
+## Purpose
+
+Founders will send me their own content — an edited TikTok, a screen-recording, a carousel image, a draft caption — and ask "is this good?" / "honest take?" / nothing at all (just the file). The bad answer is generic praise or a guess from the caption. The right answer is: I actually watch/look at it, then give the specific feedback a sharp editor would — what lands, what drags, the one highest-leverage fix — and offer to help them ship it.
+
+## When to invoke
+
+- IF the operator sends a video / image / document attachment in their DM THEN invoke (this is the trigger — an inbound attachment).
+- IF the operator pastes a link to their own draft video (a private/unlisted upload, a Loom, a direct file URL) and asks for feedback THEN invoke.
+- IF the operator asks me to review a caption / text draft they wrote (no media) THEN I review it directly with maya-slop-critic + voice judgment — no watcher needed.
+
+## How I watch it (the multimodal path)
+
+I can't watch video in my own context (my brain is text-only). Watching routes through the shared video-watcher. The steps:
+
+1. **Resolve the file URL.** OpenClaw's Telegram plugin gives me the attachment's \`file_id\`. I resolve it to a downloadable URL with the bot token I already have:
+   - \`curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getFile?file_id=<file_id>"\` → read \`result.file_path\`.
+   - The download URL is \`https://api.telegram.org/file/bot$TELEGRAM_BOT_TOKEN/<file_path>\`.
+   (If the operator pasted a direct media URL instead, use that as-is.)
+2. **Send it to the watcher** — POST \`/lc_gtm/review_media\` with \`{ idempotencyKey, mediaUrl: <the URL>, kind: "video"|"image", operatorAsk?: <their question if they asked one> }\`. The watcher downloads + watches it (Gemini multimodal) and returns \`{ ok, analysis, geminiCalled, reason? }\`.
+3. **Grounded-or-silent:** I only give visual feedback if \`geminiCalled: true\`. If \`ok:false\` (the file couldn't be fetched/watched), I tell the operator honestly and plainly — "couldn't open that one, can you re-send it / drop a link?" — I do NOT pretend to have watched it or invent feedback from the filename. (Never narrate undone work — same gate as everywhere.)
+
+## The feedback (what I send back)
+
+Take the watcher's \`analysis\` and deliver it in my voice (SOUL.md) — specific, honest, warm, no hype. Lead with the verdict + the ONE highest-leverage change, then the details:
+
+- **Hook:** does the first 0-3s (or first line) earn the watch? Name the actual hook.
+- **Pacing:** where it drags, when the payoff/demo lands (cite the real timestamp), what to cut.
+- **Caption / keyword:** front-loaded or buried — what to move up.
+- **What's genuinely working** — specific, not padding.
+- **Verdict:** ship it / quick fixes first / rework — with the single change that matters most.
+
+Good: *"Strong concept, but the hook's buried — you open with 8 seconds of setup before the actual demo at 0:11. Cut to the demo by 0:02 and you've got it. Caption's fine but front-load 'local LLM' — that's the search term. Otherwise ship it."*
+Bad: *"Great video! 🔥 Love the energy!"* (generic, unwatched-sounding, hype).
+
+## Then offer the next step
+
+Feedback isn't the end — I close the loop:
+- **If it's ready:** offer to slot it on the calendar + hand them the one-tap post (deep link / pre-filled composer per TOOLS.md), and to draft the caption/first-comment if they want.
+- **If it needs a fix:** name the fix concretely, offer to re-review the recut.
+- **Attribution:** if it carries a product link, wrap it (\`/lc_gtm/wrap_link\`) so the post is tracked, not blind.
+
+## Failure modes
+
+- **Watcher couldn't fetch/watch it (\`ok:false\`).** Say so plainly + ask for a re-send or a link. Never fabricate feedback.
+- **HEIC image / odd format.** If the watcher skips it, ask for a JPG/PNG or a screenshot. (Format conversion is a watcher-side concern; I just relay honestly.)
+- **It's actually good.** Say it's good — specifically why — and move to shipping. Don't invent problems to seem useful; a real "this is ready, here's your one-tap post" is the right answer.
+- **Text-only draft (no media).** Skip the watcher; review with maya-slop-critic + voice judgment directly.
+
+## Anti-slop check
+
+The feedback I send passes maya-slop-critic + SOUL.md — specific, grounded in what was actually watched, warm but honest, no hype, no emoji-vomit, no generic praise. If I can't point to a real beat/timestamp/line, I haven't watched it carefully enough — go back to the analysis.
+`;
+
 // Source: agents/skills/maya-gtm/maya-continuous-research/SKILL.md
-const ENTRY_7_maya_continuous_research = `---
+const ENTRY_8_maya_continuous_research = `---
 name: maya-continuous-research
 description: The daily research loop. Maya spawns per-channel workers for target threads, competitor moves, and niche pulse, watches them via native session tools, and stops the moment she has enough for a strong morning brief. Decides "thin day" honestly when signal is dead.
 ---
@@ -905,7 +966,7 @@ Tier rationales are Maya's notes to herself in \`gtmActionLog\`, but if surfaced
 `;
 
 // Source: agents/skills/maya-gtm/maya-distribution-motion-tester/SKILL.md
-const ENTRY_8_maya_distribution_motion_tester = `---
+const ENTRY_9_maya_distribution_motion_tester = `---
 name: maya-distribution-motion-tester
 description: Design first-week experiments per PLAYBOOK § 2 Phase 2 (5-piece soft-launch kit). Define stop/double-down metrics.
 ---
@@ -980,7 +1041,7 @@ interface DistributionExperimentSet {
 `;
 
 // Source: agents/skills/maya-gtm/maya-evening-recap/SKILL.md
-const ENTRY_9_maya_evening_recap = `---
+const ENTRY_10_maya_evening_recap = `---
 name: maya-evening-recap
 description: 8pm-local one-message recap. What got done, how it performed in numbers, what's carrying to tomorrow, what we cut. Reads gtmActionLog + gtmPostResults to ground every claim.
 ---
@@ -1120,7 +1181,7 @@ Banned: "you crushed it," "great hustle today," "tomorrow we level up." Recap re
 `;
 
 // Source: agents/skills/maya-gtm/maya-foundation-research/SKILL.md
-const ENTRY_10_maya_foundation_research = `---
+const ENTRY_11_maya_foundation_research = `---
 name: maya-foundation-research
 description: The onboarding + monthly deep-research pass. Maya orchestrates 5 parallel foundation workers (buyer map, competitive map, channel scorecard, content angles, relationship targets) using OpenClaw native session tools, decides when she has enough across the board, and persists synthesis to Convex.
 ---
@@ -1366,7 +1427,7 @@ The synthesis message itself passes slop-critic. No "comprehensive analysis," no
 `;
 
 // Source: agents/skills/maya-gtm/maya-hn-researcher/SKILL.md
-const ENTRY_11_maya_hn_researcher = `---
+const ENTRY_12_maya_hn_researcher = `---
 name: maya-hn-researcher
 description: Find Hacker News buyer-intent + reply targets for dev-tool / technical / B2B products — Show HN and Ask HN threads where the buyer is describing the pain, mined down the full comment tree via the Algolia item API. Discovery-only timing rules (Show HN is one-shot); the depth is in the comments.
 ---
@@ -1439,7 +1500,7 @@ On a story/Show HN, the **title** carries the whole click decision: concrete, sp
 `;
 
 // Source: agents/skills/maya-gtm/maya-icp-hypothesis/SKILL.md
-const ENTRY_12_maya_icp_hypothesis = `---
+const ENTRY_13_maya_icp_hypothesis = `---
 name: maya-icp-hypothesis
 description: Generate 3-5 ICP hypotheses from product evidence + walkthrough — never from asking the founder, who usually doesn't know.
 ---
@@ -1514,7 +1575,7 @@ Invoke \`maya-slop-critic\` (banned-phrase scan only) on every \`buyer\` and \`c
 `;
 
 // Source: agents/skills/maya-gtm/maya-inbound-triage/SKILL.md
-const ENTRY_13_maya_inbound_triage = `---
+const ENTRY_14_maya_inbound_triage = `---
 name: maya-inbound-triage
 description: Reply / DM / mention triage. For every inbound to an owned post, classify (buyer / supporter / noise / hostile), draft a response if reply-worthy, and surface to the operator in one line — they should never have to scan their own inbox.
 ---
@@ -1633,7 +1694,7 @@ The drafted reply must pass slop-critic. The surface-to-operator message itself 
 `;
 
 // Source: agents/skills/maya-gtm/maya-linkedin-fit-researcher/SKILL.md
-const ENTRY_14_maya_linkedin_fit_researcher = `---
+const ENTRY_15_maya_linkedin_fit_researcher = `---
 name: maya-linkedin-fit-researcher
 description: Decide whether LinkedIn is the right channel per playbook/linkedin.md LI-1.1 - LI-1.3 + LI-10.2. Refuse if rule LI-10.2 applies.
 ---
@@ -1772,7 +1833,7 @@ LinkedIn is the slop epicenter. Every \`suggestedCommentDraft\` and \`caption.op
 `;
 
 // Source: agents/skills/maya-gtm/maya-linkedin-researcher/SKILL.md
-const ENTRY_15_maya_linkedin_researcher = `---
+const ENTRY_16_maya_linkedin_researcher = `---
 name: maya-linkedin-researcher
 description: For B2B / prosumer products where the buyer is a professional, find LinkedIn reply targets + engagement opportunities — posts where the buyer is describing the pain, mined for comment-level buyer intent. Runs AFTER maya-linkedin-fit-researcher clears LinkedIn as a bet; this is the research worker, not the fit gate.
 ---
@@ -1845,7 +1906,7 @@ ScrapeCreators LinkedIn calls bounded by the foundation budget guard. LinkedIn i
 `;
 
 // Source: agents/skills/maya-gtm/maya-morning-brief/SKILL.md
-const ENTRY_16_maya_morning_brief = `---
+const ENTRY_17_maya_morning_brief = `---
 name: maya-morning-brief
 description: The 7am-local daily message + calendar populate. One Telegram, as tight as possible while useful, self-graded (Strong / Thin / Warmup), top priority named first, calendar events with full hands-off recipes. Reads gtmNicheLearnings to weight what surfaces.
 ---
@@ -1979,7 +2040,7 @@ Brief faces slop-critic. Banned for this message: "I've put together," "comprehe
 `;
 
 // Source: agents/skills/maya-gtm/maya-output-critic/SKILL.md
-const ENTRY_17_maya_output_critic = `---
+const ENTRY_18_maya_output_critic = `---
 name: maya-output-critic
 description: The 5-gate quality framework Maya consults before shipping any user-facing message — morning brief, evening recap, calendar event description, drafted reply, weekly review. Grounding / voice / recipe / tier-honesty / time-box. Fail → iterate or escalate, never silently ship low quality.
 ---
@@ -2101,7 +2162,7 @@ Self-referential: the critic must itself pass voice + grounding + tier-honesty b
 `;
 
 // Source: agents/skills/maya-gtm/maya-reddit-demand-researcher/SKILL.md
-const ENTRY_18_maya_reddit_demand_researcher = `---
+const ENTRY_19_maya_reddit_demand_researcher = `---
 name: maya-reddit-demand-researcher
 description: Find Reddit buyer intent for the product's pain — surface reply targets ranked by purchase signal, map the live comment tree for follow-up questions, return promotion-risk score. Budget-bounded.
 ---
@@ -2293,7 +2354,7 @@ Max 8 ScrapeCreators calls: 3 × subreddit/search, 2 × general search, 2 × sub
 `;
 
 // Source: agents/skills/maya-gtm/maya-results-reviewer/SKILL.md
-const ENTRY_19_maya_results_reviewer = `---
+const ENTRY_20_maya_results_reviewer = `---
 name: maya-results-reviewer
 description: Review published results. Recommend double_down / iterate / do_not_overfit per PLAYBOOK format-market-fit detection. Counter-overfitting checks.
 ---
@@ -2405,7 +2466,7 @@ Max 4 ScrapeCreators calls (1 per platform). Cache aggressively. 1 main_maya syn
 `;
 
 // Source: agents/skills/maya-gtm/maya-slop-critic/SKILL.md
-const ENTRY_20_maya_slop_critic = `---
+const ENTRY_21_maya_slop_critic = `---
 name: maya-slop-critic
 description: The anti-slop / AI-tell critic. Apply PLAYBOOK § 6 banned-phrase list + banned-structure scan + LLM-judgment structural AI-tell pass + voice match + read-aloud test. Returns "rejected with reasons" on any trip. The bar is native-voice fidelity, NOT detector-dodging.
 ---
@@ -2532,7 +2593,7 @@ Self-referential: this skill IS the anti-slop check. The \`suggestion\` strings 
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-demo-strategist/SKILL.md
-const ENTRY_21_maya_tiktok_demo_strategist = `---
+const ENTRY_22_maya_tiktok_demo_strategist = `---
 name: maya-tiktok-demo-strategist
 description: Pick TikTok format (faceless screen-record vs founder-on-camera vs slideshow) given showability + constraints. Refuse if user can't post manually (V1 constraint).
 ---
@@ -2616,7 +2677,7 @@ interface TikTokStrategy {
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-format-researcher/SKILL.md
-const ENTRY_22_maya_tiktok_format_researcher = `---
+const ENTRY_23_maya_tiktok_format_researcher = `---
 name: maya-tiktok-format-researcher
 description: Find what's working in the operator's niche on TikTok RIGHT NOW. Identify the format that clearly recurs across the strongest recent videos in the niche (tiktok.md § 7).
 ---
@@ -2738,7 +2799,7 @@ Structured taxonomy output, slop-critic NOT invoked. \`excerpt\` strings and eve
 `;
 
 // Source: agents/skills/maya-gtm/maya-ugc-system-advisor/SKILL.md
-const ENTRY_23_maya_ugc_system_advisor = `---
+const ENTRY_24_maya_ugc_system_advisor = `---
 name: maya-ugc-system-advisor
 description: ADVISORY-ONLY in V1. UGC creators are a Phase 4+ lever per PLAYBOOK. Refuse to recommend before format-market-fit.
 ---
@@ -2818,7 +2879,7 @@ Mostly structured refusals. \`refusalReason\` and \`gatesUnmet[].detail\` pass t
 `;
 
 // Source: agents/skills/maya-gtm/maya-viral-demo-moment-miner/SKILL.md
-const ENTRY_24_maya_viral_demo_moment_miner = `---
+const ENTRY_25_maya_viral_demo_moment_miner = `---
 name: maya-viral-demo-moment-miner
 description: Find showable app moments — before/after contrasts, screenshot sequences. Source: walkthrough + product UI.
 ---
@@ -2900,7 +2961,7 @@ interface ViralDemoBeatLibrary {
 `;
 
 // Source: agents/skills/maya-gtm/maya-voice-matcher/SKILL.md
-const ENTRY_25_maya_voice_matcher = `---
+const ENTRY_26_maya_voice_matcher = `---
 name: maya-voice-matcher
 description: Score how well a drafted reply/post/thread matches the operator's actual voice — drawn from their existing public writing (X/Reddit/LinkedIn) or onboarding answers as fallback. Combines with maya-slop-critic for a final ship-or-revise gate. Each gtmDraftedContent row gets a voiceMatchScore + slopCriticPassed flag.
 ---
@@ -3013,7 +3074,7 @@ Yes — this skill itself outputs operator-facing copy (when surfacing voice fee
 `;
 
 // Source: agents/skills/maya-gtm/maya-weekly-review/SKILL.md
-const ENTRY_26_maya_weekly_review = `---
+const ENTRY_27_maya_weekly_review = `---
 name: maya-weekly-review
 description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for next week if any, and a regenerated next-week plan re-weighted by what actually converted.
 ---
@@ -3148,7 +3209,7 @@ Banned for this message: "Crushed it this week," "We're seeing momentum," "level
 `;
 
 // Source: agents/skills/maya-gtm/maya-x-founder-led-researcher/SKILL.md
-const ENTRY_27_maya_x_founder_led_researcher = `---
+const ENTRY_28_maya_x_founder_led_researcher = `---
 name: maya-x-founder-led-researcher
 description: Find X founder-led conversations, reply targets, hooks worth modeling, and accounts worth a private List.
 ---
@@ -3306,7 +3367,7 @@ Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before t
 `;
 
 // Source: agents/skills/maya-gtm/maya-youtube-researcher/SKILL.md
-const ENTRY_28_maya_youtube_researcher = `---
+const ENTRY_29_maya_youtube_researcher = `---
 name: maya-youtube-researcher
 description: Deep YouTube research via ScrapeCreators — mine comments + transcripts for buyer language, map the venue spread (niche channels, hashtags, Shorts trends), and judge whether YouTube earns a bet for this product. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
 ---
@@ -3363,26 +3424,27 @@ export const BUNDLED_LOCAL_SKILLS: readonly BundledLocalSkill[] = [
   { slug: "maya-channel-strategy-judge", workspacePath: "skills/maya-channel-strategy-judge/SKILL.md", body: ENTRY_4_maya_channel_strategy_judge },
   { slug: "maya-competitor-researcher", workspacePath: "skills/maya-competitor-researcher/SKILL.md", body: ENTRY_5_maya_competitor_researcher },
   { slug: "maya-content-format-miner", workspacePath: "skills/maya-content-format-miner/SKILL.md", body: ENTRY_6_maya_content_format_miner },
-  { slug: "maya-continuous-research", workspacePath: "skills/maya-continuous-research/SKILL.md", body: ENTRY_7_maya_continuous_research },
-  { slug: "maya-distribution-motion-tester", workspacePath: "skills/maya-distribution-motion-tester/SKILL.md", body: ENTRY_8_maya_distribution_motion_tester },
-  { slug: "maya-evening-recap", workspacePath: "skills/maya-evening-recap/SKILL.md", body: ENTRY_9_maya_evening_recap },
-  { slug: "maya-foundation-research", workspacePath: "skills/maya-foundation-research/SKILL.md", body: ENTRY_10_maya_foundation_research },
-  { slug: "maya-hn-researcher", workspacePath: "skills/maya-hn-researcher/SKILL.md", body: ENTRY_11_maya_hn_researcher },
-  { slug: "maya-icp-hypothesis", workspacePath: "skills/maya-icp-hypothesis/SKILL.md", body: ENTRY_12_maya_icp_hypothesis },
-  { slug: "maya-inbound-triage", workspacePath: "skills/maya-inbound-triage/SKILL.md", body: ENTRY_13_maya_inbound_triage },
-  { slug: "maya-linkedin-fit-researcher", workspacePath: "skills/maya-linkedin-fit-researcher/SKILL.md", body: ENTRY_14_maya_linkedin_fit_researcher },
-  { slug: "maya-linkedin-researcher", workspacePath: "skills/maya-linkedin-researcher/SKILL.md", body: ENTRY_15_maya_linkedin_researcher },
-  { slug: "maya-morning-brief", workspacePath: "skills/maya-morning-brief/SKILL.md", body: ENTRY_16_maya_morning_brief },
-  { slug: "maya-output-critic", workspacePath: "skills/maya-output-critic/SKILL.md", body: ENTRY_17_maya_output_critic },
-  { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_18_maya_reddit_demand_researcher },
-  { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_19_maya_results_reviewer },
-  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_20_maya_slop_critic },
-  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_21_maya_tiktok_demo_strategist },
-  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_22_maya_tiktok_format_researcher },
-  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_23_maya_ugc_system_advisor },
-  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_24_maya_viral_demo_moment_miner },
-  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_25_maya_voice_matcher },
-  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_26_maya_weekly_review },
-  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_27_maya_x_founder_led_researcher },
-  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_28_maya_youtube_researcher },
+  { slug: "maya-content-reviewer", workspacePath: "skills/maya-content-reviewer/SKILL.md", body: ENTRY_7_maya_content_reviewer },
+  { slug: "maya-continuous-research", workspacePath: "skills/maya-continuous-research/SKILL.md", body: ENTRY_8_maya_continuous_research },
+  { slug: "maya-distribution-motion-tester", workspacePath: "skills/maya-distribution-motion-tester/SKILL.md", body: ENTRY_9_maya_distribution_motion_tester },
+  { slug: "maya-evening-recap", workspacePath: "skills/maya-evening-recap/SKILL.md", body: ENTRY_10_maya_evening_recap },
+  { slug: "maya-foundation-research", workspacePath: "skills/maya-foundation-research/SKILL.md", body: ENTRY_11_maya_foundation_research },
+  { slug: "maya-hn-researcher", workspacePath: "skills/maya-hn-researcher/SKILL.md", body: ENTRY_12_maya_hn_researcher },
+  { slug: "maya-icp-hypothesis", workspacePath: "skills/maya-icp-hypothesis/SKILL.md", body: ENTRY_13_maya_icp_hypothesis },
+  { slug: "maya-inbound-triage", workspacePath: "skills/maya-inbound-triage/SKILL.md", body: ENTRY_14_maya_inbound_triage },
+  { slug: "maya-linkedin-fit-researcher", workspacePath: "skills/maya-linkedin-fit-researcher/SKILL.md", body: ENTRY_15_maya_linkedin_fit_researcher },
+  { slug: "maya-linkedin-researcher", workspacePath: "skills/maya-linkedin-researcher/SKILL.md", body: ENTRY_16_maya_linkedin_researcher },
+  { slug: "maya-morning-brief", workspacePath: "skills/maya-morning-brief/SKILL.md", body: ENTRY_17_maya_morning_brief },
+  { slug: "maya-output-critic", workspacePath: "skills/maya-output-critic/SKILL.md", body: ENTRY_18_maya_output_critic },
+  { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_19_maya_reddit_demand_researcher },
+  { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_20_maya_results_reviewer },
+  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_21_maya_slop_critic },
+  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_22_maya_tiktok_demo_strategist },
+  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_23_maya_tiktok_format_researcher },
+  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_24_maya_ugc_system_advisor },
+  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_25_maya_viral_demo_moment_miner },
+  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_26_maya_voice_matcher },
+  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_27_maya_weekly_review },
+  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_28_maya_x_founder_led_researcher },
+  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_29_maya_youtube_researcher },
 ];
