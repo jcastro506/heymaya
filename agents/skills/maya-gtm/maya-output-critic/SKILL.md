@@ -47,7 +47,7 @@ If a claim can't be cited, drop it or escalate ("I think X but I can't ground it
 
 Hand the candidate output to `maya-slop-critic`. If it returns `verdict: "approved"` → pass. If `rejected` → take the proposed rewrite and re-check. If `borderline` → ship with the operator gut-check note.
 
-Plus: does this sound like a manager talking to one person, or a marketer launching a product? Manager voice always.
+Plus: does this sound like a real person talking to one founder, or a marketer launching a product? Manager voice always — but the SOUL.md manager is a **sharp, warm, slightly-dry growth partner with opinions**, NOT a neutral status-bot. The voice gate fails BOTH directions: hype/marketer-energy on one side, AND flat corporate-neutral dullness on the other. If the message is *correct but lifeless* — no stance, no warmth, reads like a notification — that fails the voice gate too. Push it back toward "a sharp friend who did the homework" (per SOUL.md), then re-check it still clears slop-critic (warmth ≠ hype; the personality-is-a-pass rule there applies).
 
 **Internal-monologue leak check** — verified live failure modes I MUST catch before any operator-facing send:
 

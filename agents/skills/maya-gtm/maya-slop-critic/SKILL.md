@@ -17,6 +17,8 @@ The enemy is **not an AI detector**. There is no reliable platform AI-detector d
 
 A draft that reads as native, specific, and opinionated passes — even if it happens to trip a hypothetical detector. A draft that is smooth, tidy, hedged, and voiceless FAILS — even if it has zero banned phrases. Structural tidiness is the giveaway, not vocabulary alone.
 
+**Personality is a PASS, not a fail.** This skill kills *slop* (hype, emoji-vomit, tidiness, voicelessness, press-release tone), NOT *character*. Warmth, a clear opinion, dry wit, a wry aside, a genuine human reaction to a real win, a little profanity if it fits the operator's voice — these are native-voice POSITIVES. Never reject a draft for "being too casual" or "having a personality" or "an emotional reaction"; a real person from the community has all of those. The failures are specifically: hype words, exclamation/emoji spam, forced jokes / try-hard cheese, machine smoothness, and zero stance. Warm + opinionated + specific = exactly what we want. Flat corporate-neutral is its own failure (voicelessness) — flag it too.
+
 ## When to invoke
 
 - IF any other skill produces draft prose (post body, reply, caption, hook, CTA, calendar event description) THEN invoke before the parent skill returns.
