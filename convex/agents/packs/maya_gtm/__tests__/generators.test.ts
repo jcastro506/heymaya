@@ -323,6 +323,10 @@ describe("Maya GTM workspace pack", () => {
     expect(heartbeat).toContain("queued calendar event in the next 30 min");
     // stuck-worker-sweep -> worker silent >5 min surfaced + adjusted
     expect(heartbeat).toContain("worker has been silent >5 min");
+    // Sprint E — restored recovery/maintenance tasks (dropped when HEARTBEAT
+    // was slimmed; flagged in Sprint A, restored here).
+    expect(heartbeat).toContain("missed-cadence recovery");
+    expect(heartbeat).toContain("published-results-scan");
 
     // Manager-mode marker the heartbeat still keys off.
     expect(heartbeat).toContain("foundation_completed_at:");

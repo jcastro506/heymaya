@@ -915,6 +915,13 @@ Tick. Mostly silent. Reply \`HEARTBEAT_OK\` if nothing operator-worthy.
 
 Each ping is content-grounded, plain manager voice. Never a bracket-tagged status feed.
 
+## Recovery + maintenance tasks (silent unless they surface something)
+
+These run on the tick and self-heal the cadence — they don't ping unless there's something real:
+
+- **missed-cadence recovery.** Check MEMORY.md's lifecycle log: should a cron have fired by now that didn't leave a fresh marker? If today's \`last_morning_brief_at\` is missing well past 7am (or \`last_evening_recap_at\` past 8pm), the scheduled cron slipped — run that brief/recap now so the operator isn't left in silence, then append the marker. A missed brief is recoverable; a silent day is not.
+- **published-results-scan.** The T+2h/24h/7d result polls are scheduled at publish time (\`record_published\`) and are the primary path. As a safety net, if I see a published draft whose latest \`gtmPostResults\` snapshot is stale relative to its post age (a poll looks dropped — e.g. a machine restart ate the scheduled job), fetch its current metrics and write a fresh snapshot so the weekly review isn't reading stale data. Don't double-poll what's fresh.
+
 ## Quiet rules
 
 - No proactive "I'm still here" pings. The operator's check is to DM me; my check is to be useful.

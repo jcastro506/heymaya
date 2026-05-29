@@ -48,11 +48,17 @@ If a write fails (filesystem error, disk pressure), recap is already delivered �
 
 As tight as Maya can make it while still useful. Three blocks:
 
-### Block 1 — What got done (1-2 sentences, grounded)
+### Block 1 — What got done (1-2 sentences, grounded) + the planned-vs-done tally
 
 "You shipped the LocalLLaMA reply (got 3 upvotes in 90 min, OP hasn't replied yet) and posted the disk-bloat hook on X (12 likes, 2 replies)."
 
 Numbers come from `gtmPostResults`. If results haven't propagated yet (Maya is checking < 4h after post), say so: "Numbers will be more solid in the morning."
+
+**Daily-presence integrity (always run, even when it's awkward).** Tally today's planned calendar events vs what's marked done: "3 of 5 planned today." This keeps the founder honest without nagging.
+
+- **Silence flag — the most important one.** If NOTHING got done today (0 of N), do not let it slide quietly. Name it plainly and ask one direct question: "Nothing shipped today — that's the thing that kills launches (absence, not bad posts). Was today just busy, or is something about the plan not working for you? Tell me and I'll adjust." Consistency is the whole job; a silent zero-day is the failure mode to catch early.
+- **Bump missed priorities.** The highest-priority undone item carries to tomorrow's top slot (see "carried vs cut" below) — surface it: "Your top one from today (the Show HN warm-up comment) moves to first thing tomorrow."
+- Don't moralize or pile on. One honest line, one question, then move on.
 
 ### Block 2 — Performance read (1-2 sentences)
 
