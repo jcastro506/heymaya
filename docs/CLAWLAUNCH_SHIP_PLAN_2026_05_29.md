@@ -38,6 +38,9 @@ Two research paths exist today: (a) the **Convex `runBudgetedResearchJob`** orch
 
 ---
 
+## Architecture decision — video-watch / multimodal (locked 2026-05-29)
+**All TEXT LLM goes through OpenRouter (K2 brain + Gemini workers). But OpenRouter is text-only — it cannot proxy video multimodal.** So watching a video is the ONE exception: it routes to the **shared `services/video-synth-worker`** (yt-dlp download → **direct** Gemini Files API watch), NOT through OpenRouter, NOT per-machine yt-dlp. The GTM agent (or a Convex action) calls the worker `POST {videoUrl, what-to-analyze}` → gets back a **structured analysis** `{ transcript, hook, pacing, key visual beats, format pattern, why-it-works }`. One worker + one direct-Gemini key serves all users; the agent stays text-only. **Today this worker is wired to the *creator* product, not GTM — wiring it into GTM (for visual format-mining + S13 user-submitted-video feedback) is S0/S13.** Capability pieces verified 2026-05-29: data APIs 6/6 (local harness), `GOOGLE_API_KEY` is a valid Gemini key, yt-dlp installs+runs, worker shipped. Remaining = wiring + a `maya-video-watcher` skill (when/what/how), no Fly deploy needed to build.
+
 # Sprints (ordered for build → ship → customers)
 
 ### S1 — Live agent reliability (FIRST; nothing works if the agent can't talk)
