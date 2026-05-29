@@ -77,6 +77,13 @@ interface RedditDemandReport {
     conversionPath: string;       // honest, non-spammy path to try the product that fits the reply context
     suggestedFramework: "been-there-done-that" | "counterintuitive" | "tactical-playbook" | "tool-neutral-recommendation" | "quiet-authority";
     mentionRecommended: boolean;
+    /** The actual reply text, in the operator's voice, ready to paste.
+     *  Reddit replies have no separate caption layer — the first line is
+     *  the hook. Lead with empathy / answer the ask / soft product mention
+     *  only if it genuinely fits (URL per § 8.8 first-comment rule) / end
+     *  with a follow-up question. This is what gets POSTed to
+     *  /lc_gtm/drafted_content, not returned for Maya to write later. */
+    draftReply: string;
     /** When the highest-value reply target is a COMMENT, not the OP.
      *  Populated when comment-tree mining finds a follow-up question
      *  the OP never answered and the product addresses directly —
@@ -133,6 +140,17 @@ interface RedditDemandReport {
   parkReasons?: string[];
 }
 ```
+
+## How you deliver — POST per item, don't just return a report
+
+When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand a `RedditDemandReport` back for Maya to act on later. For EACH `replyTarget` worth a reply, in its own item loop:
+
+1. POST `/lc_gtm/target_thread` (url, externalId, platform, title, excerpt, currentMetrics, subredditOrCommunity, recommendedAction, `painQuote` verbatim, velocityScore, priorityScore) → returns a targetThreadId.
+2. Compose `draftReply` in the operator's voice per the rules above (first line earns the read; § 8.8 first-comment URL rule).
+3. POST `/lc_gtm/drafted_content` (kind="reply", platform="reddit", targetThreadId, draftText=draftReply).
+4. Re-POST `/lc_gtm/target_thread` (same externalId) with `draftReply` set, to keep the row's one-tap deep link in sync.
+
+One self-contained POST sequence per thread — the same per-item discipline that makes the foundation strategy POSTs reliable. The `RedditDemandReport` schema above stays the shape of your *thinking* per target; the POSTs are how it lands. Exact sequence: `maya-foundation-research` Phase 2.
 
 ## Failure modes
 

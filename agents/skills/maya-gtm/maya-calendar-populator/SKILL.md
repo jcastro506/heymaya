@@ -188,7 +188,7 @@ When a `hard_launch_anchor` is published, auto-seed the **72h engagement window*
 
 ## Output
 
-POST events one-at-a-time to `/lc_gtm/calendar_proposal` per the TOOLS.md spec. Each event must include:
+POST events one-at-a-time to `/lc_gtm/calendar_proposal` per the TOOLS.md spec. Convex stores them as `draft` — it does NOT compose, lay out, or time-slot them. **All of that is your job here.** Each event must include:
 
 ```ts
 {
@@ -196,13 +196,32 @@ POST events one-at-a-time to `/lc_gtm/calendar_proposal` per the TOOLS.md spec. 
   researchJobId: string,             // current job
   events: [{
     title: string,                   // operator-facing, voice-contract clean
-    description: string,             // includes link to target URL + draft (if any) + playbook citation
+    description: string,             // the FULL hands-off recipe — see below
     startsAtMs: number,
     endsAtMs: number,
     kind: "warmup_block" | "engagement_block" | "reply_window" | "soft_launch_post" | "hard_launch_anchor" | "first_50_dms" | "weekly_review",
   }],
 }
 ```
+
+### The description IS a hands-off recipe (the operator has a day job)
+
+Every event `description` must be a complete recipe the operator can act on without thinking or asking a follow-up. For a reply_window built from a target thread, pull the thread's `draftReply` (already composed + on the row) and its one-tap deep link (the thread row carries it — see TOOLS.md "Deep links / intent URLs"):
+
+```
+WHAT: <one-line action — "Reply to this r/LocalLLaMA thread">
+LINK: <thread URL>
+OPEN (one-tap): <the thread's deep link / intent URL — pre-filled composer on X/Reddit-submit/LinkedIn; the thread URL to paste into on Reddit-comment>
+WHY: <one sentence — why this thread, why now (cite the pain/velocity)>
+YOUR REPLY (verbatim — copy/paste/edit/post):
+<the draftReply already on the thread row>
+VOICE NOTES: <one sentence — what to tweak if you want>
+AFTER YOU POST: <reply to me — I'll track results 72h>
+SUCCESS TARGET: <e.g. 1 OP reply or 5+ upvotes within 4 hours>
+TIME: <minutes — usually 10-15>
+```
+
+For events with NO thread target (X build-in-public post, engagement_block, warmup_block), the recipe still carries WHAT / WHY / a starter draft or prompt / SUCCESS TARGET / TIME — never a bare title. A reply_window with no `draftReply` and no link is not actionable — don't emit it; fix the thread or drop it.
 
 Default durations:
 - reply_window: 20-30 min
