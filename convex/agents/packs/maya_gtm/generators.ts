@@ -335,7 +335,7 @@ See SOUL.md for full voice. Headline: I'm a manager texting a founder at 6pm. Ti
 
 - **7am operator-local — morning brief.** One Telegram, top priority named, today's calendar already populated. Self-graded Strong/Thin/Warmup.
 - **8pm operator-local — evening recap.** What got done, how each post performed, what carries to tomorrow.
-- **Sunday 6pm — weekly review.** 7-day strategic block. What worked, what died. Strategic shift for next week. Extract learnings to MEMORY.md.
+- **Sunday 7pm — weekly review.** 7-day strategic block + North-Star on-track/at-risk. What worked, what died. Re-weight bet channels from what converted + regenerate next week's rolling plan (not a one-way ratchet). Extract learnings to MEMORY.md.
 - **1st of month 6am — monthly reset.** Re-foundation. Diff vs last month. Announce changes.
 - **Heartbeat 5 min during research / 30 min in compound mode.** Mostly silent (HEARTBEAT_OK). Ping only on hot threads, stuck workers, 5x baseline posts, inbound replies.
 
@@ -844,7 +844,7 @@ I'm Maya, ${input.accountEmail}'s GTM manager. This file fires once at gateway s
 2. Decide:
    - If NO line begins \`hello_sent_at:\` → send the hello first (one short Telegram to ${telegramTarget} via the message tool or curl POST to \`$CONVEX_SITE_URL/lc_gtm/send_update\`). Then APPEND a \`hello_sent_at: <ISO>\` line to the bottom of MEMORY.md's lifecycle log (append — never edit an existing line).
    - If no line begins \`foundation_completed_at:\` → run **foundation pass**. Append \`foundation_started_at: <ISO>\` when you kick it off. Read \`skills/maya-foundation-research/SKILL.md\` and follow it end-to-end (Phases 1-4); append \`foundation_completed_at: <ISO>\` only when the plan + drafts are written.
-   - If a \`foundation_completed_at:\` line exists → ensure daily crons are scheduled (morning_brief 7am, evening_recap 8pm, weekly_review Sun 6pm, monthly_reset 1st-6am operator-local), then \`sessions_yield\`. The cadence loop is established.
+   - If a \`foundation_completed_at:\` line exists → ensure daily crons are scheduled (morning_brief 7am, evening_recap 8pm, weekly_review Sun 7pm, monthly_reset 1st-6am operator-local), then \`sessions_yield\`. The cadence loop is established.
 
 ## The hello — compose it, don't transcribe it
 
@@ -1085,7 +1085,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
   // using the operator's timezone from USER.md:
   //   - morning_brief: 0 7 * * *
   //   - evening_recap: 0 20 * * *
-  //   - weekly_review: 0 18 * * 0 (Sunday 6pm)
+  //   - weekly_review: 0 19 * * 0 (Sunday 7pm)
   //   - monthly_reset: 0 6 1 * * (1st of month, 6am — includes
   //                                channel-discovery refresh inside
   //                                the foundation pass)
@@ -1149,7 +1149,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
       // after foundation completes, using the operator's actual timezone.
       // The monthly_reset cron runs maya-foundation-research again
       // (subsuming the prior channel-discovery surface); the weekly_review
-      // cron runs maya-weekly-review on Sunday 18:00 operator local.
+      // cron runs maya-weekly-review on Sunday 19:00 operator local.
     ],
   };
 
@@ -1297,7 +1297,7 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
     case "maya-evening-recap":
       return "20:00-local one-message recap. What got done grounded in gtmPostResults, performance read, tomorrow setup, learning extraction when ≥3 evidence points support a pattern.";
     case "maya-weekly-review":
-      return "Sunday-18:00 strategic review. Last week's score, learnings (write to gtmNicheLearnings), strategic shift if 2+ weeks of consistent signal, next-week content drafts.";
+      return "Sunday-19:00 strategic review. Last week's score + North-Star on-track/at-risk, learnings (write to gtmNicheLearnings), strategic shift if 2+ weeks of consistent signal, and a regenerated next-week rolling plan re-weighted by what converted.";
     case "maya-inbound-triage":
       return "Event-driven reply/DM/mention triage. Classify BUYER / SUPPORTER / NOISE / HOSTILE, draft a reply for the first two, surface one-liner to operator with reply/edit/skip controls.";
   }

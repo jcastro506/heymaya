@@ -1,6 +1,6 @@
 ---
 name: maya-weekly-review
-description: Sunday-18:00-local strategic review. Last week's score across channels, what we learned (extracted to gtmNicheLearnings), strategic shift for next week if any, draft of next week's content.
+description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for next week if any, and a regenerated next-week plan re-weighted by what actually converted.
 ---
 
 # maya-weekly-review
@@ -11,7 +11,7 @@ Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks a
 
 ## When to invoke
 
-- Native cron Sunday 18:00 operator-local. Self-scheduled.
+- Native cron Sunday 19:00 operator-local. Self-scheduled.
 - Operator manually requests ("how'd this week go?") — re-synthesize from existing data.
 
 ## Pre-conditions
@@ -39,6 +39,8 @@ As tight as Maya can make it while still useful. Four blocks:
 
 Numbers grounded in `gtmActionLog` + `gtmPostResults`. If a metric isn't available, say so — don't fabricate.
 
+**North-Star status (always).** Read the North Star off GTM.md (the `northStarMetric` / target / deadline) and the real outcome numbers from `/lc_gtm/get_my_recent_post_results` + the conversions I've recorded (`record_conversion`). State **on-track / at-risk** plainly against the target and pace-to-deadline: "North Star: 100 signups by Day 30. We're at 22 with 18 days left — at-risk; current pace lands ~37. The plan below leans harder into the channel that's actually converting." If I have clicks but no signup data, say so honestly ("12 clicks to the app this week but no signup confirmations — tell me how many converted so I optimize the right thing") — never pretend likes are signups.
+
 ### Block 2 — What we learned
 
 3-5 bullets, each a specific pattern from the week. Examples:
@@ -59,11 +61,16 @@ Maya proposes a concrete shift if data warrants:
 
 If no shift, say so ("Bets are working — staying the course"). Honesty.
 
-### Block 4 — Next week's draft pipeline
+### Block 4 — Regenerate next week's plan (NOT a one-way ratchet)
 
-3-5 content drafts queued for next week, each tied to a content-angle from `gtmContentAngles`. These get written to `gtmDraftedContent` with `approvalState: "draft"` — operator can edit / approve / reject through the week.
+The review doesn't just *extract* learnings — it *feeds them forward*. Rebuild the rolling 7-day plan for the coming week, re-weighted by what actually worked:
 
-Each draft has: angle slug it's from, target channel, target ship day, opening line.
+1. **Re-weight bet channels/angles from the week's outcomes.** Channels/angles that produced real outcomes (clicks → conversions first, then OP-replies/engagement) get MORE slots next week; flat ones get fewer. Read `maya-calendar-populator/SKILL.md` and regenerate the rolling 7-day `gtmCalendarEvents` (today→Sunday) with the new weighting — don't just append to last week's stale plan.
+2. **Counter-overfitting discipline (hard rule).** Do NOT swing the whole plan on one week or one viral post. A real re-weight needs a *repeated* signal (≥2 data points in a direction), and a big channel shift (dropping/adding a bet channel) needs the 2-week rule — flag it as a hypothesis in DREAMS.md first, act when it's confirmed. One 200-upvote thread is not a format.
+3. **Apply the surviving learnings** from Block 2 to the surfacing (which venues/angles to prioritize) and to the drafts.
+4. **Draft pipeline:** 3-5 content drafts for next week, each tied to a `gtmContentAngles` slug, written to `gtmDraftedContent` (`approvalState: "draft"`) — operator can edit/approve/reject through the week. Each draft: angle slug, target channel, ship day, opening line. **Wrap every product link via `/lc_gtm/wrap_link`** so next week's clicks are attributable.
+
+The point: next week's plan is visibly *different* from this week's because the data moved it. If nothing changed, say why ("bets are working, holding the mix") — but that's a decision, not a default.
 
 ## What this review writes
 
