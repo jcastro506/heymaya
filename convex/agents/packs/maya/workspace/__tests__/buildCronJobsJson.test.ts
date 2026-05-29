@@ -278,7 +278,10 @@ describe("buildCronJobsJson — first-boot kickstart", () => {
   const KICKSTART_NOW = 1_730_000_000_000;
   // Sprint 12.2 — flipped from past to near-future so OpenClaw's scheduler
   // arms a real timer instead of treating the job as a missed deadline.
-  const EXPECTED_AT = new Date(KICKSTART_NOW + 180_000).toISOString();
+  // Offset bumped 180s→300s in 38a48dd (180s was too tight: ~192s deploy →
+  // 12s past the `at` → scheduler reschedules +4h). Keep in sync with
+  // buildFirstBootKickstart's `now + 300_000`.
+  const EXPECTED_AT = new Date(KICKSTART_NOW + 300_000).toISOString();
 
   function freshCreator(plan: "coach" | "manager", tz = "America/Los_Angeles") {
     // firstBootCompletedAt intentionally undefined → kickstart fires.
