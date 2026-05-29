@@ -163,6 +163,29 @@ If primary channel has unmet Phase-1 audience minimum (PLAYBOOK § 2):
 - the rolling 7-day calendar is exclusively warmup_block + engagement_block + reply_window (replies allowed during warmup if they're substantive, not promotional) — the warmup PERIOD still runs its full 2-4 weeks; we just plan it a rolling week at a time
 - Maya signals to user: "We're in warmup. No public product mentions yet. Tomorrow's first task is X."
 
+### 8b. Hard-launch / Show HN preconditions (HARD GATE — kills the 48h-cold-launch bug)
+
+**NEVER emit a `hard_launch_anchor` or a Show HN event until ALL THREE preconditions pass.** A cold launch into a tiny audience is a guaranteed void (PLAYBOOK rule 9.8) — it burns the one-shot launch moment. Before slotting either:
+
+1. **Account maturity** — `creator.createdAt` is old enough that the account isn't brand-new, AND warmup is done (TikTok `tiktokWarmupState === "ready"` for TikTok; for Reddit/HN/X/LI the account has real history, not days-old). A <48h-old account launching this week → NO. Tell the operator: "your accounts need to warm up first — here's this week's warm-up plan; we launch once you've got a baseline."
+2. **Audience floor** — the primary channel's Phase-1 audience minimum (PLAYBOOK § 2) is MET. No floor → stay in warmup, don't launch into the void.
+3. **Days-in-phase** — the operator has actually spent the soft-launch (Phase 2) time building credibility; we don't skip Phase 2. (Manager-mode founders with an existing warmed audience can clear 1+2 immediately — judgment, not a fixed timer.)
+
+If any precondition fails, do NOT slot the launch; slot the warm-up/soft-launch work that earns it, and say so plainly. **This gate is also re-checked at publish time** (`publishApprovedDraft`) — a launch draft that reaches publish without preconditions met is blocked, not posted.
+
+### 8c. The launch bundle (one approval-gated unit, never a lone post)
+
+A hard launch ships as ONE coordinated, approval-gated bundle — not a single anchor post:
+- **5-piece launch kit** — the anchor post + the supporting assets (e.g. the demo/proof artifact, the first-comment context, the cross-post variants, the reply-ready FAQ). Drafted together.
+- **first_50_dms** — the warm-outreach block the day before, so the launch doesn't drop into silence.
+- **staggered multi-channel** — the anchor + the same-day cross-posts/threads, time-staggered, as one unit.
+
+Maya proposes the whole bundle for approval (per the strategy approval gate); the operator approves once, and it executes as a unit. Launches are **proposed + approved, never auto-scheduled**.
+
+### 8d. 72-hour post-launch engagement window (auto-seed + auto-diagnose)
+
+When a `hard_launch_anchor` is published, auto-seed the **72h engagement window**: reply_window + engagement_block events across the next 72h so the operator stays in the thread (the #1 launch-failure cause is post-and-pray, PLAYBOOK rule 9.29). At T+24h, check engagement: if it's **<1%** (a void by rule 9.8 — reached only the founder circle), do NOT recommend doubling down with paid promotion. Auto-flag a **reposition/replan**: the format or positioning is wrong, not the distribution — retry with a different angle in ~14 days (hand to maya-results-reviewer's positioning-vs-distribution diagnosis).
+
 ## Output
 
 POST events one-at-a-time to `/lc_gtm/calendar_proposal` per the TOOLS.md spec. Each event must include:
