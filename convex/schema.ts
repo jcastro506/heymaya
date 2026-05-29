@@ -5649,6 +5649,22 @@ export default defineSchema({
     draftText: v.string(),
     /** For thread kind — one tweet / post per segment. */
     draftSegments: v.optional(v.array(v.string())),
+    // Sprint C — content-attribute tags (Maya's own judgment, free strings —
+    // no fixed taxonomy, per the no-heuristics rule). The results-reviewer
+    // correlates these → outcomes so the loop learns what SPECIFICALLY works
+    // for this founder ("punchy 0-3s hooks convert 4x explainer intros"), not
+    // just which coarse format wins. All optional.
+    attributes: v.optional(
+      v.object({
+        hookType: v.optional(v.string()),
+        format: v.optional(v.string()),
+        tone: v.optional(v.string()),
+        lengthBucket: v.optional(v.string()),
+        hasFace: v.optional(v.boolean()),
+        captionStyle: v.optional(v.string()),
+        postingWindow: v.optional(v.string()),
+      })
+    ),
     /** 0-1; how well this matches operator's voice. Sprint 2.4 populates. */
     voiceMatchScore: v.optional(v.number()),
     /** Sprint 2.10 slop-critic gate; default false until checked. */

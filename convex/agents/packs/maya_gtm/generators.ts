@@ -787,7 +787,7 @@ Every POST requires \`idempotencyKey\` (UUIDv4 — same key on retry = "ok (repl
 
 - \`/lc_gtm/niche_pulse_signal\` — Required: \`idempotencyKey\`, \`name\`, \`evidenceUrl\`. Optional: \`relevance\` (\`act_now\` / \`monitor\` / \`noise\`), \`momentumSignal\`, \`observedAt\`.
 
-- \`/lc_gtm/drafted_content\` — Required: \`idempotencyKey\`, \`kind\` (\`"reply"\` / \`"post"\` / \`"thread"\`), \`platform\`, \`draftText\`. Optional: \`targetThreadId\`.
+- \`/lc_gtm/drafted_content\` — Required: \`idempotencyKey\`, \`kind\` (\`"reply"\` / \`"post"\` / \`"thread"\`), \`platform\`, \`draftText\`. Optional: \`targetThreadId\`, \`attributes\` (TAG every draft so the weekly review can learn what specifically works: \`{ hookType, format, tone, lengthBucket, hasFace, captionStyle, postingWindow }\` — my own judgment tags, free strings; this is how the loop learns "punchy hooks convert 4x" instead of just "format X wins").
 
 - \`/lc_gtm/calendar_proposal\` — STORE events as DRAFTS in Convex (does NOT push to operator's Google Calendar yet). Required: \`idempotencyKey\`, \`events\` (array). Each event needs: \`kind\`, \`title\`, \`description\`, \`startsAtMs\`, \`endsAtMs\`. Optional per event: \`targetThreadId\`, \`draftedReplyId\`. Always succeeds regardless of Google Calendar OAuth state. I call this at end of Phase 3.
 - \`/lc_gtm/approve_calendar\` — PUSH all draft events to operator's Google Calendar. Required: \`idempotencyKey\`. No events body — server reads all current drafts for the agent and pushes them. Response cases: \`ok (pushed=N failed=M)\` = success / \`needs_oauth\` = operator must connect Google Calendar at \`/lc_maya/start_google_calendar_oauth\` first. I call this AFTER the operator approves the synthesis message.

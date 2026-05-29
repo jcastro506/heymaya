@@ -344,6 +344,18 @@ export const recordDraftedContent = internalMutation({
     targetAccountId: v.optional(v.id("gtmTargetAccounts")),
     draftText: v.string(),
     draftSegments: v.optional(v.array(v.string())),
+    // Sprint C — content-attribute tags for attribute→outcome learning.
+    attributes: v.optional(
+      v.object({
+        hookType: v.optional(v.string()),
+        format: v.optional(v.string()),
+        tone: v.optional(v.string()),
+        lengthBucket: v.optional(v.string()),
+        hasFace: v.optional(v.boolean()),
+        captionStyle: v.optional(v.string()),
+        postingWindow: v.optional(v.string()),
+      })
+    ),
     voiceMatchScore: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<Id<"gtmDraftedContent">> => {
@@ -375,6 +387,7 @@ export const recordDraftedContent = internalMutation({
       targetAccountId: args.targetAccountId,
       draftText: args.draftText,
       draftSegments: args.draftSegments,
+      attributes: args.attributes,
       voiceMatchScore: args.voiceMatchScore,
       slopCriticPassed: false,
       approvalState: "draft",

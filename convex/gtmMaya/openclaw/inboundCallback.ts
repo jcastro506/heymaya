@@ -684,6 +684,16 @@ interface DraftedContentPayload {
   draftText: string;
   draftSegments?: string[];
   researchJobId?: string;
+  // Sprint C — content-attribute tags for attribute→outcome learning.
+  attributes?: {
+    hookType?: string;
+    format?: string;
+    tone?: string;
+    lengthBucket?: string;
+    hasFace?: boolean;
+    captionStyle?: string;
+    postingWindow?: string;
+  };
 }
 
 export const draftedContentHttp = httpAction(async (ctx, request) => {
@@ -736,6 +746,7 @@ export const draftedContentHttp = httpAction(async (ctx, request) => {
         | undefined,
       draftText: body.draftText,
       draftSegments: body.draftSegments,
+      attributes: body.attributes,
     });
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });
