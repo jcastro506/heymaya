@@ -648,6 +648,17 @@ function GtmOnboardingBody() {
         <section className="border border-lime/30 bg-lime/10 p-6">
           <h2 className="mb-3 font-display text-2xl">Maya deployment started</h2>
           <p className="text-paper-dim">{deployResult}</p>
+          <p className="mt-4 text-sm text-paper-dim">
+            She&apos;ll text you on Telegram shortly. Everything she finds —
+            your research, the week&apos;s posts and replies, and what she&apos;s
+            working on right now — also lives in Mission Control.
+          </p>
+          <Link
+            href="/clawlaunch/mission"
+            className="mt-4 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-ink"
+          >
+            Open Mission Control →
+          </Link>
         </section>
       )}
     </Shell>
