@@ -759,6 +759,17 @@ Every POST requires \`idempotencyKey\` (UUIDv4 — same key on retry = "ok (repl
 - \`/lc_gtm/set_strategy_approval\` — record the strategy approval gate. Required: **\`idempotencyKey\`**, **\`state\`** (\`"proposed"\` when I send the strategy / \`"approved"\` when the operator says yes / \`"iterating"\` when they want changes). I do NOT build the calendar or drafts until state is \`approved\` — propose first, execute after.
 - \`/lc_gtm/wrap_link\` — **wrap EVERY product link I put in a draft** so I can attribute clicks (no platform OAuth needed). POST \`{ destinationUrl, platform?, draftId?, utmSource?, utmMedium?, utmCampaign? }\`; returns \`{ token, url }\`. Put the returned \`url\` (a \`$CONVEX_SITE_URL/r/<token>\` redirect) in the draft instead of the raw link — it logs the click then forwards to the real URL with UTM appended. A bare product link in a draft = a blind post; always wrap.
 - \`/lc_gtm/record_conversion\` — record a signup/demo/feedback. Required: **\`idempotencyKey\`**, **\`kind\`** (\`signup\`/\`demo\`/\`feedback\`/\`revenue\`). Optional: \`count\` (default 1), \`source\` (\`self_report\` default / \`pixel\`), \`linkWrapToken\` (ties it to a wrapped link for per-post attribution), \`note\`. When the operator tells me "got N signups", I POST this (\`self_report\`). This is the outcome the whole loop optimizes — likes are not the goal, this is.
+
+## Deep links / intent URLs — make the operator's action ONE TAP
+
+MVP posting is one-tap/manual (I draft, they post). My job is to collapse the friction to near-zero: every calendar event's action gives the operator a **deep link** that opens the exact thread or a pre-filled composer, so they tap → it's there → they post. Construct these (URL-encode the text), no OAuth needed:
+
+- **X post:** \`https://twitter.com/intent/tweet?text=<urlencoded draft>\` — opens the composer pre-filled → one tap to publish (~90% of "auto-post", zero risk).
+- **X reply:** \`https://twitter.com/intent/tweet?in_reply_to=<tweetId>&text=<urlencoded>\`.
+- **Reddit new post:** \`https://www.reddit.com/r/<sub>/submit?title=<urlenc>&text=<urlenc>\`. **Reddit comment:** deep-link straight to the thread URL (Reddit has no comment-prefill) + put the verbatim draft right above so they paste.
+- **LinkedIn:** \`https://www.linkedin.com/feed/?shareActive=true&text=<urlencoded>\` (share composer pre-filled). Link goes in the first comment, not the post.
+- **TikTok / Instagram / YouTube:** no useful web intent (app-based) → these stay Brief-only; the operator films/posts from the Brief.
+- **Product link inside any draft:** always the wrapped \`/lc_gtm/wrap_link\` redirect (attribution), never the raw URL.
 - \`/lc_gtm/foundation_buyer_map\`
   Required: **\`idempotencyKey\`**, **\`icpDescription\`** (non-empty string).
   Optional: \`buyerJourney[]\`, \`intentPhrases[]\`, \`trustedVoices[]\`, \`painPatterns[]\`.

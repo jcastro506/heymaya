@@ -119,7 +119,16 @@ async function publishToX(input: PublishContentInput): Promise<PublishContentRes
     }
     let response: ComposioExecuteResponse | { httpStatus: number; bodyText: string };
     try {
-      response = await executeComposioAction("TWITTER_CREATION_OF_A_POST", {
+      // Sprint E — slug aligned to the authoritative, schema-validated module
+      // (convex/integrations/composio/actions/twitter.ts `createPost`), which
+      // is the canonical "post a tweet" path. The two had drifted
+      // (TWITTER_CREATION_OF_A_POST here vs TWITTER_CREATE_A_POST there).
+      // NOTE: this whole Composio auto-post path is POST-MVP (MVP posting is
+      // one-tap/manual per the locked posting-model decision). Before it ships,
+      // reconcile this helper to delegate to actions/twitter.ts `createPost`
+      // and verify the wire param shape (`text` vs `tweet_body`) against
+      // Composio's live catalog — do not assume.
+      response = await executeComposioAction("TWITTER_CREATE_A_POST", {
         apiKey,
         connectedAccountId: input.composioAccountId,
         body,

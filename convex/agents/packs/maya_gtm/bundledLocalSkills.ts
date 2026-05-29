@@ -1236,6 +1236,7 @@ Once every kept thread has a draftReply, Maya reads \`maya-calendar-populator/SK
 \`\`\`
 WHAT: <action title>
 LINK: <thread URL>
+OPEN (one-tap): <deep link / intent URL that opens the exact thread or a pre-filled composer — see TOOLS.md "Deep links / intent URLs". X/Reddit-submit/LinkedIn = pre-filled composer; Reddit comment = the thread URL (paste the reply below)>
 WHY: <one sentence — why this thread, why now>
 YOUR REPLY (verbatim — copy/paste/edit/post):
 <the draftReply Maya composed in Phase 2.5>
