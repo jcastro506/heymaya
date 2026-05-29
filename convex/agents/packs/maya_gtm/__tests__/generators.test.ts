@@ -197,6 +197,23 @@ describe("Maya GTM workspace pack", () => {
     expect(managerApp).not.toContain("Mode UNRESOLVED");
   });
 
+  // Sprint B4 — first-synthesis quality bar (output-critic) + Q&A-readiness
+  // contract (AGENTS.md). The make-or-break first reveal + defending the plan.
+  it("ships the first-synthesis quality bar + Q&A-readiness contract", () => {
+    const { files } = buildMayaGtmWorkspace(INPUT);
+    const critic = files.get("skills/maya-output-critic/SKILL.md") ?? "";
+    expect(critic).toContain("the FIRST synthesis");
+    expect(critic).toContain("Proof I understood THEIR product");
+    expect(critic).toContain("A decision, not a menu");
+    expect(critic).toContain("One concrete thing to do this week");
+
+    const agents = files.get("AGENTS.md") ?? "";
+    expect(agents).toContain("Q&A readiness");
+    expect(agents).toContain("Defend with the actual evidence I stored");
+    expect(agents).toContain("Adapt when they push back");
+    expect(agents).toContain('"I don\'t know / let me check"');
+  });
+
   it("bundles every GTM skill needed for research, calendar, approval, and review", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
 
