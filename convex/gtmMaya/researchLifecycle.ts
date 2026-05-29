@@ -537,6 +537,75 @@ export const getMyGtmSnapshot = query({
   },
 });
 
+/**
+ * S3 — operator channel-selection override. The onboarding channel-selection
+ * UX shows the agent's ranked, evidence-backed recommendation; the operator
+ * confirms it or toggles which channels to bet on. This persists their pick
+ * by patching the latest research job's gtmChannelScores `decision` + stamping
+ * operatorConfirmedAt. The deploy reads `decision === "primary"/"secondary"`
+ * into GTM.md, so the operator's call flows straight to the agent's bet
+ * channels. All platforms are selectable — nothing is gated, the operator
+ * just focuses the set ("Maya proposes with evidence, the operator decides").
+ */
+export const setMyChannelDecisions = mutation({
+  args: {
+    decisions: v.array(
+      v.object({
+        channel: v.union(
+          v.literal("reddit"),
+          v.literal("x"),
+          v.literal("linkedin"),
+          v.literal("tiktok"),
+          v.literal("youtube"),
+          v.literal("product_hunt")
+        ),
+        decision: v.union(
+          v.literal("primary"),
+          v.literal("secondary"),
+          v.literal("parked"),
+          v.literal("blocked")
+        ),
+      })
+    ),
+  },
+  handler: async (ctx, args): Promise<{ updated: number }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("channel selection requires a signed-in user.");
+    const creator = await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first();
+    if (!creator || creator.accountType !== "gtm-agent") {
+      throw new Error("GTM account not found.");
+    }
+    const jobs = await ctx.db
+      .query("gtmResearchJobs")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .collect();
+    const latestJob = jobs.sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
+    if (!latestJob) throw new Error("no research job to apply decisions to.");
+
+    const scores = await ctx.db
+      .query("gtmChannelScores")
+      .withIndex("by_research_job", (q) => q.eq("researchJobId", latestJob._id))
+      .collect();
+    const byChannel = new Map(scores.map((s) => [s.channel, s]));
+    const now = Date.now();
+    let updated = 0;
+    for (const d of args.decisions) {
+      const row = byChannel.get(d.channel);
+      // Cross-tenant safety: only patch rows under this creator's latest job.
+      if (!row || row.accountId !== creator._id) continue;
+      await ctx.db.patch(row._id, {
+        decision: d.decision,
+        operatorConfirmedAt: now,
+      });
+      updated += 1;
+    }
+    return { updated };
+  },
+});
+
 async function findOrCreateGtmAgent(
   ctx: MutationCtx,
   args: {

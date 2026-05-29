@@ -109,6 +109,10 @@ function GtmOnboardingBody() {
   const setPersonalTelegramBot = useAction(
     api.gtmMaya.telegramBotPerTenant.validateAndSetPersonalTelegramBot
   );
+  // S3 — operator confirms/overrides the channel recommendation before deploy.
+  const setChannelDecisions = useMutation(
+    api.gtmMaya.researchLifecycle.setMyChannelDecisions
+  );
 
   const [draft, setDraft] = useState<IntakeDraft>(DEFAULT_DRAFT);
   const [walkthroughFile, setWalkthroughFile] = useState<File | null>(null);
@@ -117,6 +121,11 @@ function GtmOnboardingBody() {
   const [busy, setBusy] = useState(false);
   const [researchJobId, setResearchJobId] = useState<string | null>(null);
   const [deployResult, setDeployResult] = useState<string | null>(null);
+  // S3 — operator overrides to the channel recommendation (channel → decision).
+  // Effective decision in render = override ?? the agent's scored decision.
+  const [channelPicks, setChannelPicks] = useState<Record<string, string>>({});
+  const [channelsConfirmed, setChannelsConfirmed] = useState(false);
+  const [savingChannels, setSavingChannels] = useState(false);
   // Sprint 2.26b — Telegram bot state. Operator can connect their own
   // bot from BotFather OR opt into the shared dev fallback.
   const [botToken, setBotToken] = useState("");
@@ -236,6 +245,28 @@ function GtmOnboardingBody() {
         kind: "error",
         message: (err as Error).message || "validation failed",
       });
+    }
+  }
+
+  async function confirmChannels() {
+    if (!snapshot) return;
+    setSavingChannels(true);
+    setError(null);
+    try {
+      const decisions = snapshot.channelScores.map((s) => ({
+        channel: s.channel,
+        decision: (channelPicks[s.channel] ?? s.decision) as
+          | "primary"
+          | "secondary"
+          | "parked"
+          | "blocked",
+      }));
+      await setChannelDecisions({ decisions });
+      setChannelsConfirmed(true);
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setSavingChannels(false);
     }
   }
 
@@ -613,11 +644,97 @@ function GtmOnboardingBody() {
             Job: <span className="font-mono text-paper">{researchJobId}</span>
           </p>
           <p className="mt-4 max-w-2xl text-paper-dim">
-            The skeleton pass created evidence, channel scores, and zero-spend
-            cost ledger rows. The next adapter layer swaps in live
-            ScrapeCreators and platform research behind the same budgeted job
-            contract.
+            Here&apos;s where Maya thinks your buyers are — ranked, with the
+            reasoning. This is her recommendation; you have the final call.
+            Confirm it or change any channel before you deploy.
           </p>
+
+          {/* S3 — channel-selection UX. Maya proposes with evidence; the
+              operator confirms or overrides. All platforms are selectable —
+              nothing is gated; the operator just focuses the set. The deploy
+              reads decision === "primary"/"secondary" into the agent's GTM.md. */}
+          {snapshot && snapshot.channelScores.length > 0 && (
+            <div className="mt-6 border border-paper bg-ink p-5">
+              <h3 className="mb-1 font-display text-lg">
+                Where Maya wants to play
+              </h3>
+              <p className="mb-4 text-sm text-paper-dim">
+                Ranked by buyer-fit. Set each to <strong>Primary</strong> (her
+                main bet), <strong>Secondary</strong>, or <strong>Park</strong>{" "}
+                (skip for now).
+              </p>
+              <div className="space-y-3">
+                {[...snapshot.channelScores]
+                  .sort((a, b) => b.score - a.score)
+                  .map((s) => {
+                    const pick = channelPicks[s.channel] ?? s.decision;
+                    return (
+                      <div
+                        key={s.channel}
+                        className="rounded border border-paper bg-ink-2 p-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium capitalize text-paper">
+                              {s.channel.replace("_", " ")}
+                            </span>
+                            <span className="text-xs text-paper-dim">
+                              {s.confidence} confidence
+                            </span>
+                          </div>
+                          <select
+                            value={pick}
+                            disabled={channelsConfirmed}
+                            onChange={(e) =>
+                              setChannelPicks((prev) => ({
+                                ...prev,
+                                [s.channel]: e.target.value,
+                              }))
+                            }
+                            className="input text-xs disabled:opacity-50"
+                          >
+                            <option value="primary">Primary</option>
+                            <option value="secondary">Secondary</option>
+                            <option value="parked">Park</option>
+                          </select>
+                        </div>
+                        {s.reasons.length > 0 && (
+                          <p className="mt-2 text-sm text-paper-dim">
+                            {s.reasons[0]}
+                          </p>
+                        )}
+                        {s.risks.length > 0 && (
+                          <p className="mt-1 text-xs text-amber-300/80">
+                            Watch: {s.risks[0]}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  onClick={confirmChannels}
+                  disabled={savingChannels}
+                  className="rounded-full bg-paper px-5 py-2 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingChannels
+                    ? "Saving..."
+                    : channelsConfirmed
+                      ? "Channels confirmed ✓"
+                      : "Confirm channels"}
+                </button>
+                {channelsConfirmed && (
+                  <button
+                    onClick={() => setChannelsConfirmed(false)}
+                    className="text-xs text-paper-dim underline"
+                  >
+                    Change
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Sprint 2.26b — Telegram bot setup gate. Operator either
               connects their own bot from BotFather (recommended for

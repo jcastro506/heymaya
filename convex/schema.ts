@@ -5046,6 +5046,11 @@ export default defineSchema({
       passed: v.boolean(),
       failures: v.array(v.string()),
     }),
+    // S3 — operator's channel-selection decision. When the operator confirms
+    // or overrides the agent's recommendation in onboarding, `decision` is
+    // patched to their pick and this is stamped so the deploy + GTM.md know
+    // the channel mix is operator-confirmed, not just auto-scored.
+    operatorConfirmedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_account", ["accountId"])
