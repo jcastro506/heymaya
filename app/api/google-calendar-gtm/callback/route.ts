@@ -69,8 +69,10 @@ export async function GET(req: NextRequest) {
     return redirectWithError(req, "exchange_threw");
   }
 
-  const dest = new URL("/onboarding/gtm", req.url);
-  dest.searchParams.set("step", "research");
+  // Land on the account page, where the "connected" pill confirms success.
+  // (Users reach this flow from either the onboarding deploy screen or the
+  // account page; the account page is the universal confirmation surface.)
+  const dest = new URL("/clawlaunch/mission/account", req.url);
   dest.searchParams.set("calendar_connected", "1");
   return NextResponse.redirect(dest);
 }

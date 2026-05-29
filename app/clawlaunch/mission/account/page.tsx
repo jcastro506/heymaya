@@ -105,7 +105,7 @@ export default function AccountPage() {
                 <Pill tone="lime">connected</Pill>
               ) : (
                 <a
-                  href="/lc_maya/start_google_calendar_oauth"
+                  href="/api/google-calendar-gtm/start"
                   className="text-paper underline decoration-paper/30 underline-offset-2"
                 >
                   connect

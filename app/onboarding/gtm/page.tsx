@@ -712,9 +712,23 @@ function GtmOnboardingBody() {
             your research, the week&apos;s posts and replies, and what she&apos;s
             working on right now — also lives in Mission Control.
           </p>
+          <div className="mt-5 rounded-lg border border-paper/15 bg-ink-3 p-4">
+            <p className="font-display text-lg">One last thing: connect your calendar</p>
+            <p className="mt-1 text-sm text-paper-dim">
+              Maya drops each post and reply onto your Google Calendar at the
+              right time, with the draft and a one-tap link. Connect it now so
+              the week&apos;s plan lands where you&apos;ll see it.
+            </p>
+            <a
+              href="/api/google-calendar-gtm/start"
+              className="mt-3 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-white"
+            >
+              Connect Google Calendar →
+            </a>
+          </div>
           <Link
             href="/clawlaunch/mission"
-            className="mt-4 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-white"
+            className="mt-4 inline-block rounded-lg border border-paper px-4 py-2 font-mono text-xs uppercase tracking-wide text-paper"
           >
             Open Mission Control →
           </Link>

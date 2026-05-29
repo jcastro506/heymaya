@@ -80,15 +80,15 @@ function fail(name: string, detail: string): void {
 }
 
 function checkOpenClawImageConstants(): void {
-  if (OPENCLAW_IMAGE_TARGET !== "registry.fly.io/heymaya-openclaw:v2026.5.20") {
+  if (OPENCLAW_IMAGE_TARGET !== "registry.fly.io/heymaya-openclaw:v2026.5.26") {
     fail(
       "openclaw-image-target",
-      `OPENCLAW_IMAGE_TARGET is "${OPENCLAW_IMAGE_TARGET}"; expected "registry.fly.io/heymaya-openclaw:v2026.5.20"`
+      `OPENCLAW_IMAGE_TARGET is "${OPENCLAW_IMAGE_TARGET}"; expected "registry.fly.io/heymaya-openclaw:v2026.5.26"`
     );
     return;
   }
   const expectedPinned =
-    "registry.fly.io/heymaya-openclaw@sha256:7b53d73a3c2c40f47865c508bddffccd2fbc21d28bd7ac938ed080fb2a24764d";
+    "registry.fly.io/heymaya-openclaw@sha256:49fa411e417ffe260789a9ea8d62a0122b54ee904995fca35e2a82a73c4bc7a2";
   if (OPENCLAW_IMAGE_PINNED !== expectedPinned) {
     fail(
       "openclaw-image-pinned",
