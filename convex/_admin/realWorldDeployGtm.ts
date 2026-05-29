@@ -1435,6 +1435,123 @@ export const peekResearchLanded = internalQuery({
 });
 
 /**
+ * Verification-deploy coverage report. After a `verifyAllPlatforms` run, this
+ * reads back the STRUCTURED evidence Maya wrote per platform + per provider and
+ * reports a ✓/✗ coverage matrix — so "did every platform + tool work?" is a
+ * queryable fact, not a vibe. Ground-truth backups: `flyctl logs` + the
+ * OpenClaw session transcript at /data/agents/<id>/sessions/*.jsonl.
+ *
+ *   arch -arm64 npx convex run _admin/realWorldDeployGtm:verifyAllPlatformsCoverage
+ */
+export const verifyAllPlatformsCoverage = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    const tests = (await ctx.db.query("creators").collect())
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (tests.length === 0) return { found: false };
+    const creator = tests[0];
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    if (!agent) return { found: true, agent: null };
+
+    const threads = await ctx.db
+      .query("gtmTargetThreads")
+      .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+      .collect();
+    const drafts = await ctx.db
+      .query("gtmDraftedContent")
+      .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+      .collect();
+    const channelScores = await ctx.db
+      .query("gtmChannelScores")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .collect();
+    const cost = await ctx.db
+      .query("gtmCostLedger")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .collect();
+    const toolCalls = await ctx.db
+      .query("gtmToolCallLog")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .collect();
+
+    const count = <T>(rows: T[], key: (r: T) => string | undefined) => {
+      const m: Record<string, number> = {};
+      for (const r of rows) {
+        const k = key(r);
+        if (k) m[k] = (m[k] ?? 0) + 1;
+      }
+      return m;
+    };
+
+    const threadsByPlatform = count(threads, (t) => t.platform);
+    const draftsByPlatform = count(drafts, (d) => d.platform);
+    const channelsScored = new Set(channelScores.map((c) => c.channel));
+    const providersHit = count([...cost, ...toolCalls], (r) => r.provider);
+    const operations = [...new Set(cost.map((c) => c.operation))];
+    const toolNames = [...new Set(toolCalls.map((t) => t.toolName))];
+
+    // The provider that proves each platform's READ pipeline actually fired.
+    const platformProvider: Record<string, string> = {
+      reddit: "scrapecreators",
+      tiktok: "scrapecreators",
+      instagram: "scrapecreators",
+      youtube: "scrapecreators",
+      linkedin: "scrapecreators",
+      x: "x_api",
+      hn: "other", // Algolia HN is unauthenticated; logged as other/openclaw
+    };
+
+    const PLATFORMS = ["reddit", "x", "linkedin", "tiktok", "instagram", "youtube", "hn"];
+    const matrix = PLATFORMS.map((p) => {
+      const researched = (threadsByPlatform[p] ?? 0) > 0;
+      const drafted = (draftsByPlatform[p] ?? 0) > 0;
+      const scored = channelsScored.has(p as never);
+      // operation strings are "<platform>.<op>" per dumpLastResearchQueries.
+      const apiCalled = operations.some((o) => o.startsWith(`${p}.`));
+      return {
+        platform: p,
+        researched, // surfaced ≥1 target thread
+        threadCount: threadsByPlatform[p] ?? 0,
+        scored, // channel-scored
+        drafted,
+        draftCount: draftsByPlatform[p] ?? 0,
+        apiCalled, // a cost-ledger op recorded for this platform
+        expectedProvider: platformProvider[p],
+        ok: researched || apiCalled, // pipeline demonstrably ran
+      };
+    });
+
+    return {
+      found: true,
+      agentId: agent._id,
+      flyAppId: agent.openClawFlyAppId,
+      verifyAllPlatforms: agent.verifyAllPlatforms ?? false,
+      // Per-platform coverage — the headline ✓/✗ matrix.
+      platformMatrix: matrix,
+      platformsCovered: matrix.filter((m) => m.ok).map((m) => m.platform),
+      platformsMissing: matrix.filter((m) => !m.ok).map((m) => m.platform),
+      // Tool/provider coverage — proves the APIs + multimodal path fired.
+      providersHit, // counts per provider (scrapecreators / x_api / gemini / openrouter / …)
+      geminiCalled: (providersHit["gemini"] ?? 0) > 0, // video-watch / multimodal proof
+      toolNames, // every distinct tool that fired
+      operationSample: operations.slice(0, 40),
+      totals: {
+        targetThreads: threads.length,
+        drafts: drafts.length,
+        channelScores: channelScores.length,
+        costRows: cost.length,
+        toolCalls: toolCalls.length,
+        totalSpendUsd: cost.reduce((a, c) => a + (c.costUsd ?? 0), 0),
+      },
+    };
+  },
+});
+
+/**
  * Sprint 2.16f — nuke every clawlaunch-* Fly app. Use when starting from
  * a known-clean slate: kills orphaned Maya machines whose Convex DB rows
  * have already been wiped. Pairs with `run` (which wipes Convex rows).
