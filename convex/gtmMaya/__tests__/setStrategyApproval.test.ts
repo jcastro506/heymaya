@@ -25,7 +25,10 @@ async function setupAgentWithJob(
     subject,
     email: `${subject}@clawlaunch.test`,
   });
-  await authed.mutation(api.gtmMaya.researchLifecycle.startGtmOnboarding, {});
+  const started = await authed.mutation(
+    api.gtmMaya.researchLifecycle.startGtmOnboarding,
+    {}
+  );
   const appId = await authed.mutation(
     api.gtmMaya.researchLifecycle.setAppProfile,
     {
@@ -40,15 +43,9 @@ async function setupAgentWithJob(
   );
   const hookToken = "fake-hook-" + Math.random().toString(36).slice(2);
   const jobId = await t.run(async (ctx) => {
-    const agent = await ctx.db
-      .query("gtmAgents")
-      .withIndex("by_account")
-      .collect()
-      .then((rows) => rows.find((a) => a.appId === appId));
-    if (agent) await ctx.db.patch(agent._id, { hookToken });
-    const app = await ctx.db.get(appId);
+    await ctx.db.patch(started.agentId, { hookToken });
     return await ctx.db.insert("gtmResearchJobs", {
-      accountId: app!.accountId,
+      accountId: started.accountId,
       appId,
       status: "running" as const,
       phase: "strategy_judge" as const,

@@ -65,7 +65,9 @@ const CALLBACK_KIND = v.union(
   // Sprint B — Maya persists the proposed/approved North Star + entry mode.
   v.literal("set_north_star"),
   // Sprint B — Maya records the strategy approval state (propose→approve gate).
-  v.literal("set_strategy_approval")
+  v.literal("set_strategy_approval"),
+  // Sprint C — conversion (signup/demo/feedback) self-report or pixel.
+  v.literal("record_conversion")
 );
 
 function constantTimeEqual(a: string, b: string): boolean {

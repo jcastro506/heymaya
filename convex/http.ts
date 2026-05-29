@@ -98,6 +98,7 @@ import {
   setNorthStarHttp,
   setStrategyApprovalHttp,
   competitorMoveHttp,
+  // (attribution handlers imported separately below)
   nichePulseSignalHttp,
   actionLoggedHttp,
   learningExtractedHttp,
@@ -109,6 +110,11 @@ import {
   logCostHttp,
   recordPublishedHttp,
 } from "./gtmMaya/openclaw/managerCallbacks";
+import {
+  wrapLinkHttp,
+  redirectHttp,
+  recordConversionHttp,
+} from "./gtmMaya/attribution";
 import { memoryWrittenHttp } from "./gtmMaya/memoryLedger";
 
 const http = httpRouter();
@@ -283,6 +289,23 @@ http.route({
   path: "/lc_gtm/set_strategy_approval",
   method: "POST",
   handler: setStrategyApprovalHttp,
+});
+// Sprint C — attribution. Maya wraps product links; conversions self-reported.
+http.route({
+  path: "/lc_gtm/wrap_link",
+  method: "POST",
+  handler: wrapLinkHttp,
+});
+http.route({
+  path: "/lc_gtm/record_conversion",
+  method: "POST",
+  handler: recordConversionHttp,
+});
+// Public click-through redirect (no auth) — logs a click, 302s to destination.
+http.route({
+  pathPrefix: "/r/",
+  method: "GET",
+  handler: redirectHttp,
 });
 
 // Continuous research + feedback-loop write surfaces. Maya / her

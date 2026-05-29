@@ -4535,7 +4535,9 @@ export default defineSchema({
       // Sprint B — Maya persists the proposed/approved North Star + entry mode.
       v.literal("set_north_star"),
       // Sprint B — Maya records the strategy approval state.
-      v.literal("set_strategy_approval")
+      v.literal("set_strategy_approval"),
+      // Sprint C — conversion (signup/demo/feedback) self-report or pixel.
+      v.literal("record_conversion")
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
@@ -5720,6 +5722,70 @@ export default defineSchema({
     .index("by_agent", ["agentId"])
     .index("by_draft", ["draftId"])
     .index("by_account_and_snapshot", ["accountId", "snapshotAtMs"]),
+
+  // ─── Sprint C — Attribution (the moat foundation) ─────────────────────
+  // Our own link instrumentation. Maya wraps every product link she drafts;
+  // the redirect logs a click then 302s to the destination (+ UTM). Needs
+  // ZERO platform OAuth — the redirect + UTM are our own infra. Turning a
+  // click into a known SIGNUP needs the destination (the user's app) to
+  // report back: either a pixel POST or the operator's structured self-report.
+
+  /** A wrapped product link. `token` is the short path Maya hands out
+   *  (e.g. $CONVEX_SITE_URL/r/<token>). Dedupe is by token (unique). */
+  gtmLinkWraps: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    token: v.string(),
+    destinationUrl: v.string(),
+    platform: v.optional(v.string()),
+    draftId: v.optional(v.id("gtmDraftedContent")),
+    // UTM appended to the destination on redirect so the user's own
+    // analytics also attributes the visit.
+    utmSource: v.optional(v.string()),
+    utmMedium: v.optional(v.string()),
+    utmCampaign: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_token", ["token"]),
+
+  /** One row per click on a wrapped link (logged by the public redirect). */
+  gtmLinkClicks: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    linkWrapId: v.id("gtmLinkWraps"),
+    platform: v.optional(v.string()),
+    clickedAt: v.number(),
+    userAgent: v.optional(v.string()),
+    referrer: v.optional(v.string()),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_link_wrap", ["linkWrapId"]),
+
+  /** Conversions (signups/demos/feedback). `source` = how we learned:
+   *  "self_report" (operator told Maya — no app instrumentation needed) or
+   *  "pixel" (the user's app POSTed a conversion event). Optionally tied to a
+   *  wrapped link for per-post attribution. */
+  gtmConversions: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    kind: v.union(
+      v.literal("signup"),
+      v.literal("demo"),
+      v.literal("feedback"),
+      v.literal("revenue")
+    ),
+    count: v.number(),
+    source: v.union(v.literal("self_report"), v.literal("pixel")),
+    linkWrapId: v.optional(v.id("gtmLinkWraps")),
+    occurredAt: v.number(),
+    note: v.optional(v.string()),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_agent_and_kind", ["agentId", "kind"]),
 
   // ─── Sprint 2.17 — Manager-mode foundation tables ─────────────────────
   // The five outputs of the foundation-research pass (onboarding +
