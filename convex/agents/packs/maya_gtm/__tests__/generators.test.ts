@@ -146,6 +146,13 @@ describe("Maya GTM workspace pack", () => {
     expect(platformAlgo).toContain("## Reddit");
     expect(platformAlgo).toContain("## YouTube");
     expect(platformAlgo).toContain("Refresh log");
+    // Sprint J — DREAMS.md is the per-tenant self-improvement nursery (Layer 1)
+    // and points to the governed Layer-2 propose path; core contracts are
+    // explicitly never self-editable.
+    const dreams = files.get("DREAMS.md") ?? "";
+    expect(dreams).toContain("Self-improvement");
+    expect(dreams).toContain("propose_skill_improvement");
+    expect(dreams).toContain("NEVER self-editable");
     // SOUL.md's AI self-reference ban was reworded from "never identify as
     // an AI" to the "AI self-references" banned-phrase entry (which spells
     // out "the ban is on self-identification"). Same intent: Maya never

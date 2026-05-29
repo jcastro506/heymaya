@@ -131,6 +131,49 @@ export const setNorthStarAndMode = internalMutation({
   },
 });
 
+/** Sprint J (Layer 2) — record an agent's PROPOSED improvement to a SHARED
+ *  skill. Agents never edit shared skills directly; this captures the proposal
+ *  for the (post-MVP) cross-tenant aggregate → A/B → gated-merge pipeline.
+ *  Core-contract files (firewall / evidence / safety gates) are NEVER targetable
+ *  — that's a hard safety contract, not a judgment call. */
+const CORE_CONTRACT_SKILLS = [
+  "outboundfirewall",
+  "outbound-firewall",
+  "evidence",
+  "evidence-guard",
+  "safety",
+  "approval-gate",
+  "firewall",
+];
+export const proposeSkillImprovement = internalMutation({
+  args: {
+    agentId: v.id("gtmAgents"),
+    accountId: v.id("creators"),
+    targetSkill: v.string(),
+    archetype: v.optional(v.string()),
+    proposal: v.string(),
+    groundedInOutcome: v.string(),
+  },
+  handler: async (ctx, args): Promise<Id<"gtmSkillImprovementProposals">> => {
+    await assertAgentBelongsToAccount(ctx, args.accountId, args.agentId);
+    const target = args.targetSkill.toLowerCase();
+    if (CORE_CONTRACT_SKILLS.some((c) => target.includes(c))) {
+      throw new Error(
+        "core-contract skills (firewall / evidence / safety gates) are not self-editable"
+      );
+    }
+    return await ctx.db.insert("gtmSkillImprovementProposals", {
+      agentId: args.agentId,
+      targetSkill: args.targetSkill,
+      archetype: args.archetype,
+      proposal: args.proposal,
+      groundedInOutcome: args.groundedInOutcome,
+      status: "proposed",
+      createdAt: Date.now(),
+    });
+  },
+});
+
 /** Sprint G — read the cross-tenant archetype playbook for warm-starting a new
  *  customer of the same archetype. Returns aggregated, privacy-safe learnings
  *  (no tenant PII). Empty until the post-MVP aggregation job populates it. */

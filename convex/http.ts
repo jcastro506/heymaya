@@ -97,6 +97,7 @@ import {
   foundationRelationshipHttp,
   setNorthStarHttp,
   setStrategyApprovalHttp,
+  proposeSkillImprovementHttp,
   competitorMoveHttp,
   // (attribution handlers imported separately below)
   nichePulseSignalHttp,
@@ -289,6 +290,12 @@ http.route({
   path: "/lc_gtm/set_strategy_approval",
   method: "POST",
   handler: setStrategyApprovalHttp,
+});
+// Sprint J — Maya proposes an improvement to a SHARED skill (Layer 2, governed).
+http.route({
+  path: "/lc_gtm/propose_skill_improvement",
+  method: "POST",
+  handler: proposeSkillImprovementHttp,
 });
 // Sprint C — attribution. Maya wraps product links; conversions self-reported.
 http.route({

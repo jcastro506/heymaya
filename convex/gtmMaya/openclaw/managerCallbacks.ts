@@ -209,6 +209,63 @@ export const setStrategyApprovalHttp = httpAction(async (ctx, request) => {
   return new Response("ok", { status: 200 });
 });
 
+interface ProposeSkillImprovementPayload {
+  idempotencyKey: string;
+  targetSkill: string;
+  archetype?: string;
+  proposal: string;
+  groundedInOutcome: string;
+}
+
+export const proposeSkillImprovementHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: ProposeSkillImprovementPayload;
+  try {
+    body = (await request.json()) as ProposeSkillImprovementPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (
+    !body.idempotencyKey ||
+    !body.targetSkill ||
+    !body.proposal ||
+    !body.groundedInOutcome
+  ) {
+    return new Response("missing required fields", { status: 400 });
+  }
+
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "propose_skill_improvement",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") return new Response("ok (replay)", { status: 200 });
+
+  try {
+    await ctx.runMutation(
+      internal.gtmMaya.managerStore.proposeSkillImprovement,
+      {
+        agentId: auth.agentId,
+        accountId: auth.accountId,
+        targetSkill: body.targetSkill,
+        archetype: body.archetype,
+        proposal: body.proposal,
+        groundedInOutcome: body.groundedInOutcome,
+      }
+    );
+  } catch (err) {
+    // Core-contract guard rejections land here as 400 (not self-editable).
+    return new Response((err as Error).message, { status: 400 });
+  }
+  return new Response("ok", { status: 200 });
+});
+
 // ───────────────────── Foundation: competitor ─────────────────────
 
 interface FoundationCompetitorPayload {

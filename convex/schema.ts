@@ -4537,7 +4537,9 @@ export default defineSchema({
       // Sprint B — Maya records the strategy approval state.
       v.literal("set_strategy_approval"),
       // Sprint C — conversion (signup/demo/feedback) self-report or pixel.
-      v.literal("record_conversion")
+      v.literal("record_conversion"),
+      // Sprint J — proposed improvement to a shared skill (Layer 2, governed).
+      v.literal("propose_skill_improvement")
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
@@ -5842,6 +5844,38 @@ export default defineSchema({
   })
     .index("by_archetype", ["archetype"])
     .index("by_archetype_and_kind", ["archetype", "kind"]),
+
+  // ─── Sprint J — self-improving skills (Layer 2, governed) ──────────────
+  /** Proposed improvements to the SHARED skills, emitted by agents and grounded
+   *  in a real outcome. Agents NEVER edit shared skills directly — they propose
+   *  here; the platform aggregates cross-tenant, A/B-verifies, and gated-merges.
+   *  Core contracts (firewall / evidence / safety gates) are out of scope and
+   *  never self-editable. Privacy-safe: agentId for provenance/dedupe, but the
+   *  proposal itself carries no operator PII. The aggregation + merge job is
+   *  post-MVP; this captures the proposals so the loop can start. */
+  gtmSkillImprovementProposals: defineTable({
+    agentId: v.id("gtmAgents"),
+    /** Which shared skill the proposal targets (slug), e.g.
+     *  "maya-reddit-demand-researcher". Never a core-contract file. */
+    targetSkill: v.string(),
+    /** Optional archetype this is most relevant to (ties to the data moat). */
+    archetype: v.optional(v.string()),
+    /** The proposed change, in plain language. No operator PII. */
+    proposal: v.string(),
+    /** The outcome that grounds it (why Maya thinks this helps). */
+    groundedInOutcome: v.string(),
+    status: v.union(
+      v.literal("proposed"),
+      v.literal("under_review"),
+      v.literal("ab_testing"),
+      v.literal("merged"),
+      v.literal("rejected")
+    ),
+    createdAt: v.number(),
+  })
+    .index("by_target_skill", ["targetSkill"])
+    .index("by_status", ["status"])
+    .index("by_archetype", ["archetype"]),
 
   // ─── Sprint 2.17 — Manager-mode foundation tables ─────────────────────
   // The five outputs of the foundation-research pass (onboarding +

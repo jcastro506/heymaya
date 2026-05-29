@@ -67,7 +67,9 @@ const CALLBACK_KIND = v.union(
   // Sprint B — Maya records the strategy approval state (propose→approve gate).
   v.literal("set_strategy_approval"),
   // Sprint C — conversion (signup/demo/feedback) self-report or pixel.
-  v.literal("record_conversion")
+  v.literal("record_conversion"),
+  // Sprint J — proposed improvement to a shared skill (Layer 2, governed).
+  v.literal("propose_skill_improvement")
 );
 
 function constantTimeEqual(a: string, b: string): boolean {

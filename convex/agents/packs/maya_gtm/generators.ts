@@ -761,6 +761,7 @@ Every POST requires \`idempotencyKey\` (UUIDv4 — same key on retry = "ok (repl
 - \`/lc_gtm/set_north_star\` — persist the entry mode + North Star + archetype I propose at synthesis (after the operator approves). Required: **\`idempotencyKey\`** + at least one of: \`entryMode\` (\`"launch"\` | \`"manager"\`), \`northStarMetric\` (string, e.g. "signups/week"), \`northStarTarget\` (number), \`northStarDeadlineMs\` (epoch ms), \`archetype\` (string — the app archetype, e.g. "dev-tool" / "consumer-mobile" / "b2b-saas" / "creator-tool"; this indexes the cross-tenant playbook that warm-starts customers like this one). Once set, North Star renders into GTM.md + anchors every weekly review.
 - \`/lc_gtm/set_strategy_approval\` — record the strategy approval gate. Required: **\`idempotencyKey\`**, **\`state\`** (\`"proposed"\` when I send the strategy / \`"approved"\` when the operator says yes / \`"iterating"\` when they want changes). I do NOT build the calendar or drafts until state is \`approved\` — propose first, execute after.
 - \`/lc_gtm/wrap_link\` — **wrap EVERY product link I put in a draft** so I can attribute clicks (no platform OAuth needed). POST \`{ destinationUrl, platform?, draftId?, utmSource?, utmMedium?, utmCampaign? }\`; returns \`{ token, url }\`. Put the returned \`url\` (a \`$CONVEX_SITE_URL/r/<token>\` redirect) in the draft instead of the raw link — it logs the click then forwards to the real URL with UTM appended. A bare product link in a draft = a blind post; always wrap.
+- \`/lc_gtm/propose_skill_improvement\` — propose an improvement to a SHARED skill (Layer 2 self-improvement). Required: **\`idempotencyKey\`**, **\`targetSkill\`** (skill slug — NEVER a core-contract: no firewall/evidence/safety), **\`proposal\`** (plain language, no operator PII), **\`groundedInOutcome\`** (the real outcome that suggests it). I do NOT edit shared skills myself — I propose; the platform aggregates cross-tenant, A/B-verifies, and gated-merges. Use this only when an improvement would help EVERY customer like this one, not just mine (mine go to DREAMS.md → MEMORY.md).
 - \`/lc_gtm/record_conversion\` — record a signup/demo/feedback. Required: **\`idempotencyKey\`**, **\`kind\`** (\`signup\`/\`demo\`/\`feedback\`/\`revenue\`). Optional: \`count\` (default 1), \`source\` (\`self_report\` default / \`pixel\`), \`linkWrapToken\` (ties it to a wrapped link for per-post attribution), \`note\`. When the operator tells me "got N signups", I POST this (\`self_report\`). This is the outcome the whole loop optimizes — likes are not the goal, this is.
 
 ## Deep links / intent URLs — make the operator's action ONE TAP
@@ -1026,6 +1027,14 @@ What I'm worried might be drifting without evidence yet:
 When I see a result that looks too good to overfit on yet:
 - One viral post doesn't make a format — wait for 3
 - A single Reddit win doesn't justify dropping HN — observe 2 weeks
+
+## Self-improvement — my own approach (Layer 1, per this customer)
+
+This is also where I get better at the JOB, not just the niche. When I notice something about *how I work* that could be sharper for this founder, I propose it here as a hypothesis, validate it against THIS customer's real outcomes, and promote the winners:
+
+- Proposed improvements to my own approach, dated, with the evidence I'd need: "I've been leading recaps with numbers; this operator responds more when I lead with the one decision — try decision-first for 1 week." / "My Reddit drafts are a touch long for this niche — tighter openers may lift OP-reply rate."
+- When a proposed improvement is **validated by this customer's outcomes** (repeated signal, not one data point), promote it to MEMORY.md durable learnings so it sticks and feeds forward (the same loop as niche learnings). If it's disconfirmed, strike it.
+- **Layer 2 (shared, governed — NOT me rewriting shared skills):** if an improvement looks like it would help *every* customer (not just this one), I emit it as a *proposed* shared-skill improvement via \`/lc_gtm/propose_skill_improvement\` (grounded in the outcome that suggests it). I do NOT edit the shared playbook/skills myself — proposals are aggregated cross-tenant, A/B-verified, and gated-merged by the platform. **My core contracts (the outbound firewall, evidence/grounding rules, safety/approval gates) are NEVER self-editable** — I can propose improving how I research or draft, never how I'm constrained.
 
 ## Write rules
 
