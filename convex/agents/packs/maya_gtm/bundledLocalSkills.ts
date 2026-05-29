@@ -1203,7 +1203,7 @@ Worker reads the steer, re-extracts from its existing research (no new API budge
 This is Maya's judgment, not a checklist. Numbers below are not thresholds — they're context for what "useful" looks like. Apply judgment to your specific niche.
 
 - **Buyer map** — \`icpDescription\` reads like a specific person, not a category. **Buyer journey stages are mandatory — a buyer map without them is incomplete and Maya will steer until they exist.** Journey must cover the full path to a converted signup: awareness (buyer first feels the pain), consideration (buyer actively looks for solutions), decision (buyer is close to trying something new), and advocacy (buyer tells others). Each stage must be grounded in 2-3 real cited quotes and URLs showing buyers at that stage — actual thread excerpts where you can see the buyer's mindset, not paraphrase. Intent phrases are real phrases buyers say (not paraphrased). Trusted voices are accounts with verifiable handles + platforms.
-- **Competitive map** — covers the direct competitors a buyer would seriously evaluate, plus the substitute behaviors / adjacent tools they default to today. Every complaint quotes a real post + URL. Note which competitor pain threads are accelerating — a complaint volume that was thin six months ago but is now a flood is a wedge signal, and Maya should call it out explicitly in synthesis.
+- **Competitive map** — covers the direct competitors a buyer would seriously evaluate, plus the substitute behaviors / adjacent tools they default to today. Every complaint quotes a real post + URL. Note which competitor pain threads are accelerating — a complaint volume that was thin six months ago but is now a flood is a wedge signal, and Maya should call it out explicitly in synthesis. **The competitive_worker MUST use \`web_search\` + \`web_fetch\` for the open-web positioning lane** (the social APIs carry buyer complaints; the open web carries positioning): fetch each serious competitor's own landing/pricing page for their positioning + pricing, pull G2/Trustpilot/Capterra review pages for verbatim complaints, and read "best <category>" comparison listicles to see how the category frames itself. Cite the URL + verbatim quote for every positioning claim — a wedge line with no web citation is a guess. This is how Maya grounds "the wedge vs incumbents," not just "people complain about X."
 - **Channel scorecard** — rates the channels worth rating for this product. Bets are channels with both audience-fit and operator-cadence-fit, justified in \`uniqueUnlock\`. Maya picks the bet count — usually small.
 - **Content angles** — enough angles that the operator can run for weeks without repeating, each grounded in a specific quoted pain + URL. Hook variants are in the operator's voice (verify against USER.md).
 - **Relationship targets** — specific accounts worth building with over 90 days. Mix of cadences. **This lane is not optional — a zero-target output means the worker did not finish the job; Maya will steer until real targets exist.** The mandate: find accounts whose audience IS the buyer (people who follow them are the same people who would sign up for this product). Filter hard: active posting cadence (judgment — recent posts visible), genuine engagement on their content (real replies and discussion, not ghost followers), and audience-content complementary to the product without being a direct competitor. Drop dormant accounts, vanity accounts with inflated follower counts and no engagement, and accounts that are audience-adjacent but not audience-aligned. A small number of genuinely right relationships beats a long list of names — Maya prefers 3 real ones over 10 questionable ones.
@@ -1216,7 +1216,7 @@ Foundation does NOT stop at the operating model. The operator waited ~10-15 min 
 
 ### Phase 2 — DISCOVERY + DRAFT (workers find threads AND draft the reply, one POST per item)
 
-For each channel marked \`bet: true\` in \`gtmChannelScorecard\`, spawn the matching continuous worker (\`reddit_research\`, \`x_research\`, \`hn_research\`). **Each worker both finds a reply-target thread AND drafts the operator-voice reply for it, then POSTs both — one self-contained POST per item.** This mirrors the foundation strategy workers (each worker IS a POST), which is what makes the actionable layer reliable: drafting is NOT deferred to a single inline Maya loop at the end (that loop was the step that empirically got skipped, leaving 0 drafts + an empty calendar). The worker's task string carries the operator's voice contract so the draft lands native; Maya's editorial pass (Phase 2.5) reviews + culls what the workers produced rather than drafting from scratch.
+For each channel marked \`bet: true\` in \`gtmChannelScorecard\`, spawn the matching continuous worker, and give each worker its **per-channel research skill** so it mines deep, not shallow: \`reddit_research\` → \`maya-reddit-demand-researcher\`, \`x_research\` → \`maya-x-founder-led-researcher\` (mine the REPLIES/conversation via \`advanced_search\` \`conversation_id:\`/\`to:\` operators, not just keyword page one), \`hn_research\` → \`maya-hn-researcher\` (descend the full comment tree via the Algolia item API), \`linkedin_research\` → \`maya-linkedin-researcher\` (only if \`maya-linkedin-fit-researcher\` cleared LinkedIn). For video platforms that cleared as bets, mine the **comments** (TikTok \`/v1/tiktok/video/comments\`, IG \`/v2/instagram/post/comments\`) for buyer language — that's where the intent is, not the view counts. **Each worker both finds a reply-target thread AND drafts the operator-voice reply for it, then POSTs both — one self-contained POST per item.** This mirrors the foundation strategy workers (each worker IS a POST), which is what makes the actionable layer reliable: drafting is NOT deferred to a single inline Maya loop at the end (that loop was the step that empirically got skipped, leaving 0 drafts + an empty calendar). The worker's task string carries the operator's voice contract so the draft lands native; Maya's editorial pass (Phase 2.5) reviews + culls what the workers produced rather than drafting from scratch.
 
 **Discovery depth — workers must not do a single shallow sweep and stop.** A first-pass search with one intent phrase is a starting point, not a finished sweep. Workers must: broaden their intent probes across multiple phrasings of the same pain, paginate through results by judgment until the signal stops being useful, and try adjacent communities / hashtags / subreddits if the first community is thin. They stop broadening when they've genuinely covered the buyer-pain landscape well enough to power a real first week — Maya judges this when she reads the pool, not by a count. **Phase 2.5 cannot start until Maya judges the pool is deep enough** — a handful of threads from one subreddit is not a pool; coverage across real buyer communities is.
 
@@ -1365,8 +1365,81 @@ Foundation is the most expensive thing Maya does. She watches \`gtmCostLedger\` 
 The synthesis message itself passes slop-critic. No "comprehensive analysis," no "I've identified key opportunities," no tricolons. Plain manager voice.
 `;
 
+// Source: agents/skills/maya-gtm/maya-hn-researcher/SKILL.md
+const ENTRY_11_maya_hn_researcher = `---
+name: maya-hn-researcher
+description: Find Hacker News buyer-intent + reply targets for dev-tool / technical / B2B products — Show HN and Ask HN threads where the buyer is describing the pain, mined down the full comment tree via the Algolia item API. Discovery-only timing rules (Show HN is one-shot); the depth is in the comments.
+---
+
+# maya-hn-researcher
+
+## Purpose
+
+For dev-tools, infra, AI, and technical B2B products, Hacker News is a high-credibility venue — but it punishes anything that smells like marketing, and the buyer signal lives in the **comments**, not the story titles. This skill finds Show HN / Ask HN / story threads where a technical buyer is describing the exact problem the product solves, descends the **full comment tree** for the sharpest buyer language, and judges whether HN is worth the operator's one-shot Show HN moment or is reply-only for now.
+
+## When to invoke
+
+- IF channel-judge is considering HN (primary or secondary) THEN run.
+- IF \`icpHypotheses[].locatableOn.channel === "hn"\` THEN run.
+- IF the operator's product is dev-tool / infra / AI / technical-B2B THEN HN is a likely bet — run.
+- NEVER recommend a Show HN launch in week 1 (account + audience aren't warm) — see decision rules.
+
+## Required reads
+
+1. \`APP.md\`, \`GTM.md\` — product diagnosis + current strategy.
+2. \`USER.md\` — operator voice + whether they can write a credible technical post.
+3. \`MEMORY.md\` — prior HN attempts + what landed.
+
+## API — discovery + the full comment tree (free, no auth)
+
+- **Discovery:** \`https://hn.algolia.com/api/v1/search?query=<urlencoded>&tags=story\` — also \`&tags=show_hn\`, \`&tags=ask_hn\`, \`&tags=comment\`. Sort by recency with \`/search_by_date\`. Use buyer-intent phrasings, not just the product category.
+- **Comment-tree descent (mandatory for every reply target):** \`https://hn.algolia.com/api/v1/items/<objectID>\` returns the FULL nested tree — recurse \`children[]\` all the way down. The buyer restating the pain, naming the competitor they're escaping, or rejecting a workaround is usually *deep* in the tree, not in the top comment. The story permalink is \`https://news.ycombinator.com/item?id=<objectID>\`; an individual comment's permalink is \`https://news.ycombinator.com/item?id=<commentId>\` — cite the COMMENT id when the quote is a comment (citation precision).
+
+## Decision rules
+
+1. **Buyer-intent over points.** A 12-point Ask HN where someone describes the exact pain ("what do you use for X, everything I've tried Y") outranks a 300-point story with no purchase signal. Judge intent first, points second.
+2. **Reply-target quality bar.** The thread is recent enough that a comment still surfaces, the OP or commenters are still active, and the product is a credible, non-promotional answer within one degree of fit. A dead 2-year-old thread is theater.
+3. **Comment-tree mining is the job.** For every reply target, descend the full tree and surface the strongest comments scored against: \`buyer_intent\` (a follow-up question the product answers), \`pain_restatement\` (sharper buyer phrasing), \`competitor_mention\` (named alternative, set \`competitorName\`), \`op_rejection\` ("tried that, didn't work"), \`high_velocity\` (a comment heating up fast for the thread's age — judgment, not a number).
+4. **HN comment culture.** Substantive, specific, no hype, no emoji, no "Excited to share." Lead with the technical substance; the product mention is earned by being genuinely useful, never the opener. A naked plug gets flagged + buries the account.
+5. **Show HN is one-shot — gate it hard.** NEVER queue a Show HN launch until the account has real history (not days old) AND there's a demoable artifact AND the operator has spent soft-launch time. Best windows: Tue/Wed/Thu 14:00–17:00 UTC (7–10am PT). Breakout threshold ~30 points; below that it's invisible. In week 1, HN is **comment/reply-only** — engage on others' Show HN / Ask HN where the operator's expertise applies; save the one-shot for when it can break out.
+6. **72h window.** If a Show HN does go, reply to every comment + every question in the first 72h — post-and-pray is the #1 HN launch failure.
+
+## How you deliver — POST per item, don't just return a report
+
+When invoked as a Phase-2 demand worker, you own each reply target end to end. For EACH thread worth a reply, in its own item loop:
+
+1. POST \`/lc_gtm/target_thread\` (platform="hn", url=the item permalink, externalId=objectID, title, excerpt verbatim, currentMetrics from points/comments, recommendedAction, \`painQuote\` verbatim from the comment/story that proves intent, postedAt, velocityScore, priorityScore, plus \`commentTreeSummary.mineableComments[]\` from the descent) → returns a targetThreadId.
+2. Compose the reply in the operator's voice — substantive + technical first, product mention only if it genuinely answers the question, no hype. HN replies have no URL-prefill; the operator pastes.
+3. POST \`/lc_gtm/drafted_content\` (kind="reply", platform="hn", targetThreadId, draftText).
+4. Re-POST \`/lc_gtm/target_thread\` (same externalId) with \`draftReply\` set.
+
+One self-contained POST sequence per thread — the same per-item discipline that makes the foundation strategy POSTs reliable. Exact sequence: \`maya-foundation-research\` Phase 2.
+
+## Style-exemplar capture (native-voice fidelity)
+
+While mining, capture **5-10 real, top-performing, HUMAN-written native HN comments verbatim** — the substantive ones that actually landed (genuine replies, upvoted, from real accounts). These become few-shot **voice/register anchors** for \`maya-voice-matcher\` + drafting: HN's register is terse, specific, technically credible, allergic to marketing. Match cadence/vocab/length/format; **never copy** an exemplar's content or specifics. Skip anything that reads templated. Emit in \`styleExemplars[]\`.
+
+## HN caption craft — the title is the click decision, the comment is the conversion
+
+On a story/Show HN, the **title** carries the whole click decision: concrete, specific, no hype-jargon, no emoji, "Show HN: <what it is> — <the one concrete thing>". For replies, the **first sentence** is the title-equivalent — it has to earn the read by being substantive, not by being friendly. Surface this in \`captionCraft\` (title convention + first-line guidance + anti-patterns: hype, emoji, "Excited to", vague superlatives).
+
+## Failure modes
+
+- **No buyer-intent threads found.** Park HN; surface to channel-judge. Don't pad with low-intent stories.
+- **Algolia returns thin.** Broaden phrasings + try \`tags=comment\` (search inside comments) before parking.
+- **Product is consumer/non-technical.** HN is likely the wrong venue — say so plainly and demote it.
+
+## Cost discipline
+
+0 paid API — Algolia HN is free. Bounded by the foundation budget guard, not a fixed call count: descend as deep as the comment tree warrants to be confident, then stop. 1 main synthesis call.
+
+## Anti-slop check
+
+\`painQuote\` and every mined comment \`body\` are VERBATIM from HN — quote and link to the exact item id, never paraphrase. The drafted reply passes \`maya-slop-critic\` (no hype, no em-dash cadence, no tidy tricolons, no emoji) and reads like a real HN commenter, not a marketer. \`styleExemplars[].verbatim\` is a voice reference only — never copy.
+`;
+
 // Source: agents/skills/maya-gtm/maya-icp-hypothesis/SKILL.md
-const ENTRY_11_maya_icp_hypothesis = `---
+const ENTRY_12_maya_icp_hypothesis = `---
 name: maya-icp-hypothesis
 description: Generate 3-5 ICP hypotheses from product evidence + walkthrough — never from asking the founder, who usually doesn't know.
 ---
@@ -1441,7 +1514,7 @@ Invoke \`maya-slop-critic\` (banned-phrase scan only) on every \`buyer\` and \`c
 `;
 
 // Source: agents/skills/maya-gtm/maya-inbound-triage/SKILL.md
-const ENTRY_12_maya_inbound_triage = `---
+const ENTRY_13_maya_inbound_triage = `---
 name: maya-inbound-triage
 description: Reply / DM / mention triage. For every inbound to an owned post, classify (buyer / supporter / noise / hostile), draft a response if reply-worthy, and surface to the operator in one line — they should never have to scan their own inbox.
 ---
@@ -1560,7 +1633,7 @@ The drafted reply must pass slop-critic. The surface-to-operator message itself 
 `;
 
 // Source: agents/skills/maya-gtm/maya-linkedin-fit-researcher/SKILL.md
-const ENTRY_13_maya_linkedin_fit_researcher = `---
+const ENTRY_14_maya_linkedin_fit_researcher = `---
 name: maya-linkedin-fit-researcher
 description: Decide whether LinkedIn is the right channel per playbook/linkedin.md LI-1.1 - LI-1.3 + LI-10.2. Refuse if rule LI-10.2 applies.
 ---
@@ -1698,8 +1771,81 @@ Max 4 ScrapeCreators calls. 1-2 WebFetches. 1 main_maya call. Timeout 12 min.
 LinkedIn is the slop epicenter. Every \`suggestedCommentDraft\` and \`caption.openingPattern\` MUST pass \`maya-slop-critic\` — including its structural AI-tell pass (tidy tricolons, "it's not X it's Y", em-dash cadence, uniform rhythm, no-stance hedging) — with LinkedIn-specific bans (linkedin.md § 9): no broetry overuse, no "thrilled/excited/honored", no tagged-friend humblebrag, no engagement-bait closers, no AI-emoji bullet lists. \`styleExemplars[].verbatim\` is a voice reference only — never copy content; drop any exemplar that itself reads broetry/AI.
 `;
 
+// Source: agents/skills/maya-gtm/maya-linkedin-researcher/SKILL.md
+const ENTRY_15_maya_linkedin_researcher = `---
+name: maya-linkedin-researcher
+description: For B2B / prosumer products where the buyer is a professional, find LinkedIn reply targets + engagement opportunities — posts where the buyer is describing the pain, mined for comment-level buyer intent. Runs AFTER maya-linkedin-fit-researcher clears LinkedIn as a bet; this is the research worker, not the fit gate.
+---
+
+# maya-linkedin-researcher
+
+## Purpose
+
+\`maya-linkedin-fit-researcher\` decides WHETHER LinkedIn is worth the operator's time (it parks LinkedIn for most consumer/indie-dev products). When it clears LinkedIn as a bet — B2B SaaS, prosumer, sales/ops/marketing tooling, founder-audience products — THIS skill does the actual research: finds posts + threads where the professional buyer is describing the pain, mines the comments for buyer intent, and proposes reply + engagement targets. It does NOT re-litigate fit; that gate already passed.
+
+## When to invoke
+
+- IF \`maya-linkedin-fit-researcher\` returned \`fit: "go"\` (or secondary) THEN run.
+- IF \`gtmChannelScorecard\` marks LinkedIn \`bet: true\` THEN run in the Phase-2 discovery sweep.
+- NEVER run for a product the fit-researcher parked (consumer/lifestyle/non-professional buyer) — that's wasted spend.
+
+## Required reads
+
+1. \`APP.md\`, \`GTM.md\` — product + strategy.
+2. \`USER.md\` — operator voice + whether they'll post in a professional register.
+3. The fit-researcher's output (why LinkedIn cleared, which buyer segment).
+4. \`MEMORY.md\` — prior LinkedIn attempts.
+
+## API — posts + comments (ScrapeCreators, \`x-api-key: $SCRAPECREATORS_API_KEY\`)
+
+- **Company/person posts:** \`/v1/linkedin/company/posts\` (company feed), \`/v1/linkedin/profile\` + the person-post endpoints in the \`scrapecreators-api\` skill tables.
+- **Comments are where the buyer intent is** — pull post comments and mine them the same way the Reddit/HN workers mine comment trees. A professional asking "how are you all handling X?" under a relevant post is a higher-intent reply target than the OP.
+- Discovery on LinkedIn is thinner than Reddit/X (no open keyword search across all posts) — so lean on: the fit-researcher's named target accounts/companies, the operator's own network/feed, and posts by the trusted voices in the buyer map. Quality over volume; LinkedIn rewards a few real engagements far more than spray.
+
+## Decision rules
+
+1. **Reply-target quality bar.** A post where the professional buyer describes the pain or asks for recommendations, recent enough to still surface, where the operator's product is a credible + non-salesy answer. Skip thought-leadership posts with no purchase signal.
+2. **Buyer-intent over reach.** A 40-like post with a buyer asking "what do you use for X" beats a 2,000-like viral post with no intent.
+3. **Three-beat reply.** Validate their specific situation → add genuine value (a real insight, not a pitch) → soft mention only if it fits, with the **link in the first comment, not the post body** (LinkedIn suppresses outbound-link posts). Product mention in the opener = regenerate.
+4. **Professional register.** LinkedIn voice is plain, specific, credible — NOT hype, NOT emoji-spam, NOT "🚀 thrilled to announce". Founder build-in-public about the actual process outperforms polished brag posts (~3.4x). Text-only often outperforms image; native PDF carousels get strong dwell.
+5. **Cadence (when it's also a posting channel):** 3 posts/week is the ceiling of useful (diminishing returns past 5); Tue–Thu 7–8:30am local windows; reply to every comment in the first hour. Surface posting cadence only if LinkedIn is a posting bet, not just a reply venue.
+
+## How you deliver — POST per item, don't just return a report
+
+When invoked as a Phase-2 demand worker, you own each reply target end to end. For EACH post worth engaging, in its own item loop:
+
+1. POST \`/lc_gtm/target_thread\` (platform="linkedin", url=post permalink, externalId=post id, excerpt verbatim, currentMetrics, recommendedAction, \`painQuote\` verbatim, priorityScore, \`commentTreeSummary.mineableComments[]\` from the comments).
+2. Compose the three-beat reply in the operator's professional voice (URL → first comment, not the reply body).
+3. POST \`/lc_gtm/drafted_content\` (kind="reply", platform="linkedin", targetThreadId, draftText).
+4. Re-POST \`/lc_gtm/target_thread\` (same externalId) with \`draftReply\` set.
+
+One self-contained POST sequence per item. Exact sequence: \`maya-foundation-research\` Phase 2.
+
+## Style-exemplar capture (native-voice fidelity)
+
+Capture **5-10 real, top-performing, HUMAN-written native LinkedIn posts/comments verbatim** from the buyer's professional niche — the founder build-in-public + genuine-insight ones that landed (real engagement, real accounts). These anchor \`maya-voice-matcher\` + drafting: LinkedIn's register is professional-but-human, specific, no hype. Match cadence/vocab/length/format; **never copy** content. Skip anything that reads templated/AI/corporate. Emit in \`styleExemplars[]\`.
+
+## LinkedIn caption craft — hook above the fold, link in first comment
+
+The first ~2 lines show before "see more" — they carry the whole open decision: concrete + specific, a real stake or number, no hype-emoji cluster. The **link goes in the first comment**, never the post body (outbound-link posts get throttled). Surface this in \`captionCraft\` (hook convention + the first-comment link rule + anti-patterns: "thrilled/excited to announce", emoji clusters, engagement-bait "agree? 👇").
+
+## Failure modes
+
+- **Fit-researcher parked LinkedIn.** Don't run — return immediately, note it's parked.
+- **Discovery too thin (no open search).** Lean on named target accounts + the operator's feed; if there's genuinely no buyer signal, surface that to channel-judge rather than padding.
+- **Only thought-leadership, no buyer intent.** Demote to relationship-building cadence (engage to build presence), not reply-mining for conversion.
+
+## Cost discipline
+
+ScrapeCreators LinkedIn calls bounded by the foundation budget guard. LinkedIn is quality-over-volume — a handful of real engagements beats a wide shallow sweep. 1 main synthesis call.
+
+## Anti-slop check
+
+\`painQuote\` + mined comment bodies are VERBATIM with exact post/comment URLs (citation precision). The drafted reply passes \`maya-slop-critic\` and reads like a credible professional peer, not a salesperson. The soft mention is a door left open, not a pitch. \`styleExemplars[].verbatim\` is a voice reference only — never copy.
+`;
+
 // Source: agents/skills/maya-gtm/maya-morning-brief/SKILL.md
-const ENTRY_14_maya_morning_brief = `---
+const ENTRY_16_maya_morning_brief = `---
 name: maya-morning-brief
 description: The 7am-local daily message + calendar populate. One Telegram, as tight as possible while useful, self-graded (Strong / Thin / Warmup), top priority named first, calendar events with full hands-off recipes. Reads gtmNicheLearnings to weight what surfaces.
 ---
@@ -1833,7 +1979,7 @@ Brief faces slop-critic. Banned for this message: "I've put together," "comprehe
 `;
 
 // Source: agents/skills/maya-gtm/maya-output-critic/SKILL.md
-const ENTRY_15_maya_output_critic = `---
+const ENTRY_17_maya_output_critic = `---
 name: maya-output-critic
 description: The 5-gate quality framework Maya consults before shipping any user-facing message — morning brief, evening recap, calendar event description, drafted reply, weekly review. Grounding / voice / recipe / tier-honesty / time-box. Fail → iterate or escalate, never silently ship low quality.
 ---
@@ -1955,7 +2101,7 @@ Self-referential: the critic must itself pass voice + grounding + tier-honesty b
 `;
 
 // Source: agents/skills/maya-gtm/maya-reddit-demand-researcher/SKILL.md
-const ENTRY_16_maya_reddit_demand_researcher = `---
+const ENTRY_18_maya_reddit_demand_researcher = `---
 name: maya-reddit-demand-researcher
 description: Find Reddit buyer intent for the product's pain — surface reply targets ranked by purchase signal, map the live comment tree for follow-up questions, return promotion-risk score. Budget-bounded.
 ---
@@ -2147,7 +2293,7 @@ Max 8 ScrapeCreators calls: 3 × subreddit/search, 2 × general search, 2 × sub
 `;
 
 // Source: agents/skills/maya-gtm/maya-results-reviewer/SKILL.md
-const ENTRY_17_maya_results_reviewer = `---
+const ENTRY_19_maya_results_reviewer = `---
 name: maya-results-reviewer
 description: Review published results. Recommend double_down / iterate / do_not_overfit per PLAYBOOK format-market-fit detection. Counter-overfitting checks.
 ---
@@ -2259,7 +2405,7 @@ Max 4 ScrapeCreators calls (1 per platform). Cache aggressively. 1 main_maya syn
 `;
 
 // Source: agents/skills/maya-gtm/maya-slop-critic/SKILL.md
-const ENTRY_18_maya_slop_critic = `---
+const ENTRY_20_maya_slop_critic = `---
 name: maya-slop-critic
 description: The anti-slop / AI-tell critic. Apply PLAYBOOK § 6 banned-phrase list + banned-structure scan + LLM-judgment structural AI-tell pass + voice match + read-aloud test. Returns "rejected with reasons" on any trip. The bar is native-voice fidelity, NOT detector-dodging.
 ---
@@ -2384,7 +2530,7 @@ Self-referential: this skill IS the anti-slop check. The \`suggestion\` strings 
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-demo-strategist/SKILL.md
-const ENTRY_19_maya_tiktok_demo_strategist = `---
+const ENTRY_21_maya_tiktok_demo_strategist = `---
 name: maya-tiktok-demo-strategist
 description: Pick TikTok format (faceless screen-record vs founder-on-camera vs slideshow) given showability + constraints. Refuse if user can't post manually (V1 constraint).
 ---
@@ -2468,7 +2614,7 @@ interface TikTokStrategy {
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-format-researcher/SKILL.md
-const ENTRY_20_maya_tiktok_format_researcher = `---
+const ENTRY_22_maya_tiktok_format_researcher = `---
 name: maya-tiktok-format-researcher
 description: Find what's working in the operator's niche on TikTok RIGHT NOW. Identify the format that clearly recurs across the strongest recent videos in the niche (tiktok.md § 7).
 ---
@@ -2590,7 +2736,7 @@ Structured taxonomy output, slop-critic NOT invoked. \`excerpt\` strings and eve
 `;
 
 // Source: agents/skills/maya-gtm/maya-ugc-system-advisor/SKILL.md
-const ENTRY_21_maya_ugc_system_advisor = `---
+const ENTRY_23_maya_ugc_system_advisor = `---
 name: maya-ugc-system-advisor
 description: ADVISORY-ONLY in V1. UGC creators are a Phase 4+ lever per PLAYBOOK. Refuse to recommend before format-market-fit.
 ---
@@ -2670,7 +2816,7 @@ Mostly structured refusals. \`refusalReason\` and \`gatesUnmet[].detail\` pass t
 `;
 
 // Source: agents/skills/maya-gtm/maya-viral-demo-moment-miner/SKILL.md
-const ENTRY_22_maya_viral_demo_moment_miner = `---
+const ENTRY_24_maya_viral_demo_moment_miner = `---
 name: maya-viral-demo-moment-miner
 description: Find showable app moments — before/after contrasts, screenshot sequences. Source: walkthrough + product UI.
 ---
@@ -2752,7 +2898,7 @@ interface ViralDemoBeatLibrary {
 `;
 
 // Source: agents/skills/maya-gtm/maya-voice-matcher/SKILL.md
-const ENTRY_23_maya_voice_matcher = `---
+const ENTRY_25_maya_voice_matcher = `---
 name: maya-voice-matcher
 description: Score how well a drafted reply/post/thread matches the operator's actual voice — drawn from their existing public writing (X/Reddit/LinkedIn) or onboarding answers as fallback. Combines with maya-slop-critic for a final ship-or-revise gate. Each gtmDraftedContent row gets a voiceMatchScore + slopCriticPassed flag.
 ---
@@ -2865,7 +3011,7 @@ Yes — this skill itself outputs operator-facing copy (when surfacing voice fee
 `;
 
 // Source: agents/skills/maya-gtm/maya-weekly-review/SKILL.md
-const ENTRY_24_maya_weekly_review = `---
+const ENTRY_26_maya_weekly_review = `---
 name: maya-weekly-review
 description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for next week if any, and a regenerated next-week plan re-weighted by what actually converted.
 ---
@@ -3000,7 +3146,7 @@ Banned for this message: "Crushed it this week," "We're seeing momentum," "level
 `;
 
 // Source: agents/skills/maya-gtm/maya-x-founder-led-researcher/SKILL.md
-const ENTRY_25_maya_x_founder_led_researcher = `---
+const ENTRY_27_maya_x_founder_led_researcher = `---
 name: maya-x-founder-led-researcher
 description: Find X founder-led conversations, reply targets, hooks worth modeling, and accounts worth a private List.
 ---
@@ -3058,6 +3204,8 @@ When building \`searchQueries\`, weight heavily toward problem-statement and too
 These surface people actively in the buying mindset — describing the problem, asking for recommendations, expressing frustration with alternatives. They are the highest-value reply targets. Supplement with founder-conversation queries (build-in-public, indie hacker terms) for hook modeling and List building, but buyer-intent queries drive target ranking.
 
 When the first twitterapi.io advanced_search page is thin (fewer than 5 strong targets), paginate using the cursor before expanding query terms — going deeper on a strong query beats going wide with weaker ones.
+
+**Mine the conversation, not just the original tweet (X's value is the replies).** Once a strong tweet surfaces, pull its reply thread with \`query=conversation_id:<tweetId>\` — the replies are where buyers restate the pain in sharper words and name the competitors they're escaping, and an unanswered reply-question is often a higher-intent target than the OP. Use \`query=to:<handle>\` to read who's actively replying to a target account, and \`query=quoted_tweet_id:<tweetId>\` (or \`url:<tweetUrl>\`) to see who's quote-tweeting a take in the niche. A reply-target's URL must be the reply/tweet permalink the quote came from, never the profile URL (citation precision).
 
 ## Output schema
 
@@ -3156,7 +3304,7 @@ Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before t
 `;
 
 // Source: agents/skills/maya-gtm/maya-youtube-researcher/SKILL.md
-const ENTRY_26_maya_youtube_researcher = `---
+const ENTRY_28_maya_youtube_researcher = `---
 name: maya-youtube-researcher
 description: Deep YouTube research via ScrapeCreators — mine comments + transcripts for buyer language, map the venue spread (niche channels, hashtags, Shorts trends), and judge whether YouTube earns a bet for this product. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
 ---
@@ -3217,20 +3365,22 @@ export const BUNDLED_LOCAL_SKILLS: readonly BundledLocalSkill[] = [
   { slug: "maya-distribution-motion-tester", workspacePath: "skills/maya-distribution-motion-tester/SKILL.md", body: ENTRY_8_maya_distribution_motion_tester },
   { slug: "maya-evening-recap", workspacePath: "skills/maya-evening-recap/SKILL.md", body: ENTRY_9_maya_evening_recap },
   { slug: "maya-foundation-research", workspacePath: "skills/maya-foundation-research/SKILL.md", body: ENTRY_10_maya_foundation_research },
-  { slug: "maya-icp-hypothesis", workspacePath: "skills/maya-icp-hypothesis/SKILL.md", body: ENTRY_11_maya_icp_hypothesis },
-  { slug: "maya-inbound-triage", workspacePath: "skills/maya-inbound-triage/SKILL.md", body: ENTRY_12_maya_inbound_triage },
-  { slug: "maya-linkedin-fit-researcher", workspacePath: "skills/maya-linkedin-fit-researcher/SKILL.md", body: ENTRY_13_maya_linkedin_fit_researcher },
-  { slug: "maya-morning-brief", workspacePath: "skills/maya-morning-brief/SKILL.md", body: ENTRY_14_maya_morning_brief },
-  { slug: "maya-output-critic", workspacePath: "skills/maya-output-critic/SKILL.md", body: ENTRY_15_maya_output_critic },
-  { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_16_maya_reddit_demand_researcher },
-  { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_17_maya_results_reviewer },
-  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_18_maya_slop_critic },
-  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_19_maya_tiktok_demo_strategist },
-  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_20_maya_tiktok_format_researcher },
-  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_21_maya_ugc_system_advisor },
-  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_22_maya_viral_demo_moment_miner },
-  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_23_maya_voice_matcher },
-  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_24_maya_weekly_review },
-  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_25_maya_x_founder_led_researcher },
-  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_26_maya_youtube_researcher },
+  { slug: "maya-hn-researcher", workspacePath: "skills/maya-hn-researcher/SKILL.md", body: ENTRY_11_maya_hn_researcher },
+  { slug: "maya-icp-hypothesis", workspacePath: "skills/maya-icp-hypothesis/SKILL.md", body: ENTRY_12_maya_icp_hypothesis },
+  { slug: "maya-inbound-triage", workspacePath: "skills/maya-inbound-triage/SKILL.md", body: ENTRY_13_maya_inbound_triage },
+  { slug: "maya-linkedin-fit-researcher", workspacePath: "skills/maya-linkedin-fit-researcher/SKILL.md", body: ENTRY_14_maya_linkedin_fit_researcher },
+  { slug: "maya-linkedin-researcher", workspacePath: "skills/maya-linkedin-researcher/SKILL.md", body: ENTRY_15_maya_linkedin_researcher },
+  { slug: "maya-morning-brief", workspacePath: "skills/maya-morning-brief/SKILL.md", body: ENTRY_16_maya_morning_brief },
+  { slug: "maya-output-critic", workspacePath: "skills/maya-output-critic/SKILL.md", body: ENTRY_17_maya_output_critic },
+  { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_18_maya_reddit_demand_researcher },
+  { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_19_maya_results_reviewer },
+  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_20_maya_slop_critic },
+  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_21_maya_tiktok_demo_strategist },
+  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_22_maya_tiktok_format_researcher },
+  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_23_maya_ugc_system_advisor },
+  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_24_maya_viral_demo_moment_miner },
+  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_25_maya_voice_matcher },
+  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_26_maya_weekly_review },
+  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_27_maya_x_founder_led_researcher },
+  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_28_maya_youtube_researcher },
 ];

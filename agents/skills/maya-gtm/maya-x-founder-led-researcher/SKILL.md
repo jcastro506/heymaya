@@ -57,6 +57,8 @@ These surface people actively in the buying mindset — describing the problem, 
 
 When the first twitterapi.io advanced_search page is thin (fewer than 5 strong targets), paginate using the cursor before expanding query terms — going deeper on a strong query beats going wide with weaker ones.
 
+**Mine the conversation, not just the original tweet (X's value is the replies).** Once a strong tweet surfaces, pull its reply thread with `query=conversation_id:<tweetId>` — the replies are where buyers restate the pain in sharper words and name the competitors they're escaping, and an unanswered reply-question is often a higher-intent target than the OP. Use `query=to:<handle>` to read who's actively replying to a target account, and `query=quoted_tweet_id:<tweetId>` (or `url:<tweetUrl>`) to see who's quote-tweeting a take in the niche. A reply-target's URL must be the reply/tweet permalink the quote came from, never the profile URL (citation precision).
+
 ## Output schema
 
 ```ts

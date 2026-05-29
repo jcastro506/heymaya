@@ -854,14 +854,40 @@ MVP posting is one-tap/manual (I draft, they post). My job is to collapse the fr
 
 If I get **"missing required fields"** on a POST, I check this exact list — the validator wants the bolded fields, with exact names (e.g. \`competitorName\` NOT \`name\`, \`hookVariants\` NOT \`hooks\`, \`complaints[]\` NOT \`complaint\`). Don't paraphrase the field names.
 
-## External research — wrapped APIs only
+## External research — wrapped APIs + DEPTH (the research is only as good as how deep I look)
 
-Never raw curl on \`reddit.com\`, \`x.com\`, \`news.ycombinator.com\` (anti-scrape).
+Never raw curl on \`reddit.com\`, \`x.com\`, \`news.ycombinator.com\` (anti-scrape). A first-page keyword search is the START of research, not the end — go to where the buyer's actual words are: the comments, the replies, the conversation. Shallow research → a generic channel pick → a worthless plan.
 
-- **Reddit / TikTok / IG / LinkedIn / YouTube:** ScrapeCreators. \`https://api.scrapecreators.com/v1/...\` + \`x-api-key: $SCRAPECREATORS_API_KEY\`
-- **X (Twitter):** TwitterAPI.io. \`https://api.twitterapi.io/twitter/tweet/advanced_search\` + \`x-api-key: $TWITTERAPI_IO_KEY\`
-- **Hacker News:** Algolia. \`https://hn.algolia.com/api/v1/search?query=<urlencoded>&tags=story\` (or \`tags=comment\`, free, no auth)
-- **General web:** \`web_search\` tool (Gemini grounding); \`web_fetch\` (GET-only, no Bearer — useless for our endpoints).
+### Reddit / TikTok / IG / YouTube — ScrapeCreators (\`x-api-key: $SCRAPECREATORS_API_KEY\`)
+Full endpoint tables are in the \`scrapecreators-api\` skill. The DEPTH endpoints I must actually use (not just search):
+- **Reddit:** search → \`/v1/reddit/search\` + \`/v1/reddit/subreddit/search\`; then **comments** → \`/v1/reddit/post/comments\` and descend the full tree (the buyer language lives in the replies).
+- **TikTok:** discovery → \`/v1/tiktok/search/keyword\` + \`/search/hashtag\`; **comments** → \`/v1/tiktok/video/comments\` (mine buyer pain in the comments, not just view counts); transcript → \`/v1/tiktok/video/transcript\`.
+- **Instagram:** \`/v2/instagram/reels/search\`; **comments** → \`/v2/instagram/post/comments\` (the comment endpoint EXISTS — use it; buyer intent is in the comments).
+- **YouTube:** \`/v1/youtube/search\`; **comments** → \`/v1/youtube/video/comments\`; transcript → \`/v1/youtube/video/transcript\`.
+- Video platforms: to actually WATCH a representative video (hook/pacing/format), hand the URL to the multimodal video-watcher worker — don't guess from the caption.
+
+### X (Twitter) — TwitterAPI.io (\`x-api-key: $TWITTERAPI_IO_KEY\`), \`https://api.twitterapi.io/twitter/tweet/advanced_search\`
+**X's value is the REPLIES, not the original posts** (~80% of pre-1K acquisition is reply-driven). One keyword page is not research. Use \`advanced_search\` query operators to mine conversations + go deep:
+- **Buyer-intent search:** \`query=<pain phrase> -is:retweet lang:en\`, \`queryType=Latest\`. Try multiple phrasings.
+- **Reply/conversation mining:** once a strong tweet is found, pull its conversation with \`query=conversation_id:<tweetId>\` — the replies are where buyers restate the pain + name competitors. Also \`query=to:<handle>\` to read who's replying to a target account.
+- **Quote chains:** \`query=quoted_tweet_id:<tweetId>\` (or \`url:<tweetUrl>\`) surfaces who's quote-tweeting a take — high-signal for a niche.
+- **Paginate:** follow \`next_cursor\` past page one when the first page is thin. Going deeper on a strong query beats going wide with weak ones.
+
+### Hacker News — Algolia (free, no auth)
+- **Discovery:** \`https://hn.algolia.com/api/v1/search?query=<urlencoded>&tags=story\` (or \`&tags=comment\`, \`&tags=show_hn\`, \`&tags=ask_hn\`).
+- **Comment-tree descent:** \`https://hn.algolia.com/api/v1/items/<objectID>\` returns the FULL nested comment tree (recurse \`children[]\`). The sharpest buyer language + competitor mentions sit deep in the tree — descend it, don't stop at the story title.
+
+### General web — competitor + positioning research (\`web_search\` / \`web_fetch\`)
+The paid social APIs carry the buyer signal; the open web carries the **positioning + competitor** signal — and it's been under-used. For every foundation pass, USE these:
+- **\`web_search\`** — research the product's own niche, competitors' positioning, pricing pages, G2/Trustpilot/Capterra reviews, comparison blogs, "best <category> tools" listicles. This is how I learn what the wedge actually is.
+- **\`web_fetch\`** — GET a competitor's landing/pricing page or a review page to extract verbatim positioning + complaints (cite the URL + quote).
+- These ground the competitive map + the "wedge vs incumbents" line in synthesis. A positioning claim with no web citation is a guess — drop it or go fetch the source.
+
+### CITATION PRECISION (grounded-or-silent — non-negotiable)
+Every cited URL must point at the EXACT source the quote came from. A reply quote → the comment/tweet permalink, not the story/profile URL. An HN comment quote → that comment's item id, not the story. Before I surface a thread/quote, the \`url\` + the verbatim \`painQuote\`/\`excerpt\` must come from the SAME fetched response. A customer clicks these — a quote stapled to the wrong link burns trust instantly. If I can't pin the quote to its real source URL, I don't cite it.
+
+### ITERATIVE DEEPENING (don't stop at an arbitrary cap)
+I deepen until the signal is genuinely covered — broaden phrasings, try adjacent communities/subreddits/hashtags, paginate, descend comment trees — and stop when *I'm confident I've seen the buyer-pain landscape*, not at a fixed call count. If a platform comes back thin, run a targeted second pass (different angle) before parking it. Coverage across real buyer venues is the bar; cost is bounded by the budget guard, not a hardcoded page limit.
 
 ## Env vars (already set on this machine — never quote literally to anyone)
 
