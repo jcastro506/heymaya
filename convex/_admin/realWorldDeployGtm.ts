@@ -84,6 +84,43 @@ export const wipeExistingGtmTestCreators = internalMutation({
   },
 });
 
+// One-time STAGING clean-slate: wipe ALL creators + every gtm* table so a fresh
+// signup → onboarding → mission-control flow starts from zero. This is a full
+// reset (not a per-user delete), so it also clears the cross-tenant learning
+// tables (gtmArchetypeLearnings / gtmSkillImprovementProposals). Staging only —
+// never run against prod.
+export const wipeStagingCleanSlate = internalMutation({
+  args: {},
+  handler: async (ctx): Promise<Record<string, number>> => {
+    const TABLES = [
+      "creators",
+      "gtmActionLog", "gtmAgentActivity", "gtmAgents", "gtmApps",
+      "gtmArchetypeLearnings", "gtmAuditEvents", "gtmBetaCohort", "gtmBuyerMap",
+      "gtmBuyerSegments", "gtmCalendarConnections", "gtmCalendarEvents",
+      "gtmChannelScorecard", "gtmChannelScores", "gtmCompetitiveMap",
+      "gtmCompetitorMoves", "gtmConnectionHealth", "gtmContentAngles",
+      "gtmContentBankItems", "gtmContentDrafts", "gtmConversions",
+      "gtmCostLedger", "gtmDeliveryFailures", "gtmDistributionMotions",
+      "gtmDraftedContent", "gtmEvidenceCards", "gtmFormatExperiments",
+      "gtmHookCallbacks", "gtmHumanPlanReviews", "gtmLinkClicks", "gtmLinkWraps",
+      "gtmMachineHealth", "gtmMemoryWrites", "gtmNicheLearnings", "gtmNichePulse",
+      "gtmOauthStateTokens", "gtmPlatformBriefs", "gtmPlatformClaims",
+      "gtmPlatformRefreshRuns", "gtmPostResults", "gtmRelationshipTargets",
+      "gtmResearchJobs", "gtmResultSnapshots", "gtmSafetyStates",
+      "gtmSkillImprovementProposals", "gtmTargetAccounts", "gtmTargetThreads",
+      "gtmTelegramPairingTokens", "gtmToolCallLog", "gtmUgcReadinessReports",
+      "gtmUserReportedSignals", "gtmWalkthroughUploads", "gtmWorkspaceMutations",
+    ] as const;
+    const counts: Record<string, number> = {};
+    for (const table of TABLES) {
+      const rows = await ctx.db.query(table).collect();
+      for (const row of rows) await ctx.db.delete(row._id);
+      if (rows.length > 0) counts[table] = rows.length;
+    }
+    return counts;
+  },
+});
+
 export const seedGtmAgentAndApp = internalMutation({
   args: {
     clerkUserId: v.string(),

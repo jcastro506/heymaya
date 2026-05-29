@@ -21,6 +21,8 @@ export interface MayaGtmWorkspaceInput {
     canPostInstagramManually?: boolean;
     existingTikTokUrl?: string;
     existingInstagramUrl?: string;
+    existingYoutubeUrl?: string;
+    existingLinkedinUrl?: string;
     tiktokWarmupState?:
       | "unknown"
       | "new_needs_warmup"
@@ -491,6 +493,8 @@ ${input.app.founderWhy ?? "Not yet captured. Ask why they built this before fina
 - Will manually post Instagram: ${input.app.canPostInstagramManually ? "yes" : "no"}
 - Existing TikTok: ${input.app.existingTikTokUrl ?? "not connected"}
 - Existing Instagram: ${input.app.existingInstagramUrl ?? "not connected"}
+- Existing YouTube: ${input.app.existingYoutubeUrl ?? "not connected"}
+- Existing LinkedIn: ${input.app.existingLinkedinUrl ?? "not connected"}
 - TikTok warm-up state: ${input.app.tiktokWarmupState ?? "unknown"}
 - TikTok account age days: ${input.app.tiktokAccountAgeDays ?? "unknown"}
 - TikTok Account Check completed: ${
@@ -540,6 +544,12 @@ function renderApp(input: MayaGtmWorkspaceInput): string {
     input.app.existingTikTokUrl ? `TikTok ${input.app.existingTikTokUrl}` : null,
     input.app.existingInstagramUrl
       ? `Instagram ${input.app.existingInstagramUrl}`
+      : null,
+    input.app.existingYoutubeUrl
+      ? `YouTube ${input.app.existingYoutubeUrl}`
+      : null,
+    input.app.existingLinkedinUrl
+      ? `LinkedIn ${input.app.existingLinkedinUrl}`
       : null,
   ].filter(Boolean) as string[];
   const mode = input.app.entryMode;
@@ -742,13 +752,14 @@ Quick-reference card. NOT enforcement — this is what's available; the rules li
 
 ## Native OpenClaw
 
-**Operator message delivery — TWO PATHS (NOT \`message\` tool):**
-The native \`message\` tool is **stripped from my available tool set** by the OpenClaw \`coding\` profile. If I try to call \`message\`, OpenClaw returns "tool not available" and my turn dies. NEVER call \`message\`. Use these instead:
+**Operator message delivery — ONE reliable path (NOT \`message\`, NOT \`sessions_send\`):**
+The native \`message\` tool is **stripped from my tool set** by the OpenClaw \`coding\` profile (calling it kills my turn). And \`sessions_send sessionKey="current"\` does **NOT** work — there is no session aliased "current"; it returns "No session found: current" and my reply never reaches the operator. So for **ALL** operator-facing messages — REPLIES to a DM **and** PROACTIVE sends — I use the one path that's proven to land:
 
-- \`sessions_send\` (REPLIES) — when the operator just DM'd me, use this to reply. Auto-routes back to the originating Telegram channel. \`sessionKey="current"\` is the canonical form.
-- **curl POST to \`$CONVEX_SITE_URL/lc_gtm/send_update\`** (PROACTIVE) — when I'm sending without an inbound trigger (boot hello, mid-pass progress, morning brief, evening recap, hot alert). Body: \`{ idempotencyKey, text, messageClass: "tactical"|"strategic" }\` with Bearer \`$HOOK_TOKEN\`. Convex forwards to Telegram via the bot.
+- **curl POST to \`$CONVEX_SITE_URL/lc_gtm/send_update\`** (Bearer \`$HOOK_TOKEN\`). Body: \`{ idempotencyKey, text, messageClass: "tactical"|"strategic" }\`. Convex forwards to Telegram via the bot. This is the same path the boot hello + morning brief use. It works during an inbound turn too — it's an HTTP POST, so it sidesteps the session write-locks that collide on inbound. **When the operator just DM'd me, I deliver my reply this exact way.**
 
-If I ever find myself thinking "the message tool isn't available" — that's expected. Pivot to \`sessions_send\` or \`send_update\` and proceed. Do NOT tell the operator the tool failed; that's an infra leak (banned by SOUL.md).
+After delivering, I end my turn by emitting the session control token (\`NO_REPLY\`) in my SESSION reply — that's separate from operator delivery and NEVER appears in the \`text\` the operator sees.
+
+If I ever think "the message tool isn't available" — expected. Use the \`send_update\` curl POST and proceed. Do NOT tell the operator a tool failed; that's an infra leak (banned by SOUL.md).
 - \`sessions_spawn\` — start a worker. \`task\` must specify endpoints + return shape. Do not pass a \`model\`.
 - \`subagents action=list|kill|steer\` — worker lifecycle. Kill stuck (>5 min silent), steer thin.
 - \`sessions_yield\` / \`sessions_history\` — end my turn / read worker output.

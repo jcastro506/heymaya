@@ -163,7 +163,18 @@ const MODEL_ROUTING = {
   // Plus OpenRouter passthrough `reasoning: { exclude: true }` is
   // added below via agents.defaults.models params for the model
   // route — provider-side cost saver (don't pay for hidden tokens).
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "google/gemma-4-26b-a4b-it",
+  //
+  // 2026-05-29 — Main brain switched OFF Gemma 4 → Kimi K2 0905.
+  // Gemma 4 26B (3.8B-active MoE) was too weak for operator-facing
+  // voice + agentic OpenClaw driving (the generic hello + cryptic
+  // synthesis we saw live = Gemma 4). Kimi K2 0905 = 1T-param MoE
+  // (32B active), tuned for agentic tool-use (Tau2/AceBench/SWE-bench),
+  // 262K context — handles the long OpenClaw system prompt + workspace
+  // + research build-up that broke gemini-3.5-flash at 27K tokens.
+  // $0.60 in / $2.50 out — trivial vs the $99 tier; brain quality is
+  // the anti-slop moat, so we don't cheap out here. Workers stay on
+  // cheap Gemini 3 Flash. Env override preserved for fast swaps.
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "moonshotai/kimi-k2-0905",
   // Sprint 2.18 #42 — workers DOWNGRADED from gemini-3.5-flash to
   // gemini-3-flash-preview. Per OpenRouter pricing (verified 2026-05-28):
   //   gemini-3.5-flash:  $1.50 in / $9 out per M
@@ -849,6 +860,8 @@ export const buildAndUploadGtmWorkspace = internalAction({
         canPostInstagramManually: row.app.canPostInstagramManually,
         existingTikTokUrl: row.app.existingTikTokUrl,
         existingInstagramUrl: row.app.existingInstagramUrl,
+        existingYoutubeUrl: row.app.existingYoutubeUrl,
+        existingLinkedinUrl: row.app.existingLinkedinUrl,
         tiktokWarmupState: row.app.tiktokWarmupState,
         tiktokAccountAgeDays: row.app.tiktokAccountAgeDays,
         tiktokAccountStatusChecked: row.app.tiktokAccountStatusChecked,

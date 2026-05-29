@@ -244,3 +244,57 @@ The UI never polls a static snapshot — it's **live**, and OpenClaw is what cha
 
 ### Onboarding drop-in
 Onboarding (`app/onboarding/gtm`) currently ends at the deploy stage with no redirect. Add the hand-off: on deploy success → route into Mission Control (Today tab), so the user lands in their home surface the moment Maya is live.
+
+---
+
+## 12. ReplyGuy-killer GTM — the path to revenue (sprints, locked 2026-05-29)
+
+> **▶ The actionable build-and-ship plan now lives in `docs/CLAWLAUNCH_SHIP_PLAN_2026_05_29.md`** (single execution source of truth — adds the research-depth-parity sprint [S0], the locked channel-selection design, and the multi-day live-test sprint [S5]). The notes below are retained for context.
+
+**Strategic frame:** ClawLaunch = **ReplyGuy, but on every platform, in the founder's voice, that won't get them banned, with attribution — powered by OpenClaw.** Enter a *validated* category (ReplyGuy proved the market + the ICP), win on product. See [[project-clawlaunch-icp-locked-replyguy-customer]].
+
+**ICP (locked):** ReplyGuy's customer — B2B/SaaS indie makers, solo founders, small teams, early-stage startups (pre-seed→seed, 1–5 people) without a marketing team. Persona "Sofia." Validate with 3–5 **paid pilots** from the Calacanis/Founder-University cohort.
+
+**Positioning:** *"The GTM cofounder for solo builders — the growth hire you can't afford yet."* Lead on quality + ban-safety + strategy + full-loop, NOT raw capability (capability is commoditized: ReplyGuy $9–49, Devi $29).
+
+### Locked product/infra decisions (this session)
+- **Models:** main brain = **`moonshotai/kimi-k2-0905`** (1T MoE/32B active, agentic-tuned, 262K ctx — replaces Gemma 4, which was too weak for voice + agentic driving). Workers = **`google/gemini-3-flash-preview`** ($0.50/$3). Multimodal "watcher" worker (Gemini Flash, native video/image) handles any media — **the main brain does NOT need to be multimodal.** Pin exact model IDs; never silently route to the 3× `gemini-3.5-flash`. Same brain quality for ALL tiers (voice = the moat).
+- **Infra:** per-user OpenClaw Fly machine **always-on** for v1 (~$15/mo COGS floor; scale-to-zero is unreliable for our cron + slow-boot case — verified). Heartbeat frequency is a *token*-cost lever, not a machine-cost lever → use a dynamic heartbeat to trim tokens if needed.
+- **COGS/customer ≈ $22/mo** (machine ~$15 + LLM ~$6 + scrape ~$1 + twitter ~$0.50). Margin: **$99 ≈ 73%** (healthy), $49 ≈ 50% (thin — the always-on machine is why). **Launch single-tier $99** for cohort pilots; defer $49.
+- **Pricing model:** single **$99/mo** (test mode first). `planFeaturesGtm(creator)` server-side, fail-closed, structured so $49 drops in later with no re-arch.
+- **Conversion funnel:** **cheap grounded teaser → pay to unlock + activate.** NOT free-full-research, NOT a 7-day trial. Post-signup, a ~$0.50–1 teaser pass identifies where their buyers cluster + 2–3 real live threads + a one-line plan → Maya texts "I found exactly where your buyers are + a plan, unlock + put me to work for $99/mo." Pay → THEN full deep research + deploy the agent. Bounds free COGS to <$1/signup; gates the $15 machine + deep research; strongest grounded hook.
+- **Channels — OPEN HYPOTHESIS, not settled (re-examined 2026-05-29):** the classic "focus 1 channel at launch" rule is *shaky for our product* — the agent removes the founder-attention constraint that motivates focus, and our reply/engagement motion means buyers cluster across 2–3 venues (Reddit/HN/X for a dev tool); ReplyGuy (our model) monitors all channels at once. Leaning frame: **go where buyers actually cluster (often 2–3 venues), cap the daily *ask* by the founder's time budget (not channel count), concentrate *learning* on what converts.** Validate with pilots (multi-venue vs single-venue speed-to-first-users) — do NOT bake "1–2 channels" in as doctrine. Either way: all platforms available; never gate platforms or voice; breadth is a marketing claim.
+
+### Sprints (ordered by path-to-revenue)
+
+**S1 — Live agent reliability (do first; nothing sells if the agent is broken).**
+- Fix `No session found: current` — Maya's Telegram reply path (`sessions_send sessionKey="current"`) fails to resolve, so she can't answer DMs. Chase + fix.
+- Verify **Kimi K2 0905** live on the real hello + synthesis (deploy a test Maya, judge voice + agentic reliability vs the old Gemma output). Confirm the model A/B is resolved.
+- Deliverable: a deployed Maya that says a specific, grounded hello and reliably answers DMs.
+
+**S2 — Billing + teaser-paywall funnel + gating ($99/mo).** (Full milestone breakdown above in this section's sibling notes.)
+- M0 (operator): Stripe product + $99/mo price (test), keys in Convex env, webhook registered.
+- `planFeaturesGtm(creator)` + add `"clawlaunch"` to `creators.plan` + `subscriptionStatus`/`currentPeriodEnd`.
+- Reuse `convex/billing/{checkout,portal,webhook,priceIds,stripeClient}.ts`: GTM checkout session, webhook → set plan/status (idempotent, signature-verified), portal link.
+- **Gate `runMyGtmDeploy` on active sub** (the COGS gate — no machine without payment). Paywall = "subscribe to activate" after the teaser.
+- Cancel/past-due → **stop the Fly machine** (reuse `destroyAllClawlaunchApps` Fly client, stop-not-destroy) + gate endpoints; reactivate → restart.
+- Billing UI in Mission Control Account tab (themed white/black).
+- 5 mandatory tests: cross-tenant, plan×action fail-closed (incl. reads), adversarial (forged webhook/tampered price), idempotency (Stripe replay), sibling coherence.
+
+**S3 — Fast onboarding teaser hook.** The ~$0.50–1 teaser research pass (1–2 channels, 2–3 real threads, one-line plan) shown in minutes + texted; the "unlock + activate" paywall before the full deep research/deploy. (Tightly coupled to S2.)
+
+**S4 — One-tap deep-link + effort-tiered calendar engine.** `buildDeepLink(platform, action, target, text)` (Tier-1 pre-fill: X/Reddit-post/HN/Threads; Tier-2 direct+paste: Reddit-comment/LinkedIn/IG/YT). Every calendar event = link-first → platform-shaped ready content (text = paste-ready w/ tracked link; video = Brief) → why → success. **Effort-tiered:** text replies = daily ⚡10-min loop; video = separate, spaced, planned-ahead 🎬 events (or UGC-creator outsourcing via `openToUgcCreators`/`creatorBudget`). Telegram go-time nudge reuses the payload. `validateCalendarEvent` fails a text event with no link/ready-copy.
+
+**S5 — Legacy purge (hygiene; signup redirects already fixed).** Delete creator + service UI/routes/components (`app/(creator)/`, `app/creators/`, `app/onboarding/maya/`, `app/(business)/`, `app/onboarding/business|growth/`, `components/creator|business*/`), simplify middleware, drop `NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT`. UI/routes first; Convex tables in a later pass. (Overrides CLAUDE.md "creator preserved behind flag" — git history retains it.)
+
+**S6 — Delete-account, done properly (before public launch).** Add ~47 `gtm*` tables to the `accountDeletion.ts` cascade + collect `gtmAgents.openClawFlyAppId` for Fly destroy; wire `deleteMyGtmAccount` to the real purge; Clerk sign-in/out + custom delete UI in Mission Control; add the `user.deleted` Clerk webhook backstop; **exempt** cross-tenant learnings (`gtmArchetypeLearnings`, `gtmSkillImprovementProposals`); stop-answering = destroy/stop the Fly app (inbound Telegram → Fly directly, so a Convex flag alone won't silence her).
+
+**S7 — Indispensability depth: per-channel recurring-format detector + "trending now" surface.** Port the TikTok format-recurrence rigor to the text channels (Reddit/X/LinkedIn) so drafts match the format *provably converting this week*. A velocity-ranked "trending in your niche today" surface that pre-drafts the twist (sound velocity, rising pain clusters, high-velocity comments). The "their specific product" twist = app-inspector ProductDiagnosis × mined format, required in every draft. Indispensable = daily 10-min ritual + attribution proving ROI.
+
+**S8 — Reposition / landing as ReplyGuy-killer.** Marketing copy: "ReplyGuy but every platform, your voice, won't get you banned, tells you what converted." Capability grid vs ReplyGuy/Devi. The cohort paid-pilot pitch (written to Sofia).
+
+**Later (post-validation):**
+- **S9 — Convex-as-waker scale-to-zero.** Route Telegram webhook + cron through always-up Convex (reliable waker) → per-user machine scales to zero → cuts machine COGS ~$15→$3 → makes a profitable **$49 tier** viable.
+- **S10 — $49 "Launch" tier.** Add the second tier + server-side gating (Engage vs Operate: gate volume/cadence/#products/operate-layer; never platforms/voice). Beats ReplyGuy head-to-head at their entry price.
+
+**Sellable-MVP path = S1 → S2 → S3 → S4.** That's a founder paying $99 and getting daily grounded, in-voice, ban-safe conversations across more platforms than ReplyGuy. Ship that to the cohort, then S5–S8 to harden + differentiate, S9–S10 to open the down-market tier.

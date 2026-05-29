@@ -546,9 +546,14 @@ describe("Maya GTM workspace pack", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
     const tools = files.get("TOOLS.md") ?? "";
 
-    expect(tools).toContain("(PROACTIVE)");
+    // 2026-05-29 — reply-path fix: replies AND proactive sends now BOTH go
+    // through /lc_gtm/send_update (the proven path). The broken
+    // `sessions_send sessionKey="current"` reply path is explicitly flagged.
     expect(tools).toContain("/lc_gtm/send_update");
-    expect(tools).toContain("without an inbound trigger");
+    // replies are unified onto the same path
+    expect(tools).toContain("REPLIES to a DM");
+    // the broken path is documented as broken so Maya doesn't use it
+    expect(tools).toContain("No session found");
   });
 
   it("does not leak secret-shaped placeholders into workspace files", () => {
