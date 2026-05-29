@@ -50,8 +50,11 @@ Bring every channel up to Reddit's depth + wire open-web research:
 - **X:** mine reply threads / quote chains / conversation context (TwitterAPI.io tweet-relations + user tweets), >1 page. (X's value is the replies.)
 - **HN:** comment-tree descent via HN `/item/<id>` recursion (Algolia for discovery, item API for trees).
 - **TikTok/IG:** wire the existing comment endpoints into the research path (buyer language in comments).
+- **⚠️ VERIFY the never-tested paths (as of 2026-05-29 these APIs had NEVER been called):** confirm the **TikTok + Instagram ScrapeCreators endpoints actually return data**, and that the **download → Gemini multimodal-watch flow works end-to-end** — pull a real video/image and confirm the Gemini watcher actually processes it (the `geminiCalled` proof). Today only Reddit/HN/X/LinkedIn have been exercised; TikTok/IG + the multimodal watch are unproven.
+- **`web_search` is DISABLED on the deployed agent** (every call failed in the live test) — enable/wire a provider. Secondary (the paid APIs carry the real research), but it's the open-web/competitor-positioning lane (G2, blogs, competitor sites), currently dead.
 - **LinkedIn:** add a real research worker (comment-mining on relevant posts).
 - **Open web:** wire `web_search`/`web_fetch` into the orchestrator — research the product, competitors' own sites/positioning/pricing, G2/Trustpilot, niche blogs. (Currently social-proof-rich, positioning-thin.)
+- **Citation precision:** every cited URL+quote must match its actually-fetched source (live test had one real HN item ID stapled to the wrong quote). A customer clicks these — they must land on the real source.
 - **Iterative deepening:** workers re-query / broaden when a pass is thin (don't just stop at the call cap); cross-platform triangulation (thin platform → targeted second pass).
 - Surface LLM-scorer degradation instead of silently falling back; confirm no path can silently use the hardcoded "skeleton."
 - **Done =** a research run produces grounded, cited buyer evidence + competitor-positioning context across the *relevant* channels, deep enough that the channel recommendation is trustworthy.
@@ -70,14 +73,21 @@ Bring every channel up to Reddit's depth + wire open-web research:
 - **Channel-selection UX:** ranked, evidence-backed recommendation with reasoning + user confirm/override (toggle candidates). All platforms available.
 - "Unlock + activate" paywall before the full deep research/deploy. (Couples with S2.)
 
-### S4 — One-tap deep-link + effort-tiered calendar engine
-- `buildDeepLink(platform, action, target, text)` — Tier-1 pre-fill (X / Reddit-post / HN / Threads); Tier-2 direct+paste (Reddit-comment / LinkedIn / IG / YT).
-- Every calendar event = link-first → platform-shaped ready content (text = paste-ready w/ tracked link; video = Brief) → why → success.
-- **Effort-tiered:** text replies = daily ⚡10-min loop; video = separate, spaced 🎬 events (or UGC-creator outsourcing). `validateCalendarEvent` fails a text event with no link/ready-copy. Telegram go-time nudge reuses the payload.
+### S4 — Actionable layer: the research→thread→draft→calendar chain (THE blocker — diagnosed live 2026-05-29)
+**Root cause (from the live test):** first-wake runs the foundation (5 *strategy* workers → 53 reliable POSTs) but **none of them surface reply-target threads.** So `maya-calendar-populator` (trigger: `target_threads > 0`) never fires → **0 calendar events, 0 drafts, 1 thread** — while Maya *narrates* "building your calendar." The actionable POSTs lack the per-item discipline the foundation workers have (each foundation worker *is* a POST; thread-surfacing returns text to Maya, who improvises the POST and mostly doesn't).
+**Fix — make the chain a structured first-wake step, BEFORE synthesis, with foundation-grade POST discipline:**
+- After foundation → spawn per-channel **demand-research workers** whose job *is* to **POST each surfaced thread to `/lc_gtm/target_thread` with a `draftReply`** + **POST the draft to `/lc_gtm/drafted_content`** (one POST per item — not "return to Maya").
+- Then **`calendar-populator` fires** (now it has threads + drafts) → POSTs `calendar_proposal` → events land.
+- **Then synthesis** — calendar + drafts already written (matches BOOT.md line 274: "the plan that lands with synthesis is the plan ready to act on").
+- **Output-critic gate:** never claim "calendar built / N threads ready" unless the POSTs actually returned events/threads (no narrating undone work — the agent must not say it did something it didn't).
+**Plus the one-tap execution layer:** `buildDeepLink(platform, action, target, text)` — Tier-1 pre-fill (X / Reddit-post / HN / Threads); Tier-2 direct+paste (Reddit-comment / LinkedIn / IG / YT). Each calendar event = link-first → platform-shaped ready content (text = paste-ready w/ tracked link; video = Brief) → why → success. **Effort-tiered:** text = daily ⚡10-min loop; video = spaced 🎬 events. `validateCalendarEvent` fails a text event with no link/ready-copy. Telegram go-time nudge reuses the payload.
+**Done =** approve the plan → real threads + drafts + a populated Week-1 calendar land, each one-tap. (This is the single highest-leverage fix — everything upstream already works.)
 
 ### S5 — Multi-day live test (validate the assembled product over DAYS)
 - Deploy a real Maya (real product) and **let it run for several days.** Observe across days: daily cron/heartbeat fires, research stays grounded + deep, drafts pass slop+voice gates, calendar/hand-off works, attribution records, COGS stays in band, no crashes/leaks.
-- Judge from the user's POV daily: specific not generic, posts AND replies, can answer DMs, channel recommendation holds up.
+- **Explicitly exercise EVERY channel — incl. TikTok + Instagram (never called) + the multimodal download→Gemini-watch path.** Pick a product where video channels matter (or force all-platform). Confirm each pipeline returns real data, not a silent skip.
+- **Test user-submitted content (S13):** founder sends a finished post/video → confirm ingest → watch → feedback works.
+- Judge from the user's POV daily: specific not generic, posts AND replies, can answer DMs, channel recommendation holds up, **she's fun to talk to (S12) without being cheesy.**
 - **Done =** several consecutive good days with no manual intervention — proof it's a product, not a demo.
 
 ### S6 — Legacy purge (hygiene)
@@ -92,6 +102,12 @@ Port TikTok format-recurrence rigor to text channels (drafts match the format pr
 ### S9 — Reposition / landing as ReplyGuy-killer
 Marketing copy + capability grid vs ReplyGuy/Devi; the cohort paid-pilot pitch (written to Sofia).
 
+### S12 — Personality (make her fun to talk to)
+Right now she's competent but dull. Give her a voice with character — a sharp, warm, slightly-dry growth-savvy friend who has opinions, celebrates wins, and is genuinely fun to text. **Crucially: personality from VOICE, not decoration** — word choice, stance, specificity, warmth, dry wit — NOT exclamation spam, emoji vomit, hype, or forced jokes (the slop-critic still bans those, and should). The bar: *fun to talk to, never cheesy/cringe.* Work: tune SOUL.md persona + capture voice exemplars of the target tone; then verify the slop-critic/voice-matcher **lets the warmth through** (tune the gate so "human + warm + opinionated" passes while "cheesy/hype" still fails) — today the gate may be flattening her into corporate-neutral.
+
+### S13 — User-submitted content review (founder sends a finished post/video)
+Founders WILL send Maya an edited, ready-to-post video/image/caption — we must handle it: (a) **ingest** the Telegram attachment → storage (R2/Convex; HEIC→JPEG, debounce — the attachment-bridge pattern), (b) **watch it** (multimodal Gemini watcher — actually view the video/image), (c) **give real, specific feedback** ("strong hook; cut to the demo by 0:02; caption's buried — front-load the keyword"), (d) **approve → post (or one-tap hand off)**. Depends on the multimodal watcher + the attachment bridge. This is also part of what S5 must exercise.
+
 ### Later (post-validation)
 - **S10 — Convex-as-waker scale-to-zero:** route Telegram + cron through always-up Convex → per-user machine scales to zero → cuts machine COGS ~$15→$3 → makes a profitable $49 tier viable.
 - **S11 — $49 "Launch" tier:** add second tier + server-side gating (Engage vs Operate: gate volume/cadence/#products/operate-layer; never platforms/voice).
@@ -99,13 +115,13 @@ Marketing copy + capability grid vs ReplyGuy/Devi; the cohort paid-pilot pitch (
 ---
 
 ## Build → ship sequence
-1. **S1** (agent reliability) + **S0** (research depth) — the core product must be reliable and genuinely deep.
-2. **S3 + S2** (teaser onboarding + channel UX + billing/paywall) — the funnel + the way to charge.
-3. **S4** (one-tap calendar) — the daily-loop UX.
-4. **S5** (multi-day live test) — validate the assembled product over days.
-5. **Merge `staging`** → operator runs full onboarding on staging → more testing.
-6. **S6 + S7** (legacy purge + delete-account) — pre-launch hardening.
-7. **Push to `main`** → onboard the first paying pilots from the cohort.
-8. **S8 + S9** (depth + repositioning) in parallel/after to harden + differentiate; **S10/S11** when opening the down-market tier.
+1. **S4** (actionable chain → calendar) + **S1** (agent reliability) — the core loop must actually *write the plan*, not narrate it, and she must reliably reply. *(S1 reply path already verified live 2026-05-29.)*
+2. **S0** (research depth — incl. verifying TikTok/IG + the multimodal download→Gemini-watch path that's never been tested; enable web_search; citation precision).
+3. **S3 + S2** (teaser onboarding + channel-selection UX + billing/paywall) — the funnel + the way to charge. **Add Google Calendar connect to onboarding** (so "add to your calendar" works; in-app plan is the no-OAuth fallback).
+4. **S12** (personality — fun to talk to) + **S13** (user-submitted-content review) — what makes it delightful + complete.
+5. **S5** (multi-day live test) — validate the assembled product over days, **exercising every channel incl. TikTok/IG + multimodal + user-submitted content.**
+6. **Destroy test machine → operator deploys from web (localhost fine for now) → connects Google Calendar → full end-to-end run** (signup → onboarding → research → approve → calendar populates → one-tap execute).
+7. **S6 + S7** (legacy purge + delete-account) — pre-launch hardening. Then **push to `main`** → first paying pilots from the cohort.
+8. **S8 + S9** (depth + repositioning); **S10/S11** when opening the $49 tier.
 
-**Sellable-MVP = S1 + S0 + S2 + S3 + S4, validated by S5.** That's a founder paying $99 and getting deep, grounded, in-voice, ban-safe conversations across the right channels — daily.
+**MVP-ready (does everything we claim) = S4 + S1 + S0 + S2 + S3 + S12 + S13, validated by S5.** That's: a founder signs up → sees real grounded research with receipts → a plain-language, *fun* plan → approves → their Week-1 calendar fills with one-tap replies + posts (+ video Briefs) across the right channels → they can send Maya their own content for feedback → and it's all ban-safe, in their voice, with proven ROI. That's the whole promise, end to end.
