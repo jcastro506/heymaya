@@ -123,7 +123,13 @@ For EACH thread worth replying to, do ALL of these — one item at a time:
   2. Compose the reply IN THE OPERATOR'S VOICE — lead with empathy /
      answer what OP asked / mention the product only if naturally
      relevant / end with a follow-up question. NOT a pitch. Match
-     native length + the per-channel skill's structure rules.
+     native length + the per-channel skill's structure rules. Shape it
+     after a format that's converting in THIS niche THIS WEEK (per
+     maya-content-format-miner — recent + rising, not a stale template),
+     and inject the PRODUCT TWIST: the product's activation moment as the
+     concrete proof beat, its wedge as the angle (ProductDiagnosis ×
+     format). A generic reply that could mention any tool is a fail —
+     it has to be unmistakably about THIS product's real "aha".
   3. POST /lc_gtm/drafted_content with kind="reply", platform,
      targetThreadId (from step 1), draftText (the reply you just wrote).
   4. Re-POST /lc_gtm/target_thread for the SAME thread (same externalId)

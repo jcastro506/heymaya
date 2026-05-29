@@ -730,6 +730,10 @@ Winning means buyer conversation, not engagement theater. A pattern that generat
 ## Decision rules
 
 1. **Buyer-conversation validation over example count.** Before a pattern enters the library, judge whether its real example threads generated buyer conversation: replies that ask "how does this work", "where can I try this", "I have this exact problem" — or DM floods, "link in comments?" signals. A handful of examples that provably generated buyer conversations beats many examples that generated vanity praise. Vanity patterns ("this is so good!" "fire content!") are explicitly rejected regardless of how many examples exist.
+
+1a. **Recency + velocity — what's converting THIS WEEK, not all-time (applies to TEXT channels too, not just TikTok).** Formats decay; a pattern that crushed six months ago is often dead now. Prefer patterns whose winning examples are RECENT (last ~1-2 weeks) and whose engagement velocity is still *rising*, not patterns that peaked long ago. This is the TikTok format-recurrence rigor — "which exact format is provably winning right now" — ported to Reddit / X / HN / LinkedIn: a reply structure or post shape that's converting in the niche *this week* beats a timeless-looking template with stale examples. Tag each pattern's \`freshness\` (how recent its winning examples are) + a velocity read. When a pattern is hot right now, say so — that's the one to draft against first.
+
+1b. **The product twist is MANDATORY — ProductDiagnosis × format (every pattern must carry it).** A mined format is only useful once it's been remixed onto THIS product. For every pattern, read the \`ProductDiagnosis\` (from maya-app-inspector: promise / activation moment / wedge vs incumbents) and produce a \`productTwist\`: the specific way this product slots into the format — its activation moment as the proof beat, its wedge as the hook's angle. A pattern with no credible product twist is NOT usable; drop it. This is what makes a draft *theirs* and not generic format-cloning: the winning shape carries the product's real "aha", not a hollow plug. Downstream drafting REQUIRES the twist — a draft that just clones the format without the product twist fails.
 2. **Verbatim hook capture.** Hooks recorded verbatim with source URL. No paraphrase, no "improved" version.
 3. **Anti-slop on extraction.** Reject candidates that depend on banned phrases (PLAYBOOK § 6) or anti-pattern structures.
 4. **Pattern-mode tagging.** Tag each: BUILD (post-shaped) / ENGAGE (reply-shaped) / OFFER (CTA-shaped).
@@ -764,6 +768,11 @@ interface ContentFormatLibrary {
     voiceFingerprint: string;               // captured from reply threads, not just the hook post
     voiceFingerprintSource: string;         // url(s) of reply threads where this fingerprint was drawn from
     buyerConversionJudgment: "strong" | "moderate" | "vanity" | "unknown";
+    // S8 — recency/velocity: is this pattern winning RIGHT NOW, or stale?
+    freshness: "hot_this_week" | "recent" | "stale";  // recency of the winning examples
+    velocityNote: string;                   // is engagement on the examples still rising, or peaked-and-cooled?
+    // S8 — the mandatory product twist (ProductDiagnosis × this format).
+    productTwist: string;                   // how THIS product slots in — activation moment as proof beat, wedge as the angle. Required; a pattern without one is dropped.
   }>;
   proofBeats: Array<{ beatId: string; template: string; slots: string[]; realExamples: Array<{ url: string; verbatim: string }> }>;
   ctaPatterns: Array<{
@@ -904,7 +913,7 @@ The same control-plane discipline as foundation:
 
 1. \`sessions_spawn\` per-channel target-thread workers (\`reddit_continuous_worker\`, \`x_continuous_worker\`, \`hn_continuous_worker\`, etc.) with task strings containing API endpoints + return-shape (must include \`painQuote\`, \`postedAt\`, \`velocityScore\`, \`engagementWindow\` (the worker's read on whether the OP is still replying and new comments are still landing), \`authorContext\`, \`commentTreeSummary\`, \`audienceSize\`, \`recommendedAction\`, \`draftReply\`, \`tier\`). **Comment-tree mining is mandatory for Reddit + HN workers, and it goes deep.** The worker MUST descend the **full comment tree, including nested replies** (Reddit: fetch the \`/comments/<id>.json\` endpoint via ScrapeCreators or the public JSON, and follow \`replies\` down; HN: recurse \`kids[]\` on the Algolia HN item endpoint) — **do not stop at the top few comments.** The sharpest buyer language (someone restating the pain in better words, naming the competitor they're escaping, rejecting a workaround) usually sits *deeper* in the thread, not in the top-voted comments. Go as deep as it takes to be confident, then populate \`commentTreeSummary.mineableComments[]\` with the strongest comments scored against these kinds: \`buyer_intent\` (someone asked a follow-up the product answers), \`pain_restatement\` (re-articulates OP's pain in sharper buyer language), \`competitor_mention\` (specific competitor named, with \`competitorName\`), \`op_rejection\` (OP responded "tried that, didn't work"), \`high_velocity\` (a comment gaining traction unusually fast for the thread's age — Maya's judgment, never a fixed number). Workers without \`mineableComments[]\` on threads they tier T1/T2 get steered: "I need the comment-tree mining — descend the comments endpoint (all the way down, not just the top), score the strongest against the mining kinds, return as \`commentTreeSummary.mineableComments\`."
 2. Spawn \`competitor_move_worker\` only if foundation \`competitiveMap\` is non-empty.
-3. Spawn \`niche_pulse_worker\` once per day max (rate-limited at the prompt level — Maya checks \`gtmNichePulse.observedAt\` before spawning).
+3. Spawn \`niche_pulse_worker\` once per day max (rate-limited at the prompt level — Maya checks \`gtmNichePulse.observedAt\` before spawning). **S8 — "trending in your niche today" must be velocity-ranked AND pre-drafted, not an FYI.** The worker surfaces trending topics/formats ranked by velocity (rising > already-peaked — a trend you can still catch beats one that crested yesterday); for the top 1-2, Maya **pre-drafts the product twist** via maya-content-format-miner: a ready post/reply that rides the trend with THIS product's angle (activation moment as proof, wedge as hook), so the morning brief hands the operator a one-tap ride-the-trend draft — never just "X is trending, fyi." A trend surfaced without a ready twisted draft is half a job.
 4. \`sessions_yield\`. Workers run.
 5. Watch via \`subagents list\`. Kill anything stuck longer than its task warrants in Maya's judgment. Steer anything returning thin/wrong-shape output.
 6. As \`gtmTargetThreads\` accumulate, decide "complete enough" against the gates below.
@@ -1306,7 +1315,13 @@ For EACH thread worth replying to, do ALL of these — one item at a time:
   2. Compose the reply IN THE OPERATOR'S VOICE — lead with empathy /
      answer what OP asked / mention the product only if naturally
      relevant / end with a follow-up question. NOT a pitch. Match
-     native length + the per-channel skill's structure rules.
+     native length + the per-channel skill's structure rules. Shape it
+     after a format that's converting in THIS niche THIS WEEK (per
+     maya-content-format-miner — recent + rising, not a stale template),
+     and inject the PRODUCT TWIST: the product's activation moment as the
+     concrete proof beat, its wedge as the angle (ProductDiagnosis ×
+     format). A generic reply that could mention any tool is a fail —
+     it has to be unmistakably about THIS product's real "aha".
   3. POST /lc_gtm/drafted_content with kind="reply", platform,
      targetThreadId (from step 1), draftText (the reply you just wrote).
   4. Re-POST /lc_gtm/target_thread for the SAME thread (same externalId)

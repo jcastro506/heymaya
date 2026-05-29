@@ -28,6 +28,10 @@ Winning means buyer conversation, not engagement theater. A pattern that generat
 ## Decision rules
 
 1. **Buyer-conversation validation over example count.** Before a pattern enters the library, judge whether its real example threads generated buyer conversation: replies that ask "how does this work", "where can I try this", "I have this exact problem" — or DM floods, "link in comments?" signals. A handful of examples that provably generated buyer conversations beats many examples that generated vanity praise. Vanity patterns ("this is so good!" "fire content!") are explicitly rejected regardless of how many examples exist.
+
+1a. **Recency + velocity — what's converting THIS WEEK, not all-time (applies to TEXT channels too, not just TikTok).** Formats decay; a pattern that crushed six months ago is often dead now. Prefer patterns whose winning examples are RECENT (last ~1-2 weeks) and whose engagement velocity is still *rising*, not patterns that peaked long ago. This is the TikTok format-recurrence rigor — "which exact format is provably winning right now" — ported to Reddit / X / HN / LinkedIn: a reply structure or post shape that's converting in the niche *this week* beats a timeless-looking template with stale examples. Tag each pattern's `freshness` (how recent its winning examples are) + a velocity read. When a pattern is hot right now, say so — that's the one to draft against first.
+
+1b. **The product twist is MANDATORY — ProductDiagnosis × format (every pattern must carry it).** A mined format is only useful once it's been remixed onto THIS product. For every pattern, read the `ProductDiagnosis` (from maya-app-inspector: promise / activation moment / wedge vs incumbents) and produce a `productTwist`: the specific way this product slots into the format — its activation moment as the proof beat, its wedge as the hook's angle. A pattern with no credible product twist is NOT usable; drop it. This is what makes a draft *theirs* and not generic format-cloning: the winning shape carries the product's real "aha", not a hollow plug. Downstream drafting REQUIRES the twist — a draft that just clones the format without the product twist fails.
 2. **Verbatim hook capture.** Hooks recorded verbatim with source URL. No paraphrase, no "improved" version.
 3. **Anti-slop on extraction.** Reject candidates that depend on banned phrases (PLAYBOOK § 6) or anti-pattern structures.
 4. **Pattern-mode tagging.** Tag each: BUILD (post-shaped) / ENGAGE (reply-shaped) / OFFER (CTA-shaped).
@@ -62,6 +66,11 @@ interface ContentFormatLibrary {
     voiceFingerprint: string;               // captured from reply threads, not just the hook post
     voiceFingerprintSource: string;         // url(s) of reply threads where this fingerprint was drawn from
     buyerConversionJudgment: "strong" | "moderate" | "vanity" | "unknown";
+    // S8 — recency/velocity: is this pattern winning RIGHT NOW, or stale?
+    freshness: "hot_this_week" | "recent" | "stale";  // recency of the winning examples
+    velocityNote: string;                   // is engagement on the examples still rising, or peaked-and-cooled?
+    // S8 — the mandatory product twist (ProductDiagnosis × this format).
+    productTwist: string;                   // how THIS product slots in — activation moment as proof beat, wedge as the angle. Required; a pattern without one is dropped.
   }>;
   proofBeats: Array<{ beatId: string; template: string; slots: string[]; realExamples: Array<{ url: string; verbatim: string }> }>;
   ctaPatterns: Array<{
