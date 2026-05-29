@@ -91,6 +91,72 @@ export const foundationBuyerMapHttp = httpAction(async (ctx, request) => {
   return new Response("ok", { status: 200 });
 });
 
+// ───────────────────── Sprint B: North Star + entry mode ─────────────────────
+
+interface SetNorthStarPayload {
+  idempotencyKey: string;
+  entryMode?: "launch" | "manager";
+  northStarMetric?: string;
+  northStarTarget?: number;
+  northStarDeadlineMs?: number;
+}
+
+export const setNorthStarHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: SetNorthStarPayload;
+  try {
+    body = (await request.json()) as SetNorthStarPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (!body.idempotencyKey) {
+    return new Response("missing required fields", { status: 400 });
+  }
+  // Must set at least one field.
+  if (
+    body.entryMode === undefined &&
+    body.northStarMetric === undefined &&
+    body.northStarTarget === undefined &&
+    body.northStarDeadlineMs === undefined
+  ) {
+    return new Response("nothing to set", { status: 400 });
+  }
+  if (
+    body.entryMode !== undefined &&
+    body.entryMode !== "launch" &&
+    body.entryMode !== "manager"
+  ) {
+    return new Response("invalid entryMode", { status: 400 });
+  }
+
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "set_north_star",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") return new Response("ok (replay)", { status: 200 });
+
+  try {
+    await ctx.runMutation(internal.gtmMaya.managerStore.setNorthStarAndMode, {
+      accountId: auth.accountId,
+      agentId: auth.agentId,
+      entryMode: body.entryMode,
+      northStarMetric: body.northStarMetric,
+      northStarTarget: body.northStarTarget,
+      northStarDeadlineMs: body.northStarDeadlineMs,
+    });
+  } catch (err) {
+    return new Response((err as Error).message, { status: 400 });
+  }
+  return new Response("ok", { status: 200 });
+});
+
 // ───────────────────── Foundation: competitor ─────────────────────
 
 interface FoundationCompetitorPayload {

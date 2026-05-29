@@ -95,6 +95,7 @@ import {
   foundationChannelScorecardHttp,
   foundationContentAngleHttp,
   foundationRelationshipHttp,
+  setNorthStarHttp,
   competitorMoveHttp,
   nichePulseSignalHttp,
   actionLoggedHttp,
@@ -269,6 +270,12 @@ http.route({
   path: "/lc_gtm/foundation_relationship_target",
   method: "POST",
   handler: foundationRelationshipHttp,
+});
+// Sprint B — Maya persists the proposed/approved North Star + entry mode.
+http.route({
+  path: "/lc_gtm/set_north_star",
+  method: "POST",
+  handler: setNorthStarHttp,
 });
 
 // Continuous research + feedback-loop write surfaces. Maya / her

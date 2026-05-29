@@ -853,6 +853,14 @@ export const buildAndUploadGtmWorkspace = internalAction({
         creatorBudgetMonthlyUsd: row.app.creatorBudgetMonthlyUsd,
         maxWeeklyVisualPosts: row.app.maxWeeklyVisualPosts,
         excludedAudiences: row.app.excludedAudiences,
+        // Sprint B — journey-stage fork + North Star contract. Thread the
+        // stored values so a redeploy renders the resolved mode + the
+        // approved North Star into GTM.md (else GTM.md shows the
+        // propose-at-synthesis path).
+        entryMode: row.app.entryMode,
+        northStarMetric: row.app.northStarMetric,
+        northStarTarget: row.app.northStarTarget,
+        northStarDeadlineMs: row.app.northStarDeadlineMs,
       },
       // Sprint 2.32 — hand the digested product understanding (URL inspection
       // + walkthrough-video Gemini analysis, merged on gtmApps.diagnosis) into

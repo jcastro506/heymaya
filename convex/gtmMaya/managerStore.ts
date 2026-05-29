@@ -88,6 +88,46 @@ export const upsertBuyerMap = internalMutation({
   },
 });
 
+// ───────────────────── Sprint B: North Star + entry mode ─────────────────────
+
+/** Persist the journey-stage fork (`entryMode`) and/or the North Star
+ *  contract on the agent's app. Maya calls this after proposing the North
+ *  Star at synthesis and the operator approving it. Each field is optional
+ *  so a call can set just the mode, just the North Star, or both. Scoped to
+ *  the agent's own app — cross-tenant writes are rejected. */
+export const setNorthStarAndMode = internalMutation({
+  args: {
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    entryMode: v.optional(v.union(v.literal("launch"), v.literal("manager"))),
+    northStarMetric: v.optional(v.string()),
+    northStarTarget: v.optional(v.number()),
+    northStarDeadlineMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<Id<"gtmApps">> => {
+    await assertAgentBelongsToAccount(ctx, args.accountId, args.agentId);
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent || !agent.appId) throw new Error("agent has no app");
+    const app = await ctx.db.get(agent.appId);
+    if (!app || app.accountId !== args.accountId) {
+      throw new Error("app not found for account");
+    }
+    const patch: Partial<Doc<"gtmApps">> = { updatedAt: Date.now() };
+    if (args.entryMode !== undefined) patch.entryMode = args.entryMode;
+    if (args.northStarMetric !== undefined) {
+      patch.northStarMetric = args.northStarMetric;
+    }
+    if (args.northStarTarget !== undefined) {
+      patch.northStarTarget = args.northStarTarget;
+    }
+    if (args.northStarDeadlineMs !== undefined) {
+      patch.northStarDeadlineMs = args.northStarDeadlineMs;
+    }
+    await ctx.db.patch(agent.appId, patch);
+    return agent.appId;
+  },
+});
+
 // ───────────────────── Foundation: competitive map ─────────────────────
 
 const COMPETITOR_KIND = v.union(

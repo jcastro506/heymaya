@@ -61,7 +61,9 @@ const CALLBACK_KIND = v.union(
   v.literal("competitor_move"),
   v.literal("niche_pulse_signal"),
   v.literal("action_logged"),
-  v.literal("learning_extracted")
+  v.literal("learning_extracted"),
+  // Sprint B — Maya persists the proposed/approved North Star + entry mode.
+  v.literal("set_north_star")
 );
 
 function constantTimeEqual(a: string, b: string): boolean {

@@ -4531,7 +4531,9 @@ export default defineSchema({
       v.literal("learning_extracted"),
       // Sprint 2.29 — Maya posts here after writing to memory/YYYY-MM-DD.md
       // or DREAMS.md on Fly disk, so the operator UI can ledger writes.
-      v.literal("memory_written")
+      v.literal("memory_written"),
+      // Sprint B — Maya persists the proposed/approved North Star + entry mode.
+      v.literal("set_north_star")
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
