@@ -213,6 +213,24 @@ describe("Maya GTM workspace pack", () => {
     expect(managerApp).not.toContain("Mode UNRESOLVED");
   });
 
+  // Verification deploy flag — test-only all-platform coverage override.
+  it("renders the verify-all-platforms directive only when the flag is set", () => {
+    expect(
+      buildMayaGtmWorkspace(INPUT).files.get("GTM.md") ?? ""
+    ).not.toContain("VERIFICATION RUN");
+
+    const verifyGtm =
+      buildMayaGtmWorkspace({ ...INPUT, verifyAllPlatforms: true }).files.get(
+        "GTM.md"
+      ) ?? "";
+    expect(verifyGtm).toContain("VERIFICATION RUN — exercise ALL platforms");
+    // Names every platform we want exercised, incl. YouTube + the video-watch.
+    for (const p of ["Reddit", "X", "LinkedIn", "TikTok", "Instagram", "YouTube"]) {
+      expect(verifyGtm).toContain(p);
+    }
+    expect(verifyGtm).toContain("watch");
+  });
+
   // Sprint B4 — first-synthesis quality bar (output-critic) + Q&A-readiness
   // contract (AGENTS.md). The make-or-break first reveal + defending the plan.
   it("ships the first-synthesis quality bar + Q&A-readiness contract", () => {

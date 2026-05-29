@@ -88,6 +88,13 @@ export interface MayaGtmWorkspaceInput {
   primaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "youtube" | "product_hunt";
   secondaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "youtube" | "product_hunt";
   /**
+   * Verification/test-only. When true, GTM.md carries a labeled directive to
+   * exercise ALL platforms end-to-end (research + tools + video-watch),
+   * overriding the normal focus/two-channel rule — so a dogfood deploy proves
+   * every pipeline works. NOT product behavior; real agents stay focused.
+   */
+  verifyAllPlatforms?: boolean;
+  /**
    * Active durable GTM research job created by Convex before deploying the
    * workspace. BOOT.md reads this from MEMORY.md and uses it as the workflow
    * id for subagent callbacks, evidence rows, calendar events, and recovery.
@@ -689,11 +696,19 @@ Not set yet. At synthesis, **propose a concrete North Star** adaptive to the mod
 
 `;
 
+  const verifyBlock = input.verifyAllPlatforms
+    ? `## ⚠️ VERIFICATION RUN — exercise ALL platforms (test override)
+
+This is an internal verification deploy. For THIS run only, override the normal focus / two-channel rule: **research and exercise EVERY platform end-to-end** so we can confirm each pipeline works — **Reddit, X, LinkedIn, TikTok, Instagram, YouTube** (+ HN where relevant). That means: run each platform's research (ScrapeCreators / twitterapi.io / Algolia / the YouTube endpoints), surface target threads on each, draft for each, and for the video platforms (TikTok / Instagram / YouTube) actually pull + watch a representative post (transcript/video) so the multimodal path is exercised. Hit every tool at least once. This is a coverage test, not real strategy — in production I'd focus. Tell the operator what worked and what didn't, per platform.
+
+`
+    : "";
+
   return `# GTM.md
 
 This is the current GTM plan. Maya updates it only after a research job or weekly results review.
 
-${modeBlock}${northStar}## Active Channel Choices
+${verifyBlock}${modeBlock}${northStar}## Active Channel Choices
 
 - Primary: ${input.primaryChannel ?? "pending research"}
 - Secondary: ${input.secondaryChannel ?? "pending research"}

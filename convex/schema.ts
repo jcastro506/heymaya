@@ -4301,6 +4301,11 @@ export default defineSchema({
       v.literal("telegram")
     ),
     timezone: v.string(),
+    // Verification/test-only flag. When true, the generated workspace carries a
+    // labeled "exercise ALL platforms" directive (overrides the normal focus
+    // rule) so a dogfood deploy exercises every platform's research + tools +
+    // video-watch end-to-end. NOT product behavior — real agents stay focused.
+    verifyAllPlatforms: v.optional(v.boolean()),
     openClawFlyAppId: v.optional(v.string()),
     deployedAt: v.optional(v.number()),
     // Sprint 15 (D1) — Telegram is the default ClawLaunch channel because

@@ -832,6 +832,9 @@ export const buildAndUploadGtmWorkspace = internalAction({
     const { files } = buildMayaGtmWorkspace({
       accountEmail: row.creator.email,
       timezone: row.agent.timezone,
+      // Verification/test deploys set this on the agent to force all-platform
+      // coverage; undefined/false in production (agents stay focused).
+      verifyAllPlatforms: row.agent.verifyAllPlatforms,
       app: {
         name: row.app.name ?? "Untitled app",
         url: row.app.url,

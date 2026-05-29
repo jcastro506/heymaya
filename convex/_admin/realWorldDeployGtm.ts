@@ -94,6 +94,8 @@ export const seedGtmAgentAndApp = internalMutation({
     weekGoal: v.union(v.literal("feedback"), v.literal("signups"), v.literal("demos"), v.literal("revenue"), v.literal("unknown")),
     budgetUsd: v.number(),
     channelPreference: v.optional(v.union(v.literal("whatsapp"), v.literal("imessage"), v.literal("web"), v.literal("telegram"))),
+    // Verification/test deploys: force all-platform coverage in the workspace.
+    verifyAllPlatforms: v.optional(v.boolean()),
   },
   handler: async (
     ctx,
@@ -124,6 +126,7 @@ export const seedGtmAgentAndApp = internalMutation({
       onboardingStep: "researching",
       channelPreference: channel,
       timezone: TEST_TIMEZONE,
+      verifyAllPlatforms: args.verifyAllPlatforms,
       createdAt: now,
       updatedAt: now,
     });
@@ -1022,6 +1025,8 @@ export const run = internalAction({
     deployFly: v.optional(v.boolean()),
     telegramChatId: v.optional(v.string()),
     skipResearch: v.optional(v.boolean()),
+    // Set true for a coverage test: Maya exercises EVERY platform end-to-end.
+    verifyAllPlatforms: v.optional(v.boolean()),
   },
   handler: async (
     ctx,
@@ -1052,6 +1057,7 @@ export const run = internalAction({
         stage: args.stage ?? "live-beta",
         weekGoal: args.weekGoal ?? "signups",
         budgetUsd: args.budgetUsd ?? 0.5,
+        verifyAllPlatforms: args.verifyAllPlatforms,
       }
     );
     console.log(
