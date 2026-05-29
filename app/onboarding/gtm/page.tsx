@@ -13,6 +13,7 @@ interface IntakeDraft {
   url: string;
   founderWhy: string;
   stage: "idea" | "live-beta" | "paid" | "unknown";
+  entryMode: "launch" | "manager";
   weekGoal: "feedback" | "signups" | "demos" | "revenue" | "unknown";
   canRecordScreen: boolean;
   canShowFace: boolean;
@@ -41,6 +42,7 @@ const DEFAULT_DRAFT: IntakeDraft = {
   url: "",
   founderWhy: "",
   stage: "live-beta",
+  entryMode: "manager",
   weekGoal: "signups",
   canRecordScreen: true,
   canShowFace: false,
@@ -148,6 +150,7 @@ function GtmOnboardingBody() {
         url: draft.url.trim(),
         founderWhy: draft.founderWhy.trim() || undefined,
         stage: draft.stage,
+        entryMode: draft.entryMode,
         weekGoal: draft.weekGoal,
         canRecordScreen: draft.canRecordScreen,
         canShowFace: draft.canShowFace,
@@ -304,6 +307,25 @@ function GtmOnboardingBody() {
               className="input min-h-28"
               placeholder="The real reason, not marketing copy."
             />
+          </Field>
+          <Field label="Where are you?">
+            <select
+              value={draft.entryMode}
+              onChange={(event) =>
+                setDraft((d) => ({
+                  ...d,
+                  entryMode: event.target.value as IntakeDraft["entryMode"],
+                }))
+              }
+              className="input"
+            >
+              <option value="manager">
+                I&apos;m live — take over my social, tell me what to post
+              </option>
+              <option value="launch">
+                I haven&apos;t launched yet — plan my go-to-market
+              </option>
+            </select>
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Current stage">
