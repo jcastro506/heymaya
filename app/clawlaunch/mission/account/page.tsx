@@ -65,7 +65,7 @@ export default function AccountPage() {
                   href={app.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-lime underline decoration-lime/40 underline-offset-2"
+                  className="text-paper underline decoration-paper/30 underline-offset-2"
                 >
                   {app.url}
                 </a>
@@ -106,7 +106,7 @@ export default function AccountPage() {
               ) : (
                 <a
                   href="/lc_maya/start_google_calendar_oauth"
-                  className="text-lime underline decoration-lime/40 underline-offset-2"
+                  className="text-paper underline decoration-paper/30 underline-offset-2"
                 >
                   connect
                 </a>
@@ -143,7 +143,7 @@ export default function AccountPage() {
               </p>
               <button
                 onClick={() => setConfirming(true)}
-                className="rounded-lg border border-rose/40 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-rose hover:bg-rose/10"
+                className="rounded-lg border border-rose/40 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-[#b3261e] hover:bg-rose/10"
               >
                 Delete account
               </button>

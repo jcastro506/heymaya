@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 
@@ -23,6 +23,8 @@ interface IntakeDraft {
   canPostInstagramManually: boolean;
   existingTikTokUrl: string;
   existingInstagramUrl: string;
+  existingYoutubeUrl: string;
+  existingLinkedinUrl: string;
   tiktokWarmupState:
     | "unknown"
     | "new_needs_warmup"
@@ -52,6 +54,8 @@ const DEFAULT_DRAFT: IntakeDraft = {
   canPostInstagramManually: false,
   existingTikTokUrl: "",
   existingInstagramUrl: "",
+  existingYoutubeUrl: "",
+  existingLinkedinUrl: "",
   tiktokWarmupState: "unknown",
   tiktokAccountAgeDays: "",
   tiktokAccountStatusChecked: false,
@@ -70,6 +74,11 @@ export default function GtmOnboardingPage() {
 }
 
 function GtmOnboardingBody() {
+  // Wait until Convex actually has the Clerk identity before calling any
+  // auth-required mutation. Right after sign-up the token takes a beat to
+  // propagate; firing startOnboarding too early throws "signed-in user
+  // required" — a race, not a real error.
+  const { isAuthenticated } = useConvexAuth();
   const snapshot = useQuery(api.gtmMaya.researchLifecycle.getMyGtmSnapshot);
   const startOnboarding = useMutation(
     api.gtmMaya.researchLifecycle.startGtmOnboarding
@@ -120,6 +129,7 @@ function GtmOnboardingBody() {
   >({ kind: "idle" });
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     let cancelled = false;
     void startOnboarding({
       // Sprint 15 (Part II D1): Telegram is the ClawLaunch channel default.
@@ -128,13 +138,13 @@ function GtmOnboardingBody() {
       // `Open Maya in Telegram` deep link surfaced on the deploy screen.
       channelPreference: "telegram",
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    }).catch((err: Error) => {
-      if (!cancelled) setError(err.message);
+    }).catch((err) => {
+      if (!cancelled) setError(friendlyError(err));
     });
     return () => {
       cancelled = true;
     };
-  }, [startOnboarding]);
+  }, [startOnboarding, isAuthenticated]);
 
   const canSubmit = useMemo(() => {
     return draft.url.trim().startsWith("http") && draft.name.trim().length > 0;
@@ -160,6 +170,8 @@ function GtmOnboardingBody() {
         canPostInstagramManually: draft.canPostInstagramManually,
         existingTikTokUrl: emptyToUndefined(draft.existingTikTokUrl),
         existingInstagramUrl: emptyToUndefined(draft.existingInstagramUrl),
+        existingYoutubeUrl: emptyToUndefined(draft.existingYoutubeUrl),
+        existingLinkedinUrl: emptyToUndefined(draft.existingLinkedinUrl),
         tiktokWarmupState: draft.tiktokWarmupState,
         tiktokAccountAgeDays: numberOrUndefined(draft.tiktokAccountAgeDays),
         tiktokAccountStatusChecked: draft.tiktokAccountStatusChecked,
@@ -206,7 +218,7 @@ function GtmOnboardingBody() {
       setResearchJobId(String(jobId));
       setStage("research");
     } catch (err) {
-      setError((err as Error).message);
+      setError(friendlyError(err));
     } finally {
       setBusy(false);
     }
@@ -239,7 +251,7 @@ function GtmOnboardingBody() {
       );
       if (result.ok) setStage("deploy");
     } catch (err) {
-      setError((err as Error).message);
+      setError(friendlyError(err));
     } finally {
       setBusy(false);
     }
@@ -252,7 +264,7 @@ function GtmOnboardingBody() {
   return (
     <Shell>
       <div className="mb-10">
-        <p className="mb-3 font-mono text-xs uppercase tracking-widest text-lime">
+        <p className="mb-3 font-mono text-xs uppercase tracking-widest text-paper">
           ClawLaunch onboarding
         </p>
         <h1 className="font-display text-4xl tracking-tight sm:text-5xl">
@@ -271,7 +283,7 @@ function GtmOnboardingBody() {
       <StepRail stage={stage} />
 
       {error && (
-        <div className="mb-6 border border-red-400/40 bg-red-950/30 p-4 text-sm text-red-200">
+        <div className="mb-6 rounded border border-red-600 bg-red-50 p-4 text-sm text-red-700">
           {error}
         </div>
       )}
@@ -365,14 +377,35 @@ function GtmOnboardingBody() {
             </Field>
           </div>
           <Field label="Mobile walkthrough recording">
-            <input
-              type="file"
-              accept="video/mp4,video/quicktime,video/x-m4v,video/webm"
-              onChange={(event) =>
-                setWalkthroughFile(event.target.files?.[0] ?? null)
-              }
-              className="input"
-            />
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="cursor-pointer rounded-lg border border-paper bg-ink-2 px-4 py-2 text-sm font-medium hover:bg-ink-3">
+                {walkthroughFile ? "Choose a different video" : "Choose video"}
+                <input
+                  type="file"
+                  accept="video/mp4,video/quicktime,video/x-m4v,video/webm"
+                  onChange={(event) =>
+                    setWalkthroughFile(event.target.files?.[0] ?? null)
+                  }
+                  className="hidden"
+                />
+              </label>
+              {walkthroughFile ? (
+                <>
+                  <span className="text-sm text-paper-dim">
+                    {walkthroughFile.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setWalkthroughFile(null)}
+                    className="rounded-lg border border-paper px-3 py-1.5 text-xs font-medium hover:bg-ink-3"
+                  >
+                    Remove
+                  </button>
+                </>
+              ) : (
+                <span className="text-sm text-paper-faint">No file chosen</span>
+              )}
+            </div>
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Toggle
@@ -463,6 +496,32 @@ function GtmOnboardingBody() {
                 placeholder="https://www.instagram.com/..."
               />
             </Field>
+            <Field label="YouTube channel, if any">
+              <input
+                value={draft.existingYoutubeUrl}
+                onChange={(event) =>
+                  setDraft((d) => ({
+                    ...d,
+                    existingYoutubeUrl: event.target.value,
+                  }))
+                }
+                className="input"
+                placeholder="https://www.youtube.com/@..."
+              />
+            </Field>
+            <Field label="LinkedIn profile, if any">
+              <input
+                value={draft.existingLinkedinUrl}
+                onChange={(event) =>
+                  setDraft((d) => ({
+                    ...d,
+                    existingLinkedinUrl: event.target.value,
+                  }))
+                }
+                className="input"
+                placeholder="https://www.linkedin.com/in/..."
+              />
+            </Field>
             <Field label="TikTok account age in days">
               <input
                 value={draft.tiktokAccountAgeDays}
@@ -548,7 +607,7 @@ function GtmOnboardingBody() {
       )}
 
       {stage === "research" && (
-        <section className="border border-paper-faint/15 bg-ink-2 p-6">
+        <section className="border border-paper bg-ink-2 p-6">
           <h2 className="mb-3 font-display text-2xl">Research pass complete</h2>
           <p className="text-paper-dim">
             Job: <span className="font-mono text-paper">{researchJobId}</span>
@@ -563,7 +622,7 @@ function GtmOnboardingBody() {
           {/* Sprint 2.26b — Telegram bot setup gate. Operator either
               connects their own bot from BotFather (recommended for
               production) or uses the shared dev fallback (testing). */}
-          <div className="mt-6 border border-paper-faint/15 bg-ink p-5">
+          <div className="mt-6 border border-paper bg-ink p-5">
             <h3 className="mb-2 font-display text-lg">
               Connect your Telegram bot
             </h3>
@@ -573,12 +632,12 @@ function GtmOnboardingBody() {
             </p>
 
             {botStatus.kind === "connected" ? (
-              <div className="mt-4 rounded border border-lime/30 bg-lime/10 p-3 text-sm">
+              <div className="mt-4 rounded border border-paper bg-ink-2 p-3 text-sm">
                 Connected as{" "}
                 <span className="font-mono">@{botStatus.username}</span>
               </div>
             ) : botStatus.kind === "shared_fallback" ? (
-              <div className="mt-4 rounded border border-paper-faint/15 bg-ink-2 p-3 text-sm text-paper-dim">
+              <div className="mt-4 rounded border border-paper bg-ink-2 p-3 text-sm text-paper-dim">
                 Using shared dev bot. Fine for testing — connect your own
                 later from /profile.
               </div>
@@ -645,7 +704,7 @@ function GtmOnboardingBody() {
       )}
 
       {stage === "deploy" && (
-        <section className="border border-lime/30 bg-lime/10 p-6">
+        <section className="border border-paper bg-ink-2 p-6">
           <h2 className="mb-3 font-display text-2xl">Maya deployment started</h2>
           <p className="text-paper-dim">{deployResult}</p>
           <p className="mt-4 text-sm text-paper-dim">
@@ -655,7 +714,7 @@ function GtmOnboardingBody() {
           </p>
           <Link
             href="/clawlaunch/mission"
-            className="mt-4 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-ink"
+            className="mt-4 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-white"
           >
             Open Mission Control →
           </Link>
@@ -670,6 +729,32 @@ function emptyToUndefined(value: string): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+/**
+ * Convert any thrown error into a safe, plain-language message for the operator.
+ * Raw Convex / internal errors (e.g. "signed-in user required") are NEVER shown
+ * on screen — they're logged to the console for debugging and mapped to friendly
+ * copy here. Add specific cases as real ones come up; everything else falls back
+ * to a generic try-again message.
+ */
+function friendlyError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  // Keep the real error in the console so we can still debug.
+  console.error("[onboarding]", raw);
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes("signed-in user required") ||
+    lower.includes("authenticat") ||
+    lower.includes("identity") ||
+    lower.includes("unauthenticated")
+  ) {
+    return "We lost your sign-in for a second. Refresh the page and you'll pick up right where you left off.";
+  }
+  if (lower.includes("upload")) {
+    return "That file didn't upload. Check it and try again.";
+  }
+  return "Something went wrong on our end. Give it another try in a moment.";
+}
+
 function numberOrUndefined(value: string): number | undefined {
   if (value.trim() === "") return undefined;
   const parsed = Number(value);
@@ -678,7 +763,7 @@ function numberOrUndefined(value: string): number | undefined {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="min-h-screen bg-ink text-paper">
+    <main data-surface="onboarding" className="min-h-screen bg-ink text-paper">
       <div className="mx-auto max-w-3xl px-6 py-12">
         <header className="mb-10 flex items-center justify-between">
           <Link href="/clawlaunch" className="font-mono text-xs uppercase tracking-widest">
@@ -704,8 +789,8 @@ function StepRail({ stage }: { stage: Stage }) {
           key={step}
           className={
             index <= current
-              ? "border border-lime/30 bg-lime/10 p-3 text-sm"
-              : "border border-paper-faint/15 bg-ink-2 p-3 text-sm text-paper-faint"
+              ? "bg-lime p-3 text-sm text-white"
+              : "border border-paper bg-ink-2 p-3 text-sm text-paper-faint"
           }
         >
           {step}
@@ -740,7 +825,7 @@ function Toggle({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex items-center justify-between border border-paper-faint/15 bg-ink-2 p-4 text-sm">
+    <label className="flex items-center justify-between border border-paper bg-ink-2 p-4 text-sm">
       <span>{label}</span>
       <input
         type="checkbox"

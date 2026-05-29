@@ -212,7 +212,7 @@ export default function ResultsPage() {
         {northStar ? (
           <Card className="border-lime/30">
             <div className="flex items-center justify-between gap-3">
-              <p className="font-mono text-xs uppercase tracking-[0.22em] text-lime">
+              <p className="font-mono text-xs uppercase tracking-[0.22em] text-paper">
                 {northStar.metric}
               </p>
               <Pill tone={northStar.paceTone}>{northStar.paceLabel}</Pill>

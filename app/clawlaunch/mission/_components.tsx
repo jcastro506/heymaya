@@ -48,7 +48,7 @@ export function Section({
   return (
     <section className="mb-10">
       <div className="mb-4 flex items-baseline gap-3 border-b border-paper-faint/15 pb-2">
-        <h2 className="font-mono text-xs uppercase tracking-[0.22em] text-lime">
+        <h2 className="font-mono text-xs uppercase tracking-[0.22em] text-paper">
           {title}
         </h2>
         {count !== undefined ? (
@@ -78,9 +78,9 @@ export function Card({
 }
 
 const PILL_TONE: Record<string, string> = {
-  lime: "bg-lime/15 text-lime",
+  lime: "bg-lime/30 text-[#0a0a0a]",
   paper: "bg-paper/10 text-paper-dim",
-  rose: "bg-rose/15 text-rose",
+  rose: "bg-rose/20 text-[#b3261e]",
 };
 
 /** A small status/label pill. */
@@ -134,7 +134,7 @@ export function Empty({
       {cta ? (
         <a
           href={cta.href}
-          className="mt-4 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-ink"
+          className="mt-4 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-[#0a0a0a]"
         >
           {cta.label}
         </a>
@@ -175,7 +175,7 @@ export function ExtLink({ href, children }: { href: string; children: ReactNode 
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-lime underline decoration-lime/40 underline-offset-2 hover:decoration-lime"
+      className="text-paper underline decoration-paper/30 underline-offset-2 hover:decoration-paper"
     >
       {children}
     </a>

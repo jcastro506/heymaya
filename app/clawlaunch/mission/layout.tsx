@@ -40,12 +40,12 @@ export default function MissionLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-ink text-paper">
+    <div data-surface="mission" className="min-h-screen bg-ink text-paper">
       {/* Desktop side nav */}
       <nav className="fixed inset-y-0 left-0 hidden w-56 flex-col border-r border-paper-faint/15 bg-ink px-4 py-6 lg:flex">
         <Link
           href="/clawlaunch"
-          className="font-mono text-xs uppercase tracking-[0.22em] text-lime"
+          className="font-mono text-xs uppercase tracking-[0.22em] text-paper"
         >
           ClawLaunch
         </Link>
@@ -79,7 +79,7 @@ export default function MissionLayout({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-10 flex items-center justify-between border-b border-paper-faint/15 bg-ink/95 px-5 py-3 backdrop-blur lg:hidden">
         <Link
           href="/clawlaunch"
-          className="font-mono text-xs uppercase tracking-[0.22em] text-lime"
+          className="font-mono text-xs uppercase tracking-[0.22em] text-paper"
         >
           ClawLaunch
         </Link>
@@ -99,7 +99,7 @@ export default function MissionLayout({ children }: { children: ReactNode }) {
               key={item.href}
               href={item.href}
               className={`flex flex-1 flex-col items-center gap-1 py-2 text-[10px] ${
-                active ? "text-lime" : "text-paper-faint"
+                active ? "text-paper" : "text-paper-faint"
               }`}
             >
               <Icon className="size-5" />

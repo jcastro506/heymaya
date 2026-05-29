@@ -4605,6 +4605,8 @@ export default defineSchema({
     canPostInstagramManually: v.optional(v.boolean()),
     existingTikTokUrl: v.optional(v.string()),
     existingInstagramUrl: v.optional(v.string()),
+    existingYoutubeUrl: v.optional(v.string()),
+    existingLinkedinUrl: v.optional(v.string()),
     tiktokWarmupState: v.optional(
       v.union(
         v.literal("unknown"),
