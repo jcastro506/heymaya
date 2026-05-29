@@ -153,6 +153,37 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("GTM.md")).toContain("Do not recommend TikTok/Instagram");
   });
 
+  // Sprint B2 — North Star contract + entryMode fork rendered into GTM.md.
+  it("renders North Star + entry-mode posture into GTM.md", () => {
+    // Default INPUT has no entryMode / northStar → propose-at-synthesis path.
+    const base = buildMayaGtmWorkspace(INPUT).files.get("GTM.md") ?? "";
+    expect(base).toContain("Mode — UNRESOLVED");
+    expect(base).toContain("North Star (propose at synthesis)");
+    expect(base).not.toContain("Mode — MANAGER");
+
+    // Already-launched manager-mode founder with a set North Star → the
+    // launch theater is skipped and the concrete North Star is rendered.
+    const managerInput: MayaGtmWorkspaceInput = {
+      ...INPUT,
+      app: {
+        ...INPUT.app,
+        entryMode: "manager",
+        northStarMetric: "signups/week",
+        northStarTarget: 50,
+        northStarDeadlineMs: Date.UTC(2026, 5, 30),
+      },
+    };
+    const managerGtm =
+      buildMayaGtmWorkspace(managerInput).files.get("GTM.md") ?? "";
+    expect(managerGtm).toContain("Mode — MANAGER (already launched)");
+    expect(managerGtm).toContain("Skip the launch arc");
+    expect(managerGtm).toContain("North Star (the one tracked outcome)");
+    expect(managerGtm).toContain("signups/week");
+    expect(managerGtm).toContain("50");
+    expect(managerGtm).toContain("2026-06-30");
+    expect(managerGtm).not.toContain("Mode — UNRESOLVED");
+  });
+
   it("bundles every GTM skill needed for research, calendar, approval, and review", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
 

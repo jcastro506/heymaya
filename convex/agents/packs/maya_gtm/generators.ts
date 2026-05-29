@@ -33,6 +33,21 @@ export interface MayaGtmWorkspaceInput {
     creatorBudgetMonthlyUsd?: number;
     maxWeeklyVisualPosts?: number;
     excludedAudiences: string[];
+    /**
+     * Sprint B — journey-stage fork. "launch" = pre-launch (full GTM arc);
+     * "manager" = already-launched (skip launch theater, ongoing daily
+     * engine). Undefined → Maya resolves at synthesis from stage + ingested
+     * accounts and proposes it.
+     */
+    entryMode?: "launch" | "manager";
+    /**
+     * Sprint B — North Star contract. The one tracked outcome, adaptive to
+     * entryMode. Undefined until Maya proposes it at synthesis and the
+     * operator approves; rendered into GTM.md once set.
+     */
+    northStarMetric?: string;
+    northStarTarget?: number;
+    northStarDeadlineMs?: number;
   };
   /**
    * Digested product understanding captured at onboarding, threaded into
@@ -587,11 +602,54 @@ function renderApp(input: MayaGtmWorkspaceInput): string {
 }
 
 function renderGtm(input: MayaGtmWorkspaceInput): string {
+  const mode = input.app.entryMode;
+  const modeBlock =
+    mode === "manager"
+      ? `## Mode — MANAGER (already launched)
+
+This founder has already launched. **Skip the launch arc and the launch theater.** Open straight into the ongoing daily engine: what's working on their existing accounts + this week's exact post schedule. Their North Star is growth/cadence, not "first 100 signups." Pick up from where they already are — reference their real footprint (their existing posts + what's landing), don't start cold.
+
+`
+      : mode === "launch"
+        ? `## Mode — LAUNCH (pre-launch)
+
+This founder hasn't launched yet. Run the full GTM arc (warm up → launch → compound). North Star is the first real users (e.g. "first 100 signups by Day 30").
+
+`
+        : `## Mode — UNRESOLVED
+
+Resolve the entry mode at synthesis from the operator's stage + whether their existing accounts show real audience/history: **launch** (pre-launch → full GTM arc) vs **manager** (already-launched → skip launch theater, ongoing daily engine). Propose it; the operator confirms.
+
+`;
+
+  const northStar =
+    input.app.northStarMetric
+      ? `## North Star (the one tracked outcome)
+
+- Metric: **${input.app.northStarMetric}**${
+          input.app.northStarTarget !== undefined
+            ? `\n- Target: **${input.app.northStarTarget}**`
+            : ""
+        }${
+          input.app.northStarDeadlineMs !== undefined
+            ? `\n- Deadline: **${new Date(input.app.northStarDeadlineMs).toISOString().slice(0, 10)}**`
+            : ""
+        }
+
+Every weekly review reports on-track / at-risk against this. The plan exists to move this number — not to generate activity.
+
+`
+      : `## North Star (propose at synthesis)
+
+Not set yet. At synthesis, **propose a concrete North Star** adaptive to the mode — launch: "first 100 signups by Day 30"; manager: a growth/cadence target (e.g. "+50 signups/week" or "3 posts/week that each clear baseline"). Ground it in the operator's stage + goal. The operator approves it; once set it anchors every weekly review (on-track / at-risk).
+
+`;
+
   return `# GTM.md
 
 This is the current GTM plan. Maya updates it only after a research job or weekly results review.
 
-## Active Channel Choices
+${modeBlock}${northStar}## Active Channel Choices
 
 - Primary: ${input.primaryChannel ?? "pending research"}
 - Secondary: ${input.secondaryChannel ?? "pending research"}
