@@ -336,6 +336,9 @@ describe("Maya GTM workspace pack", () => {
     // was slimmed; flagged in Sprint A, restored here).
     expect(heartbeat).toContain("missed-cadence recovery");
     expect(heartbeat).toContain("published-results-scan");
+    // Sprint E — relationship cadence engine + continuous inbound polling.
+    expect(heartbeat).toContain("relationship-cadence");
+    expect(heartbeat).toContain("inbound-poll");
 
     // Manager-mode marker the heartbeat still keys off.
     expect(heartbeat).toContain("foundation_completed_at:");
