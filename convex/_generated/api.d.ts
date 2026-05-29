@@ -108,6 +108,7 @@ import type * as gtmMaya_managerStore from "../gtmMaya/managerStore.js";
 import type * as gtmMaya_memoryLedger from "../gtmMaya/memoryLedger.js";
 import type * as gtmMaya_mineCommentTrees from "../gtmMaya/mineCommentTrees.js";
 import type * as gtmMaya_missionBoard from "../gtmMaya/missionBoard.js";
+import type * as gtmMaya_missionControl from "../gtmMaya/missionControl.js";
 import type * as gtmMaya_openclaw_hookClient from "../gtmMaya/openclaw/hookClient.js";
 import type * as gtmMaya_openclaw_inboundCallback from "../gtmMaya/openclaw/inboundCallback.js";
 import type * as gtmMaya_openclaw_managerCallbacks from "../gtmMaya/openclaw/managerCallbacks.js";
@@ -379,6 +380,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/memoryLedger": typeof gtmMaya_memoryLedger;
   "gtmMaya/mineCommentTrees": typeof gtmMaya_mineCommentTrees;
   "gtmMaya/missionBoard": typeof gtmMaya_missionBoard;
+  "gtmMaya/missionControl": typeof gtmMaya_missionControl;
   "gtmMaya/openclaw/hookClient": typeof gtmMaya_openclaw_hookClient;
   "gtmMaya/openclaw/inboundCallback": typeof gtmMaya_openclaw_inboundCallback;
   "gtmMaya/openclaw/managerCallbacks": typeof gtmMaya_openclaw_managerCallbacks;

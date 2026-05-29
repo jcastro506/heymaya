@@ -742,7 +742,7 @@ export const listAgentTargetThreads = internalQuery({
  * Mirrors gtmMaya/researchLifecycle.ts:getMyGtmSnapshot's resolution
  * pattern — null on no identity, no creator row, or wrong accountType.
  */
-async function resolveMyGtmCreator(
+export async function resolveMyGtmCreator(
   ctx: QueryCtx
 ): Promise<Doc<"creators"> | null> {
   const identity = await ctx.auth.getUserIdentity();

@@ -211,3 +211,36 @@ The shell is mostly *known* work (Stripe, Clerk, per-user bot provisioning) — 
 - **Runtime:** `runTimeoutSeconds` 900→1500 in `deployMayaGtm.ts buildGatewayConfig`.
 - **Landing (separate track):** Sprint 2.31 landing committed earlier (`dacdb9c`); a later "A normal week" rewrite + first-pane spacing may be uncommitted — check `git status`.
 - **Recommendation:** commit this before/after clearing context so it's not lost. See [[project_gtm_ideal_agent_build_2026_05_28]] for finer detail.
+
+---
+
+## 11. Mission Control — the thin web UI (3rd surface) + autonomous agent-driven updates
+
+**Added 2026-05-28 (overnight build).** A read-mostly, mobile-friendly web UI — the third surface alongside **Telegram** (home/conversation) and **Google Calendar** (on-the-go schedule). The user drops into it after onboarding and stays signed in (Clerk). Everything still flows through Telegram; the UI is the **deep proof-of-work + account home**, and Maya **links into it** from Telegram. It must never become a place the user is *required* to live — Telegram stays home. Resolves the recurring "phantom dashboard" (Maya kept referencing one) by making it real.
+
+### Foundations that already exist (build is genuinely thin)
+- `/clawlaunch/mission-board` page + `getMyMissionBoard` query already render an HQ snapshot.
+- 17 public auth-scoped read queries (`getMyTargetThreads`, `getMyDraftedContent`, `getMyCalendarEvents`, `getMyRecentPostResults`, `getMyGtmSnapshot`, …) via the `resolveMyGtmCreator` pattern (`targetList.ts`).
+- Clerk + `ConvexProviderWithClerk` wired (`app/providers.tsx`); client uses `useQuery(api.gtmMaya.*)` (LIVE subscriptions).
+- Creator-HQ responsive layout (`app/(creator)/layout.tsx`: SideNav/TopBar/BottomNav) is the structural pattern to mirror. Dark theme (`--ink`/`--paper`/`--lime`), Instrument Serif + Geist, `.input`/`.btn` classes, no shadcn.
+
+### Tabs (each = a read view on existing Convex tables; identity = social-media manager)
+1. **Today** — daily pulse: today's plan (posts **and** replies, each with the one-tap deep link), new high-intent finds, recent pings, and **"what ClawLaunch is doing/thinking now"** (the new activity feed + `lastAgentNote` + DREAMS).
+2. **Plan / Calendar** — rolling 7-day `gtmCalendarEvents` (the daily posting+replying mix — build-in-public + demo posts + reply windows), drafts + deep links. Mirrors GCal, richer.
+3. **Research / "What we know"** — `gtmBuyerMap` (ICP/journey/intent), `gtmCompetitiveMap` (cited quotes + vulnerabilities), `gtmChannelScores` (where the customer lives + why). The proof-of-work tab.
+4. **Drafts / Content** — `gtmDraftedContent` (replies + original posts) review/edit + deep-link + attribute tags.
+5. **Results** — `gtmPostResults` + `gtmConversions` + North-Star on-track/at-risk + attribute learnings (`gtmNicheLearnings`). Outcomes.
+6. **Account** — product profile, North Star, connected accounts, plan/billing, delete account (= the go-live shell).
+
+### The autonomous-update mechanism (OpenClaw drives the UI)
+The UI never polls a static snapshot — it's **live**, and OpenClaw is what changes it:
+- **Free live updates:** the UI uses Convex `useQuery` subscriptions on the tables OpenClaw already POSTs to (target threads, drafts, calendar, results, foundation). When Maya re-POSTs (calendar regenerated, new hot target, channel re-weighted, North-Star status shifts), the UI **re-renders automatically** — no extra work.
+- **New activity/status feed:** a `gtmAgentActivity` table + **`/lc_gtm/post_activity`** endpoint so Maya posts "what I'm doing / thinking / what just changed" as she works (e.g. *"researching r/macapps for Loom-fatigue threads,"* *"regenerated this week's plan — leaned into X after it converted,"* *"new hot thread, drafted a reply"*). The **Today** tab subscribes → the user sees ClawLaunch working in real time + a changelog of plan changes. This is the day-to-day dynamism: agent-driven, not a static dashboard.
+- Maya links into specific tabs from Telegram (*"drafted your 15 — review + post here: <link to Drafts>"*) instead of saying "your dashboard."
+
+### New backend needed
+- 5 public queries: `getMyBuyerMap`, `getMyCompetitiveMap`, `getMyNicheLearnings`, `getMyConversions`, `getMyAgentActivity` (+ reuse the 17 existing). All auth-scoped via `resolveMyGtmCreator`.
+- `gtmAgentActivity` table + `recordAgentActivity` mutation + `/lc_gtm/post_activity` endpoint (idempotency-keyed) + wire OpenClaw (TOOLS.md + the cadence/research skills POST activity on key events).
+
+### Onboarding drop-in
+Onboarding (`app/onboarding/gtm`) currently ends at the deploy stage with no redirect. Add the hand-off: on deploy success → route into Mission Control (Today tab), so the user lands in their home surface the moment Maya is live.

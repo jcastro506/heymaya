@@ -1,0 +1,136 @@
+/**
+ * Mission Control — public read queries for the web UI + the agent-activity
+ * feed mutation. All reads are auth-scoped to the signed-in operator via
+ * `resolveMyGtmCreator` (cross-tenant isolation, fail-closed: no identity / not
+ * a gtm-agent → empty). The UI calls these with `useQuery` (live subscriptions),
+ * so when OpenClaw POSTs new data the UI re-renders automatically.
+ */
+
+import { v } from "convex/values";
+import { internalMutation, query } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
+import { resolveMyGtmCreator } from "./targetList";
+
+// ───────────────────────── Research / "What we know" ─────────────────────────
+
+/** ICP / buyer map (singleton per agent). Research tab. */
+export const getMyBuyerMap = query({
+  args: {},
+  handler: async (ctx): Promise<Doc<"gtmBuyerMap"> | null> => {
+    const creator = await resolveMyGtmCreator(ctx);
+    if (!creator) return null;
+    return await ctx.db
+      .query("gtmBuyerMap")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+  },
+});
+
+/** Competitive map (N per agent) — competitors + cited complaints. Research tab. */
+export const getMyCompetitiveMap = query({
+  args: {},
+  handler: async (ctx): Promise<Doc<"gtmCompetitiveMap">[]> => {
+    const creator = await resolveMyGtmCreator(ctx);
+    if (!creator) return [];
+    return await ctx.db
+      .query("gtmCompetitiveMap")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .collect();
+  },
+});
+
+// ───────────────────────── Results ─────────────────────────
+
+/** Niche learnings (what's working) — Results tab. Hides retired by default. */
+export const getMyNicheLearnings = query({
+  args: { includeRetired: v.optional(v.boolean()) },
+  handler: async (ctx, args): Promise<Doc<"gtmNicheLearnings">[]> => {
+    const creator = await resolveMyGtmCreator(ctx);
+    if (!creator) return [];
+    const rows = await ctx.db
+      .query("gtmNicheLearnings")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .collect();
+    return args.includeRetired ? rows : rows.filter((r) => !r.retired);
+  },
+});
+
+/** Conversions (signups/demos/feedback/revenue) — the outcome. Results tab. */
+export const getMyConversions = query({
+  args: {},
+  handler: async (ctx): Promise<Doc<"gtmConversions">[]> => {
+    const creator = await resolveMyGtmCreator(ctx);
+    if (!creator) return [];
+    return await ctx.db
+      .query("gtmConversions")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .order("desc")
+      .collect();
+  },
+});
+
+// ───────────────────────── Today — the live activity feed ─────────────────────────
+
+/** The "what ClawLaunch is doing/thinking now" feed — Today tab. Most recent
+ *  first, capped. Live-subscribed: OpenClaw POSTs → UI updates in real time. */
+export const getMyAgentActivity = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<Doc<"gtmAgentActivity">[]> => {
+    const creator = await resolveMyGtmCreator(ctx);
+    if (!creator) return [];
+    const limit = Math.min(Math.max(args.limit ?? 30, 1), 100);
+    return await ctx.db
+      .query("gtmAgentActivity")
+      .withIndex("by_account_and_created", (q) => q.eq("accountId", creator._id))
+      .order("desc")
+      .take(limit);
+  },
+});
+
+// ───────────────────────── activity write (agent-driven) ─────────────────────────
+
+const ACTIVITY_KIND = v.union(
+  v.literal("researching"),
+  v.literal("found"),
+  v.literal("drafted"),
+  v.literal("plan_changed"),
+  v.literal("posted"),
+  v.literal("thinking"),
+  v.literal("status")
+);
+
+/** Append one activity-feed entry. Called by /lc_gtm/post_activity. Scoped to
+ *  the agent's own account. Old entries are pruned (keep the feed bounded). */
+export const recordAgentActivity = internalMutation({
+  args: {
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    kind: ACTIVITY_KIND,
+    summary: v.string(),
+    detail: v.optional(v.string()),
+    linkedRef: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<Id<"gtmAgentActivity">> => {
+    const id = await ctx.db.insert("gtmAgentActivity", {
+      accountId: args.accountId,
+      agentId: args.agentId,
+      kind: args.kind,
+      summary: args.summary.slice(0, 500),
+      detail: args.detail?.slice(0, 4000),
+      linkedRef: args.linkedRef,
+      createdAt: Date.now(),
+    });
+    // Keep the feed bounded — prune beyond the most recent 200 for this agent.
+    const all = await ctx.db
+      .query("gtmAgentActivity")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    if (all.length > 200) {
+      const toDelete = all
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .slice(0, all.length - 200);
+      for (const row of toDelete) await ctx.db.delete(row._id);
+    }
+    return id;
+  },
+});

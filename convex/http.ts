@@ -98,6 +98,7 @@ import {
   setNorthStarHttp,
   setStrategyApprovalHttp,
   proposeSkillImprovementHttp,
+  postActivityHttp,
   competitorMoveHttp,
   // (attribution handlers imported separately below)
   nichePulseSignalHttp,
@@ -296,6 +297,12 @@ http.route({
   path: "/lc_gtm/propose_skill_improvement",
   method: "POST",
   handler: proposeSkillImprovementHttp,
+});
+// Mission Control — Maya posts a live activity-feed entry (drives the web UI).
+http.route({
+  path: "/lc_gtm/post_activity",
+  method: "POST",
+  handler: postActivityHttp,
 });
 // Sprint C — attribution. Maya wraps product links; conversions self-reported.
 http.route({

@@ -4544,7 +4544,9 @@ export default defineSchema({
       // Sprint C — conversion (signup/demo/feedback) self-report or pixel.
       v.literal("record_conversion"),
       // Sprint J — proposed improvement to a shared skill (Layer 2, governed).
-      v.literal("propose_skill_improvement")
+      v.literal("propose_skill_improvement"),
+      // Mission Control — agent activity feed entry.
+      v.literal("post_activity")
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
@@ -5881,6 +5883,36 @@ export default defineSchema({
     .index("by_target_skill", ["targetSkill"])
     .index("by_status", ["status"])
     .index("by_archetype", ["archetype"]),
+
+  // ─── Mission Control — the autonomous-update activity feed ─────────────
+  /** The live "what ClawLaunch is doing / thinking / what changed" feed that
+   *  drives the web UI's Today tab. OpenClaw POSTs here as it works (research
+   *  progress, plan regenerated, new hot target, North-Star status shift, a
+   *  draft ready), and the UI subscribes via Convex live queries → real-time,
+   *  agent-driven. Operator-facing text (voice-contract clean). */
+  gtmAgentActivity: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    kind: v.union(
+      v.literal("researching"), // mid-research progress
+      v.literal("found"), // surfaced a new target / opportunity
+      v.literal("drafted"), // a post/reply is ready
+      v.literal("plan_changed"), // regenerated/re-weighted the plan
+      v.literal("posted"), // operator posted / result came in
+      v.literal("thinking"), // a hunch / strategic note
+      v.literal("status") // generic heartbeat-worthy status
+    ),
+    /** One operator-facing line — manager voice, no infra leak. */
+    summary: v.string(),
+    /** Optional longer detail (markdown ok) for the activity-detail view. */
+    detail: v.optional(v.string()),
+    /** Optional pointer to what this is about (a thread/draft url or id). */
+    linkedRef: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_agent", ["agentId"])
+    .index("by_account_and_created", ["accountId", "createdAt"]),
 
   // ─── Sprint 2.17 — Manager-mode foundation tables ─────────────────────
   // The five outputs of the foundation-research pass (onboarding +

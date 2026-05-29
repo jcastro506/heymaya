@@ -69,7 +69,9 @@ const CALLBACK_KIND = v.union(
   // Sprint C — conversion (signup/demo/feedback) self-report or pixel.
   v.literal("record_conversion"),
   // Sprint J — proposed improvement to a shared skill (Layer 2, governed).
-  v.literal("propose_skill_improvement")
+  v.literal("propose_skill_improvement"),
+  // Mission Control — agent activity feed entry (drives the web UI Today tab).
+  v.literal("post_activity")
 );
 
 function constantTimeEqual(a: string, b: string): boolean {

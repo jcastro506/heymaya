@@ -209,6 +209,70 @@ export const setStrategyApprovalHttp = httpAction(async (ctx, request) => {
   return new Response("ok", { status: 200 });
 });
 
+interface PostActivityPayload {
+  idempotencyKey: string;
+  kind:
+    | "researching"
+    | "found"
+    | "drafted"
+    | "plan_changed"
+    | "posted"
+    | "thinking"
+    | "status";
+  summary: string;
+  detail?: string;
+  linkedRef?: string;
+}
+
+export const postActivityHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: PostActivityPayload;
+  try {
+    body = (await request.json()) as PostActivityPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  const validKinds = [
+    "researching",
+    "found",
+    "drafted",
+    "plan_changed",
+    "posted",
+    "thinking",
+    "status",
+  ];
+  if (
+    !body.idempotencyKey ||
+    !body.summary ||
+    !validKinds.includes(body.kind)
+  ) {
+    return new Response("missing required fields", { status: 400 });
+  }
+
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "post_activity",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") return new Response("ok (replay)", { status: 200 });
+
+  await ctx.runMutation(internal.gtmMaya.missionControl.recordAgentActivity, {
+    accountId: auth.accountId,
+    agentId: auth.agentId,
+    kind: body.kind,
+    summary: body.summary,
+    detail: body.detail,
+    linkedRef: body.linkedRef,
+  });
+  return new Response("ok", { status: 200 });
+});
+
 interface ProposeSkillImprovementPayload {
   idempotencyKey: string;
   targetSkill: string;
