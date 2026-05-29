@@ -94,6 +94,7 @@ describe("Maya GTM workspace pack", () => {
         "HEARTBEAT.md",
         "MEMORY.md",
         "DREAMS.md",
+        "PLATFORM_ALGO.md",
         "jobs.json",
       ])
     );
@@ -137,6 +138,14 @@ describe("Maya GTM workspace pack", () => {
     expect(memory).toContain("lifecycle log");
     expect(memory).not.toContain("<set this when");
     expect(memory).not.toContain("<updated by");
+    // Sprint E — shared, monthly-refreshed platform-algorithm intelligence.
+    const platformAlgo = files.get("PLATFORM_ALGO.md") ?? "";
+    expect(platformAlgo).toContain("what's working on each platform");
+    expect(platformAlgo).toContain("Refresh contract");
+    expect(platformAlgo).toContain("monthly_reset");
+    expect(platformAlgo).toContain("## Reddit");
+    expect(platformAlgo).toContain("## YouTube");
+    expect(platformAlgo).toContain("Refresh log");
     // SOUL.md's AI self-reference ban was reworded from "never identify as
     // an AI" to the "AI self-references" banned-phrase entry (which spells
     // out "the ban is on self-identification"). Same intent: Maya never

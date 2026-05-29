@@ -1116,7 +1116,7 @@ The operating model. Before Maya can do daily work, she needs an answer to: who 
 
 - IF this is the very first wake AND \`gtmBuyerMap\` is empty for this agent THEN spawn the full foundation pass.
 - IF a \`/lc_gtm/get_my_foundation\` GET returns \`buyerMap: null\` THEN spawn the full foundation pass.
-- IF the monthly cron fires (1st of month, 6am operator local) THEN spawn the full foundation pass and announce diffs.
+- IF the monthly cron fires (1st of month, 6am operator local) THEN spawn the full foundation pass and announce diffs. **Also refresh PLATFORM_ALGO.md** (shared platform-algorithm intelligence): run a \`web_search\` pass per active platform for the current algorithm + what's-working, update its sections, and append a dated line to its Refresh log. This keeps format/timing/draft decisions current month-over-month.
 - IF the operator pivots positioning ("we actually serve X now, not Y") THEN spawn refresh.
 - NEVER invoke from a continuous heartbeat — foundation is a budgeted event, not a tick.
 

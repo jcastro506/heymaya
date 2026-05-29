@@ -209,6 +209,7 @@ export function buildMayaGtmWorkspace(
     ["HEARTBEAT.md", renderHeartbeat()],
     ["MEMORY.md", renderMemory(input)],
     ["DREAMS.md", renderDreaming()],
+    ["PLATFORM_ALGO.md", renderPlatformAlgo()],
     [`memory/${todayUtc}.md`, renderDailyMemory()],
     ["jobs.json", renderJobs(input)],
   ]);
@@ -324,6 +325,7 @@ If the work will take <5 seconds, skip the ack and just answer. If it'll take 30
 - **Read state before acting (but acknowledge first).** On inbound DM, the FIRST action is the short ack. Then read MEMORY.md + check \`subagents action=list\` + curl GET \`$CONVEX_SITE_URL/lc_gtm/get_my_foundation\`. Then respond substantively. Skip auxiliary file reads — slowness feels broken.
 - **Use OpenClaw natively.** \`sessions_spawn\` for workers, \`subagents action=kill\` for stuck ones (>5 min in \`processing\` with no output → kill, don't wait), \`subagents action=steer\` for thin output, \`cron action=add\` for my own schedule. No hand-rolled watchdogs.
 - **Workers do discovery, I do composition.** Workers find URLs + excerpts + metrics. I draft replies in the operator's voice. I assemble the calendar. The editorial gate is mine; I don't delegate it.
+- **Consult PLATFORM_ALGO.md for current format/timing.** Before choosing a format, length, posting window, or hook style for a platform, read PLATFORM_ALGO.md — it's the shared, monthly-refreshed state of what's working on each platform right now. My drafts should reflect this month's reality, not stale advice. (I refresh it on monthly_reset.)
 - **Ship with gaps surfaced, not with gaps hidden.** If competitive map landed thin, the synthesis says "competitive map is light on substitutes — I'll keep digging." Never fabricate to fill space.
 - **When a worker stalls silent (no output >5 min): kill, log the gap, move on with partial foundation.** Waiting indefinitely on a ghost is worse than shipping with the honest gap.
 
@@ -1039,6 +1041,46 @@ Operator: ${input.accountEmail}
 Product: ${input.app.name}
 
 Tagline: "I'm your AI growth manager. I exist because real ones are $5K/mo and you can't afford one yet."
+`;
+}
+
+// Sprint E — shared platform-algorithm intelligence. SHARED infra (same baseline
+// for every agent), refreshed ~monthly via web_search on the monthly_reset cron.
+// NOT per-customer niche research — this is "how each platform's algorithm +
+// what's-working looks THIS month," consulted by the per-channel skills for
+// format / timing / draft decisions so drafts reflect current reality, not
+// stale 2024 advice.
+function renderPlatformAlgo(): string {
+  const month = new Date().toISOString().slice(0, 7); // YYYY-MM
+  return `# PLATFORM_ALGO.md — what's working on each platform right now
+
+**Shared, monthly-refreshed.** This is the current algorithm + format/timing state per platform — the same baseline for every ClawLaunch. The per-channel research + drafting skills consult it so format, length, timing, and hook choices reflect THIS month's reality, not stale advice. It is NOT per-customer niche research (that lives in the foundation tables).
+
+**Baseline seeded:** ${month}. **Refresh contract:** on \`monthly_reset\`, run a \`web_search\` pass per active platform ("X algorithm changes ${month}", "what's working on Reddit right now", TikTok/LinkedIn/YouTube equivalents), update the sections below, and append a dated line under "Refresh log". If a section is older than ~6 weeks, treat it as a hypothesis and re-verify before leaning on it.
+
+## Reddit
+- Self-promotion is policed by communities, not just the algorithm — value-first, rules-per-subreddit. Newer accounts + low karma get auto-filtered. Comments on live threads outperform cold posts for a new account.
+
+## X / Twitter
+- Replies + early engagement in the first 30-60 min drive reach; external links are de-prioritized (put links in a reply, not the post). Build-in-public + concrete numbers + a clear hook line outperform polished announcements.
+
+## LinkedIn
+- Dwell time + early comments matter; links in the post suppress reach (link in first comment). Personal-story + lesson framing beats corporate. Document/carousel + text posts favored over bare links.
+
+## TikTok
+- First 0-3 seconds (the hook) decide watch-time, which decides distribution. Retention + completion + rewatch are the real signals (owner-only — we infer from public views). Trending sounds + native, un-polished feel + Photo Mode/slideshow are current levers.
+
+## Instagram
+- Reels + saves/shares (not just likes) drive reach; carousels for depth. First-line hook + clear value. Captions + a strong cover frame matter.
+
+## YouTube
+- Title + thumbnail = CTR, the gate to everything; then average-view-duration. Shorts: hook in the first second. Search-intent titles compound over time.
+
+## Hacker News
+- Show HN: Tue-Thu morning PT; honest, technical, no marketing tone. Front-page is about early upvote velocity + genuine substance; over-polish reads as spam.
+
+## Refresh log
+- ${month}: baseline seeded at deploy. (Append dated refreshes here on monthly_reset.)
 `;
 }
 
