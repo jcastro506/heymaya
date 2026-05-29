@@ -37,6 +37,40 @@ import {
   type QueryCtx,
 } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { buildDeepLink, type DeepLink, type DeepLinkPlatform } from "./deepLink";
+
+/** Platforms for which we can build a one-tap text deep link (TikTok = video
+ *  Brief, no text deep-link). */
+const DEEP_LINK_PLATFORMS: ReadonlySet<string> = new Set([
+  "x",
+  "reddit",
+  "hn",
+  "threads",
+  "linkedin",
+  "instagram",
+  "youtube",
+]);
+
+/** Attach a server-computed one-tap deep link to a target thread so the agent
+ *  + UI never have to (mis)build it. Target threads are reply targets. */
+function withDeepLink(
+  row: Doc<"gtmTargetThreads">
+): Doc<"gtmTargetThreads"> & { deepLink?: DeepLink } {
+  const platform = row.platform;
+  if (!DEEP_LINK_PLATFORMS.has(platform)) return row; // tiktok etc. → Brief, no deep link
+  const deepLink = buildDeepLink(
+    platform as DeepLinkPlatform,
+    "reply",
+    {
+      url: row.url,
+      tweetId: platform === "x" ? row.externalId : undefined,
+      subreddit: row.subredditOrCommunity,
+      title: row.title,
+    },
+    row.draftReply ?? ""
+  );
+  return { ...row, deepLink };
+}
 
 // ───────────────────── shared validators ─────────────────────
 
@@ -559,7 +593,10 @@ export const getMyTargetThreads = query({
     status: v.optional(THREAD_STATUS),
     platform: v.optional(PLATFORM),
   },
-  handler: async (ctx, args): Promise<Doc<"gtmTargetThreads">[]> => {
+  handler: async (
+    ctx,
+    args
+  ): Promise<Array<Doc<"gtmTargetThreads"> & { deepLink?: DeepLink }>> => {
     const creator = await resolveMyGtmCreator(ctx);
     if (!creator) return [];
     let rows: Doc<"gtmTargetThreads">[];
@@ -593,7 +630,7 @@ export const getMyTargetThreads = query({
     if (args.status !== undefined && args.platform !== undefined) {
       rows = rows.filter((row) => row.platform === args.platform);
     }
-    return rows;
+    return rows.map(withDeepLink);
   },
 });
 

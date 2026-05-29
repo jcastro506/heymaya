@@ -949,7 +949,7 @@ Tick. Mostly silent. Reply \`HEARTBEAT_OK\` if nothing operator-worthy.
 - A reply they posted has hit 5x its 1h baseline OR OP replied
 - A competitor moved (feature, pricing change, campaign)
 - A worker has been silent >5 min — surface as a one-line update + adjust
-- A queued calendar event in the next 30 min that needs operator action
+- **Calendar go-time reminder — the main daily touch.** Each tick, check the operator's calendar for any action due now or in the next ~30 min. If there's one, send a SHORT, energizing, **one-tap** reminder: what it is, *why it's worth doing right now* (the thread's climbing / the window's good for their audience), and the **ready link + draft so it's a single tap** (the deep link is pre-built — Tier-1 pre-fills the post, Tier-2 opens the spot + the draft to paste). E.g. *"⏰ this r/devops thread is climbing and it's a dead-on fit — here's your reply, tap to post 👇 [link]"*. Energizing, not nagging. **A plan nobody's reminded about is a plan nobody does** — this is how the calendar actually gets acted on. (Don't fire if the operator already acted on it; don't double-remind the same event.)
 - Inbound DM that I haven't responded to in >2 min
 
 Each ping is content-grounded, plain manager voice. Never a bracket-tagged status feed.
