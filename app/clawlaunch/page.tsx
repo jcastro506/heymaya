@@ -60,6 +60,7 @@ export default function ClawLaunchLandingPage() {
       <PainQuote />
       <Channels />
       <AWeekWithMaya />
+      <Compared />
       <NotThis />
       <FinalCTA />
       <Footer />
@@ -805,6 +806,71 @@ const NOT_LIST = [
     body: "She drafts; you decide. If you go quiet for three days she asks if she should pause. She doesn't pretend you're still around.",
   },
 ];
+
+/* -----------------------------------------------------------------
+ * Compared — the ReplyGuy-killer grid. You've seen the reply tools.
+ * Here's the four things they don't do. Paper bg, so it contrasts the
+ * dark "What she's not" that follows.
+ * ----------------------------------------------------------------- */
+const COMPARED_LIST: Array<{ them: string; her: string; body: string }> = [
+  {
+    them: "One feed, forever",
+    her: "Wherever your buyers actually are",
+    body: "Reply tools live on X and stop there. Your first hundred users are on Reddit, in HN threads, in a niche subreddit, on LinkedIn. She works all of it — and tells you which one's worth your time this week.",
+  },
+  {
+    them: "Reply spam in a stranger's voice",
+    her: "Sounds like you wrote it",
+    body: "Mass-reply bots all sound the same, and people can smell it. She studies how you talk and how the room talks, then writes replies you'd actually send — helpful first, never a pitch.",
+  },
+  {
+    them: "A fast track to a banned account",
+    her: "Won't get you nuked",
+    body: "Spray-and-pray replying is how accounts get killed and products get blacklisted. She stays native to each community — the right cadence, the right rooms — so you build a reputation instead of torching one.",
+  },
+  {
+    them: "Likes you can't bank",
+    her: "Tells you what actually converted",
+    body: "Engagement isn't the goal — signups are. Every link she hands you is tracked, so you find out which reply turned into a real user, and she leans into what's working.",
+  },
+];
+
+function Compared() {
+  return (
+    <section
+      id="compared"
+      className="relative border-t border-[#0a0a0a]/10 px-6 py-28 sm:px-10 sm:py-40"
+    >
+      <div className="mx-auto max-w-7xl">
+        <RevealOnView>
+          <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
+            You&apos;ve tried the reply tools
+          </p>
+          <h2 className="mb-14 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
+            Like ReplyGuy. If ReplyGuy actually had your back.
+          </h2>
+        </RevealOnView>
+        <ul className="grid grid-cols-1 gap-x-12 gap-y-10 md:grid-cols-2">
+          {COMPARED_LIST.map((item, i) => (
+            <RevealOnView key={i} delay={0.1 + i * 0.06}>
+              <li className="border-t border-[#0a0a0a]/15 pt-6">
+                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#0a0a0a]/40 line-through">
+                  {item.them}
+                </p>
+                <p className="mt-3 font-display italic text-[1.7rem] leading-[1.1]">
+                  {item.her}
+                </p>
+                <p className="mt-4 text-[14px] leading-[1.55] text-[#0a0a0a]/65">
+                  {item.body}
+                </p>
+              </li>
+            </RevealOnView>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
 
 function NotThis() {
   return (
