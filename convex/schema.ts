@@ -4602,6 +4602,21 @@ export default defineSchema({
     creatorBudgetMonthlyUsd: v.optional(v.number()),
     maxWeeklyVisualPosts: v.optional(v.number()),
     excludedAudiences: v.array(v.string()),
+    // Sprint B — journey-stage fork. "launch" = pre-launch, run the full
+    // GTM arc (warmup→launch→compound). "manager" = already-launched, skip
+    // launch theater, ingest existing accounts, open straight into the
+    // ongoing daily engine. Optional for back-compat; resolved at onboarding
+    // from `stage` + whether ingested accounts show real audience/history.
+    entryMode: v.optional(
+      v.union(v.literal("launch"), v.literal("manager"))
+    ),
+    // Sprint B — North Star contract. The one tracked outcome, adaptive to
+    // entryMode (launch: "100 signups by Day 30"; manager: a growth/cadence
+    // target). Maya proposes it at synthesis; operator approves. Metric is a
+    // free string (Maya-proposed, e.g. "signups", "signups/week", "waitlist").
+    northStarMetric: v.optional(v.string()),
+    northStarTarget: v.optional(v.number()),
+    northStarDeadlineMs: v.optional(v.number()),
     diagnosis: v.optional(v.any()),
     // Sprint 1.1 — cached LLM-driven keyword expansion. Maps the founder's
     // product description into semantic keywords + audience pain phrases the
