@@ -26,29 +26,37 @@ This skill is the pre-publish quality gate. Every draft goes through it before t
 3. **PLAYBOOK.md § 6** — Anti-slop section. The canonical ban list.
 4. **gtmDraftedContent row** for the draft being scored.
 5. **Any prior approved drafts** for the same platform (the live voice fingerprint).
-6. **Operator's existing public writing** (if Composio-connected): last 20 X tweets, last 10 Reddit comments, last 5 LinkedIn posts. Highest-fidelity voice source.
+6. **Operator's existing public writing** — the founder's OWN real posts. In manager mode these were **ingested during onboarding (APP.md Phase 0 / existing-account ingestion)** and are already on disk; otherwise pull via Composio (last 20 X tweets, last 10 Reddit comments, last 5 LinkedIn posts). Highest-fidelity voice source. Prefer same-platform samples.
+7. **Venue style exemplars** (`styleExemplars[]` from the per-channel research skill for this platform): 5-10 real top-performing HUMAN native posts captured verbatim from the exact venue. The register anchor — what "native here" sounds like. Match cadence/vocab/length/format; never copy content.
 
 ## Decision rules
 
-### 1. Build the voice fingerprint
+### 1. Build the voice fingerprint — condition on BOTH the founder's own posts AND the venue exemplars
 
-Three input tiers, in order of preference:
+The match is conditioned on two independent anchors. A draft that sounds like the founder but ignores how the venue talks reads out of place; a draft that nails the venue register but isn't in the founder's voice reads ghost-written. The target is the **intersection**: the founder's voice, expressed in a register native to this specific venue.
 
-1. **Existing public writing** (highest signal). Pull the operator's last N posts via Composio. Look for: average sentence length, contraction usage, technical-vs-casual register, characteristic phrases, hooks, sign-offs, em-dash habit, single-sentence-paragraph habit. Note 5-8 distinctive features.
+**Anchor A — the founder's OWN real posts (the voice anchor).** Where the founder already has accounts, **manager mode ingested their real posts during onboarding (APP.md Phase 0 / existing-account ingestion)** — this is the highest-fidelity source and is already on disk; you don't have to re-pull it. Input tiers, in order of preference:
+
+1. **Founder's ingested / existing public writing** (highest signal). The manager-mode Phase 0 ingestion captured their real posts per platform; where it didn't (or to supplement), pull the operator's last N posts via Composio. Look for: average sentence length and its *variance* (burstiness), contraction usage, technical-vs-casual register, characteristic phrases, how they open and sign off, em-dash habit, single-sentence-paragraph habit, profanity tolerance, emoji frequency. Note 5-8 distinctive features. **Prefer same-platform samples** — how the founder writes on X is not how they write on LinkedIn.
 
 2. **Approved prior drafts** (medium signal). Use the operator's accept/reject history on previous drafts as a voice signal. Drafts the operator approved unchanged represent voice fit. Drafts the operator EDITED tell you what to avoid.
 
 3. **Onboarding answers + USER.md `founderWhy`** (lowest signal, but always available). Their own answers about why they built the product capture their natural tone. Use as fallback when 1+2 are empty.
+
+**Anchor B — the venue style exemplars (the register anchor).** The per-channel research skills (`maya-reddit-demand-researcher`, `maya-x-founder-led-researcher`, `maya-linkedin-fit-researcher`, `maya-tiktok-format-researcher`, `maya-content-format-miner`) each capture **5-10 real, top-performing, HUMAN native posts verbatim from the exact venue** as style exemplars (`styleExemplars[]`). These are the few-shot voice/register anchors: they encode the cadence, vocabulary, length, and format a real participant in *this specific subreddit / niche / feed* uses. Read them. Match cadence/vocab/length/format — **never copy their content** (that's plagiarism and a slop tell in itself). They tell you what "native here" sounds like; Anchor A tells you what "the founder" sounds like.
+
+**When the two conflict** (founder writes long essays, the venue rewards 2-line replies): bend register toward the venue, keep voice (word choice, stance, characteristic phrases) toward the founder. Note the tension in `userFeedback` so the operator can confirm.
 
 ### 2. Score each draft on three dimensions
 
 For every draft, produce three numeric scores in [0,1]:
 
 - **Slop score** (PLAYBOOK § 6 ban list compliance). 1.0 = no banned phrases, no MBA-deck structure, no AI-paragraph rhythm. <0.7 = fail.
-- **Voice match** (fingerprint similarity). 1.0 = reads like the operator wrote it. Compare sentence length distribution, vocabulary, characteristic phrases. <0.6 = fail.
+- **Voice match** (fingerprint similarity to Anchor A — the founder's own posts). 1.0 = reads like the operator wrote it. Compare sentence length distribution and burstiness, vocabulary, characteristic phrases, stance. <0.6 = fail.
+- **Native-register fit** (similarity to Anchor B — the venue style exemplars). 1.0 = reads like a real participant in this exact venue wrote it (right length, cadence, format, vocabulary for the subreddit/niche/feed). A grammatically perfect post that's the wrong shape for the venue fails here. <0.6 = fail. (When exemplars are unavailable for the venue, default this dimension to neutral 0.5 and note it.)
 - **Specificity** (concrete-vs-generic ratio). Drafts referencing specific URLs / numbers / proper nouns from the source thread score higher. Drafts that could be sent to any product score lower. <0.5 = fail.
 
-Combine: `voiceMatchScore = 0.4*voice + 0.4*specificity + 0.2*slop`. Persist in `gtmDraftedContent.voiceMatchScore`.
+Combine the four dimensions into a single `voiceMatchScore` using judgment (this is a weighting heuristic for the score field, not a hard gate): roughly `0.3*voice + 0.25*nativeRegister + 0.3*specificity + 0.15*slop`, but let the lowest dimension dominate — a draft that aces voice and specificity but is the wrong shape for the venue (low native-register) should not score "ship." Persist in `gtmDraftedContent.voiceMatchScore`.
 
 ### 3. Slop-critic pass
 
@@ -89,7 +97,7 @@ POST scoring results to `/lc_gtm/update_draft_voice_match` (Sprint 2.4 endpoint)
 
 ## Failure modes
 
-- **No voice signal available** (no public writing, no prior drafts, no onboarding answers beyond minimal). Voice score defaults to neutral 0.5. Surface to user via Telegram: "I need a sample of how you write so my drafts sound like you. Reply with 2-3 sentences in your usual voice."
+- **No voice signal available** (no ingested posts, no public writing, no prior drafts, no onboarding answers beyond minimal). Voice score (Anchor A) defaults to neutral 0.5 — but **the venue style exemplars (Anchor B) still give you a register floor**, so don't ship voiceless: match the native cadence/length/format of the exemplars and lean on specificity. Surface to user via Telegram: "I need a sample of how you write so my drafts sound like you. Reply with 2-3 sentences in your usual voice."
 - **All drafts failing both gates.** Likely the subagent is producing template-y output. Reset: re-spawn the subagent with a tighter prompt + explicit voice samples from USER.md.
 - **Operator approval inconsistency** (approves draft A, rejects functionally-identical draft B). Surface the contradiction: "I noticed you approved [link] but rejected [link] which read very similarly. Want to tell me what's different about them?" Voice profile updates from the answer.
 

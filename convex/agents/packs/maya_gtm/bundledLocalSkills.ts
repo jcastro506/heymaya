@@ -697,6 +697,8 @@ Winning means buyer conversation, not engagement theater. A pattern that generat
 8. **Voice-fingerprint from reply threads, not just polished posts.** The real voice fingerprint lives where niche winners defend, clarify, or follow up in replies — not in the highly-edited top-level hook. Mine reply threads: how do they explain themselves when challenged? How do they handle "this doesn't work for me"? How do they follow up with someone interested? That's the authentic rhythm, sentence length, and vocabulary that built their audience. Capture it from replies, not just the hook post.
 9. **Mimicry concentration judgment.** If most of the niche patterns trace back to one or two accounts, flag \`mimicryRisk: "high"\` and note who dominates. Don't gate on a fixed percentage — judge whether the pattern diversity is real or essentially one person's format spread across reposts.
 10. **No final-copy generation.** Patterns + slots + examples, never final drafts.
+11. **Style-exemplar capture (native-voice fidelity — Sprint I).** Separate from hook templates, capture **5-10 real, top-performing, HUMAN native posts verbatim** for the chosen channel — whole posts/replies that read like a real participant wrote them, not just extractable hook skeletons. These are few-shot **voice/register anchors** for \`maya-voice-matcher\` + drafting (cadence, vocabulary, length, format, how natives open and close). Distinct from \`hookPatterns[].realExamples\` (which prove a *pattern* won): exemplars are full-text register references. Match cadence/vocab/length/format; **never copy content.** Skip anything that reads templated/AI. Emit in \`styleExemplars[]\`. Honest framing: no platform AI-detector to dodge — the enemy is generic content the community ignores and the algorithm starves.
+12. **Caption-craft per channel (Sprint I).** Roll up the channel's caption conventions into \`captionCraft\` so drafting has them inline. Encode each platform's native craft where relevant to the chosen channel: **TikTok** hook-line + small native hashtag set; **Instagram** story-shaped caption + one CTA; **YouTube** title = the CTR lever (curiosity/specific, front-loaded) + a description that does light SEO and carries the link; **Reddit** the title is everything; **X** the post text IS the caption; **LinkedIn** hook first line + link in first comment. Draw conventions from the captured exemplars, not generic advice.
 
 ## Output schema
 
@@ -731,6 +733,22 @@ interface ContentFormatLibrary {
   rejectedPatterns: Array<{ reason: "vanity_engagement" | "slop_phrase" | "mimicry_concentration" | "banned_phrase" | "other"; description: string; exampleUrl?: string }>;
   mimicryRisk: "low" | "medium" | "high";
   mimicryNote?: string;                     // who dominates if mimicryRisk is medium/high
+  /** 5-10 real, top-performing, HUMAN native FULL posts/replies captured VERBATIM
+   *  for this channel — the few-shot voice/register anchors for maya-voice-matcher
+   *  + drafting (distinct from hookPatterns.realExamples, which prove a pattern).
+   *  Match cadence/vocab/length/format; NEVER copy content. */
+  styleExemplars: Array<{
+    url: string;
+    verbatim: string;
+    whyExemplary: string;                   // why this reads native to the channel/niche
+    landedSignal: string;                   // engagement / standing that shows it landed
+  }>;
+  /** Per-channel caption conventions rolled up for inline use by drafting. */
+  captionCraft: {
+    channel: string;
+    convention: string;                     // the channel's caption craft (e.g. YouTube title=CTR lever + SEO description; Reddit title-is-everything; X post-is-the-caption; LinkedIn hook + link-in-first-comment; TikTok hook-line + hashtags; IG story + CTA)
+    antiPatterns: string[];
+  };
   rulesCited: string[];
 }
 \`\`\`
@@ -748,7 +766,7 @@ interface ContentFormatLibrary {
 
 ## Anti-slop check
 
-Each \`template\` must pass \`maya-slop-critic\` on the template-skeleton itself. Real verbatim examples with banned phrases stay in \`realExamples\` (as evidence of what won) but DO NOT promote into templates. Every pattern in the final library must have \`buyerConversionJudgment: "strong" | "moderate"\` — patterns rated "vanity" or "unknown" are moved to \`rejectedPatterns[]\`.
+Each \`template\` must pass \`maya-slop-critic\` on the template-skeleton itself — including the structural AI-tell pass (no tidy tricolons, "it's not X it's Y", em-dash cadence, uniform rhythm baked into a template). Real verbatim examples with banned phrases stay in \`realExamples\` (as evidence of what won) but DO NOT promote into templates. Every pattern in the final library must have \`buyerConversionJudgment: "strong" | "moderate"\` — patterns rated "vanity" or "unknown" are moved to \`rejectedPatterns[]\`. \`styleExemplars[].verbatim\` is a voice/register reference only — never copy an exemplar's content into a draft; drop any exemplar that itself reads templated/AI.
 `;
 
 // Source: agents/skills/maya-gtm/maya-continuous-research/SKILL.md
@@ -1511,6 +1529,8 @@ LinkedIn is the right channel for a narrow slice of indie products — B2B SaaS,
 10. **LI-10.9 newsletter gate.** Only if operator already writes long-form monthly+ elsewhere.
 11. **LI-10.11 60-day reweight.** IF leads but zero conversions at 60 days AND runway <6 months THEN \`reweightToFasterChannel: true\`.
 12. **LI-10.14 link-in-first-comment.** Any draft URL moves to first comment.
+13. **Style-exemplar capture (native-voice fidelity — Sprint I).** While mining large-account niche posts, capture **5-10 real, top-performing, HUMAN-written native LinkedIn posts verbatim** from this buyer's professional niche — substantive, voiced posts that earned real reach and *buyer* engagement (not broetry, not engagement-bait, not corporate-announcement slop). These are few-shot **voice/register anchors** for \`maya-voice-matcher\` + drafting: they encode how a credible person in *this professional niche* actually writes here — hook openers, paragraph rhythm, where they get specific, how they close without "Agree?". LinkedIn is the slop epicenter, so be ruthless: skip any exemplar that itself reads templated/AI/broetry. Match cadence/vocab/length/format; **never copy content.** Emit in \`styleExemplars[]\`.
+14. **LinkedIn caption craft — hook + "link in first comment" (linkedin.md § 4 / LI-10.14).** The first line is a scroll-stopping hook (a specific tension or concrete claim, never "Excited to announce"). The body is a thinking-process narrative a non-technical buyer can follow without clicking away. The URL/CTA lives in the **first comment**, not the post — the post itself never reads like an ad. No engagement-bait closer. Surface this in \`captionCraft\`.
 
 ## Comment-target qualification
 
@@ -1569,6 +1589,24 @@ interface LinkedInFitReport {
     conversionPath: string;       // what's the realistic next step — DM, reply thread, profile visit?
   }>;
   postingCadence: { originalPostsPerWeek: number; commentMiningMinPerDay: number };
+  /** 5-10 real, top-performing, HUMAN-written native LinkedIn posts captured
+   *  VERBATIM from this professional niche — the few-shot voice/register anchors
+   *  for maya-voice-matcher + drafting. NOT broetry/engagement-bait/announcements.
+   *  Match cadence/vocab/length/format; NEVER copy content. */
+  styleExemplars: Array<{
+    postUrl: string;
+    authorHandle: string;
+    verbatim: string;
+    whyExemplary: string;          // why this reads like a credible voiced person in this niche
+    buyerEngagementSignal: string; // evidence it earned real (buyer, not vanity) engagement
+  }>;
+  /** LinkedIn caption craft: hook + thinking-process body + link in first comment. */
+  captionCraft: {
+    hookConvention: string;        // how the scroll-stopping first line reads (specific tension / concrete claim)
+    bodyShape: string;             // thinking-process narrative, non-technical-buyer-readable
+    ctaPlacement: "link_in_first_comment";
+    antiPatterns: string[];        // broetry, "Excited to announce", "Agree?" closers, AI-emoji bullets
+  };
   rulesCited: string[];
   reweightFlag?: boolean;
 }
@@ -1587,7 +1625,7 @@ Max 4 ScrapeCreators calls. 1-2 WebFetches. 1 main_maya call. Timeout 12 min.
 
 ## Anti-slop check
 
-LinkedIn is the slop epicenter. Every \`suggestedCommentDraft\` and \`caption.openingPattern\` MUST pass \`maya-slop-critic\` with LinkedIn-specific bans (linkedin.md § 9): no broetry overuse, no "thrilled/excited/honored", no tagged-friend humblebrag, no engagement-bait closers, no AI-emoji bullet lists.
+LinkedIn is the slop epicenter. Every \`suggestedCommentDraft\` and \`caption.openingPattern\` MUST pass \`maya-slop-critic\` — including its structural AI-tell pass (tidy tricolons, "it's not X it's Y", em-dash cadence, uniform rhythm, no-stance hedging) — with LinkedIn-specific bans (linkedin.md § 9): no broetry overuse, no "thrilled/excited/honored", no tagged-friend humblebrag, no engagement-bait closers, no AI-emoji bullet lists. \`styleExemplars[].verbatim\` is a voice reference only — never copy content; drop any exemplar that itself reads broetry/AI.
 `;
 
 // Source: agents/skills/maya-gtm/maya-morning-brief/SKILL.md
@@ -1882,6 +1920,8 @@ Reddit is the highest-conversion buyer-intent channel for indie products IF the 
 10. **Live-product check (§ 8.9).** IF \`app.stage === "pre-launch"\` AND only waitlist exists THEN remove r/SideProject from candidates. Substitute r/AlphaAndBetaUsers.
 11. **Cross-post block (§ 8.7).** No same post in >2 subs in a week. Rewrite each for sub culture or stage 7+ days apart.
 12. **First-comment URL rule (§ 8.8).** For r/SaaS / r/startups / r/Entrepreneur, URL goes in the first comment, not the post body.
+13. **Style-exemplar capture (native-voice fidelity — Sprint I).** While mining each recommended sub, capture **5-10 real, top-performing, HUMAN-written native posts/comments verbatim** from that exact sub — the kind that actually landed there (high upvotes/engagement, written by a real participant, not removed, not an obvious ad or bot). These become few-shot **voice/register anchors** for \`maya-voice-matcher\` and the drafting step: they encode the cadence, vocabulary, length, formality, and format a real member of *this sub* uses. The point is to match how natives write, NOT to copy what they wrote — **never reuse their content, angle, or specifics.** Skip any post that itself reads templated/AI. Emit in \`styleExemplars[]\`. The honest framing: there is no platform AI-detector to beat; the enemy is generic content that mods remove and the community ignores. Exemplars make the founder's reply read like it belongs here.
+14. **Reddit caption craft — the title IS everything (reddit.md).** On Reddit the post title carries the entire click decision; body is secondary. When proposing any post (not reply) target, the title must read like a real human asking/sharing in this sub: lowercase-friendly where the sub is, no hype-jargon, no emoji, no "Excited to announce," curiosity or concrete-specific over clickbait. For replies, the first line is the title-equivalent — it has to earn the read before the fold. Surface title guidance in \`captionCraft\`.
 
 ## Output schema
 
@@ -1954,6 +1994,24 @@ interface RedditDemandReport {
   promotionRiskScore: 0 | 1 | 2 | 3 | 4 | 5;
   riskFlags: string[];
   domainRiskElevated: boolean;
+  /** 5-10 real, top-performing, HUMAN-written native posts/comments captured
+   *  VERBATIM from the recommended subs — the few-shot voice/register anchors
+   *  maya-voice-matcher + drafting use to make the founder's reply read native
+   *  to THIS sub. Match cadence/vocab/length/format; NEVER copy content. */
+  styleExemplars: Array<{
+    sub: string;
+    url: string;
+    kind: "post" | "comment";
+    verbatim: string;           // the real native text, unedited
+    whyExemplary: string;       // why this reads like a real member of this sub (cadence, register, format)
+    upvotesOrSignal: string;    // engagement / standing signal that it landed here
+  }>;
+  /** Reddit caption craft: the title is the whole click decision. */
+  captionCraft: {
+    titleConvention: string;    // how titles read in THIS sub (case, length, curiosity vs concrete, jargon tolerance)
+    titleAntiPatterns: string[];// e.g. emoji-in-title, hype-jargon, "Excited to announce"
+    firstLineGuidance: string;  // for replies: the title-equivalent first line that earns the read
+  };
   parkReasons?: string[];
 }
 \`\`\`
@@ -1992,6 +2050,7 @@ Max 8 ScrapeCreators calls: 3 × subreddit/search, 2 × general search, 2 × sub
 - \`conversionPath\` must be honest and non-spammy: a way to mention the product or offer a trial that fits naturally in a helpful reply. "Link in bio" or naked URL dumps are not acceptable.
 - \`whyHigherIntent\` on \`commentReplyTarget\` must explain concretely why that comment beats OP as a reply target — e.g., "OP's question was answered; this nested reply from 3 days later is still unanswered and directly names the product's pain."
 - Never surface a thread as a reply target and leave \`modRemoved: true\` without explicitly flagging it to the caller as low-priority.
+- \`styleExemplars[].verbatim\` is captured VERBATIM as a voice/register reference only. Downstream drafting matches cadence/vocab/length/format — it must NEVER copy an exemplar's content, angle, or specifics. Drop any exemplar that itself reads templated or AI-written; it can't anchor native voice.
 `;
 
 // Source: agents/skills/maya-gtm/maya-results-reviewer/SKILL.md
@@ -2089,14 +2148,22 @@ Max 4 ScrapeCreators calls (1 per platform). Cache aggressively. 1 main_maya syn
 // Source: agents/skills/maya-gtm/maya-slop-critic/SKILL.md
 const ENTRY_18_maya_slop_critic = `---
 name: maya-slop-critic
-description: The anti-slop enforcer. Apply PLAYBOOK § 6 banned-phrase list + banned-structure scan + voice match + read-aloud test. Returns "rejected with reasons" on any trip.
+description: The anti-slop / AI-tell critic. Apply PLAYBOOK § 6 banned-phrase list + banned-structure scan + LLM-judgment structural AI-tell pass + voice match + read-aloud test. Returns "rejected with reasons" on any trip. The bar is native-voice fidelity, NOT detector-dodging.
 ---
 
 # maya-slop-critic
 
 ## Purpose
 
-Every draft prose output in the system passes through this skill before shipping. The job is to detect AI-flavored writing and surface specific rewrites — banned phrases, banned structures, voice divergence, generic-template feel. PLAYBOOK § 6 codifies the rules; this skill enforces them.
+Every draft prose output in the system passes through this skill before shipping. The job is to detect writing that reads like a generic AI / templated marketer wrote it and surface specific rewrites — banned phrases, banned structures, *structural AI-tells*, voice divergence, generic-template feel. PLAYBOOK § 6 codifies the lexical rules; this skill enforces them AND adds an LLM-judgment structural pass.
+
+## The honest framing (read before judging anything)
+
+The enemy is **not an AI detector**. There is no reliable platform AI-detector demoting text as a ranking signal — detectors are noisy and platforms don't run them at scale. We never chase "undetectable." The real penalties are concrete: Reddit/HN **community + mod rejection** (and founder-account ban risk), and TikTok/IG/YT **engagement starvation** of generic, voiceless content. So the single question this skill answers, on every draft, is:
+
+> **"Would a real person from this community have actually written this?"**
+
+A draft that reads as native, specific, and opinionated passes — even if it happens to trip a hypothetical detector. A draft that is smooth, tidy, hedged, and voiceless FAILS — even if it has zero banned phrases. Structural tidiness is the giveaway, not vocabulary alone.
 
 ## When to invoke
 
@@ -2146,18 +2213,29 @@ Every draft prose output in the system passes through this skill before shipping
    - Passive voice as default.
    - Em-dash + colon stacking in the same line.
 
-3. **Rule 9.12 — voice-match scan.** Compare draft to operator's last-5 authentic posts. Diverges = REJECT. Check: sentence length variance, capitalization, emoji frequency, parenthetical-aside frequency, first-vs-third-person, profanity tolerance.
-4. **Rule 9.13 — "Excited to announce" auto-reject.** No re-read needed. Reject immediately, propose rewrite as thinking-process post (linkedin.md § 4).
-5. **Read-aloud test.** Sounds like a press release = REJECT.
-6. **Channel-specific bans.**
+3. **Rule 9.11b — STRUCTURAL AI-tell critic (LLM JUDGMENT, not regex).** This is the load-bearing addition. The banned-phrase and banned-structure lists above catch known surface patterns; this pass catches the *shape* of AI-generated prose that no phrase list can enumerate. **Do NOT implement this as regex, counts, or hardcoded thresholds** (per the no-heuristics rule) — read the draft as a human from the target community would and judge whether it has the telltale smoothness of machine-written or template-marketer text. Look for, and reason about, these tells together (any one is a yellow flag; a cluster is a REJECT):
+   - **Em-dash as default connective.** AI reaches for em-dashes to glue clauses where a real person would use a period, a comma, or just two sentences. Over-reliance — especially the rhythmic "X — Y — Z" cadence — reads machine-made. Judge by feel, not a per-paragraph count.
+   - **Suspiciously tidy tricolons / rule-of-three.** "Faster, cheaper, and more reliable." Real people don't naturally land on three balanced items this often. One deliberate tricolon is fine; a draft built out of them is a tell.
+   - **"It's not just X, it's Y" (and "not only… but also").** The signature AI pivot-to-profundity construction. Almost always a tell. Flag every instance.
+   - **Uniform sentence rhythm.** Real writing has burstiness — a fragment, then a long winding sentence, then three words. AI defaults to a metronome of medium-length, evenly-weighted sentences. If every sentence is the same length and shape, REJECT.
+   - **Over-hedging / no stance.** "It can be helpful in many cases." "This might be worth considering." A real founder in their niche has an *opinion*. Hedged, both-sides, committee-safe prose reads bot-written. Flag absence of a clear point of view.
+   - **Zero opinion / zero specifics.** Prose that could be about any product, sent to anyone, citing nothing concrete (no real number, no proper noun, no lived detail). Generic-to-anyone = REJECT. This is the symptom the whole skill exists to kill.
+   - **Suspicious symmetry / tidiness.** Perfectly parallel clause structure, every list item the same grammatical shape, a clean intro-body-closer arc on a casual reply. Humans are messier; native posts have texture, asides, and asymmetry.
+   - **Pivot-to-uplift closer.** A neat motivational/aspirational wrap-up sentence ("And that's how you turn a setback into a setup.") that a real person wouldn't tack on. Tell.
+   For each tell found, emit a \`hit\` with \`type: "structural_ai_tell"\`, the offending \`snippet\`, and a \`suggestion\` that makes it read like a real person from this niche — break the rhythm, take a side, swap the em-dash for a period, add a concrete specific, cut the tidy closer. The verdict question is always: *would someone in {community} have written this, or does it read like generic AI?*
+
+4. **Rule 9.12 — voice-match scan.** Compare draft to operator's last-5 authentic posts. Diverges = REJECT. Check: sentence length variance, capitalization, emoji frequency, parenthetical-aside frequency, first-vs-third-person, profanity tolerance.
+5. **Rule 9.13 — "Excited to announce" auto-reject.** No re-read needed. Reject immediately, propose rewrite as thinking-process post (linkedin.md § 4).
+6. **Read-aloud test.** Sounds like a press release = REJECT.
+7. **Channel-specific bans.**
    - LinkedIn: broetry overuse, "Agree?" closers, tagged-friend humblebrag, fake humility, "founder" 3x in first paragraph, stock-photo selfies.
    - TikTok: literal "link in bio", "Hey guys" / "What's up everyone", "follow for more" in first 70%.
    - Reddit: "DM me" / PM solicitation in promo-sensitive subs, naming competitors in promo-adjacent comments, hype-jargon in title, emoji in title.
    - X: hype emoji clusters (🚀🔥), "RT for reach", "Like if you agree", "Comment YES and I'll DM you", dunk-quote-RTs.
-7. **Number-presence (x.md rule 8).** X posts must contain ≥1 concrete number. No number = REJECT (or surface to operator for the number).
-8. **CTA singularity.** Multiple CTAs in one post = REJECT.
-9. **Operator's-instinct final filter (PLAYBOOK rule 6.1).** If uncertain, return \`verdict: "borderline"\` with: "read this like a stranger sent it to you — do you sound like this?"
-10. **No invented voice.** Slop-critic rejects; it doesn't write the operator's voice from scratch. If voice fingerprint missing, mark \`voiceMatch: "no_fingerprint_available"\` and apply only banned-phrase + structure scans.
+8. **Number-presence (x.md rule 8).** X posts must contain ≥1 concrete number. No number = REJECT (or surface to operator for the number).
+9. **CTA singularity.** Multiple CTAs in one post = REJECT.
+10. **Operator's-instinct final filter (PLAYBOOK rule 6.1).** If uncertain, return \`verdict: "borderline"\` with: "read this like a stranger sent it to you — do you sound like this?"
+11. **No invented voice.** Slop-critic rejects; it doesn't write the operator's voice from scratch. If voice fingerprint missing, mark \`voiceMatch: "no_fingerprint_available"\` and apply only banned-phrase + structure + structural-AI-tell scans.
 
 ## Output schema
 
@@ -2166,7 +2244,7 @@ interface SlopCriticVerdict {
   verdict: "approved" | "rejected" | "borderline";
   hits: Array<{
     rule: string;
-    type: "banned_phrase" | "banned_structure" | "voice_divergence" | "channel_ban" | "missing_number" | "multiple_ctas";
+    type: "banned_phrase" | "banned_structure" | "structural_ai_tell" | "voice_divergence" | "channel_ban" | "missing_number" | "multiple_ctas";
     snippet: string;
     suggestion: string;
   }>;
@@ -2181,7 +2259,7 @@ interface SlopCriticVerdict {
 
 - **Passes all scans but feels off.** Return \`verdict: "borderline"\` with \`finalAdvice: "Operator gut-check before posting"\`.
 - **Operator overrides rejection.** Document override + predict failure mode. Surface to MEMORY.md.
-- **No voice fingerprint.** Apply banned-phrase + structure + channel-ban scans only. Mark \`voiceMatch: "no_fingerprint_available"\`.
+- **No voice fingerprint.** Apply banned-phrase + structure + structural-AI-tell + channel-ban scans only. Mark \`voiceMatch: "no_fingerprint_available"\`. The structural-AI-tell pass still runs — it needs no fingerprint, only the "would a real person from this community have written this?" judgment.
 
 ## Cost discipline
 
@@ -2318,6 +2396,8 @@ A format that goes viral but pulls the wrong audience is actively harmful. The g
 10. **CTA pattern.** Aggregate: search-by-name / pinned-comment / DM-keyword. Refuse "link in bio" recommendations.
 11. **Buyer-language comment mining.** For the top confirming videos in the identified format, pull comments and scan for buyer-language signals: intent phrases ("where do I get this", "how do I sign up", "does it work with X"), problem-validation phrases ("I've been looking for this", "finally"), and objection phrases ("is it free", "how much"). A format with strong buyer-language in comments ranks above a format with the same reach and no buyer-language. Surface the best-signal comment excerpts verbatim in \`buyerLanguageExamples\`.
 12. **No recommendation without clear evidence.** If no format shows clear recurrence across independent creators, \`confidence: "insufficient_evidence"\`. Do not force a recommendation from thin data.
+13. **Style-exemplar capture (native-voice fidelity — Sprint I).** From the confirming videos in the winning format, capture **5-10 real, top-performing, HUMAN native examples verbatim** — the on-screen-text hook line, the spoken/written caption, and the hashtag set — from real creators in this niche (not ads, not one dominant account). These are few-shot **voice/register anchors** for \`maya-voice-matcher\` + caption drafting: they encode how a real creator in *this niche* phrases a hook, how casual/punchy the caption is, which hashtags actually run here. Match cadence/length/format; **never copy content.** Skip anything that reads templated/AI. Emit in \`styleExemplars[]\`. The honest framing: there's no TikTok AI-detector — the penalty for generic captions is engagement starvation, the algorithm simply doesn't push voiceless content.
+14. **TikTok / IG caption craft (tiktok.md).** Encode this niche's caption conventions in \`captionCraft\`. **TikTok:** the **hook line** (first ~3 words / on-screen text) does the work — pattern-interrupt or outcome-promise, never "Hey guys"; caption is short and human; hashtags are a small native set (broad + niche + intent), not a wall. CTA is search-by-name / pinned-comment, never "link in bio". **Instagram (Reels/story):** a short **story-shaped** caption + one clear **CTA** (the IG convention), hashtags in the niche's normal count. Pull the actual hook-line and hashtag norms from the captured exemplars, not from generic advice.
 
 ## Output schema
 
@@ -2350,6 +2430,32 @@ interface TikTokFormatResearch {
   ctaTaxonomy: Record<"search_by_name" | "pinned_comment" | "dm_keyword" | "other", number>;
   searchQueriesUsed: string[];
   paginationDepth: string; // describe how many pages / adjacent keywords were tried
+  /** 5-10 real, top-performing, HUMAN native examples captured VERBATIM from the
+   *  niche — the few-shot voice/register anchors for maya-voice-matcher + caption
+   *  drafting. Match hook cadence/length/format + hashtag norms; NEVER copy content. */
+  styleExemplars: Array<{
+    videoUrl: string;
+    handle: string;
+    hookLineVerbatim: string;     // the on-screen / opening hook, verbatim
+    captionVerbatim: string;      // the real caption, verbatim
+    hashtagsVerbatim: string[];   // the real hashtag set used
+    whyExemplary: string;         // why this reads native to the niche
+  }>;
+  /** TikTok + IG caption craft drawn from the exemplars, not generic advice. */
+  captionCraft: {
+    tiktok: {
+      hookLineConvention: string; // first-3-words / on-screen-text pattern that wins here
+      captionStyle: string;       // short/human register
+      hashtagNorm: string;        // the native hashtag set shape (broad + niche + intent)
+      ctaPattern: "search_by_name" | "pinned_comment" | "dm_keyword";
+    };
+    instagram: {
+      captionShape: string;       // story-shaped caption convention
+      cta: string;                // the one clear CTA
+      hashtagNorm: string;
+    };
+    antiPatterns: string[];       // "Hey guys", "link in bio", hashtag walls, "follow for more" early
+  };
   rulesCited: string[];
 }
 \`\`\`
@@ -2367,7 +2473,7 @@ Max 12 ScrapeCreators calls: 3-5 keywords × 1 \`/search/top\` + 2-3 \`/search/h
 
 ## Anti-slop check
 
-Structured taxonomy output, slop-critic NOT invoked. \`excerpt\` strings from real videos are verbatim — do not paraphrase.
+Structured taxonomy output, slop-critic NOT invoked. \`excerpt\` strings and every \`styleExemplars[]\` field (\`hookLineVerbatim\`, \`captionVerbatim\`, \`hashtagsVerbatim\`) from real videos are VERBATIM — do not paraphrase. Exemplars are voice/register references only; downstream caption drafting matches their cadence/length/hashtag-shape but NEVER copies an exemplar's content. Drop any exemplar whose caption itself reads templated/AI.
 `;
 
 // Source: agents/skills/maya-gtm/maya-ugc-system-advisor/SKILL.md
@@ -2561,29 +2667,37 @@ This skill is the pre-publish quality gate. Every draft goes through it before t
 3. **PLAYBOOK.md § 6** — Anti-slop section. The canonical ban list.
 4. **gtmDraftedContent row** for the draft being scored.
 5. **Any prior approved drafts** for the same platform (the live voice fingerprint).
-6. **Operator's existing public writing** (if Composio-connected): last 20 X tweets, last 10 Reddit comments, last 5 LinkedIn posts. Highest-fidelity voice source.
+6. **Operator's existing public writing** — the founder's OWN real posts. In manager mode these were **ingested during onboarding (APP.md Phase 0 / existing-account ingestion)** and are already on disk; otherwise pull via Composio (last 20 X tweets, last 10 Reddit comments, last 5 LinkedIn posts). Highest-fidelity voice source. Prefer same-platform samples.
+7. **Venue style exemplars** (\`styleExemplars[]\` from the per-channel research skill for this platform): 5-10 real top-performing HUMAN native posts captured verbatim from the exact venue. The register anchor — what "native here" sounds like. Match cadence/vocab/length/format; never copy content.
 
 ## Decision rules
 
-### 1. Build the voice fingerprint
+### 1. Build the voice fingerprint — condition on BOTH the founder's own posts AND the venue exemplars
 
-Three input tiers, in order of preference:
+The match is conditioned on two independent anchors. A draft that sounds like the founder but ignores how the venue talks reads out of place; a draft that nails the venue register but isn't in the founder's voice reads ghost-written. The target is the **intersection**: the founder's voice, expressed in a register native to this specific venue.
 
-1. **Existing public writing** (highest signal). Pull the operator's last N posts via Composio. Look for: average sentence length, contraction usage, technical-vs-casual register, characteristic phrases, hooks, sign-offs, em-dash habit, single-sentence-paragraph habit. Note 5-8 distinctive features.
+**Anchor A — the founder's OWN real posts (the voice anchor).** Where the founder already has accounts, **manager mode ingested their real posts during onboarding (APP.md Phase 0 / existing-account ingestion)** — this is the highest-fidelity source and is already on disk; you don't have to re-pull it. Input tiers, in order of preference:
+
+1. **Founder's ingested / existing public writing** (highest signal). The manager-mode Phase 0 ingestion captured their real posts per platform; where it didn't (or to supplement), pull the operator's last N posts via Composio. Look for: average sentence length and its *variance* (burstiness), contraction usage, technical-vs-casual register, characteristic phrases, how they open and sign off, em-dash habit, single-sentence-paragraph habit, profanity tolerance, emoji frequency. Note 5-8 distinctive features. **Prefer same-platform samples** — how the founder writes on X is not how they write on LinkedIn.
 
 2. **Approved prior drafts** (medium signal). Use the operator's accept/reject history on previous drafts as a voice signal. Drafts the operator approved unchanged represent voice fit. Drafts the operator EDITED tell you what to avoid.
 
 3. **Onboarding answers + USER.md \`founderWhy\`** (lowest signal, but always available). Their own answers about why they built the product capture their natural tone. Use as fallback when 1+2 are empty.
+
+**Anchor B — the venue style exemplars (the register anchor).** The per-channel research skills (\`maya-reddit-demand-researcher\`, \`maya-x-founder-led-researcher\`, \`maya-linkedin-fit-researcher\`, \`maya-tiktok-format-researcher\`, \`maya-content-format-miner\`) each capture **5-10 real, top-performing, HUMAN native posts verbatim from the exact venue** as style exemplars (\`styleExemplars[]\`). These are the few-shot voice/register anchors: they encode the cadence, vocabulary, length, and format a real participant in *this specific subreddit / niche / feed* uses. Read them. Match cadence/vocab/length/format — **never copy their content** (that's plagiarism and a slop tell in itself). They tell you what "native here" sounds like; Anchor A tells you what "the founder" sounds like.
+
+**When the two conflict** (founder writes long essays, the venue rewards 2-line replies): bend register toward the venue, keep voice (word choice, stance, characteristic phrases) toward the founder. Note the tension in \`userFeedback\` so the operator can confirm.
 
 ### 2. Score each draft on three dimensions
 
 For every draft, produce three numeric scores in [0,1]:
 
 - **Slop score** (PLAYBOOK § 6 ban list compliance). 1.0 = no banned phrases, no MBA-deck structure, no AI-paragraph rhythm. <0.7 = fail.
-- **Voice match** (fingerprint similarity). 1.0 = reads like the operator wrote it. Compare sentence length distribution, vocabulary, characteristic phrases. <0.6 = fail.
+- **Voice match** (fingerprint similarity to Anchor A — the founder's own posts). 1.0 = reads like the operator wrote it. Compare sentence length distribution and burstiness, vocabulary, characteristic phrases, stance. <0.6 = fail.
+- **Native-register fit** (similarity to Anchor B — the venue style exemplars). 1.0 = reads like a real participant in this exact venue wrote it (right length, cadence, format, vocabulary for the subreddit/niche/feed). A grammatically perfect post that's the wrong shape for the venue fails here. <0.6 = fail. (When exemplars are unavailable for the venue, default this dimension to neutral 0.5 and note it.)
 - **Specificity** (concrete-vs-generic ratio). Drafts referencing specific URLs / numbers / proper nouns from the source thread score higher. Drafts that could be sent to any product score lower. <0.5 = fail.
 
-Combine: \`voiceMatchScore = 0.4*voice + 0.4*specificity + 0.2*slop\`. Persist in \`gtmDraftedContent.voiceMatchScore\`.
+Combine the four dimensions into a single \`voiceMatchScore\` using judgment (this is a weighting heuristic for the score field, not a hard gate): roughly \`0.3*voice + 0.25*nativeRegister + 0.3*specificity + 0.15*slop\`, but let the lowest dimension dominate — a draft that aces voice and specificity but is the wrong shape for the venue (low native-register) should not score "ship." Persist in \`gtmDraftedContent.voiceMatchScore\`.
 
 ### 3. Slop-critic pass
 
@@ -2624,7 +2738,7 @@ POST scoring results to \`/lc_gtm/update_draft_voice_match\` (Sprint 2.4 endpoin
 
 ## Failure modes
 
-- **No voice signal available** (no public writing, no prior drafts, no onboarding answers beyond minimal). Voice score defaults to neutral 0.5. Surface to user via Telegram: "I need a sample of how you write so my drafts sound like you. Reply with 2-3 sentences in your usual voice."
+- **No voice signal available** (no ingested posts, no public writing, no prior drafts, no onboarding answers beyond minimal). Voice score (Anchor A) defaults to neutral 0.5 — but **the venue style exemplars (Anchor B) still give you a register floor**, so don't ship voiceless: match the native cadence/length/format of the exemplars and lean on specificity. Surface to user via Telegram: "I need a sample of how you write so my drafts sound like you. Reply with 2-3 sentences in your usual voice."
 - **All drafts failing both gates.** Likely the subagent is producing template-y output. Reset: re-spawn the subagent with a tighter prompt + explicit voice samples from USER.md.
 - **Operator approval inconsistency** (approves draft A, rejects functionally-identical draft B). Surface the contradiction: "I noticed you approved [link] but rejected [link] which read very similarly. Want to tell me what's different about them?" Voice profile updates from the answer.
 
@@ -2804,6 +2918,8 @@ For technical / indie / B2B SaaS / dev-tool products, X is the highest-leverage 
 12. **Black-Magic platform-risk reminder.** IF operator's product depends on free X API access THEN \`platformRiskWarning: true\` (x.md § 11 Failure 4). State this plainly: X has unilaterally repriced API access multiple times; any strategy that routes users from X into a product that itself needs the X API carries compounded dependency risk.
 13. **Account silence recovery.** IF \`lastPostAgeDays > 7\` THEN first action = value-add reply, not build-update post.
 14. **Citation-firewall on numbers.** Every number Maya quotes must come from a fresh ScrapeCreators call or operator-confirmed state.
+15. **Style-exemplar capture (native-voice fidelity — Sprint I).** While building the List and modeling hooks, capture **5-10 real, top-performing, HUMAN-written native posts AND replies verbatim** from the niche — the ones that actually landed (genuine engagement, real accounts, recent). These become few-shot **voice/register anchors** for \`maya-voice-matcher\` and draft generation: they encode how a real founder in *this niche* writes on X — sentence length and burstiness, lowercase habits, how they open a reply, how they take a stance. Capture replies specifically, not just polished posts — the native reply rhythm is where most acquisition happens (rule 11). Match cadence/vocab/length/format; **never copy their content.** Skip anything that reads templated/AI. The honest framing: there's no X AI-detector to dodge; the enemy is generic replies the niche scrolls past. Emit in \`styleExemplars[]\`.
+16. **X caption craft — the post IS the caption (x.md).** On X there's no separate caption layer: the tweet/reply text is the whole thing. Make it earn the "see more" tap before the fold — strong first line, concrete over abstract, ≥1 number where it fits (rule on number-presence). No hype-emoji clusters, no "a thread 🧵👇" theater unless the niche genuinely uses it. URL never in the first reply (rule 8). Surface this in \`captionCraft\`.
 
 ## Buyer-intent query strategy
 
@@ -2865,6 +2981,24 @@ interface XResearchReport {
   }>;
   searchQueries: string[];
   paginationNote?: string;           // note if cursor pagination was used or if deeper pagination is recommended
+  /** 5-10 real, top-performing, HUMAN-written native posts AND replies captured
+   *  VERBATIM from the niche — the few-shot voice/register anchors for
+   *  maya-voice-matcher + drafting. Replies included (that's where the native
+   *  founder voice lives). Match cadence/vocab/length/format; NEVER copy content. */
+  styleExemplars: Array<{
+    url: string;
+    handle: string;
+    kind: "post" | "reply";
+    verbatim: string;
+    whyExemplary: string;            // why this reads like a real founder in this niche
+    engagementSignal: string;        // likes/replies or standing that shows it landed
+  }>;
+  /** X caption craft: the post text IS the caption. */
+  captionCraft: {
+    firstLineConvention: string;     // how to earn the "see more" tap before the fold
+    numberRule: string;              // where a concrete number belongs
+    antiPatterns: string[];          // hype-emoji clusters, fake-thread theater, URL-in-first-reply
+  };
   platformRiskWarning?: boolean;
   parkReasons?: string[];
 }
@@ -2884,7 +3018,7 @@ Max 6 ScrapeCreators calls. Grok max 3 calls if invoked. 1 hard_research_beta + 
 
 ## Anti-slop check
 
-Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before this skill returns. Specifically ban hype emoji, "Great post!" / "So true!", "Excited to share". Mirror operator's last-5 authentic-post voice. The p3 soft mention must read like a founder being honest with a peer, not a salesperson leaving a card.
+Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before this skill returns — including its structural AI-tell pass (no em-dash cadence, no tidy tricolons, no "it's not X it's Y", no uniform rhythm). Mirror operator's last-5 authentic-post voice AND the \`styleExemplars[]\` reply register. The p3 soft mention must read like a founder being honest with a peer, not a salesperson leaving a card. \`styleExemplars[].verbatim\` is a voice reference only — never copy an exemplar's content; drop any exemplar that itself reads AI-written.
 `;
 
 export const BUNDLED_LOCAL_SKILLS: readonly BundledLocalSkill[] = [

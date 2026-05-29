@@ -39,6 +39,8 @@ A format that goes viral but pulls the wrong audience is actively harmful. The g
 10. **CTA pattern.** Aggregate: search-by-name / pinned-comment / DM-keyword. Refuse "link in bio" recommendations.
 11. **Buyer-language comment mining.** For the top confirming videos in the identified format, pull comments and scan for buyer-language signals: intent phrases ("where do I get this", "how do I sign up", "does it work with X"), problem-validation phrases ("I've been looking for this", "finally"), and objection phrases ("is it free", "how much"). A format with strong buyer-language in comments ranks above a format with the same reach and no buyer-language. Surface the best-signal comment excerpts verbatim in `buyerLanguageExamples`.
 12. **No recommendation without clear evidence.** If no format shows clear recurrence across independent creators, `confidence: "insufficient_evidence"`. Do not force a recommendation from thin data.
+13. **Style-exemplar capture (native-voice fidelity — Sprint I).** From the confirming videos in the winning format, capture **5-10 real, top-performing, HUMAN native examples verbatim** — the on-screen-text hook line, the spoken/written caption, and the hashtag set — from real creators in this niche (not ads, not one dominant account). These are few-shot **voice/register anchors** for `maya-voice-matcher` + caption drafting: they encode how a real creator in *this niche* phrases a hook, how casual/punchy the caption is, which hashtags actually run here. Match cadence/length/format; **never copy content.** Skip anything that reads templated/AI. Emit in `styleExemplars[]`. The honest framing: there's no TikTok AI-detector — the penalty for generic captions is engagement starvation, the algorithm simply doesn't push voiceless content.
+14. **TikTok / IG caption craft (tiktok.md).** Encode this niche's caption conventions in `captionCraft`. **TikTok:** the **hook line** (first ~3 words / on-screen text) does the work — pattern-interrupt or outcome-promise, never "Hey guys"; caption is short and human; hashtags are a small native set (broad + niche + intent), not a wall. CTA is search-by-name / pinned-comment, never "link in bio". **Instagram (Reels/story):** a short **story-shaped** caption + one clear **CTA** (the IG convention), hashtags in the niche's normal count. Pull the actual hook-line and hashtag norms from the captured exemplars, not from generic advice.
 
 ## Output schema
 
@@ -71,6 +73,32 @@ interface TikTokFormatResearch {
   ctaTaxonomy: Record<"search_by_name" | "pinned_comment" | "dm_keyword" | "other", number>;
   searchQueriesUsed: string[];
   paginationDepth: string; // describe how many pages / adjacent keywords were tried
+  /** 5-10 real, top-performing, HUMAN native examples captured VERBATIM from the
+   *  niche — the few-shot voice/register anchors for maya-voice-matcher + caption
+   *  drafting. Match hook cadence/length/format + hashtag norms; NEVER copy content. */
+  styleExemplars: Array<{
+    videoUrl: string;
+    handle: string;
+    hookLineVerbatim: string;     // the on-screen / opening hook, verbatim
+    captionVerbatim: string;      // the real caption, verbatim
+    hashtagsVerbatim: string[];   // the real hashtag set used
+    whyExemplary: string;         // why this reads native to the niche
+  }>;
+  /** TikTok + IG caption craft drawn from the exemplars, not generic advice. */
+  captionCraft: {
+    tiktok: {
+      hookLineConvention: string; // first-3-words / on-screen-text pattern that wins here
+      captionStyle: string;       // short/human register
+      hashtagNorm: string;        // the native hashtag set shape (broad + niche + intent)
+      ctaPattern: "search_by_name" | "pinned_comment" | "dm_keyword";
+    };
+    instagram: {
+      captionShape: string;       // story-shaped caption convention
+      cta: string;                // the one clear CTA
+      hashtagNorm: string;
+    };
+    antiPatterns: string[];       // "Hey guys", "link in bio", hashtag walls, "follow for more" early
+  };
   rulesCited: string[];
 }
 ```
@@ -88,4 +116,4 @@ Max 12 ScrapeCreators calls: 3-5 keywords × 1 `/search/top` + 2-3 `/search/hash
 
 ## Anti-slop check
 
-Structured taxonomy output, slop-critic NOT invoked. `excerpt` strings from real videos are verbatim — do not paraphrase.
+Structured taxonomy output, slop-critic NOT invoked. `excerpt` strings and every `styleExemplars[]` field (`hookLineVerbatim`, `captionVerbatim`, `hashtagsVerbatim`) from real videos are VERBATIM — do not paraphrase. Exemplars are voice/register references only; downstream caption drafting matches their cadence/length/hashtag-shape but NEVER copies an exemplar's content. Drop any exemplar whose caption itself reads templated/AI.

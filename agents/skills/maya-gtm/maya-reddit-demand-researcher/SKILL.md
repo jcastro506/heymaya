@@ -38,6 +38,8 @@ Reddit is the highest-conversion buyer-intent channel for indie products IF the 
 10. **Live-product check (§ 8.9).** IF `app.stage === "pre-launch"` AND only waitlist exists THEN remove r/SideProject from candidates. Substitute r/AlphaAndBetaUsers.
 11. **Cross-post block (§ 8.7).** No same post in >2 subs in a week. Rewrite each for sub culture or stage 7+ days apart.
 12. **First-comment URL rule (§ 8.8).** For r/SaaS / r/startups / r/Entrepreneur, URL goes in the first comment, not the post body.
+13. **Style-exemplar capture (native-voice fidelity — Sprint I).** While mining each recommended sub, capture **5-10 real, top-performing, HUMAN-written native posts/comments verbatim** from that exact sub — the kind that actually landed there (high upvotes/engagement, written by a real participant, not removed, not an obvious ad or bot). These become few-shot **voice/register anchors** for `maya-voice-matcher` and the drafting step: they encode the cadence, vocabulary, length, formality, and format a real member of *this sub* uses. The point is to match how natives write, NOT to copy what they wrote — **never reuse their content, angle, or specifics.** Skip any post that itself reads templated/AI. Emit in `styleExemplars[]`. The honest framing: there is no platform AI-detector to beat; the enemy is generic content that mods remove and the community ignores. Exemplars make the founder's reply read like it belongs here.
+14. **Reddit caption craft — the title IS everything (reddit.md).** On Reddit the post title carries the entire click decision; body is secondary. When proposing any post (not reply) target, the title must read like a real human asking/sharing in this sub: lowercase-friendly where the sub is, no hype-jargon, no emoji, no "Excited to announce," curiosity or concrete-specific over clickbait. For replies, the first line is the title-equivalent — it has to earn the read before the fold. Surface title guidance in `captionCraft`.
 
 ## Output schema
 
@@ -110,6 +112,24 @@ interface RedditDemandReport {
   promotionRiskScore: 0 | 1 | 2 | 3 | 4 | 5;
   riskFlags: string[];
   domainRiskElevated: boolean;
+  /** 5-10 real, top-performing, HUMAN-written native posts/comments captured
+   *  VERBATIM from the recommended subs — the few-shot voice/register anchors
+   *  maya-voice-matcher + drafting use to make the founder's reply read native
+   *  to THIS sub. Match cadence/vocab/length/format; NEVER copy content. */
+  styleExemplars: Array<{
+    sub: string;
+    url: string;
+    kind: "post" | "comment";
+    verbatim: string;           // the real native text, unedited
+    whyExemplary: string;       // why this reads like a real member of this sub (cadence, register, format)
+    upvotesOrSignal: string;    // engagement / standing signal that it landed here
+  }>;
+  /** Reddit caption craft: the title is the whole click decision. */
+  captionCraft: {
+    titleConvention: string;    // how titles read in THIS sub (case, length, curiosity vs concrete, jargon tolerance)
+    titleAntiPatterns: string[];// e.g. emoji-in-title, hype-jargon, "Excited to announce"
+    firstLineGuidance: string;  // for replies: the title-equivalent first line that earns the read
+  };
   parkReasons?: string[];
 }
 ```
@@ -148,3 +168,4 @@ Max 8 ScrapeCreators calls: 3 × subreddit/search, 2 × general search, 2 × sub
 - `conversionPath` must be honest and non-spammy: a way to mention the product or offer a trial that fits naturally in a helpful reply. "Link in bio" or naked URL dumps are not acceptable.
 - `whyHigherIntent` on `commentReplyTarget` must explain concretely why that comment beats OP as a reply target — e.g., "OP's question was answered; this nested reply from 3 days later is still unanswered and directly names the product's pain."
 - Never surface a thread as a reply target and leave `modRemoved: true` without explicitly flagging it to the caller as low-priority.
+- `styleExemplars[].verbatim` is captured VERBATIM as a voice/register reference only. Downstream drafting matches cadence/vocab/length/format — it must NEVER copy an exemplar's content, angle, or specifics. Drop any exemplar that itself reads templated or AI-written; it can't anchor native voice.

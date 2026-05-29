@@ -1,13 +1,21 @@
 ---
 name: maya-slop-critic
-description: The anti-slop enforcer. Apply PLAYBOOK § 6 banned-phrase list + banned-structure scan + voice match + read-aloud test. Returns "rejected with reasons" on any trip.
+description: The anti-slop / AI-tell critic. Apply PLAYBOOK § 6 banned-phrase list + banned-structure scan + LLM-judgment structural AI-tell pass + voice match + read-aloud test. Returns "rejected with reasons" on any trip. The bar is native-voice fidelity, NOT detector-dodging.
 ---
 
 # maya-slop-critic
 
 ## Purpose
 
-Every draft prose output in the system passes through this skill before shipping. The job is to detect AI-flavored writing and surface specific rewrites — banned phrases, banned structures, voice divergence, generic-template feel. PLAYBOOK § 6 codifies the rules; this skill enforces them.
+Every draft prose output in the system passes through this skill before shipping. The job is to detect writing that reads like a generic AI / templated marketer wrote it and surface specific rewrites — banned phrases, banned structures, *structural AI-tells*, voice divergence, generic-template feel. PLAYBOOK § 6 codifies the lexical rules; this skill enforces them AND adds an LLM-judgment structural pass.
+
+## The honest framing (read before judging anything)
+
+The enemy is **not an AI detector**. There is no reliable platform AI-detector demoting text as a ranking signal — detectors are noisy and platforms don't run them at scale. We never chase "undetectable." The real penalties are concrete: Reddit/HN **community + mod rejection** (and founder-account ban risk), and TikTok/IG/YT **engagement starvation** of generic, voiceless content. So the single question this skill answers, on every draft, is:
+
+> **"Would a real person from this community have actually written this?"**
+
+A draft that reads as native, specific, and opinionated passes — even if it happens to trip a hypothetical detector. A draft that is smooth, tidy, hedged, and voiceless FAILS — even if it has zero banned phrases. Structural tidiness is the giveaway, not vocabulary alone.
 
 ## When to invoke
 
@@ -57,18 +65,29 @@ Every draft prose output in the system passes through this skill before shipping
    - Passive voice as default.
    - Em-dash + colon stacking in the same line.
 
-3. **Rule 9.12 — voice-match scan.** Compare draft to operator's last-5 authentic posts. Diverges = REJECT. Check: sentence length variance, capitalization, emoji frequency, parenthetical-aside frequency, first-vs-third-person, profanity tolerance.
-4. **Rule 9.13 — "Excited to announce" auto-reject.** No re-read needed. Reject immediately, propose rewrite as thinking-process post (linkedin.md § 4).
-5. **Read-aloud test.** Sounds like a press release = REJECT.
-6. **Channel-specific bans.**
+3. **Rule 9.11b — STRUCTURAL AI-tell critic (LLM JUDGMENT, not regex).** This is the load-bearing addition. The banned-phrase and banned-structure lists above catch known surface patterns; this pass catches the *shape* of AI-generated prose that no phrase list can enumerate. **Do NOT implement this as regex, counts, or hardcoded thresholds** (per the no-heuristics rule) — read the draft as a human from the target community would and judge whether it has the telltale smoothness of machine-written or template-marketer text. Look for, and reason about, these tells together (any one is a yellow flag; a cluster is a REJECT):
+   - **Em-dash as default connective.** AI reaches for em-dashes to glue clauses where a real person would use a period, a comma, or just two sentences. Over-reliance — especially the rhythmic "X — Y — Z" cadence — reads machine-made. Judge by feel, not a per-paragraph count.
+   - **Suspiciously tidy tricolons / rule-of-three.** "Faster, cheaper, and more reliable." Real people don't naturally land on three balanced items this often. One deliberate tricolon is fine; a draft built out of them is a tell.
+   - **"It's not just X, it's Y" (and "not only… but also").** The signature AI pivot-to-profundity construction. Almost always a tell. Flag every instance.
+   - **Uniform sentence rhythm.** Real writing has burstiness — a fragment, then a long winding sentence, then three words. AI defaults to a metronome of medium-length, evenly-weighted sentences. If every sentence is the same length and shape, REJECT.
+   - **Over-hedging / no stance.** "It can be helpful in many cases." "This might be worth considering." A real founder in their niche has an *opinion*. Hedged, both-sides, committee-safe prose reads bot-written. Flag absence of a clear point of view.
+   - **Zero opinion / zero specifics.** Prose that could be about any product, sent to anyone, citing nothing concrete (no real number, no proper noun, no lived detail). Generic-to-anyone = REJECT. This is the symptom the whole skill exists to kill.
+   - **Suspicious symmetry / tidiness.** Perfectly parallel clause structure, every list item the same grammatical shape, a clean intro-body-closer arc on a casual reply. Humans are messier; native posts have texture, asides, and asymmetry.
+   - **Pivot-to-uplift closer.** A neat motivational/aspirational wrap-up sentence ("And that's how you turn a setback into a setup.") that a real person wouldn't tack on. Tell.
+   For each tell found, emit a `hit` with `type: "structural_ai_tell"`, the offending `snippet`, and a `suggestion` that makes it read like a real person from this niche — break the rhythm, take a side, swap the em-dash for a period, add a concrete specific, cut the tidy closer. The verdict question is always: *would someone in {community} have written this, or does it read like generic AI?*
+
+4. **Rule 9.12 — voice-match scan.** Compare draft to operator's last-5 authentic posts. Diverges = REJECT. Check: sentence length variance, capitalization, emoji frequency, parenthetical-aside frequency, first-vs-third-person, profanity tolerance.
+5. **Rule 9.13 — "Excited to announce" auto-reject.** No re-read needed. Reject immediately, propose rewrite as thinking-process post (linkedin.md § 4).
+6. **Read-aloud test.** Sounds like a press release = REJECT.
+7. **Channel-specific bans.**
    - LinkedIn: broetry overuse, "Agree?" closers, tagged-friend humblebrag, fake humility, "founder" 3x in first paragraph, stock-photo selfies.
    - TikTok: literal "link in bio", "Hey guys" / "What's up everyone", "follow for more" in first 70%.
    - Reddit: "DM me" / PM solicitation in promo-sensitive subs, naming competitors in promo-adjacent comments, hype-jargon in title, emoji in title.
    - X: hype emoji clusters (🚀🔥), "RT for reach", "Like if you agree", "Comment YES and I'll DM you", dunk-quote-RTs.
-7. **Number-presence (x.md rule 8).** X posts must contain ≥1 concrete number. No number = REJECT (or surface to operator for the number).
-8. **CTA singularity.** Multiple CTAs in one post = REJECT.
-9. **Operator's-instinct final filter (PLAYBOOK rule 6.1).** If uncertain, return `verdict: "borderline"` with: "read this like a stranger sent it to you — do you sound like this?"
-10. **No invented voice.** Slop-critic rejects; it doesn't write the operator's voice from scratch. If voice fingerprint missing, mark `voiceMatch: "no_fingerprint_available"` and apply only banned-phrase + structure scans.
+8. **Number-presence (x.md rule 8).** X posts must contain ≥1 concrete number. No number = REJECT (or surface to operator for the number).
+9. **CTA singularity.** Multiple CTAs in one post = REJECT.
+10. **Operator's-instinct final filter (PLAYBOOK rule 6.1).** If uncertain, return `verdict: "borderline"` with: "read this like a stranger sent it to you — do you sound like this?"
+11. **No invented voice.** Slop-critic rejects; it doesn't write the operator's voice from scratch. If voice fingerprint missing, mark `voiceMatch: "no_fingerprint_available"` and apply only banned-phrase + structure + structural-AI-tell scans.
 
 ## Output schema
 
@@ -77,7 +96,7 @@ interface SlopCriticVerdict {
   verdict: "approved" | "rejected" | "borderline";
   hits: Array<{
     rule: string;
-    type: "banned_phrase" | "banned_structure" | "voice_divergence" | "channel_ban" | "missing_number" | "multiple_ctas";
+    type: "banned_phrase" | "banned_structure" | "structural_ai_tell" | "voice_divergence" | "channel_ban" | "missing_number" | "multiple_ctas";
     snippet: string;
     suggestion: string;
   }>;
@@ -92,7 +111,7 @@ interface SlopCriticVerdict {
 
 - **Passes all scans but feels off.** Return `verdict: "borderline"` with `finalAdvice: "Operator gut-check before posting"`.
 - **Operator overrides rejection.** Document override + predict failure mode. Surface to MEMORY.md.
-- **No voice fingerprint.** Apply banned-phrase + structure + channel-ban scans only. Mark `voiceMatch: "no_fingerprint_available"`.
+- **No voice fingerprint.** Apply banned-phrase + structure + structural-AI-tell + channel-ban scans only. Mark `voiceMatch: "no_fingerprint_available"`. The structural-AI-tell pass still runs — it needs no fingerprint, only the "would a real person from this community have written this?" judgment.
 
 ## Cost discipline
 

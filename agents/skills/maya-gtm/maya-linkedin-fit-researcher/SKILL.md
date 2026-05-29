@@ -37,6 +37,8 @@ LinkedIn is the right channel for a narrow slice of indie products — B2B SaaS,
 10. **LI-10.9 newsletter gate.** Only if operator already writes long-form monthly+ elsewhere.
 11. **LI-10.11 60-day reweight.** IF leads but zero conversions at 60 days AND runway <6 months THEN `reweightToFasterChannel: true`.
 12. **LI-10.14 link-in-first-comment.** Any draft URL moves to first comment.
+13. **Style-exemplar capture (native-voice fidelity — Sprint I).** While mining large-account niche posts, capture **5-10 real, top-performing, HUMAN-written native LinkedIn posts verbatim** from this buyer's professional niche — substantive, voiced posts that earned real reach and *buyer* engagement (not broetry, not engagement-bait, not corporate-announcement slop). These are few-shot **voice/register anchors** for `maya-voice-matcher` + drafting: they encode how a credible person in *this professional niche* actually writes here — hook openers, paragraph rhythm, where they get specific, how they close without "Agree?". LinkedIn is the slop epicenter, so be ruthless: skip any exemplar that itself reads templated/AI/broetry. Match cadence/vocab/length/format; **never copy content.** Emit in `styleExemplars[]`.
+14. **LinkedIn caption craft — hook + "link in first comment" (linkedin.md § 4 / LI-10.14).** The first line is a scroll-stopping hook (a specific tension or concrete claim, never "Excited to announce"). The body is a thinking-process narrative a non-technical buyer can follow without clicking away. The URL/CTA lives in the **first comment**, not the post — the post itself never reads like an ad. No engagement-bait closer. Surface this in `captionCraft`.
 
 ## Comment-target qualification
 
@@ -95,6 +97,24 @@ interface LinkedInFitReport {
     conversionPath: string;       // what's the realistic next step — DM, reply thread, profile visit?
   }>;
   postingCadence: { originalPostsPerWeek: number; commentMiningMinPerDay: number };
+  /** 5-10 real, top-performing, HUMAN-written native LinkedIn posts captured
+   *  VERBATIM from this professional niche — the few-shot voice/register anchors
+   *  for maya-voice-matcher + drafting. NOT broetry/engagement-bait/announcements.
+   *  Match cadence/vocab/length/format; NEVER copy content. */
+  styleExemplars: Array<{
+    postUrl: string;
+    authorHandle: string;
+    verbatim: string;
+    whyExemplary: string;          // why this reads like a credible voiced person in this niche
+    buyerEngagementSignal: string; // evidence it earned real (buyer, not vanity) engagement
+  }>;
+  /** LinkedIn caption craft: hook + thinking-process body + link in first comment. */
+  captionCraft: {
+    hookConvention: string;        // how the scroll-stopping first line reads (specific tension / concrete claim)
+    bodyShape: string;             // thinking-process narrative, non-technical-buyer-readable
+    ctaPlacement: "link_in_first_comment";
+    antiPatterns: string[];        // broetry, "Excited to announce", "Agree?" closers, AI-emoji bullets
+  };
   rulesCited: string[];
   reweightFlag?: boolean;
 }
@@ -113,4 +133,4 @@ Max 4 ScrapeCreators calls. 1-2 WebFetches. 1 main_maya call. Timeout 12 min.
 
 ## Anti-slop check
 
-LinkedIn is the slop epicenter. Every `suggestedCommentDraft` and `caption.openingPattern` MUST pass `maya-slop-critic` with LinkedIn-specific bans (linkedin.md § 9): no broetry overuse, no "thrilled/excited/honored", no tagged-friend humblebrag, no engagement-bait closers, no AI-emoji bullet lists.
+LinkedIn is the slop epicenter. Every `suggestedCommentDraft` and `caption.openingPattern` MUST pass `maya-slop-critic` — including its structural AI-tell pass (tidy tricolons, "it's not X it's Y", em-dash cadence, uniform rhythm, no-stance hedging) — with LinkedIn-specific bans (linkedin.md § 9): no broetry overuse, no "thrilled/excited/honored", no tagged-friend humblebrag, no engagement-bait closers, no AI-emoji bullet lists. `styleExemplars[].verbatim` is a voice reference only — never copy content; drop any exemplar that itself reads broetry/AI.

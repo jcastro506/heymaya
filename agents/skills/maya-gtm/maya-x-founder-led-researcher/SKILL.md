@@ -39,6 +39,8 @@ For technical / indie / B2B SaaS / dev-tool products, X is the highest-leverage 
 12. **Black-Magic platform-risk reminder.** IF operator's product depends on free X API access THEN `platformRiskWarning: true` (x.md § 11 Failure 4). State this plainly: X has unilaterally repriced API access multiple times; any strategy that routes users from X into a product that itself needs the X API carries compounded dependency risk.
 13. **Account silence recovery.** IF `lastPostAgeDays > 7` THEN first action = value-add reply, not build-update post.
 14. **Citation-firewall on numbers.** Every number Maya quotes must come from a fresh ScrapeCreators call or operator-confirmed state.
+15. **Style-exemplar capture (native-voice fidelity — Sprint I).** While building the List and modeling hooks, capture **5-10 real, top-performing, HUMAN-written native posts AND replies verbatim** from the niche — the ones that actually landed (genuine engagement, real accounts, recent). These become few-shot **voice/register anchors** for `maya-voice-matcher` and draft generation: they encode how a real founder in *this niche* writes on X — sentence length and burstiness, lowercase habits, how they open a reply, how they take a stance. Capture replies specifically, not just polished posts — the native reply rhythm is where most acquisition happens (rule 11). Match cadence/vocab/length/format; **never copy their content.** Skip anything that reads templated/AI. The honest framing: there's no X AI-detector to dodge; the enemy is generic replies the niche scrolls past. Emit in `styleExemplars[]`.
+16. **X caption craft — the post IS the caption (x.md).** On X there's no separate caption layer: the tweet/reply text is the whole thing. Make it earn the "see more" tap before the fold — strong first line, concrete over abstract, ≥1 number where it fits (rule on number-presence). No hype-emoji clusters, no "a thread 🧵👇" theater unless the niche genuinely uses it. URL never in the first reply (rule 8). Surface this in `captionCraft`.
 
 ## Buyer-intent query strategy
 
@@ -100,6 +102,24 @@ interface XResearchReport {
   }>;
   searchQueries: string[];
   paginationNote?: string;           // note if cursor pagination was used or if deeper pagination is recommended
+  /** 5-10 real, top-performing, HUMAN-written native posts AND replies captured
+   *  VERBATIM from the niche — the few-shot voice/register anchors for
+   *  maya-voice-matcher + drafting. Replies included (that's where the native
+   *  founder voice lives). Match cadence/vocab/length/format; NEVER copy content. */
+  styleExemplars: Array<{
+    url: string;
+    handle: string;
+    kind: "post" | "reply";
+    verbatim: string;
+    whyExemplary: string;            // why this reads like a real founder in this niche
+    engagementSignal: string;        // likes/replies or standing that shows it landed
+  }>;
+  /** X caption craft: the post text IS the caption. */
+  captionCraft: {
+    firstLineConvention: string;     // how to earn the "see more" tap before the fold
+    numberRule: string;              // where a concrete number belongs
+    antiPatterns: string[];          // hype-emoji clusters, fake-thread theater, URL-in-first-reply
+  };
   platformRiskWarning?: boolean;
   parkReasons?: string[];
 }
@@ -119,4 +139,4 @@ Max 6 ScrapeCreators calls. Grok max 3 calls if invoked. 1 hard_research_beta + 
 
 ## Anti-slop check
 
-Every `draftReply.p1/p2/p3SoftMention` MUST pass `maya-slop-critic` before this skill returns. Specifically ban hype emoji, "Great post!" / "So true!", "Excited to share". Mirror operator's last-5 authentic-post voice. The p3 soft mention must read like a founder being honest with a peer, not a salesperson leaving a card.
+Every `draftReply.p1/p2/p3SoftMention` MUST pass `maya-slop-critic` before this skill returns — including its structural AI-tell pass (no em-dash cadence, no tidy tricolons, no "it's not X it's Y", no uniform rhythm). Mirror operator's last-5 authentic-post voice AND the `styleExemplars[]` reply register. The p3 soft mention must read like a founder being honest with a peer, not a salesperson leaving a card. `styleExemplars[].verbatim` is a voice reference only — never copy an exemplar's content; drop any exemplar that itself reads AI-written.

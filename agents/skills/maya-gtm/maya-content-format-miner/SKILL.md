@@ -37,6 +37,8 @@ Winning means buyer conversation, not engagement theater. A pattern that generat
 8. **Voice-fingerprint from reply threads, not just polished posts.** The real voice fingerprint lives where niche winners defend, clarify, or follow up in replies — not in the highly-edited top-level hook. Mine reply threads: how do they explain themselves when challenged? How do they handle "this doesn't work for me"? How do they follow up with someone interested? That's the authentic rhythm, sentence length, and vocabulary that built their audience. Capture it from replies, not just the hook post.
 9. **Mimicry concentration judgment.** If most of the niche patterns trace back to one or two accounts, flag `mimicryRisk: "high"` and note who dominates. Don't gate on a fixed percentage — judge whether the pattern diversity is real or essentially one person's format spread across reposts.
 10. **No final-copy generation.** Patterns + slots + examples, never final drafts.
+11. **Style-exemplar capture (native-voice fidelity — Sprint I).** Separate from hook templates, capture **5-10 real, top-performing, HUMAN native posts verbatim** for the chosen channel — whole posts/replies that read like a real participant wrote them, not just extractable hook skeletons. These are few-shot **voice/register anchors** for `maya-voice-matcher` + drafting (cadence, vocabulary, length, format, how natives open and close). Distinct from `hookPatterns[].realExamples` (which prove a *pattern* won): exemplars are full-text register references. Match cadence/vocab/length/format; **never copy content.** Skip anything that reads templated/AI. Emit in `styleExemplars[]`. Honest framing: no platform AI-detector to dodge — the enemy is generic content the community ignores and the algorithm starves.
+12. **Caption-craft per channel (Sprint I).** Roll up the channel's caption conventions into `captionCraft` so drafting has them inline. Encode each platform's native craft where relevant to the chosen channel: **TikTok** hook-line + small native hashtag set; **Instagram** story-shaped caption + one CTA; **YouTube** title = the CTR lever (curiosity/specific, front-loaded) + a description that does light SEO and carries the link; **Reddit** the title is everything; **X** the post text IS the caption; **LinkedIn** hook first line + link in first comment. Draw conventions from the captured exemplars, not generic advice.
 
 ## Output schema
 
@@ -71,6 +73,22 @@ interface ContentFormatLibrary {
   rejectedPatterns: Array<{ reason: "vanity_engagement" | "slop_phrase" | "mimicry_concentration" | "banned_phrase" | "other"; description: string; exampleUrl?: string }>;
   mimicryRisk: "low" | "medium" | "high";
   mimicryNote?: string;                     // who dominates if mimicryRisk is medium/high
+  /** 5-10 real, top-performing, HUMAN native FULL posts/replies captured VERBATIM
+   *  for this channel — the few-shot voice/register anchors for maya-voice-matcher
+   *  + drafting (distinct from hookPatterns.realExamples, which prove a pattern).
+   *  Match cadence/vocab/length/format; NEVER copy content. */
+  styleExemplars: Array<{
+    url: string;
+    verbatim: string;
+    whyExemplary: string;                   // why this reads native to the channel/niche
+    landedSignal: string;                   // engagement / standing that shows it landed
+  }>;
+  /** Per-channel caption conventions rolled up for inline use by drafting. */
+  captionCraft: {
+    channel: string;
+    convention: string;                     // the channel's caption craft (e.g. YouTube title=CTR lever + SEO description; Reddit title-is-everything; X post-is-the-caption; LinkedIn hook + link-in-first-comment; TikTok hook-line + hashtags; IG story + CTA)
+    antiPatterns: string[];
+  };
   rulesCited: string[];
 }
 ```
@@ -88,4 +106,4 @@ interface ContentFormatLibrary {
 
 ## Anti-slop check
 
-Each `template` must pass `maya-slop-critic` on the template-skeleton itself. Real verbatim examples with banned phrases stay in `realExamples` (as evidence of what won) but DO NOT promote into templates. Every pattern in the final library must have `buyerConversionJudgment: "strong" | "moderate"` — patterns rated "vanity" or "unknown" are moved to `rejectedPatterns[]`.
+Each `template` must pass `maya-slop-critic` on the template-skeleton itself — including the structural AI-tell pass (no tidy tricolons, "it's not X it's Y", em-dash cadence, uniform rhythm baked into a template). Real verbatim examples with banned phrases stay in `realExamples` (as evidence of what won) but DO NOT promote into templates. Every pattern in the final library must have `buyerConversionJudgment: "strong" | "moderate"` — patterns rated "vanity" or "unknown" are moved to `rejectedPatterns[]`. `styleExemplars[].verbatim` is a voice/register reference only — never copy an exemplar's content into a draft; drop any exemplar that itself reads templated/AI.
