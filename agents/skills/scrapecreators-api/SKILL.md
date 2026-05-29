@@ -17,8 +17,8 @@ metadata:
     emoji: "🔍"
     requires:
       env:
-        - SCRAPECREATORS_API_KEY
-    primaryEnv: SCRAPECREATORS_API_KEY
+        - SCRAPE_CREATORS_API_KEY
+    primaryEnv: SCRAPE_CREATORS_API_KEY
     homepage: https://scrapecreators.com
     tags:
       - scraping
@@ -68,7 +68,7 @@ All endpoints use GET requests. Pass query params in the URL and authenticate wi
 
 ```bash
 curl -s "https://api.scrapecreators.com/v1/tiktok/profile?handle=charlidamelio" \
-  -H "x-api-key: $SCRAPECREATORS_API_KEY"
+  -H "x-api-key: $SCRAPE_CREATORS_API_KEY"
 ```
 
 Or with `fetch`:
@@ -76,12 +76,12 @@ Or with `fetch`:
 ```javascript
 const res = await fetch(
   "https://api.scrapecreators.com/v1/tiktok/profile?handle=charlidamelio",
-  { headers: { "x-api-key": process.env.SCRAPECREATORS_API_KEY } }
+  { headers: { "x-api-key": process.env.SCRAPE_CREATORS_API_KEY } }
 );
 const data = await res.json();
 ```
 
-Use `SCRAPECREATORS_API_KEY` as the canonical environment variable. The official ScrapeCreators agent-skill docs use this spelling. HeyMaya also forwards `SCRAPE_CREATORS_API_KEY` as a compatibility alias when present, but agents should read `SCRAPECREATORS_API_KEY` first.
+Use `SCRAPE_CREATORS_API_KEY` as the canonical environment variable. Older ScrapeCreators examples sometimes use `SCRAPECREATORS_API_KEY`; HeyMaya's Convex, Fly, Vercel, and OpenClaw deploy paths use `SCRAPE_CREATORS_API_KEY`.
 
 Endpoint paths vary by platform and version, for example `/v3/tiktok/profile/videos` and `/v2/tiktok/video`. The tables below list each endpoint path and its required params.
 

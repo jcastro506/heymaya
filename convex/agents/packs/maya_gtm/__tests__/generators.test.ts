@@ -360,8 +360,11 @@ describe("Maya GTM workspace pack", () => {
     expect(heartbeat).toContain("5x its 1h baseline");
     // inbound-triage -> unanswered inbound DM trigger
     expect(heartbeat).toContain("Inbound DM that I haven't responded to");
-    // calendar-due -> queued calendar event needing action soon
-    expect(heartbeat).toContain("queued calendar event in the next 30 min");
+    // calendar-due -> the go-time reminder: an action due now or soon.
+    // (Reworded from the old "queued calendar event in the next 30 min"
+    // slug into the richer energizing one-tap go-time nudge — same trigger.)
+    expect(heartbeat).toContain("Calendar go-time reminder");
+    expect(heartbeat).toContain("next ~30 min");
     // stuck-worker-sweep -> worker silent >5 min surfaced + adjusted
     expect(heartbeat).toContain("worker has been silent >5 min");
     // Sprint E — restored recovery/maintenance tasks (dropped when HEARTBEAT
