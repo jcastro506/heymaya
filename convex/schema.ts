@@ -6268,7 +6268,9 @@ export default defineSchema({
   })
     .index("by_agent_and_written", ["agentId", "writtenAt"])
     .index("by_agent_and_target", ["agentId", "target"])
-    .index("by_idempotency", ["idempotencyKey"]),
+    .index("by_idempotency", ["idempotencyKey"])
+    // S7 — uniform account-scoped purge in accountDeletion's cascade.
+    .index("by_account", ["accountId"]),
 
   /** What Maya has learned about this niche over time. The compounding
    *  surface — week 4 brief reads this to weight what surfaces.

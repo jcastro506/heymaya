@@ -105,6 +105,19 @@ export const getMyAccount = query({
  *  Auth-scoped — can only ever affect the signed-in operator's row. A hard
  *  purge of all gtm* rows is a follow-up background job; this stops the agent
  *  + hides the account immediately and is reversible. */
+/**
+ * Soft, REVERSIBLE delete — marks the account `status: "deleted"` (gates
+ * Convex reads) but keeps the data recoverable. The in-app "delete account"
+ * affordance.
+ *
+ * S7 note: the PERMANENT purge is `POST /api/account/delete` →
+ * `accountDeletion.purgeByClerkUserIdPublic`, which cascade-deletes all ~47
+ * GTM tables (cross-tenant learnings exempt) AND destroys the agent's Fly
+ * machine via the collected `gtmAgents.openClawFlyAppId`. A Clerk
+ * `user.deleted` webhook backstop runs the same purge if a user is removed in
+ * Clerk directly. Inbound Telegram hits Fly directly, so only the permanent
+ * path — which destroys the machine — truly stops Maya from answering.
+ */
 export const deleteMyGtmAccount = mutation({
   args: {},
   handler: async (ctx): Promise<{ ok: boolean }> => {

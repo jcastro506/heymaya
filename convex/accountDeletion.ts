@@ -86,7 +86,63 @@ type BusinessScopedTable =
   | "gbpHealthScores"
   | "serviceTelemetry";
 
-type AccountScopedTable = "growthAgents" | "growthPosts" | "growthWaitlist";
+type AccountScopedTable =
+  | "growthAgents"
+  | "growthPosts"
+  | "growthWaitlist"
+  // S7 — GTM (ClawLaunch) account-scoped tables. All scoped by_account on
+  // accountId (= creator._id). The 5 CROSS-TENANT tables are intentionally
+  // EXEMPT and never appear here: gtmPlatformBriefs / gtmPlatformClaims /
+  // gtmPlatformRefreshRuns (shared platform-algo intelligence),
+  // gtmArchetypeLearnings + gtmSkillImprovementProposals (cross-tenant
+  // learnings) — deleting one tenant must not erase shared knowledge.
+  | "gtmAgents"
+  | "gtmTelegramPairingTokens"
+  | "gtmCalendarConnections"
+  | "gtmCalendarEvents"
+  | "gtmWorkspaceMutations"
+  | "gtmOauthStateTokens"
+  | "gtmHookCallbacks"
+  | "gtmDeliveryFailures"
+  | "gtmApps"
+  | "gtmResearchJobs"
+  | "gtmWalkthroughUploads"
+  | "gtmEvidenceCards"
+  | "gtmBuyerSegments"
+  | "gtmChannelScores"
+  | "gtmDistributionMotions"
+  | "gtmFormatExperiments"
+  | "gtmContentBankItems"
+  | "gtmCostLedger"
+  | "gtmToolCallLog"
+  | "gtmContentDrafts"
+  | "gtmResultSnapshots"
+  | "gtmSafetyStates"
+  | "gtmAuditEvents"
+  | "gtmConnectionHealth"
+  | "gtmMachineHealth"
+  | "gtmBetaCohort"
+  | "gtmHumanPlanReviews"
+  | "gtmUserReportedSignals"
+  | "gtmUgcReadinessReports"
+  | "gtmTargetThreads"
+  | "gtmTargetAccounts"
+  | "gtmDraftedContent"
+  | "gtmPostResults"
+  | "gtmLinkWraps"
+  | "gtmLinkClicks"
+  | "gtmConversions"
+  | "gtmAgentActivity"
+  | "gtmBuyerMap"
+  | "gtmCompetitiveMap"
+  | "gtmChannelScorecard"
+  | "gtmContentAngles"
+  | "gtmRelationshipTargets"
+  | "gtmCompetitorMoves"
+  | "gtmNichePulse"
+  | "gtmActionLog"
+  | "gtmNicheLearnings"
+  | "gtmMemoryWrites";
 
 const CREATOR_SCOPED_TABLES: CreatorScopedTable[] = [
   "creatorHandles",
@@ -162,6 +218,54 @@ const ACCOUNT_SCOPED_TABLES: AccountScopedTable[] = [
   "growthAgents",
   "growthPosts",
   "growthWaitlist",
+  // S7 — GTM cascade (cross-tenant tables intentionally omitted; see type).
+  "gtmAgents",
+  "gtmTelegramPairingTokens",
+  "gtmCalendarConnections",
+  "gtmCalendarEvents",
+  "gtmWorkspaceMutations",
+  "gtmOauthStateTokens",
+  "gtmHookCallbacks",
+  "gtmDeliveryFailures",
+  "gtmApps",
+  "gtmResearchJobs",
+  "gtmWalkthroughUploads",
+  "gtmEvidenceCards",
+  "gtmBuyerSegments",
+  "gtmChannelScores",
+  "gtmDistributionMotions",
+  "gtmFormatExperiments",
+  "gtmContentBankItems",
+  "gtmCostLedger",
+  "gtmToolCallLog",
+  "gtmContentDrafts",
+  "gtmResultSnapshots",
+  "gtmSafetyStates",
+  "gtmAuditEvents",
+  "gtmConnectionHealth",
+  "gtmMachineHealth",
+  "gtmBetaCohort",
+  "gtmHumanPlanReviews",
+  "gtmUserReportedSignals",
+  "gtmUgcReadinessReports",
+  "gtmTargetThreads",
+  "gtmTargetAccounts",
+  "gtmDraftedContent",
+  "gtmPostResults",
+  "gtmLinkWraps",
+  "gtmLinkClicks",
+  "gtmConversions",
+  "gtmAgentActivity",
+  "gtmBuyerMap",
+  "gtmCompetitiveMap",
+  "gtmChannelScorecard",
+  "gtmContentAngles",
+  "gtmRelationshipTargets",
+  "gtmCompetitorMoves",
+  "gtmNichePulse",
+  "gtmActionLog",
+  "gtmNicheLearnings",
+  "gtmMemoryWrites",
 ];
 
 export const requestMyAccountDeletion = mutation({
@@ -439,6 +543,17 @@ async function flyAppIdsForAccount(
     .collect();
   for (const agent of growthAgents) {
     if (agent.rileyFlyAppId) ids.add(agent.rileyFlyAppId);
+  }
+  // S7 — GTM agent's Fly machine. CRITICAL for stop-answering: inbound
+  // Telegram hits the Fly machine directly, so a Convex flag alone won't
+  // silence Maya — the machine must be destroyed. Collected here (before the
+  // cascade deletes the gtmAgents row) so destroyMayaFlyApps tears it down.
+  const gtmAgents = await ctx.db
+    .query("gtmAgents")
+    .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+    .collect();
+  for (const agent of gtmAgents) {
+    if (agent.openClawFlyAppId) ids.add(agent.openClawFlyAppId);
   }
   return [...ids];
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
+import { destroyMayaFlyApps } from "@/lib/destroyMayaFlyApps";
 
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
@@ -69,6 +70,25 @@ export async function POST(req: NextRequest) {
       email,
       accountType,
     });
+  }
+
+  // S7 — user.deleted backstop. If a user is deleted in Clerk directly
+  // (bypassing our in-app /api/account/delete flow), this guarantees the
+  // full purge still runs: cascade-delete all their data (incl. the ~47
+  // GTM tables, cross-tenant learnings exempt) AND destroy their Fly
+  // machine — otherwise inbound Telegram keeps hitting a live Maya that no
+  // longer has an account behind it. Idempotent: creator-not-found is a
+  // clean no-op, so Clerk retries are safe.
+  if (evt.type === "user.deleted") {
+    const data = evt.data as { id?: string; deleted?: boolean };
+    if (data.id) {
+      const purge = await convex.mutation(
+        api.accountDeletion.purgeByClerkUserIdPublic,
+        { secret: bridgeSecret(), clerkUserId: data.id, source: "web" }
+      );
+      const flyAppIds = "flyAppIds" in purge ? purge.flyAppIds : [];
+      await destroyMayaFlyApps(flyAppIds ?? []);
+    }
   }
 
   return NextResponse.json({ ok: true });
