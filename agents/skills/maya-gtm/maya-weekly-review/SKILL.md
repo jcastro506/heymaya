@@ -28,6 +28,7 @@ Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks a
 4. Last 7 days of `gtmActionLog` (Maya reads via `/lc_gtm/get_my_action_log?since_ms=<7d ago>`).
 5. Last 7 days of `gtmPostResults` (per-channel performance).
 6. Existing `gtmNicheLearnings` (don't re-extract what's already known).
+7. **`maya-results-reviewer/SKILL.md` § rule 12 (positioning-vs-distribution).** Run the reviewer over the week's underperforming posts (cached reads — no fresh API spend) and read its `positioningVsDistribution` rollup. The week-level diagnosis feeds Block 3 below.
 
 ## The review structure
 
@@ -58,8 +59,17 @@ Maya proposes a concrete shift if data warrants:
 - "Shift: rotating LinkedIn out of bet-channels, X stays but we're switching from hooks to threads."
 - "Hold: bet-channel mix is working — keep going."
 - "Pause: niche feels slow this week — recommend a content-only week to build the back catalog."
+- "Reframe (positioning, not distribution): posts are being seen but not wanted — change the message/who-it's-for next week, don't add cadence. See the positioning check below."
 
 If no shift, say so ("Bets are working — staying the course"). Honesty.
+
+**Positioning-vs-distribution check (feeds the shift decision — the honest-diagnosis link).** Before proposing a *distribution* shift (new channel, more cadence, different posting window), read the `positioningVsDistribution` rollup from `maya-results-reviewer` (required read #7). The diagnosis changes the *kind* of shift, and sometimes refuses one:
+
+- **If the week is a POSITIONING problem** (`positioningProblem: true` — posts got real reach but engagement/clicks/conversions stayed flat: people saw it and didn't want it), say it plainly and do NOT prescribe more distribution. The honest line: **"We're not going to out-post a positioning problem. 1,400 people saw your stuff this week and almost nobody engaged — that's not a reach issue, it's a 'this message isn't landing' issue. More posts of the same framing get the same shrug."** Then propose a **strategy reconsideration, not a cadence bump**: the messaging/audience reframe Maya would test next week (the reviewer's `reframeToTest` is the starting point) — e.g. "I'd test reframing from 'faster builds' to 'ship without a cofounder' and aim it at solo founders instead of agencies. One week, one channel, then we re-read." This is a Block 3 *shift* (change the angle/who-it's-for), and Block 4 then regenerates the plan around the reframe rather than around 'post more.'
+- **If the week is a DISTRIBUTION problem** (posts barely got seen), the shift is legitimately about channel/timing/venue — proceed normally. Note explicitly that the *message is still untested*, so we're fixing reach first and will re-judge the message once it's actually seen.
+- **Tier-2 honesty carries through.** If the reviewer marked reach as a soft proxy (`reachSignalConfidence: "proxy_soft"`), carry that caveat into the review — call the positioning read a lean, not a verdict, and say what signal would harden it.
+
+This is the *diagnosis → strategic-shift* linkage only. Do NOT duplicate Block 4's plan-regeneration logic here — Block 3 decides the *kind* of shift (reframe vs cadence/channel); Block 4 rebuilds the plan around whichever Block 3 chose.
 
 ### Block 4 — Regenerate next week's plan (NOT a one-way ratchet)
 

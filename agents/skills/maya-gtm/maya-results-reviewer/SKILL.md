@@ -43,6 +43,13 @@ Posts are useless without a feedback loop. Consumes post engagement data (T+2h /
 9. **Compounding-cadence check (PLAYBOOK § 2 Phase 4).** Expected: 1 metric + 2 build/insight + 1 demo/proof per week + reply-mining 4-5d/week. Surface gaps.
 10. **Citation-firewall on numbers.** Every metric must come from a live API pull or be marked `staleFromCacheAt: ts`.
 11. **No "we're learning a lot" sycophancy.** If verdict is "this isn't working", say so.
+12. **Positioning-vs-distribution diagnosis (the honest-diagnosis core — the moat).** This is the one most founders get wrong, and a yes-bot can't do it. When a post underperforms, separate **"they saw it and didn't want it"** from **"they never saw it."** It's a judgment call across the signals I have — NO threshold table, NO "if views > N":
+    - **Read the signals as a contrast, not absolutes.** For each underperforming post, look at the *shape* across the funnel: reach/views (the proxy — see caveat) → engagement (likes/replies/upvotes) → clicks → conversions. The diagnosis lives in *where the funnel breaks*, judged relative to THIS founder's own baselines (playbook/{channel}.md) and this venue's norms.
+    - **POSITIONING problem** (`diagnosis: "positioning"`): the post got real reach/views — people demonstrably saw it — but engagement/clicks/conversions stayed flat. They saw it and didn't care. That's a **messaging / product-market-fit / who-it's-for** problem. The hook didn't land, the value wasn't legible, or the thing genuinely isn't wanted by this audience. **Say it plainly: "This is a messaging problem, not a reach problem. More posting won't fix it — the same message in front of more people gets the same shrug."** Tie it to the existing failure-mode read: a "cringe" (high impressions + low engagement) or "feature" (replies ask "but what does it do?") post is almost always a positioning problem, not a distribution one.
+    - **DISTRIBUTION problem** (`diagnosis: "distribution"`): the post got almost no reach/views — it never got in front of people — so engagement/clicks were never given a chance. That's a **channel / timing / venue / algorithm** problem, not a message problem. The fix is where/when/how we post (wrong subreddit, dead hour, account-silence/algo penalty per rule 7), not what we say. Don't let a distribution failure masquerade as "the idea is bad" — we can't judge the message until it's actually seen.
+    - **MIXED / can't-tell** (`diagnosis: "mixed" | "insufficient_signal"`): say which signal you'd need to call it. Don't force a verdict you can't ground.
+    - **The honest framing is the value.** Most founders reflexively blame distribution ("I just need more reach") when the evidence says positioning. Naming that — "you don't have a reach problem, you have a 'nobody wants this framing' problem" — is exactly the hard truth they're paying for. Inversely, if they're about to rewrite a message that simply never got seen, stop them: "the message is untested — it didn't reach anyone. Fix the channel first, *then* we'll know if the message works."
+    - **Tier-2 caveat (signal honesty — MUST state when soft).** We are Tier 1 + Tier 3 (public engagement + our own click/conversion attribution); we do NOT have owner-only reach/impressions without per-platform OAuth. So **reach is a proxy = public views/impressions-proxy** (strong on Reddit/HN upvote+view surfaces, *soft/vanity* on TikTok/IG/YT/X/LI). When the reach signal is soft, SAY SO in the message and lower confidence: "I'm inferring reach from public view counts, which are noisy on IG — so call this a lean, not a verdict; connect the account later if you want the real reach number." Never present a proxy as a measured reach number. Clicks → conversions (Tier 3, ours) are the *reliable* leg — weight them hardest when present.
 
 ## Output schema
 
@@ -57,6 +64,11 @@ interface ResultsReview {
     buyerVsFounderEstimate: { buyer: number; founder: number; unclear: number };
     unpromptedDemandReplies: number;
     verdict: "void" | "weak" | "ok" | "strong" | "outlier";
+    // Positioning-vs-distribution diagnosis (rule 12). "positioning" = saw-but-didn't-want
+    // (messaging/PMF problem); "distribution" = never-saw (channel/time/venue problem).
+    diagnosis: "positioning" | "distribution" | "mixed" | "insufficient_signal" | "not_applicable";
+    diagnosisRationale: string;         // evidence-cited: the funnel shape that drove the call
+    reachSignalConfidence: "measured" | "proxy_strong" | "proxy_soft"; // Tier-2 caveat — proxy unless OAuth
   }>;
   formatPerformance: Array<{
     formatPatternId: string;
@@ -66,6 +78,14 @@ interface ResultsReview {
     counterOverfittingNote?: string;
   }>;
   formatMarketFitVerdict: "not_yet" | "candidate" | "confirmed";
+  // Week-level positioning-vs-distribution rollup (rule 12) — consumed by maya-weekly-review Block 3.
+  // When the pattern across posts is "real reach, no want", positioningProblem=true and more posting won't fix it.
+  positioningVsDistribution: {
+    dominantDiagnosis: "positioning" | "distribution" | "mixed" | "insufficient_signal";
+    positioningProblem: boolean;        // true = messaging/PMF, NOT a reach problem; more posting won't fix it
+    evidenceSummary: string;            // cited funnel shape across the week's posts
+    reframeToTest?: string;             // if positioning: the messaging/audience reframe Maya would test next
+  };
   channelLevelHealth: { last5PostsReach: "rising" | "flat" | "falling"; algorithmPenaltyRisk: boolean; accountSilenceRisk: boolean };
   recommendedNextActions: Array<{ action: string; rulesCited: string[]; severity: "advisory" | "blocking" }>;
   churnConfessionOpportunity?: { realChurnEvent: string };
@@ -86,4 +106,4 @@ Max 4 ScrapeCreators calls (1 per platform). Cache aggressively. 1 main_maya syn
 
 ## Anti-slop check
 
-`recommendedNextActions[].action` and `verdict` strings are operator-facing. Run `maya-slop-critic`. Must not read "let's iterate and learn from this exciting first launch!" — must read "this was a void launch by rule 9.8; the format reached only the founder circle; we change channel or sharpen the hook within 14 days." Terse, honest, cited.
+`recommendedNextActions[].action`, `verdict`, and `diagnosisRationale` strings are operator-facing. Run `maya-slop-critic`. Must not read "let's iterate and learn from this exciting first launch!" — must read "this was a void launch by rule 9.8; the format reached only the founder circle; we change channel or sharpen the hook within 14 days." Terse, honest, cited. The positioning-vs-distribution call must be equally blunt: "1,400 people saw this and 6 engaged — that's a messaging problem, not a reach problem. Posting it again won't change the answer; the framing has to change," vs "this got 40 views — it never had a chance. The message is untested; we fix the channel before we touch the copy." Never soften a positioning verdict into a distribution one to spare feelings.
