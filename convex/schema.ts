@@ -27,7 +27,10 @@ export default defineSchema({
       v.literal("onboarding"),
       v.literal("active"),
       v.literal("paused"),
-      v.literal("churned")
+      v.literal("churned"),
+      // Mission Control account-delete = reversible soft-delete (set here).
+      // Hard purge of all rows is a follow-up background job.
+      v.literal("deleted")
     ),
     plan: v.union(
       v.literal("coach"),

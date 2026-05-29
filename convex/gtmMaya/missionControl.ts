@@ -7,7 +7,7 @@
  */
 
 import { v } from "convex/values";
-import { internalMutation, query } from "../_generated/server";
+import { internalMutation, mutation, query } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { resolveMyGtmCreator } from "./targetList";
 
@@ -66,6 +66,52 @@ export const getMyConversions = query({
       .withIndex("by_account", (q) => q.eq("accountId", creator._id))
       .order("desc")
       .collect();
+  },
+});
+
+// ───────────────────────── Account ─────────────────────────
+
+/** Account/profile view for the Account tab — the operator's product, North
+ *  Star, plan, and account status. Auth-scoped; null if not a gtm-agent. */
+export const getMyAccount = query({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{
+    email?: string;
+    plan: string;
+    status: string;
+    app: Doc<"gtmApps"> | null;
+    deployedAt?: number;
+  } | null> => {
+    const creator = await resolveMyGtmCreator(ctx);
+    if (!creator) return null;
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    const app = agent?.appId ? await ctx.db.get(agent.appId) : null;
+    return {
+      email: creator.email,
+      plan: creator.plan,
+      status: creator.status,
+      app: app ?? null,
+      deployedAt: agent?.deployedAt,
+    };
+  },
+});
+
+/** Reversible soft-delete of the caller's OWN account (sets status="deleted").
+ *  Auth-scoped — can only ever affect the signed-in operator's row. A hard
+ *  purge of all gtm* rows is a follow-up background job; this stops the agent
+ *  + hides the account immediately and is reversible. */
+export const deleteMyGtmAccount = mutation({
+  args: {},
+  handler: async (ctx): Promise<{ ok: boolean }> => {
+    const creator = await resolveMyGtmCreator(ctx);
+    if (!creator) return { ok: false };
+    await ctx.db.patch(creator._id, { status: "deleted" });
+    return { ok: true };
   },
 });
 
