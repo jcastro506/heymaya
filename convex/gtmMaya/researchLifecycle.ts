@@ -240,6 +240,10 @@ export const setAppProfile = mutation({
     creatorBudgetMonthlyUsd: v.optional(v.number()),
     maxWeeklyVisualPosts: v.optional(v.number()),
     excludedAudiences: v.array(v.string()),
+    // Sprint B — journey-stage fork captured at onboarding (the launch vs
+    // manager tab). Optional; Maya can also resolve/refine it later via
+    // /lc_gtm/set_north_star.
+    entryMode: v.optional(v.union(v.literal("launch"), v.literal("manager"))),
     diagnosis: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<Id<"gtmApps">> => {
@@ -273,6 +277,7 @@ export const setAppProfile = mutation({
         creatorBudgetMonthlyUsd: args.creatorBudgetMonthlyUsd,
         maxWeeklyVisualPosts: args.maxWeeklyVisualPosts,
         excludedAudiences: args.excludedAudiences,
+        entryMode: args.entryMode,
         diagnosis: args.diagnosis,
         updatedAt: now,
       });
@@ -302,6 +307,7 @@ export const setAppProfile = mutation({
       creatorBudgetMonthlyUsd: args.creatorBudgetMonthlyUsd,
       maxWeeklyVisualPosts: args.maxWeeklyVisualPosts,
       excludedAudiences: args.excludedAudiences,
+      entryMode: args.entryMode,
       diagnosis: args.diagnosis,
       createdAt: now,
       updatedAt: now,

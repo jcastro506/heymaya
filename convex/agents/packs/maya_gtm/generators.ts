@@ -515,6 +515,40 @@ function renderApp(input: MayaGtmWorkspaceInput): string {
     lines.push(`- Why they built it: ${input.app.founderWhy}`);
   }
 
+  // Sprint B — journey-stage fork. Manager mode = already launched: pick up
+  // from their real footprint, skip launch theater. Launch mode = pre-launch:
+  // full arc. Unresolved = resolve it at synthesis.
+  const ownHandles = [
+    input.app.existingTikTokUrl ? `TikTok ${input.app.existingTikTokUrl}` : null,
+    input.app.existingInstagramUrl
+      ? `Instagram ${input.app.existingInstagramUrl}`
+      : null,
+  ].filter(Boolean) as string[];
+  const mode = input.app.entryMode;
+  lines.push("", "## Entry mode — meet them where they are", "");
+  if (mode === "manager") {
+    lines.push(
+      "**MANAGER mode** — this founder has already launched. Skip the launch arc and the launch theater. Your job is to take over their ongoing social and tell them exactly what to post and when.",
+      "**Before niche research, ingest their OWN accounts first.** Pull each of their existing handles via the scrapecreators-api skill, read their recent posts + engagement, and judge what's already working for THEM (which formats/angles/cadence land, where their audience already is). That's where you pick up — not a cold start.",
+      ownHandles.length
+        ? `Their handles to pull first: ${ownHandles.join(", ")}.`
+        : "If you don't have their handles yet, ask for them — they're your starting point."
+    );
+  } else if (mode === "launch") {
+    lines.push(
+      "**LAUNCH mode** — pre-launch. Run the full GTM arc (warm up → launch → compound). North Star is the first real users.",
+      ownHandles.length
+        ? `They have some existing accounts (${ownHandles.join(", ")}) — glance at them for voice + any early traction, but you're building from near-zero.`
+        : "No meaningful existing audience yet — building from near-zero."
+    );
+  } else {
+    lines.push(
+      "**Mode UNRESOLVED.** Resolve it from the stage above + whether their existing accounts show real audience/history: **manager** (already-launched → ingest their accounts, ongoing engine) vs **launch** (pre-launch → full arc). Propose it at synthesis; the operator confirms. If they have existing handles" +
+        (ownHandles.length ? ` (${ownHandles.join(", ")})` : "") +
+        ", pull them to inform the call."
+    );
+  }
+
   // Maya owns product digestion — she forms her OWN understanding rather than
   // trusting a pre-chewed summary. (Full-migration direction.)
   lines.push(
@@ -814,6 +848,7 @@ When I need to send the hello, I **compose** it in my own voice. Not a template,
 **What the hello must do:**
 - Identify me as Maya, their GTM manager
 - Reference SOMETHING specific from APP.md or USER.md so they know I read their context — the product name, their stage, or their founderWhy
+- Match the **entry mode** (see APP.md "Entry mode"): manager mode → frame it as *taking over their social* ("I'm digging into your accounts + your niche, back with what to post this week"); launch mode → frame it as *planning their launch*. If unresolved, stay neutral and resolve it at synthesis.
 - Set the wait expectation honestly (~10-15 min for the picture + first week's plan)
 - Invite a reply (they should know they can DM me anytime)
 

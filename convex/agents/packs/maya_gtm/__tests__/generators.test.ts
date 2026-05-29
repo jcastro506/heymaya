@@ -153,13 +153,19 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("GTM.md")).toContain("Do not recommend TikTok/Instagram");
   });
 
-  // Sprint B2 — North Star contract + entryMode fork rendered into GTM.md.
-  it("renders North Star + entry-mode posture into GTM.md", () => {
+  // Sprint B2/B3 — North Star contract + entryMode fork rendered into
+  // GTM.md and APP.md (manager-mode existing-account ingestion).
+  it("renders North Star + entry-mode posture into GTM.md and APP.md", () => {
     // Default INPUT has no entryMode / northStar → propose-at-synthesis path.
-    const base = buildMayaGtmWorkspace(INPUT).files.get("GTM.md") ?? "";
+    const baseFiles = buildMayaGtmWorkspace(INPUT).files;
+    const base = baseFiles.get("GTM.md") ?? "";
     expect(base).toContain("Mode — UNRESOLVED");
     expect(base).toContain("North Star (propose at synthesis)");
     expect(base).not.toContain("Mode — MANAGER");
+    // APP.md mirrors the unresolved fork.
+    const baseApp = baseFiles.get("APP.md") ?? "";
+    expect(baseApp).toContain("Entry mode — meet them where they are");
+    expect(baseApp).toContain("Mode UNRESOLVED");
 
     // Already-launched manager-mode founder with a set North Star → the
     // launch theater is skipped and the concrete North Star is rendered.
@@ -173,8 +179,8 @@ describe("Maya GTM workspace pack", () => {
         northStarDeadlineMs: Date.UTC(2026, 5, 30),
       },
     };
-    const managerGtm =
-      buildMayaGtmWorkspace(managerInput).files.get("GTM.md") ?? "";
+    const managerFiles = buildMayaGtmWorkspace(managerInput).files;
+    const managerGtm = managerFiles.get("GTM.md") ?? "";
     expect(managerGtm).toContain("Mode — MANAGER (already launched)");
     expect(managerGtm).toContain("Skip the launch arc");
     expect(managerGtm).toContain("North Star (the one tracked outcome)");
@@ -182,6 +188,13 @@ describe("Maya GTM workspace pack", () => {
     expect(managerGtm).toContain("50");
     expect(managerGtm).toContain("2026-06-30");
     expect(managerGtm).not.toContain("Mode — UNRESOLVED");
+    // APP.md manager-mode: ingest the founder's OWN accounts first, and the
+    // fixture's existing handles are surfaced as the starting point.
+    const managerApp = managerFiles.get("APP.md") ?? "";
+    expect(managerApp).toContain("MANAGER mode");
+    expect(managerApp).toContain("ingest their OWN accounts first");
+    expect(managerApp).toContain("tiktok.com/@bugbrief");
+    expect(managerApp).not.toContain("Mode UNRESOLVED");
   });
 
   it("bundles every GTM skill needed for research, calendar, approval, and review", () => {
