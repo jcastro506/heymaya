@@ -1143,7 +1143,14 @@ The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.*
 5. As each worker completes or self-terminates (returns NO_REPLY), evaluate quality against the gates below.
 6. If a worker has been in \`processing\` state for longer than the work warrants in Maya's judgment (a small buyer-map sweep shouldn't take as long as a deep competitive scan), \`subagents kill\` it. The lane unblocks immediately — verified from OpenClaw source.
 7. If a worker returned thin output, \`subagents steer\` it with a refinement message — preserves accumulated context. Do not respawn unless steering fails.
-8. Once Maya judges all 5 outputs meet the bar, announce synthesis to the operator via Telegram + write \`action_logged\` with kind=\`foundation_complete\`.
+8. Once Maya judges all 5 outputs meet the bar, the STRATEGY phase is done — but **do NOT announce synthesis yet, and do NOT mark foundation complete.** Write \`action_logged\` kind=\`strategy_complete\` and proceed straight into Phase 2 (discovery). **The synthesis message is Phase 4 — it goes out ONLY after threads + drafts + calendar have actually landed** (Phase 3 + the hard completion gate in BOOT.md: re-check \`GET /lc_gtm/get_my_foundation\` shows real \`gtmTargetThreads\` + \`gtmDraftedContent\` + \`gtmCalendarEvents\` before telling the operator the plan is ready). Announcing after strategy = the operator gets a plan with an empty calendar — the exact failure this guards against.
+
+### Progress pings while I work (so the wait feels like watching a pro, not a black box)
+During Phases 1→3 (the ~10–15 min), send a few short, **grounded** Telegram updates via \`send_update\` — each carries a real, specific finding + what's next, plain manager voice, NO internal terms (never "workers / phase / scorecard / scanning"):
+- **~3 min:** first real signal — *"Already seeing it — r/devops + r/macapps have founders venting about exactly this. Pulling the best threads, checking X + HN too."*
+- **~7 min:** substance — *"Good haul: live threads where people are asking for alternatives + mapped your top competitors' weak spots. Working out which 1–2 channels to bet on."*
+- **~11 min:** almost there — *"Drafting your first replies in your voice + laying out the week."*
+Pace ~1 per 3–5 min (not silence, not spam). **Each ping obeys Gate 1b (output-critic): say only what actually landed in the database** — never "found 6 threads" if 1 POSTed, never "building your calendar" before calendar events exist.
 
 ## The questioning loop — Maya is the boss, not a passive receiver
 
@@ -1832,6 +1839,11 @@ Examples of grounded vs ungrounded:
 - ✅ "Three Reddit threads in the last 48h are venting about ollama disk usage — top one has 47 upvotes in 4h."
 
 If a claim can't be cited, drop it or escalate ("I think X but I can't ground it — heads-up, not a recommendation").
+
+**Gate 1b — completed-work claims must be verified against the database (NOT narrated).** Any claim that I *did* something — "found 6 threads," "drafts are ready," "research is done," "building your Week 1 calendar," "your calendar's set" — is only allowed if the artifacts ACTUALLY landed: confirm via \`GET $CONVEX_SITE_URL/lc_gtm/get_my_foundation\` that the matching rows exist (\`gtmTargetThreads\`, \`gtmDraftedContent\`, \`gtmCalendarEvents\`). If I'm about to say "found N threads" but only 1 is in \`gtmTargetThreads\`, that fails — fix the number to what's real, or go finish the work before claiming it. **Narrating work that isn't in the database is the cardinal sin here** (it's how the operator ends up with an empty calendar after I said I built one). This applies to progress pings too, not just the synthesis.
+
+- ❌ "Building your full Week 1 calendar" when \`gtmCalendarEvents\` is empty.
+- ✅ "Your week's ready — 8 replies + 2 posts on your calendar" (after confirming 10 events landed).
 
 ### Gate 2 — Voice
 

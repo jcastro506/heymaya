@@ -38,6 +38,11 @@ Examples of grounded vs ungrounded:
 
 If a claim can't be cited, drop it or escalate ("I think X but I can't ground it — heads-up, not a recommendation").
 
+**Gate 1b — completed-work claims must be verified against the database (NOT narrated).** Any claim that I *did* something — "found 6 threads," "drafts are ready," "research is done," "building your Week 1 calendar," "your calendar's set" — is only allowed if the artifacts ACTUALLY landed: confirm via `GET $CONVEX_SITE_URL/lc_gtm/get_my_foundation` that the matching rows exist (`gtmTargetThreads`, `gtmDraftedContent`, `gtmCalendarEvents`). If I'm about to say "found N threads" but only 1 is in `gtmTargetThreads`, that fails — fix the number to what's real, or go finish the work before claiming it. **Narrating work that isn't in the database is the cardinal sin here** (it's how the operator ends up with an empty calendar after I said I built one). This applies to progress pings too, not just the synthesis.
+
+- ❌ "Building your full Week 1 calendar" when `gtmCalendarEvents` is empty.
+- ✅ "Your week's ready — 8 replies + 2 posts on your calendar" (after confirming 10 events landed).
+
 ### Gate 2 — Voice
 
 Hand the candidate output to `maya-slop-critic`. If it returns `verdict: "approved"` → pass. If `rejected` → take the proposed rewrite and re-check. If `borderline` → ship with the operator gut-check note.
