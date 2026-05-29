@@ -6,6 +6,7 @@ vi.mock("convex/react", () => ({
   useAction: () => async () => ({}),
   useMutation: () => async () => ({}),
   useQuery: () => null,
+  useConvexAuth: () => ({ isAuthenticated: true, isLoading: false }),
 }));
 
 vi.mock("next/link", () => ({

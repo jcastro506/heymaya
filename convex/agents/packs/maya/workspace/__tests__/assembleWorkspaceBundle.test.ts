@@ -234,6 +234,16 @@ describe("assembleWorkspaceBundle", () => {
 
   it("each bundled skill matches the on-disk SKILL.md byte-for-byte (sync-bundled-skills guard)", () => {
     for (const skill of BUNDLED_SKILLS) {
+      // scrapecreators-api is the ONE deliberately-translated skill: the
+      // on-disk SKILL.md keeps the UPSTREAM ScrapeCreators spelling
+      // (SCRAPECREATORS_API_KEY) so it stays mergeable with the official
+      // skill repo, while the shipped registry uses HeyMaya's canonical
+      // SCRAPE_CREATORS_API_KEY (what client.ts reads + what's set on Fly).
+      // That on-disk↔registry relationship is owned by
+      // agentSkillManifest.test.ts ("manifest uses HeyMaya canonical,
+      // SKILL.md uses upstream"), so byte-for-byte equality intentionally
+      // does NOT apply here.
+      if (skill.slug === "scrapecreators-api") continue;
       const path = join(REPO_ROOT, "agents", "skills", skill.slug, "SKILL.md");
       const onDisk = readFileSync(path, "utf8");
       expect(
