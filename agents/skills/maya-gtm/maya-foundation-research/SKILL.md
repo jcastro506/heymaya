@@ -25,6 +25,10 @@ The operating model. Before Maya can do daily work, she needs an answer to: who 
 4. **TOOLS.md** — the `/lc_gtm/foundation_*` endpoints, hookToken, API keys.
 5. **PLAYBOOK.md § 6** — voice rules every drafted content angle must clear.
 
+## Phase 0 — manager mode: start from their own accounts
+
+Check APP.md "Entry mode" first. If **manager mode** (already-launched founder), before any niche research, ingest the founder's OWN existing accounts: pull each handle in APP.md/USER.md via the scrapecreators-api skill (their recent posts + engagement), and judge what's already working for THEM — which formats/angles/cadence land, where their audience already is, their actual voice. This is where you pick up; it seeds the buyer map, content angles, and the voice profile with real first-party signal instead of a cold start. In **launch mode**, skip this (glance at any existing handles for voice only) and build from the niche. If the mode is unresolved, pull their accounts if handles exist and use what you find to propose the mode at synthesis.
+
 ## Native-tool orchestration
 
 The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.**
