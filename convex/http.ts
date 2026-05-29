@@ -96,6 +96,7 @@ import {
   foundationContentAngleHttp,
   foundationRelationshipHttp,
   setNorthStarHttp,
+  setStrategyApprovalHttp,
   competitorMoveHttp,
   nichePulseSignalHttp,
   actionLoggedHttp,
@@ -276,6 +277,12 @@ http.route({
   path: "/lc_gtm/set_north_star",
   method: "POST",
   handler: setNorthStarHttp,
+});
+// Sprint B — Maya records the strategy approval state (propose→approve gate).
+http.route({
+  path: "/lc_gtm/set_strategy_approval",
+  method: "POST",
+  handler: setStrategyApprovalHttp,
 });
 
 // Continuous research + feedback-loop write surfaces. Maya / her

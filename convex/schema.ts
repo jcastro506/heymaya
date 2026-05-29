@@ -4533,7 +4533,9 @@ export default defineSchema({
       // or DREAMS.md on Fly disk, so the operator UI can ledger writes.
       v.literal("memory_written"),
       // Sprint B — Maya persists the proposed/approved North Star + entry mode.
-      v.literal("set_north_star")
+      v.literal("set_north_star"),
+      // Sprint B — Maya records the strategy approval state.
+      v.literal("set_strategy_approval")
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
@@ -4667,6 +4669,17 @@ export default defineSchema({
     startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     failureReason: v.optional(v.string()),
+    // Sprint B — strategy approval gate. Maya proposes the strategy (POV +
+    // North Star + channel bets) and sets "proposed"; the operator approves
+    // ("approved") or asks for changes ("iterating") before she executes
+    // (builds the calendar + drafts). Undefined = pre-proposal.
+    strategyApprovalState: v.optional(
+      v.union(
+        v.literal("proposed"),
+        v.literal("approved"),
+        v.literal("iterating")
+      )
+    ),
     // Sprint 16 — Maya posts /lc_gtm/research_callback with a per-phase
     // note. Surfaced in mission board so the operator can see what Maya
     // is thinking without reading the OpenClaw session log.

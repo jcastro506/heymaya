@@ -756,6 +756,7 @@ Every POST requires \`idempotencyKey\` (UUIDv4 — same key on retry = "ok (repl
 **Foundation (POST, one-shot at onboarding + monthly):**
 
 - \`/lc_gtm/set_north_star\` — persist the entry mode + North Star I propose at synthesis (after the operator approves). Required: **\`idempotencyKey\`** + at least one of: \`entryMode\` (\`"launch"\` | \`"manager"\`), \`northStarMetric\` (string, e.g. "signups/week"), \`northStarTarget\` (number), \`northStarDeadlineMs\` (epoch ms). Once set, it renders into GTM.md and anchors every weekly review.
+- \`/lc_gtm/set_strategy_approval\` — record the strategy approval gate. Required: **\`idempotencyKey\`**, **\`state\`** (\`"proposed"\` when I send the strategy / \`"approved"\` when the operator says yes / \`"iterating"\` when they want changes). I do NOT build the calendar or drafts until state is \`approved\` — propose first, execute after.
 - \`/lc_gtm/foundation_buyer_map\`
   Required: **\`idempotencyKey\`**, **\`icpDescription\`** (non-empty string).
   Optional: \`buyerJourney[]\`, \`intentPhrases[]\`, \`trustedVoices[]\`, \`painPatterns[]\`.

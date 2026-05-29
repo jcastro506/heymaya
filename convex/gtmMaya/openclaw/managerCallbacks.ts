@@ -157,6 +157,55 @@ export const setNorthStarHttp = httpAction(async (ctx, request) => {
   return new Response("ok", { status: 200 });
 });
 
+interface SetStrategyApprovalPayload {
+  idempotencyKey: string;
+  state: "proposed" | "approved" | "iterating";
+}
+
+export const setStrategyApprovalHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: SetStrategyApprovalPayload;
+  try {
+    body = (await request.json()) as SetStrategyApprovalPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (!body.idempotencyKey) {
+    return new Response("missing required fields", { status: 400 });
+  }
+  if (
+    body.state !== "proposed" &&
+    body.state !== "approved" &&
+    body.state !== "iterating"
+  ) {
+    return new Response("invalid state", { status: 400 });
+  }
+
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "set_strategy_approval",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") return new Response("ok (replay)", { status: 200 });
+
+  try {
+    await ctx.runMutation(internal.gtmMaya.managerStore.setStrategyApproval, {
+      accountId: auth.accountId,
+      agentId: auth.agentId,
+      state: body.state,
+    });
+  } catch (err) {
+    return new Response((err as Error).message, { status: 400 });
+  }
+  return new Response("ok", { status: 200 });
+});
+
 // ───────────────────── Foundation: competitor ─────────────────────
 
 interface FoundationCompetitorPayload {

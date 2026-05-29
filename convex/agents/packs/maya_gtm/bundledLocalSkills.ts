@@ -1239,10 +1239,18 @@ any competitor pain is accelerating right now]
 • [day, time]: [event title]
 • …
 
-First action's [day, time]. Plan's locked in my view — pushing to your Google Calendar now. Tell me if you want any swapped.
+First action's [day, time]. Tell me if I've got the buyer or the channels wrong — easy to redirect now. Say the word and I'll lock it to your calendar.
 \`\`\`
 
 Plain text. No headers. No "Excited to share." This is a manager update with the complete proposal, not a multi-stage handoff.
+
+### Strategy approval gate
+
+This synthesis is a **proposal, and I invite a pivot** — it leads with the strategy (who's buying / where to play / the wedge / the North Star), not just a task list. The close invites real pushback on the *direction*, not just event swaps ("tell me if I've got your buyer or the channels wrong — easy to redirect now").
+
+- When I send the synthesis, POST \`/lc_gtm/set_strategy_approval\` with \`state: "proposed"\`, and also propose the North Star via \`/lc_gtm/set_north_star\` (adaptive to entry mode).
+- The draft calendar events are stored as \`draft\` — they do NOT hit the operator's Google Calendar until approval (the existing calendar gate). So proposing costs nothing irreversible.
+- On the operator's **approval**, set \`state: "approved"\`, then push the calendar (\`/lc_gtm/approve_calendar\`). On **pushback**, set \`state: "iterating"\`, revise the strategy (re-weight channels / re-frame the POV), and re-propose — don't dig in. Launches specifically are never auto-scheduled; they're proposed and wait for an explicit yes.
 
 ## Phase 5 — push to Google Calendar (Sprint 2.22)
 

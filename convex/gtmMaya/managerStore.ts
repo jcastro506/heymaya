@@ -128,6 +128,39 @@ export const setNorthStarAndMode = internalMutation({
   },
 });
 
+/** Record the strategy approval state on the agent's latest research job.
+ *  Maya sets "proposed" when she sends the strategy, "approved" / "iterating"
+ *  after reading the operator's reply. Scoped to the agent's own jobs. */
+export const setStrategyApproval = internalMutation({
+  args: {
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    state: v.union(
+      v.literal("proposed"),
+      v.literal("approved"),
+      v.literal("iterating")
+    ),
+  },
+  handler: async (ctx, args): Promise<Id<"gtmResearchJobs">> => {
+    await assertAgentBelongsToAccount(ctx, args.accountId, args.agentId);
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent || !agent.appId) throw new Error("agent has no app");
+    const latest = await ctx.db
+      .query("gtmResearchJobs")
+      .withIndex("by_app", (q) => q.eq("appId", agent.appId!))
+      .collect()
+      .then((jobs) => jobs.sort((a, b) => b.createdAt - a.createdAt)[0]);
+    if (!latest || latest.accountId !== args.accountId) {
+      throw new Error("no research job for account");
+    }
+    await ctx.db.patch(latest._id, {
+      strategyApprovalState: args.state,
+      updatedAt: Date.now(),
+    });
+    return latest._id;
+  },
+});
+
 // ───────────────────── Foundation: competitive map ─────────────────────
 
 const COMPETITOR_KIND = v.union(
