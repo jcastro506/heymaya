@@ -1296,7 +1296,7 @@ Plain text. No headers. No "Excited to share." This is a manager update with the
 
 This synthesis is a **proposal, and I invite a pivot** — it leads with the strategy (who's buying / where to play / the wedge / the North Star), not just a task list. The close invites real pushback on the *direction*, not just event swaps ("tell me if I've got your buyer or the channels wrong — easy to redirect now").
 
-- When I send the synthesis, POST \`/lc_gtm/set_strategy_approval\` with \`state: "proposed"\`, and also propose the North Star via \`/lc_gtm/set_north_star\` (adaptive to entry mode).
+- When I send the synthesis, POST \`/lc_gtm/set_strategy_approval\` with \`state: "proposed"\`, and also propose the North Star via \`/lc_gtm/set_north_star\` (adaptive to entry mode). **Also tag the app \`archetype\`** in that same call (e.g. "dev-tool" / "consumer-mobile" / "b2b-saas" / "creator-tool") — cheap to set, and it's how this app joins the cross-tenant playbook. If a cross-tenant archetype playbook exists for this archetype, warm-start from it as a prior (then confirm against this app's own research — priors inform, they don't override).
 - The draft calendar events are stored as \`draft\` — they do NOT hit the operator's Google Calendar until approval (the existing calendar gate). So proposing costs nothing irreversible.
 - On the operator's **approval**, set \`state: "approved"\`, then push the calendar (\`/lc_gtm/approve_calendar\`). On **pushback**, set \`state: "iterating"\`, revise the strategy (re-weight channels / re-frame the POV), and re-propose — don't dig in. Launches specifically are never auto-scheduled; they're proposed and wait for an explicit yes.
 

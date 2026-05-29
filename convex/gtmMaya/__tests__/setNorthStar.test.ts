@@ -150,4 +150,44 @@ describe("Sprint B — set_north_star", () => {
     });
     expect(res.status).toBe(401);
   });
+
+  // Sprint G — archetype tag (the cross-tenant moat index).
+  it("persists the archetype tag", async () => {
+    const t = convexTest(schema, modules);
+    const { appId, hookToken } = await setupAgent(t, "u_ns_arch");
+    const res = await callSetNorthStar(t, hookToken, {
+      idempotencyKey: "a1",
+      archetype: "dev-tool",
+    });
+    expect(res.status).toBe(200);
+    const app = await t.run(async (ctx) => ctx.db.get(appId));
+    expect(app?.archetype).toBe("dev-tool");
+  });
+
+  // Sprint G — cross-tenant archetype playbook read (warm-start), privacy-safe.
+  it("reads aggregated archetype learnings by archetype only (no tenant scope)", async () => {
+    const t = convexTest(schema, modules);
+    await t.run(async (ctx) => {
+      await ctx.db.insert("gtmArchetypeLearnings", {
+        archetype: "dev-tool",
+        kind: "channel",
+        learning: "HN + r/LocalLLaMA convert; Show HN week 3 not week 1",
+        supportingTenantCount: 12,
+        evidenceCount: 240,
+        confidence: 0.8,
+        updatedAt: Date.now(),
+      });
+    });
+    const { internal } = await import("../../_generated/api");
+    const learnings = await t.query(
+      internal.gtmMaya.managerStore.getArchetypeLearnings,
+      { archetype: "dev-tool" }
+    );
+    expect(learnings.length).toBe(1);
+    expect(learnings[0].learning).toContain("Show HN week 3");
+    // privacy-safe: no creatorId / accountId on the row at all.
+    expect(
+      Object.prototype.hasOwnProperty.call(learnings[0], "accountId")
+    ).toBe(false);
+  });
 });

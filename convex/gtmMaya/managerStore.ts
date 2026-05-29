@@ -103,6 +103,8 @@ export const setNorthStarAndMode = internalMutation({
     northStarMetric: v.optional(v.string()),
     northStarTarget: v.optional(v.number()),
     northStarDeadlineMs: v.optional(v.number()),
+    // Sprint G — app archetype (the cross-tenant data-moat index).
+    archetype: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Id<"gtmApps">> => {
     await assertAgentBelongsToAccount(ctx, args.accountId, args.agentId);
@@ -123,8 +125,22 @@ export const setNorthStarAndMode = internalMutation({
     if (args.northStarDeadlineMs !== undefined) {
       patch.northStarDeadlineMs = args.northStarDeadlineMs;
     }
+    if (args.archetype !== undefined) patch.archetype = args.archetype;
     await ctx.db.patch(agent.appId, patch);
     return agent.appId;
+  },
+});
+
+/** Sprint G — read the cross-tenant archetype playbook for warm-starting a new
+ *  customer of the same archetype. Returns aggregated, privacy-safe learnings
+ *  (no tenant PII). Empty until the post-MVP aggregation job populates it. */
+export const getArchetypeLearnings = internalQuery({
+  args: { archetype: v.string() },
+  handler: async (ctx, args): Promise<Doc<"gtmArchetypeLearnings">[]> => {
+    return await ctx.db
+      .query("gtmArchetypeLearnings")
+      .withIndex("by_archetype", (q) => q.eq("archetype", args.archetype))
+      .collect();
   },
 });
 

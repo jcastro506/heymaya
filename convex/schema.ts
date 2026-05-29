@@ -4623,6 +4623,11 @@ export default defineSchema({
     northStarMetric: v.optional(v.string()),
     northStarTarget: v.optional(v.number()),
     northStarDeadlineMs: v.optional(v.number()),
+    // Sprint G — app archetype (Maya proposes at synthesis; free string, e.g.
+    // "dev-tool", "consumer-mobile", "b2b-saas", "creator-tool"). Cheap to
+    // capture at MVP; it's the index for the cross-tenant data moat — the
+    // per-archetype outcome-grounded playbook that warm-starts new customers.
+    archetype: v.optional(v.string()),
     diagnosis: v.optional(v.any()),
     // Sprint 1.1 — cached LLM-driven keyword expansion. Maps the founder's
     // product description into semantic keywords + audience pain phrases the
@@ -5802,6 +5807,33 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_agent", ["agentId"])
     .index("by_agent_and_kind", ["agentId", "kind"]),
+
+  // ─── Sprint G — the data moat: cross-tenant archetype playbook ─────────
+  /** Privacy-safe, outcome-grounded learnings aggregated ACROSS tenants by app
+   *  archetype ("for a dev tool like yours: HN + r/LocalLLaMA, founder-story
+   *  angle converts 3x, Show HN week 3"). NO per-tenant PII / no creatorId —
+   *  only the archetype + the pattern + how many tenants/outcomes back it.
+   *  Warm-starts new customers of the same archetype. Populated by a post-MVP
+   *  cross-tenant aggregation job (needs corpus + attribution); read at
+   *  onboarding as a prior. The flywheel: more customers → more outcome data →
+   *  better per-archetype playbooks → better results → more customers. */
+  gtmArchetypeLearnings: defineTable({
+    /** App archetype this learning is indexed by (e.g. "dev-tool"). */
+    archetype: v.string(),
+    /** What kind of learning — channel/venue/angle/format/timing/launch. */
+    kind: v.string(),
+    /** The learning, in plain language. No tenant-identifying detail. */
+    learning: v.string(),
+    /** How many distinct tenants' outcomes support this (the corpus depth). */
+    supportingTenantCount: v.number(),
+    /** How many outcome events (conversions/posts) back it. */
+    evidenceCount: v.number(),
+    /** 0-1 aggregate confidence. */
+    confidence: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_archetype", ["archetype"])
+    .index("by_archetype_and_kind", ["archetype", "kind"]),
 
   // ─── Sprint 2.17 — Manager-mode foundation tables ─────────────────────
   // The five outputs of the foundation-research pass (onboarding +

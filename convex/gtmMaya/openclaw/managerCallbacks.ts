@@ -99,6 +99,7 @@ interface SetNorthStarPayload {
   northStarMetric?: string;
   northStarTarget?: number;
   northStarDeadlineMs?: number;
+  archetype?: string;
 }
 
 export const setNorthStarHttp = httpAction(async (ctx, request) => {
@@ -119,7 +120,8 @@ export const setNorthStarHttp = httpAction(async (ctx, request) => {
     body.entryMode === undefined &&
     body.northStarMetric === undefined &&
     body.northStarTarget === undefined &&
-    body.northStarDeadlineMs === undefined
+    body.northStarDeadlineMs === undefined &&
+    body.archetype === undefined
   ) {
     return new Response("nothing to set", { status: 400 });
   }
@@ -150,6 +152,7 @@ export const setNorthStarHttp = httpAction(async (ctx, request) => {
       northStarMetric: body.northStarMetric,
       northStarTarget: body.northStarTarget,
       northStarDeadlineMs: body.northStarDeadlineMs,
+      archetype: body.archetype,
     });
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });
