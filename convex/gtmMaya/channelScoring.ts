@@ -32,6 +32,7 @@ export type GtmChannel =
   | "x"
   | "linkedin"
   | "tiktok"
+  | "youtube"
   | "product_hunt";
 
 export type GtmChannelDecision = "primary" | "secondary" | "parked" | "blocked";
@@ -44,6 +45,7 @@ export type GtmEvidenceSource =
   | "linkedin"
   | "tiktok"
   | "instagram"
+  | "youtube"
   | "competitor";
 export type GtmEvidenceUse =
   | "strategy"
@@ -126,6 +128,7 @@ const CHANNEL_SOURCE: Record<GtmChannel, GtmEvidenceSource> = {
   x: "x",
   linkedin: "linkedin",
   tiktok: "tiktok",
+  youtube: "youtube",
   product_hunt: "competitor",
 };
 

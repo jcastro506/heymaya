@@ -85,8 +85,8 @@ export interface MayaGtmWorkspaceInput {
    * OpenClaw owns digestion instead of a Convex-side Gemini pass.
    */
   walkthroughVideoUrl?: string;
-  primaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "product_hunt";
-  secondaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "product_hunt";
+  primaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "youtube" | "product_hunt";
+  secondaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "youtube" | "product_hunt";
   /**
    * Active durable GTM research job created by Convex before deploying the
    * workspace. BOOT.md reads this from MEMORY.md and uses it as the workflow
@@ -152,6 +152,7 @@ const SKILLS = [
   "maya-linkedin-fit-researcher",
   "maya-tiktok-demo-strategist",
   "maya-tiktok-format-researcher",
+  "maya-youtube-researcher",
   "maya-competitor-researcher",
   "maya-channel-strategy-judge",
   "maya-content-format-miner",
@@ -1289,6 +1290,14 @@ curl -s "https://api.scrapecreators.com/v1/reddit/search?query=bug%20reporting&s
 - Twitter/X tweet details: \`GET /v1/twitter/tweet?url=...\`
 - LinkedIn company: \`GET /v1/linkedin/company?url=...\`
 - LinkedIn company posts: \`GET /v1/linkedin/company/posts?url=...\`
+- YouTube channel: \`GET /v1/youtube/channel?handle=...\` (or channelId / URL)
+- YouTube channel videos: \`GET /v1/youtube/channel-videos?handle=...\`
+- YouTube channel shorts: \`GET /v1/youtube/channel/shorts?handle=...\`
+- YouTube video details: \`GET /v1/youtube/video?url=...\` (views/likes/comments)
+- YouTube transcript: \`GET /v1/youtube/video/transcript?url=...\` (gold for mining)
+- YouTube comments: \`GET /v1/youtube/video/comments?url=...\` (~1k top + ~7k newer) + replies: \`GET /v1/youtube/video/comment/replies?...\`
+- YouTube search: \`GET /v1/youtube/search?query=...\` + hashtag: \`GET /v1/youtube/search/hashtag?hashtag=...\`
+- YouTube trending shorts: \`GET /v1/youtube/shorts/trending\`
 - Credit balance: \`GET /v1/account/credit-balance\`
 
 ## Evidence Standard
@@ -1324,6 +1333,8 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
       return "Turn trend or demo evidence into user-recorded TikTok scripts and shot plans.";
     case "maya-tiktok-format-researcher":
       return "Study TikTok formats for the niche, including videos, slideshows, screenshot sequences, text-on-image explainers, hooks, comments, and CTAs.";
+    case "maya-youtube-researcher":
+      return "Mine YouTube (Shorts + long-form) via ScrapeCreators — comments + transcripts for buyer language, venue spread, title/format patterns. Brief-only, signups-not-likes.";
     case "maya-competitor-researcher":
       return "Find substitutes, competitor positioning, and user complaints.";
     case "maya-channel-strategy-judge":

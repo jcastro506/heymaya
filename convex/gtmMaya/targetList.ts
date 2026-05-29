@@ -46,7 +46,8 @@ const PLATFORM = v.union(
   v.literal("hn"),
   v.literal("linkedin"),
   v.literal("instagram"),
-  v.literal("tiktok")
+  v.literal("tiktok"),
+  v.literal("youtube")
 );
 
 const THREAD_ACTION = v.union(

@@ -507,7 +507,7 @@ export const approveCalendarHttp = httpAction(async (ctx, request) => {
 
 interface TargetThreadPayload {
   idempotencyKey: string;
-  platform: "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok";
+  platform: "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok" | "youtube";
   url: string;
   externalId: string;
   title?: string;
@@ -601,7 +601,7 @@ export const targetThreadHttp = httpAction(async (ctx, request) => {
 
 interface TargetAccountPayload {
   idempotencyKey: string;
-  platform: "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok";
+  platform: "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok" | "youtube";
   handle: string;
   profileUrl: string;
   displayName?: string;
@@ -678,7 +678,7 @@ export const targetAccountHttp = httpAction(async (ctx, request) => {
 interface DraftedContentPayload {
   idempotencyKey: string;
   kind: "reply" | "thread" | "post" | "comment" | "dm";
-  platform: "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok";
+  platform: "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok" | "youtube";
   targetThreadId?: string;
   targetAccountId?: string;
   draftText: string;
@@ -882,7 +882,7 @@ export const publishDraftHttp = httpAction(async (ctx, request) => {
 interface PostResultSnapshotPayload {
   idempotencyKey: string;
   draftId: string;
-  platform: "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok";
+  platform: "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok" | "youtube";
   providerPostId: string;
   metrics: {
     likes?: number;

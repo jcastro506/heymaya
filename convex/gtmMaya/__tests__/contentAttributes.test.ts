@@ -105,4 +105,31 @@ describe("Sprint C3 — content-attribute tags", () => {
     );
     expect(drafts[0].attributes).toBeUndefined();
   });
+
+  // Sprint H — youtube is a first-class platform (schema enum round-trip).
+  it("accepts a youtube drafted_content row", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId, hookToken } = await setupAgent(t, "u_attr_yt");
+    const res = await t.fetch("/lc_gtm/drafted_content", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${hookToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        idempotencyKey: "yt1",
+        kind: "post",
+        platform: "youtube",
+        draftText: "Short: the bug-context problem in 30s",
+      }),
+    });
+    expect(res.status).toBe(200);
+    const drafts = await t.run(async (ctx) =>
+      ctx.db
+        .query("gtmDraftedContent")
+        .withIndex("by_agent", (q) => q.eq("agentId", agentId))
+        .collect()
+    );
+    expect(drafts[0].platform).toBe("youtube");
+  });
 });

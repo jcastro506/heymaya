@@ -27,6 +27,12 @@ export function evaluateChannelAgent(
   switch (input.channel) {
     case "tiktok":
       return evaluateTikTok(input);
+    case "youtube":
+      // YouTube Shorts are the same short-form video eligibility shape as
+      // TikTok (Brief-only, hook-driven). The real per-platform judgment now
+      // lives in maya-youtube-researcher (OpenClaw-native); this legacy
+      // heuristic path is migration-bound (#8). Reuse the video analog.
+      return evaluateTikTok(input);
     case "linkedin":
       return evaluateLinkedIn(input);
     case "reddit":
@@ -41,9 +47,9 @@ export function evaluateChannelAgent(
 export function evaluateAllChannelAgents(
   input: Omit<ChannelAgentInput, "channel">
 ): ChannelAgentVerdict[] {
-  return (["reddit", "x", "linkedin", "tiktok", "product_hunt"] as const).map(
-    (channel) => evaluateChannelAgent({ ...input, channel })
-  );
+  return (
+    ["reddit", "x", "linkedin", "tiktok", "youtube", "product_hunt"] as const
+  ).map((channel) => evaluateChannelAgent({ ...input, channel }));
 }
 
 function evaluateTikTok(input: ChannelAgentInput): ChannelAgentVerdict {

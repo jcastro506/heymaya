@@ -265,6 +265,8 @@ describe("Maya GTM workspace pack", () => {
         "maya-distribution-motion-tester",
         "maya-viral-demo-moment-miner",
         "maya-ugc-system-advisor",
+        // Sprint H — YouTube as a first-class platform.
+        "maya-youtube-researcher",
       ])
     );
     expect(files.get("skills/maya-tiktok-format-researcher/SKILL.md")).toContain(
@@ -273,6 +275,11 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("skills/maya-ugc-system-advisor/SKILL.md")).toContain(
       "premature"
     );
+    // Sprint H — YouTube researcher: transcripts + Brief-only + title=CTR.
+    const yt = files.get("skills/maya-youtube-researcher/SKILL.md") ?? "";
+    expect(yt).toContain("/video/transcript");
+    expect(yt).toContain("Brief-only");
+    expect(yt).toContain("title is the CTR lever");
   });
 
   it("renders bounded subagent contracts with model, budget, coverage, and failure behavior", () => {

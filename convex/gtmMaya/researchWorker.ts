@@ -713,6 +713,7 @@ export const insertChannelScores = internalMutation({
           v.literal("x"),
           v.literal("linkedin"),
           v.literal("tiktok"),
+          v.literal("youtube"),
           v.literal("product_hunt")
         ),
         score: v.number(),

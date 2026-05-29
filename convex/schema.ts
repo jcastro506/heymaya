@@ -5009,6 +5009,7 @@ export default defineSchema({
       v.literal("x"),
       v.literal("linkedin"),
       v.literal("tiktok"),
+      v.literal("youtube"),
       v.literal("product_hunt")
     ),
     score: v.number(),
@@ -5127,7 +5128,8 @@ export default defineSchema({
       v.literal("reddit"),
       v.literal("x"),
       v.literal("linkedin"),
-      v.literal("tiktok")
+      v.literal("tiktok"),
+      v.literal("youtube")
     ),
     motion: v.union(
       v.literal("reddit_helpful_reply"),
@@ -5233,7 +5235,8 @@ export default defineSchema({
       v.literal("reddit"),
       v.literal("x"),
       v.literal("linkedin"),
-      v.literal("tiktok")
+      v.literal("tiktok"),
+      v.literal("youtube")
     ),
     status: v.union(
       v.literal("drafted"),
@@ -5265,7 +5268,8 @@ export default defineSchema({
       v.literal("reddit"),
       v.literal("x"),
       v.literal("linkedin"),
-      v.literal("tiktok")
+      v.literal("tiktok"),
+      v.literal("youtube")
     ),
     replies: v.optional(v.number()),
     clicks: v.optional(v.number()),
@@ -5452,7 +5456,8 @@ export default defineSchema({
       v.literal("hn"),
       v.literal("linkedin"),
       v.literal("instagram"),
-      v.literal("tiktok")
+      v.literal("tiktok"),
+      v.literal("youtube")
     ),
     url: v.string(),
     /** Platform's own ID — reddit post ID, tweet ID, HN objectID, etc. Used
@@ -5589,7 +5594,8 @@ export default defineSchema({
       v.literal("hn"),
       v.literal("linkedin"),
       v.literal("instagram"),
-      v.literal("tiktok")
+      v.literal("tiktok"),
+      v.literal("youtube")
     ),
     /** The @ handle or username (no leading @, normalized to lowercase by
      *  the persistence layer for stable dedupe). */
@@ -5645,7 +5651,8 @@ export default defineSchema({
       v.literal("hn"),
       v.literal("linkedin"),
       v.literal("instagram"),
-      v.literal("tiktok")
+      v.literal("tiktok"),
+      v.literal("youtube")
     ),
     /** For reply / comment kinds — links back to the thread this is targeting. */
     targetThreadId: v.optional(v.id("gtmTargetThreads")),
@@ -5721,7 +5728,8 @@ export default defineSchema({
       v.literal("hn"),
       v.literal("linkedin"),
       v.literal("instagram"),
-      v.literal("tiktok")
+      v.literal("tiktok"),
+      v.literal("youtube")
     ),
     providerPostId: v.string(),
     metrics: v.object({

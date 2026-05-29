@@ -75,6 +75,8 @@ const CHANNEL_DESCRIPTIONS: Record<GtmChannel, string> = {
     "LinkedIn — professional B2B identity, long-form posts, employer-of-record audiences. Best for sales/marketing/enterprise tools, service businesses, B2B SaaS targeting corporate buyers.",
   tiktok:
     "TikTok — short-form video, format-driven, algorithm reach. Best for consumer products, visual demos, B2C, products with a clear 30-sec hook. Requires consistent posting cadence.",
+  youtube:
+    "YouTube — Shorts (short-form, hook-in-first-second, like TikTok) + long-form (founder-led, search-intent, compounds over time) + comment/transcript mining. Best for products with a real demo or teachable depth. Brief-only (no UGC creation); title=CTR is the lever.",
   product_hunt:
     "Product Hunt — single-day launch event + ongoing maker community. Best for one-time launch boost, not steady-state acquisition.",
 };
@@ -334,6 +336,7 @@ export async function judgeAllChannels(
     x: "x",
     linkedin: "linkedin",
     tiktok: "tiktok",
+    youtube: "youtube",
     product_hunt: "competitor",
   };
   const channels: ReadonlyArray<GtmChannel> = opts?.channels ?? [
