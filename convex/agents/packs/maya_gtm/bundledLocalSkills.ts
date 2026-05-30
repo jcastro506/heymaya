@@ -331,7 +331,16 @@ A founder with 100 users who's already launched does NOT need the cold-start aut
 
 ### 2. Per-platform cadence — research REFERENCE to reason from (2026), not a script
 
-**These are research-backed reference numbers — what tends to work per platform — NOT quotas I fill mechanically.** I reason from them and adapt to the founder's stage + what my agents found. The numbers below (and the "typical cadence" lines per platform) are the evidence base; the actual plan is my judgment over it. The one durable PRINCIPLE: replies + native engagement compound 5-150x faster than original posts — so a real plan is engagement-heavy and keeps the founder active daily, with original posts kept high-quality. A near-empty week contradicts the research and won't build an audience; a padded week is just as wrong. I aim for the daily reps the research supports for their stage.
+**These are research-backed reference numbers — what tends to work per platform — NOT quotas I fill mechanically.** I reason from them and adapt to the founder's stage + what my agents found. The numbers below (and the "typical cadence" lines per platform) are the evidence base; the actual plan is my judgment over it.
+
+**THE FLOOR (verified deep-research 2026 — this is the non-negotiable shape, the mix flexes by stage):**
+- **The motion is reply-driven + active DAILY.** On X, a reply the author engages back on ≈ **75x a like**, a direct reply ≈27x — replies are the single most-weighted signal. Original posts are LOW-volume/HIGH-quality; replies are the engine. "Any posting beats no posting" (Buffer 52M-post study: 10+ posts/wk → +32 followers/wk vs silent weeks).
+- **A real plan keeps the founder doing ~15-20 SUBSTANTIVE replies/comments per DAY + ~1 quality post/day (active stage).** Never "3 things a day" — that builds nothing. Never "1 post/week" except Reddit's warm-up window.
+- **SUBSTANTIVE is the hard quality bar, not raw volume.** Low-effort "Cool!"/emoji replies are a *documented mistake* — they get deboosted, and >50/day risks spam detection. The "1,000 replies/day" growth-guru pattern inflates vanity metrics and doesn't build an audience. Every reply must add real value. Quality gates volume: ~15-20 *good* replies beats 50 lazy ones.
+- **Cold-start (no audience) must EARN it** (Paul Graham, "do things that don't scale"): the founder recruits users one by one, engages first, builds trust — NOT post-and-wait, NOT product-push. Established accounts can coast on social capital a near-zero account doesn't have yet, so a small account's replies must carry substance to convert strangers.
+Sources: [X algorithm/replies](https://github.com/twitter/the-algorithm), [Buffer engagement 2026](https://buffer.com/resources/state-of-social-media-engagement-2026/), [Buffer LinkedIn](https://buffer.com/resources/how-often-to-post-on-linkedin/), [YC/PG do-things-that-don't-scale](https://paulgraham.com/ds.html), [indie-hacker X strategy](https://www.teract.ai/resources/twitter-strategy-indie-hackers-2026).
+
+The durable PRINCIPLE: engagement-heavy, active daily, substantive every time, posts kept high-quality. A near-empty week contradicts the research and won't build an audience; a padded week of lazy filler is just as wrong. I hit the daily reps the research supports for their stage, every one of them worth the founder's tap.
 
 **Reddit** ([source](https://www.teract.ai/resources/reddit-subreddit-marketing-2026), [source](https://getupvotes.com/reddit-self-promotion/)):
 - 9:1 ratio (Reddit's actual published rule — 1 promotional post per 9 non-promotional contributions). Active marketers tilt toward 95:5.
@@ -339,12 +348,13 @@ A founder with 100 users who's already launched does NOT need the cold-start aut
 - Frequency: at least 7-14 days between promotional posts in the same subreddit. Newer accounts wait 2-3 weeks.
 - Post-time windows: Tue/Wed/Thu 8-11am ET. Mandatory 2-hour engagement window block immediately after any post.
 - Designated promo threads: r/Entrepreneur Monday, r/SaaS Saturday, r/SideProject daily, r/IMadeThis daily.
-- Phase 2 weekly cadence: **5-7 comment-reply events** (in target subs, substantive, no product mention) + **1 original substantive post** in r/SideProject (or operator's bet sub) + **6-8 engagement-block lurk slots** for opportunistic replies. = 12-16 Reddit events/week.
+- **Verified-2026: a near-zero Reddit account does ZERO promotional activity for the first ~30 days** — instead **5-10 substantive comments/day** on rising posts in target subs, building to ~100+ karma BEFORE any product mention. This warm-up is mandatory at cold-start; skipping it gets the account flagged/shadowbanned and burns the channel.
+- Active cadence (once warmed, ~100+ karma): **5-7 substantive comment-reply events/day** in target subs + **1 original post** (in r/SideProject or the bet sub, respecting the 9:1 promo ratio + 7-14 day gap per sub).
 
 **Hacker News** ([source](https://www.myriade.ai/blogs/when-is-it-the-best-time-to-post-on-show-hn), [source](https://syften.com/blog/hacker-news-marketing/)):
 - Show HN: ONE per project, one-shot. Best windows Tue/Wed/Thu 14:00-17:00 UTC (7-10am PT / 10am-1pm ET); contrarian: Sun midnight PT (lower competition).
 - Breakout threshold: 30+ votes. Below = invisible to most.
-- Comments any weekday — engaging on others' Show HN / Ask HN threads is high-leverage. Aim for substantive (no plug) comments where your expertise applies.
+- Comments any weekday — engaging on others' Show HN / Ask HN threads is high-leverage. Aim for substantive (no plug) comments where your expertise applies. (Deep-research couldn't pin an exact HN daily-comment number — treat HN cadence as judgment: substantive comments wherever the founder's expertise genuinely applies, quality over a target count.)
 - 72h post-launch window is critical: reply to every comment, every upvote.
 - Phase 2 weekly cadence: **4-6 HN comment events** (on relevant Show HN / Ask HN threads in the niche) + (when ModelHub is ready) **1 Show HN launch** in week 3-4 (NOT week 1).
 
@@ -354,7 +364,7 @@ A founder with 100 users who's already launched does NOT need the cold-start aut
 - "30 minutes after posting are sacred engagement time" — block immediately after each post.
 - Best post windows: Tue morning operator-tz 8-10am for build-in-public threads; daily 5pm-7pm for reply-mining other founders' threads.
 - Quality > volume — 3-5 high-engagement posts beats 10 low-engagement (low-engagement damages authority score and reduces future reach).
-- Phase 2 weekly cadence: **1 build-in-public post per day = 7/week** + **4-5 reply-mining slots/week** (15-30 min each, finding 5-10 conversations to add to per slot) + **2 longer-form threads per week** (Tue/Thu mornings, 4-6 tweets, on a learning or decision from the week). = 13-14 X events/week.
+- **Verified-2026 active cadence: ~1 quality post/day + ~15-20 SUBSTANTIVE replies/day** (a useful structure: ~10 to peer founders/voices in the niche + ~5 to potential buyers). This is the daily engine — every reply adds real value (no "Cool!"/emoji filler; >50/day or lazy replies risk deboost + spam detection). Consistency beats bursts ("1x/day consistently > 5x/day sporadically"). Translate to daily calendar events: 1 post-block + a 30-45min reply-mining block holding the day's ~15-20 specific drafted replies (each its own one-tap item).
 
 **LinkedIn** ([source](https://buffer.com/resources/how-often-to-post-on-linkedin/), [source](https://pipelineroad.com/agency/blog/saas-linkedin-marketing)):
 - Optimal frequency: **3-5 posts/week**. Diminishing returns past 5 — 5th post gets 60% of 1st's engagement, 7th post 30%.
@@ -365,6 +375,7 @@ A founder with 100 users who's already launched does NOT need the cold-start aut
 - Phase 2 weekly cadence: **3 posts** (Tue + Thu + one flex day, founder build-in-public format) + **2-3 comment-engagement slots/week** (15 min, reply on others' posts in niche). Only schedule if LinkedIn is a bet channel.
 
 **TikTok** ([source](https://joinbrands.com/blog/how-often-to-post-on-tiktok/), [source](https://monolit.sh/blog/tiktok-algorithm-how-it-works-for-business-accounts-2026)):
+- **Different motion from the text channels.** TikTok/IG are POST-driven (the algorithm pushes content to a cold FYP), NOT reply-driven like X/Reddit/HN — so the "~15-20 replies/day" floor does NOT apply here. The lever is consistent quality posts + comment-replies on your OWN posts. (Note: the deep-research verified X/LinkedIn/Reddit cadence directly; TikTok/IG numbers below are reasoned from platform-norm sources, not the same verification tier — treat as strong guidance, hold loosely.)
 - Optimal frequency: **4-6 per WEEK** for business accounts (not per day — that's a consumer-FYP fallacy). Quality compounds faster than volume.
 - Save + share weighted higher than like or comment in 2026. Tutorial/checklist/data-backed formats save best.
 - Niche consistency: 3+ unrelated topics = -45% reach. Stay focused on one persona.
