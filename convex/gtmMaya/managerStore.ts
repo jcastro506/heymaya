@@ -190,6 +190,24 @@ export const getArchetypeLearnings = internalQuery({
 /** Record the strategy approval state on the agent's latest research job.
  *  Maya sets "proposed" when she sends the strategy, "approved" / "iterating"
  *  after reading the operator's reply. Scoped to the agent's own jobs. */
+export const getStrategyApprovalState = internalQuery({
+  args: { accountId: v.id("creators"), agentId: v.id("gtmAgents") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<"proposed" | "approved" | "iterating" | null> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent || !agent.appId) return null;
+    const latest = await ctx.db
+      .query("gtmResearchJobs")
+      .withIndex("by_app", (q) => q.eq("appId", agent.appId!))
+      .collect()
+      .then((jobs) => jobs.sort((a, b) => b.createdAt - a.createdAt)[0]);
+    if (!latest || latest.accountId !== args.accountId) return null;
+    return latest.strategyApprovalState ?? null;
+  },
+});
+
 export const setStrategyApproval = internalMutation({
   args: {
     accountId: v.id("creators"),

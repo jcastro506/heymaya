@@ -543,6 +543,23 @@ export function buildGatewayConfig(
       },
       subagents: { allowAgents: [] as string[] },
     },
+    {
+      // Calendar assembler. The week's plan (Phase 3) used to be a Maya-inline
+      // step that K2 reliably SKIPPED — threads+drafts landed but the calendar
+      // never did (0 events, every era). Moving it to a dedicated worker makes
+      // it land the same way threads/drafts do: workers call tools reliably.
+      // It reads the landed threads + foundation via get_my_* and calls
+      // propose_calendar (stores DRAFTS — the Google Calendar push stays gated
+      // on the operator's approval via approve_calendar).
+      id: "calendar_worker",
+      name: "Calendar Assembler",
+      model: subagentModel,
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
+      subagents: { allowAgents: [] as string[] },
+    },
   ];
 
   // The set of subagent IDs main can spawn. Sprint 2.18 — removed

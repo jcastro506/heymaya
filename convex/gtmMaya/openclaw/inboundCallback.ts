@@ -470,6 +470,23 @@ export const approveCalendarHttp = httpAction(async (ctx, request) => {
     return new Response("ok (replay)", { status: 200 });
   }
 
+  // Approval gate (server-enforced, not prompt-trust): rich Google Calendar
+  // events are pushed onto the operator's real calendar ONLY after they
+  // approve. If the strategy isn't `approved` yet, refuse the push — the draft
+  // events still live in gtmCalendarEvents + show in the operator's plan, but
+  // nothing hits their calendar until they say yes. This is the operator's
+  // explicit requirement ("Rich Google cal events get added on user approval").
+  const approvalState = await ctx.runQuery(
+    internal.gtmMaya.managerStore.getStrategyApprovalState,
+    { agentId: auth.agentId, accountId: auth.accountId }
+  );
+  if (approvalState !== "approved") {
+    return new Response(
+      `not_approved (strategy state: ${approvalState ?? "unset"}; call set_strategy_approval state=approved after the operator says yes)`,
+      { status: 200 }
+    );
+  }
+
   try {
     const result = await ctx.runAction(
       internal.gtmMaya.calendarWrite.pushApprovedCalendarEvents,

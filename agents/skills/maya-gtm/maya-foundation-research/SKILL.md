@@ -162,9 +162,22 @@ Workers saved thread + draft per item. Maya is now the editorial gate over what 
 
 This keeps the editorial bar without the brittle "Maya drafts all N replies inline" loop. Worker output is a first draft; Maya's judgment is the gate.
 
-### Phase 3 — CALENDAR ASSEMBLY (Maya lays out the week from the landed threads + drafts)
+### Phase 3 — CALENDAR ASSEMBLY (spawn `calendar_worker` — do NOT lay it out inline)
 
-Threads + drafts have already landed reliably (Phase 2/2.5). So Phase 3 is no longer "draft AND lay out" jammed into one skipped loop — it's a **bounded layout pass over real input**: read the landed `gtmTargetThreads` (each already carries `draftReply` + a one-tap deep link) and lay them out across the rolling 7 days. Maya reads `maya-calendar-populator/SKILL.md` (§ 2 per-channel cadence, § 3 slot allocation by phase) and saves the events via `propose_calendar`. Each event is a full hands-off recipe:
+Threads + drafts have already landed reliably (Phase 2/2.5). **The calendar is the one step that historically got SKIPPED when Maya tried to lay it out inline at the tail of a long turn (threads+drafts landed, calendar stayed empty, every era). So it does NOT happen inline anymore — Maya SPAWNS `calendar_worker` to build it**, the same pattern that makes threads/drafts reliable (a dedicated worker runs to completion and calls the tool; an inline tail step gets dropped):
+
+```
+sessions_spawn({ agentId: "calendar_worker", task: "<the task string below>" })
+```
+
+The `calendar_worker` task string MUST tell it to:
+1. Call `get_my_target_threads({})` + `get_my_foundation({})` to read the landed threads (each carries `draftReply` + a deep link), the channel bets, the content angles, and the stage/north-star.
+2. Read `maya-calendar-populator/SKILL.md` (§ 2 per-channel cadence, § 3 slot allocation by phase).
+3. Lay out a **rolling 7-day week** and **save it with `propose_calendar({ researchJobId, events })`** (stores DRAFTS in Convex — it does NOT push to Google Calendar; that waits for the operator's yes). A plan the worker describes in text but never calls `propose_calendar` for does not exist — it MUST call the tool.
+
+Maya waits for the worker (via `sessions_yield`), then re-checks `get_my_foundation({})` for a real `gtmCalendarEvents` week before proceeding. The same recipe + fullness + channel-fit standards apply (they go IN the worker's task string):
+
+Each event is a full hands-off recipe:
 
 ```
 WHAT: <action title>
@@ -179,9 +192,9 @@ SUCCESS TARGET: <e.g. 1 OP reply or 5+ upvotes within 4 hours>
 TIME: <minutes — usually 10-15>
 ```
 
-Save the events via `propose_calendar({ researchJobId, events })` (Convex stores them as `draft` — it does NOT compose or lay them out; that's Maya's job here). Then **add the events that have no specific thread target** — the original posts, the build-in-public content, the standing daily reply-mining blocks — so the week is a complete, daily plan, not just a list of discovered threads.
+The worker saves the events via `propose_calendar({ researchJobId, events })` (Convex stores them as `draft` — it does NOT compose or lay them out; the worker composes them). It also **adds the events that have no specific thread target** — the original posts, the build-in-public content, the standing daily reply-mining blocks — so the week is a complete, daily plan, not just a list of discovered threads.
 
-**How full, and what mix, is MY judgment — grounded in the launch research, fit to THIS founder.** Read PLAYBOOK § 2 (the 4-phase launch sequence) + § 4 (BUILD/ENGAGE/OFFER) and the founder's real situation, then decide:
+**How full, and what mix, is judgment — grounded in the launch research, fit to THIS founder (the worker's task string carries this guidance, and Maya re-checks the result).** Read PLAYBOOK § 2 (the 4-phase launch sequence) + § 4 (BUILD/ENGAGE/OFFER) and the founder's real situation, then decide:
 - **What stage are they actually at?** Pre-launch with no audience → the research (§ 2 Phase 1) says earn authority first: heavy daily reply-mining (the leveraged move at cold-start), post sparingly, do NOT pitch yet. Already launched with traction/users → push the product harder, soft-launch or hard-launch motions, more original posts. I judge this from APP.md stage + week-goal + what my agents found about their existing presence — NOT a fixed stage→phase table.
 - **How much?** The research is clear that building an audience takes *substantial daily* engagement — a near-empty week (a few comments) builds nothing and breaks the founder's trust. So the plan keeps them genuinely active every day at the volume the research supports for their stage. I don't pad with filler, but I also never ship a hollow week. Velocity over vanity (§ 2): the right daily reps, not a number I hit for show.
 - **Which channels?** Only the ones my research says their buyers actually live in. I do NOT force a channel (incl. X) just to fill the calendar — if the buyers aren't on X, X isn't in the plan.
@@ -216,18 +229,20 @@ real traction, so we skip the build-from-zero arc and push [product] straight
 into the buying conversations." I DERIVE this from their real stage + what my
 research found, and say it plainly so they get the logic.]
 
-Your week, day by day — each one's ready, just tap and post:
-• [day, time]: [what + where, one line — e.g. "reply on r/LocalLLaMA, drafted"]
-• [day, time]: [...]
-• … (a real, full week — active every day, every item drafted + linked)
+Your week, in shape: [the high-level RHYTHM, 2-4 lines — e.g. "Daily: 2-3
+reply slots in r/LocalLLaMA + X where people are quitting Ollama. Tue/Thu: an
+original post on the storage-bloat angle. Fri: a build-in-public thread." Not
+every item — the shape, so they get the plan at a glance.]
 
-First move's [day, time]. Everything's drafted and on your calendar — post what
-I've written, when I've scheduled it (tweak any of it to sound more like you).
-From here I watch what lands: what converts we double down on, what flops I cut,
-and when something hot breaks in your niche I'll add it to your day and tell you
-exactly what to say. Tell me if I've got your buyer, channels, or the approach
-wrong — easy to redirect now. Say go and I'll lock it in.
+I've built the whole week out — every item has the exact thread, a paste-ready
+reply I wrote in your voice, and a time. It's all in your plan in the app,
+ready to look at.
+
+Want me to add this week to your Google Calendar so it's right in your day? Say
+go and I'll drop it in. First — tell me if I've got your buyer, channels, or the
+approach wrong; easy to redirect now, before I lock it in.
 ```
+(Do NOT paste a literal URL — say "in your plan / in the app." I don't fabricate links.)
 
 Plain text. No headers. No "Excited to share." Lead with: who's buying (+ a real one in their words) → where they live → THE STAGE-FIT STRATEGY in plain words → the turn-key week → the steering promise. The strategy line is DERIVED from this founder's situation (never a template — pre-launch earns authority first; traction-stage pushes the product), stated so they understand the logic and can push back. Do NOT hand them a backward inventory of what I built ("5 competitors, 5 hooks, 5 accounts") — that's my back office, not their plan.
 
@@ -239,15 +254,17 @@ This synthesis is a **proposal, and I invite a pivot** — it leads with the str
 - The draft calendar events are stored as `draft` — they do NOT hit the operator's Google Calendar until approval (the existing calendar gate). So proposing costs nothing irreversible.
 - On the operator's **approval**, call `set_strategy_approval({ state: "approved" })`, then push the calendar (`approve_calendar({})`). On **pushback**, call `set_strategy_approval({ state: "iterating" })`, revise the strategy (re-weight channels / re-frame the POV), and re-propose — don't dig in. Launches specifically are never auto-scheduled; they're proposed and wait for an explicit yes.
 
-## Phase 5 — push to Google Calendar (Sprint 2.22)
+## Phase 5 — push to Google Calendar ONLY after the operator says yes
 
-After sending the synthesis, Maya immediately calls `approve_calendar({})` (no operator action needed — default-to-acting per AGENTS.md non-negotiable #7). Three response cases:
+The draft calendar events live in `gtmCalendarEvents` (status `draft`) and show in the operator's plan (HQ web view) the moment `calendar_worker` saves them — so the operator can SEE the full week immediately. They do **NOT** touch the operator's real Google Calendar until the operator approves. The push is the one thing the "yes" gates; the plan itself is already built + visible.
 
-1. **`ok (pushed=N failed=M)`** — events landed on operator's Google Calendar. Done.
-2. **`needs_oauth`** — operator hasn't connected Google Calendar yet. Maya sends ONE follow-up message: *"To put these on your actual Google Calendar, connect it once here: `<convex.site>/lc_maya/start_google_calendar_oauth`. They live in our system either way — connecting just makes them show up in your calendar app."*
-3. **`ok (push failed)`** — log it. Maya tells operator if it's a high-impact failure ("first 3 events landed; last 2 had API errors — re-trying tonight"). Otherwise stays quiet.
+- **Do NOT call `approve_calendar` before the operator says yes.** A launch week is proposed and waits for an explicit go — never auto-pushed onto someone's real calendar. (The server also refuses the push unless strategy state is `approved`, so a premature call no-ops — but the rule is: ask first.)
+- On the operator's **"yes / go / add it"** → call `set_strategy_approval({ state: "approved" })`, then `approve_calendar({})`. Response cases:
+  1. **`ok (pushed=N failed=M)`** — events landed on Google Calendar. Confirm briefly: "added to your calendar."
+  2. **`needs_oauth`** — operator hasn't connected Google Calendar. Maya sends ONE message: *"To put these on your actual Google Calendar, connect it once here: `<convex.site>/lc_maya/start_google_calendar_oauth`. They're already in your plan either way — connecting just mirrors them into your calendar app."*
+  3. **`ok (push failed)`** — log it; tell the operator only if high-impact.
 
-The events stored in `gtmCalendarEvents` (status: "draft") persist regardless. Operator can always trigger a re-push later. The operator NEVER blocks on this — Maya keeps moving forward on the daily cadence even if Google Calendar isn't connected yet.
+The events persist in `gtmCalendarEvents` regardless of Google Calendar — the daily cadence reads from there, so the operator is never blocked on connecting Google Calendar.
 
 ## Failure modes
 
