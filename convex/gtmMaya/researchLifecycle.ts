@@ -225,6 +225,15 @@ export const setAppProfile = mutation({
     founderWhy: v.optional(v.string()),
     stage: APP_STAGE,
     weekGoal: WEEK_GOAL,
+    userCountBand: v.optional(
+      v.union(
+        v.literal("none"),
+        v.literal("1-100"),
+        v.literal("100-1k"),
+        v.literal("1k+"),
+        v.literal("unknown")
+      )
+    ),
     canRecordScreen: v.boolean(),
     canShowFace: v.boolean(),
     canRecordVoice: v.optional(v.boolean()),
@@ -264,6 +273,7 @@ export const setAppProfile = mutation({
         founderWhy: args.founderWhy,
         stage: args.stage,
         weekGoal: args.weekGoal,
+        userCountBand: args.userCountBand,
         canRecordScreen: args.canRecordScreen,
         canShowFace: args.canShowFace,
         canRecordVoice: args.canRecordVoice ?? false,

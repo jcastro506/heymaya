@@ -15,6 +15,9 @@ interface IntakeDraft {
   stage: "idea" | "live-beta" | "paid" | "unknown";
   entryMode: "launch" | "manager";
   weekGoal: "feedback" | "signups" | "demos" | "revenue" | "unknown";
+  // Ground-truth signal for stage-adaptive strategy — a 5-user and a
+  // 5000-user "paid" founder need very different plans.
+  userCountBand: "none" | "1-100" | "100-1k" | "1k+" | "unknown";
   canRecordScreen: boolean;
   canShowFace: boolean;
   canRecordVoice: boolean;
@@ -46,6 +49,7 @@ const DEFAULT_DRAFT: IntakeDraft = {
   stage: "live-beta",
   entryMode: "manager",
   weekGoal: "signups",
+  userCountBand: "none",
   canRecordScreen: true,
   canShowFace: false,
   canRecordVoice: false,
@@ -171,6 +175,7 @@ function GtmOnboardingBody() {
         stage: draft.stage,
         entryMode: draft.entryMode,
         weekGoal: draft.weekGoal,
+        userCountBand: draft.userCountBand,
         canRecordScreen: draft.canRecordScreen,
         canShowFace: draft.canShowFace,
         canRecordVoice: draft.canRecordVoice,
@@ -404,6 +409,25 @@ function GtmOnboardingBody() {
                 <option value="demos">demos</option>
                 <option value="revenue">revenue</option>
                 <option value="unknown">unknown</option>
+              </select>
+            </Field>
+            <Field label="How many users/customers today?">
+              <select
+                value={draft.userCountBand}
+                onChange={(event) =>
+                  setDraft((d) => ({
+                    ...d,
+                    userCountBand: event.target
+                      .value as IntakeDraft["userCountBand"],
+                  }))
+                }
+                className="input"
+              >
+                <option value="none">none yet (pre-launch)</option>
+                <option value="1-100">1–100</option>
+                <option value="100-1k">100–1,000</option>
+                <option value="1k+">1,000+</option>
+                <option value="unknown">not sure</option>
               </select>
             </Field>
           </div>

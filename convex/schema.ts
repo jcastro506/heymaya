@@ -4597,6 +4597,18 @@ export default defineSchema({
       v.literal("revenue"),
       v.literal("unknown")
     ),
+    // Ground-truth traction band — keys Maya's stage-adaptive strategy
+    // (pre-launch earns authority first; traction pushes the product).
+    // Optional for back-compat with rows created before this field.
+    userCountBand: v.optional(
+      v.union(
+        v.literal("none"),
+        v.literal("1-100"),
+        v.literal("100-1k"),
+        v.literal("1k+"),
+        v.literal("unknown")
+      )
+    ),
     canRecordScreen: v.boolean(),
     canShowFace: v.boolean(),
     canRecordVoice: v.optional(v.boolean()),

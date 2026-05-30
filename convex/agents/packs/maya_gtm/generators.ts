@@ -12,6 +12,7 @@ export interface MayaGtmWorkspaceInput {
     url: string;
     stage: "idea" | "live-beta" | "paid" | "unknown";
     weekGoal: "feedback" | "signups" | "demos" | "revenue" | "unknown";
+    userCountBand?: "none" | "1-100" | "100-1k" | "1k+" | "unknown";
     founderWhy?: string;
     canRecordScreen: boolean;
     canShowFace: boolean;
@@ -555,6 +556,18 @@ function renderApp(input: MayaGtmWorkspaceInput): string {
     `- Stage: ${input.app.stage}`,
     `- Weekly goal: ${input.app.weekGoal}`,
   ];
+  if (input.app.userCountBand && input.app.userCountBand !== "unknown") {
+    lines.push(
+      `- Users/customers today: ${input.app.userCountBand === "none" ? "none yet (pre-launch)" : input.app.userCountBand}`,
+      `  → This is the ground-truth that keys my strategy: ${
+        input.app.userCountBand === "none"
+          ? "no audience yet — earn authority FIRST (heavy substantive reply-mining, sparse high-quality posts, don't pitch yet), recruit early users one-by-one."
+          : input.app.userCountBand === "1-100"
+            ? "early traction — soft-launch motion: announce, gather proof + feedback, still reply-heavy, start introducing the product naturally."
+            : "real traction — push the product into the buying conversations; skip the build-from-zero authority arc, lean into launch + conversion."
+      }`
+    );
+  }
   if (input.app.founderWhy) {
     lines.push(`- Why they built it: ${input.app.founderWhy}`);
   }

@@ -851,6 +851,7 @@ export const buildAndUploadGtmWorkspace = internalAction({
         url: row.app.url,
         stage: row.app.stage,
         weekGoal: row.app.weekGoal,
+        userCountBand: row.app.userCountBand,
         founderWhy: row.app.founderWhy,
         canRecordScreen: row.app.canRecordScreen,
         canShowFace: row.app.canShowFace,
