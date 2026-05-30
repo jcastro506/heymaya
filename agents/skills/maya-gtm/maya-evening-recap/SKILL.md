@@ -29,7 +29,7 @@ The bookend to the morning brief. The operator knows what they did today and how
 
 ## Write triggers (after send)
 
-After Telegram delivery succeeds and `/lc_gtm/action_logged` has been posted, append these sections to `memory/{today}.md` using the OpenClaw filesystem tool:
+After Telegram delivery succeeds and `log_action` has been called, append these sections to `memory/{today}.md` using the OpenClaw filesystem tool:
 
 1. **What got done** — bullet list of every event marked done (with the gtmPostResults numbers I cited).
 2. **Operator interactions** — anything the operator sent me in chat today (approvals, push-backs, ad-hoc questions). One line per interaction.
@@ -40,7 +40,7 @@ If today's day-grade was Strong, also do a DREAMS.md write decision:
 - If a pattern across ≥3 days now looks like it might be real but I don't have enough proof yet → append a row under `Open hypotheses` with date + the evidence I'd need before acting.
 - If a previously-open hypothesis just got disconfirmed → strike it (replace with `~~old text~~ — disconfirmed YYYY-MM-DD`).
 
-POST `/lc_gtm/memory_written` (idempotent uuid per write) after each successful write so Convex ledger tracks it.
+Call `record_memory_written({ target, op, triggeredBy })` after each successful write so Convex ledger tracks it.
 
 If a write fails (filesystem error, disk pressure), recap is already delivered — log `kind: "memory_write_failed"` to action log and move on.
 
@@ -95,21 +95,19 @@ After a strong-grade day, Maya checks if a pattern emerged worth saving as a lea
 
 Don't manufacture learnings. One day of data is not a pattern. Maya only extracts when she has ≥3 evidence points AND the pattern is strong enough to confidently shift tomorrow's weighting.
 
-POST to `/lc_gtm/learning_extracted` when triggering.
+Call `save_learning({ learningKind, learning, ... })` when triggering.
 
 ## Action-log write
 
-POST to `/lc_gtm/action_logged`:
+Call `log_action`:
 
-```json
-{
-  "idempotencyKey": "<uuid>",
-  "kind": "evening_recap",
-  "summary": "Good day — 3 actions done, Reddit reply got 3 upvotes, X hook got 12 likes.",
-  "linkedEntities": [<links to gtmActionLog rows for today's morning_brief + any draft_proposed>],
-  "sentAt": <Date.now()>,
-  "userResponse": "pending"
-}
+```ts
+log_action({
+  kind: "evening_recap",
+  summary: "Good day — 3 actions done, Reddit reply got 3 upvotes, X hook got 12 likes.",
+  linkedEntities: [<links to gtmActionLog rows for today's morning_brief + any draft_proposed>],
+  userResponse: "pending",
+})
 ```
 
 If the operator replies to the recap with feedback ("the X angle didn't land — let's drop it"), Maya patches the morning_brief row's `userResponse` to `acknowledged` and writes a learning.

@@ -32,13 +32,13 @@ The flagship operator-facing output. Every morning, the founder gets one Telegra
 
 ## Write triggers (after send)
 
-After Telegram delivery succeeds and `/lc_gtm/action_logged` has been posted:
+After Telegram delivery succeeds and `log_action` has been called:
 
 1. **memory/{today}.md** — append to `Today's plan` section. Lines:
    - Grade emitted (Strong / Thin / Warmup) + lede sentence.
    - Top-priority entity (thread id + URL).
    - Total event count + minute estimate.
-2. POST `/lc_gtm/memory_written` (idempotent on a uuid per memory write) so Convex tracks the write in `gtmMemoryWrites` and the operator UI can show "Maya wrote to memory at 7:02am".
+2. Call `record_memory_written({ target, op, triggeredBy })` so Convex tracks the write in `gtmMemoryWrites` and the operator UI can show "Maya wrote to memory at 7:02am".
 
 If the write to memory fails (Fly disk pressure, write_file errored), do NOT block — the brief is already delivered. Log to action log under `kind: "memory_write_failed"` so it surfaces in next morning's diagnostics.
 
@@ -64,7 +64,7 @@ The single most important thing. Always cited. "Top priority: [URL] — replying
 
 ## Calendar events emitted alongside
 
-Each T1/T2 thread → one `gtmCalendarEvent` written via `/lc_gtm/calendar_proposal` (or whichever route the populator skill uses). Plus 1-2 framework events:
+Each T1/T2 thread → one `gtmCalendarEvent` written via `propose_calendar` (or whichever path the populator skill uses). Plus 1-2 framework events:
 
 - **Warmup block** (always, even on warmup days): 10 min — browse the bet subs, upvote a few high-signal threads.
 - **Content draft block** (on thin/warmup days): 20 min — draft one post from the content-angle vault.
@@ -76,8 +76,7 @@ Each event description follows the full hands-off recipe template from `maya-cal
 
 ## Weighting from niche learnings
 
-Before tier-sorting, Maya does an exec curl GET to
-\`$CONVEX_SITE_URL/lc_gtm/get_my_niche_learnings\` with Bearer auth.
+Before tier-sorting, Maya calls `get_my_niche_learnings({})`.
 This returns all non-retired learnings — one row per pattern Maya has
 extracted from prior weeks (timing, channel_priority, voice_angle,
 community_quality, format_preference, hook_pattern).
@@ -101,19 +100,17 @@ Run `maya-output-critic` over the candidate brief + every calendar event descrip
 
 ## Action-log write
 
-After send, POST to `/lc_gtm/action_logged`:
+After send, call `log_action`:
 
-```json
-{
-  "idempotencyKey": "<uuid>",
-  "kind": "morning_brief",
-  "summary": "Strong day — 3 T1, 2 T2, top is [thread]. 85 min total.",
-  "linkedEntities": [
-    { "entityKind": "thread", "entityId": "<gtmTargetThread id>" },
-    { "entityKind": "calendar_event", "entityId": "<gtmCalendarEvent id>" }
+```ts
+log_action({
+  kind: "morning_brief",
+  summary: "Strong day — 3 T1, 2 T2, top is [thread]. 85 min total.",
+  linkedEntities: [
+    { entityKind: "thread", entityId: "<gtmTargetThread id>" },
+    { entityKind: "calendar_event", entityId: "<gtmCalendarEvent id>" },
   ],
-  "sentAt": <Date.now()>
-}
+})
 ```
 
 ## Failure modes

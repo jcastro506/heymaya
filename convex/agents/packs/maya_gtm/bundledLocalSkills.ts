@@ -300,7 +300,7 @@ Without this skill, the target list lives in the database and nobody acts on it.
 
 ## When to invoke
 
-- IF deep-research subagents have just completed AND \`/lc_gtm/get_my_target_threads\` returned >0 rows THEN run. This is the canonical first invocation, right at the end of FIRST WAKE.
+- IF deep-research subagents have just completed AND \`get_my_target_threads({})\` returned >0 rows THEN run. This is the canonical first invocation, right at the end of FIRST WAKE.
 - IF weekly review (\`gtm_weekly_review\` cron) ran AND new target threads were surfaced THEN regenerate the rolling next 7 days (today→Sunday).
 - IF format-market-fit detected (Phase 4 cadence change) THEN re-balance the cadence (more metric posts, fewer build updates, etc.).
 - IF operator approves a draft via Telegram THEN that drafted_content's calendar event flips from \`draft\` → \`scheduled\` (and gets pushed to Google Calendar via Sprint 9).
@@ -312,8 +312,8 @@ Without this skill, the target list lives in the database and nobody acts on it.
 3. **APP.md + USER.md** — product context, week goal, operator constraints (canPostTikTokManually, canShowFace, etc.).
 4. **GTM.md** — active channel picks. Only generates calendar events for primary + secondary channels.
 5. **Per-platform playbook**: \`playbook/reddit.md\`, \`playbook/x.md\`, etc. for time-window + frequency rules per channel.
-6. **Target list** via \`GET /lc_gtm/get_my_target_threads\` — the raw material. Top 30 by priorityScore.
-7. **Optionally** \`GET /lc_gtm/get_my_target_accounts\` for follow-and-engage events.
+6. **Target list** via \`get_my_target_threads({})\` — the raw material. Top 30 by priorityScore.
+7. **Optionally** \`get_my_target_accounts({})\` for follow-and-engage events.
 
 ## Decision rules
 
@@ -476,20 +476,19 @@ When a \`hard_launch_anchor\` is published, auto-seed the **72h engagement windo
 
 ## Output
 
-POST events one-at-a-time to \`/lc_gtm/calendar_proposal\` per the TOOLS.md spec. Convex stores them as \`draft\` — it does NOT compose, lay out, or time-slot them. **All of that is your job here.** Each event must include:
+Call \`propose_calendar\` per the TOOLS.md spec (one call carries the events array; don't pass an idempotency key — it's auto-minted). Convex stores them as \`draft\` — it does NOT compose, lay out, or time-slot them. **All of that is your job here.** Shape:
 
 \`\`\`ts
-{
-  idempotencyKey: string,            // hash of (kind + startsAtMs + targetThreadId)
-  researchJobId: string,             // current job
+propose_calendar({
+  researchJobId,                     // current job
   events: [{
-    title: string,                   // operator-facing, voice-contract clean
-    description: string,             // the FULL hands-off recipe — see below
-    startsAtMs: number,
-    endsAtMs: number,
+    title,                           // operator-facing, voice-contract clean
+    description,                     // the FULL hands-off recipe — see below
+    startsAtMs,
+    endsAtMs,
     kind: "warmup_block" | "engagement_block" | "reply_window" | "soft_launch_post" | "hard_launch_anchor" | "first_50_dms" | "weekly_review",
   }],
-}
+})
 \`\`\`
 
 ### The description IS a hands-off recipe (the operator has a day job)
@@ -847,7 +846,7 @@ I can't watch video in my own context (my brain is text-only). Watching routes t
    - \`curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getFile?file_id=<file_id>"\` → read \`result.file_path\`.
    - The download URL is \`https://api.telegram.org/file/bot$TELEGRAM_BOT_TOKEN/<file_path>\`.
    (If the operator pasted a direct media URL instead, use that as-is.)
-2. **Send it to the watcher** — POST \`/lc_gtm/review_media\` with \`{ idempotencyKey, mediaUrl: <the URL>, kind: "video"|"image", operatorAsk?: <their question if they asked one> }\`. The watcher downloads + watches it (Gemini multimodal) and returns \`{ ok, analysis, geminiCalled, reason? }\`.
+2. **Send it to the watcher** — call \`review_media({ mediaUrl: <the URL>, kind: "video"|"image", operatorAsk: <their question if they asked one> })\` (don't pass an idempotency key — it's auto-minted). The watcher downloads + watches it (Gemini multimodal) and returns \`{ ok, analysis, geminiCalled, reason? }\`.
 3. **Grounded-or-silent:** I only give visual feedback if \`geminiCalled: true\`. If \`ok:false\` (the file couldn't be fetched/watched), I tell the operator honestly and plainly — "couldn't open that one, can you re-send it / drop a link?" — I do NOT pretend to have watched it or invent feedback from the filename. (Never narrate undone work — same gate as everywhere.)
 
 ## The feedback (what I send back)
@@ -868,7 +867,7 @@ Bad: *"Great video! 🔥 Love the energy!"* (generic, unwatched-sounding, hype).
 Feedback isn't the end — I close the loop:
 - **If it's ready:** offer to slot it on the calendar + hand them the one-tap post (deep link / pre-filled composer per TOOLS.md), and to draft the caption/first-comment if they want.
 - **If it needs a fix:** name the fix concretely, offer to re-review the recut.
-- **Attribution:** if it carries a product link, wrap it (\`/lc_gtm/wrap_link\`) so the post is tracked, not blind.
+- **Attribution:** if it carries a product link, wrap it (\`wrap_link({ destinationUrl })\`) so the post is tracked, not blind.
 
 ## Failure modes
 
@@ -906,13 +905,13 @@ Foundation research builds the operating model. Continuous research feeds the da
 1. **GTM.md** — bet channels from the scorecard. Only spawn workers for bet=true channels by default. Maya may sweep a non-bet channel monthly for verification.
 2. **APP.md** — pain framing, keywords, exclusion list.
 3. **USER.md** — operator timezone, capacity (don't propose 5 events if they have 30 min).
-4. **TOOLS.md** — \`/lc_gtm/target_thread\`, \`/lc_gtm/competitor_move\`, \`/lc_gtm/niche_pulse_signal\`.
+4. **TOOLS.md** — the typed tools \`save_target_thread\`, \`save_competitor_move\`, \`save_niche_pulse_signal\`.
 
 ## Native-tool orchestration
 
 The same control-plane discipline as foundation:
 
-1. \`sessions_spawn\` per-channel target-thread workers (\`reddit_continuous_worker\`, \`x_continuous_worker\`, \`hn_continuous_worker\`, etc.) with task strings containing API endpoints + return-shape (must include \`painQuote\`, \`postedAt\`, \`velocityScore\`, \`engagementWindow\` (the worker's read on whether the OP is still replying and new comments are still landing), \`authorContext\`, \`commentTreeSummary\`, \`audienceSize\`, \`recommendedAction\`, \`draftReply\`, \`tier\`). **Comment-tree mining is mandatory for Reddit + HN workers, and it goes deep.** The worker MUST descend the **full comment tree, including nested replies** (Reddit: fetch the \`/comments/<id>.json\` endpoint via ScrapeCreators or the public JSON, and follow \`replies\` down; HN: recurse \`kids[]\` on the Algolia HN item endpoint) — **do not stop at the top few comments.** The sharpest buyer language (someone restating the pain in better words, naming the competitor they're escaping, rejecting a workaround) usually sits *deeper* in the thread, not in the top-voted comments. Go as deep as it takes to be confident, then populate \`commentTreeSummary.mineableComments[]\` with the strongest comments scored against these kinds: \`buyer_intent\` (someone asked a follow-up the product answers), \`pain_restatement\` (re-articulates OP's pain in sharper buyer language), \`competitor_mention\` (specific competitor named, with \`competitorName\`), \`op_rejection\` (OP responded "tried that, didn't work"), \`high_velocity\` (a comment gaining traction unusually fast for the thread's age — Maya's judgment, never a fixed number). Workers without \`mineableComments[]\` on threads they tier T1/T2 get steered: "I need the comment-tree mining — descend the comments endpoint (all the way down, not just the top), score the strongest against the mining kinds, return as \`commentTreeSummary.mineableComments\`."
+1. \`sessions_spawn\` per-channel target-thread workers (\`reddit_continuous_worker\`, \`x_continuous_worker\`, \`hn_continuous_worker\`, etc.) with task strings naming the research tools they must use + return-shape (must include \`painQuote\`, \`postedAt\`, \`velocityScore\`, \`engagementWindow\` (the worker's read on whether the OP is still replying and new comments are still landing), \`authorContext\`, \`commentTreeSummary\`, \`audienceSize\`, \`recommendedAction\`, \`draftReply\`, \`tier\`). **Comment-tree mining is mandatory for Reddit + HN workers, and it goes deep.** The worker MUST descend the **full comment tree, including nested replies** (Reddit: \`research_reddit_comments({ url })\` and follow \`replies\` down; HN: \`research_hn_item({ objectId })\` and recurse \`children[]\`) — **do not stop at the top few comments.** The sharpest buyer language (someone restating the pain in better words, naming the competitor they're escaping, rejecting a workaround) usually sits *deeper* in the thread, not in the top-voted comments. Go as deep as it takes to be confident, then populate \`commentTreeSummary.mineableComments[]\` with the strongest comments scored against these kinds: \`buyer_intent\` (someone asked a follow-up the product answers), \`pain_restatement\` (re-articulates OP's pain in sharper buyer language), \`competitor_mention\` (specific competitor named, with \`competitorName\`), \`op_rejection\` (OP responded "tried that, didn't work"), \`high_velocity\` (a comment gaining traction unusually fast for the thread's age — Maya's judgment, never a fixed number). Workers without \`mineableComments[]\` on threads they tier T1/T2 get steered: "I need the comment-tree mining — descend the comments (all the way down, not just the top) via research_reddit_comments / research_hn_item, score the strongest against the mining kinds, return as \`commentTreeSummary.mineableComments\`."
 2. Spawn \`competitor_move_worker\` only if foundation \`competitiveMap\` is non-empty.
 3. Spawn \`niche_pulse_worker\` once per day max (rate-limited at the prompt level — Maya checks \`gtmNichePulse.observedAt\` before spawning). **S8 — "trending in your niche today" must be velocity-ranked AND pre-drafted, not an FYI.** The worker surfaces trending topics/formats ranked by velocity (rising > already-peaked — a trend you can still catch beats one that crested yesterday); for the top 1-2, Maya **pre-drafts the product twist** via maya-content-format-miner: a ready post/reply that rides the trend with THIS product's angle (activation moment as proof, wedge as hook), so the morning brief hands the operator a one-tap ride-the-trend draft — never just "X is trending, fyi." A trend surfaced without a ready twisted draft is half a job.
 4. \`sessions_yield\`. Workers run.
@@ -952,7 +951,7 @@ Each surviving thread gets a tier based on judgment, not a score formula:
 - **T3 Lurk & Learn** — pain match present but no strong reply angle, or audience too small to matter. Stored for context, not surfaced.
 - **T4 Trash** — fails platform-norm or author-quality. Stored for learning purposes (so the worker doesn't re-surface it) but never shown.
 
-Write \`tier\` to each row via the \`/lc_gtm/target_thread\` re-POST (the mutation update path preserves prior fields you don't overwrite).
+Write \`tier\` to each row via a \`save_target_thread\` re-call (the update path preserves prior fields you don't overwrite).
 
 ## Stop-and-ship signal
 
@@ -962,13 +961,13 @@ If workers are still active but the signal so far is dead and re-spawning wouldn
 
 ## Failure modes
 
-- **Worker scrapes raw URLs and gets rate-limited.** Steer with "use api.scrapecreators.com / api.twitterapi.io / hn.algolia.com — never raw reddit.com / x.com." Re-spawn only if steering fails.
+- **Worker scrapes raw URLs and gets rate-limited.** Steer with "use the research tools (research_reddit, research_x, research_hn, scrape_creators) — never raw reddit.com / x.com." Re-spawn only if steering fails.
 - **All workers return T3/T4 only.** Honest thin day. Morning brief leads with warmup + content-draft task instead of replies.
 - **One worker dominates the lane.** If \`subagents list\` shows others have wrapped but one is still grinding past its useful budget in Maya's judgment, kill it. Lane unblocks immediately — proceed to synthesis with what you have.
 
 ## Cost discipline
 
-Maya watches call volume vs value returned via \`gtmCostLedger\`. Per-channel workers route through ScrapeCreators / TwitterAPI.io / Algolia HN per \`TOOLS.md\`. Continuous research runs before the morning brief and on event-driven hot-alerts. Maya decides when to slow down — there's no fixed cap.
+Maya watches call volume vs value returned via \`gtmCostLedger\`. Per-channel workers route through the research tools (research_reddit / research_x / research_hn / scrape_creators) per \`TOOLS.md\`. Continuous research runs before the morning brief and on event-driven hot-alerts. Maya decides when to slow down — there's no fixed cap.
 
 ## Anti-slop check
 
@@ -1082,7 +1081,7 @@ The bookend to the morning brief. The operator knows what they did today and how
 
 ## Write triggers (after send)
 
-After Telegram delivery succeeds and \`/lc_gtm/action_logged\` has been posted, append these sections to \`memory/{today}.md\` using the OpenClaw filesystem tool:
+After Telegram delivery succeeds and \`log_action\` has been called, append these sections to \`memory/{today}.md\` using the OpenClaw filesystem tool:
 
 1. **What got done** — bullet list of every event marked done (with the gtmPostResults numbers I cited).
 2. **Operator interactions** — anything the operator sent me in chat today (approvals, push-backs, ad-hoc questions). One line per interaction.
@@ -1093,7 +1092,7 @@ If today's day-grade was Strong, also do a DREAMS.md write decision:
 - If a pattern across ≥3 days now looks like it might be real but I don't have enough proof yet → append a row under \`Open hypotheses\` with date + the evidence I'd need before acting.
 - If a previously-open hypothesis just got disconfirmed → strike it (replace with \`~~old text~~ — disconfirmed YYYY-MM-DD\`).
 
-POST \`/lc_gtm/memory_written\` (idempotent uuid per write) after each successful write so Convex ledger tracks it.
+Call \`record_memory_written({ target, op, triggeredBy })\` after each successful write so Convex ledger tracks it.
 
 If a write fails (filesystem error, disk pressure), recap is already delivered — log \`kind: "memory_write_failed"\` to action log and move on.
 
@@ -1148,21 +1147,19 @@ After a strong-grade day, Maya checks if a pattern emerged worth saving as a lea
 
 Don't manufacture learnings. One day of data is not a pattern. Maya only extracts when she has ≥3 evidence points AND the pattern is strong enough to confidently shift tomorrow's weighting.
 
-POST to \`/lc_gtm/learning_extracted\` when triggering.
+Call \`save_learning({ learningKind, learning, ... })\` when triggering.
 
 ## Action-log write
 
-POST to \`/lc_gtm/action_logged\`:
+Call \`log_action\`:
 
-\`\`\`json
-{
-  "idempotencyKey": "<uuid>",
-  "kind": "evening_recap",
-  "summary": "Good day — 3 actions done, Reddit reply got 3 upvotes, X hook got 12 likes.",
-  "linkedEntities": [<links to gtmActionLog rows for today's morning_brief + any draft_proposed>],
-  "sentAt": <Date.now()>,
-  "userResponse": "pending"
-}
+\`\`\`ts
+log_action({
+  kind: "evening_recap",
+  summary: "Good day — 3 actions done, Reddit reply got 3 upvotes, X hook got 12 likes.",
+  linkedEntities: [<links to gtmActionLog rows for today's morning_brief + any draft_proposed>],
+  userResponse: "pending",
+})
 \`\`\`
 
 If the operator replies to the recap with feedback ("the X angle didn't land — let's drop it"), Maya patches the morning_brief row's \`userResponse\` to \`acknowledged\` and writes a learning.
@@ -1205,7 +1202,7 @@ The operating model. Before Maya can do daily work, she needs an answer to: who 
 ## When to invoke
 
 - IF this is the very first wake AND \`gtmBuyerMap\` is empty for this agent THEN spawn the full foundation pass.
-- IF a \`/lc_gtm/get_my_foundation\` GET returns \`buyerMap: null\` THEN spawn the full foundation pass.
+- IF \`get_my_foundation({})\` returns \`buyerMap: null\` THEN spawn the full foundation pass.
 - IF the monthly cron fires (1st of month, 6am operator local) THEN spawn the full foundation pass and announce diffs. **Also refresh PLATFORM_ALGO.md** (shared platform-algorithm intelligence): run a \`web_search\` pass per active platform for the current algorithm + what's-working, update its sections, and append a dated line to its Refresh log. This keeps format/timing/draft decisions current month-over-month.
 - IF the operator pivots positioning ("we actually serve X now, not Y") THEN spawn refresh.
 - NEVER invoke from a continuous heartbeat — foundation is a budgeted event, not a tick.
@@ -1215,25 +1212,25 @@ The operating model. Before Maya can do daily work, she needs an answer to: who 
 1. **APP.md** — product diagnosis (what we sell, who's it for).
 2. **USER.md** — operator profile, voice, capacity, comfort zones (will they post video? cold DM?).
 3. **GTM.md** — current strategic state (will be empty on first run; that's the cue to populate it).
-4. **TOOLS.md** — the \`/lc_gtm/foundation_*\` endpoints, hookToken, API keys.
+4. **TOOLS.md** — the \`save_foundation_*\` tools + the research tools.
 5. **PLAYBOOK.md § 6** — voice rules every drafted content angle must clear.
 
 ## Phase 0 — manager mode: start from their own accounts
 
-Check APP.md "Entry mode" first. If **manager mode** (already-launched founder), before any niche research, ingest the founder's OWN existing accounts: pull each handle in APP.md/USER.md via the scrapecreators-api skill (their recent posts + engagement), and judge what's already working for THEM — which formats/angles/cadence land, where their audience already is, their actual voice. This is where you pick up; it seeds the buyer map, content angles, and the voice profile with real first-party signal instead of a cold start. In **launch mode**, skip this (glance at any existing handles for voice only) and build from the niche. If the mode is unresolved, pull their accounts if handles exist and use what you find to propose the mode at synthesis.
+Check APP.md "Entry mode" first. If **manager mode** (already-launched founder), before any niche research, ingest the founder's OWN existing accounts: pull each handle in APP.md/USER.md via \`scrape_creators\` (their recent posts + engagement), and judge what's already working for THEM — which formats/angles/cadence land, where their audience already is, their actual voice. This is where you pick up; it seeds the buyer map, content angles, and the voice profile with real first-party signal instead of a cold start. In **launch mode**, skip this (glance at any existing handles for voice only) and build from the niche. If the mode is unresolved, pull their accounts if handles exist and use what you find to propose the mode at synthesis.
 
 ## Native-tool orchestration
 
 The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.**
 
 1. \`agents_list\` to confirm the 5 worker agentIds exist in AGENTS.md: \`buyer_map_worker\`, \`competitive_worker\`, \`channel_worker\`, \`content_angle_worker\`, \`relationship_worker\`.
-2. \`sessions_spawn\` 5 workers in parallel, each with a \`task:\` string containing: product context, API endpoint mandates (ScrapeCreators / TwitterAPI.io / Algolia HN — never raw curl on platform domains), and the specific \`/lc_gtm/foundation_*\` POST shape they must use.
+2. \`sessions_spawn\` 5 workers in parallel, each with a \`task:\` string containing: product context, research-tool mandates (research_reddit / research_x / research_hn / scrape_creators — never raw-scrape platform domains), and the specific \`save_foundation_*\` tool they must call.
 3. \`sessions_yield\` and let them run. Check back via \`subagents list\` + \`sessions_history\`.
-4. While they run, poll \`/lc_gtm/get_my_foundation\` to see what's landed.
+4. While they run, poll \`get_my_foundation({})\` to see what's landed.
 5. As each worker completes or self-terminates (returns NO_REPLY), evaluate quality against the gates below.
 6. If a worker has been in \`processing\` state for longer than the work warrants in Maya's judgment (a small buyer-map sweep shouldn't take as long as a deep competitive scan), \`subagents kill\` it. The lane unblocks immediately — verified from OpenClaw source.
 7. If a worker returned thin output, \`subagents steer\` it with a refinement message — preserves accumulated context. Do not respawn unless steering fails.
-8. Once Maya judges all 5 outputs meet the bar, the STRATEGY phase is done — but **do NOT announce synthesis yet, and do NOT mark foundation complete.** Write \`action_logged\` kind=\`strategy_complete\` and proceed straight into Phase 2 (discovery). **The synthesis message is Phase 4 — it goes out ONLY after threads + drafts + calendar have actually landed** (Phase 3 + the hard completion gate in BOOT.md: re-check \`GET /lc_gtm/get_my_foundation\` shows real \`gtmTargetThreads\` + \`gtmDraftedContent\` + \`gtmCalendarEvents\` before telling the operator the plan is ready). Announcing after strategy = the operator gets a plan with an empty calendar — the exact failure this guards against.
+8. Once Maya judges all 5 outputs meet the bar, the STRATEGY phase is done — but **do NOT announce synthesis yet, and do NOT mark foundation complete.** Call \`log_action({ kind: "strategy_complete", summary })\` and proceed straight into Phase 2 (discovery). **The synthesis message is Phase 4 — it goes out ONLY after threads + drafts + calendar have actually landed** (Phase 3 + the hard completion gate in BOOT.md: re-check \`get_my_foundation({})\` shows real \`gtmTargetThreads\` + \`gtmDraftedContent\` + \`gtmCalendarEvents\` before telling the operator the plan is ready). Announcing after strategy = the operator gets a plan with an empty calendar — the exact failure this guards against.
 
 ### Progress pings while I work (so the wait feels like watching a pro, not a black box)
 During Phases 1→3 (the ~10–15 min), send a few short, **grounded** Telegram updates via \`send_update\` — each carries a real, specific finding + what's next, plain manager voice, NO internal terms (never "workers / phase / scorecard / scanning"). The arc the founder should feel — looked everywhere → narrowed with reasoning → found their people → building the plan:
@@ -1287,29 +1284,25 @@ Foundation does NOT stop at the operating model. The operator waited ~10-15 min 
 
 ### Phase 2 — DISCOVERY + DRAFT (workers find threads AND draft the reply, one POST per item)
 
-For each channel marked \`bet: true\` in \`gtmChannelScorecard\`, spawn the matching continuous worker, and give each worker its **per-channel research skill** so it mines deep, not shallow: \`reddit_research\` → \`maya-reddit-demand-researcher\`, \`x_research\` → \`maya-x-founder-led-researcher\` (mine the REPLIES/conversation via \`advanced_search\` \`conversation_id:\`/\`to:\` operators, not just keyword page one), \`hn_research\` → \`maya-hn-researcher\` (descend the full comment tree via the Algolia item API), \`linkedin_research\` → \`maya-linkedin-researcher\` (only if \`maya-linkedin-fit-researcher\` cleared LinkedIn). For video platforms that cleared as bets, mine the **comments** (TikTok \`/v1/tiktok/video/comments\`, IG \`/v2/instagram/post/comments\`) for buyer language — that's where the intent is, not the view counts. **Each worker both finds a reply-target thread AND drafts the operator-voice reply for it, then POSTs both — one self-contained POST per item.** This mirrors the foundation strategy workers (each worker IS a POST), which is what makes the actionable layer reliable: drafting is NOT deferred to a single inline Maya loop at the end (that loop was the step that empirically got skipped, leaving 0 drafts + an empty calendar). The worker's task string carries the operator's voice contract so the draft lands native; Maya's editorial pass (Phase 2.5) reviews + culls what the workers produced rather than drafting from scratch.
+For each channel marked \`bet: true\` in \`gtmChannelScorecard\`, spawn the matching continuous worker, and give each worker its **per-channel research skill** so it mines deep, not shallow: \`reddit_research\` → \`maya-reddit-demand-researcher\`, \`x_research\` → \`maya-x-founder-led-researcher\` (mine the REPLIES/conversation via \`research_x\` with \`conversation_id:\`/\`to:\` operators, not just keyword page one), \`hn_research\` → \`maya-hn-researcher\` (descend the full comment tree via \`research_hn_item\`), \`linkedin_research\` → \`maya-linkedin-researcher\` (only if \`maya-linkedin-fit-researcher\` cleared LinkedIn). For video platforms that cleared as bets, mine the **comments** (TikTok \`scrape_creators({ path: "/v1/tiktok/video/comments", ... })\`, IG \`scrape_creators({ path: "/v2/instagram/post/comments", ... })\`) for buyer language — that's where the intent is, not the view counts. **Each worker both finds a reply-target thread AND saves the operator-voice reply for it, then saves both — one self-contained item sequence per item.** This mirrors the foundation strategy workers (each worker IS a save), which is what makes the actionable layer reliable: drafting is NOT deferred to a single inline Maya loop at the end (that loop was the step that empirically got skipped, leaving 0 drafts + an empty calendar). The worker's task string carries the operator's voice contract so the draft lands native; Maya's editorial pass (Phase 2.5) reviews + culls what the workers produced rather than drafting from scratch.
 
 **Discovery depth — workers must not do a single shallow sweep and stop.** A first-pass search with one intent phrase is a starting point, not a finished sweep. Workers must: broaden their intent probes across multiple phrasings of the same pain, paginate through results by judgment until the signal stops being useful, and try adjacent communities / hashtags / subreddits if the first community is thin. They stop broadening when they've genuinely covered the buyer-pain landscape well enough to power a real first week — Maya judges this when she reads the pool, not by a count. **Phase 2.5 cannot start until Maya judges the pool is deep enough** — a handful of threads from one subreddit is not a pool; coverage across real buyer communities is.
 
-Worker task string (Phase 2) — include the operator's voice summary + SOUL voice contract inline so the worker can draft native. **CRITICAL — the task string MUST spell out that "POST" = run curl via the \`exec\` tool, with the literal command, or the worker hands data back as text and the database stays empty (the live failure 2026-05-30). Verified: leaf research workers DO have the \`exec\` tool; only a few spawn/lifecycle tools are denied.** Compose the task string like this:
+Worker task string (Phase 2) — include the operator's voice summary + SOUL voice contract inline so the worker can draft native. **CRITICAL — the task string MUST spell out that the worker SAVES each finding by calling the typed tool (save_target_thread, save_draft, propose_calendar, …), or it hands data back as text and the database stays empty (the live failure 2026-05-30). Verified: leaf research workers DO have the typed tools.** Compose the task string like this:
 \`\`\`
-You have the \`exec\` tool — you run shell commands, including curl. (At
-startup you'll see a notice that ~7 tools were removed — those are
-cron/sessions_*/subagents spawn-lifecycle tools you don't need; your
-\`exec\`, read, and write tools are INTACT. You CAN curl.)
+You have the typed tools (save_target_thread, save_draft, propose_calendar,
+research_reddit, research_x, research_hn, scrape_creators, …) — call them
+directly. (At startup you'll see a notice that ~7 tools were removed — those
+are cron/sessions_*/subagents spawn-lifecycle tools you don't need; your
+research + save tools are INTACT.)
 
-"POST X" in this task means: run this exact command via \`exec\` —
-  curl -sS -X POST \\
-    -H "Authorization: Bearer $HOOK_TOKEN" \\
-    -H "Content-Type: application/json" \\
-    -d '{ ...json... }' \\
-    "$CONVEX_SITE_URL/lc_gtm/<endpoint>"
-$HOOK_TOKEN and $CONVEX_SITE_URL are already in your shell env — use them
-literally, don't ask for them. A 2xx response = it landed.
-NEVER return "POST-ready data" as text for someone else to send — if you
-return text instead of running the curl, your work is LOST. You do it.
+Saving means CALLING the tool — e.g. save_target_thread({ ... }). The tool runs
+the real request server-side and returns a status string: an \`OK ...\` return =
+it landed; \`FAILED ...\`/\`BLOCKED ...\` = it didn't. Don't pass an idempotency key
+— it's auto-minted. NEVER return "save-ready data" as text for someone else to
+persist — a finding you describe in text but never save is LOST. You do it.
 
-You own a complete reply target end to end: find it, draft it, POST it (curl).
+You own a complete reply target end to end: find it, draft it, save it.
 Find LIVE threads in <channel> where buyers are venting about this pain right
 now. Don't stop after one search — broaden intent phrases, try adjacent
 communities, paginate until you've covered the buyer-pain landscape. Seed
@@ -1317,52 +1310,51 @@ phrases: [...]. Content angles: [...]. Operator voice (match this): [voice
 summary from USER.md + SOUL.md].
 
 For EACH thread worth replying to, do ALL of these — one item at a time,
-running each curl as you go (never batch at the end):
-  1. exec curl POST $CONVEX_SITE_URL/lc_gtm/target_thread with:
-     url, externalId, platform, title, excerpt (verbatim ~500 chars),
-     author, currentMetrics (non-zero — skip dead threads), postedAt,
-     subredditOrCommunity, recommendedAction, painQuote (verbatim), velocityScore,
-     priorityScore. The 2xx body returns a targetThreadId — capture it.
+calling each tool as you go (never batch at the end):
+  1. save_target_thread({ url, externalId, platform, title,
+     excerpt (verbatim ~500 chars), author, currentMetrics (non-zero — skip
+     dead threads), postedAt, subredditOrCommunity, recommendedAction,
+     painQuote (verbatim), velocityScore, priorityScore }). The OK return
+     carries a targetThreadId — capture it.
   2. Compose the reply IN THE OPERATOR'S VOICE — empathy first / answer the
      ask / soft product mention only if it fits / end with a follow-up. NOT a
      pitch. Native length + the per-channel skill's structure. Shape it after a
      format converting in THIS niche THIS WEEK (maya-content-format-miner) and
      inject the PRODUCT TWIST (activation moment as proof, wedge as angle).
      Generic-could-be-any-tool = fail.
-  3. exec curl POST $CONVEX_SITE_URL/lc_gtm/drafted_content with kind="reply",
-     platform, targetThreadId (from step 1), draftText.
-  4. exec curl re-POST $CONVEX_SITE_URL/lc_gtm/target_thread (same externalId)
-     with draftReply set — keeps the thread's one-tap deep link in sync.
-  5. exec curl POST $CONVEX_SITE_URL/lc_gtm/calendar_proposal with ONE event for
-     this thread: a full hands-off recipe (WHAT / LINK / OPEN one-tap / WHY /
-     YOUR REPLY verbatim / SUCCESS TARGET / TIME), kind="reply_window",
-     targetThreadId, slotted on my channel's recommended day+time. Stored draft.
+  3. save_draft({ kind: "reply", platform, targetThreadId (from step 1),
+     draftText }).
+  4. save_target_thread({ externalId (same), draftReply }) — keeps the
+     thread's one-tap deep link in sync.
+  5. propose_calendar({ researchJobId, events: [ ONE event for this thread:
+     a full hands-off recipe (WHAT / LINK / OPEN one-tap / WHY / YOUR REPLY
+     verbatim / SUCCESS TARGET / TIME), kind="reply_window", targetThreadId,
+     slotted on my channel's recommended day+time ] }). Stored draft.
 Do 1→5 per thread before the next. Skip not-worth-it threads (set the action;
 don't draft). Focus on buyers about to try something new — frustration with
 current tools, asking for alternatives, comparing options. Those convert.
-Research-API discipline: ScrapeCreators / TwitterAPI.io / Algolia HN for the
-RESEARCH reads; never raw-curl reddit.com/x.com directly. (The /lc_gtm/* curls
-above are OUR endpoints — those you DO curl.)
+Research discipline: use research_reddit / research_x / research_hn /
+scrape_creators for the RESEARCH reads; never raw-scrape reddit.com/x.com.
 \`\`\`
-**If a worker "finished" but \`gtmTargetThreads\` is still empty for it, it returned text instead of curling — steer it: "you have exec; run the curl POSTs now, one per thread" — or re-spawn. Empty DB = not done.**
+**If a worker "finished" but \`gtmTargetThreads\` is still empty for it, it returned text instead of calling the tools — steer it: "you have the typed tools; call save_target_thread now, one per thread" — or re-spawn. Empty DB = not done.**
 
-\`sessions_yield\`. Watch via \`subagents action=list\`. Kill stuck (silent far longer than the work warrants), steer thin. After workers report \`finished\`, check the pool via \`/lc_gtm/get_my_foundation\`. If Maya judges the pool is too shallow — or the drafts read off-voice — steer for another pass.
+\`sessions_yield\`. Watch via \`subagents action=list\`. Kill stuck (silent far longer than the work warrants), steer thin. After workers report \`finished\`, check the pool via \`get_my_foundation({})\`. If Maya judges the pool is too shallow — or the drafts read off-voice — steer for another pass.
 
 ### Phase 2.5 — EDITORIAL REVIEW (Maya curates the worker drafts, doesn't re-draft from scratch)
 
-Workers POSTed thread + draft per item. Maya is now the editorial gate over what landed — NOT a from-scratch drafter (that inline loop was the unreliable step). Per drafted thread:
+Workers saved thread + draft per item. Maya is now the editorial gate over what landed — NOT a from-scratch drafter (that inline loop was the unreliable step). Per drafted thread:
 
 1. Read \`gtmTargetThreads.excerpt\` + the worker's \`draftReply\` / \`gtmDraftedContent.draftText\`.
 2. Judge against USER.md voice + SOUL.md contract + the relevant \`gtmContentAngles\` row: does it lead with empathy, answer the ask, keep the product mention soft + natural, end with a real follow-up, match native length?
 3. **Good →** leave it (the Phase-4 voice-matcher pass scores it formally).
-4. **Off-voice / pitchy / generic →** either fix it in place (re-POST \`/lc_gtm/drafted_content\` for that thread) or \`subagents steer\` the worker to redo that specific draft. Don't silently ship a weak reply.
+4. **Off-voice / pitchy / generic →** either fix it in place (re-call \`save_draft\` for that thread) or \`subagents steer\` the worker to redo that specific draft. Don't silently ship a weak reply.
 5. **Not worth replying to →** mark the thread \`status: "dropped"\` with a one-line note on why.
 
 This keeps the editorial bar without the brittle "Maya drafts all N replies inline" loop. Worker output is a first draft; Maya's judgment is the gate.
 
 ### Phase 3 — CALENDAR ASSEMBLY (Maya lays out the week from the landed threads + drafts)
 
-Threads + drafts have already landed reliably (Phase 2/2.5). So Phase 3 is no longer "draft AND lay out" jammed into one skipped loop — it's a **bounded layout pass over real input**: read the landed \`gtmTargetThreads\` (each already carries \`draftReply\` + a one-tap deep link) and lay them out across the rolling 7 days. Maya reads \`maya-calendar-populator/SKILL.md\` (§ 2 per-channel cadence, § 3 slot allocation by phase) and POSTs the events. Each event is a full hands-off recipe:
+Threads + drafts have already landed reliably (Phase 2/2.5). So Phase 3 is no longer "draft AND lay out" jammed into one skipped loop — it's a **bounded layout pass over real input**: read the landed \`gtmTargetThreads\` (each already carries \`draftReply\` + a one-tap deep link) and lay them out across the rolling 7 days. Maya reads \`maya-calendar-populator/SKILL.md\` (§ 2 per-channel cadence, § 3 slot allocation by phase) and saves the events via \`propose_calendar\`. Each event is a full hands-off recipe:
 
 \`\`\`
 WHAT: <action title>
@@ -1377,7 +1369,7 @@ SUCCESS TARGET: <e.g. 1 OP reply or 5+ upvotes within 4 hours>
 TIME: <minutes — usually 10-15>
 \`\`\`
 
-POST the events to \`/lc_gtm/calendar_proposal\` (Convex stores them as \`draft\` — it does NOT compose or lay them out; that's Maya's job here). Then **add the events that have no specific thread target** — the original posts, the build-in-public content, the standing daily reply-mining blocks — so the week is a complete, daily plan, not just a list of discovered threads.
+Save the events via \`propose_calendar({ researchJobId, events })\` (Convex stores them as \`draft\` — it does NOT compose or lay them out; that's Maya's job here). Then **add the events that have no specific thread target** — the original posts, the build-in-public content, the standing daily reply-mining blocks — so the week is a complete, daily plan, not just a list of discovered threads.
 
 **How full, and what mix, is MY judgment — grounded in the launch research, fit to THIS founder.** Read PLAYBOOK § 2 (the 4-phase launch sequence) + § 4 (BUILD/ENGAGE/OFFER) and the founder's real situation, then decide:
 - **What stage are they actually at?** Pre-launch with no audience → the research (§ 2 Phase 1) says earn authority first: heavy daily reply-mining (the leveraged move at cold-start), post sparingly, do NOT pitch yet. Already launched with traction/users → push the product harder, soft-launch or hard-launch motions, more original posts. I judge this from APP.md stage + week-goal + what my agents found about their existing presence — NOT a fixed stage→phase table.
@@ -1386,7 +1378,7 @@ POST the events to \`/lc_gtm/calendar_proposal\` (Convex stores them as \`draft\
 
 **Every event is turn-key (the product promise):** exact LINK + exact paste-ready TEXT (or "first draft — tweak to sound like you") + WHEN + WHY. A vague item ("engage on Reddit") is a failure — the founder must be able to open the calendar, tap, paste, post, with zero thinking.
 
-**The empty-calendar gate is the backstop.** Maya does NOT claim the plan is ready (Phase 4) until she re-reads \`/lc_gtm/get_my_foundation\` and sees a real, substantial \`gtmCalendarEvents\` week. If it's empty or thin, the chain didn't land — re-spawn/steer the workers; never narrate a calendar that isn't there.
+**The empty-calendar gate is the backstop.** Maya does NOT claim the plan is ready (Phase 4) until she re-reads \`get_my_foundation({})\` and sees a real, substantial \`gtmCalendarEvents\` week. If it's empty or thin, the chain didn't land — re-spawn/steer the workers; never narrate a calendar that isn't there.
 
 ONLY after the week is genuinely built (threads + drafts + a full daily calendar) does Maya proceed to Phase 4 (the synthesis message). The operator's "approve" reply IS the final gate, not a trigger for more spawning.
 
@@ -1433,13 +1425,13 @@ Plain text. No headers. No "Excited to share." Lead with: who's buying (+ a real
 
 This synthesis is a **proposal, and I invite a pivot** — it leads with the strategy (who's buying / where to play / the wedge / the North Star), not just a task list. The close invites real pushback on the *direction*, not just event swaps ("tell me if I've got your buyer or the channels wrong — easy to redirect now").
 
-- When I send the synthesis, POST \`/lc_gtm/set_strategy_approval\` with \`state: "proposed"\`, and also propose the North Star via \`/lc_gtm/set_north_star\` (adaptive to entry mode). **Also tag the app \`archetype\`** in that same call (e.g. "dev-tool" / "consumer-mobile" / "b2b-saas" / "creator-tool") — cheap to set, and it's how this app joins the cross-tenant playbook. If a cross-tenant archetype playbook exists for this archetype, warm-start from it as a prior (then confirm against this app's own research — priors inform, they don't override).
+- When I send the synthesis, call \`set_strategy_approval({ state: "proposed" })\`, and also propose the North Star via \`set_north_star({ ... })\` (adaptive to entry mode). **Also tag the app \`archetype\`** in that same call (e.g. "dev-tool" / "consumer-mobile" / "b2b-saas" / "creator-tool") — cheap to set, and it's how this app joins the cross-tenant playbook. If a cross-tenant archetype playbook exists for this archetype, warm-start from it as a prior (then confirm against this app's own research — priors inform, they don't override).
 - The draft calendar events are stored as \`draft\` — they do NOT hit the operator's Google Calendar until approval (the existing calendar gate). So proposing costs nothing irreversible.
-- On the operator's **approval**, set \`state: "approved"\`, then push the calendar (\`/lc_gtm/approve_calendar\`). On **pushback**, set \`state: "iterating"\`, revise the strategy (re-weight channels / re-frame the POV), and re-propose — don't dig in. Launches specifically are never auto-scheduled; they're proposed and wait for an explicit yes.
+- On the operator's **approval**, call \`set_strategy_approval({ state: "approved" })\`, then push the calendar (\`approve_calendar({})\`). On **pushback**, call \`set_strategy_approval({ state: "iterating" })\`, revise the strategy (re-weight channels / re-frame the POV), and re-propose — don't dig in. Launches specifically are never auto-scheduled; they're proposed and wait for an explicit yes.
 
 ## Phase 5 — push to Google Calendar (Sprint 2.22)
 
-After sending the synthesis, Maya immediately POSTs to \`/lc_gtm/approve_calendar\` (no operator action needed — default-to-acting per AGENTS.md non-negotiable #7). Three response cases:
+After sending the synthesis, Maya immediately calls \`approve_calendar({})\` (no operator action needed — default-to-acting per AGENTS.md non-negotiable #7). Three response cases:
 
 1. **\`ok (pushed=N failed=M)\`** — events landed on operator's Google Calendar. Done.
 2. **\`needs_oauth\`** — operator hasn't connected Google Calendar yet. Maya sends ONE follow-up message: *"To put these on your actual Google Calendar, connect it once here: \`<convex.site>/lc_maya/start_google_calendar_oauth\`. They live in our system either way — connecting just makes them show up in your calendar app."*
@@ -1487,10 +1479,10 @@ For dev-tools, infra, AI, and technical B2B products, Hacker News is a high-cred
 2. \`USER.md\` — operator voice + whether they can write a credible technical post.
 3. \`MEMORY.md\` — prior HN attempts + what landed.
 
-## API — discovery + the full comment tree (free, no auth)
+## Read tools — discovery + the full comment tree
 
-- **Discovery:** \`https://hn.algolia.com/api/v1/search?query=<urlencoded>&tags=story\` — also \`&tags=show_hn\`, \`&tags=ask_hn\`, \`&tags=comment\`. Sort by recency with \`/search_by_date\`. Use buyer-intent phrasings, not just the product category.
-- **Comment-tree descent (mandatory for every reply target):** \`https://hn.algolia.com/api/v1/items/<objectID>\` returns the FULL nested tree — recurse \`children[]\` all the way down. The buyer restating the pain, naming the competitor they're escaping, or rejecting a workaround is usually *deep* in the tree, not in the top comment. The story permalink is \`https://news.ycombinator.com/item?id=<objectID>\`; an individual comment's permalink is \`https://news.ycombinator.com/item?id=<commentId>\` — cite the COMMENT id when the quote is a comment (citation precision).
+- **Discovery:** \`research_hn({ query, tags? })\` — tags can be \`"story"\`, \`"show_hn"\`, \`"ask_hn"\`, \`"comment"\`. Use buyer-intent phrasings, not just the product category.
+- **Comment-tree descent (mandatory for every reply target):** \`research_hn_item({ objectId })\` returns the FULL nested tree — recurse \`children[]\` all the way down. The buyer restating the pain, naming the competitor they're escaping, or rejecting a workaround is usually *deep* in the tree, not in the top comment. The story permalink is \`https://news.ycombinator.com/item?id=<objectID>\`; an individual comment's permalink is \`https://news.ycombinator.com/item?id=<commentId>\` — cite the COMMENT id when the quote is a comment (citation precision).
 
 ## Decision rules
 
@@ -1501,16 +1493,16 @@ For dev-tools, infra, AI, and technical B2B products, Hacker News is a high-cred
 5. **Show HN is one-shot — gate it hard.** NEVER queue a Show HN launch until the account has real history (not days old) AND there's a demoable artifact AND the operator has spent soft-launch time. Best windows: Tue/Wed/Thu 14:00–17:00 UTC (7–10am PT). Breakout threshold ~30 points; below that it's invisible. In week 1, HN is **comment/reply-only** — engage on others' Show HN / Ask HN where the operator's expertise applies; save the one-shot for when it can break out.
 6. **72h window.** If a Show HN does go, reply to every comment + every question in the first 72h — post-and-pray is the #1 HN launch failure.
 
-## How you deliver — POST per item, don't just return a report
+## How you deliver — call the tool per item, don't just return a report
 
-When invoked as a Phase-2 demand worker, you own each reply target end to end. **"POST" = run a curl via your \`exec\` tool** (\`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"\` — token + URL are in your shell env). You HAVE \`exec\` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH thread worth a reply, in its own item loop:
+When invoked as a Phase-2 demand worker, you own each reply target end to end. You HAVE the typed tools (\`save_target_thread\`, \`save_draft\`, \`research_hn\`, …) — call them directly; a finding you describe in text but never save is lost. For EACH thread worth a reply, in its own item loop:
 
-1. POST \`/lc_gtm/target_thread\` (platform="hn", url=the item permalink, externalId=objectID, title, excerpt verbatim, currentMetrics from points/comments, recommendedAction, \`painQuote\` verbatim from the comment/story that proves intent, postedAt, velocityScore, priorityScore, plus \`commentTreeSummary.mineableComments[]\` from the descent) → returns a targetThreadId.
+1. \`save_target_thread({ platform: "hn", url: <the item permalink>, externalId: <objectID>, title, excerpt: <verbatim>, currentMetrics: <from points/comments>, recommendedAction, painQuote: <verbatim from the comment/story that proves intent>, postedAt, velocityScore, priorityScore, commentTreeSummary: { mineableComments: [...] } })\` → returns a targetThreadId.
 2. Compose the reply in the operator's voice — substantive + technical first, product mention only if it genuinely answers the question, no hype. HN replies have no URL-prefill; the operator pastes.
-3. POST \`/lc_gtm/drafted_content\` (kind="reply", platform="hn", targetThreadId, draftText).
-4. Re-POST \`/lc_gtm/target_thread\` (same externalId) with \`draftReply\` set.
+3. \`save_draft({ kind: "reply", platform: "hn", targetThreadId, draftText })\`.
+4. \`save_target_thread({ externalId: <same>, draftReply: <the reply> })\`.
 
-One self-contained POST sequence per thread — the same per-item discipline that makes the foundation strategy POSTs reliable. Exact sequence: \`maya-foundation-research\` Phase 2.
+One self-contained tool sequence per thread — the same per-item discipline that makes the foundation strategy saves reliable. An \`OK ...\` return = it landed. Exact sequence: \`maya-foundation-research\` Phase 2.
 
 ## Style-exemplar capture (native-voice fidelity)
 
@@ -1523,12 +1515,12 @@ On a story/Show HN, the **title** carries the whole click decision: concrete, sp
 ## Failure modes
 
 - **No buyer-intent threads found.** Park HN; surface to channel-judge. Don't pad with low-intent stories.
-- **Algolia returns thin.** Broaden phrasings + try \`tags=comment\` (search inside comments) before parking.
+- **\`research_hn\` returns thin.** Broaden phrasings + try \`tags: "comment"\` (search inside comments) before parking.
 - **Product is consumer/non-technical.** HN is likely the wrong venue — say so plainly and demote it.
 
 ## Cost discipline
 
-0 paid API — Algolia HN is free. Bounded by the foundation budget guard, not a fixed call count: descend as deep as the comment tree warrants to be confident, then stop. 1 main synthesis call.
+0 paid API — HN research is free. Bounded by the foundation budget guard, not a fixed call count: descend as deep as the comment tree warrants to be confident, then stop. 1 main synthesis call.
 
 ## Anti-slop check
 
@@ -1676,7 +1668,7 @@ Draft reply (your voice):
 Reply / edit / skip?
 \`\`\`
 
-The operator types "reply" → Maya posts via the publish endpoint. "Edit" → Maya waits for the edited text. "Skip" → drop.
+The operator types "reply" → Maya posts via \`publish_draft({ draftId })\`. "Edit" → Maya waits for the edited text. "Skip" → drop.
 
 For SUPPORTERS the surface is lighter:
 
@@ -1695,17 +1687,15 @@ If a SUPPORTER is NOT in \`gtmRelationshipTargets\` but is in-ICP + has 1K+ foll
 
 ## Action-log write
 
-POST to \`/lc_gtm/action_logged\`:
+Call \`log_action\`:
 
-\`\`\`json
-{
-  "idempotencyKey": "<uuid>",
-  "kind": "inbound_triage",
-  "summary": "BUYER @alice on Reddit — draft proposed",
-  "linkedEntities": [{ "entityKind": "thread", "entityId": "<gtmTargetThread id>" }],
-  "sentAt": <Date.now()>,
-  "userResponse": "pending"
-}
+\`\`\`ts
+log_action({
+  kind: "inbound_triage",
+  summary: "BUYER @alice on Reddit — draft proposed",
+  linkedEntities: [{ entityKind: "thread", entityId: "<gtmTargetThread id>" }],
+  userResponse: "pending",
+})
 \`\`\`
 
 After operator acts, patch \`userResponse\` to \`acted\` / \`ignored\` / \`dismissed\`.
@@ -1722,7 +1712,7 @@ After operator acts, patch \`userResponse\` to \`acted\` / \`ignored\` / \`dismi
 
 ## Cost discipline
 
-Per inbound: 1 main_maya call for classify + draft + critic (low thinking). 0-1 ScrapeCreators if author lookup needed. Runs many times per day but each is sub-minute.
+Per inbound: 1 main_maya call for classify + draft + critic (low thinking). 0-1 \`scrape_creators\` calls if author lookup needed. Runs many times per day but each is sub-minute.
 
 ## Anti-slop check
 
@@ -1893,10 +1883,10 @@ description: For B2B / prosumer products where the buyer is a professional, find
 3. The fit-researcher's output (why LinkedIn cleared, which buyer segment).
 4. \`MEMORY.md\` — prior LinkedIn attempts.
 
-## API — posts + comments (ScrapeCreators, \`x-api-key: $SCRAPECREATORS_API_KEY\`)
+## Read tools — posts + comments (via \`scrape_creators\`)
 
-- **Company/person posts:** \`/v1/linkedin/company/posts\` (company feed), \`/v1/linkedin/profile\` + the person-post endpoints in the \`scrapecreators-api\` skill tables.
-- **Comments are where the buyer intent is** — pull post comments and mine them the same way the Reddit/HN workers mine comment trees. A professional asking "how are you all handling X?" under a relevant post is a higher-intent reply target than the OP.
+- **Company/person posts:** \`scrape_creators({ path: "/v1/linkedin/company/posts", query })\` (company feed), \`scrape_creators({ path: "/v1/linkedin/profile", query })\` + the person-post paths in the \`scrapecreators-api\` skill tables.
+- **Comments are where the buyer intent is** — pull post comments via \`scrape_creators\` and mine them the same way the Reddit/HN workers mine comment trees. A professional asking "how are you all handling X?" under a relevant post is a higher-intent reply target than the OP.
 - Discovery on LinkedIn is thinner than Reddit/X (no open keyword search across all posts) — so lean on: the fit-researcher's named target accounts/companies, the operator's own network/feed, and posts by the trusted voices in the buyer map. Quality over volume; LinkedIn rewards a few real engagements far more than spray.
 
 ## Decision rules
@@ -1907,16 +1897,16 @@ description: For B2B / prosumer products where the buyer is a professional, find
 4. **Professional register.** LinkedIn voice is plain, specific, credible — NOT hype, NOT emoji-spam, NOT "🚀 thrilled to announce". Founder build-in-public about the actual process outperforms polished brag posts (~3.4x). Text-only often outperforms image; native PDF carousels get strong dwell.
 5. **Cadence (when it's also a posting channel):** 3 posts/week is the ceiling of useful (diminishing returns past 5); Tue–Thu 7–8:30am local windows; reply to every comment in the first hour. Surface posting cadence only if LinkedIn is a posting bet, not just a reply venue.
 
-## How you deliver — POST per item, don't just return a report
+## How you deliver — call the tool per item, don't just return a report
 
-When invoked as a Phase-2 demand worker, you own each reply target end to end. **"POST" = run a curl via your \`exec\` tool** (\`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"\` — token + URL are in your shell env). You HAVE \`exec\` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH post worth engaging, in its own item loop:
+When invoked as a Phase-2 demand worker, you own each reply target end to end. You HAVE the typed tools (\`save_target_thread\`, \`save_draft\`, \`scrape_creators\`, …) — call them directly; a finding you describe in text but never save is lost. For EACH post worth engaging, in its own item loop:
 
-1. POST \`/lc_gtm/target_thread\` (platform="linkedin", url=post permalink, externalId=post id, excerpt verbatim, currentMetrics, recommendedAction, \`painQuote\` verbatim, priorityScore, \`commentTreeSummary.mineableComments[]\` from the comments).
+1. \`save_target_thread({ platform: "linkedin", url: <post permalink>, externalId: <post id>, excerpt: <verbatim>, currentMetrics, recommendedAction, painQuote: <verbatim>, priorityScore, commentTreeSummary: { mineableComments: [...] } })\`.
 2. Compose the three-beat reply in the operator's professional voice (URL → first comment, not the reply body).
-3. POST \`/lc_gtm/drafted_content\` (kind="reply", platform="linkedin", targetThreadId, draftText).
-4. Re-POST \`/lc_gtm/target_thread\` (same externalId) with \`draftReply\` set.
+3. \`save_draft({ kind: "reply", platform: "linkedin", targetThreadId, draftText })\`.
+4. \`save_target_thread({ externalId: <same>, draftReply })\`.
 
-One self-contained POST sequence per item. Exact sequence: \`maya-foundation-research\` Phase 2.
+One self-contained tool sequence per item — an \`OK ...\` return = it landed. Exact sequence: \`maya-foundation-research\` Phase 2.
 
 ## Style-exemplar capture (native-voice fidelity)
 
@@ -1934,7 +1924,7 @@ The first ~2 lines show before "see more" — they carry the whole open decision
 
 ## Cost discipline
 
-ScrapeCreators LinkedIn calls bounded by the foundation budget guard. LinkedIn is quality-over-volume — a handful of real engagements beats a wide shallow sweep. 1 main synthesis call.
+\`scrape_creators\` LinkedIn calls bounded by the foundation budget guard. LinkedIn is quality-over-volume — a handful of real engagements beats a wide shallow sweep. 1 main synthesis call.
 
 ## Anti-slop check
 
@@ -1976,13 +1966,13 @@ The flagship operator-facing output. Every morning, the founder gets one Telegra
 
 ## Write triggers (after send)
 
-After Telegram delivery succeeds and \`/lc_gtm/action_logged\` has been posted:
+After Telegram delivery succeeds and \`log_action\` has been called:
 
 1. **memory/{today}.md** — append to \`Today's plan\` section. Lines:
    - Grade emitted (Strong / Thin / Warmup) + lede sentence.
    - Top-priority entity (thread id + URL).
    - Total event count + minute estimate.
-2. POST \`/lc_gtm/memory_written\` (idempotent on a uuid per memory write) so Convex tracks the write in \`gtmMemoryWrites\` and the operator UI can show "Maya wrote to memory at 7:02am".
+2. Call \`record_memory_written({ target, op, triggeredBy })\` so Convex tracks the write in \`gtmMemoryWrites\` and the operator UI can show "Maya wrote to memory at 7:02am".
 
 If the write to memory fails (Fly disk pressure, write_file errored), do NOT block — the brief is already delivered. Log to action log under \`kind: "memory_write_failed"\` so it surfaces in next morning's diagnostics.
 
@@ -2008,7 +1998,7 @@ The single most important thing. Always cited. "Top priority: [URL] — replying
 
 ## Calendar events emitted alongside
 
-Each T1/T2 thread → one \`gtmCalendarEvent\` written via \`/lc_gtm/calendar_proposal\` (or whichever route the populator skill uses). Plus 1-2 framework events:
+Each T1/T2 thread → one \`gtmCalendarEvent\` written via \`propose_calendar\` (or whichever path the populator skill uses). Plus 1-2 framework events:
 
 - **Warmup block** (always, even on warmup days): 10 min — browse the bet subs, upvote a few high-signal threads.
 - **Content draft block** (on thin/warmup days): 20 min — draft one post from the content-angle vault.
@@ -2020,8 +2010,7 @@ Each event description follows the full hands-off recipe template from \`maya-ca
 
 ## Weighting from niche learnings
 
-Before tier-sorting, Maya does an exec curl GET to
-\\\`$CONVEX_SITE_URL/lc_gtm/get_my_niche_learnings\\\` with Bearer auth.
+Before tier-sorting, Maya calls \`get_my_niche_learnings({})\`.
 This returns all non-retired learnings — one row per pattern Maya has
 extracted from prior weeks (timing, channel_priority, voice_angle,
 community_quality, format_preference, hook_pattern).
@@ -2045,19 +2034,17 @@ Run \`maya-output-critic\` over the candidate brief + every calendar event descr
 
 ## Action-log write
 
-After send, POST to \`/lc_gtm/action_logged\`:
+After send, call \`log_action\`:
 
-\`\`\`json
-{
-  "idempotencyKey": "<uuid>",
-  "kind": "morning_brief",
-  "summary": "Strong day — 3 T1, 2 T2, top is [thread]. 85 min total.",
-  "linkedEntities": [
-    { "entityKind": "thread", "entityId": "<gtmTargetThread id>" },
-    { "entityKind": "calendar_event", "entityId": "<gtmCalendarEvent id>" }
+\`\`\`ts
+log_action({
+  kind: "morning_brief",
+  summary: "Strong day — 3 T1, 2 T2, top is [thread]. 85 min total.",
+  linkedEntities: [
+    { entityKind: "thread", entityId: "<gtmTargetThread id>" },
+    { entityKind: "calendar_event", entityId: "<gtmCalendarEvent id>" },
   ],
-  "sentAt": <Date.now()>
-}
+})
 \`\`\`
 
 ## Failure modes
@@ -2090,7 +2077,7 @@ Maya should never silently ship a low-quality output. This skill is the judgment
 ## When to invoke
 
 - BEFORE any \`sendMessage\` to the operator (morning brief, evening recap, weekly review, hot alert, monthly reset, inbound triage response).
-- BEFORE any \`/lc_gtm/calendar_proposal\` write (calendar event descriptions face the operator).
+- BEFORE any \`propose_calendar\` write (calendar event descriptions face the operator).
 - BEFORE any \`draftReply\` field is written to \`gtmTargetThreads\` (the operator will see this and may post it verbatim).
 - NEVER invoke from subagents. They produce; main Maya critiques.
 
@@ -2116,7 +2103,7 @@ Examples of grounded vs ungrounded:
 
 If a claim can't be cited, drop it or escalate ("I think X but I can't ground it — heads-up, not a recommendation").
 
-**Gate 1b — completed-work claims must be verified against the database (NOT narrated).** Any claim that I *did* something — "found 6 threads," "drafts are ready," "research is done," "building your Week 1 calendar," "your calendar's set" — is only allowed if the artifacts ACTUALLY landed: confirm via \`GET $CONVEX_SITE_URL/lc_gtm/get_my_foundation\` that the matching rows exist (\`gtmTargetThreads\`, \`gtmDraftedContent\`, \`gtmCalendarEvents\`). If I'm about to say "found N threads" but only 1 is in \`gtmTargetThreads\`, that fails — fix the number to what's real, or go finish the work before claiming it. **Narrating work that isn't in the database is the cardinal sin here** (it's how the operator ends up with an empty calendar after I said I built one). This applies to progress pings too, not just the synthesis.
+**Gate 1b — completed-work claims must be verified against the database (NOT narrated).** Any claim that I *did* something — "found 6 threads," "drafts are ready," "research is done," "building your Week 1 calendar," "your calendar's set" — is only allowed if the artifacts ACTUALLY landed: confirm via \`get_my_foundation({})\` that the matching rows exist (\`gtmTargetThreads\`, \`gtmDraftedContent\`, \`gtmCalendarEvents\`). If I'm about to say "found N threads" but only 1 is in \`gtmTargetThreads\`, that fails — fix the number to what's real, or go finish the work before claiming it. **Narrating work that isn't in the database is the cardinal sin here** (it's how the operator ends up with an empty calendar after I said I built one). This applies to progress pings too, not just the synthesis.
 
 - ❌ "Building your full Week 1 calendar" when \`gtmCalendarEvents\` is empty.
 - ✅ "Your week's ready — 8 replies + 2 posts on your calendar" (after confirming 10 events landed).
@@ -2215,7 +2202,7 @@ Reddit is the highest-conversion buyer-intent channel for indie products IF the 
 - IF \`icpHypotheses[].locatableOn.channel === "reddit"\` THEN run.
 - IF the operator says "let me post on Reddit" THEN run BEFORE drafting.
 - IF a results-reviewer flags a Reddit post got removed THEN re-run to find a different sub.
-- NEVER from heartbeat. Each invocation spends up to 8 ScrapeCreators calls.
+- NEVER from heartbeat. Each invocation spends up to 8 \`research_reddit\` / \`research_reddit_comments\` calls.
 
 ## Required reads
 
@@ -2281,8 +2268,8 @@ interface RedditDemandReport {
      *  Reddit replies have no separate caption layer — the first line is
      *  the hook. Lead with empathy / answer the ask / soft product mention
      *  only if it genuinely fits (URL per § 8.8 first-comment rule) / end
-     *  with a follow-up question. This is what gets POSTed to
-     *  /lc_gtm/drafted_content, not returned for Maya to write later. */
+     *  with a follow-up question. This is what gets saved via
+     *  save_draft, not returned for Maya to write later. */
     draftReply: string;
     /** When the highest-value reply target is a COMMENT, not the OP.
      *  Populated when comment-tree mining finds a follow-up question
@@ -2341,29 +2328,29 @@ interface RedditDemandReport {
 }
 \`\`\`
 
-## How you deliver — POST per item, don't just return a report
+## How you deliver — call the tool per item, don't just return a report
 
-When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand a \`RedditDemandReport\` back for Maya to act on later. **"POST" = run a curl via your \`exec\` tool** (\`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"\` — the token + URL are in your shell env). You HAVE \`exec\` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH \`replyTarget\` worth a reply, in its own item loop:
+When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand a \`RedditDemandReport\` back for Maya to act on later. You HAVE the typed tools (\`save_target_thread\`, \`save_draft\`, \`research_reddit\`, \`research_reddit_comments\`, …) — call them directly; a finding you describe in text but never save is lost. For EACH \`replyTarget\` worth a reply, in its own item loop:
 
-1. POST \`/lc_gtm/target_thread\` (url, externalId, platform, title, excerpt, currentMetrics, subredditOrCommunity, recommendedAction, \`painQuote\` verbatim, velocityScore, priorityScore) → returns a targetThreadId.
+1. \`save_target_thread({ url, externalId, platform, title, excerpt, currentMetrics, subredditOrCommunity, recommendedAction, painQuote: <verbatim>, velocityScore, priorityScore })\` → returns a targetThreadId.
 2. Compose \`draftReply\` in the operator's voice per the rules above (first line earns the read; § 8.8 first-comment URL rule).
-3. POST \`/lc_gtm/drafted_content\` (kind="reply", platform="reddit", targetThreadId, draftText=draftReply).
-4. Re-POST \`/lc_gtm/target_thread\` (same externalId) with \`draftReply\` set, to keep the row's one-tap deep link in sync.
+3. \`save_draft({ kind: "reply", platform: "reddit", targetThreadId, draftText: <draftReply> })\`.
+4. \`save_target_thread({ externalId: <same>, draftReply })\`, to keep the row's one-tap deep link in sync.
 
-One self-contained POST sequence per thread — the same per-item discipline that makes the foundation strategy POSTs reliable. The \`RedditDemandReport\` schema above stays the shape of your *thinking* per target; the POSTs are how it lands. Exact sequence: \`maya-foundation-research\` Phase 2.
+One self-contained tool sequence per thread — the same per-item discipline that makes the foundation strategy saves reliable. An \`OK ...\` return = it landed. The \`RedditDemandReport\` schema above stays the shape of your *thinking* per target; the tool calls are how it lands. Exact sequence: \`maya-foundation-research\` Phase 2.
 
 ## Failure modes
 
 - **No evidence threads found.** Park. Surface to channel-judge.
 - **All candidate subs are decision-stage.** Return \`replyTargets\` only, \`recommendation: "go"\` constrained to reply-only.
-- **ScrapeCreators Reddit endpoint fails.** Return HTTP status; do NOT degrade to training-data recommendations.
+- **\`research_reddit\` / \`research_reddit_comments\` fails.** Return the tool's \`FAILED ...\` status; do NOT degrade to training-data recommendations.
 - **Domain blacklist detected.** \`domainBlacklisted: true\` + recommend domain change (reddit.md § 6).
 
 ## Comment-tree mining (mandatory for every replyTarget)
 
 For each thread in \`replyTargets\` (and any direct/adjacent \`evidenceCard\`), Maya descends the **full** comment tree — including all nested reply chains — before declaring the reply target. Do not stop at top-level comments. The sharpest buyer language and the highest-intent follow-up questions routinely sit in nested replies that never bubbled to the top.
 
-1. **Fetch the comments endpoint.** Use ScrapeCreators Reddit comments endpoint OR the public \`<thread_url>.json\` (no auth, polite UA). Pull the full tree. If the thread is large, go as deep as needed until you are confident you have seen all subtrees that could contain the five mining kinds below.
+1. **Fetch the comments.** Call \`research_reddit_comments({ url })\` for the full tree. If the thread is large, go as deep as needed until you are confident you have seen all subtrees that could contain the five mining kinds below.
 2. **Mine the full tree** against the 5 kinds at every nesting level:
    - \`buyer_intent\` — a commenter asked a follow-up question that the product directly answers and that OP never addressed. This is typically the **highest-intent reply target in the thread** because the person is still actively seeking a solution. Note the nesting depth; a question buried three levels deep that went unanswered for days is a better target than a top-level comment that already has five replies.
    - \`pain_restatement\` — a comment that re-articulates the buyer's pain in sharper, more visceral language than OP did. Mine the VERBATIM phrasing; it becomes the lede of the drafted reply.
@@ -2377,7 +2364,7 @@ Skipping full-tree descent on direct/adjacent threads is a failure — \`maya-co
 
 ## Cost discipline
 
-Max 8 ScrapeCreators calls: 3 × subreddit/search, 2 × general search, 2 × subreddit details, 1 reserve. Comment-tree mining adds 1 call per thread that gets to T1/T2 (typically 2-3 threads per run, so +2-3 calls). 1 main_maya synthesis. Timeout 20 min.
+Max 8 \`research_reddit\` calls: 3 × subreddit/search, 2 × general search, 2 × subreddit details, 1 reserve. Comment-tree mining adds 1 \`research_reddit_comments\` call per thread that gets to T1/T2 (typically 2-3 threads per run, so +2-3 calls). 1 main_maya synthesis. Timeout 20 min.
 
 ## Anti-slop check
 
@@ -3080,18 +3067,17 @@ This skill itself produces user-facing content (the voice fingerprint may surfac
 
 ## Output
 
-POST scoring results to \`/lc_gtm/update_draft_voice_match\` (Sprint 2.4 endpoint):
+Save scoring results via \`update_draft_voice_match\` (don't pass an idempotency key — it's auto-minted):
 
 \`\`\`ts
-{
-  idempotencyKey: string,           // hash of (draftId + version)
-  draftId: Id<"gtmDraftedContent">,
-  voiceMatchScore: number,          // 0-1
-  slopCriticPassed: boolean,
-  slopCriticFailures?: string[],    // populated when not passed
-  approvalStateUpdate?: "pending_approval" | "rejected",  // routing decision
-  userFeedback?: string,            // when rejected
-}
+update_draft_voice_match({
+  draftId,                          // Id<"gtmDraftedContent">
+  voiceMatchScore,                  // 0-1
+  slopCriticPassed,                 // boolean
+  slopCriticFailures,               // string[], populated when not passed
+  approvalStateUpdate,              // "pending_approval" | "rejected" — routing decision
+  userFeedback,                     // when rejected
+})
 \`\`\`
 
 ## Failure modes
@@ -3137,7 +3123,7 @@ Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks a
 1. **GTM.md** — current bet channels.
 2. **USER.md** — operator goals (signups? eyeballs? specific deal?).
 3. **SOUL.md** — voice contract.
-4. Last 7 days of \`gtmActionLog\` (Maya reads via \`/lc_gtm/get_my_action_log?since_ms=<7d ago>\`).
+4. Last 7 days of \`gtmActionLog\` (Maya reads via \`get_my_action_log({ since_ms: <7d ago> })\`).
 5. Last 7 days of \`gtmPostResults\` (per-channel performance).
 6. Existing \`gtmNicheLearnings\` (don't re-extract what's already known).
 7. **\`maya-results-reviewer/SKILL.md\` § rule 12 (positioning-vs-distribution).** Run the reviewer over the week's underperforming posts (cached reads — no fresh API spend) and read its \`positioningVsDistribution\` rollup. The week-level diagnosis feeds Block 3 below.
@@ -3152,7 +3138,7 @@ As tight as Maya can make it while still useful. Four blocks:
 
 Numbers grounded in \`gtmActionLog\` + \`gtmPostResults\`. If a metric isn't available, say so — don't fabricate.
 
-**North-Star status (always).** Read the North Star off GTM.md (the \`northStarMetric\` / target / deadline) and the real outcome numbers from \`/lc_gtm/get_my_recent_post_results\` + the conversions I've recorded (\`record_conversion\`). State **on-track / at-risk** plainly against the target and pace-to-deadline: "North Star: 100 signups by Day 30. We're at 22 with 18 days left — at-risk; current pace lands ~37. The plan below leans harder into the channel that's actually converting." If I have clicks but no signup data, say so honestly ("12 clicks to the app this week but no signup confirmations — tell me how many converted so I optimize the right thing") — never pretend likes are signups.
+**North-Star status (always).** Read the North Star off GTM.md (the \`northStarMetric\` / target / deadline) and the real outcome numbers from \`get_my_recent_post_results({})\` + the conversions I've recorded (\`record_conversion\`). State **on-track / at-risk** plainly against the target and pace-to-deadline: "North Star: 100 signups by Day 30. We're at 22 with 18 days left — at-risk; current pace lands ~37. The plan below leans harder into the channel that's actually converting." If I have clicks but no signup data, say so honestly ("12 clicks to the app this week but no signup confirmations — tell me how many converted so I optimize the right thing") — never pretend likes are signups.
 
 ### Block 2 — What we learned
 
@@ -3162,7 +3148,7 @@ Numbers grounded in \`gtmActionLog\` + \`gtmPostResults\`. If a metric isn't ava
 - "Hardware-spec hooks on X are flat. Workflow-pain hooks pulled 4x the engagement."
 - "Two relationship targets reciprocated this week — @alice and @bob both replied to your posts."
 
-Each bullet that survives → \`learning_extracted\` POST. Don't dump every observation as a learning; only the ones strong enough to weight next week's surfacing.
+Each bullet that survives → a \`save_learning\` call. Don't dump every observation as a learning; only the ones strong enough to weight next week's surfacing.
 
 ### Block 3 — Strategic shift (if any)
 
@@ -3190,13 +3176,13 @@ The review doesn't just *extract* learnings — it *feeds them forward*. Rebuild
 1. **Re-weight bet channels/angles from the week's outcomes.** Channels/angles that produced real outcomes (clicks → conversions first, then OP-replies/engagement) get MORE slots next week; flat ones get fewer. Read \`maya-calendar-populator/SKILL.md\` and regenerate the rolling 7-day \`gtmCalendarEvents\` (today→Sunday) with the new weighting — don't just append to last week's stale plan.
 2. **Counter-overfitting discipline (hard rule).** Do NOT swing the whole plan on one week or one viral post. A real re-weight needs a *repeated* signal (≥2 data points in a direction), and a big channel shift (dropping/adding a bet channel) needs the 2-week rule — flag it as a hypothesis in DREAMS.md first, act when it's confirmed. One 200-upvote thread is not a format.
 3. **Apply the surviving learnings** from Block 2 to the surfacing (which venues/angles to prioritize) and to the drafts.
-4. **Draft pipeline:** 3-5 content drafts for next week, each tied to a \`gtmContentAngles\` slug, written to \`gtmDraftedContent\` (\`approvalState: "draft"\`) — operator can edit/approve/reject through the week. Each draft: angle slug, target channel, ship day, opening line. **Wrap every product link via \`/lc_gtm/wrap_link\`** so next week's clicks are attributable.
+4. **Draft pipeline:** 3-5 content drafts for next week, each tied to a \`gtmContentAngles\` slug, saved via \`save_draft\` (\`approvalState: "draft"\`) — operator can edit/approve/reject through the week. Each draft: angle slug, target channel, ship day, opening line. **Wrap every product link via \`wrap_link({ destinationUrl })\`** so next week's clicks are attributable.
 
 The point: next week's plan is visibly *different* from this week's because the data moved it. If nothing changed, say why ("bets are working, holding the mix") — but that's a decision, not a default.
 
 ## What this review writes
 
-POST to \`/lc_gtm/action_logged\` with kind=\`weekly_review\`. Plus POST for each \`learning_extracted\`. Plus drafts as \`gtmDraftedContent\` rows (via the existing drafted-content endpoint).
+Call \`log_action({ kind: "weekly_review", ... })\`. Plus a \`save_learning\` call for each surviving learning. Plus drafts as \`gtmDraftedContent\` rows via \`save_draft\`.
 
 ## DREAMS.md write triggers (end of weekly review)
 
@@ -3205,12 +3191,12 @@ Weekly review is the canonical write window for \`DREAMS.md\`. After the review 
 1. **Open hypotheses** — scan the week for patterns I noticed but lack ≥3 evidence points for. Each hypothesis gets one row with:
    - Date emitted.
    - Hunch in one sentence.
-   - The evidence threshold I'd need before promoting it to a \`learning_extracted\` (e.g., "2 more weeks of r/MacStudio outperforming r/LocalLLaMA at >1.5x reply rate").
+   - The evidence threshold I'd need before promoting it to a \`save_learning\` call (e.g., "2 more weeks of r/MacStudio outperforming r/LocalLLaMA at >1.5x reply rate").
 2. **Drift watch** — anything I'm worried might be drifting without proof yet (operator engagement dropping, voice shifts in the niche, ROI tilts).
 3. **Counter-overfitting flags** — single viral hits or one-week wins I should NOT generalize from. "r/X had a single 200-upvote thread this week — not a format, not a learning."
-4. **Graduations + retirements** — when a previously-open hypothesis just met its evidence threshold, strike it from DREAMS.md and write the corresponding \`learning_extracted\`. When a hypothesis got disconfirmed, strike with \`~~~~ — disconfirmed YYYY-MM-DD\`.
+4. **Graduations + retirements** — when a previously-open hypothesis just met its evidence threshold, strike it from DREAMS.md and call \`save_learning\` for it. When a hypothesis got disconfirmed, strike with \`~~~~ — disconfirmed YYYY-MM-DD\`.
 
-After each DREAMS.md write, POST \`/lc_gtm/memory_written\` (idempotent uuid) so the operator UI can show "Maya updated DREAMS.md — 2 new hypotheses, 1 retired".
+After each DREAMS.md write, call \`record_memory_written({ target, op, triggeredBy })\` so the operator UI can show "Maya updated DREAMS.md — 2 new hypotheses, 1 retired".
 
 If a DREAMS.md write fails (filesystem error), do NOT block the weekly review — log \`kind: "memory_write_failed"\` to action log.
 
@@ -3278,14 +3264,14 @@ For technical / indie / B2B SaaS / dev-tool products, X is the highest-leverage 
 4. **x.md rule 10 reply-target quality bar.** OP tweet must show genuine human engagement, OP must be an active real account with a real following, and the tweet must be recent enough that a reply still surfaces to the OP's notifications. Skip bots, obvious spam, accounts with no real following.
 5. **Buyer-intent over vanity engagement.** A tweet with modest likes that describes the exact problem this product solves — "I've tried six tools for this and nothing works", "is there anything that does X?", "what do you use for Y?" — outranks a high-like tweet celebrating a win with no purchase signal. Judge intent first, engagement second.
 6. **Underserved tweets over crowded threads.** Prefer tweets that are getting real traction but have few existing replies — your reply stands out, the OP is more likely to see and respond, the conversation is still open. A tweet already buried under 40 replies from founders is a worse bet than a newer tweet with 3 replies and clear momentum. This is a judgment call, not a threshold.
-7. **Velocity + OP-active window.** Prefer tweets whose engagement is still building — likes and replies still accumulating — over tweets that peaked hours ago and went quiet. Stronger signal still: the OP is actively replying to others in that thread right now. A live conversation is worth far more than a stalled one. Use twitterapi.io advanced_search cursor pagination to go deeper when the first page yields few high-quality targets; don't stop at page one.
+7. **Velocity + OP-active window.** Prefer tweets whose engagement is still building — likes and replies still accumulating — over tweets that peaked hours ago and went quiet. Stronger signal still: the OP is actively replying to others in that thread right now. A live conversation is worth far more than a stalled one. Use \`research_x\` cursor pagination (pass the returned \`cursor\`) to go deeper when the first page yields few high-quality targets; don't stop at page one.
 8. **x.md rule 9 first-reply NO-URL.** No URL in first reply. URL goes in follow-up only if OP engages back.
 9. **Three-paragraph reply structure required.** Validation → value-add → soft mention. The soft mention in paragraph 3 must leave a genuine, low-friction path to try the product when it's a natural fit — not a pitch, a door left open. Product mention in paragraph 1 = regenerate.
 10. **List composition.** 20-40 accounts in niche, posting weekly+. From x.md § 1 + ScrapeCreators discovery. Do NOT auto-follow.
 11. **Hook modeling — include winning replies.** Pull 3-5 high-engagement hooks from the 20-40 target accounts; map to x.md § 5 (1-15). Crucially, also mine the replies those accounts wrote that performed well — the founder-voice pattern that lands in this niche shows up in successful replies, not just original posts. Extract reply patterns (how they open, how they disagree, how they validate, what makes readers click "see more") and use those patterns to inform draftReply. Reject hooks that match anti-patterns (§ 7) or hype-language (rule 11).
 12. **Black-Magic platform-risk reminder.** IF operator's product depends on free X API access THEN \`platformRiskWarning: true\` (x.md § 11 Failure 4). State this plainly: X has unilaterally repriced API access multiple times; any strategy that routes users from X into a product that itself needs the X API carries compounded dependency risk.
 13. **Account silence recovery.** IF \`lastPostAgeDays > 7\` THEN first action = value-add reply, not build-update post.
-14. **Citation-firewall on numbers.** Every number Maya quotes must come from a fresh ScrapeCreators call or operator-confirmed state.
+14. **Citation-firewall on numbers.** Every number Maya quotes must come from a fresh \`research_x\` / \`scrape_creators\` call or operator-confirmed state.
 15. **Style-exemplar capture (native-voice fidelity — Sprint I).** While building the List and modeling hooks, capture **5-10 real, top-performing, HUMAN-written native posts AND replies verbatim** from the niche — the ones that actually landed (genuine engagement, real accounts, recent). These become few-shot **voice/register anchors** for \`maya-voice-matcher\` and draft generation: they encode how a real founder in *this niche* writes on X — sentence length and burstiness, lowercase habits, how they open a reply, how they take a stance. Capture replies specifically, not just polished posts — the native reply rhythm is where most acquisition happens (rule 11). Match cadence/vocab/length/format; **never copy their content.** Skip anything that reads templated/AI. The honest framing: there's no X AI-detector to dodge; the enemy is generic replies the niche scrolls past. Emit in \`styleExemplars[]\`.
 16. **X caption craft — the post IS the caption (x.md).** On X there's no separate caption layer: the tweet/reply text is the whole thing. Make it earn the "see more" tap before the fold — strong first line, concrete over abstract, ≥1 number where it fits (rule on number-presence). No hype-emoji clusters, no "a thread 🧵👇" theater unless the niche genuinely uses it. URL never in the first reply (rule 8). Surface this in \`captionCraft\`.
 
@@ -3302,9 +3288,9 @@ When building \`searchQueries\`, weight heavily toward problem-statement and too
 
 These surface people actively in the buying mindset — describing the problem, asking for recommendations, expressing frustration with alternatives. They are the highest-value reply targets. Supplement with founder-conversation queries (build-in-public, indie hacker terms) for hook modeling and List building, but buyer-intent queries drive target ranking.
 
-When the first twitterapi.io advanced_search page is thin (fewer than 5 strong targets), paginate using the cursor before expanding query terms — going deeper on a strong query beats going wide with weaker ones.
+When the first \`research_x\` page is thin (fewer than 5 strong targets), paginate using the returned \`cursor\` before expanding query terms — going deeper on a strong query beats going wide with weaker ones.
 
-**Mine the conversation, not just the original tweet (X's value is the replies).** Once a strong tweet surfaces, pull its reply thread with \`query=conversation_id:<tweetId>\` — the replies are where buyers restate the pain in sharper words and name the competitors they're escaping, and an unanswered reply-question is often a higher-intent target than the OP. Use \`query=to:<handle>\` to read who's actively replying to a target account, and \`query=quoted_tweet_id:<tweetId>\` (or \`url:<tweetUrl>\`) to see who's quote-tweeting a take in the niche. A reply-target's URL must be the reply/tweet permalink the quote came from, never the profile URL (citation precision).
+**Mine the conversation, not just the original tweet (X's value is the replies).** Once a strong tweet surfaces, pull its reply thread with \`research_x({ query: "conversation_id:<tweetId>" })\` — the replies are where buyers restate the pain in sharper words and name the competitors they're escaping, and an unanswered reply-question is often a higher-intent target than the OP. Use \`research_x({ query: "to:<handle>" })\` to read who's actively replying to a target account, and \`research_x({ query: "quoted_tweet_id:<tweetId>" })\` (or \`url:<tweetUrl>\`) to see who's quote-tweeting a take in the niche. A reply-target's URL must be the reply/tweet permalink the quote came from, never the profile URL (citation precision).
 
 ## Output schema
 
@@ -3374,16 +3360,16 @@ interface XResearchReport {
 }
 \`\`\`
 
-## How you deliver — POST per item, don't just return a report
+## How you deliver — call the tool per item, don't just return a report
 
-When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand an \`XResearchReport\` back for Maya to act on later. **"POST" = run a curl via your \`exec\` tool** (\`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"\` — token + URL are in your shell env). You HAVE \`exec\` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH \`replyTarget\` worth a reply, in its own item loop:
+When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand an \`XResearchReport\` back for Maya to act on later. You HAVE the typed tools (\`save_target_thread\`, \`save_draft\`, \`research_x\`, …) — call them directly; a finding you describe in text but never save is lost. For EACH \`replyTarget\` worth a reply, in its own item loop:
 
-1. POST \`/lc_gtm/target_thread\` (url=tweetUrl, externalId=tweet id, platform="x", excerpt=opText, currentMetrics from likes/replies, recommendedAction, \`painQuote\` verbatim, velocityScore, priorityScore) → returns a targetThreadId.
+1. \`save_target_thread({ url: <tweetUrl>, externalId: <tweet id>, platform: "x", excerpt: <opText>, currentMetrics: <from likes/replies>, recommendedAction, painQuote: <verbatim>, velocityScore, priorityScore })\` → returns a targetThreadId.
 2. Compose the reply by joining your \`draftReply.p1 / p2 / p3SoftMention\` into the operator-voice reply (URL in follow-up only, rule 8; three-paragraph structure, rule 9).
-3. POST \`/lc_gtm/drafted_content\` (kind="reply", platform="x", targetThreadId, draftText=the joined reply).
-4. Re-POST \`/lc_gtm/target_thread\` (same externalId) with \`draftReply\` set, to keep the row's one-tap deep link in sync.
+3. \`save_draft({ kind: "reply", platform: "x", targetThreadId, draftText: <the joined reply> })\`.
+4. \`save_target_thread({ externalId: <same>, draftReply })\`, to keep the row's one-tap deep link in sync.
 
-One self-contained POST sequence per tweet — the same per-item discipline that makes the foundation strategy POSTs reliable. The \`XResearchReport\` schema above stays the shape of your *thinking* per target; the POSTs are how it lands. Exact sequence: \`maya-foundation-research\` Phase 2.
+One self-contained tool sequence per tweet — the same per-item discipline that makes the foundation strategy saves reliable. An \`OK ...\` return = it landed. The \`XResearchReport\` schema above stays the shape of your *thinking* per target; the tool calls are how it lands. Exact sequence: \`maya-foundation-research\` Phase 2.
 
 ## Failure modes
 
@@ -3391,7 +3377,7 @@ One self-contained POST sequence per tweet — the same per-item discipline that
 - **Niche has no English-language activity on X.** Park. Surface to channel-judge.
 - **All reply targets are from other founders.** Skip-launch risk. Re-query with sharpened buyer-intent probes (see Buyer-intent query strategy above).
 - **All top results are high-like but zero purchase signal.** Shift query strategy toward problem-statement forms before giving up on the channel.
-- **ScrapeCreators X endpoints fail.** Fall back to \`mvanhorn/xai\` Grok search if budget allows. Cap Grok at 5 calls/user/day.
+- **\`research_x\` / \`scrape_creators\` X reads fail.** Fall back to \`mvanhorn/xai\` Grok search if budget allows. Cap Grok at 5 calls/user/day.
 
 ## Cost discipline
 
@@ -3421,15 +3407,15 @@ Grounded in ScrapeCreators (the read layer) and PLAYBOOK.md (the launch doctrine
 - During the foundation pass when YouTube is a candidate channel (product has a real demo or teachable depth).
 - Monthly refresh, or when the channel-strategy judge wants more YouTube evidence.
 
-## Read layer — ScrapeCreators YouTube (curl, never raw youtube.com)
+## Read layer — ScrapeCreators YouTube (via \`scrape_creators\`, never raw youtube.com)
 
-All public-data, \`x-api-key: $SCRAPECREATORS_API_KEY\`, \`https://api.scrapecreators.com/v1/youtube/...\`:
+All public-data, via \`scrape_creators({ path: "/v1/youtube/...", query: { ... } })\`:
 
-- \`/channel\`, \`/channel-videos\`, \`/channel/shorts\` — map who's already making content for this niche.
-- \`/video\` (details/stats — views/likes/comments) + \`/video/transcript\` — **transcripts are gold**: mine what creators actually say + how the audience reacts.
-- \`/video/comments\` (~1k top + ~7k newer) + \`/comment/replies\` — full comment-tree mining for buyer language, pain restatements, "where do I get this", competitor mentions.
-- \`/search\` + \`/search/hashtag\` — find the niche's videos/channels/hashtags.
-- \`/shorts/trending\` — current Shorts formats/sounds worth riding.
+- \`/v1/youtube/channel\`, \`/v1/youtube/channel-videos\`, \`/v1/youtube/channel/shorts\` — map who's already making content for this niche.
+- \`/v1/youtube/video\` (details/stats — views/likes/comments) + \`/v1/youtube/video/transcript\` — **transcripts are gold**: mine what creators actually say + how the audience reacts.
+- \`/v1/youtube/video/comments\` (~1k top + ~7k newer) + \`/v1/youtube/comment/replies\` — full comment-tree mining for buyer language, pain restatements, "where do I get this", competitor mentions.
+- \`/v1/youtube/search\` + \`/v1/youtube/search/hashtag\` — find the niche's videos/channels/hashtags.
+- \`/v1/youtube/shorts/trending\` — current Shorts formats/sounds worth riding.
 
 Public metrics only — NOT Studio analytics (watch-time/retention/CTR are owner-only; infer from public views + flag as soft, per the Tier-2 caveat).
 
@@ -3443,7 +3429,7 @@ Public metrics only — NOT Studio analytics (watch-time/retention/CTR are owner
 
 ## Output
 
-POST findings as target threads (\`/lc_gtm/target_thread\`, platform \`youtube\`) + channel-scorecard evidence + style exemplars + caption craft, same shapes as the other per-channel researchers. **Caption/title craft:** the YouTube **title is the CTR lever** (the gate to everything) — propose title options; the description carries SEO + the wrapped product link (in description, with timestamps). Shorts: hook in the first second.
+Save findings as target threads (\`save_target_thread({ platform: "youtube", ... })\`) + channel-scorecard evidence + style exemplars + caption craft, same shapes as the other per-channel researchers — call the tool — a finding you describe in text but never save is lost. **Caption/title craft:** the YouTube **title is the CTR lever** (the gate to everything) — propose title options; the description carries SEO + the wrapped product link (in description, with timestamps). Shorts: hook in the first second.
 
 ## Discipline
 

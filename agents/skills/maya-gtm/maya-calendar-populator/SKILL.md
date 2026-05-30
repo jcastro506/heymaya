@@ -13,7 +13,7 @@ Without this skill, the target list lives in the database and nobody acts on it.
 
 ## When to invoke
 
-- IF deep-research subagents have just completed AND `/lc_gtm/get_my_target_threads` returned >0 rows THEN run. This is the canonical first invocation, right at the end of FIRST WAKE.
+- IF deep-research subagents have just completed AND `get_my_target_threads({})` returned >0 rows THEN run. This is the canonical first invocation, right at the end of FIRST WAKE.
 - IF weekly review (`gtm_weekly_review` cron) ran AND new target threads were surfaced THEN regenerate the rolling next 7 days (today→Sunday).
 - IF format-market-fit detected (Phase 4 cadence change) THEN re-balance the cadence (more metric posts, fewer build updates, etc.).
 - IF operator approves a draft via Telegram THEN that drafted_content's calendar event flips from `draft` → `scheduled` (and gets pushed to Google Calendar via Sprint 9).
@@ -25,8 +25,8 @@ Without this skill, the target list lives in the database and nobody acts on it.
 3. **APP.md + USER.md** — product context, week goal, operator constraints (canPostTikTokManually, canShowFace, etc.).
 4. **GTM.md** — active channel picks. Only generates calendar events for primary + secondary channels.
 5. **Per-platform playbook**: `playbook/reddit.md`, `playbook/x.md`, etc. for time-window + frequency rules per channel.
-6. **Target list** via `GET /lc_gtm/get_my_target_threads` — the raw material. Top 30 by priorityScore.
-7. **Optionally** `GET /lc_gtm/get_my_target_accounts` for follow-and-engage events.
+6. **Target list** via `get_my_target_threads({})` — the raw material. Top 30 by priorityScore.
+7. **Optionally** `get_my_target_accounts({})` for follow-and-engage events.
 
 ## Decision rules
 
@@ -189,20 +189,19 @@ When a `hard_launch_anchor` is published, auto-seed the **72h engagement window*
 
 ## Output
 
-POST events one-at-a-time to `/lc_gtm/calendar_proposal` per the TOOLS.md spec. Convex stores them as `draft` — it does NOT compose, lay out, or time-slot them. **All of that is your job here.** Each event must include:
+Call `propose_calendar` per the TOOLS.md spec (one call carries the events array; don't pass an idempotency key — it's auto-minted). Convex stores them as `draft` — it does NOT compose, lay out, or time-slot them. **All of that is your job here.** Shape:
 
 ```ts
-{
-  idempotencyKey: string,            // hash of (kind + startsAtMs + targetThreadId)
-  researchJobId: string,             // current job
+propose_calendar({
+  researchJobId,                     // current job
   events: [{
-    title: string,                   // operator-facing, voice-contract clean
-    description: string,             // the FULL hands-off recipe — see below
-    startsAtMs: number,
-    endsAtMs: number,
+    title,                           // operator-facing, voice-contract clean
+    description,                     // the FULL hands-off recipe — see below
+    startsAtMs,
+    endsAtMs,
     kind: "warmup_block" | "engagement_block" | "reply_window" | "soft_launch_post" | "hard_launch_anchor" | "first_50_dms" | "weekly_review",
   }],
-}
+})
 ```
 
 ### The description IS a hands-off recipe (the operator has a day job)

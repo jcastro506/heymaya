@@ -16,15 +16,15 @@ Grounded in ScrapeCreators (the read layer) and PLAYBOOK.md (the launch doctrine
 - During the foundation pass when YouTube is a candidate channel (product has a real demo or teachable depth).
 - Monthly refresh, or when the channel-strategy judge wants more YouTube evidence.
 
-## Read layer — ScrapeCreators YouTube (curl, never raw youtube.com)
+## Read layer — ScrapeCreators YouTube (via `scrape_creators`, never raw youtube.com)
 
-All public-data, `x-api-key: $SCRAPECREATORS_API_KEY`, `https://api.scrapecreators.com/v1/youtube/...`:
+All public-data, via `scrape_creators({ path: "/v1/youtube/...", query: { ... } })`:
 
-- `/channel`, `/channel-videos`, `/channel/shorts` — map who's already making content for this niche.
-- `/video` (details/stats — views/likes/comments) + `/video/transcript` — **transcripts are gold**: mine what creators actually say + how the audience reacts.
-- `/video/comments` (~1k top + ~7k newer) + `/comment/replies` — full comment-tree mining for buyer language, pain restatements, "where do I get this", competitor mentions.
-- `/search` + `/search/hashtag` — find the niche's videos/channels/hashtags.
-- `/shorts/trending` — current Shorts formats/sounds worth riding.
+- `/v1/youtube/channel`, `/v1/youtube/channel-videos`, `/v1/youtube/channel/shorts` — map who's already making content for this niche.
+- `/v1/youtube/video` (details/stats — views/likes/comments) + `/v1/youtube/video/transcript` — **transcripts are gold**: mine what creators actually say + how the audience reacts.
+- `/v1/youtube/video/comments` (~1k top + ~7k newer) + `/v1/youtube/comment/replies` — full comment-tree mining for buyer language, pain restatements, "where do I get this", competitor mentions.
+- `/v1/youtube/search` + `/v1/youtube/search/hashtag` — find the niche's videos/channels/hashtags.
+- `/v1/youtube/shorts/trending` — current Shorts formats/sounds worth riding.
 
 Public metrics only — NOT Studio analytics (watch-time/retention/CTR are owner-only; infer from public views + flag as soft, per the Tier-2 caveat).
 
@@ -38,7 +38,7 @@ Public metrics only — NOT Studio analytics (watch-time/retention/CTR are owner
 
 ## Output
 
-POST findings as target threads (`/lc_gtm/target_thread`, platform `youtube`) + channel-scorecard evidence + style exemplars + caption craft, same shapes as the other per-channel researchers. **Caption/title craft:** the YouTube **title is the CTR lever** (the gate to everything) — propose title options; the description carries SEO + the wrapped product link (in description, with timestamps). Shorts: hook in the first second.
+Save findings as target threads (`save_target_thread({ platform: "youtube", ... })`) + channel-scorecard evidence + style exemplars + caption craft, same shapes as the other per-channel researchers — call the tool — a finding you describe in text but never save is lost. **Caption/title craft:** the YouTube **title is the CTR lever** (the gate to everything) — propose title options; the description carries SEO + the wrapped product link (in description, with timestamps). Shorts: hook in the first second.
 
 ## Discipline
 

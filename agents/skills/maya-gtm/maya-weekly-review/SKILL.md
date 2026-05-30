@@ -25,7 +25,7 @@ Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks a
 1. **GTM.md** — current bet channels.
 2. **USER.md** — operator goals (signups? eyeballs? specific deal?).
 3. **SOUL.md** — voice contract.
-4. Last 7 days of `gtmActionLog` (Maya reads via `/lc_gtm/get_my_action_log?since_ms=<7d ago>`).
+4. Last 7 days of `gtmActionLog` (Maya reads via `get_my_action_log({ since_ms: <7d ago> })`).
 5. Last 7 days of `gtmPostResults` (per-channel performance).
 6. Existing `gtmNicheLearnings` (don't re-extract what's already known).
 7. **`maya-results-reviewer/SKILL.md` § rule 12 (positioning-vs-distribution).** Run the reviewer over the week's underperforming posts (cached reads — no fresh API spend) and read its `positioningVsDistribution` rollup. The week-level diagnosis feeds Block 3 below.
@@ -40,7 +40,7 @@ As tight as Maya can make it while still useful. Four blocks:
 
 Numbers grounded in `gtmActionLog` + `gtmPostResults`. If a metric isn't available, say so — don't fabricate.
 
-**North-Star status (always).** Read the North Star off GTM.md (the `northStarMetric` / target / deadline) and the real outcome numbers from `/lc_gtm/get_my_recent_post_results` + the conversions I've recorded (`record_conversion`). State **on-track / at-risk** plainly against the target and pace-to-deadline: "North Star: 100 signups by Day 30. We're at 22 with 18 days left — at-risk; current pace lands ~37. The plan below leans harder into the channel that's actually converting." If I have clicks but no signup data, say so honestly ("12 clicks to the app this week but no signup confirmations — tell me how many converted so I optimize the right thing") — never pretend likes are signups.
+**North-Star status (always).** Read the North Star off GTM.md (the `northStarMetric` / target / deadline) and the real outcome numbers from `get_my_recent_post_results({})` + the conversions I've recorded (`record_conversion`). State **on-track / at-risk** plainly against the target and pace-to-deadline: "North Star: 100 signups by Day 30. We're at 22 with 18 days left — at-risk; current pace lands ~37. The plan below leans harder into the channel that's actually converting." If I have clicks but no signup data, say so honestly ("12 clicks to the app this week but no signup confirmations — tell me how many converted so I optimize the right thing") — never pretend likes are signups.
 
 ### Block 2 — What we learned
 
@@ -50,7 +50,7 @@ Numbers grounded in `gtmActionLog` + `gtmPostResults`. If a metric isn't availab
 - "Hardware-spec hooks on X are flat. Workflow-pain hooks pulled 4x the engagement."
 - "Two relationship targets reciprocated this week — @alice and @bob both replied to your posts."
 
-Each bullet that survives → `learning_extracted` POST. Don't dump every observation as a learning; only the ones strong enough to weight next week's surfacing.
+Each bullet that survives → a `save_learning` call. Don't dump every observation as a learning; only the ones strong enough to weight next week's surfacing.
 
 ### Block 3 — Strategic shift (if any)
 
@@ -78,13 +78,13 @@ The review doesn't just *extract* learnings — it *feeds them forward*. Rebuild
 1. **Re-weight bet channels/angles from the week's outcomes.** Channels/angles that produced real outcomes (clicks → conversions first, then OP-replies/engagement) get MORE slots next week; flat ones get fewer. Read `maya-calendar-populator/SKILL.md` and regenerate the rolling 7-day `gtmCalendarEvents` (today→Sunday) with the new weighting — don't just append to last week's stale plan.
 2. **Counter-overfitting discipline (hard rule).** Do NOT swing the whole plan on one week or one viral post. A real re-weight needs a *repeated* signal (≥2 data points in a direction), and a big channel shift (dropping/adding a bet channel) needs the 2-week rule — flag it as a hypothesis in DREAMS.md first, act when it's confirmed. One 200-upvote thread is not a format.
 3. **Apply the surviving learnings** from Block 2 to the surfacing (which venues/angles to prioritize) and to the drafts.
-4. **Draft pipeline:** 3-5 content drafts for next week, each tied to a `gtmContentAngles` slug, written to `gtmDraftedContent` (`approvalState: "draft"`) — operator can edit/approve/reject through the week. Each draft: angle slug, target channel, ship day, opening line. **Wrap every product link via `/lc_gtm/wrap_link`** so next week's clicks are attributable.
+4. **Draft pipeline:** 3-5 content drafts for next week, each tied to a `gtmContentAngles` slug, saved via `save_draft` (`approvalState: "draft"`) — operator can edit/approve/reject through the week. Each draft: angle slug, target channel, ship day, opening line. **Wrap every product link via `wrap_link({ destinationUrl })`** so next week's clicks are attributable.
 
 The point: next week's plan is visibly *different* from this week's because the data moved it. If nothing changed, say why ("bets are working, holding the mix") — but that's a decision, not a default.
 
 ## What this review writes
 
-POST to `/lc_gtm/action_logged` with kind=`weekly_review`. Plus POST for each `learning_extracted`. Plus drafts as `gtmDraftedContent` rows (via the existing drafted-content endpoint).
+Call `log_action({ kind: "weekly_review", ... })`. Plus a `save_learning` call for each surviving learning. Plus drafts as `gtmDraftedContent` rows via `save_draft`.
 
 ## DREAMS.md write triggers (end of weekly review)
 
@@ -93,12 +93,12 @@ Weekly review is the canonical write window for `DREAMS.md`. After the review me
 1. **Open hypotheses** — scan the week for patterns I noticed but lack ≥3 evidence points for. Each hypothesis gets one row with:
    - Date emitted.
    - Hunch in one sentence.
-   - The evidence threshold I'd need before promoting it to a `learning_extracted` (e.g., "2 more weeks of r/MacStudio outperforming r/LocalLLaMA at >1.5x reply rate").
+   - The evidence threshold I'd need before promoting it to a `save_learning` call (e.g., "2 more weeks of r/MacStudio outperforming r/LocalLLaMA at >1.5x reply rate").
 2. **Drift watch** — anything I'm worried might be drifting without proof yet (operator engagement dropping, voice shifts in the niche, ROI tilts).
 3. **Counter-overfitting flags** — single viral hits or one-week wins I should NOT generalize from. "r/X had a single 200-upvote thread this week — not a format, not a learning."
-4. **Graduations + retirements** — when a previously-open hypothesis just met its evidence threshold, strike it from DREAMS.md and write the corresponding `learning_extracted`. When a hypothesis got disconfirmed, strike with `~~~~ — disconfirmed YYYY-MM-DD`.
+4. **Graduations + retirements** — when a previously-open hypothesis just met its evidence threshold, strike it from DREAMS.md and call `save_learning` for it. When a hypothesis got disconfirmed, strike with `~~~~ — disconfirmed YYYY-MM-DD`.
 
-After each DREAMS.md write, POST `/lc_gtm/memory_written` (idempotent uuid) so the operator UI can show "Maya updated DREAMS.md — 2 new hypotheses, 1 retired".
+After each DREAMS.md write, call `record_memory_written({ target, op, triggeredBy })` so the operator UI can show "Maya updated DREAMS.md — 2 new hypotheses, 1 retired".
 
 If a DREAMS.md write fails (filesystem error), do NOT block the weekly review — log `kind: "memory_write_failed"` to action log.
 

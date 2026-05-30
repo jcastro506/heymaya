@@ -22,10 +22,10 @@ For dev-tools, infra, AI, and technical B2B products, Hacker News is a high-cred
 2. `USER.md` — operator voice + whether they can write a credible technical post.
 3. `MEMORY.md` — prior HN attempts + what landed.
 
-## API — discovery + the full comment tree (free, no auth)
+## Read tools — discovery + the full comment tree
 
-- **Discovery:** `https://hn.algolia.com/api/v1/search?query=<urlencoded>&tags=story` — also `&tags=show_hn`, `&tags=ask_hn`, `&tags=comment`. Sort by recency with `/search_by_date`. Use buyer-intent phrasings, not just the product category.
-- **Comment-tree descent (mandatory for every reply target):** `https://hn.algolia.com/api/v1/items/<objectID>` returns the FULL nested tree — recurse `children[]` all the way down. The buyer restating the pain, naming the competitor they're escaping, or rejecting a workaround is usually *deep* in the tree, not in the top comment. The story permalink is `https://news.ycombinator.com/item?id=<objectID>`; an individual comment's permalink is `https://news.ycombinator.com/item?id=<commentId>` — cite the COMMENT id when the quote is a comment (citation precision).
+- **Discovery:** `research_hn({ query, tags? })` — tags can be `"story"`, `"show_hn"`, `"ask_hn"`, `"comment"`. Use buyer-intent phrasings, not just the product category.
+- **Comment-tree descent (mandatory for every reply target):** `research_hn_item({ objectId })` returns the FULL nested tree — recurse `children[]` all the way down. The buyer restating the pain, naming the competitor they're escaping, or rejecting a workaround is usually *deep* in the tree, not in the top comment. The story permalink is `https://news.ycombinator.com/item?id=<objectID>`; an individual comment's permalink is `https://news.ycombinator.com/item?id=<commentId>` — cite the COMMENT id when the quote is a comment (citation precision).
 
 ## Decision rules
 
@@ -36,16 +36,16 @@ For dev-tools, infra, AI, and technical B2B products, Hacker News is a high-cred
 5. **Show HN is one-shot — gate it hard.** NEVER queue a Show HN launch until the account has real history (not days old) AND there's a demoable artifact AND the operator has spent soft-launch time. Best windows: Tue/Wed/Thu 14:00–17:00 UTC (7–10am PT). Breakout threshold ~30 points; below that it's invisible. In week 1, HN is **comment/reply-only** — engage on others' Show HN / Ask HN where the operator's expertise applies; save the one-shot for when it can break out.
 6. **72h window.** If a Show HN does go, reply to every comment + every question in the first 72h — post-and-pray is the #1 HN launch failure.
 
-## How you deliver — POST per item, don't just return a report
+## How you deliver — call the tool per item, don't just return a report
 
-When invoked as a Phase-2 demand worker, you own each reply target end to end. **"POST" = run a curl via your `exec` tool** (`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"` — token + URL are in your shell env). You HAVE `exec` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH thread worth a reply, in its own item loop:
+When invoked as a Phase-2 demand worker, you own each reply target end to end. You HAVE the typed tools (`save_target_thread`, `save_draft`, `research_hn`, …) — call them directly; a finding you describe in text but never save is lost. For EACH thread worth a reply, in its own item loop:
 
-1. POST `/lc_gtm/target_thread` (platform="hn", url=the item permalink, externalId=objectID, title, excerpt verbatim, currentMetrics from points/comments, recommendedAction, `painQuote` verbatim from the comment/story that proves intent, postedAt, velocityScore, priorityScore, plus `commentTreeSummary.mineableComments[]` from the descent) → returns a targetThreadId.
+1. `save_target_thread({ platform: "hn", url: <the item permalink>, externalId: <objectID>, title, excerpt: <verbatim>, currentMetrics: <from points/comments>, recommendedAction, painQuote: <verbatim from the comment/story that proves intent>, postedAt, velocityScore, priorityScore, commentTreeSummary: { mineableComments: [...] } })` → returns a targetThreadId.
 2. Compose the reply in the operator's voice — substantive + technical first, product mention only if it genuinely answers the question, no hype. HN replies have no URL-prefill; the operator pastes.
-3. POST `/lc_gtm/drafted_content` (kind="reply", platform="hn", targetThreadId, draftText).
-4. Re-POST `/lc_gtm/target_thread` (same externalId) with `draftReply` set.
+3. `save_draft({ kind: "reply", platform: "hn", targetThreadId, draftText })`.
+4. `save_target_thread({ externalId: <same>, draftReply: <the reply> })`.
 
-One self-contained POST sequence per thread — the same per-item discipline that makes the foundation strategy POSTs reliable. Exact sequence: `maya-foundation-research` Phase 2.
+One self-contained tool sequence per thread — the same per-item discipline that makes the foundation strategy saves reliable. An `OK ...` return = it landed. Exact sequence: `maya-foundation-research` Phase 2.
 
 ## Style-exemplar capture (native-voice fidelity)
 
@@ -58,12 +58,12 @@ On a story/Show HN, the **title** carries the whole click decision: concrete, sp
 ## Failure modes
 
 - **No buyer-intent threads found.** Park HN; surface to channel-judge. Don't pad with low-intent stories.
-- **Algolia returns thin.** Broaden phrasings + try `tags=comment` (search inside comments) before parking.
+- **`research_hn` returns thin.** Broaden phrasings + try `tags: "comment"` (search inside comments) before parking.
 - **Product is consumer/non-technical.** HN is likely the wrong venue — say so plainly and demote it.
 
 ## Cost discipline
 
-0 paid API — Algolia HN is free. Bounded by the foundation budget guard, not a fixed call count: descend as deep as the comment tree warrants to be confident, then stop. 1 main synthesis call.
+0 paid API — HN research is free. Bounded by the foundation budget guard, not a fixed call count: descend as deep as the comment tree warrants to be confident, then stop. 1 main synthesis call.
 
 ## Anti-slop check
 

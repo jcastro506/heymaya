@@ -63,7 +63,7 @@ Draft reply (your voice):
 Reply / edit / skip?
 ```
 
-The operator types "reply" → Maya posts via the publish endpoint. "Edit" → Maya waits for the edited text. "Skip" → drop.
+The operator types "reply" → Maya posts via `publish_draft({ draftId })`. "Edit" → Maya waits for the edited text. "Skip" → drop.
 
 For SUPPORTERS the surface is lighter:
 
@@ -82,17 +82,15 @@ If a SUPPORTER is NOT in `gtmRelationshipTargets` but is in-ICP + has 1K+ follow
 
 ## Action-log write
 
-POST to `/lc_gtm/action_logged`:
+Call `log_action`:
 
-```json
-{
-  "idempotencyKey": "<uuid>",
-  "kind": "inbound_triage",
-  "summary": "BUYER @alice on Reddit — draft proposed",
-  "linkedEntities": [{ "entityKind": "thread", "entityId": "<gtmTargetThread id>" }],
-  "sentAt": <Date.now()>,
-  "userResponse": "pending"
-}
+```ts
+log_action({
+  kind: "inbound_triage",
+  summary: "BUYER @alice on Reddit — draft proposed",
+  linkedEntities: [{ entityKind: "thread", entityId: "<gtmTargetThread id>" }],
+  userResponse: "pending",
+})
 ```
 
 After operator acts, patch `userResponse` to `acted` / `ignored` / `dismissed`.
@@ -109,7 +107,7 @@ After operator acts, patch `userResponse` to `acted` / `ignored` / `dismissed`.
 
 ## Cost discipline
 
-Per inbound: 1 main_maya call for classify + draft + critic (low thinking). 0-1 ScrapeCreators if author lookup needed. Runs many times per day but each is sub-minute.
+Per inbound: 1 main_maya call for classify + draft + critic (low thinking). 0-1 `scrape_creators` calls if author lookup needed. Runs many times per day but each is sub-minute.
 
 ## Anti-slop check
 

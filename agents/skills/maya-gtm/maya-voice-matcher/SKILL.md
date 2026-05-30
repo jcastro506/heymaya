@@ -81,18 +81,17 @@ This skill itself produces user-facing content (the voice fingerprint may surfac
 
 ## Output
 
-POST scoring results to `/lc_gtm/update_draft_voice_match` (Sprint 2.4 endpoint):
+Save scoring results via `update_draft_voice_match` (don't pass an idempotency key — it's auto-minted):
 
 ```ts
-{
-  idempotencyKey: string,           // hash of (draftId + version)
-  draftId: Id<"gtmDraftedContent">,
-  voiceMatchScore: number,          // 0-1
-  slopCriticPassed: boolean,
-  slopCriticFailures?: string[],    // populated when not passed
-  approvalStateUpdate?: "pending_approval" | "rejected",  // routing decision
-  userFeedback?: string,            // when rejected
-}
+update_draft_voice_match({
+  draftId,                          // Id<"gtmDraftedContent">
+  voiceMatchScore,                  // 0-1
+  slopCriticPassed,                 // boolean
+  slopCriticFailures,               // string[], populated when not passed
+  approvalStateUpdate,              // "pending_approval" | "rejected" — routing decision
+  userFeedback,                     // when rejected
+})
 ```
 
 ## Failure modes

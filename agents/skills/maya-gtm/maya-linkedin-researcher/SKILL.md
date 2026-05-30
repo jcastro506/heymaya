@@ -22,10 +22,10 @@ description: For B2B / prosumer products where the buyer is a professional, find
 3. The fit-researcher's output (why LinkedIn cleared, which buyer segment).
 4. `MEMORY.md` — prior LinkedIn attempts.
 
-## API — posts + comments (ScrapeCreators, `x-api-key: $SCRAPECREATORS_API_KEY`)
+## Read tools — posts + comments (via `scrape_creators`)
 
-- **Company/person posts:** `/v1/linkedin/company/posts` (company feed), `/v1/linkedin/profile` + the person-post endpoints in the `scrapecreators-api` skill tables.
-- **Comments are where the buyer intent is** — pull post comments and mine them the same way the Reddit/HN workers mine comment trees. A professional asking "how are you all handling X?" under a relevant post is a higher-intent reply target than the OP.
+- **Company/person posts:** `scrape_creators({ path: "/v1/linkedin/company/posts", query })` (company feed), `scrape_creators({ path: "/v1/linkedin/profile", query })` + the person-post paths in the `scrapecreators-api` skill tables.
+- **Comments are where the buyer intent is** — pull post comments via `scrape_creators` and mine them the same way the Reddit/HN workers mine comment trees. A professional asking "how are you all handling X?" under a relevant post is a higher-intent reply target than the OP.
 - Discovery on LinkedIn is thinner than Reddit/X (no open keyword search across all posts) — so lean on: the fit-researcher's named target accounts/companies, the operator's own network/feed, and posts by the trusted voices in the buyer map. Quality over volume; LinkedIn rewards a few real engagements far more than spray.
 
 ## Decision rules
@@ -36,16 +36,16 @@ description: For B2B / prosumer products where the buyer is a professional, find
 4. **Professional register.** LinkedIn voice is plain, specific, credible — NOT hype, NOT emoji-spam, NOT "🚀 thrilled to announce". Founder build-in-public about the actual process outperforms polished brag posts (~3.4x). Text-only often outperforms image; native PDF carousels get strong dwell.
 5. **Cadence (when it's also a posting channel):** 3 posts/week is the ceiling of useful (diminishing returns past 5); Tue–Thu 7–8:30am local windows; reply to every comment in the first hour. Surface posting cadence only if LinkedIn is a posting bet, not just a reply venue.
 
-## How you deliver — POST per item, don't just return a report
+## How you deliver — call the tool per item, don't just return a report
 
-When invoked as a Phase-2 demand worker, you own each reply target end to end. **"POST" = run a curl via your `exec` tool** (`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"` — token + URL are in your shell env). You HAVE `exec` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH post worth engaging, in its own item loop:
+When invoked as a Phase-2 demand worker, you own each reply target end to end. You HAVE the typed tools (`save_target_thread`, `save_draft`, `scrape_creators`, …) — call them directly; a finding you describe in text but never save is lost. For EACH post worth engaging, in its own item loop:
 
-1. POST `/lc_gtm/target_thread` (platform="linkedin", url=post permalink, externalId=post id, excerpt verbatim, currentMetrics, recommendedAction, `painQuote` verbatim, priorityScore, `commentTreeSummary.mineableComments[]` from the comments).
+1. `save_target_thread({ platform: "linkedin", url: <post permalink>, externalId: <post id>, excerpt: <verbatim>, currentMetrics, recommendedAction, painQuote: <verbatim>, priorityScore, commentTreeSummary: { mineableComments: [...] } })`.
 2. Compose the three-beat reply in the operator's professional voice (URL → first comment, not the reply body).
-3. POST `/lc_gtm/drafted_content` (kind="reply", platform="linkedin", targetThreadId, draftText).
-4. Re-POST `/lc_gtm/target_thread` (same externalId) with `draftReply` set.
+3. `save_draft({ kind: "reply", platform: "linkedin", targetThreadId, draftText })`.
+4. `save_target_thread({ externalId: <same>, draftReply })`.
 
-One self-contained POST sequence per item. Exact sequence: `maya-foundation-research` Phase 2.
+One self-contained tool sequence per item — an `OK ...` return = it landed. Exact sequence: `maya-foundation-research` Phase 2.
 
 ## Style-exemplar capture (native-voice fidelity)
 
@@ -63,7 +63,7 @@ The first ~2 lines show before "see more" — they carry the whole open decision
 
 ## Cost discipline
 
-ScrapeCreators LinkedIn calls bounded by the foundation budget guard. LinkedIn is quality-over-volume — a handful of real engagements beats a wide shallow sweep. 1 main synthesis call.
+`scrape_creators` LinkedIn calls bounded by the foundation budget guard. LinkedIn is quality-over-volume — a handful of real engagements beats a wide shallow sweep. 1 main synthesis call.
 
 ## Anti-slop check
 

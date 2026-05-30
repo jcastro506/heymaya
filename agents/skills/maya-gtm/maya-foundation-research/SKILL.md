@@ -12,7 +12,7 @@ The operating model. Before Maya can do daily work, she needs an answer to: who 
 ## When to invoke
 
 - IF this is the very first wake AND `gtmBuyerMap` is empty for this agent THEN spawn the full foundation pass.
-- IF a `/lc_gtm/get_my_foundation` GET returns `buyerMap: null` THEN spawn the full foundation pass.
+- IF `get_my_foundation({})` returns `buyerMap: null` THEN spawn the full foundation pass.
 - IF the monthly cron fires (1st of month, 6am operator local) THEN spawn the full foundation pass and announce diffs. **Also refresh PLATFORM_ALGO.md** (shared platform-algorithm intelligence): run a `web_search` pass per active platform for the current algorithm + what's-working, update its sections, and append a dated line to its Refresh log. This keeps format/timing/draft decisions current month-over-month.
 - IF the operator pivots positioning ("we actually serve X now, not Y") THEN spawn refresh.
 - NEVER invoke from a continuous heartbeat — foundation is a budgeted event, not a tick.
@@ -22,25 +22,25 @@ The operating model. Before Maya can do daily work, she needs an answer to: who 
 1. **APP.md** — product diagnosis (what we sell, who's it for).
 2. **USER.md** — operator profile, voice, capacity, comfort zones (will they post video? cold DM?).
 3. **GTM.md** — current strategic state (will be empty on first run; that's the cue to populate it).
-4. **TOOLS.md** — the `/lc_gtm/foundation_*` endpoints, hookToken, API keys.
+4. **TOOLS.md** — the `save_foundation_*` tools + the research tools.
 5. **PLAYBOOK.md § 6** — voice rules every drafted content angle must clear.
 
 ## Phase 0 — manager mode: start from their own accounts
 
-Check APP.md "Entry mode" first. If **manager mode** (already-launched founder), before any niche research, ingest the founder's OWN existing accounts: pull each handle in APP.md/USER.md via the scrapecreators-api skill (their recent posts + engagement), and judge what's already working for THEM — which formats/angles/cadence land, where their audience already is, their actual voice. This is where you pick up; it seeds the buyer map, content angles, and the voice profile with real first-party signal instead of a cold start. In **launch mode**, skip this (glance at any existing handles for voice only) and build from the niche. If the mode is unresolved, pull their accounts if handles exist and use what you find to propose the mode at synthesis.
+Check APP.md "Entry mode" first. If **manager mode** (already-launched founder), before any niche research, ingest the founder's OWN existing accounts: pull each handle in APP.md/USER.md via `scrape_creators` (their recent posts + engagement), and judge what's already working for THEM — which formats/angles/cadence land, where their audience already is, their actual voice. This is where you pick up; it seeds the buyer map, content angles, and the voice profile with real first-party signal instead of a cold start. In **launch mode**, skip this (glance at any existing handles for voice only) and build from the niche. If the mode is unresolved, pull their accounts if handles exist and use what you find to propose the mode at synthesis.
 
 ## Native-tool orchestration
 
 The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.**
 
 1. `agents_list` to confirm the 5 worker agentIds exist in AGENTS.md: `buyer_map_worker`, `competitive_worker`, `channel_worker`, `content_angle_worker`, `relationship_worker`.
-2. `sessions_spawn` 5 workers in parallel, each with a `task:` string containing: product context, API endpoint mandates (ScrapeCreators / TwitterAPI.io / Algolia HN — never raw curl on platform domains), and the specific `/lc_gtm/foundation_*` POST shape they must use.
+2. `sessions_spawn` 5 workers in parallel, each with a `task:` string containing: product context, research-tool mandates (research_reddit / research_x / research_hn / scrape_creators — never raw-scrape platform domains), and the specific `save_foundation_*` tool they must call.
 3. `sessions_yield` and let them run. Check back via `subagents list` + `sessions_history`.
-4. While they run, poll `/lc_gtm/get_my_foundation` to see what's landed.
+4. While they run, poll `get_my_foundation({})` to see what's landed.
 5. As each worker completes or self-terminates (returns NO_REPLY), evaluate quality against the gates below.
 6. If a worker has been in `processing` state for longer than the work warrants in Maya's judgment (a small buyer-map sweep shouldn't take as long as a deep competitive scan), `subagents kill` it. The lane unblocks immediately — verified from OpenClaw source.
 7. If a worker returned thin output, `subagents steer` it with a refinement message — preserves accumulated context. Do not respawn unless steering fails.
-8. Once Maya judges all 5 outputs meet the bar, the STRATEGY phase is done — but **do NOT announce synthesis yet, and do NOT mark foundation complete.** Write `action_logged` kind=`strategy_complete` and proceed straight into Phase 2 (discovery). **The synthesis message is Phase 4 — it goes out ONLY after threads + drafts + calendar have actually landed** (Phase 3 + the hard completion gate in BOOT.md: re-check `GET /lc_gtm/get_my_foundation` shows real `gtmTargetThreads` + `gtmDraftedContent` + `gtmCalendarEvents` before telling the operator the plan is ready). Announcing after strategy = the operator gets a plan with an empty calendar — the exact failure this guards against.
+8. Once Maya judges all 5 outputs meet the bar, the STRATEGY phase is done — but **do NOT announce synthesis yet, and do NOT mark foundation complete.** Call `log_action({ kind: "strategy_complete", summary })` and proceed straight into Phase 2 (discovery). **The synthesis message is Phase 4 — it goes out ONLY after threads + drafts + calendar have actually landed** (Phase 3 + the hard completion gate in BOOT.md: re-check `get_my_foundation({})` shows real `gtmTargetThreads` + `gtmDraftedContent` + `gtmCalendarEvents` before telling the operator the plan is ready). Announcing after strategy = the operator gets a plan with an empty calendar — the exact failure this guards against.
 
 ### Progress pings while I work (so the wait feels like watching a pro, not a black box)
 During Phases 1→3 (the ~10–15 min), send a few short, **grounded** Telegram updates via `send_update` — each carries a real, specific finding + what's next, plain manager voice, NO internal terms (never "workers / phase / scorecard / scanning"). The arc the founder should feel — looked everywhere → narrowed with reasoning → found their people → building the plan:
@@ -94,29 +94,25 @@ Foundation does NOT stop at the operating model. The operator waited ~10-15 min 
 
 ### Phase 2 — DISCOVERY + DRAFT (workers find threads AND draft the reply, one POST per item)
 
-For each channel marked `bet: true` in `gtmChannelScorecard`, spawn the matching continuous worker, and give each worker its **per-channel research skill** so it mines deep, not shallow: `reddit_research` → `maya-reddit-demand-researcher`, `x_research` → `maya-x-founder-led-researcher` (mine the REPLIES/conversation via `advanced_search` `conversation_id:`/`to:` operators, not just keyword page one), `hn_research` → `maya-hn-researcher` (descend the full comment tree via the Algolia item API), `linkedin_research` → `maya-linkedin-researcher` (only if `maya-linkedin-fit-researcher` cleared LinkedIn). For video platforms that cleared as bets, mine the **comments** (TikTok `/v1/tiktok/video/comments`, IG `/v2/instagram/post/comments`) for buyer language — that's where the intent is, not the view counts. **Each worker both finds a reply-target thread AND drafts the operator-voice reply for it, then POSTs both — one self-contained POST per item.** This mirrors the foundation strategy workers (each worker IS a POST), which is what makes the actionable layer reliable: drafting is NOT deferred to a single inline Maya loop at the end (that loop was the step that empirically got skipped, leaving 0 drafts + an empty calendar). The worker's task string carries the operator's voice contract so the draft lands native; Maya's editorial pass (Phase 2.5) reviews + culls what the workers produced rather than drafting from scratch.
+For each channel marked `bet: true` in `gtmChannelScorecard`, spawn the matching continuous worker, and give each worker its **per-channel research skill** so it mines deep, not shallow: `reddit_research` → `maya-reddit-demand-researcher`, `x_research` → `maya-x-founder-led-researcher` (mine the REPLIES/conversation via `research_x` with `conversation_id:`/`to:` operators, not just keyword page one), `hn_research` → `maya-hn-researcher` (descend the full comment tree via `research_hn_item`), `linkedin_research` → `maya-linkedin-researcher` (only if `maya-linkedin-fit-researcher` cleared LinkedIn). For video platforms that cleared as bets, mine the **comments** (TikTok `scrape_creators({ path: "/v1/tiktok/video/comments", ... })`, IG `scrape_creators({ path: "/v2/instagram/post/comments", ... })`) for buyer language — that's where the intent is, not the view counts. **Each worker both finds a reply-target thread AND saves the operator-voice reply for it, then saves both — one self-contained item sequence per item.** This mirrors the foundation strategy workers (each worker IS a save), which is what makes the actionable layer reliable: drafting is NOT deferred to a single inline Maya loop at the end (that loop was the step that empirically got skipped, leaving 0 drafts + an empty calendar). The worker's task string carries the operator's voice contract so the draft lands native; Maya's editorial pass (Phase 2.5) reviews + culls what the workers produced rather than drafting from scratch.
 
 **Discovery depth — workers must not do a single shallow sweep and stop.** A first-pass search with one intent phrase is a starting point, not a finished sweep. Workers must: broaden their intent probes across multiple phrasings of the same pain, paginate through results by judgment until the signal stops being useful, and try adjacent communities / hashtags / subreddits if the first community is thin. They stop broadening when they've genuinely covered the buyer-pain landscape well enough to power a real first week — Maya judges this when she reads the pool, not by a count. **Phase 2.5 cannot start until Maya judges the pool is deep enough** — a handful of threads from one subreddit is not a pool; coverage across real buyer communities is.
 
-Worker task string (Phase 2) — include the operator's voice summary + SOUL voice contract inline so the worker can draft native. **CRITICAL — the task string MUST spell out that "POST" = run curl via the `exec` tool, with the literal command, or the worker hands data back as text and the database stays empty (the live failure 2026-05-30). Verified: leaf research workers DO have the `exec` tool; only a few spawn/lifecycle tools are denied.** Compose the task string like this:
+Worker task string (Phase 2) — include the operator's voice summary + SOUL voice contract inline so the worker can draft native. **CRITICAL — the task string MUST spell out that the worker SAVES each finding by calling the typed tool (save_target_thread, save_draft, propose_calendar, …), or it hands data back as text and the database stays empty (the live failure 2026-05-30). Verified: leaf research workers DO have the typed tools.** Compose the task string like this:
 ```
-You have the `exec` tool — you run shell commands, including curl. (At
-startup you'll see a notice that ~7 tools were removed — those are
-cron/sessions_*/subagents spawn-lifecycle tools you don't need; your
-`exec`, read, and write tools are INTACT. You CAN curl.)
+You have the typed tools (save_target_thread, save_draft, propose_calendar,
+research_reddit, research_x, research_hn, scrape_creators, …) — call them
+directly. (At startup you'll see a notice that ~7 tools were removed — those
+are cron/sessions_*/subagents spawn-lifecycle tools you don't need; your
+research + save tools are INTACT.)
 
-"POST X" in this task means: run this exact command via `exec` —
-  curl -sS -X POST \
-    -H "Authorization: Bearer $HOOK_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d '{ ...json... }' \
-    "$CONVEX_SITE_URL/lc_gtm/<endpoint>"
-$HOOK_TOKEN and $CONVEX_SITE_URL are already in your shell env — use them
-literally, don't ask for them. A 2xx response = it landed.
-NEVER return "POST-ready data" as text for someone else to send — if you
-return text instead of running the curl, your work is LOST. You do it.
+Saving means CALLING the tool — e.g. save_target_thread({ ... }). The tool runs
+the real request server-side and returns a status string: an `OK ...` return =
+it landed; `FAILED ...`/`BLOCKED ...` = it didn't. Don't pass an idempotency key
+— it's auto-minted. NEVER return "save-ready data" as text for someone else to
+persist — a finding you describe in text but never save is LOST. You do it.
 
-You own a complete reply target end to end: find it, draft it, POST it (curl).
+You own a complete reply target end to end: find it, draft it, save it.
 Find LIVE threads in <channel> where buyers are venting about this pain right
 now. Don't stop after one search — broaden intent phrases, try adjacent
 communities, paginate until you've covered the buyer-pain landscape. Seed
@@ -124,52 +120,51 @@ phrases: [...]. Content angles: [...]. Operator voice (match this): [voice
 summary from USER.md + SOUL.md].
 
 For EACH thread worth replying to, do ALL of these — one item at a time,
-running each curl as you go (never batch at the end):
-  1. exec curl POST $CONVEX_SITE_URL/lc_gtm/target_thread with:
-     url, externalId, platform, title, excerpt (verbatim ~500 chars),
-     author, currentMetrics (non-zero — skip dead threads), postedAt,
-     subredditOrCommunity, recommendedAction, painQuote (verbatim), velocityScore,
-     priorityScore. The 2xx body returns a targetThreadId — capture it.
+calling each tool as you go (never batch at the end):
+  1. save_target_thread({ url, externalId, platform, title,
+     excerpt (verbatim ~500 chars), author, currentMetrics (non-zero — skip
+     dead threads), postedAt, subredditOrCommunity, recommendedAction,
+     painQuote (verbatim), velocityScore, priorityScore }). The OK return
+     carries a targetThreadId — capture it.
   2. Compose the reply IN THE OPERATOR'S VOICE — empathy first / answer the
      ask / soft product mention only if it fits / end with a follow-up. NOT a
      pitch. Native length + the per-channel skill's structure. Shape it after a
      format converting in THIS niche THIS WEEK (maya-content-format-miner) and
      inject the PRODUCT TWIST (activation moment as proof, wedge as angle).
      Generic-could-be-any-tool = fail.
-  3. exec curl POST $CONVEX_SITE_URL/lc_gtm/drafted_content with kind="reply",
-     platform, targetThreadId (from step 1), draftText.
-  4. exec curl re-POST $CONVEX_SITE_URL/lc_gtm/target_thread (same externalId)
-     with draftReply set — keeps the thread's one-tap deep link in sync.
-  5. exec curl POST $CONVEX_SITE_URL/lc_gtm/calendar_proposal with ONE event for
-     this thread: a full hands-off recipe (WHAT / LINK / OPEN one-tap / WHY /
-     YOUR REPLY verbatim / SUCCESS TARGET / TIME), kind="reply_window",
-     targetThreadId, slotted on my channel's recommended day+time. Stored draft.
+  3. save_draft({ kind: "reply", platform, targetThreadId (from step 1),
+     draftText }).
+  4. save_target_thread({ externalId (same), draftReply }) — keeps the
+     thread's one-tap deep link in sync.
+  5. propose_calendar({ researchJobId, events: [ ONE event for this thread:
+     a full hands-off recipe (WHAT / LINK / OPEN one-tap / WHY / YOUR REPLY
+     verbatim / SUCCESS TARGET / TIME), kind="reply_window", targetThreadId,
+     slotted on my channel's recommended day+time ] }). Stored draft.
 Do 1→5 per thread before the next. Skip not-worth-it threads (set the action;
 don't draft). Focus on buyers about to try something new — frustration with
 current tools, asking for alternatives, comparing options. Those convert.
-Research-API discipline: ScrapeCreators / TwitterAPI.io / Algolia HN for the
-RESEARCH reads; never raw-curl reddit.com/x.com directly. (The /lc_gtm/* curls
-above are OUR endpoints — those you DO curl.)
+Research discipline: use research_reddit / research_x / research_hn /
+scrape_creators for the RESEARCH reads; never raw-scrape reddit.com/x.com.
 ```
-**If a worker "finished" but `gtmTargetThreads` is still empty for it, it returned text instead of curling — steer it: "you have exec; run the curl POSTs now, one per thread" — or re-spawn. Empty DB = not done.**
+**If a worker "finished" but `gtmTargetThreads` is still empty for it, it returned text instead of calling the tools — steer it: "you have the typed tools; call save_target_thread now, one per thread" — or re-spawn. Empty DB = not done.**
 
-`sessions_yield`. Watch via `subagents action=list`. Kill stuck (silent far longer than the work warrants), steer thin. After workers report `finished`, check the pool via `/lc_gtm/get_my_foundation`. If Maya judges the pool is too shallow — or the drafts read off-voice — steer for another pass.
+`sessions_yield`. Watch via `subagents action=list`. Kill stuck (silent far longer than the work warrants), steer thin. After workers report `finished`, check the pool via `get_my_foundation({})`. If Maya judges the pool is too shallow — or the drafts read off-voice — steer for another pass.
 
 ### Phase 2.5 — EDITORIAL REVIEW (Maya curates the worker drafts, doesn't re-draft from scratch)
 
-Workers POSTed thread + draft per item. Maya is now the editorial gate over what landed — NOT a from-scratch drafter (that inline loop was the unreliable step). Per drafted thread:
+Workers saved thread + draft per item. Maya is now the editorial gate over what landed — NOT a from-scratch drafter (that inline loop was the unreliable step). Per drafted thread:
 
 1. Read `gtmTargetThreads.excerpt` + the worker's `draftReply` / `gtmDraftedContent.draftText`.
 2. Judge against USER.md voice + SOUL.md contract + the relevant `gtmContentAngles` row: does it lead with empathy, answer the ask, keep the product mention soft + natural, end with a real follow-up, match native length?
 3. **Good →** leave it (the Phase-4 voice-matcher pass scores it formally).
-4. **Off-voice / pitchy / generic →** either fix it in place (re-POST `/lc_gtm/drafted_content` for that thread) or `subagents steer` the worker to redo that specific draft. Don't silently ship a weak reply.
+4. **Off-voice / pitchy / generic →** either fix it in place (re-call `save_draft` for that thread) or `subagents steer` the worker to redo that specific draft. Don't silently ship a weak reply.
 5. **Not worth replying to →** mark the thread `status: "dropped"` with a one-line note on why.
 
 This keeps the editorial bar without the brittle "Maya drafts all N replies inline" loop. Worker output is a first draft; Maya's judgment is the gate.
 
 ### Phase 3 — CALENDAR ASSEMBLY (Maya lays out the week from the landed threads + drafts)
 
-Threads + drafts have already landed reliably (Phase 2/2.5). So Phase 3 is no longer "draft AND lay out" jammed into one skipped loop — it's a **bounded layout pass over real input**: read the landed `gtmTargetThreads` (each already carries `draftReply` + a one-tap deep link) and lay them out across the rolling 7 days. Maya reads `maya-calendar-populator/SKILL.md` (§ 2 per-channel cadence, § 3 slot allocation by phase) and POSTs the events. Each event is a full hands-off recipe:
+Threads + drafts have already landed reliably (Phase 2/2.5). So Phase 3 is no longer "draft AND lay out" jammed into one skipped loop — it's a **bounded layout pass over real input**: read the landed `gtmTargetThreads` (each already carries `draftReply` + a one-tap deep link) and lay them out across the rolling 7 days. Maya reads `maya-calendar-populator/SKILL.md` (§ 2 per-channel cadence, § 3 slot allocation by phase) and saves the events via `propose_calendar`. Each event is a full hands-off recipe:
 
 ```
 WHAT: <action title>
@@ -184,7 +179,7 @@ SUCCESS TARGET: <e.g. 1 OP reply or 5+ upvotes within 4 hours>
 TIME: <minutes — usually 10-15>
 ```
 
-POST the events to `/lc_gtm/calendar_proposal` (Convex stores them as `draft` — it does NOT compose or lay them out; that's Maya's job here). Then **add the events that have no specific thread target** — the original posts, the build-in-public content, the standing daily reply-mining blocks — so the week is a complete, daily plan, not just a list of discovered threads.
+Save the events via `propose_calendar({ researchJobId, events })` (Convex stores them as `draft` — it does NOT compose or lay them out; that's Maya's job here). Then **add the events that have no specific thread target** — the original posts, the build-in-public content, the standing daily reply-mining blocks — so the week is a complete, daily plan, not just a list of discovered threads.
 
 **How full, and what mix, is MY judgment — grounded in the launch research, fit to THIS founder.** Read PLAYBOOK § 2 (the 4-phase launch sequence) + § 4 (BUILD/ENGAGE/OFFER) and the founder's real situation, then decide:
 - **What stage are they actually at?** Pre-launch with no audience → the research (§ 2 Phase 1) says earn authority first: heavy daily reply-mining (the leveraged move at cold-start), post sparingly, do NOT pitch yet. Already launched with traction/users → push the product harder, soft-launch or hard-launch motions, more original posts. I judge this from APP.md stage + week-goal + what my agents found about their existing presence — NOT a fixed stage→phase table.
@@ -193,7 +188,7 @@ POST the events to `/lc_gtm/calendar_proposal` (Convex stores them as `draft` �
 
 **Every event is turn-key (the product promise):** exact LINK + exact paste-ready TEXT (or "first draft — tweak to sound like you") + WHEN + WHY. A vague item ("engage on Reddit") is a failure — the founder must be able to open the calendar, tap, paste, post, with zero thinking.
 
-**The empty-calendar gate is the backstop.** Maya does NOT claim the plan is ready (Phase 4) until she re-reads `/lc_gtm/get_my_foundation` and sees a real, substantial `gtmCalendarEvents` week. If it's empty or thin, the chain didn't land — re-spawn/steer the workers; never narrate a calendar that isn't there.
+**The empty-calendar gate is the backstop.** Maya does NOT claim the plan is ready (Phase 4) until she re-reads `get_my_foundation({})` and sees a real, substantial `gtmCalendarEvents` week. If it's empty or thin, the chain didn't land — re-spawn/steer the workers; never narrate a calendar that isn't there.
 
 ONLY after the week is genuinely built (threads + drafts + a full daily calendar) does Maya proceed to Phase 4 (the synthesis message). The operator's "approve" reply IS the final gate, not a trigger for more spawning.
 
@@ -240,13 +235,13 @@ Plain text. No headers. No "Excited to share." Lead with: who's buying (+ a real
 
 This synthesis is a **proposal, and I invite a pivot** — it leads with the strategy (who's buying / where to play / the wedge / the North Star), not just a task list. The close invites real pushback on the *direction*, not just event swaps ("tell me if I've got your buyer or the channels wrong — easy to redirect now").
 
-- When I send the synthesis, POST `/lc_gtm/set_strategy_approval` with `state: "proposed"`, and also propose the North Star via `/lc_gtm/set_north_star` (adaptive to entry mode). **Also tag the app `archetype`** in that same call (e.g. "dev-tool" / "consumer-mobile" / "b2b-saas" / "creator-tool") — cheap to set, and it's how this app joins the cross-tenant playbook. If a cross-tenant archetype playbook exists for this archetype, warm-start from it as a prior (then confirm against this app's own research — priors inform, they don't override).
+- When I send the synthesis, call `set_strategy_approval({ state: "proposed" })`, and also propose the North Star via `set_north_star({ ... })` (adaptive to entry mode). **Also tag the app `archetype`** in that same call (e.g. "dev-tool" / "consumer-mobile" / "b2b-saas" / "creator-tool") — cheap to set, and it's how this app joins the cross-tenant playbook. If a cross-tenant archetype playbook exists for this archetype, warm-start from it as a prior (then confirm against this app's own research — priors inform, they don't override).
 - The draft calendar events are stored as `draft` — they do NOT hit the operator's Google Calendar until approval (the existing calendar gate). So proposing costs nothing irreversible.
-- On the operator's **approval**, set `state: "approved"`, then push the calendar (`/lc_gtm/approve_calendar`). On **pushback**, set `state: "iterating"`, revise the strategy (re-weight channels / re-frame the POV), and re-propose — don't dig in. Launches specifically are never auto-scheduled; they're proposed and wait for an explicit yes.
+- On the operator's **approval**, call `set_strategy_approval({ state: "approved" })`, then push the calendar (`approve_calendar({})`). On **pushback**, call `set_strategy_approval({ state: "iterating" })`, revise the strategy (re-weight channels / re-frame the POV), and re-propose — don't dig in. Launches specifically are never auto-scheduled; they're proposed and wait for an explicit yes.
 
 ## Phase 5 — push to Google Calendar (Sprint 2.22)
 
-After sending the synthesis, Maya immediately POSTs to `/lc_gtm/approve_calendar` (no operator action needed — default-to-acting per AGENTS.md non-negotiable #7). Three response cases:
+After sending the synthesis, Maya immediately calls `approve_calendar({})` (no operator action needed — default-to-acting per AGENTS.md non-negotiable #7). Three response cases:
 
 1. **`ok (pushed=N failed=M)`** — events landed on operator's Google Calendar. Done.
 2. **`needs_oauth`** — operator hasn't connected Google Calendar yet. Maya sends ONE follow-up message: *"To put these on your actual Google Calendar, connect it once here: `<convex.site>/lc_maya/start_google_calendar_oauth`. They live in our system either way — connecting just makes them show up in your calendar app."*

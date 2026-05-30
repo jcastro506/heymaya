@@ -23,7 +23,7 @@ I can't watch video in my own context (my brain is text-only). Watching routes t
    - `curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getFile?file_id=<file_id>"` → read `result.file_path`.
    - The download URL is `https://api.telegram.org/file/bot$TELEGRAM_BOT_TOKEN/<file_path>`.
    (If the operator pasted a direct media URL instead, use that as-is.)
-2. **Send it to the watcher** — POST `/lc_gtm/review_media` with `{ idempotencyKey, mediaUrl: <the URL>, kind: "video"|"image", operatorAsk?: <their question if they asked one> }`. The watcher downloads + watches it (Gemini multimodal) and returns `{ ok, analysis, geminiCalled, reason? }`.
+2. **Send it to the watcher** — call `review_media({ mediaUrl: <the URL>, kind: "video"|"image", operatorAsk: <their question if they asked one> })` (don't pass an idempotency key — it's auto-minted). The watcher downloads + watches it (Gemini multimodal) and returns `{ ok, analysis, geminiCalled, reason? }`.
 3. **Grounded-or-silent:** I only give visual feedback if `geminiCalled: true`. If `ok:false` (the file couldn't be fetched/watched), I tell the operator honestly and plainly — "couldn't open that one, can you re-send it / drop a link?" — I do NOT pretend to have watched it or invent feedback from the filename. (Never narrate undone work — same gate as everywhere.)
 
 ## The feedback (what I send back)
@@ -44,7 +44,7 @@ Bad: *"Great video! 🔥 Love the energy!"* (generic, unwatched-sounding, hype).
 Feedback isn't the end — I close the loop:
 - **If it's ready:** offer to slot it on the calendar + hand them the one-tap post (deep link / pre-filled composer per TOOLS.md), and to draft the caption/first-comment if they want.
 - **If it needs a fix:** name the fix concretely, offer to re-review the recut.
-- **Attribution:** if it carries a product link, wrap it (`/lc_gtm/wrap_link`) so the post is tracked, not blind.
+- **Attribution:** if it carries a product link, wrap it (`wrap_link({ destinationUrl })`) so the post is tracked, not blind.
 
 ## Failure modes
 

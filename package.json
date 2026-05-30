@@ -39,6 +39,7 @@
     "smoke:gtm-sprint-gate": "tsx scripts/gtm-sprint-gate.ts",
     "scan:workspace-coherence": "tsx scripts/scan-workspace-coherence.ts",
     "sync:bundled-playbook": "tsx scripts/sync-bundled-playbook.ts",
+    "sync:bundled-gtm-plugin": "tsx scripts/sync-bundled-gtm-plugin.ts",
     "smoke:gtm-sprint25": "tsx scripts/gtm-sprint-25-smoke.ts",
     "stripe:create-creator-products": "tsx scripts/stripe/createCreatorProducts.ts"
   },

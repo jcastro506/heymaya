@@ -15,7 +15,7 @@ Reddit is the highest-conversion buyer-intent channel for indie products IF the 
 - IF `icpHypotheses[].locatableOn.channel === "reddit"` THEN run.
 - IF the operator says "let me post on Reddit" THEN run BEFORE drafting.
 - IF a results-reviewer flags a Reddit post got removed THEN re-run to find a different sub.
-- NEVER from heartbeat. Each invocation spends up to 8 ScrapeCreators calls.
+- NEVER from heartbeat. Each invocation spends up to 8 `research_reddit` / `research_reddit_comments` calls.
 
 ## Required reads
 
@@ -81,8 +81,8 @@ interface RedditDemandReport {
      *  Reddit replies have no separate caption layer — the first line is
      *  the hook. Lead with empathy / answer the ask / soft product mention
      *  only if it genuinely fits (URL per § 8.8 first-comment rule) / end
-     *  with a follow-up question. This is what gets POSTed to
-     *  /lc_gtm/drafted_content, not returned for Maya to write later. */
+     *  with a follow-up question. This is what gets saved via
+     *  save_draft, not returned for Maya to write later. */
     draftReply: string;
     /** When the highest-value reply target is a COMMENT, not the OP.
      *  Populated when comment-tree mining finds a follow-up question
@@ -141,29 +141,29 @@ interface RedditDemandReport {
 }
 ```
 
-## How you deliver — POST per item, don't just return a report
+## How you deliver — call the tool per item, don't just return a report
 
-When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand a `RedditDemandReport` back for Maya to act on later. **"POST" = run a curl via your `exec` tool** (`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"` — the token + URL are in your shell env). You HAVE `exec` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH `replyTarget` worth a reply, in its own item loop:
+When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand a `RedditDemandReport` back for Maya to act on later. You HAVE the typed tools (`save_target_thread`, `save_draft`, `research_reddit`, `research_reddit_comments`, …) — call them directly; a finding you describe in text but never save is lost. For EACH `replyTarget` worth a reply, in its own item loop:
 
-1. POST `/lc_gtm/target_thread` (url, externalId, platform, title, excerpt, currentMetrics, subredditOrCommunity, recommendedAction, `painQuote` verbatim, velocityScore, priorityScore) → returns a targetThreadId.
+1. `save_target_thread({ url, externalId, platform, title, excerpt, currentMetrics, subredditOrCommunity, recommendedAction, painQuote: <verbatim>, velocityScore, priorityScore })` → returns a targetThreadId.
 2. Compose `draftReply` in the operator's voice per the rules above (first line earns the read; § 8.8 first-comment URL rule).
-3. POST `/lc_gtm/drafted_content` (kind="reply", platform="reddit", targetThreadId, draftText=draftReply).
-4. Re-POST `/lc_gtm/target_thread` (same externalId) with `draftReply` set, to keep the row's one-tap deep link in sync.
+3. `save_draft({ kind: "reply", platform: "reddit", targetThreadId, draftText: <draftReply> })`.
+4. `save_target_thread({ externalId: <same>, draftReply })`, to keep the row's one-tap deep link in sync.
 
-One self-contained POST sequence per thread — the same per-item discipline that makes the foundation strategy POSTs reliable. The `RedditDemandReport` schema above stays the shape of your *thinking* per target; the POSTs are how it lands. Exact sequence: `maya-foundation-research` Phase 2.
+One self-contained tool sequence per thread — the same per-item discipline that makes the foundation strategy saves reliable. An `OK ...` return = it landed. The `RedditDemandReport` schema above stays the shape of your *thinking* per target; the tool calls are how it lands. Exact sequence: `maya-foundation-research` Phase 2.
 
 ## Failure modes
 
 - **No evidence threads found.** Park. Surface to channel-judge.
 - **All candidate subs are decision-stage.** Return `replyTargets` only, `recommendation: "go"` constrained to reply-only.
-- **ScrapeCreators Reddit endpoint fails.** Return HTTP status; do NOT degrade to training-data recommendations.
+- **`research_reddit` / `research_reddit_comments` fails.** Return the tool's `FAILED ...` status; do NOT degrade to training-data recommendations.
 - **Domain blacklist detected.** `domainBlacklisted: true` + recommend domain change (reddit.md § 6).
 
 ## Comment-tree mining (mandatory for every replyTarget)
 
 For each thread in `replyTargets` (and any direct/adjacent `evidenceCard`), Maya descends the **full** comment tree — including all nested reply chains — before declaring the reply target. Do not stop at top-level comments. The sharpest buyer language and the highest-intent follow-up questions routinely sit in nested replies that never bubbled to the top.
 
-1. **Fetch the comments endpoint.** Use ScrapeCreators Reddit comments endpoint OR the public `<thread_url>.json` (no auth, polite UA). Pull the full tree. If the thread is large, go as deep as needed until you are confident you have seen all subtrees that could contain the five mining kinds below.
+1. **Fetch the comments.** Call `research_reddit_comments({ url })` for the full tree. If the thread is large, go as deep as needed until you are confident you have seen all subtrees that could contain the five mining kinds below.
 2. **Mine the full tree** against the 5 kinds at every nesting level:
    - `buyer_intent` — a commenter asked a follow-up question that the product directly answers and that OP never addressed. This is typically the **highest-intent reply target in the thread** because the person is still actively seeking a solution. Note the nesting depth; a question buried three levels deep that went unanswered for days is a better target than a top-level comment that already has five replies.
    - `pain_restatement` — a comment that re-articulates the buyer's pain in sharper, more visceral language than OP did. Mine the VERBATIM phrasing; it becomes the lede of the drafted reply.
@@ -177,7 +177,7 @@ Skipping full-tree descent on direct/adjacent threads is a failure — `maya-con
 
 ## Cost discipline
 
-Max 8 ScrapeCreators calls: 3 × subreddit/search, 2 × general search, 2 × subreddit details, 1 reserve. Comment-tree mining adds 1 call per thread that gets to T1/T2 (typically 2-3 threads per run, so +2-3 calls). 1 main_maya synthesis. Timeout 20 min.
+Max 8 `research_reddit` calls: 3 × subreddit/search, 2 × general search, 2 × subreddit details, 1 reserve. Comment-tree mining adds 1 `research_reddit_comments` call per thread that gets to T1/T2 (typically 2-3 threads per run, so +2-3 calls). 1 main_maya synthesis. Timeout 20 min.
 
 ## Anti-slop check
 

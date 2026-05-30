@@ -34,6 +34,7 @@ import type * as agents_packs_maya_workspace_generateUserMd from "../agents/pack
 import type * as agents_packs_maya_workspace_skillsRegistry from "../agents/packs/maya/workspace/skillsRegistry.js";
 import type * as agents_packs_maya_workspace_standingOrders from "../agents/packs/maya/workspace/standingOrders.js";
 import type * as agents_packs_maya_workspace_types from "../agents/packs/maya/workspace/types.js";
+import type * as agents_packs_maya_gtm_bundledGtmPlugin from "../agents/packs/maya_gtm/bundledGtmPlugin.js";
 import type * as agents_packs_maya_gtm_bundledLocalSkills from "../agents/packs/maya_gtm/bundledLocalSkills.js";
 import type * as agents_packs_maya_gtm_bundledPlaybook from "../agents/packs/maya_gtm/bundledPlaybook.js";
 import type * as agents_packs_maya_gtm_generators from "../agents/packs/maya_gtm/generators.js";
@@ -308,6 +309,7 @@ declare const fullApi: ApiFromModules<{
   "agents/packs/maya/workspace/skillsRegistry": typeof agents_packs_maya_workspace_skillsRegistry;
   "agents/packs/maya/workspace/standingOrders": typeof agents_packs_maya_workspace_standingOrders;
   "agents/packs/maya/workspace/types": typeof agents_packs_maya_workspace_types;
+  "agents/packs/maya_gtm/bundledGtmPlugin": typeof agents_packs_maya_gtm_bundledGtmPlugin;
   "agents/packs/maya_gtm/bundledLocalSkills": typeof agents_packs_maya_gtm_bundledLocalSkills;
   "agents/packs/maya_gtm/bundledPlaybook": typeof agents_packs_maya_gtm_bundledPlaybook;
   "agents/packs/maya_gtm/generators": typeof agents_packs_maya_gtm_generators;

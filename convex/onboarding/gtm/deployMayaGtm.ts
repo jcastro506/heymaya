@@ -10,6 +10,10 @@ import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { FlyClient, FlyError, type FlyMachineConfig } from "../../lib/flyClient";
 import { buildMayaGtmWorkspace } from "../../agents/packs/maya_gtm/generators";
+import {
+  BUNDLED_GTM_PLUGIN_TGZ_BASE64,
+  BUNDLED_GTM_PLUGIN_TGZ_NAME,
+} from "../../agents/packs/maya_gtm/bundledGtmPlugin";
 import { mintHookToken } from "../../gtmMaya/openclaw/hookClient";
 import {
   buildDeployTimeHelloText,
@@ -589,7 +593,13 @@ export function buildGatewayConfig(
       // are built-in subsystems, NOT plugins, so don't need allowing.
       // (openrouter auto-enables via model config; verified by reading
       // /data/openclaw.json after gateway start.)
-      allow: ["telegram"],
+      // `maya-gtm-tools` is our typed-tool plugin (persist + research),
+      // installed at boot via `openclaw plugins install npm-pack:`. It must be
+      // in this deny-by-default allowlist or the gateway won't load it — and
+      // its tools won't reach Maya or her subagents. Subagents inherit the
+      // parent's plugin tools (OpenClaw subagent tool-policy), so listing it
+      // once here makes it available to every research worker too.
+      allow: ["telegram", "maya-gtm-tools"],
       entries: {
         // Keep telegram explicitly enabled. Channel-config in
         // `channels.telegram` (lower in this config) does the actual
@@ -825,7 +835,11 @@ export const buildAndUploadGtmWorkspace = internalAction({
   handler: async (
     ctx,
     args
-  ): Promise<{ flyAppName: string; workspaceBundleUrl: string }> => {
+  ): Promise<{
+    flyAppName: string;
+    workspaceBundleUrl: string;
+    pluginBundleUrl: string;
+  }> => {
     const row = await ctx.runQuery(
       internal.onboarding.gtm.deployMayaGtm.getGtmAgentForDeploy,
       { agentId: args.agentId }
@@ -920,9 +934,29 @@ export const buildAndUploadGtmWorkspace = internalAction({
     );
     const url = (await ctx.storage.getUrl(storage)) ?? "";
     if (!url) throw new Error("Convex storage returned empty workspace URL.");
+
+    // Upload the typed-tool plugin tarball as its own binary blob (the tar
+    // builder is UTF-8 only, so a tgz can't ride inside the workspace tar).
+    // The Fly bootstrap downloads this and runs
+    // `openclaw plugins install npm-pack:<tgz>` before the gateway starts.
+    const pluginBytes = Uint8Array.from(
+      atob(BUNDLED_GTM_PLUGIN_TGZ_BASE64),
+      (c) => c.charCodeAt(0)
+    );
+    const pluginBuffer = pluginBytes.buffer.slice(
+      pluginBytes.byteOffset,
+      pluginBytes.byteOffset + pluginBytes.byteLength
+    ) as ArrayBuffer;
+    const pluginStorage = await ctx.storage.store(
+      new Blob([pluginBuffer], { type: "application/gzip" })
+    );
+    const pluginUrl = (await ctx.storage.getUrl(pluginStorage)) ?? "";
+    if (!pluginUrl) throw new Error("Convex storage returned empty plugin URL.");
+
     return {
       flyAppName: flyAppNameForGtmAgent(args.agentId),
       workspaceBundleUrl: url,
+      pluginBundleUrl: pluginUrl,
     };
   },
 });
@@ -949,7 +983,11 @@ export const deployMayaGtm = internalAction({
     );
     if (!row) return fail("load-agent", `GTM agent ${args.agentId} not deployable.`);
 
-    let bundle: { flyAppName: string; workspaceBundleUrl: string };
+    let bundle: {
+      flyAppName: string;
+      workspaceBundleUrl: string;
+      pluginBundleUrl: string;
+    };
     try {
       bundle = await ctx.runAction(
         internal.onboarding.gtm.deployMayaGtm.buildAndUploadGtmWorkspace,
@@ -1118,6 +1156,7 @@ export const deployMayaGtm = internalAction({
           agentId: args.agentId,
           flyAppName: bundle.flyAppName,
           workspaceBundleUrl: bundle.workspaceBundleUrl,
+          pluginBundleUrl: bundle.pluginBundleUrl,
           telegramChatId: row.agent.telegramChatId,
           telegramWebhookSecret,
         }),
@@ -1208,6 +1247,11 @@ export function buildGtmMachineConfig(input: {
   agentId: Id<"gtmAgents"> | string;
   flyAppName: string;
   workspaceBundleUrl: string;
+  /** Typed-tool plugin tarball (Convex storage URL). The bootstrap installs
+   *  it via `openclaw plugins install npm-pack:<tgz>` before gateway start so
+   *  Maya + her subagents persist/research through schema-validated tools
+   *  instead of hand-written curl. */
+  pluginBundleUrl?: string;
   /** Sprint 1.3 — passed through to buildGatewayConfig so the OpenClaw
    *  channels.telegram adapter is enabled with allowlist scoped to this
    *  user. Pre-pairing agents pass undefined; the channel is omitted. */
@@ -1254,6 +1298,11 @@ export function buildGtmMachineConfig(input: {
       MAYA_GTM_AGENT_ID: String(input.agentId),
       MAYA_GTM_APP_NAME: input.flyAppName,
       MAYA_WORKSPACE_BUNDLE_URL: input.workspaceBundleUrl,
+      // Typed-tool plugin tarball — the bootstrap installs it via
+      // `openclaw plugins install npm-pack:` before the gateway starts.
+      ...(input.pluginBundleUrl
+        ? { MAYA_PLUGIN_BUNDLE_URL: input.pluginBundleUrl }
+        : {}),
       OPENCLAW_MODEL: toOpenClawModelRef(MODEL_ROUTING.mainMaya),
       OPENCLAW_DISABLE_BONJOUR: "1",
       MAYA_GTM_MODEL_ROUTING_JSON: JSON.stringify(MODEL_ROUTING),
@@ -1338,6 +1387,19 @@ function buildBootstrapShell(): string {
     "chmod 700 /data/cron",
     "chmod 600 /data/cron/jobs.json",
     'echo "$MAYA_BOOTSTRAP_JSON" | jq .gatewayConfig > /data/openclaw.json',
+    // Install the typed-tool plugin (maya-gtm-tools) BEFORE the gateway starts.
+    // npm-pack uses OpenClaw's managed install root (~/.openclaw/npm = /data/
+    // .openclaw/npm here, HOME=/data), which resolves typebox + the openclaw
+    // peer correctly. The plugin id is already in the config's plugins.allow,
+    // so a fresh /data volume just needs the package + its install record.
+    // `|| echo WARN` keeps the boot chain alive if install fails — the gateway
+    // still starts (degraded) and the failure is visible in `flyctl logs`.
+    'if [ -n "$MAYA_PLUGIN_BUNDLE_URL" ]; then ' +
+      'curl -fsSL "$MAYA_PLUGIN_BUNDLE_URL" -o /tmp/maya-gtm-tools.tgz && ' +
+      'echo "[bootstrap] installing maya-gtm-tools plugin..." && ' +
+      'openclaw plugins install "npm-pack:/tmp/maya-gtm-tools.tgz" --force 2>&1 | tail -30 ' +
+      '|| echo "[bootstrap] WARN maya-gtm-tools plugin install failed — gateway will start without typed tools"; ' +
+      'else echo "[bootstrap] WARN no MAYA_PLUGIN_BUNDLE_URL — skipping typed-tool plugin"; fi',
     'echo "[bootstrap] launching openclaw gateway..."',
     // Sprint 2.18 — `--bind lan` is REQUIRED in OpenClaw 2026.5.x
     // container environments. Without it, the gateway defaults to

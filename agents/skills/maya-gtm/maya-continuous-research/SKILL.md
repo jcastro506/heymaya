@@ -21,13 +21,13 @@ Foundation research builds the operating model. Continuous research feeds the da
 1. **GTM.md** — bet channels from the scorecard. Only spawn workers for bet=true channels by default. Maya may sweep a non-bet channel monthly for verification.
 2. **APP.md** — pain framing, keywords, exclusion list.
 3. **USER.md** — operator timezone, capacity (don't propose 5 events if they have 30 min).
-4. **TOOLS.md** — `/lc_gtm/target_thread`, `/lc_gtm/competitor_move`, `/lc_gtm/niche_pulse_signal`.
+4. **TOOLS.md** — the typed tools `save_target_thread`, `save_competitor_move`, `save_niche_pulse_signal`.
 
 ## Native-tool orchestration
 
 The same control-plane discipline as foundation:
 
-1. `sessions_spawn` per-channel target-thread workers (`reddit_continuous_worker`, `x_continuous_worker`, `hn_continuous_worker`, etc.) with task strings containing API endpoints + return-shape (must include `painQuote`, `postedAt`, `velocityScore`, `engagementWindow` (the worker's read on whether the OP is still replying and new comments are still landing), `authorContext`, `commentTreeSummary`, `audienceSize`, `recommendedAction`, `draftReply`, `tier`). **Comment-tree mining is mandatory for Reddit + HN workers, and it goes deep.** The worker MUST descend the **full comment tree, including nested replies** (Reddit: fetch the `/comments/<id>.json` endpoint via ScrapeCreators or the public JSON, and follow `replies` down; HN: recurse `kids[]` on the Algolia HN item endpoint) — **do not stop at the top few comments.** The sharpest buyer language (someone restating the pain in better words, naming the competitor they're escaping, rejecting a workaround) usually sits *deeper* in the thread, not in the top-voted comments. Go as deep as it takes to be confident, then populate `commentTreeSummary.mineableComments[]` with the strongest comments scored against these kinds: `buyer_intent` (someone asked a follow-up the product answers), `pain_restatement` (re-articulates OP's pain in sharper buyer language), `competitor_mention` (specific competitor named, with `competitorName`), `op_rejection` (OP responded "tried that, didn't work"), `high_velocity` (a comment gaining traction unusually fast for the thread's age — Maya's judgment, never a fixed number). Workers without `mineableComments[]` on threads they tier T1/T2 get steered: "I need the comment-tree mining — descend the comments endpoint (all the way down, not just the top), score the strongest against the mining kinds, return as `commentTreeSummary.mineableComments`."
+1. `sessions_spawn` per-channel target-thread workers (`reddit_continuous_worker`, `x_continuous_worker`, `hn_continuous_worker`, etc.) with task strings naming the research tools they must use + return-shape (must include `painQuote`, `postedAt`, `velocityScore`, `engagementWindow` (the worker's read on whether the OP is still replying and new comments are still landing), `authorContext`, `commentTreeSummary`, `audienceSize`, `recommendedAction`, `draftReply`, `tier`). **Comment-tree mining is mandatory for Reddit + HN workers, and it goes deep.** The worker MUST descend the **full comment tree, including nested replies** (Reddit: `research_reddit_comments({ url })` and follow `replies` down; HN: `research_hn_item({ objectId })` and recurse `children[]`) — **do not stop at the top few comments.** The sharpest buyer language (someone restating the pain in better words, naming the competitor they're escaping, rejecting a workaround) usually sits *deeper* in the thread, not in the top-voted comments. Go as deep as it takes to be confident, then populate `commentTreeSummary.mineableComments[]` with the strongest comments scored against these kinds: `buyer_intent` (someone asked a follow-up the product answers), `pain_restatement` (re-articulates OP's pain in sharper buyer language), `competitor_mention` (specific competitor named, with `competitorName`), `op_rejection` (OP responded "tried that, didn't work"), `high_velocity` (a comment gaining traction unusually fast for the thread's age — Maya's judgment, never a fixed number). Workers without `mineableComments[]` on threads they tier T1/T2 get steered: "I need the comment-tree mining — descend the comments (all the way down, not just the top) via research_reddit_comments / research_hn_item, score the strongest against the mining kinds, return as `commentTreeSummary.mineableComments`."
 2. Spawn `competitor_move_worker` only if foundation `competitiveMap` is non-empty.
 3. Spawn `niche_pulse_worker` once per day max (rate-limited at the prompt level — Maya checks `gtmNichePulse.observedAt` before spawning). **S8 — "trending in your niche today" must be velocity-ranked AND pre-drafted, not an FYI.** The worker surfaces trending topics/formats ranked by velocity (rising > already-peaked — a trend you can still catch beats one that crested yesterday); for the top 1-2, Maya **pre-drafts the product twist** via maya-content-format-miner: a ready post/reply that rides the trend with THIS product's angle (activation moment as proof, wedge as hook), so the morning brief hands the operator a one-tap ride-the-trend draft — never just "X is trending, fyi." A trend surfaced without a ready twisted draft is half a job.
 4. `sessions_yield`. Workers run.
@@ -67,7 +67,7 @@ Each surviving thread gets a tier based on judgment, not a score formula:
 - **T3 Lurk & Learn** — pain match present but no strong reply angle, or audience too small to matter. Stored for context, not surfaced.
 - **T4 Trash** — fails platform-norm or author-quality. Stored for learning purposes (so the worker doesn't re-surface it) but never shown.
 
-Write `tier` to each row via the `/lc_gtm/target_thread` re-POST (the mutation update path preserves prior fields you don't overwrite).
+Write `tier` to each row via a `save_target_thread` re-call (the update path preserves prior fields you don't overwrite).
 
 ## Stop-and-ship signal
 
@@ -77,13 +77,13 @@ If workers are still active but the signal so far is dead and re-spawning wouldn
 
 ## Failure modes
 
-- **Worker scrapes raw URLs and gets rate-limited.** Steer with "use api.scrapecreators.com / api.twitterapi.io / hn.algolia.com — never raw reddit.com / x.com." Re-spawn only if steering fails.
+- **Worker scrapes raw URLs and gets rate-limited.** Steer with "use the research tools (research_reddit, research_x, research_hn, scrape_creators) — never raw reddit.com / x.com." Re-spawn only if steering fails.
 - **All workers return T3/T4 only.** Honest thin day. Morning brief leads with warmup + content-draft task instead of replies.
 - **One worker dominates the lane.** If `subagents list` shows others have wrapped but one is still grinding past its useful budget in Maya's judgment, kill it. Lane unblocks immediately — proceed to synthesis with what you have.
 
 ## Cost discipline
 
-Maya watches call volume vs value returned via `gtmCostLedger`. Per-channel workers route through ScrapeCreators / TwitterAPI.io / Algolia HN per `TOOLS.md`. Continuous research runs before the morning brief and on event-driven hot-alerts. Maya decides when to slow down — there's no fixed cap.
+Maya watches call volume vs value returned via `gtmCostLedger`. Per-channel workers route through the research tools (research_reddit / research_x / research_hn / scrape_creators) per `TOOLS.md`. Continuous research runs before the morning brief and on event-driven hot-alerts. Maya decides when to slow down — there's no fixed cap.
 
 ## Anti-slop check
 

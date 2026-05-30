@@ -31,14 +31,14 @@ For technical / indie / B2B SaaS / dev-tool products, X is the highest-leverage 
 4. **x.md rule 10 reply-target quality bar.** OP tweet must show genuine human engagement, OP must be an active real account with a real following, and the tweet must be recent enough that a reply still surfaces to the OP's notifications. Skip bots, obvious spam, accounts with no real following.
 5. **Buyer-intent over vanity engagement.** A tweet with modest likes that describes the exact problem this product solves — "I've tried six tools for this and nothing works", "is there anything that does X?", "what do you use for Y?" — outranks a high-like tweet celebrating a win with no purchase signal. Judge intent first, engagement second.
 6. **Underserved tweets over crowded threads.** Prefer tweets that are getting real traction but have few existing replies — your reply stands out, the OP is more likely to see and respond, the conversation is still open. A tweet already buried under 40 replies from founders is a worse bet than a newer tweet with 3 replies and clear momentum. This is a judgment call, not a threshold.
-7. **Velocity + OP-active window.** Prefer tweets whose engagement is still building — likes and replies still accumulating — over tweets that peaked hours ago and went quiet. Stronger signal still: the OP is actively replying to others in that thread right now. A live conversation is worth far more than a stalled one. Use twitterapi.io advanced_search cursor pagination to go deeper when the first page yields few high-quality targets; don't stop at page one.
+7. **Velocity + OP-active window.** Prefer tweets whose engagement is still building — likes and replies still accumulating — over tweets that peaked hours ago and went quiet. Stronger signal still: the OP is actively replying to others in that thread right now. A live conversation is worth far more than a stalled one. Use `research_x` cursor pagination (pass the returned `cursor`) to go deeper when the first page yields few high-quality targets; don't stop at page one.
 8. **x.md rule 9 first-reply NO-URL.** No URL in first reply. URL goes in follow-up only if OP engages back.
 9. **Three-paragraph reply structure required.** Validation → value-add → soft mention. The soft mention in paragraph 3 must leave a genuine, low-friction path to try the product when it's a natural fit — not a pitch, a door left open. Product mention in paragraph 1 = regenerate.
 10. **List composition.** 20-40 accounts in niche, posting weekly+. From x.md § 1 + ScrapeCreators discovery. Do NOT auto-follow.
 11. **Hook modeling — include winning replies.** Pull 3-5 high-engagement hooks from the 20-40 target accounts; map to x.md § 5 (1-15). Crucially, also mine the replies those accounts wrote that performed well — the founder-voice pattern that lands in this niche shows up in successful replies, not just original posts. Extract reply patterns (how they open, how they disagree, how they validate, what makes readers click "see more") and use those patterns to inform draftReply. Reject hooks that match anti-patterns (§ 7) or hype-language (rule 11).
 12. **Black-Magic platform-risk reminder.** IF operator's product depends on free X API access THEN `platformRiskWarning: true` (x.md § 11 Failure 4). State this plainly: X has unilaterally repriced API access multiple times; any strategy that routes users from X into a product that itself needs the X API carries compounded dependency risk.
 13. **Account silence recovery.** IF `lastPostAgeDays > 7` THEN first action = value-add reply, not build-update post.
-14. **Citation-firewall on numbers.** Every number Maya quotes must come from a fresh ScrapeCreators call or operator-confirmed state.
+14. **Citation-firewall on numbers.** Every number Maya quotes must come from a fresh `research_x` / `scrape_creators` call or operator-confirmed state.
 15. **Style-exemplar capture (native-voice fidelity — Sprint I).** While building the List and modeling hooks, capture **5-10 real, top-performing, HUMAN-written native posts AND replies verbatim** from the niche — the ones that actually landed (genuine engagement, real accounts, recent). These become few-shot **voice/register anchors** for `maya-voice-matcher` and draft generation: they encode how a real founder in *this niche* writes on X — sentence length and burstiness, lowercase habits, how they open a reply, how they take a stance. Capture replies specifically, not just polished posts — the native reply rhythm is where most acquisition happens (rule 11). Match cadence/vocab/length/format; **never copy their content.** Skip anything that reads templated/AI. The honest framing: there's no X AI-detector to dodge; the enemy is generic replies the niche scrolls past. Emit in `styleExemplars[]`.
 16. **X caption craft — the post IS the caption (x.md).** On X there's no separate caption layer: the tweet/reply text is the whole thing. Make it earn the "see more" tap before the fold — strong first line, concrete over abstract, ≥1 number where it fits (rule on number-presence). No hype-emoji clusters, no "a thread 🧵👇" theater unless the niche genuinely uses it. URL never in the first reply (rule 8). Surface this in `captionCraft`.
 
@@ -55,9 +55,9 @@ When building `searchQueries`, weight heavily toward problem-statement and tool-
 
 These surface people actively in the buying mindset — describing the problem, asking for recommendations, expressing frustration with alternatives. They are the highest-value reply targets. Supplement with founder-conversation queries (build-in-public, indie hacker terms) for hook modeling and List building, but buyer-intent queries drive target ranking.
 
-When the first twitterapi.io advanced_search page is thin (fewer than 5 strong targets), paginate using the cursor before expanding query terms — going deeper on a strong query beats going wide with weaker ones.
+When the first `research_x` page is thin (fewer than 5 strong targets), paginate using the returned `cursor` before expanding query terms — going deeper on a strong query beats going wide with weaker ones.
 
-**Mine the conversation, not just the original tweet (X's value is the replies).** Once a strong tweet surfaces, pull its reply thread with `query=conversation_id:<tweetId>` — the replies are where buyers restate the pain in sharper words and name the competitors they're escaping, and an unanswered reply-question is often a higher-intent target than the OP. Use `query=to:<handle>` to read who's actively replying to a target account, and `query=quoted_tweet_id:<tweetId>` (or `url:<tweetUrl>`) to see who's quote-tweeting a take in the niche. A reply-target's URL must be the reply/tweet permalink the quote came from, never the profile URL (citation precision).
+**Mine the conversation, not just the original tweet (X's value is the replies).** Once a strong tweet surfaces, pull its reply thread with `research_x({ query: "conversation_id:<tweetId>" })` — the replies are where buyers restate the pain in sharper words and name the competitors they're escaping, and an unanswered reply-question is often a higher-intent target than the OP. Use `research_x({ query: "to:<handle>" })` to read who's actively replying to a target account, and `research_x({ query: "quoted_tweet_id:<tweetId>" })` (or `url:<tweetUrl>`) to see who's quote-tweeting a take in the niche. A reply-target's URL must be the reply/tweet permalink the quote came from, never the profile URL (citation precision).
 
 ## Output schema
 
@@ -127,16 +127,16 @@ interface XResearchReport {
 }
 ```
 
-## How you deliver — POST per item, don't just return a report
+## How you deliver — call the tool per item, don't just return a report
 
-When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand an `XResearchReport` back for Maya to act on later. **"POST" = run a curl via your `exec` tool** (`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"` — token + URL are in your shell env). You HAVE `exec` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH `replyTarget` worth a reply, in its own item loop:
+When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand an `XResearchReport` back for Maya to act on later. You HAVE the typed tools (`save_target_thread`, `save_draft`, `research_x`, …) — call them directly; a finding you describe in text but never save is lost. For EACH `replyTarget` worth a reply, in its own item loop:
 
-1. POST `/lc_gtm/target_thread` (url=tweetUrl, externalId=tweet id, platform="x", excerpt=opText, currentMetrics from likes/replies, recommendedAction, `painQuote` verbatim, velocityScore, priorityScore) → returns a targetThreadId.
+1. `save_target_thread({ url: <tweetUrl>, externalId: <tweet id>, platform: "x", excerpt: <opText>, currentMetrics: <from likes/replies>, recommendedAction, painQuote: <verbatim>, velocityScore, priorityScore })` → returns a targetThreadId.
 2. Compose the reply by joining your `draftReply.p1 / p2 / p3SoftMention` into the operator-voice reply (URL in follow-up only, rule 8; three-paragraph structure, rule 9).
-3. POST `/lc_gtm/drafted_content` (kind="reply", platform="x", targetThreadId, draftText=the joined reply).
-4. Re-POST `/lc_gtm/target_thread` (same externalId) with `draftReply` set, to keep the row's one-tap deep link in sync.
+3. `save_draft({ kind: "reply", platform: "x", targetThreadId, draftText: <the joined reply> })`.
+4. `save_target_thread({ externalId: <same>, draftReply })`, to keep the row's one-tap deep link in sync.
 
-One self-contained POST sequence per tweet — the same per-item discipline that makes the foundation strategy POSTs reliable. The `XResearchReport` schema above stays the shape of your *thinking* per target; the POSTs are how it lands. Exact sequence: `maya-foundation-research` Phase 2.
+One self-contained tool sequence per tweet — the same per-item discipline that makes the foundation strategy saves reliable. An `OK ...` return = it landed. The `XResearchReport` schema above stays the shape of your *thinking* per target; the tool calls are how it lands. Exact sequence: `maya-foundation-research` Phase 2.
 
 ## Failure modes
 
@@ -144,7 +144,7 @@ One self-contained POST sequence per tweet — the same per-item discipline that
 - **Niche has no English-language activity on X.** Park. Surface to channel-judge.
 - **All reply targets are from other founders.** Skip-launch risk. Re-query with sharpened buyer-intent probes (see Buyer-intent query strategy above).
 - **All top results are high-like but zero purchase signal.** Shift query strategy toward problem-statement forms before giving up on the channel.
-- **ScrapeCreators X endpoints fail.** Fall back to `mvanhorn/xai` Grok search if budget allows. Cap Grok at 5 calls/user/day.
+- **`research_x` / `scrape_creators` X reads fail.** Fall back to `mvanhorn/xai` Grok search if budget allows. Cap Grok at 5 calls/user/day.
 
 ## Cost discipline
 
