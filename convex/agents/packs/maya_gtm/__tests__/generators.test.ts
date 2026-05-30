@@ -99,7 +99,7 @@ describe("Maya GTM workspace pack", () => {
       ])
     );
     expect(files.get("AGENTS.md")).toContain("My constitution");
-    expect(files.get("AGENTS.md")).toContain("The database is truth.");
+    expect(files.get("AGENTS.md")).toContain("The database is truth");
     expect(files.get("APP.md")).toContain("BugBrief");
     expect(files.get("GTM.md")).toContain("Primary: reddit");
     // Sprint A (trust & stability) — BOOT.md is the slim routing file:
