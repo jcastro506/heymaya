@@ -1223,6 +1223,16 @@ export function buildGtmMachineConfig(input: {
     env: {
       OPENCLAW_STATE_DIR: "/data",
       OPENCLAW_CONFIG_PATH: "/data/openclaw.json",
+      // 2026-05-30 — force IPv4-first DNS so outbound to api.telegram.org is
+      // reliable. Root cause of the intermittent "sendMessage failed /
+      // DNS-resolved IP unreachable" reply failures: Fly's IPv6 egress to
+      // Telegram is flaky, while IPv4 egress (NAT) is reliable. Node's
+      // --dns-result-order=ipv4first makes the telegram plugin's fetch resolve
+      // IPv4 first (falls back to IPv6 if IPv4 fails — safe, reversible). This
+      // lets OpenClaw own the reply send natively instead of proxying through
+      // Convex. Research reads (ScrapeCreators/TwitterAPI) already worked, so
+      // this is scoped to the Telegram-host quirk, not general egress.
+      NODE_OPTIONS: "--dns-result-order=ipv4first",
       // Sprint 2.14a.8 — point OpenClaw at the pre-installed
       // pi-coding-agent + Bedrock SDK + companions baked into the
       // Docker image at /opt/openclaw-runtime-preseed (Dockerfile
