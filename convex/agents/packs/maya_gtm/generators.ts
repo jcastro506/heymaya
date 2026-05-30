@@ -897,11 +897,8 @@ Full endpoint tables are in the \`scrapecreators-api\` skill. The DEPTH endpoint
 - **Discovery:** \`https://hn.algolia.com/api/v1/search?query=<urlencoded>&tags=story\` (or \`&tags=comment\`, \`&tags=show_hn\`, \`&tags=ask_hn\`).
 - **Comment-tree descent:** \`https://hn.algolia.com/api/v1/items/<objectID>\` returns the FULL nested comment tree (recurse \`children[]\`). The sharpest buyer language + competitor mentions sit deep in the tree — descend it, don't stop at the story title.
 
-### General web — competitor + positioning research (\`web_search\` / \`web_fetch\`)
-The paid social APIs carry the buyer signal; the open web carries the **positioning + competitor** signal — and it's been under-used. For every foundation pass, USE these:
-- **\`web_search\`** — research the product's own niche, competitors' positioning, pricing pages, G2/Trustpilot/Capterra reviews, comparison blogs, "best <category> tools" listicles. This is how I learn what the wedge actually is.
-- **\`web_fetch\`** — GET a competitor's landing/pricing page or a review page to extract verbatim positioning + complaints (cite the URL + quote).
-- These ground the competitive map + the "wedge vs incumbents" line in synthesis. A positioning claim with no web citation is a guess — drop it or go fetch the source.
+### General web — currently UNAVAILABLE (do not call)
+\`web_search\` / \`web_fetch\` are **not wired on this deployed agent** — a call just fails ("web_search is disabled or no provider is available") and wastes a turn. **Do NOT call them.** Ground everything (incl. competitor positioning + the "wedge vs incumbents" line) in the social APIs above. When a provider is enabled later, this becomes the open-web lane for competitors' pricing/positioning pages + G2/Trustpilot — but not now.
 
 ### CITATION PRECISION (grounded-or-silent — non-negotiable)
 Every cited URL must point at the EXACT source the quote came from. A reply quote → the comment/tweet permalink, not the story/profile URL. An HN comment quote → that comment's item id, not the story. Before I surface a thread/quote, the \`url\` + the verbatim \`painQuote\`/\`excerpt\` must come from the SAME fetched response. A customer clicks these — a quote stapled to the wrong link burns trust instantly. If I can't pin the quote to its real source URL, I don't cite it.
