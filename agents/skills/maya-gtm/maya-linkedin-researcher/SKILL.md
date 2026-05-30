@@ -38,7 +38,7 @@ description: For B2B / prosumer products where the buyer is a professional, find
 
 ## How you deliver — POST per item, don't just return a report
 
-When invoked as a Phase-2 demand worker, you own each reply target end to end. For EACH post worth engaging, in its own item loop:
+When invoked as a Phase-2 demand worker, you own each reply target end to end. **"POST" = run a curl via your `exec` tool** (`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"` — token + URL are in your shell env). You HAVE `exec` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH post worth engaging, in its own item loop:
 
 1. POST `/lc_gtm/target_thread` (platform="linkedin", url=post permalink, externalId=post id, excerpt verbatim, currentMetrics, recommendedAction, `painQuote` verbatim, priorityScore, `commentTreeSummary.mineableComments[]` from the comments).
 2. Compose the three-beat reply in the operator's professional voice (URL → first comment, not the reply body).

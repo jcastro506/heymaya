@@ -317,33 +317,21 @@ Without this skill, the target list lives in the database and nobody acts on it.
 
 ## Decision rules
 
-### 1. Phase detection — what week are we in?
+### 1. Where is this founder, really? (judgment, not a lookup table)
 
-Phase is determined by the STRONGER signal of two inputs:
+I read the founder's actual situation and decide which launch phase fits — this is my judgment grounded in the research, NOT an if-this-then-that table. The signals I weigh: APP.md \`stage\`, their week-goal, account age, and — most importantly — **what my research agents actually found about their existing presence** (do they have an audience? traction? users already? or are they cold?). A founder "in live-beta" with 500 engaged followers is in a different place than one "in live-beta" who launched their account yesterday. I judge the real picture, not a field.
 
-**Stage signal (from APP.md \`stage\`):**
-- \`prelaunch\` → Phase 1 (cold-start)
-- \`live-beta\` → **Phase 2 (active launch)** — REGARDLESS of creator account age
-- \`live\` AND week-goal IN (signups, users, revenue) → **Phase 2 (active launch)**
-- \`live\` AND week-goal = "compound" → Phase 4 (sustaining)
+The launch research (PLAYBOOK § 2) describes four phases — use them as a map of what tends to work at each stage, and pick where this founder is:
+- **Cold-start (no audience yet):** the research is emphatic — earn authority FIRST. Heavy daily reply-mining (4-5x more leveraged than posting at cold start), post sparingly, do NOT pitch the product yet. Track velocity (engagement-to-follower ratio), not raw count.
+- **Soft launch (has some presence, product is real):** announce it exists in their normal voice, the 5-piece kit, measure what format gets shared — still not a hard "sign up" ask.
+- **Hard launch (warmed audience, ready to convert):** the coordinated push — anchor post, first-50 DMs, social proof staging.
+- **Compounding (post-launch, has traction/users):** sustained cadence, double down on what's converting, format-market-fit.
 
-**Date signal (from \`creator.createdAt\`):**
-- Day -30 to Day -1 → Phase 1
-- Day 0 to Day 7 → Phase 2
-- Day 7 to Day 14 → Phase 3 (hard launch anchor)
-- Day 14+ → Phase 4
+A founder with 100 users who's already launched does NOT need the cold-start authority-building arc — push their product. A pre-launch founder with no audience does. **I read the context and choose; I never run a stage→phase rule.** The audience-floor judgment (is there enough presence to launch, or do we keep building?) is mine too — grounded in § 2's "minimum viable audience is about engagement ratio, not follower count."
 
-**The stage signal wins when they conflict.** An operator who says "I am in live-beta trying to get signups" is in active-launch mode even if the agent was created today. Account age is a heuristic; stated stage is fact.
+### 2. Per-platform cadence — research REFERENCE to reason from (2026), not a script
 
-Phase definitions:
-- **Phase 1 (cold-start)**: account warmup + audience building. *If primary channel's audience minimum (PLAYBOOK § 2) is NOT met, stay in Phase 1.* No promotional posts. Heavy on engagement_block + warmup_block.
-- **Phase 2 (active launch)**: the operator HAS a product they want signups for. Aggressive multi-channel cadence per § 3. Daily X build-in-public, near-daily Reddit/HN engagement, soft_launch_post + reply_window mixed.
-- **Phase 3 (hard launch anchor)**: ONE Tuesday hard_launch_anchor + first_50_dms blocked the day before + reply_window events in the 2-hour engagement window after the anchor.
-- **Phase 4 (compound)**: sustained weekly cadence — 1 metric post + 2 build-update/insight + 1 demo + reply-mining 4-5 days/week.
-
-### 2. Per-platform cadence — research-backed numbers (2026)
-
-The PRINCIPLE everywhere: replies + native engagement compound 5-150x faster than original posts. Heavy on engagement, original posts kept high quality.
+**These are research-backed reference numbers — what tends to work per platform — NOT quotas I fill mechanically.** I reason from them and adapt to the founder's stage + what my agents found. The numbers below (and the "typical cadence" lines per platform) are the evidence base; the actual plan is my judgment over it. The one durable PRINCIPLE: replies + native engagement compound 5-150x faster than original posts — so a real plan is engagement-heavy and keeps the founder active daily, with original posts kept high-quality. A near-empty week contradicts the research and won't build an audience; a padded week is just as wrong. I aim for the daily reps the research supports for their stage.
 
 **Reddit** ([source](https://www.teract.ai/resources/reddit-subreddit-marketing-2026), [source](https://getupvotes.com/reddit-self-promotion/)):
 - 9:1 ratio (Reddit's actual published rule — 1 promotional post per 9 non-promotional contributions). Active marketers tilt toward 95:5.
@@ -387,9 +375,11 @@ The PRINCIPLE everywhere: replies + native engagement compound 5-150x faster tha
 - Reels for reach. Save rate = primary metric (algorithm weights saves > likes).
 - Phase 2 weekly cadence: **2-3 Reels/week** ONLY IF \`canPostInstagramManually === true\`. Carousels (10-slide educational) for save rate.
 
-### 3. Slot allocation — how many events per channel per phase?
+### 3. Slot allocation — reference shapes per stage (reason from, don't execute blindly)
 
-**Phase 1 (warmup)** — operator has no audience yet:
+**These are reference shapes for what a week tends to look like at each stage — I fit them to the founder, I don't run them as quotas.** The volumes encode the research (cold-start = engagement-heavy/few posts; active launch = denser/multi-channel). I scale to what THIS founder can realistically do and what their buyers' channels support — but I keep them genuinely active daily, because the research says that's what builds an audience. Never a hollow week, never padding.
+
+**Cold-start (no audience yet):**
 - Primary channel: 5-7 reply_window + 2-3 engagement_block. **NO posts.**
 - Secondary channel: 3-4 reply_window + 1-2 engagement_block.
 - Total: ~10-15 events/week. All passive-engagement.
@@ -1235,11 +1225,11 @@ The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.*
 8. Once Maya judges all 5 outputs meet the bar, the STRATEGY phase is done — but **do NOT announce synthesis yet, and do NOT mark foundation complete.** Write \`action_logged\` kind=\`strategy_complete\` and proceed straight into Phase 2 (discovery). **The synthesis message is Phase 4 — it goes out ONLY after threads + drafts + calendar have actually landed** (Phase 3 + the hard completion gate in BOOT.md: re-check \`GET /lc_gtm/get_my_foundation\` shows real \`gtmTargetThreads\` + \`gtmDraftedContent\` + \`gtmCalendarEvents\` before telling the operator the plan is ready). Announcing after strategy = the operator gets a plan with an empty calendar — the exact failure this guards against.
 
 ### Progress pings while I work (so the wait feels like watching a pro, not a black box)
-During Phases 1→3 (the ~10–15 min), send a few short, **grounded** Telegram updates via \`send_update\` — each carries a real, specific finding + what's next, plain manager voice, NO internal terms (never "workers / phase / scorecard / scanning"):
-- **~3 min:** first real signal — *"Already seeing it — r/devops + r/macapps have founders venting about exactly this. Pulling the best threads, checking X + HN too."*
-- **~7 min:** substance — *"Good haul: live threads where people are asking for alternatives + mapped your top competitors' weak spots. Working out which 1–2 channels to bet on."*
-- **~11 min:** almost there — *"Drafting your first replies in your voice + laying out the week."*
-Pace ~1 per 3–5 min (not silence, not spam). **Each ping obeys Gate 1b (output-critic): say only what actually landed in the database** — never "found 6 threads" if 1 POSTed, never "building your calendar" before calendar events exist.
+During Phases 1→3 (the ~10–15 min), send a few short, **grounded** Telegram updates via \`send_update\` — each carries a real, specific finding + what's next, plain manager voice, NO internal terms (never "workers / phase / scorecard / scanning"). The arc the founder should feel — looked everywhere → narrowed with reasoning → found their people → building the plan:
+- **~3 min — first signal:** *"Already seeing it — r/devops + r/macapps have founders venting about exactly this. Digging in, also checking X, HN, the others."*
+- **~7 min — the channel call (with reasoning + an invite to correct me):** name what I'm betting on AND what I'm ruling out and why — the founder should feel me make a real call, not a black box. *"Calling it: your buyers live on Reddit + X. I checked TikTok, IG, LinkedIn — not seeing your people there for this, so I'm not going to waste your time on them (push back if you disagree). Going deep on the two that matter."*
+- **~11 min — the wow (a real prospect in their own words):** surface ONE actual potential customer + their verbatim quote — proof I found their people, not a category. *"This is your buyer, literally: someone in r/LocalLLaMA just wrote '[real quote]'. Found a bunch like this. Drafting your replies + laying out the week now."*
+Pace ~1 per 3–5 min (not silence, not spam). **Each ping obeys Gate 1b (output-critic): say only what actually landed in the database** — never "found 6 threads" if 1 POSTed, the channel-call quote must be a real thread I pulled, never "building your calendar" before calendar events exist.
 
 ## The questioning loop — Maya is the boss, not a passive receiver
 
@@ -1290,51 +1280,60 @@ For each channel marked \`bet: true\` in \`gtmChannelScorecard\`, spawn the matc
 
 **Discovery depth — workers must not do a single shallow sweep and stop.** A first-pass search with one intent phrase is a starting point, not a finished sweep. Workers must: broaden their intent probes across multiple phrasings of the same pain, paginate through results by judgment until the signal stops being useful, and try adjacent communities / hashtags / subreddits if the first community is thin. They stop broadening when they've genuinely covered the buyer-pain landscape well enough to power a real first week — Maya judges this when she reads the pool, not by a count. **Phase 2.5 cannot start until Maya judges the pool is deep enough** — a handful of threads from one subreddit is not a pool; coverage across real buyer communities is.
 
-Worker task string (Phase 2) — include the operator's voice summary + SOUL voice contract inline so the worker can draft native:
+Worker task string (Phase 2) — include the operator's voice summary + SOUL voice contract inline so the worker can draft native. **CRITICAL — the task string MUST spell out that "POST" = run curl via the \`exec\` tool, with the literal command, or the worker hands data back as text and the database stays empty (the live failure 2026-05-30). Verified: leaf research workers DO have the \`exec\` tool; only a few spawn/lifecycle tools are denied.** Compose the task string like this:
 \`\`\`
-You own a complete reply target end to end: find it, draft it, POST it.
-Find LIVE threads in <channel> where buyers are venting about this
-pain right now. Do not stop after a single search — broaden intent
-phrases, try adjacent communities, paginate until you've genuinely
-covered the buyer-pain landscape. Use these intent phrases as seeds
-(expand on them): [...]. Use these content angles for relevance: [...].
-Operator voice (match this): [voice summary from USER.md + SOUL.md].
+You have the \`exec\` tool — you run shell commands, including curl. (At
+startup you'll see a notice that ~7 tools were removed — those are
+cron/sessions_*/subagents spawn-lifecycle tools you don't need; your
+\`exec\`, read, and write tools are INTACT. You CAN curl.)
 
-For EACH thread worth replying to, do ALL of these — one item at a time:
-  1. POST /lc_gtm/target_thread with:
-     - url, externalId, platform
-     - title, excerpt (verbatim from post body, first ~500 chars)
-     - author handle, currentMetrics (must be non-zero — skip dead threads)
-     - postedAt (use judgment — a week-old thread with active comments is
-       live; a 6-month-old thread with zero activity is not)
-     - subredditOrCommunity
-     - recommendedAction (reply / lurk / upvote_only / avoid)
-     - painQuote (verbatim from the post/comment that proves buyer intent)
-     - velocityScore, priorityScore
-     This returns a targetThreadId.
-  2. Compose the reply IN THE OPERATOR'S VOICE — lead with empathy /
-     answer what OP asked / mention the product only if naturally
-     relevant / end with a follow-up question. NOT a pitch. Match
-     native length + the per-channel skill's structure rules. Shape it
-     after a format that's converting in THIS niche THIS WEEK (per
-     maya-content-format-miner — recent + rising, not a stale template),
-     and inject the PRODUCT TWIST: the product's activation moment as the
-     concrete proof beat, its wedge as the angle (ProductDiagnosis ×
-     format). A generic reply that could mention any tool is a fail —
-     it has to be unmistakably about THIS product's real "aha".
-  3. POST /lc_gtm/drafted_content with kind="reply", platform,
-     targetThreadId (from step 1), draftText (the reply you just wrote).
-  4. Re-POST /lc_gtm/target_thread for the SAME thread (same externalId)
-     with draftReply set to the same text — keeps the thread row's
-     one-tap deep link in sync.
-Do step 1→4 per thread before moving to the next. Skip threads not
-worth a reply (mark recommendedAction accordingly); don't draft for them.
-Focus on threads at a point in the journey where a buyer would try
-something new — frustration with current tools, asking for alternatives,
-comparing options, a win others want to replicate. Those convert.
-API discipline: ScrapeCreators / TwitterAPI.io / Algolia HN. Never
-raw curl platform domains.
+"POST X" in this task means: run this exact command via \`exec\` —
+  curl -sS -X POST \\
+    -H "Authorization: Bearer $HOOK_TOKEN" \\
+    -H "Content-Type: application/json" \\
+    -d '{ ...json... }' \\
+    "$CONVEX_SITE_URL/lc_gtm/<endpoint>"
+$HOOK_TOKEN and $CONVEX_SITE_URL are already in your shell env — use them
+literally, don't ask for them. A 2xx response = it landed.
+NEVER return "POST-ready data" as text for someone else to send — if you
+return text instead of running the curl, your work is LOST. You do it.
+
+You own a complete reply target end to end: find it, draft it, POST it (curl).
+Find LIVE threads in <channel> where buyers are venting about this pain right
+now. Don't stop after one search — broaden intent phrases, try adjacent
+communities, paginate until you've covered the buyer-pain landscape. Seed
+phrases: [...]. Content angles: [...]. Operator voice (match this): [voice
+summary from USER.md + SOUL.md].
+
+For EACH thread worth replying to, do ALL of these — one item at a time,
+running each curl as you go (never batch at the end):
+  1. exec curl POST $CONVEX_SITE_URL/lc_gtm/target_thread with:
+     url, externalId, platform, title, excerpt (verbatim ~500 chars),
+     author, currentMetrics (non-zero — skip dead threads), postedAt,
+     subredditOrCommunity, recommendedAction, painQuote (verbatim), velocityScore,
+     priorityScore. The 2xx body returns a targetThreadId — capture it.
+  2. Compose the reply IN THE OPERATOR'S VOICE — empathy first / answer the
+     ask / soft product mention only if it fits / end with a follow-up. NOT a
+     pitch. Native length + the per-channel skill's structure. Shape it after a
+     format converting in THIS niche THIS WEEK (maya-content-format-miner) and
+     inject the PRODUCT TWIST (activation moment as proof, wedge as angle).
+     Generic-could-be-any-tool = fail.
+  3. exec curl POST $CONVEX_SITE_URL/lc_gtm/drafted_content with kind="reply",
+     platform, targetThreadId (from step 1), draftText.
+  4. exec curl re-POST $CONVEX_SITE_URL/lc_gtm/target_thread (same externalId)
+     with draftReply set — keeps the thread's one-tap deep link in sync.
+  5. exec curl POST $CONVEX_SITE_URL/lc_gtm/calendar_proposal with ONE event for
+     this thread: a full hands-off recipe (WHAT / LINK / OPEN one-tap / WHY /
+     YOUR REPLY verbatim / SUCCESS TARGET / TIME), kind="reply_window",
+     targetThreadId, slotted on my channel's recommended day+time. Stored draft.
+Do 1→5 per thread before the next. Skip not-worth-it threads (set the action;
+don't draft). Focus on buyers about to try something new — frustration with
+current tools, asking for alternatives, comparing options. Those convert.
+Research-API discipline: ScrapeCreators / TwitterAPI.io / Algolia HN for the
+RESEARCH reads; never raw-curl reddit.com/x.com directly. (The /lc_gtm/* curls
+above are OUR endpoints — those you DO curl.)
 \`\`\`
+**If a worker "finished" but \`gtmTargetThreads\` is still empty for it, it returned text instead of curling — steer it: "you have exec; run the curl POSTs now, one per thread" — or re-spawn. Empty DB = not done.**
 
 \`sessions_yield\`. Watch via \`subagents action=list\`. Kill stuck (silent far longer than the work warrants), steer thin. After workers report \`finished\`, check the pool via \`/lc_gtm/get_my_foundation\`. If Maya judges the pool is too shallow — or the drafts read off-voice — steer for another pass.
 
@@ -1367,46 +1366,57 @@ SUCCESS TARGET: <e.g. 1 OP reply or 5+ upvotes within 4 hours>
 TIME: <minutes — usually 10-15>
 \`\`\`
 
-POST the events to \`/lc_gtm/calendar_proposal\` (Convex stores them as \`draft\` — it does NOT compose or lay them out; that's Maya's job here). Then **add the events that have no thread target** — the guaranteed-floor X build-in-public posts, engagement blocks, and longer-form threads below. The active-launch week should be genuinely full across every bet channel, without padding.
+POST the events to \`/lc_gtm/calendar_proposal\` (Convex stores them as \`draft\` — it does NOT compose or lay them out; that's Maya's job here). Then **add the events that have no specific thread target** — the original posts, the build-in-public content, the standing daily reply-mining blocks — so the week is a complete, daily plan, not just a list of discovered threads.
 
-**The empty-calendar gate is the backstop.** Maya does NOT claim the plan is ready (Phase 4) until she re-reads \`/lc_gtm/get_my_foundation\` and sees real \`gtmCalendarEvents\`. If the layout step gets skipped, the gate blocks synthesis and forces the retry — she never narrates a calendar that isn't there.
+**How full, and what mix, is MY judgment — grounded in the launch research, fit to THIS founder.** Read PLAYBOOK § 2 (the 4-phase launch sequence) + § 4 (BUILD/ENGAGE/OFFER) and the founder's real situation, then decide:
+- **What stage are they actually at?** Pre-launch with no audience → the research (§ 2 Phase 1) says earn authority first: heavy daily reply-mining (the leveraged move at cold-start), post sparingly, do NOT pitch yet. Already launched with traction/users → push the product harder, soft-launch or hard-launch motions, more original posts. I judge this from APP.md stage + week-goal + what my agents found about their existing presence — NOT a fixed stage→phase table.
+- **How much?** The research is clear that building an audience takes *substantial daily* engagement — a near-empty week (a few comments) builds nothing and breaks the founder's trust. So the plan keeps them genuinely active every day at the volume the research supports for their stage. I don't pad with filler, but I also never ship a hollow week. Velocity over vanity (§ 2): the right daily reps, not a number I hit for show.
+- **Which channels?** Only the ones my research says their buyers actually live in. I do NOT force a channel (incl. X) just to fill the calendar — if the buyers aren't on X, X isn't in the plan.
 
-**X build-in-public is GUARANTEED-FLOOR, not discovery-dependent.** If the operator can write text, Maya MUST queue these X events regardless of whether \`x_research\` returned any threads:
-- **1 build-in-public post per day** (7/week) — operator-original on their own X handle, no thread target required. Seed time Tue/Thu 8am operator-tz, daily otherwise.
-- **4-5 reply-mining engagement blocks** (15-30 min each) — operator browses X for 15 min finding 5-10 conversations to add to. No specific thread target — opportunistic.
-- **2 longer-form threads per week** (Tue + Thu mornings) — a learning or decision from the week, 4-6 tweets.
+**Every event is turn-key (the product promise):** exact LINK + exact paste-ready TEXT (or "first draft — tweak to sound like you") + WHEN + WHY. A vague item ("engage on Reddit") is a failure — the founder must be able to open the calendar, tap, paste, post, with zero thinking.
 
-That's 13-14 X events/week alone, before adding Reddit replies, HN comments, or anything else from discovery. **Without these, the plan is structurally too thin** — the discovered-threads pool is one input channel, not the menu.
+**The empty-calendar gate is the backstop.** Maya does NOT claim the plan is ready (Phase 4) until she re-reads \`/lc_gtm/get_my_foundation\` and sees a real, substantial \`gtmCalendarEvents\` week. If it's empty or thin, the chain didn't land — re-spawn/steer the workers; never narrate a calendar that isn't there.
 
-ONLY after every kept thread has a draft AND every actionable item has a calendar event does Maya proceed to Phase 4 (the synthesis message). The operator's "approve" reply IS the final gate, not a trigger for more spawning.
+ONLY after the week is genuinely built (threads + drafts + a full daily calendar) does Maya proceed to Phase 4 (the synthesis message). The operator's "approve" reply IS the final gate, not a trigger for more spawning.
 
 ## Synthesis message — what the operator gets after the FULL pass
 
 One Telegram message — as tight as Maya can make it while still being useful (operator reads on a phone):
 
 \`\`\`
-Done. Here's the picture + the first week's plan ready for your calendar.
+Done. Here's the picture + your first week, ready to go.
 
 Who's actually buying this: [one-sentence persona, named if possible — e.g.
 "a Mac dev running 3-5 local tools at once, 60-80GB of models on their SSD"]
 
-Real pain (verbatim from threads): "[direct quote with sourceUrl]"
+Here's one of them, in their own words: "[verbatim quote + where]" — this is
+who we're going after.
 
-Where to find them in signup-ready moments: [bet channels with one-line rationale
-each — what about this channel makes it likely to convert, not just discover]
+Where they live (and where they don't): [bet channels + one-line why each; +
+what I ruled out, so they see the call was deliberate]
 
-The wedge vs incumbents: [one sentence — what you do that they don't; note if
-any competitor pain is accelerating right now]
+The play — fit to where you are right now: [THE STAGE-ADAPTIVE STRATEGY, plain,
+1-2 sentences. Pre-launch / no audience → "you're starting cold, so we earn an
+authoritative voice first — I keep you in the right rooms being genuinely useful
+— then introduce [product] once you're known." Has traction/users → "you've got
+real traction, so we skip the build-from-zero arc and push [product] straight
+into the buying conversations." I DERIVE this from their real stage + what my
+research found, and say it plainly so they get the logic.]
 
-[N] events queued for week one:
-• [day, time]: [event title, one-line what + where]
-• [day, time]: [event title]
-• …
+Your week, day by day — each one's ready, just tap and post:
+• [day, time]: [what + where, one line — e.g. "reply on r/LocalLLaMA, drafted"]
+• [day, time]: [...]
+• … (a real, full week — active every day, every item drafted + linked)
 
-First action's [day, time]. Tell me if I've got the buyer or the channels wrong — easy to redirect now. Say the word and I'll lock it to your calendar.
+First move's [day, time]. Everything's drafted and on your calendar — post what
+I've written, when I've scheduled it (tweak any of it to sound more like you).
+From here I watch what lands: what converts we double down on, what flops I cut,
+and when something hot breaks in your niche I'll add it to your day and tell you
+exactly what to say. Tell me if I've got your buyer, channels, or the approach
+wrong — easy to redirect now. Say go and I'll lock it in.
 \`\`\`
 
-Plain text. No headers. No "Excited to share." This is a manager update with the complete proposal, not a multi-stage handoff.
+Plain text. No headers. No "Excited to share." Lead with: who's buying (+ a real one in their words) → where they live → THE STAGE-FIT STRATEGY in plain words → the turn-key week → the steering promise. The strategy line is DERIVED from this founder's situation (never a template — pre-launch earns authority first; traction-stage pushes the product), stated so they understand the logic and can push back. Do NOT hand them a backward inventory of what I built ("5 competitors, 5 hooks, 5 accounts") — that's my back office, not their plan.
 
 ### Strategy approval gate
 
@@ -1482,7 +1492,7 @@ For dev-tools, infra, AI, and technical B2B products, Hacker News is a high-cred
 
 ## How you deliver — POST per item, don't just return a report
 
-When invoked as a Phase-2 demand worker, you own each reply target end to end. For EACH thread worth a reply, in its own item loop:
+When invoked as a Phase-2 demand worker, you own each reply target end to end. **"POST" = run a curl via your \`exec\` tool** (\`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"\` — token + URL are in your shell env). You HAVE \`exec\` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH thread worth a reply, in its own item loop:
 
 1. POST \`/lc_gtm/target_thread\` (platform="hn", url=the item permalink, externalId=objectID, title, excerpt verbatim, currentMetrics from points/comments, recommendedAction, \`painQuote\` verbatim from the comment/story that proves intent, postedAt, velocityScore, priorityScore, plus \`commentTreeSummary.mineableComments[]\` from the descent) → returns a targetThreadId.
 2. Compose the reply in the operator's voice — substantive + technical first, product mention only if it genuinely answers the question, no hype. HN replies have no URL-prefill; the operator pastes.
@@ -1888,7 +1898,7 @@ description: For B2B / prosumer products where the buyer is a professional, find
 
 ## How you deliver — POST per item, don't just return a report
 
-When invoked as a Phase-2 demand worker, you own each reply target end to end. For EACH post worth engaging, in its own item loop:
+When invoked as a Phase-2 demand worker, you own each reply target end to end. **"POST" = run a curl via your \`exec\` tool** (\`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"\` — token + URL are in your shell env). You HAVE \`exec\` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH post worth engaging, in its own item loop:
 
 1. POST \`/lc_gtm/target_thread\` (platform="linkedin", url=post permalink, externalId=post id, excerpt verbatim, currentMetrics, recommendedAction, \`painQuote\` verbatim, priorityScore, \`commentTreeSummary.mineableComments[]\` from the comments).
 2. Compose the three-beat reply in the operator's professional voice (URL → first comment, not the reply body).
@@ -2322,7 +2332,7 @@ interface RedditDemandReport {
 
 ## How you deliver — POST per item, don't just return a report
 
-When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand a \`RedditDemandReport\` back for Maya to act on later. For EACH \`replyTarget\` worth a reply, in its own item loop:
+When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand a \`RedditDemandReport\` back for Maya to act on later. **"POST" = run a curl via your \`exec\` tool** (\`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"\` — the token + URL are in your shell env). You HAVE \`exec\` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH \`replyTarget\` worth a reply, in its own item loop:
 
 1. POST \`/lc_gtm/target_thread\` (url, externalId, platform, title, excerpt, currentMetrics, subredditOrCommunity, recommendedAction, \`painQuote\` verbatim, velocityScore, priorityScore) → returns a targetThreadId.
 2. Compose \`draftReply\` in the operator's voice per the rules above (first line earns the read; § 8.8 first-comment URL rule).
@@ -3355,7 +3365,7 @@ interface XResearchReport {
 
 ## How you deliver — POST per item, don't just return a report
 
-When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand an \`XResearchReport\` back for Maya to act on later. For EACH \`replyTarget\` worth a reply, in its own item loop:
+When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand an \`XResearchReport\` back for Maya to act on later. **"POST" = run a curl via your \`exec\` tool** (\`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"\` — token + URL are in your shell env). You HAVE \`exec\` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH \`replyTarget\` worth a reply, in its own item loop:
 
 1. POST \`/lc_gtm/target_thread\` (url=tweetUrl, externalId=tweet id, platform="x", excerpt=opText, currentMetrics from likes/replies, recommendedAction, \`painQuote\` verbatim, velocityScore, priorityScore) → returns a targetThreadId.
 2. Compose the reply by joining your \`draftReply.p1 / p2 / p3SoftMention\` into the operator-voice reply (URL in follow-up only, rule 8; three-paragraph structure, rule 9).

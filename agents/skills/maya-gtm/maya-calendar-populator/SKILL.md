@@ -30,33 +30,21 @@ Without this skill, the target list lives in the database and nobody acts on it.
 
 ## Decision rules
 
-### 1. Phase detection — what week are we in?
+### 1. Where is this founder, really? (judgment, not a lookup table)
 
-Phase is determined by the STRONGER signal of two inputs:
+I read the founder's actual situation and decide which launch phase fits — this is my judgment grounded in the research, NOT an if-this-then-that table. The signals I weigh: APP.md `stage`, their week-goal, account age, and — most importantly — **what my research agents actually found about their existing presence** (do they have an audience? traction? users already? or are they cold?). A founder "in live-beta" with 500 engaged followers is in a different place than one "in live-beta" who launched their account yesterday. I judge the real picture, not a field.
 
-**Stage signal (from APP.md `stage`):**
-- `prelaunch` → Phase 1 (cold-start)
-- `live-beta` → **Phase 2 (active launch)** — REGARDLESS of creator account age
-- `live` AND week-goal IN (signups, users, revenue) → **Phase 2 (active launch)**
-- `live` AND week-goal = "compound" → Phase 4 (sustaining)
+The launch research (PLAYBOOK § 2) describes four phases — use them as a map of what tends to work at each stage, and pick where this founder is:
+- **Cold-start (no audience yet):** the research is emphatic — earn authority FIRST. Heavy daily reply-mining (4-5x more leveraged than posting at cold start), post sparingly, do NOT pitch the product yet. Track velocity (engagement-to-follower ratio), not raw count.
+- **Soft launch (has some presence, product is real):** announce it exists in their normal voice, the 5-piece kit, measure what format gets shared — still not a hard "sign up" ask.
+- **Hard launch (warmed audience, ready to convert):** the coordinated push — anchor post, first-50 DMs, social proof staging.
+- **Compounding (post-launch, has traction/users):** sustained cadence, double down on what's converting, format-market-fit.
 
-**Date signal (from `creator.createdAt`):**
-- Day -30 to Day -1 → Phase 1
-- Day 0 to Day 7 → Phase 2
-- Day 7 to Day 14 → Phase 3 (hard launch anchor)
-- Day 14+ → Phase 4
+A founder with 100 users who's already launched does NOT need the cold-start authority-building arc — push their product. A pre-launch founder with no audience does. **I read the context and choose; I never run a stage→phase rule.** The audience-floor judgment (is there enough presence to launch, or do we keep building?) is mine too — grounded in § 2's "minimum viable audience is about engagement ratio, not follower count."
 
-**The stage signal wins when they conflict.** An operator who says "I am in live-beta trying to get signups" is in active-launch mode even if the agent was created today. Account age is a heuristic; stated stage is fact.
+### 2. Per-platform cadence — research REFERENCE to reason from (2026), not a script
 
-Phase definitions:
-- **Phase 1 (cold-start)**: account warmup + audience building. *If primary channel's audience minimum (PLAYBOOK § 2) is NOT met, stay in Phase 1.* No promotional posts. Heavy on engagement_block + warmup_block.
-- **Phase 2 (active launch)**: the operator HAS a product they want signups for. Aggressive multi-channel cadence per § 3. Daily X build-in-public, near-daily Reddit/HN engagement, soft_launch_post + reply_window mixed.
-- **Phase 3 (hard launch anchor)**: ONE Tuesday hard_launch_anchor + first_50_dms blocked the day before + reply_window events in the 2-hour engagement window after the anchor.
-- **Phase 4 (compound)**: sustained weekly cadence — 1 metric post + 2 build-update/insight + 1 demo + reply-mining 4-5 days/week.
-
-### 2. Per-platform cadence — research-backed numbers (2026)
-
-The PRINCIPLE everywhere: replies + native engagement compound 5-150x faster than original posts. Heavy on engagement, original posts kept high quality.
+**These are research-backed reference numbers — what tends to work per platform — NOT quotas I fill mechanically.** I reason from them and adapt to the founder's stage + what my agents found. The numbers below (and the "typical cadence" lines per platform) are the evidence base; the actual plan is my judgment over it. The one durable PRINCIPLE: replies + native engagement compound 5-150x faster than original posts — so a real plan is engagement-heavy and keeps the founder active daily, with original posts kept high-quality. A near-empty week contradicts the research and won't build an audience; a padded week is just as wrong. I aim for the daily reps the research supports for their stage.
 
 **Reddit** ([source](https://www.teract.ai/resources/reddit-subreddit-marketing-2026), [source](https://getupvotes.com/reddit-self-promotion/)):
 - 9:1 ratio (Reddit's actual published rule — 1 promotional post per 9 non-promotional contributions). Active marketers tilt toward 95:5.
@@ -100,9 +88,11 @@ The PRINCIPLE everywhere: replies + native engagement compound 5-150x faster tha
 - Reels for reach. Save rate = primary metric (algorithm weights saves > likes).
 - Phase 2 weekly cadence: **2-3 Reels/week** ONLY IF `canPostInstagramManually === true`. Carousels (10-slide educational) for save rate.
 
-### 3. Slot allocation — how many events per channel per phase?
+### 3. Slot allocation — reference shapes per stage (reason from, don't execute blindly)
 
-**Phase 1 (warmup)** — operator has no audience yet:
+**These are reference shapes for what a week tends to look like at each stage — I fit them to the founder, I don't run them as quotas.** The volumes encode the research (cold-start = engagement-heavy/few posts; active launch = denser/multi-channel). I scale to what THIS founder can realistically do and what their buyers' channels support — but I keep them genuinely active daily, because the research says that's what builds an audience. Never a hollow week, never padding.
+
+**Cold-start (no audience yet):**
 - Primary channel: 5-7 reply_window + 2-3 engagement_block. **NO posts.**
 - Secondary channel: 3-4 reply_window + 1-2 engagement_block.
 - Total: ~10-15 events/week. All passive-engagement.

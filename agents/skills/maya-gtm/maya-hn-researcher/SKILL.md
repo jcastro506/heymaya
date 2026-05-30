@@ -38,7 +38,7 @@ For dev-tools, infra, AI, and technical B2B products, Hacker News is a high-cred
 
 ## How you deliver — POST per item, don't just return a report
 
-When invoked as a Phase-2 demand worker, you own each reply target end to end. For EACH thread worth a reply, in its own item loop:
+When invoked as a Phase-2 demand worker, you own each reply target end to end. **"POST" = run a curl via your `exec` tool** (`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"` — token + URL are in your shell env). You HAVE `exec` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH thread worth a reply, in its own item loop:
 
 1. POST `/lc_gtm/target_thread` (platform="hn", url=the item permalink, externalId=objectID, title, excerpt verbatim, currentMetrics from points/comments, recommendedAction, `painQuote` verbatim from the comment/story that proves intent, postedAt, velocityScore, priorityScore, plus `commentTreeSummary.mineableComments[]` from the descent) → returns a targetThreadId.
 2. Compose the reply in the operator's voice — substantive + technical first, product mention only if it genuinely answers the question, no hype. HN replies have no URL-prefill; the operator pastes.

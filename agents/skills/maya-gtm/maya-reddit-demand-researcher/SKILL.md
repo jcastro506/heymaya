@@ -143,7 +143,7 @@ interface RedditDemandReport {
 
 ## How you deliver — POST per item, don't just return a report
 
-When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand a `RedditDemandReport` back for Maya to act on later. For EACH `replyTarget` worth a reply, in its own item loop:
+When invoked as a Phase-2 demand worker (the first-wake actionable pass), you own each reply target end to end — you do NOT hand a `RedditDemandReport` back for Maya to act on later. **"POST" = run a curl via your `exec` tool** (`curl -sS -X POST -H "Authorization: Bearer $HOOK_TOKEN" -H "Content-Type: application/json" -d '{...}' "$CONVEX_SITE_URL/lc_gtm/<endpoint>"` — the token + URL are in your shell env). You HAVE `exec` — the ~7 tools removed at startup are spawn/lifecycle tools, not your shell; you CAN curl. Returning "POST-ready data" as text = the work is lost; you run the curl yourself. For EACH `replyTarget` worth a reply, in its own item loop:
 
 1. POST `/lc_gtm/target_thread` (url, externalId, platform, title, excerpt, currentMetrics, subredditOrCommunity, recommendedAction, `painQuote` verbatim, velocityScore, priorityScore) → returns a targetThreadId.
 2. Compose `draftReply` in the operator's voice per the rules above (first line earns the read; § 8.8 first-comment URL rule).
