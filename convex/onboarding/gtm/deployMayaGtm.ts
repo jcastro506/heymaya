@@ -305,7 +305,10 @@ export function buildGatewayConfig(
       id: "reddit_research",
       name: "Reddit Demand Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const },
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
       // Allow no further spawning — depth-1 max from main.
       subagents: { allowAgents: [] as string[] },
     },
@@ -313,28 +316,60 @@ export function buildGatewayConfig(
       id: "x_research",
       name: "X Founder-Led Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const },
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "tiktok_research",
       name: "TikTok Format Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const },
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "instagram_research",
       name: "Instagram Reuse Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const },
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "linkedin_research",
       name: "LinkedIn Fit Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const },
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
       subagents: { allowAgents: [] as string[] },
     },
     {
@@ -344,7 +379,15 @@ export function buildGatewayConfig(
       id: "hn_research",
       name: "Hacker News Demand Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const },
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
       subagents: { allowAgents: [] as string[] },
     },
     {
@@ -373,7 +416,15 @@ export function buildGatewayConfig(
       // Cheap structured-output model for normalizing multimodal walkthrough
       // analysis output into ResearchRawItem-shaped data. Per TOOLS.md.
       model: extractionModel,
-      tools: { profile: "coding" as const },
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
       subagents: { allowAgents: [] as string[] },
     },
     // ─── Sprint 2.17 Phase C — Manager-mode workers ────────────────────
@@ -386,35 +437,75 @@ export function buildGatewayConfig(
       id: "buyer_map_worker",
       name: "Buyer Map Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const },
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "competitive_worker",
       name: "Competitive Map Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const },
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "channel_worker",
       name: "Channel Scorecard Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const },
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "content_angle_worker",
       name: "Content Angle Vault Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const },
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "relationship_worker",
       name: "Relationship Target Researcher",
       model: subagentModel,
-      tools: { profile: "coding" as const },
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
       subagents: { allowAgents: [] as string[] },
     },
     // Continuous-mode workers, spawned daily before the morning brief.
@@ -426,14 +517,30 @@ export function buildGatewayConfig(
       id: "competitor_move_worker",
       name: "Competitor Move Watcher",
       model: subagentModel,
-      tools: { profile: "coding" as const },
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "niche_pulse_worker",
       name: "Niche Pulse Watcher",
       model: subagentModel,
-      tools: { profile: "coding" as const },
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
       subagents: { allowAgents: [] as string[] },
     },
   ];
@@ -548,7 +655,12 @@ export function buildGatewayConfig(
           workspace: "/data/workspace",
           model: mainModel,
           subagents: { allowAgents: allowFromMain },
-          tools: { profile: "coding" },
+          // alsoAllow group:plugins so the maya-gtm-tools typed tools
+          // (persist + research) reach Maya — the `coding` profile excludes
+          // plugin-owned tools by default (verified live: toolCount was 22
+          // without this, the 46 plugin tools missing). Subagents get the
+          // same via their per-agent tools above.
+          tools: { profile: "coding", alsoAllow: ["group:plugins"] },
           // Sprint 2.18 #50 — hide reasoning tokens from operator-
           // facing output. Per OpenClaw docs: agents.list[].
           // reasoningDefault: "off" overrides the global default
