@@ -69,6 +69,79 @@ export const getMyConversions = query({
   },
 });
 
+/**
+ * Per-post attribution — "which post/reply drove clicks + signups." Joins
+ * each tracked link (gtmLinkWraps) to its click count (gtmLinkClicks) and the
+ * conversions tied to it (gtmConversions.linkWrapId), plus the draft it came
+ * from (so the UI can show the actual post text + platform). This is the
+ * proof-it's-working surface AND the data Maya reads to adapt ("double down on
+ * what converts, cut what flops"). Most-recent first, capped.
+ */
+export const getMyPostAttribution = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<
+    Array<{
+      linkWrapId: Id<"gtmLinkWraps">;
+      destinationUrl: string;
+      platform: string | null;
+      draftText: string | null;
+      draftKind: string | null;
+      clicks: number;
+      conversions: number;
+      conversionKinds: string[];
+      createdAt: number;
+    }>
+  > => {
+    const creator = await resolveMyGtmCreator(ctx);
+    if (!creator) return [];
+    const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
+
+    const wraps = await ctx.db
+      .query("gtmLinkWraps")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .order("desc")
+      .take(limit);
+
+    const rows = await Promise.all(
+      wraps.map(async (w) => {
+        const clicks = await ctx.db
+          .query("gtmLinkClicks")
+          .withIndex("by_link_wrap", (q) => q.eq("linkWrapId", w._id))
+          .collect();
+        const convs = await ctx.db
+          .query("gtmConversions")
+          .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+          .collect();
+        const linked = convs.filter((c) => c.linkWrapId === w._id);
+        let draftText: string | null = null;
+        let draftKind: string | null = null;
+        if (w.draftId) {
+          const draft = await ctx.db.get(w.draftId);
+          if (draft && draft.accountId === creator._id) {
+            draftText = draft.draftText;
+            draftKind = draft.kind;
+          }
+        }
+        return {
+          linkWrapId: w._id,
+          destinationUrl: w.destinationUrl,
+          platform: w.platform ?? null,
+          draftText,
+          draftKind,
+          clicks: clicks.length,
+          conversions: linked.reduce((sum, c) => sum + c.count, 0),
+          conversionKinds: [...new Set(linked.map((c) => c.kind))],
+          createdAt: w.createdAt,
+        };
+      })
+    );
+    return rows;
+  },
+});
+
 // ───────────────────────── Account ─────────────────────────
 
 /** Account/profile view for the Account tab — the operator's product, North

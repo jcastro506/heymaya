@@ -65,12 +65,17 @@ export default function ResultsPage() {
   const conversions = useQuery(api.gtmMaya.missionControl.getMyConversions);
   const learnings = useQuery(api.gtmMaya.missionControl.getMyNicheLearnings, {});
   const posts = useQuery(api.gtmMaya.postResults.getMyRecentPostResults, {});
+  const attribution = useQuery(
+    api.gtmMaya.missionControl.getMyPostAttribution,
+    {}
+  );
 
   if (
     snapshot === undefined ||
     conversions === undefined ||
     learnings === undefined ||
-    posts === undefined
+    posts === undefined ||
+    attribution === undefined
   ) {
     return <Loading />;
   }
@@ -80,12 +85,18 @@ export default function ResultsPage() {
   const conversionRows = conversions ?? [];
   const learningRows = learnings ?? [];
   const postRows = posts ?? [];
+  // Per-post attribution, ranked by what converted (then clicks). This is the
+  // "which post drove signups" view + the data Maya re-weights the plan on.
+  const attributionRows = [...(attribution ?? [])]
+    .filter((a) => a.clicks > 0 || a.conversions > 0)
+    .sort((a, b) => b.conversions - a.conversions || b.clicks - a.clicks);
 
   const hasAnything =
     Boolean(app?.northStarMetric) ||
     conversionRows.length > 0 ||
     learningRows.length > 0 ||
-    postRows.length > 0;
+    postRows.length > 0 ||
+    attributionRows.length > 0;
 
   if (!hasAnything) {
     return (
@@ -278,6 +289,46 @@ export default function ResultsPage() {
                   </div>
                   <span className="shrink-0 font-mono text-[11px] text-paper-faint">
                     {timeAgo(c.occurredAt)}
+                  </span>
+                </Card>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Section>
+
+      {/* ── Per-post attribution: which post drove what ── */}
+      <Section title="By post — what drove clicks + signups" count={attributionRows.length}>
+        {attributionRows.length === 0 ? (
+          <Empty
+            title="No tracked posts yet"
+            body="Every product link Maya hands you is tracked. Once you start posting them, you'll see exactly which post drove the clicks and signups — and Maya doubles down on what converts."
+          />
+        ) : (
+          <ol className="space-y-2">
+            {attributionRows.map((a) => (
+              <li key={a.linkWrapId}>
+                <Card className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      {a.platform ? (
+                        <Pill tone="paper">{a.platform}</Pill>
+                      ) : null}
+                      {a.conversions > 0 ? (
+                        <Pill tone="lime">
+                          {a.conversions} signup{a.conversions === 1 ? "" : "s"}
+                        </Pill>
+                      ) : null}
+                      <span className="font-mono text-[11px] text-paper-faint">
+                        {a.clicks} click{a.clicks === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-xs leading-relaxed text-paper-dim">
+                      {a.draftText ?? a.destinationUrl}
+                    </p>
+                  </div>
+                  <span className="shrink-0 font-mono text-[11px] text-paper-faint">
+                    {timeAgo(a.createdAt)}
                   </span>
                 </Card>
               </li>
