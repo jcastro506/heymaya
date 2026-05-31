@@ -95,7 +95,7 @@ describe("Mission Control — SSR render smoke", () => {
       const html = renderToString(createElement(Page));
       // With no data + null snapshot, every gated tab shows NeedsOnboarding.
       expect(html).toContain("No agent yet");
-      expect(html).toContain("Set up ClawLaunch");
+      expect(html).toContain("Set up HeyMaya");
     });
   }
 });

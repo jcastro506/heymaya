@@ -133,13 +133,13 @@ export default function AccountPage() {
         <Card>
           {deleted ? (
             <p className="text-sm text-paper-dim">
-              Your account is marked deleted. ClawLaunch has stopped. Reach out
+              Your account is marked deleted. HeyMaya has stopped. Reach out
               if you want it back.
             </p>
           ) : !confirming ? (
             <div className="flex items-center justify-between gap-4">
               <p className="text-sm text-paper-dim">
-                Stop ClawLaunch and remove your account.
+                Stop HeyMaya and remove your account.
               </p>
               <button
                 onClick={() => setConfirming(true)}
