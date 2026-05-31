@@ -225,6 +225,7 @@ import type * as lib_brandOutreachCaps from "../lib/brandOutreachCaps.js";
 import type * as lib_encryption from "../lib/encryption.js";
 import type * as lib_flyClient from "../lib/flyClient.js";
 import type * as lib_planFeatures from "../lib/planFeatures.js";
+import type * as lib_posthog from "../lib/posthog.js";
 import type * as lib_usageEvents from "../lib/usageEvents.js";
 import type * as lib_webhookSecret from "../lib/webhookSecret.js";
 import type * as mayaActionLog from "../mayaActionLog.js";
@@ -501,6 +502,7 @@ declare const fullApi: ApiFromModules<{
   "lib/encryption": typeof lib_encryption;
   "lib/flyClient": typeof lib_flyClient;
   "lib/planFeatures": typeof lib_planFeatures;
+  "lib/posthog": typeof lib_posthog;
   "lib/usageEvents": typeof lib_usageEvents;
   "lib/webhookSecret": typeof lib_webhookSecret;
   mayaActionLog: typeof mayaActionLog;

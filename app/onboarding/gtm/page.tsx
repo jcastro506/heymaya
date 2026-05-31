@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 
 type Stage = "intake" | "research" | "deploy";
 
@@ -230,6 +231,7 @@ function GtmOnboardingBody() {
       // gtmResearchJobs.phase for live progress.
       void runResearch({ researchJobId: jobId });
       setResearchJobId(String(jobId));
+      track(ANALYTICS_EVENTS.ONBOARDING_SUBMITTED, { app_id: String(appId) });
       setStage("research");
     } catch (err) {
       setError(friendlyError(err));
@@ -285,7 +287,10 @@ function GtmOnboardingBody() {
           ? `Deployed to ${result.flyAppId} (${result.machineId})`
           : `${result.stage}: ${result.message}`
       );
-      if (result.ok) setStage("deploy");
+      if (result.ok) {
+        track(ANALYTICS_EVENTS.PLAN_READY, { fly_app_id: result.flyAppId });
+        setStage("deploy");
+      }
     } catch (err) {
       setError(friendlyError(err));
     } finally {

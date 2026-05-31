@@ -9,6 +9,7 @@ import {
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { FlyClient, FlyError, type FlyMachineConfig } from "../../lib/flyClient";
+import { capturePosthogEvent } from "../../lib/posthog";
 import { buildMayaGtmWorkspace } from "../../agents/packs/maya_gtm/generators";
 import {
   BUNDLED_GTM_PLUGIN_TGZ_BASE64,
@@ -1329,6 +1330,27 @@ export const deployMayaGtm = internalAction({
       );
     } catch (err) {
       return fail("patch-agent", (err as Error).message, true);
+    }
+
+    // Server-truth analytics: the agent is live. Terminal step of the
+    // onboarding funnel in PostHog. Best-effort; never fails the deploy.
+    try {
+      const accountId = row.agent.accountId;
+      const distinctId = await ctx.runQuery(
+        internal.gtmMaya.openclaw.conversationCapture.getAccountDistinctId,
+        { accountId }
+      );
+      await capturePosthogEvent({
+        distinctId,
+        event: "agent_deployed",
+        properties: {
+          account_id: accountId,
+          fly_app_id: bundle.flyAppName,
+          duration_ms: Date.now() - startedAt,
+        },
+      });
+    } catch {
+      // analytics is non-critical
     }
 
     return {

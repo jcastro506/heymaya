@@ -36,11 +36,12 @@
 
 import { v } from "convex/values";
 import { httpAction } from "../../_generated/server";
-import { internalMutation } from "../../_generated/server";
+import { internalMutation, internalQuery } from "../../_generated/server";
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { recordChatTurnInline } from "../../lib/usageEvents";
 import { authenticate } from "./inboundCallback";
+import { captureAiGeneration } from "../../lib/posthog";
 
 /**
  * Hard cap on stored body length. Telegram messages top out at 4096 chars;
@@ -208,6 +209,16 @@ export const recordTurnTelemetry = internalMutation({
   },
 });
 
+/** Resolve the Clerk user id for an account so server events stitch onto the
+ *  same PostHog person the browser SDK identifies. */
+export const getAccountDistinctId = internalQuery({
+  args: { accountId: v.id("creators") },
+  handler: async (ctx, args): Promise<string> => {
+    const creator = await ctx.db.get(args.accountId);
+    return creator?.clerkUserId ?? `account:${args.accountId}`;
+  },
+});
+
 interface LogMessagePayload {
   idempotencyKey?: string;
   turnId?: string;
@@ -351,6 +362,24 @@ export const logTurnTelemetryHttp = httpAction(async (ctx, request) => {
       thinkingBudget: num(body.thinkingBudget),
     }
   );
+
+  // Native LLM observability in PostHog ($ai_generation). Best-effort; never
+  // blocks the response. distinctId = the account's Clerk id so it stitches
+  // onto the same person the browser SDK identifies.
+  const distinctId = await ctx.runQuery(
+    internal.gtmMaya.openclaw.conversationCapture.getAccountDistinctId,
+    { accountId: auth.accountId }
+  );
+  await captureAiGeneration({
+    distinctId,
+    turnId: body.turnId,
+    model: typeof body.model === "string" ? body.model : undefined,
+    tokensIn: num(body.tokensIn),
+    tokensOut: num(body.tokensOut),
+    latencyMs: num(body.latencyMs),
+    costUsd: num(body.costUsd),
+    accountId: auth.accountId,
+  });
 
   return new Response(JSON.stringify({ ok: true, patched: result.patched }), {
     status: 200,
