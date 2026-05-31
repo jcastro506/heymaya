@@ -149,8 +149,8 @@ export function NeedsOnboarding() {
     <div className="mx-auto max-w-5xl px-5 py-16 sm:px-8">
       <Empty
         title="No agent yet"
-        body="Finish setting up ClawLaunch and your manager will start working — everything she finds shows up here."
-        cta={{ href: "/onboarding/gtm", label: "Set up ClawLaunch" }}
+        body="Finish setting up HeyMaya and your manager will start working — everything she finds shows up here."
+        cta={{ href: "/onboarding/gtm", label: "Set up HeyMaya" }}
       />
     </div>
   );

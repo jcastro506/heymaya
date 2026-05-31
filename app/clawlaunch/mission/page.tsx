@@ -62,7 +62,7 @@ export default function TodayPage() {
       title="Today"
       subtitle={`What your manager is doing for ${appName} right now, and what's on deck today. Everything also lands in your Telegram + Google Calendar.`}
     >
-      <Section title="What ClawLaunch is doing now" count={activity?.length}>
+      <Section title="What Maya is doing now" count={activity?.length}>
         {!activity || activity.length === 0 ? (
           <Empty
             title="Warming up"

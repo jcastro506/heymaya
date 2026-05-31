@@ -79,7 +79,7 @@ function Masthead() {
           href="/"
           className="font-mono text-[11px] uppercase tracking-[0.22em]"
         >
-          ClawLaunch
+          HeyMaya
         </Link>
         <nav className="hidden gap-7 font-mono text-[11px] uppercase tracking-[0.22em] sm:flex">
           <a href="#what" className="opacity-60 hover:opacity-100">
@@ -140,7 +140,7 @@ function Hero() {
               href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
               className="cta-primary"
             >
-              {primaryCtaLabel("Start ClawLaunch")}
+              {primaryCtaLabel("Start HeyMaya")}
               <span className="cta-arrow">→</span>
             </Link>
             <a
@@ -932,7 +932,7 @@ function Footer() {
   return (
     <footer className="border-t border-[#0a0a0a]/10 px-6 py-10 sm:px-10">
       <div className="mx-auto flex max-w-7xl flex-wrap items-baseline justify-between gap-4 font-mono text-[10px] uppercase tracking-[0.22em] opacity-50">
-        <span>ClawLaunch</span>
+        <span>HeyMaya</span>
         <div className="flex gap-6">
           <Link href="/privacy">Privacy</Link>
           <Link href="/terms">Terms</Link>

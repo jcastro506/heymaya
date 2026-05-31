@@ -47,7 +47,7 @@ export default function MissionLayout({ children }: { children: ReactNode }) {
           href="/clawlaunch"
           className="font-mono text-xs uppercase tracking-[0.22em] text-paper"
         >
-          ClawLaunch
+          HeyMaya
         </Link>
         <p className="mt-1 font-display text-lg">Mission Control</p>
         <div className="mt-8 flex flex-col gap-1">
@@ -81,7 +81,7 @@ export default function MissionLayout({ children }: { children: ReactNode }) {
           href="/clawlaunch"
           className="font-mono text-xs uppercase tracking-[0.22em] text-paper"
         >
-          ClawLaunch
+          HeyMaya
         </Link>
         <span className="font-display text-sm">Mission Control</span>
       </header>

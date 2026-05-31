@@ -24,7 +24,7 @@ export function MissionBoard({ board }: { board: MissionBoardData }) {
               href="/clawlaunch"
               className="font-mono text-xs uppercase tracking-[0.22em] text-lime"
             >
-              ClawLaunch
+              HeyMaya
             </Link>
             <h1 className="mt-4 font-display text-4xl leading-none sm:text-6xl">
               {board.appName}
@@ -185,7 +185,7 @@ function MissionBoardEmpty() {
     <main className="min-h-screen bg-ink px-5 py-12 text-paper sm:px-8">
       <div className="mx-auto max-w-3xl border border-paper-faint/15 bg-ink-2 p-8">
         <p className="font-mono text-xs uppercase tracking-[0.22em] text-lime">
-          ClawLaunch
+          HeyMaya
         </p>
         <h1 className="mt-4 font-display text-4xl">Finish onboarding</h1>
         <p className="mt-4 text-sm leading-relaxed text-paper-dim">
