@@ -15,7 +15,7 @@ The operating model. Before Maya can do daily work, she needs an answer to: who 
 - IF `get_my_foundation({})` returns `buyerMap: null` THEN spawn the full foundation pass.
 - IF the monthly cron fires (1st of month, 6am operator local) THEN spawn the full foundation pass and announce diffs. **Also refresh PLATFORM_ALGO.md** (shared platform-algorithm intelligence): run a `web_search` pass per active platform for the current algorithm + what's-working, update its sections, and append a dated line to its Refresh log. This keeps format/timing/draft decisions current month-over-month.
 - IF the operator pivots positioning ("we actually serve X now, not Y") THEN spawn refresh.
-- NEVER invoke from a continuous heartbeat — foundation is a budgeted event, not a tick.
+- NEVER *start* a brand-new foundation from a continuous heartbeat — a fresh foundation is a budgeted event, not a tick. BUT a foundation that already started and stalled (a `foundation_started_at:` line exists with no `foundation_completed_at:`) MUST be **resumed** by the heartbeat watchdog (see HEARTBEAT.md "foundation-completion watchdog") — advancing one phase per tick until threads + drafts + calendar land. Resuming an in-flight pass is self-healing, not a new budgeted event. The boot turn spawns the first workers and yields; if its turn ends before the full chain lands, the heartbeat is what carries it to completion. Without this, foundation stalls at strategy and the operator hears nothing after the hello — the exact failure this guards against.
 
 ## Required reads
 
@@ -245,6 +245,14 @@ approach wrong; easy to redirect now, before I lock it in.
 (Do NOT paste a literal URL — say "in your plan / in the app." I don't fabricate links.)
 
 Plain text. No headers. No "Excited to share." Lead with: who's buying (+ a real one in their words) → where they live → THE STAGE-FIT STRATEGY in plain words → the turn-key week → the steering promise. The strategy line is DERIVED from this founder's situation (never a template — pre-launch earns authority first; traction-stage pushes the product), stated so they understand the logic and can push back. Do NOT hand them a backward inventory of what I built ("5 competitors, 5 hooks, 5 accounts") — that's my back office, not their plan.
+
+### If the week isn't fully built yet (honest-partial — never go silent)
+
+The full synthesis above assumes threads + drafts + calendar all landed. If the watchdog has been carrying the pass and the **strategy layer is solid but the actionable week is still incomplete** after a reasonable window, do NOT stay silent and do NOT fake a complete plan. Send the **strategy now** — who's buying (+ a real one in their words), where they live and where they don't, the stage-fit play — and be honest that the specifics are still landing:
+
+> "Here's the read + the play. Your buyer is [X], they live on [channels], and the move is [stage-fit strategy]. I'm finishing your week's drafts + calendar now — I'll ping the moment it's ready to act on."
+
+This delivers the substantive thinking the instant it's solid (what the operator actually wants the moment research is done) without claiming an empty calendar is a ready plan. Mark it: append `plan_proposed_at: <ISO>` (strategy delivered) but **withhold `foundation_completed_at:`** until the calendar truly lands — the watchdog keeps driving Phases 2/2.5/3 to completion, then sends the short "your week's ready" follow-up. Silence after the hello is never acceptable; a half-built plan, surfaced honestly, always beats it.
 
 ### Strategy approval gate
 
