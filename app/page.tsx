@@ -11,7 +11,7 @@ import ClawLaunchLandingPage from "./clawlaunch/page";
  * <head> at build time.
  */
 export const metadata: Metadata = {
-  title: "Maya — the GTM agent for builders Cursor unlocked.",
+  title: "HeyMaya — the GTM agent for builders Cursor unlocked.",
   description:
     "You shipped fast. Marketing is the wall. Maya finds where your users talk, drafts the replies, plans the week — so your signup graph stops being a flat line.",
 };
