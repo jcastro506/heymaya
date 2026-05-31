@@ -58,6 +58,10 @@ const isPublic = createRouteMatcher([
   "/waitlist",
   "/growth",
   "/clawlaunch(.*)",
+  // Founder God-view — gated server-side by ADMIN_DASH_TOKEN (the Convex
+  // queries fail closed without it). No Clerk role exists for this, so the
+  // route is "public" at the middleware layer and the token IS the gate.
+  "/founder(.*)",
   "/privacy",
   "/terms",
   "/tiktok9iwZOtsyHO9kZG4DFCD2AMpXjKs4jtyO.txt",
