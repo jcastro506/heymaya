@@ -561,42 +561,6 @@ function ChannelPane({
   );
 }
 
-/* Simpler placeholder for the four channels not yet fleshed out with
- * mockups. Same overall layout but right side is a temporary card so
- * the page still scrolls nicely until each pane gets its real mockup. */
-function ChannelPanePlaceholder({
-  logo,
-  name,
-  tagline,
-  body,
-}: Omit<ChannelPaneProps, "mockup" | "mockupLabel">) {
-  return (
-    <article className="border-b border-[#0a0a0a]/10 py-28 sm:py-40 lg:py-48 last:border-b-0">
-      <RevealOnView>
-        <div className="grid grid-cols-12 gap-x-8 gap-y-12 lg:gap-y-0">
-          <div className="col-span-12 lg:col-span-5">
-            <div className="mb-7">{logo}</div>
-            <h3 className="font-display italic text-[clamp(2.8rem,7vw,5rem)] leading-[1] tracking-tight">
-              {name}
-            </h3>
-            <p className="mt-7 font-display italic text-[clamp(1.4rem,2.4vw,1.9rem)] leading-[1.2] tracking-tight text-[#0a0a0a]/85">
-              {tagline}
-            </p>
-            <p className="mt-7 max-w-xl text-[15px] leading-[1.65] text-[#0a0a0a]/70">
-              {body}
-            </p>
-          </div>
-          <div className="col-span-12 lg:col-span-7 lg:pl-8">
-            <div className="flex h-full min-h-[280px] items-center justify-center rounded-2xl border border-dashed border-[#0a0a0a]/15 bg-[#fbfaf6] p-10 text-center text-[13px] italic text-[#0a0a0a]/40">
-              Mockup coming next — same format as Reddit above.
-            </div>
-          </div>
-        </div>
-      </RevealOnView>
-    </article>
-  );
-}
-
 function Channels() {
   return (
     <section
@@ -808,30 +772,26 @@ const NOT_LIST = [
 ];
 
 /* -----------------------------------------------------------------
- * Compared — the ReplyGuy-killer grid. You've seen the reply tools.
- * Here's the four things they don't do. Paper bg, so it contrasts the
+ * Compared — what she actually does. The four things that make her a
+ * go-to-market manager, not a reply bot. Paper bg, so it contrasts the
  * dark "What she's not" that follows.
  * ----------------------------------------------------------------- */
-const COMPARED_LIST: Array<{ them: string; her: string; body: string }> = [
+const COMPARED_LIST: Array<{ her: string; body: string }> = [
   {
-    them: "One feed, forever",
-    her: "Wherever your buyers actually are",
-    body: "Reply tools live on X and stop there. Your first hundred users are on Reddit, in HN threads, in a niche subreddit, on LinkedIn. She works all of it — and tells you which one's worth your time this week.",
+    her: "Finds your buyers wherever they are",
+    body: "Your first hundred users are on Reddit, in HN threads, in a niche subreddit, on LinkedIn, on X. She works all of it — digs up the exact conversations where people have the problem you solve, and tells you which channel's worth your time this week.",
   },
   {
-    them: "Reply spam in a stranger's voice",
-    her: "Sounds like you wrote it",
-    body: "Mass-reply bots all sound the same, and people can smell it. She studies how you talk and how the room talks, then writes replies you'd actually send — helpful first, never a pitch.",
+    her: "Writes it so it sounds like you",
+    body: "She studies how you talk and how each room talks, then hands you replies you'd actually send — helpful first, never a pitch. You read it, tweak it if you want, post it.",
   },
   {
-    them: "A fast track to a banned account",
-    her: "Won't get you nuked",
-    body: "Spray-and-pray replying is how accounts get killed and products get blacklisted. She stays native to each community — the right cadence, the right rooms — so you build a reputation instead of torching one.",
+    her: "Keeps you native, not nuked",
+    body: "Spray-and-pray posting gets accounts killed and products blacklisted. She stays native to each community — the right cadence, the right rooms — so you build a reputation instead of torching one.",
   },
   {
-    them: "Likes you can't bank",
     her: "Tells you what actually converted",
-    body: "Engagement isn't the goal — signups are. Every link she hands you is tracked, so you find out which reply turned into a real user, and she leans into what's working.",
+    body: "Engagement isn't the goal — signups are. Every link she hands you is tracked, so you find out which post turned into a real user, and she leans into what's working.",
   },
 ];
 
@@ -844,20 +804,17 @@ function Compared() {
       <div className="mx-auto max-w-7xl">
         <RevealOnView>
           <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
-            You&apos;ve tried the reply tools
+            What she actually does
           </p>
           <h2 className="mb-14 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
-            Like ReplyGuy. If ReplyGuy actually had your back.
+            She runs your go-to-market. You ship the product.
           </h2>
         </RevealOnView>
         <ul className="grid grid-cols-1 gap-x-12 gap-y-10 md:grid-cols-2">
           {COMPARED_LIST.map((item, i) => (
             <RevealOnView key={i} delay={0.1 + i * 0.06}>
               <li className="border-t border-[#0a0a0a]/15 pt-6">
-                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#0a0a0a]/40 line-through">
-                  {item.them}
-                </p>
-                <p className="mt-3 font-display italic text-[1.7rem] leading-[1.1]">
+                <p className="font-display italic text-[1.7rem] leading-[1.1]">
                   {item.her}
                 </p>
                 <p className="mt-4 text-[14px] leading-[1.55] text-[#0a0a0a]/65">
