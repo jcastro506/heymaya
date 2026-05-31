@@ -4,7 +4,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { FaLinkedin, FaXTwitter } from "react-icons/fa6";
-import { SiInstagram, SiReddit, SiTiktok } from "react-icons/si";
+import {
+  SiInstagram,
+  SiReddit,
+  SiTiktok,
+  SiTelegram,
+  SiGooglecalendar,
+} from "react-icons/si";
 
 import { primaryCtaHref, primaryCtaLabel } from "../_components/landingMode";
 
@@ -60,6 +66,7 @@ export default function ClawLaunchLandingPage() {
       <PainQuote />
       <Channels />
       <AWeekWithMaya />
+      <Delivery />
       <Compared />
       <NotThis />
       <FinalCTA />
@@ -133,7 +140,7 @@ function Hero() {
           <p className="text-[18px] leading-[1.55] text-[#0a0a0a]/75 sm:text-[20px] sm:leading-[1.5]">
             We&apos;re the marketing team for your app. We find your audience
             on Reddit, TikTok, LinkedIn, Instagram, and X — write the content
-            and ship it. You don&apos;t post a thing.
+            and ship it. The only thing left for you is one tap.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-5">
             <Link
@@ -770,6 +777,171 @@ const NOT_LIST = [
     body: "She drafts; you decide. If you go quiet for three days she asks if she should pause. She doesn't pretend you're still around.",
   },
 ];
+
+/* -----------------------------------------------------------------
+ * Delivery — how the work reaches you. Two places you already live:
+ * your texts (she messages you like a manager) and your calendar
+ * (each move dropped in with a deep link, one tap from posted).
+ * ----------------------------------------------------------------- */
+function TelegramMockup() {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[#0a0a0a]/10 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_36px_-16px_rgba(0,0,0,0.16)]">
+      <div className="flex items-center gap-2 border-b border-[#0a0a0a]/8 px-5 py-3.5">
+        <SiTelegram className="size-5" color="#229ED9" />
+        <span className="text-[13px] font-semibold">Maya</span>
+        <span className="ml-auto font-mono text-[10px] uppercase tracking-wider opacity-40">
+          Mon 7:02 AM
+        </span>
+      </div>
+      <div className="space-y-3 bg-[#fbfaf6] px-5 py-5">
+        <div className="max-w-[88%] rounded-2xl rounded-tl-sm border border-[#0a0a0a]/8 bg-white px-4 py-3 text-[13px] leading-relaxed">
+          Morning. Three moves today — the one that matters: that r/LocalLLaMA
+          thread where someone&apos;s quitting Ollama over storage bloat is
+          climbing fast. I&apos;ve drafted your reply. Want it on your calendar
+          for 9?
+        </div>
+        <div className="ml-auto max-w-[70%] rounded-2xl rounded-tr-sm bg-[#229ED9] px-4 py-3 text-[13px] leading-relaxed text-white">
+          yes, do it
+        </div>
+        <div className="max-w-[88%] rounded-2xl rounded-tl-sm border border-[#0a0a0a]/8 bg-white px-4 py-3 text-[13px] leading-relaxed">
+          Done — it&apos;s on your calendar at 9. Tap, paste, post. I&apos;ll
+          watch how it lands for 72h and tell you if it&apos;s pulling signups.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalendarMockup() {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[#0a0a0a]/10 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_36px_-16px_rgba(0,0,0,0.16)]">
+      <div className="flex items-center gap-2 border-b border-[#0a0a0a]/8 px-5 py-3.5">
+        <SiGooglecalendar className="size-[18px]" />
+        <span className="text-[13px] font-semibold leading-tight">
+          Reply: r/LocalLLaMA &ldquo;quitting Ollama&rdquo; thread
+        </span>
+      </div>
+      <div className="space-y-3.5 px-5 py-4">
+        <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider opacity-55">
+          <span>Mon · 9:00–9:15 AM</span>
+        </div>
+        <div className="space-y-3 rounded-xl border border-[#0a0a0a]/8 bg-[#fbfaf6] p-4">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.16em] opacity-45">
+              Open (one tap)
+            </p>
+            <p className="mt-1 text-[13px] text-[#229ED9] underline underline-offset-2">
+              reddit.com/r/LocalLLaMA/…/quitting_ollama
+            </p>
+          </div>
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.16em] opacity-45">
+              Your reply — paste-ready
+            </p>
+            <p className="mt-1 text-[13px] leading-relaxed">
+              had the exact same thing — 700MB of VRAM going to an Electron
+              wrapper is brutal when you&apos;re tight on a Mac. built a small
+              tool last month that manages the cache directly, happy to share
+              what I learned.
+            </p>
+          </div>
+        </div>
+        <p className="text-[12px] leading-relaxed opacity-65">
+          Tap the link → the thread opens with your reply ready → paste → posted.
+          About ninety seconds, then back to building.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+const DELIVERY_BEATS: Array<{
+  logo: React.ReactNode;
+  name: string;
+  tagline: string;
+  body: string;
+  mockupLabel: string;
+  mockup: React.ReactNode;
+}> = [
+  {
+    logo: <SiTelegram className="size-10" color="#229ED9" />,
+    name: "Your texts.",
+    tagline: "She texts you the plan — like a manager, not a dashboard.",
+    body: "No new app to check. Every morning, one short message: today's two or three moves and the single one that matters. Reply to ask her anything — it's a conversation, not a control panel you have to babysit.",
+    mockupLabel: "Here's your Monday morning →",
+    mockup: <TelegramMockup />,
+  },
+  {
+    logo: <SiGooglecalendar className="size-10" />,
+    name: "Your calendar.",
+    tagline: "Each move lands in your calendar — one tap from posted.",
+    body: "Every action is a real calendar event with the exact link and a reply written in your voice, right there inside it. Tap it, it opens the thread with your words ready, you paste and post. The whole thing is about ninety seconds.",
+    mockupLabel: "Here's an event she drops in →",
+    mockup: <CalendarMockup />,
+  },
+];
+
+function Delivery() {
+  return (
+    <section
+      id="delivery"
+      className="relative border-t border-[#0a0a0a]/10 px-6 sm:px-10"
+    >
+      <div className="mx-auto max-w-7xl">
+        <div className="pt-28 sm:pt-40">
+          <RevealOnView>
+            <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
+              How it reaches you
+            </p>
+            <h2 className="mb-8 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
+              Your texts and your calendar. That&apos;s the whole thing.
+            </h2>
+          </RevealOnView>
+          <RevealOnView delay={0.15}>
+            <p className="max-w-2xl text-[16px] leading-[1.6] text-[#0a0a0a]/70">
+              No dashboard to live in. She works in the background and surfaces
+              in the two places you already are — and every move is one tap from
+              done.
+            </p>
+          </RevealOnView>
+        </div>
+
+        <div className="mt-10 sm:mt-14">
+          {DELIVERY_BEATS.map((beat, i) => (
+            <article
+              key={i}
+              className="border-b border-[#0a0a0a]/10 py-20 last:border-b-0 sm:py-28"
+            >
+              <RevealOnView>
+                <div className="grid grid-cols-12 gap-x-8 gap-y-10 lg:gap-y-0">
+                  <div className="col-span-12 lg:col-span-5">
+                    <div className="mb-6">{beat.logo}</div>
+                    <h3 className="font-display italic text-[clamp(2.2rem,5vw,3.4rem)] leading-[1] tracking-tight">
+                      {beat.name}
+                    </h3>
+                    <p className="mt-6 font-display italic text-[clamp(1.3rem,2.2vw,1.7rem)] leading-[1.2] tracking-tight text-[#0a0a0a]/85">
+                      {beat.tagline}
+                    </p>
+                    <p className="mt-6 max-w-xl text-[15px] leading-[1.65] text-[#0a0a0a]/70">
+                      {beat.body}
+                    </p>
+                  </div>
+                  <div className="col-span-12 lg:col-span-7 lg:pl-8">
+                    <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.18em] text-[#0a0a0a]/40">
+                      {beat.mockupLabel}
+                    </p>
+                    {beat.mockup}
+                  </div>
+                </div>
+              </RevealOnView>
+            </article>
+          ))}
+        </div>
+        <div className="pb-28 sm:pb-40" aria-hidden="true" />
+      </div>
+    </section>
+  );
+}
 
 /* -----------------------------------------------------------------
  * Compared — what she actually does. The four things that make her a
