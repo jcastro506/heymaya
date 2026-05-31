@@ -639,6 +639,19 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) => postLc("send_update", p, ctx.signal),
     }),
     tool({
+      name: "log_message",
+      label: "Log Inbound Message (transcript)",
+      description:
+        "Persist the operator's inbound message to the conversation transcript. Call this as the FIRST action of every inbound turn, BEFORE you reason or reply. Pass the verbatim operator text as body, plus a fresh turnId you will reuse on the send_update reply so the message and your answer group as one turn. REQUIRED: turnId, body.",
+      parameters: Type.Object({
+        turnId: Type.String({ description: "Stable id for this turn; reuse on the matching send_update." }),
+        body: Type.String({ description: "Verbatim inbound operator text (1..8000)." }),
+        channel: Type.Optional(Enum(["telegram", "claw-messenger", "sms", "web", "unknown"])),
+        idempotencyKey: IdemKey,
+      }),
+      execute: async (p, _cfg, ctx) => postLc("log_message", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+    tool({
       name: "post_activity",
       label: "Post Activity (Mission Control)",
       description:

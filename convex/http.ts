@@ -119,6 +119,8 @@ import {
 } from "./gtmMaya/attribution";
 import { memoryWrittenHttp } from "./gtmMaya/memoryLedger";
 import { reviewMediaHttp } from "./gtmMaya/contentReview";
+// Data-collection sprint — inbound user-turn transcript capture.
+import { logMessageHttp } from "./gtmMaya/openclaw/conversationCapture";
 
 const http = httpRouter();
 
@@ -258,6 +260,16 @@ http.route({
   path: "/lc_gtm/send_update",
   method: "POST",
   handler: sendUpdateHttp,
+});
+
+// Data-collection sprint — inbound user-turn capture. Maya's runtime POSTs
+// one row per inbound user message so the conversation transcript persists
+// to Convex (not just the ephemeral Fly disk). hookToken-authed +
+// idempotency-keyed. POST { idempotencyKey, turnId, body, channel }.
+http.route({
+  path: "/lc_gtm/log_message",
+  method: "POST",
+  handler: logMessageHttp,
 });
 
 // ─── Sprint 2.17 Phase A — manager-mode routes ──────────────────────

@@ -4549,7 +4549,11 @@ export default defineSchema({
       // Sprint J — proposed improvement to a shared skill (Layer 2, governed).
       v.literal("propose_skill_improvement"),
       // Mission Control — agent activity feed entry.
-      v.literal("post_activity")
+      v.literal("post_activity"),
+      // Data-collection sprint — inbound user message capture. Maya's
+      // runtime POSTs one row per inbound user turn so the conversation
+      // transcript persists to Convex (not just the ephemeral Fly disk).
+      v.literal("log_message")
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
@@ -5935,6 +5939,59 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_agent", ["agentId"])
     .index("by_account_and_created", ["accountId", "createdAt"]),
+
+  // ─── Data-collection sprint — conversation transcript ─────────────────
+  // Every user↔Maya turn, persisted plaintext + tenant-isolated. Before
+  // this table, inbound user messages lived only on the ephemeral OpenClaw
+  // Fly machine and Maya's replies went straight to Telegram — neither
+  // reached Convex, so "what users say to their Maya" was unrecoverable.
+  //
+  // Capture paths:
+  //   - role:"maya"  — written from /lc_gtm/send_update (we own that path).
+  //   - role:"user"  — written from /lc_gtm/log_message, which Maya's
+  //     runtime calls as the first action of every inbound turn.
+  // `turnId` groups a user message with the reply(s) it produced so the
+  // quality grader (Wave 4) can score a turn as a unit. The optional
+  // telemetry fields are populated by Wave 2 (per-turn LLM cost/tokens).
+  //
+  // Tenant isolation: accountId === Id<"creators">; all reads scope by it.
+  // Privacy: plaintext is intentional (operator-locked) so the founder
+  // dashboard + LLM grader can read content directly. Body is capped at
+  // capture time (see conversationCapture.ts MAX_BODY_CHARS).
+  mayaMessages: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    role: v.union(v.literal("user"), v.literal("maya")),
+    /** Plaintext message body (capped/truncated at capture time). */
+    body: v.string(),
+    channel: v.union(
+      v.literal("telegram"),
+      v.literal("claw-messenger"),
+      v.literal("sms"),
+      v.literal("web"),
+      v.literal("unknown")
+    ),
+    /** Groups one user turn with the Maya reply(s) it produced. */
+    turnId: v.string(),
+    ts: v.number(),
+    // ── maya-role classification (from send_update) ──────────────────────
+    /** "strategic" | "tactical" — Maya's self-declared message class. */
+    messageClass: v.optional(v.string()),
+    /** Whether Maya declared the 5-gate output critic passed. */
+    criticPassed: v.optional(v.boolean()),
+    // ── Wave 2 per-turn LLM telemetry (optional, backfilled by turnId) ───
+    model: v.optional(v.string()),
+    tokensIn: v.optional(v.number()),
+    tokensOut: v.optional(v.number()),
+    cacheReadTokens: v.optional(v.number()),
+    latencyMs: v.optional(v.number()),
+    costUsd: v.optional(v.number()),
+    thinkingBudget: v.optional(v.number()),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_ts", ["accountId", "ts"])
+    .index("by_agent", ["agentId"])
+    .index("by_turn", ["turnId"]),
 
   // ─── Sprint 2.17 — Manager-mode foundation tables ─────────────────────
   // The five outputs of the foundation-research pass (onboarding +

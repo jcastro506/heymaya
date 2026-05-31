@@ -357,6 +357,35 @@ async function logUsageEventInline(
 }
 
 /**
+ * Inline chat-turn logger — for callers that are ALREADY inside a mutation
+ * (e.g. the conversation-capture mutation in
+ * gtmMaya/openclaw/conversationCapture.ts) and therefore cannot `runMutation`
+ * into `recordChatTurnIn`/`recordChatTurnOut`. Same effect as those wrappers
+ * (usageEvents row + scoreboard recompute), shared through
+ * `logUsageEventInline` so the engagement math stays in one place.
+ *
+ * `direction`: "in" = creator-driven (bumps lastEngagedAt), "out" = Maya.
+ */
+export async function recordChatTurnInline(
+  ctx: MutationCtx,
+  args: {
+    creatorId: Id<"creators">;
+    direction: "in" | "out";
+    label?: string;
+    meta?: unknown;
+    ts?: number;
+  }
+): Promise<Id<"usageEvents">> {
+  return await logUsageEventInline(ctx, {
+    creatorId: args.creatorId,
+    kind: args.direction === "in" ? "chat_turn_in" : "chat_turn_out",
+    label: args.label,
+    meta: args.meta,
+    ts: args.ts,
+  });
+}
+
+/**
  * Score contribution for one event. Pure function — kept exported for tests.
  */
 export function scoreContribution(

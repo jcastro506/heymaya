@@ -33,6 +33,7 @@
       "set_north_star",
       "set_strategy_approval",
       "send_update",
+      "log_message",
       "post_activity",
       "validate_outbound",
       "research_callback",

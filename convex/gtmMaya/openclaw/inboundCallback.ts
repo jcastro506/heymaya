@@ -71,7 +71,9 @@ const CALLBACK_KIND = v.union(
   // Sprint J — proposed improvement to a shared skill (Layer 2, governed).
   v.literal("propose_skill_improvement"),
   // Mission Control — agent activity feed entry (drives the web UI Today tab).
-  v.literal("post_activity")
+  v.literal("post_activity"),
+  // Data-collection sprint — inbound user message capture (one per turn).
+  v.literal("log_message")
 );
 
 function constantTimeEqual(a: string, b: string): boolean {
@@ -1108,6 +1110,11 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
     // (e.g. mid-pass progress ping) treats false as warning not block.
     criticPassed?: boolean;
     criticReasons?: string[];
+    // Data-collection sprint — the turn this reply belongs to. Maya passes
+    // the same turnId she used for the inbound /lc_gtm/log_message call so
+    // the user message and this reply share a turn in mayaMessages. Absent
+    // for proactive/cron pings (no inbound turn) — we synthesize one.
+    turnId?: string;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -1246,6 +1253,41 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
     chatId: agent.telegramChatId,
     text: body.text,
   });
+
+  // Data-collection sprint — persist Maya's reply to the transcript. This
+  // is the only place her outbound content is observable; we record it
+  // regardless of Telegram delivery success (the content was produced and
+  // passed every gate above). A proactive ping with no inbound turn gets a
+  // synthesized turnId so it still groups coherently.
+  const turnId =
+    typeof body.turnId === "string" && body.turnId.length > 0
+      ? body.turnId
+      : `maya-${auth.agentId}-${Date.now()}`;
+  try {
+    await ctx.runMutation(
+      internal.gtmMaya.openclaw.conversationCapture.persistMayaMessage,
+      {
+        accountId: auth.accountId,
+        agentId: auth.agentId,
+        role: "maya",
+        body: body.text,
+        channel: "telegram",
+        turnId,
+        messageClass,
+        criticPassed: body.criticPassed ?? undefined,
+      }
+    );
+  } catch (err) {
+    // Never fail the send because transcript capture hiccuped — log + move on.
+    console.error(
+      JSON.stringify({
+        event: "send_update.persist_failed",
+        agentId: auth.agentId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    );
+  }
+
   return new Response(
     JSON.stringify({
       ok: result.ok,
