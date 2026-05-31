@@ -301,7 +301,7 @@ function GtmOnboardingBody() {
     <Shell>
       <div className="mb-10">
         <p className="mb-3 font-mono text-xs uppercase tracking-widest text-paper">
-          ClawLaunch onboarding
+          HeyMaya onboarding
         </p>
         <h1 className="font-display text-4xl tracking-tight sm:text-5xl">
           Give Maya the product. She'll build your GTM operating model.
@@ -333,7 +333,7 @@ function GtmOnboardingBody() {
                 setDraft((d) => ({ ...d, name: event.target.value }))
               }
               className="input"
-              placeholder="ClawLaunch"
+              placeholder="Acme"
             />
           </Field>
           <Field label="Product URL">
@@ -922,7 +922,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <div className="mx-auto max-w-3xl px-6 py-12">
         <header className="mb-10 flex items-center justify-between">
           <Link href="/clawlaunch" className="font-mono text-xs uppercase tracking-widest">
-            ClawLaunch
+            HeyMaya
           </Link>
           <Link href="/sign-in" className="text-sm text-paper-dim hover:text-paper">
             sign in
