@@ -68,12 +68,13 @@ async function messagesFor(
   t: ReturnType<typeof convexTest>,
   accountId: Id<"creators">
 ) {
-  return await t.run((ctx) =>
-    ctx.db
-      .query("mayaMessages")
-      .withIndex("by_account", (q) => q.eq("accountId", accountId))
-      .collect()
-  );
+  // Collect-and-filter rather than .withIndex("by_account"): TypeScript's
+  // index inference truncates on this 6000-line schema (the index works at
+  // runtime — see all assertions below pass — but its type degrades to
+  // system-indexes-only). Filtering in JS keeps the test type-clean without
+  // masking the real behavior.
+  const all = await t.run((ctx) => ctx.db.query("mayaMessages").collect());
+  return all.filter((r) => r.accountId === accountId);
 }
 
 describe("conversationCapture — persistMayaMessage", () => {
@@ -271,8 +272,125 @@ describe("conversationCapture — /lc_gtm/log_message HTTP", () => {
   });
 });
 
+describe("conversationCapture — recordTurnTelemetry (Wave 2)", () => {
+  it("patches the maya row by turnId and writes a cost-ledger row", async () => {
+    const t = convexTest(schema, modules);
+    const accountId = await insertAccount(t, "ivan");
+    const agentId = await insertAgent(t, accountId, "tok_ivan");
+    await t.mutation(
+      internal.gtmMaya.openclaw.conversationCapture.persistMayaMessage,
+      {
+        accountId,
+        agentId,
+        role: "maya",
+        body: "here's the plan",
+        channel: "telegram",
+        turnId: "turn-7",
+        ts: NOW,
+      }
+    );
+
+    const res = await t.mutation(
+      internal.gtmMaya.openclaw.conversationCapture.recordTurnTelemetry,
+      {
+        accountId,
+        turnId: "turn-7",
+        model: "google/gemini-3-flash-preview",
+        tokensIn: 1200,
+        tokensOut: 340,
+        latencyMs: 880,
+        costUsd: 0.0021,
+      }
+    );
+    expect(res.patched).toBe(true);
+
+    const rows = await messagesFor(t, accountId);
+    const maya = rows.find((r) => r.turnId === "turn-7");
+    expect(maya?.model).toBe("google/gemini-3-flash-preview");
+    expect(maya?.tokensIn).toBe(1200);
+    expect(maya?.costUsd).toBeCloseTo(0.0021);
+
+    const ledger = await t.run((ctx) =>
+      ctx.db.query("gtmCostLedger").collect()
+    );
+    const turnRow = ledger.find(
+      (r) => (r.metadata as { turnId?: string })?.turnId === "turn-7"
+    );
+    expect(turnRow).toBeDefined();
+    expect(turnRow?.operation).toBe("turn_completion");
+    expect(turnRow?.units).toBe(1540);
+  });
+
+  it("records cost even when no maya row exists yet (telemetry raced ahead)", async () => {
+    const t = convexTest(schema, modules);
+    const accountId = await insertAccount(t, "jane");
+    const res = await t.mutation(
+      internal.gtmMaya.openclaw.conversationCapture.recordTurnTelemetry,
+      { accountId, turnId: "ghost", costUsd: 0.001 }
+    );
+    expect(res.patched).toBe(false);
+    const ledger = await t.run((ctx) =>
+      ctx.db.query("gtmCostLedger").collect()
+    );
+    expect(ledger.some((r) => (r.metadata as { turnId?: string })?.turnId === "ghost")).toBe(true);
+  });
+
+  it("cross-tenant — telemetry for A's turnId never patches B's row", async () => {
+    const t = convexTest(schema, modules);
+    const a = await insertAccount(t, "tenA2");
+    const b = await insertAccount(t, "tenB2");
+    const agentA = await insertAgent(t, a, "tok_a2");
+    const agentB = await insertAgent(t, b, "tok_b2");
+    // Both accounts happen to reuse the same turnId string.
+    for (const [acc, ag] of [[a, agentA], [b, agentB]] as const) {
+      await t.mutation(
+        internal.gtmMaya.openclaw.conversationCapture.persistMayaMessage,
+        { accountId: acc, agentId: ag, role: "maya", body: "x", channel: "telegram", turnId: "shared", ts: NOW }
+      );
+    }
+    await t.mutation(
+      internal.gtmMaya.openclaw.conversationCapture.recordTurnTelemetry,
+      { accountId: a, turnId: "shared", tokensIn: 999 }
+    );
+    const aRow = (await messagesFor(t, a)).find((r) => r.turnId === "shared");
+    const bRow = (await messagesFor(t, b)).find((r) => r.turnId === "shared");
+    expect(aRow?.tokensIn).toBe(999);
+    expect(bRow?.tokensIn).toBeUndefined();
+  });
+
+  it("HTTP endpoint drops garbage numerics and rejects no-auth", async () => {
+    const t = convexTest(schema, modules);
+    const accountId = await insertAccount(t, "ken");
+    await insertAgent(t, accountId, "tok_ken");
+    const agentId2 = (await t.run((ctx) =>
+      ctx.db.query("gtmAgents").collect()
+    ))[0]._id;
+    await t.mutation(
+      internal.gtmMaya.openclaw.conversationCapture.persistMayaMessage,
+      { accountId, agentId: agentId2, role: "maya", body: "x", channel: "telegram", turnId: "tk", ts: NOW }
+    );
+
+    const noAuth = await t.fetch("/lc_gtm/log_turn_telemetry", {
+      method: "POST",
+      body: JSON.stringify({ idempotencyKey: "k", turnId: "tk" }),
+    });
+    expect(noAuth.status).toBe(401);
+
+    const ok = await t.fetch("/lc_gtm/log_turn_telemetry", {
+      method: "POST",
+      headers: { authorization: "Bearer tok_ken", "content-type": "application/json" },
+      body: JSON.stringify({ idempotencyKey: "k", turnId: "tk", tokensIn: -5, latencyMs: 200 }),
+    });
+    expect(ok.status).toBe(200);
+    const row = (await messagesFor(t, accountId)).find((r) => r.turnId === "tk");
+    expect(row?.tokensIn).toBeUndefined(); // negative dropped
+    expect(row?.latencyMs).toBe(200);
+  });
+});
+
 describe("conversationCapture — sibling-file coherence", () => {
-  it("log_message is registered as a maya-gtm-tools plugin tool", () => {
+  it("log_message + log_turn_telemetry are registered plugin tools", () => {
     expect(BUNDLED_GTM_PLUGIN_TOOLS).toContain("log_message");
+    expect(BUNDLED_GTM_PLUGIN_TOOLS).toContain("log_turn_telemetry");
   });
 });

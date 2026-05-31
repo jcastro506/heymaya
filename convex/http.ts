@@ -119,8 +119,12 @@ import {
 } from "./gtmMaya/attribution";
 import { memoryWrittenHttp } from "./gtmMaya/memoryLedger";
 import { reviewMediaHttp } from "./gtmMaya/contentReview";
-// Data-collection sprint — inbound user-turn transcript capture.
-import { logMessageHttp } from "./gtmMaya/openclaw/conversationCapture";
+// Data-collection sprint — inbound user-turn transcript capture + per-turn
+// LLM telemetry.
+import {
+  logMessageHttp,
+  logTurnTelemetryHttp,
+} from "./gtmMaya/openclaw/conversationCapture";
 
 const http = httpRouter();
 
@@ -270,6 +274,15 @@ http.route({
   path: "/lc_gtm/log_message",
   method: "POST",
   handler: logMessageHttp,
+});
+
+// Data-collection sprint Wave 2 — per-turn LLM telemetry (tokens/latency/
+// cost/model), joined to the transcript row by turnId + mirrored into the
+// cost ledger. POST { idempotencyKey, turnId, model?, tokensIn?, ... }.
+http.route({
+  path: "/lc_gtm/log_turn_telemetry",
+  method: "POST",
+  handler: logTurnTelemetryHttp,
 });
 
 // ─── Sprint 2.17 Phase A — manager-mode routes ──────────────────────

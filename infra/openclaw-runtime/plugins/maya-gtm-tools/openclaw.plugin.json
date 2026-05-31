@@ -34,6 +34,7 @@
       "set_strategy_approval",
       "send_update",
       "log_message",
+      "log_turn_telemetry",
       "post_activity",
       "validate_outbound",
       "research_callback",

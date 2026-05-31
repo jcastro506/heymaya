@@ -652,6 +652,24 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) => postLc("log_message", { ...p, idempotencyKey: key(p) }, ctx.signal),
     }),
     tool({
+      name: "log_turn_telemetry",
+      label: "Log Turn Telemetry (tokens/cost)",
+      description:
+        "After a conversation turn completes, report the model usage that produced my reply so per-turn cost/latency joins to the transcript. Pass the SAME turnId I used on log_message/send_update, plus whatever usage stats I have (tokensIn, tokensOut, latencyMs, costUsd, model, thinkingBudget). Best-effort — skip fields I don't have. REQUIRED: turnId.",
+      parameters: Type.Object({
+        turnId: Type.String({ description: "Same turnId as log_message/send_update for this turn." }),
+        model: Type.Optional(Type.String()),
+        tokensIn: Type.Optional(Type.Number()),
+        tokensOut: Type.Optional(Type.Number()),
+        cacheReadTokens: Type.Optional(Type.Number()),
+        latencyMs: Type.Optional(Type.Number()),
+        costUsd: Type.Optional(Type.Number()),
+        thinkingBudget: Type.Optional(Type.Number()),
+        idempotencyKey: IdemKey,
+      }),
+      execute: async (p, _cfg, ctx) => postLc("log_turn_telemetry", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+    tool({
       name: "post_activity",
       label: "Post Activity (Mission Control)",
       description:

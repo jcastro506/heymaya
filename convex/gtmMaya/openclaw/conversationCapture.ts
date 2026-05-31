@@ -131,11 +131,100 @@ export const persistMayaMessage = internalMutation({
   },
 });
 
+/**
+ * Wave 2 — per-turn LLM telemetry. Patches the maya-role transcript row for
+ * a turn with the model usage that produced it (tokens / latency / cost /
+ * thinking budget), and mirrors the spend into gtmCostLedger so the founder
+ * dashboard can roll up cost-per-user. Token usage only exists inside the
+ * agent runtime, so it is agent-emitted (same trust model as log_cost).
+ *
+ * Joins by turnId: we patch the MOST RECENT maya row for the turn (a turn
+ * can produce multiple sends; the telemetry attaches to the latest). If no
+ * maya row exists yet (telemetry raced ahead of send_update), we still
+ * record the cost-ledger row — the spend is real even if the transcript
+ * row is a beat behind.
+ */
+export const recordTurnTelemetry = internalMutation({
+  args: {
+    accountId: v.id("creators"),
+    turnId: v.string(),
+    model: v.optional(v.string()),
+    tokensIn: v.optional(v.number()),
+    tokensOut: v.optional(v.number()),
+    cacheReadTokens: v.optional(v.number()),
+    latencyMs: v.optional(v.number()),
+    costUsd: v.optional(v.number()),
+    thinkingBudget: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<{ patched: boolean }> => {
+    // Find the most-recent maya row for this turn, scoped to the caller's
+    // account (cross-tenant defense: never patch another account's row).
+    const rows = await ctx.db
+      .query("mayaMessages")
+      .withIndex("by_turn", (q) => q.eq("turnId", args.turnId))
+      .collect();
+    const mayaRows = rows
+      .filter((r) => r.accountId === args.accountId && r.role === "maya")
+      .sort((a, b) => b.ts - a.ts);
+
+    let patched = false;
+    if (mayaRows.length > 0) {
+      await ctx.db.patch(mayaRows[0]._id, {
+        model: args.model,
+        tokensIn: args.tokensIn,
+        tokensOut: args.tokensOut,
+        cacheReadTokens: args.cacheReadTokens,
+        latencyMs: args.latencyMs,
+        costUsd: args.costUsd,
+        thinkingBudget: args.thinkingBudget,
+      });
+      patched = true;
+    }
+
+    // Mirror spend into the aggregate cost ledger (founder cost-per-user).
+    if (typeof args.costUsd === "number" && args.costUsd >= 0) {
+      const units =
+        (args.tokensIn ?? 0) + (args.tokensOut ?? 0) || undefined;
+      await ctx.db.insert("gtmCostLedger", {
+        accountId: args.accountId,
+        provider: "openrouter",
+        operation: "turn_completion",
+        reason: "maya conversation turn",
+        costUsd: args.costUsd,
+        units,
+        cacheStatus: (args.cacheReadTokens ?? 0) > 0 ? "hit" : "called",
+        metadata: {
+          turnId: args.turnId,
+          model: args.model,
+          tokensIn: args.tokensIn,
+          tokensOut: args.tokensOut,
+          latencyMs: args.latencyMs,
+        },
+        createdAt: Date.now(),
+      });
+    }
+
+    return { patched };
+  },
+});
+
 interface LogMessagePayload {
   idempotencyKey?: string;
   turnId?: string;
   body?: string;
   channel?: string;
+}
+
+interface LogTurnTelemetryPayload {
+  idempotencyKey?: string;
+  turnId?: string;
+  model?: string;
+  tokensIn?: number;
+  tokensOut?: number;
+  cacheReadTokens?: number;
+  latencyMs?: number;
+  costUsd?: number;
+  thinkingBudget?: number;
 }
 
 /**
@@ -198,6 +287,72 @@ export const logMessageHttp = httpAction(async (ctx, request) => {
   );
 
   return new Response(JSON.stringify({ ok: true, messageId }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+/**
+ * POST /lc_gtm/log_turn_telemetry — Wave 2 per-turn LLM telemetry.
+ *
+ * Maya's runtime calls this after a turn completes, passing the same turnId
+ * she used for log_message/send_update plus the model usage stats. Numeric
+ * fields are clamped to non-negative; a NaN/garbage value is dropped rather
+ * than stored.
+ */
+export const logTurnTelemetryHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: LogTurnTelemetryPayload;
+  try {
+    body = (await request.json()) as LogTurnTelemetryPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (typeof body.idempotencyKey !== "string" || !body.idempotencyKey) {
+    return new Response("idempotencyKey required", { status: 400 });
+  }
+  if (typeof body.turnId !== "string" || !body.turnId) {
+    return new Response("turnId required", { status: 400 });
+  }
+
+  // Drop non-finite / negative numerics instead of persisting garbage.
+  const num = (x: unknown): number | undefined =>
+    typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : undefined;
+
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "log_message",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") {
+    return new Response(JSON.stringify({ ok: true, deduped: true }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  const result = await ctx.runMutation(
+    internal.gtmMaya.openclaw.conversationCapture.recordTurnTelemetry,
+    {
+      accountId: auth.accountId,
+      turnId: body.turnId,
+      model: typeof body.model === "string" ? body.model : undefined,
+      tokensIn: num(body.tokensIn),
+      tokensOut: num(body.tokensOut),
+      cacheReadTokens: num(body.cacheReadTokens),
+      latencyMs: num(body.latencyMs),
+      costUsd: num(body.costUsd),
+      thinkingBudget: num(body.thinkingBudget),
+    }
+  );
+
+  return new Response(JSON.stringify({ ok: true, patched: result.patched }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
