@@ -316,6 +316,81 @@ export const stepRawGet = internalAction({
   },
 });
 
+/**
+ * Verify the nano-banana 2 (Gemini 3.1 Flash Image) IMAGE-OUTPUT path through
+ * OpenRouter actually returns an image. Answers "can we send nano-banana images
+ * through the API" with real data — no agent/library needed. ~$0.07.
+ */
+export const verifyNanoBananaApi = internalAction({
+  args: { prompt: v.optional(v.string()), model: v.optional(v.string()) },
+  handler: async (
+    _ctx,
+    args
+  ): Promise<{
+    ok: boolean;
+    model: string;
+    httpStatus?: number;
+    imageReturned: boolean;
+    imageBytes?: number;
+    mime?: string;
+    textReturned?: string;
+    error?: string;
+  }> => {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    const model = args.model ?? "google/gemini-3.1-flash-image-preview";
+    if (!apiKey) {
+      return { ok: false, model, imageReturned: false, error: "OPENROUTER_API_KEY missing" };
+    }
+    const prompt =
+      args.prompt ??
+      "A clean, modern vertical 9:16 hook slide for an indie app launch post. Bold legible headline text 'Ship it.' on a tasteful gradient. Native-to-TikTok, not corporate, not stock.";
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model,
+          modalities: ["image", "text"],
+          messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        return { ok: false, model, httpStatus: res.status, imageReturned: false, error: body.slice(0, 400) };
+      }
+      const payload = (await res.json()) as {
+        choices?: Array<{
+          message?: { content?: string; images?: Array<{ image_url?: { url?: string } }> };
+        }>;
+      };
+      const msg = payload.choices?.[0]?.message;
+      const dataUrl = msg?.images?.[0]?.image_url?.url;
+      if (!dataUrl) {
+        return {
+          ok: false,
+          model,
+          httpStatus: res.status,
+          imageReturned: false,
+          textReturned: (msg?.content ?? "").slice(0, 200),
+          error: "no image in message.images[]",
+        };
+      }
+      const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      const bytes = m ? Math.floor((m[2]?.length ?? 0) * 0.75) : 0;
+      return {
+        ok: true,
+        model,
+        httpStatus: res.status,
+        imageReturned: true,
+        imageBytes: bytes,
+        mime: m?.[1],
+      };
+    } catch (err) {
+      return { ok: false, model, imageReturned: false, error: (err as Error).message };
+    }
+  },
+});
+
 /** Best-effort id extraction from an unknown response envelope. */
 function extractId(raw: unknown, keys: string[]): string | null {
   if (raw === null || typeof raw !== "object") return null;

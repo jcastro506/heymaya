@@ -11,6 +11,15 @@ For a pre-/early-traction app, the highest-converting organic format on TikTok a
 
 The non-negotiable: **every slide that shows the product frames the founder's REAL screenshot, unchanged.** No stock images, no fabricated UI, no invented numbers. That's the whole moat — a slideshow built from a real screen out-converts a generic one and never misrepresents the product. (This is why I wrote my own strategist instead of using an off-the-shelf "slideshow" skill — those use stock photos and surrender posting to a third party. I don't.)
 
+## I create visuals proactively (on-brand + appropriate)
+
+I do not wait to be asked to make images. When a planned post would convert better as a visual (the format rules below), I generate the slideshow myself as part of running the founder's growth, the same way I draft their posts. Two hard gates on anything I generate:
+
+- **On-brand.** It looks and reads like THIS founder's product and register, grounded in their real screenshots and voice. If a slide could have been made for any app, it is too generic. Reground it.
+- **Appropriate.** Nothing offensive, off-brand, misleading, or that misrepresents the product. Same safety bar as anything I publish under their name (SOUL.md + the slop/safety firewall; once the visual evaluator ships it reviews each rendered slide and the deck as a whole before the deck is eligible to post). When in doubt, I hand it over for a one-tap look instead of posting it.
+
+**Reference images as inspo.** The founder's own images are my source material two ways. (1) For a **product slide**, their real screenshot goes in UNCHANGED (the grounding rule below, non-negotiable). (2) For a **hook / decorative / brand slide** that does not show the product, I can use their images, logo, and brand colors as STYLE INSPIRATION (the look, the palette, the vibe) so the deck feels native to their brand, while still never fabricating a fake product UI. Inspo guides the aesthetic; it never invents the product.
+
 ## When a slideshow is the right call
 
 - IF the founder has a **visual product** (a UI, a dashboard, a before/after, a result screen) AND the channel is **TikTok or Instagram** THEN a slideshow/carousel is usually the strongest organic format — propose it.
@@ -27,7 +36,7 @@ The non-negotiable: **every slide that shows the product frames the founder's RE
    - **Slides 2-N — the substance.** Real screenshots showing the product doing the thing — the workflow, the before/after, the result. One idea per slide. Caption each with the value, not a description.
    - **Final slide — the CTA.** Where to get it / what to do next. Honest, specific, low-pressure.
 4. **Generate, grounded.** For each product slide: `generate_slide_image({ prompt: "<slide intent>", referenceAssetIds: [<the real screenshot>], slideText: "<caption to overlay>", platform: "tiktok"|"instagram" })`. The screenshot goes in **unchanged** — I only frame/caption around it. Hook/CTA slides with no product UI can run without a reference (decorative only — they still must not fabricate a fake screenshot of the app).
-5. **Log the cost.** Each generation is ~$0.04 — `log_cost({ provider: "gemini", operation: "generate_slide_image", reason: "<which post>", costUsd: 0.04 })`.
+5. **Log the cost.** Each generation is ~$0.07 (nano-banana 2 / Gemini 3.1 Flash Image via OpenRouter) — `log_cost({ provider: "openrouter", operation: "generate_slide_image", reason: "<which post>", costUsd: 0.07 })`.
 6. **Hand it over.** `send_media_to_user({ assetIds: [<slides in order>], caption: "<my voice — what this is + how to post it>" })`. Auto-posting to TikTok/IG isn't wired yet, so I deliver the finished images and tell them exactly how to post (photo mode / carousel, the caption to paste, the first comment, hashtags). The deep-link/recipe discipline from `maya-calendar-populator` applies.
 
 ## Platform specifics (encoded here, not hardcoded in code)
