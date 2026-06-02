@@ -988,29 +988,16 @@ function GtmOnboardingBody() {
           <h2 className="mb-3 font-display text-2xl">Maya deployment started</h2>
           <p className="text-paper-dim">{deployResult}</p>
           <p className="mt-4 text-sm text-paper-dim">
-            She&apos;ll text you on Telegram shortly. Everything she finds —
-            your research, the week&apos;s posts and replies, and what she&apos;s
-            working on right now — also lives in Mission Control.
+            She&apos;ll text you on Telegram shortly with links to connect your
+            channels. Tap each one, and from tomorrow morning Maya plans and
+            posts your whole day for you. Everything — what&apos;s going out, what
+            landed, how it performed, and your inbox — auto-updates in your HQ.
           </p>
-          <div className="mt-5 rounded-lg border border-paper/15 bg-ink-3 p-4">
-            <p className="font-display text-lg">One last thing: connect your calendar</p>
-            <p className="mt-1 text-sm text-paper-dim">
-              Maya drops each post and reply onto your Google Calendar at the
-              right time, with the draft and a one-tap link. Connect it now so
-              the week&apos;s plan lands where you&apos;ll see it.
-            </p>
-            <a
-              href="/api/google-calendar-gtm/start"
-              className="mt-3 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-white"
-            >
-              Connect Google Calendar →
-            </a>
-          </div>
           <Link
             href="/clawlaunch/mission"
-            className="mt-4 inline-block rounded-lg border border-paper px-4 py-2 font-mono text-xs uppercase tracking-wide text-paper"
+            className="mt-4 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-white"
           >
-            Open Mission Control →
+            Open your HQ →
           </Link>
         </section>
       )}
