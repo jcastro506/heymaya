@@ -263,6 +263,10 @@ export const setAppProfile = mutation({
     appType: v.optional(v.union(v.literal("web"), v.literal("mobile"))),
     appStoreUrl: v.optional(v.string()),
     playStoreUrl: v.optional(v.string()),
+    // Conversion instrumentation — what counts as a win + where it lands, so
+    // the signup side of attribution can close.
+    conversionKind: v.optional(v.string()),
+    signupUrl: v.optional(v.string()),
     diagnosis: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<Id<"gtmApps">> => {
@@ -303,6 +307,8 @@ export const setAppProfile = mutation({
         appType: args.appType,
         appStoreUrl: normalizeOptionalUrl(args.appStoreUrl),
         playStoreUrl: normalizeOptionalUrl(args.playStoreUrl),
+        conversionKind: args.conversionKind,
+        signupUrl: normalizeOptionalUrl(args.signupUrl),
         diagnosis: args.diagnosis,
         updatedAt: now,
       });
@@ -336,6 +342,8 @@ export const setAppProfile = mutation({
       appType: args.appType,
       appStoreUrl: normalizeOptionalUrl(args.appStoreUrl),
       playStoreUrl: normalizeOptionalUrl(args.playStoreUrl),
+      conversionKind: args.conversionKind,
+      signupUrl: normalizeOptionalUrl(args.signupUrl),
       diagnosis: args.diagnosis,
       createdAt: now,
       updatedAt: now,

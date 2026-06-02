@@ -18,6 +18,10 @@ interface IntakeDraft {
   appType: "web" | "mobile";
   appStoreUrl: string;
   playStoreUrl: string;
+  // What counts as a customer + where they land — so Maya can close the
+  // attribution loop on the signup side (clicks are already tracked).
+  conversionKind: "signup" | "install" | "waitlist" | "demo" | "purchase";
+  signupUrl: string;
   founderWhy: string;
   stage: "idea" | "live-beta" | "paid" | "unknown";
   entryMode: "launch" | "manager";
@@ -71,6 +75,8 @@ const DEFAULT_DRAFT: IntakeDraft = {
   appType: "web",
   appStoreUrl: "",
   playStoreUrl: "",
+  conversionKind: "signup",
+  signupUrl: "",
   founderWhy: "",
   stage: "live-beta",
   entryMode: "manager",
@@ -206,6 +212,8 @@ function GtmOnboardingBody() {
           draft.appType === "mobile"
             ? emptyToUndefined(draft.playStoreUrl)
             : undefined,
+        conversionKind: draft.conversionKind,
+        signupUrl: emptyToUndefined(draft.signupUrl),
         founderWhy: draft.founderWhy.trim() || undefined,
         stage: draft.stage,
         entryMode: draft.entryMode,
@@ -426,6 +434,37 @@ function GtmOnboardingBody() {
               </Field>
             </div>
           )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="What counts as a customer?">
+              <select
+                value={draft.conversionKind}
+                onChange={(event) =>
+                  setDraft((d) => ({
+                    ...d,
+                    conversionKind: event.target
+                      .value as IntakeDraft["conversionKind"],
+                  }))
+                }
+                className="input"
+              >
+                <option value="signup">A sign-up</option>
+                <option value="install">An app install</option>
+                <option value="waitlist">A waitlist join</option>
+                <option value="demo">A demo booked</option>
+                <option value="purchase">A purchase</option>
+              </select>
+            </Field>
+            <Field label="Where do they land? (sign-up / install URL)">
+              <input
+                value={draft.signupUrl}
+                onChange={(event) =>
+                  setDraft((d) => ({ ...d, signupUrl: event.target.value }))
+                }
+                className="input"
+                placeholder="https://… (Maya tracks links to this so she can prove what converted)"
+              />
+            </Field>
+          </div>
           <Field label="Why did you build it?">
             <textarea
               value={draft.founderWhy}

@@ -4679,6 +4679,17 @@ export default defineSchema({
     appType: v.optional(v.union(v.literal("web"), v.literal("mobile"))),
     appStoreUrl: v.optional(v.string()),
     playStoreUrl: v.optional(v.string()),
+    // Conversion instrumentation — closes the attribution loop on the SIGNUP
+    // side (clicks are already 100% ours). conversionKind = what counts as a
+    // win for this founder (free string, e.g. "signup"/"install"/"waitlist"/
+    // "demo"); signupUrl = where a conversion lands (Maya wraps links to it by
+    // default so clicks→signups can join); conversionPixelInstalledAt is set
+    // the first time a `source:"pixel"` conversion arrives (so Maya knows the
+    // automatic path is live and can stop asking for self-reports). All
+    // optional for back-compat with rows created before the loop existed.
+    conversionKind: v.optional(v.string()),
+    signupUrl: v.optional(v.string()),
+    conversionPixelInstalledAt: v.optional(v.number()),
     diagnosis: v.optional(v.any()),
     // Sprint 1.1 — cached LLM-driven keyword expansion. Maps the founder's
     // product description into semantic keywords + audience pain phrases the

@@ -194,3 +194,155 @@ describe("Sprint C — attribution", () => {
     expect(res.status).toBe(400);
   });
 });
+
+/**
+ * Closing the loop on the SIGNUP side — the public conversion pixel.
+ *
+ *   - the redirect now passes lc_ref to the destination (the missing handoff);
+ *   - /p/conversion is PUBLIC (no hookToken — a pixel can't hold the secret),
+ *     token-keyed, idempotent, and 204s on any bad input (never errors a beacon);
+ *   - a pixel signup ties to the exact post + stamps the app pixel-installed;
+ *   - onboarding persists conversionKind + signupUrl;
+ *   - get_conversion_setup hands Maya the templated snippet.
+ */
+function pixel(t: ReturnType<typeof convexTest>, body: Record<string, unknown>) {
+  // No auth header — mimics a cross-origin beacon from the founder's site.
+  return t.fetch("/p/conversion", {
+    method: "POST",
+    headers: { "content-type": "text/plain" },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("conversion pixel — closing the signup side", () => {
+  it("redirect passes lc_ref to the destination", async () => {
+    const t = convexTest(schema, modules);
+    const { hookToken } = await setupAgent(t, "u_pix_ref");
+    const { token } = (await (
+      await post(t, "/lc_gtm/wrap_link", hookToken, {
+        destinationUrl: "https://ref.test/signup",
+      })
+    ).json()) as { token: string };
+
+    const redirect = await t.fetch(`/r/${token}`, { method: "GET" });
+    const loc = redirect.headers.get("Location") ?? "";
+    expect(loc).toContain(`lc_ref=${token}`);
+  });
+
+  it("a public pixel POST ties a signup to the exact wrapped post + stamps the app", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId, hookToken } = await setupAgent(t, "u_pix_tie");
+    const { token } = (await (
+      await post(t, "/lc_gtm/wrap_link", hookToken, {
+        destinationUrl: "https://tie.test/signup",
+        platform: "reddit",
+      })
+    ).json()) as { token: string };
+
+    const res = await pixel(t, {
+      ref: token,
+      kind: "signup",
+      idempotencyKey: "sess-1",
+    });
+    expect(res.status).toBe(204);
+
+    const convs = await t.run(async (ctx) =>
+      ctx.db
+        .query("gtmConversions")
+        .withIndex("by_agent", (q) => q.eq("agentId", agentId))
+        .collect()
+    );
+    expect(convs.length).toBe(1);
+    expect(convs[0].source).toBe("pixel");
+    expect(convs[0].kind).toBe("signup");
+    expect(convs[0].linkWrapId).toBeDefined(); // tied to THE post
+
+    // The app is stamped pixel-installed so Maya can stop self-report nudges.
+    const app = await t.run(async (ctx) => {
+      const agent = await ctx.db.get(agentId);
+      return agent?.appId ? await ctx.db.get(agent.appId) : null;
+    });
+    expect(app?.conversionPixelInstalledAt).toBeDefined();
+  });
+
+  it("pixel is idempotent — a refresh does not double-count", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId, hookToken } = await setupAgent(t, "u_pix_idem");
+    const { token } = (await (
+      await post(t, "/lc_gtm/wrap_link", hookToken, {
+        destinationUrl: "https://idem.test/signup",
+      })
+    ).json()) as { token: string };
+
+    await pixel(t, { ref: token, kind: "signup", idempotencyKey: "dup" });
+    await pixel(t, { ref: token, kind: "signup", idempotencyKey: "dup" });
+
+    const convs = await t.run(async (ctx) =>
+      ctx.db
+        .query("gtmConversions")
+        .withIndex("by_agent", (q) => q.eq("agentId", agentId))
+        .collect()
+    );
+    expect(convs.length).toBe(1);
+  });
+
+  it("unknown / missing token → 204 with no conversion (never errors a beacon)", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "u_pix_bad");
+
+    expect((await pixel(t, { ref: "nope", kind: "signup" })).status).toBe(204);
+    expect((await pixel(t, { kind: "signup" })).status).toBe(204);
+
+    const convs = await t.run(async (ctx) =>
+      ctx.db
+        .query("gtmConversions")
+        .withIndex("by_agent", (q) => q.eq("agentId", a.agentId))
+        .collect()
+    );
+    expect(convs.length).toBe(0);
+  });
+
+  it("get_conversion_setup returns the founder's signupUrl + a templated snippet", async () => {
+    const t = convexTest(schema, modules);
+    const authed = t.withIdentity({
+      subject: "u_pix_setup",
+      email: "u_pix_setup@clawlaunch.test",
+    });
+    const started = await authed.mutation(
+      api.gtmMaya.researchLifecycle.startGtmOnboarding,
+      {}
+    );
+    await authed.mutation(api.gtmMaya.researchLifecycle.setAppProfile, {
+      name: "Setup App",
+      url: "https://setup.test",
+      stage: "live-beta",
+      weekGoal: "signups",
+      canRecordScreen: true,
+      canShowFace: false,
+      excludedAudiences: [],
+      conversionKind: "install",
+      signupUrl: "https://setup.test/get-started",
+    });
+    const hookToken = "fake-hook-setup";
+    await t.run(async (ctx) => {
+      await ctx.db.patch(started.agentId, { hookToken });
+    });
+
+    const res = await t.fetch("/lc_gtm/get_conversion_setup", {
+      method: "GET",
+      headers: { authorization: `Bearer ${hookToken}` },
+    });
+    expect(res.status).toBe(200);
+    const setup = (await res.json()) as {
+      signupUrl: string;
+      conversionKind: string;
+      pixelInstalled: boolean;
+      pixelSnippet: string;
+    };
+    expect(setup.signupUrl).toBe("https://setup.test/get-started");
+    expect(setup.conversionKind).toBe("install");
+    expect(setup.pixelInstalled).toBe(false);
+    expect(setup.pixelSnippet).toContain("/p/conversion");
+    expect(setup.pixelSnippet).toContain("window.lcMaya");
+  });
+});

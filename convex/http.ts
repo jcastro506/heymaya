@@ -117,6 +117,9 @@ import {
   redirectHttp,
   recordConversionHttp,
   getMyAttributionHttp,
+  conversionPixelHttp,
+  conversionPixelOptionsHttp,
+  getConversionSetupHttp,
 } from "./gtmMaya/attribution";
 import { memoryWrittenHttp } from "./gtmMaya/memoryLedger";
 import { reviewMediaHttp } from "./gtmMaya/contentReview";
@@ -399,6 +402,26 @@ http.route({
   pathPrefix: "/r/",
   method: "GET",
   handler: redirectHttp,
+});
+// PUBLIC conversion pixel (no hookToken — a pixel on the founder's site can't
+// hold the agent secret). Token-keyed: the wrap token resolves to exactly one
+// agent. CORS-open for cross-origin beacons. Closes the signup side of the loop.
+http.route({
+  path: "/p/conversion",
+  method: "POST",
+  handler: conversionPixelHttp,
+});
+http.route({
+  path: "/p/conversion",
+  method: "OPTIONS",
+  handler: conversionPixelOptionsHttp,
+});
+// Maya pulls the founder's copy-paste conversion pixel (hookToken auth) to hand
+// over the automatic tracking during the first week.
+http.route({
+  path: "/lc_gtm/get_conversion_setup",
+  method: "GET",
+  handler: getConversionSetupHttp,
 });
 
 // Continuous research + feedback-loop write surfaces. Maya / her

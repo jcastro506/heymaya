@@ -139,6 +139,47 @@ export const recordConversion = internalMutation({
   },
 });
 
+/** First pixel conversion → stamp the app so Maya knows the automatic path is
+ *  live (and can stop nudging the founder to self-report). Idempotent. */
+export const markPixelInstalled = internalMutation({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (ctx, args): Promise<void> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent || !agent.appId) return;
+    const app = await ctx.db.get(agent.appId);
+    if (!app || app.conversionPixelInstalledAt) return;
+    await ctx.db.patch(app._id, { conversionPixelInstalledAt: Date.now() });
+  },
+});
+
+/** Read the conversion setup for an agent (signup URL + what counts as a win +
+ *  whether the pixel has ever fired) so Maya can hand over the right snippet. */
+export const getConversionSetupForAgent = internalQuery({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    signupUrl: string | null;
+    conversionKind: string | null;
+    pixelInstalled: boolean;
+  }> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent || !agent.appId) {
+      return { signupUrl: null, conversionKind: null, pixelInstalled: false };
+    }
+    const app = await ctx.db.get(agent.appId);
+    if (!app || app.accountId !== agent.accountId) {
+      return { signupUrl: null, conversionKind: null, pixelInstalled: false };
+    }
+    return {
+      signupUrl: app.signupUrl ?? null,
+      conversionKind: app.conversionKind ?? null,
+      pixelInstalled: Boolean(app.conversionPixelInstalledAt),
+    };
+  },
+});
+
 /**
  * Agent-scoped per-post attribution read-back — the runtime twin of the web
  * `getMyPostAttribution` query, but keyed off {agentId, accountId} from the
@@ -386,10 +427,111 @@ export const redirectHttp = httpAction(async (ctx, request) => {
   if (wrap.utmSource) dest.searchParams.set("utm_source", wrap.utmSource);
   if (wrap.utmMedium) dest.searchParams.set("utm_medium", wrap.utmMedium);
   if (wrap.utmCampaign) dest.searchParams.set("utm_campaign", wrap.utmCampaign);
+  // Closed-loop handoff: pass the wrap token to the destination so the
+  // founder's site (via the conversion pixel) can persist it and echo it back
+  // on signup — the missing link that ties a signup to THIS specific post.
+  dest.searchParams.set("lc_ref", token);
   return new Response(null, {
     status: 302,
     headers: { Location: dest.toString() },
   });
+});
+
+// CORS for the public pixel — it's called cross-origin from the founder's own
+// website, so it must allow any origin. sendBeacon with text/plain is a
+// "simple" request (no preflight), but we answer OPTIONS anyway for fetch.
+const PIXEL_CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "content-type",
+  "Access-Control-Max-Age": "86400",
+};
+
+export const conversionPixelOptionsHttp = httpAction(async () => {
+  return new Response(null, { status: 204, headers: PIXEL_CORS_HEADERS });
+});
+
+interface PixelConversionPayload {
+  ref?: string;
+  kind?: string;
+  idempotencyKey?: string;
+}
+
+/**
+ * PUBLIC conversion pixel — POST /p/conversion, NO hookToken (a pixel on the
+ * founder's website can't hold the agent secret). The wrap token IS the
+ * capability: it resolves to exactly one agent/account, so a conversion can
+ * only ever be attributed to the founder who shared that link. Worst-case
+ * abuse is inflating one's OWN proof number, which Maya cross-checks against
+ * real clicks — low stakes. count is forced to 1 (a pixel fires once per
+ * signup event); idempotencyKey dedupes refreshes. We answer 204 on every
+ * bad/odd input — a beacon must never see an error.
+ */
+export const conversionPixelHttp = httpAction(async (ctx, request) => {
+  let body: PixelConversionPayload;
+  try {
+    body = (await request.json()) as PixelConversionPayload;
+  } catch {
+    // sendBeacon sends a Blob — try text → JSON before giving up.
+    try {
+      body = JSON.parse(await request.text()) as PixelConversionPayload;
+    } catch {
+      return new Response(null, { status: 204, headers: PIXEL_CORS_HEADERS });
+    }
+  }
+
+  const token = typeof body.ref === "string" ? body.ref.trim() : "";
+  if (!token) {
+    return new Response(null, { status: 204, headers: PIXEL_CORS_HEADERS });
+  }
+  const validKinds = ["signup", "demo", "feedback", "revenue"];
+  // Founder-facing kinds (install/waitlist/...) all roll up to "signup" — the
+  // pixel's job is "a customer converted", and signup is the canonical bucket.
+  const kind = validKinds.includes(body.kind ?? "")
+    ? (body.kind as "signup" | "demo" | "feedback" | "revenue")
+    : "signup";
+
+  const wrap = await ctx.runQuery(
+    internal.gtmMaya.attribution.getLinkWrapByToken,
+    { token }
+  );
+  if (!wrap) {
+    // Unknown token — nothing to attribute. 204, never error.
+    return new Response(null, { status: 204, headers: PIXEL_CORS_HEADERS });
+  }
+
+  const idempotencyKey =
+    typeof body.idempotencyKey === "string" && body.idempotencyKey.length > 0
+      ? body.idempotencyKey
+      : `pixel:${token}:${kind}`;
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: wrap.agentId,
+      accountId: wrap.accountId,
+      kind: "record_conversion",
+      idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") {
+    return new Response(null, { status: 204, headers: PIXEL_CORS_HEADERS });
+  }
+
+  await ctx.runMutation(internal.gtmMaya.attribution.recordConversion, {
+    accountId: wrap.accountId,
+    agentId: wrap.agentId,
+    kind,
+    count: 1,
+    source: "pixel",
+    linkWrapToken: token,
+    note: "conversion pixel",
+  });
+  // Mark the automatic path live so Maya can stop asking for self-reports.
+  await ctx.runMutation(
+    internal.gtmMaya.attribution.markPixelInstalled,
+    { agentId: wrap.agentId }
+  );
+  return new Response(null, { status: 204, headers: PIXEL_CORS_HEADERS });
 });
 
 interface RecordConversionPayload {
@@ -474,4 +616,54 @@ export const getMyAttributionHttp = httpAction(async (ctx, request) => {
     status: 200,
     headers: { "content-type": "application/json" },
   });
+});
+
+/**
+ * Build the copy-paste conversion pixel for THIS founder. hookToken auth — Maya
+ * calls it (get_conversion_setup) when she hands the founder the automatic
+ * tracking, usually in the first week. The snippet captures `lc_ref` (which our
+ * redirect appends to the destination), persists it across pages, and exposes
+ * `window.lcMaya.signup()` for the founder to fire from their signup-success
+ * handler. Zero-code fallback is always self-report (Maya asks).
+ */
+export const getConversionSetupHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  const setup = await ctx.runQuery(
+    internal.gtmMaya.attribution.getConversionSetupForAgent,
+    { agentId: auth.agentId }
+  );
+  const site = (process.env.CONVEX_SITE_URL ?? "").replace(/\/+$/, "");
+  const endpoint = `${site}/p/conversion`;
+  const pixelSnippet =
+    `<!-- HeyMaya conversion pixel — paste in your site <head> -->\n` +
+    `<script>(function(){try{` +
+    `var r=new URLSearchParams(location.search).get('lc_ref');` +
+    `if(r){try{localStorage.setItem('lc_ref',r);}catch(e){}}` +
+    `window.lcMaya={signup:function(kind){` +
+    `var v;try{v=localStorage.getItem('lc_ref');}catch(e){}if(!v)return;` +
+    `var k='lc_done_'+v+'_'+(kind||'signup');` +
+    `try{if(localStorage.getItem(k))return;localStorage.setItem(k,'1');}catch(e){}` +
+    `navigator.sendBeacon('${endpoint}',new Blob([JSON.stringify(` +
+    `{ref:v,kind:kind||'signup',idempotencyKey:k})],{type:'text/plain'}));` +
+    `}};}catch(e){}})();</script>`;
+
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      signupUrl: setup.signupUrl,
+      conversionKind: setup.conversionKind,
+      pixelInstalled: setup.pixelInstalled,
+      endpoint,
+      pixelSnippet,
+      instructions:
+        "Paste the snippet in your site <head> (once, site-wide). Then call " +
+        "window.lcMaya.signup() from wherever a signup succeeds (your sign-up " +
+        "success handler / welcome page). It auto-attributes the signup to the " +
+        "exact post that drove it. No-code option: just tell me when someone " +
+        "signs up and I'll log it.",
+    }),
+    { status: 200, headers: { "content-type": "application/json" } }
+  );
 });

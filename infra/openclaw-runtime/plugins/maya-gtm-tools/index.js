@@ -1032,6 +1032,15 @@ export default defineToolPlugin({
       }),
       execute: async (p, _cfg, ctx) => getLc("get_my_attribution", p, ctx.signal),
     }),
+    tool({
+      name: "get_conversion_setup",
+      label: "Get Conversion Setup",
+      description:
+        "Get this founder's conversion tracking so I can close the loop on the SIGNUP side (clicks are already tracked). Returns { signupUrl (I wrap links to THIS so clicks→signups join), conversionKind (what counts as a win), pixelInstalled (true once the automatic pixel has fired), pixelSnippet, instructions }. When pixelInstalled is false I either hand them pixelSnippet to paste OR just ASK when someone signs up and log it via record_conversion.",
+      parameters: Type.Object({}),
+      execute: async (p, _cfg, ctx) =>
+        getLc("get_conversion_setup", p, ctx.signal),
+    }),
 
     // =====================================================================
     // SLIDESHOW CLUSTER — media library + grounded slide generation.
