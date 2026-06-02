@@ -4379,6 +4379,28 @@ export default defineSchema({
     // state reuses tiktokWarmupState values + 'warm'; (warm|ready) = skip warmup.
     // tiktokWarmupState stays as a back-compat alias mirrored into .tiktok.
     channelWarmthJson: v.optional(v.string()),
+    // ─── Maya v2 Zernio auto-post (additive, JSON-on-row — schema is at the TS
+    //     DataModel ceiling, so NO new tables) ────────────────────────────────
+    // The founder's Zernio profile id (created at first connect). All Zernio
+    // calls for this agent are scoped to it for cross-tenant isolation.
+    zernioProfileId: v.optional(v.string()),
+    // Registered webhook id + its signing secret (encrypted via lib/encryption,
+    // exactly like telegramBotToken — NEVER store plaintext).
+    zernioWebhookId: v.optional(v.string()),
+    zernioWebhookSecret: v.optional(v.string()),
+    // JSON array of connected accounts:
+    // [{accountId, platform, username, displayName, isActive, needsReconnect,
+    //   connectedAt}]. Maya reads this to know which channels are live
+    // (auto-post) vs which need a reconnect (deep-link fallback).
+    connectedAccountsJson: v.optional(v.string()),
+    // Single-tier plan state (gtm99). JSON: {tier, status, connectedChannelCap,
+    // autoPostChannelCap, videoCreditsMonth, xUrlPostsSoftCapMonth, periodStart,
+    // usage:{autoPostsThisPeriod, xUrlPostsThisPeriod, videosThisPeriod}}.
+    // Parsed by planFeaturesGtm; ONLY Stripe webhook handlers write it.
+    gtmPlanJson: v.optional(v.string()),
+    // Off-by-default toggle: also mirror the day's plan to Google Calendar.
+    // The Google flood retired; the web Today view is the primary surface.
+    googleCalendarMirrorEnabled: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -4471,7 +4493,17 @@ export default defineSchema({
       v.literal("draft"),
       v.literal("scheduled"),
       v.literal("completed"),
-      v.literal("cancelled")
+      v.literal("cancelled"),
+      // Maya v2 auto-post lifecycle (additive). 'queued' = Maya's internal
+      // scheduled, NOT on any external calendar (distinct from 'scheduled'
+      // which kept its Google-mirror meaning). 'published' is set ONLY by the
+      // 24h confirmEventLanded re-poll, never off the optimistic POST 200.
+      // 'needs_confirm' = Reddit/TikTok awaiting the founder's one-tap.
+      v.literal("queued"),
+      v.literal("posting"),
+      v.literal("published"),
+      v.literal("failed"),
+      v.literal("needs_confirm")
     ),
     createdBy: v.literal("maya"),
     // ─── Evidence-vault fields — additive, optional for back-compat ─────
@@ -4488,6 +4520,12 @@ export default defineSchema({
     openUrl: v.optional(v.string()),
     draftText: v.optional(v.string()),
     sourceNote: v.optional(v.string()),
+    // Maya v2 auto-post execution state (JSON-on-row, no new table):
+    // {channel, zernioAccountId, zernioPostId, mode:'auto'|'manual_confirm',
+    //  scheduledForIso, publishConfirmedAt, platformPostUrl, lastError}.
+    // providerEventId stays Google-only; zernioPostId lives here. The 24h
+    // re-poll iterates by_agent + status, so no Zernio-id index is needed.
+    autoPostJson: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -5282,6 +5320,9 @@ export default defineSchema({
       v.literal("composio"),
       v.literal("x_api"),
       v.literal("openclaw"),
+      // Maya v2: Zernio per-account fees + X $0.20/url-post metering record
+      // under their own provider so margin erosion is detectable per founder.
+      v.literal("zernio"),
       v.literal("other")
     ),
     operation: v.string(),

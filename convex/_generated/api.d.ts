@@ -11,6 +11,7 @@
 import type * as _admin_peekState from "../_admin/peekState.js";
 import type * as _admin_realWorldDeploy from "../_admin/realWorldDeploy.js";
 import type * as _admin_realWorldDeployGtm from "../_admin/realWorldDeployGtm.js";
+import type * as _admin_zernioLiveSmoke from "../_admin/zernioLiveSmoke.js";
 import type * as _test_serviceFixtures from "../_test/serviceFixtures.js";
 import type * as accountDeletion from "../accountDeletion.js";
 import type * as admin from "../admin.js";
@@ -122,6 +123,7 @@ import type * as gtmMaya_openclaw_inboundCallback from "../gtmMaya/openclaw/inbo
 import type * as gtmMaya_openclaw_managerCallbacks from "../gtmMaya/openclaw/managerCallbacks.js";
 import type * as gtmMaya_outboundFirewall from "../gtmMaya/outboundFirewall.js";
 import type * as gtmMaya_phase2Trigger from "../gtmMaya/phase2Trigger.js";
+import type * as gtmMaya_planGtm from "../gtmMaya/planGtm.js";
 import type * as gtmMaya_platformAlgo from "../gtmMaya/platformAlgo.js";
 import type * as gtmMaya_platformIntelligence from "../gtmMaya/platformIntelligence.js";
 import type * as gtmMaya_platformWorkers from "../gtmMaya/platformWorkers.js";
@@ -294,6 +296,7 @@ declare const fullApi: ApiFromModules<{
   "_admin/peekState": typeof _admin_peekState;
   "_admin/realWorldDeploy": typeof _admin_realWorldDeploy;
   "_admin/realWorldDeployGtm": typeof _admin_realWorldDeployGtm;
+  "_admin/zernioLiveSmoke": typeof _admin_zernioLiveSmoke;
   "_test/serviceFixtures": typeof _test_serviceFixtures;
   accountDeletion: typeof accountDeletion;
   admin: typeof admin;
@@ -405,6 +408,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/openclaw/managerCallbacks": typeof gtmMaya_openclaw_managerCallbacks;
   "gtmMaya/outboundFirewall": typeof gtmMaya_outboundFirewall;
   "gtmMaya/phase2Trigger": typeof gtmMaya_phase2Trigger;
+  "gtmMaya/planGtm": typeof gtmMaya_planGtm;
   "gtmMaya/platformAlgo": typeof gtmMaya_platformAlgo;
   "gtmMaya/platformIntelligence": typeof gtmMaya_platformIntelligence;
   "gtmMaya/platformWorkers": typeof gtmMaya_platformWorkers;
