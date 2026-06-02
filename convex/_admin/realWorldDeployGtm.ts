@@ -1317,6 +1317,185 @@ export const peekFoundationDetails = internalQuery({
   },
 });
 
+/**
+ * One-shot verification of the ideal-product REBUILD behaviors for the latest
+ * GTM test agent: (1) NO 7-day plan — exactly ~1 day-1 calendar event, not a
+ * week; (2) voice Phase 0 attempted (voiceProfileJson present + confidence);
+ * (3) 6-channel research incl YouTube + per-channel icpKnowledge stored;
+ * (4) messaging discipline — how many outbound messages + their framing
+ * ("first move" vs "first week").
+ *   npx convex run _admin/realWorldDeployGtm:verifyRebuild
+ */
+export const verifyRebuild = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    const all = await ctx.db.query("creators").collect();
+    const tests = all
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (tests.length === 0) return { found: false };
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", tests[0]._id))
+      .first();
+    if (!agent) return { found: true, agent: null };
+
+    const [events, scorecards, messages] = await Promise.all([
+      ctx.db
+        .query("gtmCalendarEvents")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+      ctx.db
+        .query("gtmChannelScorecard")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+      ctx.db
+        .query("mayaMessages")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+    ]);
+
+    let voiceConfidence: string | null = null;
+    if (agent.voiceProfileJson) {
+      try {
+        voiceConfidence =
+          (JSON.parse(agent.voiceProfileJson) as { confidence?: string })
+            .confidence ?? "present-unparsed-confidence";
+      } catch {
+        voiceConfidence = "present-malformed";
+      }
+    }
+
+    const mayaMsgs = messages.filter((m) => m.role === "maya");
+    return {
+      agentId: agent._id,
+      flyAppId: agent.openClawFlyAppId,
+      // (1) NO 7-DAY PLAN — want ~1 day-1 event, not a week
+      calendar: {
+        totalEvents: events.length,
+        kinds: events.map((e) => e.kind ?? "untyped"),
+        turnKey: events.filter((e) => e.openUrl && e.draftText).length,
+        verdict:
+          events.length === 0
+            ? "none-yet"
+            : events.length <= 2
+              ? "DAY-1 ✓ (not a week)"
+              : `WEEK? (${events.length} events)`,
+      },
+      // (2) VOICE Phase 0
+      voice: {
+        profilePresent: Boolean(agent.voiceProfileJson),
+        confidence: voiceConfidence,
+        note: "no handles in this test → confidence:none is the correct graceful path",
+      },
+      // (3) 6-channel + YouTube + icpKnowledge
+      channels: {
+        scored: scorecards.map((s) => s.channel),
+        bets: scorecards.filter((s) => s.bet).map((s) => s.channel),
+        youtubeScored: scorecards.some((s) => s.channel === "youtube"),
+        betChannelsWithIcpKnowledge: scorecards
+          .filter((s) => s.bet && s.icpKnowledge)
+          .map((s) => s.channel),
+      },
+      // (4) MESSAGING DISCIPLINE
+      messaging: {
+        outboundCount: mayaMsgs.length,
+        firstWeekMentions: mayaMsgs.filter((m) =>
+          /first week|whole week|rolling.{0,3}week/i.test(m.body)
+        ).length,
+        firstMoveMentions: mayaMsgs.filter((m) =>
+          /first move|today/i.test(m.body)
+        ).length,
+        previews: mayaMsgs.slice(0, 6).map((m) => m.body.slice(0, 140)),
+      },
+    };
+  },
+});
+
+/**
+ * GROUNDED research-evidence dump for the latest GTM test agent — proof she's
+ * doing REAL work (not fabricating): the actual tool calls (cost ledger by
+ * provider+operation, e.g. scrapecreators /v1/tiktok/video/comments × N +
+ * gemini review_media "watching"), the verbatim quotes she pulled (evidence
+ * cards by source), her action narration (gtmAgentActivity), and channel
+ * coverage. npx convex run _admin/realWorldDeployGtm:peekResearchEvidence
+ */
+export const peekResearchEvidence = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    const all = await ctx.db.query("creators").collect();
+    const tests = all
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (tests.length === 0) return { found: false };
+    const creator = tests[0];
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    if (!agent) return { found: true, agent: null };
+
+    const [ledger, cards, activity, scorecards] = await Promise.all([
+      ctx.db
+        .query("gtmCostLedger")
+        .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+        .collect(),
+      ctx.db
+        .query("gtmEvidenceCards")
+        .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+        .collect(),
+      ctx.db
+        .query("gtmAgentActivity")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+      ctx.db
+        .query("gtmChannelScorecard")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+    ]);
+
+    // The actual tool calls — proves which APIs/channels she really hit.
+    const callCounts: Record<string, number> = {};
+    for (const e of ledger) {
+      const k = `${e.provider} ${e.operation}`;
+      callCounts[k] = (callCounts[k] ?? 0) + 1;
+    }
+    // Evidence cards by source, with sample verbatim quotes.
+    const bySource: Record<
+      string,
+      { count: number; samples: Array<{ quote: string; url: string; who: string | null }> }
+    > = {};
+    for (const c of cards) {
+      const s = c.source;
+      if (!bySource[s]) bySource[s] = { count: 0, samples: [] };
+      bySource[s].count += 1;
+      if (bySource[s].samples.length < 2) {
+        bySource[s].samples.push({
+          quote: c.snippet.slice(0, 180),
+          url: c.url,
+          who: c.authorOrCommunity ?? null,
+        });
+      }
+    }
+
+    return {
+      agentId: agent._id,
+      toolCalls: callCounts, // e.g. {"scrapecreators /v1/tiktok/video/comments": 4, "gemini review_media": 2, ...}
+      totalLedgerCalls: ledger.length,
+      evidenceCards: { total: cards.length, bySource },
+      activity: activity
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 20)
+        .map((a) => ({ kind: a.kind, summary: a.summary })),
+      channels: scorecards.map((s) => ({
+        channel: s.channel,
+        bet: s.bet,
+        hasIcpKnowledge: Boolean(s.icpKnowledge),
+      })),
+    };
+  },
+});
+
 export const peekFoundationState = internalQuery({
   args: {},
   handler: async (ctx): Promise<unknown> => {
@@ -1439,6 +1618,161 @@ export const findLatestGtmTestAgent = internalQuery({
  * plus the freshest 5 thread rows so we can confirm what actually made it to
  * Convex when Maya appears stuck. Pairs with flyctl logs.
  */
+/** Total spend + the actual content she produced (drafts + calendar event
+ *  dates), for a "show me the work + cost" review before teardown.
+ *  npx convex run _admin/realWorldDeployGtm:showWorkAndSpend */
+export const showWorkAndSpend = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    const all = await ctx.db.query("creators").collect();
+    const tests = all
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (tests.length === 0) return { found: false };
+    const creator = tests[0];
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    if (!agent) return { found: true, agent: null };
+
+    const [ledger, drafts, events, buyerMap, job] = await Promise.all([
+      ctx.db
+        .query("gtmCostLedger")
+        .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+        .collect(),
+      ctx.db
+        .query("gtmDraftedContent")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+      ctx.db
+        .query("gtmCalendarEvents")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+      ctx.db
+        .query("gtmBuyerMap")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .first(),
+      ctx.db
+        .query("gtmResearchJobs")
+        .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+        .order("desc")
+        .first(),
+    ]);
+
+    const spendByProvider: Record<string, number> = {};
+    let totalSpend = 0;
+    for (const e of ledger) {
+      spendByProvider[e.provider] =
+        (spendByProvider[e.provider] ?? 0) + (e.costUsd ?? 0);
+      totalSpend += e.costUsd ?? 0;
+    }
+    const tz = agent.timezone;
+    return {
+      spend: {
+        totalUsd: Number(totalSpend.toFixed(4)),
+        byProvider: Object.fromEntries(
+          Object.entries(spendByProvider).map(([k, v]) => [
+            k,
+            Number(v.toFixed(4)),
+          ])
+        ),
+        researchJobSpentUsd: job?.spentUsd ?? null,
+        ledgerEntries: ledger.length,
+      },
+      timezone: tz,
+      buyerMap: buyerMap
+        ? {
+            icp: buyerMap.icpDescription?.slice(0, 200),
+            stages: buyerMap.buyerJourneyStages?.length ?? 0,
+          }
+        : null,
+      drafts: {
+        total: drafts.length,
+        samples: drafts.slice(0, 4).map((d) => ({
+          platform: d.platform,
+          kind: d.kind,
+          state: d.approvalState,
+          voiceScore: d.voiceMatchScore ?? null,
+          text: d.draftText.slice(0, 220),
+        })),
+      },
+      calendar: {
+        total: events.length,
+        events: events
+          .sort((a, b) => a.startsAtMs - b.startsAtMs)
+          .map((e) => ({
+            title: e.title,
+            kind: e.kind ?? "untyped",
+            date: new Date(e.startsAtMs).toLocaleString("en-US", {
+              timeZone: tz,
+              weekday: "short",
+              hour: "numeric",
+              minute: "2-digit",
+              month: "short",
+              day: "numeric",
+            }),
+            hasLink: Boolean(e.openUrl),
+            hasDraft: Boolean(e.draftText),
+          })),
+      },
+    };
+  },
+});
+
+/** Merge messages + activity chronologically to see if an inbound user message
+ *  triggered the foundation restart (the double-pass root cause).
+ *  npx convex run _admin/realWorldDeployGtm:peekTimeline */
+export const peekTimeline = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    const all = await ctx.db.query("creators").collect();
+    const tests = all
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (tests.length === 0) return { found: false };
+    const creator = tests[0];
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    if (!agent) return { found: true, agent: null };
+
+    const [messages, activity] = await Promise.all([
+      ctx.db
+        .query("mayaMessages")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+      ctx.db
+        .query("gtmAgentActivity")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+    ]);
+    const tz = agent.timezone;
+    const fmt = (ms: number) =>
+      new Date(ms).toLocaleString("en-US", {
+        timeZone: tz,
+        hour: "numeric",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+    type Row = { t: number; line: string };
+    const rows: Row[] = [];
+    for (const m of messages)
+      rows.push({
+        t: m._creationTime,
+        line: `[${m.role === "user" ? "USER→" : "MAYA→"}] ${m.body.slice(0, 80)}`,
+      });
+    for (const a of activity)
+      rows.push({ t: a.createdAt, line: `(${a.kind}) ${a.summary.slice(0, 80)}` });
+    rows.sort((a, b) => a.t - b.t);
+    return {
+      timezone: tz,
+      timeline: rows.map((r) => `${fmt(r.t)}  ${r.line}`),
+    };
+  },
+});
+
 export const peekResearchLanded = internalQuery({
   args: {},
   handler: async (ctx): Promise<unknown> => {
