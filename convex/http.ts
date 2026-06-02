@@ -147,6 +147,8 @@ import {
 } from "./gtmMaya/openclaw/conversationCapture";
 // Maya v2 — Zernio hosted-OAuth public callback (signed-state binding).
 import { zernioCallbackHttp } from "./gtmMaya/zernioConnect";
+// Maya v2 (S3) — agent-facing auto-post + dedup routes.
+import { zernioPostHttp, checkAlreadyEngagedHttp } from "./gtmMaya/zernioRoutes";
 
 const http = httpRouter();
 
@@ -450,6 +452,18 @@ http.route({
   path: "/lc_gtm/zernio_callback",
   method: "GET",
   handler: zernioCallbackHttp,
+});
+// Maya v2 (S3) — agent posts content directly (same gate as the cron path).
+http.route({
+  path: "/lc_gtm/zernio_post",
+  method: "POST",
+  handler: zernioPostHttp,
+});
+// Maya v2 (S3) — cheap pre-draft dedup check (the server enforces regardless).
+http.route({
+  path: "/lc_gtm/check_already_engaged",
+  method: "GET",
+  handler: checkAlreadyEngagedHttp,
 });
 // PUBLIC conversion pixel (no hookToken — a pixel on the founder's site can't
 // hold the agent secret). Token-keyed: the wrap token resolves to exactly one

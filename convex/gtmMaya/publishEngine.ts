@@ -1,22 +1,25 @@
 /**
  * Maya v2 (S3) — the auto-post publish engine.
  *
- * publishQueuedEvent renders a 'queued' gtmCalendarEvent into a Zernio post,
- * but ONLY after every gate passes:
- *   - ban-safety (reddit/tiktok are always manual-confirm — decidePublishMode)
+ * publishContentDirect is the SHARED gate+publish core used by BOTH paths:
+ *   - the cron path (publishQueuedEvent, which renders a 'queued'
+ *     gtmCalendarEvent then delegates), and
+ *   - the agent path (the /lc_gtm/zernio_post route, when Maya posts directly,
+ *     e.g. a pulse reply).
+ * Both run the exact same gates via the same pure functions, so there is one
+ * source of truth for "is it safe to auto-publish":
+ *   - ban-safety (reddit/tiktok always manual-confirm — decidePublishMode)
  *   - plan (planFeaturesGtm.canAutoPost)
  *   - the S2.7 three-verdict gate (voice + slop + safety)
  *   - the S3 dedup ledger (never reply twice)
- * Any miss => the row is downgraded to 'needs_confirm' (a one-tap founder
- * card), NEVER auto-published and NEVER silently dropped.
+ * Any miss => action 'needs_confirm' (a one-tap founder card), NEVER an
+ * auto-publish and NEVER a silent drop.
  *
- * confirmEventLanded is the 24h re-poll: it flips 'posting' -> 'published'
- * only after Zernio analytics confirm the post exists. We NEVER mark
- * 'published' off the optimistic POST 200 (Zernio can report success while a
- * platform strips the post).
+ * confirmEventLanded is the 24h re-poll: 'posting' -> 'published' ONLY after
+ * Zernio analytics confirm the post exists (never off the optimistic POST 200).
  *
  * The Zernio publish-response handling is [shape-unverified-live] until the
- * end-of-sprint live deploy; the call path + gates are unit-covered.
+ * end-of-sprint live deploy; the gate path is unit-covered.
  */
 
 import { v } from "convex/values";
@@ -32,13 +35,13 @@ import {
 import type { ZernioPostPlatform } from "../integrations/zernio/types";
 import { planFeaturesGtm } from "./planGtm";
 import { validateOutboundText, evaluateAutoPublishGate } from "./outboundFirewall";
-import {
-  decidePublishMode,
-  composeAutoPostAction,
-} from "./calendarWrite";
+import { decidePublishMode, composeAutoPostAction } from "./calendarWrite";
 import { evaluateDedupGate } from "./engagementLedger";
 
 const CONFIRM_LANDED_DELAY_MS = 24 * 60 * 60 * 1000;
+
+type LedgerPlatform =
+  | "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok" | "youtube";
 
 interface AutoPostJson {
   channel: string;
@@ -82,6 +85,7 @@ export const getAgentPublishContext = internalQuery({
     gtmPlanJson: string | null;
     voiceProfileJson: string | null;
     zernioProfileId: string | null;
+    connectedAccountsJson: string | null;
   } | null> => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent) return null;
@@ -90,48 +94,51 @@ export const getAgentPublishContext = internalQuery({
       gtmPlanJson: agent.gtmPlanJson ?? null,
       voiceProfileJson: agent.voiceProfileJson ?? null,
       zernioProfileId: agent.zernioProfileId ?? null,
+      connectedAccountsJson: agent.connectedAccountsJson ?? null,
     };
   },
 });
 
-export const publishQueuedEvent = internalAction({
-  args: { eventId: v.id("gtmCalendarEvents") },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{ outcome: "auto" | "needs_confirm" | "skipped" | "failed"; reasons?: string[] }> => {
-    const event = await ctx.runQuery(
-      internal.gtmMaya.calendarWrite.getCalendarEventForAgent,
-      { eventId: args.eventId }
-    );
-    if (!event || event.status !== "queued") {
-      return { outcome: "skipped" };
-    }
-    const ap = parseAutoPost(event.autoPostJson);
-    if (!ap || !ap.zernioAccountId) {
-      await markNeedsConfirm(ctx, args.eventId, ap, ["missing channel/account in autoPostJson"]);
-      return { outcome: "needs_confirm", reasons: ["missing channel/account"] };
-    }
-    const channel = ap.channel;
-    const content = (event.draftText ?? event.title ?? "").trim();
+export interface PublishDirectResult {
+  action: "auto" | "needs_confirm" | "failed";
+  reasons: string[];
+  zernioPostId?: string;
+  scheduledForIso?: string;
+}
+
+/**
+ * The SHARED gate+publish core. Runs every gate and, if clear, publishes via
+ * Zernio + stamps the dedup ledger (for replies). Does NOT touch calendar
+ * rows — the caller maps the returned action onto whatever it owns.
+ */
+export const publishContentDirect = internalAction({
+  args: {
+    agentId: v.id("gtmAgents"),
+    channel: v.string(),
+    zernioAccountId: v.string(),
+    content: v.string(),
+    scheduleAtMs: v.optional(v.number()),
+    timezone: v.optional(v.string()),
+    targetExternalId: v.optional(v.string()),
+    targetCommentId: v.optional(v.string()),
+    intentionalFollowUp: v.optional(v.boolean()),
+    draftId: v.optional(v.id("gtmDraftedContent")),
+  },
+  handler: async (ctx, args): Promise<PublishDirectResult> => {
+    const content = args.content.trim();
+    const channel = args.channel;
 
     const agentCtx = await ctx.runQuery(
       internal.gtmMaya.publishEngine.getAgentPublishContext,
-      { agentId: event.agentId }
+      { agentId: args.agentId }
     );
-    if (!agentCtx) {
-      await markNeedsConfirm(ctx, args.eventId, ap, ["agent context missing"]);
-      return { outcome: "needs_confirm", reasons: ["agent context missing"] };
-    }
+    if (!agentCtx) return { action: "needs_confirm", reasons: ["agent context missing"] };
 
-    // ── Gate 1: ban-safety ──────────────────────────────────────────────
+    // Gate 1: ban-safety.
     const mode = decidePublishMode(channel);
-
-    // ── Gate 2: plan allows auto-post ───────────────────────────────────
+    // Gate 2: plan allows auto-post.
     const plan = planFeaturesGtm({ gtmPlanJson: agentCtx.gtmPlanJson });
-    const planAllowsAutoPost = plan.canAutoPost;
-
-    // ── Gate 3: the S2.7 three-verdict gate (voice + slop + safety) ──────
+    // Gate 3: the S2.7 three-verdict gate.
     const slopResult = validateOutboundText(content);
     const safetyResult = await ctx.runAction(
       internal.gtmMaya.outboundFirewall.critiqueOutboundSafety,
@@ -142,114 +149,142 @@ export const publishQueuedEvent = internalAction({
       slopResult,
       safetyResult,
     });
-
-    // ── Gate 4: dedup ledger (only when this is a reply to a thread) ─────
+    // Gate 4: dedup ledger (replies only).
     let dedupAllowed = true;
-    if (ap.targetExternalId) {
+    if (args.targetExternalId) {
       const prior = await ctx.runQuery(
         internal.gtmMaya.engagementLedger.checkAlreadyEngaged,
         {
-          agentId: event.agentId,
+          agentId: args.agentId,
           platform: channel,
-          externalId: ap.targetExternalId,
-          commentId: ap.targetCommentId,
+          externalId: args.targetExternalId,
+          commentId: args.targetCommentId,
         }
       );
-      dedupAllowed = evaluateDedupGate(prior, false).allow;
+      dedupAllowed = evaluateDedupGate(prior, args.intentionalFollowUp === true).allow;
     }
-
-    // Live health is the S5 reconnect-guardian's job; here we trust the
-    // connected account and let a failed publish surface the error. [S5]
-    const healthCanPost = true;
 
     const decision = composeAutoPostAction({
       mode,
-      planAllowsAutoPost,
+      planAllowsAutoPost: plan.canAutoPost,
       autoPublishAllowed: autoPub.allowAutoPublish,
       dedupAllowed,
-      healthCanPost,
+      healthCanPost: true, // live health is the S5 reconnect-guardian's job
     });
-
     if (decision.action === "needs_confirm") {
-      await markNeedsConfirm(ctx, args.eventId, ap, decision.reasons);
-      return { outcome: "needs_confirm", reasons: decision.reasons };
+      return { action: "needs_confirm", reasons: decision.reasons };
     }
 
-    // ── Publish via Zernio ──────────────────────────────────────────────
+    // Publish via Zernio.
     try {
-      const zctx = makeZernioContext(zernioClient(), ap.zernioAccountId);
+      const zctx = makeZernioContext(zernioClient(), args.zernioAccountId);
       const scheduleAt =
-        event.startsAtMs && event.startsAtMs > Date.now() + 60_000
-          ? event.startsAtMs
-          : undefined; // else publishNow
+        args.scheduleAtMs && args.scheduleAtMs > Date.now() + 60_000
+          ? args.scheduleAtMs
+          : undefined;
       const result = await multiPlatformPost(
         zctx,
-        [
-          {
-            platform: channel as ZernioPostPlatform,
-            accountId: ap.zernioAccountId,
-          },
-        ],
-        {
-          text: content,
-          scheduleAt,
-          timezone: event.timezone,
-        }
+        [{ platform: channel as ZernioPostPlatform, accountId: args.zernioAccountId }],
+        { text: content, scheduleAt, timezone: args.timezone }
       );
       const row = result.perPlatform[0];
       const zernioPostId = row?.postId ?? null;
       if (!zernioPostId || row?.state === "failed") {
-        await markFailed(ctx, args.eventId, ap, row?.error ?? "no postId returned");
-        return { outcome: "failed", reasons: [row?.error ?? "no postId"] };
+        return { action: "failed", reasons: [row?.error ?? "no postId returned"] };
       }
-      const nextAp: AutoPostJson = {
-        ...ap,
-        mode: "auto",
-        zernioPostId,
-        scheduledForIso: scheduleAt ? new Date(scheduleAt).toISOString() : undefined,
-        lastError: undefined,
-      };
-      await ctx.runMutation(internal.gtmMaya.calendarWrite.markCalendarEventAutoPost, {
-        eventId: args.eventId,
-        status: "posting",
-        autoPostJson: JSON.stringify(nextAp),
-      });
-
-      // Stamp the dedup ledger if this was a reply.
-      if (ap.targetExternalId && ap.draftId) {
+      // Stamp the dedup ledger on reply publishes.
+      if (args.targetExternalId && args.draftId) {
         await ctx.runMutation(internal.gtmMaya.engagementLedger.recordEngagement, {
           accountId: agentCtx.accountId,
-          agentId: event.agentId,
-          draftId: ap.draftId as Id<"gtmDraftedContent">,
-          platform: channel as
-            | "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok" | "youtube",
+          agentId: args.agentId,
+          draftId: args.draftId,
+          platform: channel as LedgerPlatform,
           providerPostId: zernioPostId,
-          targetExternalId: ap.targetExternalId,
-          targetCommentId: ap.targetCommentId,
+          targetExternalId: args.targetExternalId,
+          targetCommentId: args.targetCommentId,
+          intentionalFollowUp: args.intentionalFollowUp,
         });
       }
-
-      // Schedule the 24h confirm-it-landed re-poll (the only thing that flips
-      // to 'published' — never the optimistic POST 200).
-      await ctx.scheduler.runAfter(
-        CONFIRM_LANDED_DELAY_MS,
-        internal.gtmMaya.publishEngine.confirmEventLanded,
-        { eventId: args.eventId }
-      );
-      return { outcome: "auto" };
+      return {
+        action: "auto",
+        reasons: [],
+        zernioPostId,
+        scheduledForIso: scheduleAt ? new Date(scheduleAt).toISOString() : undefined,
+      };
     } catch (err) {
-      await markFailed(ctx, args.eventId, ap, (err as Error).message);
-      return { outcome: "failed", reasons: [(err as Error).message] };
+      return { action: "failed", reasons: [(err as Error).message] };
     }
+  },
+});
+
+/**
+ * Cron path: render a 'queued' calendar event, run it through the shared gate,
+ * and map the result onto the event's auto-post status.
+ */
+export const publishQueuedEvent = internalAction({
+  args: { eventId: v.id("gtmCalendarEvents") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ outcome: "auto" | "needs_confirm" | "skipped" | "failed" }> => {
+    const event = await ctx.runQuery(
+      internal.gtmMaya.calendarWrite.getCalendarEventForAgent,
+      { eventId: args.eventId }
+    );
+    if (!event || event.status !== "queued") return { outcome: "skipped" };
+    const ap = parseAutoPost(event.autoPostJson);
+    if (!ap || !ap.zernioAccountId) {
+      await mark(ctx, args.eventId, "needs_confirm", ap, ["missing channel/account in autoPostJson"]);
+      return { outcome: "needs_confirm" };
+    }
+    const content = (event.draftText ?? event.title ?? "").trim();
+
+    const result: PublishDirectResult = await ctx.runAction(
+      internal.gtmMaya.publishEngine.publishContentDirect,
+      {
+        agentId: event.agentId,
+        channel: ap.channel,
+        zernioAccountId: ap.zernioAccountId,
+        content,
+        scheduleAtMs: event.startsAtMs,
+        timezone: event.timezone,
+        targetExternalId: ap.targetExternalId,
+        targetCommentId: ap.targetCommentId,
+        draftId: ap.draftId ? (ap.draftId as Id<"gtmDraftedContent">) : undefined,
+      }
+    );
+
+    if (result.action === "needs_confirm") {
+      await mark(ctx, args.eventId, "needs_confirm", ap, result.reasons);
+      return { outcome: "needs_confirm" };
+    }
+    if (result.action === "failed") {
+      await mark(ctx, args.eventId, "failed", ap, result.reasons);
+      return { outcome: "failed" };
+    }
+    await ctx.runMutation(internal.gtmMaya.calendarWrite.markCalendarEventAutoPost, {
+      eventId: args.eventId,
+      status: "posting",
+      autoPostJson: JSON.stringify({
+        ...ap,
+        mode: "auto",
+        zernioPostId: result.zernioPostId,
+        scheduledForIso: result.scheduledForIso,
+        lastError: undefined,
+      }),
+    });
+    await ctx.scheduler.runAfter(
+      CONFIRM_LANDED_DELAY_MS,
+      internal.gtmMaya.publishEngine.confirmEventLanded,
+      { eventId: args.eventId }
+    );
+    return { outcome: "auto" };
   },
 });
 
 export const confirmEventLanded = internalAction({
   args: { eventId: v.id("gtmCalendarEvents") },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{ confirmed: boolean }> => {
+  handler: async (ctx, args): Promise<{ confirmed: boolean }> => {
     const event = await ctx.runQuery(
       internal.gtmMaya.calendarWrite.getCalendarEventForAgent,
       { eventId: args.eventId }
@@ -257,15 +292,12 @@ export const confirmEventLanded = internalAction({
     if (!event || event.status !== "posting") return { confirmed: false };
     const ap = parseAutoPost(event.autoPostJson);
     if (!ap?.zernioPostId) {
-      await markFailed(ctx, args.eventId, ap, "no zernioPostId at confirm time");
+      await mark(ctx, args.eventId, "failed", ap, ["no zernioPostId at confirm time"]);
       return { confirmed: false };
     }
     try {
-      const analytics = await getPostAnalytics(zernioClient(), {
-        postId: ap.zernioPostId,
-      });
-      // If analytics returns for this post id, it landed. [shape-unverified-live]
-      const landed = analytics !== null && analytics !== undefined;
+      const analytics = await getPostAnalytics(zernioClient(), { postId: ap.zernioPostId });
+      const landed = analytics !== null && analytics !== undefined; // [shape-unverified-live]
       if (landed) {
         await ctx.runMutation(internal.gtmMaya.calendarWrite.markCalendarEventAutoPost, {
           eventId: args.eventId,
@@ -274,39 +306,25 @@ export const confirmEventLanded = internalAction({
         });
         return { confirmed: true };
       }
-      await markFailed(ctx, args.eventId, ap, "analytics did not confirm the post landed");
+      await mark(ctx, args.eventId, "failed", ap, ["analytics did not confirm the post landed"]);
       return { confirmed: false };
     } catch (err) {
-      await markFailed(ctx, args.eventId, ap, `confirm re-poll failed: ${(err as Error).message}`);
+      await mark(ctx, args.eventId, "failed", ap, [`confirm re-poll failed: ${(err as Error).message}`]);
       return { confirmed: false };
     }
   },
 });
 
-async function markNeedsConfirm(
+async function mark(
   ctx: { runMutation: (ref: any, args: any) => Promise<unknown> },
   eventId: Id<"gtmCalendarEvents">,
+  status: "needs_confirm" | "failed",
   ap: AutoPostJson | null,
   reasons: string[]
 ): Promise<void> {
-  const next: AutoPostJson = { ...(ap ?? { channel: "unknown" }), lastError: reasons.join("; ") };
   await ctx.runMutation(internal.gtmMaya.calendarWrite.markCalendarEventAutoPost, {
     eventId,
-    status: "needs_confirm",
-    autoPostJson: JSON.stringify(next),
-  });
-}
-
-async function markFailed(
-  ctx: { runMutation: (ref: any, args: any) => Promise<unknown> },
-  eventId: Id<"gtmCalendarEvents">,
-  ap: AutoPostJson | null,
-  error: string
-): Promise<void> {
-  const next: AutoPostJson = { ...(ap ?? { channel: "unknown" }), lastError: error };
-  await ctx.runMutation(internal.gtmMaya.calendarWrite.markCalendarEventAutoPost, {
-    eventId,
-    status: "failed",
-    autoPostJson: JSON.stringify(next),
+    status,
+    autoPostJson: JSON.stringify({ ...(ap ?? { channel: "unknown" }), lastError: reasons.join("; ") }),
   });
 }

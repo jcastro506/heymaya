@@ -1294,5 +1294,34 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) =>
         postLc("send_media_to_user", p, ctx.signal),
     }),
+    tool({
+      name: "check_already_engaged",
+      label: "Check Already Engaged",
+      description:
+        "BEFORE drafting a reply to a thread/comment, check whether you have already engaged it. Pass platform + externalId (the thread/post id), and commentId if replying to a specific comment. Returns { engaged, threadEngaged, commentEngaged }. The server enforces one-reply-per-thread/comment regardless, but calling this first avoids wasted drafting. NEVER reply twice to the same thing.",
+      parameters: Type.Object({
+        platform: Enum(PLATFORM_7),
+        externalId: Type.String({ description: "The thread/post's stable platform id." }),
+        commentId: Type.Optional(Type.String({ description: "The specific comment id, if replying to a comment." })),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("check_already_engaged", p, ctx.signal),
+    }),
+    tool({
+      name: "post_to_channel",
+      label: "Post To Channel",
+      description:
+        "Auto-post content to a CONNECTED channel via Zernio (X / LinkedIn / Instagram / YouTube). The server runs every gate (ban-safety, plan, voice/slop/safety, dedup) and either publishes or returns { outcome: 'needs_confirm', reasons }. REDDIT and TIKTOK are ALWAYS manual-confirm: this returns needs_confirm for them, never auto-publishes (post those via a one-tap card instead). REQUIRED: channel, content. Put the app link in `url` (it is appended; X meters link-posts so ration them). For a reply, pass targetExternalId (+ targetCommentId). scheduleAtMs schedules it; omit to publish now. Returns { action, reasons, zernioPostId }.",
+      parameters: Type.Object({
+        channel: Enum(["x", "linkedin", "instagram", "youtube", "reddit", "tiktok"]),
+        content: Type.String(),
+        url: Type.Optional(Type.String({ description: "Wrapped app link (appended to content). Ration on X." })),
+        targetExternalId: Type.Optional(Type.String({ description: "Thread/post id when this is a reply." })),
+        targetCommentId: Type.Optional(Type.String({ description: "Specific comment id when replying to a comment." })),
+        intentionalFollowUp: Type.Optional(Type.Boolean({ description: "Set true to deliberately reply again to an already-engaged target." })),
+        scheduleAtMs: Type.Optional(Type.Number({ description: "Epoch ms to schedule; omit to publish now." })),
+        draftId: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("zernio_post", p, ctx.signal),
+    }),
   ],
 });

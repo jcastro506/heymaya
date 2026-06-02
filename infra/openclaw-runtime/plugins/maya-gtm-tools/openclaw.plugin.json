@@ -71,7 +71,9 @@
       "search_my_media",
       "request_media",
       "generate_slide_image",
-      "send_media_to_user"
+      "send_media_to_user",
+      "check_already_engaged",
+      "post_to_channel"
     ]
   }
 }
