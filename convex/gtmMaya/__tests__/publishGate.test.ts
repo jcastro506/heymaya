@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   decidePublishMode,
   composeAutoPostAction,
+  routeAutoPostStatus,
 } from "../calendarWrite";
 
 describe("decidePublishMode — ban-safety", () => {
@@ -74,5 +75,55 @@ describe("composeAutoPostAction — fail-closed AND-gate", () => {
     });
     expect(r.action).toBe("needs_confirm");
     expect(r.reasons.length).toBe(5);
+  });
+});
+
+describe("routeAutoPostStatus — populate-time ban-safety FORCE", () => {
+  it("an auto channel with a connected account => queued + autoPostJson", () => {
+    const r = routeAutoPostStatus({ channel: "x", zernioAccountId: "acct_1" });
+    expect(r.status).toBe("queued");
+    const ap = JSON.parse(r.autoPostJson!);
+    expect(ap.channel).toBe("x");
+    expect(ap.zernioAccountId).toBe("acct_1");
+    expect(ap.mode).toBe("auto");
+  });
+
+  it("reddit is FORCED to needs_confirm even with a connected account", () => {
+    const r = routeAutoPostStatus({ channel: "reddit", zernioAccountId: "acct_r" });
+    expect(r.status).toBe("needs_confirm");
+    expect(JSON.parse(r.autoPostJson!).mode).toBe("manual_confirm");
+  });
+
+  it("tiktok is FORCED to needs_confirm", () => {
+    const r = routeAutoPostStatus({ channel: "tiktok", zernioAccountId: "acct_t" });
+    expect(r.status).toBe("needs_confirm");
+  });
+
+  it("no channel => draft (deep-link fallback), no autoPostJson", () => {
+    const r = routeAutoPostStatus({});
+    expect(r.status).toBe("draft");
+    expect(r.autoPostJson).toBeUndefined();
+  });
+
+  it("a channel WITHOUT a connected account => draft (can't auto-post)", () => {
+    const r = routeAutoPostStatus({ channel: "x" });
+    expect(r.status).toBe("draft");
+  });
+
+  it("an unknown/unoffered channel => draft", () => {
+    const r = routeAutoPostStatus({ channel: "threads", zernioAccountId: "acct_x" });
+    expect(r.status).toBe("draft");
+  });
+
+  it("carries reply dedup keys into autoPostJson", () => {
+    const r = routeAutoPostStatus({
+      channel: "x",
+      zernioAccountId: "acct_1",
+      targetExternalId: "t1",
+      targetCommentId: "c1",
+    });
+    const ap = JSON.parse(r.autoPostJson!);
+    expect(ap.targetExternalId).toBe("t1");
+    expect(ap.targetCommentId).toBe("c1");
   });
 });

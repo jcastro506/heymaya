@@ -80,7 +80,60 @@ const EVENT_INPUT = v.object({
   openUrl: v.optional(v.string()),
   draftText: v.optional(v.string()),
   sourceNote: v.optional(v.string()),
+  // Maya v2 (S3) — auto-post routing. When the populator names a connected
+  // channel + account, the row becomes an auto-post queue entry (status
+  // 'queued') instead of a Google-Calendar draft. Reddit/TikTok are FORCED to
+  // needs_confirm server-side regardless of what the skill emitted (ban-safety).
+  channel: v.optional(v.string()),
+  zernioAccountId: v.optional(v.string()),
+  // For reply events (engagement), so the dedup ledger keys correctly.
+  targetExternalId: v.optional(v.string()),
+  targetCommentId: v.optional(v.string()),
 });
+
+// The 6 offered auto-post channels. A row naming anything else stays a draft.
+const OFFERED_AUTOPOST_CHANNELS = new Set([
+  "x",
+  "linkedin",
+  "instagram",
+  "tiktok",
+  "youtube",
+  "reddit",
+]);
+
+/**
+ * Decide a calendar row's stored status + auto-post execution state at
+ * populate time. PURE + deterministic (testable). The ban-safety guarantee:
+ *   - no recognized connected channel/account => 'draft' (deep-link fallback),
+ *   - reddit/tiktok => 'needs_confirm' ALWAYS (forced, never auto-queued),
+ *   - any other offered channel with an account => 'queued' (auto-eligible;
+ *     the publish engine still re-runs every gate before it actually posts).
+ * The skill cannot override this; a populator bug can never auto-queue a
+ * ban-risk channel.
+ */
+export function routeAutoPostStatus(input: {
+  channel?: string;
+  zernioAccountId?: string;
+  targetExternalId?: string;
+  targetCommentId?: string;
+}): { status: "draft" | "queued" | "needs_confirm"; autoPostJson?: string } {
+  const channel = input.channel;
+  if (!channel || !OFFERED_AUTOPOST_CHANNELS.has(channel) || !input.zernioAccountId) {
+    return { status: "draft" };
+  }
+  const mode = decidePublishMode(channel);
+  const status = mode === "manual_confirm" ? "needs_confirm" : "queued";
+  return {
+    status,
+    autoPostJson: JSON.stringify({
+      channel,
+      zernioAccountId: input.zernioAccountId,
+      mode,
+      targetExternalId: input.targetExternalId,
+      targetCommentId: input.targetCommentId,
+    }),
+  };
+}
 
 // Pillar-4 turn-key validation. These kinds put the founder in front of a
 // real customer / public launch surface, so every such event MUST be
@@ -175,6 +228,19 @@ export const storeProposedCalendarEvents = internalAction({
         rejectedTitles.push(event.title);
         continue;
       }
+      // BAN-SAFETY FORCE (mandatory server-side guard): decide the auto-post
+      // status here, never trusting the skill. A row naming a connected
+      // auto-channel becomes 'queued'; reddit/tiktok are FORCED to
+      // needs_confirm regardless of what the populator emitted; anything
+      // without a recognized connected channel stays a 'draft' (deep-link
+      // fallback). A populator bug can therefore NEVER silently auto-queue a
+      // ban-risk channel.
+      const routed = routeAutoPostStatus({
+        channel: event.channel,
+        zernioAccountId: event.zernioAccountId,
+        targetExternalId: event.targetExternalId,
+        targetCommentId: event.targetCommentId,
+      });
       const id = await ctx.runMutation(
         internal.gtmMaya.calendarWrite.persistGtmCalendarEventDraft,
         {
@@ -190,6 +256,8 @@ export const storeProposedCalendarEvents = internalAction({
           openUrl: event.openUrl,
           draftText: event.draftText,
           sourceNote: event.sourceNote,
+          status: routed.status,
+          autoPostJson: routed.autoPostJson,
         }
       );
       draftIds.push(id);
@@ -327,6 +395,16 @@ export const persistGtmCalendarEventDraft = internalMutation({
     openUrl: v.optional(v.string()),
     draftText: v.optional(v.string()),
     sourceNote: v.optional(v.string()),
+    // Maya v2 (S3) — auto-post status + execution state. Defaults preserve the
+    // old behavior ('draft', no autoPostJson) for callers that don't set them.
+    status: v.optional(
+      v.union(
+        v.literal("draft"),
+        v.literal("queued"),
+        v.literal("needs_confirm")
+      )
+    ),
+    autoPostJson: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Id<"gtmCalendarEvents">> => {
     const now = Date.now();
@@ -345,7 +423,8 @@ export const persistGtmCalendarEventDraft = internalMutation({
       openUrl: args.openUrl,
       draftText: args.draftText,
       sourceNote: args.sourceNote,
-      status: "draft",
+      autoPostJson: args.autoPostJson,
+      status: args.status ?? "draft",
       createdBy: "maya",
       createdAt: now,
       updatedAt: now,
