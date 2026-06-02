@@ -4575,7 +4575,9 @@ export default defineSchema({
     accountId: v.id("creators"),
     agentId: v.id("gtmAgents"),
     token: v.string(),
-    provider: v.literal("google"),
+    // 'zernio' added for the Maya v2 social-connect flow (signed-state binding
+    // so a public callback can never bind one founder's account to another).
+    provider: v.union(v.literal("google"), v.literal("zernio")),
     expiresAt: v.number(),
     claimedAt: v.optional(v.number()),
     createdAt: v.number(),

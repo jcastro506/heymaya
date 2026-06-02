@@ -145,6 +145,8 @@ import {
   logMessageHttp,
   logTurnTelemetryHttp,
 } from "./gtmMaya/openclaw/conversationCapture";
+// Maya v2 — Zernio hosted-OAuth public callback (signed-state binding).
+import { zernioCallbackHttp } from "./gtmMaya/zernioConnect";
 
 const http = httpRouter();
 
@@ -439,6 +441,15 @@ http.route({
   pathPrefix: "/r/",
   method: "GET",
   handler: redirectHttp,
+});
+// Maya v2 — Zernio hosted-OAuth callback (PUBLIC, no auth). Zernio redirects
+// the founder's browser here after they authorize a channel. Trusts only the
+// single-use signed `token` query param (binds to exactly one agent); re-reads
+// the account list from Zernio by profileId, then 302s back to the app.
+http.route({
+  path: "/lc_gtm/zernio_callback",
+  method: "GET",
+  handler: zernioCallbackHttp,
 });
 // PUBLIC conversion pixel (no hookToken — a pixel on the founder's site can't
 // hold the agent secret). Token-keyed: the wrap token resolves to exactly one
