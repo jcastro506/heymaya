@@ -65,6 +65,7 @@
       "get_my_action_log",
       "get_my_niche_learnings",
       "get_my_attribution",
+      "get_platform_algo",
       "get_conversion_setup",
       "save_media",
       "search_my_media",

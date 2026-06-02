@@ -1209,6 +1209,15 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) => getLc("get_my_attribution", p, ctx.signal),
     }),
     tool({
+      name: "get_platform_algo",
+      label: "Get Platform Algo",
+      description:
+        "Read the SHARED, monthly-refreshed platform-algorithm intelligence — what's working RIGHT NOW on each channel (cadence, formats, timing, what's losing reach), researched centrally so I never have to. Returns platforms[] = { platform, whatsHotNow, sources, ageDays }. I consult this BEFORE choosing a format/length/posting-window/hook for a channel so my drafts reflect this month's reality, not stale advice. If ageDays is high or empty, fall back to PLATFORM_ALGO.md.",
+      parameters: Type.Object({}),
+      execute: async (p, _cfg, ctx) =>
+        getLc("get_platform_algo", p, ctx.signal),
+    }),
+    tool({
       name: "get_conversion_setup",
       label: "Get Conversion Setup",
       description:

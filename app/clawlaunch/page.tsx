@@ -61,6 +61,7 @@ export default function ClawLaunchLandingPage() {
       <Channels />
       <AWeekWithMaya />
       <Compared />
+      <StaysCurrent />
       <FinalCTA />
       <Footer />
     </main>
@@ -802,6 +803,56 @@ function Compared() {
             </RevealOnView>
           ))}
         </ul>
+      </div>
+    </section>
+  );
+}
+
+/* -----------------------------------------------------------------
+ * StaysCurrent — the platforms change their rules constantly; Maya keeps
+ * up so the founder never has to. Dark band for contrast.
+ * ----------------------------------------------------------------- */
+function StaysCurrent() {
+  return (
+    <section className="relative bg-[#0a0a0a] px-6 py-28 text-[#fbfaf6] sm:px-10 sm:py-40">
+      <div className="mx-auto max-w-7xl">
+        <RevealOnView>
+          <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-white/50">
+            She keeps up so you don&apos;t
+          </p>
+          <h2 className="mb-6 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
+            The algorithms change every month. Maya already read the memo.
+          </h2>
+        </RevealOnView>
+        <RevealOnView delay={0.1}>
+          <p className="mb-14 max-w-2xl text-[16px] leading-[1.6] text-white/70 sm:text-[18px]">
+            TikTok tweaks what it rewards, Reddit shifts what gets filtered,
+            LinkedIn quietly changes what reach looks like. You&apos;d have to
+            read a dozen &ldquo;2026 algorithm&rdquo; thinkpieces a month to keep
+            up. You won&apos;t — because every month Maya researches what&apos;s
+            actually working on each channel right now and bakes it straight into
+            your daily plan. The cadence, the formats, the timing, the stuff
+            that&apos;s quietly dying — she&apos;s on top of it so your posts
+            never feel a season behind.
+          </p>
+        </RevealOnView>
+        <RevealOnView delay={0.15}>
+          <div className="grid grid-cols-2 gap-x-10 gap-y-6 sm:grid-cols-3 md:grid-cols-6">
+            {["Reddit", "TikTok", "Instagram", "YouTube", "X", "LinkedIn"].map(
+              (p) => (
+                <div
+                  key={p}
+                  className="border-t border-white/15 pt-4 font-display italic text-[1.3rem] leading-tight"
+                >
+                  {p}
+                  <span className="mt-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-white/40">
+                    refreshed monthly
+                  </span>
+                </div>
+              )
+            )}
+          </div>
+        </RevealOnView>
       </div>
     </section>
   );

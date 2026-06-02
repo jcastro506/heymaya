@@ -84,6 +84,7 @@ import type * as creatorMayaV0_uploadRenderedMediaHttp from "../creatorMayaV0/up
 import type * as creatorMayaV0_videoSampling from "../creatorMayaV0/videoSampling.js";
 import type * as creatorMayaV0_workspaceManifest from "../creatorMayaV0/workspaceManifest.js";
 import type * as creators from "../creators.js";
+import type * as crons from "../crons.js";
 import type * as dealTriage from "../dealTriage.js";
 import type * as deals from "../deals.js";
 import type * as founder_dashboard from "../founder/dashboard.js";
@@ -121,6 +122,7 @@ import type * as gtmMaya_openclaw_inboundCallback from "../gtmMaya/openclaw/inbo
 import type * as gtmMaya_openclaw_managerCallbacks from "../gtmMaya/openclaw/managerCallbacks.js";
 import type * as gtmMaya_outboundFirewall from "../gtmMaya/outboundFirewall.js";
 import type * as gtmMaya_phase2Trigger from "../gtmMaya/phase2Trigger.js";
+import type * as gtmMaya_platformAlgo from "../gtmMaya/platformAlgo.js";
 import type * as gtmMaya_platformIntelligence from "../gtmMaya/platformIntelligence.js";
 import type * as gtmMaya_platformWorkers from "../gtmMaya/platformWorkers.js";
 import type * as gtmMaya_postResults from "../gtmMaya/postResults.js";
@@ -365,6 +367,7 @@ declare const fullApi: ApiFromModules<{
   "creatorMayaV0/videoSampling": typeof creatorMayaV0_videoSampling;
   "creatorMayaV0/workspaceManifest": typeof creatorMayaV0_workspaceManifest;
   creators: typeof creators;
+  crons: typeof crons;
   dealTriage: typeof dealTriage;
   deals: typeof deals;
   "founder/dashboard": typeof founder_dashboard;
@@ -402,6 +405,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/openclaw/managerCallbacks": typeof gtmMaya_openclaw_managerCallbacks;
   "gtmMaya/outboundFirewall": typeof gtmMaya_outboundFirewall;
   "gtmMaya/phase2Trigger": typeof gtmMaya_phase2Trigger;
+  "gtmMaya/platformAlgo": typeof gtmMaya_platformAlgo;
   "gtmMaya/platformIntelligence": typeof gtmMaya_platformIntelligence;
   "gtmMaya/platformWorkers": typeof gtmMaya_platformWorkers;
   "gtmMaya/postResults": typeof gtmMaya_postResults;

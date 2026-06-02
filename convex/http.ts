@@ -138,6 +138,7 @@ import {
   generateSlideImageHttp,
   sendMediaToUserHttp,
 } from "./gtmMaya/mediaAssets";
+import { getPlatformAlgoHttp } from "./gtmMaya/platformAlgo";
 // Data-collection sprint — inbound user-turn transcript capture + per-turn
 // LLM telemetry.
 import {
@@ -425,6 +426,13 @@ http.route({
   path: "/lc_gtm/get_my_attribution",
   method: "GET",
   handler: getMyAttributionHttp,
+});
+// Shared, centrally-refreshed platform-algorithm intelligence (this month's
+// what's-working per channel). Read-only; the Convex monthly cron writes it.
+http.route({
+  path: "/lc_gtm/get_platform_algo",
+  method: "GET",
+  handler: getPlatformAlgoHttp,
 });
 // Public click-through redirect (no auth) — logs a click, 302s to destination.
 http.route({

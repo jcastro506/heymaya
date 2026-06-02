@@ -1236,13 +1236,20 @@ export default defineSchema({
   // against `Date.now()`. Studio creators get fresher cache via faster cron
   // cadence (see `agents/skills/maya-platform/cron.md` § algo_research_*).
   platformAlgoCache: defineTable({
+    // SHARED platform-algorithm intelligence. Rows with creatorId undefined are
+    // the SHARED monthly intelligence (one per platform) refreshed centrally by
+    // the Convex `platform-algo-refresh` cron — every Maya reads them so the
+    // research runs ONCE, not once per customer. (creatorId-scoped rows are the
+    // legacy creator-product per-creator cache.)
     creatorId: v.optional(v.id("creators")),
     platform: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("hn"),
       v.literal("tiktok"),
       v.literal("instagram"),
       v.literal("youtube"),
-      v.literal("linkedin"),
-      v.literal("x")
+      v.literal("linkedin")
     ),
     topic: v.optional(v.string()),
     signals: v.array(
