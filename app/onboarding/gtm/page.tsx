@@ -12,6 +12,12 @@ type Stage = "intake" | "research" | "deploy";
 interface IntakeDraft {
   name: string;
   url: string;
+  // Web app (a site) vs mobile app (an App Store / Play listing). Mobile
+  // surfaces the store-URL fields + leans on screenshots as the slideshow
+  // ground truth; web just uses `url`.
+  appType: "web" | "mobile";
+  appStoreUrl: string;
+  playStoreUrl: string;
   founderWhy: string;
   stage: "idea" | "live-beta" | "paid" | "unknown";
   entryMode: "launch" | "manager";
@@ -62,6 +68,9 @@ const HIDDEN_CHANNELS = new Set(["youtube", "product_hunt"]);
 const DEFAULT_DRAFT: IntakeDraft = {
   name: "",
   url: "",
+  appType: "web",
+  appStoreUrl: "",
+  playStoreUrl: "",
   founderWhy: "",
   stage: "live-beta",
   entryMode: "manager",
@@ -188,6 +197,15 @@ function GtmOnboardingBody() {
       const appId = await setAppProfile({
         name: draft.name.trim(),
         url: draft.url.trim(),
+        appType: draft.appType,
+        appStoreUrl:
+          draft.appType === "mobile"
+            ? emptyToUndefined(draft.appStoreUrl)
+            : undefined,
+        playStoreUrl:
+          draft.appType === "mobile"
+            ? emptyToUndefined(draft.playStoreUrl)
+            : undefined,
         founderWhy: draft.founderWhy.trim() || undefined,
         stage: draft.stage,
         entryMode: draft.entryMode,
@@ -367,6 +385,47 @@ function GtmOnboardingBody() {
               placeholder="https://..."
             />
           </Field>
+          <Field label="What kind of app is it?">
+            <select
+              value={draft.appType}
+              onChange={(event) =>
+                setDraft((d) => ({
+                  ...d,
+                  appType: event.target.value as IntakeDraft["appType"],
+                }))
+              }
+              className="input"
+            >
+              <option value="web">Web app — people use it in a browser</option>
+              <option value="mobile">
+                Mobile app — people download it from the App Store / Play
+              </option>
+            </select>
+          </Field>
+          {draft.appType === "mobile" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="App Store URL (optional)">
+                <input
+                  value={draft.appStoreUrl}
+                  onChange={(event) =>
+                    setDraft((d) => ({ ...d, appStoreUrl: event.target.value }))
+                  }
+                  className="input"
+                  placeholder="https://apps.apple.com/..."
+                />
+              </Field>
+              <Field label="Play Store URL (optional)">
+                <input
+                  value={draft.playStoreUrl}
+                  onChange={(event) =>
+                    setDraft((d) => ({ ...d, playStoreUrl: event.target.value }))
+                  }
+                  className="input"
+                  placeholder="https://play.google.com/..."
+                />
+              </Field>
+            </div>
+          )}
           <Field label="Why did you build it?">
             <textarea
               value={draft.founderWhy}

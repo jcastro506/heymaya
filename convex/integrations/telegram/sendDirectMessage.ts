@@ -91,6 +91,68 @@ export async function sendDirectTelegramMessage(
   };
 }
 
+export interface DirectTelegramMediaInput {
+  botToken: string | undefined;
+  chatId: string | undefined;
+  /** A directly-fetchable URL (a Convex storage URL works — Telegram pulls it). */
+  mediaUrl: string;
+  isVideo?: boolean;
+  caption?: string;
+}
+
+/**
+ * Slideshow cluster — deliver a generated slide / saved asset back to the
+ * user. We hand Telegram the Convex storage URL (it fetches the bytes itself),
+ * so no multipart upload from Convex. Photos go via sendPhoto, recordings via
+ * sendVideo. Captions are firewall-checked like every other outbound text.
+ */
+export async function sendDirectTelegramMedia(
+  input: DirectTelegramMediaInput
+): Promise<DirectTelegramSendResult> {
+  if (!input.botToken || !input.chatId || !input.mediaUrl) {
+    return { ok: false, reason: "missing_credentials", messageId: null };
+  }
+
+  if (input.caption) {
+    const firewall = validateOutboundText(input.caption);
+    if (!firewall.ok) {
+      return {
+        ok: false,
+        reason: "firewall_blocked",
+        messageId: null,
+        firewallFailures: firewall.failures,
+      };
+    }
+  }
+
+  const method = input.isVideo ? "sendVideo" : "sendPhoto";
+  const mediaField = input.isVideo ? "video" : "photo";
+  const url = `https://api.telegram.org/bot${input.botToken}/${method}`;
+  const body: Record<string, string> = {
+    chat_id: input.chatId,
+    [mediaField]: input.mediaUrl,
+  };
+  if (input.caption) body.caption = input.caption;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    return { ok: false, reason: `telegram_${res.status}`, messageId: null };
+  }
+  const json = (await res.json()) as {
+    ok: boolean;
+    result?: { message_id: number };
+  };
+  if (!json.ok || !json.result) {
+    return { ok: false, reason: "telegram_payload_not_ok", messageId: null };
+  }
+  return { ok: true, reason: "sent", messageId: json.result.message_id };
+}
+
 /**
  * Compose the deploy-time hello in the manager voice. Caller passes the
  * operator's first name (or "" / undefined for synth tests / first-touch

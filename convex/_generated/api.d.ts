@@ -109,6 +109,7 @@ import type * as gtmMaya_experimentPlanner from "../gtmMaya/experimentPlanner.js
 import type * as gtmMaya_judgeCardsBatch from "../gtmMaya/judgeCardsBatch.js";
 import type * as gtmMaya_judgeChannel from "../gtmMaya/judgeChannel.js";
 import type * as gtmMaya_managerStore from "../gtmMaya/managerStore.js";
+import type * as gtmMaya_mediaAssets from "../gtmMaya/mediaAssets.js";
 import type * as gtmMaya_memoryLedger from "../gtmMaya/memoryLedger.js";
 import type * as gtmMaya_mineCommentTrees from "../gtmMaya/mineCommentTrees.js";
 import type * as gtmMaya_missionBoard from "../gtmMaya/missionBoard.js";
@@ -387,6 +388,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/judgeCardsBatch": typeof gtmMaya_judgeCardsBatch;
   "gtmMaya/judgeChannel": typeof gtmMaya_judgeChannel;
   "gtmMaya/managerStore": typeof gtmMaya_managerStore;
+  "gtmMaya/mediaAssets": typeof gtmMaya_mediaAssets;
   "gtmMaya/memoryLedger": typeof gtmMaya_memoryLedger;
   "gtmMaya/mineCommentTrees": typeof gtmMaya_mineCommentTrees;
   "gtmMaya/missionBoard": typeof gtmMaya_missionBoard;

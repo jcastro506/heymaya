@@ -1032,5 +1032,73 @@ export default defineToolPlugin({
       }),
       execute: async (p, _cfg, ctx) => getLc("get_my_attribution", p, ctx.signal),
     }),
+
+    // =====================================================================
+    // SLIDESHOW CLUSTER — media library + grounded slide generation.
+    // The moat is grounding: every slide frames the user's REAL screenshot,
+    // never a stock image. Check the library before asking; ask once.
+    // =====================================================================
+    tool({
+      name: "save_media",
+      label: "Save Media",
+      description:
+        "Save a screenshot/recording the USER texted me into my media library. REQUIRED: mediaUrl (the downloadable Telegram file URL I resolved via getFile — see maya-content-reviewer for the file_id→URL flow). Optional: label (what the screen IS, e.g. 'paywall screen', 'empty state', 'main dashboard'), kind (screenshot|screen_recording|image). Dedupes by content hash. Returns { ok, assetId, deduped }.",
+      parameters: Type.Object({
+        mediaUrl: Type.String(),
+        label: Type.Optional(Type.String()),
+        kind: Type.Optional(Enum(["screenshot", "screen_recording", "image"])),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("save_media", p, ctx.signal),
+    }),
+    tool({
+      name: "search_my_media",
+      label: "Search My Media",
+      description:
+        "List what's already in my media library BEFORE I ask the user for a visual or build a slideshow. Optional: kind (screenshot|screen_recording|image|slide|video) to filter; limit. Returns assets[] (id, kind, source, label, createdAt). Empty = I have nothing yet.",
+      parameters: Type.Object({
+        kind: Type.Optional(
+          Enum(["screenshot", "screen_recording", "image", "slide", "video"])
+        ),
+        limit: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("search_my_media", p, ctx.signal),
+    }),
+    tool({
+      name: "request_media",
+      label: "Request Media",
+      description:
+        "Text the user asking for ONE specific missing asset I need for a post — only after search_my_media shows I don't already have it. REQUIRED: label (the exact screen/asset I need, e.g. 'a screenshot of your onboarding screen'). Optional: reason (one line on why, in my voice). Guarded: if I already have a matching asset it returns alreadyHave:true and does NOT text the user. Never double-ask.",
+      parameters: Type.Object({
+        label: Type.String(),
+        reason: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("request_media", p, ctx.signal),
+    }),
+    tool({
+      name: "generate_slide_image",
+      label: "Generate Slide Image",
+      description:
+        "Generate ONE TikTok/IG slide grounded in the user's REAL screenshot(s). For any slide that shows the product, pass referenceAssetIds (from search_my_media) — the model places that screenshot UNCHANGED and only frames/captions around it (no fabricated UI). REQUIRED: prompt (the slide's intent — hook, feature, before/after, CTA). Optional: referenceAssetIds, slideText (caption to overlay), platform (tiktok|instagram). A carousel = call this once per slide. Returns { ok, assetId, grounded }. COGS ~$0.04/image — log it with log_cost (provider gemini).",
+      parameters: Type.Object({
+        prompt: Type.String(),
+        referenceAssetIds: Type.Optional(Type.Array(Type.String())),
+        slideText: Type.Optional(Type.String()),
+        platform: Type.Optional(Enum(["tiktok", "instagram"])),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("generate_slide_image", p, ctx.signal),
+    }),
+    tool({
+      name: "send_media_to_user",
+      label: "Send Media To User",
+      description:
+        "Deliver finished slides/assets to the user on Telegram (auto-posting to TikTok/IG is not wired yet — I hand the user the images to post). REQUIRED: assetIds (from search_my_media / generate_slide_image, in carousel order). Optional: caption (one message of context, my voice — shown on the first image). Returns { ok, delivered, requested }.",
+      parameters: Type.Object({
+        assetIds: Type.Array(Type.String()),
+        caption: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("send_media_to_user", p, ctx.signal),
+    }),
   ],
 });

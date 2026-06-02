@@ -2601,8 +2601,71 @@ Max 4 ScrapeCreators calls (1 per platform). Cache aggressively. 1 main_maya syn
 \`recommendedNextActions[].action\`, \`verdict\`, and \`diagnosisRationale\` strings are operator-facing. Run \`maya-slop-critic\`. Must not read "let's iterate and learn from this exciting first launch!" — must read "this was a void launch by rule 9.8; the format reached only the founder circle; we change channel or sharpen the hook within 14 days." Terse, honest, cited. The positioning-vs-distribution call must be equally blunt: "1,400 people saw this and 6 engaged — that's a messaging problem, not a reach problem. Posting it again won't change the answer; the framing has to change," vs "this got 40 views — it never had a chance. The message is untested; we fix the channel before we touch the copy." Never soften a positioning verdict into a distribution one to spare feelings.
 `;
 
+// Source: agents/skills/maya-gtm/maya-slideshow-strategist/SKILL.md
+const ENTRY_21_maya_slideshow_strategist = `---
+name: maya-slideshow-strategist
+description: When a post wants a visual — a TikTok photo-mode slideshow or an IG carousel — I build it grounded in the founder's REAL screenshots, never stock images. I decide when a slideshow is the right format, pull the screenshots I already have (or ask once for the one I'm missing), generate each slide framing the real screen unchanged, and hand the finished set back for the founder to post. Strategy + format + hooks live here; the mechanics live in TOOLS.md.
+---
+
+# maya-slideshow-strategist
+
+## Purpose
+
+For a pre-/early-traction app, the highest-converting organic format on TikTok and Instagram is often the **photo slideshow** (TikTok photo mode) or **carousel** (IG) — not a produced video. It's cheap, fast, and it *shows the product*. My job is to build those slideshows **grounded in the founder's real screenshots** so they're honest and specific, hand them over ready to post, and learn what converts.
+
+The non-negotiable: **every slide that shows the product frames the founder's REAL screenshot, unchanged.** No stock images, no fabricated UI, no invented numbers. That's the whole moat — a slideshow built from a real screen out-converts a generic one and never misrepresents the product. (This is why I wrote my own strategist instead of using an off-the-shelf "slideshow" skill — those use stock photos and surrender posting to a third party. I don't.)
+
+## When a slideshow is the right call
+
+- IF the founder has a **visual product** (a UI, a dashboard, a before/after, a result screen) AND the channel is **TikTok or Instagram** THEN a slideshow/carousel is usually the strongest organic format — propose it.
+- IF the post is a **feature reveal, a before/after, a "how it works in 5 taps", a results/proof screen, or a launch announcement** THEN it maps cleanly to a 3-7 slide story.
+- IF the channel is **Reddit / HN / X / LinkedIn** THEN a slideshow is usually the WRONG format — those are text-first; a single screenshot inline beats a carousel. Don't force it.
+- IF the founder has **no screenshots and a non-visual product** THEN skip the slideshow; lead with text/hook.
+
+## The flow (mechanics are in TOOLS.md — this is the judgment)
+
+1. **Check what I have first.** \`search_my_media({ kind: "screenshot" })\`. The library is the ground truth. I plan the slideshow around the screens I actually have before asking for anything.
+2. **Ask only for a real gap, once.** If the story needs a screen I don't have (e.g. I have the dashboard but not the empty-state I want for the "before"), \`request_media({ label: "your onboarding/empty-state screen", reason: "<one line in my voice>" })\`. It's guarded — it won't fire if I already have a match. I do **not** pre-ask at onboarding and I **never** double-ask. Asks shrink over time as the library fills.
+3. **Storyboard the slides.** Decide the sequence before generating. A strong default arc:
+   - **Slide 1 — the hook.** A scroll-stopping line (problem, bold claim, or curiosity gap). Often a real screenshot with a big caption, or a clean decorative hook slide.
+   - **Slides 2-N — the substance.** Real screenshots showing the product doing the thing — the workflow, the before/after, the result. One idea per slide. Caption each with the value, not a description.
+   - **Final slide — the CTA.** Where to get it / what to do next. Honest, specific, low-pressure.
+4. **Generate, grounded.** For each product slide: \`generate_slide_image({ prompt: "<slide intent>", referenceAssetIds: [<the real screenshot>], slideText: "<caption to overlay>", platform: "tiktok"|"instagram" })\`. The screenshot goes in **unchanged** — I only frame/caption around it. Hook/CTA slides with no product UI can run without a reference (decorative only — they still must not fabricate a fake screenshot of the app).
+5. **Log the cost.** Each generation is ~$0.04 — \`log_cost({ provider: "gemini", operation: "generate_slide_image", reason: "<which post>", costUsd: 0.04 })\`.
+6. **Hand it over.** \`send_media_to_user({ assetIds: [<slides in order>], caption: "<my voice — what this is + how to post it>" })\`. Auto-posting to TikTok/IG isn't wired yet, so I deliver the finished images and tell them exactly how to post (photo mode / carousel, the caption to paste, the first comment, hashtags). The deep-link/recipe discipline from \`maya-calendar-populator\` applies.
+
+## Platform specifics (encoded here, not hardcoded in code)
+
+- **TikTok photo mode:** 3-12 images, vertical 9:16. The first image + the on-screen text in the first second is the whole hook. Sound still matters (a trending sound on a photo post lifts reach) — I note a sound suggestion in the hand-off even though I don't add it. Caption is short; keywords matter for search.
+- **Instagram carousel:** up to 10 images (slides), works at 4:5 or 1:1 but 9:16-ish reads fine. Slide 1 is the hook; IG rewards a strong "swipe" reason on slide 1 ("→" / "here's how"). First comment / caption carries the CTA + hashtags.
+- **Both:** legible high-contrast captions, one idea per slide, no wall of text, no AI-slop gradients-and-3D-blobs aesthetic. Native-looking beats designed-looking.
+
+## Grounding rules (the firewall)
+
+- A product slide **must** carry a real screenshot via \`referenceAssetIds\`. If I don't have the screen the story needs, I ask for it — I do **not** generate a fake version of it.
+- I never let a generated slide alter the UI, the copy, the numbers, or the data in the real screenshot. If a generation drifts (the model redrew the screen), I discard it and either regenerate with a tighter prompt or fall back to delivering the raw screenshot with a simple caption.
+- I never claim a result the screenshot doesn't show. The caption matches what's actually on screen.
+
+## Then close the loop
+
+- Slot the slideshow on the calendar (\`propose_calendar\`) as a hands-off recipe: which slides, the caption to paste, the first comment, the sound suggestion, the success target.
+- If the post carries a product link, wrap it (\`wrap_link\`) so the slideshow is attributed, not blind — clicks → signups feed the weekly review.
+- After it's posted and I learn what converted (\`get_my_attribution\`), I \`save_learning\` the format signal ("real-screenshot hook slide → 3x saves") so the next slideshow is sharper.
+
+## Failure modes
+
+- **No screenshots + visual product** → ask once (\`request_media\`) for the single most important screen; don't build a stock-image slideshow as a substitute.
+- **Generation failed / drifted** → fall back to the raw screenshot + caption; never ship a fabricated UI. Tell the founder honestly if I couldn't generate a slide.
+- **Wrong channel** → if the founder wants a slideshow for Reddit/HN/X, gently redirect to the format that actually works there (one inline screenshot + strong text).
+- **Over-producing** → a 5-slide grounded carousel beats a 12-slide over-designed one. Fewer, realer slides.
+
+## Anti-slop check
+
+Every slideshow passes the same bar as everything I send (maya-slop-critic + SOUL.md): grounded in a real screen, specific captions, native-to-the-platform, no hype, no fabricated UI or results. If a slide could have been made for any app, it's too generic — reground it in this founder's actual product.
+`;
+
 // Source: agents/skills/maya-gtm/maya-slop-critic/SKILL.md
-const ENTRY_21_maya_slop_critic = `---
+const ENTRY_22_maya_slop_critic = `---
 name: maya-slop-critic
 description: The anti-slop / AI-tell critic. Apply PLAYBOOK § 6 banned-phrase list + banned-structure scan + LLM-judgment structural AI-tell pass + voice match + read-aloud test. Returns "rejected with reasons" on any trip. The bar is native-voice fidelity, NOT detector-dodging.
 ---
@@ -2729,7 +2792,7 @@ Self-referential: this skill IS the anti-slop check. The \`suggestion\` strings 
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-demo-strategist/SKILL.md
-const ENTRY_22_maya_tiktok_demo_strategist = `---
+const ENTRY_23_maya_tiktok_demo_strategist = `---
 name: maya-tiktok-demo-strategist
 description: Pick TikTok format (faceless screen-record vs founder-on-camera vs slideshow) given showability + constraints. Refuse if user can't post manually (V1 constraint).
 ---
@@ -2813,7 +2876,7 @@ interface TikTokStrategy {
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-format-researcher/SKILL.md
-const ENTRY_23_maya_tiktok_format_researcher = `---
+const ENTRY_24_maya_tiktok_format_researcher = `---
 name: maya-tiktok-format-researcher
 description: Find what's working in the operator's niche on TikTok RIGHT NOW. Identify the format that clearly recurs across the strongest recent videos in the niche (tiktok.md § 7).
 ---
@@ -2935,7 +2998,7 @@ Structured taxonomy output, slop-critic NOT invoked. \`excerpt\` strings and eve
 `;
 
 // Source: agents/skills/maya-gtm/maya-ugc-system-advisor/SKILL.md
-const ENTRY_24_maya_ugc_system_advisor = `---
+const ENTRY_25_maya_ugc_system_advisor = `---
 name: maya-ugc-system-advisor
 description: ADVISORY-ONLY in V1. UGC creators are a Phase 4+ lever per PLAYBOOK. Refuse to recommend before format-market-fit.
 ---
@@ -3015,7 +3078,7 @@ Mostly structured refusals. \`refusalReason\` and \`gatesUnmet[].detail\` pass t
 `;
 
 // Source: agents/skills/maya-gtm/maya-viral-demo-moment-miner/SKILL.md
-const ENTRY_25_maya_viral_demo_moment_miner = `---
+const ENTRY_26_maya_viral_demo_moment_miner = `---
 name: maya-viral-demo-moment-miner
 description: Find showable app moments — before/after contrasts, screenshot sequences. Source: walkthrough + product UI.
 ---
@@ -3097,7 +3160,7 @@ interface ViralDemoBeatLibrary {
 `;
 
 // Source: agents/skills/maya-gtm/maya-voice-matcher/SKILL.md
-const ENTRY_26_maya_voice_matcher = `---
+const ENTRY_27_maya_voice_matcher = `---
 name: maya-voice-matcher
 description: Score how well a drafted reply/post/thread matches the operator's actual voice — drawn from their existing public writing (X/Reddit/LinkedIn) or onboarding answers as fallback. Combines with maya-slop-critic for a final ship-or-revise gate. Each gtmDraftedContent row gets a voiceMatchScore + slopCriticPassed flag.
 ---
@@ -3209,7 +3272,7 @@ Yes — this skill itself outputs operator-facing copy (when surfacing voice fee
 `;
 
 // Source: agents/skills/maya-gtm/maya-weekly-review/SKILL.md
-const ENTRY_27_maya_weekly_review = `---
+const ENTRY_28_maya_weekly_review = `---
 name: maya-weekly-review
 description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for next week if any, and a regenerated next-week plan re-weighted by what actually converted.
 ---
@@ -3358,7 +3421,7 @@ Banned for this message: "Crushed it this week," "We're seeing momentum," "level
 `;
 
 // Source: agents/skills/maya-gtm/maya-x-founder-led-researcher/SKILL.md
-const ENTRY_28_maya_x_founder_led_researcher = `---
+const ENTRY_29_maya_x_founder_led_researcher = `---
 name: maya-x-founder-led-researcher
 description: Find X founder-led conversations, reply targets, hooks worth modeling, and accounts worth a private List.
 ---
@@ -3516,7 +3579,7 @@ Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before t
 `;
 
 // Source: agents/skills/maya-gtm/maya-youtube-researcher/SKILL.md
-const ENTRY_29_maya_youtube_researcher = `---
+const ENTRY_30_maya_youtube_researcher = `---
 name: maya-youtube-researcher
 description: Deep YouTube research via ScrapeCreators — mine comments + transcripts for buyer language, map the venue spread (niche channels, hashtags, Shorts trends), and judge whether YouTube earns a bet for this product. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
 ---
@@ -3587,13 +3650,14 @@ export const BUNDLED_LOCAL_SKILLS: readonly BundledLocalSkill[] = [
   { slug: "maya-output-critic", workspacePath: "skills/maya-output-critic/SKILL.md", body: ENTRY_18_maya_output_critic },
   { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_19_maya_reddit_demand_researcher },
   { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_20_maya_results_reviewer },
-  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_21_maya_slop_critic },
-  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_22_maya_tiktok_demo_strategist },
-  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_23_maya_tiktok_format_researcher },
-  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_24_maya_ugc_system_advisor },
-  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_25_maya_viral_demo_moment_miner },
-  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_26_maya_voice_matcher },
-  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_27_maya_weekly_review },
-  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_28_maya_x_founder_led_researcher },
-  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_29_maya_youtube_researcher },
+  { slug: "maya-slideshow-strategist", workspacePath: "skills/maya-slideshow-strategist/SKILL.md", body: ENTRY_21_maya_slideshow_strategist },
+  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_22_maya_slop_critic },
+  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_23_maya_tiktok_demo_strategist },
+  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_24_maya_tiktok_format_researcher },
+  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_25_maya_ugc_system_advisor },
+  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_26_maya_viral_demo_moment_miner },
+  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_27_maya_voice_matcher },
+  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_28_maya_weekly_review },
+  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_29_maya_x_founder_led_researcher },
+  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_30_maya_youtube_researcher },
 ];

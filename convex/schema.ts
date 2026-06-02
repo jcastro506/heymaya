@@ -4345,6 +4345,19 @@ export default defineSchema({
     deployTimeHelloAttemptedAt: v.optional(v.number()),
     deployTimeHelloResult: v.optional(v.string()), // "sent" | "firewall_blocked" | "missing_credentials" | "telegram_<status>" | "exception:<msg>"
     deployTimeHelloMessageId: v.optional(v.number()),
+    // Slideshow cluster — Maya's per-agent media library, stored as a JSON
+    // string (NOT a dedicated table or a typed array field). This is a
+    // DELIBERATE encoding choice: the schema sits exactly at TypeScript's
+    // DataModel instantiation ceiling, so adding a 139th table (or a richly-
+    // typed array field) regresses `db.get()` narrowing project-wide. A plain
+    // string adds zero type complexity. The value is a JSON array of
+    // GtmMediaEntry objects (see convex/gtmMaya/mediaAssets.ts):
+    //   { storageId, kind, source, mimeType, storageBytes, label?, sha256?,
+    //     referenceStorageIds?, meta?, archivedAt?, createdAt }
+    // Each entry's identity is its Convex storageId. Per-agent the library is
+    // small (dozens of screenshots + generated slides), always loaded with the
+    // agent row, and search/dedupe run in JS over the parsed array.
+    mediaLibraryJson: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -4658,6 +4671,14 @@ export default defineSchema({
     // capture at MVP; it's the index for the cross-tenant data moat — the
     // per-archetype outcome-grounded playbook that warm-starts new customers.
     archetype: v.optional(v.string()),
+    // Slideshow cluster — web-vs-mobile fork captured at onboarding. Mobile
+    // apps live in an App Store / Play listing (screenshots are the asset
+    // Maya grounds slideshows in); web apps have only a site URL. Optional
+    // for back-compat with rows created before the toggle existed; absent =
+    // "web" (the historical default, since `url` was always a site URL).
+    appType: v.optional(v.union(v.literal("web"), v.literal("mobile"))),
+    appStoreUrl: v.optional(v.string()),
+    playStoreUrl: v.optional(v.string()),
     diagnosis: v.optional(v.any()),
     // Sprint 1.1 — cached LLM-driven keyword expansion. Maps the founder's
     // product description into semantic keywords + audience pain phrases the
@@ -4681,6 +4702,11 @@ export default defineSchema({
   })
     .index("by_account", ["accountId"])
     .index("by_account_and_url", ["accountId", "url"]),
+
+  // NOTE: the slideshow-cluster media library is NOT a table — it lives as
+  // `gtmAgents.mediaLibraryJson` (a JSON string). See that field's comment:
+  // the schema is at TypeScript's DataModel instantiation ceiling and a 139th
+  // table regresses db.get() narrowing project-wide.
 
   gtmResearchJobs: defineTable({
     accountId: v.id("creators"),

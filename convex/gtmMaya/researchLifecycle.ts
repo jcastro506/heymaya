@@ -258,6 +258,11 @@ export const setAppProfile = mutation({
     // manager tab). Optional; Maya can also resolve/refine it later via
     // /lc_gtm/set_north_star.
     entryMode: v.optional(v.union(v.literal("launch"), v.literal("manager"))),
+    // Slideshow cluster — web-vs-mobile fork. Mobile apps carry store URLs +
+    // a screenshots-as-asset emphasis; web apps just have the site `url`.
+    appType: v.optional(v.union(v.literal("web"), v.literal("mobile"))),
+    appStoreUrl: v.optional(v.string()),
+    playStoreUrl: v.optional(v.string()),
     diagnosis: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<Id<"gtmApps">> => {
@@ -295,6 +300,9 @@ export const setAppProfile = mutation({
         maxWeeklyVisualPosts: args.maxWeeklyVisualPosts,
         excludedAudiences: args.excludedAudiences,
         entryMode: args.entryMode,
+        appType: args.appType,
+        appStoreUrl: normalizeOptionalUrl(args.appStoreUrl),
+        playStoreUrl: normalizeOptionalUrl(args.playStoreUrl),
         diagnosis: args.diagnosis,
         updatedAt: now,
       });
@@ -325,6 +333,9 @@ export const setAppProfile = mutation({
       maxWeeklyVisualPosts: args.maxWeeklyVisualPosts,
       excludedAudiences: args.excludedAudiences,
       entryMode: args.entryMode,
+      appType: args.appType,
+      appStoreUrl: normalizeOptionalUrl(args.appStoreUrl),
+      playStoreUrl: normalizeOptionalUrl(args.playStoreUrl),
       diagnosis: args.diagnosis,
       createdAt: now,
       updatedAt: now,

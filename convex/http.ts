@@ -120,6 +120,13 @@ import {
 } from "./gtmMaya/attribution";
 import { memoryWrittenHttp } from "./gtmMaya/memoryLedger";
 import { reviewMediaHttp } from "./gtmMaya/contentReview";
+import {
+  saveMediaHttp,
+  searchMyMediaHttp,
+  requestMediaHttp,
+  generateSlideImageHttp,
+  sendMediaToUserHttp,
+} from "./gtmMaya/mediaAssets";
 // Data-collection sprint — inbound user-turn transcript capture + per-turn
 // LLM telemetry.
 import {
@@ -206,6 +213,36 @@ http.route({
   path: "/lc_gtm/review_media",
   method: "POST",
   handler: reviewMediaHttp,
+});
+// Slideshow cluster — media library + grounded slide gen. save_media ingests
+// a user-sent screenshot (Maya resolved the Telegram file URL via getFile);
+// search_my_media lists the library; request_media texts the user for a
+// specific missing asset (once); generate_slide_image runs nano banana
+// grounded in real screenshots; send_media_to_user delivers finished slides.
+http.route({
+  path: "/lc_gtm/save_media",
+  method: "POST",
+  handler: saveMediaHttp,
+});
+http.route({
+  path: "/lc_gtm/search_my_media",
+  method: "GET",
+  handler: searchMyMediaHttp,
+});
+http.route({
+  path: "/lc_gtm/request_media",
+  method: "POST",
+  handler: requestMediaHttp,
+});
+http.route({
+  path: "/lc_gtm/generate_slide_image",
+  method: "POST",
+  handler: generateSlideImageHttp,
+});
+http.route({
+  path: "/lc_gtm/send_media_to_user",
+  method: "POST",
+  handler: sendMediaToUserHttp,
 });
 http.route({
   path: "/lc_gtm/get_my_target_threads",
