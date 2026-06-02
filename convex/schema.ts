@@ -5899,6 +5899,17 @@ export default defineSchema({
     // to show "Maya pinged the operator about this one".
     surfacedToOperator: v.boolean(),
     notes: v.optional(v.string()),
+    // Maya v2 (S3) engagement-ledger dedup — keys this published record to
+    // EXACTLY what we replied to, so the publish gate can refuse a second
+    // reply to the same thread/comment. targetExternalId = the platform's own
+    // post/thread id; targetCommentId = the specific comment within it (the
+    // operator chose per-comment granularity 2026-06-02). intentionalFollowUp
+    // records that a repeat reply was a deliberate override, not a dedup miss.
+    // No new index: the check scans by_agent + filters platform/targetExternalId
+    // (mirrors the gtmTargetThreads dedupe-scan pattern).
+    targetExternalId: v.optional(v.string()),
+    targetCommentId: v.optional(v.string()),
+    intentionalFollowUp: v.optional(v.boolean()),
   })
     .index("by_account", ["accountId"])
     .index("by_agent", ["agentId"])

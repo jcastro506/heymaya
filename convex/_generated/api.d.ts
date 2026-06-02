@@ -107,6 +107,7 @@ import type * as gtmMaya_costLedger from "../gtmMaya/costLedger.js";
 import type * as gtmMaya_deepLink from "../gtmMaya/deepLink.js";
 import type * as gtmMaya_deliveryFailures from "../gtmMaya/deliveryFailures.js";
 import type * as gtmMaya_distributionMotions from "../gtmMaya/distributionMotions.js";
+import type * as gtmMaya_engagementLedger from "../gtmMaya/engagementLedger.js";
 import type * as gtmMaya_evidenceGuard from "../gtmMaya/evidenceGuard.js";
 import type * as gtmMaya_experimentPlanner from "../gtmMaya/experimentPlanner.js";
 import type * as gtmMaya_judgeCardsBatch from "../gtmMaya/judgeCardsBatch.js";
@@ -393,6 +394,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/deepLink": typeof gtmMaya_deepLink;
   "gtmMaya/deliveryFailures": typeof gtmMaya_deliveryFailures;
   "gtmMaya/distributionMotions": typeof gtmMaya_distributionMotions;
+  "gtmMaya/engagementLedger": typeof gtmMaya_engagementLedger;
   "gtmMaya/evidenceGuard": typeof gtmMaya_evidenceGuard;
   "gtmMaya/experimentPlanner": typeof gtmMaya_experimentPlanner;
   "gtmMaya/judgeCardsBatch": typeof gtmMaya_judgeCardsBatch;
