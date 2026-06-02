@@ -175,7 +175,15 @@ export interface ValidateOutboundResult {
       | "structural_ai_tell"
       | "voice_divergence"
       // Deterministic punctuation AI-tells (em-dash, colon-header).
-      | "ai_punctuation";
+      | "ai_punctuation"
+      // S2.7 — pre-publish SAFETY firewall (auto-post under the founder's
+      // name). `safety_violation` = the critic flagged content; the matched
+      // field carries the violation category (offensive/off_brand/
+      // hallucinated_claim/competitor_disparagement/legal_overclaim/pii/
+      // tos_risk). `safety_unverifiable` = the critic could not run (fail
+      // CLOSED — the publish gate treats this as a block, NOT a pass).
+      | "safety_violation"
+      | "safety_unverifiable";
     matched: string;
     excerpt: string;
   }>;
@@ -475,3 +483,256 @@ export const critiqueOutboundStructural = internalAction({
     return { ok: failures.length === 0, failures };
   },
 });
+
+// ───────────────────────────────────────────────────────────────────
+// S2.7 — Pre-publish SAFETY firewall + the autonomous-publish gate.
+//
+// Auto-post removes the human-in-the-loop the old paste-the-link model
+// relied on. Voice-match proves a draft SOUNDS like the founder; the
+// slop-critic proves it doesn't READ like AI; NEITHER proves it is SAFE
+// TO SAY under the founder's name. This adds that missing layer and the
+// three-verdict gate that S3's publish path consults.
+//
+// CRITICAL fail-semantics difference: the structural pass above is
+// fail-OPEN (never silence Maya's chat on an LLM outage). The safety
+// critic is fail-CLOSED — if it cannot run, the draft does NOT auto-
+// publish; it downgrades to a one-tap confirm. A wrong auto-post under
+// the founder's name is worse than asking them to tap.
+// ───────────────────────────────────────────────────────────────────
+
+const SAFETY_CRITIC_SYSTEM_PROMPT = `You are Maya's pre-publish safety critic. A draft is about to be auto-posted PUBLICLY under the founder's own name and brand, with no human reading it first. Your job is to catch anything that would embarrass the founder, mislead their audience, break a platform's rules, or create legal exposure. Judge like a cautious brand manager who will be blamed if this goes wrong.
+
+Flag a draft if it contains ANY of:
+- offensive: hateful, harassing, discriminatory, sexual, violent, or crude content; punching down; anything a reasonable person would find inappropriate from a brand.
+- off_brand: claims, topics, or a tone the founder would not endorse (politics/religion unless that IS the product, drama, off-topic hot takes).
+- hallucinated_claim: a factual or product claim that is not grounded in something the founder actually provided (made-up metrics, features, customers, awards, "studies show"). Grounded-or-silent: if the draft asserts a specific number/result/capability with no basis, flag it.
+- competitor_disparagement: naming or trashing a competitor in a way that invites a fight or a defamation claim.
+- legal_overclaim: guarantees, medical/financial/health promises, income claims, "guaranteed", "cure", "risk-free", unsubstantiated superlatives ("the best", "#1") stated as fact.
+- pii: leaking a real person's private data (email, phone, address, a customer's name without consent).
+- tos_risk: content likely to violate the target platform's rules (spammy repetition, banned-topic promotion, engagement-bait that triggers bans, undisclosed paid promotion).
+
+Return STRICT JSON, no prose, no code fence:
+{
+  "violations": [{ "category": "<one of: offensive|off_brand|hallucinated_claim|competitor_disparagement|legal_overclaim|pii|tos_risk>", "snippet": "<offending text>", "reason": "<why it's unsafe>" }]
+}
+If the draft is safe to post, return an empty violations array. When unsure whether a specific claim is grounded, FLAG it (hallucinated_claim) — it is cheaper for the founder to tap-approve than to post a false claim.`;
+
+const SAFETY_VIOLATION_CATEGORIES = new Set([
+  "offensive",
+  "off_brand",
+  "hallucinated_claim",
+  "competitor_disparagement",
+  "legal_overclaim",
+  "pii",
+  "tos_risk",
+]);
+
+function asSafetyHits(x: unknown, cap = 12): ValidateOutboundResult["failures"] {
+  if (!Array.isArray(x)) return [];
+  const out: ValidateOutboundResult["failures"] = [];
+  for (const item of x) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const category =
+      typeof rec.category === "string" && SAFETY_VIOLATION_CATEGORIES.has(rec.category)
+        ? rec.category
+        : "off_brand";
+    const snippet = typeof rec.snippet === "string" ? rec.snippet.trim() : "";
+    const reason = typeof rec.reason === "string" ? rec.reason.trim() : "";
+    if (!snippet && !reason) continue;
+    out.push({
+      category: "safety_violation",
+      // `matched` carries the violation category + reason (the actionable
+      // signal); `excerpt` carries the offending snippet.
+      matched: `${category}: ${reason || "unsafe to publish"}`.slice(0, 300),
+      excerpt: snippet.slice(0, 300),
+    });
+    if (out.length >= cap) break;
+  }
+  return out;
+}
+
+/**
+ * Run the pre-publish safety critic on a draft about to be AUTO-POSTED.
+ *
+ * FAIL-CLOSED: unlike `critiqueOutboundStructural`, if the model is
+ * unreachable / unauthenticated / returns unparseable output, this returns
+ * `{ ok: false, failures: [safety_unverifiable] }` — the publish gate must
+ * treat that as a block (downgrade to needs_confirm), never an auto-publish.
+ */
+export const critiqueOutboundSafety = internalAction({
+  args: { text: v.string() },
+  handler: async (_ctx, args): Promise<ValidateOutboundResult> => {
+    const text = args.text.trim();
+    // An empty draft is not "safe" — there's nothing to publish. Block.
+    if (text.length === 0) {
+      return {
+        ok: false,
+        failures: [
+          { category: "safety_unverifiable", matched: "empty draft", excerpt: "" },
+        ],
+      };
+    }
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      return {
+        ok: false,
+        failures: [
+          {
+            category: "safety_unverifiable",
+            matched: "OPENROUTER_API_KEY missing — cannot verify safety",
+            excerpt: "",
+          },
+        ],
+      };
+    }
+    let raw: string;
+    try {
+      const completion = await callOpenRouter({
+        model: STRUCTURAL_CRITIC_MODEL,
+        messages: [
+          { role: "system", content: SAFETY_CRITIC_SYSTEM_PROMPT },
+          { role: "user", content: `DRAFT ABOUT TO BE AUTO-POSTED:\n${text}` },
+        ],
+        thinkingBudget: "medium",
+        maxOutputTokens: 1200,
+        apiKey,
+      });
+      raw = completion.content;
+    } catch {
+      return {
+        ok: false,
+        failures: [
+          {
+            category: "safety_unverifiable",
+            matched: "safety critic API call failed",
+            excerpt: "",
+          },
+        ],
+      };
+    }
+    let parsed: Record<string, unknown>;
+    try {
+      const p = parseCriticResponse(raw);
+      if (!p || typeof p !== "object" || Array.isArray(p)) {
+        return {
+          ok: false,
+          failures: [
+            {
+              category: "safety_unverifiable",
+              matched: "safety critic returned unparseable output",
+              excerpt: "",
+            },
+          ],
+        };
+      }
+      parsed = p as Record<string, unknown>;
+    } catch {
+      return {
+        ok: false,
+        failures: [
+          {
+            category: "safety_unverifiable",
+            matched: "safety critic returned unparseable output",
+            excerpt: "",
+          },
+        ],
+      };
+    }
+    const failures = asSafetyHits(parsed.violations);
+    return { ok: failures.length === 0, failures };
+  },
+});
+
+// ───────────────────────────────────────────────────────────────────
+// The three-verdict autonomous-publish gate (S2.7 → consumed by S3).
+//
+// A draft may auto-publish ONLY when ALL THREE hold:
+//   1. voice is CONFIDENT enough (the founder's voice is calibrated),
+//   2. the slop/style firewall passed (not AI-tell, not a voice contract leak),
+//   3. the safety critic passed (safe to say publicly).
+// Any miss => the draft does NOT auto-publish; S3 routes it to needs_confirm
+// (a one-tap founder approval). Fail-closed by construction.
+// ───────────────────────────────────────────────────────────────────
+
+export type VoiceConfidence = "none" | "low" | "medium" | "high";
+
+/**
+ * Read the voice-confidence from the agent's stored voiceProfileJson.
+ * Defaults to 'none' (most-restrictive) on missing/corrupt JSON.
+ */
+export function readVoiceConfidence(
+  voiceProfileJson: string | null | undefined
+): VoiceConfidence {
+  if (!voiceProfileJson) return "none";
+  try {
+    const parsed = JSON.parse(voiceProfileJson) as { confidence?: unknown };
+    const c = parsed?.confidence;
+    if (c === "high" || c === "medium" || c === "low" || c === "none") return c;
+    return "none";
+  } catch {
+    return "none";
+  }
+}
+
+export interface AutoPublishGateInput {
+  voiceProfileJson?: string | null;
+  /** Result of the slop/style firewall (substring + structural merged). */
+  slopResult: ValidateOutboundResult;
+  /** Result of `critiqueOutboundSafety`. */
+  safetyResult: ValidateOutboundResult;
+}
+
+export interface AutoPublishGateResult {
+  allowAutoPublish: boolean;
+  voiceConfidence: VoiceConfidence;
+  /** Why auto-publish was denied (empty when allowed). */
+  blockReasons: Array<{
+    layer: "voice_confidence" | "slop" | "safety";
+    detail: string;
+  }>;
+}
+
+/**
+ * The autonomous-publish decision. Pure + deterministic (no I/O) so it is
+ * trivially testable and S3 can call it inline. Confident voice = 'medium'
+ * or 'high'; 'low'/'none' means the founder's voice isn't calibrated yet, so
+ * Maya never autonomously posts in it (she still drafts for one-tap confirm).
+ */
+export function evaluateAutoPublishGate(
+  input: AutoPublishGateInput
+): AutoPublishGateResult {
+  const voiceConfidence = readVoiceConfidence(input.voiceProfileJson);
+  const blockReasons: AutoPublishGateResult["blockReasons"] = [];
+
+  if (voiceConfidence === "none" || voiceConfidence === "low") {
+    blockReasons.push({
+      layer: "voice_confidence",
+      detail: `voice not calibrated (confidence=${voiceConfidence}); route to confirm-to-post until calibrated`,
+    });
+  }
+  if (!input.slopResult.ok) {
+    blockReasons.push({
+      layer: "slop",
+      detail: input.slopResult.failures
+        .map((f) => `${f.category}:${f.matched}`)
+        .slice(0, 5)
+        .join("; "),
+    });
+  }
+  if (!input.safetyResult.ok) {
+    blockReasons.push({
+      layer: "safety",
+      detail: input.safetyResult.failures
+        .map((f) => `${f.category}:${f.matched}`)
+        .slice(0, 5)
+        .join("; "),
+    });
+  }
+
+  return {
+    allowAutoPublish: blockReasons.length === 0,
+    voiceConfidence,
+    blockReasons,
+  };
+}
