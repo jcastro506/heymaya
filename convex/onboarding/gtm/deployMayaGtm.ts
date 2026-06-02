@@ -21,6 +21,28 @@ import {
   sendDirectTelegramMessage,
 } from "../../integrations/telegram/sendDirectMessage";
 
+/**
+ * Narrow a persisted gtmChannelScores.channel (which still carries the
+ * vestigial youtube/product_hunt literals for back-compat with historical
+ * rows) down to the live picker channel set the workspace generator
+ * accepts (reddit/x/hn/linkedin/tiktok). youtube/product_hunt are never
+ * scored anymore, so they resolve to undefined ("pending research").
+ */
+function toPickerChannel(
+  channel: Doc<"gtmChannelScores">["channel"] | undefined
+): "reddit" | "x" | "hn" | "linkedin" | "tiktok" | undefined {
+  switch (channel) {
+    case "reddit":
+    case "x":
+    case "hn":
+    case "linkedin":
+    case "tiktok":
+      return channel;
+    default:
+      return undefined;
+  }
+}
+
 export type DeployMayaGtmStage =
   | "load-agent"
   | "generate-workspace"
@@ -1032,10 +1054,12 @@ export const buildAndUploadGtmWorkspace = internalAction({
       // Sprint 2.32 — the founder's walkthrough video, for Maya to watch
       // herself on boot rather than relying on a Convex-side pre-digest.
       walkthroughVideoUrl: row.walkthroughVideoUrl,
-      primaryChannel: row.channelScores.find((s) => s.decision === "primary")
-        ?.channel,
-      secondaryChannel: row.channelScores.find((s) => s.decision === "secondary")
-        ?.channel,
+      primaryChannel: toPickerChannel(
+        row.channelScores.find((s) => s.decision === "primary")?.channel
+      ),
+      secondaryChannel: toPickerChannel(
+        row.channelScores.find((s) => s.decision === "secondary")?.channel
+      ),
       activeResearchJobId: row.latestResearchJobId
         ? String(row.latestResearchJobId)
         : undefined,

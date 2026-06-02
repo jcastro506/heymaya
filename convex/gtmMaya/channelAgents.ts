@@ -39,6 +39,11 @@ export function evaluateChannelAgent(
       return evaluateReddit(input);
     case "x":
       return evaluateX(input);
+    case "hn":
+      // HN is organic + comment-driven with strict anti-promo norms, the
+      // same eligibility shape as Reddit (no warmup gate, value-first
+      // engagement). Mirror the reddit-style heuristic.
+      return evaluateHackerNews(input);
     case "product_hunt":
       return evaluateProductHunt(input);
   }
@@ -48,7 +53,7 @@ export function evaluateAllChannelAgents(
   input: Omit<ChannelAgentInput, "channel">
 ): ChannelAgentVerdict[] {
   return (
-    ["reddit", "x", "linkedin", "tiktok", "youtube", "product_hunt"] as const
+    ["reddit", "x", "hn", "linkedin", "tiktok", "youtube", "product_hunt"] as const
   ).map((channel) => evaluateChannelAgent({ ...input, channel }));
 }
 
@@ -124,6 +129,31 @@ function evaluateReddit(input: ChannelAgentInput): ChannelAgentVerdict {
     requiredNextEvidence: eligible
       ? []
       : ["subreddit rules", "two fresh pain threads", "reply angle per thread"],
+  };
+}
+
+function evaluateHackerNews(input: ChannelAgentInput): ChannelAgentVerdict {
+  const cards = evidenceFor(input.evidence, "hn");
+  // Technical founder community (Show HN, comment-driven). Best for dev
+  // tools / infra / indie products with technical merit; anti-hype.
+  const technicalFit =
+    input.app.productType === "developer_tool" ||
+    input.app.productType === "b2b_workflow" ||
+    input.app.productType === "prosumer";
+  const highRisk = cards.some((card) => card.promotionRisk === "high");
+  const eligible = technicalFit && cards.length >= 2 && !highRisk;
+  return {
+    channel: "hn",
+    eligible,
+    rationale: eligible
+      ? ["technical buyer discussion exists", "substance-first engagement is possible"]
+      : ["Hacker News needs technical merit and substance over marketing"],
+    risks: highRisk
+      ? ["at least one source has high promotion risk"]
+      : ["HN punishes hype — replies and Show HN must lead with substance"],
+    requiredNextEvidence: eligible
+      ? []
+      : ["two technical HN threads", "a substance-first Show HN angle"],
   };
 }
 

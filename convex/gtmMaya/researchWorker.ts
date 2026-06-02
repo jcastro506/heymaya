@@ -708,9 +708,14 @@ export const insertChannelScores = internalMutation({
     researchJobId: v.id("gtmResearchJobs"),
     scores: v.array(
       v.object({
+        // Mirrors the gtmChannelScores schema union. The live judge
+        // (judgeChannel.ts) emits reddit/x/hn/linkedin/tiktok now, so
+        // youtube/product_hunt never actually reach this insert — they
+        // stay here only to match the schema union for backward compat.
         channel: v.union(
           v.literal("reddit"),
           v.literal("x"),
+          v.literal("hn"),
           v.literal("linkedin"),
           v.literal("tiktok"),
           v.literal("youtube"),
@@ -1200,7 +1205,13 @@ export const runBudgetedResearchJob = internalAction({
         internal.gtmMaya.researchWorker.insertChannelScores,
         {
           researchJobId: args.researchJobId,
-          scores: scores.map((s) => ({
+          // Defense in depth: never persist a channel we no longer score
+          // or surface in the picker (youtube/product_hunt are vestigial).
+          scores: scores
+            .filter(
+              (s) => s.channel !== "youtube" && s.channel !== "product_hunt"
+            )
+            .map((s) => ({
             channel: s.channel,
             score: s.score,
             // Schema's decision union doesn't include "blocked"; treat

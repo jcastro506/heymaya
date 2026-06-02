@@ -4797,6 +4797,7 @@ export default defineSchema({
       v.literal("google"),
       v.literal("reddit"),
       v.literal("x"),
+      v.literal("hn"),
       v.literal("linkedin"),
       v.literal("tiktok"),
       v.literal("instagram"),
@@ -5034,9 +5035,17 @@ export default defineSchema({
   gtmChannelScores: defineTable({
     accountId: v.id("creators"),
     researchJobId: v.id("gtmResearchJobs"),
+    // Live scored/surfaced channels are reddit/x/hn/linkedin/tiktok (see
+    // judgeChannel.ts). `youtube` and `product_hunt` are NO LONGER
+    // scored or surfaced in the onboarding picker (vestigial — no native
+    // slideshow / not in the product vision). They are kept in this
+    // union ONLY for backward compat with historical rows written before
+    // they were dropped; do not re-introduce them at the scoring/picker
+    // layer.
     channel: v.union(
       v.literal("reddit"),
       v.literal("x"),
+      v.literal("hn"),
       v.literal("linkedin"),
       v.literal("tiktok"),
       v.literal("youtube"),

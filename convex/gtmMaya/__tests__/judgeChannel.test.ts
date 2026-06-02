@@ -201,7 +201,7 @@ describe("judgeChannel", () => {
 });
 
 describe("judgeAllChannels", () => {
-  it("judges all 5 channels in parallel, isolating per-channel failures", async () => {
+  it("judges the 5 default channels (reddit/x/hn/linkedin/tiktok) in parallel, isolating per-channel failures", async () => {
     let calls = 0;
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
       calls += 1;
@@ -234,13 +234,27 @@ describe("judgeAllChannels", () => {
     const cards: GtmEvidenceCard[] = [
       makeCard("r1", "reddit"),
       makeCard("x1", "x"),
+      makeCard("hn1", "hn"),
       makeCard("li1", "linkedin"),
       makeCard("tt1", "tiktok"),
+      // product_hunt + youtube are deliberately NOT in the default scored
+      // set, so this card (which would map to product_hunt) is never judged.
       makeCard("ph1", "competitor", { recommendedUse: "competitor" }),
     ];
     const r = await judgeAllChannels(cards, PRODUCT, { apiKey: "k", fetchImpl });
-    expect(r.decisions.length).toBe(4); // 5 channels - 1 failed
+    // 5 default channels - 1 failed (linkedin) = 4 decisions.
+    expect(r.decisions.length).toBe(4);
+    expect(r.decisions.map((d) => d.channel).sort()).toEqual([
+      "hn",
+      "reddit",
+      "tiktok",
+      "x",
+    ]);
+    // product_hunt / youtube are not scored at all.
+    expect(r.decisions.map((d) => d.channel)).not.toContain("product_hunt");
+    expect(r.decisions.map((d) => d.channel)).not.toContain("youtube");
     expect(r.failedChannels).toEqual(["linkedin"]);
+    // One LLM call per default channel (5), none for product_hunt/youtube.
     expect(calls).toBe(5);
   });
 

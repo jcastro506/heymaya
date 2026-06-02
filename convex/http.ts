@@ -116,6 +116,7 @@ import {
   wrapLinkHttp,
   redirectHttp,
   recordConversionHttp,
+  getMyAttributionHttp,
 } from "./gtmMaya/attribution";
 import { memoryWrittenHttp } from "./gtmMaya/memoryLedger";
 import { reviewMediaHttp } from "./gtmMaya/contentReview";
@@ -348,6 +349,13 @@ http.route({
   path: "/lc_gtm/record_conversion",
   method: "POST",
   handler: recordConversionHttp,
+});
+// Read-back — Maya GETs per-post clicks → signups (closed-loop attribution)
+// from her runtime so the differentiator surfaces on Telegram, not just web.
+http.route({
+  path: "/lc_gtm/get_my_attribution",
+  method: "GET",
+  handler: getMyAttributionHttp,
 });
 // Public click-through redirect (no auth) — logs a click, 302s to destination.
 http.route({

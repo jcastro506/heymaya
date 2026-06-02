@@ -86,6 +86,7 @@ import type * as creatorMayaV0_workspaceManifest from "../creatorMayaV0/workspac
 import type * as creators from "../creators.js";
 import type * as dealTriage from "../dealTriage.js";
 import type * as deals from "../deals.js";
+import type * as founder_dashboard from "../founder/dashboard.js";
 import type * as gbp_computeHealthScore from "../gbp/computeHealthScore.js";
 import type * as gtmMaya_appInspector from "../gtmMaya/appInspector.js";
 import type * as gtmMaya_approvalPublishing from "../gtmMaya/approvalPublishing.js";
@@ -363,6 +364,7 @@ declare const fullApi: ApiFromModules<{
   creators: typeof creators;
   dealTriage: typeof dealTriage;
   deals: typeof deals;
+  "founder/dashboard": typeof founder_dashboard;
   "gbp/computeHealthScore": typeof gbp_computeHealthScore;
   "gtmMaya/appInspector": typeof gtmMaya_appInspector;
   "gtmMaya/approvalPublishing": typeof gtmMaya_approvalPublishing;

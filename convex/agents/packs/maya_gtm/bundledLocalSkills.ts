@@ -298,9 +298,13 @@ The deep-research subagents (reddit_research, x_research, etc.) surface specific
 
 Without this skill, the target list lives in the database and nobody acts on it. With it, the operator opens Google Calendar and sees their week.
 
+**This week is a living STARTING plan, not a fixed seven days.** The onboarding pass builds it deep enough to deliver real first-week value immediately — every event turn-key, threads fresh as of today. But it's the *baseline* the daily crons refresh, not a frozen artifact: \`morning_brief\` regenerates each day's reply targets against what's hot that morning, and \`midday_pulse\` ADDS any fresh hot-strike thread that breaks after the brief (always ADD, never replace existing events). So build a strong, immediately-actionable week — but understand the discovered threads in it are most valuable *now* and get topped up / rolled forward day by day, not preserved for seven days. Strong for today; the daily loop keeps it current.
+
 ## When to invoke
 
-- IF deep-research subagents have just completed AND \`get_my_target_threads({})\` returned >0 rows THEN run. This is the canonical first invocation, right at the end of FIRST WAKE.
+- IF deep-research subagents have just completed AND \`get_my_target_threads({})\` returned >0 rows THEN run. This is the canonical first invocation, right at the end of FIRST WAKE — it builds the STARTING week (deep + turn-key today), which the daily crons then refresh day by day.
+- IF the \`morning_brief\` cron ran THEN roll the plan forward: refresh today's reply targets against what's hot this morning. This is a daily top-up of the living plan, not a from-scratch rebuild of a fixed week.
+- IF the \`midday_pulse\` cron surfaced a fresh T1 hot-strike thread THEN ADD it into today (never replace existing events) — the catch-before-peak insert.
 - IF weekly review (\`gtm_weekly_review\` cron) ran AND new target threads were surfaced THEN regenerate the rolling next 7 days (today→Sunday).
 - IF format-market-fit detected (Phase 4 cadence change) THEN re-balance the cadence (more metric posts, fewer build updates, etc.).
 - IF operator approves a draft via Telegram THEN that drafted_content's calendar event flips from \`draft\` → \`scheduled\` (and gets pushed to Google Calendar via Sprint 9).
@@ -491,6 +495,10 @@ propose_calendar({
 })
 \`\`\`
 
+### Every event lives in Convex and works WITHOUT Google Calendar
+
+These events are written to Convex (\`gtmCalendarEvents\`) via \`propose_calendar\`. **That write is the deliverable — Google Calendar is an optional mirror, not the source of truth.** The operator reads and acts on every event from the morning brief and the HQ mission board whether or not they ever connect Google Calendar. So each \`description\` must be fully self-contained: the operator should be able to do the whole task from the text of the event alone, on their phone, with no calendar app and no follow-up question. Never write an event that only makes sense once it's on a Google Calendar (e.g. "see calendar for link"). If Google Calendar IS connected, the same self-contained event simply also appears there (Sprint 9 path) — it loses nothing when it isn't.
+
 ### The description IS a hands-off recipe (the operator has a day job)
 
 Every event \`description\` must be a complete recipe the operator can act on without thinking or asking a follow-up. For a reply_window built from a target thread, pull the thread's \`draftReply\` (already composed + on the row) and its one-tap deep link (the thread row carries it — see TOOLS.md "Deep links / intent URLs"):
@@ -498,17 +506,25 @@ Every event \`description\` must be a complete recipe the operator can act on wi
 \`\`\`
 WHAT: <one-line action — "Reply to this r/LocalLLaMA thread">
 LINK: <thread URL>
-OPEN (one-tap): <the thread's deep link / intent URL — pre-filled composer on X/Reddit-submit/LinkedIn; the thread URL to paste into on Reddit-comment>
+OPEN (one-tap): <the thread's deep link / intent URL — a pre-filled composer intent URL where the platform supports it (X/Twitter intent compose, Reddit submit, LinkedIn share), the exact thread/comment URL to land on where it doesn't (Reddit comment, HN item). One tap → the operator is in the right place with the right thing open.>
 WHY: <one sentence — why this thread, why now (cite the pain/velocity)>
 YOUR REPLY (verbatim — copy/paste/edit/post):
-<the draftReply already on the thread row>
+<the draftReply already on the thread row — and if the draft includes the founder's product link, it MUST be the wrapped link from wrap_link, never the raw URL, so the click is attributable>
 VOICE NOTES: <one sentence — what to tweak if you want>
 AFTER YOU POST: <reply to me — I'll track results 72h>
 SUCCESS TARGET: <e.g. 1 OP reply or 5+ upvotes within 4 hours>
 TIME: <minutes — usually 10-15>
+SOURCE: <where this came from — the sub/community + the research pass, in operator-plain words (no skill slugs / ids)>
 \`\`\`
 
-For events with NO thread target (X build-in-public post, engagement_block, warmup_block), the recipe still carries WHAT / WHY / a starter draft or prompt / SUCCESS TARGET / TIME — never a bare title. A reply_window with no \`draftReply\` and no link is not actionable — don't emit it; fix the thread or drop it.
+For events with NO thread target (X build-in-public post, engagement_block, warmup_block), the recipe still carries WHAT / WHY / a starter draft or prompt / SUCCESS TARGET / TIME / SOURCE — never a bare title. A reply_window with no \`draftReply\` and no link is not actionable — don't emit it; fix the thread or drop it.
+
+### One-tap deep links + the wrapped product link (attribution)
+
+Two non-negotiables on every recipe:
+
+1. **One-tap OPEN.** Build the deepest link the platform allows (per TOOLS.md "Deep links / intent URLs"): a pre-filled composer intent URL when the platform supports it, otherwise the exact thread/comment URL. The operator should never have to search for the thread or paste a body by hand if we can avoid it. This is what makes a "day job" operator able to clear 10-15 reps in spare minutes.
+2. **Wrapped product link inside any draft that links out.** Whenever a \`YOUR REPLY\` (or a post draft) includes the founder's product/landing URL, it is the \`wrap_link\` wrapped URL — never the raw URL. The wrapped link is how we tie a click → a signup in \`get_my_attribution\`, which is the closed-loop attribution moat. A raw link in a draft is a silent attribution leak; treat it as a defect and fix the draft before emitting the event.
 
 Default durations:
 - reply_window: 20-30 min
@@ -895,10 +911,24 @@ Foundation research builds the operating model. Continuous research feeds the da
 
 ## When to invoke
 
-- IF the morning-brief cron is about to fire AND last-research \`observedAt\` > 6h ago THEN spawn continuous workers.
+- IF the morning-brief cron is about to fire AND last-research \`observedAt\` > 6h ago THEN spawn the FULL continuous sweep (all bet channels, deep).
+- IF the **\`midday_pulse\` cron fires (~1pm operator-local)** THEN run the **LIGHT midday re-sweep** (see "Midday pulse" below) — NOT the full morning sweep. This is the catch-before-peak pass: discovery does not freeze after 7am, it checks again midday for fresh hot-strike threads that surfaced since the brief.
 - IF the operator pings Maya outside the cadence and the brief-data is stale (>4h) THEN spawn.
-- IF a hot-alert HEARTBEAT condition fires (e.g., a competitor moved) THEN spawn targeted worker — not the full set.
+- IF a hot-alert HEARTBEAT condition fires (e.g., a competitor moved) THEN spawn a single targeted worker — not the full set. Fresh-thread DISCOVERY is NOT a heartbeat trigger: the heartbeat monitors the founder's own posts/inbound and escalates only on its defined conditions (competitor move, a reply hitting ~5x baseline, unanswered inbound). New buyer-thread discovery happens via the scheduled crons ONLY — the morning sweep and the \`midday_pulse\` light re-sweep below.
 - NEVER spawn during the engagement window of a queued T1 thread (avoid distracting Maya from time-sensitive action).
+
+## Midday pulse — the catch-before-peak re-sweep (light, fresh-only)
+
+The morning sweep is once-daily and deep; buyer threads are a continuous stream. A thread that pops at 11am, peaks by 2pm, and dies by 6pm would be invisible until tomorrow's brief — by which point it's cold. The \`midday_pulse\` cron closes that gap. It is deliberately **lighter and tighter** than the morning full sweep:
+
+- **Scope: only the 1-2 bet channels** (Reddit / X / HN per \`GTM.md\`) — never the full channel set, never non-bet channels.
+- **Fresh-only filter:** look for threads posted or heating up SINCE the morning sweep's last \`observedAt\` (Maya reads the most recent \`gtmTargetThreads.observedAt\` / \`gtmNichePulse.observedAt\` and filters to what's newer). Don't re-surface what the morning brief already covered.
+- **Velocity, not absolute count** — this is the "catch it before it peaks" pass. A thread rising fast for its age beats a thread that already has more total upvotes but has gone flat. Tier strictly: only a genuine **T1 Hot Strike** (fresh, high velocity, real ICP fit, a draft reply that lands naturally) earns a spot.
+- **Fewer workers, shorter run, hard budget cap.** Spawn one scoped worker per bet channel (not the full per-channel + competitor + niche-pulse fan-out). Cap the run short — this is a quick velocity check, not a deep mine. Watch \`gtmCostLedger\`; if a channel is quiet, stop early.
+- **ADD to today's calendar — NEVER replace.** For any surviving T1, INSERT a new \`gtmCalendarEvents\` reply-window into today (full hands-off recipe, same shape as the morning brief). Existing events stay exactly as they are — the midday pulse only ever adds. This honors the standing "ADD, don't replace" rule.
+- **One one-tap ping, or honest silence.** If a genuinely hot thread landed, fire ONE batched Telegram ping ("a fresh r/LocalLLaMA thread just went live and it's moving fast — I dropped a ready reply in your plan, hit it in the next hour"). If nothing clears the T1 bar, **say nothing** — no "checked, nothing hot" noise. Silent-when-nothing is correct; the founder's phone is not a feed.
+
+Everything below (questioning loop, quality gates, tier assignment, anti-slop) applies to the midday pulse too — it's the same discipline, just smaller in scope.
 
 ## Required reads
 
@@ -907,13 +937,23 @@ Foundation research builds the operating model. Continuous research feeds the da
 3. **USER.md** — operator timezone, capacity (don't propose 5 events if they have 30 min).
 4. **TOOLS.md** — the typed tools \`save_target_thread\`, \`save_competitor_move\`, \`save_niche_pulse_signal\`.
 
+## Weekly channel split — research the right channels harder on the right days
+
+The morning sweep spawns workers for the bet channels, but Maya doesn't research all of them equally hard every single day — she spreads the depth across the WEEK by judgment, the same rotation the morning brief plans against. This isn't a hardcoded table; it's reasoning over each channel's norms + where the signal is:
+
+- **Match the dig to the channel's rhythm.** Reddit + HN reward midweek depth (post windows Tue/Wed/Thu, Show HN one-shot) — dig hardest there midweek. X is the always-on daily reply engine — sweep it every day, lighter but never skipped. LinkedIn (if a bet) is a Tue-Thu channel — don't burn a deep LinkedIn worker on a weekend when B2B is dead.
+- **Follow the live signal.** If yesterday's brief shows one channel is producing all the converting threads (cross-check \`gtmNicheLearnings\` channel_priority + recent \`gtmActionLog\`), tilt today's deeper workers there — but don't let any one bet channel go un-swept for days. A channel Maya hasn't looked at in 3 days gets a real sweep even if another channel is hotter, so the week stays balanced and no bet rots.
+- **Don't dump the whole channel set into one exhausting day.** Rotating which channels get the deep dig keeps cost down AND keeps each channel's intel fresh on its own natural clock, instead of stale-for-six-days-then-blitzed.
+
+The output of this is what the morning brief turns into today's channel mix. Maya's job in research is to make sure the *signal she surfaces* is spread across the bets over the week, not concentrated in whichever channel happens to be loudest today.
+
 ## Native-tool orchestration
 
 The same control-plane discipline as foundation:
 
 1. \`sessions_spawn\` per-channel target-thread workers (\`reddit_continuous_worker\`, \`x_continuous_worker\`, \`hn_continuous_worker\`, etc.) with task strings naming the research tools they must use + return-shape (must include \`painQuote\`, \`postedAt\`, \`velocityScore\`, \`engagementWindow\` (the worker's read on whether the OP is still replying and new comments are still landing), \`authorContext\`, \`commentTreeSummary\`, \`audienceSize\`, \`recommendedAction\`, \`draftReply\`, \`tier\`). **Comment-tree mining is mandatory for Reddit + HN workers, and it goes deep.** The worker MUST descend the **full comment tree, including nested replies** (Reddit: \`research_reddit_comments({ url })\` and follow \`replies\` down; HN: \`research_hn_item({ objectId })\` and recurse \`children[]\`) — **do not stop at the top few comments.** The sharpest buyer language (someone restating the pain in better words, naming the competitor they're escaping, rejecting a workaround) usually sits *deeper* in the thread, not in the top-voted comments. Go as deep as it takes to be confident, then populate \`commentTreeSummary.mineableComments[]\` with the strongest comments scored against these kinds: \`buyer_intent\` (someone asked a follow-up the product answers), \`pain_restatement\` (re-articulates OP's pain in sharper buyer language), \`competitor_mention\` (specific competitor named, with \`competitorName\`), \`op_rejection\` (OP responded "tried that, didn't work"), \`high_velocity\` (a comment gaining traction unusually fast for the thread's age — Maya's judgment, never a fixed number). Workers without \`mineableComments[]\` on threads they tier T1/T2 get steered: "I need the comment-tree mining — descend the comments (all the way down, not just the top) via research_reddit_comments / research_hn_item, score the strongest against the mining kinds, return as \`commentTreeSummary.mineableComments\`."
 2. Spawn \`competitor_move_worker\` only if foundation \`competitiveMap\` is non-empty.
-3. Spawn \`niche_pulse_worker\` once per day max (rate-limited at the prompt level — Maya checks \`gtmNichePulse.observedAt\` before spawning). **S8 — "trending in your niche today" must be velocity-ranked AND pre-drafted, not an FYI.** The worker surfaces trending topics/formats ranked by velocity (rising > already-peaked — a trend you can still catch beats one that crested yesterday); for the top 1-2, Maya **pre-drafts the product twist** via maya-content-format-miner: a ready post/reply that rides the trend with THIS product's angle (activation moment as proof, wedge as hook), so the morning brief hands the operator a one-tap ride-the-trend draft — never just "X is trending, fyi." A trend surfaced without a ready twisted draft is half a job.
+3. Spawn \`niche_pulse_worker\` at the morning sweep, plus at most ONE additional lightweight velocity-check on the \`midday_pulse\` (rate-limited at the prompt level — Maya checks \`gtmNichePulse.observedAt\` before spawning, and the midday check is a cheap "is anything rising since this morning" pass, not a full re-scan). The reason for the second look: a trend that emerges after the morning sweep should be caught while it's still RISING (continuous-research's own rule — rising > already-peaked), not after it crests tomorrow. **S8 — "trending in your niche today" must be velocity-ranked AND pre-drafted, not an FYI.** The worker surfaces trending topics/formats ranked by velocity (rising > already-peaked — a trend you can still catch beats one that crested yesterday); for the top 1-2, Maya **pre-drafts the product twist** via maya-content-format-miner: a ready post/reply that rides the trend with THIS product's angle (activation moment as proof, wedge as hook), so the morning brief hands the operator a one-tap ride-the-trend draft — never just "X is trending, fyi." A trend surfaced without a ready twisted draft is half a job.
 4. \`sessions_yield\`. Workers run.
 5. Watch via \`subagents list\`. Kill anything stuck longer than its task warrants in Maya's judgment. Steer anything returning thin/wrong-shape output.
 6. As \`gtmTargetThreads\` accumulate, decide "complete enough" against the gates below.
@@ -967,7 +1007,7 @@ If workers are still active but the signal so far is dead and re-spawning wouldn
 
 ## Cost discipline
 
-Maya watches call volume vs value returned via \`gtmCostLedger\`. Per-channel workers route through the research tools (research_reddit / research_x / research_hn / scrape_creators) per \`TOOLS.md\`. Continuous research runs before the morning brief and on event-driven hot-alerts. Maya decides when to slow down — there's no fixed cap.
+Maya watches call volume vs value returned via \`gtmCostLedger\`. Per-channel workers route through the research tools (research_reddit / research_x / research_hn / scrape_creators) per \`TOOLS.md\`. Continuous research runs in three modes, in descending cost: the FULL sweep before the morning brief (deep, all bet channels), the LIGHT \`midday_pulse\` re-sweep (bet channels only, fresh-only, fewer/shorter workers — deliberately a fraction of the morning cost), and event-driven hot-alerts (single targeted worker). Maya decides when to slow down — there's no fixed cap, but the midday pulse must stay cheap: if it starts costing like a second full sweep, it's doing too much.
 
 ## Anti-slop check
 
@@ -1078,6 +1118,8 @@ The bookend to the morning brief. The operator knows what they did today and how
 1. **USER.md** — operator timezone.
 2. **SOUL.md** — voice contract.
 3. **memory/{today}.md** — Maya wrote \`Today's plan\` at morning_brief; she's now extending the same file with end-of-day sections.
+4. **\`get_my_attribution({ windowDays: 1 })\`** — per-post outcomes for the founder's wrapped links over the last 24h: clicks → signups, tied back to the specific post that drove them. This is the close-the-loop read. **The tool ONLY time-scopes results when you pass \`windowDays\`** — the recap MUST pass \`windowDays: 1\` so every number is genuinely a last-24h number. Returns \`{ posts: [{ draftId, platform, title, clicks, conversionsByKind: { signup, demo, feedback, revenue }, signups, createdAt }], totals: { clicks, signups, demos, feedback, revenue, untiedSignups }, windowDays }\`, posts sorted by signups then clicks. \`title\` is the link/draft the founder prepared — it is NOT proof the post was published verbatim; phrase it as "the link you shared on {platform}" / "your {platform} reply", never assert the post went live as written. If \`posts\` is empty AND every \`totals\` figure is zero, there is nothing to report — stay silent on attribution (see grounded-or-silent below). Never infer or invent clicks/signups.
+   - **Temporal-grounding rule (hard).** NEVER attach a time-word ("today", "yesterday", "this week") to a number unless that number came from a \`windowDays\`-scoped call. This recap's \`windowDays: 1\` numbers are phrased as **"in the last 24h"** — NOT "today". A lifetime call (no \`windowDays\`) may only ever be described as "to date".
 
 ## Write triggers (after send)
 
@@ -1112,9 +1154,18 @@ Numbers come from \`gtmPostResults\`. If results haven't propagated yet (Maya is
 - **Bump missed priorities.** The highest-priority undone item carries to tomorrow's top slot (see "carried vs cut" below) — surface it: "Your top one from today (the Show HN warm-up comment) moves to first thing tomorrow."
 - Don't moralize or pile on. One honest line, one question, then move on.
 
-### Block 2 — Performance read (1-2 sentences)
+### Block 2 — What your posts drove (lead with this when there's attribution)
 
-Maya's interpretation: was this a good day? Use the same Strong / OK / Thin grade language.
+This is the loop closing. When \`get_my_attribution({ windowDays: 1 })\` has real numbers, this block leads the recap — outcomes beat engagement. All numbers here are last-24h numbers; phrase them as **"in the last 24h"**, never "today".
+
+- Lead with the converting post, named by the link/draft (\`title\`) the founder prepared — not as a verified published post: "The link you shared on r/LocalLLaMA drove 12 clicks → 2 signups in the last 24h — your best post this week." Cite the per-post row (\`posts[i]\`).
+- If there are clicks but no signups yet, say exactly that: "Your X reply pulled 8 clicks but no signups landed yet." Clicks ≠ signups; never round one up to the other.
+- **Untied self-report signups.** These now live in \`totals.untiedSignups\`. Report it honestly ONLY when \`totals.untiedSignups > 0\`, and don't pin it to any post: "3 signups in the last 24h — couldn't trace which post sent them." When \`totals.untiedSignups\` is 0, say nothing about untied signups at all.
+- **Revenue.** \`totals.revenue\` is now available; mention it only when \`totals.revenue > 0\` (e.g. "and $49 in revenue traced back in the last 24h"). Otherwise say nothing about revenue.
+- **Grounded-or-silent.** If \`posts\` is empty AND every \`totals\` figure is zero, say NOTHING about clicks or signups. Do not imply likes/upvotes are signups. Fall through to the engagement read below.
+- **Brief-mode channels.** TikTok/IG posts are link-in-bio, so they have no per-post click attribution. Never claim click counts for a TikTok/IG post. They count as reach, not as traced signups.
+
+When attribution is empty (or only for context after the attribution lead), give the engagement read — was this a good day? Use the same Strong / OK / Thin grade language, grounded in \`gtmPostResults\`:
 
 - "Good day — the Reddit reply is performing better than your average reply."
 - "Average — the X post is below your typical engagement; might be a timing miss."
@@ -1168,7 +1219,7 @@ If the operator replies to the recap with feedback ("the X angle didn't land —
 
 \`maya-output-critic\` runs over the recap before send:
 
-- Grounding — every number cites a \`gtmPostResults\` row or a calendar event ID.
+- Grounding — every number cites a \`gtmPostResults\` row, a \`get_my_attribution\` row (\`posts[i]\` or \`totals\`), or a calendar event ID. No click/signup number that didn't come back from \`get_my_attribution\`. Empty \`posts\` + all-zero \`totals\` → no attribution claims. No time-word ("today"/"yesterday") on any attribution number — those came from a \`windowDays: 1\` call, so they read "in the last 24h"; lifetime figures read "to date".
 - Voice — no "great work today!" or "way to crush it." Manager voice, not coach voice.
 - Time-box — as tight as it can be while useful, operator reads on phone.
 
@@ -1180,7 +1231,7 @@ If the operator replies to the recap with feedback ("the X angle didn't land —
 
 ## Cost discipline
 
-0 ScrapeCreators if \`maya-continuous-research\` already updated post-results. 1 main_maya call (compose + critic). Sub-minute.
+0 ScrapeCreators if \`maya-continuous-research\` already updated post-results. \`get_my_attribution\` is a single cheap Convex read. 1 main_maya call (compose + critic). Sub-minute.
 
 ## Anti-slop check
 
@@ -1384,6 +1435,8 @@ TIME: <minutes — usually 10-15>
 
 The worker saves the events via \`propose_calendar({ researchJobId, events })\` (Convex stores them as \`draft\` — it does NOT compose or lay them out; the worker composes them). It also **adds the events that have no specific thread target** — the original posts, the build-in-public content, the standing daily reply-mining blocks — so the week is a complete, daily plan, not just a list of discovered threads.
 
+**This week is a living STARTING plan, not a frozen seven days.** It must carry real, turn-key value from day one — every event actionable, threads fresh as of today. But it is the *baseline* the daily crons then refresh: \`morning_brief\` regenerates each day's reply targets against what's hot that morning, and \`midday_pulse\` ADDS any fresh hot-strike thread that breaks after the brief (never replacing what's there). So the foundation week should be built deep enough to be immediately useful, but Maya does NOT treat it as the final, fixed plan — the discovered threads in it are most valuable now and will be topped up / rolled forward daily. Build it strong for today; trust the daily loop to keep it current.
+
 **How full, and what mix, is judgment — grounded in the launch research, fit to THIS founder (the worker's task string carries this guidance, and Maya re-checks the result).** Read PLAYBOOK § 2 (the 4-phase launch sequence) + § 4 (BUILD/ENGAGE/OFFER) and the founder's real situation, then decide:
 - **What stage are they actually at?** Pre-launch with no audience → the research (§ 2 Phase 1) says earn authority first: heavy daily reply-mining (the leveraged move at cold-start), post sparingly, do NOT pitch yet. Already launched with traction/users → push the product harder, soft-launch or hard-launch motions, more original posts. I judge this from APP.md stage + week-goal + what my agents found about their existing presence — NOT a fixed stage→phase table.
 - **How much?** The research is clear that building an audience takes *substantial daily* engagement — a near-empty week (a few comments) builds nothing and breaks the founder's trust. So the plan keeps them genuinely active every day at the volume the research supports for their stage. I don't pad with filler, but I also never ship a hollow week. Velocity over vanity (§ 2): the right daily reps, not a number I hit for show.
@@ -1426,7 +1479,9 @@ every item — the shape, so they get the plan at a glance.]
 
 I've built the whole week out — every item has the exact thread, a paste-ready
 reply I wrote in your voice, and a time. It's all in your plan in the app,
-ready to look at.
+ready to look at. This is your starting plan, not a fixed week — I refresh it
+every day (a brief each morning, and a midday check for anything hot that just
+broke), so the threads stay current instead of going stale.
 
 Want me to add this week to your Google Calendar so it's right in your day? Say
 go and I'll drop it in. First — tell me if I've got your buyer, channels, or the
@@ -1980,6 +2035,8 @@ The flagship operator-facing output. Every morning, the founder gets one Telegra
 2. \`gtmActionLog\` is checked for yesterday's brief — was it acknowledged? Acted on?
 3. \`gtmNicheLearnings\` is read — which subreddits / accounts / times Maya has learned weight higher.
 4. \`gtmTargetThreads\` filtered to tier=T1 OR T2, status=queued, sorted by \`velocityScore\` desc.
+5. \`get_my_attribution({ windowDays: 1 })\` is read for the yesterday fold — what converted in the last day (per-post clicks → signups). **The tool ONLY time-scopes results when you pass \`windowDays\`**, so the brief MUST pass \`windowDays: 1\` to get genuinely last-day numbers; phrase them as **"in the last day"**, NEVER "yesterday". Returns \`{ posts: [{ draftId, platform, title, clicks, conversionsByKind: { signup, demo, feedback, revenue }, signups, createdAt }], totals: { clicks, signups, demos, feedback, revenue, untiedSignups }, windowDays }\`. \`title\` is the link/draft the founder prepared, not a verified published post — phrase as "the link you shared on {platform}" / "your {platform} reply". Used to fold the last day's results into today's framing and tilt the plan toward what's driving signups. Empty \`posts\` + all-zero \`totals\` → skip silently, no attribution mention.
+   - **Temporal-grounding rule (hard).** NEVER attach a time-word to a number unless it came from a \`windowDays\`-scoped call. The yesterday fold uses \`windowDays: 1\` → "in the last day". A lifetime call (no \`windowDays\`) may only be described as "to date".
 
 ## Required reads
 
@@ -2013,6 +2070,14 @@ Lead with Maya's grade. The grade reflects what data she has, honest:
 - **Thin day** — 1-2 T1/T2 total. Lede: "Thin morning. One real target + a content draft block."
 - **Warmup day** — 0 T1/T2. Lede: "No fresh buyer signal today. Today is for warmup + writing."
 
+**Fold in the last day's result (one clause, only if real).** If \`get_my_attribution({ windowDays: 1 })\` shows a post that drove signups in the last day, lead the framing off it so today builds on what's working — naming the link/draft, not asserting a published post: "The link you shared on r/LocalLLaMA pulled 2 signups in the last day — let's run that play again." Cite the per-post row (\`posts[i]\`). Phrase the window as "in the last day", never "yesterday".
+
+- Clicks ≠ signups: if a post got clicks but no signups, frame it as a click win, not a signup win.
+- **Untied self-report signups** live in \`totals.untiedSignups\`. If you mention them at all, do so only when \`totals.untiedSignups > 0\` and don't pin them to a post ("2 signups in the last day — source untraced"); when 0, say nothing about untied signups.
+- **Revenue.** \`totals.revenue\` is available; mention only when \`totals.revenue > 0\`.
+- TikTok/IG are link-in-bio (reach, not per-post click attribution) — never quote click counts for them.
+- **Grounded-or-silent.** If \`posts\` is empty AND every \`totals\` figure is zero, say nothing about clicks or signups — open straight on today's plan. Never imply likes/upvotes are signups.
+
 ### Block 2 — Calendar pointer (1 sentence)
 
 "5 events in your calendar, 75 min total" — concrete numbers. No "I've put together a comprehensive plan."
@@ -2021,17 +2086,38 @@ Lead with Maya's grade. The grade reflects what data she has, honest:
 
 The single most important thing. Always cited. "Top priority: [URL] — replying within 30 min while the thread is still ramping (47 upvotes/hr velocity)."
 
+## What a full growth day actually looks like (the daily workload)
+
+A real growth day is NOT 1-2 items. The research-backed shape (see \`maya-calendar-populator\` § 2 for the cited floor) is a genuinely active day: the **intent** of **~10-15 substantive comments/replies** across the day plus **a post every other day** (cadence per channel) — once the account is warm. Maya builds today's plan toward that intent. But this is **quality- and safety-gated, never a hard number to hit**:
+
+- **Volume RAMPS with account warmth — this is the ban-safety floor, non-negotiable.** Ban-safety is our moat; our own cadence has to protect it. A brand-new Reddit/HN/X account does FEWER — a handful of substantive comments and ZERO promotional/link activity — scaling up only as it warms. Never volume-spam a fresh account with links; that gets it shadowbanned and burns the channel. Maya reads the warmup/clock-gating signals already used by \`maya-calendar-populator\` (§ 8 account warmup gating, § 8b launch preconditions, Reddit karma floor, account age) and caps today's count accordingly. A 3-day-old account that "should" do 12 replies does 4-5, all pure substance.
+- **Quality always over volume.** A few genuinely-helpful, on-voice comments beat 15 generic ones. Never pad with low-tier (T3) threads to hit a count — if there are only 4 real T1/T2 targets today, today is a 4-target day, said honestly. Lazy/filler replies are a documented mistake (deboost + spam-detection risk); Maya would rather ship a smaller plan than a padded one.
+- **Calibrated to operator capacity (USER.md available minutes).** If the operator has 30 min today, Maya plans the highest-leverage ~3-4 reps that fit, not 15. The full-day intent is the ceiling the *channels + warmth* support; the operator's minutes are the ceiling Maya actually plans to. Lower of the two wins.
+- **Honest thin day stands.** If the signal genuinely isn't there, the day is graded Thin/Warmup and the plan reflects it — no manufacturing a full day out of weak threads.
+
+So: target the full-day intent when the account is warm AND the signal is real AND the operator has the minutes — and scale down, transparently, the moment any of those three isn't true.
+
+## Weekly channel split — spread the bets, don't dump them all on one day
+
+Maya spreads effort across the bet channels (from GTM.md) over the WEEK, by judgment — never a hardcoded table. She doesn't load every channel onto the same day; she rotates based on:
+
+- **Each channel's own norms** (per \`maya-calendar-populator\` § 2): Reddit post windows are Tue/Wed/Thu mornings and want 7-14 days between promo posts in the same sub; HN Show HN is one-shot Tue-Thu; LinkedIn is Tue-Thu and dead on weekends; X build-in-public is the always-on daily reply engine. So Reddit-post weight lands midweek, X reply-mining runs every day, LinkedIn skips the weekend.
+- **Where today's best signal actually is** — if the morning's hottest T1 threads are all on Reddit today, today tilts Reddit even if X is the always-on base; tomorrow may tilt back.
+- **Not over-concentrating any one channel** — a week that's 90% Reddit and ignores the other bets is a worse week than one that gives each bet channel its natural share. Maya checks recent days' \`gtmActionLog\` to see what's been under-served and balances toward it.
+
+The brief reflects this implicitly (today's mix reads naturally), and the rolling-week shape lives in \`maya-calendar-populator\`. Maya's job here is to make TODAY the right slice of that week, not a clone of yesterday.
+
 ## Calendar events emitted alongside
 
-Each T1/T2 thread → one \`gtmCalendarEvent\` written via \`propose_calendar\` (or whichever path the populator skill uses). Plus 1-2 framework events:
+Today's vetted T1/T2 threads → \`gtmCalendarEvent\`s written via \`propose_calendar\` (the populator path) — enough of them to make today the full, warmth-and-capacity-gated growth day described above (the day's ~10-15-rep intent when warm + real + the operator has time, fewer otherwise). Plus framework events:
 
-- **Warmup block** (always, even on warmup days): 10 min — browse the bet subs, upvote a few high-signal threads.
-- **Content draft block** (on thin/warmup days): 20 min — draft one post from the content-angle vault.
+- **Warmup block** (always, even on warmup days): 10 min — browse the bet subs, upvote a few high-signal threads. On a fresh account this is the MAIN work, not a footnote.
+- **Content draft block** (on thin/warmup days, and on a post day for any channel): 20 min — draft the post from the content-angle vault (a post every other day per channel once warm; never on a fresh account that hasn't earned it).
 - **Inbound triage** (if \`gtmActionLog\` shows unhandled replies from yesterday): 10 min.
 
-Calibrated to operator's available capacity (per USER.md). Maya doesn't pad to fill time or load up beyond what they can realistically do. If today's total runs heavy, she cuts the lowest-tier event.
+Calibrated to operator's available capacity (per USER.md). Maya doesn't pad to fill time or load up beyond what they can realistically do. If today's total runs heavy, she cuts the lowest-tier event. If the account is fresh, she cuts volume HARD regardless of signal — ban-safety wins over a big-looking day.
 
-Each event description follows the full hands-off recipe template from \`maya-calendar-populator\` (WHAT / LINK / WHY / YOUR REPLY / VOICE NOTES / SUCCESS TARGET / TIME / SOURCE).
+Each event description follows the full hands-off recipe template from \`maya-calendar-populator\` (WHAT / LINK / WHY / YOUR REPLY / VOICE NOTES / SUCCESS TARGET / TIME / SOURCE), written to Convex \`gtmCalendarEvents\` so the operator can act on every one even when Google Calendar isn't connected.
 
 ## Weighting from niche learnings
 
@@ -2047,6 +2133,8 @@ Bump threads matching active \`gtmNicheLearnings\`:
 - Learning of kind \`voice_angle\` says hardware-spec hooks underperform for this founder → demote a thread whose draftReply opens with hardware specs.
 
 These are nudges, not overrides. Maya can ignore a learning if the specific thread is exceptional.
+
+**Weight by what converted.** If \`get_my_attribution({ windowDays: 1 })\` shows a channel or post type drove real signups in the last day (not just clicks, not just likes), promote queued threads that match it toward the top of today's plan — the loop optimizing on outcomes, not vanity. One signup is a signal, not yet a pattern; weight it, don't overfit to it. This is internal weighting only — don't surface a number here with a time-word unless it came from the \`windowDays: 1\` call. If \`posts\` is empty and \`totals\` is all-zero, this weighting is a no-op — don't manufacture it.
 
 ## Quality gate
 
@@ -2080,7 +2168,7 @@ log_action({
 
 ## Cost discipline
 
-0 ScrapeCreators (research has already run). 1-2 main_maya calls (compose + critic). Sub-minute total. Runs once per cron tick.
+0 ScrapeCreators (research has already run). \`get_my_attribution\` is a single cheap Convex read. 1-2 main_maya calls (compose + critic). Sub-minute total. Runs once per cron tick.
 
 ## Anti-slop check
 
@@ -3150,8 +3238,9 @@ Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks a
 3. **SOUL.md** — voice contract.
 4. Last 7 days of \`gtmActionLog\` (Maya reads via \`get_my_action_log({ since_ms: <7d ago> })\`).
 5. Last 7 days of \`gtmPostResults\` (per-channel performance).
-6. Existing \`gtmNicheLearnings\` (don't re-extract what's already known).
-7. **\`maya-results-reviewer/SKILL.md\` § rule 12 (positioning-vs-distribution).** Run the reviewer over the week's underperforming posts (cached reads — no fresh API spend) and read its \`positioningVsDistribution\` rollup. The week-level diagnosis feeds Block 3 below.
+6. **\`get_my_attribution({ windowDays: 7 })\`** — the week's closed-loop conversion data: per-post \`{ clicks, conversionsByKind:{signup,demo,feedback,revenue}, signups }\` keyed to \`draftId\`/\`platform\`/\`title\`, plus \`totals\` (clicks/signups/demos/feedback/revenue/untiedSignups). **This is the north-star read** — it's what tells Maya which posts actually drove customers, not just engagement. Block 2's learnings and Block 4's re-weighting lead off this. The \`windowDays:7\` is what makes "this week"/"last 7 days" a grounded claim for these numbers — never attach a time-word to numbers from an un-windowed read.
+7. Existing \`gtmNicheLearnings\` (don't re-extract what's already known).
+8. **\`maya-results-reviewer/SKILL.md\` § rule 12 (positioning-vs-distribution).** Run the reviewer over the week's underperforming posts (cached reads — no fresh API spend) and read its \`positioningVsDistribution\` rollup. The week-level diagnosis feeds Block 3 below.
 
 ## The review structure
 
@@ -3163,17 +3252,30 @@ As tight as Maya can make it while still useful. Four blocks:
 
 Numbers grounded in \`gtmActionLog\` + \`gtmPostResults\`. If a metric isn't available, say so — don't fabricate.
 
-**North-Star status (always).** Read the North Star off GTM.md (the \`northStarMetric\` / target / deadline) and the real outcome numbers from \`get_my_recent_post_results({})\` + the conversions I've recorded (\`record_conversion\`). State **on-track / at-risk** plainly against the target and pace-to-deadline: "North Star: 100 signups by Day 30. We're at 22 with 18 days left — at-risk; current pace lands ~37. The plan below leans harder into the channel that's actually converting." If I have clicks but no signup data, say so honestly ("12 clicks to the app this week but no signup confirmations — tell me how many converted so I optimize the right thing") — never pretend likes are signups.
+**North-Star status (always).** Read the North Star off GTM.md (the \`northStarMetric\` / target / deadline) and the real conversion numbers from **\`get_my_attribution({ windowDays: 7 })\`** (\`totals.signups\`/\`demos\`/\`revenue\` this week, plus \`untiedSignups\`) joined with the running total. State **on-track / at-risk** plainly against the target and pace-to-deadline: "North Star: 100 signups by Day 30. We're at 22 with 18 days left — at-risk; current pace lands ~37. This week drove 6 signups (windowDays:7), and the plan below leans harder into the channel that's actually converting." If attribution shows clicks but no signups this week, say so honestly ("12 clicks to the app this week but no confirmed signups — tell me how many converted so I optimize the right thing") — never pretend likes or clicks are signups. If \`untiedSignups > 0\`, name it ("3 signups we couldn't tie to a post — wrap every link next week so I can see what's working").
 
 ### Block 2 — What we learned
 
-3-5 bullets, each a specific pattern from the week. Examples:
+3-5 bullets, each a specific pattern from the week. **Conversions first, engagement second.** The north star is customers, so learnings are grounded in what \`get_my_attribution({ windowDays: 7 })\` shows actually drove clicks → signups, before any engagement-only signal.
 
-- "r/LocalLLaMA Tuesday morning is your strongest window — 3 of your top 5 replies landed there."
-- "Hardware-spec hooks on X are flat. Workflow-pain hooks pulled 4x the engagement."
+**How to derive a learning (conversion-grounded order):**
+
+1. **Rank the week's posts by outcome:** clicks → conversions (signups/demos/revenue) first, engagement only as a tiebreaker. The attribution read gives you \`draftId\`/\`platform\`/\`title\` per converting post — join each back to its draft attributes (\`hookType\` / \`format\` / \`tone\` / posting window) to see *what about the post* converted.
+2. **Derive the learning from the converting attribute, not the post:** "hook=pain-restatement drove 4 of 5 signups this week → weight that format up." "r/X drove 30 clicks but 0 signups → demote it next week — traffic that doesn't convert isn't a win." "demo-link CTA out-converted signup-link 3:1 → lead with demo."
+3. **Tie format/channel re-weighting to conversions:** a channel that converted gets weighted up; a channel that only got upvotes does not earn a weight bump on engagement alone.
+
+Engagement-only learnings (windows, reciprocation, like-rate) still belong here — but framed as engagement, not falsely as conversion:
+
+- "r/LocalLLaMA Tuesday morning is your strongest *engagement* window — 3 of your top 5 replies landed there (no signups tied yet)."
 - "Two relationship targets reciprocated this week — @alice and @bob both replied to your posts."
 
-Each bullet that survives → a \`save_learning\` call. Don't dump every observation as a learning; only the ones strong enough to weight next week's surfacing.
+**Caveats — grounded-or-silent (hard rules):**
+
+- **One signup is not a pattern.** Don't promote a strong conversion learning ("weight pain-restatement up") off a single signup or a single post. A conversion-based learning needs enough evidence — multiple conversions pointing the same way (e.g. ≥3 signups sharing an attribute, or the same attribute converting across ≥2 posts). Below that bar it's a DREAMS.md hypothesis, not a \`save_learning\`.
+- **Thin/empty attribution → fall back honestly.** If attribution is empty or thin this week (few/no clicks, no signups), do NOT fabricate a conversion-based learning. Fall back to engagement signals for the week's learnings — but say so plainly: "No conversions tied to posts this week, so this week's reads are engagement-only — I'll re-judge on conversions once links are landing." Never dress an engagement signal up as a conversion result.
+- **Time-words are grounded only via the window.** Say "this week" / "last 7 days" only for the \`windowDays:7\` attribution numbers. Don't attach a time-word to any number that didn't come from a windowed read.
+
+Each bullet that survives → a \`save_learning\` call (\`gtmNicheLearnings\`), with the draft attribute it ties to. Don't dump every observation as a learning; only the ones strong enough to weight next week's surfacing — and conversion-grounded ones outrank engagement-only ones when slots are limited.
 
 ### Block 3 — Strategic shift (if any)
 
@@ -3186,7 +3288,7 @@ Maya proposes a concrete shift if data warrants:
 
 If no shift, say so ("Bets are working — staying the course"). Honesty.
 
-**Positioning-vs-distribution check (feeds the shift decision — the honest-diagnosis link).** Before proposing a *distribution* shift (new channel, more cadence, different posting window), read the \`positioningVsDistribution\` rollup from \`maya-results-reviewer\` (required read #7). The diagnosis changes the *kind* of shift, and sometimes refuses one:
+**Positioning-vs-distribution check (feeds the shift decision — the honest-diagnosis link).** Before proposing a *distribution* shift (new channel, more cadence, different posting window), read the \`positioningVsDistribution\` rollup from \`maya-results-reviewer\` (required read #8). The diagnosis changes the *kind* of shift, and sometimes refuses one:
 
 - **If the week is a POSITIONING problem** (\`positioningProblem: true\` — posts got real reach but engagement/clicks/conversions stayed flat: people saw it and didn't want it), say it plainly and do NOT prescribe more distribution. The honest line: **"We're not going to out-post a positioning problem. 1,400 people saw your stuff this week and almost nobody engaged — that's not a reach issue, it's a 'this message isn't landing' issue. More posts of the same framing get the same shrug."** Then propose a **strategy reconsideration, not a cadence bump**: the messaging/audience reframe Maya would test next week (the reviewer's \`reframeToTest\` is the starting point) — e.g. "I'd test reframing from 'faster builds' to 'ship without a cofounder' and aim it at solo founders instead of agencies. One week, one channel, then we re-read." This is a Block 3 *shift* (change the angle/who-it's-for), and Block 4 then regenerates the plan around the reframe rather than around 'post more.'
 - **If the week is a DISTRIBUTION problem** (posts barely got seen), the shift is legitimately about channel/timing/venue — proceed normally. Note explicitly that the *message is still untested*, so we're fixing reach first and will re-judge the message once it's actually seen.
@@ -3198,7 +3300,7 @@ This is the *diagnosis → strategic-shift* linkage only. Do NOT duplicate Block
 
 The review doesn't just *extract* learnings — it *feeds them forward*. Rebuild the rolling 7-day plan for the coming week, re-weighted by what actually worked:
 
-1. **Re-weight bet channels/angles from the week's outcomes.** Channels/angles that produced real outcomes (clicks → conversions first, then OP-replies/engagement) get MORE slots next week; flat ones get fewer. Read \`maya-calendar-populator/SKILL.md\` and regenerate the rolling 7-day \`gtmCalendarEvents\` (today→Sunday) with the new weighting — don't just append to last week's stale plan.
+1. **Re-weight bet channels/angles from the week's outcomes — conversions lead.** Drive the re-weight off \`get_my_attribution({ windowDays: 7 })\` first: channels/angles/hook-types that produced **conversions** (signups → demos → revenue) get the most slots next week; channels that drove clicks-without-conversions get fewer (traffic that doesn't convert isn't earning slots); engagement-only signals (upvotes/likes/OP-replies) are the *last* tiebreaker, not the driver. A channel that only got engagement does not out-weight a channel that converted. Read \`maya-calendar-populator/SKILL.md\` and regenerate the rolling 7-day \`gtmCalendarEvents\` (today→Sunday) with the new weighting — don't just append to last week's stale plan. (If attribution is thin this week, weight on engagement but say so per Block 2's fallback rule — don't pretend the re-weight is conversion-grounded.)
 2. **Counter-overfitting discipline (hard rule).** Do NOT swing the whole plan on one week or one viral post. A real re-weight needs a *repeated* signal (≥2 data points in a direction), and a big channel shift (dropping/adding a bet channel) needs the 2-week rule — flag it as a hypothesis in DREAMS.md first, act when it's confirmed. One 200-upvote thread is not a format.
 3. **Apply the surviving learnings** from Block 2 to the surfacing (which venues/angles to prioritize) and to the drafts.
 4. **Draft pipeline:** 3-5 content drafts for next week, each tied to a \`gtmContentAngles\` slug, saved via \`save_draft\` (\`approvalState: "draft"\`) — operator can edit/approve/reject through the week. Each draft: angle slug, target channel, ship day, opening line. **Wrap every product link via \`wrap_link({ destinationUrl })\`** so next week's clicks are attributable.

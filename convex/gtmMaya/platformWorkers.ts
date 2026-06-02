@@ -31,10 +31,10 @@ import {
 import { twitterApiIoSearch } from "../integrations/twitterApiIo/twitterSearch";
 // Sprint 2.0 — Gemini grounded search replaces the broken ScrapeCreators
 // Google worker. Algolia HN search runs alongside it inside the same
-// worker so each Google query also probes Hacker News. HN cards are
-// platform:"google" (with hn:* tags for filtering) until Sprint 2.1
-// promotes HN to a first-class channel with its own subagent + enum
-// widening on gtmEvidenceCards / gtmChannelScores.
+// worker so each Google query also probes Hacker News. HN raw items still
+// arrive on platform:"google" carrying the hn:* tags, but rawItemToEvidence
+// now relabels those tag-marked items to source:"hn" so HN is a
+// first-class scored channel (Gemini grounded items stay source:"google").
 import { geminiGroundedSearch } from "../integrations/gemini/groundedSearch";
 import { hackerNewsSearch } from "../integrations/hackerNews/algoliaSearch";
 import { checkAllCostCaps } from "./costCap";
@@ -112,6 +112,7 @@ const EVIDENCE_INPUT_INTERNAL = v.object({
     v.literal("google"),
     v.literal("reddit"),
     v.literal("x"),
+    v.literal("hn"),
     v.literal("linkedin"),
     v.literal("tiktok"),
     v.literal("instagram"),
@@ -484,8 +485,20 @@ function rawItemToEvidence(
   // Recommended use — defaults; the judge re-tags.
   const recommendedUse: Doc<"gtmEvidenceCards">["recommendedUse"] = "strategy";
 
+  // HN now a first-class scored channel. HN-origin items come through the
+  // Google worker's merged stream (Gemini grounded + Algolia HN) tagged
+  // platform:"google" but carrying the `hn:true` tag (set in
+  // integrations/hackerNews/algoliaSearch.ts). Relabel ONLY those
+  // tag-marked items to source:"hn" so the channel-judge can score HN.
+  // Gemini grounded-search items have no hn:* tags and correctly stay
+  // source:"google".
+  const isHackerNewsOrigin = (item.tags ?? []).includes("hn:true");
+  const source: Doc<"gtmEvidenceCards">["source"] = isHackerNewsOrigin
+    ? "hn"
+    : platformToSource(platform);
+
   return {
-    source: platformToSource(platform),
+    source,
     url: sanitizeForConvex(item.url),
     title: item.title ? sanitizeForConvex(item.title) : undefined,
     snippet: sanitizeForConvex(item.excerpt ?? item.title ?? ""),

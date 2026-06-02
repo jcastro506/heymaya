@@ -71,6 +71,8 @@ const CHANNEL_DESCRIPTIONS: Record<GtmChannel, string> = {
     "Reddit — subreddit-based, anonymous, comment-driven. Best when buyer asks 'what should I use for X' or vents about a tool. Strict anti-promo norms; reply value > self-promo.",
   x:
     "X (Twitter) — public timeline + replies, founder-led, fast. Best for indie hackers, dev tools, B2B SaaS founders building in public. Hashtags weak, communities exist but small.",
+  hn:
+    "Hacker News — technical founder community (Show HN, comment-driven). Best for dev tools / infra / indie products with technical merit. Anti-hype, substance over marketing.",
   linkedin:
     "LinkedIn — professional B2B identity, long-form posts, employer-of-record audiences. Best for sales/marketing/enterprise tools, service businesses, B2B SaaS targeting corporate buyers.",
   tiktok:
@@ -334,17 +336,30 @@ export async function judgeAllChannels(
   const CHANNEL_SOURCE: Record<GtmChannel, GtmEvidenceCard["source"]> = {
     reddit: "reddit",
     x: "x",
+    hn: "hn",
     linkedin: "linkedin",
     tiktok: "tiktok",
     youtube: "youtube",
     product_hunt: "competitor",
   };
+  // The live set of channels that get scored → persisted into
+  // gtmChannelScores → surfaced in the onboarding picker. Reconciled to
+  // the foundation channel-scorecard taxonomy: Reddit / X / LinkedIn
+  // (full engagement) + TikTok (brief-mode, no genai video). YouTube is
+  // excluded (no native slideshow; vestigial) and product_hunt is
+  // excluded (single-day launch event, not steady-state acquisition and
+  // not in the product vision). Both literals remain in the GtmChannel
+  // type / schema union for backward compat with historical rows, but
+  // are deliberately NOT scored or surfaced here. HN is now a first-class
+  // scored channel — the research workers emit `hn` evidence cards
+  // (relabeled from the legacy `google`+hn:* tagging) so the judge can
+  // score it directly.
   const channels: ReadonlyArray<GtmChannel> = opts?.channels ?? [
     "reddit",
     "x",
+    "hn",
     "linkedin",
     "tiktok",
-    "product_hunt",
   ];
 
   const results = await Promise.all(

@@ -60,7 +60,8 @@
       "get_my_competitor_moves",
       "get_my_niche_pulse",
       "get_my_action_log",
-      "get_my_niche_learnings"
+      "get_my_niche_learnings",
+      "get_my_attribution"
     ]
   }
 }

@@ -27,8 +27,9 @@ Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks a
 3. **SOUL.md** — voice contract.
 4. Last 7 days of `gtmActionLog` (Maya reads via `get_my_action_log({ since_ms: <7d ago> })`).
 5. Last 7 days of `gtmPostResults` (per-channel performance).
-6. Existing `gtmNicheLearnings` (don't re-extract what's already known).
-7. **`maya-results-reviewer/SKILL.md` § rule 12 (positioning-vs-distribution).** Run the reviewer over the week's underperforming posts (cached reads — no fresh API spend) and read its `positioningVsDistribution` rollup. The week-level diagnosis feeds Block 3 below.
+6. **`get_my_attribution({ windowDays: 7 })`** — the week's closed-loop conversion data: per-post `{ clicks, conversionsByKind:{signup,demo,feedback,revenue}, signups }` keyed to `draftId`/`platform`/`title`, plus `totals` (clicks/signups/demos/feedback/revenue/untiedSignups). **This is the north-star read** — it's what tells Maya which posts actually drove customers, not just engagement. Block 2's learnings and Block 4's re-weighting lead off this. The `windowDays:7` is what makes "this week"/"last 7 days" a grounded claim for these numbers — never attach a time-word to numbers from an un-windowed read.
+7. Existing `gtmNicheLearnings` (don't re-extract what's already known).
+8. **`maya-results-reviewer/SKILL.md` § rule 12 (positioning-vs-distribution).** Run the reviewer over the week's underperforming posts (cached reads — no fresh API spend) and read its `positioningVsDistribution` rollup. The week-level diagnosis feeds Block 3 below.
 
 ## The review structure
 
@@ -40,17 +41,30 @@ As tight as Maya can make it while still useful. Four blocks:
 
 Numbers grounded in `gtmActionLog` + `gtmPostResults`. If a metric isn't available, say so — don't fabricate.
 
-**North-Star status (always).** Read the North Star off GTM.md (the `northStarMetric` / target / deadline) and the real outcome numbers from `get_my_recent_post_results({})` + the conversions I've recorded (`record_conversion`). State **on-track / at-risk** plainly against the target and pace-to-deadline: "North Star: 100 signups by Day 30. We're at 22 with 18 days left — at-risk; current pace lands ~37. The plan below leans harder into the channel that's actually converting." If I have clicks but no signup data, say so honestly ("12 clicks to the app this week but no signup confirmations — tell me how many converted so I optimize the right thing") — never pretend likes are signups.
+**North-Star status (always).** Read the North Star off GTM.md (the `northStarMetric` / target / deadline) and the real conversion numbers from **`get_my_attribution({ windowDays: 7 })`** (`totals.signups`/`demos`/`revenue` this week, plus `untiedSignups`) joined with the running total. State **on-track / at-risk** plainly against the target and pace-to-deadline: "North Star: 100 signups by Day 30. We're at 22 with 18 days left — at-risk; current pace lands ~37. This week drove 6 signups (windowDays:7), and the plan below leans harder into the channel that's actually converting." If attribution shows clicks but no signups this week, say so honestly ("12 clicks to the app this week but no confirmed signups — tell me how many converted so I optimize the right thing") — never pretend likes or clicks are signups. If `untiedSignups > 0`, name it ("3 signups we couldn't tie to a post — wrap every link next week so I can see what's working").
 
 ### Block 2 — What we learned
 
-3-5 bullets, each a specific pattern from the week. Examples:
+3-5 bullets, each a specific pattern from the week. **Conversions first, engagement second.** The north star is customers, so learnings are grounded in what `get_my_attribution({ windowDays: 7 })` shows actually drove clicks → signups, before any engagement-only signal.
 
-- "r/LocalLLaMA Tuesday morning is your strongest window — 3 of your top 5 replies landed there."
-- "Hardware-spec hooks on X are flat. Workflow-pain hooks pulled 4x the engagement."
+**How to derive a learning (conversion-grounded order):**
+
+1. **Rank the week's posts by outcome:** clicks → conversions (signups/demos/revenue) first, engagement only as a tiebreaker. The attribution read gives you `draftId`/`platform`/`title` per converting post — join each back to its draft attributes (`hookType` / `format` / `tone` / posting window) to see *what about the post* converted.
+2. **Derive the learning from the converting attribute, not the post:** "hook=pain-restatement drove 4 of 5 signups this week → weight that format up." "r/X drove 30 clicks but 0 signups → demote it next week — traffic that doesn't convert isn't a win." "demo-link CTA out-converted signup-link 3:1 → lead with demo."
+3. **Tie format/channel re-weighting to conversions:** a channel that converted gets weighted up; a channel that only got upvotes does not earn a weight bump on engagement alone.
+
+Engagement-only learnings (windows, reciprocation, like-rate) still belong here — but framed as engagement, not falsely as conversion:
+
+- "r/LocalLLaMA Tuesday morning is your strongest *engagement* window — 3 of your top 5 replies landed there (no signups tied yet)."
 - "Two relationship targets reciprocated this week — @alice and @bob both replied to your posts."
 
-Each bullet that survives → a `save_learning` call. Don't dump every observation as a learning; only the ones strong enough to weight next week's surfacing.
+**Caveats — grounded-or-silent (hard rules):**
+
+- **One signup is not a pattern.** Don't promote a strong conversion learning ("weight pain-restatement up") off a single signup or a single post. A conversion-based learning needs enough evidence — multiple conversions pointing the same way (e.g. ≥3 signups sharing an attribute, or the same attribute converting across ≥2 posts). Below that bar it's a DREAMS.md hypothesis, not a `save_learning`.
+- **Thin/empty attribution → fall back honestly.** If attribution is empty or thin this week (few/no clicks, no signups), do NOT fabricate a conversion-based learning. Fall back to engagement signals for the week's learnings — but say so plainly: "No conversions tied to posts this week, so this week's reads are engagement-only — I'll re-judge on conversions once links are landing." Never dress an engagement signal up as a conversion result.
+- **Time-words are grounded only via the window.** Say "this week" / "last 7 days" only for the `windowDays:7` attribution numbers. Don't attach a time-word to any number that didn't come from a windowed read.
+
+Each bullet that survives → a `save_learning` call (`gtmNicheLearnings`), with the draft attribute it ties to. Don't dump every observation as a learning; only the ones strong enough to weight next week's surfacing — and conversion-grounded ones outrank engagement-only ones when slots are limited.
 
 ### Block 3 — Strategic shift (if any)
 
@@ -63,7 +77,7 @@ Maya proposes a concrete shift if data warrants:
 
 If no shift, say so ("Bets are working — staying the course"). Honesty.
 
-**Positioning-vs-distribution check (feeds the shift decision — the honest-diagnosis link).** Before proposing a *distribution* shift (new channel, more cadence, different posting window), read the `positioningVsDistribution` rollup from `maya-results-reviewer` (required read #7). The diagnosis changes the *kind* of shift, and sometimes refuses one:
+**Positioning-vs-distribution check (feeds the shift decision — the honest-diagnosis link).** Before proposing a *distribution* shift (new channel, more cadence, different posting window), read the `positioningVsDistribution` rollup from `maya-results-reviewer` (required read #8). The diagnosis changes the *kind* of shift, and sometimes refuses one:
 
 - **If the week is a POSITIONING problem** (`positioningProblem: true` — posts got real reach but engagement/clicks/conversions stayed flat: people saw it and didn't want it), say it plainly and do NOT prescribe more distribution. The honest line: **"We're not going to out-post a positioning problem. 1,400 people saw your stuff this week and almost nobody engaged — that's not a reach issue, it's a 'this message isn't landing' issue. More posts of the same framing get the same shrug."** Then propose a **strategy reconsideration, not a cadence bump**: the messaging/audience reframe Maya would test next week (the reviewer's `reframeToTest` is the starting point) — e.g. "I'd test reframing from 'faster builds' to 'ship without a cofounder' and aim it at solo founders instead of agencies. One week, one channel, then we re-read." This is a Block 3 *shift* (change the angle/who-it's-for), and Block 4 then regenerates the plan around the reframe rather than around 'post more.'
 - **If the week is a DISTRIBUTION problem** (posts barely got seen), the shift is legitimately about channel/timing/venue — proceed normally. Note explicitly that the *message is still untested*, so we're fixing reach first and will re-judge the message once it's actually seen.
@@ -75,7 +89,7 @@ This is the *diagnosis → strategic-shift* linkage only. Do NOT duplicate Block
 
 The review doesn't just *extract* learnings — it *feeds them forward*. Rebuild the rolling 7-day plan for the coming week, re-weighted by what actually worked:
 
-1. **Re-weight bet channels/angles from the week's outcomes.** Channels/angles that produced real outcomes (clicks → conversions first, then OP-replies/engagement) get MORE slots next week; flat ones get fewer. Read `maya-calendar-populator/SKILL.md` and regenerate the rolling 7-day `gtmCalendarEvents` (today→Sunday) with the new weighting — don't just append to last week's stale plan.
+1. **Re-weight bet channels/angles from the week's outcomes — conversions lead.** Drive the re-weight off `get_my_attribution({ windowDays: 7 })` first: channels/angles/hook-types that produced **conversions** (signups → demos → revenue) get the most slots next week; channels that drove clicks-without-conversions get fewer (traffic that doesn't convert isn't earning slots); engagement-only signals (upvotes/likes/OP-replies) are the *last* tiebreaker, not the driver. A channel that only got engagement does not out-weight a channel that converted. Read `maya-calendar-populator/SKILL.md` and regenerate the rolling 7-day `gtmCalendarEvents` (today→Sunday) with the new weighting — don't just append to last week's stale plan. (If attribution is thin this week, weight on engagement but say so per Block 2's fallback rule — don't pretend the re-weight is conversion-grounded.)
 2. **Counter-overfitting discipline (hard rule).** Do NOT swing the whole plan on one week or one viral post. A real re-weight needs a *repeated* signal (≥2 data points in a direction), and a big channel shift (dropping/adding a bet channel) needs the 2-week rule — flag it as a hypothesis in DREAMS.md first, act when it's confirmed. One 200-upvote thread is not a format.
 3. **Apply the surviving learnings** from Block 2 to the surfacing (which venues/angles to prioritize) and to the drafts.
 4. **Draft pipeline:** 3-5 content drafts for next week, each tied to a `gtmContentAngles` slug, saved via `save_draft` (`approvalState: "draft"`) — operator can edit/approve/reject through the week. Each draft: angle slug, target channel, ship day, opening line. **Wrap every product link via `wrap_link({ destinationUrl })`** so next week's clicks are attributable.

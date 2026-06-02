@@ -1016,5 +1016,21 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) =>
         getLc("get_my_niche_learnings", p.include_retired ? { include_retired: "true" } : undefined, ctx.signal),
     }),
+    tool({
+      name: "get_my_attribution",
+      label: "Get My Attribution",
+      description:
+        "Read back per-post closed-loop attribution: which post/reply drove clicks → signups. Returns posts[] (draftId, platform, title, clicks, conversionsByKind, signups) sorted by signups then clicks, plus totals. Empty when nothing — stay silent, never fabricate. Optional: limit; windowDays (rolling window — 1 = last ~24h for a daily recap, 7 = last week, omit = lifetime).",
+      parameters: Type.Object({
+        limit: Type.Optional(Type.Number()),
+        windowDays: Type.Optional(
+          Type.Number({
+            description:
+              "Rolling lookback window in days. 1 = last ~24h (daily recap), 7 = last week; omit for lifetime.",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("get_my_attribution", p, ctx.signal),
+    }),
   ],
 });

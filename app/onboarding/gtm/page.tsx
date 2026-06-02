@@ -43,6 +43,22 @@ interface IntakeDraft {
   excludedAudiences: string;
 }
 
+// Founder-facing display names for scored channels. Keeps the picker
+// from dumping raw enum values (e.g. "x" lowercase, "product_hunt").
+const CHANNEL_LABELS: Record<string, string> = {
+  reddit: "Reddit",
+  x: "X",
+  hn: "Hacker News",
+  linkedin: "LinkedIn",
+  tiktok: "TikTok",
+  instagram: "Instagram",
+};
+
+// Channels we no longer score or surface (vestigial — no native
+// slideshow / not in the product vision). Defensively filtered out of
+// the picker so stale historical rows can never resurface them.
+const HIDDEN_CHANNELS = new Set(["youtube", "product_hunt"]);
+
 const DEFAULT_DRAFT: IntakeDraft = {
   name: "",
   url: "",
@@ -694,6 +710,7 @@ function GtmOnboardingBody() {
               </p>
               <div className="space-y-3">
                 {[...snapshot.channelScores]
+                  .filter((s) => !HIDDEN_CHANNELS.has(s.channel))
                   .sort((a, b) => b.score - a.score)
                   .map((s) => {
                     const pick = channelPicks[s.channel] ?? s.decision;
@@ -704,8 +721,9 @@ function GtmOnboardingBody() {
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium capitalize text-paper">
-                              {s.channel.replace("_", " ")}
+                            <span className="font-medium text-paper">
+                              {CHANNEL_LABELS[s.channel] ??
+                                s.channel.replace("_", " ")}
                             </span>
                             <span className="text-xs text-paper-dim">
                               {s.confidence} confidence

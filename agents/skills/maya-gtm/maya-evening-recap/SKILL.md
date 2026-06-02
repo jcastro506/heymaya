@@ -26,6 +26,8 @@ The bookend to the morning brief. The operator knows what they did today and how
 1. **USER.md** — operator timezone.
 2. **SOUL.md** — voice contract.
 3. **memory/{today}.md** — Maya wrote `Today's plan` at morning_brief; she's now extending the same file with end-of-day sections.
+4. **`get_my_attribution({ windowDays: 1 })`** — per-post outcomes for the founder's wrapped links over the last 24h: clicks → signups, tied back to the specific post that drove them. This is the close-the-loop read. **The tool ONLY time-scopes results when you pass `windowDays`** — the recap MUST pass `windowDays: 1` so every number is genuinely a last-24h number. Returns `{ posts: [{ draftId, platform, title, clicks, conversionsByKind: { signup, demo, feedback, revenue }, signups, createdAt }], totals: { clicks, signups, demos, feedback, revenue, untiedSignups }, windowDays }`, posts sorted by signups then clicks. `title` is the link/draft the founder prepared — it is NOT proof the post was published verbatim; phrase it as "the link you shared on {platform}" / "your {platform} reply", never assert the post went live as written. If `posts` is empty AND every `totals` figure is zero, there is nothing to report — stay silent on attribution (see grounded-or-silent below). Never infer or invent clicks/signups.
+   - **Temporal-grounding rule (hard).** NEVER attach a time-word ("today", "yesterday", "this week") to a number unless that number came from a `windowDays`-scoped call. This recap's `windowDays: 1` numbers are phrased as **"in the last 24h"** — NOT "today". A lifetime call (no `windowDays`) may only ever be described as "to date".
 
 ## Write triggers (after send)
 
@@ -60,9 +62,18 @@ Numbers come from `gtmPostResults`. If results haven't propagated yet (Maya is c
 - **Bump missed priorities.** The highest-priority undone item carries to tomorrow's top slot (see "carried vs cut" below) — surface it: "Your top one from today (the Show HN warm-up comment) moves to first thing tomorrow."
 - Don't moralize or pile on. One honest line, one question, then move on.
 
-### Block 2 — Performance read (1-2 sentences)
+### Block 2 — What your posts drove (lead with this when there's attribution)
 
-Maya's interpretation: was this a good day? Use the same Strong / OK / Thin grade language.
+This is the loop closing. When `get_my_attribution({ windowDays: 1 })` has real numbers, this block leads the recap — outcomes beat engagement. All numbers here are last-24h numbers; phrase them as **"in the last 24h"**, never "today".
+
+- Lead with the converting post, named by the link/draft (`title`) the founder prepared — not as a verified published post: "The link you shared on r/LocalLLaMA drove 12 clicks → 2 signups in the last 24h — your best post this week." Cite the per-post row (`posts[i]`).
+- If there are clicks but no signups yet, say exactly that: "Your X reply pulled 8 clicks but no signups landed yet." Clicks ≠ signups; never round one up to the other.
+- **Untied self-report signups.** These now live in `totals.untiedSignups`. Report it honestly ONLY when `totals.untiedSignups > 0`, and don't pin it to any post: "3 signups in the last 24h — couldn't trace which post sent them." When `totals.untiedSignups` is 0, say nothing about untied signups at all.
+- **Revenue.** `totals.revenue` is now available; mention it only when `totals.revenue > 0` (e.g. "and $49 in revenue traced back in the last 24h"). Otherwise say nothing about revenue.
+- **Grounded-or-silent.** If `posts` is empty AND every `totals` figure is zero, say NOTHING about clicks or signups. Do not imply likes/upvotes are signups. Fall through to the engagement read below.
+- **Brief-mode channels.** TikTok/IG posts are link-in-bio, so they have no per-post click attribution. Never claim click counts for a TikTok/IG post. They count as reach, not as traced signups.
+
+When attribution is empty (or only for context after the attribution lead), give the engagement read — was this a good day? Use the same Strong / OK / Thin grade language, grounded in `gtmPostResults`:
 
 - "Good day — the Reddit reply is performing better than your average reply."
 - "Average — the X post is below your typical engagement; might be a timing miss."
@@ -116,7 +127,7 @@ If the operator replies to the recap with feedback ("the X angle didn't land —
 
 `maya-output-critic` runs over the recap before send:
 
-- Grounding — every number cites a `gtmPostResults` row or a calendar event ID.
+- Grounding — every number cites a `gtmPostResults` row, a `get_my_attribution` row (`posts[i]` or `totals`), or a calendar event ID. No click/signup number that didn't come back from `get_my_attribution`. Empty `posts` + all-zero `totals` → no attribution claims. No time-word ("today"/"yesterday") on any attribution number — those came from a `windowDays: 1` call, so they read "in the last 24h"; lifetime figures read "to date".
 - Voice — no "great work today!" or "way to crush it." Manager voice, not coach voice.
 - Time-box — as tight as it can be while useful, operator reads on phone.
 
@@ -128,7 +139,7 @@ If the operator replies to the recap with feedback ("the X angle didn't land —
 
 ## Cost discipline
 
-0 ScrapeCreators if `maya-continuous-research` already updated post-results. 1 main_maya call (compose + critic). Sub-minute.
+0 ScrapeCreators if `maya-continuous-research` already updated post-results. `get_my_attribution` is a single cheap Convex read. 1 main_maya call (compose + critic). Sub-minute.
 
 ## Anti-slop check
 

@@ -11,9 +11,13 @@ The deep-research subagents (reddit_research, x_research, etc.) surface specific
 
 Without this skill, the target list lives in the database and nobody acts on it. With it, the operator opens Google Calendar and sees their week.
 
+**This week is a living STARTING plan, not a fixed seven days.** The onboarding pass builds it deep enough to deliver real first-week value immediately — every event turn-key, threads fresh as of today. But it's the *baseline* the daily crons refresh, not a frozen artifact: `morning_brief` regenerates each day's reply targets against what's hot that morning, and `midday_pulse` ADDS any fresh hot-strike thread that breaks after the brief (always ADD, never replace existing events). So build a strong, immediately-actionable week — but understand the discovered threads in it are most valuable *now* and get topped up / rolled forward day by day, not preserved for seven days. Strong for today; the daily loop keeps it current.
+
 ## When to invoke
 
-- IF deep-research subagents have just completed AND `get_my_target_threads({})` returned >0 rows THEN run. This is the canonical first invocation, right at the end of FIRST WAKE.
+- IF deep-research subagents have just completed AND `get_my_target_threads({})` returned >0 rows THEN run. This is the canonical first invocation, right at the end of FIRST WAKE — it builds the STARTING week (deep + turn-key today), which the daily crons then refresh day by day.
+- IF the `morning_brief` cron ran THEN roll the plan forward: refresh today's reply targets against what's hot this morning. This is a daily top-up of the living plan, not a from-scratch rebuild of a fixed week.
+- IF the `midday_pulse` cron surfaced a fresh T1 hot-strike thread THEN ADD it into today (never replace existing events) — the catch-before-peak insert.
 - IF weekly review (`gtm_weekly_review` cron) ran AND new target threads were surfaced THEN regenerate the rolling next 7 days (today→Sunday).
 - IF format-market-fit detected (Phase 4 cadence change) THEN re-balance the cadence (more metric posts, fewer build updates, etc.).
 - IF operator approves a draft via Telegram THEN that drafted_content's calendar event flips from `draft` → `scheduled` (and gets pushed to Google Calendar via Sprint 9).
@@ -204,6 +208,10 @@ propose_calendar({
 })
 ```
 
+### Every event lives in Convex and works WITHOUT Google Calendar
+
+These events are written to Convex (`gtmCalendarEvents`) via `propose_calendar`. **That write is the deliverable — Google Calendar is an optional mirror, not the source of truth.** The operator reads and acts on every event from the morning brief and the HQ mission board whether or not they ever connect Google Calendar. So each `description` must be fully self-contained: the operator should be able to do the whole task from the text of the event alone, on their phone, with no calendar app and no follow-up question. Never write an event that only makes sense once it's on a Google Calendar (e.g. "see calendar for link"). If Google Calendar IS connected, the same self-contained event simply also appears there (Sprint 9 path) — it loses nothing when it isn't.
+
 ### The description IS a hands-off recipe (the operator has a day job)
 
 Every event `description` must be a complete recipe the operator can act on without thinking or asking a follow-up. For a reply_window built from a target thread, pull the thread's `draftReply` (already composed + on the row) and its one-tap deep link (the thread row carries it — see TOOLS.md "Deep links / intent URLs"):
@@ -211,17 +219,25 @@ Every event `description` must be a complete recipe the operator can act on with
 ```
 WHAT: <one-line action — "Reply to this r/LocalLLaMA thread">
 LINK: <thread URL>
-OPEN (one-tap): <the thread's deep link / intent URL — pre-filled composer on X/Reddit-submit/LinkedIn; the thread URL to paste into on Reddit-comment>
+OPEN (one-tap): <the thread's deep link / intent URL — a pre-filled composer intent URL where the platform supports it (X/Twitter intent compose, Reddit submit, LinkedIn share), the exact thread/comment URL to land on where it doesn't (Reddit comment, HN item). One tap → the operator is in the right place with the right thing open.>
 WHY: <one sentence — why this thread, why now (cite the pain/velocity)>
 YOUR REPLY (verbatim — copy/paste/edit/post):
-<the draftReply already on the thread row>
+<the draftReply already on the thread row — and if the draft includes the founder's product link, it MUST be the wrapped link from wrap_link, never the raw URL, so the click is attributable>
 VOICE NOTES: <one sentence — what to tweak if you want>
 AFTER YOU POST: <reply to me — I'll track results 72h>
 SUCCESS TARGET: <e.g. 1 OP reply or 5+ upvotes within 4 hours>
 TIME: <minutes — usually 10-15>
+SOURCE: <where this came from — the sub/community + the research pass, in operator-plain words (no skill slugs / ids)>
 ```
 
-For events with NO thread target (X build-in-public post, engagement_block, warmup_block), the recipe still carries WHAT / WHY / a starter draft or prompt / SUCCESS TARGET / TIME — never a bare title. A reply_window with no `draftReply` and no link is not actionable — don't emit it; fix the thread or drop it.
+For events with NO thread target (X build-in-public post, engagement_block, warmup_block), the recipe still carries WHAT / WHY / a starter draft or prompt / SUCCESS TARGET / TIME / SOURCE — never a bare title. A reply_window with no `draftReply` and no link is not actionable — don't emit it; fix the thread or drop it.
+
+### One-tap deep links + the wrapped product link (attribution)
+
+Two non-negotiables on every recipe:
+
+1. **One-tap OPEN.** Build the deepest link the platform allows (per TOOLS.md "Deep links / intent URLs"): a pre-filled composer intent URL when the platform supports it, otherwise the exact thread/comment URL. The operator should never have to search for the thread or paste a body by hand if we can avoid it. This is what makes a "day job" operator able to clear 10-15 reps in spare minutes.
+2. **Wrapped product link inside any draft that links out.** Whenever a `YOUR REPLY` (or a post draft) includes the founder's product/landing URL, it is the `wrap_link` wrapped URL — never the raw URL. The wrapped link is how we tie a click → a signup in `get_my_attribution`, which is the closed-loop attribution moat. A raw link in a draft is a silent attribution leak; treat it as a defect and fix the draft before emitting the event.
 
 Default durations:
 - reply_window: 20-30 min

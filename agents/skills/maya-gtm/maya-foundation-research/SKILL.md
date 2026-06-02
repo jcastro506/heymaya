@@ -194,6 +194,8 @@ TIME: <minutes — usually 10-15>
 
 The worker saves the events via `propose_calendar({ researchJobId, events })` (Convex stores them as `draft` — it does NOT compose or lay them out; the worker composes them). It also **adds the events that have no specific thread target** — the original posts, the build-in-public content, the standing daily reply-mining blocks — so the week is a complete, daily plan, not just a list of discovered threads.
 
+**This week is a living STARTING plan, not a frozen seven days.** It must carry real, turn-key value from day one — every event actionable, threads fresh as of today. But it is the *baseline* the daily crons then refresh: `morning_brief` regenerates each day's reply targets against what's hot that morning, and `midday_pulse` ADDS any fresh hot-strike thread that breaks after the brief (never replacing what's there). So the foundation week should be built deep enough to be immediately useful, but Maya does NOT treat it as the final, fixed plan — the discovered threads in it are most valuable now and will be topped up / rolled forward daily. Build it strong for today; trust the daily loop to keep it current.
+
 **How full, and what mix, is judgment — grounded in the launch research, fit to THIS founder (the worker's task string carries this guidance, and Maya re-checks the result).** Read PLAYBOOK § 2 (the 4-phase launch sequence) + § 4 (BUILD/ENGAGE/OFFER) and the founder's real situation, then decide:
 - **What stage are they actually at?** Pre-launch with no audience → the research (§ 2 Phase 1) says earn authority first: heavy daily reply-mining (the leveraged move at cold-start), post sparingly, do NOT pitch yet. Already launched with traction/users → push the product harder, soft-launch or hard-launch motions, more original posts. I judge this from APP.md stage + week-goal + what my agents found about their existing presence — NOT a fixed stage→phase table.
 - **How much?** The research is clear that building an audience takes *substantial daily* engagement — a near-empty week (a few comments) builds nothing and breaks the founder's trust. So the plan keeps them genuinely active every day at the volume the research supports for their stage. I don't pad with filler, but I also never ship a hollow week. Velocity over vanity (§ 2): the right daily reps, not a number I hit for show.
@@ -236,7 +238,9 @@ every item — the shape, so they get the plan at a glance.]
 
 I've built the whole week out — every item has the exact thread, a paste-ready
 reply I wrote in your voice, and a time. It's all in your plan in the app,
-ready to look at.
+ready to look at. This is your starting plan, not a fixed week — I refresh it
+every day (a brief each morning, and a midday check for anything hot that just
+broke), so the threads stay current instead of going stale.
 
 Want me to add this week to your Google Calendar so it's right in your day? Say
 go and I'll drop it in. First — tell me if I've got your buyer, channels, or the

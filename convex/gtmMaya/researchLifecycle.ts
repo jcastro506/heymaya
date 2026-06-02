@@ -90,12 +90,15 @@ const RECOMMENDED_USE = v.union(
   v.literal("competitor")
 );
 
+// Channels the agent may record scores for. Reconciled to the live
+// judge's scored set: Reddit / X / LinkedIn / TikTok. youtube and
+// product_hunt are deliberately excluded (vestigial / not in the
+// product vision); the judge no longer emits them.
 const CHANNEL = v.union(
   v.literal("reddit"),
   v.literal("x"),
   v.literal("linkedin"),
-  v.literal("tiktok"),
-  v.literal("product_hunt")
+  v.literal("tiktok")
 );
 
 const CHANNEL_DECISION = v.union(
@@ -564,6 +567,7 @@ export const setMyChannelDecisions = mutation({
         channel: v.union(
           v.literal("reddit"),
           v.literal("x"),
+          v.literal("hn"),
           v.literal("linkedin"),
           v.literal("tiktok"),
           v.literal("youtube"),

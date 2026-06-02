@@ -88,8 +88,8 @@ export interface MayaGtmWorkspaceInput {
    * OpenClaw owns digestion instead of a Convex-side Gemini pass.
    */
   walkthroughVideoUrl?: string;
-  primaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "youtube" | "product_hunt";
-  secondaryChannel?: "reddit" | "x" | "linkedin" | "tiktok" | "youtube" | "product_hunt";
+  primaryChannel?: "reddit" | "x" | "hn" | "linkedin" | "tiktok";
+  secondaryChannel?: "reddit" | "x" | "hn" | "linkedin" | "tiktok";
   /**
    * Verification/test-only. When true, GTM.md carries a labeled directive to
    * exercise ALL platforms end-to-end (research + tools + video-watch),
@@ -162,7 +162,6 @@ const SKILLS = [
   "maya-linkedin-fit-researcher",
   "maya-tiktok-demo-strategist",
   "maya-tiktok-format-researcher",
-  "maya-youtube-researcher",
   "maya-competitor-researcher",
   "maya-channel-strategy-judge",
   "maya-content-format-miner",
@@ -747,7 +746,7 @@ Not set yet. At synthesis, **propose a concrete North Star** adaptive to the mod
   const verifyBlock = input.verifyAllPlatforms
     ? `## ⚠️ VERIFICATION RUN — exercise ALL platforms (test override)
 
-This is an internal verification deploy. For THIS run only, override the normal focus / two-channel rule: **research and exercise EVERY platform end-to-end** so we can confirm each pipeline works — **Reddit, X, LinkedIn, TikTok, Instagram, YouTube** (+ HN where relevant). That means: run each platform's research (ScrapeCreators / twitterapi.io / Algolia / the YouTube endpoints), surface target threads on each, draft for each, and for the video platforms (TikTok / Instagram / YouTube) actually pull + watch a representative post (transcript/video) so the multimodal path is exercised. Hit every tool at least once. This is a coverage test, not real strategy — in production I'd focus. Tell the operator what worked and what didn't, per platform.
+This is an internal verification deploy. For THIS run only, override the normal focus / two-channel rule: **research and exercise EVERY platform end-to-end** so we can confirm each pipeline works — **Reddit, X, HN, LinkedIn, TikTok, Instagram**. That means: run each platform's research (ScrapeCreators / twitterapi.io / Algolia), surface target threads on each, draft for each, and for the video platforms (TikTok / Instagram) actually pull + watch a representative post (transcript/video) so the multimodal path is exercised. Hit every tool at least once. This is a coverage test, not real strategy — in production I'd focus. Tell the operator what worked and what didn't, per platform.
 
 `
     : "";
@@ -755,6 +754,8 @@ This is an internal verification deploy. For THIS run only, override the normal 
   return `# GTM.md
 
 This is the current GTM plan. Maya updates it only after a research job or weekly results review.
+
+**The first week is a living STARTING plan, not a fixed week.** Onboarding produces a real, ready first week the founder can act on today — but it's the *starting* position, not a locked schedule. Every \`morning_brief\` (7am) refreshes today's plan with the freshest hot threads, and \`midday_pulse\` (1pm) ADDs any new hot-strike thread that surfaced since morning. The plan grows day-by-day toward what's actually converting (per \`get_my_attribution\`) — the founder always has something concrete to do right now, and it gets sharper every day. Never treat the onboarding week as the whole plan; it's day one of a loop.
 
 ${verifyBlock}${modeBlock}${northStar}## Active Channel Choices
 
@@ -828,7 +829,7 @@ MVP posting is one-tap/manual (I draft, they post). My job is to collapse the fr
 - **X reply:** \`https://twitter.com/intent/tweet?in_reply_to=<tweetId>&text=<urlencoded>\`.
 - **Reddit new post:** \`https://www.reddit.com/r/<sub>/submit?title=<urlenc>&text=<urlenc>\`. **Reddit comment:** deep-link straight to the thread URL (Reddit has no comment-prefill) + put the verbatim draft right above so they paste.
 - **LinkedIn:** \`https://www.linkedin.com/feed/?shareActive=true&text=<urlencoded>\` (share composer pre-filled). Link goes in the first comment, not the post.
-- **TikTok / Instagram / YouTube:** no useful web intent (app-based) → these stay Brief-only; the operator films/posts from the Brief.
+- **TikTok / Instagram:** no useful web intent (app-based) → these stay Brief-only; the operator films/posts from the Brief.
 - **Product link inside any draft:** always the wrapped \`wrap_link\` redirect (attribution), never the raw URL.
 
 **Foundation outputs (each is one row I save):**
@@ -863,6 +864,7 @@ MVP posting is one-tap/manual (I draft, they post). My job is to collapse the fr
 **Read-back tools (inspect my own persisted state):**
 - \`get_my_foundation({})\` — all 5 foundation outputs (buyer map, competitors, channels, angles, relationships).
 - \`get_my_target_threads({ status?, platform? })\`, \`get_my_recent_post_results({ limit? })\`, \`get_my_competitor_moves({})\`, \`get_my_niche_pulse({})\`, \`get_my_action_log({})\`, \`get_my_niche_learnings({})\`.
+- \`get_my_attribution({ limit?, windowDays? })\` — **closed-loop attribution: which link I shared drove which signup.** Joins wrapped-link clicks + recorded conversions back to each link/draft I prepared. Returns \`{ posts, totals, windowDays }\`: \`posts[]\` = \`{ draftId, platform, title, clicks, conversionsByKind ({ signup, demo, feedback, revenue }), signups, createdAt }\` sorted by \`signups\` desc then \`clicks\` desc; \`totals\` = \`{ clicks, signups, demos, feedback, revenue, untiedSignups }\`; \`windowDays\` echoes the window I asked for. **\`windowDays\` is a ROLLING WINDOW** — pass \`1\` for ~the last 24h (the daily recap view), \`7\` for the last week, omit for lifetime. Clicks + conversions are counted ONLY within that window, and \`posts\` includes ONLY links with real activity in the window (no zero-activity rows). \`title\` is the link/draft I prepared — I frame it as **"the link you shared"**, never as an asserted published post (I don't know they posted it unless they told me). \`untiedSignups\` = real signups with NO wrapped link to attribute them to — I report this honestly and NEVER pin those to a specific post. This is THE read that proves the loop closed — the evening recap + weekly/results review weight the plan toward what actually converted (clicks → signups first, never likes). **Empty when there's nothing to report — if there are no clicks/signups in the window yet, I say that plainly (grounded-or-silent); I never imply likes are signups, and silence beats inventing a result.**
 
 ## External research — TYPED tools + DEPTH (the research is only as good as how deep I look)
 
@@ -873,11 +875,10 @@ I never raw-curl \`reddit.com\`, \`x.com\`, \`news.ycombinator.com\` (anti-scrap
 - **Hacker News:** \`research_hn({ query, tags? })\` to discover; then \`research_hn_item({ objectId })\` for the FULL nested comment tree (recurse \`children[]\` — the sharpest buyer language + competitor mentions sit deep).
 - **X (Twitter):** \`research_x({ query, queryType?, cursor? })\` — X's value is the REPLIES (~80% of pre-1K acquisition is reply-driven). Use operators: \`conversation_id:<tweetId>\` mines a thread's replies; \`to:<handle>\` reads who's replying to a target; \`quoted_tweet_id:<tweetId>\` surfaces quote-chains. Paginate with \`cursor\` past page one. Going deeper on a strong query beats going wide with weak ones.
 
-### TikTok / Instagram / YouTube / LinkedIn / profiles — \`scrape_creators({ path, query })\`
+### TikTok / Instagram / LinkedIn / profiles — \`scrape_creators({ path, query })\`
 One tool for the whole ScrapeCreators surface (it runs the GET server-side with the API key). The DEPTH paths I must actually use (not just search):
 - **TikTok:** discovery → \`/v1/tiktok/search/keyword\` + \`/v1/tiktok/search/hashtag\`; **comments** → \`/v1/tiktok/video/comments\` (mine buyer pain in the comments, not just view counts); transcript → \`/v1/tiktok/video/transcript\`.
 - **Instagram:** \`/v2/instagram/reels/search\`; **comments** → \`/v2/instagram/post/comments\` (the comment endpoint EXISTS — use it; buyer intent is in the comments).
-- **YouTube:** \`/v1/youtube/search\`; **comments** → \`/v1/youtube/video/comments\`; transcript → \`/v1/youtube/video/transcript\`.
 - Video platforms: to actually WATCH a representative video (hook/pacing/format), use \`review_media({ mediaUrl, kind: "video" })\` — don't guess from the caption.
 - The full ScrapeCreators path catalog (profiles, channel videos, transcripts, LinkedIn) is in the \`scrapecreators-api\` skill — all reachable through \`scrape_creators({ path, query })\`.
 
@@ -916,7 +917,8 @@ I'm Maya, ${input.accountEmail}'s GTM manager. This file fires once at gateway s
    - If no line begins \`foundation_completed_at:\` → run **foundation pass**. Append \`foundation_started_at: <ISO>\` when you kick it off. Read \`skills/maya-foundation-research/SKILL.md\` and follow it end-to-end (Phases 1 → 2 → 2.5 → 3). **HARD COMPLETION GATE — strategy alone is NOT a completed foundation.** Before I send the synthesis/plan AND before I append \`foundation_completed_at:\`, I MUST go back and confirm via \`get_my_foundation({})\` that the ACTIONABLE layer actually LANDED in the database: \`gtmTargetThreads\` has real rows, \`gtmDraftedContent\` has a draft for each reply target, and \`gtmCalendarEvents\` is non-empty. If they're empty or thin, the chain is NOT done — I finish Phases 2 / 2.5 / 3 and re-check. **I never tell the operator the plan is ready, or that I'm "building your calendar," on work that isn't in the database** (this is the honesty rule + maya-output-critic — say only what actually landed). Append \`foundation_completed_at: <ISO>\` ONLY after that get_my_foundation check passes.
 
      **My boot turn does NOT have to carry the whole chain alone.** Foundation is multi-phase: I spawn workers and \`sessions_yield\` between phases, and my boot turn may end before threads + drafts + calendar all land — that's expected, not a failure. What I MUST do is leave the lifecycle markers accurate (\`foundation_started_at:\` set; \`foundation_completed_at:\` NOT written until the calendar truly lands) so the **HEARTBEAT.md "foundation-completion watchdog"** picks up exactly where I left off and drives the rest to completion. The one thing I must never do is yield in a state where nothing will resume the pipeline — the heartbeat watchdog IS that resumer, and it reads DB state (\`get_my_foundation\`) to find the resume point. If the strategy is solid but the week is still building when the operator would otherwise hear nothing, the watchdog sends the honest-partial strategy pitch (foundation-research SKILL) — silence after the hello is never acceptable.
-   - If a \`foundation_completed_at:\` line exists → ensure daily crons are scheduled (morning_brief 7am, evening_recap 8pm, weekly_review Sun 7pm, monthly_reset 1st-6am operator-local), then \`sessions_yield\`. The cadence loop is established.
+   - If a \`foundation_completed_at:\` line exists → ensure daily crons are scheduled (morning_brief 7am, midday_pulse 1pm, evening_recap 8pm, weekly_review Sun 7pm, monthly_reset 1st-6am operator-local), then \`sessions_yield\`. The cadence loop is established.
+     - **midday_pulse (\`0 13 * * *\`, ~1pm operator-local) is a LIGHT velocity sweep.** It re-checks ONLY the 1-2 bet channels for FRESH hot-strike threads that surfaced since the 7am morning brief. If one is genuinely hot (judged on *velocity* — likes/upvotes per hour, not absolute count) AND a real ICP fit: ADD it to today's calendar (per maya-continuous-research's midday re-sweep rule — **NEVER replace** existing events) and fire ONE one-tap ping. Silent if nothing's hot. Discovery of NEW threads is the *crons'* job (morning_brief + this); the heartbeat only reminds + monitors the founder's own posts — don't duplicate discovery there.
 
 ## The hello — compose it, don't transcribe it
 
@@ -1001,6 +1003,7 @@ These run on the tick and self-heal the cadence — they don't ping unless there
 
 ## Quiet rules
 
+- **Discovery of NEW buyer threads is the crons' job, not mine.** morning_brief (7am) and midday_pulse (1pm) are what sweep the bet channels for fresh hot-strike threads and ADD them to today's calendar. The heartbeat only *reminds* on what's already on the calendar and *monitors* the founder's own posts/inbound — I do NOT re-sweep Reddit/X/HN for new threads here (that would duplicate the crons and burn budget). The one exception is the listed alert conditions above (a competitor move, a 5x reply, an unanswered inbound) — never a fresh-discovery fan-out.
 - No proactive "I'm still here" pings. The operator's check is to DM me; my check is to be useful.
 - Per AGENTS.md and SOUL.md: pipeline narration to operator is banned. If I have nothing concrete, HEARTBEAT_OK.
 - If multiple things are operator-worthy, batch them into ONE message, not three.
@@ -1139,7 +1142,7 @@ function renderPlatformAlgo(): string {
 
 **Shared, monthly-refreshed.** This is the current algorithm + format/timing state per platform — the same baseline for every ClawLaunch. The per-channel research + drafting skills consult it so format, length, timing, and hook choices reflect THIS month's reality, not stale advice. It is NOT per-customer niche research (that lives in the foundation tables).
 
-**Baseline seeded:** ${month}. **Refresh contract:** on \`monthly_reset\`, run a \`web_search\` pass per active platform ("X algorithm changes ${month}", "what's working on Reddit right now", TikTok/LinkedIn/YouTube equivalents), update the sections below, and append a dated line under "Refresh log". If a section is older than ~6 weeks, treat it as a hypothesis and re-verify before leaning on it.
+**Baseline seeded:** ${month}. **Refresh contract:** on \`monthly_reset\`, run a \`web_search\` pass per active platform ("X algorithm changes ${month}", "what's working on Reddit right now", TikTok/LinkedIn/HN equivalents), update the sections below, and append a dated line under "Refresh log". If a section is older than ~6 weeks, treat it as a hypothesis and re-verify before leaning on it.
 
 ## Reddit
 - Self-promotion is policed by communities, not just the algorithm — value-first, rules-per-subreddit. Newer accounts + low karma get auto-filtered. Comments on live threads outperform cold posts for a new account.
@@ -1155,9 +1158,6 @@ function renderPlatformAlgo(): string {
 
 ## Instagram
 - Reels + saves/shares (not just likes) drive reach; carousels for depth. First-line hook + clear value. Captions + a strong cover frame matter.
-
-## YouTube
-- Title + thumbnail = CTR, the gate to everything; then average-view-duration. Shorts: hook in the first second. Search-intent titles compound over time.
 
 ## Hacker News
 - Show HN: Tue-Thu morning PT; honest, technical, no marketing tone. Front-page is about early upvote velocity + genuine substance; over-polish reads as spam.
@@ -1227,6 +1227,13 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
   // action=add` in BOOT.md Step 4 Path A after foundation completes,
   // using the operator's timezone from USER.md:
   //   - morning_brief: 0 7 * * *
+  //   - midday_pulse: 0 13 * * * (~1pm — LIGHT velocity re-sweep of
+  //                                the 1-2 bet channels for FRESH
+  //                                hot-strike threads since the 7am
+  //                                brief; ADDs to today's calendar,
+  //                                never replaces; one one-tap ping
+  //                                only if something's genuinely hot,
+  //                                else silent)
   //   - evening_recap: 0 20 * * *
   //   - weekly_review: 0 19 * * 0 (Sunday 7pm)
   //   - monthly_reset: 0 6 1 * * (1st of month, 6am — includes
@@ -1338,14 +1345,14 @@ Rules:
 
 I never hand-write curl to ScrapeCreators. I call the typed tool: \`scrape_creators({ path, query })\`. It runs the GET server-side with the \`x-api-key\` header and returns the parsed JSON, and auto-logs the call. \`path\` is one of the paths below; \`query\` is the params object.
 
-- Reddit and HN have dedicated tools (\`research_reddit\`, \`research_reddit_comments\`, \`research_hn\`, \`research_hn_item\`) and X has \`research_x\` — prefer those. Use \`scrape_creators\` for everything else (TikTok / Instagram / YouTube / LinkedIn / profiles / transcripts).
+- Reddit and HN have dedicated tools (\`research_reddit\`, \`research_reddit_comments\`, \`research_hn\`, \`research_hn_item\`) and X has \`research_x\` — prefer those. Use \`scrape_creators\` for everything else (TikTok / Instagram / LinkedIn / profiles / transcripts).
 - Before a paid call, choose the smallest path that answers the question; cap calls to the budget in the active job prompt.
 
 Example:
 
 \`\`\`
 scrape_creators({ path: "/v1/tiktok/search/keyword", query: { query: "bug reporting" } })
-scrape_creators({ path: "/v1/youtube/video/transcript", query: { url: "https://youtu.be/..." } })
+scrape_creators({ path: "/v1/tiktok/video/transcript", query: { url: "https://tiktok.com/..." } })
 \`\`\`
 
 ## Deep Research paths (pass as \`path\` to \`scrape_creators\`)
@@ -1364,14 +1371,6 @@ scrape_creators({ path: "/v1/youtube/video/transcript", query: { url: "https://y
 - Twitter/X tweet details: \`GET /v1/twitter/tweet?url=...\`
 - LinkedIn company: \`GET /v1/linkedin/company?url=...\`
 - LinkedIn company posts: \`GET /v1/linkedin/company/posts?url=...\`
-- YouTube channel: \`GET /v1/youtube/channel?handle=...\` (or channelId / URL)
-- YouTube channel videos: \`GET /v1/youtube/channel-videos?handle=...\`
-- YouTube channel shorts: \`GET /v1/youtube/channel/shorts?handle=...\`
-- YouTube video details: \`GET /v1/youtube/video?url=...\` (views/likes/comments)
-- YouTube transcript: \`GET /v1/youtube/video/transcript?url=...\` (gold for mining)
-- YouTube comments: \`GET /v1/youtube/video/comments?url=...\` (~1k top + ~7k newer) + replies: \`GET /v1/youtube/video/comment/replies?...\`
-- YouTube search: \`GET /v1/youtube/search?query=...\` + hashtag: \`GET /v1/youtube/search/hashtag?hashtag=...\`
-- YouTube trending shorts: \`GET /v1/youtube/shorts/trending\`
 - Credit balance: \`GET /v1/account/credit-balance\`
 
 ## Evidence Standard
@@ -1407,8 +1406,6 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
       return "Turn trend or demo evidence into user-recorded TikTok scripts and shot plans.";
     case "maya-tiktok-format-researcher":
       return "Study TikTok formats for the niche, including videos, slideshows, screenshot sequences, text-on-image explainers, hooks, comments, and CTAs.";
-    case "maya-youtube-researcher":
-      return "Mine YouTube (Shorts + long-form) via ScrapeCreators — comments + transcripts for buyer language, venue spread, title/format patterns. Brief-only, signups-not-likes.";
     case "maya-competitor-researcher":
       return "Find substitutes, competitor positioning, and user complaints.";
     case "maya-channel-strategy-judge":
