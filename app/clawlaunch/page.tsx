@@ -61,7 +61,6 @@ export default function ClawLaunchLandingPage() {
       <Channels />
       <AWeekWithMaya />
       <Compared />
-      <NotThis />
       <FinalCTA />
       <Footer />
     </main>
@@ -746,35 +745,8 @@ function AWeekWithMaya() {
 }
 
 /* -----------------------------------------------------------------
- * NotThis — counter-positioning. Footnote-style list, mono prefix.
- * ----------------------------------------------------------------- */
-const NOT_LIST = [
-  {
-    not: "Not a content scheduler.",
-    body: "You still post manually. She drafts, you ship. Approval is the contract.",
-  },
-  {
-    not: "Not a creator factory.",
-    body: "She won't make you a brand. She finds the people already looking for what you built.",
-  },
-  {
-    not: "Not a growth hack.",
-    body: "No cold DMs, no follow-unfollow, no Reddit account farming. She refuses to recommend Reddit if your karma is too thin to participate.",
-  },
-  {
-    not: "Not a dashboard.",
-    body: "She lives in Telegram. The dashboard is the receipt. You read it on your phone, on the train.",
-  },
-  {
-    not: "Not an autopilot.",
-    body: "She drafts; you decide. If you go quiet for three days she asks if she should pause. She doesn't pretend you're still around.",
-  },
-];
-
-/* -----------------------------------------------------------------
  * Compared — what she actually does. The four things that make her a
- * go-to-market manager, not a reply bot. Paper bg, so it contrasts the
- * dark "What she's not" that follows.
+ * go-to-market manager, not a reply bot.
  * ----------------------------------------------------------------- */
 const COMPARED_LIST: Array<{ her: string; body: string }> = [
   {
@@ -782,16 +754,16 @@ const COMPARED_LIST: Array<{ her: string; body: string }> = [
     body: "Your first hundred users are on Reddit, in HN threads, in a niche subreddit, on LinkedIn, on X. She works all of it — digs up the exact conversations where people have the problem you solve, and tells you which channel's worth your time this week.",
   },
   {
-    her: "Writes it so it sounds like you",
-    body: "She studies how you talk and how each room talks, then hands you replies you'd actually send — helpful first, never a pitch. You read it, tweak it if you want, post it.",
+    her: "Writes it — and makes the visuals — so it sounds like you",
+    body: "She studies how you talk and how each room talks, then hands you the reply you'd actually send — helpful first, never a pitch. Need a TikTok or carousel? She builds the slides from your real screenshots, no stock photos. You read it, tweak it, post it.",
   },
   {
     her: "Keeps you native, not nuked",
-    body: "Spray-and-pray posting gets accounts killed and products blacklisted. She stays native to each community — the right cadence, the right rooms — so you build a reputation instead of torching one.",
+    body: "Spray-and-pray posting gets accounts killed and products blacklisted. She stays native to each community — the right cadence, the right rooms, your account in your hands — so you build a reputation instead of torching one.",
   },
   {
-    her: "Tells you what actually converted",
-    body: "Engagement isn't the goal — signups are. Every link she hands you is tracked, so you find out which post turned into a real user, and she leans into what's working.",
+    her: "Proves which posts brought signups",
+    body: "Engagement isn't the goal — customers are. Every link she hands you is tracked end to end, so you find out which post turned into a real signup, not just a like. She doubles down on what actually converts and drops what doesn't.",
   },
 ];
 
@@ -804,11 +776,17 @@ function Compared() {
       <div className="mx-auto max-w-7xl">
         <RevealOnView>
           <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
-            What she actually does
+            What she does
           </p>
-          <h2 className="mb-14 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
+          <h2 className="mb-6 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
             She runs your go-to-market. You ship the product.
           </h2>
+          <p className="mb-14 max-w-2xl text-[16px] leading-[1.6] text-[#0a0a0a]/60 sm:text-[17px]">
+            The tools for shipping fast all multiplied. The tool for getting
+            those first hundred users never showed up. That&apos;s Maya — she
+            finds the people who want what you built, talks to them in your
+            voice, and shows you which conversations became customers.
+          </p>
         </RevealOnView>
         <ul className="grid grid-cols-1 gap-x-12 gap-y-10 md:grid-cols-2">
           {COMPARED_LIST.map((item, i) => (
@@ -818,41 +796,6 @@ function Compared() {
                   {item.her}
                 </p>
                 <p className="mt-4 text-[14px] leading-[1.55] text-[#0a0a0a]/65">
-                  {item.body}
-                </p>
-              </li>
-            </RevealOnView>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-}
-
-function NotThis() {
-  return (
-    <section className="relative bg-[#0a0a0a] px-6 py-28 text-[#fbfaf6] sm:px-10 sm:py-40">
-      <div className="mx-auto max-w-7xl">
-        <RevealOnView>
-          <h2 className="mb-14 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
-            What she&apos;s not.
-          </h2>
-        </RevealOnView>
-        <RevealOnView delay={0.08}>
-          <p className="mb-20 max-w-3xl text-[17px] leading-[1.6] text-white/70 sm:text-[18px]">
-            Tools for shipping fast multiplied.
-            <br />
-            Tools for finding the first hundred users didn&apos;t.
-          </p>
-        </RevealOnView>
-        <ul className="grid grid-cols-1 gap-x-12 gap-y-10 md:grid-cols-2">
-          {NOT_LIST.map((item, i) => (
-            <RevealOnView key={i} delay={0.1 + i * 0.06}>
-              <li className="border-t border-white/15 pt-6">
-                <p className="font-display italic text-[1.7rem] leading-[1.1]">
-                  {item.not}
-                </p>
-                <p className="mt-4 text-[14px] leading-[1.55] text-white/65">
                   {item.body}
                 </p>
               </li>

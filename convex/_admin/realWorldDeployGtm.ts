@@ -133,6 +133,13 @@ export const seedGtmAgentAndApp = internalMutation({
     channelPreference: v.optional(v.union(v.literal("whatsapp"), v.literal("imessage"), v.literal("web"), v.literal("telegram"))),
     // Verification/test deploys: force all-platform coverage in the workspace.
     verifyAllPlatforms: v.optional(v.boolean()),
+    // Slideshow + conversion test fields — exercise the mobile path + the
+    // closed-loop signup attribution end-to-end.
+    appType: v.optional(v.union(v.literal("web"), v.literal("mobile"))),
+    appStoreUrl: v.optional(v.string()),
+    playStoreUrl: v.optional(v.string()),
+    conversionKind: v.optional(v.string()),
+    signupUrl: v.optional(v.string()),
   },
   handler: async (
     ctx,
@@ -182,6 +189,11 @@ export const seedGtmAgentAndApp = internalMutation({
       canPostTikTokManually: true,
       canPostInstagramManually: true,
       excludedAudiences: [],
+      appType: args.appType,
+      appStoreUrl: args.appStoreUrl,
+      playStoreUrl: args.playStoreUrl,
+      conversionKind: args.conversionKind,
+      signupUrl: args.signupUrl,
       createdAt: now,
       updatedAt: now,
     });
@@ -1064,6 +1076,12 @@ export const run = internalAction({
     skipResearch: v.optional(v.boolean()),
     // Set true for a coverage test: Maya exercises EVERY platform end-to-end.
     verifyAllPlatforms: v.optional(v.boolean()),
+    // Slideshow + conversion test fields (mobile path + signup attribution).
+    appType: v.optional(v.union(v.literal("web"), v.literal("mobile"))),
+    appStoreUrl: v.optional(v.string()),
+    playStoreUrl: v.optional(v.string()),
+    conversionKind: v.optional(v.string()),
+    signupUrl: v.optional(v.string()),
   },
   handler: async (
     ctx,
@@ -1095,6 +1113,11 @@ export const run = internalAction({
         weekGoal: args.weekGoal ?? "signups",
         budgetUsd: args.budgetUsd ?? 0.5,
         verifyAllPlatforms: args.verifyAllPlatforms,
+        appType: args.appType,
+        appStoreUrl: args.appStoreUrl,
+        playStoreUrl: args.playStoreUrl,
+        conversionKind: args.conversionKind,
+        signupUrl: args.signupUrl,
       }
     );
     console.log(
