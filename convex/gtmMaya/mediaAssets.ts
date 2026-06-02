@@ -46,8 +46,12 @@ import { authenticate } from "./openclaw/inboundCallback";
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024; // 25 MB
 const MAX_REFERENCE_ASSETS = 4;
 const MAX_DELIVER_ASSETS = 12;
+// Nano Banana 2 = Gemini 3.1 Flash Image (launched 2026-02-26): ~50% cheaper
+// than 2.5 Flash Image and the current Flash-tier image model. Routed through
+// OpenRouter (modalities:["image","text"]) so slide-gen shares Maya's single
+// OPENROUTER_API_KEY + telemetry profile, instead of a separate GEMINI key.
 const SLIDE_MODEL =
-  process.env.MAYA_GTM_SLIDE_MODEL ?? "gemini-2.5-flash-image";
+  process.env.MAYA_GTM_SLIDE_MODEL ?? "google/gemini-3.1-flash-image-preview";
 
 const MEDIA_KINDS = [
   "screenshot",
@@ -303,10 +307,9 @@ export const generateSlide = internalAction({
     platform: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<GenerateResult> => {
-    const apiKey =
-      process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      return { ok: false as const, reason: "gemini_key_missing" };
+      return { ok: false as const, reason: "openrouter_key_missing" };
     }
 
     const refIds = (args.referenceStorageIds ?? []).slice(
@@ -322,8 +325,11 @@ export const generateSlide = internalAction({
       library.some((e) => e.storageId === id)
     );
 
+    // OpenRouter image-input content parts: { type:"image_url", image_url:{ url:
+    // "data:<mime>;base64,<...>" } }. The user's REAL screenshots, base64'd.
     const imageParts: Array<{
-      inlineData: { mimeType: string; data: string };
+      type: "image_url";
+      image_url: { url: string };
     }> = [];
     for (const id of ownedRefs) {
       const entry = library.find((e) => e.storageId === id);
@@ -334,9 +340,9 @@ export const generateSlide = internalAction({
       if (!imgRes.ok) continue;
       const imgBytes = await imgRes.arrayBuffer();
       imageParts.push({
-        inlineData: {
-          mimeType: entry.mimeType,
-          data: arrayBufferToBase64(imgBytes),
+        type: "image_url",
+        image_url: {
+          url: `data:${entry.mimeType};base64,${arrayBufferToBase64(imgBytes)}`,
         },
       });
     }
@@ -362,53 +368,57 @@ Slide intent from the founder's manager: ${args.prompt}
 
 Output a single image sized for ${platform} (vertical 9:16 / 1080x1920 feel). Modern, clean, native-to-the-platform — not corporate, not stock-photo, not AI-slop. Return the image.`;
 
+    // OpenRouter image generation: /chat/completions with modalities including
+    // "image"; the generated image returns in message.images[].image_url.url as
+    // a base64 data URL.
     let res: Response;
     try {
-      res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${SLIDE_MODEL}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              { role: "user", parts: [...imageParts, { text: fullPrompt }] },
-            ],
-          }),
-        }
-      );
+      res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: SLIDE_MODEL,
+          modalities: ["image", "text"],
+          messages: [
+            { role: "user", content: [...imageParts, { type: "text", text: fullPrompt }] },
+          ],
+        }),
+      });
     } catch (err) {
       return {
         ok: false as const,
-        reason: `gemini_fetch_error: ${(err as Error).message}`,
+        reason: `slide_fetch_error: ${(err as Error).message}`,
       };
     }
     if (!res.ok) {
-      return { ok: false as const, reason: `gemini_${res.status}` };
+      return { ok: false as const, reason: `slide_http_${res.status}` };
     }
     const payload = (await res.json()) as {
-      candidates?: Array<{
-        content?: {
-          parts?: Array<{
-            inlineData?: { mimeType?: string; data?: string };
-            inline_data?: { mime_type?: string; data?: string };
-          }>;
+      choices?: Array<{
+        message?: {
+          images?: Array<{ image_url?: { url?: string } }>;
         };
       }>;
     };
-    const parts = payload.candidates?.[0]?.content?.parts ?? [];
+    // Parse the first returned image's base64 out of its data URL.
     let outMime = "image/png";
     let outData: string | undefined;
-    for (const part of parts) {
-      const data = part.inlineData?.data ?? part.inline_data?.data;
-      if (data) {
-        outMime =
-          part.inlineData?.mimeType ?? part.inline_data?.mime_type ?? outMime;
-        outData = data;
+    const images = payload.choices?.[0]?.message?.images ?? [];
+    for (const img of images) {
+      const dataUrl = img.image_url?.url;
+      if (!dataUrl) continue;
+      const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (m) {
+        outMime = m[1] ?? outMime;
+        outData = m[2];
         break;
       }
     }
     if (!outData) {
-      return { ok: false as const, reason: "gemini_no_image_returned" };
+      return { ok: false as const, reason: "slide_no_image_returned" };
     }
 
     const binary = atob(outData);

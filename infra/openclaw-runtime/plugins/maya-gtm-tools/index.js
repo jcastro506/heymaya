@@ -1272,7 +1272,7 @@ export default defineToolPlugin({
       name: "generate_slide_image",
       label: "Generate Slide Image",
       description:
-        "Generate ONE TikTok/IG slide grounded in the user's REAL screenshot(s). For any slide that shows the product, pass referenceAssetIds (from search_my_media) — the model places that screenshot UNCHANGED and only frames/captions around it (no fabricated UI). REQUIRED: prompt (the slide's intent — hook, feature, before/after, CTA). Optional: referenceAssetIds, slideText (caption to overlay), platform (tiktok|instagram). A carousel = call this once per slide. Returns { ok, assetId, grounded }. COGS ~$0.04/image — log it with log_cost (provider gemini).",
+        "Generate ONE TikTok/IG slide grounded in the user's REAL screenshot(s). For any slide that shows the product, pass referenceAssetIds (from search_my_media) — the model places that screenshot UNCHANGED and only frames/captions around it (no fabricated UI). REQUIRED: prompt (the slide's intent — hook, feature, before/after, CTA). Optional: referenceAssetIds, slideText (caption to overlay), platform (tiktok|instagram). A carousel = call this once per slide. Returns { ok, assetId, grounded }. COGS ~$0.07/image (Gemini 3.1 Flash Image / nano-banana 2, via OpenRouter) — log it with log_cost (provider openrouter).",
       parameters: Type.Object({
         prompt: Type.String(),
         referenceAssetIds: Type.Optional(Type.Array(Type.String())),
