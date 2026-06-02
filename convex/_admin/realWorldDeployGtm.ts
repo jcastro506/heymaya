@@ -1773,6 +1773,48 @@ export const peekTimeline = internalQuery({
   },
 });
 
+/** Dump the FULL content of saved calendar events (the turn-key payload).
+ *  npx convex run _admin/realWorldDeployGtm:peekCalendarFull */
+export const peekCalendarFull = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    const all = await ctx.db.query("creators").collect();
+    const tests = all
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (tests.length === 0) return { found: false };
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", tests[0]._id))
+      .first();
+    if (!agent) return { found: true, agent: null };
+    const events = await ctx.db
+      .query("gtmCalendarEvents")
+      .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+      .collect();
+    const tz = agent.timezone;
+    return events
+      .sort((a, b) => a.startsAtMs - b.startsAtMs)
+      .map((e) => ({
+        title: e.title,
+        kind: e.kind ?? "untyped",
+        status: e.status,
+        when: new Date(e.startsAtMs).toLocaleString("en-US", {
+          timeZone: tz,
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+        openUrl: e.openUrl ?? null,
+        successMetric: e.successMetric ?? null,
+        description: e.description ?? null,
+        draftText: e.draftText ?? null,
+      }));
+  },
+});
+
 export const peekResearchLanded = internalQuery({
   args: {},
   handler: async (ctx): Promise<unknown> => {

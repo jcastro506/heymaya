@@ -21,8 +21,9 @@ import { validateOutboundText } from "../outboundFirewall";
 
 describe("validateOutboundText — voice-contract + slop firewall", () => {
   it("returns ok on a clean manager-voice message", () => {
+    // Clean = human punctuation: no em-dashes, no rhetorical colons.
     const text =
-      "Hey Josh — Maya here. Spent the last hour digging into your product and the pattern is clear: your buyer lives on Reddit, specifically r/LocalLLaMA + r/ollama. I lined up 23 threads worth replying to over the next two weeks. Your calendar's filling up — first task is tomorrow at 10am. Want me to walk you through the week before I lock it in?";
+      "Hey Josh, Maya here. Spent the last hour digging into your product and the pattern's clear. Your buyer lives on Reddit, specifically r/LocalLLaMA + r/ollama. I lined up 23 threads worth replying to over the next two weeks. Your calendar's filling up, first task is tomorrow at 10am. Want me to walk you through the week before I lock it in?";
     const result = validateOutboundText(text);
     expect(result.ok).toBe(true);
     expect(result.failures).toEqual([]);
@@ -127,6 +128,40 @@ describe("validateOutboundText — voice-contract + slop firewall", () => {
     expect(result.ok).toBe(true);
   });
 
+  // Operator directive 2026-06-02 — em-dash + colon-header are AI tells.
+  it("flags an em-dash as an ai_punctuation tell", () => {
+    const r = validateOutboundText("let the soil dry out — then water it");
+    expect(r.ok).toBe(false);
+    expect(r.failures.some((f) => f.category === "ai_punctuation")).toBe(true);
+  });
+
+  it("flags a colon used as a header/label", () => {
+    const r = validateOutboundText("Here's the play: we go Reddit first.");
+    expect(r.ok).toBe(false);
+    expect(r.failures.some((f) => f.category === "ai_punctuation")).toBe(true);
+  });
+
+  it("does NOT flag colons in URLs, times, or ratios (exemptions)", () => {
+    for (const ok of [
+      "check it out at https://sprout.app and lmk",
+      "first move's tomorrow at 9:30am, takes 2 min",
+      "the watering interval swings 2:1 between rooms",
+    ]) {
+      const r = validateOutboundText(ok);
+      expect(
+        r.failures.some((f) => f.category === "ai_punctuation"),
+        `should not flag: ${ok}`
+      ).toBe(false);
+    }
+  });
+
+  it("does NOT flag normal compound hyphens (well-meaning, low-pressure)", () => {
+    const r = validateOutboundText(
+      "a well-meaning, low-pressure plant app for new plant parents"
+    );
+    expect(r.failures.some((f) => f.category === "ai_punctuation")).toBe(false);
+  });
+
   it("handles very long strings without crashing", () => {
     const text = "Clean manager voice. ".repeat(500); // ~10000 chars
     const result = validateOutboundText(text);
@@ -175,7 +210,7 @@ describe("validateOutboundText — voice-contract + slop firewall", () => {
     // "subreddit", "tweet", "thread" are fine; "subagent" / "boot kickoff"
     // are implementation-internals and banned.
     const text =
-      "Reddit's where your buyer lives. Specifically r/LocalLlama — most active subreddit for local-model enthusiasts. I'll have drafts ready for the M5 hardware war thread by tomorrow.";
+      "Reddit's where your buyer lives. Specifically r/LocalLlama, the most active subreddit for local-model enthusiasts. I'll have drafts ready for the M5 hardware war thread by tomorrow.";
     const result = validateOutboundText(text);
     expect(result.ok).toBe(true);
     expect(result.failures).toEqual([]);
@@ -193,7 +228,7 @@ describe("validateOutboundText — voice-contract + slop firewall", () => {
       "I saw your note about local LLM workflows on Mac feeling disjointed.",
       "ModelHub helps with local language model management.",
       "There's a thread about large language model performance on M3 Macs.",
-      "AI tools for developers — pricing matters here.",
+      "AI tools for developers. pricing matters here.",
       "Reddit's r/LocalLLaMA is full of LLM enthusiasts.",
     ];
     for (const text of productDomainMessages) {

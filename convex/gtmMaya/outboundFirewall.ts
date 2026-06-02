@@ -173,10 +173,78 @@ export interface ValidateOutboundResult {
       | "slop_phrase"
       // Sprint — structural+voice LLM pass categories.
       | "structural_ai_tell"
-      | "voice_divergence";
+      | "voice_divergence"
+      // Deterministic punctuation AI-tells (em-dash, colon-header).
+      | "ai_punctuation";
     matched: string;
     excerpt: string;
   }>;
+}
+
+/**
+ * Deterministic AI-punctuation tells (operator directive 2026-06-02): the
+ * em-dash and the colon-as-header are the two most recognizable "an AI wrote
+ * this" markers. Real people texting on their phone use periods, commas, and
+ * line breaks instead. We flag them deterministically (a regex IS the right
+ * tool here — these are exact characters, not a fuzzy vibe judgment), so a
+ * tripped draft/message is rejected and Maya rewrites it as a human would.
+ *
+ * Exemptions (legitimate colon uses we must NOT flag): URLs (`https://`),
+ * clock times (`9:30`), ratios (`2:1`), and emoji shortcodes (`:tada:`).
+ */
+function detectAiPunctuation(
+  text: string
+): ValidateOutboundResult["failures"] {
+  const failures: ValidateOutboundResult["failures"] = [];
+  const push = (matched: string, idx: number) => {
+    const start = Math.max(0, idx - 30);
+    const end = Math.min(text.length, idx + 30);
+    failures.push({
+      category: "ai_punctuation",
+      matched,
+      excerpt: text.slice(start, end).trim(),
+    });
+  };
+
+  // 1. Em-dash / en-dash — never needed in casual social prose; hard tell.
+  const dashRe = /[—–]/g;
+  let m: RegExpExecArray | null;
+  let dashCount = 0;
+  while ((m = dashRe.exec(text)) !== null && dashCount < 5) {
+    push("— (em-dash)", m.index);
+    dashCount += 1;
+  }
+
+  // 2. Spaced hyphen used as a dash mid-sentence ("too - you share") — the
+  //    ASCII stand-in for an em-dash. Word, space-hyphen-space, word. (A
+  //    markdown bullet "- " at line start has a leading newline/start, not a
+  //    word char, so it's not matched.)
+  const spacedDashRe = /\S \- \S|\S \-\S|\S\- \S/g; // " - " between non-spaces
+  let sd = 0;
+  while ((m = spacedDashRe.exec(text)) !== null && sd < 5) {
+    // skip if it's a numeric range like "3 - 5" (acceptable)
+    if (!/\d \- \d/.test(m[0])) {
+      push("- (hyphen used as a dash)", m.index);
+      sd += 1;
+    }
+  }
+
+  // 3. Colon-as-header ("Here's the wedge:", "Today:") — a colon followed by
+  //    whitespace, preceded by a letter. EXEMPT: URL (`:/`), time/ratio (digit
+  //    on at least one side with no space), emoji shortcode handled by the
+  //    letter-before requirement + the `:/` skip.
+  const colonRe = /[A-Za-z]:(\s|$)/g;
+  let c = 0;
+  while ((m = colonRe.exec(text)) !== null && c < 5) {
+    const at = m.index + 1; // position of the colon
+    const next = text[at + 1] ?? "";
+    // URL ("://") or time/ratio (digit right after colon) → exempt.
+    if (next === "/" || /\d/.test(next)) continue;
+    push(": (colon used as a header/label)", m.index);
+    c += 1;
+  }
+
+  return failures;
 }
 
 function findMatches(
@@ -213,6 +281,7 @@ export function validateOutboundText(text: string): ValidateOutboundResult {
     ...findMatches(text, BANNED_INTERNAL_TERMS, "internal_term"),
     ...findMatches(text, BANNED_AI_REFERENCES, "ai_reference"),
     ...findMatches(text, BANNED_SLOP_PHRASES, "slop_phrase"),
+    ...detectAiPunctuation(text),
   ];
   return { ok: failures.length === 0, failures };
 }
