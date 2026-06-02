@@ -299,6 +299,23 @@ export const teardown_deleteProfile = internalAction({
   },
 });
 
+/**
+ * Generic raw GET probe for ad-hoc S1 diagnosis (e.g. /v1/connect/pending-data,
+ * /v1/profiles, /v1/accounts/{id}). Path is appended after /api.
+ */
+export const stepRawGet = internalAction({
+  args: {
+    path: v.string(),
+    query: v.optional(v.record(v.string(), v.string())),
+  },
+  handler: async (_ctx, args): Promise<SmokeResult> => {
+    const client = makeClient();
+    return probe(`GET ${args.path}`, { path: args.path, query: args.query }, () =>
+      client.request(args.path, { method: "GET", query: args.query })
+    );
+  },
+});
+
 /** Best-effort id extraction from an unknown response envelope. */
 function extractId(raw: unknown, keys: string[]): string | null {
   if (raw === null || typeof raw !== "object") return null;
