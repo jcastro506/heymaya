@@ -220,7 +220,27 @@ export const pushApprovedCalendarEvents = internalAction({
     eventIds: string[];
     errors: string[];
     needsOAuth: boolean;
+    mirrorDisabled?: boolean;
   }> => {
+    // Maya v2: the Google Calendar flood is RETIRED. The day's plan is Maya's
+    // internal auto-post queue, rendered in the web Today view. This push is a
+    // no-op UNLESS the founder explicitly turned on the off-by-default
+    // googleCalendarMirrorEnabled toggle (suppressed from onboarding entirely;
+    // the flag stays dormant for the rare founder who opts in via Settings).
+    const mirrorOn = await ctx.runQuery(
+      internal.gtmMaya.calendarWrite.isGoogleMirrorEnabled,
+      { agentId: args.agentId }
+    );
+    if (!mirrorOn) {
+      return {
+        pushed: 0,
+        failed: 0,
+        eventIds: [],
+        errors: [],
+        needsOAuth: false,
+        mirrorDisabled: true,
+      };
+    }
     // Fetch the OAuth token. If missing, return cleanly so the caller
     // can prompt the operator to connect their Google Calendar.
     let accessToken: string;
@@ -464,5 +484,110 @@ export const getMyCalendarEvents = query({
       .withIndex("by_account", (q) => q.eq("accountId", creator._id))
       .order("desc")
       .take(40);
+  },
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// Maya v2 (S3) — the auto-post execution engine.
+//
+// gtmCalendarEvents is no longer a Google-Calendar staging buffer; it is
+// Maya's internal auto-post queue. A 'queued' row fires publishQueuedEvent,
+// which runs every gate (ban-safety, plan caps, the S2.7 three-verdict
+// autonomous-publish gate, the S3 dedup ledger, live account health) and
+// either auto-publishes via Zernio (status 'posting') or downgrades to
+// 'needs_confirm' (a one-tap founder approval). confirmEventLanded is the
+// 24h re-poll that flips 'posting' -> 'published' (NEVER off the POST 200).
+// ════════════════════════════════════════════════════════════════════════
+
+/** The 2 ban-safety channels: always one-tap-confirm, never auto-published. */
+const MANUAL_CONFIRM_CHANNELS = new Set(["reddit", "tiktok"]);
+
+export type PublishMode = "auto" | "manual_confirm";
+
+/**
+ * Ban-safety publish-mode decision (pure). Reddit + TikTok are ALWAYS
+ * manual-confirm (account-ban risk AND the technical reality: Reddit >50%
+ * fail, TikTok legal consent). Everything else is eligible for auto-publish
+ * (still subject to the other gates).
+ */
+export function decidePublishMode(channel: string): PublishMode {
+  return MANUAL_CONFIRM_CHANNELS.has(channel) ? "manual_confirm" : "auto";
+}
+
+export interface AutoPostGateInput {
+  mode: PublishMode;
+  planAllowsAutoPost: boolean;
+  autoPublishAllowed: boolean; // S2.7 three-verdict gate
+  dedupAllowed: boolean; // S3 engagement-ledger gate
+  healthCanPost: boolean;
+}
+
+export type AutoPostAction = "auto" | "needs_confirm";
+
+/**
+ * Compose the final publish action (pure, fail-closed). Auto-publish ONLY
+ * when the channel is auto-eligible AND the plan allows AND the S2.7 gate
+ * passed AND the dedup gate passed AND the account is healthy. ANY miss
+ * downgrades to needs_confirm (a one-tap card), never a silent drop and
+ * never a forced publish.
+ */
+export function composeAutoPostAction(
+  input: AutoPostGateInput
+): { action: AutoPostAction; reasons: string[] } {
+  const reasons: string[] = [];
+  if (input.mode === "manual_confirm") reasons.push("ban-safety channel (reddit/tiktok)");
+  if (!input.planAllowsAutoPost) reasons.push("plan does not allow auto-post");
+  if (!input.autoPublishAllowed) reasons.push("voice/slop/safety gate not passed");
+  if (!input.dedupAllowed) reasons.push("already engaged (dedup)");
+  if (!input.healthCanPost) reasons.push("account unhealthy / not connected");
+  return { action: reasons.length === 0 ? "auto" : "needs_confirm", reasons };
+}
+
+export const isGoogleMirrorEnabled = internalQuery({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (ctx, args): Promise<boolean> => {
+    const agent = await ctx.db.get(args.agentId);
+    return agent?.googleCalendarMirrorEnabled === true;
+  },
+});
+
+interface AutoPostJson {
+  channel: string;
+  zernioAccountId?: string;
+  zernioPostId?: string;
+  mode?: PublishMode;
+  scheduledForIso?: string;
+  publishConfirmedAt?: number;
+  platformPostUrl?: string;
+  targetExternalId?: string;
+  targetCommentId?: string;
+  lastError?: string;
+}
+
+export const markCalendarEventAutoPost = internalMutation({
+  args: {
+    eventId: v.id("gtmCalendarEvents"),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("posting"),
+      v.literal("published"),
+      v.literal("failed"),
+      v.literal("needs_confirm")
+    ),
+    autoPostJson: v.string(),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    await ctx.db.patch(args.eventId, {
+      status: args.status,
+      autoPostJson: args.autoPostJson,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const getCalendarEventForAgent = internalQuery({
+  args: { eventId: v.id("gtmCalendarEvents") },
+  handler: async (ctx, args): Promise<Doc<"gtmCalendarEvents"> | null> => {
+    return await ctx.db.get(args.eventId);
   },
 });

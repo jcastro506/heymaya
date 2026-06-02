@@ -132,6 +132,7 @@ import type * as gtmMaya_postResults from "../gtmMaya/postResults.js";
 import type * as gtmMaya_privateBeta from "../gtmMaya/privateBeta.js";
 import type * as gtmMaya_productionReadiness from "../gtmMaya/productionReadiness.js";
 import type * as gtmMaya_productionReality from "../gtmMaya/productionReality.js";
+import type * as gtmMaya_publishEngine from "../gtmMaya/publishEngine.js";
 import type * as gtmMaya_publishWorkflow from "../gtmMaya/publishWorkflow.js";
 import type * as gtmMaya_queryExpansion from "../gtmMaya/queryExpansion.js";
 import type * as gtmMaya_recordPublished from "../gtmMaya/recordPublished.js";
@@ -419,6 +420,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/privateBeta": typeof gtmMaya_privateBeta;
   "gtmMaya/productionReadiness": typeof gtmMaya_productionReadiness;
   "gtmMaya/productionReality": typeof gtmMaya_productionReality;
+  "gtmMaya/publishEngine": typeof gtmMaya_publishEngine;
   "gtmMaya/publishWorkflow": typeof gtmMaya_publishWorkflow;
   "gtmMaya/queryExpansion": typeof gtmMaya_queryExpansion;
   "gtmMaya/recordPublished": typeof gtmMaya_recordPublished;
