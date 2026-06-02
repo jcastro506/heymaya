@@ -343,23 +343,25 @@ export async function judgeAllChannels(
     product_hunt: "competitor",
   };
   // The live set of channels that get scored → persisted into
-  // gtmChannelScores → surfaced in the onboarding picker. Reconciled to
-  // the foundation channel-scorecard taxonomy: Reddit / X / LinkedIn
-  // (full engagement) + TikTok (brief-mode, no genai video). YouTube is
-  // excluded (no native slideshow; vestigial) and product_hunt is
-  // excluded (single-day launch event, not steady-state acquisition and
-  // not in the product vision). Both literals remain in the GtmChannel
-  // type / schema union for backward compat with historical rows, but
-  // are deliberately NOT scored or surfaced here. HN is now a first-class
-  // scored channel — the research workers emit `hn` evidence cards
-  // (relabeled from the legacy `google`+hn:* tagging) so the judge can
-  // score it directly.
+  // gtmChannelScores → surfaced in the onboarding picker. The
+  // foundation channel-scorecard taxonomy is six first-class,
+  // equal-depth channels: Reddit / X / HN / LinkedIn / TikTok /
+  // YouTube. TikTok and YouTube are Brief-only channels (Maya hands
+  // over scripts + filming notes; no UGC creation). HN is a
+  // first-class scored channel — the research workers emit `hn`
+  // evidence cards (relabeled from the legacy `google`+hn:* tagging)
+  // so the judge can score it directly. product_hunt is the only
+  // excluded literal (single-day launch event, not steady-state
+  // acquisition and not in the product vision); it remains in the
+  // GtmChannel type / schema union for backward compat with historical
+  // rows but is deliberately NOT scored or surfaced here.
   const channels: ReadonlyArray<GtmChannel> = opts?.channels ?? [
     "reddit",
     "x",
     "hn",
     "linkedin",
     "tiktok",
+    "youtube",
   ];
 
   const results = await Promise.all(

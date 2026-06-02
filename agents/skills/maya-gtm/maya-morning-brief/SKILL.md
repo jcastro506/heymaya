@@ -17,12 +17,21 @@ The flagship operator-facing output. Every morning, the founder gets one Telegra
 
 ## Pre-conditions
 
+0. **`get_my_foundation({})` is the FIRST read of the morning — before anything else.** This returns the persisted ICP model the day is built FROM: the buyer map (`icpDescription`, `buyerJourneyStages[].whereTheyHangOut` + `.intentLanguage`, `intentPhrases`, `trustedVoices`), the per-channel `icpKnowledge` (venues / watch / complaints[quote+URL] / topics / nativeStyle) + `styleExemplars` for every bet channel, and the founder `voiceProfile` fingerprint. **The morning cron does NOT re-derive the ICP** — it references this stored knowledge and checks only what is LIVE on the bet channels against it. If `buyerMap` is null the foundation never landed: don't fabricate an ICP, send the holding message and re-trigger foundation. The voiceProfile + per-channel styleExemplars are also what `maya-voice-matcher` reads (Anchor A / Anchor B) when grading every draft below.
 1. `maya-continuous-research` has run within the last 4h.
 2. `gtmActionLog` is checked for yesterday's brief — was it acknowledged? Acted on?
 3. `gtmNicheLearnings` is read — which subreddits / accounts / times Maya has learned weight higher.
 4. `gtmTargetThreads` filtered to tier=T1 OR T2, status=queued, sorted by `velocityScore` desc.
 5. `get_my_attribution({ windowDays: 1 })` is read for the yesterday fold — what converted in the last day (per-post clicks → signups). **The tool ONLY time-scopes results when you pass `windowDays`**, so the brief MUST pass `windowDays: 1` to get genuinely last-day numbers; phrase them as **"in the last day"**, NEVER "yesterday". Returns `{ posts: [{ draftId, platform, title, clicks, conversionsByKind: { signup, demo, feedback, revenue }, signups, createdAt }], totals: { clicks, signups, demos, feedback, revenue, untiedSignups }, windowDays }`. `title` is the link/draft the founder prepared, not a verified published post — phrase as "the link you shared on {platform}" / "your {platform} reply". Used to fold the last day's results into today's framing and tilt the plan toward what's driving signups. Empty `posts` + all-zero `totals` → skip silently, no attribution mention.
    - **Temporal-grounding rule (hard).** NEVER attach a time-word to a number unless it came from a `windowDays`-scoped call. The yesterday fold uses `windowDays: 1` → "in the last day". A lifetime call (no `windowDays`) may only be described as "to date".
+
+## Ground today in the stored ICP, validate against live
+
+**The stored ICP map says WHERE the buyer lives and HOW they talk; the live sweep says WHAT is hot today. The day is the intersection.** Before tier-sorting the queued threads:
+
+- **Validate each surfaced thread against the stored buyer map.** Confirm it sits in a `buyerJourneyStages[].whereTheyHangOut` venue (or a `channelScorecard.icpKnowledge.venues` entry) OR that it matches an `intentPhrase` / `buyerJourneyStages[].intentLanguage`. A thread that's hot today but lives nowhere the buyer hangs out and matches no intent language is noise — **demote it** (or drop it), even if its `velocityScore` is high.
+- **The cron references stored knowledge, it does not re-derive it.** Do NOT re-research the ICP each morning — read it from `get_my_foundation`. Live channel state only decides WHICH stored venues/intents are active today, never replaces the persisted model.
+- **Every copy-paste draft is built from stored language.** Each `YOUR REPLY` / post draft must use the founder's stored `intentLanguage` + native phrasing (from `intentPhrases` / the channel's `icpKnowledge.nativeStyle` + `styleExemplars`) and match the persisted `voiceProfile` fingerprint — see the anti-slop gate below.
 
 ## Required reads
 
@@ -76,7 +85,7 @@ The single most important thing. Always cited. "Top priority: [URL] — replying
 
 A real growth day is NOT 1-2 items. The research-backed shape (see `maya-calendar-populator` § 2 for the cited floor) is a genuinely active day: the **intent** of **~10-15 substantive comments/replies** across the day plus **a post every other day** (cadence per channel) — once the account is warm. Maya builds today's plan toward that intent. But this is **quality- and safety-gated, never a hard number to hit**:
 
-- **Volume RAMPS with account warmth — this is the ban-safety floor, non-negotiable.** Ban-safety is our moat; our own cadence has to protect it. A brand-new Reddit/HN/X account does FEWER — a handful of substantive comments and ZERO promotional/link activity — scaling up only as it warms. Never volume-spam a fresh account with links; that gets it shadowbanned and burns the channel. Maya reads the warmup/clock-gating signals already used by `maya-calendar-populator` (§ 8 account warmup gating, § 8b launch preconditions, Reddit karma floor, account age) and caps today's count accordingly. A 3-day-old account that "should" do 12 replies does 4-5, all pure substance.
+- **Volume RAMPS with account warmth — PER CHANNEL — this is the ban-safety floor, non-negotiable.** Ban-safety is our moat; our own cadence has to protect it. **Warmth is read from `channelWarmthJson` (via `get_my_foundation` / GTM.md), keyed per bet channel — NOT inferred from one global "account age".** Each channel carries its own `state` (`new_needs_warmup` → `warming` → `ready`/`warm`), `accountAgeDays`, and baseline (karma/followers/postCount). A brand-new Reddit/HN/X account (state `new_needs_warmup`) does FEWER — a handful of substantive comments and ZERO promotional/link activity — scaling up only as that channel warms. A channel already `warm`/`ready` goes straight to its full ramp THE SAME DAY a sibling channel is still cold. Never volume-spam a fresh account with links; that gets it shadowbanned and burns the channel. Maya reads `channelWarmthJson[channel].state` plus the warmup/clock-gating signals used by `maya-calendar-populator` (§ 8 account warmup gating, § 8b launch preconditions, Reddit karma floor) and caps each channel's count accordingly. A channel whose state is `warming` and "should" do 12 replies does 4-5, all pure substance.
 - **Quality always over volume.** A few genuinely-helpful, on-voice comments beat 15 generic ones. Never pad with low-tier (T3) threads to hit a count — if there are only 4 real T1/T2 targets today, today is a 4-target day, said honestly. Lazy/filler replies are a documented mistake (deboost + spam-detection risk); Maya would rather ship a smaller plan than a padded one.
 - **Calibrated to operator capacity (USER.md available minutes).** If the operator has 30 min today, Maya plans the highest-leverage ~3-4 reps that fit, not 15. The full-day intent is the ceiling the *channels + warmth* support; the operator's minutes are the ceiling Maya actually plans to. Lower of the two wins.
 - **Honest thin day stands.** If the signal genuinely isn't there, the day is graded Thin/Warmup and the plan reflects it — no manufacturing a full day out of weak threads.
@@ -91,19 +100,35 @@ Maya spreads effort across the bet channels (from GTM.md) over the WEEK, by judg
 - **Where today's best signal actually is** — if the morning's hottest T1 threads are all on Reddit today, today tilts Reddit even if X is the always-on base; tomorrow may tilt back.
 - **Not over-concentrating any one channel** — a week that's 90% Reddit and ignores the other bets is a worse week than one that gives each bet channel its natural share. Maya checks recent days' `gtmActionLog` to see what's been under-served and balances toward it.
 
-The brief reflects this implicitly (today's mix reads naturally), and the rolling-week shape lives in `maya-calendar-populator`. Maya's job here is to make TODAY the right slice of that week, not a clone of yesterday.
+The brief reflects this implicitly (today's mix reads naturally). **There is no onboarding week and no populator-owned "rolling week" — the morning brief OWNS day-to-day planning.** Every morning Maya builds the FULL day from stored ICP knowledge + per-channel warmth + what's live today; she doesn't defer the day's shape to anything else. `maya-calendar-populator` is the typed-event writer she calls, not a separate week planner. On **day-1-after-onboarding**, today picks up from the single turn-key first move onboarding left in the calendar — Maya builds the rest of that day around it (don't re-do onboarding's research; reference the stored foundation). From then on, each morning is a freshly-built day, never a clone of yesterday.
 
 ## Calendar events emitted alongside
 
+### Roll forward / prune yesterday FIRST (before adding today's)
+
+Because the morning brief OWNS day-to-day planning, it also cleans up the prior day before building the new one. Before emitting any of today's events:
+
+- **Expire stale reply windows.** Read yesterday's undone `reply_window` events. For each, check its target thread (`gtmTargetThreads`): if the thread has gone cold — `postedAt` aged past the channel's freshness window, velocity collapsed, or it's deep-archived — mark the event `expired` (don't carry a dead reply into today; replying late on a cold thread reads as drive-by spam and risks deboost). Log the expiry so the evening recap can fold it.
+- **Carry forward only still-live events.** A prior-day `reply_window` whose thread is still ramping (fresh `postedAt`, live velocity) carries forward into today's plan at the top — it's already-vetted signal, don't drop it. Warmup/engagement blocks that went undone roll forward only if today's warmth state still calls for them.
+- **Never silently double-book.** Don't re-emit an event the operator already acted on (check `gtmActionLog`); promote what's live, expire what's cold, then layer today's fresh threads on top.
+
 Today's vetted T1/T2 threads → `gtmCalendarEvent`s written via `propose_calendar` (the populator path) — enough of them to make today the full, warmth-and-capacity-gated growth day described above (the day's ~10-15-rep intent when warm + real + the operator has time, fewer otherwise). Plus framework events:
 
-- **Warmup block** (always, even on warmup days): 10 min — browse the bet subs, upvote a few high-signal threads. On a fresh account this is the MAIN work, not a footnote.
-- **Content draft block** (on thin/warmup days, and on a post day for any channel): 20 min — draft the post from the content-angle vault (a post every other day per channel once warm; never on a fresh account that hasn't earned it).
+- **Warmup block** (per channel, keyed off `channelWarmthJson[channel].state`): 10 min — browse the bet subs, upvote a few high-signal threads. On a channel that's still `new_needs_warmup`/`warming` this warmup block is the MAIN work for that channel, not a footnote — no posting, no links. A channel already `warm`/`ready` **skips the warmup block entirely** and goes straight to posting + substantive replies. This is per-channel and same-day: a cold channel can be warmup-only while a warm sibling posts.
+- **Content draft block** (on thin/warmup days, and on a post day for any channel whose state is `warm`/`ready`): 20 min — draft the post from the content-angle vault (a post every other day per channel once warm; never on a channel still `new_needs_warmup`/`warming` that hasn't earned it).
 - **Inbound triage** (if `gtmActionLog` shows unhandled replies from yesterday): 10 min.
 
 Calibrated to operator's available capacity (per USER.md). Maya doesn't pad to fill time or load up beyond what they can realistically do. If today's total runs heavy, she cuts the lowest-tier event. If the account is fresh, she cuts volume HARD regardless of signal — ban-safety wins over a big-looking day.
 
 Each event description follows the full hands-off recipe template from `maya-calendar-populator` (WHAT / LINK / WHY / YOUR REPLY / VOICE NOTES / SUCCESS TARGET / TIME / SOURCE), written to Convex `gtmCalendarEvents` so the operator can act on every one even when Google Calendar isn't connected.
+
+### Every draft is voice-matched and ICP-grounded BEFORE it reaches the calendar (hard gate)
+
+No `YOUR REPLY` or post draft is written into a `gtmCalendarEvent` until it clears all three, in order:
+
+1. **Uses ≥1 real intent phrase / native term.** Pull from the stored buyer map (`intentPhrases`, `buyerJourneyStages[].intentLanguage`) or the channel's `icpKnowledge.nativeStyle` / `styleExemplars`. A draft that uses none of the founder's buyers' actual language is generic — rewrite it before going on.
+2. **Matches the founder voice fingerprint.** Built against the persisted `voiceProfile` (Anchor A) + the per-channel `styleExemplars` (Anchor B) — openings, cadence, vocab, emoji habit, signoffs. Not LLM-default tone.
+3. **Passes `maya-voice-matcher`: `voiceMatchScore >= 0.7` AND `slopCriticPassed === true`.** This runs on every drafted post/reply BEFORE the event is emitted. A draft that scores below 0.7 or fails the slop critic goes **back for a rewrite, not onto the calendar** — re-draft using the matcher's suggestions and re-score. (This mirrors the server-side approval gate, which fail-closes any draft missing those scores; if `voiceProfile` confidence is `none` because the user had zero handles, the matcher passes-with-warning rather than hard-blocking, so low-signal users can still ship.)
 
 ## Weighting from niche learnings
 

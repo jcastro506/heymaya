@@ -121,6 +121,14 @@ import {
   conversionPixelOptionsHttp,
   getConversionSetupHttp,
 } from "./gtmMaya/attribution";
+// Ideal-product Pillar 1 (VOICE) + Pillar 4 (WARMUP). Maya persists the
+// founder voice fingerprint, per-channel native-style exemplars, and per-
+// channel warmth. hookToken-authed + idempotency-keyed, same as foundation_*.
+import {
+  saveVoiceProfileHttp,
+  saveStyleExemplarsHttp,
+} from "./gtmMaya/voiceProfile";
+import { setChannelWarmthHttp } from "./gtmMaya/channelWarmth";
 import { memoryWrittenHttp } from "./gtmMaya/memoryLedger";
 import { reviewMediaHttp } from "./gtmMaya/contentReview";
 import {
@@ -366,6 +374,27 @@ http.route({
   path: "/lc_gtm/set_strategy_approval",
   method: "POST",
   handler: setStrategyApprovalHttp,
+});
+// Ideal-product Pillar 1 (VOICE) — Maya persists the founder's voice
+// fingerprint (Phase 0 onboarding pull) so every later draft anchors to it.
+http.route({
+  path: "/lc_gtm/save_voice_profile",
+  method: "POST",
+  handler: saveVoiceProfileHttp,
+});
+// Ideal-product Pillar 1 (VOICE) — per-channel native-style exemplars
+// (Anchor B for maya-voice-matcher), upserted onto the channel scorecard.
+http.route({
+  path: "/lc_gtm/save_style_exemplars",
+  method: "POST",
+  handler: saveStyleExemplarsHttp,
+});
+// Ideal-product Pillar 4 (WARMUP) — Maya advances per-channel warmth; the
+// daily/weekly crons read channelWarmthJson to gate warmup vs. posting.
+http.route({
+  path: "/lc_gtm/set_channel_warmth",
+  method: "POST",
+  handler: setChannelWarmthHttp,
 });
 // Sprint J — Maya proposes an improvement to a SHARED skill (Layer 2, governed).
 http.route({

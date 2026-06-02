@@ -47,9 +47,16 @@ When invoked as a Phase-2 demand worker, you own each reply target end to end. Y
 
 One self-contained tool sequence per thread — the same per-item discipline that makes the foundation strategy saves reliable. An `OK ...` return = it landed. Exact sequence: `maya-foundation-research` Phase 2.
 
+### REQUIRED before you return — land the ICP knowledge + voice anchors (once per run)
+
+These two saves are what make the daily cron and the drafting step work. They are not optional extras; a run that surfaces reply targets but skips them has left the channel scorecard incomplete.
+
+5. **`save_style_exemplars({ channel: "hn", styleExemplars: [ … 5-10 verbatim native HN comments … ] })`** — REQUIRED. The verbatim native comments from the "Style-exemplar capture" section below anchor `maya-voice-matcher` Anchor B; **skip this and every later HN draft defaults to generic LLM tone** that reads like marketing and gets flagged. Pass each as `{ platform: "hn", community: <thread/topic>, verbatim, why, capturedAt }`. This is the persisted form of the `styleExemplars[]` capture — described-but-unsaved = lost.
+6. **`save_foundation_channel_scorecard({ channel: "hn", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })`** — REQUIRED for a bet channel. Populate per-channel `icpKnowledge`: `venues` (the Show HN / Ask HN / story threads + any recurring niche topics as `{ name, kind: "community", url, whyHere }`), `watch` (what these technical buyers read/follow), `complaints` (verbatim buyer pain `{ quote, sourceUrl }` from the comments you mined — cite the COMMENT item id), `topics` (the technical subjects the niche debates), and `nativeStyle` (`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }` — HN's terse, technically-credible register). An HN bet with empty `icpKnowledge` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP.
+
 ## Style-exemplar capture (native-voice fidelity)
 
-While mining, capture **5-10 real, top-performing, HUMAN-written native HN comments verbatim** — the substantive ones that actually landed (genuine replies, upvoted, from real accounts). These become few-shot **voice/register anchors** for `maya-voice-matcher` + drafting: HN's register is terse, specific, technically credible, allergic to marketing. Match cadence/vocab/length/format; **never copy** an exemplar's content or specifics. Skip anything that reads templated. Emit in `styleExemplars[]`.
+While mining, capture **5-10 real, top-performing, HUMAN-written native HN comments verbatim** — the substantive ones that actually landed (genuine replies, upvoted, from real accounts). These become few-shot **voice/register anchors** for `maya-voice-matcher` + drafting: HN's register is terse, specific, technically credible, allergic to marketing. Match cadence/vocab/length/format; **never copy** an exemplar's content or specifics. Skip anything that reads templated. Emit in `styleExemplars[]` — then land them via the REQUIRED `save_style_exemplars({ channel: "hn", styleExemplars: [...] })` call above (the array is your thinking; the save is how it lands).
 
 ## HN caption craft — the title is the click decision, the comment is the conversion
 

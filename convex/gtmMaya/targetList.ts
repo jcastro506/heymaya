@@ -550,7 +550,31 @@ export const updateDraftedContentVoiceMatch = internalMutation({
       patch.slopCriticFailures = args.slopCriticFailures;
     }
     if (args.approvalStateUpdate !== undefined) {
-      patch.approvalState = args.approvalStateUpdate;
+      if (args.approvalStateUpdate === "pending_approval") {
+        // Fail-closed enforcement backstop (anti-slop): a draft may only reach
+        // the operator's approval queue if it passed the slop critic AND its
+        // voice-match score clears the floor. Prose alone has not reliably
+        // landed this discipline — this is the data-plane guard. The gate
+        // passes-with-warning when there's no voice signal (low-signal founder
+        // with no handles), so it never permanently blocks a handle-less user.
+        const { evaluateApprovalGate } = await import("./approvalPublishing");
+        const gate = evaluateApprovalGate({
+          slopCriticPassed: args.slopCriticPassed,
+          voiceMatchScore: args.voiceMatchScore,
+        });
+        if (gate.allowed) {
+          patch.approvalState = "pending_approval";
+        } else {
+          // Keep it a draft and record WHY (debuggable, not silent).
+          patch.slopCriticFailures = [
+            ...(patch.slopCriticFailures ?? []),
+            `approval_gate: ${gate.reason}`,
+          ];
+        }
+      } else {
+        // "rejected" always passes through.
+        patch.approvalState = args.approvalStateUpdate;
+      }
     }
     if (args.userFeedback !== undefined) {
       patch.userFeedback = args.userFeedback;

@@ -405,10 +405,10 @@ export const foundationCompetitorHttp = httpAction(async (ctx, request) => {
 
 // ───────────────────── Foundation: channel scorecard ─────────────────────
 
-// Sprint 2.18 #46 — YouTube REMOVED from supported channels. Operator
-// directive 2026-05-28: "we're not gonna focus on YouTube." Strip
-// across product surface: schema enum, channel scorecard validator,
-// playbook references, skills, TOOLS.md docs.
+// Ideal-product pillar 2 — YouTube REVIVED 2026-06-02 (operator: all 6
+// channels first-class — TikTok/Instagram/Reddit/YouTube/X/LinkedIn). YouTube
+// is a first-class Brief-only channel again; it must persist scorecards +
+// style exemplars like any other. (product_hunt stays out.)
 const CHANNEL_VALUES = [
   "reddit",
   "x",
@@ -416,6 +416,7 @@ const CHANNEL_VALUES = [
   "linkedin",
   "tiktok",
   "instagram",
+  "youtube",
   "threads",
   "podcasts",
   "newsletters",
@@ -435,6 +436,22 @@ interface FoundationChannelPayload {
   uniqueUnlock: string;
   bet: boolean;
   notes?: string;
+  // Pillar 2 — per-channel ICP knowledge + native-style exemplars. Sent by the
+  // plugin as either a structured object or a pre-serialized JSON string; we
+  // normalize to a JSON string for managerStore (which validates + persists it).
+  icpKnowledge?: unknown;
+  styleExemplars?: unknown;
+  styleExemplarsJson?: unknown;
+}
+
+function toJsonStringOrUndefined(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  if (typeof value === "string") return value.length > 0 ? value : undefined;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
 }
 
 export const foundationChannelScorecardHttp = httpAction(async (ctx, request) => {
@@ -485,6 +502,10 @@ export const foundationChannelScorecardHttp = httpAction(async (ctx, request) =>
         uniqueUnlock: body.uniqueUnlock,
         bet,
         notes: body.notes,
+        icpKnowledge: toJsonStringOrUndefined(body.icpKnowledge),
+        styleExemplarsJson: toJsonStringOrUndefined(
+          body.styleExemplarsJson ?? body.styleExemplars
+        ),
       }
     );
   } catch (err) {

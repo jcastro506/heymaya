@@ -14,6 +14,18 @@ The bookend to the morning brief. The operator knows what they did today and how
 - Native cron at 20:00 operator-local. Self-scheduled via `cron add` after foundation completes.
 - NEVER from a heartbeat.
 
+## Skip-when-empty (the recap is conditional, not unconditional)
+
+The evening recap is NOT a guaranteed daily send. It fires only when there is something real to close the loop on. This protects the phone budget (~2 proactive Telegram sends/day, brief + conditional recap) — a recap that says nothing is just noise.
+
+Run this gate FIRST, before composing anything:
+
+- **Genuinely empty day → DON'T send.** If ALL THREE of these are true — (a) 0 calendar events existed for today (none were ever planned), AND (b) 0 actions in `gtmActionLog` today (no posts, replies, triage, or warmup), AND (c) no attribution movement (`get_my_attribution({ windowDays: 1 })` returns empty `posts` AND every `totals` figure is zero) — then do NOT send a standalone recap. There is nothing to report and a "nothing happened" ping erodes trust. Instead, fold ONE honest line into tomorrow's morning brief (write it into `memory/{today}.md` → "Tomorrow's adjustment" so morning_brief picks it up: e.g. "Yesterday was empty — no plan ran and nothing shipped; let's get one concrete move done today."). Skip the Telegram send entirely.
+- **EXCEPTION — events were planned but NONE got done → STILL SEND.** If calendar events DID exist for today but the planned-vs-done tally is 0-of-N, send the recap anyway with just the Block 1 accountability flag (the silence flag below). A launch dies from absence, not from bad posts — a planned-but-untouched day is exactly the signal worth surfacing, so this overrides skip-when-empty. This is the one case where "nothing got done" must still reach the phone.
+- **Anything real to report → SEND.** If any of {events existed, actions happened, attribution moved} is non-empty, compose and send the full recap as normal.
+
+The zero-of-N silence-flag path in Block 1 stays fully intact — skip-when-empty only suppresses the recap when there was nothing planned AND nothing happened AND nothing converted.
+
 ## Pre-conditions
 
 1. Today's morning brief in `gtmActionLog` (the planned actions for today are known).

@@ -48,6 +48,10 @@ export const upsertBuyerMap = internalMutation({
         stage: v.string(),
         whereTheyHangOut: v.string(),
         intentLanguage: v.string(),
+        // Pillar 2 — per-stage native style + complaints (their real words),
+        // so the daily cron can ground drafts in buyer language.
+        nativeStyleExemplars: v.optional(v.array(v.string())),
+        complaints: v.optional(v.array(v.string())),
       })
     ),
     intentPhrases: v.array(v.string()),
@@ -333,6 +337,13 @@ export const upsertChannelScorecard = internalMutation({
     uniqueUnlock: v.string(),
     bet: v.boolean(),
     notes: v.optional(v.string()),
+    // Pillar 2 — per-channel ICP knowledge (where-they-live + watch/complaints/
+    // topics + native-style) and 5-10 verbatim native exemplars. Stored as JSON
+    // strings on the existing per-(agentId,channel) row (schema-ceiling: no new
+    // tables). The daily morning cron reads these back, so we validate they
+    // parse here — a malformed string would silently poison the cron's plan.
+    icpKnowledge: v.optional(v.string()),
+    styleExemplarsJson: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Id<"gtmChannelScorecard">> => {
     await assertAgentBelongsToAccount(ctx, args.accountId, args.agentId);
@@ -341,6 +352,20 @@ export const upsertChannelScorecard = internalMutation({
     }
     if (args.cadenceFit < 0 || args.cadenceFit > 1) {
       throw new Error("cadenceFit must be in [0, 1]");
+    }
+    if (args.icpKnowledge !== undefined) {
+      try {
+        JSON.parse(args.icpKnowledge);
+      } catch {
+        throw new Error("icpKnowledge must be a valid JSON string");
+      }
+    }
+    if (args.styleExemplarsJson !== undefined) {
+      try {
+        JSON.parse(args.styleExemplarsJson);
+      } catch {
+        throw new Error("styleExemplarsJson must be a valid JSON string");
+      }
     }
     const now = Date.now();
     const existing = await ctx.db
@@ -356,6 +381,11 @@ export const upsertChannelScorecard = internalMutation({
         uniqueUnlock: args.uniqueUnlock,
         bet: args.bet,
         notes: args.notes,
+        // Preserve prior ICP knowledge / exemplars unless the caller passes new
+        // ones — a scores-only re-run must not wipe a populated scorecard.
+        icpKnowledge: args.icpKnowledge ?? existing.icpKnowledge,
+        styleExemplarsJson:
+          args.styleExemplarsJson ?? existing.styleExemplarsJson,
         synthesizedAt: now,
         updatedAt: now,
       });
@@ -370,6 +400,8 @@ export const upsertChannelScorecard = internalMutation({
       uniqueUnlock: args.uniqueUnlock,
       bet: args.bet,
       notes: args.notes,
+      icpKnowledge: args.icpKnowledge,
+      styleExemplarsJson: args.styleExemplarsJson,
       synthesizedAt: now,
       updatedAt: now,
     });
@@ -826,6 +858,46 @@ export const getMyFoundation = internalQuery({
       contentAngles,
       relationshipTargets,
     };
+  },
+});
+
+/** Pillar 2 — cheap daily read of the per-channel ICP knowledge for the
+ *  agent's BET channels only. The morning cron uses this to build TODAY's
+ *  events from stored knowledge (whereTheyHangOut + native style) instead of
+ *  re-deriving the ICP. icpKnowledge / styleExemplarsJson are parsed here so
+ *  the caller gets structured objects; a row whose JSON is somehow malformed
+ *  yields null for that field rather than throwing (read paths stay resilient). */
+export const getMyChannelIcpKnowledge = internalQuery({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<
+    Array<{
+      channel: string;
+      icpKnowledge: unknown | null;
+      styleExemplars: unknown | null;
+    }>
+  > => {
+    const rows = await ctx.db
+      .query("gtmChannelScorecard")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    const safeParse = (s: string | undefined): unknown | null => {
+      if (s === undefined) return null;
+      try {
+        return JSON.parse(s);
+      } catch {
+        return null;
+      }
+    };
+    return rows
+      .filter((r) => r.bet)
+      .map((r) => ({
+        channel: r.channel,
+        icpKnowledge: safeParse(r.icpKnowledge),
+        styleExemplars: safeParse(r.styleExemplarsJson),
+      }));
   },
 });
 

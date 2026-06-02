@@ -9,6 +9,26 @@ import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 
 type Stage = "intake" | "research" | "deploy";
 
+// Per-channel warmth state captured at onboarding. Mirrors the
+// tiktokWarmupState arc generalized to every channel: a brand-new
+// account needs warming before it can post links; an established one
+// can post straight away. Kept deliberately coarse (3 buckets) so the
+// dropdown reads in one glance and never turns onboarding into a form.
+type WarmthState = "new" | "warming" | "established";
+
+// Connectable channels that have a handle field in the intake form.
+// We only ask for warmth on channels the founder actually connected,
+// so the section stays empty (zero friction) for the common case.
+const WARMTH_CHANNELS = ["tiktok", "instagram", "youtube", "linkedin"] as const;
+type WarmthChannel = (typeof WARMTH_CHANNELS)[number];
+
+interface ChannelWarmth {
+  state: WarmthState;
+  // Optional age hint (days) — pre-fillable from a future ScrapeCreators
+  // pull; the founder just confirms. Free-text numeric, may be "".
+  accountAgeDays: string;
+}
+
 interface IntakeDraft {
   name: string;
   url: string;
@@ -47,6 +67,12 @@ interface IntakeDraft {
     | "restricted";
   tiktokAccountAgeDays: string;
   tiktokAccountStatusChecked: boolean;
+  // Generalized per-channel warmth — one coarse arc per channel the
+  // founder connected. TikTok still maps back to the legacy
+  // tiktokWarmupState/tiktokAccountAgeDays fields on save (back-compat);
+  // every channel's warmth is also serialized into channelWarmthJson so
+  // the daily/weekly crons can read + advance the arc per channel.
+  channelWarmth: Partial<Record<WarmthChannel, ChannelWarmth>>;
   openToUgcCreators: boolean;
   creatorBudgetMonthlyUsd: string;
   maxWeeklyVisualPosts: string;
@@ -62,12 +88,14 @@ const CHANNEL_LABELS: Record<string, string> = {
   linkedin: "LinkedIn",
   tiktok: "TikTok",
   instagram: "Instagram",
+  youtube: "YouTube",
 };
 
-// Channels we no longer score or surface (vestigial — no native
-// slideshow / not in the product vision). Defensively filtered out of
-// the picker so stale historical rows can never resurface them.
-const HIDDEN_CHANNELS = new Set(["youtube", "product_hunt"]);
+// Channels we no longer score or surface (vestigial — not in the
+// product vision). YouTube is now a first-class Brief-only channel and
+// is NO LONGER hidden; only product_hunt stays filtered out so stale
+// historical rows can never resurface it.
+const HIDDEN_CHANNELS = new Set(["product_hunt"]);
 
 const DEFAULT_DRAFT: IntakeDraft = {
   name: "",
@@ -95,6 +123,7 @@ const DEFAULT_DRAFT: IntakeDraft = {
   tiktokWarmupState: "unknown",
   tiktokAccountAgeDays: "",
   tiktokAccountStatusChecked: false,
+  channelWarmth: {},
   openToUgcCreators: false,
   creatorBudgetMonthlyUsd: "",
   maxWeeklyVisualPosts: "3",
@@ -200,6 +229,16 @@ function GtmOnboardingBody() {
     setBusy(true);
     setError(null);
     try {
+      // Derive the legacy TikTok warmth fields from the generalized
+      // per-channel warmth map so the existing setAppProfile contract +
+      // deploy thresholds keep working unchanged. The full per-channel
+      // map (channelWarmthJson) is reconstructed server-side at deploy
+      // from the connected handle URLs + the ScrapeCreators pull.
+      const tiktokWarmth = draft.channelWarmth.tiktok;
+      const tiktokWarmupState: IntakeDraft["tiktokWarmupState"] = tiktokWarmth
+        ? toTiktokWarmupState(tiktokWarmth.state)
+        : "unknown";
+      const tiktokAccountAgeDays = tiktokWarmth?.accountAgeDays ?? "";
       const appId = await setAppProfile({
         name: draft.name.trim(),
         url: draft.url.trim(),
@@ -229,8 +268,8 @@ function GtmOnboardingBody() {
         existingInstagramUrl: emptyToUndefined(draft.existingInstagramUrl),
         existingYoutubeUrl: emptyToUndefined(draft.existingYoutubeUrl),
         existingLinkedinUrl: emptyToUndefined(draft.existingLinkedinUrl),
-        tiktokWarmupState: draft.tiktokWarmupState,
-        tiktokAccountAgeDays: numberOrUndefined(draft.tiktokAccountAgeDays),
+        tiktokWarmupState,
+        tiktokAccountAgeDays: numberOrUndefined(tiktokAccountAgeDays),
         tiktokAccountStatusChecked: draft.tiktokAccountStatusChecked,
         openToUgcCreators: draft.openToUgcCreators,
         creatorBudgetMonthlyUsd: numberOrUndefined(draft.creatorBudgetMonthlyUsd),
@@ -273,7 +312,16 @@ function GtmOnboardingBody() {
       // gtmResearchJobs.phase for live progress.
       void runResearch({ researchJobId: jobId });
       setResearchJobId(String(jobId));
-      track(ANALYTICS_EVENTS.ONBOARDING_SUBMITTED, { app_id: String(appId) });
+      // Capture the founder-confirmed per-channel warmth alongside
+      // submission. Deploy reconstructs the authoritative channelWarmthJson
+      // server-side (from connected handles + the ScrapeCreators pull); this
+      // surfaces what the founder explicitly told us so it's observable.
+      const channelWarmthJson = buildChannelWarmthJson(draft);
+      track(ANALYTICS_EVENTS.ONBOARDING_SUBMITTED, {
+        app_id: String(appId),
+        connected_channels: connectedWarmthChannels(draft),
+        ...(channelWarmthJson ? { channel_warmth_json: channelWarmthJson } : {}),
+      });
       setStage("research");
     } catch (err) {
       setError(friendlyError(err));
@@ -639,24 +687,6 @@ function GtmOnboardingBody() {
                 placeholder="https://www.tiktok.com/@..."
               />
             </Field>
-            <Field label="TikTok account status">
-              <select
-                value={draft.tiktokWarmupState}
-                onChange={(event) =>
-                  setDraft((d) => ({
-                    ...d,
-                    tiktokWarmupState: event.target.value as IntakeDraft["tiktokWarmupState"],
-                  }))
-                }
-                className="input"
-              >
-                <option value="unknown">Not sure yet</option>
-                <option value="new_needs_warmup">New account</option>
-                <option value="warming">Currently warming up</option>
-                <option value="ready">Ready / already active</option>
-                <option value="restricted">Restricted or warnings</option>
-              </select>
-            </Field>
             <Field label="Instagram profile, if any">
               <input
                 value={draft.existingInstagramUrl}
@@ -696,29 +726,17 @@ function GtmOnboardingBody() {
                 placeholder="https://www.linkedin.com/in/..."
               />
             </Field>
-            <Field label="TikTok account age in days">
-              <input
-                value={draft.tiktokAccountAgeDays}
-                onChange={(event) =>
-                  setDraft((d) => ({
-                    ...d,
-                    tiktokAccountAgeDays: event.target.value,
-                  }))
-                }
-                className="input"
-                inputMode="numeric"
-                placeholder="0"
-              />
-            </Field>
           </div>
+
+          {/* Per-channel warmth — only for channels the founder actually
+              connected. Ban-safety is per channel: a brand-new account
+              gets warmup-only days, an established one posts straight
+              away. We keep this to one coarse dropdown (+ optional age)
+              per connected channel so it never becomes a multi-step form;
+              if you connected no handles, nothing renders. */}
+          <ChannelWarmthSection draft={draft} setDraft={setDraft} />
+
           <div className="grid gap-4 sm:grid-cols-3">
-            <Toggle
-              label="I checked TikTok Account Check"
-              checked={draft.tiktokAccountStatusChecked}
-              onChange={(checked) =>
-                setDraft((d) => ({ ...d, tiktokAccountStatusChecked: checked }))
-              }
-            />
             <Toggle
               label="I am open to UGC creators later"
               checked={draft.openToUgcCreators}
@@ -1005,6 +1023,75 @@ function emptyToUndefined(value: string): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+// Handle URL per warmth channel, so we only show warmth for channels the
+// founder actually connected (sub-4-min onboarding — never ask about a
+// channel with no account).
+function handleUrlForChannel(draft: IntakeDraft, channel: WarmthChannel): string {
+  switch (channel) {
+    case "tiktok":
+      return draft.existingTikTokUrl;
+    case "instagram":
+      return draft.existingInstagramUrl;
+    case "youtube":
+      return draft.existingYoutubeUrl;
+    case "linkedin":
+      return draft.existingLinkedinUrl;
+  }
+}
+
+function connectedWarmthChannels(draft: IntakeDraft): WarmthChannel[] {
+  return WARMTH_CHANNELS.filter(
+    (channel) => handleUrlForChannel(draft, channel).trim().length > 0
+  );
+}
+
+const WARMTH_LABELS: Record<WarmthState, string> = {
+  new: "Brand new — needs warming up",
+  warming: "Warming up — posting a bit",
+  established: "Established — already active",
+};
+
+// Map the coarse onboarding warmth bucket onto the legacy
+// tiktokWarmupState enum so the existing TikTok persistence + deploy
+// thresholds keep working unchanged.
+function toTiktokWarmupState(
+  state: WarmthState
+): IntakeDraft["tiktokWarmupState"] {
+  switch (state) {
+    case "new":
+      return "new_needs_warmup";
+    case "warming":
+      return "warming";
+    case "established":
+      return "ready";
+  }
+}
+
+// Serialize the per-channel warmth into the channelWarmthJson shape the
+// crons read (keyed by channel, normalized to the warm/ready/new arc).
+// Only connected channels are included. lastUpdatedMs lets the weekly
+// cron tell a stale baseline from a fresh confirmation.
+function buildChannelWarmthJson(draft: IntakeDraft): string | undefined {
+  const channels = connectedWarmthChannels(draft);
+  if (channels.length === 0) return undefined;
+  const now = Date.now();
+  const map: Record<
+    string,
+    { state: string; accountAgeDays?: number; lastUpdatedMs: number }
+  > = {};
+  for (const channel of channels) {
+    const warmth = draft.channelWarmth[channel];
+    if (!warmth) continue;
+    const ageDays = numberOrUndefined(warmth.accountAgeDays);
+    map[channel] = {
+      state: toTiktokWarmupState(warmth.state),
+      ...(ageDays !== undefined ? { accountAgeDays: ageDays } : {}),
+      lastUpdatedMs: now,
+    };
+  }
+  return Object.keys(map).length > 0 ? JSON.stringify(map) : undefined;
+}
+
 /**
  * Convert any thrown error into a safe, plain-language message for the operator.
  * Raw Convex / internal errors (e.g. "signed-in user required") are NEVER shown
@@ -1110,5 +1197,103 @@ function Toggle({
         className="h-5 w-5 accent-lime"
       />
     </label>
+  );
+}
+
+/**
+ * Lightweight per-channel warmth capture. Renders ONE coarse dropdown
+ * (+ optional age hint) per channel the founder actually connected — and
+ * nothing at all when no handles are entered. This generalizes the old
+ * TikTok-only warmup question to every channel without turning onboarding
+ * into a multi-step form: it's a single conditional block, defaulting to
+ * "new" so the ban-safe path is the default.
+ */
+function ChannelWarmthSection({
+  draft,
+  setDraft,
+}: {
+  draft: IntakeDraft;
+  setDraft: React.Dispatch<React.SetStateAction<IntakeDraft>>;
+}) {
+  const connected = connectedWarmthChannels(draft);
+  if (connected.length === 0) return null;
+
+  function updateWarmth(
+    channel: WarmthChannel,
+    patch: Partial<ChannelWarmth>
+  ) {
+    setDraft((d) => {
+      const current: ChannelWarmth = d.channelWarmth[channel] ?? {
+        state: "new",
+        accountAgeDays: "",
+      };
+      return {
+        ...d,
+        channelWarmth: {
+          ...d.channelWarmth,
+          [channel]: { ...current, ...patch },
+        },
+      };
+    });
+  }
+
+  return (
+    <div className="border border-paper bg-ink-2 p-4">
+      <p className="mb-1 text-sm font-medium text-paper">
+        How warm are these accounts?
+      </p>
+      <p className="mb-4 text-xs text-paper-dim">
+        Maya keeps you ban-safe: brand-new accounts get warmed up before
+        they post links; established ones post right away. Just confirm
+        where each connected account stands.
+      </p>
+      <div className="space-y-3">
+        {connected.map((channel) => {
+          const warmth: ChannelWarmth = draft.channelWarmth[channel] ?? {
+            state: "new",
+            accountAgeDays: "",
+          };
+          return (
+            <div
+              key={channel}
+              className="grid gap-3 sm:grid-cols-2 sm:items-end"
+            >
+              <Field label={`${CHANNEL_LABELS[channel] ?? channel} status`}>
+                <select
+                  value={warmth.state}
+                  onChange={(event) =>
+                    updateWarmth(channel, {
+                      state: event.target.value as WarmthState,
+                    })
+                  }
+                  className="input"
+                >
+                  {(["new", "warming", "established"] as WarmthState[]).map(
+                    (state) => (
+                      <option key={state} value={state}>
+                        {WARMTH_LABELS[state]}
+                      </option>
+                    )
+                  )}
+                </select>
+              </Field>
+              <Field label="Account age in days (optional)">
+                <input
+                  value={warmth.accountAgeDays}
+                  onChange={(event) =>
+                    updateWarmth(channel, {
+                      accountAgeDays: event.target.value,
+                    })
+                  }
+                  className="input"
+                  inputMode="numeric"
+                  placeholder="e.g. 30"
+                />
+              </Field>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

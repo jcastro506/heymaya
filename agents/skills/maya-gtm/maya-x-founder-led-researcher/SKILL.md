@@ -107,7 +107,10 @@ interface XResearchReport {
   /** 5-10 real, top-performing, HUMAN-written native posts AND replies captured
    *  VERBATIM from the niche — the few-shot voice/register anchors for
    *  maya-voice-matcher + drafting. Replies included (that's where the native
-   *  founder voice lives). Match cadence/vocab/length/format; NEVER copy content. */
+   *  founder voice lives). Match cadence/vocab/length/format; NEVER copy content.
+   *  This array is the shape of your thinking; it LANDS via the REQUIRED
+   *  save_style_exemplars({ channel: "x", styleExemplars: [...] }) call
+   *  (see the Save section) — described-but-unsaved = lost. */
   styleExemplars: Array<{
     url: string;
     handle: string;
@@ -137,6 +140,13 @@ When invoked as a Phase-2 demand worker (the first-wake actionable pass), you ow
 4. `save_target_thread({ externalId: <same>, draftReply })`, to keep the row's one-tap deep link in sync.
 
 One self-contained tool sequence per tweet — the same per-item discipline that makes the foundation strategy saves reliable. An `OK ...` return = it landed. The `XResearchReport` schema above stays the shape of your *thinking* per target; the tool calls are how it lands. Exact sequence: `maya-foundation-research` Phase 2.
+
+### REQUIRED before you return — land the ICP knowledge + voice anchors (once per run)
+
+These two saves are what make the daily cron and the drafting step work. They are not optional extras; a run that surfaces reply targets but skips them has left the channel scorecard incomplete.
+
+5. **`save_style_exemplars({ channel: "x", styleExemplars: [ … 5-10 verbatim native posts AND replies … ] })`** — REQUIRED. The verbatim native posts and replies you captured in decision rule 15 anchor `maya-voice-matcher` Anchor B; **skip this and every later X draft defaults to generic LLM tone** the niche scrolls past. Pass each as `{ platform: "x", community: <niche/handle>, verbatim, why, capturedAt }` — include replies specifically (that's where the native founder voice lives). This is the persisted form of the `styleExemplars[]` schema above — the schema is your thinking; this call is how it lands.
+6. **`save_foundation_channel_scorecard({ channel: "x", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })`** — REQUIRED for a bet channel. Populate per-channel `icpKnowledge`: `venues` (the 20-40-handle List as `{ name: <handle>, kind: "account", url, whyHere }` + any niche hashtags), `watch` (who/what these founders follow), `complaints` (verbatim buyer pain `{ quote, sourceUrl }` from the tweets you mined), `topics` (what the niche talks about), and `nativeStyle` (`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }` drawn from winning replies). An X bet with empty `icpKnowledge` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP.
 
 ## Failure modes
 

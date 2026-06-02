@@ -4358,6 +4358,20 @@ export default defineSchema({
     // small (dozens of screenshots + generated slides), always loaded with the
     // agent row, and search/dedupe run in JS over the parsed array.
     mediaLibraryJson: v.optional(v.string()),
+    // Ideal-product pillar 1 (VOICE) — the founder's voice fingerprint, built
+    // at onboarding by pulling their own accounts (watch media + read text).
+    // JSON string (same JSON-on-row pattern as mediaLibraryJson — NO new table,
+    // schema is at the table-count ceiling). Shape: { builtAt, sources[],
+    // features{avgSentenceLen,burstiness,contractionUse,emojiFreq,register,
+    // openings[],signoffs[],characteristicPhrases[],emDashHabit}, perPlatform,
+    // verbatimSamples[], confidence:'high'|'medium'|'low'|'none' }.
+    voiceProfileJson: v.optional(v.string()),
+    // Pillar 4 (WARMUP, generalized to all 6 channels) — per-channel warmth map
+    // the daily/weekly crons read + advance. JSON string keyed by channel:
+    // { reddit:{state,accountAgeDays,baseline,warmTargetMs,lastUpdatedMs}, ... }.
+    // state reuses tiktokWarmupState values + 'warm'; (warm|ready) = skip warmup.
+    // tiktokWarmupState stays as a back-compat alias mirrored into .tiktok.
+    channelWarmthJson: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -4459,6 +4473,14 @@ export default defineSchema({
     // What success looks like for this task (e.g., "5 replies, 1 DM").
     successMetric: v.optional(v.string()),
     // ─── end evidence-vault fields ──────────────────────────────────────
+    // Turn-key payload (pillar 4) — so the founder just taps and posts. openUrl
+    // = the one-click deep link (the thread/composer/submit URL); draftText =
+    // the verbatim copy-paste reply/post in the founder's voice; sourceNote =
+    // the cited "why this / where it came from". successMetric above carries the
+    // target. Additive/optional for back-compat.
+    openUrl: v.optional(v.string()),
+    draftText: v.optional(v.string()),
+    sourceNote: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -6066,6 +6088,10 @@ export default defineSchema({
         stage: v.string(),
         whereTheyHangOut: v.string(),
         intentLanguage: v.string(),
+        // Pillar 2 — per-stage native style + complaints captured during
+        // research, so the daily cron can ground drafts in real buyer words.
+        nativeStyleExemplars: v.optional(v.array(v.string())),
+        complaints: v.optional(v.array(v.string())),
       })
     ),
     /** Search phrases / post titles / DM openers that signal a buyer in-market. */
@@ -6149,6 +6175,15 @@ export default defineSchema({
     /** Top 2-3 channels Maya bets on each get bet=true. */
     bet: v.boolean(),
     notes: v.optional(v.string()),
+    // Pillar 2 (ICP knowledge, per channel) — the daily cron reads this so the
+    // research pays off every morning instead of decaying after onboarding.
+    // JSON string: { venues:[{name,kind,url?,whyHere}], watch:string[],
+    // complaints:[{quote,sourceUrl}], topics:string[], nativeStyle:{...} }.
+    icpKnowledge: v.optional(v.string()),
+    // 5-10 verbatim native posts per channel — voice/register anchors for
+    // maya-voice-matcher (Anchor B). JSON: [{platform,community,verbatim,why,
+    // capturedAt}].
+    styleExemplarsJson: v.optional(v.string()),
     synthesizedAt: v.number(),
     updatedAt: v.number(),
   })

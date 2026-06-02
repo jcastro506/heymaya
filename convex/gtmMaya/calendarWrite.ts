@@ -41,6 +41,10 @@ interface CalendarEventProposal {
   startsAtMs: number;
   endsAtMs: number;
   kind?: GtmCalendarEventKind;
+  // Turn-key payload (pillar 4) — one-tap deep link + verbatim paste block.
+  openUrl?: string;
+  draftText?: string;
+  sourceNote?: string;
 }
 
 // Sprint 1.2 — typed event kinds. warmup_block is the new one closing the
@@ -70,7 +74,56 @@ const EVENT_INPUT = v.object({
   startsAtMs: v.number(),
   endsAtMs: v.number(),
   kind: v.optional(EVENT_KIND),
+  // Turn-key payload (pillar 4). openUrl = one-tap deep link
+  // (thread/composer/submit URL); draftText = the verbatim copy-paste
+  // reply/post in the founder's voice; sourceNote = the cited "why this".
+  openUrl: v.optional(v.string()),
+  draftText: v.optional(v.string()),
+  sourceNote: v.optional(v.string()),
 });
+
+// Pillar-4 turn-key validation. These kinds put the founder in front of a
+// real customer / public launch surface, so every such event MUST be
+// one-tap-actionable: an http(s) deep link AND a non-trivial verbatim
+// paste block. warmup_block / engagement_block legitimately have neither
+// (no product link while warming a cold channel) and are EXEMPT.
+const TURN_KEY_REQUIRED_KINDS = new Set<GtmCalendarEventKind>([
+  "reply_window",
+  "soft_launch_post",
+  "hard_launch_anchor",
+]);
+
+const HTTP_URL_RE = /https?:\/\/[^\s)]+/i;
+// A verbatim paste block must be substantive — a stray "TBD" or a one-word
+// placeholder doesn't count. Require some real copy the founder can paste.
+const MIN_DRAFT_CHARS = 12;
+
+function hasHttpUrl(...fields: Array<string | undefined>): boolean {
+  return fields.some((f) => !!f && HTTP_URL_RE.test(f));
+}
+
+function hasVerbatimDraft(draftText: string | undefined): boolean {
+  return !!draftText && draftText.trim().length >= MIN_DRAFT_CHARS;
+}
+
+/**
+ * Pillar-4 server-side backstop: an event of a turn-key kind is only
+ * schedulable if it carries BOTH a one-tap http(s) URL (openUrl, or a URL
+ * embedded in the description) AND a non-trivial verbatim draftText paste
+ * block. Returns true when the event passes (or is an exempt kind).
+ */
+function passesTurnKeyGate(event: {
+  kind?: GtmCalendarEventKind;
+  description?: string;
+  openUrl?: string;
+  draftText?: string;
+}): boolean {
+  if (!event.kind || !TURN_KEY_REQUIRED_KINDS.has(event.kind)) return true;
+  return (
+    hasHttpUrl(event.openUrl, event.description) &&
+    hasVerbatimDraft(event.draftText)
+  );
+}
 
 function toIsoWithTimezone(ms: number, timezone: string | undefined): {
   dateTime: string;
@@ -98,6 +151,8 @@ export const storeProposedCalendarEvents = internalAction({
   ): Promise<{
     stored: number;
     draftIds: Id<"gtmCalendarEvents">[];
+    rejected: number;
+    rejectedTitles: string[];
   }> => {
     // Read the operator's timezone for proper ISO encoding when we
     // eventually push. If no connection exists, fall back to UTC; the
@@ -109,7 +164,17 @@ export const storeProposedCalendarEvents = internalAction({
     const timezone = conn?.timezone ?? "UTC";
 
     const draftIds: Id<"gtmCalendarEvents">[] = [];
+    const rejectedTitles: string[] = [];
     for (const event of args.events) {
+      // Pillar-4 backstop: turn-key kinds (reply_window / soft_launch_post /
+      // hard_launch_anchor) MUST ship a one-tap URL + verbatim paste block.
+      // warmup_block / engagement_block are exempt. Reject (drop) the rest so
+      // a half-baked launch/reply never silently reaches the calendar; the
+      // returned count lets Maya see and fix them.
+      if (!passesTurnKeyGate(event)) {
+        rejectedTitles.push(event.title);
+        continue;
+      }
       const id = await ctx.runMutation(
         internal.gtmMaya.calendarWrite.persistGtmCalendarEventDraft,
         {
@@ -122,11 +187,19 @@ export const storeProposedCalendarEvents = internalAction({
           endsAtMs: event.endsAtMs,
           timezone,
           kind: event.kind,
+          openUrl: event.openUrl,
+          draftText: event.draftText,
+          sourceNote: event.sourceNote,
         }
       );
       draftIds.push(id);
     }
-    return { stored: draftIds.length, draftIds };
+    return {
+      stored: draftIds.length,
+      draftIds,
+      rejected: rejectedTitles.length,
+      rejectedTitles,
+    };
   },
 });
 
@@ -230,6 +303,10 @@ export const persistGtmCalendarEventDraft = internalMutation({
     endsAtMs: v.number(),
     timezone: v.string(),
     kind: v.optional(EVENT_KIND),
+    // Turn-key payload (pillar 4) — additive/optional for back-compat.
+    openUrl: v.optional(v.string()),
+    draftText: v.optional(v.string()),
+    sourceNote: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Id<"gtmCalendarEvents">> => {
     const now = Date.now();
@@ -245,6 +322,9 @@ export const persistGtmCalendarEventDraft = internalMutation({
       endsAtMs: args.endsAtMs,
       timezone: args.timezone,
       kind: args.kind,
+      openUrl: args.openUrl,
+      draftText: args.draftText,
+      sourceNote: args.sourceNote,
       status: "draft",
       createdBy: "maya",
       createdAt: now,

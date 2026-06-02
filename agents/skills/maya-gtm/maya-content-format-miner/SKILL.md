@@ -85,7 +85,10 @@ interface ContentFormatLibrary {
   /** 5-10 real, top-performing, HUMAN native FULL posts/replies captured VERBATIM
    *  for this channel — the few-shot voice/register anchors for maya-voice-matcher
    *  + drafting (distinct from hookPatterns.realExamples, which prove a pattern).
-   *  Match cadence/vocab/length/format; NEVER copy content. */
+   *  Match cadence/vocab/length/format; NEVER copy content.
+   *  This array is the shape of your thinking; it LANDS via the REQUIRED
+   *  save_style_exemplars({ channel: <this.channel>, styleExemplars: [...] }) call
+   *  (see the Save section) — described-but-unsaved = lost. */
   styleExemplars: Array<{
     url: string;
     verbatim: string;
@@ -101,6 +104,13 @@ interface ContentFormatLibrary {
   rulesCited: string[];
 }
 ```
+
+## Save — land the voice anchors + ICP knowledge for `channel` (REQUIRED)
+
+The `ContentFormatLibrary` schema is the shape of your thinking; the call below is how its voice anchors land for the chosen `channel`. REQUIRED before you return:
+
+1. **`save_style_exemplars({ channel: <this.channel>, styleExemplars: [ … your 5-10 full-text verbatim native posts/replies … ] })`** — REQUIRED. The full-text native posts you captured in decision rule 11 (distinct from `hookPatterns[].realExamples`, which prove a *pattern*) anchor `maya-voice-matcher` Anchor B; **skip this and drafting on this channel defaults to generic LLM tone** the community ignores and the algorithm starves. Pass each as `{ platform: <this.channel>, community: <niche>, verbatim, why, capturedAt }`. This is the persisted form of the `styleExemplars[]` schema above — described-but-unsaved = lost.
+2. If this run is the per-channel scorecard owner (no upstream researcher already populated it), also enrich **`save_foundation_channel_scorecard({ channel: <this.channel>, …, icpKnowledge: { …, complaints, topics, nativeStyle } })`** with the buyer-conversation evidence and native-voice fingerprints you mined — `complaints` (verbatim buyer pain `{ quote, sourceUrl }` from the winning examples' reply threads), `topics`, and `nativeStyle` (`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }` drawn from reply-thread voice fingerprints). The per-channel researcher owns `venues`/`watch`; this skill deepens the native-voice + complaints layer. Don't overwrite a populated scorecard — merge.
 
 ## Failure modes
 

@@ -40,6 +40,13 @@ Public metrics only — NOT Studio analytics (watch-time/retention/CTR are owner
 
 Save findings as target threads (`save_target_thread({ platform: "youtube", ... })`) + channel-scorecard evidence + style exemplars + caption craft, same shapes as the other per-channel researchers — call the tool — a finding you describe in text but never save is lost. **Caption/title craft:** the YouTube **title is the CTR lever** (the gate to everything) — propose title options; the description carries SEO + the wrapped product link (in description, with timestamps). Shorts: hook in the first second.
 
+### REQUIRED before you return — land the ICP knowledge + voice anchors (when YouTube is a bet)
+
+When YouTube earns a bet (real buyer presence + the founder can produce video), these two saves are REQUIRED — they are what the daily cron and Brief drafting read:
+
+1. **`save_style_exemplars({ channel: "youtube", styleExemplars: [ … 5-10 verbatim native videos/titles/Shorts … ] })`** — REQUIRED. The 5-10 real, top-performing HUMAN videos/titles/Shorts you captured anchor `maya-voice-matcher` Anchor B; **skip this and every later YouTube Brief defaults to generic LLM tone** that doesn't match how the niche talks. Pass each as `{ platform: "youtube", community: <niche/channel>, verbatim: <title + hook>, why, capturedAt }`. Described-but-unsaved = lost.
+2. **`save_foundation_channel_scorecard({ channel: "youtube", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })`** — REQUIRED for a bet channel. Populate per-channel `icpKnowledge`: `venues` (the ranked venue spread — big niche channels + small high-intent ones + hashtags + Shorts trends as `{ name, kind: "account" | "hashtag", url, whyHere }`), `watch` (what this audience watches), `complaints` / buyer-intent (verbatim from comments + transcripts as `{ quote, sourceUrl: videoUrl }`), `topics` (the search-intent subjects), and `nativeStyle` (`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }` — title/hook register). A YouTube bet with empty `icpKnowledge` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP. (If YouTube doesn't earn a bet, park it and skip both — there's nothing to score.)
+
 ## Discipline
 
 - Judgment, no hardcoded thresholds. Signups-not-likes. Brief-only — never claim we film.

@@ -205,15 +205,19 @@ export function evaluateChannelSet(
   cards: ReadonlyArray<GtmEvidenceCard>,
   app: GtmAppContext
 ): GtmChannelEvaluation[] {
-  // Mirror the live judge's scored set (judgeChannel.ts): Reddit / X /
-  // LinkedIn / TikTok. youtube + product_hunt are excluded from scoring
-  // (vestigial / not in the product vision) though they remain in the
-  // GtmChannel type for backward compat.
+  // Mirror the live judge's scored set (judgeChannel.ts): the six
+  // first-class, equal-depth channels Reddit / X / HN / LinkedIn /
+  // TikTok / YouTube (TikTok + YouTube are Brief-only). Only
+  // product_hunt is excluded from scoring (single-day launch event,
+  // not steady-state acquisition); it remains in the GtmChannel type
+  // for backward compat.
   const channels: GtmChannel[] = [
     "reddit",
     "x",
+    "hn",
     "linkedin",
     "tiktok",
+    "youtube",
   ];
   const evaluations: GtmChannelEvaluation[] = channels.map((channel) =>
     evaluateChannel(channel, cards, app)

@@ -187,139 +187,86 @@ INVOKES \`maya-slop-critic\` as final gate. \`postingInstructions\` strings in m
 // Source: agents/skills/maya-gtm/maya-calendar-plan-builder/SKILL.md
 const ENTRY_2_maya_calendar_plan_builder = `---
 name: maya-calendar-plan-builder
-description: Convert approved drafts into rich Google Calendar events. Each event carries platform / script / hook / source links / assets / approval state / success metric.
+description: DEPRECATED. Superseded by maya-calendar-populator. Do not invoke. Calendar event building (typed gtmCalendarEvents + warmup_block scheduling) is now owned end-to-end by maya-calendar-populator, which builds TODAY's turn-key plan day-by-day. This skill is retained only as a deprecation pointer to avoid two competing calendar builders.
 ---
 
-# maya-calendar-plan-builder
+# maya-calendar-plan-builder — DEPRECATED
 
-## Purpose
+> **Do not invoke this skill.** It is superseded by **\`maya-calendar-populator\`**. Keeping two calendar builders alive is exactly the failure mode the ideal-product plan warns against (two week-builders that drift apart). All calendar work routes through \`maya-calendar-populator\`.
 
-Drafts aren't useful until they're scheduled with full context the operator can act on at posting time. Takes approved drafts + channel strategy + distribution motion plan and builds rich Google Calendar events (Sprint 9 calendar OAuth).
+## Why deprecated
 
-## When to invoke
+There is no onboarding week and no rolling 7-day calendar artifact anymore. Planning is day-scoped and lives in two places only:
 
-- IF \`distributionExperimentSet\` is approved AND drafts have passed slop-critic THEN schedule.
-- IF a post is replanned THEN re-run to update.
-- IF a hard launch is scheduled (PLAYBOOK § 2 Phase 3) THEN build the full launch-day event sequence.
-- IF results-reviewer recommends "double down on metric posts" THEN extend cadence.
-- **Sprint 1.2 — IF a platform skill (maya-tiktok-demo-strategist § rule 3, maya-reddit-demand-researcher § rule 1, maya-x-founder-led-researcher) returns \`recommendation: "warmup_first"\` with a \`warmupPlan\`, THEN immediately schedule each \`dayBands[].actions\` as \`kind: "warmup_block"\` events on the operator's calendar.** Warmup blocks are self-driven operator tasks (not posts) — they are approval-by-default. Do NOT wait for slop-critic, drafts, or distribution-experiment approval. The operator needs these on their calendar today, not at the end of a multi-step approval loop.
-- NEVER auto-publish — events are scheduling. Publishing is \`maya-approval-publisher\`.
+- **\`maya-morning-brief\` / the 7am \`morning_brief\` cron** — owns day-to-day planning. Every morning it reads stored ICP knowledge (\`get_my_foundation\`) + per-channel warmth (\`channelWarmthJson\`), intersects that with what's live on the bet channels, and emits TODAY's turn-key events.
+- **\`maya-calendar-populator\`** — the skill that actually builds the typed \`gtmCalendarEvents\` for the day (one-tap \`openUrl\` + verbatim \`draftText\`, server-validated), maps each event to the operator's PLAYBOOK warmth phase, and gates warmup vs posting per channel.
 
-## Required reads
+This file used to convert approved drafts into a "week" of rich calendar events and schedule warmup \`dayBands\` across multiple future days. That responsibility is gone. A week-scoped builder running alongside a day-scoped populator produces conflicting calendars and stale plans.
 
-1. APP.md, GTM.md.
-2. PLAYBOOK.md § 2 (Phase 2/3 timing — Tuesday default, rule 9.17), § 4.
-3. playbook/{channel}.md for channel-specific timing.
-4. MEMORY.md.
+## Where its responsibilities went
 
-## Decision rules
+Everything this skill used to do now lives in \`maya-calendar-populator/SKILL.md\`:
 
-1. **Day-of-week enforcement (rule 9.17).** No Mon/Fri/weekend launch posts. Hard-launch default Tuesday; Phase 2 default Tue/Wed/Thu.
-2. **Holiday / industry-event check.** Verify before scheduling (rule 2.3.1).
-3. **Channel-specific time windows.**
-   - X: Tue morning operator-tz, 8-10am.
-   - LinkedIn: Tue-Thu 8-10am operator-tz.
-   - Reddit: Tue/Wed/Thu 8-11am ET.
-   - TikTok: niche-FYP-time from TikTokFormatResearch; default 6-9pm operator-tz B2C, 12-2pm B2B.
-4. **2-hour engagement window required (Reddit).** Operator available 2h after posting. If booked, push.
-5. **Pre-write first comment for Reddit posts.** Always attached.
-6. **One CTA per event.**
-7. **All assets attached / linked.** Screenshots, demo videos, alt-text. R2 URL or Drive link.
-8. **Approval-state visible.** Title prefix: \`[DRAFT]\` / \`[APPROVED]\` / \`[PUBLISHED]\` / \`[NEEDS REVISION]\`.
-9. **Success metric in event description.** Copy-paste from distribution-motion-tester.
-10. **Stop / double-down trigger noted.**
-11. **Native reminders.** 30 min before (push), 24h before (email).
-12. **Sidecar gtmCalendarEvents row.** Every calendar write also writes a sidecar (kind: "warmup_block" | "engagement_block" | "soft_launch_post" | "hard_launch_anchor" | "reply_window" | "weekly_review" | "first_50_dms") for HEARTBEAT calendar-scan check.
-13. **Sprint 1.2 — warmup_block scheduling rules.** When converting a \`warmupPlan\` from a platform skill:
-    - One event per \`dayBands\` entry (NOT per action — group actions into a single block).
-    - **Default time**: 10:00am operator-local. Operator can move it; the point is the block is on the calendar.
-    - **Duration**: 30 min default for ≤4 actions, 45 min for 5+ actions.
-    - **Title format**: \`[Warmup] {Platform} Day N of M — {primary action}\`. Example: \`[Warmup] TikTok Day 1 of 14 — Scroll 20 min niche FYP\`.
-    - **Description**: full action list as a checklist + cite the playbook rule (\`tiktok.md § 6\` / \`reddit.md § 6\`). Example: \`Per tiktok.md § 6 (account warm-up doctrine). Today: ☐ Scroll 20 min niche FYP at slow-thumb pace ☐ Like 10 niche posts ☐ Comment on 3 posts with substance ☐ Save 5 posts you'd actually use. Why: brand-new accounts that post commercial content on day 1 get algorithmically suppressed (tiktok.md § 13 Failure 1).\`
-    - **No slop-critic gate** — these are operator self-tasks, not public content.
-    - **Reminders**: 30 min popup + 24h email (same as posts).
-    - **Approval state**: \`APPROVED\` (warmup is the doctrine, not optional).
+| Old responsibility here | Now owned by |
+| --- | --- |
+| Build typed \`gtmCalendarEvents\` (kinds: \`warmup_block\` / \`engagement_block\` / \`soft_launch_post\` / \`hard_launch_anchor\` / \`reply_window\` / \`weekly_review\` / \`first_50_dms\`) | \`maya-calendar-populator\` (TODAY only, not a week) |
+| Schedule warmup \`dayBands\` from a platform skill's \`warmupPlan\` | \`maya-calendar-populator\` § warmup — schedules ONLY today's warmup block, gated on \`channelWarmthJson[channel].state\` (not the old hardcoded \`tiktokWarmupState\`, and not a multi-day band sweep) |
+| Day-of-week / channel time-window enforcement, holiday checks, one-CTA-per-event, asset attachment, reminders, approval-state title prefix | \`maya-calendar-populator\` (applied to allocating TODAY's events) |
+| \`openUrl\` + \`draftText\` + \`successTarget\` + \`sourceNote\` turn-key payload + server-side turn-key validation | \`maya-calendar-populator\` + \`convex/gtmMaya/calendarWrite.ts\` (\`persistGtmCalendarEventDraft\` / \`propose_calendar\`) |
+| Anti-slop on event titles/descriptions; voice-match gate before an event reaches the calendar | \`maya-calendar-populator\` + \`maya-voice-matcher\` + the \`convex/gtmMaya/approvalPublishing.ts\` voice/slop server guard |
 
-## Output schema
+Publishing remains \`maya-approval-publisher\`; never auto-publish from any calendar skill.
 
-\`\`\`ts
-interface CalendarPlan {
-  events: Array<{
-    googleEventId?: string;
-    sidecarRowId?: string;
-    kind: "warmup_block" | "engagement_block" | "soft_launch_post" | "hard_launch_anchor" | "reply_window" | "weekly_review" | "first_50_dms";
-    channel: string;
-    titleWithApprovalPrefix: string;
-    startLocal: string;
-    durationMin: number;
-    description: string;
-    attachments: Array<{ kind: "image" | "video" | "doc"; url: string }>;
-    draftText: string;
-    sourceLinks: string[];
-    successMetric: string;
-    stopOrDoubleDownTrigger: string;
-    reminders: { popupMin: number; emailMin: number };
-    approvalState: "DRAFT" | "APPROVED" | "PUBLISHED" | "NEEDS REVISION";
-    mode: "BUILD" | "ENGAGE" | "OFFER";
-  }>;
-  weekSummary: string;
-  conflicts: string[];
-  rulesCited: string[];
-}
-\`\`\`
+## If something still points here
 
-## Failure modes
-
-- **OAuth not connected.** \`status: "oauth_required"\` with connect URL.
-- **Draft hasn't passed slop-critic.** Refuse to schedule. Send back.
-- **Calendar fully booked.** Propose next-best per channel rules.
-- **Asset URL is local-path-only.** Refuse until upload complete (Sprint A.1 fix).
-
-## Cost discipline
-
-0 ScrapeCreators. Calendar API writes only. 0-1 main_maya. Heartbeat-safe (reads only). Timeout 5 min.
-
-## Anti-slop check
-
-Event titles and descriptions are operator-facing. Run \`maya-slop-critic\` on every \`titleWithApprovalPrefix\` and \`description\`. No "🚀 Launch Day — Crush It". Write like "Tue 9am: post X thread (5 tweets), pinned hook + Stripe screenshot attached, target 3% engagement, stop at <1%".
+Any skill, cron, or prompt that references \`maya-calendar-plan-builder\` should be updated to call \`maya-calendar-populator\` for today's plan. This stub exists so a stale reference fails loud (pointer to the live skill) rather than silently building a redundant week.
 `;
 
 // Source: agents/skills/maya-gtm/maya-calendar-populator/SKILL.md
 const ENTRY_3_maya_calendar_populator = `---
 name: maya-calendar-populator
-description: After deep-research subagents land target threads + accounts + drafts, generate the rolling 7-day plan (today through Sunday) of calendar events on Google Calendar (provisional, status="draft") mapped to the operator's current phase of the PLAYBOOK 4-phase arc. Each event links to a target thread + draft + cites the playbook rule. Not a 14-day dump — a tight rolling week, regenerated weekly.
+description: After deep-research subagents land target threads + accounts + drafts, build TODAY's turn-key plan — a tight set of calendar events on Google Calendar (provisional, status="draft") mapped to the operator's current phase of the PLAYBOOK arc — plus a light, non-binding high-level arc of where the week is heading. Each event links to a target thread + draft, carries openUrl + draftText, and cites the playbook rule. Not a 7-day dump and not a fixed week: today is the deliverable, the morning cron owns each following day.
 ---
 
 # maya-calendar-populator
 
 ## Purpose
 
-The deep-research subagents (reddit_research, x_research, etc.) surface specific target threads + accounts + drafts. This skill turns those raw artifacts into a real **calendar** — the rolling next 7 days (today→Sunday) of scheduled, time-blocked work the operator can actually do, regenerated each week (NOT a 14-day dump). Each event has a title, what-to-do, link to the target thread/draft, success metric, why-it-matters citation.
+The deep-research subagents (reddit_research, x_research, etc.) surface specific target threads + accounts + drafts. This skill turns those raw artifacts into **today's turn-key plan** — the specific, time-blocked work the operator can actually do *today*, each event one-tap-actionable — plus a light, non-binding high-level arc of where the week is heading (a shape, NOT a scheduled 18-25-event artifact). Each event has a title, what-to-do, an \`openUrl\` (one-tap deep link) + \`draftText\` (verbatim paste), success metric, why-it-matters citation.
 
-Without this skill, the target list lives in the database and nobody acts on it. With it, the operator opens Google Calendar and sees their week.
+Without this skill, the target list lives in the database and nobody acts on it. With it, the operator opens Google Calendar and sees a clear, doable day.
 
-**This week is a living STARTING plan, not a fixed seven days.** The onboarding pass builds it deep enough to deliver real first-week value immediately — every event turn-key, threads fresh as of today. But it's the *baseline* the daily crons refresh, not a frozen artifact: \`morning_brief\` regenerates each day's reply targets against what's hot that morning, and \`midday_pulse\` ADDS any fresh hot-strike thread that breaks after the brief (always ADD, never replace existing events). So build a strong, immediately-actionable week — but understand the discovered threads in it are most valuable *now* and get topped up / rolled forward day by day, not preserved for seven days. Strong for today; the daily loop keeps it current.
+**Today is the deliverable; there is no fixed week.** The onboarding pass produces the research + voice profile + ONE turn-key first move for today — not a rolling seven-day plan. From the next morning on, the \`morning_brief\` cron (7am) OWNS day-to-day planning: every morning it reads the stored ICP knowledge (\`get_my_foundation\` + per-channel \`icpKnowledge\`) and per-channel warmth (\`channelWarmthJson\`), intersects them with what's live on the bet channels that day, and builds THAT day's events. \`midday_pulse\` ADDs any fresh hot-strike thread that breaks after the brief (always ADD, never replace existing events). So build a strong, immediately-actionable **today** and sketch the arc loosely — the discovered threads are most valuable *now* and the daily loop keeps the plan current. Strong for today; the morning cron owns tomorrow.
 
 ## When to invoke
 
-- IF deep-research subagents have just completed AND \`get_my_target_threads({})\` returned >0 rows THEN run. This is the canonical first invocation, right at the end of FIRST WAKE — it builds the STARTING week (deep + turn-key today), which the daily crons then refresh day by day.
-- IF the \`morning_brief\` cron ran THEN roll the plan forward: refresh today's reply targets against what's hot this morning. This is a daily top-up of the living plan, not a from-scratch rebuild of a fixed week.
+- IF deep-research subagents have just completed AND \`get_my_target_threads({})\` returned >0 rows THEN run. This is the canonical first invocation, right at the end of FIRST WAKE — it builds **today's turn-key plan** (the single highest-value first move at onboarding; a fuller today on later runs), which the morning cron then owns day by day. Do NOT build a seven-day artifact.
+- IF the \`morning_brief\` cron ran THEN build TODAY's events from stored ICP knowledge + per-channel warmth against what's hot this morning. The morning cron owns the day; this skill is its calendar-writing arm, not a from-scratch rebuild of a fixed week.
 - IF the \`midday_pulse\` cron surfaced a fresh T1 hot-strike thread THEN ADD it into today (never replace existing events) — the catch-before-peak insert.
-- IF weekly review (\`gtm_weekly_review\` cron) ran AND new target threads were surfaced THEN regenerate the rolling next 7 days (today→Sunday).
-- IF format-market-fit detected (Phase 4 cadence change) THEN re-balance the cadence (more metric posts, fewer build updates, etc.).
+- IF format-market-fit detected (Phase 4 cadence change) THEN re-balance today's cadence (more metric posts, fewer build updates, etc.).
 - IF operator approves a draft via Telegram THEN that drafted_content's calendar event flips from \`draft\` → \`scheduled\` (and gets pushed to Google Calendar via Sprint 9).
 
 ## Required reads
 
-1. **PLAYBOOK.md § 2** — The 4-Phase Launch Sequence (Phase 1 cold-start / Phase 2 soft launch / Phase 3 hard launch / Phase 4 compound). Determines the SHAPE of the rolling 7-day plan.
-2. **PLAYBOOK.md § 4** — BUILD / ENGAGE / OFFER triad ratios. Determines the MIX of event kinds per platform.
-3. **APP.md + USER.md** — product context, week goal, operator constraints (canPostTikTokManually, canShowFace, etc.).
-4. **GTM.md** — active channel picks. Only generates calendar events for primary + secondary channels.
-5. **Per-platform playbook**: \`playbook/reddit.md\`, \`playbook/x.md\`, etc. for time-window + frequency rules per channel.
-6. **Target list** via \`get_my_target_threads({})\` — the raw material. Top 30 by priorityScore.
-7. **Optionally** \`get_my_target_accounts({})\` for follow-and-engage events.
+1. **\`get_my_foundation({})\` — the persisted ICP model the day is built FROM (read this FIRST).** It returns the buyer map (icpDescription, \`buyerJourneyStages[].whereTheyHangOut\` + \`.intentLanguage\`, intentPhrases, trustedVoices), per-channel \`icpKnowledge\` (venues / watch / complaints / topics / nativeStyle), per-channel \`styleExemplars\`, and the founder \`voiceProfile\`. The calendar does NOT re-derive the ICP — it references this stored knowledge and checks only what is LIVE on the bet channels against it. Every event you build today comes from \`whereTheyHangOut\` + \`intentLanguage\`; every drafted post/reply uses ≥1 real intent phrase / native term from the buyer map or channel exemplars, matches the founder voice fingerprint, and passes \`maya-voice-matcher\` (voiceMatchScore ≥ 0.7 AND slopCriticPassed) BEFORE the event is written. A draft that fails goes back for rewrite, not onto the calendar.
+2. **\`channelWarmthJson\` (per-channel warmth) — the warmth arc each bet channel is on.** Read it (via \`get_my_foundation\` / GTM.md) to decide, per channel, whether today is warmup-only (state \`new_needs_warmup\`/\`warming\`) or real posting (state \`warm\`/\`ready\`). This is per-channel, same day — a warm channel posts while a cold one warms up.
+3. **PLAYBOOK.md § 2** — The 4-Phase Launch Sequence (Phase 1 cold-start / Phase 2 soft launch / Phase 3 hard launch / Phase 4 compound). Determines the SHAPE of today's plan and the loose high-level arc.
+4. **PLAYBOOK.md § 4** — BUILD / ENGAGE / OFFER triad ratios. Determines the MIX of event kinds per platform.
+5. **APP.md + USER.md** — product context, goal, operator constraints (canPostTikTokManually, canShowFace, etc.). USER.md "Voice fingerprint" anchors every draft.
+6. **GTM.md** — active channel picks + per-channel ICP/warmth picture. Only generates calendar events for primary + secondary channels.
+7. **Per-platform playbook**: \`playbook/reddit.md\`, \`playbook/x.md\`, etc. for time-window + frequency rules per channel.
+8. **Target list** via \`get_my_target_threads({})\` — the raw material. Top 30 by priorityScore.
+9. **Optionally** \`get_my_target_accounts({})\` for follow-and-engage events.
 
 ## Decision rules
+
+### 0. Ground today in the stored ICP + voice, enforce turn-key (do this on EVERY event)
+
+Before anything else, read \`get_my_foundation({})\` — the buyer map (\`buyerJourneyStages[].whereTheyHangOut\` + \`.intentLanguage\`, intentPhrases), per-channel \`icpKnowledge\` + \`styleExemplars\`, and the founder \`voiceProfile\` — plus \`channelWarmthJson\`. The calendar does not re-derive the ICP; it builds today FROM stored knowledge and checks only what is LIVE on the bet channels against it. For every event you emit:
+
+- **Built from WHERE they live + HOW they talk.** The thread/venue must sit in a \`whereTheyHangOut\` venue or match an \`intentPhrase\`; the draft must use ≥1 real intent phrase / native term from the buyer map or that channel's \`styleExemplars\`.
+- **In the founder's voice.** Every drafted post/reply matches the persisted voice fingerprint and passes \`maya-voice-matcher\` (voiceMatchScore ≥ 0.7 AND slopCriticPassed) BEFORE the event is written. A failing draft goes back for rewrite, never onto the calendar.
+- **Turn-key or not emitted.** Every \`reply_window\` / \`soft_launch_post\` / \`hard_launch_anchor\` MUST carry an \`openUrl\` (one-tap deep link) AND a \`draftText\` (verbatim paste). Any product URL inside \`draftText\` is the \`wrap_link\` wrapped URL, never raw. No \`openUrl\` + \`draftText\` → not actionable → don't emit it (fix the thread or drop it). The server rejects launch/reply events that lack both.
 
 ### 1. Where is this founder, really? (judgment, not a lookup table)
 
@@ -384,36 +331,35 @@ The durable PRINCIPLE: engagement-heavy, active daily, substantive every time, p
 - Save + share weighted higher than like or comment in 2026. Tutorial/checklist/data-backed formats save best.
 - Niche consistency: 3+ unrelated topics = -45% reach. Stay focused on one persona.
 - Best windows: 7-9am + 6-9pm local audience time.
-- Phase 2 weekly cadence: **4 posts/week** ONLY IF \`canPostTikTokManually === true\` AND \`tiktokWarmupState === "ready"\`. Otherwise: 0 TikTok events (skip channel; do warmup separately).
+- Phase 2 weekly cadence: **4 posts/week** ONLY IF \`canPostTikTokManually === true\` AND \`channelWarmthJson["tiktok"].state\` is in (\`warm\`, \`ready\`). Otherwise: 0 TikTok posts today (warmup_block + substantive engagement_block only; advance via \`set_channel_warmth\` once the floor is met).
 
 **Instagram**:
 - Reels for reach. Save rate = primary metric (algorithm weights saves > likes).
 - Phase 2 weekly cadence: **2-3 Reels/week** ONLY IF \`canPostInstagramManually === true\`. Carousels (10-slide educational) for save rate.
 
-### 3. Slot allocation — reference shapes per stage (reason from, don't execute blindly)
+### 3. Slot allocation — TODAY's shape per stage (reason from, don't execute blindly)
 
-**These are reference shapes for what a week tends to look like at each stage — I fit them to the founder, I don't run them as quotas.** The volumes encode the research (cold-start = engagement-heavy/few posts; active launch = denser/multi-channel). I scale to what THIS founder can realistically do and what their buyers' channels support — but I keep them genuinely active daily, because the research says that's what builds an audience. Never a hollow week, never padding.
+**The primary output is TODAY's events. The per-week numbers below are a reference for the LIGHT, non-binding arc — the shape of where the days are heading — NOT a scheduled artifact I write out 7 days deep.** I derive today's allocation from the per-day rate the research supports for the founder's stage (the per-channel daily numbers in § 2), fit it to what THIS founder can realistically do today + what their buyers' channels support, and keep it genuinely active. The week figures just tell me the arc is on track. Never a hollow day, never padding, never an 18-25-event week dump.
 
-**Cold-start (no audience yet):**
-- Primary channel: 5-7 reply_window + 2-3 engagement_block. **NO posts.**
-- Secondary channel: 3-4 reply_window + 1-2 engagement_block.
-- Total: ~10-15 events/week. All passive-engagement.
+**Cold-start (no audience yet) — today:**
+- Primary channel: ~5-7 reply_window + ~2-3 engagement_block. **NO posts.**
+- Secondary channel: ~3-4 reply_window + ~1-2 engagement_block.
+- Arc reference: ~10-15 events/week, all passive-engagement — but I write only today's slice.
 
-**Phase 2 (active launch — the high-velocity week)** — operator has product, wants signups:
-- Primary channel: **per § 2 numbers above for the specific channel.**
+**Phase 2 (active launch — high-velocity) — today** — operator has product, wants signups:
+- Primary channel: **per § 2 daily numbers above for the specific channel.**
 - Secondary channel: half of primary.
-- Tertiary (X build-in-public ALWAYS, if operator can write): 1 post/day + 4-5 reply-mining/week.
-- 1 weekly_review (Sun or Mon, 30 min).
-- **Total target: 18-25 events for the week.** Sub-15 = under-prescribed. Over-30 = unrealistic for a solo founder.
+- Tertiary (X build-in-public ALWAYS, if operator can write): ~1 post + a reply-mining block today.
+- Arc reference: ~18-25 events/week is what a sustained week of THIS adds up to — but the deliverable is one solid day. A hollow today (a few token tasks) is under-prescribed; cramming a whole week into one day is over-prescribed.
 
-**Phase 3 (hard launch)**:
-- 1 hard_launch_anchor (Tuesday primary channel) + 2-3 reply_window in the engagement window + 1 first_50_dms (Monday) + 1-2 X threads pre-anchor + 4-5 reply-mining/week.
-- Total: ~10-12 events centered on the anchor week.
+**Phase 3 (hard launch) — today**:
+- On the anchor day: 1 hard_launch_anchor (primary channel) + 2-3 reply_window in the engagement window. The day before: 1 first_50_dms + 1-2 X threads pre-anchor. Reply-mining daily.
+- Arc reference: ~10-12 events centered on the anchor day; today is the anchor day's slice or its run-up.
 
-**Phase 4 (compound)**:
-- Primary: 1 metric + 2 build/insight + 1 demo + 4-5 reply_window/week + 1 weekly_review.
-- X build-in-public: 1 post/day continues.
-- Total: ~12-15 events/week sustained.
+**Phase 4 (compound) — today**:
+- Primary: a metric OR build/insight OR demo post (rotated across days) + 4-5 reply_window + (Sundays) note the weekly_review.
+- X build-in-public: ~1 post/day continues.
+- Arc reference: ~12-15 events/week sustained; today is one day of that rhythm.
 
 ### 3a. Channel-tier rule for active-launch mode (Phase 2/3)
 
@@ -448,18 +394,22 @@ The title is what the operator sees in their calendar app. Make it sound like a 
 
 Maya checks before slotting hard_launch_anchor or soft_launch_post events. Skip US holidays, known industry events (re:Invent, WWDC, etc. if relevant to the niche), Black Friday week, end-of-year freeze.
 
-### 8. Account warmup gating
+### 8. Account warmup gating — PER CHANNEL, off \`channelWarmthJson\`
 
-If primary channel has unmet Phase-1 audience minimum (PLAYBOOK § 2):
-- ALL post-kind events get pushed to Phase 1 schedule (no posts until warmup done)
-- the rolling 7-day calendar is exclusively warmup_block + engagement_block + reply_window (replies allowed during warmup if they're substantive, not promotional) — the warmup PERIOD still runs its full 2-4 weeks; we just plan it a rolling week at a time
-- Maya signals to user: "We're in warmup. No public product mentions yet. Tomorrow's first task is X."
+Warmth is **per channel, same day** — read \`channelWarmthJson[channel].state\`, do NOT hardcode any one platform's warmup flag. For each bet channel:
+
+- **Cold** (\`state\` in \`new_needs_warmup\` / \`warming\`): today's events for THAT channel are **warmup_block + substantive engagement_block + reply_window only** — no soft_launch_post, no hard_launch_anchor, no product links. Replies allowed if substantive, not promotional. The warmup PERIOD still runs its full 2-4 weeks; we just write today's slice of it.
+- **Warm** (\`state\` in \`warm\` / \`ready\`): real posting unlocks — the channel goes straight to posting + replies in the founder's voice.
+
+When a channel's Phase-1 floor (PLAYBOOK § 2 — engagement-ratio / karma / account-age floor for that channel) is met, call \`set_channel_warmth({channel, state: "warm", ...})\` to advance the arc so tomorrow's morning cron reads it as ready. A warm Reddit while X is still cold is normal and correct — gate each channel on its own warmth, not a global flag.
+
+If EVERY bet channel is cold, today is pure-warmup. Maya signals to user: "We're in warmup on [channels]. No public product mentions there yet. Today's first task is X."
 
 ### 8b. Hard-launch / Show HN preconditions (HARD GATE — kills the 48h-cold-launch bug)
 
 **NEVER emit a \`hard_launch_anchor\` or a Show HN event until ALL THREE preconditions pass.** A cold launch into a tiny audience is a guaranteed void (PLAYBOOK rule 9.8) — it burns the one-shot launch moment. Before slotting either:
 
-1. **Account maturity** — \`creator.createdAt\` is old enough that the account isn't brand-new, AND warmup is done (TikTok \`tiktokWarmupState === "ready"\` for TikTok; for Reddit/HN/X/LI the account has real history, not days-old). A <48h-old account launching this week → NO. Tell the operator: "your accounts need to warm up first — here's this week's warm-up plan; we launch once you've got a baseline."
+1. **Account maturity** — the account isn't brand-new AND warmup is done for the launch channel: \`channelWarmthJson[channel].state\` is in (\`warm\`, \`ready\`) — applied uniformly to every channel (TikTok / Reddit / HN / X / LI / IG / YT), not a per-platform special case. A days-old account or a channel still \`new_needs_warmup\`/\`warming\` → NO launch. Tell the operator: "that channel needs to warm up first — here's today's warm-up plan; we launch once you've got a baseline."
 2. **Audience floor** — the primary channel's Phase-1 audience minimum (PLAYBOOK § 2) is MET. No floor → stay in warmup, don't launch into the void.
 3. **Days-in-phase** — the operator has actually spent the soft-launch (Phase 2) time building credibility; we don't skip Phase 2. (Manager-mode founders with an existing warmed audience can clear 1+2 immediately — judgment, not a fixed timer.)
 
@@ -491,9 +441,15 @@ propose_calendar({
     startsAtMs,
     endsAtMs,
     kind: "warmup_block" | "engagement_block" | "reply_window" | "soft_launch_post" | "hard_launch_anchor" | "first_50_dms" | "weekly_review",
+    openUrl,                         // REQUIRED for reply_window / soft_launch_post / hard_launch_anchor — the one-tap deep link (pre-filled composer intent URL where supported, else the exact thread/comment URL). Server REJECTS launch/reply events lacking this.
+    draftText,                       // REQUIRED for reply_window / soft_launch_post / hard_launch_anchor — the verbatim copy/paste body. Any product URL inside MUST be the wrap_link wrapped URL, never raw. Server REJECTS launch/reply events lacking a non-trivial draftText.
+    successTarget,                   // e.g. "1 OP reply or 5+ upvotes within 4 hours"
+    sourceNote,                      // operator-plain provenance (sub/community + research pass; NO skill slugs / ids)
   }],
 })
 \`\`\`
+
+**Turn-key is server-enforced.** For \`reply_window\`, \`soft_launch_post\`, and \`hard_launch_anchor\` events, the calendar write REJECTS (or flags \`needs_fix\`) any event missing BOTH an \`openUrl\` (http(s) one-tap link) AND a non-trivial \`draftText\` paste block. Build both from \`get_my_target_threads\` (the thread's deep link + its \`draftReply\`) — if you can't, the event is not actionable: fix the thread or drop it, don't emit a bare title. \`warmup_block\` / \`engagement_block\` are exempt (they intentionally carry no product link) but still need a self-contained recipe.
 
 ### Every event lives in Convex and works WITHOUT Google Calendar
 
@@ -539,7 +495,7 @@ Default durations:
 
 - **No target threads landed.** This skill is no-op. Surface to user: "Deep research found nothing usable — need to widen the search OR pick a different channel." Push retry to next research cycle.
 - **Calendar OAuth not connected.** Events still get drafted (status:draft). Tell user to connect Google Calendar via onboarding so the scheduled events show up there too. The Telegram nudge cron still works without Google Calendar.
-- **Phase 1 floor unmet on ALL channels.** Pure warmup mode — the rolling 7-day plan is all warmup. Maya is explicit that the warmup PERIOD runs longer: "Your accounts need 2-4 weeks of warmup before launch. Here's this week's plan."
+- **Phase 1 floor unmet on ALL channels** (every \`channelWarmthJson[channel].state\` is cold). Pure warmup mode — today's plan is all warmup_block + engagement_block + reply_window. Maya is explicit that the warmup PERIOD runs longer than one day: "Your accounts need 2-4 weeks of warmup before launch. Here's today's warm-up plan; I'll build tomorrow's each morning."
 - **Operator overrides Phase 1 + insists on launching.** Document the override per AGENTS.md operating contract rule 1. Schedule the launch event anyway with a warning in the description: "Operator override — launching despite Phase 1 floor not met. Recover path: if engagement <1%, repositioning required."
 
 ## Cost discipline
@@ -803,7 +759,10 @@ interface ContentFormatLibrary {
   /** 5-10 real, top-performing, HUMAN native FULL posts/replies captured VERBATIM
    *  for this channel — the few-shot voice/register anchors for maya-voice-matcher
    *  + drafting (distinct from hookPatterns.realExamples, which prove a pattern).
-   *  Match cadence/vocab/length/format; NEVER copy content. */
+   *  Match cadence/vocab/length/format; NEVER copy content.
+   *  This array is the shape of your thinking; it LANDS via the REQUIRED
+   *  save_style_exemplars({ channel: <this.channel>, styleExemplars: [...] }) call
+   *  (see the Save section) — described-but-unsaved = lost. */
   styleExemplars: Array<{
     url: string;
     verbatim: string;
@@ -819,6 +778,13 @@ interface ContentFormatLibrary {
   rulesCited: string[];
 }
 \`\`\`
+
+## Save — land the voice anchors + ICP knowledge for \`channel\` (REQUIRED)
+
+The \`ContentFormatLibrary\` schema is the shape of your thinking; the call below is how its voice anchors land for the chosen \`channel\`. REQUIRED before you return:
+
+1. **\`save_style_exemplars({ channel: <this.channel>, styleExemplars: [ … your 5-10 full-text verbatim native posts/replies … ] })\`** — REQUIRED. The full-text native posts you captured in decision rule 11 (distinct from \`hookPatterns[].realExamples\`, which prove a *pattern*) anchor \`maya-voice-matcher\` Anchor B; **skip this and drafting on this channel defaults to generic LLM tone** the community ignores and the algorithm starves. Pass each as \`{ platform: <this.channel>, community: <niche>, verbatim, why, capturedAt }\`. This is the persisted form of the \`styleExemplars[]\` schema above — described-but-unsaved = lost.
+2. If this run is the per-channel scorecard owner (no upstream researcher already populated it), also enrich **\`save_foundation_channel_scorecard({ channel: <this.channel>, …, icpKnowledge: { …, complaints, topics, nativeStyle } })\`** with the buyer-conversation evidence and native-voice fingerprints you mined — \`complaints\` (verbatim buyer pain \`{ quote, sourceUrl }\` from the winning examples' reply threads), \`topics\`, and \`nativeStyle\` (\`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }\` drawn from reply-thread voice fingerprints). The per-channel researcher owns \`venues\`/\`watch\`; this skill deepens the native-voice + complaints layer. Don't overwrite a populated scorecard — merge.
 
 ## Failure modes
 
@@ -1154,6 +1120,18 @@ The bookend to the morning brief. The operator knows what they did today and how
 - Native cron at 20:00 operator-local. Self-scheduled via \`cron add\` after foundation completes.
 - NEVER from a heartbeat.
 
+## Skip-when-empty (the recap is conditional, not unconditional)
+
+The evening recap is NOT a guaranteed daily send. It fires only when there is something real to close the loop on. This protects the phone budget (~2 proactive Telegram sends/day, brief + conditional recap) — a recap that says nothing is just noise.
+
+Run this gate FIRST, before composing anything:
+
+- **Genuinely empty day → DON'T send.** If ALL THREE of these are true — (a) 0 calendar events existed for today (none were ever planned), AND (b) 0 actions in \`gtmActionLog\` today (no posts, replies, triage, or warmup), AND (c) no attribution movement (\`get_my_attribution({ windowDays: 1 })\` returns empty \`posts\` AND every \`totals\` figure is zero) — then do NOT send a standalone recap. There is nothing to report and a "nothing happened" ping erodes trust. Instead, fold ONE honest line into tomorrow's morning brief (write it into \`memory/{today}.md\` → "Tomorrow's adjustment" so morning_brief picks it up: e.g. "Yesterday was empty — no plan ran and nothing shipped; let's get one concrete move done today."). Skip the Telegram send entirely.
+- **EXCEPTION — events were planned but NONE got done → STILL SEND.** If calendar events DID exist for today but the planned-vs-done tally is 0-of-N, send the recap anyway with just the Block 1 accountability flag (the silence flag below). A launch dies from absence, not from bad posts — a planned-but-untouched day is exactly the signal worth surfacing, so this overrides skip-when-empty. This is the one case where "nothing got done" must still reach the phone.
+- **Anything real to report → SEND.** If any of {events existed, actions happened, attribution moved} is non-empty, compose and send the full recap as normal.
+
+The zero-of-N silence-flag path in Block 1 stays fully intact — skip-when-empty only suppresses the recap when there was nothing planned AND nothing happened AND nothing converted.
+
 ## Pre-conditions
 
 1. Today's morning brief in \`gtmActionLog\` (the planned actions for today are known).
@@ -1302,7 +1280,7 @@ The operating model. Before Maya can do daily work, she needs an answer to: who 
 
 - IF this is the very first wake AND \`gtmBuyerMap\` is empty for this agent THEN spawn the full foundation pass.
 - IF \`get_my_foundation({})\` returns \`buyerMap: null\` THEN spawn the full foundation pass.
-- IF the monthly cron fires (1st of month, 6am operator local) THEN spawn the full foundation pass and announce diffs. **Also refresh PLATFORM_ALGO.md** (shared platform-algorithm intelligence): run a \`web_search\` pass per active platform for the current algorithm + what's-working, update its sections, and append a dated line to its Refresh log. This keeps format/timing/draft decisions current month-over-month.
+- IF the monthly cron fires (1st of month, 6am operator local) THEN spawn the full foundation pass. **The monthly re-foundation is SILENT on progress** — no replay of onboarding narration, no progress pings; the running arc goes to \`post_activity\` (web). Send AT MOST ONE Telegram, and ONLY if the month-over-month diff is operator-worthy (a bet channel changed, a new buyer pocket opened). No diff worth acting on → no message. **Also re-ingest the founder's newest posts** (re-run Phase 0) → \`save_voice_profile\` with the refreshed fingerprint + refresh \`save_style_exemplars\` per bet channel, so voice + native exemplars stay current as the founder evolves. **Also refresh PLATFORM_ALGO.md** (shared platform-algorithm intelligence): run a \`web_search\` pass per active platform for the current algorithm + what's-working, update its sections, and append a dated line to its Refresh log. This keeps format/timing/draft decisions current month-over-month.
 - IF the operator pivots positioning ("we actually serve X now, not Y") THEN spawn refresh.
 - NEVER *start* a brand-new foundation from a continuous heartbeat — a fresh foundation is a budgeted event, not a tick. BUT a foundation that already started and stalled (a \`foundation_started_at:\` line exists with no \`foundation_completed_at:\`) MUST be **resumed** by the heartbeat watchdog (see HEARTBEAT.md "foundation-completion watchdog") — advancing one phase per tick until threads + drafts + calendar land. Resuming an in-flight pass is self-healing, not a new budgeted event. The boot turn spawns the first workers and yields; if its turn ends before the full chain lands, the heartbeat is what carries it to completion. Without this, foundation stalls at strategy and the operator hears nothing after the hello — the exact failure this guards against.
 
@@ -1314,9 +1292,17 @@ The operating model. Before Maya can do daily work, she needs an answer to: who 
 4. **TOOLS.md** — the \`save_foundation_*\` tools + the research tools.
 5. **PLAYBOOK.md § 6** — voice rules every drafted content angle must clear.
 
-## Phase 0 — manager mode: start from their own accounts
+## Phase 0 — Build the founder's voice (ALWAYS, before any niche research)
 
-Check APP.md "Entry mode" first. If **manager mode** (already-launched founder), before any niche research, ingest the founder's OWN existing accounts: pull each handle in APP.md/USER.md via \`scrape_creators\` (their recent posts + engagement), and judge what's already working for THEM — which formats/angles/cadence land, where their audience already is, their actual voice. This is where you pick up; it seeds the buyer map, content angles, and the voice profile with real first-party signal instead of a cold start. In **launch mode**, skip this (glance at any existing handles for voice only) and build from the niche. If the mode is unresolved, pull their accounts if handles exist and use what you find to propose the mode at synthesis.
+**This runs for EVERY user with handles — launch mode, manager mode, unresolved mode alike. Voice is not manager-gated and not optional.** Before any niche research, ingest the founder's OWN existing accounts and persist a real voice fingerprint:
+
+1. **Pull each handle** in APP.md/USER.md via \`scrape_creators\` — last ~20 text posts on X/Reddit/LinkedIn; profile + top videos on TikTok/IG. Bounded: last ~20 posts / top videos only (keep the pass under budget).
+2. **WATCH their own top videos** via \`review_media\` — capture the on-camera voice: how they actually talk, their register, their energy, their phrasing out loud. This is the multimodal step that makes the fingerprint real and not a guess from captions.
+3. **READ their text** for cadence, vocab, openings, signoffs, emoji use, contraction habits, em-dash habit, profanity tolerance, characteristic phrases.
+4. **Call \`save_voice_profile\`** with the fingerprint — features + 3-5 verbatim samples per platform + confidence. **A voice profile you describe but never save does not exist.** It only counts when the tool returns OK; it anchors every later draft (USER.md "Voice fingerprint").
+5. **If NO handles exist**, ask the founder for 2-3 sentences in their own words and store that as \`confidence: 'low'\` — never skip the save.
+
+In **manager mode** this same pull doubles as first-party niche signal: judge what's already working for THEM — which formats/angles/cadence land, where their audience already is — and let it seed the buyer map + content angles instead of a cold start. In **launch mode** you still pull + watch + save the voice (no carve-out), then build the niche research from there. If the mode is unresolved, use what the pull shows to propose the mode at synthesis. **Either way, Phase 0 ends with a saved voice profile.**
 
 ## Native-tool orchestration
 
@@ -1329,14 +1315,14 @@ The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.*
 5. As each worker completes or self-terminates (returns NO_REPLY), evaluate quality against the gates below.
 6. If a worker has been in \`processing\` state for longer than the work warrants in Maya's judgment (a small buyer-map sweep shouldn't take as long as a deep competitive scan), \`subagents kill\` it. The lane unblocks immediately — verified from OpenClaw source.
 7. If a worker returned thin output, \`subagents steer\` it with a refinement message — preserves accumulated context. Do not respawn unless steering fails.
-8. Once Maya judges all 5 outputs meet the bar, the STRATEGY phase is done — but **do NOT announce synthesis yet, and do NOT mark foundation complete.** Call \`log_action({ kind: "strategy_complete", summary })\` and proceed straight into Phase 2 (discovery). **The synthesis message is Phase 4 — it goes out ONLY after threads + drafts + calendar have actually landed** (Phase 3 + the hard completion gate in BOOT.md: re-check \`get_my_foundation({})\` shows real \`gtmTargetThreads\` + \`gtmDraftedContent\` + \`gtmCalendarEvents\` before telling the operator the plan is ready). Announcing after strategy = the operator gets a plan with an empty calendar — the exact failure this guards against.
+8. Once Maya judges all 5 outputs meet the bar, the STRATEGY phase is done — but **do NOT announce synthesis yet, and do NOT mark foundation complete.** Call \`log_action({ kind: "strategy_complete", summary })\` and proceed straight into Phase 2 (discovery). **The synthesis message is Phase 4 — it goes out ONLY after a voice profile + foundation rows + the ONE day-1 calendar event have actually landed** (Phase 3 + the hard completion gate in BOOT.md: re-check \`get_my_foundation({})\` shows a saved \`voiceProfileJson\` + real \`gtmTargetThreads\` + \`gtmDraftedContent\` + EXACTLY ONE day-1 \`gtmCalendarEvents\` before telling the operator the picture + their first move is ready). Announcing after strategy = the operator gets a plan with no first move — the exact failure this guards against.
 
-### Progress pings while I work (so the wait feels like watching a pro, not a black box)
-During Phases 1→3 (the ~10–15 min), send a few short, **grounded** Telegram updates via \`send_update\` — each carries a real, specific finding + what's next, plain manager voice, NO internal terms (never "workers / phase / scorecard / scanning"). The arc the founder should feel — looked everywhere → narrowed with reasoning → found their people → building the plan:
-- **~3 min — first signal:** *"Already seeing it — r/devops + r/macapps have founders venting about exactly this. Digging in, also checking X, HN, the others."*
-- **~7 min — the channel call (with reasoning + an invite to correct me):** name what I'm betting on AND what I'm ruling out and why — the founder should feel me make a real call, not a black box. *"Calling it: your buyers live on Reddit + X. I checked TikTok, IG, LinkedIn — not seeing your people there for this, so I'm not going to waste your time on them (push back if you disagree). Going deep on the two that matter."*
-- **~11 min — the wow (a real prospect in their own words):** surface ONE actual potential customer + their verbatim quote — proof I found their people, not a category. *"This is your buyer, literally: someone in r/LocalLLaMA just wrote '[real quote]'. Found a bunch like this. Drafting your replies + laying out the week now."*
-Pace ~1 per 3–5 min (not silence, not spam). **Each ping obeys Gate 1b (output-critic): say only what actually landed in the database** — never "found 6 threads" if 1 POSTed, the channel-call quote must be a real thread I pulled, never "building your calendar" before calendar events exist.
+### Progress while I work — web view, not the phone
+The running play-by-play of the pass (first signal → channel call → real prospect found → first move built) goes to the **web Mission Control view via \`post_activity\`**, NOT to Telegram. Each \`post_activity\` entry carries a real, specific, grounded finding (looked everywhere → narrowed with reasoning → found their people → building the move) in plain manager voice, no internal terms. The founder watches the work happen on the web; the phone stays quiet.
+
+**Onboarding Telegram budget is exactly 2: the hello and the synthesis.** The ONLY exception is the never-silent floor below: if the pass runs long (~10+ min), Maya may send AT MOST ONE short optional mid-pass Telegram line so the founder knows it's still moving — one grounded line (a real finding + "still building, ping you when it's ready"), never a stream. Default is silence on the phone between hello and synthesis.
+
+**Every \`post_activity\` entry obeys Gate 1b (output-critic): say only what actually landed in the database** — never "found 6 threads" if 1 saved, any quoted prospect must be a real thread actually pulled, never "building your move" before the calendar event exists.
 
 ## The questioning loop — Maya is the boss, not a passive receiver
 
@@ -1371,21 +1357,23 @@ This is Maya's judgment, not a checklist. Numbers below are not thresholds — t
 
 - **Buyer map** — \`icpDescription\` reads like a specific person, not a category. **Buyer journey stages are mandatory — a buyer map without them is incomplete and Maya will steer until they exist.** Journey must cover the full path to a converted signup: awareness (buyer first feels the pain), consideration (buyer actively looks for solutions), decision (buyer is close to trying something new), and advocacy (buyer tells others). Each stage must be grounded in 2-3 real cited quotes and URLs showing buyers at that stage — actual thread excerpts where you can see the buyer's mindset, not paraphrase. Intent phrases are real phrases buyers say (not paraphrased). Trusted voices are accounts with verifiable handles + platforms.
 - **Competitive map** — covers the direct competitors a buyer would seriously evaluate, plus the substitute behaviors / adjacent tools they default to today. Every complaint quotes a real post + URL. Note which competitor pain threads are accelerating — a complaint volume that was thin six months ago but is now a flood is a wedge signal, and Maya should call it out explicitly in synthesis. Ground the competitive map in the social APIs (real complaint quotes + URLs from Reddit/X/HN). **Do NOT rely on \`web_search\`/\`web_fetch\` — they're not wired on the deployed agent yet, so a call just fails and wastes a turn; skip the open-web positioning lane until it's enabled.** (When it's available later, it's the lane for competitors' own pricing/positioning pages + G2/Trustpilot — but don't attempt it now.)
-- **Channel scorecard** — rates the channels worth rating for this product. Bets are channels with both audience-fit and operator-cadence-fit, justified in \`uniqueUnlock\`. Maya picks the bet count — usually small.
+- **Channel scorecard** — rates the channels worth rating for this product. Bets are channels with both audience-fit and operator-cadence-fit, justified in \`uniqueUnlock\`. Maya picks the bet count — usually small. **Per-channel \`icpKnowledge\` is MANDATORY for every bet channel — a bet channel with empty \`icpKnowledge\` is an incomplete scorecard and Maya steers until it lands.** Each bet channel's worker MUST call \`save_foundation_channel_scorecard({ channel, ..., icpKnowledge: { venues: [{name, kind, url?, whyHere}], watch: [...], complaints: [{quote, sourceUrl}], topics: [...], nativeStyle: {exemplars: [{quote, sourceUrl}], cadenceNotes, vocab: [...]} } })\` — WHERE the buyers live (subreddits/hashtags/communities/accounts) + what they watch + their real complaints (verbatim quote + URL) + their topics + 2-3 native-style exemplars (verbatim post + URL). This is the stored ICP picture the daily morning cron reads back every day; if it's empty, the research decays after onboarding.
 - **Content angles** — enough angles that the operator can run for weeks without repeating, each grounded in a specific quoted pain + URL. Hook variants are in the operator's voice (verify against USER.md).
 - **Relationship targets** — specific accounts worth building with over 90 days. Mix of cadences. **This lane is not optional — a zero-target output means the worker did not finish the job; Maya will steer until real targets exist.** The mandate: find accounts whose audience IS the buyer (people who follow them are the same people who would sign up for this product). Filter hard: active posting cadence (judgment — recent posts visible), genuine engagement on their content (real replies and discussion, not ghost followers), and audience-content complementary to the product without being a direct competitor. Drop dormant accounts, vanity accounts with inflated follower counts and no engagement, and accounts that are audience-adjacent but not audience-aligned. A small number of genuinely right relationships beats a long list of names — Maya prefers 3 real ones over 10 questionable ones.
 
 If any output reads thin to Maya's judgment, steer the worker for more. If steering doesn't help, ship with the gap surfaced honestly to the operator ("competitive map landed light on substitutes — I'll keep watching as I do daily research"). Maya decides what "enough" means — there is no minimum count.
 
-## Phases 2 / 2.5 / 3 — discovery, composition, calendar assembly (same pass)
+## Phases 2 / 2.5 / 3 — discovery, composition, single first move (same pass)
 
-Foundation does NOT stop at the operating model. The operator waited ~10-15 min for research; making them wait again after a "yes draft replies" is broken UX. **In the same pass, before sending synthesis, Maya extends foundation into actionable specifics.** The split: per-item **workers find AND draft** each reply target (one self-contained POST sequence per thread — the reliable shape), **Maya curates** the drafts editorially (Phase 2.5), then **Maya lays out the calendar** from the landed threads+drafts (Phase 3). Composition lives in the per-item worker loop, not a single inline end-of-run loop — that loop was what got skipped, leaving an empty calendar.
+Foundation does NOT stop at the operating model. The operator waited ~10-15 min for research; making them wait again after a "yes draft replies" is broken UX. **In the same pass, before sending synthesis, Maya extends foundation into ONE actionable first move for today** — not a week. The split: per-item **workers find AND draft** reply targets (one self-contained POST sequence per thread — the reliable shape, and the pool the daily cron draws from going forward), **Maya curates** the drafts editorially (Phase 2.5), then **Maya builds the single highest-value first move** from the landed threads+drafts (Phase 3). Composition lives in the per-item worker loop, not a single inline end-of-run loop — that loop was what got skipped, leaving an empty calendar. **There is no onboarding week — the daily \`morning_brief\` (7am) owns day-to-day planning from tomorrow on.**
 
 ### Phase 2 — DISCOVERY + DRAFT (workers find threads AND draft the reply, one POST per item)
 
 For each channel marked \`bet: true\` in \`gtmChannelScorecard\`, spawn the matching continuous worker, and give each worker its **per-channel research skill** so it mines deep, not shallow: \`reddit_research\` → \`maya-reddit-demand-researcher\`, \`x_research\` → \`maya-x-founder-led-researcher\` (mine the REPLIES/conversation via \`research_x\` with \`conversation_id:\`/\`to:\` operators, not just keyword page one), \`hn_research\` → \`maya-hn-researcher\` (descend the full comment tree via \`research_hn_item\`), \`linkedin_research\` → \`maya-linkedin-researcher\` (only if \`maya-linkedin-fit-researcher\` cleared LinkedIn). For video platforms that cleared as bets, mine the **comments** (TikTok \`scrape_creators({ path: "/v1/tiktok/video/comments", ... })\`, IG \`scrape_creators({ path: "/v2/instagram/post/comments", ... })\`) for buyer language — that's where the intent is, not the view counts. **Each worker both finds a reply-target thread AND saves the operator-voice reply for it, then saves both — one self-contained item sequence per item.** This mirrors the foundation strategy workers (each worker IS a save), which is what makes the actionable layer reliable: drafting is NOT deferred to a single inline Maya loop at the end (that loop was the step that empirically got skipped, leaving 0 drafts + an empty calendar). The worker's task string carries the operator's voice contract so the draft lands native; Maya's editorial pass (Phase 2.5) reviews + culls what the workers produced rather than drafting from scratch.
 
-**Discovery depth — workers must not do a single shallow sweep and stop.** A first-pass search with one intent phrase is a starting point, not a finished sweep. Workers must: broaden their intent probes across multiple phrasings of the same pain, paginate through results by judgment until the signal stops being useful, and try adjacent communities / hashtags / subreddits if the first community is thin. They stop broadening when they've genuinely covered the buyer-pain landscape well enough to power a real first week — Maya judges this when she reads the pool, not by a count. **Phase 2.5 cannot start until Maya judges the pool is deep enough** — a handful of threads from one subreddit is not a pool; coverage across real buyer communities is.
+**Each bet channel worker MUST ALSO call \`save_style_exemplars(channel, [...])\` with 5-10 verbatim native posts** it pulled from that channel (real top posts in the community, with \`{platform, community, verbatim, why, capturedAt}\` per exemplar) AND \`save_foundation_channel_scorecard({ channel, ..., icpKnowledge: {...} })\` — these are the per-channel native-register reference the daily cron + voice-matcher (Anchor B) read back every day. A bet channel that lands threads but no \`styleExemplarsJson\` / \`icpKnowledge\` is incomplete — steer until both land.
+
+**Discovery depth — workers must not do a single shallow sweep and stop.** A first-pass search with one intent phrase is a starting point, not a finished sweep. Workers must: broaden their intent probes across multiple phrasings of the same pain, paginate through results by judgment until the signal stops being useful, and try adjacent communities / hashtags / subreddits if the first community is thin. They stop broadening when they've genuinely covered the buyer-pain landscape well enough to power a strong first move today AND seed the pool the daily cron draws from going forward — Maya judges this when she reads the pool, not by a count. **Phase 2.5 cannot start until Maya judges the pool is deep enough** — a handful of threads from one subreddit is not a pool; coverage across real buyer communities is.
 
 Worker task string (Phase 2) — include the operator's voice summary + SOUL voice contract inline so the worker can draft native. **CRITICAL — the task string MUST spell out that the worker SAVES each finding by calling the typed tool (save_target_thread, save_draft, propose_calendar, …), or it hands data back as text and the database stays empty (the live failure 2026-05-30). Verified: leaf research workers DO have the typed tools.** Compose the task string like this:
 \`\`\`
@@ -1425,13 +1413,22 @@ calling each tool as you go (never batch at the end):
      draftText }).
   4. save_target_thread({ externalId (same), draftReply }) — keeps the
      thread's one-tap deep link in sync.
-  5. propose_calendar({ researchJobId, events: [ ONE event for this thread:
-     a full hands-off recipe (WHAT / LINK / OPEN one-tap / WHY / YOUR REPLY
-     verbatim / SUCCESS TARGET / TIME), kind="reply_window", targetThreadId,
-     slotted on my channel's recommended day+time ] }). Stored draft.
-Do 1→5 per thread before the next. Skip not-worth-it threads (set the action;
+Do 1→4 per thread before the next. Skip not-worth-it threads (set the action;
 don't draft). Focus on buyers about to try something new — frustration with
 current tools, asking for alternatives, comparing options. Those convert.
+Do NOT build a calendar — you build the thread + draft pool; Maya builds the
+single day-1 first move from it (Phase 3). No propose_calendar in this worker.
+
+ALSO, before finishing, persist the per-channel ICP knowledge for <channel>:
+  - save_style_exemplars("<channel>", [ 5-10 verbatim native top posts you
+    pulled: { platform, community, verbatim, why, capturedAt } ]).
+  - save_foundation_channel_scorecard({ channel: "<channel>", ...,
+    icpKnowledge: { venues:[{name,kind,url?,whyHere}], watch:[...],
+    complaints:[{quote,sourceUrl}], topics:[...],
+    nativeStyle:{exemplars:[{quote,sourceUrl}],cadenceNotes,vocab:[...]} } }).
+These are the stored ICP picture the daily morning cron reads back — without
+them this channel's research decays after onboarding.
+
 Research discipline: use research_reddit / research_x / research_hn /
 scrape_creators for the RESEARCH reads; never raw-scrape reddit.com/x.com.
 \`\`\`
@@ -1451,57 +1448,47 @@ Workers saved thread + draft per item. Maya is now the editorial gate over what 
 
 This keeps the editorial bar without the brittle "Maya drafts all N replies inline" loop. Worker output is a first draft; Maya's judgment is the gate.
 
-### Phase 3 — CALENDAR ASSEMBLY (spawn \`calendar_worker\` — do NOT lay it out inline)
+### Phase 3 — TODAY'S SINGLE FIRST MOVE (one turn-key event — NOT a week)
 
-Threads + drafts have already landed reliably (Phase 2/2.5). **The calendar is the one step that historically got SKIPPED when Maya tried to lay it out inline at the tail of a long turn (threads+drafts landed, calendar stayed empty, every era). So it does NOT happen inline anymore — Maya SPAWNS \`calendar_worker\` to build it**, the same pattern that makes threads/drafts reliable (a dedicated worker runs to completion and calls the tool; an inline tail step gets dropped):
+Threads + drafts + per-channel ICP knowledge have landed reliably (Phase 2/2.5). **Onboarding's terminal output is ONE turn-key first move the founder can do today — not a rolling 7-day week.** No week is built here; the daily \`morning_brief\` (7am, tomorrow on) owns day-to-day planning from the stored ICP knowledge + what's hot that morning. Building a frozen seven days at onboarding is exactly the artifact this product no longer ships.
 
-\`\`\`
-sessions_spawn({ agentId: "calendar_worker", task: "<the task string below>" })
-\`\`\`
+Maya picks the **single highest-value first move** for the founder's stage from the curated pool:
+- **Pre-launch / no audience** → the warmup/reply move the research says is the leveraged cold-start play: one strong reply_window on the best live thread Maya pulled (a buyer venting about exactly this pain, fresh today), OR — if the founder's bet channel is cold per \`channelWarmthJson\` — one warmup_block / substantive engagement_block (no product link) to start the arc safely.
+- **Has traction / users** → one reply_window or soft_launch_post on the highest-intent live thread (a buyer comparing tools / asking for an alternative).
 
-The \`calendar_worker\` task string MUST tell it to:
-1. Call \`get_my_target_threads({})\` + \`get_my_foundation({})\` to read the landed threads (each carries \`draftReply\` + a deep link), the channel bets, the content angles, and the stage/north-star.
-2. Read \`maya-calendar-populator/SKILL.md\` (§ 2 per-channel cadence, § 3 slot allocation by phase).
-3. Lay out a **rolling 7-day week** and **save it with \`propose_calendar({ researchJobId, events })\`** (stores DRAFTS in Convex — it does NOT push to Google Calendar; that waits for the operator's yes). A plan the worker describes in text but never calls \`propose_calendar\` for does not exist — it MUST call the tool.
+Build it ONE of two ways:
+1. **Inline** (cheap, single event): Maya composes the one event herself from the best landed thread and calls \`propose_calendar({ researchJobId, events: [ <ONE event> ] })\`. A single event at the tail of the turn is reliable in a way a whole week was not — the historical skip was the multi-event week build, not one event.
+2. **Or spawn a small worker** with the same one-event task if Maya wants it run to completion off-turn — but the output is still EXACTLY ONE event.
 
-Maya waits for the worker (via \`sessions_yield\`), then re-checks \`get_my_foundation({})\` for a real \`gtmCalendarEvents\` week before proceeding. The same recipe + fullness + channel-fit standards apply (they go IN the worker's task string):
-
-Each event is a full hands-off recipe:
+The one event is a full hands-off recipe:
 
 \`\`\`
 WHAT: <action title>
 LINK: <thread URL>
-OPEN (one-tap): <the thread's deep link / intent URL — see TOOLS.md "Deep links / intent URLs">
+OPEN (one-tap): <the thread's deep link / intent URL — see TOOLS.md "Deep links / intent URLs">  (openUrl)
 WHY: <one sentence — why this thread, why now>
 YOUR REPLY (verbatim — copy/paste/edit/post):
-<the draftReply already on the thread row>
+<the draftReply already on the thread row>  (draftText)
 VOICE NOTES: <one sentence — what to tweak if you want>
 AFTER YOU POST: <reply to me — I'll track 72h>
-SUCCESS TARGET: <e.g. 1 OP reply or 5+ upvotes within 4 hours>
+SUCCESS TARGET: <e.g. 1 OP reply or 5+ upvotes within 4 hours>  (successTarget)
 TIME: <minutes — usually 10-15>
 \`\`\`
 
-The worker saves the events via \`propose_calendar({ researchJobId, events })\` (Convex stores them as \`draft\` — it does NOT compose or lay them out; the worker composes them). It also **adds the events that have no specific thread target** — the original posts, the build-in-public content, the standing daily reply-mining blocks — so the week is a complete, daily plan, not just a list of discovered threads.
+\`propose_calendar\` stores it as \`draft\` (it does NOT push to Google Calendar; that waits for the operator's yes). Pass the structured \`openUrl\` + \`draftText\` + \`successTarget\` so the event is server-validated turn-key. A move Maya describes in text but never calls \`propose_calendar\` for does not exist — she MUST call the tool.
 
-**This week is a living STARTING plan, not a frozen seven days.** It must carry real, turn-key value from day one — every event actionable, threads fresh as of today. But it is the *baseline* the daily crons then refresh: \`morning_brief\` regenerates each day's reply targets against what's hot that morning, and \`midday_pulse\` ADDS any fresh hot-strike thread that breaks after the brief (never replacing what's there). So the foundation week should be built deep enough to be immediately useful, but Maya does NOT treat it as the final, fixed plan — the discovered threads in it are most valuable now and will be topped up / rolled forward daily. Build it strong for today; trust the daily loop to keep it current.
+**Turn-key is the product promise:** the one event has an exact LINK + a paste-ready TEXT (or "first draft — tweak to sound like you") + WHEN + WHY. A vague item ("engage on Reddit") is a failure — the founder must be able to open the calendar, tap, paste, post, with zero thinking.
 
-**How full, and what mix, is judgment — grounded in the launch research, fit to THIS founder (the worker's task string carries this guidance, and Maya re-checks the result).** Read PLAYBOOK § 2 (the 4-phase launch sequence) + § 4 (BUILD/ENGAGE/OFFER) and the founder's real situation, then decide:
-- **What stage are they actually at?** Pre-launch with no audience → the research (§ 2 Phase 1) says earn authority first: heavy daily reply-mining (the leveraged move at cold-start), post sparingly, do NOT pitch yet. Already launched with traction/users → push the product harder, soft-launch or hard-launch motions, more original posts. I judge this from APP.md stage + week-goal + what my agents found about their existing presence — NOT a fixed stage→phase table.
-- **How much?** The research is clear that building an audience takes *substantial daily* engagement — a near-empty week (a few comments) builds nothing and breaks the founder's trust. So the plan keeps them genuinely active every day at the volume the research supports for their stage. I don't pad with filler, but I also never ship a hollow week. Velocity over vanity (§ 2): the right daily reps, not a number I hit for show.
-- **Which channels?** Only the ones my research says their buyers actually live in. I do NOT force a channel (incl. X) just to fill the calendar — if the buyers aren't on X, X isn't in the plan.
+**The first-move gate is the backstop.** Maya does NOT claim the picture + first move are ready (Phase 4) until she re-reads \`get_my_foundation({})\` and sees a saved voice profile + foundation rows + **EXACTLY ONE day-1 \`gtmCalendarEvents\` event**. If it's missing, the chain didn't land — re-build/steer; never narrate a first move that isn't there.
 
-**Every event is turn-key (the product promise):** exact LINK + exact paste-ready TEXT (or "first draft — tweak to sound like you") + WHEN + WHY. A vague item ("engage on Reddit") is a failure — the founder must be able to open the calendar, tap, paste, post, with zero thinking.
-
-**The empty-calendar gate is the backstop.** Maya does NOT claim the plan is ready (Phase 4) until she re-reads \`get_my_foundation({})\` and sees a real, substantial \`gtmCalendarEvents\` week. If it's empty or thin, the chain didn't land — re-spawn/steer the workers; never narrate a calendar that isn't there.
-
-ONLY after the week is genuinely built (threads + drafts + a full daily calendar) does Maya proceed to Phase 4 (the synthesis message). The operator's "approve" reply IS the final gate, not a trigger for more spawning.
+ONLY after the voice profile + foundation rows + the one day-1 event are genuinely landed does Maya proceed to Phase 4 (the synthesis message). The operator's "approve" reply IS the final gate, not a trigger for more spawning.
 
 ## Synthesis message — what the operator gets after the FULL pass
 
 One Telegram message — as tight as Maya can make it while still being useful (operator reads on a phone):
 
 \`\`\`
-Done. Here's the picture + your first week, ready to go.
+Done. Here's the picture + your first move.
 
 Who's actually buying this: [one-sentence persona, named if possible — e.g.
 "a Mac dev running 3-5 local tools at once, 60-80GB of models on their SSD"]
@@ -1520,32 +1507,31 @@ real traction, so we skip the build-from-zero arc and push [product] straight
 into the buying conversations." I DERIVE this from their real stage + what my
 research found, and say it plainly so they get the logic.]
 
-Your week, in shape: [the high-level RHYTHM, 2-4 lines — e.g. "Daily: 2-3
-reply slots in r/LocalLLaMA + X where people are quitting Ollama. Tue/Thu: an
-original post on the storage-bloat angle. Fri: a build-in-public thread." Not
-every item — the shape, so they get the plan at a glance.]
+Your first move — today: [the ONE turn-key action, named concretely — e.g.
+"reply to this exact thread in r/LocalLLaMA where someone's quitting Ollama —
+I already wrote it in your voice, it's in your plan, takes ~10 min."]. One
+move, not a list — the right first rep for where you're at.
 
-I've built the whole week out — every item has the exact thread, a paste-ready
-reply I wrote in your voice, and a time. It's all in your plan in the app,
-ready to look at. This is your starting plan, not a fixed week — I refresh it
-every day (a brief each morning, and a midday check for anything hot that just
-broke), so the threads stay current instead of going stale.
+It's in your plan in the app, ready to act on: the exact thread, a paste-ready
+reply I wrote in your voice, and a time. Starting tomorrow I'll send you a plan
+each morning, built from what's hot that day and where your buyers actually
+are — so you always know your next move without thinking about it.
 
-Want me to add this week to your Google Calendar so it's right in your day? Say
-go and I'll drop it in. First — tell me if I've got your buyer, channels, or the
-approach wrong; easy to redirect now, before I lock it in.
+Want me to drop today's move onto your Google Calendar so it's right in your
+day? Say go. First — tell me if I've got your buyer, channels, or the approach
+wrong; easy to redirect now, before I lock it in.
 \`\`\`
 (Do NOT paste a literal URL — say "in your plan / in the app." I don't fabricate links.)
 
-Plain text. No headers. No "Excited to share." Lead with: who's buying (+ a real one in their words) → where they live → THE STAGE-FIT STRATEGY in plain words → the turn-key week → the steering promise. The strategy line is DERIVED from this founder's situation (never a template — pre-launch earns authority first; traction-stage pushes the product), stated so they understand the logic and can push back. Do NOT hand them a backward inventory of what I built ("5 competitors, 5 hooks, 5 accounts") — that's my back office, not their plan.
+Plain text. No headers. No "Excited to share." Lead with: who's buying (+ a real one in their words) → where they live → THE STAGE-FIT STRATEGY in plain words → the ONE turn-key first move for today → the daily-plan promise (a plan each morning) → the steering promise. The strategy line is DERIVED from this founder's situation (never a template — pre-launch earns authority first; traction-stage pushes the product), stated so they understand the logic and can push back. Do NOT promise a "week" or a "first week" — onboarding delivers the read + their voice captured + ONE move for today; the daily morning cron is where planning lives from tomorrow on. Do NOT hand them a backward inventory of what I built ("5 competitors, 5 hooks, 5 accounts") — that's my back office, not their plan.
 
-### If the week isn't fully built yet (honest-partial — never go silent)
+### If the first move isn't built yet (honest-partial — never go silent)
 
-The full synthesis above assumes threads + drafts + calendar all landed. If the watchdog has been carrying the pass and the **strategy layer is solid but the actionable week is still incomplete** after a reasonable window, do NOT stay silent and do NOT fake a complete plan. Send the **strategy now** — who's buying (+ a real one in their words), where they live and where they don't, the stage-fit play — and be honest that the specifics are still landing:
+The full synthesis above assumes the voice profile + foundation rows + the one day-1 event all landed. If the watchdog has been carrying the pass and the **strategy layer is solid but the day-1 move is still landing** after a reasonable window, do NOT stay silent and do NOT fake a ready move. Send the **strategy now** — who's buying (+ a real one in their words), where they live and where they don't, the stage-fit play — and be honest that the first move is still landing:
 
-> "Here's the read + the play. Your buyer is [X], they live on [channels], and the move is [stage-fit strategy]. I'm finishing your week's drafts + calendar now — I'll ping the moment it's ready to act on."
+> "Here's the read + the play. Your buyer is [X], they live on [channels], and the move is [stage-fit strategy]. I'm locking in your first move now — I'll ping the moment it's ready to act on."
 
-This delivers the substantive thinking the instant it's solid (what the operator actually wants the moment research is done) without claiming an empty calendar is a ready plan. Mark it: append \`plan_proposed_at: <ISO>\` (strategy delivered) but **withhold \`foundation_completed_at:\`** until the calendar truly lands — the watchdog keeps driving Phases 2/2.5/3 to completion, then sends the short "your week's ready" follow-up. Silence after the hello is never acceptable; a half-built plan, surfaced honestly, always beats it.
+This delivers the substantive thinking the instant it's solid (what the operator actually wants the moment research is done) without claiming a move that isn't there yet. Mark it: append \`plan_proposed_at: <ISO>\` (strategy delivered) but **withhold \`foundation_completed_at:\`** until the one day-1 event truly lands — the watchdog keeps driving Phases 2/2.5/3 to completion, then sends the short "your first move's ready" follow-up. Silence after the hello is never acceptable; the read plus an honest "first move landing" always beats it.
 
 ### Strategy approval gate
 
@@ -1557,9 +1543,9 @@ This synthesis is a **proposal, and I invite a pivot** — it leads with the str
 
 ## Phase 5 — push to Google Calendar ONLY after the operator says yes
 
-The draft calendar events live in \`gtmCalendarEvents\` (status \`draft\`) and show in the operator's plan (HQ web view) the moment \`calendar_worker\` saves them — so the operator can SEE the full week immediately. They do **NOT** touch the operator's real Google Calendar until the operator approves. The push is the one thing the "yes" gates; the plan itself is already built + visible.
+The draft calendar event lives in \`gtmCalendarEvents\` (status \`draft\`) and shows in the operator's plan (HQ web view) the moment Phase 3 saves it — so the operator can SEE today's first move immediately. It does **NOT** touch the operator's real Google Calendar until the operator approves. The push is the one thing the "yes" gates; the move itself is already built + visible.
 
-- **Do NOT call \`approve_calendar\` before the operator says yes.** A launch week is proposed and waits for an explicit go — never auto-pushed onto someone's real calendar. (The server also refuses the push unless strategy state is \`approved\`, so a premature call no-ops — but the rule is: ask first.)
+- **Do NOT call \`approve_calendar\` before the operator says yes.** A first launch move is proposed and waits for an explicit go — never auto-pushed onto someone's real calendar. (The server also refuses the push unless strategy state is \`approved\`, so a premature call no-ops — but the rule is: ask first.)
 - On the operator's **"yes / go / add it"** → call \`set_strategy_approval({ state: "approved" })\`, then \`approve_calendar({})\`. Response cases:
   1. **\`ok (pushed=N failed=M)\`** — events landed on Google Calendar. Confirm briefly: "added to your calendar."
   2. **\`needs_oauth\`** — operator hasn't connected Google Calendar. Maya sends ONE message: *"To put these on your actual Google Calendar, connect it once here: \`<convex.site>/lc_maya/start_google_calendar_oauth\`. They're already in your plan either way — connecting just mirrors them into your calendar app."*
@@ -1632,9 +1618,16 @@ When invoked as a Phase-2 demand worker, you own each reply target end to end. Y
 
 One self-contained tool sequence per thread — the same per-item discipline that makes the foundation strategy saves reliable. An \`OK ...\` return = it landed. Exact sequence: \`maya-foundation-research\` Phase 2.
 
+### REQUIRED before you return — land the ICP knowledge + voice anchors (once per run)
+
+These two saves are what make the daily cron and the drafting step work. They are not optional extras; a run that surfaces reply targets but skips them has left the channel scorecard incomplete.
+
+5. **\`save_style_exemplars({ channel: "hn", styleExemplars: [ … 5-10 verbatim native HN comments … ] })\`** — REQUIRED. The verbatim native comments from the "Style-exemplar capture" section below anchor \`maya-voice-matcher\` Anchor B; **skip this and every later HN draft defaults to generic LLM tone** that reads like marketing and gets flagged. Pass each as \`{ platform: "hn", community: <thread/topic>, verbatim, why, capturedAt }\`. This is the persisted form of the \`styleExemplars[]\` capture — described-but-unsaved = lost.
+6. **\`save_foundation_channel_scorecard({ channel: "hn", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })\`** — REQUIRED for a bet channel. Populate per-channel \`icpKnowledge\`: \`venues\` (the Show HN / Ask HN / story threads + any recurring niche topics as \`{ name, kind: "community", url, whyHere }\`), \`watch\` (what these technical buyers read/follow), \`complaints\` (verbatim buyer pain \`{ quote, sourceUrl }\` from the comments you mined — cite the COMMENT item id), \`topics\` (the technical subjects the niche debates), and \`nativeStyle\` (\`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }\` — HN's terse, technically-credible register). An HN bet with empty \`icpKnowledge\` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP.
+
 ## Style-exemplar capture (native-voice fidelity)
 
-While mining, capture **5-10 real, top-performing, HUMAN-written native HN comments verbatim** — the substantive ones that actually landed (genuine replies, upvoted, from real accounts). These become few-shot **voice/register anchors** for \`maya-voice-matcher\` + drafting: HN's register is terse, specific, technically credible, allergic to marketing. Match cadence/vocab/length/format; **never copy** an exemplar's content or specifics. Skip anything that reads templated. Emit in \`styleExemplars[]\`.
+While mining, capture **5-10 real, top-performing, HUMAN-written native HN comments verbatim** — the substantive ones that actually landed (genuine replies, upvoted, from real accounts). These become few-shot **voice/register anchors** for \`maya-voice-matcher\` + drafting: HN's register is terse, specific, technically credible, allergic to marketing. Match cadence/vocab/length/format; **never copy** an exemplar's content or specifics. Skip anything that reads templated. Emit in \`styleExemplars[]\` — then land them via the REQUIRED \`save_style_exemplars({ channel: "hn", styleExemplars: [...] })\` call above (the array is your thinking; the save is how it lands).
 
 ## HN caption craft — the title is the click decision, the comment is the conversion
 
@@ -1847,8 +1840,120 @@ Per inbound: 1 main_maya call for classify + draft + critic (low thinking). 0-1 
 The drafted reply must pass slop-critic. The surface-to-operator message itself ("@alice asked …") is plain manager dispatch — no "Heads up, hot one!" or "Buyer alert!"
 `;
 
+// Source: agents/skills/maya-gtm/maya-instagram-researcher/SKILL.md
+const ENTRY_16_maya_instagram_researcher = `---
+name: maya-instagram-researcher
+description: Find where this product's buyers already live on Instagram and what they actually watch RIGHT NOW. Mine Reels + comments for buyer language, watch representative Reels multimodally for native register, and judge whether IG earns a bet. Instagram is the strongest mobile-app-wedge discovery surface. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
+---
+
+# maya-instagram-researcher
+
+## Purpose
+
+Instagram is a first-class, equal-depth research channel — NOT a thin reuse lane off TikTok. For a mobile app it is often **the** discovery surface: Reels reach + a native "save / send to a friend / link-in-bio app" install motion, and the audience skews to exactly the consumer-mobile buyer the wedge targets. This skill finds where this product's buyers already are on IG, in their own words, judges whether IG is worth a slot, and captures the native register so later Briefs read like a real account in this niche.
+
+Like TikTok, IG rewards **format-remix, not content-copy**. The job is buyer-pull: Reels + comments that produce "where do I get this", "does it do X", "finally", "sending this to my whole group" from people who look like the target buyer. Raw views/likes are vanity; **saves + sends + buyer-language in comments** are the convert signal. A Reel that goes viral but pulls the wrong audience is actively harmful.
+
+Grounded in ScrapeCreators (the read layer) + \`review_media\` (multimodal watch) + PLAYBOOK.md (the launch doctrine). Judgment, not lookup tables. **Brief-only** — Maya hands the founder a Brief (Reel hook + beats + caption + hashtag set), we never film.
+
+## When to invoke
+
+- During the foundation pass when Instagram is a candidate channel (consumer/mobile-app wedge, visual or demo-able product, or the ICP lives on IG).
+- IF the channel-strategy judge is weighing Instagram and \`formatConfidence\`/buyer-presence is unknown THEN run.
+- IF \`gtmChannelScorecard\` marks Instagram \`bet: true\` THEN run the deep discovery sweep + populate its \`icpKnowledge\`.
+- Monthly refresh, or when results-reviewer detects the operator's current IG format underperforming.
+- NEVER from heartbeat; this is a ScrapeCreators- + review_media-intensive skill (cap ~12 scrape calls).
+
+## Required reads
+
+1. \`APP.md\`, \`GTM.md\` — product + strategy (is the wedge mobile? is there a visual demo?).
+2. \`USER.md\` — the operator's own IG voice + whether they'll appear on camera.
+3. \`PLAYBOOK.md\` § 3 step 1-3, § 7.
+4. \`PLATFORM_ALGO.md\` — current IG/Reels algorithm state before any format/CTA call.
+5. \`MEMORY.md\` — prior IG attempts.
+
+## Read tools — Reels + comments (via \`scrape_creators\`, never raw instagram.com)
+
+All public-data, via \`scrape_creators({ path: "/v2/instagram/...", query: { ... } })\`:
+
+- **Reels discovery:** \`scrape_creators({ path: "/v2/instagram/reels/search", query: { query: <keyword>, ... } })\` — the primary discovery path. Pull the top batch per candidate keyword; this maps who's already making Reels for this niche and which formats are landing.
+- **Comment mining (where the buyer intent lives):** \`scrape_creators({ path: "/v2/instagram/post/comments", query: { ... } })\` — for the top confirming Reels, descend the comments the same way the Reddit/HN workers mine comment trees. A comment "is there an app that does X" under a relevant Reel is a higher-intent target than the post itself.
+- **Account + venue mapping:** profile + hashtag paths in the \`scrapecreators-api\` skill tables — map the big niche accounts (reach), the small high-intent ones (warmer audience), and the hashtags the niche actually uses.
+- Use the operator's own handle (from \`USER.md\`) to read their existing IG presence + their followers' comments for warm-audience signal.
+
+## Multimodal watch — \`review_media\` the representative Reels
+
+For 3-5 of the strongest confirming Reels in the candidate format, **watch them** with \`review_media({ url: <reel video url> })\` — do NOT judge IG video from captions + metrics alone. The watch is how you read what a caption can't: the on-screen-text hook, the pacing/first-second hook, whether it's faceless-screen-record vs founder-on-camera vs photo-carousel, the visual rhythm, and the actual spoken/written register. This multimodal read is what makes the native-style capture honest instead of guessed.
+
+## Decision rules (judgment, deep — not "top 5")
+
+1. **Venue spread (ranked, big→long-tail).** Not one account — a map: big niche accounts (reach) + small high-intent ones (less competition, warmer) + the hashtags + the recurring Reel formats. Be present across the spread.
+2. **Format recurrence.** A format is "winning" when it clearly recurs across a meaningful share of the strongest recent Reels from **independent** creators — same hook structure, visual rhythm, CTA pattern playing out across multiple accounts. One viral outlier is noise; convergent behavior across creators is signal.
+3. **Saves/sends + buyer-language over raw views.** Prefer Reels showing share/save momentum and buyer-language comments over a single view spike. A 5k-view Reel full of "where can I get this" beats a 2M-view one with none. Views are a soft proxy — say so.
+4. **Format taxonomy.** Tag each watched Reel: \`faceless_screen_record\`, \`founder_talking_head\`, \`photo_carousel\`, \`mixed\`. Aggregate.
+5. **Hook taxonomy.** Tag each hook (pattern-interrupt, outcome-promise, question, demo-cold-open, pain-validation, proof-first, POV, contrarian, before/after, comment-bait). The first ~1s / on-screen-text hook does the work.
+6. **Recency + drift judgment.** Prefer recent Reels — IG/Reels algorithm drift is real. How recent "recent enough" is depends on niche velocity; use judgment, don't mechanically discard by date.
+7. **Diversity check.** If the top results are dominated by 1-2 accounts, flag high creator-concentration — remixing one prolific account is riskier than a format the niche has converged on.
+8. **CTA pattern.** IG's native motion: **profile → link-in-bio / app link**, "comment KEYWORD for the link", "save this", "send to a friend". Surface what actually runs in this niche. Refuse a bare "link in bio" recommendation with no hook to drive the profile tap.
+9. **No recommendation without clear evidence.** If no format shows clear recurrence across independent creators, set \`confidence: insufficient_evidence\` and recommend channel-judge demote IG. Do not force a recommendation from thin data.
+10. **Honest framing.** There's no IG AI-detector; the penalty for generic Reels + voiceless captions is engagement starvation — the algorithm simply doesn't push them. Match the niche's native register or get buried.
+
+## How you deliver — call the tool per item, don't just return a report
+
+When invoked as a Phase-2 demand worker you own each finding end to end. You HAVE the typed tools (\`save_target_thread\`, \`save_draft\`, \`scrape_creators\`, \`review_media\`, \`save_foundation_channel_scorecard\`, \`save_style_exemplars\`) — call them directly; a finding you describe in text but never save is **lost** (this is the recurring empty-DB failure). For EACH Reel/comment worth engaging, in its own item loop:
+
+1. \`save_target_thread({ platform: "instagram", url: <reel/post permalink>, externalId: <post id>, excerpt: <verbatim>, author, whyItFits, recommendedAction, priorityScore, currentMetrics: { views, likes, comments } })\`.
+2. Compose the operator-voice reply/comment (or the Brief beats for a Reel they'd film) — native register, not a pitch; the install link goes via the profile/bio motion, not a raw URL dumped in a comment.
+3. \`save_draft({ kind: "comment" | "reply" | "post", platform: "instagram", targetThreadId, draftText })\`.
+
+One self-contained tool sequence per item — an \`OK ...\` return = it landed. Mirrors \`maya-foundation-research\` Phase 2.
+
+## Save the channel scorecard — \`icpKnowledge\` is mandatory for a bet
+
+If IG earns a bet, call \`save_foundation_channel_scorecard({ channel: "instagram", uniqueUnlock, bet: true, icpKnowledge: {...} })\`. **A bet channel with empty \`icpKnowledge\` is an incomplete scorecard** — the daily morning cron reads this every 7am to build TODAY's IG events, so a thin save means the research decays after onboarding instead of paying off daily. Populate \`icpKnowledge\` from the real mined data:
+
+- \`venues: [{ name, kind: "account" | "hashtag" | "community", url?, whyHere }]\` — WHERE the ICP lives on IG: the niche accounts they follow + the hashtags they browse, each with why.
+- \`watch: string[]\` — what this ICP actually watches on IG (the Reel formats / topics that hold them).
+- \`complaints: [{ quote, sourceUrl }]\` — verbatim pain from the comments, with the exact comment/Reel URL.
+- \`topics: string[]\` — the recurring topics/angles the niche engages with.
+- \`nativeStyle: { exemplars: [{ quote, sourceUrl }], cadenceNotes, vocab: string[] }\` — how a real account in this niche actually phrases a hook/caption.
+
+## Style-exemplar capture (native-voice fidelity)
+
+From the confirming Reels in the winning format, capture **5-10 real, top-performing, HUMAN native examples verbatim** — the on-screen-text hook line, the real caption, and the hashtag set — from real creators in this niche (not ads, not one dominant account). These are the few-shot **voice/register anchors** for \`maya-voice-matcher\` (Anchor B) + caption drafting: they encode how a real creator in *this niche* opens a Reel, how casual/punchy the caption runs, which hashtags actually fire here. Persist them:
+
+- \`save_style_exemplars({ channel: "instagram", styleExemplars: [{ platform: "instagram", community, verbatim, why, capturedAt }] })\` — the verbatim hook+caption anchors that stop drafts defaulting to generic LLM-tone.
+
+Match cadence/length/format/hashtag-shape; **never copy content.** Skip anything that reads templated/AI/influencer-bait.
+
+## Instagram caption craft — story-shaped hook + clear CTA
+
+Encode this niche's IG conventions in \`captionCraft\`, drawn from the captured exemplars (not generic advice):
+
+- **Hook:** the first line + the on-screen-text hook carry the open — pattern-interrupt or outcome-promise, never "Hey guys".
+- **Caption:** short and **story-shaped** (the IG convention) — a beat of context, then one clear CTA.
+- **Hashtags:** the niche's native count + shape (broad + niche + intent), not a wall.
+- **CTA:** the IG-native motion — "comment KEYWORD", "save this", "send to a friend", profile → link-in-bio for the app. Refuse "link in bio" with no hook driving the profile tap.
+- **Anti-patterns:** "Hey guys", hashtag walls, "follow for more" early, "link in bio" as the whole CTA, AI-flat captions.
+
+## Failure modes
+
+- **Niche has no English-language IG/Reels activity.** \`confidence: insufficient_evidence\`. Recommend channel-judge demote IG.
+- **\`/v2/instagram/reels/search\` returns zero results.** Check param shape; try adjacent keywords + hashtag paths before concluding empty. If still empty, request operator-narrowed keywords.
+- **All top Reels are paid ads / one dominant account.** Flag it — remix risky (you'd be copying one person, not a format the niche converged on). Try a broader keyword.
+- **Product isn't visual / wedge isn't mobile.** IG may genuinely not be the channel — say so honestly and park it rather than forcing it.
+
+## Cost discipline
+
+Max ~12 ScrapeCreators calls: 3-5 keywords × \`/v2/instagram/reels/search\` + 2-3 comment pulls (\`/v2/instagram/post/comments\`) + 1-2 profile/hashtag maps. Plus 3-5 \`review_media\` watches of the representative Reels. 1 main synthesis call. Timeout ~20 min. No heartbeat spend.
+
+## Anti-slop check
+
+\`save_foundation_channel_scorecard.icpKnowledge.complaints[].quote\`, every mined comment, and every \`styleExemplars[].verbatim\` are **VERBATIM** with the exact Reel/comment \`sourceUrl\` (citation precision) — do not paraphrase. The \`review_media\` watch backs the format/hook calls so they're observed, not guessed. Exemplars are voice/register references only — downstream Brief/caption drafting matches their cadence/length/hashtag-shape but NEVER copies an exemplar's content. The drafted comment passes \`maya-slop-critic\` and reads like a native member of the niche, not a marketer. Drop any exemplar whose caption itself reads templated/AI.
+`;
+
 // Source: agents/skills/maya-gtm/maya-linkedin-fit-researcher/SKILL.md
-const ENTRY_16_maya_linkedin_fit_researcher = `---
+const ENTRY_17_maya_linkedin_fit_researcher = `---
 name: maya-linkedin-fit-researcher
 description: Decide whether LinkedIn is the right channel per playbook/linkedin.md LI-1.1 - LI-1.3 + LI-10.2. Refuse if rule LI-10.2 applies.
 ---
@@ -1887,7 +1992,7 @@ LinkedIn is the right channel for a narrow slice of indie products — B2B SaaS,
 10. **LI-10.9 newsletter gate.** Only if operator already writes long-form monthly+ elsewhere.
 11. **LI-10.11 60-day reweight.** IF leads but zero conversions at 60 days AND runway <6 months THEN \`reweightToFasterChannel: true\`.
 12. **LI-10.14 link-in-first-comment.** Any draft URL moves to first comment.
-13. **Style-exemplar capture (native-voice fidelity — Sprint I).** While mining large-account niche posts, capture **5-10 real, top-performing, HUMAN-written native LinkedIn posts verbatim** from this buyer's professional niche — substantive, voiced posts that earned real reach and *buyer* engagement (not broetry, not engagement-bait, not corporate-announcement slop). These are few-shot **voice/register anchors** for \`maya-voice-matcher\` + drafting: they encode how a credible person in *this professional niche* actually writes here — hook openers, paragraph rhythm, where they get specific, how they close without "Agree?". LinkedIn is the slop epicenter, so be ruthless: skip any exemplar that itself reads templated/AI/broetry. Match cadence/vocab/length/format; **never copy content.** Emit in \`styleExemplars[]\`.
+13. **Style-exemplar capture (native-voice fidelity — Sprint I).** While mining large-account niche posts, capture **5-10 real, top-performing, HUMAN-written native LinkedIn posts verbatim** from this buyer's professional niche — substantive, voiced posts that earned real reach and *buyer* engagement (not broetry, not engagement-bait, not corporate-announcement slop). These are few-shot **voice/register anchors** for \`maya-voice-matcher\` + drafting: they encode how a credible person in *this professional niche* actually writes here — hook openers, paragraph rhythm, where they get specific, how they close without "Agree?". LinkedIn is the slop epicenter, so be ruthless: skip any exemplar that itself reads templated/AI/broetry. Match cadence/vocab/length/format; **never copy content.** Emit in \`styleExemplars[]\` — then, when fit is not park, land them via the REQUIRED \`save_style_exemplars({ channel: "linkedin", styleExemplars: [...] })\` call (see the Save section).
 14. **LinkedIn caption craft — hook + "link in first comment" (linkedin.md § 4 / LI-10.14).** The first line is a scroll-stopping hook (a specific tension or concrete claim, never "Excited to announce"). The body is a thinking-process narrative a non-technical buyer can follow without clicking away. The URL/CTA lives in the **first comment**, not the post — the post itself never reads like an ad. No engagement-bait closer. Surface this in \`captionCraft\`.
 
 ## Comment-target qualification
@@ -1970,6 +2075,13 @@ interface LinkedInFitReport {
 }
 \`\`\`
 
+## Save — land the ICP knowledge + voice anchors (REQUIRED when fit is not park)
+
+When \`fit\` is \`primary\` / \`secondary\` / \`secondary_with_caveat\` (LinkedIn cleared as a bet), two saves are REQUIRED before you return — the \`LinkedInFitReport\` schema is the shape of your thinking; these calls are how it lands:
+
+1. **\`save_style_exemplars({ channel: "linkedin", styleExemplars: [ … 5-10 verbatim native LinkedIn posts … ] })\`** — REQUIRED. The verbatim native posts you captured in decision rule 13 anchor \`maya-voice-matcher\` Anchor B; **skip this and every later LinkedIn draft defaults to generic LLM tone** (the broetry/announcement slop LinkedIn is the epicenter of). Pass each as \`{ platform: "linkedin", community: <niche>, verbatim, why, capturedAt }\`. This is the persisted form of the \`styleExemplars[]\` schema above — described-but-unsaved = lost.
+2. **\`save_foundation_channel_scorecard({ channel: "linkedin", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })\`** — REQUIRED for a bet channel. Populate per-channel \`icpKnowledge\`: \`venues\` (the niche's large accounts/communities you mined as \`{ name, kind: "account", url, whyHere }\`), \`watch\` (the trusted professional voices), \`complaints\` (verbatim buyer pain \`{ quote, sourceUrl }\` from the comment targets), \`topics\` (what this professional buyer discusses), and \`nativeStyle\` (\`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }\` — credible-voiced, no-broetry register). A LinkedIn bet with empty \`icpKnowledge\` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP. (When \`fit: "park"\`, skip both — there is no bet to score.)
+
 ## Failure modes
 
 - **Operator insists LinkedIn for consumer app.** \`fit: "park"\` + cited refusal + one-sentence alternative. Document override but don't silently comply.
@@ -1987,7 +2099,7 @@ LinkedIn is the slop epicenter. Every \`suggestedCommentDraft\` and \`caption.op
 `;
 
 // Source: agents/skills/maya-gtm/maya-linkedin-researcher/SKILL.md
-const ENTRY_17_maya_linkedin_researcher = `---
+const ENTRY_18_maya_linkedin_researcher = `---
 name: maya-linkedin-researcher
 description: For B2B / prosumer products where the buyer is a professional, find LinkedIn reply targets + engagement opportunities — posts where the buyer is describing the pain, mined for comment-level buyer intent. Runs AFTER maya-linkedin-fit-researcher clears LinkedIn as a bet; this is the research worker, not the fit gate.
 ---
@@ -2036,9 +2148,16 @@ When invoked as a Phase-2 demand worker, you own each reply target end to end. Y
 
 One self-contained tool sequence per item — an \`OK ...\` return = it landed. Exact sequence: \`maya-foundation-research\` Phase 2.
 
+### REQUIRED before you return — land the ICP knowledge + voice anchors (once per run)
+
+These two saves are what make the daily cron and the drafting step work. They are not optional extras; a run that surfaces reply targets but skips them has left the channel scorecard incomplete.
+
+5. **\`save_style_exemplars({ channel: "linkedin", styleExemplars: [ … 5-10 verbatim native LinkedIn posts/comments … ] })\`** — REQUIRED. The verbatim native posts from the "Style-exemplar capture" section below anchor \`maya-voice-matcher\` Anchor B; **skip this and every later LinkedIn draft defaults to generic LLM tone** (the broetry/corporate slop the platform is drowning in). Pass each as \`{ platform: "linkedin", community: <niche>, verbatim, why, capturedAt }\`. This is the persisted form of the capture — described-but-unsaved = lost.
+6. **\`save_foundation_channel_scorecard({ channel: "linkedin", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })\`** — REQUIRED for a bet channel. Populate per-channel \`icpKnowledge\`: \`venues\` (the named target accounts/companies + the buyer's professional communities as \`{ name, kind: "account", url, whyHere }\`), \`watch\` (the trusted voices these professionals follow), \`complaints\` (verbatim buyer pain \`{ quote, sourceUrl }\` from the comments you mined), \`topics\` (what this professional buyer discusses), and \`nativeStyle\` (\`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }\` — the professional-but-human, no-hype register). A LinkedIn bet with empty \`icpKnowledge\` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP.
+
 ## Style-exemplar capture (native-voice fidelity)
 
-Capture **5-10 real, top-performing, HUMAN-written native LinkedIn posts/comments verbatim** from the buyer's professional niche — the founder build-in-public + genuine-insight ones that landed (real engagement, real accounts). These anchor \`maya-voice-matcher\` + drafting: LinkedIn's register is professional-but-human, specific, no hype. Match cadence/vocab/length/format; **never copy** content. Skip anything that reads templated/AI/corporate. Emit in \`styleExemplars[]\`.
+Capture **5-10 real, top-performing, HUMAN-written native LinkedIn posts/comments verbatim** from the buyer's professional niche — the founder build-in-public + genuine-insight ones that landed (real engagement, real accounts). These anchor \`maya-voice-matcher\` + drafting: LinkedIn's register is professional-but-human, specific, no hype. Match cadence/vocab/length/format; **never copy** content. Skip anything that reads templated/AI/corporate. Emit in \`styleExemplars[]\` — then land them via the REQUIRED \`save_style_exemplars({ channel: "linkedin", styleExemplars: [...] })\` call above (the array is your thinking; the save is how it lands).
 
 ## LinkedIn caption craft — hook above the fold, link in first comment
 
@@ -2060,7 +2179,7 @@ The first ~2 lines show before "see more" — they carry the whole open decision
 `;
 
 // Source: agents/skills/maya-gtm/maya-morning-brief/SKILL.md
-const ENTRY_18_maya_morning_brief = `---
+const ENTRY_19_maya_morning_brief = `---
 name: maya-morning-brief
 description: The 7am-local daily message + calendar populate. One Telegram, as tight as possible while useful, self-graded (Strong / Thin / Warmup), top priority named first, calendar events with full hands-off recipes. Reads gtmNicheLearnings to weight what surfaces.
 ---
@@ -2079,12 +2198,21 @@ The flagship operator-facing output. Every morning, the founder gets one Telegra
 
 ## Pre-conditions
 
+0. **\`get_my_foundation({})\` is the FIRST read of the morning — before anything else.** This returns the persisted ICP model the day is built FROM: the buyer map (\`icpDescription\`, \`buyerJourneyStages[].whereTheyHangOut\` + \`.intentLanguage\`, \`intentPhrases\`, \`trustedVoices\`), the per-channel \`icpKnowledge\` (venues / watch / complaints[quote+URL] / topics / nativeStyle) + \`styleExemplars\` for every bet channel, and the founder \`voiceProfile\` fingerprint. **The morning cron does NOT re-derive the ICP** — it references this stored knowledge and checks only what is LIVE on the bet channels against it. If \`buyerMap\` is null the foundation never landed: don't fabricate an ICP, send the holding message and re-trigger foundation. The voiceProfile + per-channel styleExemplars are also what \`maya-voice-matcher\` reads (Anchor A / Anchor B) when grading every draft below.
 1. \`maya-continuous-research\` has run within the last 4h.
 2. \`gtmActionLog\` is checked for yesterday's brief — was it acknowledged? Acted on?
 3. \`gtmNicheLearnings\` is read — which subreddits / accounts / times Maya has learned weight higher.
 4. \`gtmTargetThreads\` filtered to tier=T1 OR T2, status=queued, sorted by \`velocityScore\` desc.
 5. \`get_my_attribution({ windowDays: 1 })\` is read for the yesterday fold — what converted in the last day (per-post clicks → signups). **The tool ONLY time-scopes results when you pass \`windowDays\`**, so the brief MUST pass \`windowDays: 1\` to get genuinely last-day numbers; phrase them as **"in the last day"**, NEVER "yesterday". Returns \`{ posts: [{ draftId, platform, title, clicks, conversionsByKind: { signup, demo, feedback, revenue }, signups, createdAt }], totals: { clicks, signups, demos, feedback, revenue, untiedSignups }, windowDays }\`. \`title\` is the link/draft the founder prepared, not a verified published post — phrase as "the link you shared on {platform}" / "your {platform} reply". Used to fold the last day's results into today's framing and tilt the plan toward what's driving signups. Empty \`posts\` + all-zero \`totals\` → skip silently, no attribution mention.
    - **Temporal-grounding rule (hard).** NEVER attach a time-word to a number unless it came from a \`windowDays\`-scoped call. The yesterday fold uses \`windowDays: 1\` → "in the last day". A lifetime call (no \`windowDays\`) may only be described as "to date".
+
+## Ground today in the stored ICP, validate against live
+
+**The stored ICP map says WHERE the buyer lives and HOW they talk; the live sweep says WHAT is hot today. The day is the intersection.** Before tier-sorting the queued threads:
+
+- **Validate each surfaced thread against the stored buyer map.** Confirm it sits in a \`buyerJourneyStages[].whereTheyHangOut\` venue (or a \`channelScorecard.icpKnowledge.venues\` entry) OR that it matches an \`intentPhrase\` / \`buyerJourneyStages[].intentLanguage\`. A thread that's hot today but lives nowhere the buyer hangs out and matches no intent language is noise — **demote it** (or drop it), even if its \`velocityScore\` is high.
+- **The cron references stored knowledge, it does not re-derive it.** Do NOT re-research the ICP each morning — read it from \`get_my_foundation\`. Live channel state only decides WHICH stored venues/intents are active today, never replaces the persisted model.
+- **Every copy-paste draft is built from stored language.** Each \`YOUR REPLY\` / post draft must use the founder's stored \`intentLanguage\` + native phrasing (from \`intentPhrases\` / the channel's \`icpKnowledge.nativeStyle\` + \`styleExemplars\`) and match the persisted \`voiceProfile\` fingerprint — see the anti-slop gate below.
 
 ## Required reads
 
@@ -2138,7 +2266,7 @@ The single most important thing. Always cited. "Top priority: [URL] — replying
 
 A real growth day is NOT 1-2 items. The research-backed shape (see \`maya-calendar-populator\` § 2 for the cited floor) is a genuinely active day: the **intent** of **~10-15 substantive comments/replies** across the day plus **a post every other day** (cadence per channel) — once the account is warm. Maya builds today's plan toward that intent. But this is **quality- and safety-gated, never a hard number to hit**:
 
-- **Volume RAMPS with account warmth — this is the ban-safety floor, non-negotiable.** Ban-safety is our moat; our own cadence has to protect it. A brand-new Reddit/HN/X account does FEWER — a handful of substantive comments and ZERO promotional/link activity — scaling up only as it warms. Never volume-spam a fresh account with links; that gets it shadowbanned and burns the channel. Maya reads the warmup/clock-gating signals already used by \`maya-calendar-populator\` (§ 8 account warmup gating, § 8b launch preconditions, Reddit karma floor, account age) and caps today's count accordingly. A 3-day-old account that "should" do 12 replies does 4-5, all pure substance.
+- **Volume RAMPS with account warmth — PER CHANNEL — this is the ban-safety floor, non-negotiable.** Ban-safety is our moat; our own cadence has to protect it. **Warmth is read from \`channelWarmthJson\` (via \`get_my_foundation\` / GTM.md), keyed per bet channel — NOT inferred from one global "account age".** Each channel carries its own \`state\` (\`new_needs_warmup\` → \`warming\` → \`ready\`/\`warm\`), \`accountAgeDays\`, and baseline (karma/followers/postCount). A brand-new Reddit/HN/X account (state \`new_needs_warmup\`) does FEWER — a handful of substantive comments and ZERO promotional/link activity — scaling up only as that channel warms. A channel already \`warm\`/\`ready\` goes straight to its full ramp THE SAME DAY a sibling channel is still cold. Never volume-spam a fresh account with links; that gets it shadowbanned and burns the channel. Maya reads \`channelWarmthJson[channel].state\` plus the warmup/clock-gating signals used by \`maya-calendar-populator\` (§ 8 account warmup gating, § 8b launch preconditions, Reddit karma floor) and caps each channel's count accordingly. A channel whose state is \`warming\` and "should" do 12 replies does 4-5, all pure substance.
 - **Quality always over volume.** A few genuinely-helpful, on-voice comments beat 15 generic ones. Never pad with low-tier (T3) threads to hit a count — if there are only 4 real T1/T2 targets today, today is a 4-target day, said honestly. Lazy/filler replies are a documented mistake (deboost + spam-detection risk); Maya would rather ship a smaller plan than a padded one.
 - **Calibrated to operator capacity (USER.md available minutes).** If the operator has 30 min today, Maya plans the highest-leverage ~3-4 reps that fit, not 15. The full-day intent is the ceiling the *channels + warmth* support; the operator's minutes are the ceiling Maya actually plans to. Lower of the two wins.
 - **Honest thin day stands.** If the signal genuinely isn't there, the day is graded Thin/Warmup and the plan reflects it — no manufacturing a full day out of weak threads.
@@ -2153,19 +2281,35 @@ Maya spreads effort across the bet channels (from GTM.md) over the WEEK, by judg
 - **Where today's best signal actually is** — if the morning's hottest T1 threads are all on Reddit today, today tilts Reddit even if X is the always-on base; tomorrow may tilt back.
 - **Not over-concentrating any one channel** — a week that's 90% Reddit and ignores the other bets is a worse week than one that gives each bet channel its natural share. Maya checks recent days' \`gtmActionLog\` to see what's been under-served and balances toward it.
 
-The brief reflects this implicitly (today's mix reads naturally), and the rolling-week shape lives in \`maya-calendar-populator\`. Maya's job here is to make TODAY the right slice of that week, not a clone of yesterday.
+The brief reflects this implicitly (today's mix reads naturally). **There is no onboarding week and no populator-owned "rolling week" — the morning brief OWNS day-to-day planning.** Every morning Maya builds the FULL day from stored ICP knowledge + per-channel warmth + what's live today; she doesn't defer the day's shape to anything else. \`maya-calendar-populator\` is the typed-event writer she calls, not a separate week planner. On **day-1-after-onboarding**, today picks up from the single turn-key first move onboarding left in the calendar — Maya builds the rest of that day around it (don't re-do onboarding's research; reference the stored foundation). From then on, each morning is a freshly-built day, never a clone of yesterday.
 
 ## Calendar events emitted alongside
 
+### Roll forward / prune yesterday FIRST (before adding today's)
+
+Because the morning brief OWNS day-to-day planning, it also cleans up the prior day before building the new one. Before emitting any of today's events:
+
+- **Expire stale reply windows.** Read yesterday's undone \`reply_window\` events. For each, check its target thread (\`gtmTargetThreads\`): if the thread has gone cold — \`postedAt\` aged past the channel's freshness window, velocity collapsed, or it's deep-archived — mark the event \`expired\` (don't carry a dead reply into today; replying late on a cold thread reads as drive-by spam and risks deboost). Log the expiry so the evening recap can fold it.
+- **Carry forward only still-live events.** A prior-day \`reply_window\` whose thread is still ramping (fresh \`postedAt\`, live velocity) carries forward into today's plan at the top — it's already-vetted signal, don't drop it. Warmup/engagement blocks that went undone roll forward only if today's warmth state still calls for them.
+- **Never silently double-book.** Don't re-emit an event the operator already acted on (check \`gtmActionLog\`); promote what's live, expire what's cold, then layer today's fresh threads on top.
+
 Today's vetted T1/T2 threads → \`gtmCalendarEvent\`s written via \`propose_calendar\` (the populator path) — enough of them to make today the full, warmth-and-capacity-gated growth day described above (the day's ~10-15-rep intent when warm + real + the operator has time, fewer otherwise). Plus framework events:
 
-- **Warmup block** (always, even on warmup days): 10 min — browse the bet subs, upvote a few high-signal threads. On a fresh account this is the MAIN work, not a footnote.
-- **Content draft block** (on thin/warmup days, and on a post day for any channel): 20 min — draft the post from the content-angle vault (a post every other day per channel once warm; never on a fresh account that hasn't earned it).
+- **Warmup block** (per channel, keyed off \`channelWarmthJson[channel].state\`): 10 min — browse the bet subs, upvote a few high-signal threads. On a channel that's still \`new_needs_warmup\`/\`warming\` this warmup block is the MAIN work for that channel, not a footnote — no posting, no links. A channel already \`warm\`/\`ready\` **skips the warmup block entirely** and goes straight to posting + substantive replies. This is per-channel and same-day: a cold channel can be warmup-only while a warm sibling posts.
+- **Content draft block** (on thin/warmup days, and on a post day for any channel whose state is \`warm\`/\`ready\`): 20 min — draft the post from the content-angle vault (a post every other day per channel once warm; never on a channel still \`new_needs_warmup\`/\`warming\` that hasn't earned it).
 - **Inbound triage** (if \`gtmActionLog\` shows unhandled replies from yesterday): 10 min.
 
 Calibrated to operator's available capacity (per USER.md). Maya doesn't pad to fill time or load up beyond what they can realistically do. If today's total runs heavy, she cuts the lowest-tier event. If the account is fresh, she cuts volume HARD regardless of signal — ban-safety wins over a big-looking day.
 
 Each event description follows the full hands-off recipe template from \`maya-calendar-populator\` (WHAT / LINK / WHY / YOUR REPLY / VOICE NOTES / SUCCESS TARGET / TIME / SOURCE), written to Convex \`gtmCalendarEvents\` so the operator can act on every one even when Google Calendar isn't connected.
+
+### Every draft is voice-matched and ICP-grounded BEFORE it reaches the calendar (hard gate)
+
+No \`YOUR REPLY\` or post draft is written into a \`gtmCalendarEvent\` until it clears all three, in order:
+
+1. **Uses ≥1 real intent phrase / native term.** Pull from the stored buyer map (\`intentPhrases\`, \`buyerJourneyStages[].intentLanguage\`) or the channel's \`icpKnowledge.nativeStyle\` / \`styleExemplars\`. A draft that uses none of the founder's buyers' actual language is generic — rewrite it before going on.
+2. **Matches the founder voice fingerprint.** Built against the persisted \`voiceProfile\` (Anchor A) + the per-channel \`styleExemplars\` (Anchor B) — openings, cadence, vocab, emoji habit, signoffs. Not LLM-default tone.
+3. **Passes \`maya-voice-matcher\`: \`voiceMatchScore >= 0.7\` AND \`slopCriticPassed === true\`.** This runs on every drafted post/reply BEFORE the event is emitted. A draft that scores below 0.7 or fails the slop critic goes **back for a rewrite, not onto the calendar** — re-draft using the matcher's suggestions and re-score. (This mirrors the server-side approval gate, which fail-closes any draft missing those scores; if \`voiceProfile\` confidence is \`none\` because the user had zero handles, the matcher passes-with-warning rather than hard-blocking, so low-signal users can still ship.)
 
 ## Weighting from niche learnings
 
@@ -2224,7 +2368,7 @@ Brief faces slop-critic. Banned for this message: "I've put together," "comprehe
 `;
 
 // Source: agents/skills/maya-gtm/maya-output-critic/SKILL.md
-const ENTRY_19_maya_output_critic = `---
+const ENTRY_20_maya_output_critic = `---
 name: maya-output-critic
 description: The 5-gate quality framework Maya consults before shipping any user-facing message — morning brief, evening recap, calendar event description, drafted reply, weekly review. Grounding / voice / recipe / tier-honesty / time-box. Fail → iterate or escalate, never silently ship low quality.
 ---
@@ -2346,7 +2490,7 @@ Self-referential: the critic must itself pass voice + grounding + tier-honesty b
 `;
 
 // Source: agents/skills/maya-gtm/maya-reddit-demand-researcher/SKILL.md
-const ENTRY_20_maya_reddit_demand_researcher = `---
+const ENTRY_21_maya_reddit_demand_researcher = `---
 name: maya-reddit-demand-researcher
 description: Find Reddit buyer intent for the product's pain — surface reply targets ranked by purchase signal, map the live comment tree for follow-up questions, return promotion-risk score. Budget-bounded.
 ---
@@ -2470,7 +2614,10 @@ interface RedditDemandReport {
   /** 5-10 real, top-performing, HUMAN-written native posts/comments captured
    *  VERBATIM from the recommended subs — the few-shot voice/register anchors
    *  maya-voice-matcher + drafting use to make the founder's reply read native
-   *  to THIS sub. Match cadence/vocab/length/format; NEVER copy content. */
+   *  to THIS sub. Match cadence/vocab/length/format; NEVER copy content.
+   *  This array is the shape of your thinking; it LANDS via the REQUIRED
+   *  save_style_exemplars({ channel: "reddit", styleExemplars: [...] }) call
+   *  (see the Save section) — described-but-unsaved = lost. */
   styleExemplars: Array<{
     sub: string;
     url: string;
@@ -2499,6 +2646,13 @@ When invoked as a Phase-2 demand worker (the first-wake actionable pass), you ow
 4. \`save_target_thread({ externalId: <same>, draftReply })\`, to keep the row's one-tap deep link in sync.
 
 One self-contained tool sequence per thread — the same per-item discipline that makes the foundation strategy saves reliable. An \`OK ...\` return = it landed. The \`RedditDemandReport\` schema above stays the shape of your *thinking* per target; the tool calls are how it lands. Exact sequence: \`maya-foundation-research\` Phase 2.
+
+### REQUIRED before you return — land the ICP knowledge + voice anchors (once per run)
+
+These two saves are what make the daily cron and the drafting step work. They are not optional extras; a run that surfaces reply targets but skips them has left the channel scorecard incomplete.
+
+5. **\`save_style_exemplars({ channel: "reddit", styleExemplars: [ … 5-10 verbatim native posts/comments … ] })\`** — REQUIRED. The verbatim native posts you captured in decision rule 13 anchor \`maya-voice-matcher\` Anchor B; **skip this and every later Reddit draft defaults to generic LLM tone** that mods remove and the sub ignores. Pass each as \`{ platform: "reddit", community: <sub>, verbatim, why, capturedAt }\`. This is the persisted form of the \`styleExemplars[]\` schema above — the schema is your thinking; this call is how it lands.
+6. **\`save_foundation_channel_scorecard({ channel: "reddit", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })\`** — REQUIRED for a bet channel. Populate per-channel \`icpKnowledge\`: \`venues\` (the recommended subs as \`{ name, kind: "subreddit", url, whyHere }\`), \`watch\` (what these buyers read/follow), \`complaints\` (verbatim pain \`{ quote, sourceUrl }\` from the threads you mined), \`topics\` (what they talk about), and \`nativeStyle\` (\`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }\`). A Reddit bet with empty \`icpKnowledge\` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP.
 
 ## Failure modes
 
@@ -2538,7 +2692,7 @@ Max 8 \`research_reddit\` calls: 3 × subreddit/search, 2 × general search, 2 �
 `;
 
 // Source: agents/skills/maya-gtm/maya-results-reviewer/SKILL.md
-const ENTRY_21_maya_results_reviewer = `---
+const ENTRY_22_maya_results_reviewer = `---
 name: maya-results-reviewer
 description: Review published results. Recommend double_down / iterate / do_not_overfit per PLAYBOOK format-market-fit detection. Counter-overfitting checks.
 ---
@@ -2650,7 +2804,7 @@ Max 4 ScrapeCreators calls (1 per platform). Cache aggressively. 1 main_maya syn
 `;
 
 // Source: agents/skills/maya-gtm/maya-slideshow-strategist/SKILL.md
-const ENTRY_22_maya_slideshow_strategist = `---
+const ENTRY_23_maya_slideshow_strategist = `---
 name: maya-slideshow-strategist
 description: When a post wants a visual — a TikTok photo-mode slideshow or an IG carousel — I build it grounded in the founder's REAL screenshots, never stock images. I decide when a slideshow is the right format, pull the screenshots I already have (or ask once for the one I'm missing), generate each slide framing the real screen unchanged, and hand the finished set back for the founder to post. Strategy + format + hooks live here; the mechanics live in TOOLS.md.
 ---
@@ -2713,7 +2867,7 @@ Every slideshow passes the same bar as everything I send (maya-slop-critic + SOU
 `;
 
 // Source: agents/skills/maya-gtm/maya-slop-critic/SKILL.md
-const ENTRY_23_maya_slop_critic = `---
+const ENTRY_24_maya_slop_critic = `---
 name: maya-slop-critic
 description: The anti-slop / AI-tell critic. Apply PLAYBOOK § 6 banned-phrase list + banned-structure scan + LLM-judgment structural AI-tell pass + voice match + read-aloud test. Returns "rejected with reasons" on any trip. The bar is native-voice fidelity, NOT detector-dodging.
 ---
@@ -2840,7 +2994,7 @@ Self-referential: this skill IS the anti-slop check. The \`suggestion\` strings 
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-demo-strategist/SKILL.md
-const ENTRY_24_maya_tiktok_demo_strategist = `---
+const ENTRY_25_maya_tiktok_demo_strategist = `---
 name: maya-tiktok-demo-strategist
 description: Pick TikTok format (faceless screen-record vs founder-on-camera vs slideshow) given showability + constraints. Refuse if user can't post manually (V1 constraint).
 ---
@@ -2918,13 +3072,17 @@ interface TikTokStrategy {
 
 0 ScrapeCreators (format research is separate). 0-1 WebFetch. 1 main_maya. Timeout 10 min.
 
+## Channel knowledge ownership — this skill does NOT save style exemplars
+
+This is a format/shot-plan strategist, not a niche miner. The TikTok channel's **verbatim native style exemplars** and **\`icpKnowledge\`** (venues/hashtags/accounts + what the audience watches + complaints + topics + native-style) are captured and persisted by **\`maya-tiktok-format-researcher\`** via its REQUIRED \`save_style_exemplars({ channel: "tiktok", … })\` + \`save_foundation_channel_scorecard({ channel: "tiktok", …, icpKnowledge: {…} })\` calls. This strategist READS those (and the format-researcher's \`styleExemplars\` / \`captionCraft\`) to ground its shot plan and CTA — it does NOT re-capture or re-save them. If \`formatResearchNeeded: true\` or the exemplars/\`icpKnowledge\` are missing, run \`maya-tiktok-format-researcher\` first; don't fabricate a shot plan from a niche that was never mined.
+
 ## Anti-slop check
 
 \`onScreenText\` and \`voiceOver\` strings must pass slop-critic (banned phrases). Hook copy itself comes from \`maya-content-format-miner\` with full slop-critic pass.
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-format-researcher/SKILL.md
-const ENTRY_25_maya_tiktok_format_researcher = `---
+const ENTRY_26_maya_tiktok_format_researcher = `---
 name: maya-tiktok-format-researcher
 description: Find what's working in the operator's niche on TikTok RIGHT NOW. Identify the format that clearly recurs across the strongest recent videos in the niche (tiktok.md § 7).
 ---
@@ -3001,7 +3159,10 @@ interface TikTokFormatResearch {
   paginationDepth: string; // describe how many pages / adjacent keywords were tried
   /** 5-10 real, top-performing, HUMAN native examples captured VERBATIM from the
    *  niche — the few-shot voice/register anchors for maya-voice-matcher + caption
-   *  drafting. Match hook cadence/length/format + hashtag norms; NEVER copy content. */
+   *  drafting. Match hook cadence/length/format + hashtag norms; NEVER copy content.
+   *  This array is the shape of your thinking; it LANDS via the REQUIRED
+   *  save_style_exemplars({ channel: "tiktok", styleExemplars: [...] }) call
+   *  (see the Save section) — described-but-unsaved = lost. */
   styleExemplars: Array<{
     videoUrl: string;
     handle: string;
@@ -3029,6 +3190,13 @@ interface TikTokFormatResearch {
 }
 \`\`\`
 
+## Save — land the ICP knowledge + voice anchors (REQUIRED when TikTok is a bet)
+
+The \`TikTokFormatResearch\` schema is the shape of your thinking; these two calls are how it lands. When TikTok clears as a bet (\`confidence\` is not \`insufficient_evidence\` and the channel-judge isn't parking it), both are REQUIRED before you return:
+
+1. **\`save_style_exemplars({ channel: "tiktok", styleExemplars: [ … 5-10 verbatim native examples … ] })\`** — REQUIRED. The verbatim hook lines + captions + hashtag sets you captured in decision rule 13 anchor \`maya-voice-matcher\` Anchor B; **skip this and every later TikTok caption defaults to generic LLM tone** the algorithm starves. Pass each as \`{ platform: "tiktok", community: <niche>, verbatim: <hook line + caption>, why, capturedAt }\` (carry the real hashtag set in \`verbatim\` or \`why\` so the caption-craft survives). This is the persisted form of the \`styleExemplars[]\` schema above — described-but-unsaved = lost.
+2. **\`save_foundation_channel_scorecard({ channel: "tiktok", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })\`** — REQUIRED for a bet channel. Populate per-channel \`icpKnowledge\`: \`venues\` (the niche's recurring hashtags + the high-signal creator accounts as \`{ name, kind: "hashtag" | "account", url, whyHere }\`), \`watch\` (what this audience watches — the winning format + the accelerating sounds), \`complaints\` / buyer-intent (verbatim from \`buyerLanguageExamples\` as \`{ quote, sourceUrl: videoUrl }\`), \`topics\` (what the niche makes content about), and \`nativeStyle\` (\`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }\` — the hook-line + caption register). A TikTok bet with empty \`icpKnowledge\` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP.
+
 ## Failure modes
 
 - **Niche has no English-language TikTok activity.** \`confidence: "insufficient_evidence"\`. Recommend channel-judge demote TikTok.
@@ -3046,7 +3214,7 @@ Structured taxonomy output, slop-critic NOT invoked. \`excerpt\` strings and eve
 `;
 
 // Source: agents/skills/maya-gtm/maya-ugc-system-advisor/SKILL.md
-const ENTRY_26_maya_ugc_system_advisor = `---
+const ENTRY_27_maya_ugc_system_advisor = `---
 name: maya-ugc-system-advisor
 description: ADVISORY-ONLY in V1. UGC creators are a Phase 4+ lever per PLAYBOOK. Refuse to recommend before format-market-fit.
 ---
@@ -3126,7 +3294,7 @@ Mostly structured refusals. \`refusalReason\` and \`gatesUnmet[].detail\` pass t
 `;
 
 // Source: agents/skills/maya-gtm/maya-viral-demo-moment-miner/SKILL.md
-const ENTRY_27_maya_viral_demo_moment_miner = `---
+const ENTRY_28_maya_viral_demo_moment_miner = `---
 name: maya-viral-demo-moment-miner
 description: Find showable app moments — before/after contrasts, screenshot sequences. Source: walkthrough + product UI.
 ---
@@ -3208,7 +3376,7 @@ interface ViralDemoBeatLibrary {
 `;
 
 // Source: agents/skills/maya-gtm/maya-voice-matcher/SKILL.md
-const ENTRY_28_maya_voice_matcher = `---
+const ENTRY_29_maya_voice_matcher = `---
 name: maya-voice-matcher
 description: Score how well a drafted reply/post/thread matches the operator's actual voice — drawn from their existing public writing (X/Reddit/LinkedIn) or onboarding answers as fallback. Combines with maya-slop-critic for a final ship-or-revise gate. Each gtmDraftedContent row gets a voiceMatchScore + slopCriticPassed flag.
 ---
@@ -3236,8 +3404,8 @@ This skill is the pre-publish quality gate. Every draft goes through it before t
 3. **PLAYBOOK.md § 6** — Anti-slop section. The canonical ban list.
 4. **gtmDraftedContent row** for the draft being scored.
 5. **Any prior approved drafts** for the same platform (the live voice fingerprint).
-6. **Operator's existing public writing** — the founder's OWN real posts. In manager mode these were **ingested during onboarding (APP.md Phase 0 / existing-account ingestion)** and are already on disk; otherwise pull via Composio (last 20 X tweets, last 10 Reddit comments, last 5 LinkedIn posts). Highest-fidelity voice source. Prefer same-platform samples.
-7. **Venue style exemplars** (\`styleExemplars[]\` from the per-channel research skill for this platform): 5-10 real top-performing HUMAN native posts captured verbatim from the exact venue. The register anchor — what "native here" sounds like. Match cadence/vocab/length/format; never copy content.
+6. **The persisted voice profile** — \`get_my_foundation({})\` returns the founder \`voiceProfile\` fingerprint (also rendered into **USER.md § Voice fingerprint**). This is built in **Phase 0 voice ingestion** for any user with handles (mode-independent — Maya pulls their own accounts, watches their videos multimodally, reads their text, and persists the fingerprint to \`gtmAgents.voiceProfileJson\`). Read it first; it is the highest-fidelity voice source and is already on disk. If the user had no handles, \`voiceProfile.confidence\` is \`"none"\` — degrade gracefully (see Anchor A below), do NOT hard-fail. Optionally supplement via Composio (last 20 X tweets, last 10 Reddit comments, last 5 LinkedIn posts) when same-platform samples are thin. Prefer same-platform samples.
+7. **Venue style exemplars** — \`get_my_foundation({})\` returns per-channel \`styleExemplars\` (persisted to \`gtmChannelScorecard.styleExemplarsJson\` by the per-channel research skill for each bet channel): 5-10 real top-performing HUMAN native posts captured verbatim from the exact venue. The register anchor — what "native here" sounds like. Match cadence/vocab/length/format; never copy content.
 
 ## Decision rules
 
@@ -3245,15 +3413,15 @@ This skill is the pre-publish quality gate. Every draft goes through it before t
 
 The match is conditioned on two independent anchors. A draft that sounds like the founder but ignores how the venue talks reads out of place; a draft that nails the venue register but isn't in the founder's voice reads ghost-written. The target is the **intersection**: the founder's voice, expressed in a register native to this specific venue.
 
-**Anchor A — the founder's OWN real posts (the voice anchor).** Where the founder already has accounts, **manager mode ingested their real posts during onboarding (APP.md Phase 0 / existing-account ingestion)** — this is the highest-fidelity source and is already on disk; you don't have to re-pull it. Input tiers, in order of preference:
+**Anchor A — the persisted founder voice profile (the voice anchor).** Read it via \`get_my_foundation({})\` (the \`voiceProfile\` fingerprint, also in **USER.md § Voice fingerprint**). For any user with handles, **Phase 0 voice ingestion already built this** — Maya pulled their own accounts, watched their videos multimodally, read their text, and persisted the fingerprint to \`gtmAgents.voiceProfileJson\`. This is the highest-fidelity source and is already on disk; you don't have to re-pull it. Input tiers, in order of preference:
 
-1. **Founder's ingested / existing public writing** (highest signal). The manager-mode Phase 0 ingestion captured their real posts per platform; where it didn't (or to supplement), pull the operator's last N posts via Composio. Look for: average sentence length and its *variance* (burstiness), contraction usage, technical-vs-casual register, characteristic phrases, how they open and sign off, em-dash habit, single-sentence-paragraph habit, profanity tolerance, emoji frequency. Note 5-8 distinctive features. **Prefer same-platform samples** — how the founder writes on X is not how they write on LinkedIn.
+1. **The persisted \`voiceProfile\` fingerprint** (highest signal). It carries the founder's \`features\` (avgSentenceLen, burstiness, contractionUse, emojiFreq, register, openings, signoffs, characteristicPhrases, emDashHabit, profanityTolerance), \`perPlatform\` breakdowns, and \`verbatimSamples\` per platform. Where a platform is thin (or to supplement), pull the operator's last N posts via Composio. Look for: average sentence length and its *variance* (burstiness), contraction usage, technical-vs-casual register, characteristic phrases, how they open and sign off, em-dash habit, single-sentence-paragraph habit, profanity tolerance, emoji frequency. Note 5-8 distinctive features. **Prefer same-platform samples** — how the founder writes on X is not how they write on LinkedIn. **If \`voiceProfile.confidence\` is \`"none"\`** (the user had no handles to ingest), this anchor is empty — degrade gracefully: fall to tiers 2-3, and lean on Anchor B + specificity (see Failure modes). Do NOT hard-fail.
 
 2. **Approved prior drafts** (medium signal). Use the operator's accept/reject history on previous drafts as a voice signal. Drafts the operator approved unchanged represent voice fit. Drafts the operator EDITED tell you what to avoid.
 
 3. **Onboarding answers + USER.md \`founderWhy\`** (lowest signal, but always available). Their own answers about why they built the product capture their natural tone. Use as fallback when 1+2 are empty.
 
-**Anchor B — the venue style exemplars (the register anchor).** The per-channel research skills (\`maya-reddit-demand-researcher\`, \`maya-x-founder-led-researcher\`, \`maya-linkedin-fit-researcher\`, \`maya-tiktok-format-researcher\`, \`maya-content-format-miner\`) each capture **5-10 real, top-performing, HUMAN native posts verbatim from the exact venue** as style exemplars (\`styleExemplars[]\`). These are the few-shot voice/register anchors: they encode the cadence, vocabulary, length, and format a real participant in *this specific subreddit / niche / feed* uses. Read them. Match cadence/vocab/length/format — **never copy their content** (that's plagiarism and a slop tell in itself). They tell you what "native here" sounds like; Anchor A tells you what "the founder" sounds like.
+**Anchor B — the persisted per-channel style exemplars (the register anchor).** Read them via \`get_my_foundation({})\` — each bet channel's \`styleExemplars\` (persisted to \`gtmChannelScorecard.styleExemplarsJson\`). The per-channel research skills (\`maya-reddit-demand-researcher\`, \`maya-x-founder-led-researcher\`, \`maya-linkedin-fit-researcher\`, \`maya-tiktok-format-researcher\`, \`maya-content-format-miner\`, \`maya-instagram-researcher\`) each capture **5-10 real, top-performing, HUMAN native posts verbatim from the exact venue** and save them as style exemplars. These are the few-shot voice/register anchors: they encode the cadence, vocabulary, length, and format a real participant in *this specific subreddit / niche / feed* uses. Read them. Match cadence/vocab/length/format — **never copy their content** (that's plagiarism and a slop tell in itself). They tell you what "native here" sounds like; Anchor A tells you what "the founder" sounds like. **Anchor B is the floor when Anchor A is empty** (\`voiceProfile.confidence: "none"\`): match the native register from the exemplars and lean on specificity rather than shipping voiceless.
 
 **When the two conflict** (founder writes long essays, the venue rewards 2-line replies): bend register toward the venue, keep voice (word choice, stance, characteristic phrases) toward the founder. Note the tension in \`userFeedback\` so the operator can confirm.
 
@@ -3306,7 +3474,7 @@ update_draft_voice_match({
 
 ## Failure modes
 
-- **No voice signal available** (no ingested posts, no public writing, no prior drafts, no onboarding answers beyond minimal). Voice score (Anchor A) defaults to neutral 0.5 — but **the venue style exemplars (Anchor B) still give you a register floor**, so don't ship voiceless: match the native cadence/length/format of the exemplars and lean on specificity. Surface to user via Telegram: "I need a sample of how you write so my drafts sound like you. Reply with 2-3 sentences in your usual voice."
+- **No voice signal available** (\`voiceProfile.confidence: "none"\` — the user had no handles for Phase 0 to ingest — plus no public writing, no prior drafts, no onboarding answers beyond minimal). Voice score (Anchor A) defaults to neutral 0.5 — but **the persisted venue style exemplars (Anchor B) still give you a register floor**, so don't ship voiceless: match the native cadence/length/format of the exemplars and lean on specificity. Surface to user via Telegram: "I need a sample of how you write so my drafts sound like you. Reply with 2-3 sentences in your usual voice." (A reply here is the supplement that lifts \`confidence\` off \`"none"\`.)
 - **All drafts failing both gates.** Likely the subagent is producing template-y output. Reset: re-spawn the subagent with a tighter prompt + explicit voice samples from USER.md.
 - **Operator approval inconsistency** (approves draft A, rejects functionally-identical draft B). Surface the contradiction: "I noticed you approved [link] but rejected [link] which read very similarly. Want to tell me what's different about them?" Voice profile updates from the answer.
 
@@ -3320,16 +3488,18 @@ Yes — this skill itself outputs operator-facing copy (when surfacing voice fee
 `;
 
 // Source: agents/skills/maya-gtm/maya-weekly-review/SKILL.md
-const ENTRY_29_maya_weekly_review = `---
+const ENTRY_30_maya_weekly_review = `---
 name: maya-weekly-review
-description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for next week if any, and a regenerated next-week plan re-weighted by what actually converted.
+description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for the coming week if any, and a re-weighting of bet channels + per-channel warmth advancement (set_channel_warmth) by what actually converted. Does NOT regenerate a next-week rolling plan — the daily morning cron owns day-to-day planning.
 ---
 
 # maya-weekly-review
 
 ## Purpose
 
-Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks at the prior 7 days as one block: did the channels we bet on actually convert, are the angles working, did relationships warm. Then she shifts strategy for the coming week — that's how the product compounds.
+Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks at the prior 7 days as one block: did the channels we bet on actually convert, are the angles working, did relationships warm. Then she shifts *strategy* for the coming week — re-weights which channels/angles get the most attention and advances each channel's warmth state — that's how the product compounds.
+
+**Scope boundary (load-bearing).** The weekly review does NOT regenerate a "next-week rolling plan." There is no rolling 7-day calendar artifact. Day-to-day planning is owned by the **daily morning cron** (\`maya-morning-brief\` / \`morning_brief\` 7am), which every morning reads the stored ICP knowledge + per-channel warmth and builds THAT day's turn-key events from what's live. The weekly review's forward output is *strategic weighting + warmth advancement*, persisted as learnings + \`set_channel_warmth\` calls that the daily cron then reads — not a pre-built week of events.
 
 ## When to invoke
 
@@ -3401,26 +3571,26 @@ If no shift, say so ("Bets are working — staying the course"). Honesty.
 
 **Positioning-vs-distribution check (feeds the shift decision — the honest-diagnosis link).** Before proposing a *distribution* shift (new channel, more cadence, different posting window), read the \`positioningVsDistribution\` rollup from \`maya-results-reviewer\` (required read #8). The diagnosis changes the *kind* of shift, and sometimes refuses one:
 
-- **If the week is a POSITIONING problem** (\`positioningProblem: true\` — posts got real reach but engagement/clicks/conversions stayed flat: people saw it and didn't want it), say it plainly and do NOT prescribe more distribution. The honest line: **"We're not going to out-post a positioning problem. 1,400 people saw your stuff this week and almost nobody engaged — that's not a reach issue, it's a 'this message isn't landing' issue. More posts of the same framing get the same shrug."** Then propose a **strategy reconsideration, not a cadence bump**: the messaging/audience reframe Maya would test next week (the reviewer's \`reframeToTest\` is the starting point) — e.g. "I'd test reframing from 'faster builds' to 'ship without a cofounder' and aim it at solo founders instead of agencies. One week, one channel, then we re-read." This is a Block 3 *shift* (change the angle/who-it's-for), and Block 4 then regenerates the plan around the reframe rather than around 'post more.'
+- **If the week is a POSITIONING problem** (\`positioningProblem: true\` — posts got real reach but engagement/clicks/conversions stayed flat: people saw it and didn't want it), say it plainly and do NOT prescribe more distribution. The honest line: **"We're not going to out-post a positioning problem. 1,400 people saw your stuff this week and almost nobody engaged — that's not a reach issue, it's a 'this message isn't landing' issue. More posts of the same framing get the same shrug."** Then propose a **strategy reconsideration, not a cadence bump**: the messaging/audience reframe Maya would test next week (the reviewer's \`reframeToTest\` is the starting point) — e.g. "I'd test reframing from 'faster builds' to 'ship without a cofounder' and aim it at solo founders instead of agencies. One week, one channel, then we re-read." This is a Block 3 *shift* (change the angle/who-it's-for), and Block 4 then re-weights the bets + persists the reframe as learnings so the daily cron builds around the new angle rather than around 'post more.'
 - **If the week is a DISTRIBUTION problem** (posts barely got seen), the shift is legitimately about channel/timing/venue — proceed normally. Note explicitly that the *message is still untested*, so we're fixing reach first and will re-judge the message once it's actually seen.
 - **Tier-2 honesty carries through.** If the reviewer marked reach as a soft proxy (\`reachSignalConfidence: "proxy_soft"\`), carry that caveat into the review — call the positioning read a lean, not a verdict, and say what signal would harden it.
 
-This is the *diagnosis → strategic-shift* linkage only. Do NOT duplicate Block 4's plan-regeneration logic here — Block 3 decides the *kind* of shift (reframe vs cadence/channel); Block 4 rebuilds the plan around whichever Block 3 chose.
+This is the *diagnosis → strategic-shift* linkage only. Do NOT duplicate Block 4's re-weighting logic here — Block 3 decides the *kind* of shift (reframe vs cadence/channel); Block 4 persists that shift as re-weighting + warmth advancement that the daily cron then acts on.
 
-### Block 4 — Regenerate next week's plan (NOT a one-way ratchet)
+### Block 4 — Re-weight the bets + advance warmth (NOT a regenerated week)
 
-The review doesn't just *extract* learnings — it *feeds them forward*. Rebuild the rolling 7-day plan for the coming week, re-weighted by what actually worked:
+The review doesn't just *extract* learnings — it *feeds them forward*. But it does **NOT** rebuild a rolling 7-day calendar. There is no next-week plan to regenerate — the daily morning cron builds each day fresh from stored ICP knowledge + live channel state. What the weekly review feeds forward is *strategic weighting and warmth state* that the daily cron then reads. Two outputs only:
 
-1. **Re-weight bet channels/angles from the week's outcomes — conversions lead.** Drive the re-weight off \`get_my_attribution({ windowDays: 7 })\` first: channels/angles/hook-types that produced **conversions** (signups → demos → revenue) get the most slots next week; channels that drove clicks-without-conversions get fewer (traffic that doesn't convert isn't earning slots); engagement-only signals (upvotes/likes/OP-replies) are the *last* tiebreaker, not the driver. A channel that only got engagement does not out-weight a channel that converted. Read \`maya-calendar-populator/SKILL.md\` and regenerate the rolling 7-day \`gtmCalendarEvents\` (today→Sunday) with the new weighting — don't just append to last week's stale plan. (If attribution is thin this week, weight on engagement but say so per Block 2's fallback rule — don't pretend the re-weight is conversion-grounded.)
-2. **Counter-overfitting discipline (hard rule).** Do NOT swing the whole plan on one week or one viral post. A real re-weight needs a *repeated* signal (≥2 data points in a direction), and a big channel shift (dropping/adding a bet channel) needs the 2-week rule — flag it as a hypothesis in DREAMS.md first, act when it's confirmed. One 200-upvote thread is not a format.
-3. **Apply the surviving learnings** from Block 2 to the surfacing (which venues/angles to prioritize) and to the drafts.
-4. **Draft pipeline:** 3-5 content drafts for next week, each tied to a \`gtmContentAngles\` slug, saved via \`save_draft\` (\`approvalState: "draft"\`) — operator can edit/approve/reject through the week. Each draft: angle slug, target channel, ship day, opening line. **Wrap every product link via \`wrap_link({ destinationUrl })\`** so next week's clicks are attributable.
+1. **Re-weight bet channels/angles from the week's outcomes — conversions lead.** Drive the re-weight off \`get_my_attribution({ windowDays: 7 })\` first: channels/angles/hook-types that produced **conversions** (signups → demos → revenue) earn the most *priority* going forward; channels that drove clicks-without-conversions get demoted (traffic that doesn't convert isn't earning attention); engagement-only signals (upvotes/likes/OP-replies) are the *last* tiebreaker, not the driver. A channel that only got engagement does not out-weight a channel that converted. Persist this re-weighting as \`save_learning\` calls tied to the converting draft attribute (hook-type / format / channel) — these are exactly the signals \`maya-morning-brief\` reads each day to decide what to surface. Do NOT generate \`gtmCalendarEvents\` here; the daily cron owns the calendar. (If attribution is thin this week, weight on engagement but say so per Block 2's fallback rule — don't pretend the re-weight is conversion-grounded.)
+2. **Advance per-channel warmth.** Review each bet channel's progress this week against its warmth arc (PLAYBOOK § 2 Phase-1 floor): an account that hit its floor (account age, baseline karma/followers, substantive engagement logged) gets advanced via **\`set_channel_warmth({ channel, state })\`** — e.g. \`new_needs_warmup → warming\`, or \`warming → warm\` once the floor is met. A warm channel unlocks soft/hard launch posting for the daily cron; a channel still cold stays warmup-only. This is the one durable forward-write the weekly review owns over warmth: the daily cron reads \`channelWarmthJson\` every morning and respects whatever state the review last set. Do NOT advance a channel that didn't actually warm — warmth is grounded in logged activity + age, not optimism.
+3. **Counter-overfitting discipline (hard rule).** Do NOT swing strategy on one week or one viral post. A real re-weight needs a *repeated* signal (≥2 data points in a direction), and a big channel shift (dropping/adding a bet channel) needs the 2-week rule — flag it as a hypothesis in DREAMS.md first, act when it's confirmed. One 200-upvote thread is not a format. Likewise, don't advance warmth off a single good day.
+4. **Apply the surviving learnings** from Block 2 to the stored weighting (which venues/angles the daily cron should prioritize). The morning cron consumes these — the weekly review's job is to make sure the right learnings + warmth states are persisted, not to pre-schedule the week.
 
-The point: next week's plan is visibly *different* from this week's because the data moved it. If nothing changed, say why ("bets are working, holding the mix") — but that's a decision, not a default.
+The point: the *strategy* the daily cron acts on is visibly *different* next week because the data moved the weighting + warmth — not because Maya pre-built a calendar. If nothing changed, say why ("bets are working, holding the mix — warmth unchanged") — but that's a decision, not a default.
 
 ## What this review writes
 
-Call \`log_action({ kind: "weekly_review", ... })\`. Plus a \`save_learning\` call for each surviving learning. Plus drafts as \`gtmDraftedContent\` rows via \`save_draft\`.
+Call \`log_action({ kind: "weekly_review", ... })\`. Plus a \`save_learning\` call for each surviving learning (these are what the daily morning cron reads to re-weight its surfacing). Plus a \`set_channel_warmth({ channel, state })\` call for every bet channel whose warmth advanced this week. The weekly review does NOT write \`gtmCalendarEvents\` and does NOT pre-build next week's drafts — the daily cron writes today's events + drafts each morning from this stored weighting + warmth.
 
 ## DREAMS.md write triggers (end of weekly review)
 
@@ -3461,7 +3631,7 @@ If foundation tables look stale to Maya's judgment AND a shift is proposed, Maya
 
 ## Cost discipline
 
-0 ScrapeCreators (uses existing Convex data). 2-3 main_maya calls (synthesis + critic + draft generation). 2-3 min total. Once per week.
+0 ScrapeCreators (uses existing Convex data). 2-3 main_maya calls (synthesis + critic + warmth/re-weight decisions). No week-of-drafts generation (the daily cron drafts each morning). 2-3 min total. Once per week.
 
 ## Anti-slop check
 
@@ -3469,7 +3639,7 @@ Banned for this message: "Crushed it this week," "We're seeing momentum," "level
 `;
 
 // Source: agents/skills/maya-gtm/maya-x-founder-led-researcher/SKILL.md
-const ENTRY_30_maya_x_founder_led_researcher = `---
+const ENTRY_31_maya_x_founder_led_researcher = `---
 name: maya-x-founder-led-researcher
 description: Find X founder-led conversations, reply targets, hooks worth modeling, and accounts worth a private List.
 ---
@@ -3578,7 +3748,10 @@ interface XResearchReport {
   /** 5-10 real, top-performing, HUMAN-written native posts AND replies captured
    *  VERBATIM from the niche — the few-shot voice/register anchors for
    *  maya-voice-matcher + drafting. Replies included (that's where the native
-   *  founder voice lives). Match cadence/vocab/length/format; NEVER copy content. */
+   *  founder voice lives). Match cadence/vocab/length/format; NEVER copy content.
+   *  This array is the shape of your thinking; it LANDS via the REQUIRED
+   *  save_style_exemplars({ channel: "x", styleExemplars: [...] }) call
+   *  (see the Save section) — described-but-unsaved = lost. */
   styleExemplars: Array<{
     url: string;
     handle: string;
@@ -3609,6 +3782,13 @@ When invoked as a Phase-2 demand worker (the first-wake actionable pass), you ow
 
 One self-contained tool sequence per tweet — the same per-item discipline that makes the foundation strategy saves reliable. An \`OK ...\` return = it landed. The \`XResearchReport\` schema above stays the shape of your *thinking* per target; the tool calls are how it lands. Exact sequence: \`maya-foundation-research\` Phase 2.
 
+### REQUIRED before you return — land the ICP knowledge + voice anchors (once per run)
+
+These two saves are what make the daily cron and the drafting step work. They are not optional extras; a run that surfaces reply targets but skips them has left the channel scorecard incomplete.
+
+5. **\`save_style_exemplars({ channel: "x", styleExemplars: [ … 5-10 verbatim native posts AND replies … ] })\`** — REQUIRED. The verbatim native posts and replies you captured in decision rule 15 anchor \`maya-voice-matcher\` Anchor B; **skip this and every later X draft defaults to generic LLM tone** the niche scrolls past. Pass each as \`{ platform: "x", community: <niche/handle>, verbatim, why, capturedAt }\` — include replies specifically (that's where the native founder voice lives). This is the persisted form of the \`styleExemplars[]\` schema above — the schema is your thinking; this call is how it lands.
+6. **\`save_foundation_channel_scorecard({ channel: "x", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })\`** — REQUIRED for a bet channel. Populate per-channel \`icpKnowledge\`: \`venues\` (the 20-40-handle List as \`{ name: <handle>, kind: "account", url, whyHere }\` + any niche hashtags), \`watch\` (who/what these founders follow), \`complaints\` (verbatim buyer pain \`{ quote, sourceUrl }\` from the tweets you mined), \`topics\` (what the niche talks about), and \`nativeStyle\` (\`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }\` drawn from winning replies). An X bet with empty \`icpKnowledge\` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP.
+
 ## Failure modes
 
 - **Operator <100 followers + wants a launch thread.** Refuse. Return Phase 1 routine + ClearNoteLab failure citation (x.md § 11 Failure 1).
@@ -3627,7 +3807,7 @@ Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before t
 `;
 
 // Source: agents/skills/maya-gtm/maya-youtube-researcher/SKILL.md
-const ENTRY_31_maya_youtube_researcher = `---
+const ENTRY_32_maya_youtube_researcher = `---
 name: maya-youtube-researcher
 description: Deep YouTube research via ScrapeCreators — mine comments + transcripts for buyer language, map the venue spread (niche channels, hashtags, Shorts trends), and judge whether YouTube earns a bet for this product. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
 ---
@@ -3669,6 +3849,13 @@ Public metrics only — NOT Studio analytics (watch-time/retention/CTR are owner
 
 Save findings as target threads (\`save_target_thread({ platform: "youtube", ... })\`) + channel-scorecard evidence + style exemplars + caption craft, same shapes as the other per-channel researchers — call the tool — a finding you describe in text but never save is lost. **Caption/title craft:** the YouTube **title is the CTR lever** (the gate to everything) — propose title options; the description carries SEO + the wrapped product link (in description, with timestamps). Shorts: hook in the first second.
 
+### REQUIRED before you return — land the ICP knowledge + voice anchors (when YouTube is a bet)
+
+When YouTube earns a bet (real buyer presence + the founder can produce video), these two saves are REQUIRED — they are what the daily cron and Brief drafting read:
+
+1. **\`save_style_exemplars({ channel: "youtube", styleExemplars: [ … 5-10 verbatim native videos/titles/Shorts … ] })\`** — REQUIRED. The 5-10 real, top-performing HUMAN videos/titles/Shorts you captured anchor \`maya-voice-matcher\` Anchor B; **skip this and every later YouTube Brief defaults to generic LLM tone** that doesn't match how the niche talks. Pass each as \`{ platform: "youtube", community: <niche/channel>, verbatim: <title + hook>, why, capturedAt }\`. Described-but-unsaved = lost.
+2. **\`save_foundation_channel_scorecard({ channel: "youtube", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })\`** — REQUIRED for a bet channel. Populate per-channel \`icpKnowledge\`: \`venues\` (the ranked venue spread — big niche channels + small high-intent ones + hashtags + Shorts trends as \`{ name, kind: "account" | "hashtag", url, whyHere }\`), \`watch\` (what this audience watches), \`complaints\` / buyer-intent (verbatim from comments + transcripts as \`{ quote, sourceUrl: videoUrl }\`), \`topics\` (the search-intent subjects), and \`nativeStyle\` (\`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }\` — title/hook register). A YouTube bet with empty \`icpKnowledge\` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP. (If YouTube doesn't earn a bet, park it and skip both — there's nothing to score.)
+
 ## Discipline
 
 - Judgment, no hardcoded thresholds. Signups-not-likes. Brief-only — never claim we film.
@@ -3693,20 +3880,21 @@ export const BUNDLED_LOCAL_SKILLS: readonly BundledLocalSkill[] = [
   { slug: "maya-hn-researcher", workspacePath: "skills/maya-hn-researcher/SKILL.md", body: ENTRY_13_maya_hn_researcher },
   { slug: "maya-icp-hypothesis", workspacePath: "skills/maya-icp-hypothesis/SKILL.md", body: ENTRY_14_maya_icp_hypothesis },
   { slug: "maya-inbound-triage", workspacePath: "skills/maya-inbound-triage/SKILL.md", body: ENTRY_15_maya_inbound_triage },
-  { slug: "maya-linkedin-fit-researcher", workspacePath: "skills/maya-linkedin-fit-researcher/SKILL.md", body: ENTRY_16_maya_linkedin_fit_researcher },
-  { slug: "maya-linkedin-researcher", workspacePath: "skills/maya-linkedin-researcher/SKILL.md", body: ENTRY_17_maya_linkedin_researcher },
-  { slug: "maya-morning-brief", workspacePath: "skills/maya-morning-brief/SKILL.md", body: ENTRY_18_maya_morning_brief },
-  { slug: "maya-output-critic", workspacePath: "skills/maya-output-critic/SKILL.md", body: ENTRY_19_maya_output_critic },
-  { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_20_maya_reddit_demand_researcher },
-  { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_21_maya_results_reviewer },
-  { slug: "maya-slideshow-strategist", workspacePath: "skills/maya-slideshow-strategist/SKILL.md", body: ENTRY_22_maya_slideshow_strategist },
-  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_23_maya_slop_critic },
-  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_24_maya_tiktok_demo_strategist },
-  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_25_maya_tiktok_format_researcher },
-  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_26_maya_ugc_system_advisor },
-  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_27_maya_viral_demo_moment_miner },
-  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_28_maya_voice_matcher },
-  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_29_maya_weekly_review },
-  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_30_maya_x_founder_led_researcher },
-  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_31_maya_youtube_researcher },
+  { slug: "maya-instagram-researcher", workspacePath: "skills/maya-instagram-researcher/SKILL.md", body: ENTRY_16_maya_instagram_researcher },
+  { slug: "maya-linkedin-fit-researcher", workspacePath: "skills/maya-linkedin-fit-researcher/SKILL.md", body: ENTRY_17_maya_linkedin_fit_researcher },
+  { slug: "maya-linkedin-researcher", workspacePath: "skills/maya-linkedin-researcher/SKILL.md", body: ENTRY_18_maya_linkedin_researcher },
+  { slug: "maya-morning-brief", workspacePath: "skills/maya-morning-brief/SKILL.md", body: ENTRY_19_maya_morning_brief },
+  { slug: "maya-output-critic", workspacePath: "skills/maya-output-critic/SKILL.md", body: ENTRY_20_maya_output_critic },
+  { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_21_maya_reddit_demand_researcher },
+  { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_22_maya_results_reviewer },
+  { slug: "maya-slideshow-strategist", workspacePath: "skills/maya-slideshow-strategist/SKILL.md", body: ENTRY_23_maya_slideshow_strategist },
+  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_24_maya_slop_critic },
+  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_25_maya_tiktok_demo_strategist },
+  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_26_maya_tiktok_format_researcher },
+  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_27_maya_ugc_system_advisor },
+  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_28_maya_viral_demo_moment_miner },
+  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_29_maya_voice_matcher },
+  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_30_maya_weekly_review },
+  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_31_maya_x_founder_led_researcher },
+  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_32_maya_youtube_researcher },
 ];

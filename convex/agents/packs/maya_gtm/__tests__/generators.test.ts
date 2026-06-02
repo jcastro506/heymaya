@@ -160,8 +160,10 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("SOUL.md")).toContain("AI self-references");
     expect(files.get("SOUL.md")).toContain("self-identification");
     expect(files.get("USER.md")).toContain("Will manually post Instagram: yes");
-    expect(files.get("USER.md")).toContain("TikTok warm-up state: warming");
-    expect(files.get("USER.md")).toContain("TikTok account age days: 3");
+    // Warmup generalized to per-channel (pillar 4): USER.md now renders one
+    // line per connected channel from channelWarmthJson, not a TikTok-only line.
+    expect(files.get("USER.md")).toMatch(/\*\*tiktok:\*\*\s*warming/i);
+    expect(files.get("USER.md")).toContain("3d old");
     expect(files.get("USER.md")).toContain(
       "TikTok Account Check completed: no"
     );

@@ -22,25 +22,137 @@ import {
 } from "../../integrations/telegram/sendDirectMessage";
 
 /**
- * Narrow a persisted gtmChannelScores.channel (which still carries the
- * vestigial youtube/product_hunt literals for back-compat with historical
- * rows) down to the live picker channel set the workspace generator
- * accepts (reddit/x/hn/linkedin/tiktok). youtube/product_hunt are never
- * scored anymore, so they resolve to undefined ("pending research").
+ * Narrow a persisted gtmChannelScores.channel down to the live picker channel
+ * set the workspace generator accepts. Ideal-product pillar 2 (EQUAL
+ * SIX-CHANNEL RESEARCH) re-promotes youtube to a first-class Brief-only
+ * channel, so a youtube primary/secondary now survives instead of resolving
+ * to undefined. product_hunt stays excluded (never scored) and resolves to
+ * undefined ("pending research").
  */
 function toPickerChannel(
   channel: Doc<"gtmChannelScores">["channel"] | undefined
-): "reddit" | "x" | "hn" | "linkedin" | "tiktok" | undefined {
+): "reddit" | "x" | "hn" | "linkedin" | "tiktok" | "youtube" | undefined {
   switch (channel) {
     case "reddit":
     case "x":
     case "hn":
     case "linkedin":
     case "tiktok":
+    case "youtube":
       return channel;
     default:
       return undefined;
   }
+}
+
+/**
+ * Ideal-product WARMUP pillar — seed an initial channelWarmthJson from the
+ * founder-voice ScrapeCreators pull when one ran, so the per-channel warmth
+ * arc starts GROUNDED instead of "unknown". Only consulted as a deploy-time
+ * fallback: if the agent already persisted channelWarmthJson (via
+ * set_channel_warmth), that authoritative map wins and this helper is skipped.
+ *
+ * The voice pull persists per-platform signal on gtmAgents.voiceProfileJson
+ * (sources[] + perPlatform{}). For each platform we have a source for, derive
+ * a starting warmth state from the cheap thresholds the pull captured
+ * (sampleCount as a proxy for posting history, plus follower/age hints when
+ * present): an established account (real history / follower base / aged) starts
+ * "warm"; a thin or brand-new account starts "new_needs_warmup". Channels with
+ * no voice source are left absent (the cron treats absent as cold/unknown).
+ *
+ * tiktokWarmupState is mirrored into channelWarmthJson.tiktok as the
+ * back-compat alias so the legacy TikTok field and the generalized map agree.
+ */
+function seedChannelWarmthFromVoice(input: {
+  voiceProfileJson?: string;
+  existingChannelWarmthJson?: string;
+  tiktokWarmupState?: Doc<"gtmApps">["tiktokWarmupState"];
+  tiktokAccountAgeDays?: number;
+}): string | undefined {
+  // Authoritative map already exists — never overwrite the runtime's arc.
+  if (input.existingChannelWarmthJson) {
+    return input.existingChannelWarmthJson;
+  }
+  if (!input.voiceProfileJson) {
+    return undefined;
+  }
+
+  type VoiceSource = {
+    platform?: string;
+    url?: string;
+    sampleCount?: number;
+    followerCount?: number;
+    accountAgeDays?: number;
+    kind?: string;
+  };
+  let parsed: {
+    sources?: VoiceSource[];
+    perPlatform?: Record<string, VoiceSource>;
+  };
+  try {
+    parsed = JSON.parse(input.voiceProfileJson) as typeof parsed;
+  } catch {
+    // Malformed voice profile — fail open to "unknown" (return nothing).
+    return undefined;
+  }
+
+  const now = Date.now();
+  const warmth: Record<string, unknown> = {};
+
+  const deriveState = (s: VoiceSource): "warm" | "new_needs_warmup" => {
+    // Grounded thresholds: a channel with real posting history OR a follower
+    // base OR an aged account is treated as already warm (skip warmup); a thin
+    // or brand-new account needs the warmup arc first.
+    const samples = s.sampleCount ?? 0;
+    const followers = s.followerCount ?? 0;
+    const ageDays = s.accountAgeDays ?? 0;
+    const established = samples >= 10 || followers >= 100 || ageDays >= 30;
+    return established ? "warm" : "new_needs_warmup";
+  };
+
+  const mergeSource = (platform: string, s: VoiceSource): void => {
+    const key = platform.toLowerCase().trim();
+    if (!key || warmth[key]) return;
+    warmth[key] = {
+      state: deriveState(s),
+      accountAgeDays: s.accountAgeDays,
+      baseline: {
+        followers: s.followerCount,
+        postCount: s.sampleCount,
+      },
+      lastUpdatedMs: now,
+      seededFrom: "voice_pull",
+    };
+  };
+
+  for (const s of parsed.sources ?? []) {
+    if (s?.platform) mergeSource(s.platform, s);
+  }
+  for (const [platform, s] of Object.entries(parsed.perPlatform ?? {})) {
+    if (s) mergeSource(platform, s);
+  }
+
+  // Back-compat alias: mirror tiktokWarmupState into channelWarmthJson.tiktok
+  // so the legacy field and the generalized map never disagree. A TikTok voice
+  // source (above) is overridden by the explicit warmup state when present.
+  if (input.tiktokWarmupState) {
+    const tiktokState =
+      input.tiktokWarmupState === "ready" ? "warm" : input.tiktokWarmupState;
+    warmth.tiktok = {
+      ...(typeof warmth.tiktok === "object" && warmth.tiktok
+        ? (warmth.tiktok as Record<string, unknown>)
+        : {}),
+      state: tiktokState,
+      accountAgeDays: input.tiktokAccountAgeDays,
+      lastUpdatedMs: now,
+      seededFrom: "tiktok_warmup_state",
+    };
+  }
+
+  if (Object.keys(warmth).length === 0) {
+    return undefined;
+  }
+  return JSON.stringify(warmth);
 }
 
 export type DeployMayaGtmStage =
@@ -383,6 +495,30 @@ export function buildGatewayConfig(
     {
       id: "linkedin_research",
       name: "LinkedIn Fit Researcher",
+      model: subagentModel,
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      // Ideal-product pillar 2 (EQUAL SIX-CHANNEL RESEARCH) — youtube is
+      // re-promoted to a first-class Brief-only channel. This worker mirrors
+      // instagram_research / linkedin_research: it scrapes the founder's +
+      // ICP's YouTube via scrape_creators, mines comments + transcripts for
+      // native register and buyer language, and persists via save_target_thread
+      // + save_foundation_channel_scorecard (with icpKnowledge) +
+      // save_style_exemplars. Task contract lives in the maya-youtube-researcher
+      // SKILL.md; this entry just gives it the plugin tools + coding profile so
+      // its save_* calls actually land instead of fabricating.
+      id: "youtube_research",
+      name: "YouTube Demand Researcher",
       model: subagentModel,
       // alsoAllow group:plugins — the `coding` profile does NOT include
       // plugin-owned tools, so without this the maya-gtm-tools typed tools
@@ -1077,6 +1213,22 @@ export const buildAndUploadGtmWorkspace = internalAction({
       // where to POST /lc_gtm/* callbacks.
       hookToken,
       convexHookCallbackUrl: resolveConvexHookCallbackBaseUrl(),
+      // Ideal-product pillar 1 (VOICE) — thread the founder's persisted voice
+      // fingerprint so a redeploy re-renders the USER.md "Voice fingerprint"
+      // section instead of resetting it to "not yet built". Built in Phase 0
+      // from the founder's own handles (save_voice_profile).
+      voiceProfileJson: row.agent.voiceProfileJson,
+      // Ideal-product pillar 4 (WARMUP) — thread the per-channel warmth map so a
+      // redeploy re-renders the per-channel warmth block. If the runtime already
+      // persisted channelWarmthJson (via set_channel_warmth) it wins; otherwise
+      // seed an initial grounded arc from the voice pull's per-platform signal
+      // (and mirror the legacy tiktokWarmupState into .tiktok).
+      channelWarmthJson: seedChannelWarmthFromVoice({
+        voiceProfileJson: row.agent.voiceProfileJson,
+        existingChannelWarmthJson: row.agent.channelWarmthJson,
+        tiktokWarmupState: row.app.tiktokWarmupState,
+        tiktokAccountAgeDays: row.app.tiktokAccountAgeDays,
+      }),
     });
     const tarBytes = buildPosixTar(files);
     const tarBuffer = tarBytes.buffer.slice(

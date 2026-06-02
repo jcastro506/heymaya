@@ -259,10 +259,16 @@ const IdemKey = Type.Optional(
 const PLATFORM_7 = ["reddit", "x", "hn", "linkedin", "instagram", "tiktok", "youtube"];
 const RELATIONSHIP_PLATFORM = ["reddit", "x", "hn", "linkedin", "instagram", "tiktok", "threads"];
 const CHANNEL_11 = [
-  "reddit", "x", "hn", "linkedin", "tiktok", "instagram",
+  "reddit", "x", "hn", "linkedin", "tiktok", "instagram", "youtube",
   "threads", "podcasts", "newsletters", "discord", "blog",
 ];
 const PUBLISHED_PLATFORM_6 = ["reddit", "x", "hn", "linkedin", "instagram", "tiktok"];
+// Channels that carry a per-channel warmth state (ban-safety arc). Mirrors the
+// bet channels plus tiktok (the original warmup channel kept as back-compat).
+const WARMTH_CHANNEL = ["reddit", "x", "hn", "linkedin", "instagram", "tiktok", "youtube"];
+// Per-channel warmth state. Reuses the tiktokWarmupState enum values; warm|ready
+// means skip-warmup for that channel.
+const WARMTH_STATE = ["unknown", "new_needs_warmup", "warming", "ready", "warm", "restricted"];
 
 function Enum(values, description) {
   return Type.Unsafe({ type: "string", enum: values, ...(description ? { description } : {}) });
@@ -463,7 +469,7 @@ export default defineToolPlugin({
       name: "propose_calendar",
       label: "Propose Calendar Events",
       description:
-        "Persist proposed calendar events for the week. REQUIRED: researchJobId, events[] each with title + startsAtMs + endsAtMs (epoch ms). This is the plan the operator approves.",
+        "Persist today's proposed calendar event(s). REQUIRED: researchJobId, events[] each with title + startsAtMs + endsAtMs (epoch ms). This is the plan the operator approves. For any reply_window / soft_launch_post / hard_launch_anchor event, make it TURN-KEY: openUrl (one-tap OPEN/LINK; wrap_link any product URL first) + draftText (verbatim paste block) so the operator acts in one tap.",
       parameters: Type.Object({
         researchJobId: Type.String(),
         events: Type.Array(
@@ -472,6 +478,15 @@ export default defineToolPlugin({
             startsAtMs: Type.Number({ description: "Epoch ms." }),
             endsAtMs: Type.Number({ description: "Epoch ms." }),
             description: Type.Optional(Type.String({ description: "Full hands-off recipe." })),
+            openUrl: Type.Optional(
+              Type.String({ description: "One-tap OPEN/LINK target (wrap_link any product URL first)." })
+            ),
+            draftText: Type.Optional(
+              Type.String({ description: "Verbatim 'YOUR REPLY'/paste block the operator copies." })
+            ),
+            sourceNote: Type.Optional(
+              Type.String({ description: "Why this event exists — the grounded source/thread it came from." })
+            ),
           }),
           { minItems: 1 }
         ),
@@ -512,6 +527,16 @@ export default defineToolPlugin({
               stage: Type.String(),
               whereTheyHangOut: Type.String(),
               intentLanguage: Type.String(),
+              nativeStyleExemplars: Type.Optional(
+                Type.Array(Type.String(), {
+                  description: "Verbatim native phrasing buyers use at this stage / in this venue.",
+                })
+              ),
+              complaints: Type.Optional(
+                Type.Array(Type.String(), {
+                  description: "Pain/complaints heard at this stage (their words).",
+                })
+              ),
             })
           )
         ),
@@ -548,7 +573,7 @@ export default defineToolPlugin({
       name: "save_foundation_channel_scorecard",
       label: "Foundation: Channel Scorecard",
       description:
-        "Persist a channel scorecard row. REQUIRED: channel (one of the 11), uniqueUnlock. NOTE: youtube is NOT a valid channel here.",
+        "Persist a channel scorecard row. REQUIRED: channel (one of the 11), uniqueUnlock. For any BET channel, populate icpKnowledge (venues + watch + complaints[quote+URL] + topics + nativeStyle) — a bet channel with empty icpKnowledge is an incomplete scorecard. styleExemplars holds 5-10 verbatim native posts that anchor maya-voice-matcher Anchor B (or use save_style_exemplars).",
       parameters: Type.Object({
         channel: Enum(CHANNEL_11),
         uniqueUnlock: Type.String(),
@@ -556,6 +581,55 @@ export default defineToolPlugin({
         cadenceFit: Type.Optional(Type.Number({ description: "0..1, default 0.5" })),
         bet: Type.Optional(Type.Boolean()),
         notes: Type.Optional(Type.String()),
+        icpKnowledge: Type.Optional(
+          Type.Union(
+            [
+              Type.Object({
+                venues: Type.Optional(
+                  Type.Array(
+                    Type.Object({
+                      name: Type.String(),
+                      kind: Type.Optional(Enum(["subreddit", "hashtag", "community", "account"])),
+                      url: Type.Optional(Type.String()),
+                      whyHere: Type.Optional(Type.String()),
+                    })
+                  )
+                ),
+                watch: Type.Optional(Type.Array(Type.String())),
+                complaints: Type.Optional(
+                  Type.Array(Type.Object({ quote: Type.String(), sourceUrl: Type.String() }))
+                ),
+                topics: Type.Optional(Type.Array(Type.String())),
+                nativeStyle: Type.Optional(
+                  Type.Object({
+                    exemplars: Type.Optional(
+                      Type.Array(Type.Object({ quote: Type.String(), sourceUrl: Type.String() }))
+                    ),
+                    cadenceNotes: Type.Optional(Type.String()),
+                    vocab: Type.Optional(Type.Array(Type.String())),
+                  })
+                ),
+              }),
+              Type.String({ description: "Or a pre-serialized JSON string of the same shape." }),
+            ],
+            {
+              description:
+                "Per-channel ICP knowledge: where the buyer lives, what to watch, their complaints (quote+URL), topics, and native style. Pass the object OR a JSON string.",
+            }
+          )
+        ),
+        styleExemplars: Type.Optional(
+          Type.Array(
+            Type.Object({
+              platform: Type.Optional(Type.String()),
+              community: Type.Optional(Type.String()),
+              verbatim: Type.String({ description: "The native post, copied verbatim." }),
+              why: Type.Optional(Type.String()),
+              capturedAt: Type.Optional(Type.Number()),
+            }),
+            { description: "5-10 verbatim native posts for this channel (voice-matcher Anchor B)." }
+          )
+        ),
         idempotencyKey: IdemKey,
       }),
       execute: async (p, _cfg, ctx) =>
@@ -619,6 +693,108 @@ export default defineToolPlugin({
         idempotencyKey: IdemKey,
       }),
       execute: async (p, _cfg, ctx) => postLc("set_strategy_approval", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+
+    // --- Voice + per-channel warmth (Phase 0 + ban-safety arc) ---
+    tool({
+      name: "save_voice_profile",
+      label: "Save Voice Profile",
+      description:
+        "Persist the founder's voice fingerprint (Phase 0 — built from their own posts/videos before any niche research). REQUIRED: voiceProfile (the fingerprint object, or a pre-serialized JSON string of it). A voice profile you describe but never save does not exist — maya-voice-matcher Anchor A reads it back. If the user has NO handles, build from 2-3 sentences they give and set confidence:'low'/'none'.",
+      parameters: Type.Object({
+        voiceProfile: Type.Union(
+          [
+            Type.Object({
+              builtAt: Type.Optional(Type.Number()),
+              sources: Type.Optional(
+                Type.Array(
+                  Type.Object({
+                    platform: Type.String(),
+                    url: Type.Optional(Type.String()),
+                    sampleCount: Type.Optional(Type.Number()),
+                    kind: Type.Optional(Enum(["text", "video"])),
+                  })
+                )
+              ),
+              features: Type.Optional(
+                Type.Object({
+                  avgSentenceLen: Type.Optional(Type.Number()),
+                  burstiness: Type.Optional(Type.Number()),
+                  contractionUse: Type.Optional(Type.String()),
+                  emojiFreq: Type.Optional(Type.String()),
+                  register: Type.Optional(Type.String()),
+                  openings: Type.Optional(Type.Array(Type.String())),
+                  signoffs: Type.Optional(Type.Array(Type.String())),
+                  characteristicPhrases: Type.Optional(Type.Array(Type.String())),
+                  emDashHabit: Type.Optional(Type.String()),
+                  profanityTolerance: Type.Optional(Type.String()),
+                })
+              ),
+              perPlatform: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+              verbatimSamples: Type.Optional(
+                Type.Array(
+                  Type.Object({
+                    platform: Type.String(),
+                    text: Type.Optional(Type.String()),
+                    videoSummary: Type.Optional(Type.String()),
+                    url: Type.Optional(Type.String()),
+                  })
+                )
+              ),
+              confidence: Type.Optional(Enum(["high", "medium", "low", "none"])),
+            }),
+            Type.String({ description: "Or a pre-serialized JSON string of the same shape." }),
+          ],
+          {
+            description:
+              "Voice fingerprint: sources, cadence/vocab/openings/signoffs/emoji features, per-platform variants, verbatim samples, and confidence. Pass the object OR a JSON string.",
+          }
+        ),
+        idempotencyKey: IdemKey,
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("save_voice_profile", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+    tool({
+      name: "save_style_exemplars",
+      label: "Save Style Exemplars",
+      description:
+        "Persist 5-10 verbatim native posts for one channel — they anchor maya-voice-matcher Anchor B (native-community style). REQUIRED: channel, styleExemplars[] (>=1). Skip it and drafts default to generic LLM-tone. Saved onto that channel's scorecard row.",
+      parameters: Type.Object({
+        channel: Enum(CHANNEL_11),
+        styleExemplars: Type.Array(
+          Type.Object({
+            platform: Type.Optional(Type.String()),
+            community: Type.Optional(Type.String()),
+            verbatim: Type.String({ description: "The native post, copied verbatim." }),
+            why: Type.Optional(Type.String({ description: "What makes it native to the community." })),
+            capturedAt: Type.Optional(Type.Number()),
+          }),
+          { minItems: 1 }
+        ),
+        idempotencyKey: IdemKey,
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("save_style_exemplars", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+    tool({
+      name: "set_channel_warmth",
+      label: "Set Channel Warmth",
+      description:
+        "Set/advance one channel's warmth state in the ban-safety arc (new_needs_warmup -> warming -> warm). REQUIRED: channel, state. warm|ready = skip-warmup (real posting unlocked); cold channels stay warmup_block + substantive engagement only (no promo/links). Merges into channelWarmthJson and stamps lastUpdatedMs — idempotent. Call when a channel's Phase-1 floor is met.",
+      parameters: Type.Object({
+        channel: Enum(WARMTH_CHANNEL),
+        state: Enum(WARMTH_STATE),
+        accountAgeDays: Type.Optional(Type.Number()),
+        baselineKarma: Type.Optional(Type.Number()),
+        baselineFollowers: Type.Optional(Type.Number()),
+        baselinePostCount: Type.Optional(Type.Number()),
+        warmTargetMs: Type.Optional(Type.Number({ description: "Epoch ms the channel is expected to be warm." })),
+        note: Type.Optional(Type.String()),
+        idempotencyKey: IdemKey,
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("set_channel_warmth", { ...p, idempotencyKey: key(p) }, ctx.signal),
     }),
 
     // --- Operator comms + progress ---

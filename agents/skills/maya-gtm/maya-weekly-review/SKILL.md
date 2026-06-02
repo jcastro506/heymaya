@@ -1,13 +1,15 @@
 ---
 name: maya-weekly-review
-description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for next week if any, and a regenerated next-week plan re-weighted by what actually converted.
+description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for the coming week if any, and a re-weighting of bet channels + per-channel warmth advancement (set_channel_warmth) by what actually converted. Does NOT regenerate a next-week rolling plan — the daily morning cron owns day-to-day planning.
 ---
 
 # maya-weekly-review
 
 ## Purpose
 
-Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks at the prior 7 days as one block: did the channels we bet on actually convert, are the angles working, did relationships warm. Then she shifts strategy for the coming week — that's how the product compounds.
+Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks at the prior 7 days as one block: did the channels we bet on actually convert, are the angles working, did relationships warm. Then she shifts *strategy* for the coming week — re-weights which channels/angles get the most attention and advances each channel's warmth state — that's how the product compounds.
+
+**Scope boundary (load-bearing).** The weekly review does NOT regenerate a "next-week rolling plan." There is no rolling 7-day calendar artifact. Day-to-day planning is owned by the **daily morning cron** (`maya-morning-brief` / `morning_brief` 7am), which every morning reads the stored ICP knowledge + per-channel warmth and builds THAT day's turn-key events from what's live. The weekly review's forward output is *strategic weighting + warmth advancement*, persisted as learnings + `set_channel_warmth` calls that the daily cron then reads — not a pre-built week of events.
 
 ## When to invoke
 
@@ -79,26 +81,26 @@ If no shift, say so ("Bets are working — staying the course"). Honesty.
 
 **Positioning-vs-distribution check (feeds the shift decision — the honest-diagnosis link).** Before proposing a *distribution* shift (new channel, more cadence, different posting window), read the `positioningVsDistribution` rollup from `maya-results-reviewer` (required read #8). The diagnosis changes the *kind* of shift, and sometimes refuses one:
 
-- **If the week is a POSITIONING problem** (`positioningProblem: true` — posts got real reach but engagement/clicks/conversions stayed flat: people saw it and didn't want it), say it plainly and do NOT prescribe more distribution. The honest line: **"We're not going to out-post a positioning problem. 1,400 people saw your stuff this week and almost nobody engaged — that's not a reach issue, it's a 'this message isn't landing' issue. More posts of the same framing get the same shrug."** Then propose a **strategy reconsideration, not a cadence bump**: the messaging/audience reframe Maya would test next week (the reviewer's `reframeToTest` is the starting point) — e.g. "I'd test reframing from 'faster builds' to 'ship without a cofounder' and aim it at solo founders instead of agencies. One week, one channel, then we re-read." This is a Block 3 *shift* (change the angle/who-it's-for), and Block 4 then regenerates the plan around the reframe rather than around 'post more.'
+- **If the week is a POSITIONING problem** (`positioningProblem: true` — posts got real reach but engagement/clicks/conversions stayed flat: people saw it and didn't want it), say it plainly and do NOT prescribe more distribution. The honest line: **"We're not going to out-post a positioning problem. 1,400 people saw your stuff this week and almost nobody engaged — that's not a reach issue, it's a 'this message isn't landing' issue. More posts of the same framing get the same shrug."** Then propose a **strategy reconsideration, not a cadence bump**: the messaging/audience reframe Maya would test next week (the reviewer's `reframeToTest` is the starting point) — e.g. "I'd test reframing from 'faster builds' to 'ship without a cofounder' and aim it at solo founders instead of agencies. One week, one channel, then we re-read." This is a Block 3 *shift* (change the angle/who-it's-for), and Block 4 then re-weights the bets + persists the reframe as learnings so the daily cron builds around the new angle rather than around 'post more.'
 - **If the week is a DISTRIBUTION problem** (posts barely got seen), the shift is legitimately about channel/timing/venue — proceed normally. Note explicitly that the *message is still untested*, so we're fixing reach first and will re-judge the message once it's actually seen.
 - **Tier-2 honesty carries through.** If the reviewer marked reach as a soft proxy (`reachSignalConfidence: "proxy_soft"`), carry that caveat into the review — call the positioning read a lean, not a verdict, and say what signal would harden it.
 
-This is the *diagnosis → strategic-shift* linkage only. Do NOT duplicate Block 4's plan-regeneration logic here — Block 3 decides the *kind* of shift (reframe vs cadence/channel); Block 4 rebuilds the plan around whichever Block 3 chose.
+This is the *diagnosis → strategic-shift* linkage only. Do NOT duplicate Block 4's re-weighting logic here — Block 3 decides the *kind* of shift (reframe vs cadence/channel); Block 4 persists that shift as re-weighting + warmth advancement that the daily cron then acts on.
 
-### Block 4 — Regenerate next week's plan (NOT a one-way ratchet)
+### Block 4 — Re-weight the bets + advance warmth (NOT a regenerated week)
 
-The review doesn't just *extract* learnings — it *feeds them forward*. Rebuild the rolling 7-day plan for the coming week, re-weighted by what actually worked:
+The review doesn't just *extract* learnings — it *feeds them forward*. But it does **NOT** rebuild a rolling 7-day calendar. There is no next-week plan to regenerate — the daily morning cron builds each day fresh from stored ICP knowledge + live channel state. What the weekly review feeds forward is *strategic weighting and warmth state* that the daily cron then reads. Two outputs only:
 
-1. **Re-weight bet channels/angles from the week's outcomes — conversions lead.** Drive the re-weight off `get_my_attribution({ windowDays: 7 })` first: channels/angles/hook-types that produced **conversions** (signups → demos → revenue) get the most slots next week; channels that drove clicks-without-conversions get fewer (traffic that doesn't convert isn't earning slots); engagement-only signals (upvotes/likes/OP-replies) are the *last* tiebreaker, not the driver. A channel that only got engagement does not out-weight a channel that converted. Read `maya-calendar-populator/SKILL.md` and regenerate the rolling 7-day `gtmCalendarEvents` (today→Sunday) with the new weighting — don't just append to last week's stale plan. (If attribution is thin this week, weight on engagement but say so per Block 2's fallback rule — don't pretend the re-weight is conversion-grounded.)
-2. **Counter-overfitting discipline (hard rule).** Do NOT swing the whole plan on one week or one viral post. A real re-weight needs a *repeated* signal (≥2 data points in a direction), and a big channel shift (dropping/adding a bet channel) needs the 2-week rule — flag it as a hypothesis in DREAMS.md first, act when it's confirmed. One 200-upvote thread is not a format.
-3. **Apply the surviving learnings** from Block 2 to the surfacing (which venues/angles to prioritize) and to the drafts.
-4. **Draft pipeline:** 3-5 content drafts for next week, each tied to a `gtmContentAngles` slug, saved via `save_draft` (`approvalState: "draft"`) — operator can edit/approve/reject through the week. Each draft: angle slug, target channel, ship day, opening line. **Wrap every product link via `wrap_link({ destinationUrl })`** so next week's clicks are attributable.
+1. **Re-weight bet channels/angles from the week's outcomes — conversions lead.** Drive the re-weight off `get_my_attribution({ windowDays: 7 })` first: channels/angles/hook-types that produced **conversions** (signups → demos → revenue) earn the most *priority* going forward; channels that drove clicks-without-conversions get demoted (traffic that doesn't convert isn't earning attention); engagement-only signals (upvotes/likes/OP-replies) are the *last* tiebreaker, not the driver. A channel that only got engagement does not out-weight a channel that converted. Persist this re-weighting as `save_learning` calls tied to the converting draft attribute (hook-type / format / channel) — these are exactly the signals `maya-morning-brief` reads each day to decide what to surface. Do NOT generate `gtmCalendarEvents` here; the daily cron owns the calendar. (If attribution is thin this week, weight on engagement but say so per Block 2's fallback rule — don't pretend the re-weight is conversion-grounded.)
+2. **Advance per-channel warmth.** Review each bet channel's progress this week against its warmth arc (PLAYBOOK § 2 Phase-1 floor): an account that hit its floor (account age, baseline karma/followers, substantive engagement logged) gets advanced via **`set_channel_warmth({ channel, state })`** — e.g. `new_needs_warmup → warming`, or `warming → warm` once the floor is met. A warm channel unlocks soft/hard launch posting for the daily cron; a channel still cold stays warmup-only. This is the one durable forward-write the weekly review owns over warmth: the daily cron reads `channelWarmthJson` every morning and respects whatever state the review last set. Do NOT advance a channel that didn't actually warm — warmth is grounded in logged activity + age, not optimism.
+3. **Counter-overfitting discipline (hard rule).** Do NOT swing strategy on one week or one viral post. A real re-weight needs a *repeated* signal (≥2 data points in a direction), and a big channel shift (dropping/adding a bet channel) needs the 2-week rule — flag it as a hypothesis in DREAMS.md first, act when it's confirmed. One 200-upvote thread is not a format. Likewise, don't advance warmth off a single good day.
+4. **Apply the surviving learnings** from Block 2 to the stored weighting (which venues/angles the daily cron should prioritize). The morning cron consumes these — the weekly review's job is to make sure the right learnings + warmth states are persisted, not to pre-schedule the week.
 
-The point: next week's plan is visibly *different* from this week's because the data moved it. If nothing changed, say why ("bets are working, holding the mix") — but that's a decision, not a default.
+The point: the *strategy* the daily cron acts on is visibly *different* next week because the data moved the weighting + warmth — not because Maya pre-built a calendar. If nothing changed, say why ("bets are working, holding the mix — warmth unchanged") — but that's a decision, not a default.
 
 ## What this review writes
 
-Call `log_action({ kind: "weekly_review", ... })`. Plus a `save_learning` call for each surviving learning. Plus drafts as `gtmDraftedContent` rows via `save_draft`.
+Call `log_action({ kind: "weekly_review", ... })`. Plus a `save_learning` call for each surviving learning (these are what the daily morning cron reads to re-weight its surfacing). Plus a `set_channel_warmth({ channel, state })` call for every bet channel whose warmth advanced this week. The weekly review does NOT write `gtmCalendarEvents` and does NOT pre-build next week's drafts — the daily cron writes today's events + drafts each morning from this stored weighting + warmth.
 
 ## DREAMS.md write triggers (end of weekly review)
 
@@ -139,7 +141,7 @@ If foundation tables look stale to Maya's judgment AND a shift is proposed, Maya
 
 ## Cost discipline
 
-0 ScrapeCreators (uses existing Convex data). 2-3 main_maya calls (synthesis + critic + draft generation). 2-3 min total. Once per week.
+0 ScrapeCreators (uses existing Convex data). 2-3 main_maya calls (synthesis + critic + warmth/re-weight decisions). No week-of-drafts generation (the daily cron drafts each morning). 2-3 min total. Once per week.
 
 ## Anti-slop check
 

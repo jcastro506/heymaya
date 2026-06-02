@@ -56,6 +56,11 @@ const SAMPLE_EVENT = (offsetMs = 24 * 60 * 60 * 1000) => ({
   title: "Reddit reply: M5 Max thread",
   description:
     "WHAT: Reply on r/LocalLLaMA / LINK: https://reddit.com/x / WHY: ...",
+  // Turn-key fields — reply_window events now require a one-tap link + verbatim
+  // paste block (server-side turn-key validation), so the founder just posts.
+  openUrl: "https://reddit.com/x",
+  draftText:
+    "Honestly the M5 Max is overkill for most local LLM work — I run 70B quants fine on far less. Happy to share my setup if it helps.",
   startsAtMs: Date.now() + offsetMs,
   endsAtMs: Date.now() + offsetMs + 30 * 60 * 1000,
   kind: "reply_window" as const,
