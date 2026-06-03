@@ -69,6 +69,8 @@
       "get_my_attribution",
       "get_attribute_outcomes",
       "get_experiment_verdict",
+      "save_experiment",
+      "assign_arm",
       "get_platform_algo",
       "get_conversion_setup",
       "save_media",

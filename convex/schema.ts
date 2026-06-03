@@ -4393,6 +4393,11 @@ export default defineSchema({
     //   connectedAt}]. Maya reads this to know which channels are live
     // (auto-post) vs which need a reconnect (deep-link fallback).
     connectedAccountsJson: v.optional(v.string()),
+    // Sprint 5 — experiment registry (JSON-on-row, NO new table). JSON array of
+    // {id, hypothesis, dimension, arms:[label], metric, status('running'|'concluded'),
+    // createdAt, verdict?}. save_experiment appends; assign_arm reads to allocate;
+    // the weekly review concludes. ≤2 'running' dimensions enforced at write.
+    experimentsJson: v.optional(v.string()),
     // Single-tier plan state (gtm99). JSON: {tier, status, connectedChannelCap,
     // autoPostChannelCap, videoCreditsMonth, xUrlPostsSoftCapMonth, periodStart,
     // usage:{autoPostsThisPeriod, xUrlPostsThisPeriod, videosThisPeriod}}.
@@ -5856,6 +5861,11 @@ export default defineSchema({
         hasFace: v.optional(v.boolean()),
         captionStyle: v.optional(v.string()),
         postingWindow: v.optional(v.string()),
+        // Sprint 5 — when this draft is an arm in a registered experiment, the
+        // allocator stamps which experiment + arm it belongs to so the verdict
+        // join (getAttributeOutcomes / experiment registry) can attribute it.
+        experimentId: v.optional(v.string()),
+        armLabel: v.optional(v.string()),
       })
     ),
     /** 0-1; how well this matches operator's voice. Sprint 2.4 populates. */

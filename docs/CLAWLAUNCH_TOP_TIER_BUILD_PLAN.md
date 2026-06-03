@@ -150,6 +150,8 @@
 
 **Effort:** M.
 
+> **Status (2026-06-03): SHIPPED.** `experimentStats.ts` gained `allocateArm` (deterministic-by-seed Thompson sampling) + `maxConfidenceForEvidence` + `RETIRE_CONFIDENCE`. `experimentsJson` on gtmAgents + `experimentId`/`armLabel` on draft attributes (JSON-on-row / additive — no new table). `convex/gtmMaya/experiments.ts`: `save_experiment` (≤2 running dimensions server-enforced, + conclude) / `assign_arm` (Thompson over real outcomes) (79 tools). `upsertNicheLearning` now clamps confidence to the evidence (fail-closed) + auto-retires contradicted learnings. Wired into morning-brief (allocator picks + says why) + weekly-review (conclude only on a `winner` verdict). 8 allocator/cap unit tests + 9 registry/clamp convex-tests. convex+root tsc clean, zero net-new failures.
+
 ---
 
 ## Sprint 6 — The strategic partner (hard truths: positioning → PMF → pricing)

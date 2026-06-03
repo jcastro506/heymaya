@@ -281,6 +281,75 @@ export function confirmedConversions(totals: {
   );
 }
 
+// ───────── Sprint 5 — Thompson allocator + honest-confidence cap ─────────
+
+/**
+ * Thompson-sampling allocator: draw ONE sample from each arm's Beta posterior
+ * and pick the argmax. Over many calls this allocates traffic to each arm in
+ * proportion to its probability of being best — real explore/exploit, not a
+ * vibe. A barely-tested arm has a wide posterior, so it still gets picked
+ * sometimes (it gets a fair shot); a proven loser rarely does.
+ *
+ * `seed` is REQUIRED and varies per call (caller passes e.g. a per-draft
+ * counter or timestamp) so allocation explores; tests pass a fixed seed for
+ * reproducibility. Returns the chosen arm's label (null if no arms).
+ */
+export function allocateArm(
+  rawArms: ReadonlyArray<Arm>,
+  seed: number
+): { label: string; reason: string } | null {
+  const arms = rawArms.map((a) => ({
+    label: a.label,
+    trials: Math.max(0, Math.floor(a.trials)),
+    conversions: Math.max(0, Math.min(Math.floor(a.conversions), Math.max(0, Math.floor(a.trials)))),
+  }));
+  if (arms.length === 0) return null;
+  if (arms.length === 1) {
+    return { label: arms[0].label, reason: "only one variant so far" };
+  }
+
+  const rng = mulberry32(seed >>> 0);
+  let bestIdx = 0;
+  let bestDraw = -1;
+  for (let i = 0; i < arms.length; i++) {
+    const draw = randBeta(rng, 1 + arms[i].conversions, 1 + arms[i].trials - arms[i].conversions);
+    if (draw > bestDraw) {
+      bestDraw = draw;
+      bestIdx = i;
+    }
+  }
+  const chosen = arms[bestIdx];
+  // A barely-tested arm winning the draw = exploration; a well-tested leader
+  // winning = exploitation. Surface which, in plain words.
+  const exploring = chosen.trials < MIN_CONVERSIONS * 2;
+  return {
+    label: chosen.label,
+    reason: exploring
+      ? `giving "${chosen.label}" a fair shot — it's still under-tested (${chosen.conversions}/${chosen.trials})`
+      : `leaning on "${chosen.label}" — it's the current best bet (${chosen.conversions}/${chosen.trials})`,
+  };
+}
+
+/**
+ * The most confidence a learning may honestly claim given how many data points
+ * back it. A learning off 1 observation can't be 0.9 confident. Caps mirror the
+ * winner floor: real certainty needs real evidence. Used to clamp save_learning
+ * server-side (fail-closed — an overconfident claim can never persist).
+ */
+export function maxConfidenceForEvidence(evidenceCount: number): number {
+  const n = Math.max(0, Math.floor(evidenceCount));
+  if (n <= 0) return 0.0;
+  if (n === 1) return 0.5;
+  if (n === 2) return 0.65;
+  if (n < MIN_CONVERSIONS) return 0.8; // 3-4 points
+  if (n < MIN_CONVERSIONS * 2) return 0.9; // 5-9 points
+  return 0.97; // 10+ points — still never absolute
+}
+
+/** Confidence at/below this on an EXISTING learning means it's been contradicted
+ *  enough to retire (Maya may revive it if it re-emerges). */
+export const RETIRE_CONFIDENCE = 0.3;
+
 export type MotionSignal = "strong" | "weak" | "not_enough_data";
 
 export interface MotionAssessment {

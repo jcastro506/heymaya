@@ -9,6 +9,7 @@
 import { convexTest } from "convex-test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { api } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
 import schema from "../../schema";
 import { modules } from "../../../tests/_modules";
 
@@ -521,10 +522,8 @@ async function seedAttributeArm(
   });
   const { token } = (await wrapRes.json()) as { token: string };
   await t.run(async (ctx) => {
-    const wrap = await ctx.db
-      .query("gtmLinkWraps")
-      .withIndex("by_token", (q) => q.eq("token", token))
-      .first();
+    const allWraps = await ctx.db.query("gtmLinkWraps").collect();
+    const wrap = allWraps.find((w) => w.token === token);
     for (let i = 0; i < clicks; i++) {
       await ctx.db.insert("gtmLinkClicks", {
         accountId,

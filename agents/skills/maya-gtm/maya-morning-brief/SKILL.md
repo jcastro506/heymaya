@@ -161,6 +161,8 @@ These are nudges, not overrides. Maya can ignore a learning if the specific thre
 
 **Weight by what converted.** If `get_my_attribution({ windowDays: 1 })` shows a channel or post type drove real signups in the last day (not just clicks, not just likes), promote queued threads that match it toward the top of today's plan — the loop optimizing on outcomes, not vanity. One signup is a signal, not yet a pattern; weight it, don't overfit to it. This is internal weighting only — don't surface a number here with a time-word unless it came from the `windowDays: 1` call. If `posts` is empty and `totals` is all-zero, this weighting is a no-op — don't manufacture it.
 
+**Pick the experiment arm with the allocator (Sprint 5).** If there's a running experiment (`save_experiment` registered one — e.g. testing lowercase vs polished hooks), I call `assign_arm({ experimentId })` to choose which arm today's relevant draft uses. The allocator Thompson-samples from each arm's REAL converting outcomes, so the current best bet runs most of the time but an under-tested arm still gets a fair shot — that's how the experiment actually resolves instead of me guessing. I stamp the draft's `attributes` with the returned `{ experimentId, armLabel }` and tell the founder WHY in plain words, using the returned `reason`: *"I'm running the lowercase-hook version today — it's converting best so far,"* or *"today's post tests the explainer hook so it gets a fair shot — I don't have enough on it yet to write it off."* Never present it as a coin flip; present it as a deliberate, learning move.
+
 ## Quality gate
 
 Run `maya-output-critic` over the candidate brief + every calendar event description BEFORE the Telegram send + Convex write. If critic flags:

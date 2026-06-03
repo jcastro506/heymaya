@@ -126,6 +126,10 @@ import {
   getAttributeOutcomesHttp,
   experimentVerdictHttp,
 } from "./gtmMaya/attribution";
+import {
+  saveExperimentHttp,
+  assignArmHttp,
+} from "./gtmMaya/experiments";
 // Ideal-product Pillar 1 (VOICE) + Pillar 4 (WARMUP). Maya persists the
 // founder voice fingerprint, per-channel native-style exemplars, and per-
 // channel warmth. hookToken-authed + idempotency-keyed, same as foundation_*.
@@ -568,6 +572,18 @@ http.route({
   path: "/lc_gtm/get_experiment_verdict",
   method: "POST",
   handler: experimentVerdictHttp,
+});
+
+// Sprint 5 — experiment registry + Thompson allocator.
+http.route({
+  path: "/lc_gtm/save_experiment",
+  method: "POST",
+  handler: saveExperimentHttp,
+});
+http.route({
+  path: "/lc_gtm/assign_arm",
+  method: "POST",
+  handler: assignArmHttp,
 });
 
 // Continuous research + feedback-loop write surfaces. Maya / her

@@ -23,6 +23,10 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { computeAgentLifecycle, type AgentLifecycle } from "./agentLifecycle";
+import {
+  maxConfidenceForEvidence,
+  RETIRE_CONFIDENCE,
+} from "./experimentStats";
 
 async function assertAgentBelongsToAccount(
   ctx: { db: { get: <T>(id: T) => Promise<unknown> } },
@@ -780,14 +784,28 @@ export const upsertNicheLearning = internalMutation({
         q.eq("agentId", args.agentId).eq("learningKey", args.learningKey)
       )
       .first();
+    const evidenceCount =
+      args.evidenceCount ?? (existing ? existing.evidenceCount + 1 : 1);
+    // Sprint 5 — honest re-weight (fail-closed): a learning can never claim more
+    // confidence than its evidence supports. Clamp, never trust, an overconfident
+    // claim (0.95 on 1 data point is noise, not knowledge).
+    const confidenceScore = Math.min(
+      args.confidenceScore,
+      maxConfidenceForEvidence(evidenceCount)
+    );
+    // Auto-retire a contradicted learning: if confidence has collapsed below the
+    // retire floor, mark it retired (Maya may revive it if it re-emerges).
+    const retired =
+      args.retired ?? (confidenceScore <= RETIRE_CONFIDENCE ? true : existing?.retired ?? false);
+
     if (existing) {
       await ctx.db.patch(existing._id, {
         learningKind: args.learningKind,
         learning: args.learning,
-        confidenceScore: args.confidenceScore,
-        evidenceCount: args.evidenceCount ?? existing.evidenceCount + 1,
+        confidenceScore,
+        evidenceCount,
         lastReinforcedAt: now,
-        retired: args.retired ?? existing.retired,
+        retired,
         updatedAt: now,
       });
       return existing._id;
@@ -798,11 +816,11 @@ export const upsertNicheLearning = internalMutation({
       learningKey: args.learningKey,
       learningKind: args.learningKind,
       learning: args.learning,
-      confidenceScore: args.confidenceScore,
-      evidenceCount: args.evidenceCount ?? 1,
+      confidenceScore,
+      evidenceCount,
       firstObservedAt: now,
       lastReinforcedAt: now,
-      retired: args.retired ?? false,
+      retired,
       createdAt: now,
       updatedAt: now,
     });

@@ -9,6 +9,9 @@ import {
   summarizeExperiment,
   assessSingleMotion,
   confirmedConversions,
+  allocateArm,
+  maxConfidenceForEvidence,
+  RETIRE_CONFIDENCE,
   WIN_THRESHOLD,
   MIN_CONVERSIONS,
 } from "../experimentStats";
@@ -126,5 +129,68 @@ describe("assessSingleMotion — honest floor, not a weighted threshold", () => 
     const a = assessSingleMotion(0, { samples: 100, largeExposureNoConversion: true });
     expect(a.signal).toBe("weak");
     expect(a.reason).toMatch(/isn't converting|revise or park/i);
+  });
+});
+
+describe("allocateArm — Thompson allocator (explore/exploit)", () => {
+  it("returns the single arm when there's only one", () => {
+    const r = allocateArm([{ label: "solo", trials: 5, conversions: 2 }], 1);
+    expect(r?.label).toBe("solo");
+  });
+
+  it("null on no arms", () => {
+    expect(allocateArm([], 1)).toBeNull();
+  });
+
+  it("is deterministic for a fixed seed", () => {
+    const arms = [
+      { label: "a", trials: 20, conversions: 6 },
+      { label: "b", trials: 18, conversions: 1 },
+    ];
+    expect(allocateArm(arms, 123)?.label).toBe(allocateArm(arms, 123)?.label);
+  });
+
+  it("explores — an under-tested arm still gets picked across seeds (not pure greedy)", () => {
+    // 'b' is the weaker mean but barely tested; over many seeds it should win
+    // the draw at least sometimes (a greedy allocator never would).
+    const arms = [
+      { label: "a", trials: 60, conversions: 12 },
+      { label: "b", trials: 4, conversions: 1 },
+    ];
+    const picks = new Set<string>();
+    for (let seed = 1; seed <= 80; seed++) {
+      picks.add(allocateArm(arms, seed)!.label);
+    }
+    expect(picks.has("a")).toBe(true);
+    expect(picks.has("b")).toBe(true); // exploration happened
+  });
+
+  it("mostly exploits a clear, well-tested leader", () => {
+    const arms = [
+      { label: "winner", trials: 100, conversions: 40 },
+      { label: "loser", trials: 100, conversions: 2 },
+    ];
+    let winnerPicks = 0;
+    for (let seed = 1; seed <= 100; seed++) {
+      if (allocateArm(arms, seed)!.label === "winner") winnerPicks++;
+    }
+    expect(winnerPicks).toBeGreaterThan(85); // exploit dominates when it's earned
+  });
+});
+
+describe("maxConfidenceForEvidence — honest-confidence cap", () => {
+  it("can't be confident off one data point", () => {
+    expect(maxConfidenceForEvidence(1)).toBeLessThanOrEqual(0.5);
+  });
+  it("rises with evidence but is never absolute", () => {
+    expect(maxConfidenceForEvidence(5)).toBeGreaterThan(maxConfidenceForEvidence(2));
+    expect(maxConfidenceForEvidence(100)).toBeLessThan(1);
+  });
+  it("a winner-grade claim (>=0.85) needs real evidence (>= the floor)", () => {
+    expect(maxConfidenceForEvidence(MIN_CONVERSIONS - 1)).toBeLessThan(WIN_THRESHOLD);
+    expect(maxConfidenceForEvidence(MIN_CONVERSIONS * 2)).toBeGreaterThanOrEqual(
+      WIN_THRESHOLD
+    );
+    expect(RETIRE_CONFIDENCE).toBeLessThan(0.5);
   });
 });

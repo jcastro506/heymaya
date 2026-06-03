@@ -1268,6 +1268,31 @@ export default defineToolPlugin({
         postLc("get_experiment_verdict", p, ctx.signal),
     }),
     tool({
+      name: "save_experiment",
+      label: "Save Experiment",
+      description:
+        "Register a systematic experiment so I test ONE thing at a time on purpose. Pass { hypothesis, dimension (hookType/format/tone/lengthBucket/captionStyle/postingWindow), arms:[two+ value labels], metric }. At most TWO dimensions may run at once (server-enforced) — I don't test six things and learn nothing. To conclude one, pass { concludeId, verdict } instead. Returns { ok, experimentId } or { ok:false, reason }.",
+      parameters: Type.Object({
+        hypothesis: Type.Optional(Type.String()),
+        dimension: Type.Optional(Type.String()),
+        arms: Type.Optional(Type.Array(Type.String())),
+        metric: Type.Optional(Type.String()),
+        concludeId: Type.Optional(Type.String()),
+        verdict: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("save_experiment", p, ctx.signal),
+    }),
+    tool({
+      name: "assign_arm",
+      label: "Assign Arm",
+      description:
+        "Thompson-allocate the next draft to an arm of a running experiment, based on each arm's REAL converting outcomes so far (explore/exploit, not vibes). Pass { experimentId }. Returns { ok, experimentId, dimension, armLabel, reason }. I stamp the draft's attributes with { experimentId, armLabel, [dimension]: armLabel } and say WHY in the brief ('giving the explainer arm a fair shot' / 'leaning on lowercase — current best bet').",
+      parameters: Type.Object({
+        experimentId: Type.String(),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("assign_arm", p, ctx.signal),
+    }),
+    tool({
       name: "get_platform_algo",
       label: "Get Platform Algo",
       description:
