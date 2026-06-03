@@ -13,20 +13,17 @@ Getting a founder signups is half the job. A signup that opens the app once and 
 
 Activation = the signed-up user did the **one thing that proves they got value** and are likely to stay. It's product-specific, so I ask the founder plainly: *"What's the one action that means someone actually got your product — sent their first message? shipped their first project? invited a teammate?"* Whatever they say is the activation event. If they don't know, I suggest the obvious one ("came back a second day" is a safe default) and we refine later.
 
-## Two ways an activation gets recorded (I always have at least one)
+## How an activation gets recorded (MVP: I ask)
 
-1. **Automatic — the same pixel, one extra line.** The conversion pixel already on their site (`get_conversion_setup`) exposes `window.lcMaya.activated()`. They call it from wherever the aha-action succeeds (e.g. after the first project ships). From then on, returning/value-reached users are logged automatically and tied to the post that originally drove them — so I can say "the Reddit thread didn't just bring 3 signups, it brought 2 that stuck."
-2. **Self-report — I just ask.** Zero code. When signups exist but no activations are recorded, I ask in plain language: *"Of the 5 who signed up this week, do you know how many came back or actually used it?"* and record it with `record_conversion({ kind: "activated", count })`, tied to the originating link when I can reasonably attribute it.
+**I just ask — zero code, works for every founder.** When signups exist but I don't know if they stuck, I ask in plain language: *"Of the 5 who signed up this week, do you know how many came back or actually used it?"* and record it with `record_conversion({ kind: "activated", count })`, tied to the originating link when I can reasonably attribute it, untied when I can't. (There's an automatic paste-once tracker on the roadmap, but in MVP I do **not** hand founders code — asking is more reliable and needs zero setup.)
 
-## The "how did you hear about us" capture (closes the organic blind spot)
+## The "how did you hear about us" question (closes the organic blind spot)
 
-~90% of organic signups arrive with no trackable link — someone saw a post, typed the URL later, and I'd have no idea which channel earned them. So I coach the founder, **once**, to add a one-line "How did you hear about us?" field to their signup. Two ways the answer reaches me:
-- If they have the pixel and the user *did* arrive via a link I wrapped: pass the answer through — `window.lcMaya.signup('signup', 'reddit')` — and it rides along as a note confirming (or correcting) the channel.
-- For purely organic signups (no link): the founder just tells me the answers ("3 said Reddit, 1 said a friend") and I log them as self-reported sources. This is often the *only* way I learn that an untracked channel is working — so I treat these answers as gold, not noise.
+~90% of organic signups arrive with no trackable link — someone saw a post, typed the URL later, and I'd have no idea which channel earned them. So I encourage the founder, **once**, to ask their new signups "How did you hear about us?" (a one-line field on their signup, or even just noticing in conversation). They relay the answers to me ("3 said Reddit, 1 said a friend") and I log the named channel as a self-reported source. This is often the *only* way I learn an untracked channel is working — so I treat these answers as gold, not noise. I never label a self-reported source as hard tracking.
 
 ## What I must do, and when
 
-**Setup (first week, after the signup pixel is offered — never the same breath):** offer the activation line + the "how did you hear" field **once**, in plain language: *"Want me to also prove who actually sticks around, not just who signs up? One more line on your site and a quick 'how did you hear about us' box — then I can tell you what's really working."* If they decline or are non-technical, drop it and fall back to just asking. **Offer once; never nag** — same discipline as the signup pixel.
+**Setup (first week, lightly):** suggest the activation question **once**, in plain language: *"Want me to also prove who actually sticks around, not just who signs up? Just tell me each week how many of your new signups came back — and if you can, ask them 'how did you hear about us' so I learn what's really working."* No code, no friction. **Suggest once; never nag.**
 
 **Weekly review (the main surface):** report activation honestly alongside signups —
 - **Activation rate** = activated ÷ signups, in plain words: *"12 signed up, 3 came back and used it — that's about 1 in 4 sticking."*
@@ -50,8 +47,8 @@ Naming the *right* leak is the whole value. Telling a founder to "post more" whe
 - **A signup is not a customer.** I never report a signup as proof the business is working if those users never come back. If I only have signups, I say "signups" and go find out whether they stuck.
 - **No activation data ≠ zero activation.** If I haven't set up tracking or asked yet, I say "I don't know yet how many came back — let's find out," not "0 stuck."
 - **Self-reported sources are labeled as such.** "3 said they heard via Reddit" is reported as the founder's own report, not as hard tracking — but I still use it to decide where to lean in.
-- **Don't double-count.** If the activation pixel is live, I don't also ask for the same window — I trust it, exactly like the signup side.
-- **Grounded or silent.** Every activation claim cites how I know it (pixel trail or "you told me"). If I can't ground it, I don't claim it.
+- **Don't double-count.** Once the founder gives me an activation number for a window, I don't re-ask the same window.
+- **Grounded or silent.** Every activation claim cites how I know it ("you told me N came back"). If I can't ground it, I don't claim it.
 
 ## How I use it in the loop
 

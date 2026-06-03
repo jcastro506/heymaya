@@ -94,6 +94,28 @@
 
 **Effort:** M. **No operator block** (OpenRouter + existing pixel).
 
+> **Status (2026-06-03): SHIPPED.** `activated` kind, the pixel `activated()`/`signup(kind,source)` calls, the "how did you hear" note path, and `maya-activation-coach` are all built + tested (attribution suite 16/16). **BUT** — see Sprint 3.5: we are deliberately **not offering the paste-the-code pixel in MVP**. The signal that's actually live for MVP is **clicks (automatic) + signups/activation via self-report (Maya asks).** The pixel endpoint + snippet stay in the codebase (tested server-side) for the deferred roadmap build, but Maya does not hand it to founders yet.
+
+---
+
+## Sprint 3.5 — MVP conversion = clicks + self-report (retire the pixel OFFER)
+**Why:** the automatic web pixel's **client snippet has never executed in a real browser** (only the server endpoint is tested), it's **web-only** (useless for the mobile-app slice of our ICP), and it can't see organic signups as currently built. Offering an untested, setup-requiring tracker at the exact "prove it" moment is a credibility risk that's worse than just asking. For the first cohort, **clicks (already automatic + tested) + self-report ("did anyone sign up?") closes the loop honestly with zero founder setup** — and being asked is natural at pilot scale, not friction.
+
+**Implement (skill/prompt/onboarding copy only — keep all pixel CODE + tests):**
+- `maya-conversion-tracker` + `maya-activation-coach`: lead with **self-report** as THE method; **stop offering the paste-the-code snippet**; keep wrapping links to `signupUrl` (clicks stay automatic) and keep the "how did you hear about us?" question as a *spoken* ask, not a pixel field. Note the automatic tracker is "coming," not offered.
+- `get_conversion_setup` tool + TOOLS.md blurbs: reframe to "returns `signupUrl` so I wrap links + I ask about signups"; de-emphasize `pixelSnippet`.
+- `getConversionSetupHttp` `instructions` field: self-report-first wording (snippet stays in the payload, unused).
+- Onboarding/results UI: no pixel-paste ask; `SOURCE_LABEL`/`CONVERSION_LABEL` stay (add the `activated` label).
+- **Never offer a web tracker to a mobile-only / no-site founder** (we already capture `appType`).
+
+**Effort:** S. **No operator block.** **Tests:** existing pixel/endpoint tests stay green (we're not removing code); a sibling-scan that the skills no longer instruct "paste the snippet."
+
+---
+
+## Roadmap (deferred) — Automatic verified web pixel
+**Build when:** a pilot founder's signup volume makes a daily "any signups?" genuinely annoying, OR we want "automatically proves organic conversions" as a marketing line. Not before.
+**Shape (already designed):** a public per-founder **`pixelKey`** baked into the snippet (self-identifying — no click needed); a **`hello`-on-load ping** → stamps "tracker live"; a **3-state machine** Maya narrates (not installed → live-unconfirmed → confirmed-by-one-test-signup); organic signups recorded as theirs-but-untied; install via **"hand this to your coding agent (Claude Code / Cursor / Lovable)."** Web-only by design; mobile/no-site stay on self-report. Verify with a happy-dom test that actually *executes* the snippet JS + one real-browser live fire (the client JS has never run live).
+
 ---
 
 ## Sprint 4 — The experiment-stats core (Bayesian honesty)

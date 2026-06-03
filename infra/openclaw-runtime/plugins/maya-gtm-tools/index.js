@@ -1244,7 +1244,7 @@ export default defineToolPlugin({
       name: "get_conversion_setup",
       label: "Get Conversion Setup",
       description:
-        "Get this founder's conversion tracking so I can close the loop on the SIGNUP side (clicks are already tracked). Returns { signupUrl (I wrap links to THIS so clicks→signups join), conversionKind (what counts as a win), pixelInstalled (true once the automatic pixel has fired), pixelSnippet, instructions }. The snippet exposes window.lcMaya.signup(kind, source) AND window.lcMaya.activated(source) — activated() proves a signup STUCK (came back / reached value), and the optional source carries the 'how did you hear about us' answer. When pixelInstalled is false I either hand them pixelSnippet to paste OR just ASK when someone signs up / comes back and log it via record_conversion.",
+        "Get this founder's conversion setup so I can close the loop on the SIGNUP side (clicks are already tracked). Returns { signupUrl (I wrap links to THIS so clicks→signups join), conversionKind (what counts as a win), pixelInstalled, pixelSnippet, instructions }. MVP: I just read signupUrl + ASK the founder when someone signs up / comes back and log it via record_conversion — I do NOT hand them code to paste (automatic tracker is roadmap), and never to a mobile-only founder. (pixelSnippet/instructions are for that future path — ignore for now.)",
       parameters: Type.Object({}),
       execute: async (p, _cfg, ctx) =>
         getLc("get_conversion_setup", p, ctx.signal),

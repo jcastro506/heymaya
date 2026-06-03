@@ -1,6 +1,6 @@
 ---
 name: maya-conversion-tracker
-description: How I close the loop on the SIGNUP side — not just clicks. I wrap every product link to the founder's real signup URL, hand them the conversion pixel for automatic real-time signup tracking, and when the pixel isn't in yet I simply ASK "did anyone sign up?" and record it. The whole product promise is "proves what converted" — clicks are easy; this is how I actually prove customers.
+description: How I close the loop on the SIGNUP side — not just clicks. I wrap every product link to the founder's real signup URL so clicks are tracked automatically, and then I simply ASK "did anyone sign up?" and record it (self-report — zero setup, works for every founder). The whole product promise is "proves what converted" — clicks are easy; this is how I actually prove customers.
 ---
 
 # maya-conversion-tracker
@@ -9,23 +9,21 @@ description: How I close the loop on the SIGNUP side — not just clicks. I wrap
 
 My entire job is to get this founder **customers** — and to *prove* which moves brought them. Clicks are already 100% tracked (every wrapped link logs them). The hard, honest part is the **signup**: did a click become a customer, and from which post? This skill is how I close that gap. Without it I can only ever say "your Reddit comment got 40 clicks" — useful, but not "your Reddit comment brought you 3 signups." The second sentence is the product.
 
-## Two ways a signup gets recorded (I always have at least one working)
+## How a signup gets recorded (MVP: clicks are automatic, signups are self-reported)
 
-1. **Automatic — the conversion pixel** (best; real-time, zero guessing).
-   - `get_conversion_setup()` returns the founder's `signupUrl`, `conversionKind`, `pixelInstalled`, and a ready-to-paste `pixelSnippet`.
-   - The founder pastes the snippet in their site `<head>` once, and calls `window.lcMaya.signup()` when a signup succeeds. From then on, every signup that came from a link I wrapped is attributed to the exact post automatically.
-   - Our redirect passes `lc_ref` to their site; the pixel persists it and echoes it back on signup. That's the closed loop.
-2. **Self-report — I just ask** (always available, zero founder code).
+1. **Clicks — automatic, always on.** Every product link I share is wrapped to the founder's `signupUrl` (`get_conversion_setup` gives me that URL), so a tap is logged and tied to the exact post with zero setup. This is the half of the loop that needs nothing from the founder.
+2. **Signups — I just ASK** (the MVP method; zero founder code, works for every founder, web or mobile or pre-launch).
    - When there are clicks but no recorded signups, I ask in plain language ("Did anyone sign up after that HN post? Even a rough number helps") and record it with `record_conversion({ kind: "signup", count, linkWrapToken })`.
-   - This works from day one for every founder, including the ones who won't touch their code.
+   - I tie it to the wrapped link that most likely drove it when I reasonably can; otherwise I log it untied and say so.
+   - For organic signups I can't see, I ask the founder to add (or just relay) a "How did you hear about us?" answer, and log the channel they name as a self-reported source — this is how I learn an untracked channel is working.
+
+> **Note for now:** there is an automatic paste-once code tracker on the roadmap, but I do **not** hand founders code to install in MVP — asking is more reliable at this stage and needs zero setup. So the founder's word (clearly labeled as self-reported) + automatic clicks is how I close the loop today. I never offer a snippet to paste, and never to a mobile-only founder.
 
 ## What I must do, and when
 
 **Always (every draft with a product link):** wrap it to the founder's `signupUrl` (from `get_conversion_setup`), not their homepage — `wrap_link({ destinationUrl: signupUrl, draftId, platform })`. A click on the signup page is one step from a customer; a click on the homepage often isn't. If they haven't given a signupUrl, wrap the most conversion-proximate URL I have and note I'd track better with their signup link.
 
-**First week (onboarding follow-through):** once, offer the automatic pixel. Hand over `pixelSnippet` + `instructions` in my voice — frame it as "paste this once and I'll prove exactly which posts bring you signups, in real time." If they're non-technical or decline, drop it gracefully — I'll just ask instead. **Offer once; never nag.** Re-offer only if they later ask "how do you know a signup came from X?"
-
-**Daily / in the evening recap:** check `get_my_attribution({ windowDays: 1 })`. If a post has **clicks but zero signups** AND the pixel isn't installed (`get_conversion_setup().pixelInstalled === false`), ask the founder about it — once per post, not every day. If the pixel IS installed, trust it and don't ask (don't double-count).
+**Daily / in the evening recap:** check `get_my_attribution({ windowDays: 1 })`. If a post has **clicks but zero recorded signups**, ask the founder about it once — "your r/X reply pulled 9 clicks, did any sign up?" — once per post, not every day. A "no" is real data too (clicks that don't convert tell me to demote that channel/angle).
 
 **Inbound:** if the founder mentions a signup/user/customer in chat ("we got 5 new users yesterday"), record it immediately (`record_conversion`), tied to the most likely wrapped link if I can reasonably attribute it, or untied if I genuinely can't.
 
@@ -33,12 +31,12 @@ My entire job is to get this founder **customers** — and to *prove* which move
 
 - **Clicks ≠ signups, ever.** I never report a click as a customer. If I only have clicks, I say "clicks" and ask about signups; I don't imply conversion.
 - **Untied signups stay untied.** A signup I can't trace to a specific post (`untiedSignups`) is reported honestly ("you got 4 signups this week; I could trace 2 to the Reddit thread, the other 2 I couldn't pin to a post") — I never fabricate a source to make a post look better.
-- **Don't double-count.** If the pixel is live, self-report for the same window is redundant — trust the pixel. Idempotency keys protect the data layer, but I also just don't ask when the automatic path is working.
-- **Pixel inflation is the founder's own number.** The pixel is token-keyed and only ever attributes to this founder; I still sanity-check signups against real clicks and flag anything that looks off (100 signups on 3 clicks = ask, don't report).
+- **Don't double-count.** Once the founder gives me a signup number for a window, I don't re-ask the same window. Idempotency keys protect the data layer; I also just don't pester.
+- **Self-reported numbers are the founder's own.** I sanity-check signups against real clicks and gently flag anything that looks off (100 signups on 3 clicks = "want to double-check that?", don't just report it).
 
 ## How I use it in the loop
 
-This is the metric the whole engine optimizes. The evening recap and weekly review weight tomorrow's plan toward what actually **converted** (clicks → signups), not what got likes. When I learn a channel/format/hook is converting (`save_learning`), it's because I closed this loop — not because something got engagement. If I can't prove a customer, I don't claim one; I make closing that gap (get the pixel in, or get the self-report) the next concrete ask.
+This is the metric the whole engine optimizes. The evening recap and weekly review weight tomorrow's plan toward what actually **converted** (clicks → signups), not what got likes. When I learn a channel/format/hook is converting (`save_learning`), it's because I closed this loop — not because something got engagement. If I can't prove a customer, I don't claim one; I make closing that gap (just ask the founder for the signup number) the next concrete ask.
 
 ## Anti-slop check
 

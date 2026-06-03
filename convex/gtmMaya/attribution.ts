@@ -683,15 +683,12 @@ export const getConversionSetupHttp = httpAction(async (ctx, request) => {
       pixelInstalled: setup.pixelInstalled,
       endpoint,
       pixelSnippet,
+      // MVP: Maya does NOT hand this snippet to founders — she asks for signup
+      // numbers (self-report) and wraps links to signupUrl for click tracking.
+      // The snippet + this text stay for the deferred automatic-tracker roadmap.
       instructions:
-        "Paste the snippet in your site <head> (once, site-wide). Then call " +
-        "window.lcMaya.signup() from wherever a signup succeeds (your sign-up " +
-        "success handler / welcome page). It auto-attributes the signup to the " +
-        "exact post that drove it. Two optional extras: pass the 'how did you " +
-        "hear about us' answer as window.lcMaya.signup('signup','reddit'), and " +
-        "call window.lcMaya.activated() when a signed-up user comes back or hits " +
-        "the main action — that proves they STUCK, not just signed up. No-code " +
-        "option: just tell me when someone signs up or comes back and I'll log it.",
+        "Just tell me when someone signs up (and roughly how many came back) and " +
+        "I'll log it and tie it to the post that drove it. No code, no setup.",
     }),
     { status: 200, headers: { "content-type": "application/json" } }
   );
