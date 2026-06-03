@@ -42,6 +42,14 @@ import {
   ZernioRateLimitError,
   ZernioTimeoutError,
 } from "../integrations/zernio/types";
+import {
+  getPostAnalytics,
+  getFollowerStats,
+  getAccountsHealth,
+  listInboxComments,
+  replyToComment,
+  listAccounts,
+} from "../integrations/zernio/endpoints";
 
 interface SmokeResult {
   ok: boolean;
@@ -312,6 +320,108 @@ export const stepRawGet = internalAction({
     const client = makeClient();
     return probe(`GET ${args.path}`, { path: args.path, query: args.query }, () =>
       client.request(args.path, { method: "GET", query: args.query })
+    );
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* S5 READ TOOLS — exercise the SAME endpoint wrappers the agent tools call,    */
+/* live against real Zernio, no deploy. Analytics + inbox need the add-ons;     */
+/* a 403 here is the EXPECTED "enable the add-on" path, not a wiring failure.    */
+/*                                                                              */
+/*   step7_readTools '{"profileId":"<id>","accountIds":["<acct>"]}'             */
+/*   step8_listConnectedAccounts '{"profileId":"<id>"}'                          */
+/*   step9_replyToComment '{"accountId":"<acct>","postId":"<id>",               */
+/*                          "message":"...","commentId":"<id>"}'                 */
+/* -------------------------------------------------------------------------- */
+
+/** Runs analytics + follower-stats + health + inbox in one shot. Each is
+ *  independently normalized so one add-on-gated 403 doesn't hide the others. */
+export const step7_readTools = internalAction({
+  args: {
+    profileId: v.optional(v.string()),
+    accountIds: v.optional(v.array(v.string())),
+    platform: v.optional(v.string()),
+    postId: v.optional(v.string()),
+  },
+  handler: async (
+    _ctx,
+    args
+  ): Promise<{
+    health: SmokeResult;
+    analytics: SmokeResult;
+    followerStats: SmokeResult;
+    inbox: SmokeResult;
+  }> => {
+    const client = makeClient();
+    const health = await probe(
+      "getAccountsHealth",
+      { profileId: args.profileId },
+      () => getAccountsHealth(client, { profileId: args.profileId })
+    );
+    const analytics = await probe(
+      "getPostAnalytics",
+      { profileId: args.profileId, postId: args.postId, platform: args.platform },
+      () =>
+        getPostAnalytics(client, {
+          profileId: args.profileId,
+          postId: args.postId,
+          platform: args.platform,
+        })
+    );
+    const followerStats = await probe(
+      "getFollowerStats",
+      { accountIds: args.accountIds, profileId: args.profileId },
+      () =>
+        getFollowerStats(client, {
+          accountIds: args.accountIds ?? [],
+          profileId: args.profileId,
+        })
+    );
+    const inbox = await probe(
+      "listInboxComments",
+      { profileId: args.profileId, platform: args.platform },
+      () =>
+        listInboxComments(client, {
+          profileId: args.profileId,
+          platform: args.platform,
+        })
+    );
+    return { health, analytics, followerStats, inbox };
+  },
+});
+
+/** Lists the profile's connected accounts (what list_connected_accounts reads). */
+export const step8_listConnectedAccounts = internalAction({
+  args: { profileId: v.optional(v.string()) },
+  handler: async (_ctx, args): Promise<SmokeResult> => {
+    const client = makeClient();
+    return probe("listAccounts", { profileId: args.profileId }, () =>
+      listAccounts(client, { profileId: args.profileId })
+    );
+  },
+});
+
+/** Posts a real comment reply (write — uses an account credit; run sparingly). */
+export const step9_replyToComment = internalAction({
+  args: {
+    accountId: v.string(),
+    postId: v.string(),
+    message: v.string(),
+    commentId: v.optional(v.string()),
+  },
+  handler: async (_ctx, args): Promise<SmokeResult> => {
+    const client = makeClient();
+    return probe(
+      "replyToComment",
+      { accountId: args.accountId, postId: args.postId, commentId: args.commentId },
+      () =>
+        replyToComment(client, {
+          postId: args.postId,
+          accountId: args.accountId,
+          message: args.message,
+          commentId: args.commentId,
+        })
     );
   },
 });
