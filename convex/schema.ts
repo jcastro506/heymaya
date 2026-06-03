@@ -5996,7 +5996,10 @@ export default defineSchema({
       v.literal("signup"),
       v.literal("demo"),
       v.literal("feedback"),
-      v.literal("revenue")
+      v.literal("revenue"),
+      // Sprint 3 (top-tier): a signed-up user who came BACK / reached value.
+      // Lets Maya own outcomes (a customer who stuck), not just first-touch signups.
+      v.literal("activated")
     ),
     count: v.number(),
     source: v.union(v.literal("self_report"), v.literal("pixel")),

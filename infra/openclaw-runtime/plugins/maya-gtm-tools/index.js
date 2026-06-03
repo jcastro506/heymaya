@@ -1077,9 +1077,9 @@ export default defineToolPlugin({
     tool({
       name: "record_conversion",
       label: "Record Conversion",
-      description: "Record a conversion (signup/demo/feedback/revenue). REQUIRED: kind.",
+      description: "Record a conversion. REQUIRED: kind. 'activated' = a signed-up user who came BACK / reached value (proves they stuck, not just signed up). For self-reported 'how did you hear about us' answers on an organic signup, put the channel in note.",
       parameters: Type.Object({
-        kind: Enum(["signup", "demo", "feedback", "revenue"]),
+        kind: Enum(["signup", "demo", "feedback", "revenue", "activated"]),
         count: Type.Optional(Type.Number({ description: "default 1, must be > 0" })),
         source: Type.Optional(Enum(["self_report", "pixel"])),
         linkWrapToken: Type.Optional(Type.String()),
@@ -1244,7 +1244,7 @@ export default defineToolPlugin({
       name: "get_conversion_setup",
       label: "Get Conversion Setup",
       description:
-        "Get this founder's conversion tracking so I can close the loop on the SIGNUP side (clicks are already tracked). Returns { signupUrl (I wrap links to THIS so clicks→signups join), conversionKind (what counts as a win), pixelInstalled (true once the automatic pixel has fired), pixelSnippet, instructions }. When pixelInstalled is false I either hand them pixelSnippet to paste OR just ASK when someone signs up and log it via record_conversion.",
+        "Get this founder's conversion tracking so I can close the loop on the SIGNUP side (clicks are already tracked). Returns { signupUrl (I wrap links to THIS so clicks→signups join), conversionKind (what counts as a win), pixelInstalled (true once the automatic pixel has fired), pixelSnippet, instructions }. The snippet exposes window.lcMaya.signup(kind, source) AND window.lcMaya.activated(source) — activated() proves a signup STUCK (came back / reached value), and the optional source carries the 'how did you hear about us' answer. When pixelInstalled is false I either hand them pixelSnippet to paste OR just ASK when someone signs up / comes back and log it via record_conversion.",
       parameters: Type.Object({}),
       execute: async (p, _cfg, ctx) =>
         getLc("get_conversion_setup", p, ctx.signal),

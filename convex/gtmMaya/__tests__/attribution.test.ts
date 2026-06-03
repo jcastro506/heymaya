@@ -346,3 +346,129 @@ describe("conversion pixel — closing the signup side", () => {
     expect(setup.pixelSnippet).toContain("window.lcMaya");
   });
 });
+
+/**
+ * Sprint 3 (top-tier) — activation: proving a signup STUCK, not just landed.
+ *
+ *   - record_conversion accepts kind:"activated" (self-report floor);
+ *   - the pixel accepts activated + carries the "how did you hear" source as a note;
+ *   - get_my_attribution surfaces `activated` in conversionsByKind + totals;
+ *   - cross-tenant: an activation for A never shows in B's read.
+ */
+describe("Sprint 3 — activation (a signup that stuck)", () => {
+  it("record_conversion accepts kind:activated (self-report floor)", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId, hookToken } = await setupAgent(t, "u_act_self");
+
+    const res = await post(t, "/lc_gtm/record_conversion", hookToken, {
+      idempotencyKey: "act1",
+      kind: "activated",
+      count: 2,
+      note: "2 of last week's signups came back",
+    });
+    expect(res.status).toBe(200);
+
+    const conv = await t.run(async (ctx) =>
+      ctx.db
+        .query("gtmConversions")
+        .withIndex("by_agent", (q) => q.eq("agentId", agentId))
+        .collect()
+    );
+    expect(conv.length).toBe(1);
+    expect(conv[0].kind).toBe("activated");
+    expect(conv[0].count).toBe(2);
+  });
+
+  it("pixel records an activation tied to the post + keeps the 'how did you hear' source as a note", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId, hookToken } = await setupAgent(t, "u_act_pix");
+    const { token } = (await (
+      await post(t, "/lc_gtm/wrap_link", hookToken, {
+        destinationUrl: "https://act.test/signup",
+        platform: "reddit",
+      })
+    ).json()) as { token: string };
+
+    const res = await pixel(t, {
+      ref: token,
+      kind: "activated",
+      source: "reddit",
+      idempotencyKey: "act-sess-1",
+    });
+    expect(res.status).toBe(204);
+
+    const convs = await t.run(async (ctx) =>
+      ctx.db
+        .query("gtmConversions")
+        .withIndex("by_agent", (q) => q.eq("agentId", agentId))
+        .collect()
+    );
+    expect(convs.length).toBe(1);
+    expect(convs[0].kind).toBe("activated");
+    expect(convs[0].source).toBe("pixel");
+    expect(convs[0].linkWrapId).toBeDefined(); // tied to THE post
+    expect(convs[0].note).toContain("reddit"); // self-reported source kept
+  });
+
+  it("get_my_attribution surfaces activated in conversionsByKind + totals", async () => {
+    const t = convexTest(schema, modules);
+    const { hookToken } = await setupAgent(t, "u_act_read");
+    const { token } = (await (
+      await post(t, "/lc_gtm/wrap_link", hookToken, {
+        destinationUrl: "https://read.test/signup",
+        platform: "x",
+      })
+    ).json()) as { token: string };
+
+    await pixel(t, { ref: token, kind: "signup", idempotencyKey: "s" });
+    await pixel(t, { ref: token, kind: "activated", idempotencyKey: "a" });
+
+    const res = await t.fetch("/lc_gtm/get_my_attribution?windowDays=7", {
+      method: "GET",
+      headers: { authorization: `Bearer ${hookToken}` },
+    });
+    expect(res.status).toBe(200);
+    const { attribution } = (await res.json()) as {
+      attribution: {
+        posts: Array<{ conversionsByKind: { activated: number; signup: number } }>;
+        totals: { activated: number; signups: number };
+      };
+    };
+    expect(attribution.totals.signups).toBe(1);
+    expect(attribution.totals.activated).toBe(1);
+    expect(attribution.posts[0].conversionsByKind.activated).toBe(1);
+  });
+
+  it("cross-tenant: an activation for A never appears in B's attribution", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "u_act_xa");
+    const b = await setupAgent(t, "u_act_xb");
+    const { token } = (await (
+      await post(t, "/lc_gtm/wrap_link", a.hookToken, {
+        destinationUrl: "https://xa.test/signup",
+      })
+    ).json()) as { token: string };
+    await pixel(t, { ref: token, kind: "activated", idempotencyKey: "xa" });
+
+    const res = await t.fetch("/lc_gtm/get_my_attribution?windowDays=7", {
+      method: "GET",
+      headers: { authorization: `Bearer ${b.hookToken}` },
+    });
+    const { attribution } = (await res.json()) as {
+      attribution: { totals: { activated: number } };
+    };
+    expect(attribution.totals.activated).toBe(0);
+  });
+
+  it("get_conversion_setup snippet exposes activated() + signup(kind, source)", async () => {
+    const t = convexTest(schema, modules);
+    const { hookToken } = await setupAgent(t, "u_act_snip");
+    const res = await t.fetch("/lc_gtm/get_conversion_setup", {
+      method: "GET",
+      headers: { authorization: `Bearer ${hookToken}` },
+    });
+    const setup = (await res.json()) as { pixelSnippet: string };
+    expect(setup.pixelSnippet).toContain("activated:function");
+    expect(setup.pixelSnippet).toContain("source"); // "how did you hear" rides along
+  });
+});

@@ -81,6 +81,7 @@ This is the loop closing. When `get_my_attribution({ windowDays: 1 })` has real 
 - If there are clicks but no signups yet, say exactly that: "Your X reply pulled 8 clicks but no signups landed yet." Clicks ≠ signups; never round one up to the other.
 - **Untied self-report signups.** These now live in `totals.untiedSignups`. Report it honestly ONLY when `totals.untiedSignups > 0`, and don't pin it to any post: "3 signups in the last 24h — couldn't trace which post sent them." When `totals.untiedSignups` is 0, say nothing about untied signups at all.
 - **Revenue.** `totals.revenue` is now available; mention it only when `totals.revenue > 0` (e.g. "and $49 in revenue traced back in the last 24h"). Otherwise say nothing about revenue.
+- **Activation (a signup that STUCK).** `totals.activated` = signed-up users who came back / reached value. Mention it only when `totals.activated > 0`: "and 1 of them came back and actually used it." It's the strongest proof of all — but the weekly review owns the full activation-rate read (see `maya-activation-coach`); the recap just surfaces a fresh one.
 - **Grounded-or-silent.** If `posts` is empty AND every `totals` figure is zero, say NOTHING about clicks or signups. Do not imply likes/upvotes are signups. Fall through to the engagement read below.
 - **Brief-mode channels.** TikTok/IG posts are link-in-bio, so they have no per-post click attribution. Never claim click counts for a TikTok/IG post. They count as reach, not as traced signups.
 

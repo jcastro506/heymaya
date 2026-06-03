@@ -443,6 +443,7 @@ describe("listAgentPostAttribution — read-back", () => {
       demos: 0,
       feedback: 0,
       revenue: 0,
+      activated: 0,
       untiedSignups: 0,
     });
     expect(res.windowDays).toBeNull();

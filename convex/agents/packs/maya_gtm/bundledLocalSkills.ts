@@ -16,8 +16,73 @@ export interface BundledLocalSkill {
   body: string;
 }
 
+// Source: agents/skills/maya-gtm/maya-activation-coach/SKILL.md
+const ENTRY_0_maya_activation_coach = `---
+name: maya-activation-coach
+description: How I prove a customer who STUCK — not just a signup. A signup that never comes back is a vanity number. This skill is how I track whether signed-up users return / reach the "aha" moment (activation), report activation rate + time-to-value in plain words, and turn a low activation rate into one concrete fix. Same closed-loop discipline as the signup side, one step deeper.
+---
+
+# maya-activation-coach
+
+## Why this exists
+
+Getting a founder signups is half the job. A signup that opens the app once and never returns isn't a customer — it's a number that feels good and means nothing. The thing that actually grows a business is a signup that **comes back and reaches value** (the "aha" moment). That's activation. This skill is how I prove *that*, so I can tell the founder the truth: "you got 12 signups, but only 2 came back — your distribution is working, your product's first-run isn't." Owning the *outcome* (a customer who stuck), not the *output* (a signup), is what makes me worth paying for.
+
+## What "activated" means (I set it with the founder, once)
+
+Activation = the signed-up user did the **one thing that proves they got value** and are likely to stay. It's product-specific, so I ask the founder plainly: *"What's the one action that means someone actually got your product — sent their first message? shipped their first project? invited a teammate?"* Whatever they say is the activation event. If they don't know, I suggest the obvious one ("came back a second day" is a safe default) and we refine later.
+
+## Two ways an activation gets recorded (I always have at least one)
+
+1. **Automatic — the same pixel, one extra line.** The conversion pixel already on their site (\`get_conversion_setup\`) exposes \`window.lcMaya.activated()\`. They call it from wherever the aha-action succeeds (e.g. after the first project ships). From then on, returning/value-reached users are logged automatically and tied to the post that originally drove them — so I can say "the Reddit thread didn't just bring 3 signups, it brought 2 that stuck."
+2. **Self-report — I just ask.** Zero code. When signups exist but no activations are recorded, I ask in plain language: *"Of the 5 who signed up this week, do you know how many came back or actually used it?"* and record it with \`record_conversion({ kind: "activated", count })\`, tied to the originating link when I can reasonably attribute it.
+
+## The "how did you hear about us" capture (closes the organic blind spot)
+
+~90% of organic signups arrive with no trackable link — someone saw a post, typed the URL later, and I'd have no idea which channel earned them. So I coach the founder, **once**, to add a one-line "How did you hear about us?" field to their signup. Two ways the answer reaches me:
+- If they have the pixel and the user *did* arrive via a link I wrapped: pass the answer through — \`window.lcMaya.signup('signup', 'reddit')\` — and it rides along as a note confirming (or correcting) the channel.
+- For purely organic signups (no link): the founder just tells me the answers ("3 said Reddit, 1 said a friend") and I log them as self-reported sources. This is often the *only* way I learn that an untracked channel is working — so I treat these answers as gold, not noise.
+
+## What I must do, and when
+
+**Setup (first week, after the signup pixel is offered — never the same breath):** offer the activation line + the "how did you hear" field **once**, in plain language: *"Want me to also prove who actually sticks around, not just who signs up? One more line on your site and a quick 'how did you hear about us' box — then I can tell you what's really working."* If they decline or are non-technical, drop it and fall back to just asking. **Offer once; never nag** — same discipline as the signup pixel.
+
+**Weekly review (the main surface):** report activation honestly alongside signups —
+- **Activation rate** = activated ÷ signups, in plain words: *"12 signed up, 3 came back and used it — that's about 1 in 4 sticking."*
+- **Time-to-value** when I can see it: *"the ones who stuck got to their first project within a day; the ones who didn't never got past setup."*
+- **The diagnosis, not just the number:** a low activation rate is a *product/onboarding* signal, not a distribution one. I say so plainly: *"More posting won't fix this — people are showing up and bouncing. Your first-run experience is the leak. Cutting onboarding from 7 steps to 3 is where I'd put this week."*
+
+**Daily / evening recap:** light touch — if a new activation came in, I tie it back to the post that earned the original signup so the founder sees the *full* chain (post → click → signup → stuck), not just the top of it.
+
+**Inbound:** if the founder mentions retention/usage in chat ("a few of them actually came back"), I record it immediately as \`activated\`, tied to a link if I can, untied if I can't.
+
+## Clicks-but-no-signups vs signups-but-no-activation (different problems, different fixes)
+
+I keep these straight because they route to completely different advice:
+- **Clicks, no signups** → the *landing page / signup* is the leak. I read it with \`search_web\` and hand the diagnosis to the strategic read (positioning/clarity/CTA). (See maya-conversion-tracker + the strategic-diagnostician path.)
+- **Signups, no activation** → the *product's first run* is the leak. Distribution is working; I stop pushing more reach and tell the founder the honest truth that the fix is inside the product, not in more posts.
+
+Naming the *right* leak is the whole value. Telling a founder to "post more" when their real problem is a broken onboarding is exactly the kind of confident-but-wrong advice I must never give.
+
+## Honesty rules (non-negotiable)
+
+- **A signup is not a customer.** I never report a signup as proof the business is working if those users never come back. If I only have signups, I say "signups" and go find out whether they stuck.
+- **No activation data ≠ zero activation.** If I haven't set up tracking or asked yet, I say "I don't know yet how many came back — let's find out," not "0 stuck."
+- **Self-reported sources are labeled as such.** "3 said they heard via Reddit" is reported as the founder's own report, not as hard tracking — but I still use it to decide where to lean in.
+- **Don't double-count.** If the activation pixel is live, I don't also ask for the same window — I trust it, exactly like the signup side.
+- **Grounded or silent.** Every activation claim cites how I know it (pixel trail or "you told me"). If I can't ground it, I don't claim it.
+
+## How I use it in the loop
+
+Activation is the deepest truth I can give a founder, so it gets the heaviest weight in what I learn. A channel/format that brings signups that *stick* beats one that brings more signups that bounce — and \`save_learning\` reflects that. The north star was never reach or even signups; it's customers who stay. When activation is low, the most valuable thing I can do is stop optimizing my own posting and tell the founder, plainly, that the next fix is theirs to make inside the product — and exactly which step is losing people.
+
+## Anti-slop check
+
+Same bar as everything I send (maya-output-critic + SOUL.md): grounded, specific, plain language a non-technical founder gets instantly. "12 signed up, 3 stuck — your setup flow is where the other 9 dropped" is the goal. "Activation metrics trending positively 📈" is not.
+`;
+
 // Source: agents/skills/maya-gtm/maya-app-inspector/SKILL.md
-const ENTRY_0_maya_app_inspector = `---
+const ENTRY_1_maya_app_inspector = `---
 name: maya-app-inspector
 description: Inspect a product URL + walkthrough and emit a structured ProductDiagnosis (promise, target action, activation moment, showable demo beats).
 ---
@@ -105,7 +170,7 @@ This skill produces structured data, not draft prose. Slop-critic is NOT invoked
 `;
 
 // Source: agents/skills/maya-gtm/maya-approval-publisher/SKILL.md
-const ENTRY_1_maya_approval_publisher = `---
+const ENTRY_2_maya_approval_publisher = `---
 name: maya-approval-publisher
 description: DEPRECATED — superseded by maya-publisher (Zernio post_to_channel).
 ---
@@ -133,7 +198,7 @@ Any skill, cron, or prompt that references \`maya-approval-publisher\` should ca
 `;
 
 // Source: agents/skills/maya-gtm/maya-calendar-plan-builder/SKILL.md
-const ENTRY_2_maya_calendar_plan_builder = `---
+const ENTRY_3_maya_calendar_plan_builder = `---
 name: maya-calendar-plan-builder
 description: DEPRECATED. Superseded by maya-calendar-populator. Do not invoke. Calendar event building (typed gtmCalendarEvents + warmup_block scheduling) is now owned end-to-end by maya-calendar-populator, which builds TODAY's turn-key plan day-by-day. This skill is retained only as a deprecation pointer to avoid two competing calendar builders.
 ---
@@ -171,7 +236,7 @@ Any skill, cron, or prompt that references \`maya-calendar-plan-builder\` should
 `;
 
 // Source: agents/skills/maya-gtm/maya-calendar-populator/SKILL.md
-const ENTRY_3_maya_calendar_populator = `---
+const ENTRY_4_maya_calendar_populator = `---
 name: maya-calendar-populator
 description: After deep-research subagents land target threads + accounts + drafts, build TODAY's turn-key plan — a tight set of events in Maya's today's-posts queue (shown in the app's Plan tab; provisional, status="draft") mapped to the operator's current phase of the PLAYBOOK arc — plus a light, non-binding high-level arc of where the week is heading. Each event links to a target thread + draft, carries openUrl + draftText, and cites the playbook rule. Not a 7-day dump and not a fixed week: today is the deliverable, the morning cron owns each following day.
 ---
@@ -460,7 +525,7 @@ Run maya-slop-critic on every event \`title\` and \`description\`. Banned phrase
 `;
 
 // Source: agents/skills/maya-gtm/maya-channel-strategy-judge/SKILL.md
-const ENTRY_4_maya_channel_strategy_judge = `---
+const ENTRY_5_maya_channel_strategy_judge = `---
 name: maya-channel-strategy-judge
 description: THE channel-judge subagent. Returns one primary, at most one secondary, and parked-with-reasons. Surfaces rule conflicts.
 ---
@@ -540,7 +605,7 @@ interface ChannelStrategyVerdict {
 `;
 
 // Source: agents/skills/maya-gtm/maya-competitor-researcher/SKILL.md
-const ENTRY_5_maya_competitor_researcher = `---
+const ENTRY_6_maya_competitor_researcher = `---
 name: maya-competitor-researcher
 description: Find substitutes + what their users complain about. Sources: Reddit, X, App Store, G2, LinkedIn comments.
 ---
@@ -624,7 +689,7 @@ User-quotes-verbatim. Slop-critic NOT invoked on output. Pattern summary labels 
 `;
 
 // Source: agents/skills/maya-gtm/maya-connection-health/SKILL.md
-const ENTRY_6_maya_connection_health = `---
+const ENTRY_7_maya_connection_health = `---
 name: maya-connection-health
 description: The anti-silent-failure guardian defending the "we post for you" headline. Reacts to account.disconnected webhooks and health warnings, detects token expiry/revoke, explains it in plain founder language, and hands over a reconnect deep link. Drives the Settings "Connected accounts" chips and fires the proactive reconnect nudge before posting silently breaks (push-don't-pull).
 ---
@@ -682,7 +747,7 @@ The reconnect nudge is plain, calm founder language. Maya normalizes the expiry 
 `;
 
 // Source: agents/skills/maya-gtm/maya-content-format-miner/SKILL.md
-const ENTRY_7_maya_content_format_miner = `---
+const ENTRY_8_maya_content_format_miner = `---
 name: maya-content-format-miner
 description: Extract reusable hook patterns, proof beats, CTA patterns from real competitor / niche content. Output is a remix kit for drafts.
 ---
@@ -813,7 +878,7 @@ Each \`template\` must pass \`maya-slop-critic\` on the template-skeleton itself
 `;
 
 // Source: agents/skills/maya-gtm/maya-content-reviewer/SKILL.md
-const ENTRY_8_maya_content_reviewer = `---
+const ENTRY_9_maya_content_reviewer = `---
 name: maya-content-reviewer
 description: When the founder sends me a finished/edited post, video, or image to review, I actually WATCH it (multimodal) and give specific, honest editor feedback — hook, pacing, what to cut, caption/keyword placement — then offer the next step (approve → post / one-tap hand-off). Not generic praise; grounded in what I actually saw.
 ---
@@ -874,7 +939,7 @@ The feedback I send passes maya-slop-critic + SOUL.md — specific, grounded in 
 `;
 
 // Source: agents/skills/maya-gtm/maya-continuous-research/SKILL.md
-const ENTRY_9_maya_continuous_research = `---
+const ENTRY_10_maya_continuous_research = `---
 name: maya-continuous-research
 description: The daily research loop. Maya spawns per-channel workers for target threads, competitor moves, and niche pulse, watches them via native session tools, and stops the moment she has enough for a strong morning brief. Decides "thin day" honestly when signal is dead.
 ---
@@ -991,7 +1056,7 @@ Tier rationales are Maya's notes to herself in \`gtmActionLog\`, but if surfaced
 `;
 
 // Source: agents/skills/maya-gtm/maya-conversion-tracker/SKILL.md
-const ENTRY_10_maya_conversion_tracker = `---
+const ENTRY_11_maya_conversion_tracker = `---
 name: maya-conversion-tracker
 description: How I close the loop on the SIGNUP side — not just clicks. I wrap every product link to the founder's real signup URL, hand them the conversion pixel for automatic real-time signup tracking, and when the pixel isn't in yet I simply ASK "did anyone sign up?" and record it. The whole product promise is "proves what converted" — clicks are easy; this is how I actually prove customers.
 ---
@@ -1039,7 +1104,7 @@ Same bar as everything I send (maya-output-critic + SOUL.md): grounded, specific
 `;
 
 // Source: agents/skills/maya-gtm/maya-distribution-motion-tester/SKILL.md
-const ENTRY_11_maya_distribution_motion_tester = `---
+const ENTRY_12_maya_distribution_motion_tester = `---
 name: maya-distribution-motion-tester
 description: Design first-week experiments per PLAYBOOK § 2 Phase 2 (5-piece soft-launch kit). Define stop/double-down metrics.
 ---
@@ -1114,7 +1179,7 @@ interface DistributionExperimentSet {
 `;
 
 // Source: agents/skills/maya-gtm/maya-engagement-responder/SKILL.md
-const ENTRY_12_maya_engagement_responder = `---
+const ENTRY_13_maya_engagement_responder = `---
 name: maya-engagement-responder
 description: Real-time comment / mention triage into voice-matched DRAFTS through the existing approval pipeline (drafts, never autonomous send). Encodes the inbox availability map across the 6 offered channels (X, Reddit, LinkedIn, Instagram, TikTok, YouTube), classifies buyer-lead vs noise and routes lead signals into the signup-attribution funnel.
 ---
@@ -1202,7 +1267,7 @@ The drafted reply must pass slop-critic, because it's the founder speaking publi
 `;
 
 // Source: agents/skills/maya-gtm/maya-evening-recap/SKILL.md
-const ENTRY_13_maya_evening_recap = `---
+const ENTRY_14_maya_evening_recap = `---
 name: maya-evening-recap
 description: 8pm-local one-message recap. What got done, how it performed in numbers, what's carrying to tomorrow, what we cut. Reads gtmActionLog + gtmPostResults to ground every claim.
 ---
@@ -1285,6 +1350,7 @@ This is the loop closing. When \`get_my_attribution({ windowDays: 1 })\` has rea
 - If there are clicks but no signups yet, say exactly that: "Your X reply pulled 8 clicks but no signups landed yet." Clicks ≠ signups; never round one up to the other.
 - **Untied self-report signups.** These now live in \`totals.untiedSignups\`. Report it honestly ONLY when \`totals.untiedSignups > 0\`, and don't pin it to any post: "3 signups in the last 24h — couldn't trace which post sent them." When \`totals.untiedSignups\` is 0, say nothing about untied signups at all.
 - **Revenue.** \`totals.revenue\` is now available; mention it only when \`totals.revenue > 0\` (e.g. "and $49 in revenue traced back in the last 24h"). Otherwise say nothing about revenue.
+- **Activation (a signup that STUCK).** \`totals.activated\` = signed-up users who came back / reached value. Mention it only when \`totals.activated > 0\`: "and 1 of them came back and actually used it." It's the strongest proof of all — but the weekly review owns the full activation-rate read (see \`maya-activation-coach\`); the recap just surfaces a fresh one.
 - **Grounded-or-silent.** If \`posts\` is empty AND every \`totals\` figure is zero, say NOTHING about clicks or signups. Do not imply likes/upvotes are signups. Fall through to the engagement read below.
 - **Brief-mode channels.** TikTok/IG posts are link-in-bio, so they have no per-post click attribution. Never claim click counts for a TikTok/IG post. They count as reach, not as traced signups.
 
@@ -1362,7 +1428,7 @@ Banned: "you crushed it," "great hustle today," "tomorrow we level up." Recap re
 `;
 
 // Source: agents/skills/maya-gtm/maya-foundation-research/SKILL.md
-const ENTRY_14_maya_foundation_research = `---
+const ENTRY_15_maya_foundation_research = `---
 name: maya-foundation-research
 description: The onboarding + monthly deep-research pass. Maya orchestrates 5 parallel foundation workers (buyer map, competitive map, channel scorecard, content angles, relationship targets) using OpenClaw native session tools, decides when she has enough across the board, and persists synthesis to Convex.
 ---
@@ -1655,7 +1721,7 @@ The synthesis message itself passes slop-critic. No "comprehensive analysis," no
 `;
 
 // Source: agents/skills/maya-gtm/maya-hn-researcher/SKILL.md
-const ENTRY_15_maya_hn_researcher = `---
+const ENTRY_16_maya_hn_researcher = `---
 name: maya-hn-researcher
 description: Find Hacker News buyer-intent + reply targets for dev-tool / technical / B2B products — Show HN and Ask HN threads where the buyer is describing the pain, mined down the full comment tree via the Algolia item API. Discovery-only timing rules (Show HN is one-shot); the depth is in the comments.
 ---
@@ -1735,7 +1801,7 @@ On a story/Show HN, the **title** carries the whole click decision: concrete, sp
 `;
 
 // Source: agents/skills/maya-gtm/maya-icp-hypothesis/SKILL.md
-const ENTRY_16_maya_icp_hypothesis = `---
+const ENTRY_17_maya_icp_hypothesis = `---
 name: maya-icp-hypothesis
 description: Generate 3-5 ICP hypotheses from product evidence + walkthrough — never from asking the founder, who usually doesn't know.
 ---
@@ -1810,7 +1876,7 @@ Invoke \`maya-slop-critic\` (banned-phrase scan only) on every \`buyer\` and \`c
 `;
 
 // Source: agents/skills/maya-gtm/maya-inbound-triage/SKILL.md
-const ENTRY_17_maya_inbound_triage = `---
+const ENTRY_18_maya_inbound_triage = `---
 name: maya-inbound-triage
 description: Reply / DM / mention triage. For every inbound to an owned post, classify (buyer / supporter / noise / hostile), draft a response if reply-worthy, and surface to the operator in one line — they should never have to scan their own inbox.
 ---
@@ -1929,7 +1995,7 @@ The drafted reply must pass slop-critic. The surface-to-operator message itself 
 `;
 
 // Source: agents/skills/maya-gtm/maya-instagram-researcher/SKILL.md
-const ENTRY_18_maya_instagram_researcher = `---
+const ENTRY_19_maya_instagram_researcher = `---
 name: maya-instagram-researcher
 description: Find where this product's buyers already live on Instagram and what they actually watch RIGHT NOW. Mine Reels + comments for buyer language, watch representative Reels multimodally for native register, and judge whether IG earns a bet. Instagram is the strongest mobile-app-wedge discovery surface. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
 ---
@@ -2041,7 +2107,7 @@ Max ~12 ScrapeCreators calls: 3-5 keywords × \`/v2/instagram/reels/search\` + 2
 `;
 
 // Source: agents/skills/maya-gtm/maya-linkedin-fit-researcher/SKILL.md
-const ENTRY_19_maya_linkedin_fit_researcher = `---
+const ENTRY_20_maya_linkedin_fit_researcher = `---
 name: maya-linkedin-fit-researcher
 description: Decide whether LinkedIn is the right channel per playbook/linkedin.md LI-1.1 - LI-1.3 + LI-10.2. Refuse if rule LI-10.2 applies.
 ---
@@ -2187,7 +2253,7 @@ LinkedIn is the slop epicenter. Every \`suggestedCommentDraft\` and \`caption.op
 `;
 
 // Source: agents/skills/maya-gtm/maya-linkedin-researcher/SKILL.md
-const ENTRY_20_maya_linkedin_researcher = `---
+const ENTRY_21_maya_linkedin_researcher = `---
 name: maya-linkedin-researcher
 description: For B2B / prosumer products where the buyer is a professional, find LinkedIn reply targets + engagement opportunities — posts where the buyer is describing the pain, mined for comment-level buyer intent. Runs AFTER maya-linkedin-fit-researcher clears LinkedIn as a bet; this is the research worker, not the fit gate.
 ---
@@ -2267,7 +2333,7 @@ The first ~2 lines show before "see more" — they carry the whole open decision
 `;
 
 // Source: agents/skills/maya-gtm/maya-morning-brief/SKILL.md
-const ENTRY_21_maya_morning_brief = `---
+const ENTRY_22_maya_morning_brief = `---
 name: maya-morning-brief
 description: The 7am-local daily message + calendar populate. One Telegram, as tight as possible while useful, self-graded (Strong / Thin / Warmup), top priority named first, calendar events with full hands-off recipes. Reads gtmNicheLearnings to weight what surfaces.
 ---
@@ -2470,7 +2536,7 @@ Brief faces slop-critic. Banned for this message: "I've put together," "comprehe
 `;
 
 // Source: agents/skills/maya-gtm/maya-output-critic/SKILL.md
-const ENTRY_22_maya_output_critic = `---
+const ENTRY_23_maya_output_critic = `---
 name: maya-output-critic
 description: The 5-gate quality framework Maya consults before shipping any user-facing message — morning brief, evening recap, calendar event description, drafted reply, weekly review. Grounding / voice / recipe / tier-honesty / time-box. Fail → iterate or escalate, never silently ship low quality.
 ---
@@ -2592,7 +2658,7 @@ Self-referential: the critic must itself pass voice + grounding + tier-honesty b
 `;
 
 // Source: agents/skills/maya-gtm/maya-performance-reader/SKILL.md
-const ENTRY_23_maya_performance_reader = `---
+const ENTRY_24_maya_performance_reader = `---
 name: maya-performance-reader
 description: Read Zernio post analytics + follower stats and fold them into attribution as the slower ground-truth, WITHOUT ever overriding the faster wrapped-link click signal. Encodes staleness windows and the uneven read coverage across the 6 offered channels (X, Reddit, LinkedIn, Instagram, TikTok, YouTube). Grounded-or-silent: stale or empty numbers get said plainly, never fabricated.
 ---
@@ -2669,7 +2735,7 @@ Any founder-facing summary of performance is plain manager language ("your Tuesd
 `;
 
 // Source: agents/skills/maya-gtm/maya-publisher/SKILL.md
-const ENTRY_24_maya_publisher = `---
+const ENTRY_25_maya_publisher = `---
 name: maya-publisher
 description: Turn a planned post recipe (WHAT to say / LINK / VOICE NOTES from a gtmCalendarEvent) into a correct Zernio post for the channel, then gate it. Encodes per-platform write SHAPE as prose for the 6 offered channels (X, Reddit, LinkedIn, Instagram, TikTok, YouTube). The one place Maya turns a queued event into a live post, with ban-safety + cost + connection-health gates fail-closed before anything ships.
 ---
@@ -2767,7 +2833,7 @@ The final draft passes the PLAYBOOK § 6 ban list before it ships, because a pub
 `;
 
 // Source: agents/skills/maya-gtm/maya-reddit-demand-researcher/SKILL.md
-const ENTRY_25_maya_reddit_demand_researcher = `---
+const ENTRY_26_maya_reddit_demand_researcher = `---
 name: maya-reddit-demand-researcher
 description: Find Reddit buyer intent for the product's pain — surface reply targets ranked by purchase signal, map the live comment tree for follow-up questions, return promotion-risk score. Budget-bounded.
 ---
@@ -2969,7 +3035,7 @@ Max 8 \`research_reddit\` calls: 3 × subreddit/search, 2 × general search, 2 �
 `;
 
 // Source: agents/skills/maya-gtm/maya-results-reviewer/SKILL.md
-const ENTRY_26_maya_results_reviewer = `---
+const ENTRY_27_maya_results_reviewer = `---
 name: maya-results-reviewer
 description: Review published results. Recommend double_down / iterate / do_not_overfit per PLAYBOOK format-market-fit detection. Counter-overfitting checks.
 ---
@@ -3081,7 +3147,7 @@ Max 4 ScrapeCreators calls (1 per platform). Cache aggressively. 1 main_maya syn
 `;
 
 // Source: agents/skills/maya-gtm/maya-safety-critic/SKILL.md
-const ENTRY_27_maya_safety_critic = `---
+const ENTRY_28_maya_safety_critic = `---
 name: maya-safety-critic
 description: The mandatory outbound ban-safety FORCE gate that maya-publisher runs before any post ships. Blocks unsafe publishes, FORCES Reddit/TikTok to one-tap-confirm, and is one of the three verdicts (voice-match + slop + safety) every post must clear. Backed server-side by convex/gtmMaya/outboundFirewall.ts + approvalPublishing.ts.
 ---
@@ -3138,7 +3204,7 @@ This gate's own founder-facing notes ("held your Reddit post for a tap" / "X isn
 `;
 
 // Source: agents/skills/maya-gtm/maya-slideshow-strategist/SKILL.md
-const ENTRY_28_maya_slideshow_strategist = `---
+const ENTRY_29_maya_slideshow_strategist = `---
 name: maya-slideshow-strategist
 description: When a post wants a visual — a TikTok photo-mode slideshow or an IG carousel — I build it grounded in the founder's REAL screenshots, never stock images. I decide when a slideshow is the right format, pull the screenshots I already have (or ask once for the one I'm missing), generate each slide framing the real screen unchanged, and hand the finished set back for the founder to post. Strategy + format + hooks live here; the mechanics live in TOOLS.md.
 ---
@@ -3213,7 +3279,7 @@ Every slideshow passes the same bar as everything I send (maya-slop-critic + SOU
 `;
 
 // Source: agents/skills/maya-gtm/maya-slop-critic/SKILL.md
-const ENTRY_29_maya_slop_critic = `---
+const ENTRY_30_maya_slop_critic = `---
 name: maya-slop-critic
 description: The anti-slop / AI-tell critic. Apply PLAYBOOK § 6 banned-phrase list + banned-structure scan + LLM-judgment structural AI-tell pass + voice match + read-aloud test. Returns "rejected with reasons" on any trip. The bar is native-voice fidelity, NOT detector-dodging.
 ---
@@ -3340,7 +3406,7 @@ Self-referential: this skill IS the anti-slop check. The \`suggestion\` strings 
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-demo-strategist/SKILL.md
-const ENTRY_30_maya_tiktok_demo_strategist = `---
+const ENTRY_31_maya_tiktok_demo_strategist = `---
 name: maya-tiktok-demo-strategist
 description: Pick TikTok format (faceless screen-record vs founder-on-camera vs slideshow) given showability + constraints. Refuse if user can't post manually (V1 constraint).
 ---
@@ -3428,7 +3494,7 @@ This is a format/shot-plan strategist, not a niche miner. The TikTok channel's *
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-format-researcher/SKILL.md
-const ENTRY_31_maya_tiktok_format_researcher = `---
+const ENTRY_32_maya_tiktok_format_researcher = `---
 name: maya-tiktok-format-researcher
 description: Find what's working in the operator's niche on TikTok RIGHT NOW. Identify the format that clearly recurs across the strongest recent videos in the niche (tiktok.md § 7).
 ---
@@ -3560,7 +3626,7 @@ Structured taxonomy output, slop-critic NOT invoked. \`excerpt\` strings and eve
 `;
 
 // Source: agents/skills/maya-gtm/maya-ugc-system-advisor/SKILL.md
-const ENTRY_32_maya_ugc_system_advisor = `---
+const ENTRY_33_maya_ugc_system_advisor = `---
 name: maya-ugc-system-advisor
 description: ADVISORY-ONLY in V1. UGC creators are a Phase 4+ lever per PLAYBOOK. Refuse to recommend before format-market-fit.
 ---
@@ -3640,7 +3706,7 @@ Mostly structured refusals. \`refusalReason\` and \`gatesUnmet[].detail\` pass t
 `;
 
 // Source: agents/skills/maya-gtm/maya-viral-demo-moment-miner/SKILL.md
-const ENTRY_33_maya_viral_demo_moment_miner = `---
+const ENTRY_34_maya_viral_demo_moment_miner = `---
 name: maya-viral-demo-moment-miner
 description: Find showable app moments — before/after contrasts, screenshot sequences. Source: walkthrough + product UI.
 ---
@@ -3722,7 +3788,7 @@ interface ViralDemoBeatLibrary {
 `;
 
 // Source: agents/skills/maya-gtm/maya-voice-matcher/SKILL.md
-const ENTRY_34_maya_voice_matcher = `---
+const ENTRY_35_maya_voice_matcher = `---
 name: maya-voice-matcher
 description: Score how well a drafted reply/post/thread matches the operator's actual voice — drawn from their existing public writing (X/Reddit/LinkedIn) or onboarding answers as fallback. Combines with maya-slop-critic for a final ship-or-revise gate. Each gtmDraftedContent row gets a voiceMatchScore + slopCriticPassed flag.
 ---
@@ -3834,7 +3900,7 @@ Yes — this skill itself outputs operator-facing copy (when surfacing voice fee
 `;
 
 // Source: agents/skills/maya-gtm/maya-weekly-review/SKILL.md
-const ENTRY_35_maya_weekly_review = `---
+const ENTRY_36_maya_weekly_review = `---
 name: maya-weekly-review
 description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for the coming week if any, and a re-weighting of bet channels + per-channel warmth advancement (set_channel_warmth) by what actually converted. Does NOT regenerate a next-week rolling plan — the daily morning cron owns day-to-day planning.
 ---
@@ -3880,6 +3946,8 @@ As tight as Maya can make it while still useful. Four blocks:
 Numbers grounded in \`gtmActionLog\` + \`gtmPostResults\`. If a metric isn't available, say so — don't fabricate.
 
 **North-Star status (always).** Read the North Star off GTM.md (the \`northStarMetric\` / target / deadline) and the real conversion numbers from **\`get_my_attribution({ windowDays: 7 })\`** (\`totals.signups\`/\`demos\`/\`revenue\` this week, plus \`untiedSignups\`) joined with the running total. State **on-track / at-risk** plainly against the target and pace-to-deadline: "North Star: 100 signups by Day 30. We're at 22 with 18 days left — at-risk; current pace lands ~37. This week drove 6 signups (windowDays:7), and the plan below leans harder into the channel that's actually converting." If attribution shows clicks but no signups this week, say so honestly ("12 clicks to the app this week but no confirmed signups — tell me how many converted so I optimize the right thing") — never pretend likes or clicks are signups. If \`untiedSignups > 0\`, name it ("3 signups we couldn't tie to a post — wrap every link next week so I can see what's working").
+
+**Activation status (the deeper truth — \`maya-activation-coach\` owns this).** Signups are only half the story; what grows the business is signups that **stick** (came back / reached value = \`totals.activated\`). Report the activation rate plainly in user words when I have the data: "12 signed up this week, 3 came back and used it — about 1 in 4 sticking." A **low activation rate is a product/onboarding problem, not a distribution one** — say so directly and DON'T prescribe more posting: "people are showing up and bouncing — more posts won't fix that; the leak is your first-run experience." If activation isn't being tracked yet, that's the concrete ask ("I can see signups but not whether they stuck — one line on your site, or just tell me how many came back, and I'll prove it"). This is the most valuable honest read I can give — see the clicks-no-signups vs signups-no-activation split in \`maya-activation-coach\`.
 
 ### Block 2 — What we learned
 
@@ -3985,7 +4053,7 @@ Banned for this message: "Crushed it this week," "We're seeing momentum," "level
 `;
 
 // Source: agents/skills/maya-gtm/maya-x-founder-led-researcher/SKILL.md
-const ENTRY_36_maya_x_founder_led_researcher = `---
+const ENTRY_37_maya_x_founder_led_researcher = `---
 name: maya-x-founder-led-researcher
 description: Find X founder-led conversations, reply targets, hooks worth modeling, and accounts worth a private List.
 ---
@@ -4153,7 +4221,7 @@ Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before t
 `;
 
 // Source: agents/skills/maya-gtm/maya-youtube-researcher/SKILL.md
-const ENTRY_37_maya_youtube_researcher = `---
+const ENTRY_38_maya_youtube_researcher = `---
 name: maya-youtube-researcher
 description: Deep YouTube research via ScrapeCreators — mine comments + transcripts for buyer language, map the venue spread (niche channels, hashtags, Shorts trends), and judge whether YouTube earns a bet for this product. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
 ---
@@ -4210,42 +4278,43 @@ When YouTube earns a bet (real buyer presence + the founder can produce video), 
 `;
 
 export const BUNDLED_LOCAL_SKILLS: readonly BundledLocalSkill[] = [
-  { slug: "maya-app-inspector", workspacePath: "skills/maya-app-inspector/SKILL.md", body: ENTRY_0_maya_app_inspector },
-  { slug: "maya-approval-publisher", workspacePath: "skills/maya-approval-publisher/SKILL.md", body: ENTRY_1_maya_approval_publisher },
-  { slug: "maya-calendar-plan-builder", workspacePath: "skills/maya-calendar-plan-builder/SKILL.md", body: ENTRY_2_maya_calendar_plan_builder },
-  { slug: "maya-calendar-populator", workspacePath: "skills/maya-calendar-populator/SKILL.md", body: ENTRY_3_maya_calendar_populator },
-  { slug: "maya-channel-strategy-judge", workspacePath: "skills/maya-channel-strategy-judge/SKILL.md", body: ENTRY_4_maya_channel_strategy_judge },
-  { slug: "maya-competitor-researcher", workspacePath: "skills/maya-competitor-researcher/SKILL.md", body: ENTRY_5_maya_competitor_researcher },
-  { slug: "maya-connection-health", workspacePath: "skills/maya-connection-health/SKILL.md", body: ENTRY_6_maya_connection_health },
-  { slug: "maya-content-format-miner", workspacePath: "skills/maya-content-format-miner/SKILL.md", body: ENTRY_7_maya_content_format_miner },
-  { slug: "maya-content-reviewer", workspacePath: "skills/maya-content-reviewer/SKILL.md", body: ENTRY_8_maya_content_reviewer },
-  { slug: "maya-continuous-research", workspacePath: "skills/maya-continuous-research/SKILL.md", body: ENTRY_9_maya_continuous_research },
-  { slug: "maya-conversion-tracker", workspacePath: "skills/maya-conversion-tracker/SKILL.md", body: ENTRY_10_maya_conversion_tracker },
-  { slug: "maya-distribution-motion-tester", workspacePath: "skills/maya-distribution-motion-tester/SKILL.md", body: ENTRY_11_maya_distribution_motion_tester },
-  { slug: "maya-engagement-responder", workspacePath: "skills/maya-engagement-responder/SKILL.md", body: ENTRY_12_maya_engagement_responder },
-  { slug: "maya-evening-recap", workspacePath: "skills/maya-evening-recap/SKILL.md", body: ENTRY_13_maya_evening_recap },
-  { slug: "maya-foundation-research", workspacePath: "skills/maya-foundation-research/SKILL.md", body: ENTRY_14_maya_foundation_research },
-  { slug: "maya-hn-researcher", workspacePath: "skills/maya-hn-researcher/SKILL.md", body: ENTRY_15_maya_hn_researcher },
-  { slug: "maya-icp-hypothesis", workspacePath: "skills/maya-icp-hypothesis/SKILL.md", body: ENTRY_16_maya_icp_hypothesis },
-  { slug: "maya-inbound-triage", workspacePath: "skills/maya-inbound-triage/SKILL.md", body: ENTRY_17_maya_inbound_triage },
-  { slug: "maya-instagram-researcher", workspacePath: "skills/maya-instagram-researcher/SKILL.md", body: ENTRY_18_maya_instagram_researcher },
-  { slug: "maya-linkedin-fit-researcher", workspacePath: "skills/maya-linkedin-fit-researcher/SKILL.md", body: ENTRY_19_maya_linkedin_fit_researcher },
-  { slug: "maya-linkedin-researcher", workspacePath: "skills/maya-linkedin-researcher/SKILL.md", body: ENTRY_20_maya_linkedin_researcher },
-  { slug: "maya-morning-brief", workspacePath: "skills/maya-morning-brief/SKILL.md", body: ENTRY_21_maya_morning_brief },
-  { slug: "maya-output-critic", workspacePath: "skills/maya-output-critic/SKILL.md", body: ENTRY_22_maya_output_critic },
-  { slug: "maya-performance-reader", workspacePath: "skills/maya-performance-reader/SKILL.md", body: ENTRY_23_maya_performance_reader },
-  { slug: "maya-publisher", workspacePath: "skills/maya-publisher/SKILL.md", body: ENTRY_24_maya_publisher },
-  { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_25_maya_reddit_demand_researcher },
-  { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_26_maya_results_reviewer },
-  { slug: "maya-safety-critic", workspacePath: "skills/maya-safety-critic/SKILL.md", body: ENTRY_27_maya_safety_critic },
-  { slug: "maya-slideshow-strategist", workspacePath: "skills/maya-slideshow-strategist/SKILL.md", body: ENTRY_28_maya_slideshow_strategist },
-  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_29_maya_slop_critic },
-  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_30_maya_tiktok_demo_strategist },
-  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_31_maya_tiktok_format_researcher },
-  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_32_maya_ugc_system_advisor },
-  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_33_maya_viral_demo_moment_miner },
-  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_34_maya_voice_matcher },
-  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_35_maya_weekly_review },
-  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_36_maya_x_founder_led_researcher },
-  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_37_maya_youtube_researcher },
+  { slug: "maya-activation-coach", workspacePath: "skills/maya-activation-coach/SKILL.md", body: ENTRY_0_maya_activation_coach },
+  { slug: "maya-app-inspector", workspacePath: "skills/maya-app-inspector/SKILL.md", body: ENTRY_1_maya_app_inspector },
+  { slug: "maya-approval-publisher", workspacePath: "skills/maya-approval-publisher/SKILL.md", body: ENTRY_2_maya_approval_publisher },
+  { slug: "maya-calendar-plan-builder", workspacePath: "skills/maya-calendar-plan-builder/SKILL.md", body: ENTRY_3_maya_calendar_plan_builder },
+  { slug: "maya-calendar-populator", workspacePath: "skills/maya-calendar-populator/SKILL.md", body: ENTRY_4_maya_calendar_populator },
+  { slug: "maya-channel-strategy-judge", workspacePath: "skills/maya-channel-strategy-judge/SKILL.md", body: ENTRY_5_maya_channel_strategy_judge },
+  { slug: "maya-competitor-researcher", workspacePath: "skills/maya-competitor-researcher/SKILL.md", body: ENTRY_6_maya_competitor_researcher },
+  { slug: "maya-connection-health", workspacePath: "skills/maya-connection-health/SKILL.md", body: ENTRY_7_maya_connection_health },
+  { slug: "maya-content-format-miner", workspacePath: "skills/maya-content-format-miner/SKILL.md", body: ENTRY_8_maya_content_format_miner },
+  { slug: "maya-content-reviewer", workspacePath: "skills/maya-content-reviewer/SKILL.md", body: ENTRY_9_maya_content_reviewer },
+  { slug: "maya-continuous-research", workspacePath: "skills/maya-continuous-research/SKILL.md", body: ENTRY_10_maya_continuous_research },
+  { slug: "maya-conversion-tracker", workspacePath: "skills/maya-conversion-tracker/SKILL.md", body: ENTRY_11_maya_conversion_tracker },
+  { slug: "maya-distribution-motion-tester", workspacePath: "skills/maya-distribution-motion-tester/SKILL.md", body: ENTRY_12_maya_distribution_motion_tester },
+  { slug: "maya-engagement-responder", workspacePath: "skills/maya-engagement-responder/SKILL.md", body: ENTRY_13_maya_engagement_responder },
+  { slug: "maya-evening-recap", workspacePath: "skills/maya-evening-recap/SKILL.md", body: ENTRY_14_maya_evening_recap },
+  { slug: "maya-foundation-research", workspacePath: "skills/maya-foundation-research/SKILL.md", body: ENTRY_15_maya_foundation_research },
+  { slug: "maya-hn-researcher", workspacePath: "skills/maya-hn-researcher/SKILL.md", body: ENTRY_16_maya_hn_researcher },
+  { slug: "maya-icp-hypothesis", workspacePath: "skills/maya-icp-hypothesis/SKILL.md", body: ENTRY_17_maya_icp_hypothesis },
+  { slug: "maya-inbound-triage", workspacePath: "skills/maya-inbound-triage/SKILL.md", body: ENTRY_18_maya_inbound_triage },
+  { slug: "maya-instagram-researcher", workspacePath: "skills/maya-instagram-researcher/SKILL.md", body: ENTRY_19_maya_instagram_researcher },
+  { slug: "maya-linkedin-fit-researcher", workspacePath: "skills/maya-linkedin-fit-researcher/SKILL.md", body: ENTRY_20_maya_linkedin_fit_researcher },
+  { slug: "maya-linkedin-researcher", workspacePath: "skills/maya-linkedin-researcher/SKILL.md", body: ENTRY_21_maya_linkedin_researcher },
+  { slug: "maya-morning-brief", workspacePath: "skills/maya-morning-brief/SKILL.md", body: ENTRY_22_maya_morning_brief },
+  { slug: "maya-output-critic", workspacePath: "skills/maya-output-critic/SKILL.md", body: ENTRY_23_maya_output_critic },
+  { slug: "maya-performance-reader", workspacePath: "skills/maya-performance-reader/SKILL.md", body: ENTRY_24_maya_performance_reader },
+  { slug: "maya-publisher", workspacePath: "skills/maya-publisher/SKILL.md", body: ENTRY_25_maya_publisher },
+  { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_26_maya_reddit_demand_researcher },
+  { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_27_maya_results_reviewer },
+  { slug: "maya-safety-critic", workspacePath: "skills/maya-safety-critic/SKILL.md", body: ENTRY_28_maya_safety_critic },
+  { slug: "maya-slideshow-strategist", workspacePath: "skills/maya-slideshow-strategist/SKILL.md", body: ENTRY_29_maya_slideshow_strategist },
+  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_30_maya_slop_critic },
+  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_31_maya_tiktok_demo_strategist },
+  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_32_maya_tiktok_format_researcher },
+  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_33_maya_ugc_system_advisor },
+  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_34_maya_viral_demo_moment_miner },
+  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_35_maya_voice_matcher },
+  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_36_maya_weekly_review },
+  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_37_maya_x_founder_led_researcher },
+  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_38_maya_youtube_researcher },
 ];

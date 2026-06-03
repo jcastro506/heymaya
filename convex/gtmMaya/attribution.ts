@@ -28,7 +28,10 @@ const CONVERSION_KIND = v.union(
   v.literal("signup"),
   v.literal("demo"),
   v.literal("feedback"),
-  v.literal("revenue")
+  v.literal("revenue"),
+  // Sprint 3 (top-tier): a signed-up user who came BACK / reached value. Lets
+  // Maya prove a customer who STUCK, not just a first-touch signup.
+  v.literal("activated")
 );
 
 // ───────────────────────── mutations / queries ─────────────────────────
@@ -221,6 +224,7 @@ export const listAgentPostAttribution = internalQuery({
         demo: number;
         feedback: number;
         revenue: number;
+        activated: number;
       };
       signups: number;
       createdAt: number;
@@ -231,6 +235,8 @@ export const listAgentPostAttribution = internalQuery({
       demos: number;
       feedback: number;
       revenue: number;
+      // Returning/value-reached customers — proof a signup STUCK, not just landed.
+      activated: number;
       // Signups recorded WITHOUT a wrapped link — real, but un-attributable to a
       // specific post. Callers report these honestly ("N signups, couldn't trace
       // which post") instead of fabricating a source, and never drop them.
@@ -267,6 +273,7 @@ export const listAgentPostAttribution = internalQuery({
       demos: 0,
       feedback: 0,
       revenue: 0,
+      activated: 0,
       untiedSignups: 0,
     };
 
@@ -291,6 +298,7 @@ export const listAgentPostAttribution = internalQuery({
             demo: 0,
             feedback: 0,
             revenue: 0,
+            activated: 0,
           };
           for (const c of linked) conversionsByKind[c.kind] += c.count;
 
@@ -330,7 +338,8 @@ export const listAgentPostAttribution = internalQuery({
         p.conversionsByKind.signup > 0 ||
         p.conversionsByKind.demo > 0 ||
         p.conversionsByKind.feedback > 0 ||
-        p.conversionsByKind.revenue > 0
+        p.conversionsByKind.revenue > 0 ||
+        p.conversionsByKind.activated > 0
     );
 
     for (const p of posts) {
@@ -339,6 +348,7 @@ export const listAgentPostAttribution = internalQuery({
       totals.demos += p.conversionsByKind.demo;
       totals.feedback += p.conversionsByKind.feedback;
       totals.revenue += p.conversionsByKind.revenue;
+      totals.activated += p.conversionsByKind.activated;
     }
 
     posts.sort((a, b) =>
@@ -455,6 +465,8 @@ interface PixelConversionPayload {
   ref?: string;
   kind?: string;
   idempotencyKey?: string;
+  /** Optional "how did you hear about us" answer, captured as a note. */
+  source?: string;
 }
 
 /**
@@ -484,12 +496,20 @@ export const conversionPixelHttp = httpAction(async (ctx, request) => {
   if (!token) {
     return new Response(null, { status: 204, headers: PIXEL_CORS_HEADERS });
   }
-  const validKinds = ["signup", "demo", "feedback", "revenue"];
+  const validKinds = ["signup", "demo", "feedback", "revenue", "activated"];
   // Founder-facing kinds (install/waitlist/...) all roll up to "signup" — the
   // pixel's job is "a customer converted", and signup is the canonical bucket.
+  // "activated" (a returning/value-reached user) is kept distinct so Maya can
+  // report a customer who STUCK, not just a first signup.
   const kind = validKinds.includes(body.kind ?? "")
-    ? (body.kind as "signup" | "demo" | "feedback" | "revenue")
+    ? (body.kind as "signup" | "demo" | "feedback" | "revenue" | "activated")
     : "signup";
+  // Optional self-reported source ("how did you hear about us") rides along as a
+  // note so a tracked conversion also records what the customer SAID drove them.
+  const selfSource =
+    typeof body.source === "string" && body.source.trim().length > 0
+      ? body.source.trim().slice(0, 120)
+      : "";
 
   const wrap = await ctx.runQuery(
     internal.gtmMaya.attribution.getLinkWrapByToken,
@@ -524,7 +544,7 @@ export const conversionPixelHttp = httpAction(async (ctx, request) => {
     count: 1,
     source: "pixel",
     linkWrapToken: token,
-    note: "conversion pixel",
+    note: selfSource ? `conversion pixel · heard via: ${selfSource}` : "conversion pixel",
   });
   // Mark the automatic path live so Maya can stop asking for self-reports.
   await ctx.runMutation(
@@ -536,7 +556,7 @@ export const conversionPixelHttp = httpAction(async (ctx, request) => {
 
 interface RecordConversionPayload {
   idempotencyKey: string;
-  kind: "signup" | "demo" | "feedback" | "revenue";
+  kind: "signup" | "demo" | "feedback" | "revenue" | "activated";
   count?: number;
   source?: "self_report" | "pixel";
   linkWrapToken?: string;
@@ -556,7 +576,7 @@ export const recordConversionHttp = httpAction(async (ctx, request) => {
   if (!body.idempotencyKey) {
     return new Response("missing required fields", { status: 400 });
   }
-  const validKinds = ["signup", "demo", "feedback", "revenue"];
+  const validKinds = ["signup", "demo", "feedback", "revenue", "activated"];
   if (!validKinds.includes(body.kind)) {
     return new Response("invalid kind", { status: 400 });
   }
@@ -641,13 +661,19 @@ export const getConversionSetupHttp = httpAction(async (ctx, request) => {
     `<script>(function(){try{` +
     `var r=new URLSearchParams(location.search).get('lc_ref');` +
     `if(r){try{localStorage.setItem('lc_ref',r);}catch(e){}}` +
-    `window.lcMaya={signup:function(kind){` +
+    `function send(kind,source){` +
     `var v;try{v=localStorage.getItem('lc_ref');}catch(e){}if(!v)return;` +
     `var k='lc_done_'+v+'_'+(kind||'signup');` +
     `try{if(localStorage.getItem(k))return;localStorage.setItem(k,'1');}catch(e){}` +
     `navigator.sendBeacon('${endpoint}',new Blob([JSON.stringify(` +
-    `{ref:v,kind:kind||'signup',idempotencyKey:k})],{type:'text/plain'}));` +
-    `}};}catch(e){}})();</script>`;
+    `{ref:v,kind:kind||'signup',source:source||'',idempotencyKey:k})],{type:'text/plain'}));` +
+    `}` +
+    // signup(kind, source?) — fire when someone signs up. Optional `source` is
+    // the "how did you hear about us" answer. activated() — fire when that user
+    // comes BACK / reaches the aha moment (proves the signup stuck).
+    `window.lcMaya={signup:function(kind,source){send(kind||'signup',source);},` +
+    `activated:function(source){send('activated',source);}};` +
+    `}catch(e){}})();</script>`;
 
   return new Response(
     JSON.stringify({
@@ -661,8 +687,11 @@ export const getConversionSetupHttp = httpAction(async (ctx, request) => {
         "Paste the snippet in your site <head> (once, site-wide). Then call " +
         "window.lcMaya.signup() from wherever a signup succeeds (your sign-up " +
         "success handler / welcome page). It auto-attributes the signup to the " +
-        "exact post that drove it. No-code option: just tell me when someone " +
-        "signs up and I'll log it.",
+        "exact post that drove it. Two optional extras: pass the 'how did you " +
+        "hear about us' answer as window.lcMaya.signup('signup','reddit'), and " +
+        "call window.lcMaya.activated() when a signed-up user comes back or hits " +
+        "the main action — that proves they STUCK, not just signed up. No-code " +
+        "option: just tell me when someone signs up or comes back and I'll log it.",
     }),
     { status: 200, headers: { "content-type": "application/json" } }
   );
