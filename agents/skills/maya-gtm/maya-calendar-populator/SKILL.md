@@ -1,6 +1,6 @@
 ---
 name: maya-calendar-populator
-description: After deep-research subagents land target threads + accounts + drafts, build TODAY's turn-key plan — a tight set of calendar events on Google Calendar (provisional, status="draft") mapped to the operator's current phase of the PLAYBOOK arc — plus a light, non-binding high-level arc of where the week is heading. Each event links to a target thread + draft, carries openUrl + draftText, and cites the playbook rule. Not a 7-day dump and not a fixed week: today is the deliverable, the morning cron owns each following day.
+description: After deep-research subagents land target threads + accounts + drafts, build TODAY's turn-key plan — a tight set of events in Maya's today's-posts queue (shown in the app's Plan tab; provisional, status="draft") mapped to the operator's current phase of the PLAYBOOK arc — plus a light, non-binding high-level arc of where the week is heading. Each event links to a target thread + draft, carries openUrl + draftText, and cites the playbook rule. Not a 7-day dump and not a fixed week: today is the deliverable, the morning cron owns each following day.
 ---
 
 # maya-calendar-populator
@@ -9,7 +9,9 @@ description: After deep-research subagents land target threads + accounts + draf
 
 The deep-research subagents (reddit_research, x_research, etc.) surface specific target threads + accounts + drafts. This skill turns those raw artifacts into **today's turn-key plan** — the specific, time-blocked work the operator can actually do *today*, each event one-tap-actionable — plus a light, non-binding high-level arc of where the week is heading (a shape, NOT a scheduled 18-25-event artifact). Each event has a title, what-to-do, an `openUrl` (one-tap deep link) + `draftText` (verbatim paste), success metric, why-it-matters citation.
 
-Without this skill, the target list lives in the database and nobody acts on it. With it, the operator opens Google Calendar and sees a clear, doable day.
+Without this skill, the target list lives in the database and nobody acts on it. With it, the operator opens the Plan tab and sees a clear, doable day.
+
+**Maya posts; she doesn't hand out paste cards by default.** For the auto-post channels (X / LinkedIn / Instagram / YouTube), the event is an INTERNAL queue item — `maya-publisher` shapes it and posts it for the founder via `post_to_channel` once it reaches its scheduled time. The founder doesn't tap-paste those. The `openUrl` + `draftText` paste recipe is the FALLBACK path: it's what Maya hands the founder when a channel isn't connected, and it's the body of the one-tap CONFIRM card for Reddit and TikTok (which are always confirm-to-post, never auto). So every event still carries a self-contained, paste-ready recipe, but on connected auto-post channels that recipe is Maya's posting instruction to herself, not a chore she pushes to the founder.
 
 **Today is the deliverable; there is no fixed week.** The onboarding pass produces the research + voice profile + ONE turn-key first move for today — not a rolling seven-day plan. From the next morning on, the `morning_brief` cron (7am) OWNS day-to-day planning: every morning it reads the stored ICP knowledge (`get_my_foundation` + per-channel `icpKnowledge`) and per-channel warmth (`channelWarmthJson`), intersects them with what's live on the bet channels that day, and builds THAT day's events. `midday_pulse` ADDs any fresh hot-strike thread that breaks after the brief (always ADD, never replace existing events). So build a strong, immediately-actionable **today** and sketch the arc loosely — the discovered threads are most valuable *now* and the daily loop keeps the plan current. Strong for today; the morning cron owns tomorrow.
 
@@ -19,7 +21,7 @@ Without this skill, the target list lives in the database and nobody acts on it.
 - IF the `morning_brief` cron ran THEN build TODAY's events from stored ICP knowledge + per-channel warmth against what's hot this morning. The morning cron owns the day; this skill is its calendar-writing arm, not a from-scratch rebuild of a fixed week.
 - IF the `midday_pulse` cron surfaced a fresh T1 hot-strike thread THEN ADD it into today (never replace existing events) — the catch-before-peak insert.
 - IF format-market-fit detected (Phase 4 cadence change) THEN re-balance today's cadence (more metric posts, fewer build updates, etc.).
-- IF operator approves a draft via Telegram THEN that drafted_content's calendar event flips from `draft` → `scheduled` (and gets pushed to Google Calendar via Sprint 9).
+- IF operator approves a draft via Telegram THEN that drafted_content's event flips `draft` → `queued` for the posting path (`maya-publisher`). There is no Google Calendar push.
 
 ## Required reads
 
@@ -57,6 +59,8 @@ A founder with 100 users who's already launched does NOT need the cold-start aut
 
 ### 2. Per-platform cadence — research REFERENCE to reason from (2026), not a script
 
+**CROSS-CHANNEL POST CEILING (hard).** Original POSTS are rationed: **~1/day/channel MAX (~4-5/week), ≤1 product-pitch/week.** Replies/comments are the engine (**≥7-10 substantive engagement actions/day/active channel**, almost all of them comments/replies). Never schedule multiple original posts in one day on a single channel — a day with two+ original posts on one channel is over-prescribed and reads as spam. The leveraged, ban-safe move is always the reply, not the post.
+
 **These are research-backed reference numbers — what tends to work per platform — NOT quotas I fill mechanically.** I reason from them and adapt to the founder's stage + what my agents found. The numbers below (and the "typical cadence" lines per platform) are the evidence base; the actual plan is my judgment over it.
 
 **THE FLOOR (verified deep-research 2026 — this is the non-negotiable shape, the mix flexes by stage):**
@@ -78,11 +82,11 @@ The durable PRINCIPLE: engagement-heavy, active daily, substantive every time, p
 - Active cadence (once warmed, ~100+ karma): **5-7 substantive comment-reply events/day** in target subs + **1 original post** (in r/SideProject or the bet sub, respecting the 9:1 promo ratio + 7-14 day gap per sub).
 
 **Hacker News** ([source](https://www.myriade.ai/blogs/when-is-it-the-best-time-to-post-on-show-hn), [source](https://syften.com/blog/hacker-news-marketing/)):
-- Show HN: ONE per project, one-shot. Best windows Tue/Wed/Thu 14:00-17:00 UTC (7-10am PT / 10am-1pm ET); contrarian: Sun midnight PT (lower competition).
+- **HN is research-only.** Maya does NOT auto-schedule HN activity. A Show HN is **rare, manual, one-tap-confirm only — never auto-scheduled**: ONE per project, one-shot, surfaced to the founder as a confirm card they tap, never queued as an auto-post. Best windows Tue/Wed/Thu 14:00-17:00 UTC (7-10am PT / 10am-1pm ET); contrarian: Sun midnight PT (lower competition).
 - Breakout threshold: 30+ votes. Below = invisible to most.
 - Comments any weekday — engaging on others' Show HN / Ask HN threads is high-leverage. Aim for substantive (no plug) comments where your expertise applies. (Deep-research couldn't pin an exact HN daily-comment number — treat HN cadence as judgment: substantive comments wherever the founder's expertise genuinely applies, quality over a target count.)
 - 72h post-launch window is critical: reply to every comment, every upvote.
-- Phase 2 weekly cadence: **4-6 HN comment events** (on relevant Show HN / Ask HN threads in the niche) + (when ModelHub is ready) **1 Show HN launch** in week 3-4 (NOT week 1).
+- Phase 2 weekly cadence: **4-6 HN comment events** (on relevant Show HN / Ask HN threads in the niche) + (when ModelHub is ready) **1 Show HN launch** in week 3-4 (NOT week 1) — and that Show HN is surfaced as a **one-tap-confirm card, never an auto-scheduled post**.
 
 **X / Twitter** ([source](https://www.tweetarchivist.com/how-often-to-post-on-twitter-2025), [source](https://posteverywhere.ai/blog/how-the-x-twitter-algorithm-works)):
 - Optimal frequency: **3-5 posts per day** for accounts under 5K followers (build-in-public mode). Reply weight is 150x like weight in 2026 algorithm.
@@ -155,7 +159,7 @@ Every event MUST link to its source:
 
 ### 5. Status semantics
 
-All events default to `status: "draft"`. They are visible to the operator but NOT yet on Google Calendar. The operator reviews via Telegram or mission board, approves, and only then does the calendar-write happen (Sprint 9 path) flipping to `status: "scheduled"`.
+All events default to `status: "draft"` — visible to the operator in the Plan tab. From there they move **draft → queued → posting → published** via the Zernio publish path (`maya-publisher`), not a calendar write. There is no scheduled-to-Google-Calendar step. The operator reviews via Telegram or the Plan tab, approves, and the event flips to `queued` for the posting path; `maya-publisher` then takes it `posting` and, once the 24h re-poll confirms it landed, `published` (Reddit/TikTok flip to `needs_confirm` first and only post on the founder's tap).
 
 ### 6. Voice contract (per SOUL.md)
 
@@ -226,9 +230,9 @@ propose_calendar({
 
 **Turn-key is server-enforced.** For `reply_window`, `soft_launch_post`, and `hard_launch_anchor` events, the calendar write REJECTS (or flags `needs_fix`) any event missing BOTH an `openUrl` (http(s) one-tap link) AND a non-trivial `draftText` paste block. Build both from `get_my_target_threads` (the thread's deep link + its `draftReply`) — if you can't, the event is not actionable: fix the thread or drop it, don't emit a bare title. `warmup_block` / `engagement_block` are exempt (they intentionally carry no product link) but still need a self-contained recipe.
 
-### Every event lives in Convex and works WITHOUT Google Calendar
+### Every event lives in Convex and is read from the Plan tab
 
-These events are written to Convex (`gtmCalendarEvents`) via `propose_calendar`. **That write is the deliverable — Google Calendar is an optional mirror, not the source of truth.** The operator reads and acts on every event from the morning brief and the HQ mission board whether or not they ever connect Google Calendar. So each `description` must be fully self-contained: the operator should be able to do the whole task from the text of the event alone, on their phone, with no calendar app and no follow-up question. Never write an event that only makes sense once it's on a Google Calendar (e.g. "see calendar for link"). If Google Calendar IS connected, the same self-contained event simply also appears there (Sprint 9 path) — it loses nothing when it isn't.
+These events are written to Convex (`gtmCalendarEvents`) via `propose_calendar`. **That write is the deliverable.** The operator reads and acts on every event from the morning brief, the Telegram cards, and the app's Plan tab (the today's-posts queue). So each `description` must be fully self-contained: the operator should be able to understand the whole task from the text of the event alone, on their phone, with no follow-up question. Never write an event that only makes sense somewhere else (e.g. "see calendar for link") — the Plan tab is the surface, and on connected auto-post channels Maya is the one acting on the event, not the founder.
 
 ### The description IS a hands-off recipe (the operator has a day job)
 
@@ -269,7 +273,7 @@ Default durations:
 ## Failure modes
 
 - **No target threads landed.** This skill is no-op. Surface to user: "Deep research found nothing usable — need to widen the search OR pick a different channel." Push retry to next research cycle.
-- **Calendar OAuth not connected.** Events still get drafted (status:draft). Tell user to connect Google Calendar via onboarding so the scheduled events show up there too. The Telegram nudge cron still works without Google Calendar.
+- **A posting channel is not connected.** Events still get drafted (status:draft) and show in the Plan tab. For a queued auto-post channel that isn't connected, Maya can't post for the founder yet — she falls back to handing them the paste-ready `openUrl` + `draftText` and defers the reconnect nudge to `maya-publisher` / `maya-connection-health`. The Telegram nudge cron and the Plan tab both still work regardless of connection state.
 - **Phase 1 floor unmet on ALL channels** (every `channelWarmthJson[channel].state` is cold). Pure warmup mode — today's plan is all warmup_block + engagement_block + reply_window. Maya is explicit that the warmup PERIOD runs longer than one day: "Your accounts need 2-4 weeks of warmup before launch. Here's today's warm-up plan; I'll build tomorrow's each morning."
 - **Operator overrides Phase 1 + insists on launching.** Document the override per AGENTS.md operating contract rule 1. Schedule the launch event anyway with a warning in the description: "Operator override — launching despite Phase 1 floor not met. Recover path: if engagement <1%, repositioning required."
 

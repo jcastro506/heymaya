@@ -107,81 +107,29 @@ This skill produces structured data, not draft prose. Slop-critic is NOT invoked
 // Source: agents/skills/maya-gtm/maya-approval-publisher/SKILL.md
 const ENTRY_1_maya_approval_publisher = `---
 name: maya-approval-publisher
-description: Handle approval → publish flow. Composio for LinkedIn/Reddit; manual handoff for TikTok / IG / X-without-API.
+description: DEPRECATED — superseded by maya-publisher (Zernio post_to_channel).
 ---
 
-# maya-approval-publisher
+# maya-approval-publisher — DEPRECATED
 
-## Purpose
+> **Do not invoke this skill.** Publishing is owned end-to-end by **\`maya-publisher\`**.
 
-The ONE place where Maya turns approved drafts into live posts. Enforces the approval gate, picks the right write-path (Composio for some platforms, manual handoff for others), refuses to publish when PLAYBOOK rules say not to.
+This was a Composio-based manual-handoff publisher. It competed with \`maya-publisher\` (the Zernio path), which is the single, correct publish path. Keeping two publishers alive is exactly the drift the ideal-product plan warns against.
 
-## When to invoke
+Publishing on all 6 channels is owned end-to-end by **\`maya-publisher\`** — X / LinkedIn / Instagram / YouTube auto-publish via \`post_to_channel\`; Reddit / TikTok are one-tap-confirm. Composio is no longer the publish path. Approval gating + the slop re-check live in \`maya-publisher\`'s gates plus the server-side \`approvalPublishing.ts\` guard.
 
-- IF a calendar event is at scheduled time AND \`approvalState === "APPROVED"\` THEN publish.
-- IF operator explicitly says "post this now" AND draft is approved + slop-clean THEN publish.
-- NEVER from heartbeat.
-- NEVER for TikTok / IG Stories / X-without-API write — manual handoffs (tiktok.md § 12).
+## Where its responsibilities went
 
-## Required reads
+| Old responsibility here | Now owned by |
+| --- | --- |
+| Approval gate before publish | \`maya-publisher\` |
+| Pre-publish slop re-check | \`maya-publisher\` |
+| Phase-gate refusal (don't launch on a cold account) | \`maya-calendar-populator\` (the launch-precondition gate) |
+| Channel write-path routing / publish | \`maya-publisher\` (\`post_to_channel\`, ban-safety + connection-health + cost gates) |
 
-1. APP.md, GTM.md.
-2. **PLAYBOOK.md § 6 (anti-slop last check), § 8 (when NOT to launch), § 9 (rules 9.5/9.6/9.7/9.9/9.22).**
-3. playbook/{channel}.md.
-4. MEMORY.md.
+## If something still points here
 
-## Decision rules
-
-1. **Pre-publish slop re-check.** Invoke \`maya-slop-critic\` ONE more time on final draft. Drafts can drift between approval and publish. Anything other than \`approved\` = refuse, move event to \`NEEDS REVISION\`.
-2. **Phase-gate refusal.** IF \`channelStrategy.primaryPhase === "phase_1"\` AND draft is mode=OFFER THEN refuse (rule 9.5). Cold-start is BUILD + ENGAGE only.
-3. **Audience-minimum refusal.** IF channel doesn't meet Phase 1 minimums THEN refuse with \`refusalReason: "rule_9.3"\`.
-4. **Hard-launch precondition (rules 9.6/9.7/9.22).** Verify: 5-piece kit complete, first-50 DM list seeded, ≥1 unprompted testimonial. Any missing → refuse with \`pushBy7Days: true\`.
-5. **Day-of-week refusal.** Mon/Fri/weekend + not explicit override → flag + require re-confirmation.
-6. **Channel-write-path routing.**
-   - **LinkedIn** → Composio publish (text + document + first-comment URL).
-   - **Reddit** → Composio post + auto-post pre-drafted first comment within 60 sec.
-   - **X** → write only if operator on Basic/PAYG/Pro tier AND opt-in; else manual handoff.
-   - **TikTok** → ALWAYS manual handoff.
-   - **Instagram Stories / Reels** → manual handoff.
-   - **Gmail / Calendar** → Composio (operational, not social).
-7. **URL-in-first-comment for strict subs.** r/Entrepreneur / r/startups / r/SaaS → URL in first comment.
-8. **Cross-post block.** Identical text to >1 channel in <7 days → refuse. Each channel needs a rewrite.
-9. **Operator-override documented.** In MEMORY.md with predicted failure mode.
-10. **Post-publish state machine.** On success: write back to calendar event (approvalState = PUBLISHED), record \`publishedAt\` + live URL, register results-reviewer follow-up at T+2h, T+24h, T+7d.
-
-## Output schema
-
-\`\`\`ts
-interface PublishResult {
-  status: "published" | "manual_handoff_sent" | "refused" | "deferred";
-  liveUrl?: string;
-  channel: string;
-  refusalReason?: string;
-  manualHandoffPacket?: {
-    deliveredTo: "imessage" | "whatsapp" | "sms" | "email";
-    pasteableDraft: string;
-    attachmentLinks: string[];
-    postingInstructions: string[];
-  };
-  postPublishFollowups: Array<{ triggerAtUtc: string; skill: "maya-results-reviewer" }>;
-  rulesCited: string[];
-}
-\`\`\`
-
-## Failure modes
-
-- **Composio token expired / OAuth disconnected.** \`refused\` + reconnect URL. Don't silently retry.
-- **Platform-API write failure (e.g. LinkedIn 401, Reddit AutoMod removal).** Capture error code/body verbatim. Mark event \`NEEDS REVISION\`. No auto-retry without operator approval.
-- **Slop-drift between approval and publish.** Refuse, return to slop-critic.
-- **PLAYBOOK § 8 hard-refuse case detected late.** Refuse with rule 9.14.
-
-## Cost discipline
-
-Composio: 1-2 calls per publish. 0 ScrapeCreators. 1 main_maya (low thinking — orchestration). 1 slop-critic invocation. Timeout 5 min.
-
-## Anti-slop check
-
-INVOKES \`maya-slop-critic\` as final gate. \`postingInstructions\` strings in manual-handoff packets pass slop-critic too: write "post at 9am Tue, first comment URL", not "Excited to schedule your launch! 🚀".
+Any skill, cron, or prompt that references \`maya-approval-publisher\` should call \`maya-publisher\` instead. This stub exists so a stale reference fails loud (a pointer to the live skill) rather than silently invoking a dead Composio publish path.
 `;
 
 // Source: agents/skills/maya-gtm/maya-calendar-plan-builder/SKILL.md
@@ -225,7 +173,7 @@ Any skill, cron, or prompt that references \`maya-calendar-plan-builder\` should
 // Source: agents/skills/maya-gtm/maya-calendar-populator/SKILL.md
 const ENTRY_3_maya_calendar_populator = `---
 name: maya-calendar-populator
-description: After deep-research subagents land target threads + accounts + drafts, build TODAY's turn-key plan — a tight set of calendar events on Google Calendar (provisional, status="draft") mapped to the operator's current phase of the PLAYBOOK arc — plus a light, non-binding high-level arc of where the week is heading. Each event links to a target thread + draft, carries openUrl + draftText, and cites the playbook rule. Not a 7-day dump and not a fixed week: today is the deliverable, the morning cron owns each following day.
+description: After deep-research subagents land target threads + accounts + drafts, build TODAY's turn-key plan — a tight set of events in Maya's today's-posts queue (shown in the app's Plan tab; provisional, status="draft") mapped to the operator's current phase of the PLAYBOOK arc — plus a light, non-binding high-level arc of where the week is heading. Each event links to a target thread + draft, carries openUrl + draftText, and cites the playbook rule. Not a 7-day dump and not a fixed week: today is the deliverable, the morning cron owns each following day.
 ---
 
 # maya-calendar-populator
@@ -234,7 +182,9 @@ description: After deep-research subagents land target threads + accounts + draf
 
 The deep-research subagents (reddit_research, x_research, etc.) surface specific target threads + accounts + drafts. This skill turns those raw artifacts into **today's turn-key plan** — the specific, time-blocked work the operator can actually do *today*, each event one-tap-actionable — plus a light, non-binding high-level arc of where the week is heading (a shape, NOT a scheduled 18-25-event artifact). Each event has a title, what-to-do, an \`openUrl\` (one-tap deep link) + \`draftText\` (verbatim paste), success metric, why-it-matters citation.
 
-Without this skill, the target list lives in the database and nobody acts on it. With it, the operator opens Google Calendar and sees a clear, doable day.
+Without this skill, the target list lives in the database and nobody acts on it. With it, the operator opens the Plan tab and sees a clear, doable day.
+
+**Maya posts; she doesn't hand out paste cards by default.** For the auto-post channels (X / LinkedIn / Instagram / YouTube), the event is an INTERNAL queue item — \`maya-publisher\` shapes it and posts it for the founder via \`post_to_channel\` once it reaches its scheduled time. The founder doesn't tap-paste those. The \`openUrl\` + \`draftText\` paste recipe is the FALLBACK path: it's what Maya hands the founder when a channel isn't connected, and it's the body of the one-tap CONFIRM card for Reddit and TikTok (which are always confirm-to-post, never auto). So every event still carries a self-contained, paste-ready recipe, but on connected auto-post channels that recipe is Maya's posting instruction to herself, not a chore she pushes to the founder.
 
 **Today is the deliverable; there is no fixed week.** The onboarding pass produces the research + voice profile + ONE turn-key first move for today — not a rolling seven-day plan. From the next morning on, the \`morning_brief\` cron (7am) OWNS day-to-day planning: every morning it reads the stored ICP knowledge (\`get_my_foundation\` + per-channel \`icpKnowledge\`) and per-channel warmth (\`channelWarmthJson\`), intersects them with what's live on the bet channels that day, and builds THAT day's events. \`midday_pulse\` ADDs any fresh hot-strike thread that breaks after the brief (always ADD, never replace existing events). So build a strong, immediately-actionable **today** and sketch the arc loosely — the discovered threads are most valuable *now* and the daily loop keeps the plan current. Strong for today; the morning cron owns tomorrow.
 
@@ -244,7 +194,7 @@ Without this skill, the target list lives in the database and nobody acts on it.
 - IF the \`morning_brief\` cron ran THEN build TODAY's events from stored ICP knowledge + per-channel warmth against what's hot this morning. The morning cron owns the day; this skill is its calendar-writing arm, not a from-scratch rebuild of a fixed week.
 - IF the \`midday_pulse\` cron surfaced a fresh T1 hot-strike thread THEN ADD it into today (never replace existing events) — the catch-before-peak insert.
 - IF format-market-fit detected (Phase 4 cadence change) THEN re-balance today's cadence (more metric posts, fewer build updates, etc.).
-- IF operator approves a draft via Telegram THEN that drafted_content's calendar event flips from \`draft\` → \`scheduled\` (and gets pushed to Google Calendar via Sprint 9).
+- IF operator approves a draft via Telegram THEN that drafted_content's event flips \`draft\` → \`queued\` for the posting path (\`maya-publisher\`). There is no Google Calendar push.
 
 ## Required reads
 
@@ -282,6 +232,8 @@ A founder with 100 users who's already launched does NOT need the cold-start aut
 
 ### 2. Per-platform cadence — research REFERENCE to reason from (2026), not a script
 
+**CROSS-CHANNEL POST CEILING (hard).** Original POSTS are rationed: **~1/day/channel MAX (~4-5/week), ≤1 product-pitch/week.** Replies/comments are the engine (**≥7-10 substantive engagement actions/day/active channel**, almost all of them comments/replies). Never schedule multiple original posts in one day on a single channel — a day with two+ original posts on one channel is over-prescribed and reads as spam. The leveraged, ban-safe move is always the reply, not the post.
+
 **These are research-backed reference numbers — what tends to work per platform — NOT quotas I fill mechanically.** I reason from them and adapt to the founder's stage + what my agents found. The numbers below (and the "typical cadence" lines per platform) are the evidence base; the actual plan is my judgment over it.
 
 **THE FLOOR (verified deep-research 2026 — this is the non-negotiable shape, the mix flexes by stage):**
@@ -303,11 +255,11 @@ The durable PRINCIPLE: engagement-heavy, active daily, substantive every time, p
 - Active cadence (once warmed, ~100+ karma): **5-7 substantive comment-reply events/day** in target subs + **1 original post** (in r/SideProject or the bet sub, respecting the 9:1 promo ratio + 7-14 day gap per sub).
 
 **Hacker News** ([source](https://www.myriade.ai/blogs/when-is-it-the-best-time-to-post-on-show-hn), [source](https://syften.com/blog/hacker-news-marketing/)):
-- Show HN: ONE per project, one-shot. Best windows Tue/Wed/Thu 14:00-17:00 UTC (7-10am PT / 10am-1pm ET); contrarian: Sun midnight PT (lower competition).
+- **HN is research-only.** Maya does NOT auto-schedule HN activity. A Show HN is **rare, manual, one-tap-confirm only — never auto-scheduled**: ONE per project, one-shot, surfaced to the founder as a confirm card they tap, never queued as an auto-post. Best windows Tue/Wed/Thu 14:00-17:00 UTC (7-10am PT / 10am-1pm ET); contrarian: Sun midnight PT (lower competition).
 - Breakout threshold: 30+ votes. Below = invisible to most.
 - Comments any weekday — engaging on others' Show HN / Ask HN threads is high-leverage. Aim for substantive (no plug) comments where your expertise applies. (Deep-research couldn't pin an exact HN daily-comment number — treat HN cadence as judgment: substantive comments wherever the founder's expertise genuinely applies, quality over a target count.)
 - 72h post-launch window is critical: reply to every comment, every upvote.
-- Phase 2 weekly cadence: **4-6 HN comment events** (on relevant Show HN / Ask HN threads in the niche) + (when ModelHub is ready) **1 Show HN launch** in week 3-4 (NOT week 1).
+- Phase 2 weekly cadence: **4-6 HN comment events** (on relevant Show HN / Ask HN threads in the niche) + (when ModelHub is ready) **1 Show HN launch** in week 3-4 (NOT week 1) — and that Show HN is surfaced as a **one-tap-confirm card, never an auto-scheduled post**.
 
 **X / Twitter** ([source](https://www.tweetarchivist.com/how-often-to-post-on-twitter-2025), [source](https://posteverywhere.ai/blog/how-the-x-twitter-algorithm-works)):
 - Optimal frequency: **3-5 posts per day** for accounts under 5K followers (build-in-public mode). Reply weight is 150x like weight in 2026 algorithm.
@@ -380,7 +332,7 @@ Every event MUST link to its source:
 
 ### 5. Status semantics
 
-All events default to \`status: "draft"\`. They are visible to the operator but NOT yet on Google Calendar. The operator reviews via Telegram or mission board, approves, and only then does the calendar-write happen (Sprint 9 path) flipping to \`status: "scheduled"\`.
+All events default to \`status: "draft"\` — visible to the operator in the Plan tab. From there they move **draft → queued → posting → published** via the Zernio publish path (\`maya-publisher\`), not a calendar write. There is no scheduled-to-Google-Calendar step. The operator reviews via Telegram or the Plan tab, approves, and the event flips to \`queued\` for the posting path; \`maya-publisher\` then takes it \`posting\` and, once the 24h re-poll confirms it landed, \`published\` (Reddit/TikTok flip to \`needs_confirm\` first and only post on the founder's tap).
 
 ### 6. Voice contract (per SOUL.md)
 
@@ -451,9 +403,9 @@ propose_calendar({
 
 **Turn-key is server-enforced.** For \`reply_window\`, \`soft_launch_post\`, and \`hard_launch_anchor\` events, the calendar write REJECTS (or flags \`needs_fix\`) any event missing BOTH an \`openUrl\` (http(s) one-tap link) AND a non-trivial \`draftText\` paste block. Build both from \`get_my_target_threads\` (the thread's deep link + its \`draftReply\`) — if you can't, the event is not actionable: fix the thread or drop it, don't emit a bare title. \`warmup_block\` / \`engagement_block\` are exempt (they intentionally carry no product link) but still need a self-contained recipe.
 
-### Every event lives in Convex and works WITHOUT Google Calendar
+### Every event lives in Convex and is read from the Plan tab
 
-These events are written to Convex (\`gtmCalendarEvents\`) via \`propose_calendar\`. **That write is the deliverable — Google Calendar is an optional mirror, not the source of truth.** The operator reads and acts on every event from the morning brief and the HQ mission board whether or not they ever connect Google Calendar. So each \`description\` must be fully self-contained: the operator should be able to do the whole task from the text of the event alone, on their phone, with no calendar app and no follow-up question. Never write an event that only makes sense once it's on a Google Calendar (e.g. "see calendar for link"). If Google Calendar IS connected, the same self-contained event simply also appears there (Sprint 9 path) — it loses nothing when it isn't.
+These events are written to Convex (\`gtmCalendarEvents\`) via \`propose_calendar\`. **That write is the deliverable.** The operator reads and acts on every event from the morning brief, the Telegram cards, and the app's Plan tab (the today's-posts queue). So each \`description\` must be fully self-contained: the operator should be able to understand the whole task from the text of the event alone, on their phone, with no follow-up question. Never write an event that only makes sense somewhere else (e.g. "see calendar for link") — the Plan tab is the surface, and on connected auto-post channels Maya is the one acting on the event, not the founder.
 
 ### The description IS a hands-off recipe (the operator has a day job)
 
@@ -494,7 +446,7 @@ Default durations:
 ## Failure modes
 
 - **No target threads landed.** This skill is no-op. Surface to user: "Deep research found nothing usable — need to widen the search OR pick a different channel." Push retry to next research cycle.
-- **Calendar OAuth not connected.** Events still get drafted (status:draft). Tell user to connect Google Calendar via onboarding so the scheduled events show up there too. The Telegram nudge cron still works without Google Calendar.
+- **A posting channel is not connected.** Events still get drafted (status:draft) and show in the Plan tab. For a queued auto-post channel that isn't connected, Maya can't post for the founder yet — she falls back to handing them the paste-ready \`openUrl\` + \`draftText\` and defers the reconnect nudge to \`maya-publisher\` / \`maya-connection-health\`. The Telegram nudge cron and the Plan tab both still work regardless of connection state.
 - **Phase 1 floor unmet on ALL channels** (every \`channelWarmthJson[channel].state\` is cold). Pure warmup mode — today's plan is all warmup_block + engagement_block + reply_window. Maya is explicit that the warmup PERIOD runs longer than one day: "Your accounts need 2-4 weeks of warmup before launch. Here's today's warm-up plan; I'll build tomorrow's each morning."
 - **Operator overrides Phase 1 + insists on launching.** Document the override per AGENTS.md operating contract rule 1. Schedule the launch event anyway with a warning in the description: "Operator override — launching despite Phase 1 floor not met. Recover path: if engagement <1%, repositioning required."
 
@@ -1273,7 +1225,7 @@ The bookend to the morning brief. The operator knows what they did today and how
 
 ## When to invoke
 
-- Native cron at 20:00 operator-local. Self-scheduled via \`cron add\` after foundation completes.
+- Fired by the \`0012_evening_recap\` cron (20:00 operator-local), shipped deterministically in jobs.json. NOT self-scheduled — Maya never adds crons.
 - NEVER from a heartbeat.
 
 ## Skip-when-empty (the recap is conditional, not unconditional)
@@ -1438,7 +1390,7 @@ The operating model. Before Maya can do daily work, she needs an answer to: who 
 - IF \`get_my_foundation({})\` returns \`buyerMap: null\` THEN spawn the full foundation pass.
 - IF the monthly cron fires (1st of month, 6am operator local) THEN spawn the full foundation pass. **The monthly re-foundation is SILENT on progress** — no replay of onboarding narration, no progress pings; the running arc goes to \`post_activity\` (web). Send AT MOST ONE Telegram, and ONLY if the month-over-month diff is operator-worthy (a bet channel changed, a new buyer pocket opened). No diff worth acting on → no message. **Also re-ingest the founder's newest posts** (re-run Phase 0) → \`save_voice_profile\` with the refreshed fingerprint + refresh \`save_style_exemplars\` per bet channel, so voice + native exemplars stay current as the founder evolves. **Also refresh PLATFORM_ALGO.md** (shared platform-algorithm intelligence): run a \`web_search\` pass per active platform for the current algorithm + what's-working, update its sections, and append a dated line to its Refresh log. This keeps format/timing/draft decisions current month-over-month.
 - IF the operator pivots positioning ("we actually serve X now, not Y") THEN spawn refresh.
-- NEVER *start* a brand-new foundation from a continuous heartbeat — a fresh foundation is a budgeted event, not a tick. BUT a foundation that already started and stalled (a \`foundation_started_at:\` line exists with no \`foundation_completed_at:\`) MUST be **resumed** by the heartbeat watchdog (see HEARTBEAT.md "foundation-completion watchdog") — advancing one phase per tick until threads + drafts + calendar land. Resuming an in-flight pass is self-healing, not a new budgeted event. The boot turn spawns the first workers and yields; if its turn ends before the full chain lands, the heartbeat is what carries it to completion. Without this, foundation stalls at strategy and the operator hears nothing after the hello — the exact failure this guards against.
+- NEVER *start* a brand-new foundation from a continuous heartbeat — a fresh foundation is a budgeted event, not a tick. BUT a foundation that already started and stalled MUST be **resumed** by the heartbeat watchdog (see HEARTBEAT.md "foundation-completion watchdog"), which checks the DURABLE lifecycle (\`get_agent_lifecycle({})\` — \`foundationComplete\` false, work partially done) and acquires the lease (\`acquire_foundation_lease({})\`) before advancing one phase per tick until the research + voice + draft pool land and the strategy goes out. Lifecycle state lives in Convex via those tools — NEVER in MEMORY.md (it's an ephemeral scratchpad, wiped on restart). Resuming an in-flight pass is self-healing, not a new budgeted event. The boot turn spawns the first workers and yields; if its turn ends before the full chain lands, the heartbeat is what carries it to completion. Without this, foundation stalls at strategy and the founder hears nothing after the hello — the exact failure this guards against.
 
 ## Required reads
 
@@ -1476,10 +1428,10 @@ The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.*
 5. As each worker completes or self-terminates (returns NO_REPLY), evaluate quality against the gates below.
 6. If a worker has been in \`processing\` state for longer than the work warrants in Maya's judgment (a small buyer-map sweep shouldn't take as long as a deep competitive scan), \`subagents kill\` it. The lane unblocks immediately — verified from OpenClaw source.
 7. If a worker returned thin output, \`subagents steer\` it with a refinement message — preserves accumulated context. Do not respawn unless steering fails.
-8. Once Maya judges all 5 outputs meet the bar, the STRATEGY phase is done — but **do NOT announce synthesis yet, and do NOT mark foundation complete.** Call \`log_action({ kind: "strategy_complete", summary })\` and proceed straight into Phase 2 (discovery). **The synthesis message is Phase 4 — it goes out ONLY after a voice profile + foundation rows + the ONE day-1 calendar event have actually landed** (Phase 3 + the hard completion gate in BOOT.md: re-check \`get_my_foundation({})\` shows a saved \`voiceProfileJson\` + real \`gtmTargetThreads\` + \`gtmDraftedContent\` + EXACTLY ONE day-1 \`gtmCalendarEvents\` before telling the operator the picture + their first move is ready). Announcing after strategy = the operator gets a plan with no first move — the exact failure this guards against.
+8. Once Maya judges all 5 outputs meet the bar, the STRATEGY phase is done — but **do NOT announce synthesis yet, and do NOT mark foundation complete.** Call \`log_action({ kind: "strategy_complete", summary })\` and proceed straight into Phase 2 (discovery). **The synthesis message is Phase 4 — it goes out ONLY after the voice profile + the research pool have actually landed** (Phase 2/2.5 + the completion gate in BOOT.md: re-check \`get_my_foundation({})\` shows a saved \`voiceProfileJson\` + real \`gtmTargetThreads\` + \`gtmDraftedContent\` + the buyer map / channel scorecard before telling the founder the full picture + the plan). There is NO day-1 calendar event — onboarding seeds the research + the draft pool; the daily \`morning_brief\` posts the first plan tomorrow morning. Announcing after only the strategy phase = a plan with no real research behind it — the exact failure this guards against.
 
 ### Progress while I work — web view, not the phone
-The running play-by-play of the pass (first signal → channel call → real prospect found → first move built) goes to the **web Mission Control view via \`post_activity\`**, NOT to Telegram. Each \`post_activity\` entry carries a real, specific, grounded finding (looked everywhere → narrowed with reasoning → found their people → building the move) in plain manager voice, no internal terms. The founder watches the work happen on the web; the phone stays quiet.
+The running play-by-play of the pass (first signal → channel call → real prospect found → plan taking shape) goes to the **web Mission Control view via \`post_activity\`**, NOT to Telegram. Each \`post_activity\` entry carries a real, specific, grounded finding (looked everywhere → narrowed with reasoning → found their people → shaping the plan) in plain manager voice, no internal terms. The founder watches the work happen on the web; the phone stays quiet.
 
 **Onboarding Telegram budget is exactly 2: the hello and the synthesis.** The ONLY exception is the never-silent floor below: if the pass runs long (~10+ min), Maya may send AT MOST ONE short optional mid-pass Telegram line so the founder knows it's still moving — one grounded line (a real finding + "still building, ping you when it's ready"), never a stream. Default is silence on the phone between hello and synthesis.
 
@@ -1524,9 +1476,9 @@ This is Maya's judgment, not a checklist. Numbers below are not thresholds — t
 
 If any output reads thin to Maya's judgment, steer the worker for more. If steering doesn't help, ship with the gap surfaced honestly to the operator ("competitive map landed light on substitutes — I'll keep watching as I do daily research"). Maya decides what "enough" means — there is no minimum count.
 
-## Phases 2 / 2.5 / 3 — discovery, composition, single first move (same pass)
+## Phases 2 / 2.5 — discovery + composition (seed the pool; no posting today)
 
-Foundation does NOT stop at the operating model. The operator waited ~10-15 min for research; making them wait again after a "yes draft replies" is broken UX. **In the same pass, before sending synthesis, Maya extends foundation into ONE actionable first move for today** — not a week. The split: per-item **workers find AND draft** reply targets (one self-contained POST sequence per thread — the reliable shape, and the pool the daily cron draws from going forward), **Maya curates** the drafts editorially (Phase 2.5), then **Maya builds the single highest-value first move** from the landed threads+drafts (Phase 3). Composition lives in the per-item worker loop, not a single inline end-of-run loop — that loop was what got skipped, leaving an empty calendar. **There is no onboarding week — the daily \`morning_brief\` (7am) owns day-to-day planning from tomorrow on.**
+Foundation does NOT stop at the operating model. The research has to land a real **pool** of reply targets + drafts so tomorrow's first daily plan is grounded, not generic. The split: per-item **workers find AND draft** reply targets (one self-contained draft per thread — the reliable shape, and the pool the daily cron draws from going forward), then **Maya curates** the drafts editorially (Phase 2.5). Composition lives in the per-item worker loop, not a single inline end-of-run loop. **Onboarding does NOT post anything and does NOT build a day-1 event** — it seeds the pool + the per-channel read; the daily \`morning_brief\` (7am, starting tomorrow) is what builds and posts each day's plan from that pool + what's hot that morning. There is no onboarding week and no "first move today."
 
 ### Phase 2 — DISCOVERY + DRAFT (workers find threads AND draft the reply, one POST per item)
 
@@ -1534,13 +1486,13 @@ For each channel marked \`bet: true\` in \`gtmChannelScorecard\`, spawn the matc
 
 **Each bet channel worker MUST ALSO call \`save_style_exemplars(channel, [...])\` with 5-10 verbatim native posts** it pulled from that channel (real top posts in the community, with \`{platform, community, verbatim, why, capturedAt}\` per exemplar) AND \`save_foundation_channel_scorecard({ channel, ..., icpKnowledge: {...} })\` — these are the per-channel native-register reference the daily cron + voice-matcher (Anchor B) read back every day. A bet channel that lands threads but no \`styleExemplarsJson\` / \`icpKnowledge\` is incomplete — steer until both land.
 
-**Discovery depth — workers must not do a single shallow sweep and stop.** A first-pass search with one intent phrase is a starting point, not a finished sweep. Workers must: broaden their intent probes across multiple phrasings of the same pain, paginate through results by judgment until the signal stops being useful, and try adjacent communities / hashtags / subreddits if the first community is thin. They stop broadening when they've genuinely covered the buyer-pain landscape well enough to power a strong first move today AND seed the pool the daily cron draws from going forward — Maya judges this when she reads the pool, not by a count. **Phase 2.5 cannot start until Maya judges the pool is deep enough** — a handful of threads from one subreddit is not a pool; coverage across real buyer communities is.
+**Discovery depth — workers must not do a single shallow sweep and stop.** A first-pass search with one intent phrase is a starting point, not a finished sweep. Workers must: broaden their intent probes across multiple phrasings of the same pain, paginate through results by judgment until the signal stops being useful, and try adjacent communities / hashtags / subreddits if the first community is thin. They stop broadening when they've genuinely covered the buyer-pain landscape well enough to seed a strong pool the daily plan draws from going forward — Maya judges this when she reads the pool, not by a count. **Phase 2.5 cannot start until Maya judges the pool is deep enough** — a handful of threads from one subreddit is not a pool; coverage across real buyer communities is.
 
 **STAY ON THE PRODUCT — do not drift to a tangential angle.** Every thread + draft must be about the founder's ACTUAL product and its real use case, targeting the people who'd actually use it. A plant-care app's buyers are plant owners in plant communities (r/houseplants, #planttok) — NOT "forgetful people" in ADHD/productivity communities just because the product happens to send reminders. The founder's one-liner ("reminders tuned to my plants") is a feature of a *plant* product; it is **not** a license to pitch it as an "ADHD habit tracker" to r/ADHD_Programmers. If a thread isn't about the product's actual job-to-be-done, it is NOT a target, no matter how tempting the adjacent-pain match looks. When in doubt, anchor on the \`gtmBuyerMap\` ICP + the product's category, not a clever reframe. (This drift — plant app → ADHD habit tracker — is a real failure that shipped; it happens when the pass synthesizes on thin data before the real buyer research lands. Patience + this rule together prevent it.)
 
-Worker task string (Phase 2) — include the operator's voice summary + SOUL voice contract inline so the worker can draft native. **CRITICAL — the task string MUST spell out that the worker SAVES each finding by calling the typed tool (save_target_thread, save_draft, propose_calendar, …), or it hands data back as text and the database stays empty (the live failure 2026-05-30). Verified: leaf research workers DO have the typed tools.** Compose the task string like this:
+Worker task string (Phase 2) — include the operator's voice summary + SOUL voice contract inline so the worker can draft native. **CRITICAL — the task string MUST spell out that the worker SAVES each finding by calling the typed tool (save_target_thread, save_draft, …), or it hands data back as text and the database stays empty (the live failure 2026-05-30). Verified: leaf research workers DO have the typed tools.** Compose the task string like this:
 \`\`\`
-You have the typed tools (save_target_thread, save_draft, propose_calendar,
+You have the typed tools (save_target_thread, save_draft,
 research_reddit, research_x, research_hn, scrape_creators, …) — call them
 directly. (At startup you'll see a notice that ~7 tools were removed — those
 are cron/sessions_*/subagents spawn-lifecycle tools you don't need; your
@@ -1579,8 +1531,9 @@ calling each tool as you go (never batch at the end):
 Do 1→4 per thread before the next. Skip not-worth-it threads (set the action;
 don't draft). Focus on buyers about to try something new — frustration with
 current tools, asking for alternatives, comparing options. Those convert.
-Do NOT build a calendar — you build the thread + draft pool; Maya builds the
-single day-1 first move from it (Phase 3). No propose_calendar in this worker.
+Do NOT build a calendar and do NOT post anything — you build the thread +
+draft POOL. The daily morning plan draws from this pool starting tomorrow.
+No propose_calendar in this worker.
 
 ALSO, before finishing, persist the per-channel ICP knowledge for <channel>:
   - save_style_exemplars("<channel>", [ 5-10 verbatim native top posts you
@@ -1611,40 +1564,19 @@ Workers saved thread + draft per item. Maya is now the editorial gate over what 
 
 This keeps the editorial bar without the brittle "Maya drafts all N replies inline" loop. Worker output is a first draft; Maya's judgment is the gate.
 
-### Phase 3 — TODAY'S SINGLE FIRST MOVE (one turn-key event — NOT a week)
+### Phase 2.5 completeness gate — the POOL is deep enough (no day-1 event)
 
-Threads + drafts + per-channel ICP knowledge have landed reliably (Phase 2/2.5). **Onboarding's terminal output is ONE turn-key first move the founder can do today — not a rolling 7-day week.** No week is built here; the daily \`morning_brief\` (7am, tomorrow on) owns day-to-day planning from the stored ICP knowledge + what's hot that morning. Building a frozen seven days at onboarding is exactly the artifact this product no longer ships.
+Threads + drafts + per-channel ICP knowledge have landed (Phase 2/2.5). **Onboarding builds NO calendar event and posts nothing** — its job is to seed a real pool the daily plan draws from. Maya does NOT compose a "first move for today" and does NOT call \`propose_calendar\` here. The daily \`morning_brief\` (7am, starting tomorrow) is what turns the pool into a posted plan each day.
 
-Maya picks the **single highest-value first move** for the founder's stage from the curated pool:
-- **Pre-launch / no audience** → the warmup/reply move the research says is the leveraged cold-start play: one strong reply_window on the best live thread Maya pulled (a buyer venting about exactly this pain, fresh today), OR — if the founder's bet channel is cold per \`channelWarmthJson\` — one warmup_block / substantive engagement_block (no product link) to start the arc safely.
-- **Has traction / users** → one reply_window or soft_launch_post on the highest-intent live thread (a buyer comparing tools / asking for an alternative).
+Before Phase 4 (the synthesis), Maya confirms the **pool is deep enough** for tomorrow's plan to be strong:
+- a saved voice profile (\`voiceProfileJson\`, or confidence 'low' if they had no handles to learn from),
+- real \`gtmTargetThreads\` across the bet channels (not a handful from one subreddit — coverage across the buyer communities),
+- a \`gtmDraftedContent\` draft for each strong reply target (the pool the morning brief picks from),
+- per-bet-channel \`icpKnowledge\` + the buyer map / channel scorecard saved.
 
-Build it ONE of two ways:
-1. **Inline** (cheap, single event): Maya composes the one event herself from the best landed thread and calls \`propose_calendar({ researchJobId, events: [ <ONE event> ] })\`. A single event at the tail of the turn is reliable in a way a whole week was not — the historical skip was the multi-event week build, not one event.
-2. **Or spawn a small worker** with the same one-event task if Maya wants it run to completion off-turn — but the output is still EXACTLY ONE event.
+**The pool gate is the backstop.** Maya does NOT claim the picture + plan are ready (Phase 4) until she re-reads \`get_my_foundation({})\` and sees the voice profile + a real thread/draft pool + the per-channel read. If it's thin, the research didn't land — steer the workers for more; never send a plan with no real research behind it.
 
-The one event is a full hands-off recipe:
-
-\`\`\`
-WHAT: <action title>
-LINK: <thread URL>
-OPEN (one-tap): <the thread's deep link / intent URL — see TOOLS.md "Deep links / intent URLs">  (openUrl)
-WHY: <one sentence — why this thread, why now>
-YOUR REPLY (verbatim — copy/paste/edit/post):
-<the draftReply already on the thread row>  (draftText)
-VOICE NOTES: <one sentence — what to tweak if you want>
-AFTER YOU POST: <reply to me — I'll track 72h>
-SUCCESS TARGET: <e.g. 1 OP reply or 5+ upvotes within 4 hours>  (successTarget)
-TIME: <minutes — usually 10-15>
-\`\`\`
-
-\`propose_calendar\` stores it as \`draft\` (it does NOT push to Google Calendar; that waits for the operator's yes). Pass the structured \`openUrl\` + \`draftText\` + \`successTarget\` so the event is server-validated turn-key. A move Maya describes in text but never calls \`propose_calendar\` for does not exist — she MUST call the tool.
-
-**Turn-key is the product promise:** the one event has an exact LINK + a paste-ready TEXT (or "first draft — tweak to sound like you") + WHEN + WHY. A vague item ("engage on Reddit") is a failure — the founder must be able to open the calendar, tap, paste, post, with zero thinking.
-
-**The first-move gate is the backstop.** Maya does NOT claim the picture + first move are ready (Phase 4) until she re-reads \`get_my_foundation({})\` and sees a saved voice profile + foundation rows + **EXACTLY ONE day-1 \`gtmCalendarEvents\` event**. If it's missing, the chain didn't land — re-build/steer; never narrate a first move that isn't there.
-
-ONLY after the voice profile + foundation rows + the one day-1 event are genuinely landed does Maya proceed to Phase 4 (the synthesis message). The operator's "approve" reply IS the final gate, not a trigger for more spawning.
+ONLY after the voice profile + the pool + the per-channel read are genuinely landed does Maya proceed to Phase 4 (the synthesis message — beat 3 of the opening: full research + plan explained + "I start posting for you tomorrow morning"). The founder's "approve" reply is the final gate; the posting itself begins with tomorrow's \`morning_brief\`.
 
 ## Synthesis message — what the operator gets after the FULL pass
 
@@ -1675,51 +1607,47 @@ deadline, fit to their stage, e.g. "100 installs in your first 30 days" /
 "your first 25 signups this month". Ask them to confirm it. Then ACTUALLY
 SAVE it with set_north_star — a plan with no target is not a plan.]
 
-Your first move — today: [the ONE turn-key action, named concretely — e.g.
-"reply to this exact thread in r/LocalLLaMA where someone's quitting Ollama —
-I already wrote it in your voice, it's in your plan, takes ~10 min."]. One
-move, not a list — the right first rep for where you're at.
+How this works from here: starting tomorrow morning, I run your plan every
+day — I write the posts and replies in your voice and post them for you on the
+channels you've connected (your X, LinkedIn, Instagram, YouTube go out
+automatically; for Reddit and TikTok I'll line it up and you tap once to send,
+so you never get flagged). You'll see the whole day in your app anytime, and
+I'll text you when something needs you.
 
-It's in your plan in the app, ready to act on: the exact thread, a paste-ready
-reply I wrote in your voice, and a time. Starting tomorrow I'll send you a plan
-each morning, built from what's hot that day and where your buyers actually
-are — so you always know your next move without thinking about it.
+To let me post for you, connect your accounts — takes a minute: [tell them how,
+in plain words — e.g. "I'll send you the link to connect them"]. The more you
+connect, the more I can run for you.
 
-Want me to drop today's move onto your Google Calendar so it's right in your
-day? Say go. First — tell me if I've got your buyer, channels, or the approach
-wrong; easy to redirect now, before I lock it in.
+First though — tell me if I've got any of this wrong: your buyer, the channels,
+or the approach. Way easier to redirect now, before I start. If it's good, I'll
+get to work and you'll see your first posts go out tomorrow morning.
 \`\`\`
-(Do NOT paste a literal URL — say "in your plan / in the app." I don't fabricate links.)
+(Do NOT paste a literal URL — say "I'll send you the link." I don't fabricate links. NO "first move today" — there is no posting today; I research today, start posting tomorrow morning.)
 
-Plain text. No headers. No "Excited to share." Lead with: who's buying (+ a real one in their words) → where they live → THE STAGE-FIT STRATEGY in plain words → the ONE turn-key first move for today → the daily-plan promise (a plan each morning) → the steering promise. The strategy line is DERIVED from this founder's situation (never a template — pre-launch earns authority first; traction-stage pushes the product), stated so they understand the logic and can push back. Do NOT promise a "week" or a "first week" — onboarding delivers the read + their voice captured + ONE move for today; the daily morning cron is where planning lives from tomorrow on. Do NOT hand them a backward inventory of what I built ("5 competitors, 5 hooks, 5 accounts") — that's my back office, not their plan.
+Plain text. No headers. No "Excited to share." All in plain, non-technical language the founder actually understands — never internal terms (no "buyer map," "channel scorecard," "ICP," tool names, file names). Lead with: who's buying (+ a real one in their words) → where they live → THE STAGE-FIT STRATEGY in plain words → the goal → how it works from here (**I post for you, starting tomorrow morning**) → the connect-your-accounts ask → the steering invite. The strategy line is DERIVED from this founder's situation (never a template — pre-launch earns authority first; traction-stage pushes the product), stated so they understand the logic and can push back. **This is BEAT 3 of the opening — the full research + plan, explained, ending with "I start posting for you tomorrow morning."** Do NOT propose a posting move to do "today" — there is no posting today; research today, post tomorrow. Do NOT promise a "week" or a "first week" — the daily morning plan is where day-to-day lives from tomorrow on. Do NOT hand them a backward inventory of what I built ("5 competitors, 5 hooks, 5 accounts") — that's my back office, not their plan.
 
-### If the first move isn't built yet (honest-partial — never go silent)
+### If the research isn't fully landed yet (honest-partial — never go silent)
 
-The full synthesis above assumes the voice profile + foundation rows + the one day-1 event all landed. If the watchdog has been carrying the pass and the **strategy layer is solid but the day-1 move is still landing** after a reasonable window, do NOT stay silent and do NOT fake a ready move. Send the **strategy now** — who's buying (+ a real one in their words), where they live and where they don't, the stage-fit play — and be honest that the first move is still landing:
+The full synthesis above assumes the voice profile + the research (who's buying, where they are, the per-channel read) all landed. If the watchdog has been carrying the pass and the **strategy is solid but some research is still landing** after a reasonable window, do NOT stay silent and do NOT fake certainty. Send the **strategy now** — who's buying (+ a real one in their words), where they live and where they don't, the stage-fit play — and be honest that you're still finishing the deep read:
 
-> "Here's the read + the play. Your buyer is [X], they live on [channels], and the move is [stage-fit strategy]. I'm locking in your first move now — I'll ping the moment it's ready to act on."
+> "Here's the read + the play. Your customer is [X], they spend time on [channels], and here's how I'll get in front of them: [stage-fit strategy]. I'm finishing the deep dive on a couple of channels now, then I start posting for you tomorrow morning."
 
-This delivers the substantive thinking the instant it's solid (what the operator actually wants the moment research is done) without claiming a move that isn't there yet. Mark it: append \`plan_proposed_at: <ISO>\` (strategy delivered) but **withhold \`foundation_completed_at:\`** until the one day-1 event truly lands — the watchdog keeps driving Phases 2/2.5/3 to completion, then sends the short "your first move's ready" follow-up. Silence after the hello is never acceptable; the read plus an honest "first move landing" always beats it.
+This delivers the substantive thinking the instant it's solid (what the founder actually wants the moment research is done). Mark it with \`mark_lifecycle({ marker: "strategy_delivered" })\` if available, but **do NOT call \`mark_lifecycle({ marker: "foundation_complete" })\`** until the full research has landed and you've sent the complete plan — the watchdog keeps driving the research to completion. Silence after the hello is never acceptable; the read plus an honest "still finishing" always beats it.
 
 ### Strategy approval gate
 
-This synthesis is a **proposal, and I invite a pivot** — it leads with the strategy (who's buying / where to play / the wedge / the North Star), not just a task list. The close invites real pushback on the *direction*, not just event swaps ("tell me if I've got your buyer or the channels wrong — easy to redirect now").
+This synthesis is a **proposal, and I invite a pivot** — it leads with the strategy (who's buying / where to play / the wedge / the North Star) and ends with "I start posting for you tomorrow morning." The close invites real pushback on the *direction* ("tell me if I've got your buyer or the channels wrong — easy to redirect now, before I start").
 
 - When I send the synthesis, call \`set_strategy_approval({ state: "proposed" })\`, and also propose the North Star via \`set_north_star({ ... })\` (adaptive to entry mode). **Also tag the app \`archetype\`** in that same call (e.g. "dev-tool" / "consumer-mobile" / "b2b-saas" / "creator-tool") — cheap to set, and it's how this app joins the cross-tenant playbook. If a cross-tenant archetype playbook exists for this archetype, warm-start from it as a prior (then confirm against this app's own research — priors inform, they don't override).
-- The draft calendar events are stored as \`draft\` — they do NOT hit the operator's Google Calendar until approval (the existing calendar gate). So proposing costs nothing irreversible.
-- On the operator's **approval**, call \`set_strategy_approval({ state: "approved" })\`, then push the calendar (\`approve_calendar({})\`). On **pushback**, call \`set_strategy_approval({ state: "iterating" })\`, revise the strategy (re-weight channels / re-frame the POV), and re-propose — don't dig in. Launches specifically are never auto-scheduled; they're proposed and wait for an explicit yes.
+- Nothing is posted during onboarding — there is no posting today, so proposing costs nothing irreversible. The actual posting starts tomorrow morning via the daily plan.
+- On the founder's **approval**, call \`set_strategy_approval({ state: "approved" })\`, then \`mark_lifecycle({ marker: "foundation_complete" })\`. On **pushback**, call \`set_strategy_approval({ state: "iterating" })\`, revise the strategy (re-weight channels / re-frame the POV), and re-propose — don't dig in.
 
-## Phase 5 — push to Google Calendar ONLY after the operator says yes
+## Phase 5 — confirm accounts are connected → posting begins tomorrow
 
-The draft calendar event lives in \`gtmCalendarEvents\` (status \`draft\`) and shows in the operator's plan (HQ web view) the moment Phase 3 saves it — so the operator can SEE today's first move immediately. It does **NOT** touch the operator's real Google Calendar until the operator approves. The push is the one thing the "yes" gates; the move itself is already built + visible.
+There is NO Google Calendar and NO posting today. Onboarding ends at the plan being explained + the founder asked to connect their accounts. The actual work starts tomorrow morning when the daily plan runs.
 
-- **Do NOT call \`approve_calendar\` before the operator says yes.** A first launch move is proposed and waits for an explicit go — never auto-pushed onto someone's real calendar. (The server also refuses the push unless strategy state is \`approved\`, so a premature call no-ops — but the rule is: ask first.)
-- On the operator's **"yes / go / add it"** → call \`set_strategy_approval({ state: "approved" })\`, then \`approve_calendar({})\`. Response cases:
-  1. **\`ok (pushed=N failed=M)\`** — events landed on Google Calendar. Confirm briefly: "added to your calendar."
-  2. **\`needs_oauth\`** — operator hasn't connected Google Calendar. Maya sends ONE message: *"To put these on your actual Google Calendar, connect it once here: \`<convex.site>/lc_maya/start_google_calendar_oauth\`. They're already in your plan either way — connecting just mirrors them into your calendar app."*
-  3. **\`ok (push failed)\`** — log it; tell the operator only if high-impact.
-
-The events persist in \`gtmCalendarEvents\` regardless of Google Calendar — the daily cadence reads from there, so the operator is never blocked on connecting Google Calendar.
+- After the founder approves, check what's connected with \`list_connected_accounts({})\` / \`get_connection_health({})\`. If channels they want me on aren't connected yet, ask them to connect (in plain words — "connect your X and LinkedIn so I can post for you; I'll send the link"). On the channels they DO connect, I post automatically from tomorrow; Reddit and TikTok stay one-tap so they never get flagged; anything not connected, I'll hand them paste-ready until they connect it.
+- The plan lives in their app (the Plan tab) so they can see the day anytime. The daily morning plan reads from there — the founder is never blocked, and there is no calendar to connect.
 
 ## Failure modes
 
@@ -1899,6 +1827,8 @@ description: Reply / DM / mention triage. For every inbound to an owned post, cl
 
 # maya-inbound-triage
 
+> **Scope:** triaging inbound on the founder's OWN posts. For replies/DMs on connected channels via the inbox (the Zernio inbox path — \`list_inbox\`, \`reply_to_comment\`, \`send_dm\`), use **\`maya-engagement-responder\`**.
+
 ## Purpose
 
 The founder shouldn't be scrolling through Reddit comments or X notifications. Every inbound — reply to an owned post, DM, mention — gets classified by Maya and surfaced as a one-liner with an action. Operator decides yes/no/edit, Maya handles the rest.
@@ -1957,7 +1887,7 @@ Draft reply (your voice):
 Reply / edit / skip?
 \`\`\`
 
-The operator types "reply" → Maya posts via \`publish_draft({ draftId })\`. "Edit" → Maya waits for the edited text. "Skip" → drop.
+The operator types "reply" → Maya posts the reply through the Zernio path (\`maya-publisher\` / \`reply_to_comment\`). "Edit" → Maya waits for the edited text. "Skip" → drop.
 
 For SUPPORTERS the surface is lighter:
 
@@ -2360,7 +2290,7 @@ The flagship operator-facing output. Every morning, the founder gets one Telegra
 
 ## When to invoke
 
-- Native cron schedules a daily trigger at 7am operator-local (operator timezone from USER.md). Maya self-schedules via \`cron add\`.
+- Fired by the \`0010_morning_brief\` cron (7am operator-local, operator timezone baked into jobs.json at deploy). Shipped deterministically — Maya never self-schedules or adds crons.
 - Operator manually requests ("what's the plan today?") — re-run synthesis with existing data, don't re-spawn workers unless data is >4h stale.
 - Hot-alert mid-day fires its own message via \`maya-continuous-research\` → not via this skill.
 
@@ -2432,7 +2362,7 @@ The single most important thing. Always cited. "Top priority: [URL] — replying
 
 ## What a full growth day actually looks like (the daily workload)
 
-A real growth day is NOT 1-2 items. **The floor is a MINIMUM of 10 substantive actions per day — every day, including week one.** Plus a post every other day or so once warm (cadence per channel). Maya builds today's plan to hit 10+ — but hits it the SAFE way: by SPREADING across the 2-3 bet channels and WEIGHTING to comments/replies (the low-ban-risk action), not posts. 10 thoughtful comments split across Reddit + TikTok + IG (e.g. 4 + 3 + 3) is safe and easy even for a brand-new account; 10 *posts* from a 3-day-old account is a ban. So the floor is real and non-negotiable, and ban-safety is preserved by HOW we hit it (spread + comment-weighted + value-only on cold channels), not by dropping below it. The ONE honest exception: if after a deep sweep there genuinely aren't 10 real T1/T2 targets across all bet channels today, say so plainly and steer the workers for more rather than padding with junk — but 10 is the number to actually reach, not a nice-to-have:
+A real growth day is NOT 1-2 items. **Floor: ≥7-10 engagement actions/day/active channel, almost ALL comments/replies (the leveraged, ban-safe move).** Original POSTS are rationed to **~1/day/channel MAX (~4-5/week), ≤1 product-pitch/week** — never a day of multiple original posts on one channel. Replies are the engine; posts are the exception. Maya builds today's plan to hit the engagement floor the SAFE way: by SPREADING across the 2-3 bet channels and WEIGHTING to comments/replies (the low-ban-risk action), not posts. 7-10 thoughtful comments per active channel is safe and easy even for a brand-new account; a stack of *posts* from a 3-day-old account is a ban. So the floor is real and non-negotiable, and ban-safety is preserved by HOW we hit it (spread + comment-weighted + value-only on cold channels), not by dropping below it. The ONE honest exception: if after a deep sweep there genuinely aren't enough real T1/T2 targets across the active channels today, say so plainly and steer the workers for more rather than padding with junk — but the engagement floor is the number to actually reach, not a nice-to-have:
 
 - **Volume RAMPS with account warmth — PER CHANNEL — this is the ban-safety floor, non-negotiable.** Ban-safety is our moat; our own cadence has to protect it. **Warmth is read from \`channelWarmthJson\` (via \`get_my_foundation\` / GTM.md), keyed per bet channel — NOT inferred from one global "account age".** Each channel carries its own \`state\` (\`new_needs_warmup\` → \`warming\` → \`ready\`/\`warm\`), \`accountAgeDays\`, and baseline (karma/followers/postCount). A brand-new Reddit/HN/X account (state \`new_needs_warmup\`) does FEWER — a handful of substantive comments and ZERO promotional/link activity — scaling up only as that channel warms. A channel already \`warm\`/\`ready\` goes straight to its full ramp THE SAME DAY a sibling channel is still cold. Never volume-spam a fresh account with links; that gets it shadowbanned and burns the channel. Maya reads \`channelWarmthJson[channel].state\` plus the warmup/clock-gating signals used by \`maya-calendar-populator\` (§ 8 account warmup gating, § 8b launch preconditions, Reddit karma floor) and caps each channel's count accordingly. A channel whose state is \`warming\` and "should" do 12 replies does 4-5, all pure substance.
 - **Quality always over volume.** A few genuinely-helpful, on-voice comments beat 15 generic ones. Never pad with low-tier (T3) threads to hit a count — if there are only 4 real T1/T2 targets today, today is a 4-target day, said honestly. Lazy/filler replies are a documented mistake (deboost + spam-detection risk); Maya would rather ship a smaller plan than a padded one.
@@ -2469,7 +2399,7 @@ Today's vetted T1/T2 threads → \`gtmCalendarEvent\`s written via \`propose_cal
 
 Calibrated to operator's available capacity (per USER.md). Maya doesn't pad to fill time or load up beyond what they can realistically do. If today's total runs heavy, she cuts the lowest-tier event. If the account is fresh, she cuts volume HARD regardless of signal — ban-safety wins over a big-looking day.
 
-Each event description follows the full hands-off recipe template from \`maya-calendar-populator\` (WHAT / LINK / WHY / YOUR REPLY / VOICE NOTES / SUCCESS TARGET / TIME / SOURCE), written to Convex \`gtmCalendarEvents\` so the operator can act on every one even when Google Calendar isn't connected.
+Each event description follows the full hands-off recipe template from \`maya-calendar-populator\` (WHAT / LINK / WHY / YOUR REPLY / VOICE NOTES / SUCCESS TARGET / TIME / SOURCE), written to the founder's Plan tab (the today's-posts queue) so they see the day; on connected channels Maya posts for them via \`maya-publisher\`, and the recipe is the fallback paste for unconnected channels + the confirm-card body for Reddit/TikTok.
 
 ### Every draft is voice-matched and ICP-grounded BEFORE it reaches the calendar (hard gate)
 
@@ -2524,7 +2454,7 @@ log_action({
 
 - **No fresh data.** If \`maya-continuous-research\` failed and the data is stale, send a holding message: "Pulling cleaner data — brief in 30 min" and re-trigger research. Don't ship a stale brief silently.
 - **Operator hasn't acknowledged 3 briefs in a row.** Add a closing line: "I notice you haven't opened the last 3 briefs. Want me to scale back the cadence, switch tone, or pause for a few days?"
-- **Calendar OAuth not connected.** Events still write to Convex \`gtmCalendarEvents\`. Brief notes: "5 events queued in HQ (your Google Calendar isn't connected yet — want me to walk you through it?)."
+- **Posting channel not connected.** Events still write to Convex \`gtmCalendarEvents\` and show in the Plan tab. For a queued channel that isn't connected, the brief notes plainly: "X is queued but your X isn't connected — connect it and I'll post for you; until then I'll hand you paste-ready drafts." Defer the reconnect to \`maya-connection-health\`.
 
 ## Cost discipline
 
@@ -2761,13 +2691,13 @@ Platform differences live in the prose below, not in branches. Maya reasons over
 1. **APP.md, GTM.md** — what we sell, the wrapped signup link, the bet channels.
 2. **USER.md** — operator voice, and the connected-accounts state (which channels are live, which need a reconnect).
 3. **PLAYBOOK.md § 6** — the anti-slop ban list (final pre-publish check).
-4. **TOOLS.md** — the typed tools \`post_to_channel\`, \`check_already_engaged\`, \`get_connection_health\`, \`list_connected_accounts\`. Never call a raw Zernio endpoint by name. Always go through Maya's typed tools.
+4. **TOOLS.md** — the typed tools \`post_to_channel\` and \`check_already_engaged\` (the publish path that exists today). Never call a raw Zernio endpoint by name. Always go through Maya's typed tools. Which channels are connected: read USER.md's "Connected accounts" section (live connection-health / inbox / analytics tools are a future build).
 
 ## The gates — fail-closed, in order, before every publish
 
 Maya runs these before shaping anything. If any gate fails, she does not publish.
 
-1. **Connection health.** Call \`get_connection_health\` for the channel. If the account is not connected or \`canPost\` is false (token expired or revoked), do NOT publish. Fall back to a deep-link draft the founder pastes by hand, and hand off to maya-connection-health for the reconnect nudge. A silent failure here is the worst outcome, so when in doubt, fall back to the paste-it draft rather than fire into a dead connection.
+1. **Connection check.** Confirm the channel is connected — read USER.md's "Connected accounts" section. If it isn't connected, do NOT auto-publish. Fall back to a deep-link draft the founder pastes by hand, and ask them to connect it so I can take it over. A silent failure here is the worst outcome, so when in doubt, fall back to the paste-it draft rather than fire into a channel that isn't connected. (The server \`outboundFirewall.ts\` enforces this independently.)
 2. **Plan caps.** Consult \`planFeaturesGtm\`: respect \`autoPostChannelCap\` (don't auto-post on a channel beyond the connected cap) and \`xUrlPostsSoftCap\` for X link-posts. These are fail-closed circuit-breakers, not paywalls. If a corrupt plan reads as caps-of-zero, Maya can still research and draft but cannot publish.
 3. **Dedup.** For any reply or comment, call \`check_already_engaged({platform, externalId, commentId?})\` BEFORE drafting. If Maya already engaged that thread or comment, do not draft a second reply. The server enforces one-reply-per-thread anyway, but checking first avoids wasted work.
 4. **Slop re-check.** Drafts drift between approval and publish. Run the final ban-list check (PLAYBOOK § 6). Anything that trips it goes back for revision, not out the door.
@@ -2825,7 +2755,7 @@ After publishing (or confirming, or falling back), Maya updates the calendar eve
 
 ## Cost discipline
 
-The dominant cost line is X link-posts at $0.20 each, so the X discipline above is the real lever. Per publish: one \`post_to_channel\` call, one \`check_already_engaged\` for replies, one \`get_connection_health\`, one slop-critic pass. Schedule the re-poll once. No polling loops.
+The dominant cost line is X link-posts at $0.20 each, so the X discipline above is the real lever. Per publish: one \`post_to_channel\` call, one \`check_already_engaged\` for replies, one connection check (USER.md read), one slop-critic pass. Schedule the re-poll once. No polling loops.
 
 ## Anti-slop check
 
@@ -3146,8 +3076,65 @@ Max 4 ScrapeCreators calls (1 per platform). Cache aggressively. 1 main_maya syn
 \`recommendedNextActions[].action\`, \`verdict\`, and \`diagnosisRationale\` strings are operator-facing. Run \`maya-slop-critic\`. Must not read "let's iterate and learn from this exciting first launch!" — must read "this was a void launch by rule 9.8; the format reached only the founder circle; we change channel or sharpen the hook within 14 days." Terse, honest, cited. The positioning-vs-distribution call must be equally blunt: "1,400 people saw this and 6 engaged — that's a messaging problem, not a reach problem. Posting it again won't change the answer; the framing has to change," vs "this got 40 views — it never had a chance. The message is untested; we fix the channel before we touch the copy." Never soften a positioning verdict into a distribution one to spare feelings.
 `;
 
+// Source: agents/skills/maya-gtm/maya-safety-critic/SKILL.md
+const ENTRY_27_maya_safety_critic = `---
+name: maya-safety-critic
+description: The mandatory outbound ban-safety FORCE gate that maya-publisher runs before any post ships. Blocks unsafe publishes, FORCES Reddit/TikTok to one-tap-confirm, and is one of the three verdicts (voice-match + slop + safety) every post must clear. Backed server-side by convex/gtmMaya/outboundFirewall.ts + approvalPublishing.ts.
+---
+
+# maya-safety-critic
+
+## Purpose
+
+This is the **mandatory pre-publish ban-safety gate** that lives INSIDE \`maya-publisher\`. Nothing ships to a live channel until it clears this gate. Where \`maya-slop-critic\` protects the founder's voice and \`maya-voice-matcher\` protects their register, \`maya-safety-critic\` protects their **account** — the one thing Maya never gambles. A misfired post can get a founder shadowbanned, rule-flagged, or permanently restricted on a channel, and that is a worse outcome than a missed post. So this gate is fail-closed: when in doubt, it blocks or downgrades to a human confirm, never fires.
+
+It is not a separate runtime step the founder sees. It is the safety verdict \`maya-publisher\` runs as part of its gate stack, backed server-side by \`convex/gtmMaya/outboundFirewall.ts\` (the outbound firewall) and \`convex/gtmMaya/approvalPublishing.ts\` (the voice/slop publish guard). Maya runs it on her side; the server enforces it independently so a prompt bug can never bypass it.
+
+## When to invoke
+
+- ALWAYS, inside \`maya-publisher\`, before any \`post_to_channel\`, reply, or DM ships — auto-post or confirmed.
+- It runs AFTER the draft has a voice-match score and a slop verdict, because the final ship decision is the union of all three (see below).
+- NEVER skipped. A publish path that reaches \`post_to_channel\` without this gate having passed is a defect.
+
+## The FORCE gate — what it does, fail-closed
+
+1. **FORCE Reddit/TikTok to one-tap-confirm — regardless of what was queued.** No matter what \`status\` a Reddit or TikTok event arrived with (even if a populator bug queued it as auto), this gate forces it to \`needs_confirm\`: Maya emits a one-tap Telegram confirm card with a real preview and posts ONLY on the founder's tap. Reddit because Zernio's own >50% failure rate (subreddit-rule violations) makes autonomous posting reckless; TikTok because its \`content_preview_confirmed\` + \`express_consent_given\` flags are legal human-consent requirements that may only be set true behind a genuine preview. The server forces these rows to \`needs_confirm\` too — this gate never relies on the server alone.
+
+2. **Block publishing to an unconnected channel.** This gate checks whether the channel is connected — read it from USER.md's "Connected accounts" section. If the channel isn't connected, it BLOCKS the auto-publish and routes to the deep-link paste fallback (the founder pastes it by hand) + asks them to connect it. Firing into a channel that isn't connected is a silent failure — the worst outcome — so this is hard-blocked. The server (\`outboundFirewall.ts\`) independently enforces this, so a prompt bug can't bypass it. (Live per-channel connection-health reads are a future tool; until then, USER.md + the server gate are the source of truth.)
+
+3. **Block a post that violates launch preconditions.** A product pitch or launch on a cold/un-warmed account is a guaranteed void and a ban risk. If the channel's warmth/launch preconditions (the launch-precondition gate in \`maya-calendar-populator\`) are not met — e.g. pitching the product on a brand-new account that hasn't earned authority — this gate BLOCKS it and hands back the warm-up work instead. It also holds the cross-channel post ceiling: original posts are rationed (~1/day/channel, ≤1 pitch/week), so a second same-day original post on one channel is blocked as over-posting.
+
+4. **Block on slop / off-voice (the union).** A post that trips the PLAYBOOK § 6 ban list, or whose voice-match score is below the \`0.7\` floor, does not ship — it goes back for a rewrite.
+
+## The three-verdict gate (a post ships only if ALL THREE pass)
+
+Every post that goes live must clear three independent verdicts. The publish is the AND of all three — any one failing holds the post:
+
+1. **Voice-match** — \`voiceMatchScore >= 0.7\` (from \`maya-voice-matcher\`). Below the floor → rewrite.
+2. **Slop** — \`slopCriticPassed === true\` (from \`maya-slop-critic\`, PLAYBOOK § 6). Trips the ban list → rewrite.
+3. **Safety** — this gate: connection healthy, launch preconditions met, post ceiling respected, channel not forced-to-confirm-and-unconfirmed.
+
+If all three pass on an auto-post channel (X / LinkedIn / Instagram / YouTube) and the connection is healthy and caps allow it, Maya auto-publishes via \`post_to_channel\`. If any fails, she does not.
+
+## Low voice-confidence routes to confirm, not auto
+
+When the voice-match confidence is low — a borderline \`voiceMatchScore\`, or a founder whose \`voiceProfile\` confidence is \`none\` (zero handles at onboarding, so the matcher passes-with-warning rather than hard-blocking) — this gate does NOT auto-publish even on an auto-post channel. It downgrades to a one-tap-confirm card so a human eyes the post before it goes out in their name. The fail-closed default for an uncertain voice is "let the founder confirm," never "fire it anyway."
+
+## Output
+
+A verdict \`maya-publisher\` consumes: \`pass\` (ship per its normal path), \`force_confirm\` (downgrade to a one-tap Telegram card — Reddit/TikTok always, plus low-voice-confidence and borderline cases), or \`block\` (do not ship — fall back to the paste draft and/or hand the warm-up work back, with the reason recorded verbatim). On a block or force, the reason is plain-language and never leaks internals to the founder.
+
+## Cost discipline
+
+No external API spend. One connection-health read, one launch-precondition check (both cached Convex reads), and the union of the already-computed voice + slop verdicts. Sub-second. Runs once per publish attempt, no loops.
+
+## Anti-slop check
+
+This gate's own founder-facing notes ("held your Reddit post for a tap" / "X isn't connected, here's the paste-ready draft") are plain manager dispatch — no "Safety alert! 🚨", no internals, no skill slugs.
+`;
+
 // Source: agents/skills/maya-gtm/maya-slideshow-strategist/SKILL.md
-const ENTRY_27_maya_slideshow_strategist = `---
+const ENTRY_28_maya_slideshow_strategist = `---
 name: maya-slideshow-strategist
 description: When a post wants a visual — a TikTok photo-mode slideshow or an IG carousel — I build it grounded in the founder's REAL screenshots, never stock images. I decide when a slideshow is the right format, pull the screenshots I already have (or ask once for the one I'm missing), generate each slide framing the real screen unchanged, and hand the finished set back for the founder to post. Strategy + format + hooks live here; the mechanics live in TOOLS.md.
 ---
@@ -3219,7 +3206,7 @@ Every slideshow passes the same bar as everything I send (maya-slop-critic + SOU
 `;
 
 // Source: agents/skills/maya-gtm/maya-slop-critic/SKILL.md
-const ENTRY_28_maya_slop_critic = `---
+const ENTRY_29_maya_slop_critic = `---
 name: maya-slop-critic
 description: The anti-slop / AI-tell critic. Apply PLAYBOOK § 6 banned-phrase list + banned-structure scan + LLM-judgment structural AI-tell pass + voice match + read-aloud test. Returns "rejected with reasons" on any trip. The bar is native-voice fidelity, NOT detector-dodging.
 ---
@@ -3346,7 +3333,7 @@ Self-referential: this skill IS the anti-slop check. The \`suggestion\` strings 
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-demo-strategist/SKILL.md
-const ENTRY_29_maya_tiktok_demo_strategist = `---
+const ENTRY_30_maya_tiktok_demo_strategist = `---
 name: maya-tiktok-demo-strategist
 description: Pick TikTok format (faceless screen-record vs founder-on-camera vs slideshow) given showability + constraints. Refuse if user can't post manually (V1 constraint).
 ---
@@ -3434,7 +3421,7 @@ This is a format/shot-plan strategist, not a niche miner. The TikTok channel's *
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-format-researcher/SKILL.md
-const ENTRY_30_maya_tiktok_format_researcher = `---
+const ENTRY_31_maya_tiktok_format_researcher = `---
 name: maya-tiktok-format-researcher
 description: Find what's working in the operator's niche on TikTok RIGHT NOW. Identify the format that clearly recurs across the strongest recent videos in the niche (tiktok.md § 7).
 ---
@@ -3566,7 +3553,7 @@ Structured taxonomy output, slop-critic NOT invoked. \`excerpt\` strings and eve
 `;
 
 // Source: agents/skills/maya-gtm/maya-ugc-system-advisor/SKILL.md
-const ENTRY_31_maya_ugc_system_advisor = `---
+const ENTRY_32_maya_ugc_system_advisor = `---
 name: maya-ugc-system-advisor
 description: ADVISORY-ONLY in V1. UGC creators are a Phase 4+ lever per PLAYBOOK. Refuse to recommend before format-market-fit.
 ---
@@ -3646,7 +3633,7 @@ Mostly structured refusals. \`refusalReason\` and \`gatesUnmet[].detail\` pass t
 `;
 
 // Source: agents/skills/maya-gtm/maya-viral-demo-moment-miner/SKILL.md
-const ENTRY_32_maya_viral_demo_moment_miner = `---
+const ENTRY_33_maya_viral_demo_moment_miner = `---
 name: maya-viral-demo-moment-miner
 description: Find showable app moments — before/after contrasts, screenshot sequences. Source: walkthrough + product UI.
 ---
@@ -3728,7 +3715,7 @@ interface ViralDemoBeatLibrary {
 `;
 
 // Source: agents/skills/maya-gtm/maya-voice-matcher/SKILL.md
-const ENTRY_33_maya_voice_matcher = `---
+const ENTRY_34_maya_voice_matcher = `---
 name: maya-voice-matcher
 description: Score how well a drafted reply/post/thread matches the operator's actual voice — drawn from their existing public writing (X/Reddit/LinkedIn) or onboarding answers as fallback. Combines with maya-slop-critic for a final ship-or-revise gate. Each gtmDraftedContent row gets a voiceMatchScore + slopCriticPassed flag.
 ---
@@ -3840,7 +3827,7 @@ Yes — this skill itself outputs operator-facing copy (when surfacing voice fee
 `;
 
 // Source: agents/skills/maya-gtm/maya-weekly-review/SKILL.md
-const ENTRY_34_maya_weekly_review = `---
+const ENTRY_35_maya_weekly_review = `---
 name: maya-weekly-review
 description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for the coming week if any, and a re-weighting of bet channels + per-channel warmth advancement (set_channel_warmth) by what actually converted. Does NOT regenerate a next-week rolling plan — the daily morning cron owns day-to-day planning.
 ---
@@ -3855,7 +3842,7 @@ Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks a
 
 ## When to invoke
 
-- Native cron Sunday 19:00 operator-local. Self-scheduled.
+- Fired by the deterministic \`0013_weekly_review\` cron (Sun 19:00 operator-local, in jobs.json). Maya never self-schedules or adds crons.
 - Operator manually requests ("how'd this week go?") — re-synthesize from existing data.
 
 ## Pre-conditions
@@ -3991,7 +3978,7 @@ Banned for this message: "Crushed it this week," "We're seeing momentum," "level
 `;
 
 // Source: agents/skills/maya-gtm/maya-x-founder-led-researcher/SKILL.md
-const ENTRY_35_maya_x_founder_led_researcher = `---
+const ENTRY_36_maya_x_founder_led_researcher = `---
 name: maya-x-founder-led-researcher
 description: Find X founder-led conversations, reply targets, hooks worth modeling, and accounts worth a private List.
 ---
@@ -4159,7 +4146,7 @@ Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before t
 `;
 
 // Source: agents/skills/maya-gtm/maya-youtube-researcher/SKILL.md
-const ENTRY_36_maya_youtube_researcher = `---
+const ENTRY_37_maya_youtube_researcher = `---
 name: maya-youtube-researcher
 description: Deep YouTube research via ScrapeCreators — mine comments + transcripts for buyer language, map the venue spread (niche channels, hashtags, Shorts trends), and judge whether YouTube earns a bet for this product. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
 ---
@@ -4243,14 +4230,15 @@ export const BUNDLED_LOCAL_SKILLS: readonly BundledLocalSkill[] = [
   { slug: "maya-publisher", workspacePath: "skills/maya-publisher/SKILL.md", body: ENTRY_24_maya_publisher },
   { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_25_maya_reddit_demand_researcher },
   { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_26_maya_results_reviewer },
-  { slug: "maya-slideshow-strategist", workspacePath: "skills/maya-slideshow-strategist/SKILL.md", body: ENTRY_27_maya_slideshow_strategist },
-  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_28_maya_slop_critic },
-  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_29_maya_tiktok_demo_strategist },
-  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_30_maya_tiktok_format_researcher },
-  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_31_maya_ugc_system_advisor },
-  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_32_maya_viral_demo_moment_miner },
-  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_33_maya_voice_matcher },
-  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_34_maya_weekly_review },
-  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_35_maya_x_founder_led_researcher },
-  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_36_maya_youtube_researcher },
+  { slug: "maya-safety-critic", workspacePath: "skills/maya-safety-critic/SKILL.md", body: ENTRY_27_maya_safety_critic },
+  { slug: "maya-slideshow-strategist", workspacePath: "skills/maya-slideshow-strategist/SKILL.md", body: ENTRY_28_maya_slideshow_strategist },
+  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_29_maya_slop_critic },
+  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_30_maya_tiktok_demo_strategist },
+  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_31_maya_tiktok_format_researcher },
+  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_32_maya_ugc_system_advisor },
+  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_33_maya_viral_demo_moment_miner },
+  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_34_maya_voice_matcher },
+  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_35_maya_weekly_review },
+  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_36_maya_x_founder_led_researcher },
+  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_37_maya_youtube_researcher },
 ];

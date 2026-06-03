@@ -44,7 +44,7 @@ export const landingMetadata: Metadata = {
   title:
     "Maya — the GTM agent for builders Cursor unlocked.",
   description:
-    "You shipped fast. Marketing is the wall. Maya finds where your users talk, drafts the replies, plans the week — so your signup graph stops being a flat line.",
+    "You shipped fast. Marketing is the wall. Maya finds where your customers are, writes AND posts the content for you, and proves what actually drove signups — so your signup graph stops being a flat line.",
 };
 
 export default function ClawLaunchLandingPage() {
@@ -327,7 +327,7 @@ function TikTokMockup() {
           </span>
         </div>
         <span className="font-mono text-[9.5px] uppercase tracking-[0.2em] opacity-50">
-          draft · for your approval
+          one-tap to post
         </span>
       </div>
       <div className="space-y-5 px-5 py-5 text-[13px]">
@@ -430,7 +430,7 @@ function InstagramMockup() {
           </span>
         </div>
         <span className="font-mono text-[9.5px] uppercase tracking-[0.2em] opacity-50">
-          draft · for your approval
+          auto-posting
         </span>
       </div>
       <div className="space-y-5 px-5 py-5 text-[13px]">
@@ -587,7 +587,7 @@ function Channels() {
             logo={<RedditLogo className="size-11" />}
             name="Reddit."
             tagline="Where your users are literally asking the question your app answers."
-            body="We find the thread the second it lands. We write a reply that sounds like a real person — not a marketer with a quota. You hit send."
+            body="We find the thread the second it lands. We write the reply so it sounds like a real person — and post it for you once you've okayed it."
             mockupLabel="Here's what we'd send to this thread →"
             mockup={<RedditMockup />}
           />
@@ -596,7 +596,7 @@ function Channels() {
             logo={<TikTokLogo className="size-11" />}
             name="TikTok."
             tagline="Where your app gets demoed — even if you hate being on camera."
-            body="We figure out the format that works for what you built — screen recording, voiceover, no-face. We write the script. We tell you what's worth filming and what to skip. You film the 30 seconds."
+            body="We figure out the format that works for what you built — screen recording, voiceover, no-face. We write the script. We tell you what's worth filming and what to skip. You film the 30 seconds — then I post it for you with one tap."
             mockupLabel="Here's the brief we'd hand you →"
             mockup={<TikTokMockup />}
           />
@@ -605,8 +605,8 @@ function Channels() {
             logo={<LinkedInLogo className="size-11" />}
             name="LinkedIn."
             tagline="Where the founders, operators, and buyers in your space actually hang out."
-            body="We find the people who'd care. We draft the post they'd actually stop scrolling for. We tell you who to follow back and who to ignore."
-            mockupLabel="Here's the post we'd draft →"
+            body="We find the people who'd care. We write the post they'd actually stop scrolling for — and publish it for you, in your voice. We tell you who to follow back and who to ignore."
+            mockupLabel="Here's the post we'd publish →"
             mockup={<LinkedInMockup />}
           />
 
@@ -614,7 +614,7 @@ function Channels() {
             logo={<InstagramLogo className="size-11" />}
             name="Instagram."
             tagline="Where the visual product earns its first audience."
-            body="We figure out the angle, draft the caption, queue the carousel order. We watch what's working in your niche and adjust week to week. No #motivation. Promise."
+            body="We figure out the angle, draft the caption, queue the carousel order — and post it for you. We watch what's working in your niche and adjust week to week. No #motivation. Promise."
             mockupLabel="Here's the brief we'd hand you →"
             mockup={<InstagramMockup />}
           />
@@ -623,8 +623,8 @@ function Channels() {
             logo={<XLogo className="size-11" />}
             name="X."
             tagline="Where build-in-public actually turns into your first users."
-            body="We find the conversations where your product fits. We write the reply, the founder post, the build update. We tell you when to jump in — not just to be loud."
-            mockupLabel="Here's the post we'd draft →"
+            body="We find the conversations where your product fits. We write the reply, the founder post, the build update — and post it for you. We tell you when to jump in — not just to be loud."
+            mockupLabel="Here's the post we'd publish →"
             mockup={<XMockup />}
           />
         </div>
@@ -651,13 +651,13 @@ const WEEK_ROWS: Array<{
     time: "7:00a",
     ping: true,
     title: "Your morning text",
-    body: "One short message: the two or three things worth doing today, and the single one that matters most. The writing's already done — you approve, you post, you get back to building.",
+    body: "One short message: the two or three things worth doing today, and the single one that matters most. The writing's already done — I post it for you. You just get back to building; anything that needs your tap (Reddit, your TikTok) I'll flag.",
   },
   {
     day: "Mon",
     time: "11:20a",
     title: "Replies, ready to send",
-    body: "She's been reading the places your future users hang out and found the conversations where they're describing the exact problem your app solves. Each one comes with a reply that sounds like you — not an ad. You just hit send.",
+    body: "She's been reading the places your future users hang out and found the conversations where they're describing the exact problem your app solves. Each one's a reply that sounds like you — and I post it for you on the channels you've connected.",
   },
   {
     day: "Tue",
@@ -756,7 +756,7 @@ const COMPARED_LIST: Array<{ her: string; body: string }> = [
   },
   {
     her: "Writes it — and makes the visuals — so it sounds like you",
-    body: "She studies how you talk and how each room talks, then hands you the reply you'd actually send — helpful first, never a pitch. Need a TikTok or carousel? She builds the slides from your real screenshots, no stock photos. You read it, tweak it, post it.",
+    body: "She studies how you talk and how each room talks, then hands you the reply you'd actually send — helpful first, never a pitch. Need a TikTok or carousel? She builds the slides from your real screenshots, no stock photos. You read it, tweak it if you want — I post it for you.",
   },
   {
     her: "Keeps you native, not nuked",
@@ -882,8 +882,8 @@ function FinalCTA() {
               <span className="cta-arrow">→</span>
             </Link>
             <p className="max-w-sm text-[15px] leading-[1.55] text-[#0a0a0a]/60">
-              Four-minute setup. Connect a Telegram bot and your calendar.
-              She takes it from there.
+              Four-minute setup. Connect Telegram and the channels you want
+              her on. She takes it from there.
             </p>
           </div>
         </RevealOnView>

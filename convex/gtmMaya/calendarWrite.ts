@@ -89,6 +89,11 @@ const EVENT_INPUT = v.object({
   // For reply events (engagement), so the dedup ledger keys correctly.
   targetExternalId: v.optional(v.string()),
   targetCommentId: v.optional(v.string()),
+  // #15 idempotency — optional stable identity. When the populator passes one
+  // (e.g. "day1_first_move"), a re-run UPSERTS rather than appending. When
+  // omitted, the server derives one from the thread/kind+day so watchdog
+  // re-entry still can't produce duplicate events.
+  dedupeKey: v.optional(v.string()),
 });
 
 // The 6 offered auto-post channels. A row naming anything else stays a draft.
@@ -178,6 +183,37 @@ function passesTurnKeyGate(event: {
   );
 }
 
+/**
+ * #15 — derive a stable dedupe identity for a calendar event when the populator
+ * didn't pass one explicitly. Same event identity on a re-run → same key → the
+ * persist mutation upserts instead of appending a duplicate. Tied to a thread
+ * when one exists (channel:commentOrThreadId), else to the kind + calendar day +
+ * a title slug so a same-day re-run of the same logical task collapses.
+ */
+function deriveEventDedupeKey(event: {
+  dedupeKey?: string;
+  channel?: string;
+  kind?: GtmCalendarEventKind;
+  startsAtMs: number;
+  title: string;
+  targetExternalId?: string;
+  targetCommentId?: string;
+}): string {
+  if (event.dedupeKey && event.dedupeKey.trim().length > 0) {
+    return event.dedupeKey.trim();
+  }
+  const channelOrKind = event.channel ?? event.kind ?? "event";
+  const threadAnchor = event.targetCommentId ?? event.targetExternalId;
+  if (threadAnchor) return `${channelOrKind}:${threadAnchor}`;
+  const isoDay = new Date(event.startsAtMs).toISOString().slice(0, 10);
+  const titleSlug = event.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return `${channelOrKind}:${isoDay}:${titleSlug}`;
+}
+
 function toIsoWithTimezone(ms: number, timezone: string | undefined): {
   dateTime: string;
   timeZone?: string;
@@ -258,6 +294,7 @@ export const storeProposedCalendarEvents = internalAction({
           sourceNote: event.sourceNote,
           status: routed.status,
           autoPostJson: routed.autoPostJson,
+          dedupeKey: deriveEventDedupeKey(event),
         }
       );
       draftIds.push(id);
@@ -405,9 +442,37 @@ export const persistGtmCalendarEventDraft = internalMutation({
       )
     ),
     autoPostJson: v.optional(v.string()),
+    // #15 idempotency — when set, a second persist with the same (agent,
+    // dedupeKey) returns the EXISTING row instead of appending a duplicate.
+    // The foundation pass passes "day1_first_move"; the daily pass passes
+    // "<channel>:<isoDay>:<threadId>". This is what stops watchdog re-entry
+    // from producing 9 day-1 events.
+    dedupeKey: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Id<"gtmCalendarEvents">> => {
     const now = Date.now();
+    if (args.dedupeKey) {
+      const existing = await ctx.db
+        .query("gtmCalendarEvents")
+        .withIndex("by_agent_dedupe", (q) =>
+          q.eq("agentId", args.agentId).eq("dedupeKey", args.dedupeKey)
+        )
+        .first();
+      if (existing) {
+        // Refresh the turn-key payload in place (a re-run may have a better
+        // draft) but never create a second event for this identity.
+        await ctx.db.patch(existing._id, {
+          title: args.title,
+          description: args.description,
+          openUrl: args.openUrl ?? existing.openUrl,
+          draftText: args.draftText ?? existing.draftText,
+          sourceNote: args.sourceNote ?? existing.sourceNote,
+          autoPostJson: args.autoPostJson ?? existing.autoPostJson,
+          updatedAt: now,
+        });
+        return existing._id;
+      }
+    }
     return await ctx.db.insert("gtmCalendarEvents", {
       accountId: args.accountId,
       agentId: args.agentId,
@@ -424,6 +489,7 @@ export const persistGtmCalendarEventDraft = internalMutation({
       draftText: args.draftText,
       sourceNote: args.sourceNote,
       autoPostJson: args.autoPostJson,
+      dedupeKey: args.dedupeKey,
       status: args.status ?? "draft",
       createdBy: "maya",
       createdAt: now,

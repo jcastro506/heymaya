@@ -162,6 +162,14 @@ export interface MayaGtmWorkspaceInput {
    * unknown/cold per channel).
    */
   channelWarmthJson?: string;
+  /**
+   * Which social channels the founder has connected (gtmAgents.connectedAccountsJson),
+   * so Maya knows who she can post for. Raw JSON array:
+   * [{ platform, username?, isActive?, needsReconnect?, ... }]. Rendered into
+   * USER.md's "Connected accounts" section. Undefined/empty = nothing connected
+   * yet (Maya hands paste-ready drafts until the founder connects).
+   */
+  connectedAccountsJson?: string;
 }
 
 import { BUNDLED_PLAYBOOK_ENTRIES } from "./bundledPlaybook";
@@ -216,7 +224,7 @@ const SKILLS = [
   // maya-foundation-research, populated → invoke maya-continuous-research
   // + maya-morning-brief. The 5-gate output critic runs over every
   // user-facing send. Cadence skills (evening/weekly) are read by their
-  // respective self-scheduled crons added in BOOT step 4.
+  // respective recurring crons shipped deterministically in jobs.json.
   "maya-foundation-research",
   "maya-continuous-research",
   "maya-output-critic",
@@ -224,6 +232,26 @@ const SKILLS = [
   "maya-evening-recap",
   "maya-weekly-review",
   "maya-inbound-triage",
+  // ─── Zernio "I POST for you" skill bundle ──────────────────────────
+  // The publishing layer Maya can actually run TODAY: she auto-posts to the
+  // connected channels (X/LinkedIn/IG/YouTube) via `post_to_channel` and routes
+  // Reddit/TikTok to one-tap-confirm. `post_to_channel` also posts replies
+  // (pass targetCommentId), so the replies-heavy daily floor runs through it.
+  // The ban-safety FORCE gate is server-enforced (outboundFirewall.ts).
+  "maya-publisher",
+  "maya-content-reviewer",
+  "maya-slideshow-strategist",
+  "maya-conversion-tracker",
+  // Ban-safety critic — the pre-publish guard (server-enforced gate).
+  "maya-safety-critic",
+  // DEFERRED (authored, NOT yet shipped): maya-engagement-responder /
+  // maya-performance-reader / maya-connection-health depend on Zernio read
+  // tools that aren't wired yet (list_inbox, reply_to_comment, send_dm,
+  // get_account_analytics, get_follower_stats, get_connection_health,
+  // list_connected_accounts) — and the analytics/inbox ones are operator-
+  // blocked on the Zernio add-ons (403 today). Ship them once those tools
+  // exist. Until then Maya posts via post_to_channel and reads results via
+  // get_my_attribution / get_my_recent_post_results (which DO exist).
 ] as const;
 
 export function buildMayaGtmWorkspace(
@@ -313,7 +341,7 @@ I am Maya. I work for ${input.accountEmail}. My only job is to get real signups 
 
    **Approval scope — when I DO ask the operator:**
    - **Publishing under their name** (the actual post hitting X / Reddit / HN). They post — I never auto-publish.
-   - **Touching their external connected accounts** (Google Calendar push, Gmail send, etc.). I ask once before pushing events to their actual calendar app.
+   - **Publishing to their connected social accounts under their name** (X / LinkedIn / IG / YouTube auto-post; Reddit / TikTok one-tap-confirm). I ask once before I start auto-posting; after that, auto-channels post on the agreed cadence.
    - **Strategic pivots** they signaled but I haven't internalized ("you mentioned dropping the Mac angle — want me to refresh foundation?")
    - **Voice corrections** ("I tried this tone in draft #3, dial back?")
 
@@ -331,7 +359,7 @@ I am Maya. I work for ${input.accountEmail}. My only job is to get real signups 
    - "Approve and I'll lock these in. Or tell me which to swap."
 
    Good (decided, executing, operator can override):
-   - "Today's locked. First action 9am. Pushing it to your Google Calendar — confirm?"
+   - "Today's locked. First post goes out 9am on X — I'll auto-post it once you've connected the account. Reply if you want it changed."
    - "Leading with wherever your buyers actually are — here's why. In ~15 min you'll see your first move on your calendar; from tomorrow I send a fresh plan each morning."
    - "Built today's move. The top one's the priority. Tell me if it needs swapping."
 
@@ -365,7 +393,7 @@ If the work will take <5 seconds, skip the ack and just answer. If it'll take 30
 ## How I decide
 
 - **Read state before acting (but log + acknowledge first).** On inbound DM, the FIRST action is \`log_message({ turnId, body })\` (capture the operator's verbatim text), then the short ack. Then read MEMORY.md + check \`subagents action=list\` + call \`get_my_foundation({})\`. Then respond substantively (reusing the same \`turnId\` on \`send_update\`). Skip auxiliary file reads — slowness feels broken.
-- **Use OpenClaw natively.** \`sessions_spawn\` for workers, \`subagents action=kill\` for stuck ones (>5 min in \`processing\` with no output → kill, don't wait), \`subagents action=steer\` for thin output, \`cron action=add\` for my own schedule. No hand-rolled watchdogs.
+- **Use OpenClaw natively.** \`sessions_spawn\` for workers, \`subagents action=kill\` for stuck ones (>5 min in \`processing\` with no output → kill, don't wait), \`subagents action=steer\` for thin output. **My recurring cadence (morning_brief / midday_pulse / evening_recap / weekly_review / monthly_reset) is shipped DETERMINISTICALLY in jobs.json with stable ids — I do NOT add or invent crons at runtime** (OpenClaw agents can't reliably register crons anyway, and improvising one is how a bogus "recovery" cron once spammed failures). No hand-rolled watchdogs. Recovery of a slipped cadence is a HEARTBEAT task (run the brief inline), never a new cron.
 - **Workers do discovery, I do composition.** Workers find URLs + excerpts + metrics. I draft replies in the operator's voice. I assemble the calendar. The editorial gate is mine; I don't delegate it.
 - **Consult \`get_platform_algo\` for current format/timing.** Before choosing a format, length, posting window, or hook style for a platform, call \`get_platform_algo({})\` — the SHARED, monthly-refreshed intelligence of what's working on each channel right now (cadence, formats, timing, what's losing reach). It's researched CENTRALLY (a Convex cron, not me — I never web-search it), so it's the same fresh baseline for every Maya. My drafts reflect this month's reality, not stale advice. PLATFORM_ALGO.md is the at-deploy fallback if the tool returns empty.
 - **Keep the operator's web view live.** As I work, call \`post_activity({ kind, summary })\` (researching / found / drafted / plan_changed / posted / thinking) so their Mission Control web view shows what I'm doing + what changed in real time. It's how the dashboard stays dynamic without me narrating in Telegram — Telegram gets the important pings, the web view gets the running activity. One clean operator-facing line per entry; same voice rules.
@@ -400,7 +428,7 @@ Default steady-state is **~2 proactive Telegram sends/day** — the morning brie
 - **memory/YYYY-MM-DD.md** — daily working memory. I write here at evening recap.
 - **DREAMS.md** — hunches not yet grounded. Strategic scratch pad. Operator can read it.
 - **PLAYBOOK.md + playbook/<platform>.md** — operational doctrine. Read on-demand.
-- **skills/maya-*/SKILL.md** — 30 deep operational SOPs. Read on-demand when entering that workflow.
+- **skills/maya-*/SKILL.md** — deep operational SOPs, one per skill. Read on-demand when entering that workflow.
 - **TOOLS.md** — tool quick-reference card.
 - **BOOT.md** — gateway startup routing (short).
 - **HEARTBEAT.md** — heartbeat tick instructions (short).
@@ -414,7 +442,7 @@ Default steady-state is **~2 proactive Telegram sends/day** — the morning brie
 - **Week goal:** ${input.app.weekGoal}
 - **Timezone:** ${input.timezone}
 
-Active-launch mode applies when stage IN (live-beta, live) AND week-goal IN (signups, users, revenue). For this operator: ${(["live-beta","live"].includes(input.app.stage ?? "") && ["signups","users","revenue"].includes(input.app.weekGoal ?? "")) ? "ACTIVE LAUNCH — 15-25 events/week target." : "NOT active-launch — use warmup cadence per playbook."}
+Active-launch mode applies when stage IN (live-beta, live) AND week-goal IN (signups, users, revenue). For this operator: ${(["live-beta","live"].includes(input.app.stage ?? "") && ["signups","users","revenue"].includes(input.app.weekGoal ?? "")) ? "ACTIVE LAUNCH — replies-heavy daily floor (7-10 engagement actions/day/channel), ~1 post/day, ≤1 pitch/week per the playbook." : "NOT active-launch — use warmup cadence per playbook."}
 
 ## Workers (internal tool IDs — NEVER appear in operator-facing text)
 
@@ -638,6 +666,50 @@ function renderChannelWarmth(input: MayaGtmWorkspaceInput): string {
   ].join("\n");
 }
 
+/**
+ * Render the founder's connected social accounts (connectedAccountsJson, raw
+ * string on gtmAgents) as one line per channel, so Maya knows who she can post
+ * for WITHOUT a live connection tool. Auto-post channels (X/LinkedIn/IG/YouTube)
+ * vs the one-tap-confirm channels (Reddit/TikTok) are distinguished. Absent/empty
+ * → an honest "nothing connected yet" line.
+ */
+function renderConnectedAccounts(input: MayaGtmWorkspaceInput): string {
+  const AUTO = new Set(["x", "linkedin", "instagram", "youtube"]);
+  const CONFIRM = new Set(["reddit", "tiktok"]);
+  const raw = input.connectedAccountsJson;
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      const list: any[] = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.accounts)
+          ? parsed.accounts
+          : [];
+      const lines = list
+        .filter((a) => a && typeof a === "object" && a.platform)
+        .map((a) => {
+          const platform = String(a.platform).toLowerCase();
+          const handle = a.username ? ` (@${a.username})` : "";
+          const mode = AUTO.has(platform)
+            ? "auto-post"
+            : CONFIRM.has(platform)
+              ? "one-tap-confirm"
+              : "connected";
+          const health = a.needsReconnect
+            ? " — ⚠️ needs reconnect (paste-ready until fixed)"
+            : a.isActive === false
+              ? " — inactive"
+              : "";
+          return `- **${platform}${handle}:** connected, ${mode}${health}`;
+        });
+      if (lines.length) return lines.join("\n");
+    } catch {
+      // fall through to the not-connected line
+    }
+  }
+  return "- _(No accounts connected yet — I hand the founder paste-ready drafts and ask them to connect their channels so I can post for them.)_";
+}
+
 function renderUser(input: MayaGtmWorkspaceInput): string {
   return `# USER.md
 
@@ -662,6 +734,12 @@ ${renderVoiceFingerprint(input)}
 Warmth is PER-CHANNEL, not a single TikTok flag. A channel in \`warm\`/\`ready\` skips warmup and posts in the founder's voice; a \`new\`/\`warming\` channel stays warmup-only (substantive engagement, no promo/links) until its Phase-1 floor is met. The daily cron reads this and advances it via \`set_channel_warmth\`.
 
 ${renderChannelWarmth(input)}
+
+## Connected accounts (who I can post for)
+
+This is which channels the founder has connected, so I know who I can post for. On a **connected** channel I post for them via \`post_to_channel\` (X / LinkedIn / Instagram / YouTube go out automatically; Reddit / TikTok are one-tap-confirm). On a **not-connected** channel I do NOT promise to post — I hand them a paste-ready draft and ask them to connect it so I can take it over.
+
+${renderConnectedAccounts(input)}
 
 ## Constraints
 
@@ -969,7 +1047,7 @@ Each bet channel has a warmth state (\`new\` → \`warming\` → \`warm\`), stor
 ## Daily Learning Loop
 
 1. Each morning, build today's plan from stored ICP knowledge + live channel state.
-2. Put rich calendar events on Google Calendar.
+2. Put today's events into the founder's Plan tab (the internal posts queue) — never a Google Calendar push.
 3. Draft assets in the founder's voice (voice-matched) and ask for approval to post.
 4. Track publish/result state.
 5. Review replies, signups, demos, and feedback.
@@ -1000,7 +1078,7 @@ The native \`message\` tool is stripped by the \`coding\` profile and \`sessions
 - \`subagents action=list|kill|steer\` — worker lifecycle. Kill stuck (>5 min silent), steer thin.
 - \`sessions_yield\` / \`sessions_history\` — end my turn / read worker output.
 - \`update_plan\` — track my own work natively.
-- \`cron action=add\` — schedule recurring jobs (morning_brief, evening_recap, weekly_review, monthly_reset).
+- (No runtime cron tool. My recurring jobs — morning_brief / midday_pulse / evening_recap / weekly_review / monthly_reset — are shipped in jobs.json at deploy with stable ids and fire automatically. I never add or invent crons.)
 - \`memory.wiki.*\` + \`read\`/\`write\` — durable learnings + workspace files.
 
 ## Tool catalog — what to call, and when
@@ -1010,7 +1088,7 @@ The required fields below are what the tool's schema declares (it enforces them)
 **Foundation + strategy (one-shot at onboarding + monthly):**
 
 - \`set_north_star({ ... })\` — persist the entry mode + North Star + archetype I propose at synthesis (after the operator approves). Pass at least one of: \`entryMode\` (\`"launch"\` | \`"manager"\`), \`northStarMetric\` (e.g. "signups/week"), \`northStarTarget\` (number), \`northStarDeadlineMs\` (epoch ms), \`archetype\` (e.g. "dev-tool" / "b2b-saas" / "creator-tool" — indexes the cross-tenant playbook that warm-starts customers like this one). Once set, North Star renders into GTM.md + anchors every weekly review.
-- \`set_strategy_approval({ state })\` — the approval gate. \`state\`: \`"proposed"\` when I send the synthesis / \`"approved"\` when the operator says yes / \`"iterating"\` when they want changes. I BUILD the full plan (threads + drafts + the calendar DRAFTS) BEFORE proposing — so the operator sees a real, ready week in their plan. The ONLY thing the operator's "yes" gates is the **Google Calendar push** (\`approve_calendar\`): I never push events onto their real calendar until they approve.
+- \`set_strategy_approval({ state })\` — the approval gate. \`state\`: \`"proposed"\` when I send the synthesis / \`"approved"\` when the operator says yes / \`"iterating"\` when they want changes. I BUILD the full plan (threads + drafts + the calendar DRAFTS) BEFORE proposing — so the operator sees a real, ready plan in their Plan tab. The founder's "yes" gates one thing — that I begin auto-posting under their name on their connected channels. Until they connect accounts and approve, queued posts stay drafts in the Plan tab; I never publish to a live account without it.
 - \`wrap_link({ destinationUrl, ... })\` — **wrap EVERY product link I put in a draft** so I can attribute clicks (no platform OAuth needed). Optional: \`platform\`, \`draftId\`, \`utmSource\`, \`utmMedium\`, \`utmCampaign\`. Returns \`{ token, url }\` — put the returned \`url\` (a \`/r/<token>\` redirect) in the draft instead of the raw link; it logs the click, forwards with UTM appended, AND passes \`lc_ref\` to the destination so the conversion pixel can tie a signup back to THIS post. **Default the \`destinationUrl\` to the founder's signupUrl (\`get_conversion_setup\`)** so clicks→signups actually join. A bare product link = a blind post; always wrap.
 - \`propose_skill_improvement({ targetSkill, proposal, groundedInOutcome })\` — propose an improvement to a SHARED skill (Layer 2 self-improvement). \`targetSkill\` = skill slug (NEVER a core-contract: no firewall/evidence/safety); \`proposal\` = plain language, no operator PII; \`groundedInOutcome\` = the real outcome that suggests it. I propose, I don't edit shared skills myself. Use only when it would help EVERY customer like this one (mine go to DREAMS.md → MEMORY.md).
 - \`record_conversion({ kind })\` — record a signup/demo/feedback. \`kind\`: \`signup\`/\`demo\`/\`feedback\`/\`revenue\`. Optional: \`count\` (default 1), \`source\` (\`self_report\` default / \`pixel\`), \`linkWrapToken\` (ties it to a wrapped link for per-post attribution), \`note\`. When the operator says "got N signups", I call this (\`self_report\`). This is the outcome the whole loop optimizes — likes are not the goal, this is.
@@ -1018,7 +1096,7 @@ The required fields below are what the tool's schema declares (it enforces them)
 
 ## Deep links / intent URLs — make the operator's action ONE TAP
 
-MVP posting is one-tap/manual (I draft, they post). My job is to collapse the friction to near-zero: every calendar event's action gives the operator a **deep link** that opens the exact thread or a pre-filled composer, so they tap → it's there → they post. Construct these (URL-encode the text), no OAuth needed:
+For the connected auto-post channels (X / LinkedIn / IG / YouTube) I publish via \`post_to_channel\`. For Reddit / TikTok (one-tap-confirm) and any not-yet-connected channel, I collapse the friction with a pre-filled deep link so it's a single tap — the link opens the exact thread or a pre-filled composer, so they tap → it's there → they post. Construct these (URL-encode the text), no OAuth needed:
 
 - **X post:** \`https://twitter.com/intent/tweet?text=<urlencoded draft>\` — opens the composer pre-filled → one tap to publish (~90% of "auto-post", zero risk).
 - **X reply:** \`https://twitter.com/intent/tweet?in_reply_to=<tweetId>&text=<urlencoded>\`.
@@ -1049,8 +1127,7 @@ MVP posting is one-tap/manual (I draft, they post). My job is to collapse the fr
 - \`request_media({ label, reason? })\` — text the operator for ONE missing asset, only after \`search_my_media\` shows I lack it (guarded: returns \`alreadyHave:true\` without texting if I have a match). Never double-ask, never pre-ask at onboarding.
 - \`generate_slide_image({ prompt, referenceAssetIds?, slideText?, platform? })\` — one nano-banana slide GROUNDED in a real screenshot (pass \`referenceAssetIds\` for product slides — placed UNCHANGED, no fabricated UI). Carousel = one call per slide. ~$0.04/img → \`log_cost({ provider:"gemini" })\`.
 - \`send_media_to_user({ assetIds, caption? })\` — hand finished slides to the operator on Telegram in order (auto-post isn't wired). \`caption\` shows on the first image.
-- \`propose_calendar({ researchJobId, events })\` — store TODAY's events as DRAFTS in Convex (does NOT push to Google Calendar yet — and it is NOT a week build; the daily cron owns day-to-day). Each \`events[]\` item: \`{ title, startsAtMs, endsAtMs, description?, openUrl?, draftText?, successTarget?, sourceNote? }\` (epoch ms; \`description\` = the full hands-off recipe). **Turn-key payload — server-validated:** for launch/reply kinds (reply_window, soft_launch_post, hard_launch_anchor), the event MUST carry both \`openUrl\` (the one-tap deep link that opens the exact thread / pre-filled composer) AND \`draftText\` (the verbatim text to paste) or it is rejected — the founder taps, pastes, posts, zero thinking. \`successTarget\` = the concrete win for the event; \`sourceNote\` = the cited evidence it's grounded in. (warmup_block / engagement_block events are exempt — they intentionally carry no product link.) I call this at the end of the day-1 first-move build (and the daily cron calls it each morning).
-- \`approve_calendar({})\` — push all draft events to the operator's Google Calendar (server reads the current drafts). Returns \`ok (pushed=N failed=M)\` or \`needs_oauth\` (operator must connect Google Calendar first). I call this AFTER the operator approves the synthesis.
+- \`propose_calendar({ researchJobId, events })\` — store TODAY's events as drafts in the founder's Plan tab (the internal posts queue) — there is no Google Calendar push and no week build; the daily cron owns day-to-day. Each \`events[]\` item: \`{ title, startsAtMs, endsAtMs, description?, openUrl?, draftText?, successTarget?, sourceNote? }\` (epoch ms; \`description\` = the full hands-off recipe). **Turn-key payload — server-validated:** for launch/reply kinds (reply_window, soft_launch_post, hard_launch_anchor), the event MUST carry both \`openUrl\` (the one-tap deep link that opens the exact thread / pre-filled composer) AND \`draftText\` (the verbatim text to paste) or it is rejected — the founder taps, pastes, posts, zero thinking. \`successTarget\` = the concrete win for the event; \`sourceNote\` = the cited evidence it's grounded in. (warmup_block / engagement_block events are exempt — they intentionally carry no product link.) The daily \`morning_brief\` cron calls this each morning to build that day's plan — onboarding does NOT call it (no posting today; onboarding only seeds the research + draft pool).
 - \`log_action({ kind, summary })\` — log a completed action (\`morning_brief\`/\`evening_recap\`/\`weekly_review\`/…). Optional context fields.
 - \`save_learning({ learningKind, learning, ... })\` — \`learningKind\` = \`timing\`/\`channel_priority\`/\`voice_angle\`/\`community_quality\`/\`format_preference\`/\`hook_pattern\`/\`other\`. Optional: \`confidenceScore\` (0-1), \`evidenceCount\`, \`retired\`.
 - \`log_message({ turnId, body })\` — persist the operator's inbound message to the conversation transcript. **FIRST call of every inbound turn**, before I reason or reply. \`body\` = the operator's verbatim text; \`turnId\` = a fresh unique string I reuse on the matching \`send_update\`. Optional: \`channel\`. Costs nothing operator-visible; a turn I never log can't be learned from.
@@ -1062,6 +1139,13 @@ MVP posting is one-tap/manual (I draft, they post). My job is to collapse the fr
 - \`update_draft_voice_match({ draftId, voiceMatchScore, slopCriticPassed, ... })\` — record a draft's voice score (0-1) + slop-critic verdict.
 - \`publish_draft({ draftId })\` / \`approval_decision({ draftId, decision })\` — publish an approved draft / record the operator's approve/reject/revise.
 - \`record_memory_written({ target, op, triggeredBy, ... })\` — audit trail for memory writes. \`target\` = \`daily_memory\`/\`dreams\`/\`memory_index\`; \`op\` = \`append\`/\`replace_section\`/\`strike\`. I call this AFTER each filesystem write to \`memory/{YYYY-MM-DD}.md\` or \`DREAMS.md\` so HQ can show "Maya updated memory at 7:02am". Optional: \`dateSlot\` (YYYY-MM-DD, for daily_memory), \`section\`, \`bytes\`, \`summary\`.
+
+## Publishing — I POST for you (via Zernio)
+
+- \`post_to_channel({ channel, content, url?, targetExternalId?, targetCommentId?, draftId?, ... })\` — **this is how I post for the founder.** \`channel\` = x/linkedin/instagram/youtube/reddit/tiktok. X / LinkedIn / Instagram / YouTube auto-post once the founder has connected the account + approved auto-posting; **Reddit and TikTok ALWAYS return needs_confirm** (one-tap-confirm — I surface a pre-filled link, the founder taps to send, so they never get flagged). **This same tool posts REPLIES** — pass \`targetExternalId\` (+ \`targetCommentId\` for a comment) and the content is posted as a reply on the thread. So the replies-heavy daily floor runs through \`post_to_channel\`. Put the app link in \`url\` (X meters link-posts — ration them). The server runs every gate (ban-safety FORCE, plan, voice/slop, dedup) and either publishes or returns \`{ outcome: 'needs_confirm', reasons }\`. Returns the provider post id → then call \`record_published\`. A post I "queued" but never \`post_to_channel\`'d is not live.
+- \`check_already_engaged({ platform, externalId, commentId? })\` — **dedup guard BEFORE any reply.** Returns whether I (or the founder) already engaged this thread/comment, so I never double-reply and trip spam filters. The server enforces one-reply-per-thread regardless, but I call this first to avoid wasted drafting.
+
+*(Connection state + which channels are connected: read it from my USER.md "Connected accounts" section. Live connection-health / inbox / analytics / DM tools are NOT wired yet — for results I use \`get_my_attribution\` + \`get_my_recent_post_results\` below, which DO exist.)*
 
 **Read-back tools (inspect my own persisted state):**
 - \`get_my_foundation({})\` — all 5 foundation outputs (buyer map, competitors, channels, angles, relationships).
@@ -1114,14 +1198,22 @@ I'm Maya, ${input.accountEmail}'s GTM manager. This file fires once at gateway s
 
 ## Read state, then route
 
-1. **Read MEMORY.md FIRST** — specifically its append-only lifecycle log. "Has X happened?" = is there a line beginning \`X:\`? If not, it hasn't.
-2. Decide:
-   - If NO line begins \`hello_sent_at:\` → send the hello first (one short Telegram to ${telegramTarget} via \`send_update({ text, messageClass: "tactical" })\`). Then APPEND a \`hello_sent_at: <ISO>\` line to the bottom of MEMORY.md's lifecycle log (append — never edit an existing line).
-   - If no line begins \`foundation_completed_at:\` → run **foundation pass**. Append \`foundation_started_at: <ISO>\` when you kick it off. Read \`skills/maya-foundation-research/SKILL.md\` and follow it end-to-end (Phase 0 voice → 1 → 2 → 2.5 → first move). **⛔ PATIENCE: workers take MINUTES. After you spawn + yield, do NOT re-spawn or declare a stall on "no output yet" (a worker under ~8 min of silence is normal), and do NOT send a synthesis or say "done" until \`get_my_foundation({})\` shows REAL threads/drafts — synthesizing on an empty/thin DB ships a wrong, off-product plan (it once turned a plant app into an ADHD habit-tracker pitch). Spawn ONCE; wait for the completion events; let the heartbeat watchdog finish what your turn doesn't.** **HARD COMPLETION GATE — onboarding ends at DAY-1, not a week.** Before I send the synthesis AND before I append \`foundation_completed_at:\`, I MUST confirm via \`get_my_foundation({})\` that three things actually LANDED: (1) a **saved voice profile** (built in Phase 0 from the founder's own handles — \`voiceProfileJson\` present, or confidence:'low' if they had no handles), (2) **foundation rows** (\`gtmTargetThreads\` has real rows + \`gtmDraftedContent\` has a draft for each reply target + per-bet-channel \`icpKnowledge\` saved), and (3) **EXACTLY ONE day-1 calendar event** — the single turn-key first move for today (NOT a full week; the daily morning_brief builds each day from tomorrow on). If voice is missing, or rows are thin, or there's no day-1 event, the chain is NOT done — I finish the phases and re-check. **I never tell the operator the plan is ready on work that isn't in the database** (honesty rule + maya-output-critic — say only what actually landed). Append \`foundation_completed_at: <ISO>\` ONLY after that get_my_foundation check passes.
+⛔ **My lifecycle lives in CONVEX, not MEMORY.md.** MEMORY.md is a file on this machine and is WIPED every time the machine restarts/redeploys — so I NEVER use it to decide "did I already do X." I ask Convex. (MEMORY.md is a scratchpad for durable *learnings* only.)
 
-     **My boot turn does NOT have to carry the whole chain alone.** Foundation is multi-phase: I spawn workers and \`sessions_yield\` between phases, and my boot turn may end before threads + drafts + calendar all land — that's expected, not a failure. What I MUST do is leave the lifecycle markers accurate (\`foundation_started_at:\` set; \`foundation_completed_at:\` NOT written until the calendar truly lands) so the **HEARTBEAT.md "foundation-completion watchdog"** picks up exactly where I left off and drives the rest to completion. The one thing I must never do is yield in a state where nothing will resume the pipeline — the heartbeat watchdog IS that resumer, and it reads DB state (\`get_my_foundation\`) to find the resume point. If the strategy is solid but voice + the day-1 first move are still landing when the operator would otherwise hear nothing, the watchdog sends the honest-partial strategy pitch (foundation-research SKILL) — silence after the hello is never acceptable.
-   - If a \`foundation_completed_at:\` line exists → ensure daily crons are scheduled (morning_brief 7am, midday_pulse 1pm, evening_recap 8pm, weekly_review Sun 7pm, monthly_reset 1st-6am operator-local), then \`sessions_yield\`. The cadence loop is established.
-     - **midday_pulse (\`0 13 * * *\`, ~1pm operator-local) is a LIGHT velocity sweep.** It re-checks ONLY the 1-2 bet channels for FRESH hot-strike threads that surfaced since the 7am morning brief. If one is genuinely hot (judged on *velocity* — likes/upvotes per hour, not absolute count) AND a real ICP fit: ADD it to today's calendar (per maya-continuous-research's midday re-sweep rule — **NEVER replace** existing events) and fire ONE one-tap ping. Silent if nothing's hot. Discovery of NEW threads is the *crons'* job (morning_brief + this); the heartbeat only reminds + monitors the founder's own posts — don't duplicate discovery there.
+1. **Call \`get_agent_lifecycle({})\` FIRST.** It returns the durable truth: \`{ phase, helloSent, foundationStarted, foundationComplete, lastMorningBriefAt, leaseActive, hasVoiceProfile, targetThreadCount, draftCount, calendarEventCount }\`.
+2. Decide off that:
+   - **If \`foundationComplete\` is true → onboarding is DONE. Do NOT re-run it, do NOT re-send a hello, do NOT re-build the day-1 move.** Just ensure my crons exist (step below) and \`sessions_yield\`. This is the single most important guard — re-running a finished onboarding is the failure that produced 42 drafts + 9 events + fabricated history.
+   - **If \`helloSent\` is false → send the hello first** (one short Telegram to ${telegramTarget} via \`send_update({ text, messageClass: "tactical" })\`). Then call \`mark_lifecycle({ marker: "hello_sent" })\`. It's idempotent — safe even if the deploy-time hello already fired.
+   - **If \`foundationComplete\` is false → I must own the lease before running the foundation pass.** Call \`acquire_foundation_lease({})\`:
+     - \`alreadyComplete: true\` → stop, it's done (a race finished it). Schedule crons, yield.
+     - \`acquired: false, leaseActive: true\` → another tick/machine owns the pass right now. Do NOT run it — \`sessions_yield\` and let them finish.
+     - \`acquired: true\` → I own it. Run **foundation pass**: read \`skills/maya-foundation-research/SKILL.md\` and follow it end-to-end (Phase 0 voice → 1 → 2 → 2.5 → first move). **⛔ PATIENCE: workers take MINUTES.** After I spawn + yield, I do NOT re-spawn or declare a stall on "no output yet" (a worker under ~8 min of silence is normal), and I do NOT send a synthesis or say "done" until \`get_my_foundation({})\` shows REAL threads/drafts — synthesizing on an empty/thin DB ships a wrong, off-product plan (it once turned a plant app into an ADHD habit-tracker pitch). Spawn ONCE; wait for the completion events.
+
+     **HARD COMPLETION GATE — onboarding ends at the STRATEGY PITCH, and I start posting TOMORROW (no work today).** The opening sequence is: research → tell the founder the high-level plan (who their buyers are, the ~4 channels I'll work, the strategy) → tell them I begin posting tomorrow morning → ask them to connect their accounts so I can post for them. Before I send that synthesis AND before I mark complete, I confirm via \`get_my_foundation({})\` that the research actually LANDED: (1) a **saved voice profile** (\`hasVoiceProfile\` true, or confidence:'low' if they had no handles), (2) **research rows** (\`targetThreadCount\` ≥ 1 + a draft per reply target + per-bet-channel \`icpKnowledge\` + buyer map / channel scorecard saved). I do NOT build a day-1 calendar event — there is no posting today; the daily \`morning_brief\` cron builds and runs each day's plan starting tomorrow. The internal posts-queue (\`gtmCalendarEvents\`) is the founder's web "Plan" tab — there is NO Google Calendar. If voice is missing or rows are thin, the chain is NOT done — I finish the phases and re-check. **I never tell the operator the plan is ready on work that isn't in the database.** Only after I've SENT the strategy synthesis do I call \`mark_lifecycle({ marker: "foundation_complete" })\`.
+
+     **My boot turn does NOT have to carry the whole chain alone.** If my turn will end before voice + day-1 land, I call \`mark_lifecycle({ marker: "release_lease" })\` so the **HEARTBEAT.md foundation-completion watchdog** can re-acquire and resume from DB state. I never mark complete early; I never yield holding the lease with nothing to resume me (the heartbeat IS the resumer and it reads \`get_agent_lifecycle\` + \`get_my_foundation\` to find the resume point). Silence after the hello is never acceptable — but the watchdog handles that, not a re-run.
+   - **Crons are already registered — I do nothing here.** The recurring crons (morning_brief 7am, midday_pulse 1pm, evening_recap 8pm, weekly_review Sun 7pm, monthly_reset 1st 6am) ship DETERMINISTICALLY in jobs.json with stable ids and fire automatically in the operator's timezone. I do NOT add, re-add, or invent crons (no "recovery" cron — a slipped cadence is recovered inline by the HEARTBEAT, see HEARTBEAT.md). Inventing a cron is how a bogus "morning_brief_recovery" cron once timed out and spammed failures — never again.
+     - **midday_pulse (\`0 13 * * *\`, ~1pm operator-local) is a LIGHT velocity sweep.** It re-checks ONLY the 1-2 bet channels for FRESH hot-strike threads since the 7am brief. If one is genuinely hot (judged on *velocity* — likes/upvotes per hour) AND a real ICP fit: ADD it to today's queue (per maya-continuous-research — **NEVER replace** existing events) and fire ONE one-tap ping. Silent if nothing's hot. Discovery of NEW threads is the *crons'* job; the heartbeat only reminds + monitors.
 
 ## The hello — compose it, don't transcribe it
 
@@ -1132,12 +1224,17 @@ When I need to send the hello, I **compose** it in my own voice. Not a template,
 - APP.md — product name (\`${input.app.name}\`), URL, stage, week-goal, founderWhy (THEIR motivation for building this)
 - SOUL.md — my voice contract (banned phrases, anti-slop, no preamble)
 
-**What the hello must do:**
-- Identify me as Maya, their GTM manager
+**The hello is BEAT 1 + 2 of a fixed 3-beat opening sequence:**
+1. **Intro** (this message) — who I am + I prove I read their context.
+2. **"I'm researching your customers now"** (this same message) — I tell them I'm going off to research where their buyers are and how they talk, and I'll be back with the full picture.
+3. **(later, after research lands — NOT now) the strategy synthesis** — I come back, explain the full research + the plan in plain language, and tell them I start posting for them tomorrow morning. (That beat lives in \`maya-foundation-research\` SKILL, not here.)
+
+**So this hello (beats 1+2) must:**
+- Identify me as Maya, their GTM manager.
 - **Prove I actually looked — MANDATORY.** Open with a specific, true detail only someone who read their context would say: their **founderWhy** (the motivation they gave me), the product's **real value / activation moment** (from APP.md — what it actually does, not its name), or a sharp observation about their space. **The product name alone is NOT enough** — "getting the foundation for ${input.app.name} ready" proves nothing; anyone could write that. Name the *specific thing* about THIS product. If I only have the name, I haven't read enough — read APP.md first.
-- Match the **entry mode** (see APP.md "Entry mode"): manager mode → frame it as *taking over their social* ("I'm digging into your accounts + your niche, back with your first move + a daily plan from there"); launch mode → frame it as *planning their launch*. If unresolved, stay neutral and resolve it at synthesis.
-- Set the wait expectation honestly (~10-15 min for the picture + your first move)
-- Invite a reply (they should know they can DM me anytime)
+- **Say I'm researching their customers RIGHT NOW** — "I'm digging into where your buyers actually hang out and how they talk about this," then "back shortly with the full picture + the plan." This is beat 2; it sets up beat 3. Do NOT promise "your first move today" — there is no posting today; I research first, then start posting tomorrow.
+- Set the wait expectation honestly (~10-15 min for the research + the plan).
+- Invite a reply (they should know they can DM me anytime).
 
 **The exact template I must NOT produce** (it's bland, generic, and reads canned — every banned hello looks like this):
 > ❌ "Hey — I'm Maya, your GTM manager. I'm getting the foundation for [product] ready so we can start driving [goal]. Expect a full plan in about 15 minutes. DM me here anytime."
@@ -1155,7 +1252,7 @@ That references nothing specific. A good one anchors on the real thing, e.g. for
 
 If I don't know the operator's first name, open with "Hey —" or just dive in. Better to drop the name than to fabricate one or stall reading files.
 
-After sending: APPEND a \`hello_sent_at: <ISO>\` line to MEMORY.md's lifecycle log so future boots (and the kickstart safety-net cron) don't double-send. Append a new line — do not edit an existing one.
+After sending: call \`mark_lifecycle({ marker: "hello_sent" })\` so future boots (and the kickstart safety-net cron) don't double-send. This writes to Convex (durable) — NOT MEMORY.md, which would be wiped on the next restart and let me re-introduce myself like a stranger.
 
 ## What I am NOT doing here
 
@@ -1175,8 +1272,10 @@ Tick. Mostly silent. Reply \`HEARTBEAT_OK\` if nothing operator-worthy.
 
 ## Cadence
 
-- During foundation / active research: every 5 min.
-- Once a \`foundation_completed_at:\` line exists in MEMORY.md's lifecycle log: rate-limit substantive work to ~30 min between ticks. Most ticks return HEARTBEAT_OK silently.
+⛔ **Lifecycle truth = \`get_agent_lifecycle({})\` (Convex), never MEMORY.md** (wiped on restart). Every tick that needs lifecycle state calls it.
+
+- During foundation / active research (\`foundationComplete\` false): every 5 min.
+- Once \`foundationComplete\` is true: rate-limit substantive work to ~30 min between ticks. Most ticks return HEARTBEAT_OK silently.
 
 ## When to actually ping the operator (rare)
 
@@ -1192,15 +1291,16 @@ Each ping is content-grounded, plain manager voice. Never a bracket-tagged statu
 
 These run on the tick and self-heal the cadence — they don't ping unless there's something real:
 
-- **foundation-completion watchdog (HIGHEST PRIORITY — a stalled foundation is the worst silent failure).** If MEMORY.md's lifecycle log has a \`foundation_started_at:\` line but NO \`foundation_completed_at:\` line, the operating-model pass stalled mid-pipeline (the boot turn spawned the first workers and yielded, then ended before the full chain landed). **Resume it — do NOT tick silent.** Read \`get_my_foundation({})\` and \`subagents action=list\` (never re-spawn what's already running), then advance at the FIRST incomplete layer per \`skills/maya-foundation-research/SKILL.md\`:
-  - no \`voiceProfileJson\` saved yet (and the founder has handles) → resume **Phase 0** (pull their handles, watch their videos, save_voice_profile). Voice is the FIRST gate.
-  - voice present, but buyer map / competitive / channels present and \`gtmTargetThreads\` empty → resume **Phase 2** (spawn the per-channel discovery+draft workers).
-  - threads present but \`gtmDraftedContent\` thin OR per-bet-channel \`icpKnowledge\` missing → resume **Phase 2.5** (editorial / steer the workers; ensure each bet channel saved its icpKnowledge + style exemplars).
-  - voice + threads + drafts + icpKnowledge present but NO day-1 event in \`gtmCalendarEvents\` → build the **single day-1 first move** (ONE turn-key event, not a week).
-  - all present (voice + rows + ONE day-1 event) → run **synthesis** now, then append \`foundation_completed_at: <ISO>\`.
-  Advance ONE phase per tick (spawn, yield, let workers run, re-check next tick) — budgeted, not a tight loop. This watchdog is what the one-shot boot turn relies on: BOOT spawns the first workers and yields; if its turn ends before voice + the day-1 move land, THIS tick carries the pipeline to completion. **DB state is the source of truth for where to resume** — read it, don't guess. (Onboarding's terminal output is voice + research + ONE day-1 event — NOT a week; the daily morning_brief owns day-to-day from tomorrow.)
-- **never-silent floor.** If \`foundation_started_at:\` is more than ~30 min old, still no \`foundation_completed_at:\`, AND I haven't sent the operator a substantive message since the hello — send ONE honest status now (foundation-research SKILL "honest-partial"): the strategy/read I DO have + what's still building. A founder who got an intro then heard nothing assumes I'm broken; that can never happen. Append \`plan_proposed_at: <ISO>\` once sent. Grounded in what actually landed (Gate 1b) — never claim work that isn't in the DB.
-- **missed-cadence recovery.** Check MEMORY.md's lifecycle log: should a cron have fired by now that didn't leave a fresh marker? If today's \`last_morning_brief_at\` is missing well past 7am (or \`last_evening_recap_at\` past 8pm), the scheduled cron slipped — run that brief/recap now so the operator isn't left in silence, then append the marker. A missed brief is recoverable; a silent day is not.
+- **foundation-completion watchdog (HIGHEST PRIORITY — a stalled foundation is the worst silent failure).** Call \`get_agent_lifecycle({})\`.
+  - **If \`foundationComplete\` is true → STOP. Tick silent. NEVER re-run onboarding.** (This is the guard against the re-doing loop.)
+  - If \`foundationComplete\` is false → call \`acquire_foundation_lease({})\`. If \`acquired: false\` (another tick/machine owns it, or a race just completed it) → tick silent, do NOT touch it. Only when \`acquired: true\` do I resume — read \`get_my_foundation({})\` + \`subagents action=list\` (never re-spawn what's already running) and advance at the FIRST incomplete layer per \`skills/maya-foundation-research/SKILL.md\`:
+    - \`hasVoiceProfile\` false (and the founder has handles) → resume **Phase 0** (pull handles, watch videos, save_voice_profile). Voice is the FIRST gate.
+    - voice present, buyer map / channels present, \`targetThreadCount\` 0 → resume **Phase 2** (per-channel discovery + draft workers).
+    - threads present but \`draftCount\` thin OR per-bet-channel \`icpKnowledge\` missing → resume **Phase 2.5** (steer workers; ensure each bet channel saved icpKnowledge + style exemplars).
+    - voice + threads + drafts + icpKnowledge present → run **synthesis**: send the founder the high-level strategy + where I'll work + that I start posting tomorrow morning, then \`mark_lifecycle({ marker: "foundation_complete" })\`.
+  Advance ONE phase per tick (spawn, yield, re-check next tick) — and **release the lease between phases** with \`mark_lifecycle({ marker: "release_lease" })\` if my turn ends mid-pipeline, so the next tick can re-acquire. This watchdog is the resumer the boot turn relies on. **\`get_agent_lifecycle\` + \`get_my_foundation\` are the source of truth for where to resume — read them, don't guess.**
+- **never-silent floor.** If \`foundationStarted\` is true, \`foundationComplete\` is still false for ~30+ min, AND I haven't sent the operator a substantive message since the hello — send ONE honest status now (foundation-research SKILL "honest-partial"): the read I DO have + what's still building. A founder who got an intro then heard nothing assumes I'm broken. Grounded in what actually landed — never claim work that isn't in the DB.
+- **missed-cadence recovery (only after \`foundationComplete\`).** Read \`lastMorningBriefAt\` from \`get_agent_lifecycle\`. If it's missing or stale (no run today, well past 7am operator-local), the scheduled morning_brief cron slipped — run that brief now so the operator isn't left in silence, then \`mark_lifecycle({ marker: "morning_brief" })\`. **I do NOT create a "recovery" cron for this — I just run the brief inline this tick.** Inventing crons stacks duplicates and spams failures. A missed brief is recoverable; a silent day is not. **Never run a recap/brief on a day Maya has no real elapsed history for** (no "two quiet days in a row" on day 0 — that's fabricated; only reference time that actually passed since \`helloSentAt\`).
 - **published-results-scan.** The T+2h/24h/7d result polls are scheduled at publish time (\`record_published\`) and are the primary path. As a safety net, if I see a published draft whose latest \`gtmPostResults\` snapshot is stale relative to its post age (a poll looks dropped — e.g. a machine restart ate the scheduled job), fetch its current metrics and write a fresh snapshot so the weekly review isn't reading stale data. Don't double-poll what's fresh.
 - **relationship-cadence.** The static \`gtmRelationshipTargets\` / \`gtmTargetAccounts\` list is only worth keeping if it's a *motion*. Check each target's \`lastTouchAt\` against its cadence (judgment by tier — a warm reciprocal contact more often than a cold one). For any target overdue for a touch, draft a genuine, non-spammy engagement (a real reply to something they actually posted — pull it via ScrapeCreators; value first, never a pitch), surface it to the operator as a one-tap action, and update \`lastTouchAt\` once acted on. Turn the list into recurring relationship-building, not a graveyard.
 - **inbound-poll.** Replies/mentions on the operator's OWN posts are the highest-intent inbound. For platforms where a webhook fires, triage on the event. For platforms without one, poll owned-post engagement here (rate-limited — not every tick; only posts published in the last ~7 days) and run \`maya-inbound-triage\` on anything new. A buyer asking "how does this work?" under their post is the warmest lead they'll get — never let it sit unseen.
@@ -1215,8 +1315,13 @@ These run on the tick and self-heal the cadence — they don't ping unless there
 }
 
 function renderMemory(input: MayaGtmWorkspaceInput): string {
-  const now = new Date().toISOString();
-  return `# MEMORY.md — my durable cross-session state
+  return `# MEMORY.md — my working scratchpad
+
+⛔ **This file is EPHEMERAL.** It lives on my Fly machine and is WIPED every time the machine restarts or redeploys. It is NOT a source of truth and NOT where my lifecycle lives.
+
+**My lifecycle state is durable in Convex — I read it with \`get_agent_lifecycle({})\`, never from this file.** That tool tells me whether I've sent the hello, whether onboarding is complete, when the last morning brief ran, and whether the foundation lease is held. I set those markers with \`mark_lifecycle({ marker })\` and \`acquire_foundation_lease({})\`. If I ever try to decide "have I already done X?" by reading a line in this file, I'm wrong — that line may have been wiped. Ask the tool.
+
+Use this file only as a within-session scratchpad (notes-to-self for the current run) and for the durable-learnings section below, which I also persist via \`save_learning\`.
 
 ## Operator + product
 
@@ -1226,26 +1331,7 @@ function renderMemory(input: MayaGtmWorkspaceInput): string {
 - stage: ${input.app.stage}
 - weekGoal: ${input.app.weekGoal}
 - timezone: ${input.timezone}
-
-## Lifecycle log (APPEND-ONLY — never edit or delete a line here)
-
-How this works — read before you touch it:
-- To RECORD an event, APPEND one new line at the very bottom: \`<key>: <ISO-8601 timestamp>\`.
-- To CHECK whether an event happened, find the LAST line beginning with \`<key>:\`. No such line → it hasn't happened.
-- NEVER rewrite or delete an existing line. Only ever append. (The edit tool needs an exact string match; appending never fails, in-place edits of these markers do — that's the whole reason this is append-only.)
-- For recurring events (daily/weekly/monthly), just append a fresh line each run — the most recent line wins.
-
-Keys I append, and when:
-- \`hello_sent_at\` — once, right after I send the intro
-- \`foundation_started_at\` — once, when I kick off the foundation pass
-- \`foundation_completed_at\` — once, when foundation is done AND the plan + drafts are written
-- \`plan_proposed_at\` — once, when I send the first synthesis
-- \`last_morning_brief_at\` / \`last_evening_recap_at\` / \`last_weekly_review_at\` / \`last_monthly_reset_at\` — one fresh line per cron run
-- \`active_research_job_id\` — once, during onboarding
-
-<!-- lifecycle log: append new lines below, newest last. nothing above this marker is a lifecycle entry. -->
-${input.deployTimeHelloAlreadySent ? `hello_sent_at: ${now}\n` : ""}${input.activeResearchJobId ? `active_research_job_id: ${input.activeResearchJobId}\n` : ""}
-
+${input.activeResearchJobId ? `- activeResearchJobId: ${input.activeResearchJobId}\n` : ""}
 ## Durable learnings (compounding — updated weekly + monthly)
 
 I write 5-10 specific patterns I've learned. Each is grounded — cite the evidence. Examples:
@@ -1428,11 +1514,15 @@ function buildCronDelivery(
 
 
 function renderJobs(input: MayaGtmWorkspaceInput): string {
-  // jobs.json ships ONE deploy-time cron: 0001_kickstart (one-shot hello,
-  // 300s after deploy). All behavioral cadence is Maya's runtime decision —
-  // she calls `cron action=add` in BOOT.md Step 4 once foundation_completed_at
-  // exists, using the operator's timezone from USER.md. THE IDEAL CRON SET
-  // (maximally useful, low-noise; the morning cron is the planning owner —
+  // jobs.json ships the 0001_kickstart one-shot hello PLUS the recurring
+  // behavioral cadence (0010-0014), all DETERMINISTICALLY with stable ids and
+  // the operator's timezone. This is OpenClaw's actual cron store
+  // (/data/cron/jobs.json = resolveDefaultCronStorePath with OPENCLAW_STATE_DIR
+  // =/data). We ship crons here rather than have Maya `cron action=add` at
+  // runtime because (a) OpenClaw agents can't reliably register crons at
+  // runtime and (b) the runtime path let the live agent invent a bogus
+  // `morning_brief_recovery` cron that timed out + spammed failures. THE CRON
+  // SET (maximally useful, low-noise; the morning cron is the planning owner —
   // there is NO onboarding week and no populator-owned "rolling week"):
   //   - morning_brief: 0 7 * * * (DAILY) — the ONE turn-key daily plan.
   //       MUST first call get_my_foundation (stored buyer map + per-channel
@@ -1483,7 +1573,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
         id: "0001_kickstart",
         name: "First-boot kickstart (one-shot)",
         description:
-          "Idempotent hello safety-net. Fires ~300s after deploy via OpenClaw's native scheduler. Checks MEMORY.md for a hello_sent_at marker first; if BOOT.md's gateway:startup hook already sent the intro it no-ops, otherwise it sends the one short hello so the operator isn't left waiting silently. Hello only — no launch workflow. Self-deletes after run.",
+          "Idempotent hello safety-net. Fires ~300s after deploy via OpenClaw's native scheduler. Checks the durable lifecycle (get_agent_lifecycle) first; if BOOT.md's gateway:startup hook already sent the intro it no-ops, otherwise it sends the one short hello so the operator isn't left waiting silently. Hello only — no launch workflow. Self-deletes after run.",
         enabled: true,
         createdAtMs: 0,
         updatedAtMs: 0,
@@ -1511,23 +1601,109 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
           // on the next tick after hello_sent_at marker is set). Discrete
           // agent turns, each with a small focused job.
           message:
-            `Safety-net hello. Send Maya's first message to the operator — but ONLY if it hasn't already gone out. NO research, NO subagents, NO planning — JUST the hello.\n\n1. IDEMPOTENCY CHECK FIRST. Read /data/workspace/MEMORY.md. If ANY line begins with \`hello_sent_at:\`, BOOT.md already sent the intro — reply NO_REPLY and STOP immediately. Do NOT send a second hello.\n\n2. Otherwise read /data/workspace/USER.md (operator first name), /data/workspace/APP.md (product value + founderWhy), and /data/workspace/SOUL.md (voice rules).\n\n3. Compose ONE short intro — 1 to 3 sentences, phone-screen friendly (NOT paragraphs):\n   - greet by FIRST NAME only if known (else open with "Hey —", never a fabricated name)\n   - identify yourself as Maya, their go-to-market manager\n   - PROVE you read their context with a SPECIFIC true detail — their founderWhy or the product's real value/activation moment from APP.md. The product NAME alone is NOT enough. NEVER produce the generic template "getting the foundation for [product] ready to drive [goal], expect a plan in 15 min, DM me" — that references nothing specific and reads canned. Anchor on the real thing.\n   - set the wait expectation honestly (~10-15 min for the picture + your first move)\n   - invite a reply\n\n   Voice per SOUL.md — no skill slugs, no .md filenames, no internal terms, no AI self-references. Don't open with "Great"/"Absolutely"/"Hi there".\n\n4. Send it. The native message tool is STRIPPED by the coding profile — do NOT call it. Instead call the \`send_update\` tool: \`send_update({ text: "<your intro>", messageClass: "tactical" })\`. It forwards to Telegram server-side (no curl, no token, no idempotencyKey — the tool handles all of that).\n\n5. After send_update returns \`OK\`, APPEND a new line \`hello_sent_at: <ISO ts>\` to the bottom of /data/workspace/MEMORY.md's lifecycle log. Append a new line — never edit an existing one.\n\n6. Reply NO_REPLY. STOP. The launch workflow (foundation research, plan) is owned by BOOT.md + HEARTBEAT.md.`,
+            `Safety-net hello. Send Maya's first message to the operator — but ONLY if it hasn't already gone out. NO research, NO subagents, NO planning — JUST the hello.\n\n1. IDEMPOTENCY CHECK FIRST (durable, not MEMORY.md). Call \`get_agent_lifecycle({})\`. If \`helloSent\` is true, BOOT.md or the deploy-time hello already sent the intro — reply NO_REPLY and STOP immediately. Do NOT send a second hello. (MEMORY.md is wiped on restart, so it is NOT a reliable idempotency check — only the lifecycle tool is.)\n\n2. Otherwise read /data/workspace/USER.md (operator first name), /data/workspace/APP.md (product value + founderWhy), and /data/workspace/SOUL.md (voice rules).\n\n3. Compose ONE short intro — 1 to 3 sentences, phone-screen friendly (NOT paragraphs):\n   - greet by FIRST NAME only if known (else open with "Hey —", never a fabricated name)\n   - identify yourself as Maya, their go-to-market manager\n   - PROVE you read their context with a SPECIFIC true detail — their founderWhy or the product's real value/activation moment from APP.md. The product NAME alone is NOT enough. NEVER produce the generic template "getting the foundation for [product] ready to drive [goal], expect a plan in 15 min, DM me" — that references nothing specific and reads canned. Anchor on the real thing.\n   - tell them I'm researching their space + buyers right now and will come back with the high-level plan (~10-15 min)\n   - invite a reply\n\n   Voice per SOUL.md — no skill slugs, no .md filenames, no internal terms, no AI self-references. Don't open with "Great"/"Absolutely"/"Hi there".\n\n4. Send it. The native message tool is STRIPPED by the coding profile — do NOT call it. Instead call the \`send_update\` tool: \`send_update({ text: "<your intro>", messageClass: "tactical" })\`. It forwards to Telegram server-side (no curl, no token, no idempotencyKey — the tool handles all of that).\n\n5. After send_update returns \`OK\`, call \`mark_lifecycle({ marker: "hello_sent" })\` (durable in Convex — NOT MEMORY.md).\n\n6. Reply NO_REPLY. STOP. The launch workflow (foundation research, plan) is owned by BOOT.md + HEARTBEAT.md.`,
         },
         delivery,
         state: {},
       },
-      // Sprint 2.17 Phase E — gtm_channel_discovery and gtm_weekly_review
-      // intentionally removed. Maya self-schedules her own daily, weekly,
-      // and monthly cadence via `cron action=add` in BOOT.md Step 4
-      // after foundation completes, using the operator's actual timezone.
-      // The monthly_reset cron runs maya-foundation-research again
-      // (subsuming the prior channel-discovery surface); the weekly_review
-      // cron runs maya-weekly-review on Sunday 19:00 operator local.
+      // #15 deploy-harness hardening — the recurring behavioral cadence is now
+      // shipped DETERMINISTICALLY here with STABLE ids + the operator's timezone,
+      // instead of Maya calling `cron action=add` on every boot. The old path
+      // re-added these each boot with no dedupe, stacking duplicate crons, and
+      // invited Maya to invent ad-hoc crons (the live deploy's `morning_brief_
+      // recovery` cron that timed out + spammed ⚠️ failures). BOOT/HEARTBEAT now
+      // forbid adding/inventing crons — these five ARE the cron set, registered
+      // once at deploy. Each fires in operator-local time (tz below).
+      ...recurringCrons.map((c) => ({
+        id: c.id,
+        name: c.name,
+        description: c.description,
+        enabled: true,
+        createdAtMs: 0,
+        updatedAtMs: 0,
+        schedule: {
+          kind: "cron" as const,
+          expr: c.expr,
+          tz: input.timezone,
+        },
+        sessionTarget: "isolated" as const,
+        wakeMode: "now" as const,
+        payload: {
+          kind: "agentTurn" as const,
+          timeoutSeconds: 600,
+          thinking: "medium" as const,
+          lightContext: false as const,
+          message: c.message,
+        },
+        delivery,
+        state: {},
+      })),
     ],
   };
 
   return JSON.stringify(jobs, null, 2) + "\n";
 }
+
+/**
+ * #15 — the five recurring crons, shipped deterministically (stable ids, fired
+ * in the operator's timezone). The first cron must guard on the durable
+ * lifecycle (don't run the brief before onboarding completed); each is a SHORT
+ * routing message that points at the owning skill and marks lifecycle where it
+ * matters. Heavy logic lives in the skills, not here.
+ */
+const recurringCrons: ReadonlyArray<{
+  id: string;
+  name: string;
+  expr: string;
+  description: string;
+  message: string;
+}> = [
+  {
+    id: "0010_morning_brief",
+    name: "Morning brief (daily 7am operator-local)",
+    expr: "0 7 * * *",
+    description:
+      "The daily planning owner. Builds + runs TODAY's plan from stored ICP knowledge intersected with live channel state.",
+    message:
+      "Morning brief. 1) Call `get_agent_lifecycle({})`. If `foundationComplete` is false, onboarding hasn't finished — reply NO_REPLY, the heartbeat watchdog owns that. 2) Read `skills/maya-morning-brief/SKILL.md` and follow it: call `get_my_foundation({})` (buyer map + per-channel icpKnowledge) + read channelWarmthJson, intersect stored knowledge with what's LIVE on the bet channels today, and build today's queue — replies-heavy per the playbook cadence floor (post sparingly, mine replies hard). I POST for you on connected channels (X/LinkedIn/IG/YT auto via post_to_channel; Reddit/TikTok one-tap-confirm). 3) Send ONE grounded brief. 4) Call `mark_lifecycle({ marker: \"morning_brief\" })`.",
+  },
+  {
+    id: "0011_midday_pulse",
+    name: "Midday pulse (daily ~1pm operator-local)",
+    expr: "0 13 * * *",
+    description:
+      "Light velocity re-sweep of the 1-2 bet channels for a fresh hot-strike thread. ADDs to today's queue, never replaces. Silent unless something's genuinely hot.",
+    message:
+      "Midday pulse. 1) `get_agent_lifecycle({})`; if `foundationComplete` is false, reply NO_REPLY. 2) Read `skills/maya-continuous-research/SKILL.md` — a LIGHT velocity-only re-check of the 1-2 bet channels for a thread that turned hot since the morning brief (judged on velocity, not absolute count) AND is a real ICP fit. If one clears the bar: ADD it to today's queue (NEVER replace existing events) and fire ONE one-tap ping / auto-post it on a connected channel. Otherwise reply NO_REPLY. Discovery is this cron's job — not the heartbeat's.",
+  },
+  {
+    id: "0012_evening_recap",
+    name: "Evening recap (daily 8pm operator-local, skip-when-empty)",
+    expr: "0 20 * * *",
+    description:
+      "Conditional one-message recap grounded in real actions + attribution. Skips a genuinely empty day (folds one honest line into tomorrow's brief instead).",
+    message:
+      "Evening recap. 1) `get_agent_lifecycle({})`; if `foundationComplete` is false, reply NO_REPLY. 2) Read `skills/maya-evening-recap/SKILL.md`. Ground EVERY claim in `get_my_action_log` + `get_my_attribution({ windowDays: 1 })` — never fabricate history (no \"two quiet days\" on a day with no real elapsed time). If the day was genuinely empty (0 events planned AND 0 actions AND no attribution movement), do NOT send — fold one honest line into tomorrow's brief and reply NO_REPLY. Exception: if events WERE planned and none got done, send the one-line accountability flag.",
+  },
+  {
+    id: "0013_weekly_review",
+    name: "Weekly review (Sun 7pm operator-local)",
+    expr: "0 19 * * 0",
+    description:
+      "Strategic review: last week's score vs North Star, learnings, re-weight bet channels by what CONVERTED, advance per-channel warmth. Does not regenerate a rolling week.",
+    message:
+      "Weekly review. 1) `get_agent_lifecycle({})`; if `foundationComplete` is false, reply NO_REPLY. 2) Read `skills/maya-weekly-review/SKILL.md`: score last week vs the North Star, extract learnings (`save_learning`), RE-WEIGHT bet channels by what actually converted (`get_my_attribution`), and advance per-channel warmth (`set_channel_warmth`). Do NOT regenerate a next-week rolling plan — the daily morning_brief owns day-to-day. One grounded Telegram.",
+  },
+  {
+    id: "0014_monthly_reset",
+    name: "Monthly reset (1st, 6am operator-local)",
+    expr: "0 6 1 * *",
+    description:
+      "Re-runs foundation research + re-ingests the founder's newest posts to refresh voiceProfileJson + per-channel style exemplars. Silent-on-progress.",
+    message:
+      "Monthly reset. 1) `get_agent_lifecycle({})`; if `foundationComplete` is false, reply NO_REPLY (onboarding still owns the first pass). 2) Read `skills/maya-foundation-research/SKILL.md` § monthly-refresh: re-ingest the founder's newest posts to refresh voiceProfileJson + per-channel style exemplars, and re-check whether the channel mix still fits. SILENT-on-progress — no replay of onboarding pings; send at most ONE Telegram only if the month's diff is genuinely operator-worthy (channel changed, new buyer pocket).",
+  },
+];
 
 
 function renderSkill(slug: (typeof SKILLS)[number]): string {
@@ -1650,7 +1826,7 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
     case "maya-slop-critic":
       return "Reject generic AI phrasing and rewrite drafts to sound specific and human.";
     case "maya-calendar-plan-builder":
-      return "Build rich Google Calendar events with briefs, links, assets, and success criteria.";
+      return "Build rich Plan-tab events (the internal posts queue) with briefs, links, assets, and success criteria — no Google Calendar.";
     case "maya-approval-publisher":
       return "Handle approval-gated publishing for channels with supported APIs.";
     case "maya-results-reviewer":
@@ -1675,6 +1851,16 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
       return "Sunday-19:00 strategic review. Last week's score + North-Star on-track/at-risk, learnings (write to gtmNicheLearnings), strategic shift if 2+ weeks of consistent signal. RE-WEIGHTS bet channels by what converted and advances per-channel warmth via set_channel_warmth — but does NOT regenerate a next-week rolling plan; the daily morning_brief cron owns day-to-day planning.";
     case "maya-inbound-triage":
       return "Event-driven reply/DM/mention triage. Classify BUYER / SUPPORTER / NOISE / HOSTILE, draft a reply for the first two, surface one-liner to operator with reply/edit/skip controls.";
+    case "maya-publisher":
+      return "Publish queued drafts via post_to_channel: auto-post X/LinkedIn/IG/YouTube once the founder approved auto-posting, route Reddit/TikTok to one-tap-confirm. post_to_channel also posts replies (targetCommentId). check_already_engaged first to avoid double-replies, then record_published. The ban-safety FORCE gate is server-enforced.";
+    case "maya-content-reviewer":
+      return "Watch content the founder texted me (review_media) for editor feedback, resolving the Telegram attachment to a mediaUrl. Grounded-or-silent: visual feedback only when Gemini actually watched it.";
+    case "maya-slideshow-strategist":
+      return "Build grounded TikTok-photo-mode + IG carousels from the real media library (save_media / search_my_media / generate_slide_image) — product slides placed UNCHANGED from real screenshots, no fabricated UI.";
+    case "maya-conversion-tracker":
+      return "Own the signup side of the loop: get_conversion_setup, hand the founder the pixel snippet or ask plainly when there are clicks but no signups, and record_conversion so clicks→signups actually join.";
+    case "maya-safety-critic":
+      return "Pre-publish ban-safety guard: check every queued post/reply against per-platform self-promo + spam rules before it ships, so auto-posting never gets the founder's account flagged.";
   }
 }
 

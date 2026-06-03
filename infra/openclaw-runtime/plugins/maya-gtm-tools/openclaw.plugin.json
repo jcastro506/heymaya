@@ -73,7 +73,10 @@
       "generate_slide_image",
       "send_media_to_user",
       "check_already_engaged",
-      "post_to_channel"
+      "post_to_channel",
+      "get_agent_lifecycle",
+      "acquire_foundation_lease",
+      "mark_lifecycle"
     ]
   }
 }

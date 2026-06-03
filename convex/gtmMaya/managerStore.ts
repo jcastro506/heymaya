@@ -22,6 +22,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { computeAgentLifecycle, type AgentLifecycle } from "./agentLifecycle";
 
 async function assertAgentBelongsToAccount(
   ctx: { db: { get: <T>(id: T) => Promise<unknown> } },
@@ -830,6 +831,10 @@ export const getMyFoundation = internalQuery({
     channelScorecard: Doc<"gtmChannelScorecard">[];
     contentAngles: Doc<"gtmContentAngles">[];
     relationshipTargets: Doc<"gtmRelationshipTargets">[];
+    // #15 — durable lifecycle completeness, so the boot + heartbeat gate on
+    // Convex state (NOT ephemeral MEMORY.md markers). `foundationComplete`
+    // here is the same value `get_agent_lifecycle` returns.
+    lifecycle: AgentLifecycle | null;
   }> => {
     const buyerMap = await ctx.db
       .query("gtmBuyerMap")
@@ -851,12 +856,17 @@ export const getMyFoundation = internalQuery({
       .query("gtmRelationshipTargets")
       .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
       .collect();
+    const agent = await ctx.db.get(args.agentId);
+    const lifecycle = agent
+      ? await computeAgentLifecycle(ctx, agent, Date.now())
+      : null;
     return {
       buyerMap,
       competitiveMap,
       channelScorecard,
       contentAngles,
       relationshipTargets,
+      lifecycle,
     };
   },
 });

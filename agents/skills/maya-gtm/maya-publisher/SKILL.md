@@ -24,13 +24,13 @@ Platform differences live in the prose below, not in branches. Maya reasons over
 1. **APP.md, GTM.md** — what we sell, the wrapped signup link, the bet channels.
 2. **USER.md** — operator voice, and the connected-accounts state (which channels are live, which need a reconnect).
 3. **PLAYBOOK.md § 6** — the anti-slop ban list (final pre-publish check).
-4. **TOOLS.md** — the typed tools `post_to_channel`, `check_already_engaged`, `get_connection_health`, `list_connected_accounts`. Never call a raw Zernio endpoint by name. Always go through Maya's typed tools.
+4. **TOOLS.md** — the typed tools `post_to_channel` and `check_already_engaged` (the publish path that exists today). Never call a raw Zernio endpoint by name. Always go through Maya's typed tools. Which channels are connected: read USER.md's "Connected accounts" section (live connection-health / inbox / analytics tools are a future build).
 
 ## The gates — fail-closed, in order, before every publish
 
 Maya runs these before shaping anything. If any gate fails, she does not publish.
 
-1. **Connection health.** Call `get_connection_health` for the channel. If the account is not connected or `canPost` is false (token expired or revoked), do NOT publish. Fall back to a deep-link draft the founder pastes by hand, and hand off to maya-connection-health for the reconnect nudge. A silent failure here is the worst outcome, so when in doubt, fall back to the paste-it draft rather than fire into a dead connection.
+1. **Connection check.** Confirm the channel is connected — read USER.md's "Connected accounts" section. If it isn't connected, do NOT auto-publish. Fall back to a deep-link draft the founder pastes by hand, and ask them to connect it so I can take it over. A silent failure here is the worst outcome, so when in doubt, fall back to the paste-it draft rather than fire into a channel that isn't connected. (The server `outboundFirewall.ts` enforces this independently.)
 2. **Plan caps.** Consult `planFeaturesGtm`: respect `autoPostChannelCap` (don't auto-post on a channel beyond the connected cap) and `xUrlPostsSoftCap` for X link-posts. These are fail-closed circuit-breakers, not paywalls. If a corrupt plan reads as caps-of-zero, Maya can still research and draft but cannot publish.
 3. **Dedup.** For any reply or comment, call `check_already_engaged({platform, externalId, commentId?})` BEFORE drafting. If Maya already engaged that thread or comment, do not draft a second reply. The server enforces one-reply-per-thread anyway, but checking first avoids wasted work.
 4. **Slop re-check.** Drafts drift between approval and publish. Run the final ban-list check (PLAYBOOK § 6). Anything that trips it goes back for revision, not out the door.
@@ -88,7 +88,7 @@ After publishing (or confirming, or falling back), Maya updates the calendar eve
 
 ## Cost discipline
 
-The dominant cost line is X link-posts at $0.20 each, so the X discipline above is the real lever. Per publish: one `post_to_channel` call, one `check_already_engaged` for replies, one `get_connection_health`, one slop-critic pass. Schedule the re-poll once. No polling loops.
+The dominant cost line is X link-posts at $0.20 each, so the X discipline above is the real lever. Per publish: one `post_to_channel` call, one `check_already_engaged` for replies, one connection check (USER.md read), one slop-critic pass. Schedule the re-poll once. No polling loops.
 
 ## Anti-slop check
 

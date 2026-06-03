@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Account — product profile, North Star, connected surfaces (Telegram + Google
- * Calendar), plan, and a reversible delete-account. The go-live shell home.
+ * Account — product profile, North Star, connected surfaces (Telegram + your
+ * social channels), plan, and a reversible delete-account. The go-live shell home.
  */
 
 import { useState } from "react";
@@ -30,7 +30,6 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default function AccountPage() {
   const account = useQuery(api.gtmMaya.missionControl.getMyAccount);
-  const calendar = useQuery(api.gtmMaya.calendarOAuth.getMyCalendarConnection);
   const deleteAccount = useMutation(
     api.gtmMaya.missionControl.deleteMyGtmAccount
   );
@@ -99,19 +98,8 @@ export default function AccountPage() {
             value={<Pill tone="lime">primary channel</Pill>}
           />
           <Row
-            label="Google Calendar"
-            value={
-              calendar ? (
-                <Pill tone="lime">connected</Pill>
-              ) : (
-                <a
-                  href="/api/google-calendar-gtm/start"
-                  className="text-paper underline decoration-paper/30 underline-offset-2"
-                >
-                  connect
-                </a>
-              )
-            }
+            label="Channels"
+            value="Managed in onboarding and your Plan"
           />
         </Card>
       </Section>

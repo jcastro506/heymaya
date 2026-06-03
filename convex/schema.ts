@@ -4401,6 +4401,25 @@ export default defineSchema({
     // Off-by-default toggle: also mirror the day's plan to Google Calendar.
     // The Google flood retired; the web Today view is the primary surface.
     googleCalendarMirrorEnabled: v.optional(v.boolean()),
+    // ─── Maya v2 (#15) DURABLE agent lifecycle state ────────────────────────
+    // The agent's lifecycle markers MUST live in Convex, not in MEMORY.md.
+    // MEMORY.md is a file on the EPHEMERAL Fly machine — wiped on every
+    // redeploy/restart (bootstrap re-extracts the bundle tar over /data) — so
+    // markers stored there vanish, and the 5-min foundation watchdog re-ran the
+    // WHOLE onboarding pipeline forever (the live "re-doing loop": 42 drafts,
+    // 9 day-1 events, fabricated multi-day history). These scalar fields are the
+    // durable source of truth; the agent reads them via `get_agent_lifecycle`
+    // and gates BOOT/HEARTBEAT on them instead of MEMORY.md (scratchpad only).
+    //   helloSentAt — first intro fired (idempotency for the boot + safety-net).
+    //   foundationStartedAt / foundationCompletedAt — onboarding pass bounds.
+    //   lastMorningBriefAt — last 7am brief, for missed-cadence recovery.
+    //   foundationLeaseUntil — a check-and-set lease (acquireFoundationLease) so
+    //     only ONE heartbeat/machine runs the foundation pass at a time.
+    helloSentAt: v.optional(v.number()),
+    foundationStartedAt: v.optional(v.number()),
+    foundationCompletedAt: v.optional(v.number()),
+    lastMorningBriefAt: v.optional(v.number()),
+    foundationLeaseUntil: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -4526,13 +4545,22 @@ export default defineSchema({
     // providerEventId stays Google-only; zernioPostId lives here. The 24h
     // re-poll iterates by_agent + status, so no Zernio-id index is needed.
     autoPostJson: v.optional(v.string()),
+    // #15 idempotency — stable dedupe identity so a re-run of the foundation /
+    // morning pass UPSERTS instead of appending duplicate events (the live
+    // deploy produced 9 day-1 events from watchdog re-entry). Optional for
+    // back-compat; when set, persistGtmCalendarEventDraft returns the existing
+    // row for (agentId, dedupeKey) instead of inserting a second. Stable keys:
+    // "day1_first_move" for the single onboarding move; "<channel>:<isoDay>:<threadId>"
+    // for a daily event tied to a thread.
+    dedupeKey: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_account", ["accountId"])
     .index("by_agent", ["agentId"])
     .index("by_research_job", ["researchJobId"])
-    .index("by_provider_event", ["providerEventId"]),
+    .index("by_provider_event", ["providerEventId"])
+    .index("by_agent_dedupe", ["agentId", "dedupeKey"]),
 
   // Sprint 19 — audit log of workspace mutations. Each row records a
   // re-generation of APP.md / GTM.md / MEMORY.md content driven by a

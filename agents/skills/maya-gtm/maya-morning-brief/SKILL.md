@@ -11,7 +11,7 @@ The flagship operator-facing output. Every morning, the founder gets one Telegra
 
 ## When to invoke
 
-- Native cron schedules a daily trigger at 7am operator-local (operator timezone from USER.md). Maya self-schedules via `cron add`.
+- Fired by the `0010_morning_brief` cron (7am operator-local, operator timezone baked into jobs.json at deploy). Shipped deterministically — Maya never self-schedules or adds crons.
 - Operator manually requests ("what's the plan today?") — re-run synthesis with existing data, don't re-spawn workers unless data is >4h stale.
 - Hot-alert mid-day fires its own message via `maya-continuous-research` → not via this skill.
 
@@ -83,7 +83,7 @@ The single most important thing. Always cited. "Top priority: [URL] — replying
 
 ## What a full growth day actually looks like (the daily workload)
 
-A real growth day is NOT 1-2 items. **The floor is a MINIMUM of 10 substantive actions per day — every day, including week one.** Plus a post every other day or so once warm (cadence per channel). Maya builds today's plan to hit 10+ — but hits it the SAFE way: by SPREADING across the 2-3 bet channels and WEIGHTING to comments/replies (the low-ban-risk action), not posts. 10 thoughtful comments split across Reddit + TikTok + IG (e.g. 4 + 3 + 3) is safe and easy even for a brand-new account; 10 *posts* from a 3-day-old account is a ban. So the floor is real and non-negotiable, and ban-safety is preserved by HOW we hit it (spread + comment-weighted + value-only on cold channels), not by dropping below it. The ONE honest exception: if after a deep sweep there genuinely aren't 10 real T1/T2 targets across all bet channels today, say so plainly and steer the workers for more rather than padding with junk — but 10 is the number to actually reach, not a nice-to-have:
+A real growth day is NOT 1-2 items. **Floor: ≥7-10 engagement actions/day/active channel, almost ALL comments/replies (the leveraged, ban-safe move).** Original POSTS are rationed to **~1/day/channel MAX (~4-5/week), ≤1 product-pitch/week** — never a day of multiple original posts on one channel. Replies are the engine; posts are the exception. Maya builds today's plan to hit the engagement floor the SAFE way: by SPREADING across the 2-3 bet channels and WEIGHTING to comments/replies (the low-ban-risk action), not posts. 7-10 thoughtful comments per active channel is safe and easy even for a brand-new account; a stack of *posts* from a 3-day-old account is a ban. So the floor is real and non-negotiable, and ban-safety is preserved by HOW we hit it (spread + comment-weighted + value-only on cold channels), not by dropping below it. The ONE honest exception: if after a deep sweep there genuinely aren't enough real T1/T2 targets across the active channels today, say so plainly and steer the workers for more rather than padding with junk — but the engagement floor is the number to actually reach, not a nice-to-have:
 
 - **Volume RAMPS with account warmth — PER CHANNEL — this is the ban-safety floor, non-negotiable.** Ban-safety is our moat; our own cadence has to protect it. **Warmth is read from `channelWarmthJson` (via `get_my_foundation` / GTM.md), keyed per bet channel — NOT inferred from one global "account age".** Each channel carries its own `state` (`new_needs_warmup` → `warming` → `ready`/`warm`), `accountAgeDays`, and baseline (karma/followers/postCount). A brand-new Reddit/HN/X account (state `new_needs_warmup`) does FEWER — a handful of substantive comments and ZERO promotional/link activity — scaling up only as that channel warms. A channel already `warm`/`ready` goes straight to its full ramp THE SAME DAY a sibling channel is still cold. Never volume-spam a fresh account with links; that gets it shadowbanned and burns the channel. Maya reads `channelWarmthJson[channel].state` plus the warmup/clock-gating signals used by `maya-calendar-populator` (§ 8 account warmup gating, § 8b launch preconditions, Reddit karma floor) and caps each channel's count accordingly. A channel whose state is `warming` and "should" do 12 replies does 4-5, all pure substance.
 - **Quality always over volume.** A few genuinely-helpful, on-voice comments beat 15 generic ones. Never pad with low-tier (T3) threads to hit a count — if there are only 4 real T1/T2 targets today, today is a 4-target day, said honestly. Lazy/filler replies are a documented mistake (deboost + spam-detection risk); Maya would rather ship a smaller plan than a padded one.
@@ -120,7 +120,7 @@ Today's vetted T1/T2 threads → `gtmCalendarEvent`s written via `propose_calend
 
 Calibrated to operator's available capacity (per USER.md). Maya doesn't pad to fill time or load up beyond what they can realistically do. If today's total runs heavy, she cuts the lowest-tier event. If the account is fresh, she cuts volume HARD regardless of signal — ban-safety wins over a big-looking day.
 
-Each event description follows the full hands-off recipe template from `maya-calendar-populator` (WHAT / LINK / WHY / YOUR REPLY / VOICE NOTES / SUCCESS TARGET / TIME / SOURCE), written to Convex `gtmCalendarEvents` so the operator can act on every one even when Google Calendar isn't connected.
+Each event description follows the full hands-off recipe template from `maya-calendar-populator` (WHAT / LINK / WHY / YOUR REPLY / VOICE NOTES / SUCCESS TARGET / TIME / SOURCE), written to the founder's Plan tab (the today's-posts queue) so they see the day; on connected channels Maya posts for them via `maya-publisher`, and the recipe is the fallback paste for unconnected channels + the confirm-card body for Reddit/TikTok.
 
 ### Every draft is voice-matched and ICP-grounded BEFORE it reaches the calendar (hard gate)
 
@@ -175,7 +175,7 @@ log_action({
 
 - **No fresh data.** If `maya-continuous-research` failed and the data is stale, send a holding message: "Pulling cleaner data — brief in 30 min" and re-trigger research. Don't ship a stale brief silently.
 - **Operator hasn't acknowledged 3 briefs in a row.** Add a closing line: "I notice you haven't opened the last 3 briefs. Want me to scale back the cadence, switch tone, or pause for a few days?"
-- **Calendar OAuth not connected.** Events still write to Convex `gtmCalendarEvents`. Brief notes: "5 events queued in HQ (your Google Calendar isn't connected yet — want me to walk you through it?)."
+- **Posting channel not connected.** Events still write to Convex `gtmCalendarEvents` and show in the Plan tab. For a queued channel that isn't connected, the brief notes plainly: "X is queued but your X isn't connected — connect it and I'll post for you; until then I'll hand you paste-ready drafts." Defer the reconnect to `maya-connection-health`.
 
 ## Cost discipline
 

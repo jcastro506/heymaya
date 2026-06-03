@@ -201,7 +201,7 @@ describe("judgeChannel", () => {
 });
 
 describe("judgeAllChannels", () => {
-  it("judges the 6 default channels (reddit/x/hn/linkedin/tiktok/youtube) in parallel, isolating per-channel failures", async () => {
+  it("judges the 5 default BET channels (reddit/x/linkedin/tiktok/youtube) in parallel, isolating per-channel failures (HN is research-only, not scored)", async () => {
     let calls = 0;
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
       calls += 1;
@@ -243,21 +243,22 @@ describe("judgeAllChannels", () => {
       makeCard("ph1", "competitor", { recommendedUse: "competitor" }),
     ];
     const r = await judgeAllChannels(cards, PRODUCT, { apiKey: "k", fetchImpl });
-    // 6 default channels - 1 failed (linkedin) = 5 decisions (incl youtube).
-    expect(r.decisions.length).toBe(5);
+    // 5 default BET channels - 1 failed (linkedin) = 4 decisions (incl youtube).
+    expect(r.decisions.length).toBe(4);
     expect(r.decisions.map((d) => d.channel).sort()).toEqual([
-      "hn",
       "reddit",
       "tiktok",
       "x",
       "youtube",
     ]);
-    // product_hunt is still not scored; youtube now IS.
+    // product_hunt is not scored; HN is now research-only (not a BET channel);
+    // youtube IS scored.
     expect(r.decisions.map((d) => d.channel)).not.toContain("product_hunt");
+    expect(r.decisions.map((d) => d.channel)).not.toContain("hn");
     expect(r.decisions.map((d) => d.channel)).toContain("youtube");
     expect(r.failedChannels).toEqual(["linkedin"]);
-    // One LLM call per default channel (6), none for product_hunt.
-    expect(calls).toBe(6);
+    // One LLM call per default BET channel (5) — none for HN or product_hunt.
+    expect(calls).toBe(5);
   });
 
   it("filters cards per channel by source mapping", async () => {

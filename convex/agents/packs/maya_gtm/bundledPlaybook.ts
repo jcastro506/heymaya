@@ -78,7 +78,7 @@ These are the **floor** numbers. Below these, do not launch on that channel — 
 | LinkedIn | 50 niche follows, 1 post/week for 4 weeks, a posting voice that isn't broetry | A baseline the algorithm has seen you do |
 | Instagram | 200 followers in your niche, 4 weeks of Reels/carousels, bio keyword-optimized for IG SEO | Account looks alive enough to recommend |
 | Product Hunt | 50 hunters/followers who will be notified, 1 prior comment on someone else's launch | A starting upvote pool |
-| Hacker News | A submission account >90 days old with karma >50 from non-self-submissions | HN's spam filter respects age and history |
+| Hacker News | RESEARCH-ONLY for Maya — not a posting cadence. A one-time founder-written "Show HN" at hard launch needs a submission account >90 days old with karma >50 from non-self-submissions | HN's spam filter respects age and history; the Show HN is a one-time manual launch artifact, not a recurring posting cadence |
 
 #### The "build in public" doctrine — when it works, when it's noise
 
@@ -106,13 +106,13 @@ It fails in the other configurations, all of which are common:
 
 #### The 5-piece soft-launch kit
 
-This is the minimum set. Maya drafts all five before posting any. Anything less = post-and-pray (Failure Mode 5).
+This is the minimum set. Maya writes and posts all five on the founder's connected channels (auto-post); nothing waits on the founder to paste. Anything less = post-and-pray (Failure Mode 5).
 
 1. **The thread / long post.** 6-12 tweets OR a LinkedIn long-form OR a Reddit text post. Tells the story of why you built it, who it's for, what it does. Ends with link. No CTA stronger than "DM me if you want in."
 2. **The demo video.** 30-90 second screen recording. No voiceover required. Captions auto-burned. Native upload to every channel (LinkedIn 2026: native video 36% YoY growth, do not link out).
 3. **The carousel / document.** 8-12 slides. Slide 1 hook, slides 2-N problem→solution→evidence, last slide CTA. Highest-engagement format on LinkedIn (6.6% engagement on documents). Also reusable as IG carousel (10% engagement vs Reels 6%) and TikTok slideshow (1.9x more likes than video).
 4. **The Reddit post.** Targeted at ONE subreddit you've already warmed (>20 comments, no removed posts). r/SideProject (622k members, most permissive) is the safest default; r/SaaS uses scheduled "Share Your SaaS" threads; r/microsaas (28k) for smaller-niche fit.
-5. **The 5 reply opportunities.** 5 specific tweets/posts in your niche where you can mention the product as an answer to an existing question. Pre-identified, drafted, ready to post when the moment shows up. This is the highest-conversion content format and the one operators always skip.
+5. **The 5 reply opportunities.** 5 specific tweets/posts in your niche where you can mention the product as an answer to an existing question. Pre-identified and posted by Maya the moment the matching question shows up. This is the highest-conversion content format and the one operators always skip.
 
 #### The "don't ask for users yet" rule
 
@@ -143,7 +143,7 @@ If Maya sees only founder-circle engagement, she flags it: "We're getting likes 
 The canonical hard-launch day is **Tuesday** (sometimes Wednesday). The reasoning:
 
 - **Product Hunt:** Launch at **12:01am PT Tuesday** for max daily window. Some 2026 guidance suggests Mondays/Fridays for lower competition if optimizing for top rank rather than visibility.
-- **Hacker News (Show HN):** Tuesday-Thursday morning Pacific (14:00-17:00 UTC = 7am-10am PT / 10am-1pm ET). Sunday-night midnight-PT is a counter-strategy if visibility > competition.
+- **Hacker News (Show HN):** the ONE-TIME, founder-written, manually-posted launch artifact (not a Maya posting cadence). If the founder runs it, Tuesday-Thursday morning Pacific (14:00-17:00 UTC = 7am-10am PT / 10am-1pm ET). Sunday-night midnight-PT is a counter-strategy if visibility > competition.
 - **Twitter/X thread:** Tuesday morning, drops 1-2 hours after PH goes live so PH velocity is already showing.
 - **LinkedIn:** Tuesday morning, 8-10am the user's timezone.
 - **Reddit:** Stagger — drop in your warmed sub mid-morning Tuesday after PH/HN have visible traction.
@@ -174,15 +174,14 @@ If any of these are missing, hard launch is premature. Push it 7 days, generate 
 
 **Doctrine: Find the format that worked in Phases 2-3. Double down. Run it until it stops working. Then find the next one.**
 
-#### Weekly cadence rhythm
+#### Daily cadence floor (per ACTIVE channel)
 
-A sustainable post-launch cadence Maya defaults to:
+Reply-mining is the leveraged, ban-safe engine — it's where almost all of Maya's daily work happens. Original posts are rationed; replies are the volume.
 
-- **1 metric post / week.** Something quantitative. MRR. Users. Jobs done. Builds trust by being concrete.
-- **2 build-update or insight posts / week.** Shipped X. Learned Y. New feature. Pattern noticed.
-- **1 demo or proof post / week.** A user using the product. Screen recording of new feature. Before/after.
-- **Reply mining 4-5 days / week.** 30-60 min/day in the niche feed/subreddit/comments — the most leveraged content activity bar none.
-- **No more than 1 product-pitch post per week.** Anything more is salesy and trips the slop detectors (Section 6).
+- **≥7-10 engagement actions / day, per active channel.** Almost all are comments/replies on other people's posts — answering a buyer's question, adding evidence, sharing a counter-example. This is the floor the morning plan hits every day. Maya posts these herself on connected channels; she does not hand them to the founder to paste.
+- **≤1 original post / day / channel (≈4-5 original posts/week).** Build-updates, insights, metric posts, demos. One a day is the ceiling, not the target — skip days when there's nothing real to say.
+- **≤1 product-pitch (OFFER) post / week.** More than that is salesy and trips the slop detectors (Section 6). The 9:1 ENGAGE-to-OFFER ratio (Section 4) is enforced by the reply volume above.
+- **Phase- and strategy-dependent.** Phase 1 (cold-start) is reply-heavy with near-zero original posts. Phase 4 (compounding) keeps the daily reply floor and adds rationed originals once a format is proven. Maya tunes the mix to the channel and stage but never drops below the daily engagement floor.
 
 #### Format-market-fit detection
 
@@ -218,11 +217,11 @@ Given the product + operator constraints, which channel(s) should Maya recommend
 
 3. Can the operator provide screenshots / static visuals?
    YES → TikTok slideshow + IG carousel + LinkedIn document candidates
-   NO → skip visual channels entirely; route to text-only (X, Reddit, HN, LinkedIn long-form)
+   NO → skip visual channels entirely; route to text-only posting channels (X, Reddit, LinkedIn long-form). HN is research-only — mine it for signal, don't post to it (rule 3.6).
 
 4. (No visual product, e.g., B2B / API / enterprise)
    Is the target buyer technical (engineers, devs, technical PMs)?
-   YES → X primary, Reddit (r/programming, r/SaaS, niche dev subs) secondary, HN if novel
+   YES → X primary, Reddit (r/programming, r/SaaS, niche dev subs) secondary. HN is research-only (mine for buyer-pain/competitor signal, don't post — rule 3.6); a one-time founder-written Show HN at hard launch is the only HN post.
    NO → continue to step 5
 
 5. Is the target buyer in ops / marketing / HR / sales / finance?
@@ -245,7 +244,7 @@ Given the product + operator constraints, which channel(s) should Maya recommend
 - **3.3.** If TikTok is right but operator won't appear on camera, route to TikTok-slideshow / screen-record format, not abandon TikTok.
 - **3.4.** If LinkedIn is right but operator's tone is informal/builder, route to LinkedIn long-form personal narrative, NOT broetry / corporate.
 - **3.5.** Reddit is never primary by itself — it has no follow-loop, only post-loop. Use it as a soft-launch testbed and a sustained presence channel, not as the headline launch channel.
-- **3.6.** Hacker News is binary: novel-technical-thing-builders-care-about, OR don't bother. Show HN is not a generic launch surface.
+- **3.6 (REVISED).** Hacker News is RESEARCH-ONLY for Maya. She mines HN via Algolia search for buyer-pain signal and competitor mentions — she does NOT auto-post to HN. The one exception is a single, founder-written "Show HN" at hard launch (Phase 3), posted manually by the founder with Maya's coached title. HN is never a steady-state posting cadence and never an "active channel" in the daily floor.
 - **3.7.** Product Hunt is **amplification**, not ignition. Maya does not recommend PH as the first channel.
 - **3.8.** If the operator's product is a meta-tool (something for builders, something for indie hackers, dev tools), bias toward X. The audience is concentrated there.
 - **3.9.** If the operator is a strong writer but weak on video, route to X / LinkedIn / Reddit / HN. Don't force TikTok.
@@ -259,9 +258,9 @@ Codifies the three modes Maya should always be aware she's in. Posts/replies/wor
 
 ### The three modes
 
-- **BUILD.** Original content. Build-in-public posts. Threads. Demos. Carousels. Story posts. Insight posts. Everything that makes the operator more discoverable and grows follower count. Mode-purpose: be findable.
-- **ENGAGE.** Replies. Comments. Helpful answers in niche subreddits/threads/DMs. Amplifying others. Mode-purpose: be present in the room where the buyers are.
-- **OFFER.** Product mention. Demo. Pitch. CTA. Sign-up ask. Mode-purpose: convert attention to evidence.
+- **BUILD.** Original content Maya writes and posts on connected channels. Build-in-public posts. Threads. Demos. Carousels. Story posts. Insight posts. Everything that makes the operator more discoverable and grows follower count. Mode-purpose: be findable.
+- **ENGAGE.** Replies. Comments. Helpful answers in niche threads — Maya posts these herself on connected channels. Amplifying others. This is the volume engine: almost all daily work lives here. Mode-purpose: be present in the room where the buyers are.
+- **OFFER.** Product mention. Demo. Pitch. CTA. Sign-up ask — Maya posts these too, rationed to ≤1/week. Mode-purpose: convert attention to evidence.
 
 ### The ratio per platform
 
@@ -274,7 +273,7 @@ These ratios are **time/effort ratios**, not literal post counts.
 | LinkedIn | 40% | 50% | 10% |
 | TikTok | 60% | 30% | 10% |
 | Instagram | 60% | 30% | 10% |
-| Hacker News | 20% | 70% | 10% |
+| Hacker News (research-only; not part of the daily posting floor) | — | — | — |
 
 ### The 9:1 doctrine, generalized
 
@@ -423,21 +422,21 @@ Maya never ships a post the operator wouldn't write themselves. Operator's insti
 
 | Product type | Primary | Secondary | Parked |
 |---|---|---|---|
-| B2B SaaS, technical buyer (dev tools, infra, devops) | X | Reddit (r/programming, r/SaaS, niche), HN | LinkedIn (low conversion at SMB) |
+| B2B SaaS, technical buyer (dev tools, infra, devops) | X | Reddit (r/programming, r/SaaS, niche); HN research-only + Show HN (one-time, manual) | LinkedIn (low conversion at SMB) |
 | B2B SaaS, ops buyer ($500-5000 ACV) | LinkedIn | X | TikTok, IG, Reddit |
 | Consumer productivity app | Reddit (niche-specific) | X | TikTok-secondary |
 | Consumer lifestyle app (fitness, dating, social, journaling) | TikTok | Instagram | Reddit (only if subreddit fits the lifestyle) |
-| Dev tool / CLI / API | X | Show HN | TikTok |
+| Dev tool / CLI / API | X | Show HN (one-time, manual) | TikTok |
 | AI tool (general) | X | Reddit (r/SideProject, r/LocalLLaMA if local, r/ChatGPTPromptGenius) | TikTok-tertiary |
 | Marketplace (two-sided) | Depends on supply side: creator-side → TikTok/IG; buyer-side → Reddit/X | Other side as secondary | LinkedIn unless B2B marketplace |
 | Hardware / physical product | Press + creator partnerships + crowdfunding | TikTok / IG | Organic social as the primary launch |
 | Newsletter / writer / media | Twitter (or platform-of-record like Substack Notes) | LinkedIn | TikTok unless story-driven |
 | Education / course / info product | The channel where the course's topic-audience lives | One other | All others |
 | Vertical SaaS (e.g., for plumbers, dentists, salons) | Niche-specific (FB groups, niche subreddits, industry forums) | Direct outbound / cold email | Mass-social (X, LinkedIn) |
-| Open-source dev project | GitHub README + Show HN + X | Reddit (r/programming if novel, niche subs) | LinkedIn |
+| Open-source dev project | GitHub README + Show HN (one-time, manual) + X | Reddit (r/programming if novel, niche subs) | LinkedIn |
 | Indie consumer game | TikTok | Reddit (r/IndieDev, r/IndieGaming, r/Steam) | LinkedIn |
-| Productivity tool for engineers (Cursor, Linear-likes) | X | Show HN | TikTok |
-| AI coding tool / agent | X | Show HN + GitHub | Reddit (r/programming has historically rejected AI tools; r/LocalLLaMA fine) |
+| Productivity tool for engineers (Cursor, Linear-likes) | X | Show HN (one-time, manual) | TikTok |
+| AI coding tool / agent | X | Show HN (one-time, manual) + GitHub | Reddit (r/programming has historically rejected AI tools; r/LocalLLaMA fine) |
 | For-VibeCoders / no-audience-builder tools (ClawLaunch's own ICP) | X (where they are) + the indie-hacker rooms (IH, /r/SideProject) | LinkedIn (only if creator-side) | TikTok unless operator is comfortable |
 
 ---

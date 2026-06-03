@@ -1323,5 +1323,48 @@ export default defineToolPlugin({
       }),
       execute: async (p, _cfg, ctx) => postLc("zernio_post", p, ctx.signal),
     }),
+
+    // =====================================================================
+    // DURABLE LIFECYCLE (#15) — the re-doing-loop fix.
+    // The agent's lifecycle (hello sent? foundation done? lease held?) lives
+    // in CONVEX, not MEMORY.md (which is wiped on every Fly restart). BOOT and
+    // HEARTBEAT gate on these tools, never on MEMORY.md markers. This is what
+    // stops the foundation watchdog from re-running onboarding forever.
+    // =====================================================================
+    tool({
+      name: "get_agent_lifecycle",
+      label: "Get Agent Lifecycle",
+      description:
+        "Read my DURABLE lifecycle from Convex (the source of truth — NOT MEMORY.md, which is wiped on restart). Returns lifecycle: { phase (fresh|hello_sent|foundation_in_progress|active), helloSent, foundationStarted, foundationComplete, foundationCompletedAt, lastMorningBriefAt, leaseActive, leaseHeldUntil, hasVoiceProfile, targetThreadCount, draftCount, calendarEventCount }. CALL THIS FIRST on every boot and heartbeat tick. If foundationComplete is true, onboarding is DONE — never re-run it.",
+      parameters: Type.Object({}),
+      execute: async (_p, _cfg, ctx) =>
+        getLc("get_agent_lifecycle", undefined, ctx.signal),
+    }),
+    tool({
+      name: "acquire_foundation_lease",
+      label: "Acquire Foundation Lease",
+      description:
+        "Check-and-set lease I MUST acquire before running the foundation/onboarding pass. Prevents two heartbeat ticks (or two machines) from re-running onboarding at once. Returns { acquired, alreadyComplete, leaseActive, leaseUntil }. If alreadyComplete:true → foundation is DONE, stop, do NOT run it. If acquired:false & leaseActive:true → another tick owns it, tick silent. Only run the pass when acquired:true. Optional ttlMs (default 15min).",
+      parameters: Type.Object({
+        ttlMs: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("acquire_foundation_lease", p, ctx.signal),
+    }),
+    tool({
+      name: "mark_lifecycle",
+      label: "Mark Lifecycle",
+      description:
+        "Set a DURABLE lifecycle marker in Convex (replaces appending to MEMORY.md). marker = 'hello_sent' AFTER the intro is sent (idempotent — safe to call twice); 'foundation_complete' ONLY after the synthesis + the single day-1 move have actually landed in the DB; 'morning_brief' after each 7am brief; 'release_lease' if I yield the foundation pass mid-way for the next tick to resume.",
+      parameters: Type.Object({
+        marker: Enum([
+          "hello_sent",
+          "foundation_complete",
+          "morning_brief",
+          "release_lease",
+        ]),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("mark_lifecycle", p, ctx.signal),
+    }),
   ],
 });

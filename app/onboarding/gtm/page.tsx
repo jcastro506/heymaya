@@ -535,7 +535,7 @@ function GtmOnboardingBody() {
               className="input"
             >
               <option value="manager">
-                I&apos;m live — take over my social, tell me what to post
+                I&apos;m live — take over my social and run it for me.
               </option>
               <option value="launch">
                 I haven&apos;t launched yet — plan my go-to-market
@@ -666,7 +666,7 @@ function GtmOnboardingBody() {
               }
             />
             <Toggle
-              label="I will manually post on Instagram"
+              label="I'll connect Instagram so Maya posts for me"
               checked={draft.canPostInstagramManually}
               onChange={(checked) =>
                 setDraft((d) => ({ ...d, canPostInstagramManually: checked }))

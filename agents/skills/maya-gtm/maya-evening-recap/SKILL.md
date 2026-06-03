@@ -11,7 +11,7 @@ The bookend to the morning brief. The operator knows what they did today and how
 
 ## When to invoke
 
-- Native cron at 20:00 operator-local. Self-scheduled via `cron add` after foundation completes.
+- Fired by the `0012_evening_recap` cron (20:00 operator-local), shipped deterministically in jobs.json. NOT self-scheduled — Maya never adds crons.
 - NEVER from a heartbeat.
 
 ## Skip-when-empty (the recap is conditional, not unconditional)

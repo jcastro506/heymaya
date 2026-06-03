@@ -102,40 +102,40 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("AGENTS.md")).toContain("The database is truth.");
     expect(files.get("APP.md")).toContain("BugBrief");
     expect(files.get("GTM.md")).toContain("Primary: reddit");
-    // Sprint A (trust & stability) — BOOT.md is the slim routing file:
-    // read MEMORY.md's append-only lifecycle log, send the hello if no
-    // `hello_sent_at:` line exists yet, route on foundation, then yield.
-    // It deliberately does NOT inline the foundation procedure, subagent
-    // management, or cron scheduling — those live in the skills /
-    // HEARTBEAT / native tools. "This file is the routing decision and
-    // nothing more."
+    // #15 (durable loop fix) — BOOT.md is the slim routing file: it reads the
+    // DURABLE lifecycle from Convex via `get_agent_lifecycle` (NOT MEMORY.md,
+    // which is wiped on every Fly restart and caused the re-doing loop), sends
+    // the hello if `helloSent` is false, acquires the foundation lease before
+    // running onboarding, and marks completion via `mark_lifecycle`. It
+    // deliberately does NOT inline the foundation procedure, subagent
+    // management, or cron scheduling — those live in the skills / HEARTBEAT /
+    // native tools.
     const boot = files.get("BOOT.md") ?? "";
-    expect(boot).toContain("MEMORY.md FIRST");
-    expect(boot).toContain("lifecycle log");
-    expect(boot).toContain("hello_sent_at:");
-    expect(boot).toContain("foundation_started_at");
-    expect(boot).toContain("foundation_completed_at:");
+    expect(boot).toContain("get_agent_lifecycle");
+    expect(boot).toContain("foundationComplete");
+    expect(boot).toContain("acquire_foundation_lease");
+    expect(boot).toContain('mark_lifecycle');
+    // The lifecycle is durable in Convex; MEMORY.md is explicitly NOT the
+    // source of truth (it's wiped on restart). BOOT must say so.
+    expect(boot).toMatch(/MEMORY\.md.*(wiped|not.*source|ephemeral)/i);
     expect(boot).toContain("USER.md");
     expect(boot).toContain("APP.md");
     expect(boot).toContain("maya-foundation-research");
     expect(boot).toContain("sessions_yield");
-    // Sprint A append-only contract: BOOT must instruct APPEND, never
-    // edit, so the OpenClaw exact-match edit tool cannot fail on marker
-    // drift (the "Could not find the exact text in MEMORY.md" bug class).
-    expect(boot).toMatch(/APPEND a .*hello_sent_at/);
-    expect(boot).toContain("never edit an existing line");
+    // After sending the hello, mark it durably (idempotent) so a restart can't
+    // make Maya re-introduce herself like a stranger.
+    expect(boot).toMatch(/mark_lifecycle\(\{ marker: "hello_sent" \}\)/);
     // Sprint 2.16u-fix8 — voice firewall removed per operator: "I hate
     // hardcoded string blockers. Get rid of all of that and just add
     // it to her prompt where appropriate." Voice contract now lives in
     // SOUL.md "What I never say" section, enforced by Maya's judgment.
     expect(boot).toContain('SOUL.md');
-    // Sprint A — MEMORY.md ships an append-only lifecycle log, not the
-    // old exact-match placeholder lines (`<set this when…>` / `<updated
-    // by … cron>`) that the edit tool would choke on. Assert the old
-    // fragile placeholders are gone.
+    // #15 — MEMORY.md is now an EPHEMERAL scratchpad, NOT an append-only
+    // lifecycle log. It must tell Maya the lifecycle lives in Convex
+    // (get_agent_lifecycle), and must not carry the old fragile placeholders.
     const memory = files.get("MEMORY.md") ?? "";
-    expect(memory).toContain("APPEND-ONLY");
-    expect(memory).toContain("lifecycle log");
+    expect(memory).toMatch(/EPHEMERAL|wiped/);
+    expect(memory).toContain("get_agent_lifecycle");
     expect(memory).not.toContain("<set this when");
     expect(memory).not.toContain("<updated by");
     // Sprint E — shared, monthly-refreshed platform-algorithm intelligence.
@@ -377,27 +377,35 @@ describe("Maya GTM workspace pack", () => {
     expect(heartbeat).toContain("relationship-cadence");
     expect(heartbeat).toContain("inbound-poll");
 
-    // Manager-mode marker the heartbeat still keys off.
-    expect(heartbeat).toContain("foundation_completed_at:");
+    // #15 — the watchdog now gates on the DURABLE lifecycle (get_agent_lifecycle
+    // + acquire_foundation_lease), not a MEMORY.md `foundation_completed_at:`
+    // marker. If foundationComplete is true it ticks silent (never re-runs
+    // onboarding); it only resumes the pass when it actually acquires the lease.
+    expect(heartbeat).toContain("get_agent_lifecycle");
+    expect(heartbeat).toContain("foundationComplete");
+    expect(heartbeat).toContain("acquire_foundation_lease");
 
     // Voice contract + primitives.
     expect(heartbeat).toContain("HEARTBEAT_OK");
     expect(heartbeat).toContain("SOUL.md");
   });
 
-  it("jobs.json carries only the deploy-safety-net kickstart; cadence is Maya-scheduled at runtime", () => {
-    // Sprint 2.17 Phase E — jobs.json drops gtm_channel_discovery +
-    // gtm_weekly_review. Maya self-schedules her own behavioral cadence
-    // via `cron action=add` in BOOT step 4 (morning/evening/weekly/
-    // monthly) using the operator's timezone. The kickstart cron
-    // stays as a safety net so the operator gets the hello at +300s
-    // even if the gateway:startup hook misfires.
+  it("jobs.json ships the kickstart PLUS the recurring cadence deterministically (stable ids, operator tz)", () => {
+    // #15 deploy-harness hardening — the recurring behavioral cadence
+    // (morning/midday/evening/weekly/monthly) is now shipped DETERMINISTICALLY
+    // in jobs.json with stable ids, instead of Maya calling `cron action=add`
+    // at runtime. OpenClaw's cron store IS /data/cron/jobs.json
+    // (resolveDefaultCronStorePath with OPENCLAW_STATE_DIR=/data), so these
+    // register at boot and fire in the operator's timezone. The runtime-add path
+    // was both unsupported AND the source of the invented `morning_brief_
+    // recovery` cron that timed out + spammed failures.
     const { files } = buildMayaGtmWorkspace(INPUT);
     const jobs = JSON.parse(files.get("jobs.json") ?? "{}") as {
       version?: number;
       jobs: Array<{
         id: string;
         sessionTarget: string;
+        schedule?: { kind: string; expr?: string; tz?: string; at?: string };
         payload: {
           kind: string;
           message: string;
@@ -411,6 +419,30 @@ describe("Maya GTM workspace pack", () => {
 
     expect(jobs.version).toBe(1);
     expect(jobs.jobs.every((job) => job.state != null)).toBe(true);
+
+    // The 5 recurring crons ship with stable ids + cron schedules in the
+    // operator's timezone. Maya never adds these at runtime.
+    const recurring = [
+      { id: "0010_morning_brief", expr: "0 7 * * *" },
+      { id: "0011_midday_pulse", expr: "0 13 * * *" },
+      { id: "0012_evening_recap", expr: "0 20 * * *" },
+      { id: "0013_weekly_review", expr: "0 19 * * 0" },
+      { id: "0014_monthly_reset", expr: "0 6 1 * *" },
+    ];
+    for (const r of recurring) {
+      const job = jobs.jobs.find((j) => j.id === r.id);
+      expect(job, `recurring cron ${r.id} must ship in jobs.json`).toBeTruthy();
+      expect(job?.schedule?.kind).toBe("cron");
+      expect(job?.schedule?.expr).toBe(r.expr);
+      expect(job?.schedule?.tz).toBe(INPUT.timezone);
+      // Each guards on the durable lifecycle before doing work.
+      expect(job?.payload.message).toContain("get_agent_lifecycle");
+    }
+    // Morning brief stamps its durable marker; never invents a recovery cron.
+    const morning = jobs.jobs.find((j) => j.id === "0010_morning_brief");
+    expect(morning?.payload.message).toContain(
+      'mark_lifecycle({ marker: "morning_brief" })'
+    );
 
     // The OLD heavy boot crons stay GONE — they orchestrated 45-min
     // research turns that held main session captive (Sprint 2.16u).
@@ -441,14 +473,16 @@ describe("Maya GTM workspace pack", () => {
     // workflow moved to HEARTBEAT.md watchdog (fix14's prompt packed
     // too much into one 5-min cron turn and got timed out at 362s).
     expect(kickstart?.payload.message).toContain("SOUL.md");
-    expect(kickstart?.payload.message).toContain("hello_sent_at");
     expect(kickstart?.payload.message).toContain("message tool");
-    // Sprint A — idempotency: the kickstart is a SAFETY NET that must
-    // read MEMORY.md and no-op if BOOT.md already sent the hello, so a
-    // successful gateway:startup hello is never followed by a duplicate.
+    // #15 — idempotency via the DURABLE lifecycle, not MEMORY.md. The kickstart
+    // is a SAFETY NET that must check `get_agent_lifecycle` and no-op if the
+    // hello already went out, then mark it durably — so a successful
+    // gateway:startup hello is never followed by a duplicate, even across a
+    // restart that wipes MEMORY.md.
     expect(kickstart?.payload.message).toContain("IDEMPOTENCY CHECK FIRST");
+    expect(kickstart?.payload.message).toContain("get_agent_lifecycle");
     expect(kickstart?.payload.message).toMatch(
-      /If ANY line begins with .*hello_sent_at/
+      /mark_lifecycle\(\{ marker: "hello_sent" \}\)/
     );
     expect(kickstart?.payload.message).toContain("STOP");
     // Sprint A — reconciled hello spec: short (1-3 sentences), and the
@@ -478,9 +512,18 @@ describe("Maya GTM workspace pack", () => {
       "channel discovery must NOT be baked into deploy-time jobs.json"
     ).toBeUndefined();
 
-    // jobs.json now contains exactly one job: the kickstart safety net.
-    expect(jobs.jobs).toHaveLength(1);
+    // jobs.json now contains exactly the kickstart + the 5 deterministic
+    // recurring crons (#15). No old heavy boot crons, no Maya-added crons.
+    expect(jobs.jobs).toHaveLength(6);
     expect(jobs.jobs[0].id).toBe("0001_kickstart");
+    expect(jobs.jobs.map((j) => j.id).sort()).toEqual([
+      "0001_kickstart",
+      "0010_morning_brief",
+      "0011_midday_pulse",
+      "0012_evening_recap",
+      "0013_weekly_review",
+      "0014_monthly_reset",
+    ]);
   });
 
   it("Sprint 2.16u-fix8 — kickstart cron references SOUL.md for voice (firewall removed)", () => {

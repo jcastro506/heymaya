@@ -13,7 +13,7 @@ Daily cadence is tactical. Weekly review is strategic. Once a week, Maya looks a
 
 ## When to invoke
 
-- Native cron Sunday 19:00 operator-local. Self-scheduled.
+- Fired by the deterministic `0013_weekly_review` cron (Sun 19:00 operator-local, in jobs.json). Maya never self-schedules or adds crons.
 - Operator manually requests ("how'd this week go?") — re-synthesize from existing data.
 
 ## Pre-conditions

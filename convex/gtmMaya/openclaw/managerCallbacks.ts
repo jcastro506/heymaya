@@ -1110,6 +1110,115 @@ export const getMyNicheLearningsHttp = httpAction(async (ctx, request) => {
   });
 });
 
+// ───────────────────── Durable lifecycle (#15) ─────────────────────
+//
+// The agent reads/writes its lifecycle through these instead of MEMORY.md
+// markers. MEMORY.md is wiped on every Fly restart; these are durable in
+// Convex, which is what stops the foundation watchdog from re-running the
+// whole onboarding pipeline forever.
+
+/** GET — read the durable lifecycle (phase, helloSent, foundationComplete,
+ *  lease state, evidence counts). */
+export const getAgentLifecycleHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  const lifecycle = await ctx.runQuery(
+    internal.gtmMaya.agentLifecycle.getAgentLifecycle,
+    { agentId: auth.agentId }
+  );
+  return new Response(JSON.stringify({ lifecycle }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+/** POST — check-and-set the foundation lease before running the pass.
+ *  Body (all optional): { ttlMs }. Returns { acquired, alreadyComplete,
+ *  leaseActive, leaseUntil }. */
+export const acquireFoundationLeaseHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let ttlMs: number | undefined;
+  try {
+    const body = (await request.json()) as { ttlMs?: number };
+    if (typeof body?.ttlMs === "number" && body.ttlMs > 0) ttlMs = body.ttlMs;
+  } catch {
+    // empty/invalid body is fine — use the default lease window.
+  }
+
+  const result = await ctx.runMutation(
+    internal.gtmMaya.agentLifecycle.acquireFoundationLease,
+    { agentId: auth.agentId, ttlMs }
+  );
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+/** POST — set a durable lifecycle marker. Body: { marker }.
+ *  marker ∈ hello_sent | foundation_complete | morning_brief | release_lease. */
+export const markLifecycleHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let marker: string | undefined;
+  try {
+    const body = (await request.json()) as { marker?: string };
+    marker = body?.marker;
+  } catch {
+    return new Response("invalid JSON body", { status: 400 });
+  }
+  if (!marker) return new Response("missing 'marker'", { status: 400 });
+
+  switch (marker) {
+    case "hello_sent": {
+      const r = await ctx.runMutation(
+        internal.gtmMaya.agentLifecycle.markHelloSent,
+        { agentId: auth.agentId }
+      );
+      return new Response(JSON.stringify({ ok: true, ...r }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    case "foundation_complete": {
+      const r = await ctx.runMutation(
+        internal.gtmMaya.agentLifecycle.markFoundationComplete,
+        { agentId: auth.agentId }
+      );
+      return new Response(JSON.stringify({ ok: true, ...r }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    case "morning_brief": {
+      await ctx.runMutation(
+        internal.gtmMaya.agentLifecycle.markMorningBrief,
+        { agentId: auth.agentId }
+      );
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    case "release_lease": {
+      await ctx.runMutation(
+        internal.gtmMaya.agentLifecycle.releaseFoundationLease,
+        { agentId: auth.agentId }
+      );
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    default:
+      return new Response(`unknown marker '${marker}'`, { status: 400 });
+  }
+});
+
 // ───────────────────── Cost ledger (Sprint 2.25) ─────────────────────
 
 /**

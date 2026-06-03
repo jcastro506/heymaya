@@ -109,6 +109,9 @@ import {
   getMyNichePulseHttp,
   getMyActionLogHttp,
   getMyNicheLearningsHttp,
+  getAgentLifecycleHttp,
+  acquireFoundationLeaseHttp,
+  markLifecycleHttp,
   logCostHttp,
   recordPublishedHttp,
 } from "./gtmMaya/openclaw/managerCallbacks";
@@ -535,6 +538,23 @@ http.route({
   path: "/lc_gtm/get_my_niche_learnings",
   method: "GET",
   handler: getMyNicheLearningsHttp,
+});
+// #15 — durable lifecycle. The agent gates BOOT/HEARTBEAT on these instead of
+// ephemeral MEMORY.md markers (the foundation re-doing-loop fix).
+http.route({
+  path: "/lc_gtm/get_agent_lifecycle",
+  method: "GET",
+  handler: getAgentLifecycleHttp,
+});
+http.route({
+  path: "/lc_gtm/acquire_foundation_lease",
+  method: "POST",
+  handler: acquireFoundationLeaseHttp,
+});
+http.route({
+  path: "/lc_gtm/mark_lifecycle",
+  method: "POST",
+  handler: markLifecycleHttp,
 });
 // Sprint 2.25 — cost ledger write endpoint. Maya (in OpenClaw on Fly)
 // curl-POSTs cost data here after each major phase / call so the

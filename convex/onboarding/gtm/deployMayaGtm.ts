@@ -1085,10 +1085,17 @@ export const recordDeployTimeHelloResult = internalMutation({
   },
   handler: async (ctx, args): Promise<void> => {
     const now = Date.now();
+    const agent = await ctx.db.get(args.agentId);
     await ctx.db.patch(args.agentId, {
       deployTimeHelloAttemptedAt: now,
       deployTimeHelloResult: args.result.slice(0, 200),
       deployTimeHelloMessageId: args.messageId,
+      // #15 — when the deploy-time hello actually SENT, set the durable
+      // lifecycle marker too so BOOT's get_agent_lifecycle sees helloSent=true
+      // and never re-introduces Maya like a stranger on the next boot/restart.
+      ...(args.result === "sent" && !agent?.helloSentAt
+        ? { helloSentAt: now }
+        : {}),
       updatedAt: now,
     });
   },
@@ -1229,6 +1236,9 @@ export const buildAndUploadGtmWorkspace = internalAction({
         tiktokWarmupState: row.app.tiktokWarmupState,
         tiktokAccountAgeDays: row.app.tiktokAccountAgeDays,
       }),
+      // Which channels the founder connected, so USER.md tells Maya who she can
+      // post for (auto-post vs one-tap-confirm vs not-connected).
+      connectedAccountsJson: row.agent.connectedAccountsJson,
     });
     const tarBytes = buildPosixTar(files);
     const tarBuffer = tarBytes.buffer.slice(
@@ -1451,6 +1461,33 @@ export const deployMayaGtm = internalAction({
       } catch (err) {
         return fail("set-telegram-webhook", (err as Error).message, true);
       }
+    }
+
+    // #15 deploy-harness hardening — DESTROY any existing machine on this app
+    // BEFORE creating a new one. A redeploy used to leave the old machine
+    // running, so two machines = two HEARTBEAT watchdogs = doubled work (a
+    // direct contributor to the re-doing loop: two foundation passes, two sets
+    // of crons). Idempotent + best-effort: list, force-destroy each, never let a
+    // teardown error block the fresh deploy (the new machine + the durable
+    // foundation lease are the real guards).
+    try {
+      const existing = await fly.listMachines(bundle.flyAppName);
+      for (const m of existing) {
+        try {
+          await fly.destroyMachine(bundle.flyAppName, m.id, { force: true });
+          console.log(
+            `[deployMayaGtm] destroyed stale machine ${m.id} on ${bundle.flyAppName} before redeploy`
+          );
+        } catch (err) {
+          console.warn(
+            `[deployMayaGtm] could not destroy stale machine ${m.id}: ${(err as Error).message}`
+          );
+        }
+      }
+    } catch (err) {
+      console.warn(
+        `[deployMayaGtm] listMachines pre-destroy failed (continuing): ${(err as Error).message}`
+      );
     }
 
     let machine;
