@@ -138,6 +138,21 @@ export const publishContentDirect = internalAction({
     const content = args.content.trim();
     const channel = args.channel;
 
+    // Hacker News is RESEARCH-ONLY — it has no posting API (Zernio can't reach it)
+    // and auto-promo there gets makers flagged. judgeChannel already excludes HN
+    // from BET/posting channels; this is the hard backstop so an HN post can NEVER
+    // be routed to the publish path. A Show HN is prepped for the founder to post
+    // themselves, never auto-published. (Enforces the research-only rule in code.)
+    if (channel === "hn") {
+      return {
+        action: "failed",
+        reasons: [
+          "hn_research_only: Hacker News is research-only — no posting API exists. " +
+            "Mine it for buyer language; prep a Show HN for the founder to post manually, never here.",
+        ],
+      };
+    }
+
     const agentCtx = await ctx.runQuery(
       internal.gtmMaya.publishEngine.getAgentPublishContext,
       { agentId: args.agentId }

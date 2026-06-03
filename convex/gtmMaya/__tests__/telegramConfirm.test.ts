@@ -112,6 +112,24 @@ describe("S6 confirm-to-post — publish override", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("Hacker News can NEVER be routed to the publish path (research-only, no API)", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "c_hn", { activePlan: true });
+    const fetchMock = vi.fn(async () => jsonResponse(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+    // Even WITH a founder confirm + active plan, HN is rejected before any post.
+    const r = (await t.action(internal.gtmMaya.publishEngine.publishContentDirect, {
+      agentId: a.agentId,
+      channel: "hn",
+      zernioAccountId: "acct_hn",
+      content: "Show HN: my tool",
+      founderConfirmed: true,
+    })) as { action: string; reasons: string[] };
+    expect(r.action).toBe("failed");
+    expect(r.reasons[0]).toContain("hn_research_only");
+    expect(fetchMock).not.toHaveBeenCalled(); // never even tried to post
+  });
+
   it("founder confirm overrides the channel force BUT NOT the plan cap (no plan → still needs_confirm)", async () => {
     const t = convexTest(schema, modules);
     const a = await setupAgent(t, "c_plan", { activePlan: false }); // fail-closed plan
