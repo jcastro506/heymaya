@@ -749,6 +749,13 @@ export function buildGatewayConfig(
         // none exceed 30K). With the canonical reorg, files should be
         // much smaller anyway — this is safety net.
         bootstrapMaxChars: 30000,
+        // Sprint top-tier (2026-06-03) — raise the TOTAL bootstrap budget from
+        // the 60K default. A live deploy-test proved the failure mode: TOOLS.md
+        // had grown to 36K (12 new tools) and ate the whole 60K total, so BOOT.md
+        // (the research kickoff) was SILENTLY SKIPPED and the agent stalled with
+        // no instructions. TOOLS.md is now a terse ~8.5K index; total core ~85K.
+        // 110K total leaves comfortable headroom so the kickoff never gets dropped.
+        bootstrapTotalMaxChars: 110000,
         // Skip OpenClaw's first-run Q&A — Convex onboarding already
         // collected identity + user preferences + timezone. IDENTITY.md
         // is rendered by our own template.

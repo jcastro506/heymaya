@@ -279,7 +279,7 @@ describe("Maya GTM workspace pack", () => {
     const tools = files.get("TOOLS.md") ?? "";
     expect(tools).toContain("maya-demand-intelligence");
     expect(tools).toContain("maya-open-web-read");
-    expect(tools).toContain("ADVERTISER density"); // the demand rubric, inline
+    expect(tools).toContain("NOT SEO difficulty"); // the demand rubric, inline (terse)
     expect(tools).toContain("alternative-to"); // organic-target framing, not an ads plan
   });
 
@@ -599,7 +599,15 @@ describe("Maya GTM workspace pack", () => {
       )
       .reduce((sum, [, body]) => sum + body.length, 0);
 
-    expect(promptContextChars).toBeLessThan(75_000);
+    // These guard the ACTUAL OpenClaw bootstrap budgets in deployMayaGtm.ts:
+    // - bootstrapTotalMaxChars (110_000) — total injected context; over this and
+    //   files get SILENTLY DROPPED (a live deploy proved BOOT.md got skipped → the
+    //   agent stalled with no instructions). Headroom kept below the cap.
+    // - bootstrapMaxChars (30_000) — PER FILE; over this a single file is
+    //   truncated. TOOLS.md is the historical offender — keep it terse.
+    expect(promptContextChars).toBeLessThan(105_000); // under the 110K total cap
+    expect(files.get("TOOLS.md")?.length).toBeLessThan(28_000); // under the 30K per-file cap
+    expect(files.get("BOOT.md")?.length).toBeLessThan(28_000);
     expect(files.get("AGENTS.md")?.length).toBeLessThan(25_000);
   });
 
@@ -627,14 +635,13 @@ describe("Maya GTM workspace pack", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
     const tools = files.get("TOOLS.md") ?? "";
 
-    // 2026-05-29 — reply-path fix: replies AND proactive sends now BOTH go
-    // through /lc_gtm/send_update (the proven path). The broken
-    // `sessions_send sessionKey="current"` reply path is explicitly flagged.
-    expect(tools).toContain("/lc_gtm/send_update");
-    // replies are unified onto the same path
-    expect(tools).toContain("REPLIES to a DM");
-    // the broken path is documented as broken so Maya doesn't use it
-    expect(tools).toContain("No session found");
+    // 2026-06-03 — TOOLS.md is now a terse index; send_update is the TYPED TOOL
+    // (not a curl to /lc_gtm/send_update). Assert the current contract: ALL
+    // operator messages (replies + proactive) go through send_update, and the
+    // broken native paths (message / sessions_send) are explicitly flagged.
+    expect(tools).toContain("send_update");
+    expect(tools).toMatch(/Operator messages/i);
+    expect(tools).toContain("sessions_send"); // the broken path, flagged
   });
 
   it("does not leak secret-shaped placeholders into workspace files", () => {
