@@ -155,6 +155,7 @@ import type * as gtmMaya_telegramWebhook from "../gtmMaya/telegramWebhook.js";
 import type * as gtmMaya_tiktokWarmup from "../gtmMaya/tiktokWarmup.js";
 import type * as gtmMaya_voiceProfile from "../gtmMaya/voiceProfile.js";
 import type * as gtmMaya_walkthrough from "../gtmMaya/walkthrough.js";
+import type * as gtmMaya_webSearch from "../gtmMaya/webSearch.js";
 import type * as gtmMaya_workspaceMutator from "../gtmMaya/workspaceMutator.js";
 import type * as gtmMaya_zernioConnect from "../gtmMaya/zernioConnect.js";
 import type * as gtmMaya_zernioReads from "../gtmMaya/zernioReads.js";
@@ -447,6 +448,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/tiktokWarmup": typeof gtmMaya_tiktokWarmup;
   "gtmMaya/voiceProfile": typeof gtmMaya_voiceProfile;
   "gtmMaya/walkthrough": typeof gtmMaya_walkthrough;
+  "gtmMaya/webSearch": typeof gtmMaya_webSearch;
   "gtmMaya/workspaceMutator": typeof gtmMaya_workspaceMutator;
   "gtmMaya/zernioConnect": typeof gtmMaya_zernioConnect;
   "gtmMaya/zernioReads": typeof gtmMaya_zernioReads;

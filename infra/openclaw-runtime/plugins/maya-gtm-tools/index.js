@@ -288,6 +288,17 @@ export default defineToolPlugin({
     // RESEARCH (read) — kills fabrication: data exists only if the call ran.
     // =====================================================================
     tool({
+      name: "search_web",
+      label: "Search Web",
+      description:
+        "Search the OPEN WEB (Google-grounded) and read any page — competitor pricing/positioning/changelog pages, a founder's own landing page, reviews, blogs, docs. Use this when I need something OFF the social platforms (research_reddit/x/hn cover social). REQUIRED: query (a question or 'read <url>'-style ask). Optional: limit (default 8). Returns { ok, results:[{url, title, excerpt, domain}], statusDetail }. Cited — I quote the page, never invent. Costs ~$0.04/query: log it with log_cost (provider gemini). Empty/blocked returns ok:false with statusDetail, never an error.",
+      parameters: Type.Object({
+        query: Type.String({ description: "What to find on the web, or a site to read." }),
+        limit: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("search_web", p, ctx.signal),
+    }),
+    tool({
       name: "research_reddit",
       label: "Research Reddit",
       description:

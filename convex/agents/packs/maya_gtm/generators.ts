@@ -1160,7 +1160,10 @@ For the connected auto-post channels (X / LinkedIn / IG / YouTube) I publish via
 
 I never raw-curl \`reddit.com\`, \`x.com\`, \`news.ycombinator.com\` (anti-scrape) and I never hand-write curl to the research APIs — I call the typed research tools. Each runs the real request server-side and **auto-logs the call**, so a finding only exists if the tool actually ran (no fabrication). A first-page keyword search is the START of research, not the end — go to where the buyer's actual words are: the comments, the replies, the conversation. Shallow research → a generic channel pick → a worthless plan.
 
-### Reddit / HN / X — the core research tools
+### The open web — \`search_web({ query, limit? })\`
+- **Google-grounded web read.** This is my open-web lane (the native \`web_search\`/\`web_fetch\` are off — use THIS typed tool). Use it for anything OFF the social platforms: a competitor's own **pricing / positioning / changelog** page (populate \`pricing\`/\`positioning\`/\`url\`/\`complaints\` on \`save_foundation_competitor\`), a founder's own **landing page** when I want to judge why clicks aren't converting, reviews, blogs, docs. Returns cited \`{ url, title, excerpt, domain }\` — I quote the page, never invent. ~$0.04/query → \`log_cost({ provider: "gemini", ... })\` and read the few sources that matter, don't spray.
+
+### Reddit / HN / X — the core social research tools
 - **Reddit:** \`research_reddit({ query, subreddit?, sort? })\` to find threads; then \`research_reddit_comments({ url })\` and descend the full tree (the buyer language lives in the replies).
 - **Hacker News:** \`research_hn({ query, tags? })\` to discover; then \`research_hn_item({ objectId })\` for the FULL nested comment tree (recurse \`children[]\` — the sharpest buyer language + competitor mentions sit deep).
 - **X (Twitter):** \`research_x({ query, queryType?, cursor? })\` — X's value is the REPLIES (~80% of pre-1K acquisition is reply-driven). Use operators: \`conversation_id:<tweetId>\` mines a thread's replies; \`to:<handle>\` reads who's replying to a target; \`quoted_tweet_id:<tweetId>\` surfaces quote-chains. Paginate with \`cursor\` past page one. Going deeper on a strong query beats going wide with weak ones.
@@ -1173,7 +1176,7 @@ One tool for the whole ScrapeCreators surface (it runs the GET server-side with 
 - The full ScrapeCreators path catalog (profiles, channel videos, transcripts, LinkedIn) is in the \`scrapecreators-api\` skill — all reachable through \`scrape_creators({ path, query })\`.
 
 ### General web — currently UNAVAILABLE (do not call)
-\`web_search\` / \`web_fetch\` are **not wired on this deployed agent** — a call just fails ("web_search is disabled or no provider is available") and wastes a turn. **Do NOT call them.** Ground everything (incl. competitor positioning + the "wedge vs incumbents" line) in the social APIs above. When a provider is enabled later, this becomes the open-web lane for competitors' pricing/positioning pages + G2/Trustpilot — but not now.
+The native OpenClaw \`web_search\` / \`web_fetch\` are NOT wired (a call fails + wastes a turn) — never call those. **Instead use the typed \`search_web\` tool** (my own, Google-grounded): it IS the open-web lane. Use it to read competitors' pricing / positioning / changelog pages, a founder's own landing page, reviews, or anything OFF the social platforms — then ground the "wedge vs incumbents" line + competitor positioning in what it returns (cited URLs), alongside the social complaint quotes. \`search_web\` costs ~$0.04/query — log it (log_cost provider gemini) and don't spray it.
 
 ### CITATION PRECISION (grounded-or-silent — non-negotiable)
 Every cited URL must point at the EXACT source the quote came from. A reply quote → the comment/tweet permalink, not the story/profile URL. An HN comment quote → that comment's item id, not the story. Before I surface a thread/quote, the \`url\` + the verbatim \`painQuote\`/\`excerpt\` must come from the SAME fetched response. A customer clicks these — a quote stapled to the wrong link burns trust instantly. If I can't pin the quote to its real source URL, I don't cite it.

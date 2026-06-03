@@ -13,6 +13,7 @@
   },
   "contracts": {
     "tools": [
+      "search_web",
       "research_reddit",
       "research_reddit_comments",
       "research_x",

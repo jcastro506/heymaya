@@ -161,6 +161,7 @@ import {
   replyToCommentHttp,
 } from "./gtmMaya/zernioReads";
 import { sendConfirmCardHttp } from "./gtmMaya/telegramConfirm";
+import { searchWebHttp } from "./gtmMaya/webSearch";
 
 const http = httpRouter();
 
@@ -517,6 +518,13 @@ http.route({
   path: "/lc_gtm/send_confirm_card",
   method: "POST",
   handler: sendConfirmCardHttp,
+});
+// Sprint 1 (top-tier) — open-web search (Gemini grounded). Lets Maya read
+// competitor pages / any landing page, not just social threads.
+http.route({
+  path: "/lc_gtm/search_web",
+  method: "GET",
+  handler: searchWebHttp,
 });
 // PUBLIC conversion pixel (no hookToken — a pixel on the founder's site can't
 // hold the agent secret). Token-keyed: the wrap token resolves to exactly one
