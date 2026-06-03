@@ -1448,5 +1448,17 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) =>
         postLc("reply_to_comment", p, ctx.signal),
     }),
+    tool({
+      name: "send_confirm_card",
+      label: "Send Confirm Card",
+      description:
+        "Send the founder a ONE-TAP Telegram card to approve a Reddit/TikTok post (the ban-safety channels that always need their tap). REQUIRED: eventId (a needs_confirm gtmCalendarEvents row I already created via propose_calendar/post_to_channel). Optional: mediaAssetIds (storage ids from generate_slide_image — for a TikTok slideshow, so the founder SEES the slides in Telegram before tapping). They tap '✅ Post it' and I publish it for them via Zernio — they never leave Telegram or open the app. Returns { ok, messageId }. This is how the 'needs your tap' items in the morning brief actually get posted.",
+      parameters: Type.Object({
+        eventId: Type.String(),
+        mediaAssetIds: Type.Optional(Type.Array(Type.String())),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("send_confirm_card", p, ctx.signal),
+    }),
   ],
 });

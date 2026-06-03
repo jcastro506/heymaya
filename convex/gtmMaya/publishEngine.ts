@@ -123,6 +123,12 @@ export const publishContentDirect = internalAction({
     targetCommentId: v.optional(v.string()),
     intentionalFollowUp: v.optional(v.boolean()),
     draftId: v.optional(v.id("gtmDraftedContent")),
+    // S6 — set true ONLY by the founder's explicit one-tap Telegram confirm.
+    // It overrides the Reddit/TikTok manual-confirm FORCE (the human IS the
+    // confirm) and skips the LLM safety/slop re-gate (the human approved the
+    // exact content they previewed). Dedup + plan caps STILL apply — confirm is
+    // not a license to double-post or exceed the plan.
+    founderConfirmed: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<PublishDirectResult> => {
     const content = args.content.trim();
@@ -134,21 +140,31 @@ export const publishContentDirect = internalAction({
     );
     if (!agentCtx) return { action: "needs_confirm", reasons: ["agent context missing"] };
 
-    // Gate 1: ban-safety.
-    const mode = decidePublishMode(channel);
-    // Gate 2: plan allows auto-post.
+    // Gate 1: ban-safety. A founder one-tap confirm overrides the manual-confirm
+    // FORCE on Reddit/TikTok (the human just consented behind a real preview —
+    // which is also what satisfies TikTok's content_preview_confirmed flag).
+    const mode = args.founderConfirmed ? "auto" : decidePublishMode(channel);
+    // Gate 2: plan allows auto-post (ALWAYS applies, even on confirm).
     const plan = planFeaturesGtm({ gtmPlanJson: agentCtx.gtmPlanJson });
-    // Gate 3: the S2.7 three-verdict gate.
-    const slopResult = validateOutboundText(content);
-    const safetyResult = await ctx.runAction(
-      internal.gtmMaya.outboundFirewall.critiqueOutboundSafety,
-      { text: content }
-    );
-    const autoPub = evaluateAutoPublishGate({
-      voiceProfileJson: agentCtx.voiceProfileJson,
-      slopResult,
-      safetyResult,
-    });
+    // Gate 3: the S2.7 three-verdict gate. Skipped on founderConfirmed — the
+    // human approved the exact content they previewed, so re-running the
+    // non-deterministic LLM safety check would only risk blocking what they
+    // already okayed.
+    let autoPub: { allowAutoPublish: boolean };
+    if (args.founderConfirmed) {
+      autoPub = { allowAutoPublish: true };
+    } else {
+      const slopResult = validateOutboundText(content);
+      const safetyResult = await ctx.runAction(
+        internal.gtmMaya.outboundFirewall.critiqueOutboundSafety,
+        { text: content }
+      );
+      autoPub = evaluateAutoPublishGate({
+        voiceProfileJson: agentCtx.voiceProfileJson,
+        slopResult,
+        safetyResult,
+      });
+    }
     // Gate 4: dedup ledger (replies only).
     let dedupAllowed = true;
     if (args.targetExternalId) {

@@ -57,6 +57,26 @@ export const telegramWebhookHttp = httpAction(async (ctx, request) => {
     return new Response("bad json", { status: 400 });
   }
 
+  // One-tap confirm-to-post: the founder tapped a button on a Reddit/TikTok
+  // card. Dispatch to the confirm handler (it publishes via Zernio + edits the
+  // card). Always 200 so Telegram doesn't retry-poison the queue.
+  const cb = update.callback_query;
+  if (cb && cb.data && cb.message) {
+    try {
+      await ctx.runAction(internal.gtmMaya.telegramConfirm.handleConfirmCallback, {
+        chatId: String(cb.message.chat.id),
+        data: cb.data,
+        callbackQueryId: cb.id,
+        messageId: cb.message.message_id,
+      });
+    } catch (err) {
+      console.warn(
+        `[telegram-webhook] confirm callback failed: ${(err as Error).message}`
+      );
+    }
+    return new Response("ok", { status: 200 });
+  }
+
   const startPayload = parseStartCommand(update.message);
   const pairingToken = parsePairingPayload(startPayload);
 

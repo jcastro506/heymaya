@@ -148,6 +148,7 @@ import type * as gtmMaya_scrapeCreatorsGtmResearch from "../gtmMaya/scrapeCreato
 import type * as gtmMaya_strategyJudge from "../gtmMaya/strategyJudge.js";
 import type * as gtmMaya_targetList from "../gtmMaya/targetList.js";
 import type * as gtmMaya_telegramBotPerTenant from "../gtmMaya/telegramBotPerTenant.js";
+import type * as gtmMaya_telegramConfirm from "../gtmMaya/telegramConfirm.js";
 import type * as gtmMaya_telegramHandoff from "../gtmMaya/telegramHandoff.js";
 import type * as gtmMaya_telegramPairing from "../gtmMaya/telegramPairing.js";
 import type * as gtmMaya_telegramWebhook from "../gtmMaya/telegramWebhook.js";
@@ -439,6 +440,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/strategyJudge": typeof gtmMaya_strategyJudge;
   "gtmMaya/targetList": typeof gtmMaya_targetList;
   "gtmMaya/telegramBotPerTenant": typeof gtmMaya_telegramBotPerTenant;
+  "gtmMaya/telegramConfirm": typeof gtmMaya_telegramConfirm;
   "gtmMaya/telegramHandoff": typeof gtmMaya_telegramHandoff;
   "gtmMaya/telegramPairing": typeof gtmMaya_telegramPairing;
   "gtmMaya/telegramWebhook": typeof gtmMaya_telegramWebhook;

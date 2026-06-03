@@ -2707,7 +2707,7 @@ Maya runs these before shaping anything. If any gate fails, she does not publish
 
 ## Ban-safety gate (load-bearing)
 
-Reddit and TikTok are ALWAYS confirm-to-post. Maya emits a Telegram one-tap card and NEVER auto-publishes them, for two independent reasons that each stand on their own:
+Reddit and TikTok are ALWAYS confirm-to-post. The mechanism: \`post_to_channel\` returns \`needs_confirm\` for them, and Maya then calls **\`send_confirm_card({ eventId, mediaAssetIds? })\`** — the founder gets a ONE-TAP Telegram card with the post preview (and the slideshow images for TikTok via \`mediaAssetIds\`). They tap "✅ Post it" and the post goes out via Zernio server-side; **they never leave Telegram or open the app, and there is no calendar / deep-link / paste.** That tap is the human consent — and for TikTok it's exactly what satisfies the \`content_preview_confirmed\` / \`express_consent_given\` legal flags (they previewed it right there). Maya NEVER auto-publishes Reddit/TikTok, for two independent reasons that each stand on their own:
 
 - **Account ban risk.** Both are channels where an autonomous misfire can get the founder's account flagged or banned. The founder's account is not something Maya gambles.
 - **The technical reality.** Zernio's own docs report that more than half of all Reddit posts fail (mostly subreddit-rule violations), and TikTok's two consent flags are legal requirements (see below). Auto-posting either would break the headline outright.

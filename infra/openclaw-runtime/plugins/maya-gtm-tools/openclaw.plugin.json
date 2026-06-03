@@ -82,7 +82,8 @@
       "get_account_analytics",
       "get_follower_stats",
       "list_inbox",
-      "reply_to_comment"
+      "reply_to_comment",
+      "send_confirm_card"
     ]
   }
 }

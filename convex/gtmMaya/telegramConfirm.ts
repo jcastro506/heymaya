@@ -1,0 +1,423 @@
+/**
+ * S6 — Telegram one-tap confirm-to-post (the ban-safety channels: Reddit / TikTok).
+ *
+ * THE FLOW (no web UI, no Google Calendar, no deep-links, no native drafts):
+ *   1. Maya composes a Reddit/TikTok post; it's stored `needs_confirm`.
+ *   2. She calls `send_confirm_card({ eventId, mediaAssetIds? })` → the founder
+ *      gets a Telegram card: a preview (text, and the slideshow images for
+ *      TikTok) + a `✅ Post it` button.
+ *   3. The founder taps. The tap IS the human consent (and for TikTok it's what
+ *      satisfies the content_preview_confirmed / express_consent_given legal
+ *      flags — they previewed it right in Telegram). Telegram POSTs a
+ *      callback_query to our webhook → `handleConfirmCallback`.
+ *   4. We publish via Zernio server-side (`publishContentDirect` with
+ *      `founderConfirmed: true`, which overrides the manual-confirm force) and
+ *      edit the card to "✅ Posted to <channel>." The user never leaves Telegram.
+ *
+ * Cross-tenant: the callback's chatId resolves to exactly one agent; the event
+ * must belong to that agent or we refuse. Idempotent: a second tap on an event
+ * that's no longer `needs_confirm` is a no-op.
+ *
+ * v1 scope: transport + Reddit text publish end-to-end + TikTok slideshow
+ * PREVIEW in the card. Posting the TikTok MEDIA through Zernio (mediaUrls in the
+ * post payload) is the next increment — `publishContentDirect` currently posts
+ * text; see the TODO in the publish step.
+ */
+
+import {
+  httpAction,
+  internalAction,
+  internalQuery,
+  internalMutation,
+} from "../_generated/server";
+import { internal } from "../_generated/api";
+import { v } from "convex/values";
+import { authenticate } from "./openclaw/inboundCallback";
+import type { Id } from "../_generated/dataModel";
+
+// ───────────────────── raw Telegram helpers ─────────────────────
+// (sendDirectMessage doesn't support inline keyboards / callbacks, so these
+//  hit the Bot API directly. best-effort — never throw into the webhook.)
+const TG = "https://api.telegram.org";
+
+async function tgSendCard(
+  botToken: string,
+  chatId: string,
+  text: string,
+  eventId: string
+): Promise<number | null> {
+  try {
+    const res = await fetch(`${TG}/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        disable_web_page_preview: true,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "✅ Post it", callback_data: `gpost:${eventId}` }],
+            [
+              { text: "✏️ Edit", callback_data: `gedit:${eventId}` },
+              { text: "✕ Skip", callback_data: `gskip:${eventId}` },
+            ],
+          ],
+        },
+      }),
+    });
+    const j = (await res.json().catch(() => null)) as {
+      result?: { message_id?: number };
+    } | null;
+    return j?.result?.message_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function tgSendPhoto(
+  botToken: string,
+  chatId: string,
+  photoUrl: string,
+  caption?: string
+): Promise<void> {
+  try {
+    await fetch(`${TG}/bot${botToken}/sendPhoto`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, photo: photoUrl, caption }),
+    });
+  } catch {
+    /* best-effort preview */
+  }
+}
+
+async function tgAnswerCallback(
+  botToken: string,
+  callbackQueryId: string,
+  text: string
+): Promise<void> {
+  try {
+    await fetch(`${TG}/bot${botToken}/answerCallbackQuery`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
+async function tgEditText(
+  botToken: string,
+  chatId: string,
+  messageId: number,
+  text: string
+): Promise<void> {
+  try {
+    await fetch(`${TG}/bot${botToken}/editMessageText`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        message_id: messageId,
+        text,
+        reply_markup: { inline_keyboard: [] }, // strip the buttons once acted
+      }),
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
+// ───────────────────── queries / mutations ─────────────────────
+
+interface ConfirmEventView {
+  agentId: Id<"gtmAgents">;
+  accountId: Id<"creators">;
+  channel: string | null;
+  zernioAccountId: string | null;
+  targetExternalId: string | null;
+  targetCommentId: string | null;
+  content: string;
+  status: string;
+  chatId: string | null;
+}
+
+function parseAutoPost(json: string | undefined): {
+  channel?: string;
+  zernioAccountId?: string;
+  targetExternalId?: string;
+  targetCommentId?: string;
+} {
+  if (!json) return {};
+  try {
+    return JSON.parse(json) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+/** Read everything needed to send a card OR publish on tap, scoped to one event. */
+export const getConfirmEvent = internalQuery({
+  args: { eventId: v.id("gtmCalendarEvents") },
+  handler: async (ctx, args): Promise<ConfirmEventView | null> => {
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return null;
+    const agent = await ctx.db.get(event.agentId);
+    const ap = parseAutoPost(event.autoPostJson);
+    return {
+      agentId: event.agentId,
+      accountId: event.accountId,
+      channel: ap.channel ?? null,
+      zernioAccountId: ap.zernioAccountId ?? null,
+      targetExternalId: ap.targetExternalId ?? null,
+      targetCommentId: ap.targetCommentId ?? null,
+      content: event.draftText ?? event.description ?? event.title,
+      status: event.status,
+      chatId: agent?.telegramChatId ?? null,
+    };
+  },
+});
+
+/** Resolve the agent paired to a Telegram chat (for callback cross-tenant check). */
+export const getAgentIdByChatId = internalQuery({
+  args: { chatId: v.string() },
+  handler: async (ctx, args): Promise<Id<"gtmAgents"> | null> => {
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", args.chatId))
+      .first();
+    return agent?._id ?? null;
+  },
+});
+
+/** Flip a confirm event to its terminal state after a tap. */
+export const setConfirmEventStatus = internalMutation({
+  args: {
+    eventId: v.id("gtmCalendarEvents"),
+    status: v.union(
+      v.literal("posting"),
+      v.literal("published"),
+      v.literal("cancelled"),
+      v.literal("failed")
+    ),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    await ctx.db.patch(args.eventId, {
+      status: args.status,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// ───────────────────── send the card ─────────────────────
+
+export const sendPostConfirmCard = internalAction({
+  args: {
+    eventId: v.id("gtmCalendarEvents"),
+    mediaAssetIds: v.optional(v.array(v.string())),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; reason?: string; messageId?: number }> => {
+    const ev = await ctx.runQuery(internal.gtmMaya.telegramConfirm.getConfirmEvent, {
+      eventId: args.eventId,
+    });
+    if (!ev) return { ok: false, reason: "event not found" };
+    if (ev.status !== "needs_confirm") {
+      return { ok: false, reason: `event is ${ev.status}, not needs_confirm` };
+    }
+    if (!ev.chatId) return { ok: false, reason: "no telegram chat for agent" };
+
+    const { resolveBotForAgent } = await import("./telegramBotPerTenant");
+    const bot = await resolveBotForAgent(
+      ctx as { runQuery: <T>(ref: unknown, args: unknown) => Promise<T> },
+      ev.agentId,
+      {
+        sharedToken: process.env.TELEGRAM_BOT_TOKEN,
+        sharedUsername: process.env.TELEGRAM_BOT_USERNAME,
+      }
+    );
+    if (!bot.token) return { ok: false, reason: "no telegram bot token" };
+
+    const channelLabel = ev.channel ? ev.channel[0].toUpperCase() + ev.channel.slice(1) : "this channel";
+
+    // Slideshow / image preview (TikTok): show the founder exactly what posts.
+    if (args.mediaAssetIds && args.mediaAssetIds.length > 0) {
+      for (const id of args.mediaAssetIds.slice(0, 10)) {
+        const url = await ctx.storage.getUrl(id as Id<"_storage">).catch(() => null);
+        if (url) await tgSendPhoto(bot.token, ev.chatId, url);
+      }
+    }
+
+    const text =
+      `Ready to post to ${channelLabel} — I'll send it for you, tap to OK:\n\n` +
+      `${ev.content}\n\n` +
+      `(Reddit/TikTok need your tap so your account stays safe — one tap and I post it.)`;
+    const messageId = await tgSendCard(bot.token, ev.chatId, text, args.eventId);
+    return messageId
+      ? { ok: true, messageId }
+      : { ok: false, reason: "telegram send failed" };
+  },
+});
+
+// ───────────────────── handle the tap (callback) ─────────────────────
+
+export const handleConfirmCallback = internalAction({
+  args: {
+    chatId: v.string(),
+    data: v.string(),
+    callbackQueryId: v.string(),
+    messageId: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    const m = /^g(post|skip|edit):(.+)$/.exec(args.data);
+    if (!m) return; // not one of ours
+    const action = m[1];
+    const eventIdRaw = m[2];
+
+    // Resolve the bot first so we can always answer the callback.
+    const agentIdByChat = await ctx.runQuery(
+      internal.gtmMaya.telegramConfirm.getAgentIdByChatId,
+      { chatId: args.chatId }
+    );
+    if (!agentIdByChat) return;
+    const { resolveBotForAgent } = await import("./telegramBotPerTenant");
+    const bot = await resolveBotForAgent(
+      ctx as { runQuery: <T>(ref: unknown, args: unknown) => Promise<T> },
+      agentIdByChat,
+      {
+        sharedToken: process.env.TELEGRAM_BOT_TOKEN,
+        sharedUsername: process.env.TELEGRAM_BOT_USERNAME,
+      }
+    );
+    const token = bot.token;
+    const ans = (t: string) =>
+      token ? tgAnswerCallback(token, args.callbackQueryId, t) : Promise.resolve();
+    const edit = (t: string) =>
+      token && args.messageId
+        ? tgEditText(token, args.chatId, args.messageId, t)
+        : Promise.resolve();
+
+    const ev = await ctx.runQuery(internal.gtmMaya.telegramConfirm.getConfirmEvent, {
+      eventId: eventIdRaw as Id<"gtmCalendarEvents">,
+    });
+    if (!ev) {
+      await ans("That post is gone.");
+      return;
+    }
+    // Cross-tenant: the event must belong to the agent paired to THIS chat.
+    if (ev.agentId !== agentIdByChat) {
+      await ans("Not yours.");
+      return;
+    }
+    // Idempotent: a second tap after it's already acted is a no-op.
+    if (ev.status !== "needs_confirm") {
+      await ans(`Already ${ev.status}.`);
+      return;
+    }
+
+    if (action === "skip") {
+      await ctx.runMutation(internal.gtmMaya.telegramConfirm.setConfirmEventStatus, {
+        eventId: eventIdRaw as Id<"gtmCalendarEvents">,
+        status: "cancelled",
+      });
+      await ans("Skipped.");
+      await edit("✕ Skipped — I won't post this.");
+      return;
+    }
+
+    if (action === "edit") {
+      // Full edit-reply loop is owned by Maya (OpenClaw) on the next inbound
+      // message; here we just leave the post pending + tell them how.
+      await ans("Tell me the change.");
+      await edit(
+        "✏️ Reply here with what to change and I'll redo it, then send a fresh one to OK."
+      );
+      return;
+    }
+
+    // action === "post"
+    if (!ev.channel || !ev.zernioAccountId) {
+      await ans("That channel isn't connected.");
+      await edit(
+        `⚠️ I can't post this — your ${ev.channel ?? "account"} isn't connected. Connect it and I'll take it over.`
+      );
+      return;
+    }
+    await ans("Posting…");
+    await ctx.runMutation(internal.gtmMaya.telegramConfirm.setConfirmEventStatus, {
+      eventId: eventIdRaw as Id<"gtmCalendarEvents">,
+      status: "posting",
+    });
+    // founderConfirmed overrides the Reddit/TikTok manual-force; dedup + plan
+    // caps still apply. TODO(S6.1): thread the TikTok slideshow media (mediaUrls)
+    // into this publish so the video/carousel posts, not just text.
+    const result = await ctx.runAction(
+      internal.gtmMaya.publishEngine.publishContentDirect,
+      {
+        agentId: ev.agentId,
+        channel: ev.channel,
+        zernioAccountId: ev.zernioAccountId,
+        content: ev.content,
+        targetExternalId: ev.targetExternalId ?? undefined,
+        targetCommentId: ev.targetCommentId ?? undefined,
+        founderConfirmed: true,
+      }
+    );
+    if (result.action === "auto") {
+      await ctx.runMutation(internal.gtmMaya.telegramConfirm.setConfirmEventStatus, {
+        eventId: eventIdRaw as Id<"gtmCalendarEvents">,
+        status: "published",
+      });
+      const channelLabel =
+        ev.channel[0].toUpperCase() + ev.channel.slice(1);
+      await edit(`✅ Posted to ${channelLabel}. I'll confirm it's live shortly.`);
+    } else {
+      await ctx.runMutation(internal.gtmMaya.telegramConfirm.setConfirmEventStatus, {
+        eventId: eventIdRaw as Id<"gtmCalendarEvents">,
+        status: "failed",
+      });
+      await edit(
+        `⚠️ That didn't go through (${result.reasons[0] ?? "unknown"}). I'll take another run at it.`
+      );
+    }
+  },
+});
+
+// ───────────────────── agent-facing route (send_confirm_card) ─────────────────────
+
+export const sendConfirmCardHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+  let body: { eventId?: string; mediaAssetIds?: string[] };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (!body.eventId) return new Response("missing eventId", { status: 400 });
+
+  // Cross-tenant: the event must belong to the calling agent.
+  const ev = await ctx.runQuery(internal.gtmMaya.telegramConfirm.getConfirmEvent, {
+    eventId: body.eventId as Id<"gtmCalendarEvents">,
+  });
+  if (!ev || ev.agentId !== auth.agentId) {
+    return new Response(
+      JSON.stringify({ ok: false, reason: "event not found for this agent" }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  }
+  const result = await ctx.runAction(
+    internal.gtmMaya.telegramConfirm.sendPostConfirmCard,
+    {
+      eventId: body.eventId as Id<"gtmCalendarEvents">,
+      mediaAssetIds: body.mediaAssetIds,
+    }
+  );
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});

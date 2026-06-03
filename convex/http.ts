@@ -160,6 +160,7 @@ import {
   listInboxHttp,
   replyToCommentHttp,
 } from "./gtmMaya/zernioReads";
+import { sendConfirmCardHttp } from "./gtmMaya/telegramConfirm";
 
 const http = httpRouter();
 
@@ -509,6 +510,13 @@ http.route({
   path: "/lc_gtm/reply_to_comment",
   method: "POST",
   handler: replyToCommentHttp,
+});
+// S6 — Maya sends the founder a one-tap Telegram confirm-to-post card for a
+// Reddit/TikTok needs_confirm event. The tap is handled by the Telegram webhook.
+http.route({
+  path: "/lc_gtm/send_confirm_card",
+  method: "POST",
+  handler: sendConfirmCardHttp,
 });
 // PUBLIC conversion pixel (no hookToken — a pixel on the founder's site can't
 // hold the agent secret). Token-keyed: the wrap token resolves to exactly one
