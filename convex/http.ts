@@ -152,6 +152,14 @@ import {
 import { zernioCallbackHttp } from "./gtmMaya/zernioConnect";
 // Maya v2 (S3) — agent-facing auto-post + dedup routes.
 import { zernioPostHttp, checkAlreadyEngagedHttp } from "./gtmMaya/zernioRoutes";
+import {
+  listConnectedAccountsHttp,
+  getConnectionHealthHttp,
+  getAccountAnalyticsHttp,
+  getFollowerStatsHttp,
+  listInboxHttp,
+  replyToCommentHttp,
+} from "./gtmMaya/zernioReads";
 
 const http = httpRouter();
 
@@ -467,6 +475,40 @@ http.route({
   path: "/lc_gtm/check_already_engaged",
   method: "GET",
   handler: checkAlreadyEngagedHttp,
+});
+// Maya v2 (S5) — Zernio READ + engagement tools. Analytics/inbox degrade
+// gracefully when the operator's Zernio add-on isn't enabled (clean message, not
+// a crash). reply_to_comment runs the same fail-closed ban-safety gate as posts.
+// (DMs are deliberately NOT handled — operator decision.)
+http.route({
+  path: "/lc_gtm/list_connected_accounts",
+  method: "GET",
+  handler: listConnectedAccountsHttp,
+});
+http.route({
+  path: "/lc_gtm/get_connection_health",
+  method: "GET",
+  handler: getConnectionHealthHttp,
+});
+http.route({
+  path: "/lc_gtm/get_account_analytics",
+  method: "GET",
+  handler: getAccountAnalyticsHttp,
+});
+http.route({
+  path: "/lc_gtm/get_follower_stats",
+  method: "GET",
+  handler: getFollowerStatsHttp,
+});
+http.route({
+  path: "/lc_gtm/list_inbox",
+  method: "GET",
+  handler: listInboxHttp,
+});
+http.route({
+  path: "/lc_gtm/reply_to_comment",
+  method: "POST",
+  handler: replyToCommentHttp,
 });
 // PUBLIC conversion pixel (no hookToken — a pixel on the founder's site can't
 // hold the agent secret). Token-keyed: the wrap token resolves to exactly one

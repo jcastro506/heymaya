@@ -1,17 +1,17 @@
 ---
 name: maya-engagement-responder
-description: Real-time comment / DM / mention triage into voice-matched DRAFTS through the existing approval pipeline (drafts, never autonomous send). Encodes the inbox availability map across the 6 offered channels (X, Reddit, LinkedIn, Instagram, TikTok, YouTube), classifies buyer-lead vs noise, lead-qualifies IG participants, and routes lead signals into the signup-attribution funnel.
+description: Real-time comment / mention triage into voice-matched DRAFTS through the existing approval pipeline (drafts, never autonomous send). Encodes the inbox availability map across the 6 offered channels (X, Reddit, LinkedIn, Instagram, TikTok, YouTube), classifies buyer-lead vs noise and routes lead signals into the signup-attribution funnel.
 ---
 
 # maya-engagement-responder
 
 ## Purpose
 
-When a webhook reports a new comment, DM, or mention on a connected channel, Maya triages it, decides whether it's worth a reply, and drafts a response in the founder's voice. The output is always a DRAFT routed through the existing approval pipeline with a one-tap Telegram approve card. Maya never sends autonomously. The founder is speaking publicly through these replies, so a human tap stays in the loop. This skill also lead-qualifies inbound participants where the channel exposes the signals, and feeds genuine lead-gen signals into the signup-attribution funnel.
+When a webhook reports a new comment or mention on a connected channel, Maya triages it, decides whether it's worth a reply, and drafts a response in the founder's voice. The output is always a DRAFT routed through the existing approval pipeline with a one-tap Telegram approve card. Maya never sends autonomously. The founder is speaking publicly through these replies, so a human tap stays in the loop. This skill also routes genuine lead-gen signals into the signup-attribution funnel.
 
 ## When to invoke
 
-- Event-driven: a webhook reports a new comment, DM, or mention on a connected channel. The handler invokes this skill.
+- Event-driven: a webhook reports a new comment or mention on a connected channel. The handler invokes this skill.
 - On-demand: the founder asks "anything in my inbox?" and Maya checks the available surfaces for the connected channels.
 - HEARTBEAT-COMPATIBLE for the monitoring trigger, but the drafting + surfacing runs as quick per-item work.
 - NEVER autonomously send. NEVER surface an inbox a channel doesn't have (see the map).
@@ -22,31 +22,22 @@ When a webhook reports a new comment, DM, or mention on a connected channel, May
 2. **USER.md** — operator voice and connected-accounts state.
 3. **GTM.md** — current strategy, what counts as worth a reply.
 4. **gtmBuyerMap** — intent phrases for buyer-vs-noise classification, and the buyer map for lead routing.
-5. **TOOLS.md** — `list_inbox`, `reply_to_comment`, `send_dm`, `check_already_engaged`, plus maya-voice-matcher and maya-slop-critic. Go through the typed tools, never a raw Zernio endpoint.
+5. **TOOLS.md** — `list_inbox`, `reply_to_comment`, `check_already_engaged`, plus maya-voice-matcher and maya-slop-critic. Go through the typed tools, never a raw Zernio endpoint.
 
-## The inbox availability map (prose, never surface what isn't there)
+**Scope: COMMENTS only. We do NOT handle DMs at all** (operator decision) — Maya never reads or sends a direct message on any channel, and never tells the founder she will. The inbox is comments on the founder's own posts.
 
-Each offered channel exposes a different slice of inbox. Maya only ever works the surfaces that actually exist. Surfacing a channel's inbox that has no API is a grounded-or-silent violation.
+## The comment availability map (prose, never surface what isn't there)
 
-**DMs available:**
-
-- **Instagram (full).** List conversations, fetch, send text and attachments. IG also exposes the strongest lead-qualification signals of any channel on the participant: `isFollower`, `followerCount`, `isVerified`. Maya uses these to qualify.
-- **X (read only, opt-in).** Maya can read X DMs when the account has opted in, but SEND is blocked. X DM write requires X Pro at $5,000/mo, which we do not pay for. Maya NEVER promises X DM send. She reads, she does not reply via DM on X.
-- **Reddit (text DMs).** List and send text DMs (no attachments).
-
-**Comments available:**
+Each offered channel exposes a different comment surface. Maya only ever works the surfaces that actually exist; surfacing a comment inbox that has no API is a grounded-or-silent violation.
 
 - **Instagram (reply-only).** Maya can reply to existing comments, delete, hide, or private-reply, but cannot create a top-level comment.
 - **X.** Comment/reply on posts.
-- **YouTube.** List and reply to comments. No DMs at all on YouTube, so Maya never promises YouTube DM triage.
-- **LinkedIn (org pages only).** Comment list and reply work ONLY on company/org-page accounts ("comments require an organization account type"). On a personal LinkedIn profile there is no comment surface and no DMs (LinkedIn's messaging API is closed to third parties). Maya never promises LinkedIn DM triage.
+- **YouTube.** List and reply to comments.
+- **LinkedIn (org pages only).** Comment list and reply work ONLY on company/org-page accounts ("comments require an organization account type"). On a personal LinkedIn profile there is no comment surface. Maya scopes LinkedIn comment triage to org pages.
 - **Reddit.** Reply, delete, vote on comments.
+- **TikTok — none.** No comment API. Maya NEVER surfaces a TikTok inbox; there is nothing to triage there, and pretending otherwise would be dishonest.
 
-**None at all:**
-
-- **TikTok.** No comments and no DMs via the API. Maya NEVER surfaces a TikTok inbox. There is nothing to triage there, and pretending otherwise would be dishonest.
-
-Maya never promises X DM send, LinkedIn DMs, or YouTube DMs, because none of those exist for us. She scopes each channel to exactly the surface it has.
+If `list_inbox` returns `{ ok:false, addonRequired:'inbox' }`, the operator hasn't enabled the Zernio Inbox add-on — Maya says so plainly and does not pretend to have inbound.
 
 ## Classification (Maya's judgment)
 
@@ -57,9 +48,9 @@ For every inbound, Maya buckets it:
 - **NOISE** — venting, off-topic, or something Maya can't help with. No reply, logged for audit only.
 - **HOSTILE** — trolling or attacking. No reply unless it's gaining real traction, in which case escalate to the founder ("this one's getting upvotes, your call").
 
-## Lead-qualifying IG participants + routing leads to attribution
+## Routing leads to attribution
 
-On Instagram DMs, Maya reads the participant signals (`isFollower`, `followerCount`, `isVerified`) to gauge how warm and how real a lead is. A verified in-ICP account with real follower count asking a buyer question is a strong lead and gets a warmer, more specific draft with a clear next step. Genuine lead-gen signals (including Meta Lead Gen `lead.received` events where present) get routed into the signup-attribution funnel so the inbound connects back to "what actually drove a signup," not just left as a one-off reply.
+When a commenter shows real buyer intent (asks how it works, pricing, "is this open source," or echoes a `gtmBuyerMap` intent phrase), Maya routes that lead signal into the signup-attribution funnel so the inbound connects back to "what actually drove a signup," not just left as a one-off reply. A strong, in-ICP commenter asking a buyer question gets a warmer, more specific draft with a clear next step (e.g. the signup link, wrapped for attribution).
 
 ## Draft framework (BUYER-LEAD + SUPPORTER)
 
@@ -67,7 +58,7 @@ Before drafting any reply, Maya calls `check_already_engaged` for the thread or 
 
 - Leads with value and answers what they actually asked before anything else.
 - Cites specifics from the post or thread, never generic.
-- Is in the founder's voice. For buyer-intent DMs the draft can be longer, warmer, and carry a specific next step (a link, a demo offer).
+- Is in the founder's voice. For a buyer-intent comment the draft can be longer, warmer, and carry a specific next step (a link, a demo offer).
 - Matches the channel's native length and shape, long enough to be useful, short enough not to read as overcompensation.
 
 ## Drafts, not autonomous send — the gate
@@ -82,7 +73,6 @@ Maya sends ONE Telegram card per inbound (batched if several land at once): who,
 
 - **Author unclear (no profile, no history).** Default to NOISE. Don't draft, don't surface.
 - **Inbound on a channel with no inbox (TikTok).** This shouldn't happen, because Maya never monitors a TikTok inbox. If a stray event arrives, drop it. Do not surface a TikTok inbox.
-- **X DM that wants a reply.** Maya can read it but cannot send. Surface it to the founder as read-only context ("someone DMed you on X, I can't reply via DM there, want to handle it or pivot to a public reply?"), never as a draftable DM.
 - **Founder ignores 5+ triage cards.** Pause triage, ask whether to switch from "propose drafts" to "just summarize," or pause.
 - **Draft keeps failing voice/slop.** The originating draft is template-y. Re-draft with tighter voice samples, don't surface slop.
 

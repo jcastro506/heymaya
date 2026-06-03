@@ -232,26 +232,23 @@ const SKILLS = [
   "maya-evening-recap",
   "maya-weekly-review",
   "maya-inbound-triage",
-  // ─── Zernio "I POST for you" skill bundle ──────────────────────────
-  // The publishing layer Maya can actually run TODAY: she auto-posts to the
-  // connected channels (X/LinkedIn/IG/YouTube) via `post_to_channel` and routes
-  // Reddit/TikTok to one-tap-confirm. `post_to_channel` also posts replies
-  // (pass targetCommentId), so the replies-heavy daily floor runs through it.
-  // The ban-safety FORCE gate is server-enforced (outboundFirewall.ts).
+  // ─── Zernio "I POST for you" + engagement skill bundle ─────────────
+  // The publishing + engagement layer: Maya auto-posts to the connected
+  // channels (X/LinkedIn/IG/YouTube) via `post_to_channel` (Reddit/TikTok
+  // one-tap-confirm), reads what converted via analytics + follower stats,
+  // replies to comment inbound in the founder's voice, and watches connection
+  // health. Analytics/inbox degrade gracefully when the operator's Zernio
+  // add-on is off. (DMs are deliberately not handled.) Ban-safety is
+  // server-enforced (outboundFirewall.ts).
   "maya-publisher",
+  "maya-performance-reader",
+  "maya-engagement-responder",
+  "maya-connection-health",
   "maya-content-reviewer",
   "maya-slideshow-strategist",
   "maya-conversion-tracker",
   // Ban-safety critic — the pre-publish guard (server-enforced gate).
   "maya-safety-critic",
-  // DEFERRED (authored, NOT yet shipped): maya-engagement-responder /
-  // maya-performance-reader / maya-connection-health depend on Zernio read
-  // tools that aren't wired yet (list_inbox, reply_to_comment, send_dm,
-  // get_account_analytics, get_follower_stats, get_connection_health,
-  // list_connected_accounts) — and the analytics/inbox ones are operator-
-  // blocked on the Zernio add-ons (403 today). Ship them once those tools
-  // exist. Until then Maya posts via post_to_channel and reads results via
-  // get_my_attribution / get_my_recent_post_results (which DO exist).
 ] as const;
 
 export function buildMayaGtmWorkspace(
@@ -1144,8 +1141,12 @@ For the connected auto-post channels (X / LinkedIn / IG / YouTube) I publish via
 
 - \`post_to_channel({ channel, content, url?, targetExternalId?, targetCommentId?, draftId?, ... })\` — **this is how I post for the founder.** \`channel\` = x/linkedin/instagram/youtube/reddit/tiktok. X / LinkedIn / Instagram / YouTube auto-post once the founder has connected the account + approved auto-posting; **Reddit and TikTok ALWAYS return needs_confirm** (one-tap-confirm — I surface a pre-filled link, the founder taps to send, so they never get flagged). **This same tool posts REPLIES** — pass \`targetExternalId\` (+ \`targetCommentId\` for a comment) and the content is posted as a reply on the thread. So the replies-heavy daily floor runs through \`post_to_channel\`. Put the app link in \`url\` (X meters link-posts — ration them). The server runs every gate (ban-safety FORCE, plan, voice/slop, dedup) and either publishes or returns \`{ outcome: 'needs_confirm', reasons }\`. Returns the provider post id → then call \`record_published\`. A post I "queued" but never \`post_to_channel\`'d is not live.
 - \`check_already_engaged({ platform, externalId, commentId? })\` — **dedup guard BEFORE any reply.** Returns whether I (or the founder) already engaged this thread/comment, so I never double-reply and trip spam filters. The server enforces one-reply-per-thread regardless, but I call this first to avoid wasted drafting.
-
-*(Connection state + which channels are connected: read it from my USER.md "Connected accounts" section. Live connection-health / inbox / analytics / DM tools are NOT wired yet — for results I use \`get_my_attribution\` + \`get_my_recent_post_results\` below, which DO exist.)*
+- \`list_connected_accounts({})\` — which channels are connected + in what mode (auto-post vs one-tap-confirm). I call this BEFORE promising to post on a channel — never "I'll post X for you" on an unconnected channel. (Also in USER.md's Connected-accounts section.)
+- \`get_connection_health({})\` — per-channel health (can it still post? token expiring/revoked?). I check before a posting run; on a bad state I hand the founder a reconnect link in plain words (never "token expired").
+- \`get_account_analytics({ postId?, platform?, ... })\` — Zernio post/account analytics — the SLOWER ground-truth (which channel + format drove reach). NEVER overrides the faster wrapped-link click signal (\`get_my_attribution\` stays primary). Returns \`{ ok:false, addonRequired:'analytics' }\` if the operator hasn't enabled the Zernio Analytics add-on — I say that plainly; attribution still works. Stale/empty = said plainly, never fabricated.
+- \`get_follower_stats({ platform? })\` — follower counts + growth per channel for the warmth/growth read. \`addonRequired:'analytics'\` if the add-on is off. Grounded-or-silent on staleness.
+- \`list_inbox({ platform?, since? })\` — new COMMENTS on the founder's posts (highest-intent inbound — a buyer asking under a post). Triage, then reply with \`reply_to_comment\`. \`addonRequired:'inbox'\` if the add-on is off. (Comments only — DMs aren't handled.)
+- \`reply_to_comment({ channel, postId, text, commentId? })\` — post a voice-matched reply to a comment on the founder's connected-channel post. Same fail-closed ban-safety gate as \`post_to_channel\`. Returns \`{ ok:false, blocked, reasons }\` if the gate held it.
 
 **Read-back tools (inspect my own persisted state):**
 - \`get_my_foundation({})\` — all 5 foundation outputs (buyer map, competitors, channels, angles, relationships).
@@ -1853,6 +1854,12 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
       return "Event-driven reply/DM/mention triage. Classify BUYER / SUPPORTER / NOISE / HOSTILE, draft a reply for the first two, surface one-liner to operator with reply/edit/skip controls.";
     case "maya-publisher":
       return "Publish queued drafts via post_to_channel: auto-post X/LinkedIn/IG/YouTube once the founder approved auto-posting, route Reddit/TikTok to one-tap-confirm. post_to_channel also posts replies (targetCommentId). check_already_engaged first to avoid double-replies, then record_published. The ban-safety FORCE gate is server-enforced.";
+    case "maya-performance-reader":
+      return "Fold get_account_analytics + get_follower_stats (slower Zernio ground-truth) into the attribution read — NEVER overriding the faster wrapped-link click signal. On addonRequired:'analytics', say plainly the add-on is off; attribution still works. Stale/empty numbers said plainly, never fabricated.";
+    case "maya-engagement-responder":
+      return "Run the replies-heavy daily floor on inbound: list_inbox (comments on the founder's posts) -> classify buyer/supporter/noise -> check_already_engaged -> reply_to_comment in the founder's voice (server runs the ban-safety gate). Comments only; DMs are not handled.";
+    case "maya-connection-health":
+      return "Read get_connection_health per channel; on expiring/revoked/disconnected, hand the founder a reconnect link in plain words (never 'token expired') and pause posting on that channel until it's healthy.";
     case "maya-content-reviewer":
       return "Watch content the founder texted me (review_media) for editor feedback, resolving the Telegram attachment to a mediaUrl. Grounded-or-silent: visual feedback only when Gemini actually watched it.";
     case "maya-slideshow-strategist":

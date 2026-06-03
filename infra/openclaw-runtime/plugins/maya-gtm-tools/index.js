@@ -1366,5 +1366,87 @@ export default defineToolPlugin({
       }),
       execute: async (p, _cfg, ctx) => postLc("mark_lifecycle", p, ctx.signal),
     }),
+
+    // =====================================================================
+    // ZERNIO READ + ENGAGEMENT (S5) — analytics, follower stats, connection
+    // health, comment inbox, and comment replies across connected channels.
+    // Analytics + inbox need the operator's Zernio add-ons; these return a
+    // clean { ok:false, addonRequired } when the add-on is off (not an error).
+    // (DMs are deliberately not handled.)
+    // =====================================================================
+    tool({
+      name: "list_connected_accounts",
+      label: "List Connected Accounts",
+      description:
+        "Which channels the founder has connected and in what mode (auto-post for X/LinkedIn/IG/YouTube; one-tap-confirm for Reddit/TikTok). Call this BEFORE promising to post on a channel — never say 'I'll post X for you' on a channel that isn't connected. Returns { ok, accounts:[{platform, mode, isActive}] }.",
+      parameters: Type.Object({}),
+      execute: async (_p, _cfg, ctx) =>
+        getLc("list_connected_accounts", undefined, ctx.signal),
+    }),
+    tool({
+      name: "get_connection_health",
+      label: "Get Connection Health",
+      description:
+        "Per-channel connection health (can the account still post? token expiring/revoked?). Check before a posting run; on a bad state, hand the founder a reconnect link in plain words (never 'token expired'). Returns { ok, health }.",
+      parameters: Type.Object({}),
+      execute: async (_p, _cfg, ctx) =>
+        getLc("get_connection_health", undefined, ctx.signal),
+    }),
+    tool({
+      name: "get_account_analytics",
+      label: "Get Account Analytics",
+      description:
+        "Zernio post/account analytics (impressions, reach, engagement) — the SLOWER ground-truth that confirms which channel + format drove reach. NEVER overrides the faster wrapped-link click signal (get_my_attribution stays primary). Optional: postId, platform, accountId, fromDate, toDate, limit. Returns { ok, analytics } — or { ok:false, addonRequired:'analytics' } if the operator hasn't enabled the Zernio Analytics add-on (say so plainly; attribution still works). Stale/empty numbers get said plainly, never fabricated.",
+      parameters: Type.Object({
+        postId: Type.Optional(Type.String()),
+        platform: Type.Optional(Type.String()),
+        accountId: Type.Optional(Type.String()),
+        fromDate: Type.Optional(Type.String()),
+        toDate: Type.Optional(Type.String()),
+        limit: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        getLc("get_account_analytics", p, ctx.signal),
+    }),
+    tool({
+      name: "get_follower_stats",
+      label: "Get Follower Stats",
+      description:
+        "Follower/subscriber counts + growth over time per connected channel, for the warmth + growth read. Optional: platform, fromDate, toDate, granularity. Returns { ok, stats } — or { ok:false, addonRequired:'analytics' } if the add-on is off. Grounded-or-silent on staleness.",
+      parameters: Type.Object({
+        platform: Type.Optional(Type.String()),
+        fromDate: Type.Optional(Type.String()),
+        toDate: Type.Optional(Type.String()),
+        granularity: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        getLc("get_follower_stats", p, ctx.signal),
+    }),
+    tool({
+      name: "list_inbox",
+      label: "List Inbox (comments)",
+      description:
+        "New COMMENTS on the founder's posts across connected channels — the highest-intent inbound (a buyer asking 'how does this work?' under a post). Triage these, then reply in the founder's voice with reply_to_comment. Optional: platform, since (ISO), limit. Returns { ok, comments } — or { ok:false, addonRequired:'inbox' } if the operator hasn't enabled the Zernio Inbox add-on. (DMs are not handled — comments only.)",
+      parameters: Type.Object({
+        platform: Type.Optional(Type.String()),
+        since: Type.Optional(Type.String()),
+        limit: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("list_inbox", p, ctx.signal),
+    }),
+    tool({
+      name: "reply_to_comment",
+      label: "Reply To Comment",
+      description:
+        "Post a voice-matched reply to a comment on one of the founder's connected-channel posts (from list_inbox). REQUIRED: channel, postId, text. Optional: commentId (the specific comment to reply under). The server runs the SAME fail-closed ban-safety gate as post_to_channel before anything ships. Returns { ok, id } — or { ok:false, blocked, reasons } if the safety gate held it, or { ok:false, addonRequired:'inbox' } if the add-on is off.",
+      parameters: Type.Object({
+        channel: Enum(["x", "linkedin", "instagram", "youtube", "reddit"]),
+        postId: Type.String(),
+        text: Type.String(),
+        commentId: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("reply_to_comment", p, ctx.signal),
+    }),
   ],
 });

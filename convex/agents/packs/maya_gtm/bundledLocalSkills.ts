@@ -1116,18 +1116,18 @@ interface DistributionExperimentSet {
 // Source: agents/skills/maya-gtm/maya-engagement-responder/SKILL.md
 const ENTRY_12_maya_engagement_responder = `---
 name: maya-engagement-responder
-description: Real-time comment / DM / mention triage into voice-matched DRAFTS through the existing approval pipeline (drafts, never autonomous send). Encodes the inbox availability map across the 6 offered channels (X, Reddit, LinkedIn, Instagram, TikTok, YouTube), classifies buyer-lead vs noise, lead-qualifies IG participants, and routes lead signals into the signup-attribution funnel.
+description: Real-time comment / mention triage into voice-matched DRAFTS through the existing approval pipeline (drafts, never autonomous send). Encodes the inbox availability map across the 6 offered channels (X, Reddit, LinkedIn, Instagram, TikTok, YouTube), classifies buyer-lead vs noise and routes lead signals into the signup-attribution funnel.
 ---
 
 # maya-engagement-responder
 
 ## Purpose
 
-When a webhook reports a new comment, DM, or mention on a connected channel, Maya triages it, decides whether it's worth a reply, and drafts a response in the founder's voice. The output is always a DRAFT routed through the existing approval pipeline with a one-tap Telegram approve card. Maya never sends autonomously. The founder is speaking publicly through these replies, so a human tap stays in the loop. This skill also lead-qualifies inbound participants where the channel exposes the signals, and feeds genuine lead-gen signals into the signup-attribution funnel.
+When a webhook reports a new comment or mention on a connected channel, Maya triages it, decides whether it's worth a reply, and drafts a response in the founder's voice. The output is always a DRAFT routed through the existing approval pipeline with a one-tap Telegram approve card. Maya never sends autonomously. The founder is speaking publicly through these replies, so a human tap stays in the loop. This skill also routes genuine lead-gen signals into the signup-attribution funnel.
 
 ## When to invoke
 
-- Event-driven: a webhook reports a new comment, DM, or mention on a connected channel. The handler invokes this skill.
+- Event-driven: a webhook reports a new comment or mention on a connected channel. The handler invokes this skill.
 - On-demand: the founder asks "anything in my inbox?" and Maya checks the available surfaces for the connected channels.
 - HEARTBEAT-COMPATIBLE for the monitoring trigger, but the drafting + surfacing runs as quick per-item work.
 - NEVER autonomously send. NEVER surface an inbox a channel doesn't have (see the map).
@@ -1138,31 +1138,22 @@ When a webhook reports a new comment, DM, or mention on a connected channel, May
 2. **USER.md** — operator voice and connected-accounts state.
 3. **GTM.md** — current strategy, what counts as worth a reply.
 4. **gtmBuyerMap** — intent phrases for buyer-vs-noise classification, and the buyer map for lead routing.
-5. **TOOLS.md** — \`list_inbox\`, \`reply_to_comment\`, \`send_dm\`, \`check_already_engaged\`, plus maya-voice-matcher and maya-slop-critic. Go through the typed tools, never a raw Zernio endpoint.
+5. **TOOLS.md** — \`list_inbox\`, \`reply_to_comment\`, \`check_already_engaged\`, plus maya-voice-matcher and maya-slop-critic. Go through the typed tools, never a raw Zernio endpoint.
 
-## The inbox availability map (prose, never surface what isn't there)
+**Scope: COMMENTS only. We do NOT handle DMs at all** (operator decision) — Maya never reads or sends a direct message on any channel, and never tells the founder she will. The inbox is comments on the founder's own posts.
 
-Each offered channel exposes a different slice of inbox. Maya only ever works the surfaces that actually exist. Surfacing a channel's inbox that has no API is a grounded-or-silent violation.
+## The comment availability map (prose, never surface what isn't there)
 
-**DMs available:**
-
-- **Instagram (full).** List conversations, fetch, send text and attachments. IG also exposes the strongest lead-qualification signals of any channel on the participant: \`isFollower\`, \`followerCount\`, \`isVerified\`. Maya uses these to qualify.
-- **X (read only, opt-in).** Maya can read X DMs when the account has opted in, but SEND is blocked. X DM write requires X Pro at $5,000/mo, which we do not pay for. Maya NEVER promises X DM send. She reads, she does not reply via DM on X.
-- **Reddit (text DMs).** List and send text DMs (no attachments).
-
-**Comments available:**
+Each offered channel exposes a different comment surface. Maya only ever works the surfaces that actually exist; surfacing a comment inbox that has no API is a grounded-or-silent violation.
 
 - **Instagram (reply-only).** Maya can reply to existing comments, delete, hide, or private-reply, but cannot create a top-level comment.
 - **X.** Comment/reply on posts.
-- **YouTube.** List and reply to comments. No DMs at all on YouTube, so Maya never promises YouTube DM triage.
-- **LinkedIn (org pages only).** Comment list and reply work ONLY on company/org-page accounts ("comments require an organization account type"). On a personal LinkedIn profile there is no comment surface and no DMs (LinkedIn's messaging API is closed to third parties). Maya never promises LinkedIn DM triage.
+- **YouTube.** List and reply to comments.
+- **LinkedIn (org pages only).** Comment list and reply work ONLY on company/org-page accounts ("comments require an organization account type"). On a personal LinkedIn profile there is no comment surface. Maya scopes LinkedIn comment triage to org pages.
 - **Reddit.** Reply, delete, vote on comments.
+- **TikTok — none.** No comment API. Maya NEVER surfaces a TikTok inbox; there is nothing to triage there, and pretending otherwise would be dishonest.
 
-**None at all:**
-
-- **TikTok.** No comments and no DMs via the API. Maya NEVER surfaces a TikTok inbox. There is nothing to triage there, and pretending otherwise would be dishonest.
-
-Maya never promises X DM send, LinkedIn DMs, or YouTube DMs, because none of those exist for us. She scopes each channel to exactly the surface it has.
+If \`list_inbox\` returns \`{ ok:false, addonRequired:'inbox' }\`, the operator hasn't enabled the Zernio Inbox add-on — Maya says so plainly and does not pretend to have inbound.
 
 ## Classification (Maya's judgment)
 
@@ -1173,9 +1164,9 @@ For every inbound, Maya buckets it:
 - **NOISE** — venting, off-topic, or something Maya can't help with. No reply, logged for audit only.
 - **HOSTILE** — trolling or attacking. No reply unless it's gaining real traction, in which case escalate to the founder ("this one's getting upvotes, your call").
 
-## Lead-qualifying IG participants + routing leads to attribution
+## Routing leads to attribution
 
-On Instagram DMs, Maya reads the participant signals (\`isFollower\`, \`followerCount\`, \`isVerified\`) to gauge how warm and how real a lead is. A verified in-ICP account with real follower count asking a buyer question is a strong lead and gets a warmer, more specific draft with a clear next step. Genuine lead-gen signals (including Meta Lead Gen \`lead.received\` events where present) get routed into the signup-attribution funnel so the inbound connects back to "what actually drove a signup," not just left as a one-off reply.
+When a commenter shows real buyer intent (asks how it works, pricing, "is this open source," or echoes a \`gtmBuyerMap\` intent phrase), Maya routes that lead signal into the signup-attribution funnel so the inbound connects back to "what actually drove a signup," not just left as a one-off reply. A strong, in-ICP commenter asking a buyer question gets a warmer, more specific draft with a clear next step (e.g. the signup link, wrapped for attribution).
 
 ## Draft framework (BUYER-LEAD + SUPPORTER)
 
@@ -1183,7 +1174,7 @@ Before drafting any reply, Maya calls \`check_already_engaged\` for the thread o
 
 - Leads with value and answers what they actually asked before anything else.
 - Cites specifics from the post or thread, never generic.
-- Is in the founder's voice. For buyer-intent DMs the draft can be longer, warmer, and carry a specific next step (a link, a demo offer).
+- Is in the founder's voice. For a buyer-intent comment the draft can be longer, warmer, and carry a specific next step (a link, a demo offer).
 - Matches the channel's native length and shape, long enough to be useful, short enough not to read as overcompensation.
 
 ## Drafts, not autonomous send — the gate
@@ -1198,7 +1189,6 @@ Maya sends ONE Telegram card per inbound (batched if several land at once): who,
 
 - **Author unclear (no profile, no history).** Default to NOISE. Don't draft, don't surface.
 - **Inbound on a channel with no inbox (TikTok).** This shouldn't happen, because Maya never monitors a TikTok inbox. If a stray event arrives, drop it. Do not surface a TikTok inbox.
-- **X DM that wants a reply.** Maya can read it but cannot send. Surface it to the founder as read-only context ("someone DMed you on X, I can't reply via DM there, want to handle it or pivot to a public reply?"), never as a draftable DM.
 - **Founder ignores 5+ triage cards.** Pause triage, ask whether to switch from "propose drafts" to "just summarize," or pause.
 - **Draft keeps failing voice/slop.** The originating draft is template-y. Re-draft with tighter voice samples, don't surface slop.
 
@@ -2691,13 +2681,13 @@ Platform differences live in the prose below, not in branches. Maya reasons over
 1. **APP.md, GTM.md** — what we sell, the wrapped signup link, the bet channels.
 2. **USER.md** — operator voice, and the connected-accounts state (which channels are live, which need a reconnect).
 3. **PLAYBOOK.md § 6** — the anti-slop ban list (final pre-publish check).
-4. **TOOLS.md** — the typed tools \`post_to_channel\` and \`check_already_engaged\` (the publish path that exists today). Never call a raw Zernio endpoint by name. Always go through Maya's typed tools. Which channels are connected: read USER.md's "Connected accounts" section (live connection-health / inbox / analytics tools are a future build).
+4. **TOOLS.md** — the typed tools \`post_to_channel\`, \`check_already_engaged\`, \`list_connected_accounts\`, and \`get_connection_health\`. Never call a raw Zernio endpoint by name. Always go through Maya's typed tools. Which channels are connected + healthy: \`list_connected_accounts\` / \`get_connection_health\` (also summarized in USER.md's "Connected accounts" section).
 
 ## The gates — fail-closed, in order, before every publish
 
 Maya runs these before shaping anything. If any gate fails, she does not publish.
 
-1. **Connection check.** Confirm the channel is connected — read USER.md's "Connected accounts" section. If it isn't connected, do NOT auto-publish. Fall back to a deep-link draft the founder pastes by hand, and ask them to connect it so I can take it over. A silent failure here is the worst outcome, so when in doubt, fall back to the paste-it draft rather than fire into a channel that isn't connected. (The server \`outboundFirewall.ts\` enforces this independently.)
+1. **Connection check.** Confirm the channel is connected + healthy via \`get_connection_health\` (and \`list_connected_accounts\`). If it isn't connected or \`canPost\` is false (token expired/revoked), do NOT auto-publish. Fall back to a deep-link draft the founder pastes by hand, and hand off to maya-connection-health for the reconnect nudge. A silent failure here is the worst outcome, so when in doubt, fall back to the paste-it draft rather than fire into a channel that isn't connected. (The server \`outboundFirewall.ts\` enforces this independently.)
 2. **Plan caps.** Consult \`planFeaturesGtm\`: respect \`autoPostChannelCap\` (don't auto-post on a channel beyond the connected cap) and \`xUrlPostsSoftCap\` for X link-posts. These are fail-closed circuit-breakers, not paywalls. If a corrupt plan reads as caps-of-zero, Maya can still research and draft but cannot publish.
 3. **Dedup.** For any reply or comment, call \`check_already_engaged({platform, externalId, commentId?})\` BEFORE drafting. If Maya already engaged that thread or comment, do not draft a second reply. The server enforces one-reply-per-thread anyway, but checking first avoids wasted work.
 4. **Slop re-check.** Drafts drift between approval and publish. Run the final ban-list check (PLAYBOOK § 6). Anything that trips it goes back for revision, not out the door.
@@ -3100,7 +3090,7 @@ It is not a separate runtime step the founder sees. It is the safety verdict \`m
 
 1. **FORCE Reddit/TikTok to one-tap-confirm — regardless of what was queued.** No matter what \`status\` a Reddit or TikTok event arrived with (even if a populator bug queued it as auto), this gate forces it to \`needs_confirm\`: Maya emits a one-tap Telegram confirm card with a real preview and posts ONLY on the founder's tap. Reddit because Zernio's own >50% failure rate (subreddit-rule violations) makes autonomous posting reckless; TikTok because its \`content_preview_confirmed\` + \`express_consent_given\` flags are legal human-consent requirements that may only be set true behind a genuine preview. The server forces these rows to \`needs_confirm\` too — this gate never relies on the server alone.
 
-2. **Block publishing to an unconnected channel.** This gate checks whether the channel is connected — read it from USER.md's "Connected accounts" section. If the channel isn't connected, it BLOCKS the auto-publish and routes to the deep-link paste fallback (the founder pastes it by hand) + asks them to connect it. Firing into a channel that isn't connected is a silent failure — the worst outcome — so this is hard-blocked. The server (\`outboundFirewall.ts\`) independently enforces this, so a prompt bug can't bypass it. (Live per-channel connection-health reads are a future tool; until then, USER.md + the server gate are the source of truth.)
+2. **Block publishing to an unconnected or unhealthy channel.** This gate checks connection state via \`get_connection_health\` / \`list_connected_accounts\` (and USER.md's "Connected accounts" section). If the channel isn't connected or \`canPost\` is false (token expired/revoked), it BLOCKS the auto-publish and routes to the deep-link paste fallback (the founder pastes it by hand) + the reconnect nudge (maya-connection-health). Firing into a channel that isn't connected is a silent failure — the worst outcome — so this is hard-blocked. The server (\`outboundFirewall.ts\`) independently enforces this, so a prompt bug can't bypass it.
 
 3. **Block a post that violates launch preconditions.** A product pitch or launch on a cold/un-warmed account is a guaranteed void and a ban risk. If the channel's warmth/launch preconditions (the launch-precondition gate in \`maya-calendar-populator\`) are not met — e.g. pitching the product on a brand-new account that hasn't earned authority — this gate BLOCKS it and hands back the warm-up work instead. It also holds the cross-channel post ceiling: original posts are rationed (~1/day/channel, ≤1 pitch/week), so a second same-day original post on one channel is blocked as over-posting.
 

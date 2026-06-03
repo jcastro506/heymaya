@@ -76,7 +76,13 @@
       "post_to_channel",
       "get_agent_lifecycle",
       "acquire_foundation_lease",
-      "mark_lifecycle"
+      "mark_lifecycle",
+      "list_connected_accounts",
+      "get_connection_health",
+      "get_account_analytics",
+      "get_follower_stats",
+      "list_inbox",
+      "reply_to_comment"
     ]
   }
 }
