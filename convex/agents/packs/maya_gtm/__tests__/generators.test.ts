@@ -250,6 +250,39 @@ describe("Maya GTM workspace pack", () => {
     expect(agents).toContain('"I don\'t know / let me check"');
   });
 
+  // Sprint 2.5 — the demand-intel & open-web JUDGMENT layer: the search tools
+  // ship with a thinking model, not just bullets. Both skills bundle, are in
+  // the active slug list, and the reasoning renders in TOOLS.md.
+  it("ships the demand-intel + open-web judgment layer (skills + reasoning)", () => {
+    const { files } = buildMayaGtmWorkspace(INPUT);
+
+    // Both judgment skills are bundled and grounded (real SOPs, not stubs).
+    const demand = files.get("skills/maya-demand-intelligence/SKILL.md") ?? "";
+    const web = files.get("skills/maya-open-web-read/SKILL.md") ?? "";
+    expect(demand.length).toBeGreaterThan(800);
+    expect(web.length).toBeGreaterThan(800);
+    expect(mayaGtmSkillSlugs()).toEqual(
+      expect.arrayContaining([
+        "maya-demand-intelligence",
+        "maya-open-web-read",
+      ])
+    );
+
+    // The load-bearing judgment is actually IN the skills (not just named).
+    expect(demand).toContain("ADVERTISER density"); // competition ≠ SEO difficulty
+    expect(demand).toMatch(/0 \/ null volume|volume.*≠.*demand|0 volume/i); // the reframe
+    expect(web).toContain("5-second test"); // the clicks-no-signups diagnostic
+    expect(web).toMatch(/verbatim quote \+ (the )?URL/i); // the output contract
+
+    // The reasoning is wired into BOOT context (TOOLS.md) — Maya doesn't read
+    // the raw keyword numbers without the judgment, and the skills are cited.
+    const tools = files.get("TOOLS.md") ?? "";
+    expect(tools).toContain("maya-demand-intelligence");
+    expect(tools).toContain("maya-open-web-read");
+    expect(tools).toContain("ADVERTISER density"); // the demand rubric, inline
+    expect(tools).toContain("alternative-to"); // organic-target framing, not an ads plan
+  });
+
   it("bundles every GTM skill needed for research, calendar, approval, and review", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
 

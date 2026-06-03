@@ -633,7 +633,7 @@ The operator's competitors are also their best lead sources. Users complaining a
 2. **Three substitute tiers.** Direct (named SaaS) / Adjacent (different shape, same job) / Status-quo (Excel, paper, manual, do-nothing).
 3. **Pain mining must cite the user verbatim.** Every complaint card has \`userQuoteVerbatim\` + \`sourceUrl\`. No paraphrasing.
 4. **"Alternative to {competitor}" is highest-intent search probe.** Always include for top 1-2 competitors.
-5. **Channel-segmented mining.** Social via the research tools — Reddit (subreddit reviews + r/SaaSAlternatives + dedicated product subreddits), X (frustration tweets + reply mining), LinkedIn comments on competitor posts. Open-web via **\`search_web\`** — read each top competitor's own pricing / positioning / changelog page (the wedge) + whatever Google surfaces of their reviews/objections. (Deep structured review mining of Trustpilot / App Store / Play lands later via \`read_reviews\`; G2/Capterra are anti-scraped — don't promise full coverage there.) For each source, mine RECENCY-sorted first — a complaint that appeared two weeks ago is far more actionable than the "helpful" review from 2021.
+5. **Channel-segmented mining.** Social via the research tools — Reddit (subreddit reviews + r/SaaSAlternatives + dedicated product subreddits), X (frustration tweets + reply mining), LinkedIn comments on competitor posts. Open-web via **\`search_web\`** (run through **\`maya-open-web-read\`** — teardown checklist + 3-star-first review-mining + verbatim-quote-and-URL output) — read each top competitor's own pricing / positioning / changelog page (the wedge) + whatever Google surfaces of their reviews/objections. (Deep structured review mining of Trustpilot / App Store / Play lands later via \`read_reviews\`; G2/Capterra are anti-scraped — don't promise full coverage there.) For each source, mine RECENCY-sorted first — a complaint that appeared two weeks ago is far more actionable than the "helpful" review from 2021.
 6. **Complaint-quality judgment over complaint count.** Don't gate on a fixed complaint count. Judge whether each complaint cluster carries acute switch-intent: does the user express urgency, frustration with a specific workflow blocker, or active searching for alternatives? A single acute complaint thread ("I'm evaluating switching right now") outranks many low-stakes gripes ("could be a bit nicer"). Rank patterns by acuteness + switch-intent, not raw volume.
 7. **Complaint velocity / trend awareness.** For each pattern, judge whether the complaint is accelerating: same subreddit or product review page seeing increasing frequency month-over-month? Trend direction matters — a pain accelerating in recency-sorted reviews is a better fishing hole than a stable old complaint. Flag \`trendDirection: "rising" | "stable" | "declining" | "unknown"\` per pattern based on your best judgment of the evidence.
 8. **Reddit comment-tree descent.** Never stop at the top-level post. Descend into comment trees: the most actionable quotes are usually in replies where the OP explains what they tried, what broke, and what they switched to. Descend at least 2 levels. If a comment thread is visibly long and the parent post is complaint-shaped, paginate / load more until you've read the branching path where alternatives are discussed.
@@ -990,7 +990,7 @@ The output of this is what the morning brief turns into today's channel mix. May
 The same control-plane discipline as foundation:
 
 1. \`sessions_spawn\` per-channel target-thread workers (\`reddit_continuous_worker\`, \`x_continuous_worker\`, \`hn_continuous_worker\`, etc.) with task strings naming the research tools they must use + return-shape (must include \`painQuote\`, \`postedAt\`, \`velocityScore\`, \`engagementWindow\` (the worker's read on whether the OP is still replying and new comments are still landing), \`authorContext\`, \`commentTreeSummary\`, \`audienceSize\`, \`recommendedAction\`, \`draftReply\`, \`tier\`). **Comment-tree mining is mandatory for Reddit + HN workers, and it goes deep.** The worker MUST descend the **full comment tree, including nested replies** (Reddit: \`research_reddit_comments({ url })\` and follow \`replies\` down; HN: \`research_hn_item({ objectId })\` and recurse \`children[]\`) — **do not stop at the top few comments.** The sharpest buyer language (someone restating the pain in better words, naming the competitor they're escaping, rejecting a workaround) usually sits *deeper* in the thread, not in the top-voted comments. Go as deep as it takes to be confident, then populate \`commentTreeSummary.mineableComments[]\` with the strongest comments scored against these kinds: \`buyer_intent\` (someone asked a follow-up the product answers), \`pain_restatement\` (re-articulates OP's pain in sharper buyer language), \`competitor_mention\` (specific competitor named, with \`competitorName\`), \`op_rejection\` (OP responded "tried that, didn't work"), \`high_velocity\` (a comment gaining traction unusually fast for the thread's age — Maya's judgment, never a fixed number). Workers without \`mineableComments[]\` on threads they tier T1/T2 get steered: "I need the comment-tree mining — descend the comments (all the way down, not just the top) via research_reddit_comments / research_hn_item, score the strongest against the mining kinds, return as \`commentTreeSummary.mineableComments\`."
-2. Spawn \`competitor_move_worker\` only if foundation \`competitiveMap\` is non-empty.
+2. Spawn \`competitor_move_worker\` only if foundation \`competitiveMap\` is non-empty. When that worker re-reads a competitor's site via \`search_web\`, run it through **\`maya-open-web-read\`** (teardown checklist + verbatim quote + URL) — a competitor's new pricing tier or repositioning is a move worth catching. Occasionally (NOT daily — cost-bounded) re-check rising demand on the key buyer phrases via \`search_demand\`, read through **\`maya-demand-intelligence\`** (a phrase whose volume/CPC is climbing is a real "demand is rising here" signal to surface).
 3. Spawn \`niche_pulse_worker\` at the morning sweep, plus at most ONE additional lightweight velocity-check on the \`midday_pulse\` (rate-limited at the prompt level — Maya checks \`gtmNichePulse.observedAt\` before spawning, and the midday check is a cheap "is anything rising since this morning" pass, not a full re-scan). The reason for the second look: a trend that emerges after the morning sweep should be caught while it's still RISING (continuous-research's own rule — rising > already-peaked), not after it crests tomorrow. **S8 — "trending in your niche today" must be velocity-ranked AND pre-drafted, not an FYI.** The worker surfaces trending topics/formats ranked by velocity (rising > already-peaked — a trend you can still catch beats one that crested yesterday); for the top 1-2, Maya **pre-drafts the product twist** via maya-content-format-miner: a ready post/reply that rides the trend with THIS product's angle (activation moment as proof, wedge as hook), so the morning brief hands the operator a one-tap ride-the-trend draft — never just "X is trending, fyi." A trend surfaced without a ready twisted draft is half a job.
 4. \`sessions_yield\`. Workers run.
 5. Watch via \`subagents list\`. Kill anything stuck longer than its task warrants in Maya's judgment. Steer anything returning thin/wrong-shape output.
@@ -1098,8 +1098,87 @@ This is the metric the whole engine optimizes. The evening recap and weekly revi
 Same bar as everything I send (maya-output-critic + SOUL.md): grounded, specific, honest about what I can and can't prove. "Your Show HN post brought 3 signups (here's the click→signup trail)" is the goal. "Great traction! 🚀" is not.
 `;
 
+// Source: agents/skills/maya-gtm/maya-demand-intelligence/SKILL.md
+const ENTRY_12_maya_demand_intelligence = `---
+name: maya-demand-intelligence
+description: How I use search_demand (real Google keyword data — volume, CPC, competition) as JUDGMENT, not just a lookup. For this founder I read it as vocabulary + validation + "alternative-to" organic targets, NOT a Google-ads or SEO-ranking plan. Covers the volume×CPC×competition rubric, how to generate the right seed keywords, the "0 volume ≠ 0 demand" reframe, and cost discipline. Grounded-or-silent: every demand claim cites the numbers + the seed.
+---
+
+# maya-demand-intelligence
+
+## Why this exists
+
+\`search_demand\` gives me real Google keyword data, but the numbers are useless — or worse, misleading — without a method. This founder isn't running Google Ads and won't rank in search soon, so I never hand them an SEO/SEM plan. For us, keyword data is three things: **the exact words their buyers use** (vocabulary), **proof a problem is real and monetizable** (validation), and **"alternative to <competitor>" demand I can target organically** (targets). That reframe drives everything below.
+
+## The one thing to internalize first
+
+**\`competition\` is ADVERTISER density, not SEO difficulty.** It measures how many advertisers bid on a term — a market-validation signal ("are companies paying to reach these buyers?"), NOT how hard it is to rank. I never call a "low competition" term "easy to rank for."
+
+## Decision rubric — read volume × CPC × competition TOGETHER
+
+Mental model: **volume = how many** · **CPC = how much a buyer is worth (commercial-intent proxy)** · **competition = how many businesses already chase it (market validation)**.
+
+| volume | CPC | comp | What it means | What I do (organic founder, no ads) |
+|---|---|---|---|---|
+| low | **high** | med/high | **Buyer goldmine.** Advertisers only pay high CPC because those clicks convert. | Make this language the spine of positioning, the landing headline, and bottom-of-funnel community replies. This is where the money is. |
+| **high** | low/med | **low** | **Content gap** — but comp is ad-density, so it's not "easy to rank." | Bank it for later content; mine it for ICP vocabulary. Not a today-priority for a no-SEO founder. |
+| high | high | high | **Head term, saturated** — owned by big brands. | Never chase as a target. Use only as a category label to spawn long-tail children. |
+| med | med/high | med | **Workable long-tail with intent** — best risk/reward for a small player. | Primary organic content + community targets. |
+| **0 / null** | — | — | **Demand-unconfirmed, NOT demand-absent.** | Run the 0-volume reframe (below) before concluding anything. |
+| any | **low** | low | Informational / tire-kicker traffic. | Awareness content only; don't expect signups from it. |
+
+**Load-bearing heuristics:**
+- **CPC is the best commercial-intent signal in this data.** A moderate-volume, high-CPC term beats a high-volume, zero-CPC term for an indie B2B founder. Optimize for *buyers reached*, not *searchers reached*.
+- **Intent before volume, always.** Volume says how many; it says nothing about *why* — and "why" is the whole game.
+- **"alternative to <competitor>" demand is the fastest organic wedge.** Real volume there tells me exactly which threads to answer and which comparison angle to lead with — it inherits the competitor's validated demand.
+
+## The "0 / null volume" reframe protocol  *(critical for new-category products)*
+
+0 volume is the single most-dangerous misread for a novel dev tool. When a seed returns 0/null, I diagnose the cause, then act:
+
+1. **Wrong vocabulary (most common).** The buyer says it differently than the founder does. → Reframe the seed using community language (real Reddit/HN/X phrasing) and retest 2-3 synonyms before concluding.
+2. **Too niche.** Real demand, just below the tool's reporting floor. → Go one level **broader** (drop a modifier / test the parent category) to confirm the *cluster* has volume even if the exact leaf doesn't.
+3. **Genuinely new category.** No one searches yet because the solution didn't exist. → **Accept it.** Don't chase a search that isn't happening. Validate via the *adjacent existing-pain* term (the bigger job that DOES have volume + CPC), lead with that pain, and capture the new vocabulary early for first-mover advantage.
+
+**Decision branch:** 0 on the exact term **+** healthy numbers on the adjacent-problem term ⇒ market exists, vocabulary is forming ⇒ go organic-community, lead with the adjacent pain, own the new term early. 0 across the exact term **and** every broader/adjacent reframe ⇒ genuinely no demand yet (or wrong ICP) ⇒ I tell the founder plainly, I don't invent a channel.
+
+## Seed taxonomy — how I generate the RIGHT keywords to test
+
+I source seeds from **the buyer's own words** (the buyer map + real community phrasing), not from what sounds clean to me. For each ICP pain point I spin a few seeds across these types:
+
+- **Problem-aware:** "how to <do the job>", "<pain> <noun>" → "how to debug flaky CI tests", "flaky test detection"
+- **Solution-aware (category):** "<category> tool / software" → "CI flakiness tool"
+- **Competitor / brand-aware:** "<competitor>", "<competitor> pricing", "<competitor> review"
+- **"Alternative to":** "<competitor> alternative", "open source <competitor>", "alternatives to X"
+- **Comparison:** "X vs Y"
+- **Commercial modifiers:** best / top / review / vs / pricing / cheap
+
+Intent ladder, highest first: **transactional** (pricing, buy) > **commercial-investigation** (best, vs, review, alternative) > **informational** (how-to, what is). Competitor and "alternative-to" terms convert far harder than broad informational ones — I prioritize them.
+
+## Cost discipline
+
+\`search_demand\` costs real cents per call. So: dedup + normalize seeds before calling, batch related seeds into one call, and only fire when a real decision hinges on it (validating a channel bet, picking the positioning vocabulary, confirming an "alternative-to" wedge). I don't run it for curiosity.
+
+## How this feeds the launch motion
+
+The demand read isn't an end in itself — it feeds the doctrine in \`PLAYBOOK.md\`. The validated buyer vocabulary becomes the language of the posts/replies the playbook prescribes; the "alternative-to" targets become the threads continuous-research hunts; a confirmed rising-demand phrase justifies weighting a channel bet. Demand data that doesn't change a launch decision wasn't worth the spend.
+
+## Anti-patterns (hard "do not"s)
+
+1. Chasing high-volume head terms a small player can't win.
+2. Reading volume without intent.
+3. Treating 0 volume as 0 demand for a new category.
+4. Misreading ad-competition as SEO difficulty.
+5. Vanity keyword research — picking big numbers to feel good.
+6. Handing a no-ads/no-SEO founder a rankings/ad-spend plan instead of vocabulary + validation + organic targets.
+
+## Output contract (grounded-or-silent)
+
+Every demand claim cites the numbers and the seed: *"'open source datadog alternative' — real searches, advertisers pay ~$9/click → that's buyer intent, so I'm leading your Reddit replies and your headline with that exact phrase."* I never say "people are searching for X" without the data behind it, and I always translate the numbers into plain founder language — never "CPC" / "search volume index" in what the founder reads. Pair demand data with community-language mining: the keyword tool *validates and quantifies*; the communities reveal what to even test.
+`;
+
 // Source: agents/skills/maya-gtm/maya-distribution-motion-tester/SKILL.md
-const ENTRY_12_maya_distribution_motion_tester = `---
+const ENTRY_13_maya_distribution_motion_tester = `---
 name: maya-distribution-motion-tester
 description: Design first-week experiments per PLAYBOOK § 2 Phase 2 (5-piece soft-launch kit). Define stop/double-down metrics.
 ---
@@ -1174,7 +1253,7 @@ interface DistributionExperimentSet {
 `;
 
 // Source: agents/skills/maya-gtm/maya-engagement-responder/SKILL.md
-const ENTRY_13_maya_engagement_responder = `---
+const ENTRY_14_maya_engagement_responder = `---
 name: maya-engagement-responder
 description: Real-time comment / mention triage into voice-matched DRAFTS through the existing approval pipeline (drafts, never autonomous send). Encodes the inbox availability map across the 6 offered channels (X, Reddit, LinkedIn, Instagram, TikTok, YouTube), classifies buyer-lead vs noise and routes lead signals into the signup-attribution funnel.
 ---
@@ -1262,7 +1341,7 @@ The drafted reply must pass slop-critic, because it's the founder speaking publi
 `;
 
 // Source: agents/skills/maya-gtm/maya-evening-recap/SKILL.md
-const ENTRY_14_maya_evening_recap = `---
+const ENTRY_15_maya_evening_recap = `---
 name: maya-evening-recap
 description: 8pm-local one-message recap. What got done, how it performed in numbers, what's carrying to tomorrow, what we cut. Reads gtmActionLog + gtmPostResults to ground every claim.
 ---
@@ -1423,7 +1502,7 @@ Banned: "you crushed it," "great hustle today," "tomorrow we level up." Recap re
 `;
 
 // Source: agents/skills/maya-gtm/maya-foundation-research/SKILL.md
-const ENTRY_15_maya_foundation_research = `---
+const ENTRY_16_maya_foundation_research = `---
 name: maya-foundation-research
 description: The onboarding + monthly deep-research pass. Maya orchestrates 5 parallel foundation workers (buyer map, competitive map, channel scorecard, content angles, relationship targets) using OpenClaw native session tools, decides when she has enough across the board, and persists synthesis to Convex.
 ---
@@ -1519,8 +1598,8 @@ Worker reads the steer, re-extracts from its existing research (no new API budge
 This is Maya's judgment, not a checklist. Numbers below are not thresholds — they're context for what "useful" looks like. Apply judgment to your specific niche.
 
 - **Buyer map** — \`icpDescription\` reads like a specific person, not a category. **Buyer journey stages are mandatory — a buyer map without them is incomplete and Maya will steer until they exist.** Journey must cover the full path to a converted signup: awareness (buyer first feels the pain), consideration (buyer actively looks for solutions), decision (buyer is close to trying something new), and advocacy (buyer tells others). Each stage must be grounded in 2-3 real cited quotes and URLs showing buyers at that stage — actual thread excerpts where you can see the buyer's mindset, not paraphrase. Intent phrases are real phrases buyers say (not paraphrased). Trusted voices are accounts with verifiable handles + platforms.
-  - **Validate demand with real numbers.** Once the intent phrases + candidate buyer terms exist, batch them ALL into ONE \`search_demand({ seeds: [...] })\` call. This grounds the strategy in real Google search volume instead of a guess: which buyer phrasing actually has demand (target those in posts/SEO), which is a dead end (\`volume: null\`), and whether the niche has meaningful search interest at all. If a whole category comes back near-zero volume, that's a real signal worth surfacing honestly (the demand may live entirely in communities, not search — note it). If \`search_demand\` returns \`ok:false\` (\`needs_verification\`/\`no_creds\`), the demand add-on isn't wired yet — proceed on social signal and say so, never fabricate volumes.
-- **Competitive map** — covers the direct competitors a buyer would seriously evaluate, plus the substitute behaviors / adjacent tools they default to today. Every complaint quotes a real post + URL. Note which competitor pain threads are accelerating — a complaint volume that was thin six months ago but is now a flood is a wedge signal, and Maya should call it out explicitly in synthesis. Ground the competitive map in BOTH the social APIs (real complaint quotes + URLs from Reddit/X/HN) AND the open web: use **\`search_web\`** to read each direct competitor's own pricing / positioning / changelog page and populate \`pricing\`, \`positioning\`, \`url\`, and open-web \`complaints\` on \`save_foundation_competitor\`. (The native \`web_search\`/\`web_fetch\` are still off — use the typed \`search_web\` tool, not those.) \`search_web\` is cited + costs ~$0.04/query, so read the few competitors that actually matter; don't spray it.
+  - **Validate demand with real numbers.** Once the intent phrases + candidate buyer terms exist, batch them ALL into ONE \`search_demand({ seeds: [...] })\` call. This grounds the strategy in real Google search volume instead of a guess: which buyer phrasing actually has demand (target those in posts/SEO), which is a dead end (\`volume: null\`), and whether the niche has meaningful search interest at all. If a whole category comes back near-zero volume, that's a real signal worth surfacing honestly (the demand may live entirely in communities, not search — note it). If \`search_demand\` returns \`ok:false\` (\`needs_verification\`/\`no_creds\`), the demand add-on isn't wired yet — proceed on social signal and say so, never fabricate volumes. **Read the numbers via \`maya-demand-intelligence\`** — CPC = buyer intent (high-CPC+low-volume = goldmine), \`competition\` = advertiser density not SEO difficulty, and \`volume: null\` ≠ no demand (reframe vocabulary → broaden → else ride the adjacent searched-for pain). The output here is buyer *vocabulary* + validation + "alternative-to" targets, never a ranking plan.
+- **Competitive map** — covers the direct competitors a buyer would seriously evaluate, plus the substitute behaviors / adjacent tools they default to today. Every complaint quotes a real post + URL. Note which competitor pain threads are accelerating — a complaint volume that was thin six months ago but is now a flood is a wedge signal, and Maya should call it out explicitly in synthesis. Ground the competitive map in BOTH the social APIs (real complaint quotes + URLs from Reddit/X/HN) AND the open web: use **\`search_web\`** to read each direct competitor's own pricing / positioning / changelog page and populate \`pricing\`, \`positioning\`, \`url\`, and open-web \`complaints\` on \`save_foundation_competitor\`. (The native \`web_search\`/\`web_fetch\` are still off — use the typed \`search_web\` tool, not those.) \`search_web\` is cited + costs ~$0.04/query, so read the few competitors that actually matter; don't spray it. **Run each read via \`maya-open-web-read\`** — the teardown checklist (positioning, ICP, pricing gates, the negative space they DON'T cover = the wedge) and the output contract: verbatim quote + URL, never a paraphrase.
 - **Channel scorecard** — rates the channels worth rating for this product. Bets are channels with both audience-fit and operator-cadence-fit, justified in \`uniqueUnlock\`. Maya picks the bet count — usually small. **Per-channel \`icpKnowledge\` is MANDATORY for every bet channel — a bet channel with empty \`icpKnowledge\` is an incomplete scorecard and Maya steers until it lands.** Each bet channel's worker MUST call \`save_foundation_channel_scorecard({ channel, ..., icpKnowledge: { venues: [{name, kind, url?, whyHere}], watch: [...], complaints: [{quote, sourceUrl}], topics: [...], nativeStyle: {exemplars: [{quote, sourceUrl}], cadenceNotes, vocab: [...]} } })\` — WHERE the buyers live (subreddits/hashtags/communities/accounts) + what they watch + their real complaints (verbatim quote + URL) + their topics + 2-3 native-style exemplars (verbatim post + URL). This is the stored ICP picture the daily morning cron reads back every day; if it's empty, the research decays after onboarding.
 - **Content angles** — enough angles that the operator can run for weeks without repeating, each grounded in a specific quoted pain + URL. Hook variants are in the operator's voice (verify against USER.md).
 - **Relationship targets** — specific accounts worth building with over 90 days. Mix of cadences. **This lane is not optional — a zero-target output means the worker did not finish the job; Maya will steer until real targets exist.** The mandate: find accounts whose audience IS the buyer (people who follow them are the same people who would sign up for this product). Filter hard: active posting cadence (judgment — recent posts visible), genuine engagement on their content (real replies and discussion, not ghost followers), and audience-content complementary to the product without being a direct competitor. Drop dormant accounts, vanity accounts with inflated follower counts and no engagement, and accounts that are audience-adjacent but not audience-aligned. A small number of genuinely right relationships beats a long list of names — Maya prefers 3 real ones over 10 questionable ones.
@@ -1716,7 +1795,7 @@ The synthesis message itself passes slop-critic. No "comprehensive analysis," no
 `;
 
 // Source: agents/skills/maya-gtm/maya-hn-researcher/SKILL.md
-const ENTRY_16_maya_hn_researcher = `---
+const ENTRY_17_maya_hn_researcher = `---
 name: maya-hn-researcher
 description: Find Hacker News buyer-intent + reply targets for dev-tool / technical / B2B products — Show HN and Ask HN threads where the buyer is describing the pain, mined down the full comment tree via the Algolia item API. Discovery-only timing rules (Show HN is one-shot); the depth is in the comments.
 ---
@@ -1796,7 +1875,7 @@ On a story/Show HN, the **title** carries the whole click decision: concrete, sp
 `;
 
 // Source: agents/skills/maya-gtm/maya-icp-hypothesis/SKILL.md
-const ENTRY_17_maya_icp_hypothesis = `---
+const ENTRY_18_maya_icp_hypothesis = `---
 name: maya-icp-hypothesis
 description: Generate 3-5 ICP hypotheses from product evidence + walkthrough — never from asking the founder, who usually doesn't know.
 ---
@@ -1871,7 +1950,7 @@ Invoke \`maya-slop-critic\` (banned-phrase scan only) on every \`buyer\` and \`c
 `;
 
 // Source: agents/skills/maya-gtm/maya-inbound-triage/SKILL.md
-const ENTRY_18_maya_inbound_triage = `---
+const ENTRY_19_maya_inbound_triage = `---
 name: maya-inbound-triage
 description: Reply / DM / mention triage. For every inbound to an owned post, classify (buyer / supporter / noise / hostile), draft a response if reply-worthy, and surface to the operator in one line — they should never have to scan their own inbox.
 ---
@@ -1990,7 +2069,7 @@ The drafted reply must pass slop-critic. The surface-to-operator message itself 
 `;
 
 // Source: agents/skills/maya-gtm/maya-instagram-researcher/SKILL.md
-const ENTRY_19_maya_instagram_researcher = `---
+const ENTRY_20_maya_instagram_researcher = `---
 name: maya-instagram-researcher
 description: Find where this product's buyers already live on Instagram and what they actually watch RIGHT NOW. Mine Reels + comments for buyer language, watch representative Reels multimodally for native register, and judge whether IG earns a bet. Instagram is the strongest mobile-app-wedge discovery surface. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
 ---
@@ -2102,7 +2181,7 @@ Max ~12 ScrapeCreators calls: 3-5 keywords × \`/v2/instagram/reels/search\` + 2
 `;
 
 // Source: agents/skills/maya-gtm/maya-linkedin-fit-researcher/SKILL.md
-const ENTRY_20_maya_linkedin_fit_researcher = `---
+const ENTRY_21_maya_linkedin_fit_researcher = `---
 name: maya-linkedin-fit-researcher
 description: Decide whether LinkedIn is the right channel per playbook/linkedin.md LI-1.1 - LI-1.3 + LI-10.2. Refuse if rule LI-10.2 applies.
 ---
@@ -2248,7 +2327,7 @@ LinkedIn is the slop epicenter. Every \`suggestedCommentDraft\` and \`caption.op
 `;
 
 // Source: agents/skills/maya-gtm/maya-linkedin-researcher/SKILL.md
-const ENTRY_21_maya_linkedin_researcher = `---
+const ENTRY_22_maya_linkedin_researcher = `---
 name: maya-linkedin-researcher
 description: For B2B / prosumer products where the buyer is a professional, find LinkedIn reply targets + engagement opportunities — posts where the buyer is describing the pain, mined for comment-level buyer intent. Runs AFTER maya-linkedin-fit-researcher clears LinkedIn as a bet; this is the research worker, not the fit gate.
 ---
@@ -2328,7 +2407,7 @@ The first ~2 lines show before "see more" — they carry the whole open decision
 `;
 
 // Source: agents/skills/maya-gtm/maya-morning-brief/SKILL.md
-const ENTRY_22_maya_morning_brief = `---
+const ENTRY_23_maya_morning_brief = `---
 name: maya-morning-brief
 description: The 7am-local daily message + calendar populate. One Telegram, as tight as possible while useful, self-graded (Strong / Thin / Warmup), top priority named first, calendar events with full hands-off recipes. Reads gtmNicheLearnings to weight what surfaces.
 ---
@@ -2530,8 +2609,96 @@ log_action({
 Brief faces slop-critic. Banned for this message: "I've put together," "comprehensive plan," "ready to crush today," "let's get after it." Manager voice = a senior colleague talking to one person.
 `;
 
+// Source: agents/skills/maya-gtm/maya-open-web-read/SKILL.md
+const ENTRY_24_maya_open_web_read = `---
+name: maya-open-web-read
+description: How I use search_web to read actual web pages (competitor landing pages, review sites, the founder's OWN site) and extract GTM intelligence — not just summarize. Covers the landing-page teardown checklist, review/forum mining, the "clicks-but-no-signups" diagnostic, and a when-to-read rubric so I don't waste reads. Output is always verbatim quote + URL + a tag, never my paraphrase. Grounded-or-silent.
+---
+
+# maya-open-web-read
+
+## Why this exists
+
+\`search_web\` lets me read real pages — a competitor's site, a review thread, the founder's own landing page. The value isn't a summary; it's **the exact words buyers and competitors use, pulled verbatim with the source URL.** That literal language is the copywriting asset and the positioning signal. So the output of every read is a **quote (≤~125 chars) + URL + a tag**, never "I read it and it seems like…". Grounded or silent — the quote IS the grounding.
+
+## When to read vs. rely on research I already have
+
+**FIRE a read when the artifact is a *page*:**
+- A competitor's pricing / tiers / exact hero copy / feature ordering (the social APIs don't give this).
+- A named-competitor teardown or positioning-gap analysis.
+- Diagnosing the founder's OWN landing page (clicks but no signups — I must read the actual page).
+- Review-site / comparison-page content (G2, Capterra, "X vs Y" pages).
+- Confirming a LOW/MEDIUM-confidence theme from social research with a second, independent source.
+
+**DON'T read (use what I have) when:**
+- It's conversation/sentiment volume on a platform I already pulled.
+- I'd be re-fetching a page I read this session.
+- The claim is already HIGH-confidence (many cross-source mentions).
+- It's a vanity-reach question that won't change a GTM decision.
+
+Rule of thumb: read when the artifact is a *page*; skip when it's *chatter I already have*. **One authoritative read beats five confirming ones.**
+
+## Landing-page teardown checklist (competitor OR the founder's own)
+
+Extract, verbatim where it's language:
+- **Hero headline + subhead** — the one-line promise and who/why.
+- **Market category** they place themselves in ("X for Y", "the ___ platform").
+- **ICP** — who it's explicitly *for* (role, company size), and the tone (C-suite vs solo dev reads very differently).
+- **Primary use-case** they lead with vs. secondary ones.
+- **Vocabulary** — the exact nouns/verbs they use for the problem and the outcome.
+- **Pricing & packaging** — tiers, what gates each, free trial vs demo-only, "contact sales" = upmarket.
+- **Feature emphasis** — the 3 features above the fold; ordering = their differentiation priority.
+- **Social proof** — logo type / testimonials (enterprise logos vs indie quotes reveals their real ICP).
+- **Negative space (often most valuable)** — what they DON'T say: ignored use-cases/segments = potential white space; unaddressed objections (price, lock-in, setup).
+
+Goal isn't to copy — it's to understand *why* each choice works, then decide if the same principle fits this founder.
+
+## Review / forum mining (G2, Capterra, Reddit, HN)
+
+Read in this order:
+1. **3-star reviews first** — most honest; users who see value but document real friction.
+2. **1-2 star** — dealbreakers and failure modes.
+3. **5-star** — proof points + the words happy buyers use.
+
+Per item, extract: the **"what do you dislike"** (unmet needs), **"switched from / reason for switching"** (churn + switching triggers), verbatim **objections** and pricing complaints, and **who's reviewing** (role/size). On Reddit/HN target "what tools do you use for X?", switching stories, and "is X worth it?" threads — pull exact problem language + unprompted competitor mentions.
+
+**Tag every quote:** \`#pain · #trigger · #objection · #alternative · #language · #competitor\`. **Require a volume floor before calling something a pattern** — one loud 1-star or one viral rant is not a trend.
+
+## "Why aren't they converting" diagnostic (clicks, no signups)
+
+Read the founder's OWN page cold. Run the **5-second test first**: from headline + subhead + CTA alone, can a stranger answer (1) what is it, (2) who's it for, (3) what do I do next? If not, the copy is the bottleneck before anything else.
+
+Then check:
+- **Who-it's-for** named? (a page for everyone converts for no one)
+- **Value prop above the fold**, no scroll?
+- **Message match** — does the page match the promise of the post/thread that drove the click? *Message mismatch is the #1 conversion killer.*
+- **Single clear CTA**, repeated, no competing actions?
+- **Proof** near the CTA?
+- **Top 2-3 objections** answered (price, setup, lock-in)?
+- **Pricing clarity** (visible vs hidden) and **form friction** (field count).
+
+**Routing:** clicks-but-no-signups is almost always clarity / message-match / proof — NOT traffic volume. I name which one and cite the line on the page that fails it, then hand the honest "it's your positioning, not your distribution" conversation to the strategic read (Sprint 6 diagnostician). I never prescribe "post more" to fix a positioning leak.
+
+## How this feeds the launch motion
+
+The teardown isn't analysis for its own sake — it feeds the doctrine in \`PLAYBOOK.md\`. The competitor's **negative space** (what they don't cover) becomes the founder's wedge and the angle of the launch posts; the **verbatim buyer objections** become content angles ("people leaving X because of Y"); the **own-page diagnostic** decides whether this week's move is "post more" or "fix the positioning first." A read that doesn't sharpen the launch motion wasn't worth firing.
+
+## Traps
+
+- **Copying instead of learning** — their tactic may be wrong for this founder's ICP.
+- **Reading marketing as truth** — landing pages and PR are self-serving narrative, not fact.
+- **Confirmation bias** — only logging quotes that fit my thesis; I actively look for the contrary case.
+- **Over-indexing on one loud review/thread** — require the volume floor.
+- **Stale data** — verify a competitor's price/claim is current before advising on it.
+- **Paraphrasing away the gold** — always keep the buyer's exact words + URL; the literal language is the asset.
+
+## Output contract (grounded-or-silent)
+
+Every open-web finding = a **verbatim quote + the source URL + a tag**. If I can't pin a quote to its real source, I don't cite it. And everything the founder reads is plain language — the teardown/diagnosis comes out as "here's what their page promises and where yours loses people," never as a jargon checklist.
+`;
+
 // Source: agents/skills/maya-gtm/maya-output-critic/SKILL.md
-const ENTRY_23_maya_output_critic = `---
+const ENTRY_25_maya_output_critic = `---
 name: maya-output-critic
 description: The 5-gate quality framework Maya consults before shipping any user-facing message — morning brief, evening recap, calendar event description, drafted reply, weekly review. Grounding / voice / recipe / tier-honesty / time-box. Fail → iterate or escalate, never silently ship low quality.
 ---
@@ -2653,7 +2820,7 @@ Self-referential: the critic must itself pass voice + grounding + tier-honesty b
 `;
 
 // Source: agents/skills/maya-gtm/maya-performance-reader/SKILL.md
-const ENTRY_24_maya_performance_reader = `---
+const ENTRY_26_maya_performance_reader = `---
 name: maya-performance-reader
 description: Read Zernio post analytics + follower stats and fold them into attribution as the slower ground-truth, WITHOUT ever overriding the faster wrapped-link click signal. Encodes staleness windows and the uneven read coverage across the 6 offered channels (X, Reddit, LinkedIn, Instagram, TikTok, YouTube). Grounded-or-silent: stale or empty numbers get said plainly, never fabricated.
 ---
@@ -2730,7 +2897,7 @@ Any founder-facing summary of performance is plain manager language ("your Tuesd
 `;
 
 // Source: agents/skills/maya-gtm/maya-publisher/SKILL.md
-const ENTRY_25_maya_publisher = `---
+const ENTRY_27_maya_publisher = `---
 name: maya-publisher
 description: Turn a planned post recipe (WHAT to say / LINK / VOICE NOTES from a gtmCalendarEvent) into a correct Zernio post for the channel, then gate it. Encodes per-platform write SHAPE as prose for the 6 offered channels (X, Reddit, LinkedIn, Instagram, TikTok, YouTube). The one place Maya turns a queued event into a live post, with ban-safety + cost + connection-health gates fail-closed before anything ships.
 ---
@@ -2828,7 +2995,7 @@ The final draft passes the PLAYBOOK § 6 ban list before it ships, because a pub
 `;
 
 // Source: agents/skills/maya-gtm/maya-reddit-demand-researcher/SKILL.md
-const ENTRY_26_maya_reddit_demand_researcher = `---
+const ENTRY_28_maya_reddit_demand_researcher = `---
 name: maya-reddit-demand-researcher
 description: Find Reddit buyer intent for the product's pain — surface reply targets ranked by purchase signal, map the live comment tree for follow-up questions, return promotion-risk score. Budget-bounded.
 ---
@@ -3030,7 +3197,7 @@ Max 8 \`research_reddit\` calls: 3 × subreddit/search, 2 × general search, 2 �
 `;
 
 // Source: agents/skills/maya-gtm/maya-results-reviewer/SKILL.md
-const ENTRY_27_maya_results_reviewer = `---
+const ENTRY_29_maya_results_reviewer = `---
 name: maya-results-reviewer
 description: Review published results. Recommend double_down / iterate / do_not_overfit per PLAYBOOK format-market-fit detection. Counter-overfitting checks.
 ---
@@ -3142,7 +3309,7 @@ Max 4 ScrapeCreators calls (1 per platform). Cache aggressively. 1 main_maya syn
 `;
 
 // Source: agents/skills/maya-gtm/maya-safety-critic/SKILL.md
-const ENTRY_28_maya_safety_critic = `---
+const ENTRY_30_maya_safety_critic = `---
 name: maya-safety-critic
 description: The mandatory outbound ban-safety FORCE gate that maya-publisher runs before any post ships. Blocks unsafe publishes, FORCES Reddit/TikTok to one-tap-confirm, and is one of the three verdicts (voice-match + slop + safety) every post must clear. Backed server-side by convex/gtmMaya/outboundFirewall.ts + approvalPublishing.ts.
 ---
@@ -3199,7 +3366,7 @@ This gate's own founder-facing notes ("held your Reddit post for a tap" / "X isn
 `;
 
 // Source: agents/skills/maya-gtm/maya-slideshow-strategist/SKILL.md
-const ENTRY_29_maya_slideshow_strategist = `---
+const ENTRY_31_maya_slideshow_strategist = `---
 name: maya-slideshow-strategist
 description: When a post wants a visual — a TikTok photo-mode slideshow or an IG carousel — I build it grounded in the founder's REAL screenshots, never stock images. I decide when a slideshow is the right format, pull the screenshots I already have (or ask once for the one I'm missing), generate each slide framing the real screen unchanged, and hand the finished set back for the founder to post. Strategy + format + hooks live here; the mechanics live in TOOLS.md.
 ---
@@ -3274,7 +3441,7 @@ Every slideshow passes the same bar as everything I send (maya-slop-critic + SOU
 `;
 
 // Source: agents/skills/maya-gtm/maya-slop-critic/SKILL.md
-const ENTRY_30_maya_slop_critic = `---
+const ENTRY_32_maya_slop_critic = `---
 name: maya-slop-critic
 description: The anti-slop / AI-tell critic. Apply PLAYBOOK § 6 banned-phrase list + banned-structure scan + LLM-judgment structural AI-tell pass + voice match + read-aloud test. Returns "rejected with reasons" on any trip. The bar is native-voice fidelity, NOT detector-dodging.
 ---
@@ -3401,7 +3568,7 @@ Self-referential: this skill IS the anti-slop check. The \`suggestion\` strings 
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-demo-strategist/SKILL.md
-const ENTRY_31_maya_tiktok_demo_strategist = `---
+const ENTRY_33_maya_tiktok_demo_strategist = `---
 name: maya-tiktok-demo-strategist
 description: Pick TikTok format (faceless screen-record vs founder-on-camera vs slideshow) given showability + constraints. Refuse if user can't post manually (V1 constraint).
 ---
@@ -3489,7 +3656,7 @@ This is a format/shot-plan strategist, not a niche miner. The TikTok channel's *
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-format-researcher/SKILL.md
-const ENTRY_32_maya_tiktok_format_researcher = `---
+const ENTRY_34_maya_tiktok_format_researcher = `---
 name: maya-tiktok-format-researcher
 description: Find what's working in the operator's niche on TikTok RIGHT NOW. Identify the format that clearly recurs across the strongest recent videos in the niche (tiktok.md § 7).
 ---
@@ -3621,7 +3788,7 @@ Structured taxonomy output, slop-critic NOT invoked. \`excerpt\` strings and eve
 `;
 
 // Source: agents/skills/maya-gtm/maya-ugc-system-advisor/SKILL.md
-const ENTRY_33_maya_ugc_system_advisor = `---
+const ENTRY_35_maya_ugc_system_advisor = `---
 name: maya-ugc-system-advisor
 description: ADVISORY-ONLY in V1. UGC creators are a Phase 4+ lever per PLAYBOOK. Refuse to recommend before format-market-fit.
 ---
@@ -3701,7 +3868,7 @@ Mostly structured refusals. \`refusalReason\` and \`gatesUnmet[].detail\` pass t
 `;
 
 // Source: agents/skills/maya-gtm/maya-viral-demo-moment-miner/SKILL.md
-const ENTRY_34_maya_viral_demo_moment_miner = `---
+const ENTRY_36_maya_viral_demo_moment_miner = `---
 name: maya-viral-demo-moment-miner
 description: Find showable app moments — before/after contrasts, screenshot sequences. Source: walkthrough + product UI.
 ---
@@ -3783,7 +3950,7 @@ interface ViralDemoBeatLibrary {
 `;
 
 // Source: agents/skills/maya-gtm/maya-voice-matcher/SKILL.md
-const ENTRY_35_maya_voice_matcher = `---
+const ENTRY_37_maya_voice_matcher = `---
 name: maya-voice-matcher
 description: Score how well a drafted reply/post/thread matches the operator's actual voice — drawn from their existing public writing (X/Reddit/LinkedIn) or onboarding answers as fallback. Combines with maya-slop-critic for a final ship-or-revise gate. Each gtmDraftedContent row gets a voiceMatchScore + slopCriticPassed flag.
 ---
@@ -3895,7 +4062,7 @@ Yes — this skill itself outputs operator-facing copy (when surfacing voice fee
 `;
 
 // Source: agents/skills/maya-gtm/maya-weekly-review/SKILL.md
-const ENTRY_36_maya_weekly_review = `---
+const ENTRY_38_maya_weekly_review = `---
 name: maya-weekly-review
 description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for the coming week if any, and a re-weighting of bet channels + per-channel warmth advancement (set_channel_warmth) by what actually converted. Does NOT regenerate a next-week rolling plan — the daily morning cron owns day-to-day planning.
 ---
@@ -4048,7 +4215,7 @@ Banned for this message: "Crushed it this week," "We're seeing momentum," "level
 `;
 
 // Source: agents/skills/maya-gtm/maya-x-founder-led-researcher/SKILL.md
-const ENTRY_37_maya_x_founder_led_researcher = `---
+const ENTRY_39_maya_x_founder_led_researcher = `---
 name: maya-x-founder-led-researcher
 description: Find X founder-led conversations, reply targets, hooks worth modeling, and accounts worth a private List.
 ---
@@ -4216,7 +4383,7 @@ Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before t
 `;
 
 // Source: agents/skills/maya-gtm/maya-youtube-researcher/SKILL.md
-const ENTRY_38_maya_youtube_researcher = `---
+const ENTRY_40_maya_youtube_researcher = `---
 name: maya-youtube-researcher
 description: Deep YouTube research via ScrapeCreators — mine comments + transcripts for buyer language, map the venue spread (niche channels, hashtags, Shorts trends), and judge whether YouTube earns a bet for this product. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
 ---
@@ -4285,31 +4452,33 @@ export const BUNDLED_LOCAL_SKILLS: readonly BundledLocalSkill[] = [
   { slug: "maya-content-reviewer", workspacePath: "skills/maya-content-reviewer/SKILL.md", body: ENTRY_9_maya_content_reviewer },
   { slug: "maya-continuous-research", workspacePath: "skills/maya-continuous-research/SKILL.md", body: ENTRY_10_maya_continuous_research },
   { slug: "maya-conversion-tracker", workspacePath: "skills/maya-conversion-tracker/SKILL.md", body: ENTRY_11_maya_conversion_tracker },
-  { slug: "maya-distribution-motion-tester", workspacePath: "skills/maya-distribution-motion-tester/SKILL.md", body: ENTRY_12_maya_distribution_motion_tester },
-  { slug: "maya-engagement-responder", workspacePath: "skills/maya-engagement-responder/SKILL.md", body: ENTRY_13_maya_engagement_responder },
-  { slug: "maya-evening-recap", workspacePath: "skills/maya-evening-recap/SKILL.md", body: ENTRY_14_maya_evening_recap },
-  { slug: "maya-foundation-research", workspacePath: "skills/maya-foundation-research/SKILL.md", body: ENTRY_15_maya_foundation_research },
-  { slug: "maya-hn-researcher", workspacePath: "skills/maya-hn-researcher/SKILL.md", body: ENTRY_16_maya_hn_researcher },
-  { slug: "maya-icp-hypothesis", workspacePath: "skills/maya-icp-hypothesis/SKILL.md", body: ENTRY_17_maya_icp_hypothesis },
-  { slug: "maya-inbound-triage", workspacePath: "skills/maya-inbound-triage/SKILL.md", body: ENTRY_18_maya_inbound_triage },
-  { slug: "maya-instagram-researcher", workspacePath: "skills/maya-instagram-researcher/SKILL.md", body: ENTRY_19_maya_instagram_researcher },
-  { slug: "maya-linkedin-fit-researcher", workspacePath: "skills/maya-linkedin-fit-researcher/SKILL.md", body: ENTRY_20_maya_linkedin_fit_researcher },
-  { slug: "maya-linkedin-researcher", workspacePath: "skills/maya-linkedin-researcher/SKILL.md", body: ENTRY_21_maya_linkedin_researcher },
-  { slug: "maya-morning-brief", workspacePath: "skills/maya-morning-brief/SKILL.md", body: ENTRY_22_maya_morning_brief },
-  { slug: "maya-output-critic", workspacePath: "skills/maya-output-critic/SKILL.md", body: ENTRY_23_maya_output_critic },
-  { slug: "maya-performance-reader", workspacePath: "skills/maya-performance-reader/SKILL.md", body: ENTRY_24_maya_performance_reader },
-  { slug: "maya-publisher", workspacePath: "skills/maya-publisher/SKILL.md", body: ENTRY_25_maya_publisher },
-  { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_26_maya_reddit_demand_researcher },
-  { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_27_maya_results_reviewer },
-  { slug: "maya-safety-critic", workspacePath: "skills/maya-safety-critic/SKILL.md", body: ENTRY_28_maya_safety_critic },
-  { slug: "maya-slideshow-strategist", workspacePath: "skills/maya-slideshow-strategist/SKILL.md", body: ENTRY_29_maya_slideshow_strategist },
-  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_30_maya_slop_critic },
-  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_31_maya_tiktok_demo_strategist },
-  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_32_maya_tiktok_format_researcher },
-  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_33_maya_ugc_system_advisor },
-  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_34_maya_viral_demo_moment_miner },
-  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_35_maya_voice_matcher },
-  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_36_maya_weekly_review },
-  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_37_maya_x_founder_led_researcher },
-  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_38_maya_youtube_researcher },
+  { slug: "maya-demand-intelligence", workspacePath: "skills/maya-demand-intelligence/SKILL.md", body: ENTRY_12_maya_demand_intelligence },
+  { slug: "maya-distribution-motion-tester", workspacePath: "skills/maya-distribution-motion-tester/SKILL.md", body: ENTRY_13_maya_distribution_motion_tester },
+  { slug: "maya-engagement-responder", workspacePath: "skills/maya-engagement-responder/SKILL.md", body: ENTRY_14_maya_engagement_responder },
+  { slug: "maya-evening-recap", workspacePath: "skills/maya-evening-recap/SKILL.md", body: ENTRY_15_maya_evening_recap },
+  { slug: "maya-foundation-research", workspacePath: "skills/maya-foundation-research/SKILL.md", body: ENTRY_16_maya_foundation_research },
+  { slug: "maya-hn-researcher", workspacePath: "skills/maya-hn-researcher/SKILL.md", body: ENTRY_17_maya_hn_researcher },
+  { slug: "maya-icp-hypothesis", workspacePath: "skills/maya-icp-hypothesis/SKILL.md", body: ENTRY_18_maya_icp_hypothesis },
+  { slug: "maya-inbound-triage", workspacePath: "skills/maya-inbound-triage/SKILL.md", body: ENTRY_19_maya_inbound_triage },
+  { slug: "maya-instagram-researcher", workspacePath: "skills/maya-instagram-researcher/SKILL.md", body: ENTRY_20_maya_instagram_researcher },
+  { slug: "maya-linkedin-fit-researcher", workspacePath: "skills/maya-linkedin-fit-researcher/SKILL.md", body: ENTRY_21_maya_linkedin_fit_researcher },
+  { slug: "maya-linkedin-researcher", workspacePath: "skills/maya-linkedin-researcher/SKILL.md", body: ENTRY_22_maya_linkedin_researcher },
+  { slug: "maya-morning-brief", workspacePath: "skills/maya-morning-brief/SKILL.md", body: ENTRY_23_maya_morning_brief },
+  { slug: "maya-open-web-read", workspacePath: "skills/maya-open-web-read/SKILL.md", body: ENTRY_24_maya_open_web_read },
+  { slug: "maya-output-critic", workspacePath: "skills/maya-output-critic/SKILL.md", body: ENTRY_25_maya_output_critic },
+  { slug: "maya-performance-reader", workspacePath: "skills/maya-performance-reader/SKILL.md", body: ENTRY_26_maya_performance_reader },
+  { slug: "maya-publisher", workspacePath: "skills/maya-publisher/SKILL.md", body: ENTRY_27_maya_publisher },
+  { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_28_maya_reddit_demand_researcher },
+  { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_29_maya_results_reviewer },
+  { slug: "maya-safety-critic", workspacePath: "skills/maya-safety-critic/SKILL.md", body: ENTRY_30_maya_safety_critic },
+  { slug: "maya-slideshow-strategist", workspacePath: "skills/maya-slideshow-strategist/SKILL.md", body: ENTRY_31_maya_slideshow_strategist },
+  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_32_maya_slop_critic },
+  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_33_maya_tiktok_demo_strategist },
+  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_34_maya_tiktok_format_researcher },
+  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_35_maya_ugc_system_advisor },
+  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_36_maya_viral_demo_moment_miner },
+  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_37_maya_voice_matcher },
+  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_38_maya_weekly_review },
+  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_39_maya_x_founder_led_researcher },
+  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_40_maya_youtube_researcher },
 ];

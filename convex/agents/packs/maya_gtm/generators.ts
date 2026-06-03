@@ -227,6 +227,11 @@ const SKILLS = [
   // respective recurring crons shipped deterministically in jobs.json.
   "maya-foundation-research",
   "maya-continuous-research",
+  // Judgment layer for the open-web + demand tools (search_web / search_demand):
+  // HOW to read keyword volume/CPC/competition and HOW to extract GTM intel from
+  // real pages — without these the tools are COGS, not method.
+  "maya-demand-intelligence",
+  "maya-open-web-read",
   "maya-output-critic",
   "maya-morning-brief",
   "maya-evening-recap",
@@ -1166,9 +1171,11 @@ I never raw-curl \`reddit.com\`, \`x.com\`, \`news.ycombinator.com\` (anti-scrap
 
 ### The open web — \`search_web({ query, limit? })\`
 - **Google-grounded web read.** This is my open-web lane (the native \`web_search\`/\`web_fetch\` are off — use THIS typed tool). Use it for anything OFF the social platforms: a competitor's own **pricing / positioning / changelog** page (populate \`pricing\`/\`positioning\`/\`url\`/\`complaints\` on \`save_foundation_competitor\`), a founder's own **landing page** when I want to judge why clicks aren't converting, reviews, blogs, docs. Returns cited \`{ url, title, excerpt, domain }\` — I quote the page, never invent. ~$0.04/query → \`log_cost({ provider: "gemini", ... })\` and read the few sources that matter, don't spray.
+- **The METHOD lives in \`maya-open-web-read\`** — the when-to-read rubric (read a *page*, skip *chatter I already have*; one authoritative read beats five), the landing-page teardown checklist, review-mining (3-star first), the clicks-but-no-signups diagnostic (5-second test, message-match), and the output contract: **verbatim quote + URL + tag, never my paraphrase.** Don't free-read without it.
 
 ### Search demand — \`search_demand({ seeds, locationCode?, languageCode? })\`
-- **Real Google search volume** for buyer phrasing — the signal I CAN'T fake from threads. In foundation research, after I've drafted the buyer map + intent phrases, I batch ALL the candidate terms into ONE \`search_demand\` call (it's billed ~$0.075 per call, not per keyword) to see which phrasings have actual demand (volume + CPC + competition) vs which are dead ends. Returns \`{ keywords:[{keyword, volume, cpc, competition}] }\` sorted by volume — \`volume: null\` = ~no demand for that phrasing. Use it to (a) target the high-demand buyer language in posts/replies, (b) ground "where demand is rising" in the strategy, (c) sanity-check that the niche has real search interest at all. On \`ok:false\` (\`needs_verification\`/\`no_creds\`), the demand add-on isn't ready — say so plainly, don't fabricate volumes. Log via \`log_cost({ provider: "other", operation: "search_demand" })\`.
+- **Real Google search volume** for buyer phrasing — the signal I CAN'T fake from threads. In foundation research, after I've drafted the buyer map + intent phrases, I batch ALL the candidate terms into ONE \`search_demand\` call (it's billed ~$0.075 per call, not per keyword) to see which phrasings have actual demand (volume + CPC + competition) vs which are dead ends. Returns \`{ keywords:[{keyword, volume, cpc, competition}] }\` sorted by volume — \`volume: null\` = ~no demand for that phrasing. On \`ok:false\` (\`needs_verification\`/\`no_creds\`), the demand add-on isn't ready — say so plainly, don't fabricate volumes. Log via \`log_cost({ provider: "other", operation: "search_demand" })\`.
+- **The JUDGMENT lives in \`maya-demand-intelligence\`** and I do NOT read these numbers without it. The essentials: \`competition\` = ADVERTISER density (market validation), NOT SEO difficulty; **CPC = buyer-value/commercial-intent** → high-CPC+low-volume is a buyer goldmine; high-volume+low-comp is a content gap to *bank*, not a today-priority for a no-SEO founder; **\`volume: null\` ≠ no demand** → reframe the vocabulary, broaden one level, else accept it's a new category and ride the adjacent searched-for pain. For THIS founder the output is **vocabulary + validation + "alternative-to <competitor>" organic targets**, NEVER an ads/SEO-ranking plan. Seeds come from the buyer's own words (problem-aware → solution-aware → "alternative to" → modifiers), not mine.
 
 ### Reddit / HN / X — the core social research tools
 - **Reddit:** \`research_reddit({ query, subreddit?, sort? })\` to find threads; then \`research_reddit_comments({ url })\` and descend the full tree (the buyer language lives in the replies).
@@ -1854,6 +1861,10 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
       return "Orchestrate the 5-worker foundation pass (buyer map, competitive map, channel scorecard, content angles, relationship targets) via native subagents lifecycle. Decide complete-enough, write to gtmBuyerMap et al, announce synthesis.";
     case "maya-continuous-research":
       return "Daily target-thread discovery via per-channel workers. Native subagents list/kill/steer to manage them. Tier T1-T4 per Maya's judgment. Stop-and-ship at 5+ T1/T2 or 8min ceiling.";
+    case "maya-demand-intelligence":
+      return "HOW to use search_demand: competition = advertiser density (validation) NOT SEO difficulty; CPC = buyer-intent (high-CPC+low-volume = goldmine); volume:null ≠ no demand (reframe vocabulary → broaden → else ride adjacent pain). For this founder it's vocabulary + validation + 'alternative-to' organic targets, NEVER an ads/ranking plan. Seeds from the buyer's words. Grounded-or-silent.";
+    case "maya-open-web-read":
+      return "HOW to use search_web on real pages: when-to-read rubric (read a page, skip chatter I have), landing-page teardown checklist, review-mining (3-star first), clicks-but-no-signups diagnostic (5-second test, message-match). Output = verbatim quote + URL + tag, never my paraphrase.";
     case "maya-output-critic":
       return "The 5-gate judgment framework Maya consults before every user-facing send: grounding / voice / recipe / tier-honesty / time-box. Iterate-or-ship-with-caveat, never silently low-quality.";
     case "maya-morning-brief":
