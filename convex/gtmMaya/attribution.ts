@@ -23,6 +23,23 @@ import {
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { authenticate } from "./openclaw/inboundCallback";
+import {
+  summarizeExperiment,
+  type Arm,
+  type ExperimentVerdict,
+} from "./experimentStats";
+
+/** The content-attribute dimensions Maya can run an experiment across — the
+ *  keys of gtmDraftedContent.attributes. */
+const ATTRIBUTE_DIMENSIONS = [
+  "hookType",
+  "format",
+  "tone",
+  "lengthBucket",
+  "captionStyle",
+  "postingWindow",
+] as const;
+type AttributeDimension = (typeof ATTRIBUTE_DIMENSIONS)[number];
 
 const CONVERSION_KIND = v.union(
   v.literal("signup"),
@@ -692,4 +709,155 @@ export const getConversionSetupHttp = httpAction(async (ctx, request) => {
     }),
     { status: 200, headers: { "content-type": "application/json" } }
   );
+});
+
+// ───────── Sprint 4 — attribute outcomes + the experiment verdict ─────────
+
+/**
+ * Join this agent's wrapped-link clicks → signups back to each draft's content
+ * ATTRIBUTE (hookType / format / tone / …) so Maya can ask the real question:
+ * "which hook actually converts?" Each distinct attribute value is an arm:
+ * trials = clicks on links carrying that value, conversions = signups on them.
+ * Feeds `summarizeExperiment` for an honest verdict (winner / leaning / not
+ * enough data + how many more conversions are needed).
+ *
+ * Cross-tenant safe: every wrap + draft is re-checked against accountId.
+ */
+export const getAttributeOutcomes = internalQuery({
+  args: {
+    agentId: v.id("gtmAgents"),
+    accountId: v.id("creators"),
+    dimension: v.string(),
+    windowDays: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    dimension: string;
+    arms: Arm[];
+    verdict: ExperimentVerdict;
+  }> => {
+    const dimension = ATTRIBUTE_DIMENSIONS.includes(
+      args.dimension as AttributeDimension
+    )
+      ? (args.dimension as AttributeDimension)
+      : null;
+    if (!dimension) {
+      return {
+        dimension: args.dimension,
+        arms: [],
+        verdict: summarizeExperiment([]),
+      };
+    }
+
+    const windowDays =
+      args.windowDays && args.windowDays > 0 ? args.windowDays : null;
+    const cutoff = windowDays ? Date.now() - windowDays * 86_400_000 : 0;
+
+    const wraps = await ctx.db
+      .query("gtmLinkWraps")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+
+    const convs = await ctx.db
+      .query("gtmConversions")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    const myConvs = convs.filter(
+      (c) => c.accountId === args.accountId && c.occurredAt >= cutoff
+    );
+
+    // value → { trials (clicks), conversions (signups) }
+    const byValue = new Map<string, { trials: number; conversions: number }>();
+
+    for (const w of wraps) {
+      if (w.accountId !== args.accountId || !w.draftId) continue;
+      const draft = await ctx.db.get(w.draftId);
+      if (!draft || draft.accountId !== args.accountId) continue;
+      const value = draft.attributes?.[dimension];
+      if (typeof value !== "string" || value.trim() === "") continue;
+
+      const clickRows = await ctx.db
+        .query("gtmLinkClicks")
+        .withIndex("by_link_wrap", (q) => q.eq("linkWrapId", w._id))
+        .collect();
+      const clicks = clickRows.filter((r) => r.clickedAt >= cutoff).length;
+      const signups = myConvs
+        .filter((c) => c.linkWrapId === w._id && c.kind === "signup")
+        .reduce((s, c) => s + c.count, 0);
+
+      const bucket = byValue.get(value) ?? { trials: 0, conversions: 0 };
+      bucket.trials += clicks;
+      bucket.conversions += signups;
+      byValue.set(value, bucket);
+    }
+
+    const arms: Arm[] = [...byValue.entries()]
+      .map(([label, t]) => ({ label, trials: t.trials, conversions: t.conversions }))
+      .filter((a) => a.trials > 0)
+      .sort((a, b) => b.conversions - a.conversions || b.trials - a.trials);
+
+    return { dimension, arms, verdict: summarizeExperiment(arms) };
+  },
+});
+
+/** GET /lc_gtm/get_attribute_outcomes?dimension=hookType[&windowDays=N] — Maya
+ *  reads which value of a content dimension actually converts, with a verdict. */
+export const getAttributeOutcomesHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  const url = new URL(request.url);
+  const dimension = url.searchParams.get("dimension") ?? "";
+  const windowParam = url.searchParams.get("windowDays");
+  const windowDays = windowParam ? parseInt(windowParam, 10) : undefined;
+
+  const outcomes = await ctx.runQuery(
+    internal.gtmMaya.attribution.getAttributeOutcomes,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      dimension,
+      windowDays: Number.isFinite(windowDays) ? windowDays : undefined,
+    }
+  );
+  return new Response(JSON.stringify(outcomes), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+interface ExperimentVerdictPayload {
+  arms?: Array<{ label?: unknown; trials?: unknown; conversions?: unknown }>;
+}
+
+/** POST /lc_gtm/get_experiment_verdict { arms:[{label,trials,conversions}] } —
+ *  pure stats: real P(best) + winner/leaning/not-enough-data + conversionsNeeded.
+ *  Lets Maya compare ANY arms she's holding (channels, CTAs, anything), not just
+ *  the stored attribute dimensions. Hook-token auth for consistency; no DB. */
+export const experimentVerdictHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: ExperimentVerdictPayload;
+  try {
+    body = (await request.json()) as ExperimentVerdictPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  const rawArms = Array.isArray(body.arms) ? body.arms : [];
+  const arms: Arm[] = rawArms
+    .map((a) => ({
+      label: typeof a.label === "string" ? a.label : "",
+      trials: typeof a.trials === "number" ? a.trials : 0,
+      conversions: typeof a.conversions === "number" ? a.conversions : 0,
+    }))
+    .filter((a) => a.label !== "");
+
+  const verdict = summarizeExperiment(arms);
+  return new Response(JSON.stringify({ verdict }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
 });

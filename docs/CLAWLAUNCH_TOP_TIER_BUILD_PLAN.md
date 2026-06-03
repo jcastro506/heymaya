@@ -131,6 +131,8 @@
 
 **Effort:** M. **Tests:** `experimentStats.ts` against the fixture corpus (pure functions — ideal).
 
+> **Status (2026-06-03): SHIPPED.** `convex/gtmMaya/experimentStats.ts` (deterministic Beta-Bernoulli MC: `summarizeExperiment` → winner needs P(best)≥0.85 AND ≥5 conversions; `confirmedConversions` + `assessSingleMotion`). `getAttributeOutcomes` join + `get_attribute_outcomes` / `get_experiment_verdict` tools (75 total). Rewired `decideExperimentScale` + `interpretResults` to drop the weighted sums. `maya-results-reviewer` now reports the computed verdict, never an uncomputed multiplier. 12 stats tests + 4 join/verdict tests; convex+root tsc clean, zero net-new failures.
+
 ---
 
 ## Sprint 5 — Systematic experimentation: registry + allocator + honest re-weight

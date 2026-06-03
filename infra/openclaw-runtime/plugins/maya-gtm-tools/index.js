@@ -1232,6 +1232,42 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) => getLc("get_my_attribution", p, ctx.signal),
     }),
     tool({
+      name: "get_attribute_outcomes",
+      label: "Get Attribute Outcomes",
+      description:
+        "Which VALUE of a content attribute actually converts — real Beta-Bernoulli math, not a guess. dimension is one of hookType/format/tone/lengthBucket/captionStyle/postingWindow. Returns { dimension, arms:[{label,trials(clicks),conversions(signups)}], verdict:{ winner, leader, pBestLeader, verdict('winner'|'leaning'|'not_enough_data'), reason, conversionsNeeded } }. Use the verdict.reason verbatim-ish in plain language: 'lowercase hooks: 3 signups / 12 vs polished 0 / 9 — 84% likely better' or 'not enough data yet — need N more signups to call it'. Optional windowDays.",
+      parameters: Type.Object({
+        dimension: Enum([
+          "hookType",
+          "format",
+          "tone",
+          "lengthBucket",
+          "captionStyle",
+          "postingWindow",
+        ]),
+        windowDays: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        getLc("get_attribute_outcomes", p, ctx.signal),
+    }),
+    tool({
+      name: "get_experiment_verdict",
+      label: "Get Experiment Verdict",
+      description:
+        "Pure stats verdict for ANY arms I'm comparing (channels, CTAs, hooks — anything), when I already have the counts. Pass arms:[{label, trials, conversions}]. Returns { verdict:{ arms:[{label,mean,ci80,pBest}], winner, leader, pBestLeader, verdict, reason, conversionsNeeded } }. A winner needs BOTH P(best)>=0.85 AND >=5 conversions — never P(best) alone. Lets me say honestly 'I can't call this yet, need N more conversions' instead of overfitting.",
+      parameters: Type.Object({
+        arms: Type.Array(
+          Type.Object({
+            label: Type.String(),
+            trials: Type.Number(),
+            conversions: Type.Number(),
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("get_experiment_verdict", p, ctx.signal),
+    }),
+    tool({
       name: "get_platform_algo",
       label: "Get Platform Algo",
       description:

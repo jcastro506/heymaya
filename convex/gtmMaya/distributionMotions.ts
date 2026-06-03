@@ -1,4 +1,5 @@
 import type { GtmAppContext, GtmEvidenceCard } from "./channelScoring";
+import { assessSingleMotion, confirmedConversions } from "./experimentStats";
 
 export type DistributionMotion =
   | "reddit_helpful_reply"
@@ -169,18 +170,18 @@ export function decideExperimentScale(
     }),
     zeroTotals
   );
-  const customerSignal =
-    totals.signups +
-    totals.installs +
-    totals.trials +
-    totals.demos * 2 +
-    totals.feedbackItems +
-    totals.creatorApplicants +
-    totals.replies * 0.25;
+  // Sprint 4: replaced the hand-weighted "signups + demos*2 + replies*0.25 >= 5"
+  // with real, UNWEIGHTED confirmed conversions + the shared stats floor. A
+  // conversion is a conversion; replies/views never inflate the customer signal.
+  const conversions = confirmedConversions(totals);
+  const assessment = assessSingleMotion(conversions, {
+    samples: results.length,
+    largeExposureNoConversion: totals.views >= 10_000 && conversions === 0,
+  });
 
-  if (customerSignal >= 5 && results.length >= 3) return "double_down";
-  if (totals.views >= 10_000 && customerSignal < 1) return "revise";
-  if (results.length >= 5 && customerSignal < 1) return "park";
+  if (assessment.signal === "strong" && results.length >= 3) return "double_down";
+  if (totals.views >= 10_000 && conversions < 1) return "revise";
+  if (results.length >= 5 && conversions < 1) return "park";
   return "keep_testing";
 }
 

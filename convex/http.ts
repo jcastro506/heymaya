@@ -123,6 +123,8 @@ import {
   conversionPixelHttp,
   conversionPixelOptionsHttp,
   getConversionSetupHttp,
+  getAttributeOutcomesHttp,
+  experimentVerdictHttp,
 } from "./gtmMaya/attribution";
 // Ideal-product Pillar 1 (VOICE) + Pillar 4 (WARMUP). Maya persists the
 // founder voice fingerprint, per-channel native-style exemplars, and per-
@@ -553,6 +555,19 @@ http.route({
   path: "/lc_gtm/get_conversion_setup",
   method: "GET",
   handler: getConversionSetupHttp,
+});
+
+// Sprint 4 — the experiment-stats core surfaces. Which content attribute
+// actually converts (Beta-Bernoulli verdict), and a pure verdict for any arms.
+http.route({
+  path: "/lc_gtm/get_attribute_outcomes",
+  method: "GET",
+  handler: getAttributeOutcomesHttp,
+});
+http.route({
+  path: "/lc_gtm/get_experiment_verdict",
+  method: "POST",
+  handler: experimentVerdictHttp,
 });
 
 // Continuous research + feedback-loop write surfaces. Maya / her

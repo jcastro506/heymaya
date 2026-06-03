@@ -472,3 +472,158 @@ describe("Sprint 3 — activation (a signup that stuck)", () => {
     expect(setup.pixelSnippet).toContain("source"); // "how did you hear" rides along
   });
 });
+
+/**
+ * Sprint 4 (top-tier) — attribute outcomes (which content attribute converts)
+ * + the pure experiment verdict. The Beta-Bernoulli math itself is covered in
+ * experimentStats.test.ts; here we test the JOIN (clicks→signups grouped by a
+ * draft attribute), cross-tenant isolation, and the verdict HTTP wrapper.
+ */
+async function agentAccountId(
+  t: ReturnType<typeof convexTest>,
+  agentId: Id<"gtmAgents">
+): Promise<Id<"creators">> {
+  return await t.run(async (ctx) => {
+    const agent = await ctx.db.get(agentId);
+    return agent!.accountId;
+  });
+}
+
+/** Wrap a link tied to a freshly-inserted draft carrying a hookType, then seed
+ *  N clicks + M signups directly. Returns nothing — drives the join inputs. */
+async function seedAttributeArm(
+  t: ReturnType<typeof convexTest>,
+  agentId: Id<"gtmAgents">,
+  accountId: Id<"creators">,
+  hookToken: string,
+  hookType: string,
+  clicks: number,
+  signups: number
+): Promise<void> {
+  const draftId = await t.run(async (ctx) =>
+    ctx.db.insert("gtmDraftedContent", {
+      accountId,
+      agentId,
+      kind: "post",
+      platform: "reddit",
+      draftText: `draft for ${hookType}`,
+      slopCriticPassed: true,
+      approvalState: "approved",
+      attributes: { hookType },
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+  );
+  const wrapRes = await post(t, "/lc_gtm/wrap_link", hookToken, {
+    destinationUrl: "https://exp.test/signup",
+    draftId,
+    platform: "reddit",
+  });
+  const { token } = (await wrapRes.json()) as { token: string };
+  await t.run(async (ctx) => {
+    const wrap = await ctx.db
+      .query("gtmLinkWraps")
+      .withIndex("by_token", (q) => q.eq("token", token))
+      .first();
+    for (let i = 0; i < clicks; i++) {
+      await ctx.db.insert("gtmLinkClicks", {
+        accountId,
+        agentId,
+        linkWrapId: wrap!._id,
+        clickedAt: Date.now(),
+      });
+    }
+    for (let i = 0; i < signups; i++) {
+      await ctx.db.insert("gtmConversions", {
+        accountId,
+        agentId,
+        kind: "signup",
+        count: 1,
+        source: "self_report",
+        linkWrapId: wrap!._id,
+        occurredAt: Date.now(),
+      });
+    }
+  });
+}
+
+describe("Sprint 4 — attribute outcomes + experiment verdict", () => {
+  it("groups clicks→signups by hookType and returns a real verdict", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId, hookToken } = await setupAgent(t, "u_exp_join");
+    const accountId = await agentAccountId(t, agentId);
+
+    // punchy: 6/12 (clears floor, clearly best) · explainer: 0/10
+    await seedAttributeArm(t, agentId, accountId, hookToken, "punchy", 12, 6);
+    await seedAttributeArm(t, agentId, accountId, hookToken, "explainer", 10, 0);
+
+    const res = (await t.fetch(
+      "/lc_gtm/get_attribute_outcomes?dimension=hookType",
+      { method: "GET", headers: { authorization: `Bearer ${hookToken}` } }
+    ).then((r) => r.json())) as {
+      dimension: string;
+      arms: Array<{ label: string; trials: number; conversions: number }>;
+      verdict: { winner: string | null; leader: string | null; verdict: string };
+    };
+
+    expect(res.dimension).toBe("hookType");
+    const punchy = res.arms.find((a) => a.label === "punchy")!;
+    expect(punchy.trials).toBe(12);
+    expect(punchy.conversions).toBe(6);
+    expect(res.verdict.leader).toBe("punchy");
+    expect(res.verdict.winner).toBe("punchy"); // 6 ≥ floor AND high P(best)
+  });
+
+  it("does NOT mix another agent's drafts into the outcomes (cross-tenant)", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "u_exp_a");
+    const b = await setupAgent(t, "u_exp_b");
+    const accA = await agentAccountId(t, a.agentId);
+    const accB = await agentAccountId(t, b.agentId);
+
+    await seedAttributeArm(t, a.agentId, accA, a.hookToken, "punchy", 8, 4);
+    // B has a 'punchy' arm too, with different numbers — must not leak into A.
+    await seedAttributeArm(t, b.agentId, accB, b.hookToken, "punchy", 99, 99);
+
+    const res = (await t.fetch(
+      "/lc_gtm/get_attribute_outcomes?dimension=hookType",
+      { method: "GET", headers: { authorization: `Bearer ${a.hookToken}` } }
+    ).then((r) => r.json())) as {
+      arms: Array<{ label: string; trials: number; conversions: number }>;
+    };
+    const punchy = res.arms.find((x) => x.label === "punchy")!;
+    expect(punchy.trials).toBe(8); // A's numbers only — never 99
+    expect(punchy.conversions).toBe(4);
+  });
+
+  it("get_experiment_verdict scores arbitrary arms (pure stats, no DB)", async () => {
+    const t = convexTest(schema, modules);
+    const { hookToken } = await setupAgent(t, "u_exp_verdict");
+    const res = (await post(t, "/lc_gtm/get_experiment_verdict", hookToken, {
+      arms: [
+        { label: "cta_demo", trials: 40, conversions: 12 },
+        { label: "cta_signup", trials: 38, conversions: 1 },
+      ],
+    }).then((r) => r.json())) as {
+      verdict: { winner: string | null; verdict: string; conversionsNeeded: number };
+    };
+    expect(res.verdict.verdict).toBe("winner");
+    expect(res.verdict.winner).toBe("cta_demo");
+    expect(res.verdict.conversionsNeeded).toBe(0);
+  });
+
+  it("get_experiment_verdict is honest about thin data (not_enough_data)", async () => {
+    const t = convexTest(schema, modules);
+    const { hookToken } = await setupAgent(t, "u_exp_thin");
+    const res = (await post(t, "/lc_gtm/get_experiment_verdict", hookToken, {
+      arms: [
+        { label: "a", trials: 4, conversions: 1 },
+        { label: "b", trials: 5, conversions: 0 },
+      ],
+    }).then((r) => r.json())) as {
+      verdict: { winner: string | null; conversionsNeeded: number };
+    };
+    expect(res.verdict.winner).toBeNull();
+    expect(res.verdict.conversionsNeeded).toBeGreaterThan(0);
+  });
+});
