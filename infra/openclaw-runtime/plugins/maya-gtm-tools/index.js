@@ -299,6 +299,18 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) => getLc("search_web", p, ctx.signal),
     }),
     tool({
+      name: "search_demand",
+      label: "Search Demand",
+      description:
+        "Real Google SEARCH DEMAND for buyer phrasing — which terms people actually search, with volume + CPC + competition. Use it in foundation research to validate WHERE demand is (vs guessing from threads) and to find which buyer language to target. REQUIRED: seeds (terms derived from the buyer map / intent phrases — pass ALL of them in ONE call, it's billed per-call ~$0.075 not per-keyword, up to ~200). Optional: locationCode (default 2840 = US), languageCode (default 'en'). Returns { ok, keywords:[{keyword, volume, cpc, competition}] sorted by volume } — volume null = ~no search demand for that phrasing (a dead end). On ok:false reason 'needs_verification'/'no_creds', the demand add-on isn't ready — say so plainly. Log the ~$0.075 with log_cost (provider other, operation search_demand).",
+      parameters: Type.Object({
+        seeds: Type.Array(Type.String()),
+        locationCode: Type.Optional(Type.Number()),
+        languageCode: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("search_demand", p, ctx.signal),
+    }),
+    tool({
       name: "research_reddit",
       label: "Research Reddit",
       description:

@@ -14,6 +14,7 @@
   "contracts": {
     "tools": [
       "search_web",
+      "search_demand",
       "research_reddit",
       "research_reddit_comments",
       "research_x",

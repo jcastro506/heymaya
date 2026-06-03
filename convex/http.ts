@@ -162,6 +162,7 @@ import {
 } from "./gtmMaya/zernioReads";
 import { sendConfirmCardHttp } from "./gtmMaya/telegramConfirm";
 import { searchWebHttp } from "./gtmMaya/webSearch";
+import { searchDemandHttp } from "./gtmMaya/demandIntel";
 
 const http = httpRouter();
 
@@ -525,6 +526,13 @@ http.route({
   path: "/lc_gtm/search_web",
   method: "GET",
   handler: searchWebHttp,
+});
+// Sprint 2 (top-tier) — demand intelligence: real Google search volume for the
+// buyer phrasing Maya derives, so she targets where demand actually is.
+http.route({
+  path: "/lc_gtm/search_demand",
+  method: "POST",
+  handler: searchDemandHttp,
 });
 // PUBLIC conversion pixel (no hookToken — a pixel on the founder's site can't
 // hold the agent secret). Token-keyed: the wrap token resolves to exactly one
