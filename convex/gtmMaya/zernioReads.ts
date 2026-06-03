@@ -65,11 +65,22 @@ function resolveAccountId(
   return accounts.find((a) => a.platform === channel && a.accountId)?.accountId ?? null;
 }
 
-/** Map a Zernio add-on 403 into a clean, model-facing result instead of throwing. */
+/** Map a Zernio add-on 403/401 into a clean, model-facing result instead of
+ *  throwing. The client throws ZernioAuthError on 401/403 (no `status` field) and
+ *  ZernioApiError (with `status`) on other 4xx, so we detect BOTH — and duck-type
+ *  rather than rely on `instanceof`, which breaks across convex-test's module
+ *  boundary. */
 function addonError(err: unknown, addon: "analytics" | "inbox"):
   | { ok: false; addonRequired: "analytics" | "inbox"; message: string }
   | null {
-  if (err instanceof ZernioApiError && (err.status === 403 || err.status === 401)) {
+  const e = err as { status?: number; name?: string; message?: string };
+  const status = err instanceof ZernioApiError ? err.status : (e?.status ?? 0);
+  const isAuth =
+    status === 403 ||
+    status === 401 ||
+    e?.name === "ZernioAuthError" ||
+    /HTTP 40[13]|auth failed/i.test(e?.message ?? "");
+  if (isAuth) {
     return {
       ok: false,
       addonRequired: addon,
