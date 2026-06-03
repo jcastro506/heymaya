@@ -981,7 +981,7 @@ export default defineToolPlugin({
     tool({
       name: "save_learning",
       label: "Save Learning",
-      description: "Persist an extracted learning. REQUIRED: learningKind, learning.",
+      description: "Persist an extracted learning. REQUIRED: learningKind, learning. Confidence is auto-clamped to the evidence server-side (can't claim 0.95 off 1 point). Pass `structured` ({venue,hook,format,timeBucket,outcome}) when the learning is a converting pattern — it feeds the cross-tenant archetype brain so it makes the NEXT founder like this one smarter.",
       parameters: Type.Object({
         learningKind: Enum([
           "timing", "channel_priority", "voice_angle", "community_quality",
@@ -992,9 +992,23 @@ export default defineToolPlugin({
         confidenceScore: Type.Optional(Type.Number({ description: "0..1" })),
         evidenceCount: Type.Optional(Type.Number()),
         retired: Type.Optional(Type.Boolean()),
+        structured: Type.Optional(Type.Object({
+          venue: Type.Optional(Type.String()),
+          hook: Type.Optional(Type.String()),
+          format: Type.Optional(Type.String()),
+          timeBucket: Type.Optional(Type.String()),
+          outcome: Type.Optional(Type.String()),
+        })),
         idempotencyKey: IdemKey,
       }),
       execute: async (p, _cfg, ctx) => postLc("learning_extracted", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+    tool({
+      name: "get_archetype_playbook",
+      label: "Get Archetype Playbook",
+      description: "At synthesis (after I tag the app archetype), fetch the cross-tenant prior for this archetype — what's converted for OTHER founders like this one ('dev-tool founders convert best in r/X with the founder-story hook'). Returns { archetype, playbook:[{kind, learning, supportingTenantCount, evidenceCount, confidence}] }. PII-FREE — only patterns + how many tenants back them, never any other founder's identity. Empty until an archetype has ≥5 attributed founders; then I fold it in as a SOFT prior my own research confirms or overrides, never as fact.",
+      parameters: Type.Object({}),
+      execute: async (p, _cfg, ctx) => getLc("get_archetype_playbook", p, ctx.signal),
     }),
     tool({
       name: "propose_skill_improvement",

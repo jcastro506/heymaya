@@ -952,6 +952,15 @@ interface LearningExtractedPayload {
   confidenceScore: number;
   evidenceCount?: number;
   retired?: boolean;
+  /** Sprint 8 — structured {venue,hook,format,timeBucket,outcome} for the
+   *  cross-tenant archetype rollup. */
+  structured?: {
+    venue?: string;
+    hook?: string;
+    format?: string;
+    timeBucket?: string;
+    outcome?: string;
+  };
 }
 
 export const learningExtractedHttp = httpAction(async (ctx, request) => {
@@ -996,6 +1005,10 @@ export const learningExtractedHttp = httpAction(async (ctx, request) => {
   if (claim === "duplicate") return new Response("ok (replay)", { status: 200 });
 
   try {
+    const structuredJson =
+      body.structured && typeof body.structured === "object"
+        ? JSON.stringify(body.structured)
+        : undefined;
     await ctx.runMutation(internal.gtmMaya.managerStore.upsertNicheLearning, {
       accountId: auth.accountId,
       agentId: auth.agentId,
@@ -1005,6 +1018,7 @@ export const learningExtractedHttp = httpAction(async (ctx, request) => {
       confidenceScore,
       evidenceCount: body.evidenceCount,
       retired: body.retired,
+      structuredJson,
     });
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });

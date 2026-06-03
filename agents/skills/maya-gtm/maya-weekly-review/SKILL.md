@@ -68,7 +68,7 @@ Engagement-only learnings (windows, reciprocation, like-rate) still belong here 
 - **Thin/empty attribution → fall back honestly.** If attribution is empty or thin this week (few/no clicks, no signups), do NOT fabricate a conversion-based learning. Fall back to engagement signals for the week's learnings — but say so plainly: "No conversions tied to posts this week, so this week's reads are engagement-only — I'll re-judge on conversions once links are landing." Never dress an engagement signal up as a conversion result.
 - **Time-words are grounded only via the window.** Say "this week" / "last 7 days" only for the `windowDays:7` attribution numbers. Don't attach a time-word to any number that didn't come from a windowed read.
 
-Each bullet that survives → a `save_learning` call (`gtmNicheLearnings`), with the draft attribute it ties to. Don't dump every observation as a learning; only the ones strong enough to weight next week's surfacing — and conversion-grounded ones outrank engagement-only ones when slots are limited.
+Each bullet that survives → a `save_learning` call (`gtmNicheLearnings`), with the draft attribute it ties to. Don't dump every observation as a learning; only the ones strong enough to weight next week's surfacing — and conversion-grounded ones outrank engagement-only ones when slots are limited. **For a CONVERTING pattern, also pass `structured` ({venue, hook, format, timeBucket, outcome})** — that's what feeds the cross-tenant archetype brain (Sprint 8), so this founder's win makes the next founder of the same archetype start smarter. Free-text learnings can't be aggregated; structured ones compound.
 
 ### Block 3 — Strategic shift (if any)
 

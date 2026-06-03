@@ -93,6 +93,7 @@ import type * as gbp_computeHealthScore from "../gbp/computeHealthScore.js";
 import type * as gtmMaya_agentLifecycle from "../gtmMaya/agentLifecycle.js";
 import type * as gtmMaya_appInspector from "../gtmMaya/appInspector.js";
 import type * as gtmMaya_approvalPublishing from "../gtmMaya/approvalPublishing.js";
+import type * as gtmMaya_archetypeBrain from "../gtmMaya/archetypeBrain.js";
 import type * as gtmMaya_attribution from "../gtmMaya/attribution.js";
 import type * as gtmMaya_betaGuards from "../gtmMaya/betaGuards.js";
 import type * as gtmMaya_calendarOAuth from "../gtmMaya/calendarOAuth.js";
@@ -392,6 +393,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/agentLifecycle": typeof gtmMaya_agentLifecycle;
   "gtmMaya/appInspector": typeof gtmMaya_appInspector;
   "gtmMaya/approvalPublishing": typeof gtmMaya_approvalPublishing;
+  "gtmMaya/archetypeBrain": typeof gtmMaya_archetypeBrain;
   "gtmMaya/attribution": typeof gtmMaya_attribution;
   "gtmMaya/betaGuards": typeof gtmMaya_betaGuards;
   "gtmMaya/calendarOAuth": typeof gtmMaya_calendarOAuth;

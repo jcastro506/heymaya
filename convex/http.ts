@@ -140,6 +140,7 @@ import {
   evaluateIntentCandidatesHttp,
   recordStrikeHttp,
 } from "./gtmMaya/intentStrike";
+import { getArchetypePlaybookHttp } from "./gtmMaya/archetypeBrain";
 // Ideal-product Pillar 1 (VOICE) + Pillar 4 (WARMUP). Maya persists the
 // founder voice fingerprint, per-channel native-style exemplars, and per-
 // channel warmth. hookToken-authed + idempotency-keyed, same as foundation_*.
@@ -628,6 +629,13 @@ http.route({
   path: "/lc_gtm/record_strike",
   method: "POST",
   handler: recordStrikeHttp,
+});
+
+// Sprint 8 — the cross-tenant archetype playbook (PII-free warm-start prior).
+http.route({
+  path: "/lc_gtm/get_archetype_playbook",
+  method: "GET",
+  handler: getArchetypePlaybookHttp,
 });
 
 // Continuous research + feedback-loop write surfaces. Maya / her

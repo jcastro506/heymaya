@@ -210,6 +210,8 @@
 
 **Effort:** M/L.
 
+> **Status (2026-06-03): SHIPPED (plumbed; goes live at ≥5-tenant density per design).** `convex/gtmMaya/archetypeBrain.ts` — pure `aggregateArchetypeLearnings` with the **k-anonymity guard** (publish only when ≥5 DISTINCT tenants back a pattern; output is PII-free by construction — no accountId/agentId can leave the rollup). `structuredJson` on gtmNicheLearnings + threaded through `save_learning`. Monthly `archetype-brain-rollup` cron (cross-tenant, joins agent→app→archetype). `get_archetype_playbook` tool (83 total) wired to the previously-dead `getArchetypeLearnings`; `maya-foundation-research` warm-start is now live (soft prior, never fact, empty below floor → own research). 9 tests incl. the load-bearing k-anon property (distinct-tenant count, PII-free output, archetype separation) + rollup/read convex-tests. Caught + fixed a real bug: `archetype` lives on gtmApps, not gtmAgents. convex+root tsc clean, zero net-new failures.
+
 ---
 
 ## Execution order

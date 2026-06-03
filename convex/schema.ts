@@ -6563,6 +6563,10 @@ export default defineSchema({
     /** Set when the learning is contradicted by newer evidence. Maya
      *  may revive a retired learning if it re-emerges. */
     retired: v.boolean(),
+    // Sprint 8 — structured, AGGREGATABLE form of this learning (free text is
+    // un-rollupable). JSON: {venue?, hook?, format?, timeBucket?, outcome?}. The
+    // monthly cross-tenant rollup reads this to build the archetype playbook.
+    structuredJson: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

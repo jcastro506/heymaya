@@ -76,6 +76,7 @@
       "propose_pricing_test",
       "build_intent_watch",
       "record_strike",
+      "get_archetype_playbook",
       "get_platform_algo",
       "get_conversion_setup",
       "save_media",

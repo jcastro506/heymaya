@@ -21,4 +21,14 @@ crons.monthly(
   internal.gtmMaya.platformAlgo.refreshAllPlatformAlgo
 );
 
+// Sprint 8 — the compounding archetype brain. Roll up every tenant's structured,
+// converting learnings into a k-anonymous (≥5 distinct tenants) per-archetype
+// playbook that warm-starts the next founder of the same archetype. Cross-tenant
+// by design, PII-free by construction — see convex/gtmMaya/archetypeBrain.ts.
+crons.monthly(
+  "archetype-brain-rollup",
+  { day: 2, hourUTC: 9, minuteUTC: 0 },
+  internal.gtmMaya.archetypeBrain.runArchetypeRollup
+);
+
 export default crons;

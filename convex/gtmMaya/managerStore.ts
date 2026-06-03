@@ -771,6 +771,9 @@ export const upsertNicheLearning = internalMutation({
      *  increment the existing count by 1 (or start at 1 for new). */
     evidenceCount: v.optional(v.number()),
     retired: v.optional(v.boolean()),
+    /** Sprint 8 — structured form {venue,hook,format,timeBucket,outcome} as JSON,
+     *  so the cross-tenant rollup can aggregate it. */
+    structuredJson: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Id<"gtmNicheLearnings">> => {
     await assertAgentBelongsToAccount(ctx, args.accountId, args.agentId);
@@ -806,6 +809,7 @@ export const upsertNicheLearning = internalMutation({
         evidenceCount,
         lastReinforcedAt: now,
         retired,
+        structuredJson: args.structuredJson ?? existing.structuredJson,
         updatedAt: now,
       });
       return existing._id;
@@ -821,6 +825,7 @@ export const upsertNicheLearning = internalMutation({
       firstObservedAt: now,
       lastReinforcedAt: now,
       retired,
+      structuredJson: args.structuredJson,
       createdAt: now,
       updatedAt: now,
     });
