@@ -129,6 +129,10 @@ export const publishContentDirect = internalAction({
     // exact content they previewed). Dedup + plan caps STILL apply — confirm is
     // not a license to double-post or exceed the plan.
     founderConfirmed: v.optional(v.boolean()),
+    // S6.1 — media for the post (TikTok photo-mode slideshow / IG carousel).
+    // Convex storage ids; resolved to URLs Zernio fetches + attached as
+    // mediaItems. Required for media-gated channels (TikTok/IG/YouTube).
+    mediaAssetIds: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args): Promise<PublishDirectResult> => {
     const content = args.content.trim();
@@ -198,10 +202,20 @@ export const publishContentDirect = internalAction({
         args.scheduleAtMs && args.scheduleAtMs > Date.now() + 60_000
           ? args.scheduleAtMs
           : undefined;
+      // S6.1 — resolve the slideshow/carousel media to URLs Zernio can fetch.
+      let mediaItems: Array<{ type: "image"; url: string }> | undefined;
+      if (args.mediaAssetIds && args.mediaAssetIds.length > 0) {
+        const urls: Array<{ type: "image"; url: string }> = [];
+        for (const id of args.mediaAssetIds) {
+          const u = await ctx.storage.getUrl(id as Id<"_storage">).catch(() => null);
+          if (u) urls.push({ type: "image", url: u });
+        }
+        if (urls.length > 0) mediaItems = urls;
+      }
       const result = await multiPlatformPost(
         zctx,
         [{ platform: channel as ZernioPostPlatform, accountId: args.zernioAccountId }],
-        { text: content, scheduleAt, timezone: args.timezone }
+        { text: content, mediaItems, scheduleAt, timezone: args.timezone }
       );
       const row = result.perPlatform[0];
       const zernioPostId = row?.postId ?? null;

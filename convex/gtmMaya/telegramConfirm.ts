@@ -18,10 +18,10 @@
  * must belong to that agent or we refuse. Idempotent: a second tap on an event
  * that's no longer `needs_confirm` is a no-op.
  *
- * v1 scope: transport + Reddit text publish end-to-end + TikTok slideshow
- * PREVIEW in the card. Posting the TikTok MEDIA through Zernio (mediaUrls in the
- * post payload) is the next increment — `publishContentDirect` currently posts
- * text; see the TODO in the publish step.
+ * Media: when Maya passes `mediaAssetIds` to `send_confirm_card` (the TikTok/IG
+ * slideshow she generated), they're shown in the card AND persisted on the event,
+ * so the tap posts the actual carousel/photo-mode slides through Zernio — not
+ * just the caption. Reddit (text) and TikTok/IG (media) both post end-to-end.
  */
 
 import {
@@ -141,17 +141,23 @@ interface ConfirmEventView {
   content: string;
   status: string;
   chatId: string | null;
+  /** Slideshow/carousel media (storage ids) persisted on the event so the tap
+   *  path posts the actual slides, not just the caption. */
+  mediaAssetIds: string[];
 }
 
-function parseAutoPost(json: string | undefined): {
+interface ParsedAutoPost {
   channel?: string;
   zernioAccountId?: string;
   targetExternalId?: string;
   targetCommentId?: string;
-} {
+  mediaAssetIds?: string[];
+}
+
+function parseAutoPost(json: string | undefined): ParsedAutoPost {
   if (!json) return {};
   try {
-    return JSON.parse(json) as Record<string, string>;
+    return JSON.parse(json) as ParsedAutoPost;
   } catch {
     return {};
   }
@@ -175,7 +181,27 @@ export const getConfirmEvent = internalQuery({
       content: event.draftText ?? event.description ?? event.title,
       status: event.status,
       chatId: agent?.telegramChatId ?? null,
+      mediaAssetIds: Array.isArray(ap.mediaAssetIds) ? ap.mediaAssetIds : [],
     };
+  },
+});
+
+/** Persist the slideshow/carousel media (storage ids) onto the event so the
+ *  founder's tap posts the actual slides through Zernio, not just the caption. */
+export const setConfirmEventMedia = internalMutation({
+  args: {
+    eventId: v.id("gtmCalendarEvents"),
+    mediaAssetIds: v.array(v.string()),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return;
+    const ap = parseAutoPost(event.autoPostJson);
+    ap.mediaAssetIds = args.mediaAssetIds;
+    await ctx.db.patch(args.eventId, {
+      autoPostJson: JSON.stringify(ap),
+      updatedAt: Date.now(),
+    });
   },
 });
 
@@ -243,8 +269,14 @@ export const sendPostConfirmCard = internalAction({
 
     const channelLabel = ev.channel ? ev.channel[0].toUpperCase() + ev.channel.slice(1) : "this channel";
 
-    // Slideshow / image preview (TikTok): show the founder exactly what posts.
+    // Slideshow / image preview (TikTok/IG): show the founder exactly what
+    // posts, AND persist the ids on the event so the tap actually posts the
+    // slides through Zernio (not just the caption).
     if (args.mediaAssetIds && args.mediaAssetIds.length > 0) {
+      await ctx.runMutation(
+        internal.gtmMaya.telegramConfirm.setConfirmEventMedia,
+        { eventId: args.eventId, mediaAssetIds: args.mediaAssetIds }
+      );
       for (const id of args.mediaAssetIds.slice(0, 10)) {
         const url = await ctx.storage.getUrl(id as Id<"_storage">).catch(() => null);
         if (url) await tgSendPhoto(bot.token, ev.chatId, url);
@@ -352,8 +384,8 @@ export const handleConfirmCallback = internalAction({
       status: "posting",
     });
     // founderConfirmed overrides the Reddit/TikTok manual-force; dedup + plan
-    // caps still apply. TODO(S6.1): thread the TikTok slideshow media (mediaUrls)
-    // into this publish so the video/carousel posts, not just text.
+    // caps still apply. The slideshow media persisted on the event posts through
+    // Zernio as the actual carousel/photo-mode slides (S6.1).
     const result = await ctx.runAction(
       internal.gtmMaya.publishEngine.publishContentDirect,
       {
@@ -364,6 +396,7 @@ export const handleConfirmCallback = internalAction({
         targetExternalId: ev.targetExternalId ?? undefined,
         targetCommentId: ev.targetCommentId ?? undefined,
         founderConfirmed: true,
+        mediaAssetIds: ev.mediaAssetIds.length > 0 ? ev.mediaAssetIds : undefined,
       }
     );
     if (result.action === "auto") {

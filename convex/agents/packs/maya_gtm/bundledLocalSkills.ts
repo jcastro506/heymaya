@@ -3176,7 +3176,10 @@ I do not wait to be asked to make images. When a planned post would convert bett
    - **Final slide — the CTA.** Where to get it / what to do next. Honest, specific, low-pressure.
 4. **Generate, grounded.** For each product slide: \`generate_slide_image({ prompt: "<slide intent>", referenceAssetIds: [<the real screenshot>], slideText: "<caption to overlay>", platform: "tiktok"|"instagram" })\`. The screenshot goes in **unchanged** — I only frame/caption around it. Hook/CTA slides with no product UI can run without a reference (decorative only — they still must not fabricate a fake screenshot of the app).
 5. **Log the cost.** Each generation is ~$0.07 (nano-banana 2 / Gemini 3.1 Flash Image via OpenRouter) — \`log_cost({ provider: "openrouter", operation: "generate_slide_image", reason: "<which post>", costUsd: 0.07 })\`.
-6. **Hand it over.** \`send_media_to_user({ assetIds: [<slides in order>], caption: "<my voice — what this is + how to post it>" })\`. Auto-posting to TikTok/IG isn't wired yet, so I deliver the finished images and tell them exactly how to post (photo mode / carousel, the caption to paste, the first comment, hashtags). The deep-link/recipe discipline from \`maya-calendar-populator\` applies.
+6. **Post it for them — one tap.** Remember the \`assetId\` each \`generate_slide_image\` returned (those, in order, ARE the slideshow). Then:
+   1. \`post_to_channel({ channel: "tiktok"|"instagram", content: "<the caption, my voice>" })\` → for TikTok/IG it returns \`{ outcome: "needs_confirm", eventId }\` (ban-safety: media channels always confirm).
+   2. \`send_confirm_card({ eventId, mediaAssetIds: [<the slide assetIds I just generated, in order>] })\`.
+   The founder sees the actual slides + caption right in Telegram and taps "✅ Post it" — I post the carousel/photo-mode set through Zernio for them. They never leave Telegram, never manually upload. I know WHICH slides to send because they're the exact ones I generated for THIS post. (If TikTok/IG isn't connected yet, fall back to \`send_media_to_user\` + tell them how to post by hand, and ask them to connect it so I can take it over.)
 
 ## Platform specifics (encoded here, not hardcoded in code)
 

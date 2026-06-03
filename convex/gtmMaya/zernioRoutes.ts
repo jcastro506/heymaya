@@ -96,6 +96,44 @@ export const zernioPostHttp = httpAction(async (ctx, request) => {
     }
   );
 
+  // Reddit/TikTok come back needs_confirm (ban-safety). publishContentDirect
+  // doesn't touch calendar rows, so CREATE the needs_confirm event here and hand
+  // Maya its eventId — that's exactly what she passes to `send_confirm_card` to
+  // fire the founder's one-tap Telegram card. Without this she'd know a card is
+  // needed but have no eventId to reference. Deduped so re-posting the same
+  // reply/target doesn't pile up confirm cards.
+  if (result.action === "needs_confirm") {
+    const dedupeKey =
+      `confirm:${body.channel}:` +
+      (body.targetCommentId ?? body.targetExternalId ?? content.slice(0, 40));
+    const now = Date.now();
+    const eventId = await ctx.runMutation(
+      internal.gtmMaya.calendarWrite.persistGtmCalendarEventDraft,
+      {
+        accountId: agentCtx.accountId,
+        agentId: auth.agentId,
+        title: `${body.channel} post (needs your tap)`,
+        draftText: content,
+        startsAtMs: now,
+        endsAtMs: now + 3_600_000,
+        timezone: "UTC",
+        status: "needs_confirm",
+        autoPostJson: JSON.stringify({
+          channel: body.channel,
+          zernioAccountId,
+          mode: "manual_confirm",
+          targetExternalId: body.targetExternalId,
+          targetCommentId: body.targetCommentId,
+        }),
+        dedupeKey,
+      }
+    );
+    return new Response(
+      JSON.stringify({ ...result, outcome: "needs_confirm", eventId }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  }
+
   return new Response(JSON.stringify(result), {
     status: 200,
     headers: { "content-type": "application/json" },
