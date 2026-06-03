@@ -52,6 +52,31 @@
 
 **Effort:** M. **Operator-blocked:** DataForSEO creds (one account covers both tools).
 
+> **Status (2026-06-03):** `search_demand` + `search_web` are BUILT, wired as typed tools, and live-verified. `read_reviews` (DataForSEO Business Data) is the remaining Sprint 2.1 follow-on. The *tools* exist; **the judgment to use them well does NOT yet — that is Sprint 2.5 below.**
+
+---
+
+## Sprint 2.5 — The demand-intel & open-web JUDGMENT layer (skill + thinking)
+**Why:** `search_demand` and `search_web` are instruments, not method. Today Maya has each wired into a single bullet. A SEO/demand tool with no thinking model is just COGS — she'd fire a $0.075 keyword call and not know that *high CPC at low volume = a buyer goldmine*, that *0 volume ≠ 0 demand for a new-category dev tool*, or that this data is **vocabulary + validation + "alternative-to" organic targets**, NOT a Google-ads/ranking plan for an organic-social founder. This sprint gives her the operating method — grounded in expert research (decision rubric, seed taxonomy, 0-volume reframe, landing-page teardown, review/forum mining, "why no conversion" diagnostic, when-to-read rubric). Distilled research brief lives in this sprint's notes.
+
+**Implement (it's all `.md` + prompt thinking — no schema, no new tables):**
+- New skill **`maya-demand-intelligence`** (SKILL.md). Teaches:
+  - **Decision rubric** read VOLUME×CPC×COMPETITION *together*: COMP = ad-bidder density (market validation), NOT rank difficulty; CPC = buyer-value/commercial-intent proxy; high-CPC+low-volume = buyer goldmine → make it the spine of positioning + BOFU replies; high-volume+low-comp = content gap to *bank* (not a today-priority for a no-SEO founder).
+  - **Seed taxonomy** problem-aware → solution-aware → competitor/"alternative to X" → modifiers (best/vs/pricing/review/open-source). Source seeds from the ICP's *own words* (Reddit/HN/support language), not the tool's vocabulary; expand via autosuggest before spending.
+  - **The 0/null-volume reframe protocol** wrong-vocabulary (reframe + retest 2-3 synonyms) → too-niche (broaden one level, confirm the *cluster*) → genuinely-new-category (accept it; ride the adjacent-problem term that DOES have volume + CPC; capture the new vocabulary early for first-mover). **Never call 0 "no demand."**
+  - **Cost discipline** dedup/normalize seeds, batch, only fire when a decision hinges on it.
+- New skill **`maya-open-web-read`** (SKILL.md) for `search_web`. Teaches:
+  - **Landing-page teardown checklist** (own + competitor): hero/subhead/category, ICP named, primary use-case, pricing & tier gates, top-3 above-fold features, social-proof type, and the **negative space** (what they DON'T say = white space).
+  - **Review/forum mining** read 3-star first (most honest) → 1-2 star (dealbreakers) → 5-star (proof + happy-buyer words); extract verbatim quotes ≤125 chars + URL + a tag (`#pain #trigger #objection #alternative #language`); require a volume floor before calling a pattern (don't over-index on one loud thread).
+  - **"Why aren't they converting" diagnostic** (clicks, no signups): 5-second test (what/who/next from hero+CTA), message-match to the traffic source (#1 killer), single clear CTA, proof near CTA, top-objections answered, pricing clarity, form friction. Routes the honest *"it's your positioning, not your distribution"* hand-off to the Sprint 6 diagnostician.
+  - **When-to-read rubric** fire when the artifact is a *page* (pricing, positioning, reviews, the founder's own funnel) or to confirm a LOW/MED-confidence theme; SKIP when it's *chatter you already pulled*, a re-read this session, or a HIGH-confidence claim. One authoritative read beats five confirming ones.
+- **Wire the thinking into the loops, not just the skill shelf:** add a compact demand-intel + open-web reasoning block to `generators.ts` `renderTools` (so it's in BOOT context), and reference both skills from `maya-foundation-research` (demand validation + competitor teardown), `maya-competitor-researcher` (open-web teardown + review mining), and `maya-continuous-research` (rising-demand re-checks + watering-hole discovery).
+- **Output contract (grounded-or-silent):** every demand finding cites volume/CPC/competition + the seed; every open-web finding cites a verbatim quote + URL. No ungrounded "people are searching for X."
+
+**How Maya uses it (plain-language, user-facing):** she tells the founder things like *"'open source datadog alternative' gets real searches and advertisers pay $9 a click for it — that's where the buyers are, so I'm leading your Reddit replies and your headline with that exact phrase,"* and *"nobody's searching your product name yet — that's normal for something new — so I'm riding the bigger pain people DO search and planting your name early."* All in words a non-technical founder understands.
+
+**Effort:** M (mostly prompt/skill authoring + light generators wiring). **No operator block** (tools already live). **Tests:** sibling-file scan (both skills referenced from the loops that use them) + a generators assertion that the demand-intel reasoning block renders. **Pick-up order:** strong candidate to run right after Sprint 3 — it makes the already-live S1/S2 tools actually pay off.
+
 ---
 
 ## Sprint 3 — Close the loop: activation + self-reported attribution
