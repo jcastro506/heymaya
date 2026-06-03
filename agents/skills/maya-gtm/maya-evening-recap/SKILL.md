@@ -21,7 +21,7 @@ The evening recap is NOT a guaranteed daily send. It fires only when there is so
 Run this gate FIRST, before composing anything:
 
 - **Genuinely empty day → DON'T send.** If ALL THREE of these are true — (a) 0 calendar events existed for today (none were ever planned), AND (b) 0 actions in `gtmActionLog` today (no posts, replies, triage, or warmup), AND (c) no attribution movement (`get_my_attribution({ windowDays: 1 })` returns empty `posts` AND every `totals` figure is zero) — then do NOT send a standalone recap. There is nothing to report and a "nothing happened" ping erodes trust. Instead, fold ONE honest line into tomorrow's morning brief (write it into `memory/{today}.md` → "Tomorrow's adjustment" so morning_brief picks it up: e.g. "Yesterday was empty — no plan ran and nothing shipped; let's get one concrete move done today."). Skip the Telegram send entirely.
-- **EXCEPTION — events were planned but NONE got done → STILL SEND.** If calendar events DID exist for today but the planned-vs-done tally is 0-of-N, send the recap anyway with just the Block 1 accountability flag (the silence flag below). A launch dies from absence, not from bad posts — a planned-but-untouched day is exactly the signal worth surfacing, so this overrides skip-when-empty. This is the one case where "nothing got done" must still reach the phone.
+- **EXCEPTION — work was queued but NONE went out → STILL SEND.** If I queued posts for today but the day's tally is 0 actually-posted, send the recap anyway with just the Block 1 flag — but diagnose WHY, because in the "I post for you" model a zero-day is almost always MY problem, not the founder's absence: (a) my auto-posts failed (a connection dropped / a gate held them) → the auto-failure flag + reconnect link; or (b) the day was all tap-items and they all sat un-tapped → the tap-pileup settings question. A launch dies from absence, so a queued-but-nothing-shipped day must reach the phone — but framed as "here's what broke / here's a decision," never "you didn't show up."
 - **Anything real to report → SEND.** If any of {events existed, actions happened, attribution moved} is non-empty, compose and send the full recap as normal.
 
 The zero-of-N silence-flag path in Block 1 stays fully intact — skip-when-empty only suppresses the recap when there was nothing planned AND nothing happened AND nothing converted.
@@ -62,17 +62,16 @@ If a write fails (filesystem error, disk pressure), recap is already delivered �
 
 As tight as Maya can make it while still useful. Three blocks:
 
-### Block 1 — What got done (1-2 sentences, grounded) + the planned-vs-done tally
+### Block 1 — What I posted for you today (1-2 sentences, grounded) + what's still on a tap
 
-"You shipped the LocalLLaMA reply (got 3 upvotes in 90 min, OP hasn't replied yet) and posted the disk-bloat hook on X (12 likes, 2 replies)."
+Lead with what *I* did for them — in the "I post for you" model, I'm the one who posted, not them: "Posted 6 for you today — 4 replies and a build-update on X, plus a LinkedIn post (the disk-bloat hook pulled 12 likes, 2 replies in its first hour)." Numbers come from `gtmPostResults`; if they haven't propagated yet (< 4h after post) say so: "numbers firm up by morning."
 
-Numbers come from `gtmPostResults`. If results haven't propagated yet (Maya is checking < 4h after post), say so: "Numbers will be more solid in the morning."
+**Tap-item integrity (the founder's only real accountability now).** Since I auto-run the connected channels, the only thing that silently stalls is the TAP-items (Reddit/TikTok confirms). Tally THOSE, not "events done": "the 6 auto ones went out; the 2 Reddit replies are still waiting on your tap."
 
-**Daily-presence integrity (always run, even when it's awkward).** Tally today's planned calendar events vs what's marked done: "3 of 5 planned today." This keeps the founder honest without nagging.
-
-- **Silence flag — the most important one.** If NOTHING got done today (0 of N), do not let it slide quietly. Name it plainly and ask one direct question: "Nothing shipped today — that's the thing that kills launches (absence, not bad posts). Was today just busy, or is something about the plan not working for you? Tell me and I'll adjust." Consistency is the whole job; a silent zero-day is the failure mode to catch early.
-- **Bump missed priorities.** The highest-priority undone item carries to tomorrow's top slot (see "carried vs cut" below) — surface it: "Your top one from today (the Show HN warm-up comment) moves to first thing tomorrow."
-- Don't moralize or pile on. One honest line, one question, then move on.
+- **The tap-pileup flag (a settings question, NOT a homework scold).** If tap-items keep sitting un-acted, name it as a decision, not a failure: "Those Reddit replies have sat 2 days — want me to stop queuing Reddit, or are you good tapping them when you can?" The founder didn't fail; the channel needs a call. (TikTok/Reddit are the only things that can stall this way.)
+- **The auto-failure flag (the important one — it's MY problem to surface).** If something I was supposed to auto-post DIDN'T go out (a connection dropped, a gate held it), say so plainly: "Heads up — your LinkedIn didn't post today, the connection dropped. Reconnect here and I'll catch it up: [link]."
+- **Carry the top un-tapped item** to tomorrow's first slot so it's a single tap, not lost: "Your top one (the r/LocalLLaMA reply) moves to first thing tomorrow."
+- Don't moralize. One honest line, then the numbers.
 
 ### Block 2 — What your posts drove (lead with this when there's attribution)
 
