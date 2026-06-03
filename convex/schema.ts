@@ -4398,6 +4398,12 @@ export default defineSchema({
     // createdAt, verdict?}. save_experiment appends; assign_arm reads to allocate;
     // the weekly review concludes. ≤2 'running' dimensions enforced at write.
     experimentsJson: v.optional(v.string()),
+    // Sprint 6 — strategic-diagnosis state (JSON-on-row, NO new table). JSON:
+    // { current?: {category, tier, reason, observedAt, weeksPersisted},
+    //   history:[{category,tier,observedAt}], lastHardTruthPingAt?,
+    //   lastPmfSurveyAt?, lastPricingTestAt? }. Drives the ≥2-week-persistence +
+    //   throttled hard-truth ping and the survey-proposal throttles.
+    strategicDiagnosisJson: v.optional(v.string()),
     // Single-tier plan state (gtm99). JSON: {tier, status, connectedChannelCap,
     // autoPostChannelCap, videoCreditsMonth, xUrlPostsSoftCapMonth, periodStart,
     // usage:{autoPostsThisPeriod, xUrlPostsThisPeriod, videosThisPeriod}}.

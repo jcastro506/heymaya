@@ -148,6 +148,7 @@ import type * as gtmMaya_researchTasks from "../gtmMaya/researchTasks.js";
 import type * as gtmMaya_researchWorker from "../gtmMaya/researchWorker.js";
 import type * as gtmMaya_resultsLoop from "../gtmMaya/resultsLoop.js";
 import type * as gtmMaya_scrapeCreatorsGtmResearch from "../gtmMaya/scrapeCreatorsGtmResearch.js";
+import type * as gtmMaya_strategicDiagnosis from "../gtmMaya/strategicDiagnosis.js";
 import type * as gtmMaya_strategyJudge from "../gtmMaya/strategyJudge.js";
 import type * as gtmMaya_targetList from "../gtmMaya/targetList.js";
 import type * as gtmMaya_telegramBotPerTenant from "../gtmMaya/telegramBotPerTenant.js";
@@ -445,6 +446,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/researchWorker": typeof gtmMaya_researchWorker;
   "gtmMaya/resultsLoop": typeof gtmMaya_resultsLoop;
   "gtmMaya/scrapeCreatorsGtmResearch": typeof gtmMaya_scrapeCreatorsGtmResearch;
+  "gtmMaya/strategicDiagnosis": typeof gtmMaya_strategicDiagnosis;
   "gtmMaya/strategyJudge": typeof gtmMaya_strategyJudge;
   "gtmMaya/targetList": typeof gtmMaya_targetList;
   "gtmMaya/telegramBotPerTenant": typeof gtmMaya_telegramBotPerTenant;

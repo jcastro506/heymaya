@@ -130,6 +130,11 @@ import {
   saveExperimentHttp,
   assignArmHttp,
 } from "./gtmMaya/experiments";
+import {
+  saveDiagnosisHttp,
+  proposePmfSurveyHttp,
+  proposePricingTestHttp,
+} from "./gtmMaya/strategicDiagnosis";
 // Ideal-product Pillar 1 (VOICE) + Pillar 4 (WARMUP). Maya persists the
 // founder voice fingerprint, per-channel native-style exemplars, and per-
 // channel warmth. hookToken-authed + idempotency-keyed, same as foundation_*.
@@ -584,6 +589,23 @@ http.route({
   path: "/lc_gtm/assign_arm",
   method: "POST",
   handler: assignArmHttp,
+});
+
+// Sprint 6 — the strategic partner (hard truths + surveys).
+http.route({
+  path: "/lc_gtm/save_diagnosis",
+  method: "POST",
+  handler: saveDiagnosisHttp,
+});
+http.route({
+  path: "/lc_gtm/propose_pmf_survey",
+  method: "POST",
+  handler: proposePmfSurveyHttp,
+});
+http.route({
+  path: "/lc_gtm/propose_pricing_test",
+  method: "POST",
+  handler: proposePricingTestHttp,
 });
 
 // Continuous research + feedback-loop write surfaces. Maya / her

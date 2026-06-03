@@ -1293,6 +1293,40 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) => postLc("assign_arm", p, ctx.signal),
     }),
     tool({
+      name: "save_diagnosis",
+      label: "Save Strategic Diagnosis",
+      description:
+        "Record this week's strategic read when reach is real but conversion is flat. category ∈ messaging/positioning/pmf_suspected/pricing/distribution; tier ∈ hunch/lean/strong. Returns { tier (PMF & pricing are AUTO-CAPPED to 'lean' server-side — I can't assert what I can't see from outside), cappedFrom?, weeksPersisted, shouldHardTruthPing }. I only deliver a hard-truth PING when shouldHardTruthPing is true (a STRONG non-distribution verdict that's persisted ≥2 weeks, throttled). For pmf_suspected/pricing I ALWAYS pair the read with 'here's what I can't see — run this survey'. Method in maya-strategic-diagnostician.",
+      parameters: Type.Object({
+        category: Enum([
+          "messaging",
+          "positioning",
+          "pmf_suspected",
+          "pricing",
+          "distribution",
+        ]),
+        tier: Enum(["hunch", "lean", "strong"]),
+        reason: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("save_diagnosis", p, ctx.signal),
+    }),
+    tool({
+      name: "propose_pmf_survey",
+      label: "Propose PMF Survey",
+      description:
+        "Turn an honest 'I can't see retention from out here' into a real instrument: the Sean-Ellis 40% PMF survey. Returns { ok, survey:{ questions, scoring } } or { ok:false, reason:'throttled' } (offered ≤ once/~3 weeks). I hand the founder the questions in plain language and offer to score the result. Optional productName.",
+      parameters: Type.Object({ productName: Type.Optional(Type.String()) }),
+      execute: async (p, _cfg, ctx) => postLc("propose_pmf_survey", p, ctx.signal),
+    }),
+    tool({
+      name: "propose_pricing_test",
+      label: "Propose Pricing Test",
+      description:
+        "Turn an honest 'I can't see willingness-to-pay' into a real instrument: the van Westendorp 4-question price-sensitivity test. Returns { ok, survey:{ questions, scoring } } or { ok:false, reason:'throttled' } (≤ once/~3 weeks). Optional productName.",
+      parameters: Type.Object({ productName: Type.Optional(Type.String()) }),
+      execute: async (p, _cfg, ctx) => postLc("propose_pricing_test", p, ctx.signal),
+    }),
+    tool({
       name: "get_platform_algo",
       label: "Get Platform Algo",
       description:

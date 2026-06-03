@@ -170,6 +170,8 @@
 
 **Effort:** M/L.
 
+> **Status (2026-06-03): SHIPPED.** `convex/gtmMaya/strategicDiagnosis.ts` — pure `capTier` (PMF/pricing hard-capped at `lean`), `foldDiagnosis` (≥2-week persistence + ≤once/3wk throttled hard-truth ping, deterministic), `seanEllisSurvey`/`vanWestendorpSurvey`. `strategicDiagnosisJson` on gtmAgents (JSON-on-row; verdict + history + throttle markers). `save_diagnosis` / `propose_pmf_survey` / `propose_pricing_test` tools (80 total). New `maya-strategic-diagnostician` skill (humility-first doctrine); reply-sentiment tagging added to `maya-results-reviewer`; weekly-review Block 3 records the verdict + escalates only on `shouldHardTruthPing`. 14 tests (caps, persistence/throttle, survey throttle, server enforcement). convex+root tsc clean, zero net-new failures.
+
 ---
 
 ## Sprint 7 — The speed moat: real-time intent strike *(spike first)*

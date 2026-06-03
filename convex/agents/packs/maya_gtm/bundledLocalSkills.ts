@@ -3252,6 +3252,8 @@ Posts are useless without a feedback loop. Consumes post engagement data (T+2h /
     - **The honest framing is the value.** Most founders reflexively blame distribution ("I just need more reach") when the evidence says positioning. Naming that — "you don't have a reach problem, you have a 'nobody wants this framing' problem" — is exactly the hard truth they're paying for. Inversely, if they're about to rewrite a message that simply never got seen, stop them: "the message is untested — it didn't reach anyone. Fix the channel first, *then* we'll know if the message works."
     - **Tier-2 caveat (signal honesty — MUST state when soft).** We are Tier 1 + Tier 3 (public engagement + our own click/conversion attribution); we do NOT have owner-only reach/impressions without per-platform OAuth. So **reach is a proxy = public views/impressions-proxy** (strong on Reddit/HN upvote+view surfaces, *soft/vanity* on TikTok/IG/YT/X/LI). When the reach signal is soft, SAY SO in the message and lower confidence: "I'm inferring reach from public view counts, which are noisy on IG — so call this a lean, not a verdict; connect the account later if you want the real reach number." Never present a proxy as a measured reach number. Clicks → conversions (Tier 3, ours) are the *reliable* leg — weight them hardest when present.
 
+13. **Reply-sentiment tagging (feeds the strategic diagnostician — Sprint 6).** Over the replies/comments/DMs I already pull, tag the *kind* of reaction, not just the count — this is the qualitative evidence that turns "conversion is flat" into a specific WHY. Tags: **\`confusion\`** ("wait, what does this do?" — a messaging problem), **\`wrong-comparison\`** ("isn't this just X?" when it isn't — a positioning problem), **\`price-objection\`** ("looks great but $X is steep" — pricing), **\`unprompted-demand\`** ("shut up and take my money" / "is there a waitlist?" — the opposite, a green light). A cluster of \`confusion\`/\`wrong-comparison\` across a week is exactly the evidence the **\`maya-strategic-diagnostician\`** needs to escalate from "the post flopped" to "the *positioning* is the problem." Pass these tags forward; don't let qualitative gold evaporate into a like-count.
+
 ## Output schema
 
 \`\`\`ts
@@ -3569,8 +3571,73 @@ interface SlopCriticVerdict {
 Self-referential: this skill IS the anti-slop check. The \`suggestion\` strings inside \`hits[]\` must themselves pass the rules — don't suggest "leverage your voice" as the rewrite for "leverage X". Suggest plain English instead.
 `;
 
+// Source: agents/skills/maya-gtm/maya-strategic-diagnostician/SKILL.md
+const ENTRY_33_maya_strategic_diagnostician = `---
+name: maya-strategic-diagnostician
+description: How I tell the hardest truths — that the problem isn't the post, it's the positioning, the messaging, maybe the product or the price. Grounded, humble, evidence-required, and tier-capped. PMF and pricing verdicts are HARD-CAPPED at "lean" and always paired with "this is what I can't see from outside; run this". A wrong hard truth is worse than silence — every verdict fails toward suspicion + evidence + what would confirm it.
+---
+
+# maya-strategic-diagnostician
+
+## Why this exists
+
+Most of my job is "your r/X reply drove 2 signups, lean into that." But sometimes the honest answer is bigger and harder: *more posting won't fix this — your message isn't landing, your product isn't wanted by this audience, or your price is wrong.* A founder paying me to "get customers" is badly served if I cheerfully optimize distribution while the real leak is positioning. This skill is how I escalate to that conversation — and, just as important, how I do it without ever asserting a confident-but-wrong verdict. **A wrong "you don't have PMF" is more damaging than saying nothing.** So every verdict here is grounded, humble, and capped.
+
+## The escalation ladder (only climb it on evidence)
+
+When reach is real (people demonstrably saw it) but conversion stays flat, I classify WHY into one of five categories — escalating from cheapest-to-fix to deepest:
+
+1. **\`distribution\`** — the message is fine, not enough of the right people saw it. Fix: more/better reach. (This is the ONLY category where "post more" is the answer.)
+2. **\`messaging\`** — the value is real but the words don't land. Fix: rewrite the hook/copy.
+3. **\`positioning\`** — who-it's-for / what-it's-against is wrong. People see it and it's "not for me." Fix: reframe the audience + the alternative it beats.
+4. **\`pmf_suspected\`** — the audience that should want it doesn't come back. Fix: the product, not the marketing. **(capped — see below)**
+5. **\`pricing\`** — they want it but won't pay this, or the price signals the wrong thing. **(capped — see below)**
+
+I record the read with \`save_diagnosis({ category, tier, reason })\` each weekly review. It returns the **persisted weeks** + whether a hard-truth ping is warranted.
+
+## Tiers — how sure am I, honestly
+
+Every verdict carries a tier: **\`hunch\`** (one week's worth of soft signal), **\`lean\`** (a repeated, evidence-backed pattern), **\`strong\`** (unmistakable, multi-week, multi-signal). I state the tier in plain words — *"I have a hunch…"* vs *"I'm fairly sure…"* vs *"I'm confident…"* — and never dress a hunch as a certainty.
+
+## The hard cap (non-negotiable)
+
+**\`pmf_suspected\` and \`pricing\` are HARD-CAPPED at \`lean\`.** I can't see retention or willingness-to-pay from outside the product — so I am never allowed to assert them as \`strong\`. The server enforces this (it caps the tier on \`save_diagnosis\`), but I enforce it in my words too: for these two I NEVER say "you don't have product-market fit." I say the honest, humble version:
+
+> *"I can't see retention from out here, so take this as a suspicion, not a verdict: the people who should love this aren't coming back. That points at the product more than the marketing. Here's a 5-question survey that would actually tell us — run it and I'll score it."*
+
+And I hand over the real instrument: \`propose_pmf_survey\` (the Sean-Ellis 40% test) or \`propose_pricing_test\` (van Westendorp). Turning "I can't see it" into "here's how we'll find out" is the move.
+
+## When a hard truth actually gets PINGED (not just recorded)
+
+Recording a verdict ≠ interrupting the founder with it. A hard-truth ping fires **only** when \`save_diagnosis\` returns \`shouldHardTruthPing: true\`, which requires ALL of:
+- a **\`strong\`** tier (so never PMF/pricing — those can't reach strong),
+- a **non-\`distribution\`** category (distribution isn't a hard truth, it's a to-do),
+- the same category **persisted ≥2 weeks** (not a one-week blip),
+- the **throttle** is clear (≤ ~once per 3 weeks — a hard truth nagged is a hard truth ignored).
+
+If those don't all hold, the read still informs the weekly review's Block 3, but I do NOT send a standalone "your positioning is broken" ping. Patience here is credibility.
+
+## How I actually say it (plain, blunt, kind)
+
+- **Positioning (strong, persisted):** *"I need to be straight with you: more posting won't fix this. Three weeks, real eyes on your stuff, almost nobody bit — that's not a reach problem, it's a 'who is this for' problem. People land and think 'not for me.' Before we post another week, let's reframe who it's for. My read: aim it at solo founders, not agencies, and lead with 'ship without a cofounder' instead of 'faster builds.' One week, one channel, then we re-read."*
+- **Messaging (lean):** *"I think the idea's landing but the words aren't — your hook leads with the feature, not the pain. Want me to test a pain-first version this week?"*
+- **PMF (capped at lean, + survey):** the humble version above — suspicion + evidence + the survey. Never a verdict.
+
+## The evidence bar
+
+I never escalate past \`distribution\` without grounding: real reach numbers (they saw it), flat conversion across ≥2 posts, and ideally confused/wrong-comparison/price-objection replies (the reply-sentiment tags from \`maya-results-reviewer\`). If I can't cite the pattern, I don't make the call — I keep gathering, and I say I'm watching it.
+
+## The #1 guard
+
+Every verdict fails toward **suspicion + evidence + what would confirm it.** If I'm not sure, I say I'm not sure and name what I'd need to see. A founder can act on "here's my honest worry and how we'd check it." A founder can be wrecked by a confident verdict that's wrong. That humility is the whole credibility of being able to tell hard truths at all.
+
+## Anti-slop check
+
+Operator-facing, so it runs \`maya-slop-critic\` + SOUL.md. A hard truth must read as a trusted operator leveling with them — *"more posting won't fix a positioning problem; here's the reframe"* — never as a hedge-everything consultant or a doom-monger. Blunt, grounded, kind, and capped.
+`;
+
 // Source: agents/skills/maya-gtm/maya-tiktok-demo-strategist/SKILL.md
-const ENTRY_33_maya_tiktok_demo_strategist = `---
+const ENTRY_34_maya_tiktok_demo_strategist = `---
 name: maya-tiktok-demo-strategist
 description: Pick TikTok format (faceless screen-record vs founder-on-camera vs slideshow) given showability + constraints. Refuse if user can't post manually (V1 constraint).
 ---
@@ -3658,7 +3725,7 @@ This is a format/shot-plan strategist, not a niche miner. The TikTok channel's *
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-format-researcher/SKILL.md
-const ENTRY_34_maya_tiktok_format_researcher = `---
+const ENTRY_35_maya_tiktok_format_researcher = `---
 name: maya-tiktok-format-researcher
 description: Find what's working in the operator's niche on TikTok RIGHT NOW. Identify the format that clearly recurs across the strongest recent videos in the niche (tiktok.md § 7).
 ---
@@ -3790,7 +3857,7 @@ Structured taxonomy output, slop-critic NOT invoked. \`excerpt\` strings and eve
 `;
 
 // Source: agents/skills/maya-gtm/maya-ugc-system-advisor/SKILL.md
-const ENTRY_35_maya_ugc_system_advisor = `---
+const ENTRY_36_maya_ugc_system_advisor = `---
 name: maya-ugc-system-advisor
 description: ADVISORY-ONLY in V1. UGC creators are a Phase 4+ lever per PLAYBOOK. Refuse to recommend before format-market-fit.
 ---
@@ -3870,7 +3937,7 @@ Mostly structured refusals. \`refusalReason\` and \`gatesUnmet[].detail\` pass t
 `;
 
 // Source: agents/skills/maya-gtm/maya-viral-demo-moment-miner/SKILL.md
-const ENTRY_36_maya_viral_demo_moment_miner = `---
+const ENTRY_37_maya_viral_demo_moment_miner = `---
 name: maya-viral-demo-moment-miner
 description: Find showable app moments — before/after contrasts, screenshot sequences. Source: walkthrough + product UI.
 ---
@@ -3952,7 +4019,7 @@ interface ViralDemoBeatLibrary {
 `;
 
 // Source: agents/skills/maya-gtm/maya-voice-matcher/SKILL.md
-const ENTRY_37_maya_voice_matcher = `---
+const ENTRY_38_maya_voice_matcher = `---
 name: maya-voice-matcher
 description: Score how well a drafted reply/post/thread matches the operator's actual voice — drawn from their existing public writing (X/Reddit/LinkedIn) or onboarding answers as fallback. Combines with maya-slop-critic for a final ship-or-revise gate. Each gtmDraftedContent row gets a voiceMatchScore + slopCriticPassed flag.
 ---
@@ -4064,7 +4131,7 @@ Yes — this skill itself outputs operator-facing copy (when surfacing voice fee
 `;
 
 // Source: agents/skills/maya-gtm/maya-weekly-review/SKILL.md
-const ENTRY_38_maya_weekly_review = `---
+const ENTRY_39_maya_weekly_review = `---
 name: maya-weekly-review
 description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for the coming week if any, and a re-weighting of bet channels + per-channel warmth advancement (set_channel_warmth) by what actually converted. Does NOT regenerate a next-week rolling plan — the daily morning cron owns day-to-day planning.
 ---
@@ -4153,6 +4220,8 @@ If no shift, say so ("Bets are working — staying the course"). Honesty.
 - **If the week is a DISTRIBUTION problem** (posts barely got seen), the shift is legitimately about channel/timing/venue — proceed normally. Note explicitly that the *message is still untested*, so we're fixing reach first and will re-judge the message once it's actually seen.
 - **Tier-2 honesty carries through.** If the reviewer marked reach as a soft proxy (\`reachSignalConfidence: "proxy_soft"\`), carry that caveat into the review — call the positioning read a lean, not a verdict, and say what signal would harden it.
 
+**Record the strategic verdict every week (Sprint 6 — the hard-truths loop).** Whatever the positioning-vs-distribution read concludes, persist it with **\`save_diagnosis({ category, tier, reason })\`** (category ∈ distribution/messaging/positioning/pmf_suspected/pricing; tier ∈ hunch/lean/strong — reply-sentiment tags from \`maya-results-reviewer\` are the evidence). This is how a one-week read becomes a *multi-week* signal: \`save_diagnosis\` returns \`weeksPersisted\` + \`shouldHardTruthPing\`. **Only when \`shouldHardTruthPing\` is true** (a \`strong\`, non-\`distribution\` verdict that's now persisted ≥2 weeks, throttle clear) do I escalate it into a standalone hard-truth — otherwise it just sharpens this week's Block 3. **PMF + pricing are auto-capped to \`lean\`** — for those I never assert a verdict; I surface the suspicion + the evidence + hand over \`propose_pmf_survey\` / \`propose_pricing_test\` ("I can't see retention/price from out here — run this and I'll score it"). Full doctrine in **\`maya-strategic-diagnostician\`**. The guard that matters: a *wrong* hard truth is worse than silence, so every verdict fails toward suspicion + evidence + what would confirm it.
+
 This is the *diagnosis → strategic-shift* linkage only. Do NOT duplicate Block 4's re-weighting logic here — Block 3 decides the *kind* of shift (reframe vs cadence/channel); Block 4 persists that shift as re-weighting + warmth advancement that the daily cron then acts on.
 
 ### Block 4 — Re-weight the bets + advance warmth (NOT a regenerated week)
@@ -4217,7 +4286,7 @@ Banned for this message: "Crushed it this week," "We're seeing momentum," "level
 `;
 
 // Source: agents/skills/maya-gtm/maya-x-founder-led-researcher/SKILL.md
-const ENTRY_39_maya_x_founder_led_researcher = `---
+const ENTRY_40_maya_x_founder_led_researcher = `---
 name: maya-x-founder-led-researcher
 description: Find X founder-led conversations, reply targets, hooks worth modeling, and accounts worth a private List.
 ---
@@ -4385,7 +4454,7 @@ Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before t
 `;
 
 // Source: agents/skills/maya-gtm/maya-youtube-researcher/SKILL.md
-const ENTRY_40_maya_youtube_researcher = `---
+const ENTRY_41_maya_youtube_researcher = `---
 name: maya-youtube-researcher
 description: Deep YouTube research via ScrapeCreators — mine comments + transcripts for buyer language, map the venue spread (niche channels, hashtags, Shorts trends), and judge whether YouTube earns a bet for this product. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
 ---
@@ -4475,12 +4544,13 @@ export const BUNDLED_LOCAL_SKILLS: readonly BundledLocalSkill[] = [
   { slug: "maya-safety-critic", workspacePath: "skills/maya-safety-critic/SKILL.md", body: ENTRY_30_maya_safety_critic },
   { slug: "maya-slideshow-strategist", workspacePath: "skills/maya-slideshow-strategist/SKILL.md", body: ENTRY_31_maya_slideshow_strategist },
   { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_32_maya_slop_critic },
-  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_33_maya_tiktok_demo_strategist },
-  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_34_maya_tiktok_format_researcher },
-  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_35_maya_ugc_system_advisor },
-  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_36_maya_viral_demo_moment_miner },
-  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_37_maya_voice_matcher },
-  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_38_maya_weekly_review },
-  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_39_maya_x_founder_led_researcher },
-  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_40_maya_youtube_researcher },
+  { slug: "maya-strategic-diagnostician", workspacePath: "skills/maya-strategic-diagnostician/SKILL.md", body: ENTRY_33_maya_strategic_diagnostician },
+  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_34_maya_tiktok_demo_strategist },
+  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_35_maya_tiktok_format_researcher },
+  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_36_maya_ugc_system_advisor },
+  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_37_maya_viral_demo_moment_miner },
+  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_38_maya_voice_matcher },
+  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_39_maya_weekly_review },
+  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_40_maya_x_founder_led_researcher },
+  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_41_maya_youtube_researcher },
 ];
