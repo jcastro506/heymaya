@@ -167,3 +167,23 @@
 - **Own the outcome** (Sprints 3-4-6): judged on customers; diagnose why they don't convert (via `search_web` + the diagnostician); tell hard truths.
 - **Compound** (Sprints 5-7-8): real learning per founder + a cross-customer brain per customer base.
 Open web (1) + demand (2) + intent speed (7) make that loop richer and faster.
+
+---
+
+## UI / receipt surfacing (the web app) — a PARALLEL track, auto-updating via Convex
+**Principle:** Telegram = nudges + what-needs-a-tap. The web app (`app/clawlaunch/mission/*`) is the **receipt** — where the founder reviews the proof, the intel, and what's working at a glance. The rich, glanceable outputs of these sprints belong here, NOT in a text message.
+
+**Auto-update is free:** every Mission Control tab already uses Convex `useQuery` (live subscriptions). When Maya writes new data to Convex, the subscribed UI re-renders **instantly — no refresh, no polling.** Each new capability just needs: (a) a reactive query over the table/JSON-field it writes, (b) a tile/panel. That's the whole UI cost per sprint.
+
+**Surface map (build the tile alongside each backend sprint):**
+| Sprint | Founder-visible output | Web surface (Mission Control tab) |
+|---|---|---|
+| 1 — Open web | Competitor pricing / positioning / real weaknesses (richer competitive map) | **research** |
+| 2 — Demand intel | Rising-demand topics + SEO opportunity + competitor objections | **research** — new "Market" panel |
+| 3 — Activation/attribution | clicks → signups → **activated**, time-to-value, "how they heard" | **results** (extend; today it's clicks/signups only) |
+| 4-5 — Experiments | What's converting + **confidence (P(best))** + what's being tested + why this arm | **results** — "What's working / Testing" panel |
+| 6 — Strategic read | North Star on-track/at-risk + the current honest strategic verdict (tiered) | **Today** (`page.tsx`) — "Strategy" panel |
+| 7 — Intent strikes | "Maya jumped on this hot thread 3 min ago" + the live post | **Today** activity feed (`getMyAgentActivity` already feeds it) |
+| 8 — Archetype brain | (mostly invisible) subtle "informed by N similar founders" note | light/none |
+
+**Implementation note per tile:** the data already lands in Convex (the backend sprint writes it). The UI add is a new reactive `query` in the relevant `convex/founder/` or `convex/gtmMaya/` read module + a tile in the tab's `page.tsx`. Keep it glanceable — the receipt shows *proof + intel*, it is not a control panel (Maya drives; the founder reviews). Build each tile in the SAME sprint as its backend so the data never lands invisibly.
