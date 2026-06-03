@@ -4404,6 +4404,12 @@ export default defineSchema({
     //   lastPmfSurveyAt?, lastPricingTestAt? }. Drives the ≥2-week-persistence +
     //   throttled hard-truth ping and the survey-proposal throttles.
     strategicDiagnosisJson: v.optional(v.string()),
+    // Sprint 7 — real-time intent-strike watchlist (JSON-on-row, NO new table).
+    // JSON: { phrases:[string], channels:[string], dailyStrikeBudget:number,
+    //   strikesToday:number, strikeDayStamp:string(YYYY-MM-DD), seenThreadIds:[string],
+    //   lastPolledAt?:number }. Compiled from gtmBuyerMap.intentPhrases + bet
+    //   channels. The Convex-owned poller reads it; the dedup + budget live here.
+    intentWatchJson: v.optional(v.string()),
     // Single-tier plan state (gtm99). JSON: {tier, status, connectedChannelCap,
     // autoPostChannelCap, videoCreditsMonth, xUrlPostsSoftCapMonth, periodStart,
     // usage:{autoPostsThisPeriod, xUrlPostsThisPeriod, videosThisPeriod}}.

@@ -191,6 +191,8 @@
 
 **Effort:** M/L. **Operator-blocked:** the agent-wake spike result.
 
+> **Status (2026-06-03): GATE SHIPPED; live poll + wake still operator-blocked.** `convex/gtmMaya/intentStrike.ts` ships the deterministic core (pure, nowMs-passed): `compileIntentWatch` (dedup/lowercase phrases, same-day strike-count preservation, day-roll reset), `prefilterIntentCandidates` — **the gate that is the whole ballgame**: dedup → off-channel → keyword → freshness (≤180m) → author-quality → velocity-ranked → hard daily strike budget — and `recordStrike` (budget + dedup upkeep). `intentWatchJson` on gtmAgents (JSON-on-row). Tools `build_intent_watch` / `record_strike` (agent-facing) + `evaluate_intent` (poller) (82 total); HEARTBEAT/TOOLS prose: the reflex is Convex-owned, she does NOT poll, she strikes what she's handed. 14 tests (every drop reason, ranking, budget, day-roll, full HTTP flow). **Still operator-blocked:** the every-2-3-min Convex poll cron against the social APIs + the low-latency agent-wake (the spike) + the Flash-Lite "real buyer?" confirm on survivors. The gate is ready the moment those land. convex+root tsc clean, zero net-new failures.
+
 ---
 
 ## Sprint 8 — The compounding brain (archetype moat) *(plumb early, pays off at density)*

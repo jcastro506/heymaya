@@ -114,6 +114,7 @@ import type * as gtmMaya_evidenceGuard from "../gtmMaya/evidenceGuard.js";
 import type * as gtmMaya_experimentPlanner from "../gtmMaya/experimentPlanner.js";
 import type * as gtmMaya_experimentStats from "../gtmMaya/experimentStats.js";
 import type * as gtmMaya_experiments from "../gtmMaya/experiments.js";
+import type * as gtmMaya_intentStrike from "../gtmMaya/intentStrike.js";
 import type * as gtmMaya_judgeCardsBatch from "../gtmMaya/judgeCardsBatch.js";
 import type * as gtmMaya_judgeChannel from "../gtmMaya/judgeChannel.js";
 import type * as gtmMaya_managerStore from "../gtmMaya/managerStore.js";
@@ -412,6 +413,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/experimentPlanner": typeof gtmMaya_experimentPlanner;
   "gtmMaya/experimentStats": typeof gtmMaya_experimentStats;
   "gtmMaya/experiments": typeof gtmMaya_experiments;
+  "gtmMaya/intentStrike": typeof gtmMaya_intentStrike;
   "gtmMaya/judgeCardsBatch": typeof gtmMaya_judgeCardsBatch;
   "gtmMaya/judgeChannel": typeof gtmMaya_judgeChannel;
   "gtmMaya/managerStore": typeof gtmMaya_managerStore;

@@ -74,6 +74,8 @@
       "save_diagnosis",
       "propose_pmf_survey",
       "propose_pricing_test",
+      "build_intent_watch",
+      "record_strike",
       "get_platform_algo",
       "get_conversion_setup",
       "save_media",

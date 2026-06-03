@@ -1327,6 +1327,29 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) => postLc("propose_pricing_test", p, ctx.signal),
     }),
     tool({
+      name: "build_intent_watch",
+      label: "Build Intent Watch",
+      description:
+        "Compile my real-time intent-strike watchlist from my buyer map's intent phrases + my bet channels, so the Convex-owned poller can catch a buyer the MOMENT they ask 'is there a tool that does X'. Pass { phrases:[buyer intent phrases], channels:[bet channels], dailyStrikeBudget? }. I do NOT poll myself — the watcher lives in Convex; I just keep the watchlist fresh (re-run when my foundation/bets change). Returns { ok, phrases, channels, dailyStrikeBudget }.",
+      parameters: Type.Object({
+        phrases: Type.Array(Type.String()),
+        channels: Type.Array(Type.String()),
+        dailyStrikeBudget: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("build_intent_watch", p, ctx.signal),
+    }),
+    tool({
+      name: "record_strike",
+      label: "Record Strike",
+      description:
+        "After I strike a hot intent thread I was handed (drafted + posted via post_to_channel / send_confirm_card), call this to fold it back into the watch: { struckThreadIds:[ids I struck], seenThreadIds?:[ids I saw but skipped] }. This decrements today's strike budget and prevents ever re-striking the same thread. Returns { ok, strikesToday, budget }.",
+      parameters: Type.Object({
+        struckThreadIds: Type.Array(Type.String()),
+        seenThreadIds: Type.Optional(Type.Array(Type.String())),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("record_strike", p, ctx.signal),
+    }),
+    tool({
       name: "get_platform_algo",
       label: "Get Platform Algo",
       description:

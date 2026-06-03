@@ -135,6 +135,11 @@ import {
   proposePmfSurveyHttp,
   proposePricingTestHttp,
 } from "./gtmMaya/strategicDiagnosis";
+import {
+  buildIntentWatchHttp,
+  evaluateIntentCandidatesHttp,
+  recordStrikeHttp,
+} from "./gtmMaya/intentStrike";
 // Ideal-product Pillar 1 (VOICE) + Pillar 4 (WARMUP). Maya persists the
 // founder voice fingerprint, per-channel native-style exemplars, and per-
 // channel warmth. hookToken-authed + idempotency-keyed, same as foundation_*.
@@ -606,6 +611,23 @@ http.route({
   path: "/lc_gtm/propose_pricing_test",
   method: "POST",
   handler: proposePricingTestHttp,
+});
+
+// Sprint 7 — real-time intent strike: compile the watch, run the gate, record strikes.
+http.route({
+  path: "/lc_gtm/build_intent_watch",
+  method: "POST",
+  handler: buildIntentWatchHttp,
+});
+http.route({
+  path: "/lc_gtm/evaluate_intent",
+  method: "POST",
+  handler: evaluateIntentCandidatesHttp,
+});
+http.route({
+  path: "/lc_gtm/record_strike",
+  method: "POST",
+  handler: recordStrikeHttp,
 });
 
 // Continuous research + feedback-loop write surfaces. Maya / her
