@@ -103,6 +103,7 @@
       "mark_lifecycle",
       "list_connected_accounts",
       "get_connection_health",
+      "get_connect_links",
       "get_account_analytics",
       "get_post_timeline",
       "get_best_time",

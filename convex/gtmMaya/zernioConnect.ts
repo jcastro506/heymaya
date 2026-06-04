@@ -18,6 +18,7 @@ import {
   deleteAccount,
 } from "../integrations/zernio/endpoints";
 import type { ZernioPostPlatform } from "../integrations/zernio/types";
+import { authenticate } from "./openclaw/inboundCallback";
 
 /**
  * Maya v2 — Zernio social-connect flow (S2).
@@ -440,6 +441,96 @@ export const disconnectZernioAccount = action({
  * exactly one agent; the account list is re-read from Zernio by that agent's
  * profileId. We then 302 the browser back to the app.
  * ──────────────────────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────────────────
+ * Agent-facing — mint prioritized one-tap connect links (hookToken auth).
+ *
+ * The Clerk-authed `getZernioConnectUrl` action above is for the WEB dashboard;
+ * Maya can't call it (she's hookToken, not a signed-in user). This route lets
+ * her generate per-channel connect URLs to send straight into Telegram at
+ * synthesis — one-tap, in BET-CHANNEL ORDER — instead of a "go to the
+ * dashboard" nudge. Accepts the channels she wants links for (her bet channels);
+ * skips any already connected; preserves the order she passed (her priority).
+ * ──────────────────────────────────────────────────────────────────────── */
+export const getConnectLinksHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: { channels?: string[] };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    body = {};
+  }
+
+  const agentCtx = await ctx.runQuery(
+    internal.gtmMaya.publishEngine.getAgentPublishContext,
+    { agentId: auth.agentId }
+  );
+  if (!agentCtx) return new Response("agent not found", { status: 404 });
+
+  // Which channels are already connected (skip those).
+  let connected: Set<string> = new Set();
+  try {
+    const arr = JSON.parse(agentCtx.connectedAccountsJson ?? "[]") as Array<{
+      platform?: string;
+    }>;
+    if (Array.isArray(arr)) connected = new Set(arr.map((a) => a.platform ?? ""));
+  } catch {
+    /* no connections yet */
+  }
+
+  // Preserve the caller's order (her bet priority); default to all offered.
+  const requested =
+    Array.isArray(body.channels) && body.channels.length > 0
+      ? body.channels
+      : OFFERED_PLATFORMS;
+  const channels = requested.filter(
+    (c) => OFFERED_PLATFORMS.includes(c) && !connected.has(c)
+  );
+
+  const client = zernioClient();
+
+  // Ensure the founder has a Zernio profile (created once, reused).
+  let profileId = agentCtx.zernioProfileId ?? undefined;
+  if (!profileId) {
+    const profile = await createProfile(client, {
+      name: `maya-agent-${auth.agentId}`,
+      description: "HeyMaya managed profile",
+    });
+    profileId = profile._id;
+    await ctx.runMutation(internal.gtmMaya.zernioConnect.persistZernioProfileId, {
+      agentId: auth.agentId,
+      zernioProfileId: profileId,
+    });
+  }
+
+  const site = (process.env.CONVEX_SITE_URL ?? "").replace(/\/+$/, "");
+  const links: Array<{ channel: string; url: string }> = [];
+  for (const platform of channels) {
+    try {
+      const { token } = await ctx.runMutation(
+        internal.gtmMaya.zernioConnect.issueZernioStateToken,
+        { accountId: agentCtx.accountId, agentId: auth.agentId }
+      );
+      const redirectUrl = `${site}/lc_gtm/zernio_callback?token=${encodeURIComponent(token)}`;
+      const { authUrl } = await getConnectUrl(
+        client,
+        platform as ZernioPostPlatform,
+        profileId,
+        redirectUrl
+      );
+      links.push({ channel: platform, url: authUrl });
+    } catch {
+      // Skip a channel that errors rather than failing the whole batch.
+    }
+  }
+
+  return new Response(
+    JSON.stringify({ ok: true, links, alreadyConnected: [...connected] }),
+    { status: 200, headers: { "content-type": "application/json" } }
+  );
+});
+
 export const zernioCallbackHttp = httpAction(async (ctx, request) => {
   const appBase = (
     process.env.APP_URL ??

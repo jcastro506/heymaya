@@ -1762,6 +1762,20 @@ export default defineToolPlugin({
         getLc("get_connection_health", undefined, ctx.signal),
     }),
     tool({
+      name: "get_connect_links",
+      label: "Get Connect Links",
+      description:
+        "Generate one-tap connect links so the founder can hook up their accounts and I can start posting. Pass `channels` IN BET-PRIORITY ORDER (my top channel first) — I get back a link per channel, already-connected ones skipped. I send the #1 channel's link first in plain words ('Your top channel is X — tap to connect and I'll start posting the replies I've queued: <link>'), then the others as follow-ups. NEVER tell them to 'go to the dashboard' — I send the actual link. Returns { ok, links:[{channel, url}], alreadyConnected }.",
+      parameters: Type.Object({
+        channels: Type.Optional(
+          Type.Array(Type.String(), {
+            description: "Channels to connect, in priority order (my bet channels). Omit = all offered, not-yet-connected.",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("get_connect_links", p, ctx.signal),
+    }),
+    tool({
       name: "get_account_analytics",
       label: "Get Account Analytics",
       description:

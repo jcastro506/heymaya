@@ -166,7 +166,7 @@ import {
   logTurnTelemetryHttp,
 } from "./gtmMaya/openclaw/conversationCapture";
 // Maya v2 — Zernio hosted-OAuth public callback (signed-state binding).
-import { zernioCallbackHttp } from "./gtmMaya/zernioConnect";
+import { zernioCallbackHttp, getConnectLinksHttp } from "./gtmMaya/zernioConnect";
 // Maya v2 (S3) — agent-facing auto-post + dedup routes.
 import { zernioPostHttp, checkAlreadyEngagedHttp } from "./gtmMaya/zernioRoutes";
 import {
@@ -485,6 +485,11 @@ http.route({
   path: "/lc_gtm/zernio_callback",
   method: "GET",
   handler: zernioCallbackHttp,
+});
+http.route({
+  path: "/lc_gtm/get_connect_links",
+  method: "POST",
+  handler: getConnectLinksHttp,
 });
 // Maya v2 (S3) — agent posts content directly (same gate as the cron path).
 http.route({
