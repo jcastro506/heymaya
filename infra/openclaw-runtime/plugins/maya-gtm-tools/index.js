@@ -346,7 +346,7 @@ export default defineToolPlugin({
       name: "research_x",
       label: "Research X/Twitter",
       description:
-        "TwitterAPI.io advanced search. X's value is the REPLIES (~80% of pre-1K acquisition is reply-driven). Use query operators (min_faves:, since:, conversation_id:) and go deep, not one page.",
+        "TwitterAPI.io advanced search. X's value is the REPLIES (~80% of pre-1K acquisition is reply-driven). Operators: min_faves:N, filter:replies / -filter:replies, conversation_id:<id>, from:/to:/@user, lang:en. TIME = `since_time:<unix>` / `until_time:<unix>` (unix SECONDS — `since:`/`min_replies:` are NOT supported). Find a hot original, then pull its thread with research_x_thread. Go deep, paginate.",
       parameters: Type.Object({
         query: Type.String({ description: "advanced_search query string (supports operators)." }),
         queryType: Type.Optional(Enum(["Latest", "Top"], "Latest or Top; default Latest.")),
@@ -356,6 +356,63 @@ export default defineToolPlugin({
         twitterApiGet(
           "/twitter/tweet/advanced_search",
           { query, queryType: queryType ?? "Latest", cursor },
+          ctx.signal
+        ),
+    }),
+    tool({
+      name: "research_x_thread",
+      label: "Research X Thread",
+      description:
+        "Pull the REPLY THREAD under a tweet (the reply-driven 80% — repliers are pre-qualified, they care about the topic). Pass the tweetId (from research_x). Returns repliers + their text in `tweets`. Mine for buyer pain language AND warm reply targets. Paginate with cursor.",
+      parameters: Type.Object({
+        tweetId: Type.String({ description: "The tweet id whose replies to pull." }),
+        queryType: Type.Optional(Enum(["Likes", "Relevance", "Latest"], "Reply sort; default Likes (best first).")),
+        cursor: Type.Optional(Type.String()),
+      }),
+      execute: async ({ tweetId, queryType, cursor }, _cfg, ctx) =>
+        twitterApiGet(
+          "/twitter/tweet/replies/v2",
+          { tweetId, queryType: queryType ?? "Likes", cursor },
+          ctx.signal
+        ),
+    }),
+    tool({
+      name: "research_x_competitor_mentions",
+      label: "Research X Competitor Mentions",
+      description:
+        "Who's talking AT a competitor — the highest-converting X lead type (a public complaint at a competitor = a warm switch lead). Pass the competitor's userName (no @). Returns `tweets` mentioning them. Pair with research_x query `to:<competitor> (\"cancel\" OR \"alternative\" OR \"too expensive\")` for the sharpest switch-intent.",
+      parameters: Type.Object({
+        userName: Type.String({ description: "Competitor's X handle (no @)." }),
+      }),
+      execute: async ({ userName }, _cfg, ctx) =>
+        twitterApiGet("/twitter/user/mentions", { userName }, ctx.signal),
+    }),
+    tool({
+      name: "research_x_engaged_audience",
+      label: "Research X Engaged Audience",
+      description:
+        "Harvest the people who AMPLIFIED a viral post about the problem you solve — a hand-raised, pre-qualified list. Pass a tweetId. Returns retweeters as `users` (full profiles → filter by bio/follower fit). Use for 'who to go engage with' lists, never spam.",
+      parameters: Type.Object({
+        tweetId: Type.String({ description: "The tweet whose retweeters to harvest." }),
+        cursor: Type.Optional(Type.String()),
+      }),
+      execute: async ({ tweetId, cursor }, _cfg, ctx) =>
+        twitterApiGet("/twitter/tweet/retweeters", { tweetId, cursor }, ctx.signal),
+    }),
+    tool({
+      name: "research_x_user_timeline",
+      label: "Research X User Timeline",
+      description:
+        "Mine a specific account's recent tweets — competitor-watch (what they ship/announce, and with includeReplies how they handle customers in replies = their unanswered complaints are your opening) or grounding a personalized reply to a named buyer. Pass userName (no @).",
+      parameters: Type.Object({
+        userName: Type.String({ description: "X handle (no @)." }),
+        includeReplies: Type.Optional(Type.Boolean({ description: "Include their replies (default true — that's where the customer signal is)." })),
+        cursor: Type.Optional(Type.String()),
+      }),
+      execute: async ({ userName, includeReplies, cursor }, _cfg, ctx) =>
+        twitterApiGet(
+          "/twitter/user/last_tweets",
+          { userName, includeReplies: includeReplies ?? true, cursor },
           ctx.signal
         ),
     }),
