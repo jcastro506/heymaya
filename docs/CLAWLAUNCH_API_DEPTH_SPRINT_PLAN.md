@@ -33,10 +33,13 @@ Source of truth for capability claims: live OpenAPI specs + our wired code, audi
 | S3 depth-parity | ✅ `research_tiktok/youtube/instagram/linkedin` + `research_video_comments/transcript` (6 tools) + foundation mandate |
 | S4 competitor ads | ✅ `competitor_ads` + `bio_funnel` + competitor-researcher mandate |
 | S5 X reply-mining | ✅ `research_x_thread / _competitor_mentions / _engaged_audience / _user_timeline` (4 tools) |
-| S2 analytics + webhooks | ⏳ not started (Zernio time-series, best-time scheduling, webhook receiver, private-reply/moderate) |
+| S2 analytics + webhooks | 🟡 part — `get_post_timeline` + `get_best_time` wired + contract-tested. ⏳ remaining: content-decay, posting-frequency, best-time→scheduling wiring, webhook receiver, private-reply/moderate |
 | S6 UI receipts | ⏳ not started |
 
-Plugin: **83 → 95 tools** (+12 verified research/intel tools). Every change tested, convex tsc 0, zero net-new test failures (2 pre-existing generators reds unrelated). The verifying deploy is batched for when S1-remainder + S2 land.
+Plugin: **83 → 97 tools** (+14). Every change tested, convex tsc 0, zero net-new test failures (2 pre-existing generators reds unrelated).
+
+### ⚠️ The verification gate (honest)
+Everything **research/intelligence** (S3/S4/S5) is **live-verified** against real APIs. But the **Zernio posting + analytics layer** (S1 first-comment, S2 analytics reads, S1-tail Reddit pre-flight, and Track B posting) can only be **contract-tested (mocked) until a social account is connected** — Zernio analytics/posting need a live connected account + published posts to return real data. So: the next real confidence step is **connect one Zernio account** (operator OAuth) → which unblocks live-verifying the whole posting/analytics layer AND the verifying deploy AND Track B in one move.
 
 ## 0.5 — URGENT: post-foundation heartbeat/discovery cost loop (blocks the live test)
 
