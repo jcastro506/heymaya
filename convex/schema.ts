@@ -4437,6 +4437,13 @@ export default defineSchema({
     foundationCompletedAt: v.optional(v.number()),
     lastMorningBriefAt: v.optional(v.number()),
     foundationLeaseUntil: v.optional(v.number()),
+    // How many times the foundation lease has been acquired. The watchdog
+    // re-acquires it each tick to resume the pass — but a weak brain that never
+    // finishes would re-run (and re-spawn the whole research fleet) forever
+    // (observed live: 283 subagent sessions on one onboarding). This is the HARD
+    // server-side cap: past FOUNDATION_MAX_LEASE_ACQUIRES with foundation still
+    // incomplete, the lease is DENIED so the agent physically cannot re-run it.
+    foundationLeaseAcquireCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

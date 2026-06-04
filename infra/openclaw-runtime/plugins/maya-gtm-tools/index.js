@@ -1490,7 +1490,7 @@ export default defineToolPlugin({
       name: "get_agent_lifecycle",
       label: "Get Agent Lifecycle",
       description:
-        "Read my DURABLE lifecycle from Convex (the source of truth — NOT MEMORY.md, which is wiped on restart). Returns lifecycle: { phase (fresh|hello_sent|foundation_in_progress|active), helloSent, foundationStarted, foundationComplete, foundationCompletedAt, lastMorningBriefAt, leaseActive, leaseHeldUntil, hasVoiceProfile, targetThreadCount, draftCount, calendarEventCount }. CALL THIS FIRST on every boot and heartbeat tick. If foundationComplete is true, onboarding is DONE — never re-run it.",
+        "Read my DURABLE lifecycle from Convex (the source of truth — NOT MEMORY.md, which is wiped on restart). Returns lifecycle: { phase, helloSent, foundationStarted, foundationComplete, foundationCompletedAt, lastMorningBriefAt, leaseActive, hasVoiceProfile, targetThreadCount, draftCount, calendarEventCount, researchComplete, foundationStep (research|finalize|complete), leaseAcquireCount }. CALL THIS FIRST on every boot and heartbeat tick. foundationStep is the source of truth for WHAT to do: 'research' = run the worker fleet; 'finalize' = research is DONE, only discovery/drafts/synthesis remain (NEVER re-spawn research); 'complete' = onboarding done, never re-run.",
       parameters: Type.Object({}),
       execute: async (_p, _cfg, ctx) =>
         getLc("get_agent_lifecycle", undefined, ctx.signal),
@@ -1499,7 +1499,7 @@ export default defineToolPlugin({
       name: "acquire_foundation_lease",
       label: "Acquire Foundation Lease",
       description:
-        "Check-and-set lease I MUST acquire before running the foundation/onboarding pass. Prevents two heartbeat ticks (or two machines) from re-running onboarding at once. Returns { acquired, alreadyComplete, leaseActive, leaseUntil }. If alreadyComplete:true → foundation is DONE, stop, do NOT run it. If acquired:false & leaseActive:true → another tick owns it, tick silent. Only run the pass when acquired:true. Optional ttlMs (default 15min).",
+        "Check-and-set lease I MUST acquire before running the foundation/onboarding pass. Returns { acquired, alreadyComplete, leaseActive, leaseUntil, foundationStep (research|finalize|complete), researchComplete, capped }. Rules: alreadyComplete:true → DONE, stop. acquired:false & leaseActive:true → another tick owns it, tick silent. capped:true → I've re-acquired the max times without finishing — STOP re-running, send ONE honest 'still building' status and let the crons carry it. When acquired:true, act ONLY on foundationStep: 'research' → spawn the worker fleet; 'finalize' → research is DONE so I do discovery/drafts/synthesis ONLY and NEVER re-spawn a research worker. Optional ttlMs (default 15min).",
       parameters: Type.Object({
         ttlMs: Type.Optional(Type.Number()),
       }),

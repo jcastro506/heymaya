@@ -138,6 +138,69 @@ describe("#15 lifecycle — markers + phases", () => {
   // extract, so hasVoiceProfile is false. Voice must NOT gate completion, or
   // foundation never auto-completes and the heartbeat watchdog re-runs the WHOLE
   // research fleet every tick forever.
+  // The phase machine: research → finalize → complete, derived from rows so a
+  // completed step is never re-run.
+  it("foundationStep advances research → finalize → complete as rows land", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, agentId } = await setupAgent(t, "lc_step");
+    const lc0 = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
+    expect(lc0?.foundationStep).toBe("research");
+    expect(lc0?.researchComplete).toBe(false);
+
+    // Foundation research rows land (buyer map + competitor + scorecard).
+    await t.mutation(internal.gtmMaya.managerStore.upsertBuyerMap, {
+      accountId, agentId,
+      icpDescription: "Privacy-conscious SaaS founders.",
+      buyerJourneyStages: [{ stage: "aware", whereTheyHangOut: "r/SaaS", intentLanguage: "GA4 sucks" }],
+      intentPhrases: ["GA4 alternative"],
+      trustedVoices: [],
+    });
+    await t.mutation(internal.gtmMaya.managerStore.upsertCompetitor, {
+      accountId, agentId, competitorKey: "fathom", competitorName: "Fathom",
+      kind: "direct", positioning: "Simple privacy analytics", complaints: [], vulnerabilities: [],
+    });
+    await t.mutation(internal.gtmMaya.managerStore.upsertChannelScorecard, {
+      accountId, agentId, channel: "reddit", audienceFit: 0.8, cadenceFit: 0.7,
+      uniqueUnlock: "answer-strike on GA4 threads", bet: true,
+    });
+
+    // Research DONE, but no threads/drafts → finalize (and NEVER re-spawn research).
+    const lc1 = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
+    expect(lc1?.researchComplete).toBe(true);
+    expect(lc1?.foundationComplete).toBe(false);
+    expect(lc1?.foundationStep).toBe("finalize");
+
+    // Discovery + drafting land → complete.
+    const threadId = await seedThread(t, accountId, agentId, "post_step_1");
+    await t.mutation(internal.gtmMaya.targetList.recordDraftedContent, {
+      accountId, agentId, kind: "reply", platform: "reddit", targetThreadId: threadId,
+      draftText: "A grounded reply.",
+    });
+    const lc2 = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
+    expect(lc2?.foundationComplete).toBe(true);
+    expect(lc2?.foundationStep).toBe("complete");
+  });
+
+  // The HARD backstop: the lease is denied past the cap so a stuck agent
+  // CANNOT re-spawn the research fleet forever (the 283-session bleed).
+  it("acquireFoundationLease is hard-capped — denies past the max", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId } = await setupAgent(t, "lc_cap");
+    const { FOUNDATION_MAX_LEASE_ACQUIRES } = await import("../agentLifecycle");
+
+    // Acquire + release the max number of times (each grant increments the count).
+    for (let i = 0; i < FOUNDATION_MAX_LEASE_ACQUIRES; i++) {
+      const r = await t.mutation(internal.gtmMaya.agentLifecycle.acquireFoundationLease, { agentId });
+      expect(r.acquired).toBe(true);
+      expect(r.foundationStep).toBe("research"); // no rows → still research
+      await t.mutation(internal.gtmMaya.agentLifecycle.releaseFoundationLease, { agentId });
+    }
+    // The NEXT acquire is over the cap → denied, capped, no re-spawn possible.
+    const capped = await t.mutation(internal.gtmMaya.agentLifecycle.acquireFoundationLease, { agentId });
+    expect(capped.acquired).toBe(false);
+    expect(capped.capped).toBe(true);
+  });
+
   it("foundation auto-completes WITHOUT a voice profile once research landed (no-handles founder)", async () => {
     const t = convexTest(schema, modules);
     const { accountId, agentId } = await setupAgent(t, "lc_novoice");

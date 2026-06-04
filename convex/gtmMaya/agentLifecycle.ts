@@ -37,12 +37,26 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
  *  longer re-acquires on the next heartbeat tick; a crashed pass frees the slot
  *  when the lease expires. */
 export const FOUNDATION_LEASE_MS = 15 * 60 * 1000;
+/** Hard cap on foundation-lease acquisitions. The watchdog re-acquires the lease
+ *  each tick to resume the pass; past this many, with foundation still
+ *  incomplete, the lease is DENIED so a stuck agent cannot re-spawn the research
+ *  fleet forever (observed live: 283 subagent sessions / ~12× re-runs). After the
+ *  cap the agent surfaces an honest "still building" and the cadence crons own
+ *  the rest. Generous enough that a healthy multi-tick pass never hits it. */
+export const FOUNDATION_MAX_LEASE_ACQUIRES = 8;
 
 export type AgentLifecyclePhase =
   | "fresh"
   | "hello_sent"
   | "foundation_in_progress"
   | "active";
+
+/** The current step of the onboarding pipeline, derived from durable rows — so
+ *  the watchdog spawns ONLY the current step's workers and never re-runs a step
+ *  whose output already exists. `research` = the ~16-worker foundation fleet;
+ *  `finalize` = research is DONE, only discovery/drafting/synthesis remain (NEVER
+ *  re-spawn research); `complete` = onboarding done. */
+export type FoundationStep = "research" | "finalize" | "complete";
 
 export interface AgentLifecycle {
   phase: AgentLifecyclePhase;
@@ -62,6 +76,14 @@ export interface AgentLifecycle {
   targetThreadCount: number;
   draftCount: number;
   calendarEventCount: number;
+  // ─── Phase-aware re-spawn control (the 283-session fix) ───────────────────
+  /** Foundation RESEARCH output exists (buyer map + ≥1 competitor + ≥1 channel
+   *  scorecard). Once true, the watchdog must NEVER re-spawn the research fleet. */
+  researchComplete: boolean;
+  /** The current onboarding step to act on — research / finalize / complete. */
+  foundationStep: FoundationStep;
+  /** How many times the foundation lease has been acquired (the cap counter). */
+  leaseAcquireCount: number;
 }
 
 /**
@@ -103,6 +125,28 @@ export async function computeAgentLifecycle(
     (e) => e.status !== "cancelled"
   ).length;
 
+  // Foundation RESEARCH output (the ~16-worker fleet's product): a buyer map, at
+  // least one competitor, at least one channel scorecard. Once these exist the
+  // research is done and must never be re-spawned.
+  const buyerMap = await ctx.db
+    .query("gtmBuyerMap")
+    .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+    .first();
+  const competitorCount = (
+    await ctx.db
+      .query("gtmCompetitiveMap")
+      .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+      .collect()
+  ).length;
+  const scorecardCount = (
+    await ctx.db
+      .query("gtmChannelScorecard")
+      .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+      .collect()
+  ).length;
+  const researchComplete =
+    buyerMap !== null && competitorCount >= 1 && scorecardCount >= 1;
+
   const hasVoiceProfile =
     typeof agent.voiceProfileJson === "string" &&
     agent.voiceProfileJson.trim().length > 0;
@@ -133,6 +177,17 @@ export async function computeAgentLifecycle(
   const helloSent = helloSentAt !== null;
   const foundationStarted = foundationStartedAt !== null || leaseActive;
 
+  // The step the watchdog should act on — derived from rows, so a completed step
+  // is NEVER re-run. research → (research not done yet, spawn the fleet);
+  // finalize → (research DONE, only discovery/drafts/synthesis remain — never
+  // re-spawn the research fleet); complete → onboarding done.
+  const foundationStep: FoundationStep = foundationComplete
+    ? "complete"
+    : researchComplete
+      ? "finalize"
+      : "research";
+  const leaseAcquireCount = agent.foundationLeaseAcquireCount ?? 0;
+
   let phase: AgentLifecyclePhase;
   if (foundationComplete) phase = "active";
   else if (foundationStarted) phase = "foundation_in_progress";
@@ -154,6 +209,9 @@ export async function computeAgentLifecycle(
     targetThreadCount,
     draftCount,
     calendarEventCount,
+    researchComplete,
+    foundationStep,
+    leaseAcquireCount,
   };
 }
 
@@ -203,39 +261,46 @@ export const acquireFoundationLease = internalMutation({
     alreadyComplete: boolean;
     leaseActive: boolean;
     leaseUntil: number | null;
+    // Phase-aware re-spawn control. The watchdog acts ONLY on `foundationStep`:
+    //   "research"  → spawn the foundation research fleet.
+    //   "finalize"  → research is DONE; only discovery/drafts/synthesis remain —
+    //                 NEVER re-spawn the research fleet.
+    //   "complete"  → onboarding done.
+    foundationStep: FoundationStep;
+    researchComplete: boolean;
+    // HARD CAP: true once the lease has been acquired too many times without
+    // completing. The lease is denied — the agent physically cannot re-run the
+    // pass again. It must surface an honest "still building" and let the crons
+    // take over, rather than re-spawn the fleet forever.
+    capped: boolean;
   }> => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent) throw new Error("acquireFoundationLease: agent not found");
     const now = Date.now();
     const lifecycle = await computeAgentLifecycle(ctx, agent, now);
+    const base = {
+      foundationStep: lifecycle.foundationStep,
+      researchComplete: lifecycle.researchComplete,
+    };
     if (lifecycle.foundationComplete) {
-      return {
-        acquired: false,
-        alreadyComplete: true,
-        leaseActive: false,
-        leaseUntil: null,
-      };
+      return { acquired: false, alreadyComplete: true, leaseActive: false, leaseUntil: null, capped: false, ...base };
     }
     if (lifecycle.leaseActive) {
-      return {
-        acquired: false,
-        alreadyComplete: false,
-        leaseActive: true,
-        leaseUntil: lifecycle.leaseHeldUntil,
-      };
+      return { acquired: false, alreadyComplete: false, leaseActive: true, leaseUntil: lifecycle.leaseHeldUntil, capped: false, ...base };
+    }
+    // The hard backstop: a stuck agent that keeps re-acquiring without finishing
+    // is denied past the cap, so it cannot re-spawn the research fleet forever.
+    if (lifecycle.leaseAcquireCount >= FOUNDATION_MAX_LEASE_ACQUIRES) {
+      return { acquired: false, alreadyComplete: false, leaseActive: false, leaseUntil: null, capped: true, ...base };
     }
     const leaseUntil = now + (args.ttlMs ?? FOUNDATION_LEASE_MS);
     await ctx.db.patch(args.agentId, {
       foundationLeaseUntil: leaseUntil,
       foundationStartedAt: agent.foundationStartedAt ?? now,
+      foundationLeaseAcquireCount: lifecycle.leaseAcquireCount + 1,
       updatedAt: now,
     });
-    return {
-      acquired: true,
-      alreadyComplete: false,
-      leaseActive: false,
-      leaseUntil,
-    };
+    return { acquired: true, alreadyComplete: false, leaseActive: false, leaseUntil, capped: false, ...base };
   },
 });
 
