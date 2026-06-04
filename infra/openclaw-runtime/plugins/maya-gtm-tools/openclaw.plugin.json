@@ -26,6 +26,8 @@
       "research_linkedin",
       "research_video_comments",
       "research_video_transcript",
+      "competitor_ads",
+      "bio_funnel",
       "scrape_creators",
       "save_target_thread",
       "save_target_account",

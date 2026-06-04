@@ -470,11 +470,77 @@ export default defineToolPlugin({
         return scrapeCreatorsGet(path, { url }, ctx.signal);
       },
     }),
+    // ── Competitive intelligence (the foundation dossier upgrade). ──
+    tool({
+      name: "competitor_ads",
+      label: "Competitor Ads",
+      description:
+        "See what a competitor is PAYING to run — their live ads, copy, offers, CTAs. A long-running ad is a PROVEN hook: extract the angle and ground the founder's ORGANIC posts in messaging the market already pays for (never copy verbatim). Pass the competitor's name as `query` (Meta/Facebook ad library — resolves their page + full active ad set) and/or their `domain` (Google ads, ~1 credit). Use in the foundation competitive sweep + monthly to catch new ads.",
+      parameters: Type.Object({
+        query: Type.Optional(Type.String({ description: "Competitor/brand name (Meta ad library)." })),
+        domain: Type.Optional(Type.String({ description: "Competitor domain, e.g. notion.so (Google ads)." })),
+        country: Type.Optional(Type.String({ description: "ISO country for Meta; default US." })),
+      }),
+      execute: async ({ query, domain, country }, _cfg, ctx) => {
+        if (!query && !domain) return "Pass `query` (competitor name) and/or `domain`.";
+        const out = {};
+        if (query) {
+          const companies = await scrapeCreatorsGet(
+            "/v1/facebook/adLibrary/search/companies",
+            { query },
+            ctx.signal
+          );
+          const page = (companies && companies.searchResults ? companies.searchResults : [])[0];
+          if (page && page.page_id) {
+            out.metaCompany = { name: page.name, page_id: page.page_id };
+            out.metaAds = await scrapeCreatorsGet(
+              "/v1/facebook/adLibrary/company/ads",
+              { pageId: page.page_id, country: country ?? "US" },
+              ctx.signal
+            );
+          } else {
+            out.metaAds = await scrapeCreatorsGet(
+              "/v1/facebook/adLibrary/search/ads",
+              { query, country: country ?? "US" },
+              ctx.signal
+            );
+          }
+        }
+        if (domain) {
+          out.googleAds = await scrapeCreatorsGet(
+            "/v1/google/company/ads",
+            { domain },
+            ctx.signal
+          );
+        }
+        return out;
+      },
+    }),
+    tool({
+      name: "bio_funnel",
+      label: "Bio Funnel",
+      description:
+        "Map a competitor's or prospect's link-in-bio funnel in ONE call — all destination links (lead magnet → pricing → community → newsletter). Reverse-engineers their conversion path. Pass the bio URL (Linktree / Komi / Linkbio / Pillar).",
+      parameters: Type.Object({
+        url: Type.String({ description: "The link-in-bio page url." }),
+      }),
+      execute: async ({ url }, _cfg, ctx) => {
+        const u = String(url).toLowerCase();
+        const path = u.includes("komi.")
+          ? "/v1/komi"
+          : u.includes("linkbio") || u.includes("lnk.bio")
+            ? "/v1/linkbio"
+            : u.includes("pillar.")
+              ? "/v1/pillar"
+              : "/v1/linktree";
+        return scrapeCreatorsGet(path, { url }, ctx.signal);
+      },
+    }),
     tool({
       name: "scrape_creators",
       label: "ScrapeCreators (generic)",
       description:
-        "Escape hatch for any ScrapeCreators endpoint NOT covered by the first-class research_* tools (research_reddit/x/hn/tiktok/youtube/instagram/linkedin + research_video_comments/transcript). Prefer those — they're depth-tuned. Pass the path (e.g. /v1/tiktok/profile) and a query object. Runs server-side with the API key; never curl scrapecreators.com by hand.",
+        "Escape hatch for any ScrapeCreators endpoint NOT covered by the first-class research_* tools (research_reddit/x/hn/tiktok/youtube/instagram/linkedin + research_video_comments/transcript + competitor_ads + bio_funnel). Prefer those — they're depth-tuned. Pass the path (e.g. /v1/tiktok/profile) and a query object. Runs server-side with the API key; never curl scrapecreators.com by hand.",
       parameters: Type.Object({
         path: Type.String({
           description:
