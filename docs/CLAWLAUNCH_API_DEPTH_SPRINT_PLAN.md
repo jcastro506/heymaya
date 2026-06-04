@@ -46,6 +46,26 @@ This is a **prerequisite for resuming the long-running test** — ships before S
 - **`gtmCalendarEvents`** stays as the **planning + receipt layer** (what the UI renders, what Maya reasons over) — **not** a heartbeat-polled firing queue.
 - **Consequence for cost:** once posting runs on Zernio's clock and inbound runs on Zernio webhooks (`comment.received`, S2), the heartbeat has almost nothing to do → quiet *structurally*, not just by interval. This is the durable fix behind §0.5.
 
+## 0.7 — Endpoint verification matrix (LIVE-probed 2026-06-04, before any wiring)
+
+Every new endpoint below was hit against the real API with our production keys and **returned 200 + the expected shape.** Response key in parens — use these exact keys when building the typed tools.
+
+**S3 depth-parity (ScrapeCreators):**
+- TikTok: `/v1/tiktok/video/comments` (`comments`) ✓ · `/v1/tiktok/video/transcript` (`transcript`) ✓
+- YouTube: `/v1/youtube/search` (`videos`) ✓ · `/v1/youtube/video/comments` (`comments` + `continuationToken`) ✓ · `/v1/youtube/video/transcript` (`transcript` + **`transcript_only_text`** + `language`) ✓
+- Instagram: `/v1/instagram/search/hashtag` (`posts`) ✓ · `/v2/instagram/post/comments` (`comments`) ✓
+- LinkedIn: `/v1/linkedin/search/posts` (`posts` + `cursor`) ✓
+
+**S4 ad intelligence (ScrapeCreators):**
+- FB Ad Library: `/v1/facebook/adLibrary/search/companies` (`searchResults`) ✓ · `/v1/facebook/adLibrary/search/ads` (`searchResults` + `searchResultsCount` + `cursor`) ✓
+- Google Ad Library: `/v1/google/company/ads` (`ads` + `number_of_ads_estimate`, **1 credit**) ✓
+
+**S5 X reply-mining (twitterapi.io):**
+- `/twitter/tweet/advanced_search` (`tweets`) ✓ · `/twitter/tweet/replies/v2` (key is **`tweets`**, w/ `next_cursor`) ✓ · `/twitter/tweet/retweeters` (key is **`users`**) ✓ · `/twitter/user/mentions` (`tweets`) ✓
+- ⚠️ Operator caveat **confirmed live**: `min_replies:` returns nothing (unsupported) — use the verified `min_faves:` instead. Header must be `x-api-key: <key>` exactly.
+
+**Already fixed & verified (S0):** TikTok video search shape, YouTube `/channel-videos`, X `/user-tweets` (all live-probed; IG `/v1/user/posts` confirmed still-working).
+
 ## 1. Cross-cutting correctness fixes (S0 — prerequisite, tiny, ships first)
 
 These are silently degrading us **today** — fix before building on top.
