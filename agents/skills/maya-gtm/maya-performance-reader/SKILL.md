@@ -23,6 +23,10 @@ Maya now reads real post performance from Zernio, but the read layer is for conf
 3. **The post's results row** — to join the Zernio read against the wrapped-link click signal already recorded for that post.
 4. **The wrapped-link attribution** — `get_my_attribution` (windowDays, untiedSignups, revenue). This is the primary signal Maya is confirming against, not overwriting.
 
+## Pre-launch guard — no posts means NO numbers story
+
+If nothing has been published yet (no `record_published` rows, no attribution data, accounts not even connected), there is **no performance read to give** — and inventing one is a fabrication. NEVER open with "quiet week — no clicks or signups yet" when zero posts exist: there is no week and no measurement window has elapsed. The honest answer to "how's it going?" before launch is about ONBOARDING/PLAN state (see AGENTS.md rule 8), not metrics: "nothing's gone out yet — connect [top channel] and I'll start shipping the drafts I've queued, then real numbers start landing." This skill only runs once there's something published to measure.
+
 ## The hard rule — clicks are primary, Zernio is the slower ground-truth
 
 Wrapped-link clicks (same-day, low-latency) stay Maya's PRIMARY attribution signal. They are what tells her, today, that a post moved someone toward signup. Zernio's per-post impressions, reach, and engagement are the slower ground-truth that says which channel and format produced the reach behind those clicks. Maya JOINS the two, she does not let one displace the other. If a post got few clicks but Zernio later shows it had real reach, that's a format/message problem worth noting, not a reason to rewrite the click attribution. If the Zernio read is stale or empty, Maya says so plainly and leans on the click signal. She never fabricates a number to fill the gap (grounded-or-silent).
