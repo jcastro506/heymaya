@@ -384,11 +384,97 @@ export default defineToolPlugin({
       execute: async ({ objectId }, _cfg, ctx) =>
         algoliaHnGet(`https://hn.algolia.com/api/v1/items/${encodeURIComponent(objectId)}`, ctx.signal),
     }),
+    // ── First-class per-channel research (depth-parity with Reddit/HN/X). ──
+    // These exist so non-Reddit bet channels get mined as DEEP as Reddit — the
+    // generic scrape_creators hatch below was under-used, biasing research to
+    // Reddit. Search → drill the COMMENTS + TRANSCRIPT, never stop at counts.
+    tool({
+      name: "research_tiktok",
+      label: "Research TikTok",
+      description:
+        "Search TikTok videos by keyword (ScrapeCreators). The buyer language + winning formats live in the COMMENTS and TRANSCRIPTS — after you find videos, drill the top ones with research_video_comments({platform:'tiktok'}) + research_video_transcript({platform:'tiktok'}). Never stop at view counts. Returns videos with aweme_id + author.unique_id → build the url https://www.tiktok.com/@<unique_id>/video/<aweme_id> for the drill.",
+      parameters: Type.Object({
+        query: Type.String({ description: "Keyword / buyer-pain phrase." }),
+      }),
+      execute: async ({ query }, _cfg, ctx) =>
+        scrapeCreatorsGet("/v1/tiktok/search/keyword", { query }, ctx.signal),
+    }),
+    tool({
+      name: "research_youtube",
+      label: "Research YouTube",
+      description:
+        "Search YouTube videos (ScrapeCreators). The richest buyer language PER CREDIT is the TRANSCRIPT of videos ranking for a buyer-pain query, plus the COMMENTS. After searching, drill with research_video_transcript({platform:'youtube'}) + research_video_comments({platform:'youtube'}) on each result's url.",
+      parameters: Type.Object({
+        query: Type.String({ description: "Search query (buyer-pain language)." }),
+      }),
+      execute: async ({ query }, _cfg, ctx) =>
+        scrapeCreatorsGet("/v1/youtube/search", { query }, ctx.signal),
+    }),
+    tool({
+      name: "research_instagram",
+      label: "Research Instagram",
+      description:
+        "Search Instagram posts by hashtag (ScrapeCreators). Drill a post's COMMENTS with research_video_comments({platform:'instagram', url}) and reels with research_video_transcript({platform:'instagram', url}) — that's where buyer intent is, not the like counts. Returns posts with a `code`/shortcode → url https://www.instagram.com/p/<code>/.",
+      parameters: Type.Object({
+        hashtag: Type.String({ description: "Hashtag WITHOUT the # (e.g. 'buildinpublic')." }),
+      }),
+      execute: async ({ hashtag }, _cfg, ctx) =>
+        scrapeCreatorsGet("/v1/instagram/search/hashtag", { hashtag }, ctx.signal),
+    }),
+    tool({
+      name: "research_linkedin",
+      label: "Research LinkedIn",
+      description:
+        "Search LinkedIn posts platform-wide by query (ScrapeCreators). Mine the posts for how the ICP talks + which angles resonate (reactions/comments counts). LinkedIn has no public comment-tree API, so the post text + engagement IS the signal — read widely, quote real lines.",
+      parameters: Type.Object({
+        query: Type.String({ description: "Search query (buyer-pain / topic language)." }),
+      }),
+      execute: async ({ query }, _cfg, ctx) =>
+        scrapeCreatorsGet("/v1/linkedin/search/posts", { query }, ctx.signal),
+    }),
+    tool({
+      name: "research_video_comments",
+      label: "Research Video Comments",
+      description:
+        "Mine the COMMENTS on a TikTok/YouTube/Instagram post for buyer pain language (the intent lives in the replies, not the captions). Pass platform + the post/video url.",
+      parameters: Type.Object({
+        platform: Enum(["tiktok", "youtube", "instagram"], "Which platform the url is on."),
+        url: Type.String({ description: "Full post/video url." }),
+      }),
+      execute: async ({ platform, url }, _cfg, ctx) => {
+        const path =
+          platform === "tiktok"
+            ? "/v1/tiktok/video/comments"
+            : platform === "youtube"
+              ? "/v1/youtube/video/comments"
+              : "/v2/instagram/post/comments";
+        return scrapeCreatorsGet(path, { url }, ctx.signal);
+      },
+    }),
+    tool({
+      name: "research_video_transcript",
+      label: "Research Video Transcript",
+      description:
+        "Pull the TRANSCRIPT of a TikTok/YouTube/Instagram video — the hook + structure of what's working, in text, to mine for native phrasing and content angles. Pass platform + the video url. (YouTube returns transcript_only_text for a clean read.)",
+      parameters: Type.Object({
+        platform: Enum(["tiktok", "youtube", "instagram"], "Which platform the url is on."),
+        url: Type.String({ description: "Full video url." }),
+      }),
+      execute: async ({ platform, url }, _cfg, ctx) => {
+        const path =
+          platform === "tiktok"
+            ? "/v1/tiktok/video/transcript"
+            : platform === "youtube"
+              ? "/v1/youtube/video/transcript"
+              : "/v2/instagram/media/transcript";
+        return scrapeCreatorsGet(path, { url }, ctx.signal);
+      },
+    }),
     tool({
       name: "scrape_creators",
       label: "ScrapeCreators (generic)",
       description:
-        "Escape hatch for any ScrapeCreators endpoint not covered by research_reddit/x/hn — TikTok, Instagram, YouTube, LinkedIn, profiles, transcripts, comments. Pass the path (e.g. /v1/tiktok/search/keyword) and a query object. Runs server-side with the API key; never curl scrapecreators.com by hand.",
+        "Escape hatch for any ScrapeCreators endpoint NOT covered by the first-class research_* tools (research_reddit/x/hn/tiktok/youtube/instagram/linkedin + research_video_comments/transcript). Prefer those — they're depth-tuned. Pass the path (e.g. /v1/tiktok/profile) and a query object. Runs server-side with the API key; never curl scrapecreators.com by hand.",
       parameters: Type.Object({
         path: Type.String({
           description:
