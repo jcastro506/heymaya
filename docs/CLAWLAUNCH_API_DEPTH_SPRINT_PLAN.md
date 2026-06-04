@@ -20,6 +20,32 @@ Source of truth for capability claims: live OpenAPI specs + our wired code, audi
 
 ---
 
+## 0.5 — URGENT: post-foundation heartbeat/discovery cost loop (blocks the live test)
+
+**Symptom (live, 2026-06-04):** a deployed agent that had finished foundation + gone "idle" ran **continuous K2 turns every 20-40s** (`[agents/tool-policy] removed 6 tool(s)` bursts + `[diagnostic] lane wait exceeded: lane=main queueAhead`), billing **~$25 OpenRouter in ~4h (~$150/day)**. Distinct from the #15 *foundation* lease cap (that held — synthesis completed once and stopped).
+
+**Root cause (hypothesis, to confirm via session transcripts):** post-foundation, with **0 connected accounts**, the daily-cadence/heartbeat path re-kicks discovery/draft work that can never reach "done" (nothing can publish), so it re-spawns the worker fleet each tick and the main lane backs up. The `recentActions: []` (no new actions persisted despite continuous turns) is consistent with a spin loop that does work but lands nothing.
+
+**Fix (mirror the #15 pattern one phase down):**
+- A durable, capped lifecycle gate for the **daily/discovery** loop like foundation has — once the day's discovery + draft pool is built and the only blocker is "accounts not connected", the heartbeat must go to a true **no-op** (status check only, no fleet spawn) until either accounts connect or the next scheduled cadence cron.
+- Heartbeat turn must be cheap: check `get_agent_lifecycle` + connection health → if blocked-on-connect, emit nothing and spawn nothing.
+- Cron audit: the evening-recap content fired at 2pm — verify cron schedules + timezone resolution (the `timezone: row.agent.timezone` plumbing at `deployMayaGtm.ts:1161`) and that no missed-run catch-up burst is enqueuing.
+- Re-confirm "destroy old machine on redeploy" so stopped/looping machines don't linger.
+
+This is a **prerequisite for resuming the long-running test** — ships before S1.
+
+## 0.6 — Scheduling & posting-time architecture (LOCKED 2026-06-04)
+
+**Decision:** Zernio is the clock. The agent does **not** wake up to post, and the heartbeat is **never** the firing mechanism.
+
+- **Planning (when):** the `morning_brief` cron (7am local) builds the day's plan and assigns each action a **spread-out** time — via Zernio **queue slots** (`/v1/queue/slots`, seeded from `best-time` analytics, e.g. 9:00 / 12:30 / 15:00 / 18:00) + `queuedFromProfile` so Zernio auto-assigns the next open slot. Hard rules: **min-gap ≥45-90 min**, **daily fair-use cap**, never two in one hour. `midday_pulse` (1pm) adds time-sensitive strikes. This is what prevents "15 posts at 9am."
+- **Firing (how it actually posts):**
+  - **Auto-post channels — X, LinkedIn, Instagram, YouTube:** hand the post to Zernio with a future `scheduleAtMs` (already plumbed: `publishContentDirect` → Zernio returns `state:"scheduled"`). **Zernio fires it server-side. Zero agent tokens at post time.**
+  - **Confirm-first channels — Reddit, TikTok (LOCKED: keep human one-tap):** a cheap **non-LLM** Convex `scheduler.runAt(startsAtMs, sendConfirmCard)` fires at go-time and sends the **one-tap Telegram card**. The operator taps to post. Rationale: a Reddit ban is catastrophic and hard to undo; TikTok's API *requires* a consent/preview step anyway. Ban safety > automation.
+  - **Time-sensitive replies:** post at *discovery* (not pre-scheduled hours out) — auto → `publishNow`; confirm channel → immediate one-tap card.
+- **`gtmCalendarEvents`** stays as the **planning + receipt layer** (what the UI renders, what Maya reasons over) — **not** a heartbeat-polled firing queue.
+- **Consequence for cost:** once posting runs on Zernio's clock and inbound runs on Zernio webhooks (`comment.received`, S2), the heartbeat has almost nothing to do → quiet *structurally*, not just by interval. This is the durable fix behind §0.5.
+
 ## 1. Cross-cutting correctness fixes (S0 — prerequisite, tiny, ships first)
 
 These are silently degrading us **today** — fix before building on top.
@@ -163,5 +189,17 @@ Plus per-sprint contract tests against live API responses (one call each) since 
 
 ---
 
-## 6. Recommended order & rationale
+## 6. Teaching Maya to USE the new tools (cross-cutting — every sprint)
+
+A new typed tool is useless if Maya doesn't know when/why to reach for it. Maya's "how to think" lives in three layers, and **every new tool in this plan must update all three** — this is a Definition-of-Done gate, not a follow-up:
+
+1. **TOOLS.md** (`generators.ts` `renderTools`) — the terse orientation index. Each new tool gets a one-line "what + when" entry in the right functional group (and, for the research tools, a per-channel "go deep" note so the model stops treating non-Reddit channels as the escape hatch).
+2. **The owning SKILL.md** — the deep how/when/judgment. Each new capability needs its method skill: `research_tiktok`/`instagram`/`youtube`/`linkedin` extend their existing per-channel researcher SKILLs with the drill sequence; `competitor_ads` gets a new `maya-ad-intelligence` skill ("a competitor ad that's run 60+ days is a *proven* hook — extract it, don't copy it"); the X reply-mining tools extend `maya-x-founder-led-researcher`; Zernio first-comment/threads/quote get rules in `maya-publisher`.
+3. **The worker/agent mandate** — for foundation, the Phase-1 worker `task:` strings (`maya-foundation-research`) must *name* the new tools and the per-channel depth floor + evidence bet-gate (S3). For the daily loop, the cadence skills (`morning-brief`, `continuous-research`, `performance-reader`) must reference the new analytics/posting tools.
+
+Plus a **decision heuristic** Maya needs (added to AGENTS.md/PLAYBOOK): *"Where do my buyers actually convert?"* is answered by **depth-balanced** research (every bet channel grounded), **demand** (`search_demand`), and **competitor-proven messaging** (`competitor_ads`) — not by whichever API returned the most rows. This is the prompt-level antidote to the Reddit-bias.
+
+Sibling-file coherence (mandatory test category #4) already enforces tool↔skill↔index consistency — extend it to fail if a new tool lacks a TOOLS.md entry or a skill reference.
+
+## 7. Recommended order & rationale
 **S0 → S1 → S2 → S3 → S4 → S5.** S0 stops active bleeding. S1/S2 are cheap, pure-plumbing, Tier-1 ROI (link penalty, cost, attribution moat). S3 fixes the depth-parity problem that prompted this plan. S4/S5 add the two biggest *new* capabilities (ad intelligence, reply-mining + intent monitor). S1-S2 could run before S3 even though S3 is the "asked-for" fix, because they're lower-risk and higher immediate ROI — but if depth-parity is the priority, S3 can jump ahead of S4/S5 right after S0.

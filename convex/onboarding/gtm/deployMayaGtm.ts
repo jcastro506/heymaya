@@ -817,9 +817,13 @@ export function buildGatewayConfig(
         // stalled flows, pending approvals, due calendar events, and
         // result scans.
         heartbeat: {
-          // 5m keeps stuck boot/launch detection quick without making
-          // heartbeat the primary launch engine.
-          every: "5m",
+          // 30m: the heartbeat is only a watchdog/recovery net — foundation is
+          // driven by the BOOT turn, and the daily cadence by dedicated crons.
+          // 5m was a debug interval; at K2 prices a 5m tick that does real
+          // reasoning (or flails reading non-existent state files) burns ~$150/day
+          // on an idle agent. 30m = 6x fewer ticks. Most ticks must return
+          // HEARTBEAT_OK silently (see HEARTBEAT.md).
+          every: "30m",
           lightContext: true,
           isolatedSession: true,
           // Sprint 2.16u-fix2 — REMOVED activeHours because timezone was
