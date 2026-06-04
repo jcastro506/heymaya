@@ -916,9 +916,14 @@ export default defineToolPlugin({
     tool({
       name: "subagent_complete",
       label: "Subagent Complete",
-      description: "Signal a research subagent finished. REQUIRED: researchJobId.",
+      // researchJobId is OPTIONAL: in the "Maya owns research natively" model a
+      // natively-spawned worker often has no jobId in context. Requiring it made
+      // this call fail client-side validation, the worker saw a tool error,
+      // retried/flailed, and never terminated (a zombie burning tokens). A
+      // completion signal must never be able to fail and strand a worker.
+      description: "Signal a research subagent finished. Optional researchJobId.",
       parameters: Type.Object({
-        researchJobId: Type.String(),
+        researchJobId: Type.Optional(Type.String()),
         platform: Type.Optional(Type.String()),
       }),
       execute: async (p, _cfg, ctx) => postLc("subagent_complete", p, ctx.signal),

@@ -1036,39 +1036,56 @@ export const subagentCompleteHttp = httpAction(async (ctx, request) => {
   } catch {
     return new Response("bad json", { status: 400 });
   }
+
+  // A *completion* signal must NEVER fail-closed and strand a worker. Returning
+  // 400 on a missing/invalid jobId made the worker see a tool error, retry, and
+  // never terminate — a zombie that burned tokens for hours (post-foundation
+  // cost loop). In the native-research model a worker often has no jobId at all.
+  // Treat missing/unresolvable as a best-effort no-op and ALWAYS return 200.
   if (!body.researchJobId) {
-    return new Response("researchJobId required", { status: 400 });
+    return new Response(JSON.stringify({ ok: true, noop: "no researchJobId" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   }
 
-  const result = await ctx.runMutation(
-    internal.gtmMaya.researchWorker.incrementSubagentsCompleted,
-    { researchJobId: body.researchJobId as Id<"gtmResearchJobs"> }
-  );
-
-  if (result.readyToFirePhase2) {
-    // Schedule (fire-and-forget) — actions can't await actions, and
-    // we don't want the subagent's HTTP response gated on the
-    // phase-2 webhook round-trip.
-    await ctx.scheduler.runAfter(
-      0,
-      internal.gtmMaya.researchWorker.triggerPhase2,
-      {
-        researchJobId: body.researchJobId as Id<"gtmResearchJobs">,
-        source: "subagent_complete",
-      }
+  try {
+    const result = await ctx.runMutation(
+      internal.gtmMaya.researchWorker.incrementSubagentsCompleted,
+      { researchJobId: body.researchJobId as Id<"gtmResearchJobs"> }
     );
-  }
 
-  return new Response(
-    JSON.stringify({
-      ok: true,
-      completed: result.completed,
-      expected: result.expected,
-      readyToFirePhase2: result.readyToFirePhase2,
-      alreadyTriggered: result.alreadyTriggered,
-    }),
-    { status: 200, headers: { "content-type": "application/json" } }
-  );
+    if (result.readyToFirePhase2) {
+      // Schedule (fire-and-forget) — actions can't await actions, and we don't
+      // want the subagent's HTTP response gated on the phase-2 round-trip.
+      await ctx.scheduler.runAfter(
+        0,
+        internal.gtmMaya.researchWorker.triggerPhase2,
+        {
+          researchJobId: body.researchJobId as Id<"gtmResearchJobs">,
+          source: "subagent_complete",
+        }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        completed: result.completed,
+        expected: result.expected,
+        readyToFirePhase2: result.readyToFirePhase2,
+        alreadyTriggered: result.alreadyTriggered,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  } catch {
+    // Stale/malformed jobId — accept the signal so the worker terminates cleanly
+    // instead of retrying into a loop.
+    return new Response(JSON.stringify({ ok: true, noop: "unresolved researchJobId" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
 });
 
 /**
