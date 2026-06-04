@@ -66,6 +66,42 @@ Every new endpoint below was hit against the real API with our production keys a
 
 **Already fixed & verified (S0):** TikTok video search shape, YouTube `/channel-videos`, X `/user-tweets` (all live-probed; IG `/v1/user/posts` confirmed still-working).
 
+## 0.8 — How the new capabilities reshape the research model (LOCKED)
+
+Yes — these abilities expand foundation research, **most of all competitive intelligence**. But the governing principle stays **minimum viable data**: onboarding must stay fast + bounded in COGS, so we **tier** what gets mined where.
+
+### The competitive lane becomes a real dossier (biggest upgrade)
+Today the competitive worker = "who are they + a few complaint quotes." With the new APIs it becomes a genuine competitive-intelligence sweep:
+- **What they're paying to say** — `competitor_ads` (FB/Google/LinkedIn ad libraries): live ad copy, offers, CTAs, and **which ads they've kept running** (a long-running ad = a *proven* hook). Ad transcripts for video ads.
+- **Their funnel** — `bio_funnel` (Linktree/etc.): lead magnet → pricing → community in one call.
+- **Their content + hooks** — their social posts/transcripts (scrape_creators) → what's working for them.
+- **Their positioning** — `search_web` on their pricing/changelog (already in the lane).
+
+Maya can now say "here's exactly what your competition is running, what's proven, and the gap" — and it becomes a UI receipt (S6) and a content input (ground the founder's posts in messaging the market already pays for).
+
+### Channel research becomes depth-balanced
+Every bet channel mined to comment/transcript depth (S3 typed tools), not just Reddit — with the per-channel floor + evidence bet-gate. This is the fix for the Reddit-bias.
+
+### The tiering decision (the COGS guardrail)
+**Onboarding (foundation pass) — sharper but bounded:**
+- Competitive: ad-library read **IS** included (FB company-ads is cheap, Google is 1cr, high signal) + funnel + positioning. But cap ad *detail* fetches to top-N competitors.
+- Channels: mine comments/transcripts on **bet channels only**, bounded sample (top ~K threads/videos), not exhaustive.
+- Demand: the one batched `search_demand` call (already).
+- Reply-thread + retweeter harvesting: **NOT** in onboarding (expensive, time-sensitive — belongs to the live loop).
+
+**Ongoing (continuous-research cron, weekly/monthly) — the heavy compounding work:**
+- Ad-library **monitoring over time** (did the competitor change/launch ads? that's a signal worth a ping).
+- Deep transcript mining, reply-thread harvesting, engaged-audience lists.
+- Refreshing the competitive dossier monthly.
+
+**Why tier, not "do it all in onboarding":** a foundation pass already costs real API spend; ad-lib + depth-balanced comments add to it, and exhaustive transcript/reply mining on day one would blow both COGS and the sub-few-minutes onboarding latency. `credit_guard` (S0) enforces a per-pass ceiling. The compounding mining is worth more *amortized over the relationship* than front-loaded.
+
+### Build impact
+- **Competitive worker** mandate expands (S4 lands `competitor_ads` + `bio_funnel` into it; split into `competitive_map` + `competitive_intel` sub-workers if the single lane gets too heavy).
+- **`maya-ad-intelligence`** method skill (how to read a competitor's ad set: kept-running = proven; recent launch = a bet; gap = opening).
+- **`maya-continuous-research`** SKILL gains the ongoing ad-monitoring + deep-mining cadence.
+- Onboarding-vs-ongoing split documented in `maya-foundation-research` SKILL so workers know what's in-scope for the bounded pass.
+
 ## 1. Cross-cutting correctness fixes (S0 — prerequisite, tiny, ships first)
 
 These are silently degrading us **today** — fix before building on top.
