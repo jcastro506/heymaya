@@ -113,15 +113,21 @@ export async function computeAgentLifecycle(
   const leaseHeldUntil = agent.foundationLeaseUntil ?? null;
   const leaseActive = leaseHeldUntil !== null && leaseHeldUntil > now;
 
-  // Onboarding's terminal output is: research + voice + the strategy PITCH sent
-  // to the founder ("here's the plan, I start posting tomorrow morning") — NOT a
-  // day-1 event today (the daily morning_brief owns each day's posting from
-  // tomorrow). So row-completeness is voice + research threads + drafts; the
-  // explicit `foundationCompletedAt` marker (set right after the synthesis is
-  // sent) is the authoritative signal. calendarEventCount is reported for
-  // observability but is NOT required to be complete.
-  const rowsComplete =
-    hasVoiceProfile && targetThreadCount >= 1 && draftCount >= 1;
+  // Onboarding's terminal output is: research + the strategy PITCH sent to the
+  // founder ("here's the plan, I start posting tomorrow morning") — NOT a day-1
+  // event today (the daily morning_brief owns each day's posting from tomorrow).
+  //
+  // ⚠️ Voice is NOT a completion gate. A founder with NO social handles (e.g. a
+  // brand with only a website) has no posts to extract a voice from — so
+  // `hasVoiceProfile` is legitimately false and a low-confidence default is used.
+  // Gating completion on voice made foundation NEVER auto-complete for those
+  // founders, so the heartbeat watchdog re-ran the WHOLE foundation pass every
+  // tick (observed live: 283 subagent sessions / ~12× re-spawn of all 16 worker
+  // types on ONE onboarding). Row-completeness is now: real research landed
+  // (target threads + at least one draft). The explicit `foundationCompletedAt`
+  // marker (set right after the synthesis is sent) remains the authoritative
+  // signal; this is the backstop that must reliably flip so the watchdog STOPS.
+  const rowsComplete = targetThreadCount >= 1 && draftCount >= 1;
   const foundationComplete = foundationCompletedAt !== null || rowsComplete;
 
   const helloSent = helloSentAt !== null;

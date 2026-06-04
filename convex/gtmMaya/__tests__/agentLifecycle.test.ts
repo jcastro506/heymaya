@@ -133,6 +133,33 @@ describe("#15 lifecycle — markers + phases", () => {
     expect(lc?.foundationComplete).toBe(true);
     expect(lc?.phase).toBe("active");
   });
+
+  // The 283-subagent bug: a founder with NO social handles has no voice to
+  // extract, so hasVoiceProfile is false. Voice must NOT gate completion, or
+  // foundation never auto-completes and the heartbeat watchdog re-runs the WHOLE
+  // research fleet every tick forever.
+  it("foundation auto-completes WITHOUT a voice profile once research landed (no-handles founder)", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, agentId } = await setupAgent(t, "lc_novoice");
+
+    // No voice profile at all (founder gave no handles) + research landed.
+    const threadId = await seedThread(t, accountId, agentId, "post_novoice_1");
+    await t.mutation(internal.gtmMaya.targetList.recordDraftedContent, {
+      accountId,
+      agentId,
+      kind: "reply",
+      platform: "reddit",
+      targetThreadId: threadId,
+      draftText: "A grounded reply for a brand with only a website.",
+    });
+
+    const lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, {
+      agentId,
+    });
+    expect(lc?.hasVoiceProfile).toBe(false); // legitimately — no handles
+    expect(lc?.foundationComplete).toBe(true); // but research is real → DONE
+    expect(lc?.phase).toBe("active"); // watchdog stops → no re-spawn loop
+  });
 });
 
 describe("#15 lifecycle — foundation lease (the lock)", () => {

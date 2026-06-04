@@ -402,9 +402,12 @@ describe("Maya GTM workspace pack", () => {
     expect(heartbeat).toContain("next ~30 min");
     // stuck-worker-sweep -> worker silent >5 min surfaced + adjusted
     expect(heartbeat).toContain("worker has been silent >5 min");
-    // Sprint E — restored recovery/maintenance tasks (dropped when HEARTBEAT
-    // was slimmed; flagged in Sprint A, restored here).
-    expect(heartbeat).toContain("missed-cadence recovery");
+    // 2026-06-03 — the buggy "missed-cadence recovery" rule is REMOVED. It made
+    // a fresh-boot agent fabricate an overnight ("14 threads came in overnight")
+    // and run a morning brief it never missed. The 7am cron owns the brief; the
+    // heartbeat never runs cadence messages inline.
+    expect(heartbeat).not.toContain("missed-cadence recovery");
+    expect(heartbeat).toContain("the 7am cron's job");
     expect(heartbeat).toContain("published-results-scan");
     // Sprint E — relationship cadence engine + continuous inbound polling.
     expect(heartbeat).toContain("relationship-cadence");
