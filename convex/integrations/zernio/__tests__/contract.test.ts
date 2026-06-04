@@ -24,8 +24,10 @@ import {
   deleteAccount,
   getAccountsHealth,
   getConnectUrl,
+  getBestTime,
   getFollowerStats,
   getPostAnalytics,
+  getPostTimeline,
   listAccounts,
   listConversations,
   listInboxComments,
@@ -377,6 +379,31 @@ describe("read wrappers hit the right paths with the right query params", () => 
     expect(url.pathname).toBe("/api/v1/accounts/follower-stats");
     expect(url.searchParams.get("accountIds")).toBe("a1,a2");
     expect(url.searchParams.get("granularity")).toBe("day");
+  });
+
+  it("getPostTimeline → GET /api/v1/analytics/post-timeline (closed-loop moat)", async () => {
+    const rec = recordingClient({ timeline: [{ date: "2026-06-01", impressions: 40 }] });
+    const out = await getPostTimeline(rec.client, {
+      postId: "post_9",
+      fromDate: "2026-06-01",
+      toDate: "2026-06-07",
+    });
+    const url = new URL(rec.lastUrl());
+    expect(url.pathname).toBe("/api/v1/analytics/post-timeline");
+    expect(url.searchParams.get("postId")).toBe("post_9");
+    expect(url.searchParams.get("fromDate")).toBe("2026-06-01");
+    // lenient passthrough surfaces the raw envelope:
+    expect((out.raw as { timeline: unknown[] }).timeline).toHaveLength(1);
+  });
+
+  it("getBestTime → GET /api/v1/analytics/best-time", async () => {
+    const rec = recordingClient({ slots: [{ day_of_week: 1, hour: 9, avg_engagement: 0.04 }] });
+    const out = await getBestTime(rec.client, { platform: "linkedin", profileId: PROFILE });
+    const url = new URL(rec.lastUrl());
+    expect(url.pathname).toBe("/api/v1/analytics/best-time");
+    expect(url.searchParams.get("platform")).toBe("linkedin");
+    expect(url.searchParams.get("profileId")).toBe(PROFILE);
+    expect((out.raw as { slots: unknown[] }).slots).toHaveLength(1);
   });
 
   it("listInboxComments → GET /api/v1/inbox/comments", async () => {

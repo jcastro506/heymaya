@@ -1684,6 +1684,84 @@ export async function getPostAnalytics(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Analytics time-series — closed-loop "what converted over time" (add-on).    */
+/* -------------------------------------------------------------------------- */
+
+// Lenient passthrough — the spec returns different envelopes per endpoint
+// (timeline rows / best-time slots / decay buckets). We surface the raw and
+// let the agent reason over it. [shape-unverified-live — needs a connected
+// account with published posts to confirm against a real response].
+const TimeSeriesResponseSchema = z
+  .object({
+    overview: z.unknown().optional(),
+    timeline: z.unknown().optional(),
+    rows: z.unknown().optional(),
+    data: z.unknown().optional(),
+    slots: z.unknown().optional(),
+    buckets: z.unknown().optional(),
+    frequency: z.unknown().optional(),
+  })
+  .passthrough();
+
+/**
+ * Per-post daily metric evolution — the closed-loop attribution moat ("which
+ * post → which spike → which signup"). `GET /api/v1/analytics/post-timeline?
+ * postId&fromDate&toDate`. Analytics add-on.
+ */
+export async function getPostTimeline(
+  client: ZernioClient,
+  args: { postId: string; fromDate?: string; toDate?: string }
+): Promise<{ raw: unknown }> {
+  const raw = await client.request<unknown>("/api/v1/analytics/post-timeline", {
+    method: "GET",
+    query: { postId: args.postId, fromDate: args.fromDate, toDate: args.toDate },
+  });
+  const parsed = TimeSeriesResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/analytics/post-timeline",
+      `Unexpected post-timeline payload: ${parsed.error.message}`
+    );
+  }
+  return { raw };
+}
+
+/**
+ * Empirically-optimal posting slots per channel — feeds spread-out scheduling.
+ * `GET /api/v1/analytics/best-time?platform&profileId&accountId&source`.
+ * Analytics add-on.
+ */
+export async function getBestTime(
+  client: ZernioClient,
+  args: {
+    platform?: string;
+    profileId?: string;
+    accountId?: string;
+    source?: string;
+  } = {}
+): Promise<{ raw: unknown }> {
+  const raw = await client.request<unknown>("/api/v1/analytics/best-time", {
+    method: "GET",
+    query: {
+      platform: args.platform,
+      profileId: args.profileId,
+      accountId: args.accountId,
+      source: args.source,
+    },
+  });
+  const parsed = TimeSeriesResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/analytics/best-time",
+      `Unexpected best-time payload: ${parsed.error.message}`
+    );
+  }
+  return { raw };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Follower stats — GET /api/v1/accounts/follower-stats                        */
 /* -------------------------------------------------------------------------- */
 

@@ -1778,6 +1778,29 @@ export default defineToolPlugin({
         getLc("get_account_analytics", p, ctx.signal),
     }),
     tool({
+      name: "get_post_timeline",
+      label: "Get Post Timeline",
+      description:
+        "Per-post DAILY metric evolution (impressions/clicks/engagement day-by-day since publish) — the closed-loop attribution moat: correlate a post's spike to the wrapped-link signups (get_my_attribution). Pass postId (from record_published). Returns { ok, timeline } — or { ok:false, addonRequired:'analytics' } if the add-on is off (say so plainly; click attribution still works). Numbers stale/empty → say it, never fabricate.",
+      parameters: Type.Object({
+        postId: Type.String({ description: "The Zernio post id whose day-by-day metrics to read." }),
+        fromDate: Type.Optional(Type.String()),
+        toDate: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("get_post_timeline", p, ctx.signal),
+    }),
+    tool({
+      name: "get_best_time",
+      label: "Get Best Time",
+      description:
+        "Empirically-optimal posting slots per channel (day-of-week + hour, by avg engagement) — feeds the spread-out daily schedule so posts land when this audience is active, not all at 9am. Optional: platform, accountId. Returns { ok, bestTime } — or { ok:false, addonRequired:'analytics' } if the add-on is off (fall back to sensible defaults from PLATFORM_ALGO). Don't invent slots if empty.",
+      parameters: Type.Object({
+        platform: Type.Optional(Type.String()),
+        accountId: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("get_best_time", p, ctx.signal),
+    }),
+    tool({
       name: "get_follower_stats",
       label: "Get Follower Stats",
       description:

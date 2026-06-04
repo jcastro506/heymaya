@@ -173,6 +173,8 @@ import {
   listConnectedAccountsHttp,
   getConnectionHealthHttp,
   getAccountAnalyticsHttp,
+  getPostTimelineHttp,
+  getBestTimeHttp,
   getFollowerStatsHttp,
   listInboxHttp,
   replyToCommentHttp,
@@ -514,6 +516,16 @@ http.route({
   path: "/lc_gtm/get_account_analytics",
   method: "GET",
   handler: getAccountAnalyticsHttp,
+});
+http.route({
+  path: "/lc_gtm/get_post_timeline",
+  method: "GET",
+  handler: getPostTimelineHttp,
+});
+http.route({
+  path: "/lc_gtm/get_best_time",
+  method: "GET",
+  handler: getBestTimeHttp,
 });
 http.route({
   path: "/lc_gtm/get_follower_stats",

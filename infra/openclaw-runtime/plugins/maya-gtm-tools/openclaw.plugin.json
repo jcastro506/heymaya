@@ -104,6 +104,8 @@
       "list_connected_accounts",
       "get_connection_health",
       "get_account_analytics",
+      "get_post_timeline",
+      "get_best_time",
       "get_follower_stats",
       "list_inbox",
       "reply_to_comment",
