@@ -20,6 +20,24 @@ Source of truth for capability claims: live OpenAPI specs + our wired code, audi
 
 ---
 
+## Build progress (2026-06-04)
+
+| Item | Status |
+|---|---|
+| §0.5 Loop fix | ✅ `subagent_complete` tolerance + heartbeat 30m (committed, on staging) |
+| §0.6 Scheduling architecture | ✅ locked (Zernio is the clock) |
+| §0.7 Endpoint verification | ✅ all S3/S4/S5 endpoints live-probed OK |
+| §0.8 Research-model expansion | ✅ locked (tiered onboarding vs ongoing + dossier) |
+| S0 correctness | ✅ ScrapeCreators X/YouTube paths + twitterapi `since_time`. ⏳ remaining: dead-Zernio-path delete, `credit_guard`, twitterSearch `conversationId` preserve |
+| S1 Zernio posting | ✅ **first-comment** (LinkedIn/IG/YT). ⏳ remaining: X `quoteTweet` + threads, Reddit flair pre-flight |
+| S3 depth-parity | ✅ `research_tiktok/youtube/instagram/linkedin` + `research_video_comments/transcript` (6 tools) + foundation mandate |
+| S4 competitor ads | ✅ `competitor_ads` + `bio_funnel` + competitor-researcher mandate |
+| S5 X reply-mining | ✅ `research_x_thread / _competitor_mentions / _engaged_audience / _user_timeline` (4 tools) |
+| S2 analytics + webhooks | ⏳ not started (Zernio time-series, best-time scheduling, webhook receiver, private-reply/moderate) |
+| S6 UI receipts | ⏳ not started |
+
+Plugin: **83 → 95 tools** (+12 verified research/intel tools). Every change tested, convex tsc 0, zero net-new test failures (2 pre-existing generators reds unrelated). The verifying deploy is batched for when S1-remainder + S2 land.
+
 ## 0.5 — URGENT: post-foundation heartbeat/discovery cost loop (blocks the live test)
 
 **Symptom (live, 2026-06-04):** a deployed agent that had finished foundation + gone "idle" ran **continuous K2 turns every 20-40s** (`[agents/tool-policy] removed 6 tool(s)` bursts + `[diagnostic] lane wait exceeded: lane=main queueAhead`), billing **~$25 OpenRouter in ~4h (~$150/day)**. Distinct from the #15 *foundation* lease cap (that held — synthesis completed once and stopped).
