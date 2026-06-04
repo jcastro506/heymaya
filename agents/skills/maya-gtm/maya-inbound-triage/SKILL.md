@@ -5,6 +5,8 @@ description: Reply / DM / mention triage. For every inbound to an owned post, cl
 
 # maya-inbound-triage
 
+> **Scope:** triaging inbound on the founder's OWN posts. For replies/DMs on connected channels via the inbox (the Zernio inbox path — `list_inbox`, `reply_to_comment`, `send_dm`), use **`maya-engagement-responder`**.
+
 ## Purpose
 
 The founder shouldn't be scrolling through Reddit comments or X notifications. Every inbound — reply to an owned post, DM, mention — gets classified by Maya and surfaced as a one-liner with an action. Operator decides yes/no/edit, Maya handles the rest.
@@ -63,7 +65,7 @@ Draft reply (your voice):
 Reply / edit / skip?
 ```
 
-The operator types "reply" → Maya posts via `publish_draft({ draftId })`. "Edit" → Maya waits for the edited text. "Skip" → drop.
+The operator types "reply" → Maya posts the reply through the Zernio path (`maya-publisher` / `reply_to_comment`). "Edit" → Maya waits for the edited text. "Skip" → drop.
 
 For SUPPORTERS the surface is lighter:
 

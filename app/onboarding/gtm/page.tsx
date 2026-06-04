@@ -5,12 +5,43 @@ import Link from "next/link";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 
 type Stage = "intake" | "research" | "deploy";
+
+// Per-channel warmth state captured at onboarding. Mirrors the
+// tiktokWarmupState arc generalized to every channel: a brand-new
+// account needs warming before it can post links; an established one
+// can post straight away. Kept deliberately coarse (3 buckets) so the
+// dropdown reads in one glance and never turns onboarding into a form.
+type WarmthState = "new" | "warming" | "established";
+
+// Connectable channels that have a handle field in the intake form.
+// We only ask for warmth on channels the founder actually connected,
+// so the section stays empty (zero friction) for the common case.
+const WARMTH_CHANNELS = ["tiktok", "instagram", "youtube", "linkedin"] as const;
+type WarmthChannel = (typeof WARMTH_CHANNELS)[number];
+
+interface ChannelWarmth {
+  state: WarmthState;
+  // Optional age hint (days) — pre-fillable from a future ScrapeCreators
+  // pull; the founder just confirms. Free-text numeric, may be "".
+  accountAgeDays: string;
+}
 
 interface IntakeDraft {
   name: string;
   url: string;
+  // Web app (a site) vs mobile app (an App Store / Play listing). Mobile
+  // surfaces the store-URL fields + leans on screenshots as the slideshow
+  // ground truth; web just uses `url`.
+  appType: "web" | "mobile";
+  appStoreUrl: string;
+  playStoreUrl: string;
+  // What counts as a customer + where they land — so Maya can close the
+  // attribution loop on the signup side (clicks are already tracked).
+  conversionKind: "signup" | "install" | "waitlist" | "demo" | "purchase";
+  signupUrl: string;
   founderWhy: string;
   stage: "idea" | "live-beta" | "paid" | "unknown";
   entryMode: "launch" | "manager";
@@ -36,15 +67,44 @@ interface IntakeDraft {
     | "restricted";
   tiktokAccountAgeDays: string;
   tiktokAccountStatusChecked: boolean;
+  // Generalized per-channel warmth — one coarse arc per channel the
+  // founder connected. TikTok still maps back to the legacy
+  // tiktokWarmupState/tiktokAccountAgeDays fields on save (back-compat);
+  // every channel's warmth is also serialized into channelWarmthJson so
+  // the daily/weekly crons can read + advance the arc per channel.
+  channelWarmth: Partial<Record<WarmthChannel, ChannelWarmth>>;
   openToUgcCreators: boolean;
   creatorBudgetMonthlyUsd: string;
   maxWeeklyVisualPosts: string;
   excludedAudiences: string;
 }
 
+// Founder-facing display names for scored channels. Keeps the picker
+// from dumping raw enum values (e.g. "x" lowercase, "product_hunt").
+const CHANNEL_LABELS: Record<string, string> = {
+  reddit: "Reddit",
+  x: "X",
+  hn: "Hacker News",
+  linkedin: "LinkedIn",
+  tiktok: "TikTok",
+  instagram: "Instagram",
+  youtube: "YouTube",
+};
+
+// Channels we no longer score or surface (vestigial — not in the
+// product vision). YouTube is now a first-class Brief-only channel and
+// is NO LONGER hidden; only product_hunt stays filtered out so stale
+// historical rows can never resurface it.
+const HIDDEN_CHANNELS = new Set(["product_hunt"]);
+
 const DEFAULT_DRAFT: IntakeDraft = {
   name: "",
   url: "",
+  appType: "web",
+  appStoreUrl: "",
+  playStoreUrl: "",
+  conversionKind: "signup",
+  signupUrl: "",
   founderWhy: "",
   stage: "live-beta",
   entryMode: "manager",
@@ -63,6 +123,7 @@ const DEFAULT_DRAFT: IntakeDraft = {
   tiktokWarmupState: "unknown",
   tiktokAccountAgeDays: "",
   tiktokAccountStatusChecked: false,
+  channelWarmth: {},
   openToUgcCreators: false,
   creatorBudgetMonthlyUsd: "",
   maxWeeklyVisualPosts: "3",
@@ -168,9 +229,30 @@ function GtmOnboardingBody() {
     setBusy(true);
     setError(null);
     try {
+      // Derive the legacy TikTok warmth fields from the generalized
+      // per-channel warmth map so the existing setAppProfile contract +
+      // deploy thresholds keep working unchanged. The full per-channel
+      // map (channelWarmthJson) is reconstructed server-side at deploy
+      // from the connected handle URLs + the ScrapeCreators pull.
+      const tiktokWarmth = draft.channelWarmth.tiktok;
+      const tiktokWarmupState: IntakeDraft["tiktokWarmupState"] = tiktokWarmth
+        ? toTiktokWarmupState(tiktokWarmth.state)
+        : "unknown";
+      const tiktokAccountAgeDays = tiktokWarmth?.accountAgeDays ?? "";
       const appId = await setAppProfile({
         name: draft.name.trim(),
         url: draft.url.trim(),
+        appType: draft.appType,
+        appStoreUrl:
+          draft.appType === "mobile"
+            ? emptyToUndefined(draft.appStoreUrl)
+            : undefined,
+        playStoreUrl:
+          draft.appType === "mobile"
+            ? emptyToUndefined(draft.playStoreUrl)
+            : undefined,
+        conversionKind: draft.conversionKind,
+        signupUrl: emptyToUndefined(draft.signupUrl),
         founderWhy: draft.founderWhy.trim() || undefined,
         stage: draft.stage,
         entryMode: draft.entryMode,
@@ -186,8 +268,8 @@ function GtmOnboardingBody() {
         existingInstagramUrl: emptyToUndefined(draft.existingInstagramUrl),
         existingYoutubeUrl: emptyToUndefined(draft.existingYoutubeUrl),
         existingLinkedinUrl: emptyToUndefined(draft.existingLinkedinUrl),
-        tiktokWarmupState: draft.tiktokWarmupState,
-        tiktokAccountAgeDays: numberOrUndefined(draft.tiktokAccountAgeDays),
+        tiktokWarmupState,
+        tiktokAccountAgeDays: numberOrUndefined(tiktokAccountAgeDays),
         tiktokAccountStatusChecked: draft.tiktokAccountStatusChecked,
         openToUgcCreators: draft.openToUgcCreators,
         creatorBudgetMonthlyUsd: numberOrUndefined(draft.creatorBudgetMonthlyUsd),
@@ -230,6 +312,16 @@ function GtmOnboardingBody() {
       // gtmResearchJobs.phase for live progress.
       void runResearch({ researchJobId: jobId });
       setResearchJobId(String(jobId));
+      // Capture the founder-confirmed per-channel warmth alongside
+      // submission. Deploy reconstructs the authoritative channelWarmthJson
+      // server-side (from connected handles + the ScrapeCreators pull); this
+      // surfaces what the founder explicitly told us so it's observable.
+      const channelWarmthJson = buildChannelWarmthJson(draft);
+      track(ANALYTICS_EVENTS.ONBOARDING_SUBMITTED, {
+        app_id: String(appId),
+        connected_channels: connectedWarmthChannels(draft),
+        ...(channelWarmthJson ? { channel_warmth_json: channelWarmthJson } : {}),
+      });
       setStage("research");
     } catch (err) {
       setError(friendlyError(err));
@@ -285,7 +377,10 @@ function GtmOnboardingBody() {
           ? `Deployed to ${result.flyAppId} (${result.machineId})`
           : `${result.stage}: ${result.message}`
       );
-      if (result.ok) setStage("deploy");
+      if (result.ok) {
+        track(ANALYTICS_EVENTS.PLAN_READY, { fly_app_id: result.flyAppId });
+        setStage("deploy");
+      }
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -346,6 +441,78 @@ function GtmOnboardingBody() {
               placeholder="https://..."
             />
           </Field>
+          <Field label="What kind of app is it?">
+            <select
+              value={draft.appType}
+              onChange={(event) =>
+                setDraft((d) => ({
+                  ...d,
+                  appType: event.target.value as IntakeDraft["appType"],
+                }))
+              }
+              className="input"
+            >
+              <option value="web">Web app — people use it in a browser</option>
+              <option value="mobile">
+                Mobile app — people download it from the App Store / Play
+              </option>
+            </select>
+          </Field>
+          {draft.appType === "mobile" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="App Store URL (optional)">
+                <input
+                  value={draft.appStoreUrl}
+                  onChange={(event) =>
+                    setDraft((d) => ({ ...d, appStoreUrl: event.target.value }))
+                  }
+                  className="input"
+                  placeholder="https://apps.apple.com/..."
+                />
+              </Field>
+              <Field label="Play Store URL (optional)">
+                <input
+                  value={draft.playStoreUrl}
+                  onChange={(event) =>
+                    setDraft((d) => ({ ...d, playStoreUrl: event.target.value }))
+                  }
+                  className="input"
+                  placeholder="https://play.google.com/..."
+                />
+              </Field>
+            </div>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="What counts as a customer?">
+              <select
+                value={draft.conversionKind}
+                onChange={(event) =>
+                  setDraft((d) => ({
+                    ...d,
+                    conversionKind: event.target
+                      .value as IntakeDraft["conversionKind"],
+                  }))
+                }
+                className="input"
+              >
+                <option value="signup">A sign-up</option>
+                <option value="install">An app install</option>
+                <option value="waitlist">A waitlist join</option>
+                <option value="demo">A demo booked</option>
+                <option value="purchase">A purchase</option>
+              </select>
+            </Field>
+            <Field label="Where do they land? (sign-up / install URL)">
+              <input
+                value={draft.signupUrl}
+                onChange={(event) =>
+                  setDraft((d) => ({ ...d, signupUrl: event.target.value }))
+                }
+                className="input"
+                placeholder="https://… (Maya tracks links to this so she can prove what converted)"
+              />
+            </Field>
+          </div>
           <Field label="Why did you build it?">
             <textarea
               value={draft.founderWhy}
@@ -368,7 +535,7 @@ function GtmOnboardingBody() {
               className="input"
             >
               <option value="manager">
-                I&apos;m live — take over my social, tell me what to post
+                I&apos;m live — take over my social and run it for me.
               </option>
               <option value="launch">
                 I haven&apos;t launched yet — plan my go-to-market
@@ -499,7 +666,7 @@ function GtmOnboardingBody() {
               }
             />
             <Toggle
-              label="I will manually post on Instagram"
+              label="I'll connect Instagram so Maya posts for me"
               checked={draft.canPostInstagramManually}
               onChange={(checked) =>
                 setDraft((d) => ({ ...d, canPostInstagramManually: checked }))
@@ -519,24 +686,6 @@ function GtmOnboardingBody() {
                 className="input"
                 placeholder="https://www.tiktok.com/@..."
               />
-            </Field>
-            <Field label="TikTok account status">
-              <select
-                value={draft.tiktokWarmupState}
-                onChange={(event) =>
-                  setDraft((d) => ({
-                    ...d,
-                    tiktokWarmupState: event.target.value as IntakeDraft["tiktokWarmupState"],
-                  }))
-                }
-                className="input"
-              >
-                <option value="unknown">Not sure yet</option>
-                <option value="new_needs_warmup">New account</option>
-                <option value="warming">Currently warming up</option>
-                <option value="ready">Ready / already active</option>
-                <option value="restricted">Restricted or warnings</option>
-              </select>
             </Field>
             <Field label="Instagram profile, if any">
               <input
@@ -577,29 +726,17 @@ function GtmOnboardingBody() {
                 placeholder="https://www.linkedin.com/in/..."
               />
             </Field>
-            <Field label="TikTok account age in days">
-              <input
-                value={draft.tiktokAccountAgeDays}
-                onChange={(event) =>
-                  setDraft((d) => ({
-                    ...d,
-                    tiktokAccountAgeDays: event.target.value,
-                  }))
-                }
-                className="input"
-                inputMode="numeric"
-                placeholder="0"
-              />
-            </Field>
           </div>
+
+          {/* Per-channel warmth — only for channels the founder actually
+              connected. Ban-safety is per channel: a brand-new account
+              gets warmup-only days, an established one posts straight
+              away. We keep this to one coarse dropdown (+ optional age)
+              per connected channel so it never becomes a multi-step form;
+              if you connected no handles, nothing renders. */}
+          <ChannelWarmthSection draft={draft} setDraft={setDraft} />
+
           <div className="grid gap-4 sm:grid-cols-3">
-            <Toggle
-              label="I checked TikTok Account Check"
-              checked={draft.tiktokAccountStatusChecked}
-              onChange={(checked) =>
-                setDraft((d) => ({ ...d, tiktokAccountStatusChecked: checked }))
-              }
-            />
             <Toggle
               label="I am open to UGC creators later"
               checked={draft.openToUgcCreators}
@@ -689,6 +826,7 @@ function GtmOnboardingBody() {
               </p>
               <div className="space-y-3">
                 {[...snapshot.channelScores]
+                  .filter((s) => !HIDDEN_CHANNELS.has(s.channel))
                   .sort((a, b) => b.score - a.score)
                   .map((s) => {
                     const pick = channelPicks[s.channel] ?? s.decision;
@@ -699,8 +837,9 @@ function GtmOnboardingBody() {
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium capitalize text-paper">
-                              {s.channel.replace("_", " ")}
+                            <span className="font-medium text-paper">
+                              {CHANNEL_LABELS[s.channel] ??
+                                s.channel.replace("_", " ")}
                             </span>
                             <span className="text-xs text-paper-dim">
                               {s.confidence} confidence
@@ -849,29 +988,16 @@ function GtmOnboardingBody() {
           <h2 className="mb-3 font-display text-2xl">Maya deployment started</h2>
           <p className="text-paper-dim">{deployResult}</p>
           <p className="mt-4 text-sm text-paper-dim">
-            She&apos;ll text you on Telegram shortly. Everything she finds —
-            your research, the week&apos;s posts and replies, and what she&apos;s
-            working on right now — also lives in Mission Control.
+            She&apos;ll text you on Telegram shortly with links to connect your
+            channels. Tap each one, and from tomorrow morning Maya plans and
+            posts your whole day for you. Everything — what&apos;s going out, what
+            landed, how it performed, and your inbox — auto-updates in your HQ.
           </p>
-          <div className="mt-5 rounded-lg border border-paper/15 bg-ink-3 p-4">
-            <p className="font-display text-lg">One last thing: connect your calendar</p>
-            <p className="mt-1 text-sm text-paper-dim">
-              Maya drops each post and reply onto your Google Calendar at the
-              right time, with the draft and a one-tap link. Connect it now so
-              the week&apos;s plan lands where you&apos;ll see it.
-            </p>
-            <a
-              href="/api/google-calendar-gtm/start"
-              className="mt-3 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-white"
-            >
-              Connect Google Calendar →
-            </a>
-          </div>
           <Link
             href="/clawlaunch/mission"
-            className="mt-4 inline-block rounded-lg border border-paper px-4 py-2 font-mono text-xs uppercase tracking-wide text-paper"
+            className="mt-4 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-white"
           >
-            Open Mission Control →
+            Open your HQ →
           </Link>
         </section>
       )}
@@ -882,6 +1008,75 @@ function GtmOnboardingBody() {
 function emptyToUndefined(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
+}
+
+// Handle URL per warmth channel, so we only show warmth for channels the
+// founder actually connected (sub-4-min onboarding — never ask about a
+// channel with no account).
+function handleUrlForChannel(draft: IntakeDraft, channel: WarmthChannel): string {
+  switch (channel) {
+    case "tiktok":
+      return draft.existingTikTokUrl;
+    case "instagram":
+      return draft.existingInstagramUrl;
+    case "youtube":
+      return draft.existingYoutubeUrl;
+    case "linkedin":
+      return draft.existingLinkedinUrl;
+  }
+}
+
+function connectedWarmthChannels(draft: IntakeDraft): WarmthChannel[] {
+  return WARMTH_CHANNELS.filter(
+    (channel) => handleUrlForChannel(draft, channel).trim().length > 0
+  );
+}
+
+const WARMTH_LABELS: Record<WarmthState, string> = {
+  new: "Brand new — needs warming up",
+  warming: "Warming up — posting a bit",
+  established: "Established — already active",
+};
+
+// Map the coarse onboarding warmth bucket onto the legacy
+// tiktokWarmupState enum so the existing TikTok persistence + deploy
+// thresholds keep working unchanged.
+function toTiktokWarmupState(
+  state: WarmthState
+): IntakeDraft["tiktokWarmupState"] {
+  switch (state) {
+    case "new":
+      return "new_needs_warmup";
+    case "warming":
+      return "warming";
+    case "established":
+      return "ready";
+  }
+}
+
+// Serialize the per-channel warmth into the channelWarmthJson shape the
+// crons read (keyed by channel, normalized to the warm/ready/new arc).
+// Only connected channels are included. lastUpdatedMs lets the weekly
+// cron tell a stale baseline from a fresh confirmation.
+function buildChannelWarmthJson(draft: IntakeDraft): string | undefined {
+  const channels = connectedWarmthChannels(draft);
+  if (channels.length === 0) return undefined;
+  const now = Date.now();
+  const map: Record<
+    string,
+    { state: string; accountAgeDays?: number; lastUpdatedMs: number }
+  > = {};
+  for (const channel of channels) {
+    const warmth = draft.channelWarmth[channel];
+    if (!warmth) continue;
+    const ageDays = numberOrUndefined(warmth.accountAgeDays);
+    map[channel] = {
+      state: toTiktokWarmupState(warmth.state),
+      ...(ageDays !== undefined ? { accountAgeDays: ageDays } : {}),
+      lastUpdatedMs: now,
+    };
+  }
+  return Object.keys(map).length > 0 ? JSON.stringify(map) : undefined;
 }
 
 /**
@@ -989,5 +1184,103 @@ function Toggle({
         className="h-5 w-5 accent-lime"
       />
     </label>
+  );
+}
+
+/**
+ * Lightweight per-channel warmth capture. Renders ONE coarse dropdown
+ * (+ optional age hint) per channel the founder actually connected — and
+ * nothing at all when no handles are entered. This generalizes the old
+ * TikTok-only warmup question to every channel without turning onboarding
+ * into a multi-step form: it's a single conditional block, defaulting to
+ * "new" so the ban-safe path is the default.
+ */
+function ChannelWarmthSection({
+  draft,
+  setDraft,
+}: {
+  draft: IntakeDraft;
+  setDraft: React.Dispatch<React.SetStateAction<IntakeDraft>>;
+}) {
+  const connected = connectedWarmthChannels(draft);
+  if (connected.length === 0) return null;
+
+  function updateWarmth(
+    channel: WarmthChannel,
+    patch: Partial<ChannelWarmth>
+  ) {
+    setDraft((d) => {
+      const current: ChannelWarmth = d.channelWarmth[channel] ?? {
+        state: "new",
+        accountAgeDays: "",
+      };
+      return {
+        ...d,
+        channelWarmth: {
+          ...d.channelWarmth,
+          [channel]: { ...current, ...patch },
+        },
+      };
+    });
+  }
+
+  return (
+    <div className="border border-paper bg-ink-2 p-4">
+      <p className="mb-1 text-sm font-medium text-paper">
+        How warm are these accounts?
+      </p>
+      <p className="mb-4 text-xs text-paper-dim">
+        Maya keeps you ban-safe: brand-new accounts get warmed up before
+        they post links; established ones post right away. Just confirm
+        where each connected account stands.
+      </p>
+      <div className="space-y-3">
+        {connected.map((channel) => {
+          const warmth: ChannelWarmth = draft.channelWarmth[channel] ?? {
+            state: "new",
+            accountAgeDays: "",
+          };
+          return (
+            <div
+              key={channel}
+              className="grid gap-3 sm:grid-cols-2 sm:items-end"
+            >
+              <Field label={`${CHANNEL_LABELS[channel] ?? channel} status`}>
+                <select
+                  value={warmth.state}
+                  onChange={(event) =>
+                    updateWarmth(channel, {
+                      state: event.target.value as WarmthState,
+                    })
+                  }
+                  className="input"
+                >
+                  {(["new", "warming", "established"] as WarmthState[]).map(
+                    (state) => (
+                      <option key={state} value={state}>
+                        {WARMTH_LABELS[state]}
+                      </option>
+                    )
+                  )}
+                </select>
+              </Field>
+              <Field label="Account age in days (optional)">
+                <input
+                  value={warmth.accountAgeDays}
+                  onChange={(event) =>
+                    updateWarmth(channel, {
+                      accountAgeDays: event.target.value,
+                    })
+                  }
+                  className="input"
+                  inputMode="numeric"
+                  placeholder="e.g. 30"
+                />
+              </Field>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

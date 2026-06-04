@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Mission Control layout — the third surface (web) alongside Telegram + Google
- * Calendar. Read-mostly, mobile-friendly. Side nav on desktop, bottom nav on
+ * Mission Control layout — the third surface (web) alongside Telegram.
+ * Read-mostly, mobile-friendly. Side nav on desktop, bottom nav on
  * mobile. Tabs map to the operator's data (Today / Plan / Research / Drafts /
  * Results / Account). Auth is enforced by middleware + the Convex queries
  * (which return empty without a signed-in gtm-agent identity).

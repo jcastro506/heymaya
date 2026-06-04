@@ -50,7 +50,7 @@ export const landingMetadata: Metadata = {
   title:
     "Maya — the GTM agent for builders Cursor unlocked.",
   description:
-    "You shipped fast. Marketing is the wall. Maya finds where your users talk, drafts the replies, plans the week — so your signup graph stops being a flat line.",
+    "You shipped fast. Marketing is the wall. Maya finds where your customers are, writes AND posts the content for you, and proves what actually drove signups — so your signup graph stops being a flat line.",
 };
 
 export default function ClawLaunchLandingPage() {
@@ -68,7 +68,7 @@ export default function ClawLaunchLandingPage() {
       <AWeekWithMaya />
       <Delivery />
       <Compared />
-      <NotThis />
+      <StaysCurrent />
       <FinalCTA />
       <Footer />
     </main>
@@ -334,7 +334,7 @@ function TikTokMockup() {
           </span>
         </div>
         <span className="font-mono text-[9.5px] uppercase tracking-[0.2em] opacity-50">
-          draft · for your approval
+          one-tap to post
         </span>
       </div>
       <div className="space-y-5 px-5 py-5 text-[13px]">
@@ -437,7 +437,7 @@ function InstagramMockup() {
           </span>
         </div>
         <span className="font-mono text-[9.5px] uppercase tracking-[0.2em] opacity-50">
-          draft · for your approval
+          auto-posting
         </span>
       </div>
       <div className="space-y-5 px-5 py-5 text-[13px]">
@@ -594,7 +594,7 @@ function Channels() {
             logo={<RedditLogo className="size-11" />}
             name="Reddit."
             tagline="Where your users are literally asking the question your app answers."
-            body="We find the thread the second it lands. We write a reply that sounds like a real person — not a marketer with a quota. You hit send."
+            body="We find the thread the second it lands. We write the reply so it sounds like a real person — and post it for you once you've okayed it."
             mockupLabel="Here's what we'd send to this thread →"
             mockup={<RedditMockup />}
           />
@@ -603,7 +603,7 @@ function Channels() {
             logo={<TikTokLogo className="size-11" />}
             name="TikTok."
             tagline="Where your app gets demoed — even if you hate being on camera."
-            body="We figure out the format that works for what you built — screen recording, voiceover, no-face. We write the script. We tell you what's worth filming and what to skip. You film the 30 seconds."
+            body="We figure out the format that works for what you built — screen recording, voiceover, no-face. We write the script. We tell you what's worth filming and what to skip. You film the 30 seconds — then I post it for you with one tap."
             mockupLabel="Here's the brief we'd hand you →"
             mockup={<TikTokMockup />}
           />
@@ -612,8 +612,8 @@ function Channels() {
             logo={<LinkedInLogo className="size-11" />}
             name="LinkedIn."
             tagline="Where the founders, operators, and buyers in your space actually hang out."
-            body="We find the people who'd care. We draft the post they'd actually stop scrolling for. We tell you who to follow back and who to ignore."
-            mockupLabel="Here's the post we'd draft →"
+            body="We find the people who'd care. We write the post they'd actually stop scrolling for — and publish it for you, in your voice. We tell you who to follow back and who to ignore."
+            mockupLabel="Here's the post we'd publish →"
             mockup={<LinkedInMockup />}
           />
 
@@ -621,7 +621,7 @@ function Channels() {
             logo={<InstagramLogo className="size-11" />}
             name="Instagram."
             tagline="Where the visual product earns its first audience."
-            body="We figure out the angle, draft the caption, queue the carousel order. We watch what's working in your niche and adjust week to week. No #motivation. Promise."
+            body="We figure out the angle, draft the caption, queue the carousel order — and post it for you. We watch what's working in your niche and adjust week to week. No #motivation. Promise."
             mockupLabel="Here's the brief we'd hand you →"
             mockup={<InstagramMockup />}
           />
@@ -630,8 +630,8 @@ function Channels() {
             logo={<XLogo className="size-11" />}
             name="X."
             tagline="Where build-in-public actually turns into your first users."
-            body="We find the conversations where your product fits. We write the reply, the founder post, the build update. We tell you when to jump in — not just to be loud."
-            mockupLabel="Here's the post we'd draft →"
+            body="We find the conversations where your product fits. We write the reply, the founder post, the build update — and post it for you. We tell you when to jump in — not just to be loud."
+            mockupLabel="Here's the post we'd publish →"
             mockup={<XMockup />}
           />
         </div>
@@ -658,13 +658,13 @@ const WEEK_ROWS: Array<{
     time: "7:00a",
     ping: true,
     title: "Your morning text",
-    body: "One short message: the two or three things worth doing today, and the single one that matters most. The writing's already done — you approve, you post, you get back to building.",
+    body: "One short message: the two or three things worth doing today, and the single one that matters most. The writing's already done — I post it for you. You just get back to building; anything that needs your tap (Reddit, your TikTok) I'll flag.",
   },
   {
     day: "Mon",
     time: "11:20a",
     title: "Replies, ready to send",
-    body: "She's been reading the places your future users hang out and found the conversations where they're describing the exact problem your app solves. Each one comes with a reply that sounds like you — not an ad. You just hit send.",
+    body: "She's been reading the places your future users hang out and found the conversations where they're describing the exact problem your app solves. Each one's a reply that sounds like you — and I post it for you on the channels you've connected.",
   },
   {
     day: "Tue",
@@ -751,32 +751,6 @@ function AWeekWithMaya() {
     </section>
   );
 }
-
-/* -----------------------------------------------------------------
- * NotThis — counter-positioning. Footnote-style list, mono prefix.
- * ----------------------------------------------------------------- */
-const NOT_LIST = [
-  {
-    not: "Not a content scheduler.",
-    body: "You still post manually. She drafts, you ship. Approval is the contract.",
-  },
-  {
-    not: "Not a creator factory.",
-    body: "She won't make you a brand. She finds the people already looking for what you built.",
-  },
-  {
-    not: "Not a growth hack.",
-    body: "No cold DMs, no follow-unfollow, no Reddit account farming. She refuses to recommend Reddit if your karma is too thin to participate.",
-  },
-  {
-    not: "Not a dashboard.",
-    body: "She lives in Telegram. The dashboard is the receipt. You read it on your phone, on the train.",
-  },
-  {
-    not: "Not an autopilot.",
-    body: "She drafts; you decide. If you go quiet for three days she asks if she should pause. She doesn't pretend you're still around.",
-  },
-];
 
 /* -----------------------------------------------------------------
  * Delivery — how the work reaches you. Two places you already live:
@@ -945,8 +919,7 @@ function Delivery() {
 
 /* -----------------------------------------------------------------
  * Compared — what she actually does. The four things that make her a
- * go-to-market manager, not a reply bot. Paper bg, so it contrasts the
- * dark "What she's not" that follows.
+ * go-to-market manager, not a reply bot.
  * ----------------------------------------------------------------- */
 const COMPARED_LIST: Array<{ her: string; body: string }> = [
   {
@@ -954,16 +927,16 @@ const COMPARED_LIST: Array<{ her: string; body: string }> = [
     body: "Your first hundred users are on Reddit, in HN threads, in a niche subreddit, on LinkedIn, on X. She works all of it — digs up the exact conversations where people have the problem you solve, and tells you which channel's worth your time this week.",
   },
   {
-    her: "Writes it so it sounds like you",
-    body: "She studies how you talk and how each room talks, then hands you replies you'd actually send — helpful first, never a pitch. You read it, tweak it if you want, post it.",
+    her: "Writes it — and makes the visuals — so it sounds like you",
+    body: "She studies how you talk and how each room talks, then hands you the reply you'd actually send — helpful first, never a pitch. Need a TikTok or carousel? She builds the slides from your real screenshots, no stock photos. You read it, tweak it if you want — I post it for you.",
   },
   {
     her: "Keeps you native, not nuked",
-    body: "Spray-and-pray posting gets accounts killed and products blacklisted. She stays native to each community — the right cadence, the right rooms — so you build a reputation instead of torching one.",
+    body: "Spray-and-pray posting gets accounts killed and products blacklisted. She stays native to each community — the right cadence, the right rooms, your account in your hands — so you build a reputation instead of torching one.",
   },
   {
-    her: "Tells you what actually converted",
-    body: "Engagement isn't the goal — signups are. Every link she hands you is tracked, so you find out which post turned into a real user, and she leans into what's working.",
+    her: "Proves which posts brought signups",
+    body: "Engagement isn't the goal — customers are. Every link she hands you is tracked end to end, so you find out which post turned into a real signup, not just a like. She doubles down on what actually converts and drops what doesn't.",
   },
 ];
 
@@ -976,11 +949,17 @@ function Compared() {
       <div className="mx-auto max-w-7xl">
         <RevealOnView>
           <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
-            What she actually does
+            What she does
           </p>
-          <h2 className="mb-14 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
+          <h2 className="mb-6 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
             She runs your go-to-market. You ship the product.
           </h2>
+          <p className="mb-14 max-w-2xl text-[16px] leading-[1.6] text-[#0a0a0a]/60 sm:text-[17px]">
+            The tools for shipping fast all multiplied. The tool for getting
+            those first hundred users never showed up. That&apos;s Maya — she
+            finds the people who want what you built, talks to them in your
+            voice, and shows you which conversations became customers.
+          </p>
         </RevealOnView>
         <ul className="grid grid-cols-1 gap-x-12 gap-y-10 md:grid-cols-2">
           {COMPARED_LIST.map((item, i) => (
@@ -1001,36 +980,51 @@ function Compared() {
   );
 }
 
-function NotThis() {
+/* -----------------------------------------------------------------
+ * StaysCurrent — the platforms change their rules constantly; Maya keeps
+ * up so the founder never has to. Dark band for contrast.
+ * ----------------------------------------------------------------- */
+function StaysCurrent() {
   return (
     <section className="relative bg-[#0a0a0a] px-6 py-28 text-[#fbfaf6] sm:px-10 sm:py-40">
       <div className="mx-auto max-w-7xl">
         <RevealOnView>
-          <h2 className="mb-14 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
-            What she&apos;s not.
+          <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-white/50">
+            She keeps up so you don&apos;t
+          </p>
+          <h2 className="mb-6 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
+            The algorithms change every month. Maya already read the memo.
           </h2>
         </RevealOnView>
-        <RevealOnView delay={0.08}>
-          <p className="mb-20 max-w-3xl text-[17px] leading-[1.6] text-white/70 sm:text-[18px]">
-            Tools for shipping fast multiplied.
-            <br />
-            Tools for finding the first hundred users didn&apos;t.
+        <RevealOnView delay={0.1}>
+          <p className="mb-14 max-w-2xl text-[16px] leading-[1.6] text-white/70 sm:text-[18px]">
+            TikTok tweaks what it rewards, Reddit shifts what gets filtered,
+            LinkedIn quietly changes what reach looks like. You&apos;d have to
+            read a dozen &ldquo;2026 algorithm&rdquo; thinkpieces a month to keep
+            up. You won&apos;t — because every month Maya researches what&apos;s
+            actually working on each channel right now and bakes it straight into
+            your daily plan. The cadence, the formats, the timing, the stuff
+            that&apos;s quietly dying — she&apos;s on top of it so your posts
+            never feel a season behind.
           </p>
         </RevealOnView>
-        <ul className="grid grid-cols-1 gap-x-12 gap-y-10 md:grid-cols-2">
-          {NOT_LIST.map((item, i) => (
-            <RevealOnView key={i} delay={0.1 + i * 0.06}>
-              <li className="border-t border-white/15 pt-6">
-                <p className="font-display italic text-[1.7rem] leading-[1.1]">
-                  {item.not}
-                </p>
-                <p className="mt-4 text-[14px] leading-[1.55] text-white/65">
-                  {item.body}
-                </p>
-              </li>
-            </RevealOnView>
-          ))}
-        </ul>
+        <RevealOnView delay={0.15}>
+          <div className="grid grid-cols-2 gap-x-10 gap-y-6 sm:grid-cols-3 md:grid-cols-6">
+            {["Reddit", "TikTok", "Instagram", "YouTube", "X", "LinkedIn"].map(
+              (p) => (
+                <div
+                  key={p}
+                  className="border-t border-white/15 pt-4 font-display italic text-[1.3rem] leading-tight"
+                >
+                  {p}
+                  <span className="mt-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-white/40">
+                    refreshed monthly
+                  </span>
+                </div>
+              )
+            )}
+          </div>
+        </RevealOnView>
       </div>
     </section>
   );
@@ -1060,8 +1054,8 @@ function FinalCTA() {
               <span className="cta-arrow">→</span>
             </Link>
             <p className="max-w-sm text-[15px] leading-[1.55] text-[#0a0a0a]/60">
-              Four-minute setup. Connect a Telegram bot and your calendar.
-              She takes it from there.
+              Four-minute setup. Connect Telegram and the channels you want
+              her on. She takes it from there.
             </p>
           </div>
         </RevealOnView>

@@ -61,6 +61,19 @@ export type TelegramApiResult<T> = TelegramApiOk<T> | TelegramApiErr;
 export interface TelegramInboundUpdate {
   update_id: number;
   message?: TelegramInboundMessage;
+  /** Present when the user taps an inline-keyboard button (e.g. the one-tap
+   *  confirm-to-post card). `data` carries our `gpost:<eventId>` callback_data. */
+  callback_query?: TelegramCallbackQuery;
+}
+
+export interface TelegramCallbackQuery {
+  id: string;
+  from?: { id: number; username?: string };
+  data?: string;
+  message?: {
+    message_id: number;
+    chat: { id: number; type: string; username?: string };
+  };
 }
 
 export interface TelegramInboundMessage {

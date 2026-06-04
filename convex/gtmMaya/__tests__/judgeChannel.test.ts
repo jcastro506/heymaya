@@ -201,7 +201,7 @@ describe("judgeChannel", () => {
 });
 
 describe("judgeAllChannels", () => {
-  it("judges all 5 channels in parallel, isolating per-channel failures", async () => {
+  it("judges the 5 default BET channels (reddit/x/linkedin/tiktok/youtube) in parallel, isolating per-channel failures (HN is research-only, not scored)", async () => {
     let calls = 0;
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
       calls += 1;
@@ -234,13 +234,30 @@ describe("judgeAllChannels", () => {
     const cards: GtmEvidenceCard[] = [
       makeCard("r1", "reddit"),
       makeCard("x1", "x"),
+      makeCard("hn1", "hn"),
       makeCard("li1", "linkedin"),
       makeCard("tt1", "tiktok"),
+      // YouTube is now a first-class default channel (revived 2026-06-02) — it
+      // gets judged even with no cards. product_hunt is still NOT scored, so
+      // this competitor card (which would map to product_hunt) is never judged.
       makeCard("ph1", "competitor", { recommendedUse: "competitor" }),
     ];
     const r = await judgeAllChannels(cards, PRODUCT, { apiKey: "k", fetchImpl });
-    expect(r.decisions.length).toBe(4); // 5 channels - 1 failed
+    // 5 default BET channels - 1 failed (linkedin) = 4 decisions (incl youtube).
+    expect(r.decisions.length).toBe(4);
+    expect(r.decisions.map((d) => d.channel).sort()).toEqual([
+      "reddit",
+      "tiktok",
+      "x",
+      "youtube",
+    ]);
+    // product_hunt is not scored; HN is now research-only (not a BET channel);
+    // youtube IS scored.
+    expect(r.decisions.map((d) => d.channel)).not.toContain("product_hunt");
+    expect(r.decisions.map((d) => d.channel)).not.toContain("hn");
+    expect(r.decisions.map((d) => d.channel)).toContain("youtube");
     expect(r.failedChannels).toEqual(["linkedin"]);
+    // One LLM call per default BET channel (5) — none for HN or product_hunt.
     expect(calls).toBe(5);
   });
 

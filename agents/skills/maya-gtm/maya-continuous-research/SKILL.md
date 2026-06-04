@@ -11,10 +11,24 @@ Foundation research builds the operating model. Continuous research feeds the da
 
 ## When to invoke
 
-- IF the morning-brief cron is about to fire AND last-research `observedAt` > 6h ago THEN spawn continuous workers.
+- IF the morning-brief cron is about to fire AND last-research `observedAt` > 6h ago THEN spawn the FULL continuous sweep (all bet channels, deep).
+- IF the **`midday_pulse` cron fires (~1pm operator-local)** THEN run the **LIGHT midday re-sweep** (see "Midday pulse" below) — NOT the full morning sweep. This is the catch-before-peak pass: discovery does not freeze after 7am, it checks again midday for fresh hot-strike threads that surfaced since the brief.
 - IF the operator pings Maya outside the cadence and the brief-data is stale (>4h) THEN spawn.
-- IF a hot-alert HEARTBEAT condition fires (e.g., a competitor moved) THEN spawn targeted worker — not the full set.
+- IF a hot-alert HEARTBEAT condition fires (e.g., a competitor moved) THEN spawn a single targeted worker — not the full set. Fresh-thread DISCOVERY is NOT a heartbeat trigger: the heartbeat monitors the founder's own posts/inbound and escalates only on its defined conditions (competitor move, a reply hitting ~5x baseline, unanswered inbound). New buyer-thread discovery happens via the scheduled crons ONLY — the morning sweep and the `midday_pulse` light re-sweep below.
 - NEVER spawn during the engagement window of a queued T1 thread (avoid distracting Maya from time-sensitive action).
+
+## Midday pulse — the catch-before-peak re-sweep (light, fresh-only)
+
+The morning sweep is once-daily and deep; buyer threads are a continuous stream. A thread that pops at 11am, peaks by 2pm, and dies by 6pm would be invisible until tomorrow's brief — by which point it's cold. The `midday_pulse` cron closes that gap. It is deliberately **lighter and tighter** than the morning full sweep:
+
+- **Scope: only the 1-2 bet channels** (Reddit / X / HN per `GTM.md`) — never the full channel set, never non-bet channels.
+- **Fresh-only filter:** look for threads posted or heating up SINCE the morning sweep's last `observedAt` (Maya reads the most recent `gtmTargetThreads.observedAt` / `gtmNichePulse.observedAt` and filters to what's newer). Don't re-surface what the morning brief already covered.
+- **Velocity, not absolute count** — this is the "catch it before it peaks" pass. A thread rising fast for its age beats a thread that already has more total upvotes but has gone flat. Tier strictly: only a genuine **T1 Hot Strike** (fresh, high velocity, real ICP fit, a draft reply that lands naturally) earns a spot.
+- **Fewer workers, shorter run, hard budget cap.** Spawn one scoped worker per bet channel (not the full per-channel + competitor + niche-pulse fan-out). Cap the run short — this is a quick velocity check, not a deep mine. Watch `gtmCostLedger`; if a channel is quiet, stop early.
+- **ADD to today's calendar — NEVER replace.** For any surviving T1, INSERT a new `gtmCalendarEvents` reply-window into today (full hands-off recipe, same shape as the morning brief). Existing events stay exactly as they are — the midday pulse only ever adds. This honors the standing "ADD, don't replace" rule.
+- **One one-tap ping, or honest silence.** If a genuinely hot thread landed, fire ONE batched Telegram ping ("a fresh r/LocalLLaMA thread just went live and it's moving fast — I dropped a ready reply in your plan, hit it in the next hour"). If nothing clears the T1 bar, **say nothing** — no "checked, nothing hot" noise. Silent-when-nothing is correct; the founder's phone is not a feed.
+
+Everything below (questioning loop, quality gates, tier assignment, anti-slop) applies to the midday pulse too — it's the same discipline, just smaller in scope.
 
 ## Required reads
 
@@ -23,13 +37,23 @@ Foundation research builds the operating model. Continuous research feeds the da
 3. **USER.md** — operator timezone, capacity (don't propose 5 events if they have 30 min).
 4. **TOOLS.md** — the typed tools `save_target_thread`, `save_competitor_move`, `save_niche_pulse_signal`.
 
+## Weekly channel split — research the right channels harder on the right days
+
+The morning sweep spawns workers for the bet channels, but Maya doesn't research all of them equally hard every single day — she spreads the depth across the WEEK by judgment, the same rotation the morning brief plans against. This isn't a hardcoded table; it's reasoning over each channel's norms + where the signal is:
+
+- **Match the dig to the channel's rhythm.** Reddit + HN reward midweek depth (post windows Tue/Wed/Thu, Show HN one-shot) — dig hardest there midweek. X is the always-on daily reply engine — sweep it every day, lighter but never skipped. LinkedIn (if a bet) is a Tue-Thu channel — don't burn a deep LinkedIn worker on a weekend when B2B is dead.
+- **Follow the live signal.** If yesterday's brief shows one channel is producing all the converting threads (cross-check `gtmNicheLearnings` channel_priority + recent `gtmActionLog`), tilt today's deeper workers there — but don't let any one bet channel go un-swept for days. A channel Maya hasn't looked at in 3 days gets a real sweep even if another channel is hotter, so the week stays balanced and no bet rots.
+- **Don't dump the whole channel set into one exhausting day.** Rotating which channels get the deep dig keeps cost down AND keeps each channel's intel fresh on its own natural clock, instead of stale-for-six-days-then-blitzed.
+
+The output of this is what the morning brief turns into today's channel mix. Maya's job in research is to make sure the *signal she surfaces* is spread across the bets over the week, not concentrated in whichever channel happens to be loudest today.
+
 ## Native-tool orchestration
 
 The same control-plane discipline as foundation:
 
 1. `sessions_spawn` per-channel target-thread workers (`reddit_continuous_worker`, `x_continuous_worker`, `hn_continuous_worker`, etc.) with task strings naming the research tools they must use + return-shape (must include `painQuote`, `postedAt`, `velocityScore`, `engagementWindow` (the worker's read on whether the OP is still replying and new comments are still landing), `authorContext`, `commentTreeSummary`, `audienceSize`, `recommendedAction`, `draftReply`, `tier`). **Comment-tree mining is mandatory for Reddit + HN workers, and it goes deep.** The worker MUST descend the **full comment tree, including nested replies** (Reddit: `research_reddit_comments({ url })` and follow `replies` down; HN: `research_hn_item({ objectId })` and recurse `children[]`) — **do not stop at the top few comments.** The sharpest buyer language (someone restating the pain in better words, naming the competitor they're escaping, rejecting a workaround) usually sits *deeper* in the thread, not in the top-voted comments. Go as deep as it takes to be confident, then populate `commentTreeSummary.mineableComments[]` with the strongest comments scored against these kinds: `buyer_intent` (someone asked a follow-up the product answers), `pain_restatement` (re-articulates OP's pain in sharper buyer language), `competitor_mention` (specific competitor named, with `competitorName`), `op_rejection` (OP responded "tried that, didn't work"), `high_velocity` (a comment gaining traction unusually fast for the thread's age — Maya's judgment, never a fixed number). Workers without `mineableComments[]` on threads they tier T1/T2 get steered: "I need the comment-tree mining — descend the comments (all the way down, not just the top) via research_reddit_comments / research_hn_item, score the strongest against the mining kinds, return as `commentTreeSummary.mineableComments`."
-2. Spawn `competitor_move_worker` only if foundation `competitiveMap` is non-empty.
-3. Spawn `niche_pulse_worker` once per day max (rate-limited at the prompt level — Maya checks `gtmNichePulse.observedAt` before spawning). **S8 — "trending in your niche today" must be velocity-ranked AND pre-drafted, not an FYI.** The worker surfaces trending topics/formats ranked by velocity (rising > already-peaked — a trend you can still catch beats one that crested yesterday); for the top 1-2, Maya **pre-drafts the product twist** via maya-content-format-miner: a ready post/reply that rides the trend with THIS product's angle (activation moment as proof, wedge as hook), so the morning brief hands the operator a one-tap ride-the-trend draft — never just "X is trending, fyi." A trend surfaced without a ready twisted draft is half a job.
+2. Spawn `competitor_move_worker` only if foundation `competitiveMap` is non-empty. When that worker re-reads a competitor's site via `search_web`, run it through **`maya-open-web-read`** (teardown checklist + verbatim quote + URL) — a competitor's new pricing tier or repositioning is a move worth catching. Occasionally (NOT daily — cost-bounded) re-check rising demand on the key buyer phrases via `search_demand`, read through **`maya-demand-intelligence`** (a phrase whose volume/CPC is climbing is a real "demand is rising here" signal to surface).
+3. Spawn `niche_pulse_worker` at the morning sweep, plus at most ONE additional lightweight velocity-check on the `midday_pulse` (rate-limited at the prompt level — Maya checks `gtmNichePulse.observedAt` before spawning, and the midday check is a cheap "is anything rising since this morning" pass, not a full re-scan). The reason for the second look: a trend that emerges after the morning sweep should be caught while it's still RISING (continuous-research's own rule — rising > already-peaked), not after it crests tomorrow. **S8 — "trending in your niche today" must be velocity-ranked AND pre-drafted, not an FYI.** The worker surfaces trending topics/formats ranked by velocity (rising > already-peaked — a trend you can still catch beats one that crested yesterday); for the top 1-2, Maya **pre-drafts the product twist** via maya-content-format-miner: a ready post/reply that rides the trend with THIS product's angle (activation moment as proof, wedge as hook), so the morning brief hands the operator a one-tap ride-the-trend draft — never just "X is trending, fyi." A trend surfaced without a ready twisted draft is half a job.
 4. `sessions_yield`. Workers run.
 5. Watch via `subagents list`. Kill anything stuck longer than its task warrants in Maya's judgment. Steer anything returning thin/wrong-shape output.
 6. As `gtmTargetThreads` accumulate, decide "complete enough" against the gates below.
@@ -83,7 +107,7 @@ If workers are still active but the signal so far is dead and re-spawning wouldn
 
 ## Cost discipline
 
-Maya watches call volume vs value returned via `gtmCostLedger`. Per-channel workers route through the research tools (research_reddit / research_x / research_hn / scrape_creators) per `TOOLS.md`. Continuous research runs before the morning brief and on event-driven hot-alerts. Maya decides when to slow down — there's no fixed cap.
+Maya watches call volume vs value returned via `gtmCostLedger`. Per-channel workers route through the research tools (research_reddit / research_x / research_hn / scrape_creators) per `TOOLS.md`. Continuous research runs in three modes, in descending cost: the FULL sweep before the morning brief (deep, all bet channels), the LIGHT `midday_pulse` re-sweep (bet channels only, fresh-only, fewer/shorter workers — deliberately a fraction of the morning cost), and event-driven hot-alerts (single targeted worker). Maya decides when to slow down — there's no fixed cap, but the midday pulse must stay cheap: if it starts costing like a second full sweep, it's doing too much.
 
 ## Anti-slop check
 

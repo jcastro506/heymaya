@@ -37,7 +37,7 @@ LinkedIn is the right channel for a narrow slice of indie products — B2B SaaS,
 10. **LI-10.9 newsletter gate.** Only if operator already writes long-form monthly+ elsewhere.
 11. **LI-10.11 60-day reweight.** IF leads but zero conversions at 60 days AND runway <6 months THEN `reweightToFasterChannel: true`.
 12. **LI-10.14 link-in-first-comment.** Any draft URL moves to first comment.
-13. **Style-exemplar capture (native-voice fidelity — Sprint I).** While mining large-account niche posts, capture **5-10 real, top-performing, HUMAN-written native LinkedIn posts verbatim** from this buyer's professional niche — substantive, voiced posts that earned real reach and *buyer* engagement (not broetry, not engagement-bait, not corporate-announcement slop). These are few-shot **voice/register anchors** for `maya-voice-matcher` + drafting: they encode how a credible person in *this professional niche* actually writes here — hook openers, paragraph rhythm, where they get specific, how they close without "Agree?". LinkedIn is the slop epicenter, so be ruthless: skip any exemplar that itself reads templated/AI/broetry. Match cadence/vocab/length/format; **never copy content.** Emit in `styleExemplars[]`.
+13. **Style-exemplar capture (native-voice fidelity — Sprint I).** While mining large-account niche posts, capture **5-10 real, top-performing, HUMAN-written native LinkedIn posts verbatim** from this buyer's professional niche — substantive, voiced posts that earned real reach and *buyer* engagement (not broetry, not engagement-bait, not corporate-announcement slop). These are few-shot **voice/register anchors** for `maya-voice-matcher` + drafting: they encode how a credible person in *this professional niche* actually writes here — hook openers, paragraph rhythm, where they get specific, how they close without "Agree?". LinkedIn is the slop epicenter, so be ruthless: skip any exemplar that itself reads templated/AI/broetry. Match cadence/vocab/length/format; **never copy content.** Emit in `styleExemplars[]` — then, when fit is not park, land them via the REQUIRED `save_style_exemplars({ channel: "linkedin", styleExemplars: [...] })` call (see the Save section).
 14. **LinkedIn caption craft — hook + "link in first comment" (linkedin.md § 4 / LI-10.14).** The first line is a scroll-stopping hook (a specific tension or concrete claim, never "Excited to announce"). The body is a thinking-process narrative a non-technical buyer can follow without clicking away. The URL/CTA lives in the **first comment**, not the post — the post itself never reads like an ad. No engagement-bait closer. Surface this in `captionCraft`.
 
 ## Comment-target qualification
@@ -119,6 +119,13 @@ interface LinkedInFitReport {
   reweightFlag?: boolean;
 }
 ```
+
+## Save — land the ICP knowledge + voice anchors (REQUIRED when fit is not park)
+
+When `fit` is `primary` / `secondary` / `secondary_with_caveat` (LinkedIn cleared as a bet), two saves are REQUIRED before you return — the `LinkedInFitReport` schema is the shape of your thinking; these calls are how it lands:
+
+1. **`save_style_exemplars({ channel: "linkedin", styleExemplars: [ … 5-10 verbatim native LinkedIn posts … ] })`** — REQUIRED. The verbatim native posts you captured in decision rule 13 anchor `maya-voice-matcher` Anchor B; **skip this and every later LinkedIn draft defaults to generic LLM tone** (the broetry/announcement slop LinkedIn is the epicenter of). Pass each as `{ platform: "linkedin", community: <niche>, verbatim, why, capturedAt }`. This is the persisted form of the `styleExemplars[]` schema above — described-but-unsaved = lost.
+2. **`save_foundation_channel_scorecard({ channel: "linkedin", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })`** — REQUIRED for a bet channel. Populate per-channel `icpKnowledge`: `venues` (the niche's large accounts/communities you mined as `{ name, kind: "account", url, whyHere }`), `watch` (the trusted professional voices), `complaints` (verbatim buyer pain `{ quote, sourceUrl }` from the comment targets), `topics` (what this professional buyer discusses), and `nativeStyle` (`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }` — credible-voiced, no-broetry register). A LinkedIn bet with empty `icpKnowledge` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP. (When `fit: "park"`, skip both — there is no bet to score.)
 
 ## Failure modes
 

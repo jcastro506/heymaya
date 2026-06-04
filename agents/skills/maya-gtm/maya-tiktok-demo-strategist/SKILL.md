@@ -76,6 +76,10 @@ interface TikTokStrategy {
 
 0 ScrapeCreators (format research is separate). 0-1 WebFetch. 1 main_maya. Timeout 10 min.
 
+## Channel knowledge ownership — this skill does NOT save style exemplars
+
+This is a format/shot-plan strategist, not a niche miner. The TikTok channel's **verbatim native style exemplars** and **`icpKnowledge`** (venues/hashtags/accounts + what the audience watches + complaints + topics + native-style) are captured and persisted by **`maya-tiktok-format-researcher`** via its REQUIRED `save_style_exemplars({ channel: "tiktok", … })` + `save_foundation_channel_scorecard({ channel: "tiktok", …, icpKnowledge: {…} })` calls. This strategist READS those (and the format-researcher's `styleExemplars` / `captionCraft`) to ground its shot plan and CTA — it does NOT re-capture or re-save them. If `formatResearchNeeded: true` or the exemplars/`icpKnowledge` are missing, run `maya-tiktok-format-researcher` first; don't fabricate a shot plan from a niche that was never mined.
+
 ## Anti-slop check
 
 `onScreenText` and `voiceOver` strings must pass slop-critic (banned phrases). Hook copy itself comes from `maya-content-format-miner` with full slop-critic pass.

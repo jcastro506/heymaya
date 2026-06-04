@@ -1,5 +1,9 @@
 # ClawLaunch GTM MVP Execution Sprint
 
+> ⚠️ **PARTIALLY SUPERSEDED (2026-06-03).** Two parts of this doc are out of date and should NOT be treated as current:
+> - **Google Calendar is retired.** Maya does not push to or connect a Google Calendar. The day's plan is an internal posts-queue (`gtmCalendarEvents`) shown in the web "Plan" tab; posting happens via Zernio auto-post (`post_to_channel`). See `docs/MAYA_V2_ZERNIO_AUTOPOST_SPRINT_PLAN.md`.
+> - **MEMORY.md is NOT the canonical lifecycle/source-of-truth.** Durable lifecycle state (helloSent / foundationComplete / lease / dedup) now lives in **Convex** (`convex/gtmMaya/agentLifecycle.ts`); MEMORY.md is an ephemeral agent scratchpad, wiped on restart.
+
 Date: 2026-05-23
 Branch target: `staging` first, then `main`
 Production target: `https://clawlaunch.io`

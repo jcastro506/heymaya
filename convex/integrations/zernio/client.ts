@@ -49,12 +49,22 @@ import {
   ZernioTimeoutError,
 } from "./types";
 
-const DEFAULT_BASE_URL = "https://getlate.dev";
+// Retargeted to the live Zernio host (S1, 2026-06-02). getlate.dev was the
+// pre-rebrand host; the live host is zernio.com. NOTE: this is the HOST only,
+// not the API root — every endpoint wrapper in endpoints.ts prepends the
+// `/api/v1/...` path segment itself, so the resolved URL is
+// `https://zernio.com/api/v1/<path>`. Override per-env with ZERNIO_BASE_URL.
+const DEFAULT_BASE_URL = "https://zernio.com";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_BASE_BACKOFF_MS = 500;
 
-export const ZERNIO_SIGNATURE_HEADER = "x-late-signature";
+// Live webhook signature header is `x-zernio-signature`. The pre-rebrand
+// `x-late-signature` alias is kept exported for back-compat with any caller
+// still reading the old constant; both name the same HMAC-SHA256 scheme.
+export const ZERNIO_SIGNATURE_HEADER = "x-zernio-signature";
+/** @deprecated pre-rebrand alias of {@link ZERNIO_SIGNATURE_HEADER}. */
+export const X_LATE_SIGNATURE_HEADER = "x-late-signature";
 
 export interface ZernioClientOptions {
   /** Per-business Zernio API key (Bearer). Required. */

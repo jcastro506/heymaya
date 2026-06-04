@@ -412,6 +412,35 @@ export const recordDraftedContent = internalMutation({
       }
     }
     const now = Date.now();
+    // #15 idempotency — a re-run of the foundation/morning pass must not pile up
+    // duplicate drafts for the SAME thread (the live deploy produced 42). If an
+    // un-acted draft already exists for this (agent, thread), UPDATE it in place
+    // instead of inserting a second. Once a draft is approved/published, a fresh
+    // one is allowed (genuine new content), so we only collapse "draft"-state rows.
+    if (args.targetThreadId) {
+      const existing = await ctx.db
+        .query("gtmDraftedContent")
+        .withIndex("by_target_thread", (q) =>
+          q.eq("targetThreadId", args.targetThreadId)
+        )
+        .collect();
+      const reusable = existing.find(
+        (d) =>
+          d.agentId === args.agentId &&
+          d.kind === args.kind &&
+          d.approvalState === "draft"
+      );
+      if (reusable) {
+        await ctx.db.patch(reusable._id, {
+          draftText: args.draftText,
+          draftSegments: args.draftSegments,
+          attributes: args.attributes ?? reusable.attributes,
+          voiceMatchScore: args.voiceMatchScore ?? reusable.voiceMatchScore,
+          updatedAt: now,
+        });
+        return reusable._id;
+      }
+    }
     return await ctx.db.insert("gtmDraftedContent", {
       accountId: args.accountId,
       agentId: args.agentId,
@@ -550,7 +579,31 @@ export const updateDraftedContentVoiceMatch = internalMutation({
       patch.slopCriticFailures = args.slopCriticFailures;
     }
     if (args.approvalStateUpdate !== undefined) {
-      patch.approvalState = args.approvalStateUpdate;
+      if (args.approvalStateUpdate === "pending_approval") {
+        // Fail-closed enforcement backstop (anti-slop): a draft may only reach
+        // the operator's approval queue if it passed the slop critic AND its
+        // voice-match score clears the floor. Prose alone has not reliably
+        // landed this discipline — this is the data-plane guard. The gate
+        // passes-with-warning when there's no voice signal (low-signal founder
+        // with no handles), so it never permanently blocks a handle-less user.
+        const { evaluateApprovalGate } = await import("./approvalPublishing");
+        const gate = evaluateApprovalGate({
+          slopCriticPassed: args.slopCriticPassed,
+          voiceMatchScore: args.voiceMatchScore,
+        });
+        if (gate.allowed) {
+          patch.approvalState = "pending_approval";
+        } else {
+          // Keep it a draft and record WHY (debuggable, not silent).
+          patch.slopCriticFailures = [
+            ...(patch.slopCriticFailures ?? []),
+            `approval_gate: ${gate.reason}`,
+          ];
+        }
+      } else {
+        // "rejected" always passes through.
+        patch.approvalState = args.approvalStateUpdate;
+      }
     }
     if (args.userFeedback !== undefined) {
       patch.userFeedback = args.userFeedback;

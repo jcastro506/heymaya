@@ -13,7 +13,7 @@ import ClawLaunchLandingPage from "./clawlaunch/page";
 export const metadata: Metadata = {
   title: "HeyMaya — the GTM agent for builders Cursor unlocked.",
   description:
-    "You shipped fast. Marketing is the wall. Maya finds where your users talk, drafts the replies, plans the week — so your signup graph stops being a flat line.",
+    "You shipped fast. Marketing is the wall. Maya finds where your customers are, writes AND posts the content for you, and proves what actually drove signups — so your signup graph stops being a flat line.",
 };
 
 export default function Home() {

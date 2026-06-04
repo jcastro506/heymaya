@@ -30,6 +30,7 @@
 export type GtmChannel =
   | "reddit"
   | "x"
+  | "hn"
   | "linkedin"
   | "tiktok"
   | "youtube"
@@ -42,6 +43,7 @@ export type GtmEvidenceSource =
   | "google"
   | "reddit"
   | "x"
+  | "hn"
   | "linkedin"
   | "tiktok"
   | "instagram"
@@ -126,6 +128,7 @@ export interface GtmChannelEvaluation {
 const CHANNEL_SOURCE: Record<GtmChannel, GtmEvidenceSource> = {
   reddit: "reddit",
   x: "x",
+  hn: "hn",
   linkedin: "linkedin",
   tiktok: "tiktok",
   youtube: "youtube",
@@ -202,12 +205,18 @@ export function evaluateChannelSet(
   cards: ReadonlyArray<GtmEvidenceCard>,
   app: GtmAppContext
 ): GtmChannelEvaluation[] {
+  // Mirror the live judge's scored set (judgeChannel.ts): the
+  // Zernio-postable BET channels Reddit / X / LinkedIn / TikTok /
+  // YouTube (TikTok + YouTube are Brief-only). HN is research-only
+  // (Algolia buyer-pain read + rare manual Show HN) and product_hunt is
+  // a one-time launch event; both are excluded from BET scoring and
+  // remain in the GtmChannel type only for backward compat.
   const channels: GtmChannel[] = [
     "reddit",
     "x",
     "linkedin",
     "tiktok",
-    "product_hunt",
+    "youtube",
   ];
   const evaluations: GtmChannelEvaluation[] = channels.map((channel) =>
     evaluateChannel(channel, cards, app)

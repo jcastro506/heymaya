@@ -79,9 +79,11 @@ describe("Sprint I — slop-critic becomes a structural AI-tell critic", () => {
 describe("Sprint I — voice-matcher conditions on founder posts AND venue exemplars", () => {
   const src = readSkill("maya-voice-matcher");
 
-  it("conditions on the founder's OWN real posts ingested in manager mode (Phase 0)", () => {
+  it("conditions on the founder's OWN real posts ingested in Phase 0 (mode-independent, any user with handles)", () => {
     expect(src).toMatch(/phase 0/i);
-    expect(src).toMatch(/manager mode/i);
+    // Voice ingestion is now MODE-INDEPENDENT (every user with handles), not
+    // manager-only — Phase 0 pulls their own accounts regardless of entry mode.
+    expect(src).toMatch(/mode-independent|any user with handles/i);
     expect(src.toLowerCase()).toContain("ingest");
   });
 

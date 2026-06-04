@@ -109,6 +109,9 @@ import {
   getMyNichePulseHttp,
   getMyActionLogHttp,
   getMyNicheLearningsHttp,
+  getAgentLifecycleHttp,
+  acquireFoundationLeaseHttp,
+  markLifecycleHttp,
   logCostHttp,
   recordPublishedHttp,
 } from "./gtmMaya/openclaw/managerCallbacks";
@@ -116,9 +119,67 @@ import {
   wrapLinkHttp,
   redirectHttp,
   recordConversionHttp,
+  getMyAttributionHttp,
+  conversionPixelHttp,
+  conversionPixelOptionsHttp,
+  getConversionSetupHttp,
+  getAttributeOutcomesHttp,
+  experimentVerdictHttp,
 } from "./gtmMaya/attribution";
+import {
+  saveExperimentHttp,
+  assignArmHttp,
+} from "./gtmMaya/experiments";
+import {
+  saveDiagnosisHttp,
+  proposePmfSurveyHttp,
+  proposePricingTestHttp,
+} from "./gtmMaya/strategicDiagnosis";
+import {
+  buildIntentWatchHttp,
+  evaluateIntentCandidatesHttp,
+  recordStrikeHttp,
+} from "./gtmMaya/intentStrike";
+import { getArchetypePlaybookHttp } from "./gtmMaya/archetypeBrain";
+// Ideal-product Pillar 1 (VOICE) + Pillar 4 (WARMUP). Maya persists the
+// founder voice fingerprint, per-channel native-style exemplars, and per-
+// channel warmth. hookToken-authed + idempotency-keyed, same as foundation_*.
+import {
+  saveVoiceProfileHttp,
+  saveStyleExemplarsHttp,
+} from "./gtmMaya/voiceProfile";
+import { setChannelWarmthHttp } from "./gtmMaya/channelWarmth";
 import { memoryWrittenHttp } from "./gtmMaya/memoryLedger";
 import { reviewMediaHttp } from "./gtmMaya/contentReview";
+import {
+  saveMediaHttp,
+  searchMyMediaHttp,
+  requestMediaHttp,
+  generateSlideImageHttp,
+  sendMediaToUserHttp,
+} from "./gtmMaya/mediaAssets";
+import { getPlatformAlgoHttp } from "./gtmMaya/platformAlgo";
+// Data-collection sprint — inbound user-turn transcript capture + per-turn
+// LLM telemetry.
+import {
+  logMessageHttp,
+  logTurnTelemetryHttp,
+} from "./gtmMaya/openclaw/conversationCapture";
+// Maya v2 — Zernio hosted-OAuth public callback (signed-state binding).
+import { zernioCallbackHttp } from "./gtmMaya/zernioConnect";
+// Maya v2 (S3) — agent-facing auto-post + dedup routes.
+import { zernioPostHttp, checkAlreadyEngagedHttp } from "./gtmMaya/zernioRoutes";
+import {
+  listConnectedAccountsHttp,
+  getConnectionHealthHttp,
+  getAccountAnalyticsHttp,
+  getFollowerStatsHttp,
+  listInboxHttp,
+  replyToCommentHttp,
+} from "./gtmMaya/zernioReads";
+import { sendConfirmCardHttp } from "./gtmMaya/telegramConfirm";
+import { searchWebHttp } from "./gtmMaya/webSearch";
+import { searchDemandHttp } from "./gtmMaya/demandIntel";
 
 const http = httpRouter();
 
@@ -200,6 +261,36 @@ http.route({
   method: "POST",
   handler: reviewMediaHttp,
 });
+// Slideshow cluster — media library + grounded slide gen. save_media ingests
+// a user-sent screenshot (Maya resolved the Telegram file URL via getFile);
+// search_my_media lists the library; request_media texts the user for a
+// specific missing asset (once); generate_slide_image runs nano banana
+// grounded in real screenshots; send_media_to_user delivers finished slides.
+http.route({
+  path: "/lc_gtm/save_media",
+  method: "POST",
+  handler: saveMediaHttp,
+});
+http.route({
+  path: "/lc_gtm/search_my_media",
+  method: "GET",
+  handler: searchMyMediaHttp,
+});
+http.route({
+  path: "/lc_gtm/request_media",
+  method: "POST",
+  handler: requestMediaHttp,
+});
+http.route({
+  path: "/lc_gtm/generate_slide_image",
+  method: "POST",
+  handler: generateSlideImageHttp,
+});
+http.route({
+  path: "/lc_gtm/send_media_to_user",
+  method: "POST",
+  handler: sendMediaToUserHttp,
+});
 http.route({
   path: "/lc_gtm/get_my_target_threads",
   method: "GET",
@@ -260,6 +351,25 @@ http.route({
   handler: sendUpdateHttp,
 });
 
+// Data-collection sprint — inbound user-turn capture. Maya's runtime POSTs
+// one row per inbound user message so the conversation transcript persists
+// to Convex (not just the ephemeral Fly disk). hookToken-authed +
+// idempotency-keyed. POST { idempotencyKey, turnId, body, channel }.
+http.route({
+  path: "/lc_gtm/log_message",
+  method: "POST",
+  handler: logMessageHttp,
+});
+
+// Data-collection sprint Wave 2 — per-turn LLM telemetry (tokens/latency/
+// cost/model), joined to the transcript row by turnId + mirrored into the
+// cost ledger. POST { idempotencyKey, turnId, model?, tokensIn?, ... }.
+http.route({
+  path: "/lc_gtm/log_turn_telemetry",
+  method: "POST",
+  handler: logTurnTelemetryHttp,
+});
+
 // ─── Sprint 2.17 Phase A — manager-mode routes ──────────────────────
 // Foundation research write surfaces. Each is hookToken-authed and
 // idempotency-keyed. Subagents POST one row at a time during the
@@ -301,6 +411,27 @@ http.route({
   method: "POST",
   handler: setStrategyApprovalHttp,
 });
+// Ideal-product Pillar 1 (VOICE) — Maya persists the founder's voice
+// fingerprint (Phase 0 onboarding pull) so every later draft anchors to it.
+http.route({
+  path: "/lc_gtm/save_voice_profile",
+  method: "POST",
+  handler: saveVoiceProfileHttp,
+});
+// Ideal-product Pillar 1 (VOICE) — per-channel native-style exemplars
+// (Anchor B for maya-voice-matcher), upserted onto the channel scorecard.
+http.route({
+  path: "/lc_gtm/save_style_exemplars",
+  method: "POST",
+  handler: saveStyleExemplarsHttp,
+});
+// Ideal-product Pillar 4 (WARMUP) — Maya advances per-channel warmth; the
+// daily/weekly crons read channelWarmthJson to gate warmup vs. posting.
+http.route({
+  path: "/lc_gtm/set_channel_warmth",
+  method: "POST",
+  handler: setChannelWarmthHttp,
+});
 // Sprint J — Maya proposes an improvement to a SHARED skill (Layer 2, governed).
 http.route({
   path: "/lc_gtm/propose_skill_improvement",
@@ -324,11 +455,187 @@ http.route({
   method: "POST",
   handler: recordConversionHttp,
 });
+// Read-back — Maya GETs per-post clicks → signups (closed-loop attribution)
+// from her runtime so the differentiator surfaces on Telegram, not just web.
+http.route({
+  path: "/lc_gtm/get_my_attribution",
+  method: "GET",
+  handler: getMyAttributionHttp,
+});
+// Shared, centrally-refreshed platform-algorithm intelligence (this month's
+// what's-working per channel). Read-only; the Convex monthly cron writes it.
+http.route({
+  path: "/lc_gtm/get_platform_algo",
+  method: "GET",
+  handler: getPlatformAlgoHttp,
+});
 // Public click-through redirect (no auth) — logs a click, 302s to destination.
 http.route({
   pathPrefix: "/r/",
   method: "GET",
   handler: redirectHttp,
+});
+// Maya v2 — Zernio hosted-OAuth callback (PUBLIC, no auth). Zernio redirects
+// the founder's browser here after they authorize a channel. Trusts only the
+// single-use signed `token` query param (binds to exactly one agent); re-reads
+// the account list from Zernio by profileId, then 302s back to the app.
+http.route({
+  path: "/lc_gtm/zernio_callback",
+  method: "GET",
+  handler: zernioCallbackHttp,
+});
+// Maya v2 (S3) — agent posts content directly (same gate as the cron path).
+http.route({
+  path: "/lc_gtm/zernio_post",
+  method: "POST",
+  handler: zernioPostHttp,
+});
+// Maya v2 (S3) — cheap pre-draft dedup check (the server enforces regardless).
+http.route({
+  path: "/lc_gtm/check_already_engaged",
+  method: "GET",
+  handler: checkAlreadyEngagedHttp,
+});
+// Maya v2 (S5) — Zernio READ + engagement tools. Analytics/inbox degrade
+// gracefully when the operator's Zernio add-on isn't enabled (clean message, not
+// a crash). reply_to_comment runs the same fail-closed ban-safety gate as posts.
+// (DMs are deliberately NOT handled — operator decision.)
+http.route({
+  path: "/lc_gtm/list_connected_accounts",
+  method: "GET",
+  handler: listConnectedAccountsHttp,
+});
+http.route({
+  path: "/lc_gtm/get_connection_health",
+  method: "GET",
+  handler: getConnectionHealthHttp,
+});
+http.route({
+  path: "/lc_gtm/get_account_analytics",
+  method: "GET",
+  handler: getAccountAnalyticsHttp,
+});
+http.route({
+  path: "/lc_gtm/get_follower_stats",
+  method: "GET",
+  handler: getFollowerStatsHttp,
+});
+http.route({
+  path: "/lc_gtm/list_inbox",
+  method: "GET",
+  handler: listInboxHttp,
+});
+http.route({
+  path: "/lc_gtm/reply_to_comment",
+  method: "POST",
+  handler: replyToCommentHttp,
+});
+// S6 — Maya sends the founder a one-tap Telegram confirm-to-post card for a
+// Reddit/TikTok needs_confirm event. The tap is handled by the Telegram webhook.
+http.route({
+  path: "/lc_gtm/send_confirm_card",
+  method: "POST",
+  handler: sendConfirmCardHttp,
+});
+// Sprint 1 (top-tier) — open-web search (Gemini grounded). Lets Maya read
+// competitor pages / any landing page, not just social threads.
+http.route({
+  path: "/lc_gtm/search_web",
+  method: "GET",
+  handler: searchWebHttp,
+});
+// Sprint 2 (top-tier) — demand intelligence: real Google search volume for the
+// buyer phrasing Maya derives, so she targets where demand actually is.
+http.route({
+  path: "/lc_gtm/search_demand",
+  method: "POST",
+  handler: searchDemandHttp,
+});
+// PUBLIC conversion pixel (no hookToken — a pixel on the founder's site can't
+// hold the agent secret). Token-keyed: the wrap token resolves to exactly one
+// agent. CORS-open for cross-origin beacons. Closes the signup side of the loop.
+http.route({
+  path: "/p/conversion",
+  method: "POST",
+  handler: conversionPixelHttp,
+});
+http.route({
+  path: "/p/conversion",
+  method: "OPTIONS",
+  handler: conversionPixelOptionsHttp,
+});
+// Maya pulls the founder's copy-paste conversion pixel (hookToken auth) to hand
+// over the automatic tracking during the first week.
+http.route({
+  path: "/lc_gtm/get_conversion_setup",
+  method: "GET",
+  handler: getConversionSetupHttp,
+});
+
+// Sprint 4 — the experiment-stats core surfaces. Which content attribute
+// actually converts (Beta-Bernoulli verdict), and a pure verdict for any arms.
+http.route({
+  path: "/lc_gtm/get_attribute_outcomes",
+  method: "GET",
+  handler: getAttributeOutcomesHttp,
+});
+http.route({
+  path: "/lc_gtm/get_experiment_verdict",
+  method: "POST",
+  handler: experimentVerdictHttp,
+});
+
+// Sprint 5 — experiment registry + Thompson allocator.
+http.route({
+  path: "/lc_gtm/save_experiment",
+  method: "POST",
+  handler: saveExperimentHttp,
+});
+http.route({
+  path: "/lc_gtm/assign_arm",
+  method: "POST",
+  handler: assignArmHttp,
+});
+
+// Sprint 6 — the strategic partner (hard truths + surveys).
+http.route({
+  path: "/lc_gtm/save_diagnosis",
+  method: "POST",
+  handler: saveDiagnosisHttp,
+});
+http.route({
+  path: "/lc_gtm/propose_pmf_survey",
+  method: "POST",
+  handler: proposePmfSurveyHttp,
+});
+http.route({
+  path: "/lc_gtm/propose_pricing_test",
+  method: "POST",
+  handler: proposePricingTestHttp,
+});
+
+// Sprint 7 — real-time intent strike: compile the watch, run the gate, record strikes.
+http.route({
+  path: "/lc_gtm/build_intent_watch",
+  method: "POST",
+  handler: buildIntentWatchHttp,
+});
+http.route({
+  path: "/lc_gtm/evaluate_intent",
+  method: "POST",
+  handler: evaluateIntentCandidatesHttp,
+});
+http.route({
+  path: "/lc_gtm/record_strike",
+  method: "POST",
+  handler: recordStrikeHttp,
+});
+
+// Sprint 8 — the cross-tenant archetype playbook (PII-free warm-start prior).
+http.route({
+  path: "/lc_gtm/get_archetype_playbook",
+  method: "GET",
+  handler: getArchetypePlaybookHttp,
 });
 
 // Continuous research + feedback-loop write surfaces. Maya / her
@@ -380,6 +687,23 @@ http.route({
   path: "/lc_gtm/get_my_niche_learnings",
   method: "GET",
   handler: getMyNicheLearningsHttp,
+});
+// #15 — durable lifecycle. The agent gates BOOT/HEARTBEAT on these instead of
+// ephemeral MEMORY.md markers (the foundation re-doing-loop fix).
+http.route({
+  path: "/lc_gtm/get_agent_lifecycle",
+  method: "GET",
+  handler: getAgentLifecycleHttp,
+});
+http.route({
+  path: "/lc_gtm/acquire_foundation_lease",
+  method: "POST",
+  handler: acquireFoundationLeaseHttp,
+});
+http.route({
+  path: "/lc_gtm/mark_lifecycle",
+  method: "POST",
+  handler: markLifecycleHttp,
 });
 // Sprint 2.25 — cost ledger write endpoint. Maya (in OpenClaw on Fly)
 // curl-POSTs cost data here after each major phase / call so the

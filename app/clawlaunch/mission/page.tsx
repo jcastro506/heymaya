@@ -5,8 +5,7 @@
  *  1. "What ClawLaunch is doing now" — the LIVE agent-activity feed
  *     (gtmAgentActivity, subscribed). OpenClaw POSTs as it works → this updates
  *     in real time. This is the autonomous-update mechanism made visible.
- *  2. "Today" — the calendar events due today (the posting + replying mix),
- *     each with its one-tap deep link.
+ *  2. "Today" — today's post/reply queue; most auto-post, a few need a tap.
  */
 
 import { useQuery } from "convex/react";
@@ -60,7 +59,7 @@ export default function TodayPage() {
   return (
     <Shell
       title="Today"
-      subtitle={`What your manager is doing for ${appName} right now, and what's on deck today. Everything also lands in your Telegram + Google Calendar.`}
+      subtitle={`What your manager is doing for ${appName} right now, and what's on deck today. Everything also pings you in Telegram.`}
     >
       <Section title="What Maya is doing now" count={activity?.length}>
         {!activity || activity.length === 0 ? (
@@ -105,7 +104,7 @@ export default function TodayPage() {
         {todays.length === 0 ? (
           <Empty
             title="Nothing scheduled for today yet"
-            body="Once your week's plan is approved, today's posts and replies show up here — each with a one-tap link to do it."
+            body="Once your week's plan is approved, today's posts and replies show up here — what's auto-posting, what's already posted, and the few that need your tap."
           />
         ) : (
           <ol className="space-y-2">
@@ -121,7 +120,7 @@ export default function TodayPage() {
                       })}
                     </span>
                     {e.status === "scheduled" ? (
-                      <Pill tone="lime">on calendar</Pill>
+                      <Pill tone="lime">scheduled</Pill>
                     ) : null}
                   </div>
                   <p className="mt-2 text-sm text-paper">{e.title}</p>

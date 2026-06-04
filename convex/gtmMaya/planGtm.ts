@@ -1,0 +1,322 @@
+/**
+ * GTM-product (creator-acquisition) plan-gating matrix.
+ *
+ * The GTM analog of `convex/planService.ts`. Same fail-closed philosophy, same
+ * GateError class pattern, same `planFeatures*` + `requireFeature*` shape — but
+ * a SEPARATE module because the GTM product is single-tier and its "caps" are
+ * cost circuit-breakers rather than paywalls.
+ *
+ * Source of truth: `docs/MAYA_V2_ZERNIO_AUTOPOST_SPRINT_PLAN.md` + the
+ * operator-ratified product decisions of 2026-06-02 (memory:
+ * project_maya_v2_zernio_autopost_plan / project_gtm_tiers_locked_2026_06_01).
+ *
+ * LOCKED PRODUCT DECISIONS encoded here:
+ *   - SINGLE TIER. `GtmPlan = 'gtm99'`. There is NO 'studio' tier in v1. The
+ *     product is one $99 plan, everything included. The de-tier was ratified
+ *     2026-06-02 (caps are fair-use, not gates).
+ *   - For an ACTIVE gtm99 founder, EVERY boolean feature is true: research,
+ *     drafts, autoPost, reads, monitoring, video, banSafety, attribution.
+ *     Nothing is feature-gated by tier (there is only one tier).
+ *   - `banSafetyManualGate` and `attributionEnabled` are CONST true — they can
+ *     NEVER be turned off by any state. They are the anti-churn moats; even the
+ *     fail-closed default keeps them true.
+ *   - The CAPS are FAIR-USE COST CIRCUIT-BREAKERS (not paywalls), applied
+ *     identically to every founder:
+ *       connectedChannelCap   — 6 = all offered channels (X/Reddit/LinkedIn/
+ *                               IG/TikTok/YouTube).
+ *       autoPostChannelCap    — how many channels may auto-post.
+ *       videoCreditsMonth     — monthly fair-use video ceiling.
+ *       xUrlPostsSoftCapMonth — the X $0.20/link-post margin guard; doubles as
+ *                               a ban-safe cadence ceiling.
+ *
+ * Fail-closed contract:
+ *   - `planFeaturesGtm(agent)` returns the MOST-RESTRICTIVE VALID default on a
+ *     missing / corrupt / none-status `gtmPlanJson`: the founder can still
+ *     research + draft (research/draft/attribution must NEVER be blocked — that
+ *     is not a paywall), but every cap = 0 so it CANNOT auto-post. banSafety +
+ *     attribution stay const-true even in this default.
+ *   - `requireFeatureGtm(...)` THROWS a `GtmPlanGateError` so callers can't
+ *     silently fall through to "no gate" behavior.
+ *
+ * NOTE on the input shape: the param is typed STRUCTURALLY as
+ * `{ gtmPlanJson?: string | null }`, NOT `Pick<Doc<'gtmAgents'>, 'gtmPlanJson'>`.
+ * The `gtmPlanJson` field does NOT exist on the schema yet (it lands in a later
+ * sprint), so referencing `Doc<'gtmAgents'>` would break `tsc`. A structural
+ * param is satisfied by a real Doc later. This module intentionally does NOT
+ * import `Doc`/`Id` from dataModel to stay schema-decoupled and tsc-safe.
+ */
+
+export type GtmPlan = "gtm99";
+
+/** Lifecycle status of the founder's GTM subscription. */
+export type GtmPlanStatus = "active" | "past_due" | "trialing" | "none";
+
+export interface GtmPlanFeatures {
+  plan: GtmPlan;
+  status: GtmPlanStatus;
+
+  // ── Fair-use cost circuit-breakers (NOT paywalls) ──────────────────────
+  /** Max channels the founder may CONNECT. 6 = all offered channels. */
+  connectedChannelCap: number;
+  /** Max channels that may AUTO-POST. */
+  autoPostChannelCap: number;
+  /** Monthly fair-use video-generation ceiling. */
+  videoCreditsMonth: number;
+  /**
+   * Monthly soft cap on X URL/link posts — the $0.20/link-post margin guard
+   * that doubles as a ban-safe cadence ceiling.
+   */
+  xUrlPostsSoftCapMonth: number;
+
+  // ── Anti-churn moats — CONST true, can NEVER be turned off ──────────────
+  /** Ban-safety manual gate. Always on, every state. */
+  banSafetyManualGate: true;
+  /** Closed-loop conversion attribution. Always on, every state. */
+  attributionEnabled: true;
+
+  // ── Boolean feature flags (gate-able via requireFeatureGtm) ─────────────
+  /** Whether Maya may auto-post on the founder's behalf. */
+  canAutoPost: boolean;
+  /** Whether research is allowed. Never blocked — true in every valid state. */
+  canResearch: boolean;
+  /** Whether drafting is allowed. Never blocked — true in every valid state. */
+  canDraft: boolean;
+  /** Whether read-layer scraping / monitoring is allowed. */
+  canRead: boolean;
+  /** Whether ongoing channel monitoring is allowed. */
+  canMonitor: boolean;
+  /** Whether Maya may generate videos (subject to videoCreditsMonth cap). */
+  canVideo: boolean;
+}
+
+/**
+ * The single full-product feature set for an ACTIVE gtm99 founder. Everything
+ * is included; caps are the fair-use ceilings.
+ */
+const GTM99_ACTIVE: GtmPlanFeatures = {
+  plan: "gtm99",
+  status: "active",
+  connectedChannelCap: 6,
+  autoPostChannelCap: 6,
+  videoCreditsMonth: 15,
+  xUrlPostsSoftCapMonth: 30,
+  banSafetyManualGate: true,
+  attributionEnabled: true,
+  canAutoPost: true,
+  canResearch: true,
+  canDraft: true,
+  canRead: true,
+  canMonitor: true,
+  canVideo: true,
+};
+
+/**
+ * Default fair-use cap values used when an active gtm99 plan supplies no
+ * explicit caps (so a real subscription always gets the full ceilings).
+ */
+const DEFAULT_CAPS = {
+  connectedChannelCap: GTM99_ACTIVE.connectedChannelCap,
+  autoPostChannelCap: GTM99_ACTIVE.autoPostChannelCap,
+  videoCreditsMonth: GTM99_ACTIVE.videoCreditsMonth,
+  xUrlPostsSoftCapMonth: GTM99_ACTIVE.xUrlPostsSoftCapMonth,
+} as const;
+
+/**
+ * The MOST-RESTRICTIVE VALID default. Returned on missing / corrupt /
+ * none-status `gtmPlanJson`. The founder can still research + draft (these are
+ * NEVER paywalled), attribution + ban-safety stay const-true, but every cap = 0
+ * so nothing auto-posts. This is a safe floor, not a paywall.
+ */
+const FAIL_CLOSED_DEFAULT: GtmPlanFeatures = {
+  plan: "gtm99",
+  status: "none",
+  connectedChannelCap: 0,
+  autoPostChannelCap: 0,
+  videoCreditsMonth: 0,
+  xUrlPostsSoftCapMonth: 0,
+  banSafetyManualGate: true,
+  attributionEnabled: true,
+  canAutoPost: false,
+  canResearch: true,
+  canDraft: true,
+  canRead: true,
+  canMonitor: false,
+  canVideo: false,
+};
+
+/**
+ * The shape we expect inside the parsed `gtmPlanJson` string. Every field is
+ * optional/unknown at the type level — we validate defensively at runtime
+ * because the JSON is operator/Stripe-webhook-sourced and may be partial or
+ * corrupt.
+ */
+interface ParsedGtmPlan {
+  tier?: unknown;
+  status?: unknown;
+  connectedChannelCap?: unknown;
+  autoPostChannelCap?: unknown;
+  videoCreditsMonth?: unknown;
+  xUrlPostsSoftCapMonth?: unknown;
+  periodStart?: unknown;
+  usage?: {
+    autoPostsThisPeriod?: unknown;
+    xUrlPostsThisPeriod?: unknown;
+    videosThisPeriod?: unknown;
+  };
+}
+
+/** A non-negative finite integer cap, or the supplied fallback. */
+function coerceCap(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return Math.floor(value);
+  }
+  return fallback;
+}
+
+/**
+ * Plan-feature resolver for a GTM agent row.
+ *
+ * Fail-closed semantics: an unset, unknown, corrupt, or none/past_due-status
+ * `gtmPlanJson` returns `FAIL_CLOSED_DEFAULT` (research/draft only, caps = 0,
+ * ban-safety + attribution const-true). An `active` plan returns the full
+ * gtm99 feature set with caps drawn from the JSON (or the fair-use defaults if
+ * the JSON omits them). A `trialing` plan can research/draft but cannot
+ * auto-post — the 14-day trial downshifts to research/draft-only.
+ *
+ * This intentionally does NOT throw because reads against this helper happen
+ * all over the codebase and we want consistent gating semantics rather than
+ * crashing the request. Mutations that need to ENFORCE a feature should use
+ * `requireFeatureGtm(...)` which throws.
+ */
+export function planFeaturesGtm(agent: {
+  gtmPlanJson?: string | null;
+}): GtmPlanFeatures {
+  const raw = agent.gtmPlanJson;
+  if (typeof raw !== "string" || raw.trim() === "") {
+    return FAIL_CLOSED_DEFAULT;
+  }
+
+  let parsed: ParsedGtmPlan;
+  try {
+    const candidate = JSON.parse(raw);
+    if (candidate === null || typeof candidate !== "object") {
+      return FAIL_CLOSED_DEFAULT;
+    }
+    parsed = candidate as ParsedGtmPlan;
+  } catch {
+    // Corrupt JSON — fail closed.
+    return FAIL_CLOSED_DEFAULT;
+  }
+
+  // The only tier in v1 is gtm99. Any other / missing tier → fail closed.
+  if (parsed.tier !== "gtm99") {
+    return FAIL_CLOSED_DEFAULT;
+  }
+
+  const status = parsed.status;
+
+  if (status === "active" || status === "past_due") {
+    // past_due gets the active feature set too: we never cut off research /
+    // draft / attribution / ban-safety for a payment hiccup. (Auto-post can be
+    // throttled separately via caps if a future Stripe-dunning sprint wants to;
+    // for now past_due keeps the full ceilings — billing recovery, not a gate.)
+    return {
+      ...GTM99_ACTIVE,
+      status,
+      connectedChannelCap: coerceCap(
+        parsed.connectedChannelCap,
+        DEFAULT_CAPS.connectedChannelCap
+      ),
+      autoPostChannelCap: coerceCap(
+        parsed.autoPostChannelCap,
+        DEFAULT_CAPS.autoPostChannelCap
+      ),
+      videoCreditsMonth: coerceCap(
+        parsed.videoCreditsMonth,
+        DEFAULT_CAPS.videoCreditsMonth
+      ),
+      xUrlPostsSoftCapMonth: coerceCap(
+        parsed.xUrlPostsSoftCapMonth,
+        DEFAULT_CAPS.xUrlPostsSoftCapMonth
+      ),
+    };
+  }
+
+  if (status === "trialing") {
+    // 14-day trial → research/draft-only (no auto-post). Caps = 0 so nothing
+    // posts during the trial, but research/draft/attribution/ban-safety stay
+    // on. This is the most-restrictive-valid rule applied to the trial state.
+    return {
+      ...FAIL_CLOSED_DEFAULT,
+      status: "trialing",
+    };
+  }
+
+  // status === 'none', missing, or any unexpected value → fail closed.
+  return FAIL_CLOSED_DEFAULT;
+}
+
+export class GtmPlanGateError extends Error {
+  constructor(
+    public plan: GtmPlan,
+    public status: GtmPlanStatus,
+    public attemptedFeature: string
+  ) {
+    super(
+      `GTM plan '${plan}' (status '${status}') cannot access '${attemptedFeature}'.`
+    );
+    this.name = "GtmPlanGateError";
+  }
+}
+
+/**
+ * Throwing-form feature gate. Mutations that must ENFORCE a feature wrap their
+ * entry point in this helper so a missed-gate mistake fails loud. The
+ * `predicate` is a function over the resolved features matrix so callers can
+ * express arbitrary gate logic (e.g. `f => f.canAutoPost`).
+ */
+export function requireFeatureGtm(
+  features: GtmPlanFeatures,
+  predicate: (f: GtmPlanFeatures) => boolean,
+  attemptedFeature: string
+): void {
+  if (!predicate(features)) {
+    throw new GtmPlanGateError(features.plan, features.status, attemptedFeature);
+  }
+}
+
+/**
+ * Throwing-form cap gate. Throws `GtmPlanGateError` when current usage has met
+ * or exceeded the named cap. Fail-closed: a cap of 0 (the fail-closed default)
+ * blocks the FIRST attempt.
+ */
+export function requireUnderCapGtm(
+  features: GtmPlanFeatures,
+  capName:
+    | "connectedChannelCap"
+    | "autoPostChannelCap"
+    | "videoCreditsMonth"
+    | "xUrlPostsSoftCapMonth",
+  currentUsage: number
+): void {
+  const cap = features[capName];
+  if (!(currentUsage < cap)) {
+    throw new GtmPlanGateError(
+      features.plan,
+      features.status,
+      `${capName} (usage ${currentUsage} >= cap ${cap})`
+    );
+  }
+}
+
+/**
+ * Non-throwing predicate for the X URL/link-post soft cap. Returns true iff
+ * another X url-post is allowed given the current-period usage. Fail-closed:
+ * a 0 cap (fail-closed default / trial) returns false on the first post.
+ */
+export function canPostXUrlGtm(
+  features: GtmPlanFeatures,
+  currentPeriodXUrlPosts: number
+): boolean {
+  return currentPeriodXUrlPosts < features.xUrlPostsSoftCapMonth;
+}

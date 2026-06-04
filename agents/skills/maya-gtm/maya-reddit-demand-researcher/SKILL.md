@@ -122,7 +122,10 @@ interface RedditDemandReport {
   /** 5-10 real, top-performing, HUMAN-written native posts/comments captured
    *  VERBATIM from the recommended subs — the few-shot voice/register anchors
    *  maya-voice-matcher + drafting use to make the founder's reply read native
-   *  to THIS sub. Match cadence/vocab/length/format; NEVER copy content. */
+   *  to THIS sub. Match cadence/vocab/length/format; NEVER copy content.
+   *  This array is the shape of your thinking; it LANDS via the REQUIRED
+   *  save_style_exemplars({ channel: "reddit", styleExemplars: [...] }) call
+   *  (see the Save section) — described-but-unsaved = lost. */
   styleExemplars: Array<{
     sub: string;
     url: string;
@@ -151,6 +154,13 @@ When invoked as a Phase-2 demand worker (the first-wake actionable pass), you ow
 4. `save_target_thread({ externalId: <same>, draftReply })`, to keep the row's one-tap deep link in sync.
 
 One self-contained tool sequence per thread — the same per-item discipline that makes the foundation strategy saves reliable. An `OK ...` return = it landed. The `RedditDemandReport` schema above stays the shape of your *thinking* per target; the tool calls are how it lands. Exact sequence: `maya-foundation-research` Phase 2.
+
+### REQUIRED before you return — land the ICP knowledge + voice anchors (once per run)
+
+These two saves are what make the daily cron and the drafting step work. They are not optional extras; a run that surfaces reply targets but skips them has left the channel scorecard incomplete.
+
+5. **`save_style_exemplars({ channel: "reddit", styleExemplars: [ … 5-10 verbatim native posts/comments … ] })`** — REQUIRED. The verbatim native posts you captured in decision rule 13 anchor `maya-voice-matcher` Anchor B; **skip this and every later Reddit draft defaults to generic LLM tone** that mods remove and the sub ignores. Pass each as `{ platform: "reddit", community: <sub>, verbatim, why, capturedAt }`. This is the persisted form of the `styleExemplars[]` schema above — the schema is your thinking; this call is how it lands.
+6. **`save_foundation_channel_scorecard({ channel: "reddit", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })`** — REQUIRED for a bet channel. Populate per-channel `icpKnowledge`: `venues` (the recommended subs as `{ name, kind: "subreddit", url, whyHere }`), `watch` (what these buyers read/follow), `complaints` (verbatim pain `{ quote, sourceUrl }` from the threads you mined), `topics` (what they talk about), and `nativeStyle` (`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }`). A Reddit bet with empty `icpKnowledge` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP.
 
 ## Failure modes
 

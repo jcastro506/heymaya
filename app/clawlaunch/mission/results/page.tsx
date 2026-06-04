@@ -33,6 +33,7 @@ const CONVERSION_LABEL: Record<string, string> = {
   demo: "demos",
   feedback: "feedback",
   revenue: "revenue",
+  activated: "came back",
 };
 
 const SOURCE_LABEL: Record<string, string> = {

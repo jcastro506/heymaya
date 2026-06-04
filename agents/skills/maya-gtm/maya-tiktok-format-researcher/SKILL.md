@@ -75,7 +75,10 @@ interface TikTokFormatResearch {
   paginationDepth: string; // describe how many pages / adjacent keywords were tried
   /** 5-10 real, top-performing, HUMAN native examples captured VERBATIM from the
    *  niche — the few-shot voice/register anchors for maya-voice-matcher + caption
-   *  drafting. Match hook cadence/length/format + hashtag norms; NEVER copy content. */
+   *  drafting. Match hook cadence/length/format + hashtag norms; NEVER copy content.
+   *  This array is the shape of your thinking; it LANDS via the REQUIRED
+   *  save_style_exemplars({ channel: "tiktok", styleExemplars: [...] }) call
+   *  (see the Save section) — described-but-unsaved = lost. */
   styleExemplars: Array<{
     videoUrl: string;
     handle: string;
@@ -102,6 +105,13 @@ interface TikTokFormatResearch {
   rulesCited: string[];
 }
 ```
+
+## Save — land the ICP knowledge + voice anchors (REQUIRED when TikTok is a bet)
+
+The `TikTokFormatResearch` schema is the shape of your thinking; these two calls are how it lands. When TikTok clears as a bet (`confidence` is not `insufficient_evidence` and the channel-judge isn't parking it), both are REQUIRED before you return:
+
+1. **`save_style_exemplars({ channel: "tiktok", styleExemplars: [ … 5-10 verbatim native examples … ] })`** — REQUIRED. The verbatim hook lines + captions + hashtag sets you captured in decision rule 13 anchor `maya-voice-matcher` Anchor B; **skip this and every later TikTok caption defaults to generic LLM tone** the algorithm starves. Pass each as `{ platform: "tiktok", community: <niche>, verbatim: <hook line + caption>, why, capturedAt }` (carry the real hashtag set in `verbatim` or `why` so the caption-craft survives). This is the persisted form of the `styleExemplars[]` schema above — described-but-unsaved = lost.
+2. **`save_foundation_channel_scorecard({ channel: "tiktok", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })`** — REQUIRED for a bet channel. Populate per-channel `icpKnowledge`: `venues` (the niche's recurring hashtags + the high-signal creator accounts as `{ name, kind: "hashtag" | "account", url, whyHere }`), `watch` (what this audience watches — the winning format + the accelerating sounds), `complaints` / buyer-intent (verbatim from `buyerLanguageExamples` as `{ quote, sourceUrl: videoUrl }`), `topics` (what the niche makes content about), and `nativeStyle` (`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }` — the hook-line + caption register). A TikTok bet with empty `icpKnowledge` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP.
 
 ## Failure modes
 

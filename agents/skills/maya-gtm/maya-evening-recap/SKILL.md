@@ -11,8 +11,20 @@ The bookend to the morning brief. The operator knows what they did today and how
 
 ## When to invoke
 
-- Native cron at 20:00 operator-local. Self-scheduled via `cron add` after foundation completes.
+- Fired by the `0012_evening_recap` cron (20:00 operator-local), shipped deterministically in jobs.json. NOT self-scheduled — Maya never adds crons.
 - NEVER from a heartbeat.
+
+## Skip-when-empty (the recap is conditional, not unconditional)
+
+The evening recap is NOT a guaranteed daily send. It fires only when there is something real to close the loop on. This protects the phone budget (~2 proactive Telegram sends/day, brief + conditional recap) — a recap that says nothing is just noise.
+
+Run this gate FIRST, before composing anything:
+
+- **Genuinely empty day → DON'T send.** If ALL THREE of these are true — (a) 0 calendar events existed for today (none were ever planned), AND (b) 0 actions in `gtmActionLog` today (no posts, replies, triage, or warmup), AND (c) no attribution movement (`get_my_attribution({ windowDays: 1 })` returns empty `posts` AND every `totals` figure is zero) — then do NOT send a standalone recap. There is nothing to report and a "nothing happened" ping erodes trust. Instead, fold ONE honest line into tomorrow's morning brief (write it into `memory/{today}.md` → "Tomorrow's adjustment" so morning_brief picks it up: e.g. "Yesterday was empty — no plan ran and nothing shipped; let's get one concrete move done today."). Skip the Telegram send entirely.
+- **EXCEPTION — work was queued but NONE went out → STILL SEND.** If I queued posts for today but the day's tally is 0 actually-posted, send the recap anyway with just the Block 1 flag — but diagnose WHY, because in the "I post for you" model a zero-day is almost always MY problem, not the founder's absence: (a) my auto-posts failed (a connection dropped / a gate held them) → the auto-failure flag + reconnect link; or (b) the day was all tap-items and they all sat un-tapped → the tap-pileup settings question. A launch dies from absence, so a queued-but-nothing-shipped day must reach the phone — but framed as "here's what broke / here's a decision," never "you didn't show up."
+- **Anything real to report → SEND.** If any of {events existed, actions happened, attribution moved} is non-empty, compose and send the full recap as normal.
+
+The zero-of-N silence-flag path in Block 1 stays fully intact — skip-when-empty only suppresses the recap when there was nothing planned AND nothing happened AND nothing converted.
 
 ## Pre-conditions
 
@@ -26,6 +38,8 @@ The bookend to the morning brief. The operator knows what they did today and how
 1. **USER.md** — operator timezone.
 2. **SOUL.md** — voice contract.
 3. **memory/{today}.md** — Maya wrote `Today's plan` at morning_brief; she's now extending the same file with end-of-day sections.
+4. **`get_my_attribution({ windowDays: 1 })`** — per-post outcomes for the founder's wrapped links over the last 24h: clicks → signups, tied back to the specific post that drove them. This is the close-the-loop read. **The tool ONLY time-scopes results when you pass `windowDays`** — the recap MUST pass `windowDays: 1` so every number is genuinely a last-24h number. Returns `{ posts: [{ draftId, platform, title, clicks, conversionsByKind: { signup, demo, feedback, revenue }, signups, createdAt }], totals: { clicks, signups, demos, feedback, revenue, untiedSignups }, windowDays }`, posts sorted by signups then clicks. `title` is the link/draft the founder prepared — it is NOT proof the post was published verbatim; phrase it as "the link you shared on {platform}" / "your {platform} reply", never assert the post went live as written. If `posts` is empty AND every `totals` figure is zero, there is nothing to report — stay silent on attribution (see grounded-or-silent below). Never infer or invent clicks/signups.
+   - **Temporal-grounding rule (hard).** NEVER attach a time-word ("today", "yesterday", "this week") to a number unless that number came from a `windowDays`-scoped call. This recap's `windowDays: 1` numbers are phrased as **"in the last 24h"** — NOT "today". A lifetime call (no `windowDays`) may only ever be described as "to date".
 
 ## Write triggers (after send)
 
@@ -48,21 +62,30 @@ If a write fails (filesystem error, disk pressure), recap is already delivered �
 
 As tight as Maya can make it while still useful. Three blocks:
 
-### Block 1 — What got done (1-2 sentences, grounded) + the planned-vs-done tally
+### Block 1 — What I posted for you today (1-2 sentences, grounded) + what's still on a tap
 
-"You shipped the LocalLLaMA reply (got 3 upvotes in 90 min, OP hasn't replied yet) and posted the disk-bloat hook on X (12 likes, 2 replies)."
+Lead with what *I* did for them — in the "I post for you" model, I'm the one who posted, not them: "Posted 6 for you today — 4 replies and a build-update on X, plus a LinkedIn post (the disk-bloat hook pulled 12 likes, 2 replies in its first hour)." Numbers come from `gtmPostResults`; if they haven't propagated yet (< 4h after post) say so: "numbers firm up by morning."
 
-Numbers come from `gtmPostResults`. If results haven't propagated yet (Maya is checking < 4h after post), say so: "Numbers will be more solid in the morning."
+**Tap-item integrity (the founder's only real accountability now).** Since I auto-run the connected channels, the only thing that silently stalls is the TAP-items (Reddit/TikTok confirms). Tally THOSE, not "events done": "the 6 auto ones went out; the 2 Reddit replies are still waiting on your tap."
 
-**Daily-presence integrity (always run, even when it's awkward).** Tally today's planned calendar events vs what's marked done: "3 of 5 planned today." This keeps the founder honest without nagging.
+- **The tap-pileup flag (a settings question, NOT a homework scold).** If tap-items keep sitting un-acted, name it as a decision, not a failure: "Those Reddit replies have sat 2 days — want me to stop queuing Reddit, or are you good tapping them when you can?" The founder didn't fail; the channel needs a call. (TikTok/Reddit are the only things that can stall this way.)
+- **The auto-failure flag (the important one — it's MY problem to surface).** If something I was supposed to auto-post DIDN'T go out (a connection dropped, a gate held it), say so plainly: "Heads up — your LinkedIn didn't post today, the connection dropped. Reconnect here and I'll catch it up: [link]."
+- **Carry the top un-tapped item** to tomorrow's first slot so it's a single tap, not lost: "Your top one (the r/LocalLLaMA reply) moves to first thing tomorrow."
+- Don't moralize. One honest line, then the numbers.
 
-- **Silence flag — the most important one.** If NOTHING got done today (0 of N), do not let it slide quietly. Name it plainly and ask one direct question: "Nothing shipped today — that's the thing that kills launches (absence, not bad posts). Was today just busy, or is something about the plan not working for you? Tell me and I'll adjust." Consistency is the whole job; a silent zero-day is the failure mode to catch early.
-- **Bump missed priorities.** The highest-priority undone item carries to tomorrow's top slot (see "carried vs cut" below) — surface it: "Your top one from today (the Show HN warm-up comment) moves to first thing tomorrow."
-- Don't moralize or pile on. One honest line, one question, then move on.
+### Block 2 — What your posts drove (lead with this when there's attribution)
 
-### Block 2 — Performance read (1-2 sentences)
+This is the loop closing. When `get_my_attribution({ windowDays: 1 })` has real numbers, this block leads the recap — outcomes beat engagement. All numbers here are last-24h numbers; phrase them as **"in the last 24h"**, never "today".
 
-Maya's interpretation: was this a good day? Use the same Strong / OK / Thin grade language.
+- Lead with the converting post, named by the link/draft (`title`) the founder prepared — not as a verified published post: "The link you shared on r/LocalLLaMA drove 12 clicks → 2 signups in the last 24h — your best post this week." Cite the per-post row (`posts[i]`).
+- If there are clicks but no signups yet, say exactly that: "Your X reply pulled 8 clicks but no signups landed yet." Clicks ≠ signups; never round one up to the other.
+- **Untied self-report signups.** These now live in `totals.untiedSignups`. Report it honestly ONLY when `totals.untiedSignups > 0`, and don't pin it to any post: "3 signups in the last 24h — couldn't trace which post sent them." When `totals.untiedSignups` is 0, say nothing about untied signups at all.
+- **Revenue.** `totals.revenue` is now available; mention it only when `totals.revenue > 0` (e.g. "and $49 in revenue traced back in the last 24h"). Otherwise say nothing about revenue.
+- **Activation (a signup that STUCK).** `totals.activated` = signed-up users who came back / reached value. Mention it only when `totals.activated > 0`: "and 1 of them came back and actually used it." It's the strongest proof of all — but the weekly review owns the full activation-rate read (see `maya-activation-coach`); the recap just surfaces a fresh one.
+- **Grounded-or-silent.** If `posts` is empty AND every `totals` figure is zero, say NOTHING about clicks or signups. Do not imply likes/upvotes are signups. Fall through to the engagement read below.
+- **Brief-mode channels.** TikTok/IG posts are link-in-bio, so they have no per-post click attribution. Never claim click counts for a TikTok/IG post. They count as reach, not as traced signups.
+
+When attribution is empty (or only for context after the attribution lead), give the engagement read — was this a good day? Use the same Strong / OK / Thin grade language, grounded in `gtmPostResults`:
 
 - "Good day — the Reddit reply is performing better than your average reply."
 - "Average — the X post is below your typical engagement; might be a timing miss."
@@ -116,7 +139,7 @@ If the operator replies to the recap with feedback ("the X angle didn't land —
 
 `maya-output-critic` runs over the recap before send:
 
-- Grounding — every number cites a `gtmPostResults` row or a calendar event ID.
+- Grounding — every number cites a `gtmPostResults` row, a `get_my_attribution` row (`posts[i]` or `totals`), or a calendar event ID. No click/signup number that didn't come back from `get_my_attribution`. Empty `posts` + all-zero `totals` → no attribution claims. No time-word ("today"/"yesterday") on any attribution number — those came from a `windowDays: 1` call, so they read "in the last 24h"; lifetime figures read "to date".
 - Voice — no "great work today!" or "way to crush it." Manager voice, not coach voice.
 - Time-box — as tight as it can be while useful, operator reads on phone.
 
@@ -128,7 +151,7 @@ If the operator replies to the recap with feedback ("the X angle didn't land —
 
 ## Cost discipline
 
-0 ScrapeCreators if `maya-continuous-research` already updated post-results. 1 main_maya call (compose + critic). Sub-minute.
+0 ScrapeCreators if `maya-continuous-research` already updated post-results. `get_my_attribution` is a single cheap Convex read. 1 main_maya call (compose + critic). Sub-minute.
 
 ## Anti-slop check
 

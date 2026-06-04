@@ -405,10 +405,10 @@ export const foundationCompetitorHttp = httpAction(async (ctx, request) => {
 
 // ───────────────────── Foundation: channel scorecard ─────────────────────
 
-// Sprint 2.18 #46 — YouTube REMOVED from supported channels. Operator
-// directive 2026-05-28: "we're not gonna focus on YouTube." Strip
-// across product surface: schema enum, channel scorecard validator,
-// playbook references, skills, TOOLS.md docs.
+// Ideal-product pillar 2 — YouTube REVIVED 2026-06-02 (operator: all 6
+// channels first-class — TikTok/Instagram/Reddit/YouTube/X/LinkedIn). YouTube
+// is a first-class Brief-only channel again; it must persist scorecards +
+// style exemplars like any other. (product_hunt stays out.)
 const CHANNEL_VALUES = [
   "reddit",
   "x",
@@ -416,6 +416,7 @@ const CHANNEL_VALUES = [
   "linkedin",
   "tiktok",
   "instagram",
+  "youtube",
   "threads",
   "podcasts",
   "newsletters",
@@ -435,6 +436,22 @@ interface FoundationChannelPayload {
   uniqueUnlock: string;
   bet: boolean;
   notes?: string;
+  // Pillar 2 — per-channel ICP knowledge + native-style exemplars. Sent by the
+  // plugin as either a structured object or a pre-serialized JSON string; we
+  // normalize to a JSON string for managerStore (which validates + persists it).
+  icpKnowledge?: unknown;
+  styleExemplars?: unknown;
+  styleExemplarsJson?: unknown;
+}
+
+function toJsonStringOrUndefined(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  if (typeof value === "string") return value.length > 0 ? value : undefined;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
 }
 
 export const foundationChannelScorecardHttp = httpAction(async (ctx, request) => {
@@ -485,6 +502,10 @@ export const foundationChannelScorecardHttp = httpAction(async (ctx, request) =>
         uniqueUnlock: body.uniqueUnlock,
         bet,
         notes: body.notes,
+        icpKnowledge: toJsonStringOrUndefined(body.icpKnowledge),
+        styleExemplarsJson: toJsonStringOrUndefined(
+          body.styleExemplarsJson ?? body.styleExemplars
+        ),
       }
     );
   } catch (err) {
@@ -931,6 +952,15 @@ interface LearningExtractedPayload {
   confidenceScore: number;
   evidenceCount?: number;
   retired?: boolean;
+  /** Sprint 8 — structured {venue,hook,format,timeBucket,outcome} for the
+   *  cross-tenant archetype rollup. */
+  structured?: {
+    venue?: string;
+    hook?: string;
+    format?: string;
+    timeBucket?: string;
+    outcome?: string;
+  };
 }
 
 export const learningExtractedHttp = httpAction(async (ctx, request) => {
@@ -975,6 +1005,10 @@ export const learningExtractedHttp = httpAction(async (ctx, request) => {
   if (claim === "duplicate") return new Response("ok (replay)", { status: 200 });
 
   try {
+    const structuredJson =
+      body.structured && typeof body.structured === "object"
+        ? JSON.stringify(body.structured)
+        : undefined;
     await ctx.runMutation(internal.gtmMaya.managerStore.upsertNicheLearning, {
       accountId: auth.accountId,
       agentId: auth.agentId,
@@ -984,6 +1018,7 @@ export const learningExtractedHttp = httpAction(async (ctx, request) => {
       confidenceScore,
       evidenceCount: body.evidenceCount,
       retired: body.retired,
+      structuredJson,
     });
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });
@@ -1087,6 +1122,115 @@ export const getMyNicheLearningsHttp = httpAction(async (ctx, request) => {
     status: 200,
     headers: { "content-type": "application/json" },
   });
+});
+
+// ───────────────────── Durable lifecycle (#15) ─────────────────────
+//
+// The agent reads/writes its lifecycle through these instead of MEMORY.md
+// markers. MEMORY.md is wiped on every Fly restart; these are durable in
+// Convex, which is what stops the foundation watchdog from re-running the
+// whole onboarding pipeline forever.
+
+/** GET — read the durable lifecycle (phase, helloSent, foundationComplete,
+ *  lease state, evidence counts). */
+export const getAgentLifecycleHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  const lifecycle = await ctx.runQuery(
+    internal.gtmMaya.agentLifecycle.getAgentLifecycle,
+    { agentId: auth.agentId }
+  );
+  return new Response(JSON.stringify({ lifecycle }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+/** POST — check-and-set the foundation lease before running the pass.
+ *  Body (all optional): { ttlMs }. Returns { acquired, alreadyComplete,
+ *  leaseActive, leaseUntil }. */
+export const acquireFoundationLeaseHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let ttlMs: number | undefined;
+  try {
+    const body = (await request.json()) as { ttlMs?: number };
+    if (typeof body?.ttlMs === "number" && body.ttlMs > 0) ttlMs = body.ttlMs;
+  } catch {
+    // empty/invalid body is fine — use the default lease window.
+  }
+
+  const result = await ctx.runMutation(
+    internal.gtmMaya.agentLifecycle.acquireFoundationLease,
+    { agentId: auth.agentId, ttlMs }
+  );
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+/** POST — set a durable lifecycle marker. Body: { marker }.
+ *  marker ∈ hello_sent | foundation_complete | morning_brief | release_lease. */
+export const markLifecycleHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let marker: string | undefined;
+  try {
+    const body = (await request.json()) as { marker?: string };
+    marker = body?.marker;
+  } catch {
+    return new Response("invalid JSON body", { status: 400 });
+  }
+  if (!marker) return new Response("missing 'marker'", { status: 400 });
+
+  switch (marker) {
+    case "hello_sent": {
+      const r = await ctx.runMutation(
+        internal.gtmMaya.agentLifecycle.markHelloSent,
+        { agentId: auth.agentId }
+      );
+      return new Response(JSON.stringify({ ok: true, ...r }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    case "foundation_complete": {
+      const r = await ctx.runMutation(
+        internal.gtmMaya.agentLifecycle.markFoundationComplete,
+        { agentId: auth.agentId }
+      );
+      return new Response(JSON.stringify({ ok: true, ...r }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    case "morning_brief": {
+      await ctx.runMutation(
+        internal.gtmMaya.agentLifecycle.markMorningBrief,
+        { agentId: auth.agentId }
+      );
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    case "release_lease": {
+      await ctx.runMutation(
+        internal.gtmMaya.agentLifecycle.releaseFoundationLease,
+        { agentId: auth.agentId }
+      );
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    default:
+      return new Response(`unknown marker '${marker}'`, { status: 400 });
+  }
 });
 
 // ───────────────────── Cost ledger (Sprint 2.25) ─────────────────────

@@ -10,7 +10,8 @@
  *
  * The point is the MIX: your manager schedules original posts AND replies, like
  * a real social-media manager. The kind pill makes that mix legible at a glance.
- * Everything here also lands on the operator's Google Calendar.
+ * This IS the surface — Maya posts these for you on connected channels (Google
+ * Calendar mirroring is retired); the queue lives here, not on any calendar.
  */
 
 import { useQuery } from "convex/react";
@@ -107,11 +108,11 @@ export default function PlanPage() {
     return (
       <Shell
         title="Plan"
-        subtitle="Your rolling 7-day plan — the posts and replies your manager lined up. Each one also lands on your Google Calendar."
+        subtitle="Your rolling plan — the posts and replies your manager lined up. She posts them for you on your connected channels."
       >
         <Empty
-          title="Nothing on the calendar yet"
-          body="Once your manager finishes this week's research, she'll fill the next 7 days with posts to publish and replies to leave — each one a step-by-step recipe with a one-tap link. Check back shortly."
+          title="Nothing scheduled yet"
+          body="Once your manager finishes this week's research, she'll fill the next 7 days with posts to publish and replies to leave — each one auto-posting on your connected channels, with the few that need your tap clearly flagged. Check back shortly."
         />
       </Shell>
     );
@@ -120,7 +121,7 @@ export default function PlanPage() {
   return (
     <Shell
       title="Plan"
-      subtitle="Your rolling 7-day plan — the posts and replies your manager lined up. Each one also lands on your Google Calendar."
+      subtitle="Your rolling plan — the posts and replies your manager lined up. She posts them for you on your connected channels."
     >
       {days.map(({ dayStart, items }) => (
         <Section
@@ -143,7 +144,7 @@ export default function PlanPage() {
                           {eventTime(e.startsAtMs)}
                         </span>
                         {e.status === "scheduled" ? (
-                          <Pill tone="lime">on calendar</Pill>
+                          <Pill tone="lime">scheduled</Pill>
                         ) : null}
                         {e.status === "completed" ? (
                           <Pill tone="paper">done</Pill>

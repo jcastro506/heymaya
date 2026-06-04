@@ -1236,13 +1236,20 @@ export default defineSchema({
   // against `Date.now()`. Studio creators get fresher cache via faster cron
   // cadence (see `agents/skills/maya-platform/cron.md` § algo_research_*).
   platformAlgoCache: defineTable({
+    // SHARED platform-algorithm intelligence. Rows with creatorId undefined are
+    // the SHARED monthly intelligence (one per platform) refreshed centrally by
+    // the Convex `platform-algo-refresh` cron — every Maya reads them so the
+    // research runs ONCE, not once per customer. (creatorId-scoped rows are the
+    // legacy creator-product per-creator cache.)
     creatorId: v.optional(v.id("creators")),
     platform: v.union(
+      v.literal("reddit"),
+      v.literal("x"),
+      v.literal("hn"),
       v.literal("tiktok"),
       v.literal("instagram"),
       v.literal("youtube"),
-      v.literal("linkedin"),
-      v.literal("x")
+      v.literal("linkedin")
     ),
     topic: v.optional(v.string()),
     signals: v.array(
@@ -4345,6 +4352,98 @@ export default defineSchema({
     deployTimeHelloAttemptedAt: v.optional(v.number()),
     deployTimeHelloResult: v.optional(v.string()), // "sent" | "firewall_blocked" | "missing_credentials" | "telegram_<status>" | "exception:<msg>"
     deployTimeHelloMessageId: v.optional(v.number()),
+    // Slideshow cluster — Maya's per-agent media library, stored as a JSON
+    // string (NOT a dedicated table or a typed array field). This is a
+    // DELIBERATE encoding choice: the schema sits exactly at TypeScript's
+    // DataModel instantiation ceiling, so adding a 139th table (or a richly-
+    // typed array field) regresses `db.get()` narrowing project-wide. A plain
+    // string adds zero type complexity. The value is a JSON array of
+    // GtmMediaEntry objects (see convex/gtmMaya/mediaAssets.ts):
+    //   { storageId, kind, source, mimeType, storageBytes, label?, sha256?,
+    //     referenceStorageIds?, meta?, archivedAt?, createdAt }
+    // Each entry's identity is its Convex storageId. Per-agent the library is
+    // small (dozens of screenshots + generated slides), always loaded with the
+    // agent row, and search/dedupe run in JS over the parsed array.
+    mediaLibraryJson: v.optional(v.string()),
+    // Ideal-product pillar 1 (VOICE) — the founder's voice fingerprint, built
+    // at onboarding by pulling their own accounts (watch media + read text).
+    // JSON string (same JSON-on-row pattern as mediaLibraryJson — NO new table,
+    // schema is at the table-count ceiling). Shape: { builtAt, sources[],
+    // features{avgSentenceLen,burstiness,contractionUse,emojiFreq,register,
+    // openings[],signoffs[],characteristicPhrases[],emDashHabit}, perPlatform,
+    // verbatimSamples[], confidence:'high'|'medium'|'low'|'none' }.
+    voiceProfileJson: v.optional(v.string()),
+    // Pillar 4 (WARMUP, generalized to all 6 channels) — per-channel warmth map
+    // the daily/weekly crons read + advance. JSON string keyed by channel:
+    // { reddit:{state,accountAgeDays,baseline,warmTargetMs,lastUpdatedMs}, ... }.
+    // state reuses tiktokWarmupState values + 'warm'; (warm|ready) = skip warmup.
+    // tiktokWarmupState stays as a back-compat alias mirrored into .tiktok.
+    channelWarmthJson: v.optional(v.string()),
+    // ─── Maya v2 Zernio auto-post (additive, JSON-on-row — schema is at the TS
+    //     DataModel ceiling, so NO new tables) ────────────────────────────────
+    // The founder's Zernio profile id (created at first connect). All Zernio
+    // calls for this agent are scoped to it for cross-tenant isolation.
+    zernioProfileId: v.optional(v.string()),
+    // Registered webhook id + its signing secret (encrypted via lib/encryption,
+    // exactly like telegramBotToken — NEVER store plaintext).
+    zernioWebhookId: v.optional(v.string()),
+    zernioWebhookSecret: v.optional(v.string()),
+    // JSON array of connected accounts:
+    // [{accountId, platform, username, displayName, isActive, needsReconnect,
+    //   connectedAt}]. Maya reads this to know which channels are live
+    // (auto-post) vs which need a reconnect (deep-link fallback).
+    connectedAccountsJson: v.optional(v.string()),
+    // Sprint 5 — experiment registry (JSON-on-row, NO new table). JSON array of
+    // {id, hypothesis, dimension, arms:[label], metric, status('running'|'concluded'),
+    // createdAt, verdict?}. save_experiment appends; assign_arm reads to allocate;
+    // the weekly review concludes. ≤2 'running' dimensions enforced at write.
+    experimentsJson: v.optional(v.string()),
+    // Sprint 6 — strategic-diagnosis state (JSON-on-row, NO new table). JSON:
+    // { current?: {category, tier, reason, observedAt, weeksPersisted},
+    //   history:[{category,tier,observedAt}], lastHardTruthPingAt?,
+    //   lastPmfSurveyAt?, lastPricingTestAt? }. Drives the ≥2-week-persistence +
+    //   throttled hard-truth ping and the survey-proposal throttles.
+    strategicDiagnosisJson: v.optional(v.string()),
+    // Sprint 7 — real-time intent-strike watchlist (JSON-on-row, NO new table).
+    // JSON: { phrases:[string], channels:[string], dailyStrikeBudget:number,
+    //   strikesToday:number, strikeDayStamp:string(YYYY-MM-DD), seenThreadIds:[string],
+    //   lastPolledAt?:number }. Compiled from gtmBuyerMap.intentPhrases + bet
+    //   channels. The Convex-owned poller reads it; the dedup + budget live here.
+    intentWatchJson: v.optional(v.string()),
+    // Single-tier plan state (gtm99). JSON: {tier, status, connectedChannelCap,
+    // autoPostChannelCap, videoCreditsMonth, xUrlPostsSoftCapMonth, periodStart,
+    // usage:{autoPostsThisPeriod, xUrlPostsThisPeriod, videosThisPeriod}}.
+    // Parsed by planFeaturesGtm; ONLY Stripe webhook handlers write it.
+    gtmPlanJson: v.optional(v.string()),
+    // Off-by-default toggle: also mirror the day's plan to Google Calendar.
+    // The Google flood retired; the web Today view is the primary surface.
+    googleCalendarMirrorEnabled: v.optional(v.boolean()),
+    // ─── Maya v2 (#15) DURABLE agent lifecycle state ────────────────────────
+    // The agent's lifecycle markers MUST live in Convex, not in MEMORY.md.
+    // MEMORY.md is a file on the EPHEMERAL Fly machine — wiped on every
+    // redeploy/restart (bootstrap re-extracts the bundle tar over /data) — so
+    // markers stored there vanish, and the 5-min foundation watchdog re-ran the
+    // WHOLE onboarding pipeline forever (the live "re-doing loop": 42 drafts,
+    // 9 day-1 events, fabricated multi-day history). These scalar fields are the
+    // durable source of truth; the agent reads them via `get_agent_lifecycle`
+    // and gates BOOT/HEARTBEAT on them instead of MEMORY.md (scratchpad only).
+    //   helloSentAt — first intro fired (idempotency for the boot + safety-net).
+    //   foundationStartedAt / foundationCompletedAt — onboarding pass bounds.
+    //   lastMorningBriefAt — last 7am brief, for missed-cadence recovery.
+    //   foundationLeaseUntil — a check-and-set lease (acquireFoundationLease) so
+    //     only ONE heartbeat/machine runs the foundation pass at a time.
+    helloSentAt: v.optional(v.number()),
+    foundationStartedAt: v.optional(v.number()),
+    foundationCompletedAt: v.optional(v.number()),
+    lastMorningBriefAt: v.optional(v.number()),
+    foundationLeaseUntil: v.optional(v.number()),
+    // How many times the foundation lease has been acquired. The watchdog
+    // re-acquires it each tick to resume the pass — but a weak brain that never
+    // finishes would re-run (and re-spawn the whole research fleet) forever
+    // (observed live: 283 subagent sessions on one onboarding). This is the HARD
+    // server-side cap: past FOUNDATION_MAX_LEASE_ACQUIRES with foundation still
+    // incomplete, the lease is DENIED so the agent physically cannot re-run it.
+    foundationLeaseAcquireCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -4437,7 +4536,17 @@ export default defineSchema({
       v.literal("draft"),
       v.literal("scheduled"),
       v.literal("completed"),
-      v.literal("cancelled")
+      v.literal("cancelled"),
+      // Maya v2 auto-post lifecycle (additive). 'queued' = Maya's internal
+      // scheduled, NOT on any external calendar (distinct from 'scheduled'
+      // which kept its Google-mirror meaning). 'published' is set ONLY by the
+      // 24h confirmEventLanded re-poll, never off the optimistic POST 200.
+      // 'needs_confirm' = Reddit/TikTok awaiting the founder's one-tap.
+      v.literal("queued"),
+      v.literal("posting"),
+      v.literal("published"),
+      v.literal("failed"),
+      v.literal("needs_confirm")
     ),
     createdBy: v.literal("maya"),
     // ─── Evidence-vault fields — additive, optional for back-compat ─────
@@ -4446,13 +4555,36 @@ export default defineSchema({
     // What success looks like for this task (e.g., "5 replies, 1 DM").
     successMetric: v.optional(v.string()),
     // ─── end evidence-vault fields ──────────────────────────────────────
+    // Turn-key payload (pillar 4) — so the founder just taps and posts. openUrl
+    // = the one-click deep link (the thread/composer/submit URL); draftText =
+    // the verbatim copy-paste reply/post in the founder's voice; sourceNote =
+    // the cited "why this / where it came from". successMetric above carries the
+    // target. Additive/optional for back-compat.
+    openUrl: v.optional(v.string()),
+    draftText: v.optional(v.string()),
+    sourceNote: v.optional(v.string()),
+    // Maya v2 auto-post execution state (JSON-on-row, no new table):
+    // {channel, zernioAccountId, zernioPostId, mode:'auto'|'manual_confirm',
+    //  scheduledForIso, publishConfirmedAt, platformPostUrl, lastError}.
+    // providerEventId stays Google-only; zernioPostId lives here. The 24h
+    // re-poll iterates by_agent + status, so no Zernio-id index is needed.
+    autoPostJson: v.optional(v.string()),
+    // #15 idempotency — stable dedupe identity so a re-run of the foundation /
+    // morning pass UPSERTS instead of appending duplicate events (the live
+    // deploy produced 9 day-1 events from watchdog re-entry). Optional for
+    // back-compat; when set, persistGtmCalendarEventDraft returns the existing
+    // row for (agentId, dedupeKey) instead of inserting a second. Stable keys:
+    // "day1_first_move" for the single onboarding move; "<channel>:<isoDay>:<threadId>"
+    // for a daily event tied to a thread.
+    dedupeKey: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_account", ["accountId"])
     .index("by_agent", ["agentId"])
     .index("by_research_job", ["researchJobId"])
-    .index("by_provider_event", ["providerEventId"]),
+    .index("by_provider_event", ["providerEventId"])
+    .index("by_agent_dedupe", ["agentId", "dedupeKey"]),
 
   // Sprint 19 — audit log of workspace mutations. Each row records a
   // re-generation of APP.md / GTM.md / MEMORY.md content driven by a
@@ -4495,7 +4627,9 @@ export default defineSchema({
     accountId: v.id("creators"),
     agentId: v.id("gtmAgents"),
     token: v.string(),
-    provider: v.literal("google"),
+    // 'zernio' added for the Maya v2 social-connect flow (signed-state binding
+    // so a public callback can never bind one founder's account to another).
+    provider: v.union(v.literal("google"), v.literal("zernio")),
     expiresAt: v.number(),
     claimedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -4549,7 +4683,11 @@ export default defineSchema({
       // Sprint J — proposed improvement to a shared skill (Layer 2, governed).
       v.literal("propose_skill_improvement"),
       // Mission Control — agent activity feed entry.
-      v.literal("post_activity")
+      v.literal("post_activity"),
+      // Data-collection sprint — inbound user message capture. Maya's
+      // runtime POSTs one row per inbound user turn so the conversation
+      // transcript persists to Convex (not just the ephemeral Fly disk).
+      v.literal("log_message")
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
@@ -4654,6 +4792,25 @@ export default defineSchema({
     // capture at MVP; it's the index for the cross-tenant data moat — the
     // per-archetype outcome-grounded playbook that warm-starts new customers.
     archetype: v.optional(v.string()),
+    // Slideshow cluster — web-vs-mobile fork captured at onboarding. Mobile
+    // apps live in an App Store / Play listing (screenshots are the asset
+    // Maya grounds slideshows in); web apps have only a site URL. Optional
+    // for back-compat with rows created before the toggle existed; absent =
+    // "web" (the historical default, since `url` was always a site URL).
+    appType: v.optional(v.union(v.literal("web"), v.literal("mobile"))),
+    appStoreUrl: v.optional(v.string()),
+    playStoreUrl: v.optional(v.string()),
+    // Conversion instrumentation — closes the attribution loop on the SIGNUP
+    // side (clicks are already 100% ours). conversionKind = what counts as a
+    // win for this founder (free string, e.g. "signup"/"install"/"waitlist"/
+    // "demo"); signupUrl = where a conversion lands (Maya wraps links to it by
+    // default so clicks→signups can join); conversionPixelInstalledAt is set
+    // the first time a `source:"pixel"` conversion arrives (so Maya knows the
+    // automatic path is live and can stop asking for self-reports). All
+    // optional for back-compat with rows created before the loop existed.
+    conversionKind: v.optional(v.string()),
+    signupUrl: v.optional(v.string()),
+    conversionPixelInstalledAt: v.optional(v.number()),
     diagnosis: v.optional(v.any()),
     // Sprint 1.1 — cached LLM-driven keyword expansion. Maps the founder's
     // product description into semantic keywords + audience pain phrases the
@@ -4677,6 +4834,11 @@ export default defineSchema({
   })
     .index("by_account", ["accountId"])
     .index("by_account_and_url", ["accountId", "url"]),
+
+  // NOTE: the slideshow-cluster media library is NOT a table — it lives as
+  // `gtmAgents.mediaLibraryJson` (a JSON string). See that field's comment:
+  // the schema is at TypeScript's DataModel instantiation ceiling and a 139th
+  // table regresses db.get() narrowing project-wide.
 
   gtmResearchJobs: defineTable({
     accountId: v.id("creators"),
@@ -4793,6 +4955,7 @@ export default defineSchema({
       v.literal("google"),
       v.literal("reddit"),
       v.literal("x"),
+      v.literal("hn"),
       v.literal("linkedin"),
       v.literal("tiktok"),
       v.literal("instagram"),
@@ -5030,9 +5193,17 @@ export default defineSchema({
   gtmChannelScores: defineTable({
     accountId: v.id("creators"),
     researchJobId: v.id("gtmResearchJobs"),
+    // Live scored/surfaced channels are reddit/x/hn/linkedin/tiktok (see
+    // judgeChannel.ts). `youtube` and `product_hunt` are NO LONGER
+    // scored or surfaced in the onboarding picker (vestigial — no native
+    // slideshow / not in the product vision). They are kept in this
+    // union ONLY for backward compat with historical rows written before
+    // they were dropped; do not re-introduce them at the scoring/picker
+    // layer.
     channel: v.union(
       v.literal("reddit"),
       v.literal("x"),
+      v.literal("hn"),
       v.literal("linkedin"),
       v.literal("tiktok"),
       v.literal("youtube"),
@@ -5203,6 +5374,9 @@ export default defineSchema({
       v.literal("composio"),
       v.literal("x_api"),
       v.literal("openclaw"),
+      // Maya v2: Zernio per-account fees + X $0.20/url-post metering record
+      // under their own provider so margin erosion is detectable per founder.
+      v.literal("zernio"),
       v.literal("other")
     ),
     operation: v.string(),
@@ -5706,6 +5880,11 @@ export default defineSchema({
         hasFace: v.optional(v.boolean()),
         captionStyle: v.optional(v.string()),
         postingWindow: v.optional(v.string()),
+        // Sprint 5 — when this draft is an arm in a registered experiment, the
+        // allocator stamps which experiment + arm it belongs to so the verdict
+        // join (getAttributeOutcomes / experiment registry) can attribute it.
+        experimentId: v.optional(v.string()),
+        armLabel: v.optional(v.string()),
       })
     ),
     /** 0-1; how well this matches operator's voice. Sprint 2.4 populates. */
@@ -5777,6 +5956,17 @@ export default defineSchema({
     // to show "Maya pinged the operator about this one".
     surfacedToOperator: v.boolean(),
     notes: v.optional(v.string()),
+    // Maya v2 (S3) engagement-ledger dedup — keys this published record to
+    // EXACTLY what we replied to, so the publish gate can refuse a second
+    // reply to the same thread/comment. targetExternalId = the platform's own
+    // post/thread id; targetCommentId = the specific comment within it (the
+    // operator chose per-comment granularity 2026-06-02). intentionalFollowUp
+    // records that a repeat reply was a deliberate override, not a dedup miss.
+    // No new index: the check scans by_agent + filters platform/targetExternalId
+    // (mirrors the gtmTargetThreads dedupe-scan pattern).
+    targetExternalId: v.optional(v.string()),
+    targetCommentId: v.optional(v.string()),
+    intentionalFollowUp: v.optional(v.boolean()),
   })
     .index("by_account", ["accountId"])
     .index("by_agent", ["agentId"])
@@ -5835,7 +6025,10 @@ export default defineSchema({
       v.literal("signup"),
       v.literal("demo"),
       v.literal("feedback"),
-      v.literal("revenue")
+      v.literal("revenue"),
+      // Sprint 3 (top-tier): a signed-up user who came BACK / reached value.
+      // Lets Maya own outcomes (a customer who stuck), not just first-touch signups.
+      v.literal("activated")
     ),
     count: v.number(),
     source: v.union(v.literal("self_report"), v.literal("pixel")),
@@ -5936,6 +6129,59 @@ export default defineSchema({
     .index("by_agent", ["agentId"])
     .index("by_account_and_created", ["accountId", "createdAt"]),
 
+  // ─── Data-collection sprint — conversation transcript ─────────────────
+  // Every user↔Maya turn, persisted plaintext + tenant-isolated. Before
+  // this table, inbound user messages lived only on the ephemeral OpenClaw
+  // Fly machine and Maya's replies went straight to Telegram — neither
+  // reached Convex, so "what users say to their Maya" was unrecoverable.
+  //
+  // Capture paths:
+  //   - role:"maya"  — written from /lc_gtm/send_update (we own that path).
+  //   - role:"user"  — written from /lc_gtm/log_message, which Maya's
+  //     runtime calls as the first action of every inbound turn.
+  // `turnId` groups a user message with the reply(s) it produced so the
+  // quality grader (Wave 4) can score a turn as a unit. The optional
+  // telemetry fields are populated by Wave 2 (per-turn LLM cost/tokens).
+  //
+  // Tenant isolation: accountId === Id<"creators">; all reads scope by it.
+  // Privacy: plaintext is intentional (operator-locked) so the founder
+  // dashboard + LLM grader can read content directly. Body is capped at
+  // capture time (see conversationCapture.ts MAX_BODY_CHARS).
+  mayaMessages: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    role: v.union(v.literal("user"), v.literal("maya")),
+    /** Plaintext message body (capped/truncated at capture time). */
+    body: v.string(),
+    channel: v.union(
+      v.literal("telegram"),
+      v.literal("claw-messenger"),
+      v.literal("sms"),
+      v.literal("web"),
+      v.literal("unknown")
+    ),
+    /** Groups one user turn with the Maya reply(s) it produced. */
+    turnId: v.string(),
+    ts: v.number(),
+    // ── maya-role classification (from send_update) ──────────────────────
+    /** "strategic" | "tactical" — Maya's self-declared message class. */
+    messageClass: v.optional(v.string()),
+    /** Whether Maya declared the 5-gate output critic passed. */
+    criticPassed: v.optional(v.boolean()),
+    // ── Wave 2 per-turn LLM telemetry (optional, backfilled by turnId) ───
+    model: v.optional(v.string()),
+    tokensIn: v.optional(v.number()),
+    tokensOut: v.optional(v.number()),
+    cacheReadTokens: v.optional(v.number()),
+    latencyMs: v.optional(v.number()),
+    costUsd: v.optional(v.number()),
+    thinkingBudget: v.optional(v.number()),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_ts", ["accountId", "ts"])
+    .index("by_agent", ["agentId"])
+    .index("by_turn", ["turnId"]),
+
   // ─── Sprint 2.17 — Manager-mode foundation tables ─────────────────────
   // The five outputs of the foundation-research pass (onboarding +
   // monthly refresh). Each is its own table because:
@@ -5963,6 +6209,10 @@ export default defineSchema({
         stage: v.string(),
         whereTheyHangOut: v.string(),
         intentLanguage: v.string(),
+        // Pillar 2 — per-stage native style + complaints captured during
+        // research, so the daily cron can ground drafts in real buyer words.
+        nativeStyleExemplars: v.optional(v.array(v.string())),
+        complaints: v.optional(v.array(v.string())),
       })
     ),
     /** Search phrases / post titles / DM openers that signal a buyer in-market. */
@@ -6046,6 +6296,15 @@ export default defineSchema({
     /** Top 2-3 channels Maya bets on each get bet=true. */
     bet: v.boolean(),
     notes: v.optional(v.string()),
+    // Pillar 2 (ICP knowledge, per channel) — the daily cron reads this so the
+    // research pays off every morning instead of decaying after onboarding.
+    // JSON string: { venues:[{name,kind,url?,whyHere}], watch:string[],
+    // complaints:[{quote,sourceUrl}], topics:string[], nativeStyle:{...} }.
+    icpKnowledge: v.optional(v.string()),
+    // 5-10 verbatim native posts per channel — voice/register anchors for
+    // maya-voice-matcher (Anchor B). JSON: [{platform,community,verbatim,why,
+    // capturedAt}].
+    styleExemplarsJson: v.optional(v.string()),
     synthesizedAt: v.number(),
     updatedAt: v.number(),
   })
@@ -6311,6 +6570,10 @@ export default defineSchema({
     /** Set when the learning is contradicted by newer evidence. Maya
      *  may revive a retired learning if it re-emerges. */
     retired: v.boolean(),
+    // Sprint 8 — structured, AGGREGATABLE form of this learning (free text is
+    // un-rollupable). JSON: {venue?, hook?, format?, timeBucket?, outcome?}. The
+    // monthly cross-tenant rollup reads this to build the archetype playbook.
+    structuredJson: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

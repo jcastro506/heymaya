@@ -71,6 +71,8 @@ const CHANNEL_DESCRIPTIONS: Record<GtmChannel, string> = {
     "Reddit — subreddit-based, anonymous, comment-driven. Best when buyer asks 'what should I use for X' or vents about a tool. Strict anti-promo norms; reply value > self-promo.",
   x:
     "X (Twitter) — public timeline + replies, founder-led, fast. Best for indie hackers, dev tools, B2B SaaS founders building in public. Hashtags weak, communities exist but small.",
+  hn:
+    "Hacker News — research-only (buyer-pain signal via Algolia read + rare manual Show HN); NOT a posting/BET channel. Kept for backward compat only.",
   linkedin:
     "LinkedIn — professional B2B identity, long-form posts, employer-of-record audiences. Best for sales/marketing/enterprise tools, service businesses, B2B SaaS targeting corporate buyers.",
   tiktok:
@@ -334,17 +336,30 @@ export async function judgeAllChannels(
   const CHANNEL_SOURCE: Record<GtmChannel, GtmEvidenceCard["source"]> = {
     reddit: "reddit",
     x: "x",
+    hn: "hn",
     linkedin: "linkedin",
     tiktok: "tiktok",
     youtube: "youtube",
     product_hunt: "competitor",
   };
+  // The live set of channels that get scored → persisted into
+  // gtmChannelScores → surfaced in the onboarding picker. The scored
+  // BET set is the Zernio-postable channels: Reddit / X / LinkedIn /
+  // TikTok / YouTube. TikTok and YouTube are Brief-only channels (Maya
+  // hands over scripts + filming notes; no UGC creation). HN is
+  // RESEARCH-ONLY (Algolia buyer-pain read + rare manual "Show HN") and
+  // is deliberately EXCLUDED from BET scoring — it is not a posting
+  // channel. It remains in the GtmChannel type / schema union only for
+  // backward compat with historical rows. product_hunt is likewise
+  // excluded (single-day launch event, not steady-state acquisition);
+  // it too stays in the type/union for backward compat but is not
+  // scored or surfaced here.
   const channels: ReadonlyArray<GtmChannel> = opts?.channels ?? [
     "reddit",
     "x",
     "linkedin",
     "tiktok",
-    "product_hunt",
+    "youtube",
   ];
 
   const results = await Promise.all(

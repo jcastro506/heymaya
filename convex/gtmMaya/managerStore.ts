@@ -22,6 +22,11 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { computeAgentLifecycle, type AgentLifecycle } from "./agentLifecycle";
+import {
+  maxConfidenceForEvidence,
+  RETIRE_CONFIDENCE,
+} from "./experimentStats";
 
 async function assertAgentBelongsToAccount(
   ctx: { db: { get: <T>(id: T) => Promise<unknown> } },
@@ -48,6 +53,10 @@ export const upsertBuyerMap = internalMutation({
         stage: v.string(),
         whereTheyHangOut: v.string(),
         intentLanguage: v.string(),
+        // Pillar 2 — per-stage native style + complaints (their real words),
+        // so the daily cron can ground drafts in buyer language.
+        nativeStyleExemplars: v.optional(v.array(v.string())),
+        complaints: v.optional(v.array(v.string())),
       })
     ),
     intentPhrases: v.array(v.string()),
@@ -333,6 +342,13 @@ export const upsertChannelScorecard = internalMutation({
     uniqueUnlock: v.string(),
     bet: v.boolean(),
     notes: v.optional(v.string()),
+    // Pillar 2 — per-channel ICP knowledge (where-they-live + watch/complaints/
+    // topics + native-style) and 5-10 verbatim native exemplars. Stored as JSON
+    // strings on the existing per-(agentId,channel) row (schema-ceiling: no new
+    // tables). The daily morning cron reads these back, so we validate they
+    // parse here — a malformed string would silently poison the cron's plan.
+    icpKnowledge: v.optional(v.string()),
+    styleExemplarsJson: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Id<"gtmChannelScorecard">> => {
     await assertAgentBelongsToAccount(ctx, args.accountId, args.agentId);
@@ -341,6 +357,20 @@ export const upsertChannelScorecard = internalMutation({
     }
     if (args.cadenceFit < 0 || args.cadenceFit > 1) {
       throw new Error("cadenceFit must be in [0, 1]");
+    }
+    if (args.icpKnowledge !== undefined) {
+      try {
+        JSON.parse(args.icpKnowledge);
+      } catch {
+        throw new Error("icpKnowledge must be a valid JSON string");
+      }
+    }
+    if (args.styleExemplarsJson !== undefined) {
+      try {
+        JSON.parse(args.styleExemplarsJson);
+      } catch {
+        throw new Error("styleExemplarsJson must be a valid JSON string");
+      }
     }
     const now = Date.now();
     const existing = await ctx.db
@@ -356,6 +386,11 @@ export const upsertChannelScorecard = internalMutation({
         uniqueUnlock: args.uniqueUnlock,
         bet: args.bet,
         notes: args.notes,
+        // Preserve prior ICP knowledge / exemplars unless the caller passes new
+        // ones — a scores-only re-run must not wipe a populated scorecard.
+        icpKnowledge: args.icpKnowledge ?? existing.icpKnowledge,
+        styleExemplarsJson:
+          args.styleExemplarsJson ?? existing.styleExemplarsJson,
         synthesizedAt: now,
         updatedAt: now,
       });
@@ -370,6 +405,8 @@ export const upsertChannelScorecard = internalMutation({
       uniqueUnlock: args.uniqueUnlock,
       bet: args.bet,
       notes: args.notes,
+      icpKnowledge: args.icpKnowledge,
+      styleExemplarsJson: args.styleExemplarsJson,
       synthesizedAt: now,
       updatedAt: now,
     });
@@ -734,6 +771,9 @@ export const upsertNicheLearning = internalMutation({
      *  increment the existing count by 1 (or start at 1 for new). */
     evidenceCount: v.optional(v.number()),
     retired: v.optional(v.boolean()),
+    /** Sprint 8 — structured form {venue,hook,format,timeBucket,outcome} as JSON,
+     *  so the cross-tenant rollup can aggregate it. */
+    structuredJson: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Id<"gtmNicheLearnings">> => {
     await assertAgentBelongsToAccount(ctx, args.accountId, args.agentId);
@@ -747,14 +787,29 @@ export const upsertNicheLearning = internalMutation({
         q.eq("agentId", args.agentId).eq("learningKey", args.learningKey)
       )
       .first();
+    const evidenceCount =
+      args.evidenceCount ?? (existing ? existing.evidenceCount + 1 : 1);
+    // Sprint 5 — honest re-weight (fail-closed): a learning can never claim more
+    // confidence than its evidence supports. Clamp, never trust, an overconfident
+    // claim (0.95 on 1 data point is noise, not knowledge).
+    const confidenceScore = Math.min(
+      args.confidenceScore,
+      maxConfidenceForEvidence(evidenceCount)
+    );
+    // Auto-retire a contradicted learning: if confidence has collapsed below the
+    // retire floor, mark it retired (Maya may revive it if it re-emerges).
+    const retired =
+      args.retired ?? (confidenceScore <= RETIRE_CONFIDENCE ? true : existing?.retired ?? false);
+
     if (existing) {
       await ctx.db.patch(existing._id, {
         learningKind: args.learningKind,
         learning: args.learning,
-        confidenceScore: args.confidenceScore,
-        evidenceCount: args.evidenceCount ?? existing.evidenceCount + 1,
+        confidenceScore,
+        evidenceCount,
         lastReinforcedAt: now,
-        retired: args.retired ?? existing.retired,
+        retired,
+        structuredJson: args.structuredJson ?? existing.structuredJson,
         updatedAt: now,
       });
       return existing._id;
@@ -765,11 +820,12 @@ export const upsertNicheLearning = internalMutation({
       learningKey: args.learningKey,
       learningKind: args.learningKind,
       learning: args.learning,
-      confidenceScore: args.confidenceScore,
-      evidenceCount: args.evidenceCount ?? 1,
+      confidenceScore,
+      evidenceCount,
       firstObservedAt: now,
       lastReinforcedAt: now,
-      retired: args.retired ?? false,
+      retired,
+      structuredJson: args.structuredJson,
       createdAt: now,
       updatedAt: now,
     });
@@ -798,6 +854,10 @@ export const getMyFoundation = internalQuery({
     channelScorecard: Doc<"gtmChannelScorecard">[];
     contentAngles: Doc<"gtmContentAngles">[];
     relationshipTargets: Doc<"gtmRelationshipTargets">[];
+    // #15 — durable lifecycle completeness, so the boot + heartbeat gate on
+    // Convex state (NOT ephemeral MEMORY.md markers). `foundationComplete`
+    // here is the same value `get_agent_lifecycle` returns.
+    lifecycle: AgentLifecycle | null;
   }> => {
     const buyerMap = await ctx.db
       .query("gtmBuyerMap")
@@ -819,13 +879,58 @@ export const getMyFoundation = internalQuery({
       .query("gtmRelationshipTargets")
       .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
       .collect();
+    const agent = await ctx.db.get(args.agentId);
+    const lifecycle = agent
+      ? await computeAgentLifecycle(ctx, agent, Date.now())
+      : null;
     return {
       buyerMap,
       competitiveMap,
       channelScorecard,
       contentAngles,
       relationshipTargets,
+      lifecycle,
     };
+  },
+});
+
+/** Pillar 2 — cheap daily read of the per-channel ICP knowledge for the
+ *  agent's BET channels only. The morning cron uses this to build TODAY's
+ *  events from stored knowledge (whereTheyHangOut + native style) instead of
+ *  re-deriving the ICP. icpKnowledge / styleExemplarsJson are parsed here so
+ *  the caller gets structured objects; a row whose JSON is somehow malformed
+ *  yields null for that field rather than throwing (read paths stay resilient). */
+export const getMyChannelIcpKnowledge = internalQuery({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<
+    Array<{
+      channel: string;
+      icpKnowledge: unknown | null;
+      styleExemplars: unknown | null;
+    }>
+  > => {
+    const rows = await ctx.db
+      .query("gtmChannelScorecard")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    const safeParse = (s: string | undefined): unknown | null => {
+      if (s === undefined) return null;
+      try {
+        return JSON.parse(s);
+      } catch {
+        return null;
+      }
+    };
+    return rows
+      .filter((r) => r.bet)
+      .map((r) => ({
+        channel: r.channel,
+        icpKnowledge: safeParse(r.icpKnowledge),
+        styleExemplars: safeParse(r.styleExemplarsJson),
+      }));
   },
 });
 

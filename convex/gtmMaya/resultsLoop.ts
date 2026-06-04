@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { confirmedConversions, assessSingleMotion } from "./experimentStats";
 
 const PLATFORM = v.union(
   v.literal("reddit"),
@@ -87,26 +88,33 @@ export function interpretResults(
     }),
     { replies: 0, clicks: 0, signups: 0, demos: 0, feedbackItems: 0 }
   );
-  const customerMovement =
-    totals.signups + totals.demos * 2 + totals.feedbackItems + totals.replies * 0.25;
+  // Sprint 4: real, UNWEIGHTED confirmed conversions + the shared stats floor
+  // replace the old "signups + demos*2 + replies*0.25 >= 3" fudge. Replies are
+  // not conversions and never count toward "strong".
+  const conversions = confirmedConversions(totals);
+  const assessment = assessSingleMotion(conversions, { samples: snapshots.length });
 
-  if (customerMovement >= 3) {
+  if (assessment.signal === "strong") {
     return {
       signal: "strong",
-      summary: `Strong signal: ${totals.signups} signups, ${totals.demos} demos, ${totals.feedbackItems} feedback items, ${totals.replies} replies.`,
+      summary: `Strong signal: ${totals.signups} signups, ${totals.demos} demos, ${totals.feedbackItems} feedback items (${conversions} confirmed conversions — past the floor).`,
       recommendation: "double_down",
     };
   }
-  if (snapshots.length < 3 || customerMovement < 1) {
+  if (snapshots.length < 3 || conversions < 1) {
     return {
       signal: "inconclusive",
-      summary: "Not enough customer movement yet. Do not overfit this result.",
+      summary: `Not enough customer movement yet (${conversions} conversion${
+        conversions === 1 ? "" : "s"
+      }; need ${assessment.conversionsNeeded} more before I'd call it). Do not overfit this result.`,
       recommendation: "do_not_overfit",
     };
   }
   return {
     signal: "weak",
-    summary: `Weak signal: some engagement, but not enough customer movement to double down.`,
+    summary: `Weak signal: ${conversions} confirmed conversion${
+      conversions === 1 ? "" : "s"
+    } — some movement, but ${assessment.conversionsNeeded} more needed to double down. Not vanity metrics.`,
     recommendation: "iterate",
   };
 }

@@ -90,12 +90,15 @@ const RECOMMENDED_USE = v.union(
   v.literal("competitor")
 );
 
+// Channels the agent may record scores for. Reconciled to the live
+// judge's scored set: Reddit / X / LinkedIn / TikTok. youtube and
+// product_hunt are deliberately excluded (vestigial / not in the
+// product vision); the judge no longer emits them.
 const CHANNEL = v.union(
   v.literal("reddit"),
   v.literal("x"),
   v.literal("linkedin"),
-  v.literal("tiktok"),
-  v.literal("product_hunt")
+  v.literal("tiktok")
 );
 
 const CHANNEL_DECISION = v.union(
@@ -255,6 +258,15 @@ export const setAppProfile = mutation({
     // manager tab). Optional; Maya can also resolve/refine it later via
     // /lc_gtm/set_north_star.
     entryMode: v.optional(v.union(v.literal("launch"), v.literal("manager"))),
+    // Slideshow cluster — web-vs-mobile fork. Mobile apps carry store URLs +
+    // a screenshots-as-asset emphasis; web apps just have the site `url`.
+    appType: v.optional(v.union(v.literal("web"), v.literal("mobile"))),
+    appStoreUrl: v.optional(v.string()),
+    playStoreUrl: v.optional(v.string()),
+    // Conversion instrumentation — what counts as a win + where it lands, so
+    // the signup side of attribution can close.
+    conversionKind: v.optional(v.string()),
+    signupUrl: v.optional(v.string()),
     diagnosis: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<Id<"gtmApps">> => {
@@ -292,6 +304,11 @@ export const setAppProfile = mutation({
         maxWeeklyVisualPosts: args.maxWeeklyVisualPosts,
         excludedAudiences: args.excludedAudiences,
         entryMode: args.entryMode,
+        appType: args.appType,
+        appStoreUrl: normalizeOptionalUrl(args.appStoreUrl),
+        playStoreUrl: normalizeOptionalUrl(args.playStoreUrl),
+        conversionKind: args.conversionKind,
+        signupUrl: normalizeOptionalUrl(args.signupUrl),
         diagnosis: args.diagnosis,
         updatedAt: now,
       });
@@ -322,6 +339,11 @@ export const setAppProfile = mutation({
       maxWeeklyVisualPosts: args.maxWeeklyVisualPosts,
       excludedAudiences: args.excludedAudiences,
       entryMode: args.entryMode,
+      appType: args.appType,
+      appStoreUrl: normalizeOptionalUrl(args.appStoreUrl),
+      playStoreUrl: normalizeOptionalUrl(args.playStoreUrl),
+      conversionKind: args.conversionKind,
+      signupUrl: normalizeOptionalUrl(args.signupUrl),
       diagnosis: args.diagnosis,
       createdAt: now,
       updatedAt: now,
@@ -564,6 +586,7 @@ export const setMyChannelDecisions = mutation({
         channel: v.union(
           v.literal("reddit"),
           v.literal("x"),
+          v.literal("hn"),
           v.literal("linkedin"),
           v.literal("tiktok"),
           v.literal("youtube"),

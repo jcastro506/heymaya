@@ -652,7 +652,9 @@ describe("Sprint 2.17 — gtmNicheLearnings", () => {
     );
     expect(learnings).toHaveLength(1);
     expect(learnings[0].evidenceCount).toBe(2);
-    expect(learnings[0].confidenceScore).toBeCloseTo(0.85);
+    // Sprint 5 — confidence is clamped to what the evidence supports. A claimed
+    // 0.85 off only 2 data points is honestly capped at maxConfidenceForEvidence(2)=0.65.
+    expect(learnings[0].confidenceScore).toBeCloseTo(0.65);
   });
 
   it("upsertNicheLearning rejects confidence out of range", async () => {
@@ -792,7 +794,8 @@ describe("Sprint 2.17 Phase F — feedback loop integration", () => {
     );
     expect(timingLearning).toBeTruthy();
     expect(timingLearning?.evidenceCount).toBe(2); // auto-incremented
-    expect(timingLearning?.confidenceScore).toBeCloseTo(0.88);
+    // Sprint 5 — clamped to the evidence: 0.88 claimed off 2 points → capped at 0.65.
+    expect(timingLearning?.confidenceScore).toBeCloseTo(0.65);
 
     // And she can read her recent action log to gauge operator
     // engagement with prior briefs.

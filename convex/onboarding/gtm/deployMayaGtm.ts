@@ -9,6 +9,7 @@ import {
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import { FlyClient, FlyError, type FlyMachineConfig } from "../../lib/flyClient";
+import { capturePosthogEvent } from "../../lib/posthog";
 import { buildMayaGtmWorkspace } from "../../agents/packs/maya_gtm/generators";
 import {
   BUNDLED_GTM_PLUGIN_TGZ_BASE64,
@@ -19,6 +20,140 @@ import {
   buildDeployTimeHelloText,
   sendDirectTelegramMessage,
 } from "../../integrations/telegram/sendDirectMessage";
+
+/**
+ * Narrow a persisted gtmChannelScores.channel down to the live picker channel
+ * set the workspace generator accepts. Ideal-product pillar 2 (EQUAL
+ * SIX-CHANNEL RESEARCH) re-promotes youtube to a first-class Brief-only
+ * channel, so a youtube primary/secondary now survives instead of resolving
+ * to undefined. product_hunt stays excluded (never scored) and resolves to
+ * undefined ("pending research").
+ */
+function toPickerChannel(
+  channel: Doc<"gtmChannelScores">["channel"] | undefined
+): "reddit" | "x" | "hn" | "linkedin" | "tiktok" | "youtube" | undefined {
+  switch (channel) {
+    case "reddit":
+    case "x":
+    case "hn":
+    case "linkedin":
+    case "tiktok":
+    case "youtube":
+      return channel;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Ideal-product WARMUP pillar — seed an initial channelWarmthJson from the
+ * founder-voice ScrapeCreators pull when one ran, so the per-channel warmth
+ * arc starts GROUNDED instead of "unknown". Only consulted as a deploy-time
+ * fallback: if the agent already persisted channelWarmthJson (via
+ * set_channel_warmth), that authoritative map wins and this helper is skipped.
+ *
+ * The voice pull persists per-platform signal on gtmAgents.voiceProfileJson
+ * (sources[] + perPlatform{}). For each platform we have a source for, derive
+ * a starting warmth state from the cheap thresholds the pull captured
+ * (sampleCount as a proxy for posting history, plus follower/age hints when
+ * present): an established account (real history / follower base / aged) starts
+ * "warm"; a thin or brand-new account starts "new_needs_warmup". Channels with
+ * no voice source are left absent (the cron treats absent as cold/unknown).
+ *
+ * tiktokWarmupState is mirrored into channelWarmthJson.tiktok as the
+ * back-compat alias so the legacy TikTok field and the generalized map agree.
+ */
+function seedChannelWarmthFromVoice(input: {
+  voiceProfileJson?: string;
+  existingChannelWarmthJson?: string;
+  tiktokWarmupState?: Doc<"gtmApps">["tiktokWarmupState"];
+  tiktokAccountAgeDays?: number;
+}): string | undefined {
+  // Authoritative map already exists — never overwrite the runtime's arc.
+  if (input.existingChannelWarmthJson) {
+    return input.existingChannelWarmthJson;
+  }
+  if (!input.voiceProfileJson) {
+    return undefined;
+  }
+
+  type VoiceSource = {
+    platform?: string;
+    url?: string;
+    sampleCount?: number;
+    followerCount?: number;
+    accountAgeDays?: number;
+    kind?: string;
+  };
+  let parsed: {
+    sources?: VoiceSource[];
+    perPlatform?: Record<string, VoiceSource>;
+  };
+  try {
+    parsed = JSON.parse(input.voiceProfileJson) as typeof parsed;
+  } catch {
+    // Malformed voice profile — fail open to "unknown" (return nothing).
+    return undefined;
+  }
+
+  const now = Date.now();
+  const warmth: Record<string, unknown> = {};
+
+  const deriveState = (s: VoiceSource): "warm" | "new_needs_warmup" => {
+    // Grounded thresholds: a channel with real posting history OR a follower
+    // base OR an aged account is treated as already warm (skip warmup); a thin
+    // or brand-new account needs the warmup arc first.
+    const samples = s.sampleCount ?? 0;
+    const followers = s.followerCount ?? 0;
+    const ageDays = s.accountAgeDays ?? 0;
+    const established = samples >= 10 || followers >= 100 || ageDays >= 30;
+    return established ? "warm" : "new_needs_warmup";
+  };
+
+  const mergeSource = (platform: string, s: VoiceSource): void => {
+    const key = platform.toLowerCase().trim();
+    if (!key || warmth[key]) return;
+    warmth[key] = {
+      state: deriveState(s),
+      accountAgeDays: s.accountAgeDays,
+      baseline: {
+        followers: s.followerCount,
+        postCount: s.sampleCount,
+      },
+      lastUpdatedMs: now,
+      seededFrom: "voice_pull",
+    };
+  };
+
+  for (const s of parsed.sources ?? []) {
+    if (s?.platform) mergeSource(s.platform, s);
+  }
+  for (const [platform, s] of Object.entries(parsed.perPlatform ?? {})) {
+    if (s) mergeSource(platform, s);
+  }
+
+  // Back-compat alias: mirror tiktokWarmupState into channelWarmthJson.tiktok
+  // so the legacy field and the generalized map never disagree. A TikTok voice
+  // source (above) is overridden by the explicit warmup state when present.
+  if (input.tiktokWarmupState) {
+    const tiktokState =
+      input.tiktokWarmupState === "ready" ? "warm" : input.tiktokWarmupState;
+    warmth.tiktok = {
+      ...(typeof warmth.tiktok === "object" && warmth.tiktok
+        ? (warmth.tiktok as Record<string, unknown>)
+        : {}),
+      state: tiktokState,
+      accountAgeDays: input.tiktokAccountAgeDays,
+      lastUpdatedMs: now,
+      seededFrom: "tiktok_warmup_state",
+    };
+  }
+
+  if (Object.keys(warmth).length === 0) {
+    return undefined;
+  }
+  return JSON.stringify(warmth);
+}
 
 export type DeployMayaGtmStage =
   | "load-agent"
@@ -373,6 +508,30 @@ export function buildGatewayConfig(
       subagents: { allowAgents: [] as string[] },
     },
     {
+      // Ideal-product pillar 2 (EQUAL SIX-CHANNEL RESEARCH) — youtube is
+      // re-promoted to a first-class Brief-only channel. This worker mirrors
+      // instagram_research / linkedin_research: it scrapes the founder's +
+      // ICP's YouTube via scrape_creators, mines comments + transcripts for
+      // native register and buyer language, and persists via save_target_thread
+      // + save_foundation_channel_scorecard (with icpKnowledge) +
+      // save_style_exemplars. Task contract lives in the maya-youtube-researcher
+      // SKILL.md; this entry just gives it the plugin tools + coding profile so
+      // its save_* calls actually land instead of fabricating.
+      id: "youtube_research",
+      name: "YouTube Demand Researcher",
+      model: subagentModel,
+      // alsoAllow group:plugins — the `coding` profile does NOT include
+      // plugin-owned tools, so without this the maya-gtm-tools typed tools
+      // (research_* + save_*) are filtered out of the worker's tool set and
+      // it falls back to fabricating. This is what makes the workers actually
+      // persist instead of returning text.
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
       // HN via Algolia search — no API key required, GET-only.
       // Full coding profile here too so subagent can choose web_fetch
       // for the GET or curl-via-exec if needed.
@@ -590,6 +749,13 @@ export function buildGatewayConfig(
         // none exceed 30K). With the canonical reorg, files should be
         // much smaller anyway — this is safety net.
         bootstrapMaxChars: 30000,
+        // Sprint top-tier (2026-06-03) — raise the TOTAL bootstrap budget from
+        // the 60K default. A live deploy-test proved the failure mode: TOOLS.md
+        // had grown to 36K (12 new tools) and ate the whole 60K total, so BOOT.md
+        // (the research kickoff) was SILENTLY SKIPPED and the agent stalled with
+        // no instructions. TOOLS.md is now a terse ~8.5K index; total core ~85K.
+        // 110K total leaves comfortable headroom so the kickoff never gets dropped.
+        bootstrapTotalMaxChars: 110000,
         // Skip OpenClaw's first-run Q&A — Convex onboarding already
         // collected identity + user preferences + timezone. IDENTITY.md
         // is rendered by our own template.
@@ -926,10 +1092,17 @@ export const recordDeployTimeHelloResult = internalMutation({
   },
   handler: async (ctx, args): Promise<void> => {
     const now = Date.now();
+    const agent = await ctx.db.get(args.agentId);
     await ctx.db.patch(args.agentId, {
       deployTimeHelloAttemptedAt: now,
       deployTimeHelloResult: args.result.slice(0, 200),
       deployTimeHelloMessageId: args.messageId,
+      // #15 — when the deploy-time hello actually SENT, set the durable
+      // lifecycle marker too so BOOT's get_agent_lifecycle sees helloSent=true
+      // and never re-introduces Maya like a stranger on the next boot/restart.
+      ...(args.result === "sent" && !agent?.helloSentAt
+        ? { helloSentAt: now }
+        : {}),
       updatedAt: now,
     });
   },
@@ -1031,10 +1204,12 @@ export const buildAndUploadGtmWorkspace = internalAction({
       // Sprint 2.32 — the founder's walkthrough video, for Maya to watch
       // herself on boot rather than relying on a Convex-side pre-digest.
       walkthroughVideoUrl: row.walkthroughVideoUrl,
-      primaryChannel: row.channelScores.find((s) => s.decision === "primary")
-        ?.channel,
-      secondaryChannel: row.channelScores.find((s) => s.decision === "secondary")
-        ?.channel,
+      primaryChannel: toPickerChannel(
+        row.channelScores.find((s) => s.decision === "primary")?.channel
+      ),
+      secondaryChannel: toPickerChannel(
+        row.channelScores.find((s) => s.decision === "secondary")?.channel
+      ),
       activeResearchJobId: row.latestResearchJobId
         ? String(row.latestResearchJobId)
         : undefined,
@@ -1052,6 +1227,25 @@ export const buildAndUploadGtmWorkspace = internalAction({
       // where to POST /lc_gtm/* callbacks.
       hookToken,
       convexHookCallbackUrl: resolveConvexHookCallbackBaseUrl(),
+      // Ideal-product pillar 1 (VOICE) — thread the founder's persisted voice
+      // fingerprint so a redeploy re-renders the USER.md "Voice fingerprint"
+      // section instead of resetting it to "not yet built". Built in Phase 0
+      // from the founder's own handles (save_voice_profile).
+      voiceProfileJson: row.agent.voiceProfileJson,
+      // Ideal-product pillar 4 (WARMUP) — thread the per-channel warmth map so a
+      // redeploy re-renders the per-channel warmth block. If the runtime already
+      // persisted channelWarmthJson (via set_channel_warmth) it wins; otherwise
+      // seed an initial grounded arc from the voice pull's per-platform signal
+      // (and mirror the legacy tiktokWarmupState into .tiktok).
+      channelWarmthJson: seedChannelWarmthFromVoice({
+        voiceProfileJson: row.agent.voiceProfileJson,
+        existingChannelWarmthJson: row.agent.channelWarmthJson,
+        tiktokWarmupState: row.app.tiktokWarmupState,
+        tiktokAccountAgeDays: row.app.tiktokAccountAgeDays,
+      }),
+      // Which channels the founder connected, so USER.md tells Maya who she can
+      // post for (auto-post vs one-tap-confirm vs not-connected).
+      connectedAccountsJson: row.agent.connectedAccountsJson,
     });
     const tarBytes = buildPosixTar(files);
     const tarBuffer = tarBytes.buffer.slice(
@@ -1276,6 +1470,33 @@ export const deployMayaGtm = internalAction({
       }
     }
 
+    // #15 deploy-harness hardening — DESTROY any existing machine on this app
+    // BEFORE creating a new one. A redeploy used to leave the old machine
+    // running, so two machines = two HEARTBEAT watchdogs = doubled work (a
+    // direct contributor to the re-doing loop: two foundation passes, two sets
+    // of crons). Idempotent + best-effort: list, force-destroy each, never let a
+    // teardown error block the fresh deploy (the new machine + the durable
+    // foundation lease are the real guards).
+    try {
+      const existing = await fly.listMachines(bundle.flyAppName);
+      for (const m of existing) {
+        try {
+          await fly.destroyMachine(bundle.flyAppName, m.id, { force: true });
+          console.log(
+            `[deployMayaGtm] destroyed stale machine ${m.id} on ${bundle.flyAppName} before redeploy`
+          );
+        } catch (err) {
+          console.warn(
+            `[deployMayaGtm] could not destroy stale machine ${m.id}: ${(err as Error).message}`
+          );
+        }
+      }
+    } catch (err) {
+      console.warn(
+        `[deployMayaGtm] listMachines pre-destroy failed (continuing): ${(err as Error).message}`
+      );
+    }
+
     let machine;
     try {
       machine = await fly.createMachine({
@@ -1329,6 +1550,27 @@ export const deployMayaGtm = internalAction({
       );
     } catch (err) {
       return fail("patch-agent", (err as Error).message, true);
+    }
+
+    // Server-truth analytics: the agent is live. Terminal step of the
+    // onboarding funnel in PostHog. Best-effort; never fails the deploy.
+    try {
+      const accountId = row.agent.accountId;
+      const distinctId = await ctx.runQuery(
+        internal.gtmMaya.openclaw.conversationCapture.getAccountDistinctId,
+        { accountId }
+      );
+      await capturePosthogEvent({
+        distinctId,
+        event: "agent_deployed",
+        properties: {
+          account_id: accountId,
+          fly_app_id: bundle.flyAppName,
+          duration_ms: Date.now() - startedAt,
+        },
+      });
+    } catch {
+      // analytics is non-critical
     }
 
     return {

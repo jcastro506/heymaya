@@ -259,10 +259,16 @@ const IdemKey = Type.Optional(
 const PLATFORM_7 = ["reddit", "x", "hn", "linkedin", "instagram", "tiktok", "youtube"];
 const RELATIONSHIP_PLATFORM = ["reddit", "x", "hn", "linkedin", "instagram", "tiktok", "threads"];
 const CHANNEL_11 = [
-  "reddit", "x", "hn", "linkedin", "tiktok", "instagram",
+  "reddit", "x", "hn", "linkedin", "tiktok", "instagram", "youtube",
   "threads", "podcasts", "newsletters", "discord", "blog",
 ];
 const PUBLISHED_PLATFORM_6 = ["reddit", "x", "hn", "linkedin", "instagram", "tiktok"];
+// Channels that carry a per-channel warmth state (ban-safety arc). Mirrors the
+// bet channels plus tiktok (the original warmup channel kept as back-compat).
+const WARMTH_CHANNEL = ["reddit", "x", "hn", "linkedin", "instagram", "tiktok", "youtube"];
+// Per-channel warmth state. Reuses the tiktokWarmupState enum values; warm|ready
+// means skip-warmup for that channel.
+const WARMTH_STATE = ["unknown", "new_needs_warmup", "warming", "ready", "warm", "restricted"];
 
 function Enum(values, description) {
   return Type.Unsafe({ type: "string", enum: values, ...(description ? { description } : {}) });
@@ -281,6 +287,29 @@ export default defineToolPlugin({
     // =====================================================================
     // RESEARCH (read) — kills fabrication: data exists only if the call ran.
     // =====================================================================
+    tool({
+      name: "search_web",
+      label: "Search Web",
+      description:
+        "Search the OPEN WEB (Google-grounded) and read any page — competitor pricing/positioning/changelog pages, a founder's own landing page, reviews, blogs, docs. Use this when I need something OFF the social platforms (research_reddit/x/hn cover social). REQUIRED: query (a question or 'read <url>'-style ask). Optional: limit (default 8). Returns { ok, results:[{url, title, excerpt, domain}], statusDetail }. Cited — I quote the page, never invent. Costs ~$0.04/query: log it with log_cost (provider gemini). Empty/blocked returns ok:false with statusDetail, never an error.",
+      parameters: Type.Object({
+        query: Type.String({ description: "What to find on the web, or a site to read." }),
+        limit: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("search_web", p, ctx.signal),
+    }),
+    tool({
+      name: "search_demand",
+      label: "Search Demand",
+      description:
+        "Real Google SEARCH DEMAND for buyer phrasing — which terms people actually search, with volume + CPC + competition. Use it in foundation research to validate WHERE demand is (vs guessing from threads) and to find which buyer language to target. REQUIRED: seeds (terms derived from the buyer map / intent phrases — pass ALL of them in ONE call, it's billed per-call ~$0.075 not per-keyword, up to ~200). Optional: locationCode (default 2840 = US), languageCode (default 'en'). Returns { ok, keywords:[{keyword, volume, cpc, competition}] sorted by volume } — volume null = ~no search demand for that phrasing (a dead end). On ok:false reason 'needs_verification'/'no_creds', the demand add-on isn't ready — say so plainly. Log the ~$0.075 with log_cost (provider other, operation search_demand).",
+      parameters: Type.Object({
+        seeds: Type.Array(Type.String()),
+        locationCode: Type.Optional(Type.Number()),
+        languageCode: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("search_demand", p, ctx.signal),
+    }),
     tool({
       name: "research_reddit",
       label: "Research Reddit",
@@ -463,7 +492,7 @@ export default defineToolPlugin({
       name: "propose_calendar",
       label: "Propose Calendar Events",
       description:
-        "Persist proposed calendar events for the week. REQUIRED: researchJobId, events[] each with title + startsAtMs + endsAtMs (epoch ms). This is the plan the operator approves.",
+        "Persist today's proposed calendar event(s). REQUIRED: researchJobId, events[] each with title + startsAtMs + endsAtMs (epoch ms). This is the plan the operator approves. For any reply_window / soft_launch_post / hard_launch_anchor event, make it TURN-KEY: openUrl (one-tap OPEN/LINK; wrap_link any product URL first) + draftText (verbatim paste block) so the operator acts in one tap.",
       parameters: Type.Object({
         researchJobId: Type.String(),
         events: Type.Array(
@@ -472,6 +501,15 @@ export default defineToolPlugin({
             startsAtMs: Type.Number({ description: "Epoch ms." }),
             endsAtMs: Type.Number({ description: "Epoch ms." }),
             description: Type.Optional(Type.String({ description: "Full hands-off recipe." })),
+            openUrl: Type.Optional(
+              Type.String({ description: "One-tap OPEN/LINK target (wrap_link any product URL first)." })
+            ),
+            draftText: Type.Optional(
+              Type.String({ description: "Verbatim 'YOUR REPLY'/paste block the operator copies." })
+            ),
+            sourceNote: Type.Optional(
+              Type.String({ description: "Why this event exists — the grounded source/thread it came from." })
+            ),
           }),
           { minItems: 1 }
         ),
@@ -512,6 +550,16 @@ export default defineToolPlugin({
               stage: Type.String(),
               whereTheyHangOut: Type.String(),
               intentLanguage: Type.String(),
+              nativeStyleExemplars: Type.Optional(
+                Type.Array(Type.String(), {
+                  description: "Verbatim native phrasing buyers use at this stage / in this venue.",
+                })
+              ),
+              complaints: Type.Optional(
+                Type.Array(Type.String(), {
+                  description: "Pain/complaints heard at this stage (their words).",
+                })
+              ),
             })
           )
         ),
@@ -548,7 +596,7 @@ export default defineToolPlugin({
       name: "save_foundation_channel_scorecard",
       label: "Foundation: Channel Scorecard",
       description:
-        "Persist a channel scorecard row. REQUIRED: channel (one of the 11), uniqueUnlock. NOTE: youtube is NOT a valid channel here.",
+        "Persist a channel scorecard row. REQUIRED: channel (one of the 11), uniqueUnlock. For any BET channel, populate icpKnowledge (venues + watch + complaints[quote+URL] + topics + nativeStyle) — a bet channel with empty icpKnowledge is an incomplete scorecard. styleExemplars holds 5-10 verbatim native posts that anchor maya-voice-matcher Anchor B (or use save_style_exemplars).",
       parameters: Type.Object({
         channel: Enum(CHANNEL_11),
         uniqueUnlock: Type.String(),
@@ -556,6 +604,55 @@ export default defineToolPlugin({
         cadenceFit: Type.Optional(Type.Number({ description: "0..1, default 0.5" })),
         bet: Type.Optional(Type.Boolean()),
         notes: Type.Optional(Type.String()),
+        icpKnowledge: Type.Optional(
+          Type.Union(
+            [
+              Type.Object({
+                venues: Type.Optional(
+                  Type.Array(
+                    Type.Object({
+                      name: Type.String(),
+                      kind: Type.Optional(Enum(["subreddit", "hashtag", "community", "account"])),
+                      url: Type.Optional(Type.String()),
+                      whyHere: Type.Optional(Type.String()),
+                    })
+                  )
+                ),
+                watch: Type.Optional(Type.Array(Type.String())),
+                complaints: Type.Optional(
+                  Type.Array(Type.Object({ quote: Type.String(), sourceUrl: Type.String() }))
+                ),
+                topics: Type.Optional(Type.Array(Type.String())),
+                nativeStyle: Type.Optional(
+                  Type.Object({
+                    exemplars: Type.Optional(
+                      Type.Array(Type.Object({ quote: Type.String(), sourceUrl: Type.String() }))
+                    ),
+                    cadenceNotes: Type.Optional(Type.String()),
+                    vocab: Type.Optional(Type.Array(Type.String())),
+                  })
+                ),
+              }),
+              Type.String({ description: "Or a pre-serialized JSON string of the same shape." }),
+            ],
+            {
+              description:
+                "Per-channel ICP knowledge: where the buyer lives, what to watch, their complaints (quote+URL), topics, and native style. Pass the object OR a JSON string.",
+            }
+          )
+        ),
+        styleExemplars: Type.Optional(
+          Type.Array(
+            Type.Object({
+              platform: Type.Optional(Type.String()),
+              community: Type.Optional(Type.String()),
+              verbatim: Type.String({ description: "The native post, copied verbatim." }),
+              why: Type.Optional(Type.String()),
+              capturedAt: Type.Optional(Type.Number()),
+            }),
+            { description: "5-10 verbatim native posts for this channel (voice-matcher Anchor B)." }
+          )
+        ),
         idempotencyKey: IdemKey,
       }),
       execute: async (p, _cfg, ctx) =>
@@ -621,6 +718,108 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) => postLc("set_strategy_approval", { ...p, idempotencyKey: key(p) }, ctx.signal),
     }),
 
+    // --- Voice + per-channel warmth (Phase 0 + ban-safety arc) ---
+    tool({
+      name: "save_voice_profile",
+      label: "Save Voice Profile",
+      description:
+        "Persist the founder's voice fingerprint (Phase 0 — built from their own posts/videos before any niche research). REQUIRED: voiceProfile (the fingerprint object, or a pre-serialized JSON string of it). A voice profile you describe but never save does not exist — maya-voice-matcher Anchor A reads it back. If the user has NO handles, build from 2-3 sentences they give and set confidence:'low'/'none'.",
+      parameters: Type.Object({
+        voiceProfile: Type.Union(
+          [
+            Type.Object({
+              builtAt: Type.Optional(Type.Number()),
+              sources: Type.Optional(
+                Type.Array(
+                  Type.Object({
+                    platform: Type.String(),
+                    url: Type.Optional(Type.String()),
+                    sampleCount: Type.Optional(Type.Number()),
+                    kind: Type.Optional(Enum(["text", "video"])),
+                  })
+                )
+              ),
+              features: Type.Optional(
+                Type.Object({
+                  avgSentenceLen: Type.Optional(Type.Number()),
+                  burstiness: Type.Optional(Type.Number()),
+                  contractionUse: Type.Optional(Type.String()),
+                  emojiFreq: Type.Optional(Type.String()),
+                  register: Type.Optional(Type.String()),
+                  openings: Type.Optional(Type.Array(Type.String())),
+                  signoffs: Type.Optional(Type.Array(Type.String())),
+                  characteristicPhrases: Type.Optional(Type.Array(Type.String())),
+                  emDashHabit: Type.Optional(Type.String()),
+                  profanityTolerance: Type.Optional(Type.String()),
+                })
+              ),
+              perPlatform: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+              verbatimSamples: Type.Optional(
+                Type.Array(
+                  Type.Object({
+                    platform: Type.String(),
+                    text: Type.Optional(Type.String()),
+                    videoSummary: Type.Optional(Type.String()),
+                    url: Type.Optional(Type.String()),
+                  })
+                )
+              ),
+              confidence: Type.Optional(Enum(["high", "medium", "low", "none"])),
+            }),
+            Type.String({ description: "Or a pre-serialized JSON string of the same shape." }),
+          ],
+          {
+            description:
+              "Voice fingerprint: sources, cadence/vocab/openings/signoffs/emoji features, per-platform variants, verbatim samples, and confidence. Pass the object OR a JSON string.",
+          }
+        ),
+        idempotencyKey: IdemKey,
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("save_voice_profile", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+    tool({
+      name: "save_style_exemplars",
+      label: "Save Style Exemplars",
+      description:
+        "Persist 5-10 verbatim native posts for one channel — they anchor maya-voice-matcher Anchor B (native-community style). REQUIRED: channel, styleExemplars[] (>=1). Skip it and drafts default to generic LLM-tone. Saved onto that channel's scorecard row.",
+      parameters: Type.Object({
+        channel: Enum(CHANNEL_11),
+        styleExemplars: Type.Array(
+          Type.Object({
+            platform: Type.Optional(Type.String()),
+            community: Type.Optional(Type.String()),
+            verbatim: Type.String({ description: "The native post, copied verbatim." }),
+            why: Type.Optional(Type.String({ description: "What makes it native to the community." })),
+            capturedAt: Type.Optional(Type.Number()),
+          }),
+          { minItems: 1 }
+        ),
+        idempotencyKey: IdemKey,
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("save_style_exemplars", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+    tool({
+      name: "set_channel_warmth",
+      label: "Set Channel Warmth",
+      description:
+        "Set/advance one channel's warmth state in the ban-safety arc (new_needs_warmup -> warming -> warm). REQUIRED: channel, state. warm|ready = skip-warmup (real posting unlocked); cold channels stay warmup_block + substantive engagement only (no promo/links). Merges into channelWarmthJson and stamps lastUpdatedMs — idempotent. Call when a channel's Phase-1 floor is met.",
+      parameters: Type.Object({
+        channel: Enum(WARMTH_CHANNEL),
+        state: Enum(WARMTH_STATE),
+        accountAgeDays: Type.Optional(Type.Number()),
+        baselineKarma: Type.Optional(Type.Number()),
+        baselineFollowers: Type.Optional(Type.Number()),
+        baselinePostCount: Type.Optional(Type.Number()),
+        warmTargetMs: Type.Optional(Type.Number({ description: "Epoch ms the channel is expected to be warm." })),
+        note: Type.Optional(Type.String()),
+        idempotencyKey: IdemKey,
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("set_channel_warmth", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+
     // --- Operator comms + progress ---
     tool({
       name: "send_update",
@@ -637,6 +836,37 @@ export default defineToolPlugin({
         ),
       }),
       execute: async (p, _cfg, ctx) => postLc("send_update", p, ctx.signal),
+    }),
+    tool({
+      name: "log_message",
+      label: "Log Inbound Message (transcript)",
+      description:
+        "Persist the operator's inbound message to the conversation transcript. Call this as the FIRST action of every inbound turn, BEFORE you reason or reply. Pass the verbatim operator text as body, plus a fresh turnId you will reuse on the send_update reply so the message and your answer group as one turn. REQUIRED: turnId, body.",
+      parameters: Type.Object({
+        turnId: Type.String({ description: "Stable id for this turn; reuse on the matching send_update." }),
+        body: Type.String({ description: "Verbatim inbound operator text (1..8000)." }),
+        channel: Type.Optional(Enum(["telegram", "claw-messenger", "sms", "web", "unknown"])),
+        idempotencyKey: IdemKey,
+      }),
+      execute: async (p, _cfg, ctx) => postLc("log_message", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+    tool({
+      name: "log_turn_telemetry",
+      label: "Log Turn Telemetry (tokens/cost)",
+      description:
+        "After a conversation turn completes, report the model usage that produced my reply so per-turn cost/latency joins to the transcript. Pass the SAME turnId I used on log_message/send_update, plus whatever usage stats I have (tokensIn, tokensOut, latencyMs, costUsd, model, thinkingBudget). Best-effort — skip fields I don't have. REQUIRED: turnId.",
+      parameters: Type.Object({
+        turnId: Type.String({ description: "Same turnId as log_message/send_update for this turn." }),
+        model: Type.Optional(Type.String()),
+        tokensIn: Type.Optional(Type.Number()),
+        tokensOut: Type.Optional(Type.Number()),
+        cacheReadTokens: Type.Optional(Type.Number()),
+        latencyMs: Type.Optional(Type.Number()),
+        costUsd: Type.Optional(Type.Number()),
+        thinkingBudget: Type.Optional(Type.Number()),
+        idempotencyKey: IdemKey,
+      }),
+      execute: async (p, _cfg, ctx) => postLc("log_turn_telemetry", { ...p, idempotencyKey: key(p) }, ctx.signal),
     }),
     tool({
       name: "post_activity",
@@ -751,7 +981,7 @@ export default defineToolPlugin({
     tool({
       name: "save_learning",
       label: "Save Learning",
-      description: "Persist an extracted learning. REQUIRED: learningKind, learning.",
+      description: "Persist an extracted learning. REQUIRED: learningKind, learning. Confidence is auto-clamped to the evidence server-side (can't claim 0.95 off 1 point). Pass `structured` ({venue,hook,format,timeBucket,outcome}) when the learning is a converting pattern — it feeds the cross-tenant archetype brain so it makes the NEXT founder like this one smarter.",
       parameters: Type.Object({
         learningKind: Enum([
           "timing", "channel_priority", "voice_angle", "community_quality",
@@ -762,9 +992,23 @@ export default defineToolPlugin({
         confidenceScore: Type.Optional(Type.Number({ description: "0..1" })),
         evidenceCount: Type.Optional(Type.Number()),
         retired: Type.Optional(Type.Boolean()),
+        structured: Type.Optional(Type.Object({
+          venue: Type.Optional(Type.String()),
+          hook: Type.Optional(Type.String()),
+          format: Type.Optional(Type.String()),
+          timeBucket: Type.Optional(Type.String()),
+          outcome: Type.Optional(Type.String()),
+        })),
         idempotencyKey: IdemKey,
       }),
       execute: async (p, _cfg, ctx) => postLc("learning_extracted", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+    tool({
+      name: "get_archetype_playbook",
+      label: "Get Archetype Playbook",
+      description: "At synthesis (after I tag the app archetype), fetch the cross-tenant prior for this archetype — what's converted for OTHER founders like this one ('dev-tool founders convert best in r/X with the founder-story hook'). Returns { archetype, playbook:[{kind, learning, supportingTenantCount, evidenceCount, confidence}] }. PII-FREE — only patterns + how many tenants back them, never any other founder's identity. Empty until an archetype has ≥5 attributed founders; then I fold it in as a SOFT prior my own research confirms or overrides, never as fact.",
+      parameters: Type.Object({}),
+      execute: async (p, _cfg, ctx) => getLc("get_archetype_playbook", p, ctx.signal),
     }),
     tool({
       name: "propose_skill_improvement",
@@ -847,9 +1091,9 @@ export default defineToolPlugin({
     tool({
       name: "record_conversion",
       label: "Record Conversion",
-      description: "Record a conversion (signup/demo/feedback/revenue). REQUIRED: kind.",
+      description: "Record a conversion. REQUIRED: kind. 'activated' = a signed-up user who came BACK / reached value (proves they stuck, not just signed up). For self-reported 'how did you hear about us' answers on an organic signup, put the channel in note.",
       parameters: Type.Object({
-        kind: Enum(["signup", "demo", "feedback", "revenue"]),
+        kind: Enum(["signup", "demo", "feedback", "revenue", "activated"]),
         count: Type.Optional(Type.Number({ description: "default 1, must be > 0" })),
         source: Type.Optional(Enum(["self_report", "pixel"])),
         linkWrapToken: Type.Optional(Type.String()),
@@ -984,6 +1228,392 @@ export default defineToolPlugin({
       parameters: Type.Object({ include_retired: Type.Optional(Type.Boolean()) }),
       execute: async (p, _cfg, ctx) =>
         getLc("get_my_niche_learnings", p.include_retired ? { include_retired: "true" } : undefined, ctx.signal),
+    }),
+    tool({
+      name: "get_my_attribution",
+      label: "Get My Attribution",
+      description:
+        "Read back per-post closed-loop attribution: which post/reply drove clicks → signups. Returns posts[] (draftId, platform, title, clicks, conversionsByKind, signups) sorted by signups then clicks, plus totals. Empty when nothing — stay silent, never fabricate. Optional: limit; windowDays (rolling window — 1 = last ~24h for a daily recap, 7 = last week, omit = lifetime).",
+      parameters: Type.Object({
+        limit: Type.Optional(Type.Number()),
+        windowDays: Type.Optional(
+          Type.Number({
+            description:
+              "Rolling lookback window in days. 1 = last ~24h (daily recap), 7 = last week; omit for lifetime.",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("get_my_attribution", p, ctx.signal),
+    }),
+    tool({
+      name: "get_attribute_outcomes",
+      label: "Get Attribute Outcomes",
+      description:
+        "Which VALUE of a content attribute actually converts — real Beta-Bernoulli math, not a guess. dimension is one of hookType/format/tone/lengthBucket/captionStyle/postingWindow. Returns { dimension, arms:[{label,trials(clicks),conversions(signups)}], verdict:{ winner, leader, pBestLeader, verdict('winner'|'leaning'|'not_enough_data'), reason, conversionsNeeded } }. Use the verdict.reason verbatim-ish in plain language: 'lowercase hooks: 3 signups / 12 vs polished 0 / 9 — 84% likely better' or 'not enough data yet — need N more signups to call it'. Optional windowDays.",
+      parameters: Type.Object({
+        dimension: Enum([
+          "hookType",
+          "format",
+          "tone",
+          "lengthBucket",
+          "captionStyle",
+          "postingWindow",
+        ]),
+        windowDays: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        getLc("get_attribute_outcomes", p, ctx.signal),
+    }),
+    tool({
+      name: "get_experiment_verdict",
+      label: "Get Experiment Verdict",
+      description:
+        "Pure stats verdict for ANY arms I'm comparing (channels, CTAs, hooks — anything), when I already have the counts. Pass arms:[{label, trials, conversions}]. Returns { verdict:{ arms:[{label,mean,ci80,pBest}], winner, leader, pBestLeader, verdict, reason, conversionsNeeded } }. A winner needs BOTH P(best)>=0.85 AND >=5 conversions — never P(best) alone. Lets me say honestly 'I can't call this yet, need N more conversions' instead of overfitting.",
+      parameters: Type.Object({
+        arms: Type.Array(
+          Type.Object({
+            label: Type.String(),
+            trials: Type.Number(),
+            conversions: Type.Number(),
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("get_experiment_verdict", p, ctx.signal),
+    }),
+    tool({
+      name: "save_experiment",
+      label: "Save Experiment",
+      description:
+        "Register a systematic experiment so I test ONE thing at a time on purpose. Pass { hypothesis, dimension (hookType/format/tone/lengthBucket/captionStyle/postingWindow), arms:[two+ value labels], metric }. At most TWO dimensions may run at once (server-enforced) — I don't test six things and learn nothing. To conclude one, pass { concludeId, verdict } instead. Returns { ok, experimentId } or { ok:false, reason }.",
+      parameters: Type.Object({
+        hypothesis: Type.Optional(Type.String()),
+        dimension: Type.Optional(Type.String()),
+        arms: Type.Optional(Type.Array(Type.String())),
+        metric: Type.Optional(Type.String()),
+        concludeId: Type.Optional(Type.String()),
+        verdict: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("save_experiment", p, ctx.signal),
+    }),
+    tool({
+      name: "assign_arm",
+      label: "Assign Arm",
+      description:
+        "Thompson-allocate the next draft to an arm of a running experiment, based on each arm's REAL converting outcomes so far (explore/exploit, not vibes). Pass { experimentId }. Returns { ok, experimentId, dimension, armLabel, reason }. I stamp the draft's attributes with { experimentId, armLabel, [dimension]: armLabel } and say WHY in the brief ('giving the explainer arm a fair shot' / 'leaning on lowercase — current best bet').",
+      parameters: Type.Object({
+        experimentId: Type.String(),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("assign_arm", p, ctx.signal),
+    }),
+    tool({
+      name: "save_diagnosis",
+      label: "Save Strategic Diagnosis",
+      description:
+        "Record this week's strategic read when reach is real but conversion is flat. category ∈ messaging/positioning/pmf_suspected/pricing/distribution; tier ∈ hunch/lean/strong. Returns { tier (PMF & pricing are AUTO-CAPPED to 'lean' server-side — I can't assert what I can't see from outside), cappedFrom?, weeksPersisted, shouldHardTruthPing }. I only deliver a hard-truth PING when shouldHardTruthPing is true (a STRONG non-distribution verdict that's persisted ≥2 weeks, throttled). For pmf_suspected/pricing I ALWAYS pair the read with 'here's what I can't see — run this survey'. Method in maya-strategic-diagnostician.",
+      parameters: Type.Object({
+        category: Enum([
+          "messaging",
+          "positioning",
+          "pmf_suspected",
+          "pricing",
+          "distribution",
+        ]),
+        tier: Enum(["hunch", "lean", "strong"]),
+        reason: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("save_diagnosis", p, ctx.signal),
+    }),
+    tool({
+      name: "propose_pmf_survey",
+      label: "Propose PMF Survey",
+      description:
+        "Turn an honest 'I can't see retention from out here' into a real instrument: the Sean-Ellis 40% PMF survey. Returns { ok, survey:{ questions, scoring } } or { ok:false, reason:'throttled' } (offered ≤ once/~3 weeks). I hand the founder the questions in plain language and offer to score the result. Optional productName.",
+      parameters: Type.Object({ productName: Type.Optional(Type.String()) }),
+      execute: async (p, _cfg, ctx) => postLc("propose_pmf_survey", p, ctx.signal),
+    }),
+    tool({
+      name: "propose_pricing_test",
+      label: "Propose Pricing Test",
+      description:
+        "Turn an honest 'I can't see willingness-to-pay' into a real instrument: the van Westendorp 4-question price-sensitivity test. Returns { ok, survey:{ questions, scoring } } or { ok:false, reason:'throttled' } (≤ once/~3 weeks). Optional productName.",
+      parameters: Type.Object({ productName: Type.Optional(Type.String()) }),
+      execute: async (p, _cfg, ctx) => postLc("propose_pricing_test", p, ctx.signal),
+    }),
+    tool({
+      name: "build_intent_watch",
+      label: "Build Intent Watch",
+      description:
+        "Compile my real-time intent-strike watchlist from my buyer map's intent phrases + my bet channels, so the Convex-owned poller can catch a buyer the MOMENT they ask 'is there a tool that does X'. Pass { phrases:[buyer intent phrases], channels:[bet channels], dailyStrikeBudget? }. I do NOT poll myself — the watcher lives in Convex; I just keep the watchlist fresh (re-run when my foundation/bets change). Returns { ok, phrases, channels, dailyStrikeBudget }.",
+      parameters: Type.Object({
+        phrases: Type.Array(Type.String()),
+        channels: Type.Array(Type.String()),
+        dailyStrikeBudget: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("build_intent_watch", p, ctx.signal),
+    }),
+    tool({
+      name: "record_strike",
+      label: "Record Strike",
+      description:
+        "After I strike a hot intent thread I was handed (drafted + posted via post_to_channel / send_confirm_card), call this to fold it back into the watch: { struckThreadIds:[ids I struck], seenThreadIds?:[ids I saw but skipped] }. This decrements today's strike budget and prevents ever re-striking the same thread. Returns { ok, strikesToday, budget }.",
+      parameters: Type.Object({
+        struckThreadIds: Type.Array(Type.String()),
+        seenThreadIds: Type.Optional(Type.Array(Type.String())),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("record_strike", p, ctx.signal),
+    }),
+    tool({
+      name: "get_platform_algo",
+      label: "Get Platform Algo",
+      description:
+        "Read the SHARED, monthly-refreshed platform-algorithm intelligence — what's working RIGHT NOW on each channel (cadence, formats, timing, what's losing reach), researched centrally so I never have to. Returns platforms[] = { platform, whatsHotNow, sources, ageDays }. I consult this BEFORE choosing a format/length/posting-window/hook for a channel so my drafts reflect this month's reality, not stale advice. If ageDays is high or empty, fall back to PLATFORM_ALGO.md.",
+      parameters: Type.Object({}),
+      execute: async (p, _cfg, ctx) =>
+        getLc("get_platform_algo", p, ctx.signal),
+    }),
+    tool({
+      name: "get_conversion_setup",
+      label: "Get Conversion Setup",
+      description:
+        "Get this founder's conversion setup so I can close the loop on the SIGNUP side (clicks are already tracked). Returns { signupUrl (I wrap links to THIS so clicks→signups join), conversionKind (what counts as a win), pixelInstalled, pixelSnippet, instructions }. MVP: I just read signupUrl + ASK the founder when someone signs up / comes back and log it via record_conversion — I do NOT hand them code to paste (automatic tracker is roadmap), and never to a mobile-only founder. (pixelSnippet/instructions are for that future path — ignore for now.)",
+      parameters: Type.Object({}),
+      execute: async (p, _cfg, ctx) =>
+        getLc("get_conversion_setup", p, ctx.signal),
+    }),
+
+    // =====================================================================
+    // SLIDESHOW CLUSTER — media library + grounded slide generation.
+    // The moat is grounding: every slide frames the user's REAL screenshot,
+    // never a stock image. Check the library before asking; ask once.
+    // =====================================================================
+    tool({
+      name: "save_media",
+      label: "Save Media",
+      description:
+        "Save a screenshot/recording the USER texted me into my media library. REQUIRED: mediaUrl (the downloadable Telegram file URL I resolved via getFile — see maya-content-reviewer for the file_id→URL flow). Optional: label (what the screen IS, e.g. 'paywall screen', 'empty state', 'main dashboard'), kind (screenshot|screen_recording|image). Dedupes by content hash. Returns { ok, assetId, deduped }.",
+      parameters: Type.Object({
+        mediaUrl: Type.String(),
+        label: Type.Optional(Type.String()),
+        kind: Type.Optional(Enum(["screenshot", "screen_recording", "image"])),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("save_media", p, ctx.signal),
+    }),
+    tool({
+      name: "search_my_media",
+      label: "Search My Media",
+      description:
+        "List what's already in my media library BEFORE I ask the user for a visual or build a slideshow. Optional: kind (screenshot|screen_recording|image|slide|video) to filter; limit. Returns assets[] (id, kind, source, label, createdAt). Empty = I have nothing yet.",
+      parameters: Type.Object({
+        kind: Type.Optional(
+          Enum(["screenshot", "screen_recording", "image", "slide", "video"])
+        ),
+        limit: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("search_my_media", p, ctx.signal),
+    }),
+    tool({
+      name: "request_media",
+      label: "Request Media",
+      description:
+        "Text the user asking for ONE specific missing asset I need for a post — only after search_my_media shows I don't already have it. REQUIRED: label (the exact screen/asset I need, e.g. 'a screenshot of your onboarding screen'). Optional: reason (one line on why, in my voice). Guarded: if I already have a matching asset it returns alreadyHave:true and does NOT text the user. Never double-ask.",
+      parameters: Type.Object({
+        label: Type.String(),
+        reason: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("request_media", p, ctx.signal),
+    }),
+    tool({
+      name: "generate_slide_image",
+      label: "Generate Slide Image",
+      description:
+        "Generate ONE TikTok/IG slide grounded in the user's REAL screenshot(s). For any slide that shows the product, pass referenceAssetIds (from search_my_media) — the model places that screenshot UNCHANGED and only frames/captions around it (no fabricated UI). REQUIRED: prompt (the slide's intent — hook, feature, before/after, CTA). Optional: referenceAssetIds, slideText (caption to overlay), platform (tiktok|instagram). A carousel = call this once per slide. Returns { ok, assetId, grounded }. COGS ~$0.07/image (Gemini 3.1 Flash Image / nano-banana 2, via OpenRouter) — log it with log_cost (provider openrouter).",
+      parameters: Type.Object({
+        prompt: Type.String(),
+        referenceAssetIds: Type.Optional(Type.Array(Type.String())),
+        slideText: Type.Optional(Type.String()),
+        platform: Type.Optional(Enum(["tiktok", "instagram"])),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("generate_slide_image", p, ctx.signal),
+    }),
+    tool({
+      name: "send_media_to_user",
+      label: "Send Media To User",
+      description:
+        "Deliver finished slides/assets to the user on Telegram (auto-posting to TikTok/IG is not wired yet — I hand the user the images to post). REQUIRED: assetIds (from search_my_media / generate_slide_image, in carousel order). Optional: caption (one message of context, my voice — shown on the first image). Returns { ok, delivered, requested }.",
+      parameters: Type.Object({
+        assetIds: Type.Array(Type.String()),
+        caption: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("send_media_to_user", p, ctx.signal),
+    }),
+    tool({
+      name: "check_already_engaged",
+      label: "Check Already Engaged",
+      description:
+        "BEFORE drafting a reply to a thread/comment, check whether you have already engaged it. Pass platform + externalId (the thread/post id), and commentId if replying to a specific comment. Returns { engaged, threadEngaged, commentEngaged }. The server enforces one-reply-per-thread/comment regardless, but calling this first avoids wasted drafting. NEVER reply twice to the same thing.",
+      parameters: Type.Object({
+        platform: Enum(PLATFORM_7),
+        externalId: Type.String({ description: "The thread/post's stable platform id." }),
+        commentId: Type.Optional(Type.String({ description: "The specific comment id, if replying to a comment." })),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("check_already_engaged", p, ctx.signal),
+    }),
+    tool({
+      name: "post_to_channel",
+      label: "Post To Channel",
+      description:
+        "Auto-post content to a CONNECTED channel via Zernio (X / LinkedIn / Instagram / YouTube). The server runs every gate (ban-safety, plan, voice/slop/safety, dedup) and either publishes or returns { outcome: 'needs_confirm', reasons }. REDDIT and TIKTOK are ALWAYS manual-confirm: this returns needs_confirm for them, never auto-publishes (post those via a one-tap card instead). REQUIRED: channel, content. Put the app link in `url` (it is appended; X meters link-posts so ration them). For a reply, pass targetExternalId (+ targetCommentId). scheduleAtMs schedules it; omit to publish now. Returns { action, reasons, zernioPostId }.",
+      parameters: Type.Object({
+        channel: Enum(["x", "linkedin", "instagram", "youtube", "reddit", "tiktok"]),
+        content: Type.String(),
+        url: Type.Optional(Type.String({ description: "Wrapped app link (appended to content). Ration on X." })),
+        targetExternalId: Type.Optional(Type.String({ description: "Thread/post id when this is a reply." })),
+        targetCommentId: Type.Optional(Type.String({ description: "Specific comment id when replying to a comment." })),
+        intentionalFollowUp: Type.Optional(Type.Boolean({ description: "Set true to deliberately reply again to an already-engaged target." })),
+        scheduleAtMs: Type.Optional(Type.Number({ description: "Epoch ms to schedule; omit to publish now." })),
+        draftId: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("zernio_post", p, ctx.signal),
+    }),
+
+    // =====================================================================
+    // DURABLE LIFECYCLE (#15) — the re-doing-loop fix.
+    // The agent's lifecycle (hello sent? foundation done? lease held?) lives
+    // in CONVEX, not MEMORY.md (which is wiped on every Fly restart). BOOT and
+    // HEARTBEAT gate on these tools, never on MEMORY.md markers. This is what
+    // stops the foundation watchdog from re-running onboarding forever.
+    // =====================================================================
+    tool({
+      name: "get_agent_lifecycle",
+      label: "Get Agent Lifecycle",
+      description:
+        "Read my DURABLE lifecycle from Convex (the source of truth — NOT MEMORY.md, which is wiped on restart). Returns lifecycle: { phase, helloSent, foundationStarted, foundationComplete, foundationCompletedAt, lastMorningBriefAt, leaseActive, hasVoiceProfile, targetThreadCount, draftCount, calendarEventCount, researchComplete, foundationStep (research|finalize|complete), leaseAcquireCount }. CALL THIS FIRST on every boot and heartbeat tick. foundationStep is the source of truth for WHAT to do: 'research' = run the worker fleet; 'finalize' = research is DONE, only discovery/drafts/synthesis remain (NEVER re-spawn research); 'complete' = onboarding done, never re-run.",
+      parameters: Type.Object({}),
+      execute: async (_p, _cfg, ctx) =>
+        getLc("get_agent_lifecycle", undefined, ctx.signal),
+    }),
+    tool({
+      name: "acquire_foundation_lease",
+      label: "Acquire Foundation Lease",
+      description:
+        "Check-and-set lease I MUST acquire before running the foundation/onboarding pass. Returns { acquired, alreadyComplete, leaseActive, leaseUntil, foundationStep (research|finalize|complete), researchComplete, capped }. Rules: alreadyComplete:true → DONE, stop. acquired:false & leaseActive:true → another tick owns it, tick silent. capped:true → I've re-acquired the max times without finishing — STOP re-running, send ONE honest 'still building' status and let the crons carry it. When acquired:true, act ONLY on foundationStep: 'research' → spawn the worker fleet; 'finalize' → research is DONE so I do discovery/drafts/synthesis ONLY and NEVER re-spawn a research worker. Optional ttlMs (default 15min).",
+      parameters: Type.Object({
+        ttlMs: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("acquire_foundation_lease", p, ctx.signal),
+    }),
+    tool({
+      name: "mark_lifecycle",
+      label: "Mark Lifecycle",
+      description:
+        "Set a DURABLE lifecycle marker in Convex (replaces appending to MEMORY.md). marker = 'hello_sent' AFTER the intro is sent (idempotent — safe to call twice); 'foundation_complete' ONLY after the synthesis + the single day-1 move have actually landed in the DB; 'morning_brief' after each 7am brief; 'release_lease' if I yield the foundation pass mid-way for the next tick to resume.",
+      parameters: Type.Object({
+        marker: Enum([
+          "hello_sent",
+          "foundation_complete",
+          "morning_brief",
+          "release_lease",
+        ]),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("mark_lifecycle", p, ctx.signal),
+    }),
+
+    // =====================================================================
+    // ZERNIO READ + ENGAGEMENT (S5) — analytics, follower stats, connection
+    // health, comment inbox, and comment replies across connected channels.
+    // Analytics + inbox need the operator's Zernio add-ons; these return a
+    // clean { ok:false, addonRequired } when the add-on is off (not an error).
+    // (DMs are deliberately not handled.)
+    // =====================================================================
+    tool({
+      name: "list_connected_accounts",
+      label: "List Connected Accounts",
+      description:
+        "Which channels the founder has connected and in what mode (auto-post for X/LinkedIn/IG/YouTube; one-tap-confirm for Reddit/TikTok). Call this BEFORE promising to post on a channel — never say 'I'll post X for you' on a channel that isn't connected. Returns { ok, accounts:[{platform, mode, isActive}] }.",
+      parameters: Type.Object({}),
+      execute: async (_p, _cfg, ctx) =>
+        getLc("list_connected_accounts", undefined, ctx.signal),
+    }),
+    tool({
+      name: "get_connection_health",
+      label: "Get Connection Health",
+      description:
+        "Per-channel connection health (can the account still post? token expiring/revoked?). Check before a posting run; on a bad state, hand the founder a reconnect link in plain words (never 'token expired'). Returns { ok, health }.",
+      parameters: Type.Object({}),
+      execute: async (_p, _cfg, ctx) =>
+        getLc("get_connection_health", undefined, ctx.signal),
+    }),
+    tool({
+      name: "get_account_analytics",
+      label: "Get Account Analytics",
+      description:
+        "Zernio post/account analytics (impressions, reach, engagement) — the SLOWER ground-truth that confirms which channel + format drove reach. NEVER overrides the faster wrapped-link click signal (get_my_attribution stays primary). Optional: postId, platform, accountId, fromDate, toDate, limit. Returns { ok, analytics } — or { ok:false, addonRequired:'analytics' } if the operator hasn't enabled the Zernio Analytics add-on (say so plainly; attribution still works). Stale/empty numbers get said plainly, never fabricated.",
+      parameters: Type.Object({
+        postId: Type.Optional(Type.String()),
+        platform: Type.Optional(Type.String()),
+        accountId: Type.Optional(Type.String()),
+        fromDate: Type.Optional(Type.String()),
+        toDate: Type.Optional(Type.String()),
+        limit: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        getLc("get_account_analytics", p, ctx.signal),
+    }),
+    tool({
+      name: "get_follower_stats",
+      label: "Get Follower Stats",
+      description:
+        "Follower/subscriber counts + growth over time per connected channel, for the warmth + growth read. Optional: platform, fromDate, toDate, granularity. Returns { ok, stats } — or { ok:false, addonRequired:'analytics' } if the add-on is off. Grounded-or-silent on staleness.",
+      parameters: Type.Object({
+        platform: Type.Optional(Type.String()),
+        fromDate: Type.Optional(Type.String()),
+        toDate: Type.Optional(Type.String()),
+        granularity: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        getLc("get_follower_stats", p, ctx.signal),
+    }),
+    tool({
+      name: "list_inbox",
+      label: "List Inbox (comments)",
+      description:
+        "New COMMENTS on the founder's posts across connected channels — the highest-intent inbound (a buyer asking 'how does this work?' under a post). Triage these, then reply in the founder's voice with reply_to_comment. Optional: platform, since (ISO), limit. Returns { ok, comments } — or { ok:false, addonRequired:'inbox' } if the operator hasn't enabled the Zernio Inbox add-on. (DMs are not handled — comments only.)",
+      parameters: Type.Object({
+        platform: Type.Optional(Type.String()),
+        since: Type.Optional(Type.String()),
+        limit: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("list_inbox", p, ctx.signal),
+    }),
+    tool({
+      name: "reply_to_comment",
+      label: "Reply To Comment",
+      description:
+        "Post a voice-matched reply to a comment on one of the founder's connected-channel posts (from list_inbox). REQUIRED: channel, postId, text. Optional: commentId (the specific comment to reply under). The server runs the SAME fail-closed ban-safety gate as post_to_channel before anything ships. Returns { ok, id } — or { ok:false, blocked, reasons } if the safety gate held it, or { ok:false, addonRequired:'inbox' } if the add-on is off.",
+      parameters: Type.Object({
+        channel: Enum(["x", "linkedin", "instagram", "youtube", "reddit"]),
+        postId: Type.String(),
+        text: Type.String(),
+        commentId: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("reply_to_comment", p, ctx.signal),
+    }),
+    tool({
+      name: "send_confirm_card",
+      label: "Send Confirm Card",
+      description:
+        "Send the founder a ONE-TAP Telegram card to approve a Reddit/TikTok post (the ban-safety channels that always need their tap). REQUIRED: eventId (a needs_confirm gtmCalendarEvents row I already created via propose_calendar/post_to_channel). Optional: mediaAssetIds (storage ids from generate_slide_image — for a TikTok slideshow, so the founder SEES the slides in Telegram before tapping). They tap '✅ Post it' and I publish it for them via Zernio — they never leave Telegram or open the app. Returns { ok, messageId }. This is how the 'needs your tap' items in the morning brief actually get posted.",
+      parameters: Type.Object({
+        eventId: Type.String(),
+        mediaAssetIds: Type.Optional(Type.Array(Type.String())),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("send_confirm_card", p, ctx.signal),
     }),
   ],
 });

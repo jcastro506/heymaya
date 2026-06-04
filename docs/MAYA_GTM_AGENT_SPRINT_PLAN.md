@@ -1,5 +1,7 @@
 # Maya GTM Agent Sprint Plan
 
+> ⚠️ **PARTIALLY SUPERSEDED (2026-06-03).** **Google Calendar is retired** — there is no Google Calendar OAuth/integration and no "Did you post this?" check-in (Maya posts for the founder via Zernio auto-post, `post_to_channel`; the day's plan lives in the web "Plan" tab, not a calendar). Durable agent lifecycle now lives in **Convex** (`convex/gtmMaya/agentLifecycle.ts`), not MEMORY.md. Current model: `docs/MAYA_V2_ZERNIO_AUTOPOST_SPRINT_PLAN.md`.
+
 Last updated: 2026-05-22
 
 ## Product Contract

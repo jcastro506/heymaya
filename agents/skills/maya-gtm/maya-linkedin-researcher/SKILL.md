@@ -47,9 +47,16 @@ When invoked as a Phase-2 demand worker, you own each reply target end to end. Y
 
 One self-contained tool sequence per item — an `OK ...` return = it landed. Exact sequence: `maya-foundation-research` Phase 2.
 
+### REQUIRED before you return — land the ICP knowledge + voice anchors (once per run)
+
+These two saves are what make the daily cron and the drafting step work. They are not optional extras; a run that surfaces reply targets but skips them has left the channel scorecard incomplete.
+
+5. **`save_style_exemplars({ channel: "linkedin", styleExemplars: [ … 5-10 verbatim native LinkedIn posts/comments … ] })`** — REQUIRED. The verbatim native posts from the "Style-exemplar capture" section below anchor `maya-voice-matcher` Anchor B; **skip this and every later LinkedIn draft defaults to generic LLM tone** (the broetry/corporate slop the platform is drowning in). Pass each as `{ platform: "linkedin", community: <niche>, verbatim, why, capturedAt }`. This is the persisted form of the capture — described-but-unsaved = lost.
+6. **`save_foundation_channel_scorecard({ channel: "linkedin", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })`** — REQUIRED for a bet channel. Populate per-channel `icpKnowledge`: `venues` (the named target accounts/companies + the buyer's professional communities as `{ name, kind: "account", url, whyHere }`), `watch` (the trusted voices these professionals follow), `complaints` (verbatim buyer pain `{ quote, sourceUrl }` from the comments you mined), `topics` (what this professional buyer discusses), and `nativeStyle` (`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }` — the professional-but-human, no-hype register). A LinkedIn bet with empty `icpKnowledge` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP.
+
 ## Style-exemplar capture (native-voice fidelity)
 
-Capture **5-10 real, top-performing, HUMAN-written native LinkedIn posts/comments verbatim** from the buyer's professional niche — the founder build-in-public + genuine-insight ones that landed (real engagement, real accounts). These anchor `maya-voice-matcher` + drafting: LinkedIn's register is professional-but-human, specific, no hype. Match cadence/vocab/length/format; **never copy** content. Skip anything that reads templated/AI/corporate. Emit in `styleExemplars[]`.
+Capture **5-10 real, top-performing, HUMAN-written native LinkedIn posts/comments verbatim** from the buyer's professional niche — the founder build-in-public + genuine-insight ones that landed (real engagement, real accounts). These anchor `maya-voice-matcher` + drafting: LinkedIn's register is professional-but-human, specific, no hype. Match cadence/vocab/length/format; **never copy** content. Skip anything that reads templated/AI/corporate. Emit in `styleExemplars[]` — then land them via the REQUIRED `save_style_exemplars({ channel: "linkedin", styleExemplars: [...] })` call above (the array is your thinking; the save is how it lands).
 
 ## LinkedIn caption craft — hook above the fold, link in first comment
 
