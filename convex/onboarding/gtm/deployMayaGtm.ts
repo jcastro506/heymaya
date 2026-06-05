@@ -313,7 +313,17 @@ const MODEL_ROUTING = {
   // $0.60 in / $2.50 out — trivial vs the $99 tier; brain quality is
   // the anti-slop moat, so we don't cheap out here. Workers stay on
   // cheap Gemini 3 Flash. Env override preserved for fast swaps.
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "moonshotai/kimi-k2-0905",
+  //
+  // 2026-06-04 — ":nitro" suffix = OpenRouter THROUGHPUT routing (not the
+  // default PRICE routing). K2-0905 has only 3 providers (Novita, AtlasCloud,
+  // Groq); default price-routing kept landing our calls on the slow budget
+  // providers — measured 18.4s for a trivial completion (AtlasCloud), which
+  // blows past OpenClaw's 120s idle timeout on a full-context turn and stalled
+  // a whole deploy. ":nitro" pins to the fastest provider (Groq LPU) = 0.3s on
+  // the same call (60x). This is THE scale fix: never get stuck on a degraded
+  // budget provider. Groq is ~1.6x the price ($1/$3 per M) — trivial vs the
+  // reliability win. Falls back to other providers if Groq is unavailable.
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "moonshotai/kimi-k2-0905:nitro",
   // Sprint 2.18 #42 — workers DOWNGRADED from gemini-3.5-flash to
   // gemini-3-flash-preview. Per OpenRouter pricing (verified 2026-05-28):
   //   gemini-3.5-flash:  $1.50 in / $9 out per M
