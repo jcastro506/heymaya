@@ -24,6 +24,7 @@
 - ✅ **Heartbeat quiet** (30m, mostly `HEARTBEAT_OK`)
 - ✅ **K2 fast** — `:nitro` throughput routing (Groq, 0.3s vs 18.4s budget provider)
 - 🟡 **No fabrication** — grounded-or-silent; no invented threads/numbers (citation firewall)
+- 🔴 **Grounds the RIGHT product** — must build the buyer map from the real landing page + `founderWhy`, NEVER hallucinate the product premise. *Observed 2026-06-04: on one run the agent invented a fictional "memory-augmented CLI tool" (described its own OpenClaw runtime) instead of the actual product, despite a correct founderWhy + landing. Confounded by testing with HeyMaya (an AI-agent product), but a hard go-live gate regardless.* Fix: force a landing-page read first, ground the premise there, add "you are not the product; never describe your own runtime."
 - 🟡 **Grounded status answers** — "how's it going?" mid-onboarding reports real state, never a fake "quiet week / no clicks" (prompt fixed, RE-VERIFY)
 - 🔴 **Deterministic synthesis safety-net** — plan delivers even if the LLM turn flakes (assemble from stored foundation data)
 - 🟡 K2 path-guessing quirk (`~/workspace` vs `/data/workspace`) — harmless now, tighten
