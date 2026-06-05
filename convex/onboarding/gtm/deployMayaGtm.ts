@@ -314,16 +314,22 @@ const MODEL_ROUTING = {
   // the anti-slop moat, so we don't cheap out here. Workers stay on
   // cheap Gemini 3 Flash. Env override preserved for fast swaps.
   //
-  // 2026-06-04 — ":nitro" suffix = OpenRouter THROUGHPUT routing (not the
-  // default PRICE routing). K2-0905 has only 3 providers (Novita, AtlasCloud,
-  // Groq); default price-routing kept landing our calls on the slow budget
-  // providers — measured 18.4s for a trivial completion (AtlasCloud), which
-  // blows past OpenClaw's 120s idle timeout on a full-context turn and stalled
-  // a whole deploy. ":nitro" pins to the fastest provider (Groq LPU) = 0.3s on
-  // the same call (60x). This is THE scale fix: never get stuck on a degraded
-  // budget provider. Groq is ~1.6x the price ($1/$3 per M) — trivial vs the
-  // reliability win. Falls back to other providers if Groq is unavailable.
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "moonshotai/kimi-k2-0905:nitro",
+  // 2026-06-05 — model PROVIDER routing saga (K2-0905 has only 3 OpenRouter
+  // providers: Novita, AtlasCloud, Groq):
+  //   - Default PRICE routing hit slow AtlasCloud (18.4s on a trivial call) →
+  //     blew past OpenClaw's 120s idle timeout → an all-night stall.
+  //   - ":nitro" (THROUGHPUT routing) fixed latency by pinning Groq (0.18s) BUT
+  //     Groq's strict tool-call validator REJECTS our complex/parallel tool
+  //     calls ("Upstream error from Groq: tool call validation") → it silently
+  //     killed agent turns mid-reply. Measured: Groq 0.18s (breaks tools),
+  //     Novita 1.4s (reliable), AtlasCloud 0.85s now / 18s under load.
+  // We can't pin Novita via the model config — OpenClaw only passes the model
+  // SLUG, and rejects extra model params (provider routing). So: DROP :nitro →
+  // price routing to the cheap providers (Novita/AtlasCloud, both tool-reliable)
+  // and AVOID Groq. The bulletproof version is an OpenRouter dashboard action:
+  // Provider Preferences → prefer/only "Novita" (or ignore Groq + AtlasCloud) —
+  // then routing is fast AND tool-safe regardless of slug. Env-overridable.
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "moonshotai/kimi-k2-0905",
   // Sprint 2.18 #42 — workers DOWNGRADED from gemini-3.5-flash to
   // gemini-3-flash-preview. Per OpenRouter pricing (verified 2026-05-28):
   //   gemini-3.5-flash:  $1.50 in / $9 out per M
