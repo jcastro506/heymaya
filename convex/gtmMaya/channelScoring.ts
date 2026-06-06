@@ -33,6 +33,7 @@ export type GtmChannel =
   | "hn"
   | "linkedin"
   | "tiktok"
+  | "instagram"
   | "youtube"
   | "product_hunt";
 
@@ -131,6 +132,7 @@ const CHANNEL_SOURCE: Record<GtmChannel, GtmEvidenceSource> = {
   hn: "hn",
   linkedin: "linkedin",
   tiktok: "tiktok",
+  instagram: "instagram",
   youtube: "youtube",
   product_hunt: "competitor",
 };

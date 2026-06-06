@@ -88,8 +88,8 @@ export interface MayaGtmWorkspaceInput {
    * OpenClaw owns digestion instead of a Convex-side Gemini pass.
    */
   walkthroughVideoUrl?: string;
-  primaryChannel?: "reddit" | "x" | "hn" | "linkedin" | "tiktok" | "youtube";
-  secondaryChannel?: "reddit" | "x" | "hn" | "linkedin" | "tiktok" | "youtube";
+  primaryChannel?: "reddit" | "x" | "hn" | "linkedin" | "tiktok" | "instagram" | "youtube";
+  secondaryChannel?: "reddit" | "x" | "hn" | "linkedin" | "tiktok" | "instagram" | "youtube";
   /**
    * Verification/test-only. When true, GTM.md carries a labeled directive to
    * exercise ALL platforms end-to-end (research + tools + video-watch),

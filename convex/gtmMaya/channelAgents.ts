@@ -27,6 +27,11 @@ export function evaluateChannelAgent(
   switch (input.channel) {
     case "tiktok":
       return evaluateTikTok(input);
+    case "instagram":
+      // Instagram Reels are the same short-form video eligibility shape as
+      // TikTok (Brief-only, hook-driven, visual). Reuse the video analog;
+      // per-platform nuance lives in the OpenClaw-native researcher skills.
+      return evaluateTikTok(input);
     case "youtube":
       // YouTube Shorts are the same short-form video eligibility shape as
       // TikTok (Brief-only, hook-driven). The real per-platform judgment now
@@ -53,7 +58,7 @@ export function evaluateAllChannelAgents(
   input: Omit<ChannelAgentInput, "channel">
 ): ChannelAgentVerdict[] {
   return (
-    ["reddit", "x", "hn", "linkedin", "tiktok", "youtube", "product_hunt"] as const
+    ["reddit", "x", "hn", "linkedin", "tiktok", "instagram", "youtube", "product_hunt"] as const
   ).map((channel) => evaluateChannelAgent({ ...input, channel }));
 }
 

@@ -718,6 +718,7 @@ export const insertChannelScores = internalMutation({
           v.literal("hn"),
           v.literal("linkedin"),
           v.literal("tiktok"),
+          v.literal("instagram"),
           v.literal("youtube"),
           v.literal("product_hunt")
         ),
@@ -1205,12 +1206,13 @@ export const runBudgetedResearchJob = internalAction({
         internal.gtmMaya.researchWorker.insertChannelScores,
         {
           researchJobId: args.researchJobId,
-          // Defense in depth: never persist a channel we no longer score
-          // or surface in the picker (youtube/product_hunt are vestigial).
+          // Defense in depth: drop only channels we never post to. TikTok /
+          // Instagram / YouTube ARE postable bet channels (the visual set for
+          // consumer products) and must persist. HN is research-only and
+          // product_hunt is a one-day event — neither is a steady-state
+          // posting channel, so neither is surfaced in the picker.
           scores: scores
-            .filter(
-              (s) => s.channel !== "youtube" && s.channel !== "product_hunt"
-            )
+            .filter((s) => s.channel !== "product_hunt" && s.channel !== "hn")
             .map((s) => ({
             channel: s.channel,
             score: s.score,
