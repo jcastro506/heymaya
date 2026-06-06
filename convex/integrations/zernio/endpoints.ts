@@ -2132,6 +2132,31 @@ const WebhookCreateResponseSchema = z
   .passthrough();
 
 /**
+ * List registered webhook subscriptions.
+ * `GET /api/v1/webhooks/settings`. Used to make webhook registration
+ * idempotent (find-by-url before create). The response envelope varies
+ * (`{ webhooks: [...] }` vs a bare array) so we accept both. [shape-unverified-live].
+ */
+export async function listWebhooks(
+  client: ZernioClient
+): Promise<Array<{ id: string; url: string; events: string[]; raw: unknown }>> {
+  const raw = await client.request<unknown>("/api/v1/webhooks/settings", {
+    method: "GET",
+  });
+  const rows: Array<Record<string, unknown>> = Array.isArray(raw)
+    ? (raw as Array<Record<string, unknown>>)
+    : raw && typeof raw === "object" && Array.isArray((raw as { webhooks?: unknown }).webhooks)
+      ? ((raw as { webhooks: Array<Record<string, unknown>> }).webhooks)
+      : [];
+  return rows.map((r) => ({
+    id: (typeof r._id === "string" && r._id) || (typeof r.id === "string" && r.id) || "",
+    url: typeof r.url === "string" ? r.url : "",
+    events: Array.isArray(r.events) ? (r.events.filter((e) => typeof e === "string") as string[]) : [],
+    raw: r,
+  }));
+}
+
+/**
  * Register a webhook subscription.
  * `POST /api/v1/webhooks/settings` — body requires `{ name, url, events }`,
  * optional `{ secret, isActive, customHeaders }`. Rejects any event name not

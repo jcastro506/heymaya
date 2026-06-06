@@ -328,6 +328,19 @@ export const sendCommentReply = internalAction({
 export const listConnectedAccountsHttp = httpAction(async (ctx, request) => {
   const auth = await authenticate(ctx, request);
   if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+  // Self-heal: re-read the authoritative account list from Zernio and rewrite
+  // connectedAccountsJson before answering. This covers a connection whose OAuth
+  // callback never made it back AND whose account.connected webhook was missed —
+  // the next time Maya checks "who can I post for", the truth is reconciled.
+  // Best-effort: a Zernio hiccup must not block the (still-useful) cached read.
+  try {
+    await ctx.runAction(
+      internal.gtmMaya.zernioConnect.reconcileAccountsForAgent,
+      { agentId: auth.agentId }
+    );
+  } catch {
+    /* fall back to the last-known connectedAccountsJson */
+  }
   const agentCtx = await ctx.runQuery(
     internal.gtmMaya.publishEngine.getAgentPublishContext,
     { agentId: auth.agentId }

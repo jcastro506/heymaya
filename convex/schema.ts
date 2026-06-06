@@ -4450,7 +4450,11 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_app", ["appId"])
     .index("by_fly_app", ["openClawFlyAppId"])
-    .index("by_telegram_chat", ["telegramChatId"]),
+    .index("by_telegram_chat", ["telegramChatId"])
+    // Zernio webhook routing: a single shared Zernio account fans `account.*`
+    // deliveries through one endpoint; we resolve the owning agent by the
+    // per-agent Zernio profile id carried in the payload.
+    .index("by_zernio_profile", ["zernioProfileId"]),
 
   // Sprint 15 — short-lived single-use Telegram pairing tokens. Generated
   // when the user clicks "Open Maya in Telegram" in onboarding; consumed

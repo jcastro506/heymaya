@@ -166,6 +166,7 @@ import type * as gtmMaya_workspaceMutator from "../gtmMaya/workspaceMutator.js";
 import type * as gtmMaya_zernioConnect from "../gtmMaya/zernioConnect.js";
 import type * as gtmMaya_zernioReads from "../gtmMaya/zernioReads.js";
 import type * as gtmMaya_zernioRoutes from "../gtmMaya/zernioRoutes.js";
+import type * as gtmMaya_zernioWebhook from "../gtmMaya/zernioWebhook.js";
 import type * as http from "../http.js";
 import type * as integrations_aggregators_unified_client from "../integrations/aggregators/unified/client.js";
 import type * as integrations_aggregators_unified_types from "../integrations/aggregators/unified/types.js";
@@ -466,6 +467,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/zernioConnect": typeof gtmMaya_zernioConnect;
   "gtmMaya/zernioReads": typeof gtmMaya_zernioReads;
   "gtmMaya/zernioRoutes": typeof gtmMaya_zernioRoutes;
+  "gtmMaya/zernioWebhook": typeof gtmMaya_zernioWebhook;
   http: typeof http;
   "integrations/aggregators/unified/client": typeof integrations_aggregators_unified_client;
   "integrations/aggregators/unified/types": typeof integrations_aggregators_unified_types;

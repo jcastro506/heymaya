@@ -161,11 +161,67 @@ export const claimZernioStateToken = internalMutation({
   },
 });
 
+/**
+ * Resolve a state token WITHOUT consuming it. Used by the callback so a connect
+ * that comes back with 0 accounts (user didn't finish "Allow", or eventual-
+ * consistency lag) does NOT burn the single-use token — the founder can re-tap
+ * the same link and retry. The token is only marked claimed once accounts land
+ * (see {@link markZernioStateTokenClaimed}).
+ */
+export const peekZernioStateToken = internalQuery({
+  args: { token: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ accountId: Id<"creators">; agentId: Id<"gtmAgents"> } | null> => {
+    const now = Date.now();
+    const row = await ctx.db
+      .query("gtmOauthStateTokens")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+    if (!row || row.provider !== "zernio") return null;
+    if (row.expiresAt <= now) return null;
+    if (row.claimedAt) return null;
+    return { accountId: row.accountId, agentId: row.agentId };
+  },
+});
+
+export const markZernioStateTokenClaimed = internalMutation({
+  args: { token: v.string() },
+  handler: async (ctx, args): Promise<void> => {
+    const row = await ctx.db
+      .query("gtmOauthStateTokens")
+      .withIndex("by_token", (q) => q.eq("token", args.token))
+      .first();
+    if (row && !row.claimedAt) {
+      await ctx.db.patch(row._id, { claimedAt: Date.now() });
+    }
+  },
+});
+
 export const getAgentProfileId = internalQuery({
   args: { agentId: v.id("gtmAgents") },
   handler: async (ctx, args): Promise<string | null> => {
     const agent = await ctx.db.get(args.agentId);
     return agent?.zernioProfileId ?? null;
+  },
+});
+
+/** Resolve the owning agent from a Zernio profile id (webhook routing). */
+export const lookupAgentByZernioProfile = internalQuery({
+  args: { zernioProfileId: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ agentId: Id<"gtmAgents">; telegramChatId: string | null } | null> => {
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_zernio_profile", (q) =>
+        q.eq("zernioProfileId", args.zernioProfileId)
+      )
+      .first();
+    if (!agent) return null;
+    return { agentId: agent._id, telegramChatId: agent.telegramChatId ?? null };
   },
 });
 
@@ -216,14 +272,26 @@ function parseConnectedAccounts(json: string | null | undefined): ConnectedAccou
   }
 }
 
+/**
+ * Zernio's wire platform slugs → our internal channel keys. Zernio reports X
+ * accounts as `twitter`; everywhere else in Maya v2 the channel is `x` (the
+ * connect-URL mapping does internal→wire, this is the inverse for reads). If we
+ * stored the raw `twitter` slug, posting (which resolves the channel as `x`)
+ * would never find the account and would silently fall to "not connected".
+ */
+const WIRE_TO_INTERNAL_PLATFORM: Record<string, string> = {
+  twitter: "x",
+};
+
 /** Map a raw Zernio account row to our ConnectedAccount shape. */
 function toConnectedAccount(raw: Record<string, unknown>, now: number): ConnectedAccount | null {
   const accountId =
     (typeof raw._id === "string" && raw._id) ||
     (typeof raw.id === "string" && raw.id) ||
     null;
-  const platform = typeof raw.platform === "string" ? raw.platform : null;
-  if (!accountId || !platform) return null;
+  const rawPlatform = typeof raw.platform === "string" ? raw.platform : null;
+  if (!accountId || !rawPlatform) return null;
+  const platform = WIRE_TO_INTERNAL_PLATFORM[rawPlatform] ?? rawPlatform;
   return {
     accountId,
     platform,
@@ -292,26 +360,29 @@ export const getZernioConnectUrl = action({
  * Internal action — finalize a connect (called by the public callback route)
  * ──────────────────────────────────────────────────────────────────────── */
 
-export const finalizeZernioConnect = internalAction({
-  args: { token: v.string() },
+/**
+ * Authoritative reconcile: re-read the account list from Zernio (scoped to the
+ * founder's profileId) and rewrite `connectedAccountsJson`. This is the SINGLE
+ * source of truth for connection state — the OAuth callback, the
+ * `account.connected` webhook, and the read-path self-heal all funnel through
+ * here, so a connection persists no matter which signal arrives first (or if the
+ * browser redirect never makes it back at all).
+ *
+ * Idempotent: preserves the original `connectedAt` for accounts already known,
+ * so repeated reconciles don't churn the timestamps.
+ */
+export const reconcileAccountsForAgent = internalAction({
+  args: { agentId: v.id("gtmAgents") },
   handler: async (
     ctx,
     args
   ): Promise<{ ok: boolean; connectedCount?: number; reason?: string }> => {
-    const claim = await ctx.runMutation(
-      internal.gtmMaya.zernioConnect.claimZernioStateToken,
-      { token: args.token }
-    );
-    if (!claim) return { ok: false, reason: "invalid-or-expired-token" };
-
     const profileId = await ctx.runQuery(
       internal.gtmMaya.zernioConnect.getAgentProfileId,
-      { agentId: claim.agentId }
+      { agentId: args.agentId }
     );
     if (!profileId) return { ok: false, reason: "no-profile" };
 
-    // Authoritatively read the account list from Zernio scoped to THIS
-    // founder's profile — never trust the redirect query params for binding.
     const client = zernioClient();
     let rows: Array<Record<string, unknown>>;
     try {
@@ -319,16 +390,61 @@ export const finalizeZernioConnect = internalAction({
     } catch (err) {
       return { ok: false, reason: `list-accounts-failed: ${(err as Error).message}` };
     }
+
+    const prior = await ctx.runQuery(
+      internal.gtmMaya.zernioConnect.readConnectedAccounts,
+      { agentId: args.agentId }
+    );
+    const priorConnectedAt = new Map(prior.map((a) => [a.accountId, a.connectedAt]));
+
     const now = Date.now();
     const accounts = rows
       .map((r) => toConnectedAccount(r, now))
-      .filter((a): a is ConnectedAccount => a !== null);
+      .filter((a): a is ConnectedAccount => a !== null)
+      .map((a) => ({
+        ...a,
+        connectedAt: priorConnectedAt.get(a.accountId) ?? a.connectedAt,
+      }));
 
     await ctx.runMutation(
       internal.gtmMaya.zernioConnect.replaceConnectedAccounts,
-      { agentId: claim.agentId, accounts }
+      { agentId: args.agentId, accounts }
     );
     return { ok: true, connectedCount: accounts.length };
+  },
+});
+
+export const finalizeZernioConnect = internalAction({
+  args: { token: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; connectedCount?: number; reason?: string }> => {
+    // Resolve WITHOUT consuming — never trust the redirect query for binding;
+    // the token resolves to exactly one (accountId, agentId).
+    const claim = await ctx.runQuery(
+      internal.gtmMaya.zernioConnect.peekZernioStateToken,
+      { token: args.token }
+    );
+    if (!claim) return { ok: false, reason: "invalid-or-expired-token" };
+
+    const result = await ctx.runAction(
+      internal.gtmMaya.zernioConnect.reconcileAccountsForAgent,
+      { agentId: claim.agentId }
+    );
+    if (!result.ok) return result;
+
+    // Only burn the single-use token once at least one account actually landed.
+    // A connect that comes back empty (user dropped off at "Allow", or Zernio
+    // eventual-consistency lag) leaves the token live so a re-tap can retry —
+    // and the `account.connected` webhook will reconcile it regardless.
+    if ((result.connectedCount ?? 0) > 0) {
+      await ctx.runMutation(
+        internal.gtmMaya.zernioConnect.markZernioStateTokenClaimed,
+        { token: args.token }
+      );
+    }
+    return result;
   },
 });
 

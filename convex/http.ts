@@ -167,6 +167,7 @@ import {
 } from "./gtmMaya/openclaw/conversationCapture";
 // Maya v2 — Zernio hosted-OAuth public callback (signed-state binding).
 import { zernioCallbackHttp, getConnectLinksHttp } from "./gtmMaya/zernioConnect";
+import { zernioWebhookHttp } from "./gtmMaya/zernioWebhook";
 // Maya v2 (S3) — agent-facing auto-post + dedup routes.
 import { zernioPostHttp, checkAlreadyEngagedHttp } from "./gtmMaya/zernioRoutes";
 import {
@@ -490,6 +491,14 @@ http.route({
   path: "/lc_gtm/get_connect_links",
   method: "POST",
   handler: getConnectLinksHttp,
+});
+// Maya v2 — Zernio inbound webhook (the reliable connection signal). Verifies
+// HMAC-SHA256 against ZERNIO_WEBHOOK_SECRET, routes account.* by profile id to
+// the owning agent, and reconciles connectedAccountsJson from listAccounts.
+http.route({
+  path: "/lc_gtm/zernio_webhook",
+  method: "POST",
+  handler: zernioWebhookHttp,
 });
 // Maya v2 (S3) — agent posts content directly (same gate as the cron path).
 http.route({
