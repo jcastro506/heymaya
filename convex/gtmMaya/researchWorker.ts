@@ -17,7 +17,7 @@ import { buildResearchQueryPlan, type IcpHypothesisInput } from "./researchQuery
 import type { PlatformResearchResult } from "./platformWorkers";
 import { scoreAllCardsForProduct } from "./judgeCardsBatch";
 import { judgeAllChannels } from "./judgeChannel";
-import { mineTopRedditCards } from "./mineCommentTrees";
+import { mineTopRedditCards, mineTopVideoCards } from "./mineCommentTrees";
 import { ScrapeCreatorsClient } from "../integrations/scrapeCreators/client";
 import { fireBootPhase2Webhook } from "./phase2Trigger";
 
@@ -1092,9 +1092,19 @@ export const runBudgetedResearchJob = internalAction({
             icpPainPhrases: expansion.icpPainPhrases ?? [],
             productCategoryKeywords: expansion.productCategoryKeywords ?? [],
           };
-          const mineResult = await mineTopRedditCards(cardsForMining, product, {
-            scrapeClient,
-          });
+          // Mine Reddit threads AND the visual bet channels (TikTok / Instagram)
+          // so the channel judge grounds the video channels on real comment
+          // buyer-language, not caption + view counts. Run in parallel.
+          const [redditMine, videoMine] = await Promise.all([
+            mineTopRedditCards(cardsForMining, product, { scrapeClient }),
+            mineTopVideoCards(cardsForMining, product, { scrapeClient }),
+          ]);
+          const mineResult = {
+            results: [...redditMine.results, ...videoMine.results],
+            attempted: redditMine.attempted + videoMine.attempted,
+            succeeded: redditMine.succeeded + videoMine.succeeded,
+            costUsd: redditMine.costUsd + videoMine.costUsd,
+          };
           const toPatch = mineResult.results
             .filter((r) => r.insights !== null)
             .map((r) => ({
@@ -1117,7 +1127,8 @@ export const runBudgetedResearchJob = internalAction({
           );
           llmCost.commentMiner = mineResult.costUsd;
           console.log(
-            `[gtm/commentMiner] attempted=${mineResult.attempted} succeeded=${mineResult.succeeded} costUsd=${mineResult.costUsd.toFixed(6)}`
+            `[gtm/commentMiner] reddit(attempted=${redditMine.attempted} ok=${redditMine.succeeded}) ` +
+              `video(attempted=${videoMine.attempted} ok=${videoMine.succeeded}) costUsd=${mineResult.costUsd.toFixed(6)}`
           );
         } else {
           console.log("[gtm/commentMiner] skipped — no ScrapeCreators API key");

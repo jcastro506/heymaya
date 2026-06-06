@@ -793,6 +793,82 @@ export async function instagramSearchReels(
   }
 }
 
+// Instagram post/reel comments — /v2/instagram/post/comments?url=...
+// [shape-defensive] The live response field names aren't pinned in the Convex
+// path (the agent-side tool is live-verified; this mirrors that endpoint). We
+// accept several plausible shapes and soft-fail on anything else, so a shape
+// surprise yields "no comments" (IG simply stays un-comment-grounded, exactly
+// today's behavior) and never throws into the research pipeline.
+interface RawInstagramComment {
+  pk?: string;
+  id?: string;
+  text?: string;
+  comment?: string;
+  like_count?: number;
+  comment_like_count?: number;
+  created_at?: number;
+  created_at_utc?: number;
+  user?: { username?: string; full_name?: string };
+  owner?: { username?: string };
+  username?: string;
+}
+
+export async function instagramPostComments(
+  client: ScrapeCreatorsClient,
+  postUrl: string,
+  options: { amount?: number } = {}
+): Promise<WrapperResult> {
+  const params = { url: postUrl, amount: options.amount ?? 30 };
+  const rawRef = rawRefOf("instagram", "post/comments", hashParams(params));
+  try {
+    const raw = await client.request<Record<string, unknown>>(
+      "/v2/instagram/post/comments",
+      { query: params as Record<string, string | number | boolean | undefined> }
+    );
+    // Accept { comments: [...] } | { data: { comments } } | bare array.
+    const list: RawInstagramComment[] = Array.isArray(raw)
+      ? (raw as RawInstagramComment[])
+      : Array.isArray((raw as { comments?: unknown }).comments)
+        ? ((raw as { comments: RawInstagramComment[] }).comments)
+        : Array.isArray(
+              (raw as { data?: { comments?: unknown } }).data?.comments
+            )
+          ? ((raw as { data: { comments: RawInstagramComment[] } }).data.comments)
+          : [];
+    const items: ResearchRawItem[] = [];
+    for (const c of list) {
+      const text = c.text ?? c.comment;
+      const id = c.pk ?? c.id;
+      if (!text || !id) continue;
+      const author =
+        c.user?.username ?? c.owner?.username ?? c.username ?? null;
+      const createdSec = c.created_at ?? c.created_at_utc;
+      items.push({
+        platform: "instagram",
+        externalId: String(id),
+        url: postUrl,
+        title: null,
+        excerpt: text.slice(0, 2000),
+        author: author ?? c.user?.full_name ?? null,
+        createdAtMs: createdSec ? createdSec * 1000 : null,
+        engagement: {
+          likes: c.like_count ?? c.comment_like_count ?? null,
+          comments: null,
+          shares: null,
+          views: null,
+          upvotes: null,
+          downvotes: null,
+        },
+        tags: ["comment"],
+        rawRef,
+      });
+    }
+    return { items, statusDetail: "ok" };
+  } catch (err) {
+    return softFail("instagram", err, rawRef);
+  }
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // Google search (substitutes / pain probes)
 // ──────────────────────────────────────────────────────────────────────
