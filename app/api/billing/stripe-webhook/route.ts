@@ -76,6 +76,15 @@ function metadataCreatorId(
   return undefined;
 }
 
+/** GTM ($99) subscribers carry metadata.product === "gtm" on both the Checkout
+ * session and the subscription. Routes them to the GTM plan-write path instead
+ * of the creator (coach/manager) handlers. */
+function isGtmProduct(
+  obj: Stripe.Subscription | Stripe.Checkout.Session
+): boolean {
+  return (obj.metadata ?? {}).product === "gtm";
+}
+
 /** Extract the unix-seconds period end from a subscription, in ms. */
 function subscriptionPeriodEndMs(sub: Stripe.Subscription): number | undefined {
   // `current_period_end` is unix seconds. Some SDK versions ship it on the
@@ -187,6 +196,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // current_period_end + trial_end + price id (the Checkout session
         // doesn't carry those reliably until the subscription is created).
         const sub = await stripe.subscriptions.retrieve(subscriptionId);
+
+        // GTM ($99) branch — write gtmPlanJson from the subscription status
+        // instead of the creator coach/manager tuple.
+        if (isGtmProduct(session) || isGtmProduct(sub)) {
+          const gtmResult = await convex.mutation(
+            api.billing.gtmBilling.applyGtmPlanFromWebhookPublic,
+            {
+              secret: bridge,
+              stripeCustomerId,
+              creatorId: metadataCreatorId(session) ?? metadataCreatorId(sub),
+              stripeStatus: sub.status,
+              periodEndMs: subscriptionPeriodEndMs(sub),
+            }
+          );
+          if (!gtmResult.patched) {
+            await convex.mutation(api.billing.webhook.recordWebhookEventPublic, {
+              secret: bridge,
+              eventId: `${eventId}.dispatch-failed`,
+              type: event.type,
+              livemode,
+              status: "errored",
+              detail: `applyGtmPlanFromWebhook returned ${gtmResult.reason ?? "no_patch"}`,
+              customerId: stripeCustomerId,
+              rawPayload: event as unknown,
+            });
+          }
+          return NextResponse.json({ ok: true, product: "gtm" });
+        }
+
         const tuple = resolveTierIntervalFromSubscription(sub);
         if (!tuple) {
           await convex.mutation(api.billing.webhook.recordWebhookEventPublic, {
@@ -268,6 +306,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           return NextResponse.json({ ok: true, skipped: "replay" });
         }
 
+        // GTM ($99) branch — status-driven plan write.
+        if (isGtmProduct(sub)) {
+          const gtmResult = await convex.mutation(
+            api.billing.gtmBilling.applyGtmPlanFromWebhookPublic,
+            {
+              secret: bridge,
+              stripeCustomerId,
+              creatorId: metadataCreatorId(sub),
+              stripeStatus: sub.status,
+              periodEndMs: subscriptionPeriodEndMs(sub),
+            }
+          );
+          if (!gtmResult.patched) {
+            await convex.mutation(api.billing.webhook.recordWebhookEventPublic, {
+              secret: bridge,
+              eventId: `${eventId}.dispatch-failed`,
+              type: event.type,
+              livemode,
+              status: "errored",
+              detail: `applyGtmPlanFromWebhook returned ${gtmResult.reason ?? "no_patch"}`,
+              customerId: stripeCustomerId,
+              rawPayload: event as unknown,
+            });
+          }
+          return NextResponse.json({ ok: true, product: "gtm" });
+        }
+
         const tuple = resolveTierIntervalFromSubscription(sub);
         if (!tuple) {
           await convex.mutation(api.billing.webhook.recordWebhookEventPublic, {
@@ -342,6 +407,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         );
         if (audit.alreadySeen) {
           return NextResponse.json({ ok: true, skipped: "replay" });
+        }
+
+        // GTM ($99) branch — a deleted/canceled sub lapses the plan to "none".
+        if (isGtmProduct(sub)) {
+          await convex.mutation(
+            api.billing.gtmBilling.applyGtmPlanFromWebhookPublic,
+            {
+              secret: bridge,
+              stripeCustomerId,
+              creatorId: metadataCreatorId(sub),
+              stripeStatus: "canceled",
+            }
+          );
+          return NextResponse.json({ ok: true, product: "gtm" });
         }
 
         const result = await convex.mutation(

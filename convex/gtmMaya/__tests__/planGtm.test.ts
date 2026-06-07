@@ -134,16 +134,18 @@ describe("planFeaturesGtm — status handling (most-restrictive-valid)", () => {
     expect(f.connectedChannelCap).toBe(6);
   });
 
-  it("trialing → research/draft only, cannot auto-post, caps 0", () => {
+  it("trialing → FULL access (operator decision 2026-06-07: trial sees the core value)", () => {
     const f = planFeaturesGtm({
       gtmPlanJson: planJson({ tier: "gtm99", status: "trialing" }),
     });
     expect(f.status).toBe("trialing");
     expect(f.canResearch).toBe(true);
     expect(f.canDraft).toBe(true);
-    expect(f.canAutoPost).toBe(false);
-    expect(f.autoPostChannelCap).toBe(0);
-    expect(f.xUrlPostsSoftCapMonth).toBe(0);
+    // Full access during the (short) trial — Maya actually posts.
+    expect(f.canAutoPost).toBe(true);
+    expect(f.autoPostChannelCap).toBeGreaterThan(0);
+    expect(f.xUrlPostsSoftCapMonth).toBeGreaterThan(0);
+    expect(f.canVideo).toBe(true);
     expect(f.banSafetyManualGate).toBe(true);
     expect(f.attributionEnabled).toBe(true);
   });
@@ -179,9 +181,18 @@ describe("requireFeatureGtm", () => {
     ).not.toThrow();
   });
 
-  it("throws on trialing auto-post attempt", () => {
+  it("does NOT throw on trialing auto-post (trial has full access)", () => {
     const f = planFeaturesGtm({
       gtmPlanJson: planJson({ tier: "gtm99", status: "trialing" }),
+    });
+    expect(() =>
+      requireFeatureGtm(f, (x) => x.canAutoPost, "auto-post")
+    ).not.toThrow();
+  });
+
+  it("throws on auto-post attempt with no subscription (status none)", () => {
+    const f = planFeaturesGtm({
+      gtmPlanJson: planJson({ tier: "gtm99", status: "none" }),
     });
     expect(() =>
       requireFeatureGtm(f, (x) => x.canAutoPost, "auto-post")

@@ -60,6 +60,7 @@ import type * as agents_packs_maya_service_wikiInitialPages from "../agents/pack
 import type * as agents_packs_riley_growth_clawhubManifest from "../agents/packs/riley_growth/clawhubManifest.js";
 import type * as agents_packs_riley_growth_generators from "../agents/packs/riley_growth/generators.js";
 import type * as billing_checkout from "../billing/checkout.js";
+import type * as billing_gtmBilling from "../billing/gtmBilling.js";
 import type * as billing_portal from "../billing/portal.js";
 import type * as billing_priceIds from "../billing/priceIds.js";
 import type * as billing_stripeClient from "../billing/stripeClient.js";
@@ -365,6 +366,7 @@ declare const fullApi: ApiFromModules<{
   "agents/packs/riley_growth/clawhubManifest": typeof agents_packs_riley_growth_clawhubManifest;
   "agents/packs/riley_growth/generators": typeof agents_packs_riley_growth_generators;
   "billing/checkout": typeof billing_checkout;
+  "billing/gtmBilling": typeof billing_gtmBilling;
   "billing/portal": typeof billing_portal;
   "billing/priceIds": typeof billing_priceIds;
   "billing/stripeClient": typeof billing_stripeClient;
