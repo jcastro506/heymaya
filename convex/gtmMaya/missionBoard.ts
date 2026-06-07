@@ -1,6 +1,7 @@
 import { query } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { decideLearningLoop } from "./resultsLoop";
+import { selectActiveChannels } from "./channelSelection";
 
 export interface MissionBoardItem {
   label: string;
@@ -139,6 +140,9 @@ export function projectMissionBoard(input: {
       | "risks"
       | "firstWeekTest"
       | "createdAt"
+      // score + qualityGate feed the activation policy (selectActiveChannels).
+      | "score"
+      | "qualityGate"
     >
   >;
   drafts: Array<
@@ -165,9 +169,16 @@ export function projectMissionBoard(input: {
   const channelScores = [...input.channelScores].sort(
     (a, b) => decisionRank(a.decision) - decisionRank(b.decision)
   );
-  const activeChannels = channelScores.filter(
-    (row) => row.decision === "primary" || row.decision === "secondary"
-  );
+  // The Plan card shows the channels Maya actually RUNS — the activation
+  // policy's set (lock all high-fit + floor of 3), not the raw judge decisions,
+  // so the mission board matches what deploy renders into GTM.md.
+  const channelSelection = selectActiveChannels(input.channelScores);
+  const activeChannels = channelSelection.active;
+  // Same set as full score rows (carrying firstWeekTest), in policy order, for
+  // the task/test builders below.
+  const activeChannelRows = channelSelection.active
+    .map((ch) => channelScores.find((row) => row.channel === ch))
+    .filter((row): row is (typeof channelScores)[number] => Boolean(row));
 
   return {
     appName,
@@ -199,7 +210,13 @@ export function projectMissionBoard(input: {
         detail:
           activeChannels.length > 0
             ? activeChannels
-                .map((row) => `${row.decision}: ${row.channel}`)
+                .map((channel, i) =>
+                  i === 0
+                    ? `primary: ${channel}`
+                    : i === 1
+                      ? `secondary: ${channel}`
+                      : `active: ${channel}`
+                )
                 .join(", ")
             : "No channel decision yet.",
         state: activeChannels.length > 0 ? "done" : "waiting",
@@ -226,7 +243,7 @@ export function projectMissionBoard(input: {
     })),
     todayTasks: buildTodayTasks({
       latestJob,
-      activeChannels,
+      activeChannels: activeChannelRows,
       pendingDraftCount: pendingDrafts.length,
     }),
     pendingApprovals: pendingDrafts.slice(0, 6).map((draft) => ({
@@ -239,7 +256,7 @@ export function projectMissionBoard(input: {
     learnings: learningItems(input.snapshots),
     nextTests: nextTestItems({
       snapshots: input.snapshots,
-      activeChannels,
+      activeChannels: activeChannelRows,
       pendingDraftCount: pendingDrafts.length,
     }),
     cost: {

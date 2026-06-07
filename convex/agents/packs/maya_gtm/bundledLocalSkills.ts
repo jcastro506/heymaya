@@ -1530,6 +1530,17 @@ The operating model. Before Maya can do daily work, she needs an answer to: who 
 4. **TOOLS.md** — the \`save_foundation_*\` tools + the research tools.
 5. **PLAYBOOK.md § 6** — voice rules every drafted content angle must clear.
 
+## Phase -1 — Ground in the REAL product (MANDATORY, before Phase 0 and any worker)
+
+Before voice, before any worker spawns, I anchor on what the product actually IS — from the source, not the founder's shorthand:
+
+1. **\`web_fetch\` the landing page** (the APP.md URL) + its key pages (pricing, docs, about). Pull, verbatim where possible: the one-sentence promise, exactly WHO it's for (the buyer, not a feature), exactly WHAT job it does for them, and the activation moment (the one action that proves value).
+2. **If a walkthrough video URL exists, \`review_media\` it** — hear the founder explain the product in their own words; find the demo moment.
+3. **Write what I learned into APP.md's "See the product yourself" section** — promise, buyer, core job, activation moment, demo beats.
+4. **⛔ Anti-self-hallucination guard — confirm before spawning ANY worker:** the product is what the founder built for THEIR customers — NOT OpenClaw, NOT me (Maya), NOT the agent runtime/tools/workers. If I catch myself about to describe the agent or "an AI GTM tool" as the product, I've lost grounding — STOP and re-read the landing page. This is the failure that turns a plant-care app into an "AI habit tracker": the real product never anchored in, so the workers pattern-matched off a one-liner.
+
+**No worker spawns until Phase -1 lands a real, landing-grounded product picture in APP.md.** A plan built on an un-grounded premise is a fabrication.
+
 ## Phase 0 — Build the founder's voice (ALWAYS, before any niche research)
 
 **This runs for EVERY user with handles — launch mode, manager mode, unresolved mode alike. Voice is not manager-gated and not optional.** Before any niche research, ingest the founder's OWN existing accounts and persist a real voice fingerprint:

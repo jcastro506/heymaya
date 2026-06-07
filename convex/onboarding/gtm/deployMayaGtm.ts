@@ -16,6 +16,7 @@ import {
   BUNDLED_GTM_PLUGIN_TGZ_NAME,
 } from "../../agents/packs/maya_gtm/bundledGtmPlugin";
 import { mintHookToken } from "../../gtmMaya/openclaw/hookClient";
+import { selectActiveChannels } from "../../gtmMaya/channelSelection";
 import {
   buildDeployTimeHelloText,
   sendDirectTelegramMessage,
@@ -31,13 +32,22 @@ import {
  */
 function toPickerChannel(
   channel: Doc<"gtmChannelScores">["channel"] | undefined
-): "reddit" | "x" | "hn" | "linkedin" | "tiktok" | "youtube" | undefined {
+):
+  | "reddit"
+  | "x"
+  | "hn"
+  | "linkedin"
+  | "tiktok"
+  | "instagram"
+  | "youtube"
+  | undefined {
   switch (channel) {
     case "reddit":
     case "x":
     case "hn":
     case "linkedin":
     case "tiktok":
+    case "instagram":
     case "youtube":
       return channel;
     default:
@@ -1176,6 +1186,12 @@ export const buildAndUploadGtmWorkspace = internalAction({
       { agentId: args.agentId }
     );
 
+    // Channel-activation policy: turn the judge's scored rows into the SET of
+    // channels Maya actually runs (lock all high-fit, floor of 3, quality
+    // floor, honesty escape). One pure fn shared with the mission board + the
+    // onboarding picker so deploy and UI never disagree.
+    const channelSelection = selectActiveChannels(row.channelScores);
+
     const { files } = buildMayaGtmWorkspace({
       accountEmail: row.creator.email,
       timezone: row.agent.timezone,
@@ -1224,12 +1240,16 @@ export const buildAndUploadGtmWorkspace = internalAction({
       // Sprint 2.32 — the founder's walkthrough video, for Maya to watch
       // herself on boot rather than relying on a Convex-side pre-digest.
       walkthroughVideoUrl: row.walkthroughVideoUrl,
-      primaryChannel: toPickerChannel(
-        row.channelScores.find((s) => s.decision === "primary")?.channel
-      ),
-      secondaryChannel: toPickerChannel(
-        row.channelScores.find((s) => s.decision === "secondary")?.channel
-      ),
+      // Full active set + back-compat single fields, all from the policy so
+      // GTM.md renders exactly what Maya will run (not just the first
+      // primary/secondary row).
+      activeChannels: channelSelection.active
+        .map(toPickerChannel)
+        .filter((c): c is NonNullable<typeof c> => c !== undefined),
+      channelSelectionNote: channelSelection.note,
+      channelSelectionBelowFloor: channelSelection.belowFloor,
+      primaryChannel: toPickerChannel(channelSelection.primaryChannel ?? undefined),
+      secondaryChannel: toPickerChannel(channelSelection.secondaryChannel ?? undefined),
       activeResearchJobId: row.latestResearchJobId
         ? String(row.latestResearchJobId)
         : undefined,

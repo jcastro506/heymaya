@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { selectActiveChannels } from "@/convex/gtmMaya/channelSelection";
+import type { GtmChannelDecision } from "@/convex/gtmMaya/channelScoring";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 
 type Stage = "intake" | "research" | "deploy";
@@ -875,6 +877,37 @@ function GtmOnboardingBody() {
                     );
                   })}
               </div>
+              {(() => {
+                // Live preview of the activation policy: shows which channels
+                // Maya will actually RUN given the current picks (lock all
+                // high-fit, floor of 3). Same pure fn the deploy path uses, so
+                // what the operator sees here is exactly what ships.
+                const preview = selectActiveChannels(
+                  snapshot.channelScores.map((s) => ({
+                    channel: s.channel,
+                    score: s.score,
+                    decision: (channelPicks[s.channel] ??
+                      s.decision) as GtmChannelDecision,
+                    confidence: s.confidence,
+                    qualityGate: s.qualityGate,
+                  }))
+                );
+                if (preview.active.length === 0) return null;
+                return (
+                  <div className="mt-4 rounded border border-paper/40 bg-ink-2 p-3">
+                    <p className="text-sm text-paper">
+                      Maya will run{" "}
+                      <strong>
+                        {preview.active
+                          .map((c) => CHANNEL_LABELS[c] ?? c)
+                          .join(", ")}
+                      </strong>
+                      .
+                    </p>
+                    <p className="mt-1 text-xs text-paper-dim">{preview.note}</p>
+                  </div>
+                );
+              })()}
               <div className="mt-4 flex items-center gap-3">
                 <button
                   onClick={confirmChannels}

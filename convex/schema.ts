@@ -4444,6 +4444,30 @@ export default defineSchema({
     // server-side cap: past FOUNDATION_MAX_LEASE_ACQUIRES with foundation still
     // incomplete, the lease is DENIED so the agent physically cannot re-run it.
     foundationLeaseAcquireCount: v.optional(v.number()),
+    // ─── Hard spend kill-switch (runaway-burn backstop) ─────────────────────
+    // The throttle caps in costCap.ts (hour/day/month) assume the agent honors
+    // a 403 and stops. A runaway loop (observed: an old-model agent burned
+    // ~$30 in 7h) does NOT. These fields back a HARD kill: when ROLLING-window
+    // spend crosses a ceiling ($3/hr velocity OR $6/24h sustained, defaults in
+    // spendKill.ts, env-overridable), the agent's Fly machine is DESTROYED
+    // (billing physically stops), its hookToken rotated, and these stamped.
+    // Rolling windows (not lifetime) so a long-lived daily driver under normal
+    // ~$2/day spend is never killed — only a runaway trips it.
+    //   spendKillCapUsd — OPTIONAL per-agent override of the 24h kill ceiling,
+    //     for one-off watched tests that want a tighter bound than the default.
+    //   killedAt / killReason — stamped when the kill fires; a killed agent is
+    //     skipped by the sweep + telemetry enforcer (idempotent).
+    spendKillCapUsd: v.optional(v.number()),
+    killedAt: v.optional(v.number()),
+    killReason: v.optional(v.string()),
+    // Deterministic synthesis safety-net (#1 onboarding deliverable). The plan
+    // ("who buys / where I post / what to post / connect ask") is normally
+    // composed + sent by the agent's LLM. When that turn flakes and the user
+    // never gets a plan, a Convex watchdog assembles it from stored research
+    // and sends it directly. Stamped when the watchdog fires (idempotency +
+    // observability); the happy path never sets it. See
+    // convex/gtmMaya/synthesisDelivery.ts.
+    synthesisSafetyNetFiredAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -4920,6 +4944,7 @@ export default defineSchema({
         cardScorer: v.optional(v.number()),
         commentMiner: v.optional(v.number()),
         channelJudge: v.optional(v.number()),
+        formatIntel: v.optional(v.number()),
       })
     ),
     createdAt: v.number(),
@@ -5235,6 +5260,13 @@ export default defineSchema({
       passed: v.boolean(),
       failures: v.array(v.string()),
     }),
+    // Format intelligence ("what's working in the niche") for the visual
+    // channels — JSON array of WorkingFormat {formatName, description,
+    // whyItWorks, exemplarUrl, exemplarHook, engagementSignal} extracted from
+    // the top-ENGAGEMENT posts (ranked by views/likes, distinct from the
+    // pain-ranked comment miner). Grounds "how to post" in winning formats.
+    // See convex/gtmMaya/formatIntel.ts. Absent on non-video channels.
+    workingFormatsJson: v.optional(v.string()),
     // S3 — operator's channel-selection decision. When the operator confirms
     // or overrides the agent's recommendation in onboarding, `decision` is
     // patched to their pick and this is stamped so the deploy + GTM.md know

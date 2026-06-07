@@ -82,19 +82,24 @@ export function evaluateCostCap(input: {
 /**
  * Sum gtmCostLedger over a sliding window from `now`.
  */
-async function sumLedgerForAccountSince(
+export async function sumLedgerForAccountSince(
   ctx: Pick<QueryCtx, "db">,
   accountId: Id<"creators">,
-  sinceMs: number
+  sinceMs: number,
+  opts?: { excludeResearchJobSpend?: boolean }
 ): Promise<number> {
   const rows = await ctx.db
     .query("gtmCostLedger")
     .withIndex("by_account", (q) => q.eq("accountId", accountId))
     .collect();
-  return rows.reduce<number>(
-    (sum, row) => (row.createdAt >= sinceMs ? sum + row.costUsd : sum),
-    0
-  );
+  return rows.reduce<number>((sum, row) => {
+    if (row.createdAt < sinceMs) return sum;
+    // Research-job spend is bounded by the job's own budgetUsd, so callers
+    // governing only the uncapped operational loop (the spend kill-switch) can
+    // exclude it — a legitimate deep research run must not trip a runaway kill.
+    if (opts?.excludeResearchJobSpend && row.researchJobId) return sum;
+    return sum + row.costUsd;
+  }, 0);
 }
 
 async function loadResearchJob(

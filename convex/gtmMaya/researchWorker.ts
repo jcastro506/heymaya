@@ -18,6 +18,7 @@ import type { PlatformResearchResult } from "./platformWorkers";
 import { scoreAllCardsForProduct } from "./judgeCardsBatch";
 import { judgeAllChannels } from "./judgeChannel";
 import { mineTopRedditCards, mineTopVideoCards } from "./mineCommentTrees";
+import { extractWorkingFormats } from "./formatIntel";
 import { ScrapeCreatorsClient } from "../integrations/scrapeCreators/client";
 import { fireBootPhase2Webhook } from "./phase2Trigger";
 
@@ -410,6 +411,7 @@ export const recordLlmCost = internalMutation({
       cardScorer: v.number(),
       commentMiner: v.number(),
       channelJudge: v.number(),
+      formatIntel: v.number(),
     }),
   },
   handler: async (ctx, args): Promise<void> => {
@@ -743,6 +745,10 @@ export const insertChannelScores = internalMutation({
         }),
       })
     ),
+    // Format intelligence per channel, keyed by channel name → JSON-stringified
+    // WorkingFormat[] (formatIntel.extractWorkingFormats). Attached to the
+    // matching channel's score row so the plan + cron can ground "how to post".
+    workingFormatsByChannel: v.optional(v.record(v.string(), v.string())),
   },
   handler: async (ctx, args): Promise<void> => {
     const job = await ctx.db.get(args.researchJobId);
@@ -753,6 +759,7 @@ export const insertChannelScores = internalMutation({
         accountId: job.accountId,
         researchJobId: args.researchJobId,
         ...score,
+        workingFormatsJson: args.workingFormatsByChannel?.[score.channel],
         createdAt: now,
       });
     }
@@ -809,6 +816,7 @@ export const runBudgetedResearchJob = internalAction({
       cardScorer: 0,
       commentMiner: 0,
       channelJudge: 0,
+      formatIntel: 0,
     };
 
     // Sprint 2.14a.2 — safety net. Live observed: ModelHub v6/v7
@@ -1147,6 +1155,59 @@ export const runBudgetedResearchJob = internalAction({
       { researchJobId: args.researchJobId }
     );
 
+    // ── Format intelligence: "what's working in the niche" for the visual
+    // channels. Rank the niche's video posts by ENGAGEMENT (not pain) and
+    // LLM-extract the content formats that perform, with a real exemplar + hook.
+    // This is what grounds "how to post" — the pain miner above grounds "who
+    // buys / what hurts." Best-effort; never blocks the job.
+    let workingFormatsByChannel: Record<string, string> | undefined;
+    try {
+      const scrapeKeyFmt =
+        process.env.SCRAPE_CREATORS_API_KEY ??
+        process.env.SCRAPECREATORS_API_KEY;
+      const fmt = await extractWorkingFormats(
+        cardsWithInsights.map((c) => ({
+          id: c.id!,
+          source: c.source,
+          url: c.url,
+          title: c.title,
+          snippet: c.snippet,
+          engagement: c.engagement ?? {},
+          commentInsights: c.commentInsights
+            ? { summary: c.commentInsights.summary }
+            : null,
+        })),
+        { productName: app.name ?? "Untitled product", productUrl: app.url },
+        {
+          scrapeClient: scrapeKeyFmt
+            ? new ScrapeCreatorsClient({ apiKey: scrapeKeyFmt })
+            : undefined,
+          // WATCH the top performers via Gemini vision (video-synth-worker);
+          // falls back to transcript/caption text if the worker is down.
+          watch: true,
+          accountId: String(creatorId),
+        }
+      );
+      llmCost.formatIntel = fmt.costUsd;
+      const entries = Object.entries(fmt.byChannel).filter(
+        ([, f]) => f && f.length > 0
+      );
+      if (entries.length > 0) {
+        workingFormatsByChannel = Object.fromEntries(
+          entries.map(([ch, f]) => [ch, JSON.stringify(f)])
+        );
+      }
+      console.log(
+        `[gtm/formatIntel] formats for [${entries
+          .map(([c]) => `${c}:${fmt.groundedIn[c as keyof typeof fmt.groundedIn] ?? "?"}`)
+          .join(",") || "none"}] costUsd=${fmt.costUsd.toFixed(6)}`
+      );
+    } catch (err) {
+      console.warn(
+        `[gtm/formatIntel] failed (non-fatal, plan proceeds without format intel): ${(err as Error).message}`
+      );
+    }
+
     // ── Sprint 2.13b: LLM channel-judge.
     // Replaces the weighted-formula evaluateChannelSet that was
     // picking wrong channels on non-dev-tools products (live N=3
@@ -1239,6 +1300,7 @@ export const runBudgetedResearchJob = internalAction({
             firstWeekTest: s.firstWeekTest,
             qualityGate: s.qualityGate,
           })),
+          workingFormatsByChannel,
         }
       );
     }
@@ -1348,7 +1410,8 @@ export const runBudgetedResearchJob = internalAction({
       llmCost.keywordExpansion +
       llmCost.cardScorer +
       llmCost.commentMiner +
-      llmCost.channelJudge;
+      llmCost.channelJudge +
+      llmCost.formatIntel;
     try {
       await ctx.runMutation(
         internal.gtmMaya.researchWorker.recordLlmCost,
