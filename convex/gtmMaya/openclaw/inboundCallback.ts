@@ -1217,19 +1217,25 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
     }
   }
 
-  // Firewall after evidence guard.
+  // Firewall after evidence guard. For OPERATOR DMs (send_update) the firewall
+  // is voice-quality, NOT ban-safety (public posts hard-gate elsewhere). A hard
+  // block here blackholes the founder's message (the live root-cause of "hello +
+  // synthesis never arrived" — bounced on an em-dash). So instead of blocking,
+  // SANITIZE the mechanical AI-tells and SEND the cleaned text. Delivery wins.
   const firewall = await ctx.runAction(
     internal.gtmMaya.outboundFirewall.validateOutbound,
     { text: body.text }
   );
+  let outboundText = body.text;
   if (!firewall.ok) {
-    return new Response(
+    const { sanitizeOutboundText } = await import("../outboundFirewall");
+    outboundText = sanitizeOutboundText(body.text);
+    console.warn(
       JSON.stringify({
-        ok: false,
-        reason: "firewall_blocked",
+        event: "send_update.firewall_sanitized",
+        agentId: auth.agentId,
         failures: firewall.failures,
-      }),
-      { status: 200, headers: { "content-type": "application/json" } }
+      })
     );
   }
 
@@ -1268,7 +1274,7 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
   const result = await sendDirectTelegramMessage({
     botToken: resolvedBot.token,
     chatId: agent.telegramChatId,
-    text: body.text,
+    text: outboundText,
   });
 
   // Data-collection sprint — persist Maya's reply to the transcript. This
@@ -1287,7 +1293,7 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
         accountId: auth.accountId,
         agentId: auth.agentId,
         role: "maya",
-        body: body.text,
+        body: outboundText,
         channel: "telegram",
         turnId,
         messageClass,
