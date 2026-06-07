@@ -34,6 +34,7 @@ import {
   redditPostComments,
   tiktokVideoComments,
   instagramPostComments,
+  youtubeVideoComments,
 } from "./scrapeCreatorsGtmResearch";
 
 export const COMMENT_MINER_MODEL = "google/gemini-3.1-flash-lite";
@@ -200,6 +201,11 @@ async function fetchCommentsForCard(
     }
     case "instagram":
       wr = await instagramPostComments(scrapeClient, card.url, {
+        amount: MAX_COMMENTS_PER_CARD,
+      });
+      break;
+    case "youtube":
+      wr = await youtubeVideoComments(scrapeClient, card.url, {
         amount: MAX_COMMENTS_PER_CARD,
       });
       break;
@@ -408,7 +414,7 @@ export async function mineTopVideoCards(
 }> {
   const topN = opts.topN ?? DEFAULT_TOP_N;
   const concurrency = opts.concurrency ?? 3;
-  const VIDEO_SOURCES = new Set(["tiktok", "instagram"]);
+  const VIDEO_SOURCES = new Set(["tiktok", "instagram", "youtube"]);
 
   // Take the top-N per source so one high-volume channel (TikTok often returns
   // 200+ cards) can't starve the other (Instagram) of mining budget.

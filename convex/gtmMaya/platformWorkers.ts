@@ -14,6 +14,7 @@ import {
   searchRedditSubreddit,
   subredditPosts,
   tiktokVideoComments,
+  youtubeSearch,
   twitterProfile,
   twitterSearch,
   twitterUserTweets,
@@ -73,6 +74,7 @@ export type PlatformWorkerPlatform =
   | "tiktok"
   | "twitter"
   | "instagram"
+  | "youtube"
   | "google";
 
 export interface PlatformResearchResult {
@@ -95,6 +97,7 @@ const PER_CALL_COST_USD: Record<PlatformWorkerPlatform, number> = {
   tiktok: 0.015,
   twitter: 0.012,
   instagram: 0.012,
+  youtube: 0.015,
   // Sprint 2.0 — Google now fans to Gemini grounded ($35/1K = ~$0.035/call)
   // + Algolia HN (free). Bumped from the old ScrapeCreators rate (0.005)
   // so the cost-cap pre-flight check doesn't underestimate 7x and let
@@ -116,6 +119,7 @@ const EVIDENCE_INPUT_INTERNAL = v.object({
     v.literal("linkedin"),
     v.literal("tiktok"),
     v.literal("instagram"),
+    v.literal("youtube"),
     v.literal("competitor")
   ),
   url: v.string(),
@@ -414,6 +418,8 @@ function platformToSource(
       return "x";
     case "instagram":
       return "instagram";
+    case "youtube":
+      return "youtube";
     case "google":
       return "google";
   }
@@ -764,6 +770,34 @@ export const runInstagramWorker = internalAction({
     };
     return await runWorker(wc, args.pack, async (query) => {
       const res = await instagramSearchReels(client, query);
+      return res.items;
+    });
+  },
+});
+
+// ──────────────────────────────────────────────────────────────────────
+// YouTube worker — /v1/youtube/search (Shorts + long-form ranking for
+// buyer-pain queries). Grounds the YouTube channel decision in real videos
+// instead of category reasoning.
+// ──────────────────────────────────────────────────────────────────────
+
+export const runYouTubeWorker = internalAction({
+  args: {
+    researchJobId: v.id("gtmResearchJobs"),
+    accountId: v.id("creators"),
+    pack: PACK_ARGS,
+  },
+  handler: async (ctx, args): Promise<PlatformResearchResult> => {
+    const client = new ScrapeCreatorsClient();
+    const wc: WorkerContext = {
+      ctx,
+      client,
+      researchJobId: args.researchJobId,
+      accountId: args.accountId,
+      platform: "youtube",
+    };
+    return await runWorker(wc, args.pack, async (query) => {
+      const res = await youtubeSearch(client, query);
       return res.items;
     });
   },

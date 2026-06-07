@@ -27,6 +27,7 @@ export const PlatformSchema = z.enum([
   "twitter",
   "tiktok",
   "instagram",
+  "youtube",
   "linkedin",
   "google",
 ]);
@@ -124,6 +125,7 @@ const DEFAULT_BUDGETS: Record<GtmQueryPlatform, number> = {
   tiktok: 12,
   twitter: 8,
   instagram: 8,
+  youtube: 8,
   linkedin: 4,
   google: 4,
 };
@@ -134,6 +136,7 @@ const DEFAULT_MIN_EVIDENCE: Record<GtmQueryPlatform, number> = {
   tiktok: 5,
   twitter: 5,
   instagram: 3,
+  youtube: 3,
   linkedin: 3,
   google: 3,
 };
@@ -411,6 +414,37 @@ function buildInstagramPack(
   };
 }
 
+function buildYouTubePack(
+  input: BuildResearchQueryPlanInput,
+  budget: number
+): PlatformQueryPack {
+  // YouTube mining: Shorts + long-form ranking for buyer-pain queries. The
+  // richest per-credit signal is the transcript/comments of videos that rank
+  // for "how to X" / "X tutorial" / "best X" — search-intent buyer language.
+  const cats = input.diagnosis.productCategoryKeywords;
+  return {
+    platform: "youtube",
+    painQueries: uniqueTrimmed([
+      ...cats.map((c) => `how to ${c}`),
+      ...cats.map((c) => `${c} tutorial`),
+      ...cats.map((c) => `best ${c}`),
+    ]),
+    solutionQueries: uniqueTrimmed([
+      ...cats.map((c) => `${c} app review`),
+      ...cats.map((c) => `${c} demo`),
+    ]),
+    competitorQueries: uniqueTrimmed(
+      input.diagnosis.competitorMentions.map((c) => `${c} review`)
+    ),
+    formatQueries: uniqueTrimmed(cats.map((c) => `${c} shorts`)),
+    exclusionQueries: uniqueTrimmed(
+      (input.excludedAudiences ?? []).map((a) => `-${a}`)
+    ),
+    minimumEvidenceCards: DEFAULT_MIN_EVIDENCE.youtube,
+    maxCalls: budget,
+  };
+}
+
 function buildLinkedInPack(
   input: BuildResearchQueryPlanInput,
   budget: number
@@ -496,13 +530,17 @@ export function buildResearchQueryPlan(
     "twitter",
     "tiktok",
     "instagram",
+    "youtube",
     "linkedin",
     "google",
   ];
   for (const platform of allPlatforms) {
-    // Showability gate (tiktok.md rule 4 + IG mirror).
+    // Showability gate (tiktok.md rule 4 + IG/YouTube mirror — all three are
+    // video channels that need a demonstrable product).
     if (
-      (platform === "tiktok" || platform === "instagram") &&
+      (platform === "tiktok" ||
+        platform === "instagram" ||
+        platform === "youtube") &&
       input.diagnosis.showability === "unshowable"
     ) {
       skipped.push({
@@ -552,6 +590,9 @@ export function buildResearchQueryPlan(
         break;
       case "instagram":
         pack = buildInstagramPack(input, budget);
+        break;
+      case "youtube":
+        pack = buildYouTubePack(input, budget);
         break;
       case "linkedin":
         pack = buildLinkedInPack(input, budget);

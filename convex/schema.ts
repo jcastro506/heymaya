@@ -4963,6 +4963,7 @@ export default defineSchema({
       v.literal("linkedin"),
       v.literal("tiktok"),
       v.literal("instagram"),
+      v.literal("youtube"),
       v.literal("competitor")
     ),
     url: v.string(),

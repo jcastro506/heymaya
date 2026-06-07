@@ -256,6 +256,16 @@ function makeVideoScrapeClient(): ScrapeCreatorsClient {
           { status: 200 }
         );
       }
+      if (url.includes("/v1/youtube/video/comments")) {
+        return new Response(
+          JSON.stringify({
+            comments: [
+              { id: "yc1", text: "finally a tutorial that explains light levels", author: "ytuser", like_count: 9 },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
       return new Response(JSON.stringify({ comments: [] }), { status: 200 });
     }) as unknown as typeof fetch,
   });
@@ -264,17 +274,18 @@ function makeVideoScrapeClient(): ScrapeCreatorsClient {
 function videoCard(
   id: string,
   painMatch: number,
-  source: "tiktok" | "instagram",
+  source: "tiktok" | "instagram" | "youtube",
   url: string
 ) {
   return { id, url, title: `Card ${id}`, snippet: "caption", painMatch, source };
 }
 
 describe("mineTopVideoCards", () => {
-  it("mines TikTok + Instagram cards (not reddit) and grounds them in comments", async () => {
+  it("mines TikTok + Instagram + YouTube cards (not reddit) and grounds them in comments", async () => {
     const cards = [
       videoCard("v1", 0.5, "tiktok", "https://www.tiktok.com/@u1/video/7123456789"),
       videoCard("v2", 0.45, "instagram", "https://www.instagram.com/reel/abc123/"),
+      videoCard("v4", 0.5, "youtube", "https://www.youtube.com/watch?v=abcDEF123"),
       // reddit card must NOT be mined by the video miner
       makeCard("r1", 0.95, "reddit"),
       // below VIDEO_PAIN_THRESHOLD (0.35) — skipped
@@ -285,9 +296,9 @@ describe("mineTopVideoCards", () => {
       apiKey: "k",
       fetchImpl: makeOpenRouterFetch(CLEAN_INSIGHTS),
     });
-    expect(r.attempted).toBe(2); // v1 (tiktok) + v2 (instagram)
-    expect(r.succeeded).toBe(2);
-    expect(r.results.map((x) => x.cardId).sort()).toEqual(["v1", "v2"]);
+    expect(r.attempted).toBe(3); // v1 (tiktok) + v2 (instagram) + v4 (youtube)
+    expect(r.succeeded).toBe(3);
+    expect(r.results.map((x) => x.cardId).sort()).toEqual(["v1", "v2", "v4"]);
   });
 
   it("skips a TikTok card whose url has no aweme id", async () => {

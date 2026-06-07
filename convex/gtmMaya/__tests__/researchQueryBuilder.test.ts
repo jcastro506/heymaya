@@ -45,6 +45,7 @@ describe("Sprint 3 — researchQueryBuilder", () => {
       "reddit",
       "tiktok",
       "twitter",
+      "youtube",
     ]);
     expect(plan.skipped.find((s) => s.platform === "linkedin")).toBeTruthy();
   });
@@ -57,7 +58,7 @@ describe("Sprint 3 — researchQueryBuilder", () => {
     }
   });
 
-  it("skips TikTok + Instagram when showability is unshowable (tiktok.md rule 4)", () => {
+  it("skips TikTok + Instagram + YouTube when showability is unshowable (tiktok.md rule 4)", () => {
     const plan = buildResearchQueryPlan({
       ...baseInput,
       diagnosis: { ...baseInput.diagnosis, showability: "unshowable" },
@@ -65,10 +66,13 @@ describe("Sprint 3 — researchQueryBuilder", () => {
     const platforms = plan.packs.map((p) => p.platform);
     expect(platforms).not.toContain("tiktok");
     expect(platforms).not.toContain("instagram");
+    expect(platforms).not.toContain("youtube");
     const tiktokSkip = plan.skipped.find((s) => s.platform === "tiktok");
     const igSkip = plan.skipped.find((s) => s.platform === "instagram");
+    const ytSkip = plan.skipped.find((s) => s.platform === "youtube");
     expect(tiktokSkip?.reason).toContain("unshowable");
     expect(igSkip?.reason).toContain("unshowable");
+    expect(ytSkip?.reason).toContain("unshowable");
   });
 
   it("emits LinkedIn pack when an ICP locates on linkedin", () => {
@@ -171,6 +175,7 @@ describe("Sprint 3 — researchQueryBuilder", () => {
       "twitter",
       "tiktok",
       "instagram",
+      "youtube",
       "linkedin",
       "google",
     ];

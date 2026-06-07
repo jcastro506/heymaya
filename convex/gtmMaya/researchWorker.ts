@@ -932,6 +932,7 @@ export const runBudgetedResearchJob = internalAction({
       twitter: internal.gtmMaya.platformWorkers.runTwitterWorker,
       tiktok: internal.gtmMaya.platformWorkers.runTikTokWorker,
       instagram: internal.gtmMaya.platformWorkers.runInstagramWorker,
+      youtube: internal.gtmMaya.platformWorkers.runYouTubeWorker,
       google: internal.gtmMaya.platformWorkers.runGoogleWorker,
     };
     const workerPromises: Promise<PlatformResearchResult>[] = [];
