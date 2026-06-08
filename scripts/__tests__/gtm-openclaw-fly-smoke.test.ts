@@ -12,22 +12,36 @@ describe("gtm-openclaw-fly-smoke", () => {
       "iad"
     );
 
-    expect(fixture.image).toBe("registry.fly.io/heymaya-openclaw:v2026.4.23");
+    expect(fixture.image).toBe(
+      "registry.fly.io/heymaya-openclaw@sha256:dd4fd47d15e641c726fc9e3914b2dbd967d07bbdc806e80e6b8743978b68deed"
+    );
     expect(fixture.workspaceFiles["AGENTS.md"]).toContain("Maya GTM");
     expect(fixture.workspaceFiles["TOOLS.md"]).toContain(
       "ScrapeCreators OpenClaw agent skill"
     );
-    expect(fixture.workspaceFiles["HEARTBEAT.md"]).toContain(
-      "ScrapeCreators calls"
+    // BOOT.md starts launch work immediately; HEARTBEAT.md is now only
+    // the watchdog/recovery loop.
+    expect(fixture.workspaceFiles["BOOT.md"]).toContain("gateway:startup");
+    expect(fixture.workspaceFiles["BOOT.md"]).toContain("sessions_spawn");
+    expect(fixture.workspaceFiles["HEARTBEAT.md"]).toContain("launch-watchdog");
+    expect(fixture.workspaceFiles["HEARTBEAT.md"]).not.toContain("state-hello");
+    // Sprint 2.16u-fix8 — firewall removed; voice contract now in SOUL.md.
+    expect(fixture.workspaceFiles["HEARTBEAT.md"]).toContain("SOUL.md");
+    // Boot cron and heartbeat cron are GONE — only scheduled events
+    // (weekly review, monthly channel discovery) live in jobs.json.
+    expect(fixture.workspaceFiles["jobs.json"]).not.toContain("gtm_heartbeat");
+    expect(fixture.workspaceFiles["jobs.json"]).not.toContain(
+      "0001_gtm_first_research"
     );
-    expect(fixture.workspaceFiles["jobs.json"]).toContain("gtm_heartbeat");
+    expect(fixture.workspaceFiles["jobs.json"]).toContain("gtm_weekly_review");
     expect(fixture.workspaceFiles["jobs.json"]).toContain(
-      "0001_gtm_boot_kickoff"
+      "gtm_channel_discovery"
     );
-    expect(fixture.workspaceFiles["jobs.json"]).toContain("FIRST WAKE");
-    expect(fixture.workspaceFiles["jobs.json"]).toContain(
-      "Do not call ScrapeCreators"
-    );
+    // Sprint 2.16u-fix14 — kickstart cron RE-ADDED. Sprint 2.16u-fix15
+    // stripped its prompt to JUST the hello (was timing out at 362s when
+    // it tried to do hello + launch workflow + subagents in one turn).
+    expect(fixture.workspaceFiles["jobs.json"]).toContain("0001_kickstart");
+    expect(fixture.workspaceFiles["jobs.json"]).toContain("hello_sent_at");
     expect(
       fixture.workspaceFiles["skills/scrapecreators-api/SKILL.md"]
     ).toContain("ScrapeCreators");
@@ -36,10 +50,11 @@ describe("gtm-openclaw-fly-smoke", () => {
       agents: {
         defaults: {
           workspace: "/data/workspace",
-          model: { primary: "openrouter/google/gemini-3-flash-preview" },
+          model: { primary: "openrouter/anthropic/claude-sonnet-4.5" },
           memorySearch: { enabled: false },
           subagents: {
-            maxConcurrent: 4,
+            // Sprint 2.16j — bumped 4 → 8 per external-architect review.
+            maxConcurrent: 8,
             maxChildrenPerAgent: 4,
             runTimeoutSeconds: 900,
             archiveAfterMinutes: 60,
@@ -51,7 +66,7 @@ describe("gtm-openclaw-fly-smoke", () => {
             default: true,
             name: "Maya",
             workspace: "/data/workspace",
-            model: "openrouter/google/gemini-3-flash-preview",
+            model: "openrouter/anthropic/claude-sonnet-4.5",
             subagents: { allowAgents: ["main", "hard_research_beta"] },
             tools: { profile: "coding" },
           },
@@ -112,11 +127,11 @@ describe("gtm-openclaw-fly-smoke", () => {
     expect(args).toContain("OPENCLAW_CONFIG_PATH=/data/openclaw.json");
     expect(args).toContain("OPENCLAW_DISABLE_BONJOUR=1");
     expect(args).toContain(
-      "OPENCLAW_MODEL=openrouter/google/gemini-3-flash-preview"
+      "OPENCLAW_MODEL=openrouter/anthropic/claude-sonnet-4.5"
     );
     expect(args.slice(-5)).toEqual([
       "--",
-      "registry.fly.io/heymaya-openclaw:v2026.4.23",
+      "registry.fly.io/heymaya-openclaw@sha256:dd4fd47d15e641c726fc9e3914b2dbd967d07bbdc806e80e6b8743978b68deed",
       "/bin/sh",
       "-lc",
       fixture.bootCommand,

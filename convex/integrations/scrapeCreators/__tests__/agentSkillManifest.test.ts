@@ -29,14 +29,25 @@ function loadManifest(): Manifest {
 }
 
 describe("ScrapeCreators agent skill manifest", () => {
-  it("uses HeyMaya's canonical ScrapeCreators environment variable", () => {
+  it("ScrapeCreators env var spelling: manifest uses HeyMaya canonical, SKILL.md uses upstream", () => {
+    // Two spellings exist in the wild:
+    //   - HeyMaya canonical: SCRAPE_CREATORS_API_KEY (used by manifest +
+    //     Convex backend integration code)
+    //   - Upstream canonical: SCRAPECREATORS_API_KEY (used by the
+    //     official ScrapeCreators agent-skill docs and our SKILL.md)
+    // The deploy layer (convex/onboarding/gtm/deployMayaGtm.ts ~777-803)
+    // bridges them — whichever the operator sets gets aliased to both
+    // before being injected into the Fly machine. This test pins both
+    // sides of that bridge so neither file drifts unilaterally.
     const manifest = loadManifest();
     const skill = readFileSync(SKILL_PATH, "utf8");
 
     expect(manifest.auth.envVar).toBe("SCRAPE_CREATORS_API_KEY");
-    expect(skill).toContain("primaryEnv: SCRAPE_CREATORS_API_KEY");
-    expect(skill).toContain("$SCRAPE_CREATORS_API_KEY");
-    expect(skill).not.toContain("primaryEnv: SCRAPECREATORS_API_KEY");
+    expect(skill).toContain("primaryEnv: SCRAPECREATORS_API_KEY");
+    expect(skill).toContain("$SCRAPECREATORS_API_KEY");
+    // SKILL.md must call out the HeyMaya-side alias so contributors
+    // looking up the var find the bridge.
+    expect(skill).toContain("SCRAPE_CREATORS_API_KEY");
   });
 
   it("does not expose stale TikTok v1 post/comment/transcript paths", () => {

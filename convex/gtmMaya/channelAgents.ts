@@ -27,12 +27,28 @@ export function evaluateChannelAgent(
   switch (input.channel) {
     case "tiktok":
       return evaluateTikTok(input);
+    case "instagram":
+      // Instagram Reels are the same short-form video eligibility shape as
+      // TikTok (Brief-only, hook-driven, visual). Reuse the video analog;
+      // per-platform nuance lives in the OpenClaw-native researcher skills.
+      return evaluateTikTok(input);
+    case "youtube":
+      // YouTube Shorts are the same short-form video eligibility shape as
+      // TikTok (Brief-only, hook-driven). The real per-platform judgment now
+      // lives in maya-youtube-researcher (OpenClaw-native); this legacy
+      // heuristic path is migration-bound (#8). Reuse the video analog.
+      return evaluateTikTok(input);
     case "linkedin":
       return evaluateLinkedIn(input);
     case "reddit":
       return evaluateReddit(input);
     case "x":
       return evaluateX(input);
+    case "hn":
+      // HN is organic + comment-driven with strict anti-promo norms, the
+      // same eligibility shape as Reddit (no warmup gate, value-first
+      // engagement). Mirror the reddit-style heuristic.
+      return evaluateHackerNews(input);
     case "product_hunt":
       return evaluateProductHunt(input);
   }
@@ -41,9 +57,9 @@ export function evaluateChannelAgent(
 export function evaluateAllChannelAgents(
   input: Omit<ChannelAgentInput, "channel">
 ): ChannelAgentVerdict[] {
-  return (["reddit", "x", "linkedin", "tiktok", "product_hunt"] as const).map(
-    (channel) => evaluateChannelAgent({ ...input, channel })
-  );
+  return (
+    ["reddit", "x", "hn", "linkedin", "tiktok", "instagram", "youtube", "product_hunt"] as const
+  ).map((channel) => evaluateChannelAgent({ ...input, channel }));
 }
 
 function evaluateTikTok(input: ChannelAgentInput): ChannelAgentVerdict {
@@ -118,6 +134,31 @@ function evaluateReddit(input: ChannelAgentInput): ChannelAgentVerdict {
     requiredNextEvidence: eligible
       ? []
       : ["subreddit rules", "two fresh pain threads", "reply angle per thread"],
+  };
+}
+
+function evaluateHackerNews(input: ChannelAgentInput): ChannelAgentVerdict {
+  const cards = evidenceFor(input.evidence, "hn");
+  // Technical founder community (Show HN, comment-driven). Best for dev
+  // tools / infra / indie products with technical merit; anti-hype.
+  const technicalFit =
+    input.app.productType === "developer_tool" ||
+    input.app.productType === "b2b_workflow" ||
+    input.app.productType === "prosumer";
+  const highRisk = cards.some((card) => card.promotionRisk === "high");
+  const eligible = technicalFit && cards.length >= 2 && !highRisk;
+  return {
+    channel: "hn",
+    eligible,
+    rationale: eligible
+      ? ["technical buyer discussion exists", "substance-first engagement is possible"]
+      : ["Hacker News needs technical merit and substance over marketing"],
+    risks: highRisk
+      ? ["at least one source has high promotion risk"]
+      : ["HN punishes hype — replies and Show HN must lead with substance"],
+    requiredNextEvidence: eligible
+      ? []
+      : ["two technical HN threads", "a substance-first Show HN angle"],
   };
 }
 

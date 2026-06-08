@@ -1,0 +1,335 @@
+#!/usr/bin/env tsx
+/**
+ * ClawLaunch GTM cumulative sprint-gate E2E.
+ *
+ * Per Part III of docs/CLAWLAUNCH_GTM_MVP_EXECUTION_SPRINT.md (§ "Sprint-gate
+ * E2E (L5)"), this is the single growing E2E that exercises every sprint's
+ * deliverable end-to-end against staging. By the end of S22 it asserts the
+ * full signup → onboarding → research → delivery → callback → mutation flow.
+ *
+ * Scaffolded at Sprint 13 with only the foundation checks. Each subsequent
+ * sprint MUST add one section here before its sprint gate can pass.
+ *
+ * Modes:
+ *   --mock-channels --mock-fly  CI mode — no real Fly / Telegram / paid APIs.
+ *   --live --confirm            Operator mode — exercises real staging.
+ *
+ * Exit codes:
+ *   0 — gate green for every shipped sprint section.
+ *   1 — one or more sprint sections failed.
+ *   2 — harness error.
+ *
+ * Section status legend:
+ *   ✓ shipped + passing
+ *   - shipped + skipped due to mode
+ *   ? not yet shipped (sprint not started)
+ */
+
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+type SprintStatus = "shipped-passing" | "shipped-skipped" | "not-yet-shipped";
+
+interface SprintSection {
+  sprint: string;
+  title: string;
+  status: SprintStatus;
+  detail: string;
+}
+
+const liveMode = process.argv.includes("--live");
+const confirmed = process.argv.includes("--confirm");
+const mockChannels = process.argv.includes("--mock-channels");
+const mockFly = process.argv.includes("--mock-fly");
+
+function delegateToSmoke(
+  sprint: string,
+  title: string,
+  scriptPath: string,
+  summaryRegex: RegExp
+): SprintSection {
+  // Gate composes (not duplicates) per-sprint L4 smokes so additions stay
+  // in one place.
+  const args: string[] = [];
+  if (liveMode) args.push("--live");
+  if (confirmed) args.push("--confirm");
+  const result = spawnSync("npx", ["tsx", scriptPath, ...args], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+  });
+  const out = (result.stdout ?? "") + (result.stderr ?? "");
+  const lines = out.split(/\r?\n/).filter((l) => l.length > 0);
+  const lastSummary =
+    [...lines].reverse().find((l) => summaryRegex.test(l)) ?? "unknown";
+  if (result.status === 0) {
+    return { sprint, title, status: "shipped-passing", detail: lastSummary };
+  }
+  return {
+    sprint,
+    title,
+    status: "shipped-skipped",
+    detail: `smoke exited ${result.status}: ${lastSummary}`,
+  };
+}
+
+function delegateToSprint13Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S13",
+    "OpenClaw image bump + persistent volume + cost-cap kill switch",
+    "scripts/gtm-sprint-13-smoke.ts",
+    /Sprint 13 L4 smoke:/i
+  );
+}
+
+function delegateToSprint15Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S15",
+    "Telegram channel provisioning at signup",
+    "scripts/gtm-sprint-15-smoke.ts",
+    /Sprint 15 L4 smoke:/i
+  );
+}
+
+function delegateToSprint14Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S14",
+    "Native cron delivery (kill mode:none)",
+    "scripts/gtm-sprint-14-smoke.ts",
+    /Sprint 14 L4 smoke:/i
+  );
+}
+
+function delegateToSprint25Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S2.5",
+    "Launch playbook codification (PLAYBOOK.md + per-platform)",
+    "scripts/gtm-sprint-25-smoke.ts",
+    /Sprint 2\.5 L4 smoke:/i
+  );
+}
+
+function delegateToSprint16Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S16",
+    "Convex ↔ Maya hook bridge",
+    "scripts/gtm-sprint-16-smoke.ts",
+    /Sprint 16 L4 smoke:/i
+  );
+}
+
+function delegateToSprint17Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S17",
+    "Real skill installation + ClawHub pinning",
+    "scripts/gtm-sprint-17-smoke.ts",
+    /Sprint 17 L4 smoke:/i
+  );
+}
+
+function delegateToSprint2Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S2",
+    "GTM ScrapeCreators wrappers (Reddit + TikTok + X + IG + Google)",
+    "scripts/gtm-sprint-2-smoke.ts",
+    /Sprint 2 L4 smoke:/i
+  );
+}
+
+function delegateToSprint3Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S3",
+    "Research query builder (per-platform PlatformQueryPacks)",
+    "scripts/gtm-sprint-3-smoke.ts",
+    /Sprint 3 L4 smoke:/i
+  );
+}
+
+function delegateToSprint4Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S4",
+    "Platform workers (Reddit / TikTok / Twitter / IG / Google)",
+    "scripts/gtm-sprint-4-smoke.ts",
+    /Sprint 4 L4 smoke:/i
+  );
+}
+
+function delegateToSprint1Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S1",
+    "Orchestrator (replaces skeleton — Maya's brain becomes real)",
+    "scripts/gtm-sprint-1-smoke.ts",
+    /Sprint 1 L4 smoke:/i
+  );
+}
+
+function delegateToSprint20Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S20",
+    "Maya-side subagent lane (sessions_spawn config)",
+    "scripts/gtm-sprint-20-smoke.ts",
+    /Sprint 20 L4 smoke:/i
+  );
+}
+
+function delegateToSprint9Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S9",
+    "Calendar OAuth + event write (GTM-scoped, reuses creator infra)",
+    "scripts/gtm-sprint-9-smoke.ts",
+    /Sprint 9 L4 smoke:/i
+  );
+}
+
+function delegateToSprint10Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S10",
+    "Telegram handoff after research (orchestrator → hook → Telegram)",
+    "scripts/gtm-sprint-10-smoke.ts",
+    /Sprint 10 L4 smoke:/i
+  );
+}
+
+function delegateToSprint18Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S18",
+    "Heartbeat tasks block (native OpenClaw primitive)",
+    "scripts/gtm-sprint-18-smoke.ts",
+    /Sprint 18 L4 smoke:/i
+  );
+}
+
+function delegateToSprint19Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S19",
+    "Workspace mutation pipeline (post-research APP/GTM/MEMORY updates)",
+    "scripts/gtm-sprint-19-smoke.ts",
+    /Sprint 19 L4 smoke:/i
+  );
+}
+
+function delegateToSprint22Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S22",
+    "Production readiness checks (env-var report)",
+    "scripts/gtm-sprint-22-smoke.ts",
+    /Sprint 22 L4 smoke:/i
+  );
+}
+
+function delegateToSprint12Smoke(): SprintSection {
+  return delegateToSmoke(
+    "S12",
+    "Cumulative E2E (signup → research → mutation → handoff → calendar)",
+    "scripts/gtm-sprint-12-smoke.ts",
+    /Sprint 12 L4 smoke:/i
+  );
+}
+
+function placeholderSection(sprint: string, title: string): SprintSection {
+  return {
+    sprint,
+    title,
+    status: "not-yet-shipped",
+    detail: "deliverable not yet shipped",
+  };
+}
+
+function statusGlyph(status: SprintStatus): string {
+  switch (status) {
+    case "shipped-passing":
+      return "✓";
+    case "shipped-skipped":
+      return "-";
+    case "not-yet-shipped":
+      return "?";
+  }
+}
+
+async function main(): Promise<void> {
+  if (liveMode && !confirmed) {
+    console.error(
+      "[gate] --live requires --confirm to acknowledge real-API spend"
+    );
+    process.exit(2);
+  }
+  if (!liveMode && !mockChannels && !mockFly) {
+    console.log(
+      "[gate] running in in-process mode (no --live, no --mock-* flags); use --live --confirm for the real sprint-gate run"
+    );
+  }
+
+  const sections: SprintSection[] = [];
+
+  // ─── Sprint 13 ─────────────────────────────────────────────────────────
+  sections.push(delegateToSprint13Smoke());
+
+  // ─── Sprint 15 ─────────────────────────────────────────────────────────
+  sections.push(delegateToSprint15Smoke());
+
+  // ─── Sprint 14 ─────────────────────────────────────────────────────────
+  sections.push(delegateToSprint14Smoke());
+
+  // ─── Sprint 2.5 — launch playbook codification ─────────────────────────
+  sections.push(delegateToSprint25Smoke());
+
+  // ─── Sprint 16 — hook bridge ───────────────────────────────────────────
+  sections.push(delegateToSprint16Smoke());
+
+  // ─── Sprint 17 — real skill installation + ClawHub pinning ────────────
+  sections.push(delegateToSprint17Smoke());
+
+  // ─── Sprint 2 — GTM ScrapeCreators wrappers ───────────────────────────
+  sections.push(delegateToSprint2Smoke());
+
+  // ─── Sprint 3 — research query builder ────────────────────────────────
+  sections.push(delegateToSprint3Smoke());
+
+  // ─── Sprint 4 — platform workers ──────────────────────────────────────
+  sections.push(delegateToSprint4Smoke());
+
+  // ─── Sprint 1 — orchestrator (replaces skeleton) ──────────────────────
+  sections.push(delegateToSprint1Smoke());
+
+  sections.push(delegateToSprint19Smoke());
+
+  // ─── Sprints not yet shipped — placeholders ────────────────────────────
+  sections.push(delegateToSprint20Smoke());
+  sections.push(delegateToSprint9Smoke());
+  sections.push(delegateToSprint10Smoke());
+  sections.push(delegateToSprint18Smoke());
+  sections.push(
+    placeholderSection("S21", "Standing orders + hooks + Policy plugin")
+  );
+  sections.push(delegateToSprint22Smoke());
+  // ─── Sprint 12 — cumulative E2E (the final gate before public test) ───
+  sections.push(delegateToSprint12Smoke());
+
+  // ─── Report ────────────────────────────────────────────────────────────
+  console.log("\nClawLaunch GTM Sprint Gate");
+  console.log("──────────────────────────");
+  for (const s of sections) {
+    console.log(
+      `${statusGlyph(s.status)}  ${s.sprint} ${s.title}\n   ${s.detail}`
+    );
+  }
+  const passing = sections.filter((s) => s.status === "shipped-passing").length;
+  const skipped = sections.filter((s) => s.status === "shipped-skipped").length;
+  const pending = sections.filter((s) => s.status === "not-yet-shipped").length;
+  console.log(
+    `\nGate: ${passing} passing, ${skipped} shipped-but-blocked, ${pending} pending.`
+  );
+  if (liveMode) {
+    console.log(
+      "\nReminder — L6 operator follow-ups for each shipped sprint must be completed and attached to the PR before merging staging → main."
+    );
+  }
+  process.exit(skipped === 0 ? 0 : 1);
+}
+
+main().catch((err) => {
+  console.error("[gate] harness error:", err);
+  process.exit(2);
+});

@@ -6,6 +6,7 @@ vi.mock("convex/react", () => ({
   useAction: () => async () => ({}),
   useMutation: () => async () => ({}),
   useQuery: () => null,
+  useConvexAuth: () => ({ isAuthenticated: true, isLoading: false }),
 }));
 
 vi.mock("next/link", () => ({
@@ -32,11 +33,16 @@ vi.mock("@/convex/_generated/api", () => ({
       },
       researchWorker: {
         runBudgetedResearchSkeleton: "runBudgetedResearchSkeleton",
+        runMyResearch: "runMyResearch",
       },
       walkthrough: {
         analyzeMyWalkthroughUpload: "analyzeMyWalkthroughUpload",
         generateWalkthroughUploadUrl: "generateWalkthroughUploadUrl",
         registerWalkthroughUpload: "registerWalkthroughUpload",
+      },
+      telegramBotPerTenant: {
+        validateAndSetPersonalTelegramBot:
+          "validateAndSetPersonalTelegramBot",
       },
     },
     onboarding: {
@@ -58,9 +64,9 @@ describe("GTM onboarding page", () => {
     expect(html).toContain("I will manually post on TikTok");
     expect(html).toContain("I will manually post on Instagram");
     expect(html).toContain("TikTok profile, if any");
-    expect(html).toContain("TikTok account status");
-    expect(html).toContain("TikTok account age in days");
-    expect(html).toContain("I checked TikTok Account Check");
+    // The TikTok-only account-status/age/check toggles were replaced by the
+    // generalized per-channel warmth UI (shown only for channels the founder
+    // actually connected), so they're no longer in the empty-form render.
     expect(html).toContain("Instagram profile, if any");
     expect(html).toContain("I am open to UGC creators later");
     expect(html).toContain("Creator budget per month");

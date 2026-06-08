@@ -32,6 +32,8 @@ const EXPECTED: Record<TaskTag, ThinkingBudget> = {
   soul_generation: "high",
   pre_post_scorer: "high",
   underperformance_diagnoser: "high",
+  gtm_query_expansion: "medium",
+  gtm_claim_extraction: "low",
 };
 
 describe("taskTags / defaultThinkingBudget", () => {
@@ -41,13 +43,13 @@ describe("taskTags / defaultThinkingBudget", () => {
     }
   });
 
-  it("declares 21 task tags (7 low + 5 medium + 9 high) — Sprint 3 Slice 2 additions", () => {
-    expect(TASK_TAGS).toHaveLength(21);
+  it("declares 23 task tags (8 low + 6 medium + 9 high) — Sprint 1.1 GTM expansion additions", () => {
+    expect(TASK_TAGS).toHaveLength(23);
     const lows = TASK_TAGS.filter((t) => EXPECTED[t] === "low").length;
     const meds = TASK_TAGS.filter((t) => EXPECTED[t] === "medium").length;
     const highs = TASK_TAGS.filter((t) => EXPECTED[t] === "high").length;
-    expect(lows).toBe(7);
-    expect(meds).toBe(5);
+    expect(lows).toBe(8);
+    expect(meds).toBe(6);
     expect(highs).toBe(9);
   });
 

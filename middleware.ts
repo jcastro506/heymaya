@@ -44,6 +44,10 @@ const CREATOR_HQ_PREFIXES = [
   "/profile",
 ] as const;
 
+// Mission Control (the signed-in web UI) lives under /clawlaunch but must be
+// auth-protected even though /clawlaunch(.*) is otherwise public.
+const isMissionControl = createRouteMatcher(["/clawlaunch/mission(.*)"]);
+
 const isPublic = createRouteMatcher([
   "/",
   "/creators",
@@ -54,6 +58,10 @@ const isPublic = createRouteMatcher([
   "/waitlist",
   "/growth",
   "/clawlaunch(.*)",
+  // Founder God-view — gated server-side by ADMIN_DASH_TOKEN (the Convex
+  // queries fail closed without it). No Clerk role exists for this, so the
+  // route is "public" at the middleware layer and the token IS the gate.
+  "/founder(.*)",
   "/privacy",
   "/terms",
   "/tiktok9iwZOtsyHO9kZG4DFCD2AMpXjKs4jtyO.txt",
@@ -135,7 +143,9 @@ export default clerkMiddleware(async (auth, req) => {
     void search; // suppress unused-binding lint while the analytics flag is off
   }
 
-  if (!isPublic(req)) {
+  // Mission Control is under /clawlaunch (public matcher) but is the signed-in
+  // operator's home — force auth so they land here with a session.
+  if (!isPublic(req) || isMissionControl(req)) {
     await auth.protect();
   }
 });

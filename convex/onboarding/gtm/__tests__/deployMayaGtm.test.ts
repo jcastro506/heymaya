@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildGtmMachineConfig,
+  collectDeploySecrets,
   flyAppNameForGtmAgent,
 } from "../deployMayaGtm";
 
@@ -38,61 +39,76 @@ describe("Maya GTM OpenClaw deploy config", () => {
 
     const bootstrap = JSON.parse(config.env?.MAYA_BOOTSTRAP_JSON ?? "{}");
     expect(bootstrap.product).toBe("clawlaunch-gtm");
-    expect(bootstrap.modelRouting.mainMaya).toBe("google/gemini-3-flash-preview");
+    expect(bootstrap.modelRouting.mainMaya).toBe("anthropic/claude-sonnet-4.5");
     expect(bootstrap.modelRouting.hardResearchBeta).toContain("claude-sonnet");
     expect(bootstrap.directPingSmoke).toBe(true);
-    expect(bootstrap.gatewayConfig).toEqual({
+    // Sprint 2.1 expanded the agent list from 2 → 11 (six platform
+    // research subagents + channel_judge + slop_critic +
+    // extraction_worker). Sprint 1.3 added telegram channel + heartbeat
+    // active-hours config. Rather than re-snapshotting the full config
+    // every sprint (which has been the source of test drift), we pin
+    // the structural invariants that actually matter for runtime
+    // correctness:
+    expect(bootstrap.gatewayConfig).toMatchObject({
       gateway: { mode: "local" },
-      agents: {
-        defaults: {
-          workspace: "/data/workspace",
-          model: { primary: "openrouter/google/gemini-3-flash-preview" },
-          memorySearch: { enabled: false },
-          subagents: {
-            maxConcurrent: 4,
-            maxChildrenPerAgent: 4,
-            runTimeoutSeconds: 900,
-            archiveAfterMinutes: 60,
-          },
-        },
-        list: [
-          {
-            id: "main",
-            default: true,
-            name: "Maya",
-            workspace: "/data/workspace",
-            model: "openrouter/google/gemini-3-flash-preview",
-            subagents: { allowAgents: ["main", "hard_research_beta"] },
-            tools: { profile: "coding" },
-          },
-          {
-            id: "hard_research_beta",
-            name: "Hard Research Beta",
-            workspace: "/data/workspace",
-            model: "openrouter/anthropic/claude-sonnet-4.5",
-            tools: { profile: "coding" },
-          },
-        ],
-      },
       plugins: {
+        // Sprint 2.16j v3 — switched from `enabled: false` stubs for
+        // every disabled plugin to a restrictive `plugins.allow`
+        // allowlist (deny-by-default). External-architect cited known
+        // OpenClaw bug where doctor-bundled-plugin-runtime-deps still
+        // installed disabled-channel deps via a health path.
+        allow: ["telegram"],
         entries: {
-          acpx: { enabled: false },
-          browser: { enabled: false },
-          "device-pair": { enabled: false },
-          "phone-control": { enabled: false },
-          "talk-voice": { enabled: false },
+          telegram: { enabled: true },
         },
       },
       discovery: { mdns: { mode: "off" } },
       skills: { load: { watch: true } },
     });
+    expect(bootstrap.gatewayConfig.agents.defaults.workspace).toBe(
+      "/data/workspace"
+    );
+    expect(bootstrap.gatewayConfig.agents.defaults.subagents).toMatchObject({
+      // Sprint 2.16j — bumped 4 → 8 per external-architect review. We
+      // cap research lanes at 3 in the boot prompt so 8 leaves room
+      // for refinement waves + weekly fans without queuing.
+      maxConcurrent: 8,
+      maxChildrenPerAgent: 4,
+      runTimeoutSeconds: 900,
+    });
+    // Sprint 2.16j — hooks.internal.enabled at TOP LEVEL of config
+    // (sibling of `agents`, `plugins`, `gateway`) per OpenClaw 2026.4.23
+    // schema. BOOT.md fires on gateway startup as a real native primitive
+    // (not just a workspace file).
+    expect(bootstrap.gatewayConfig.hooks).toEqual({
+      internal: { enabled: true },
+    });
+    // Sprint 2.16h — LLM idle watchdog bumped from default 120s to 300s so
+    // slow Gemini 3.5 Flash thinking turns don't trip "LLM request timed
+    // out" mid-stream.
+    expect(bootstrap.gatewayConfig.agents.defaults.llm).toEqual({
+      idleTimeoutSeconds: 300,
+    });
+    // main + hard_research_beta must always exist; platform research
+    // subagents are gated by enabled channels but main + beta are
+    // always on.
+    const agentIds = bootstrap.gatewayConfig.agents.list.map(
+      (a: { id: string }) => a.id
+    );
+    expect(agentIds).toContain("main");
+    expect(agentIds).toContain("hard_research_beta");
+    const main = bootstrap.gatewayConfig.agents.list.find(
+      (a: { id: string }) => a.id === "main"
+    );
+    expect(main.default).toBe(true);
+    expect(main.model).toBe("openrouter/anthropic/claude-sonnet-4.5");
     expect(config.init?.cmd?.join(" ")).toContain(
       "cp /data/workspace/jobs.json /data/cron/jobs.json"
     );
     expect(config.init?.cmd?.join(" ")).toContain("chmod 700 /data/cron");
   });
 
-  it("uses Gemini 3.5 Flash as the default GTM OpenClaw model", () => {
+  it("uses Sonnet as the default GTM OpenClaw model", () => {
     const config = buildGtmMachineConfig({
       agentId: "agent",
       flyAppName: "clawlaunch-agent",
@@ -100,11 +116,35 @@ describe("Maya GTM OpenClaw deploy config", () => {
     });
 
     expect(config.env?.OPENCLAW_MODEL).toBe(
-      "openrouter/google/gemini-3-flash-preview"
+      "openrouter/anthropic/claude-sonnet-4.5"
     );
     expect(config.env?.OPENCLAW_DISABLE_BONJOUR).toBe("1");
     expect(config.env?.MAYA_GTM_MODEL_ROUTING_JSON).toContain(
       "futureDefaultResearch"
     );
+  });
+
+  it("maps env-specific Telegram bot tokens into the Fly secret name OpenClaw reads", () => {
+    expect(
+      collectDeploySecrets({
+        CONVEX_DEPLOYMENT: "dev:precise-canary-781",
+        TELEGRAM_BOT_TOKEN_STAGING: "staging-token",
+        TELEGRAM_BOT_TOKEN: "global-token",
+      }).TELEGRAM_BOT_TOKEN
+    ).toBe("staging-token");
+
+    expect(
+      collectDeploySecrets({
+        CONVEX_DEPLOYMENT: "dev:precise-canary-781",
+        TELEGRAM_BOT_TOKEN_STAGING: "staging-token",
+      }).TELEGRAM_BOT_TOKEN
+    ).toBe("staging-token");
+
+    expect(
+      collectDeploySecrets({
+        CONVEX_DEPLOYMENT: "prod:whatever",
+        TELEGRAM_BOT_TOKEN_PRODUCTION: "prod-token",
+      }).TELEGRAM_BOT_TOKEN
+    ).toBe("prod-token");
   });
 });

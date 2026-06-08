@@ -1,0 +1,22 @@
+{
+  "name": "maya-gtm-tools",
+  "version": "0.1.0",
+  "description": "Typed persistence + research tools for the ClawLaunch GTM agent (replaces hand-written curl through exec).",
+  "type": "module",
+  "files": [
+    "index.js",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
+  "dependencies": {
+    "typebox": "1.1.28"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.5.17"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ]
+  }
+}

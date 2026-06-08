@@ -35,7 +35,12 @@ import { ZernioClient } from "./client";
 import {
   ZernioApiError,
   ZernioPlatformError,
+  type AccountHealth,
+  type ChannelPlatformData,
+  type ConnectUrlResult,
+  type Conversation,
   type FbPageMessageSummary,
+  type FollowerStats,
   type GbpInsightsRequest,
   type GbpInsightsResult,
   type GbpLocalPostInput,
@@ -44,9 +49,18 @@ import {
   type GbpReviewSummary,
   type IgCommentSummary,
   type IgPostInput,
+  type InboxComment,
+  type MediaItem,
   type MultiPlatformPostInput,
   type MultiPlatformPostResult,
+  type MultiPlatformTarget,
+  type PlatformTarget,
+  type PostAnalytics,
+  type PresignResult,
   type ZernioPlatform,
+  type ZernioPostPlatform,
+  type ZernioProfile,
+  type ZernioWebhookSubscribableEvent,
 } from "./types";
 
 /* -------------------------------------------------------------------------- */
@@ -990,8 +1004,16 @@ export async function igListComments(
 /* Multi-platform post (the most-used Zernio feature)                          */
 /* -------------------------------------------------------------------------- */
 
+// [shape-unverified-live] We have NOT published a live multi-platform post
+// yet (the live-smoke gate is X-only so far). The Zernio 1.0.4 create-post
+// response echoes the post doc with a `platforms[]` array of PlatformTarget
+// (carrying per-target `status` / `platformPostId` / `errorMessage`), NOT a
+// `perPlatform[]` array. We parse BOTH shapes permissively and normalize to
+// our stable `MultiPlatformPostResult.perPlatform`. Confirm the exact shape
+// at the live-smoke gate and tighten then.
 const MultiPostResponseSchema = z
   .object({
+    // Pre-S1 / fixture shape.
     perPlatform: z
       .array(
         z
@@ -1003,24 +1025,72 @@ const MultiPostResponseSchema = z
           })
           .passthrough()
       )
-      .default([]),
+      .optional(),
+    // Real Zernio 1.0.4 shape: the created post echoes its targets.
+    platforms: z
+      .array(
+        z
+          .object({
+            platform: z.string(),
+            accountId: z.string().optional(),
+            status: z.string().optional(),
+            platformPostId: z.string().nullable().optional(),
+            errorMessage: z.string().optional(),
+          })
+          .passthrough()
+      )
+      .optional(),
+    _id: z.string().optional(),
     results: z.array(z.unknown()).optional(),
   })
   .passthrough();
 
-const ALL_PLATFORMS: ReadonlyArray<ZernioPlatform> = [
+const ALL_POST_PLATFORMS: ReadonlyArray<ZernioPostPlatform> = [
   "gbp",
   "facebook",
   "instagram",
   "tiktok",
   "linkedin",
   "x",
+  "reddit",
+  "youtube",
   "pinterest",
   "threads",
 ];
 
-function isZernioPlatform(value: string): value is ZernioPlatform {
-  return (ALL_PLATFORMS as ReadonlyArray<string>).includes(value);
+function isZernioPostPlatform(value: string): value is ZernioPostPlatform {
+  return (ALL_POST_PLATFORMS as ReadonlyArray<string>).includes(value);
+}
+
+/**
+ * Zernio connect-SLUG / wire-platform map. HeyMaya's internal `x` is the only
+ * divergence today (Zernio's slug is `twitter`, verified live 2026-06-02).
+ * The rest pass through identically. Used by both `getConnectUrl` and the
+ * multi-platform POST body builder.
+ */
+const PLATFORM_WIRE_SLUG: Record<ZernioPostPlatform, string> = {
+  gbp: "googlebusiness",
+  facebook: "facebook",
+  instagram: "instagram",
+  tiktok: "tiktok",
+  linkedin: "linkedin",
+  x: "twitter",
+  reddit: "reddit",
+  youtube: "youtube",
+  pinterest: "pinterest",
+  threads: "threads",
+};
+
+/** Map a HeyMaya internal platform name to the Zernio wire/connect slug. */
+export function zernioWireSlug(platform: ZernioPostPlatform): string {
+  return PLATFORM_WIRE_SLUG[platform];
+}
+
+/** Map a Zernio wire platform string back to our internal name (best-effort). */
+function fromWireSlug(wire: string): ZernioPostPlatform | null {
+  if (wire === "twitter") return "x";
+  if (wire === "googlebusiness") return "gbp";
+  return isZernioPostPlatform(wire) ? wire : null;
 }
 
 /**
@@ -1037,36 +1107,101 @@ function isZernioPlatform(value: string): value is ZernioPlatform {
  * the integration boundary as defense in depth — a bug elsewhere can't
  * accidentally mass-publish on a Starter account.
  */
-export async function multiPlatformPost(
+/**
+ * Build the spec `PlatformTarget[]` from either the bare platform-name array
+ * (each target defaults its `accountId` to `ctx.zernioAccountId`) or explicit
+ * {@link MultiPlatformTarget} objects. Maps the internal `x` → wire `twitter`.
+ */
+function buildPlatformTargets(
   ctx: ZernioContext,
-  platforms: ReadonlyArray<ZernioPlatform>,
+  targets: ReadonlyArray<ZernioPostPlatform | MultiPlatformTarget>,
   post: MultiPlatformPostInput
-): Promise<MultiPlatformPostResult> {
-  if (platforms.length === 0) {
-    throw new ZernioApiError(0, "multiPlatformPost", "platforms must be non-empty.");
-  }
-  for (const p of platforms) {
-    if (!isZernioPlatform(p)) {
+): PlatformTarget[] {
+  return targets.map((t) => {
+    const internal: ZernioPostPlatform = typeof t === "string" ? t : t.platform;
+    if (!isZernioPostPlatform(internal)) {
       throw new ZernioApiError(
         0,
         "multiPlatformPost",
-        `Unknown platform: ${String(p)}`
+        `Unknown platform: ${String(internal)}`
       );
     }
+    const explicit = typeof t === "string" ? undefined : t;
+    const target: PlatformTarget = {
+      platform: zernioWireSlug(internal),
+      accountId: explicit?.accountId ?? ctx.zernioAccountId,
+    };
+    if (explicit?.customContent !== undefined) {
+      target.customContent = explicit.customContent;
+    }
+    if (explicit?.customMedia !== undefined) {
+      target.customMedia = explicit.customMedia;
+    }
+    if (explicit?.scheduledFor !== undefined) {
+      target.scheduledFor = explicit.scheduledFor;
+    }
+    const psd: ChannelPlatformData | undefined =
+      explicit?.platformSpecificData ?? post.platformData?.[internal];
+    if (psd !== undefined) {
+      target.platformSpecificData = psd;
+    }
+    return target;
+  });
+}
+
+/**
+ * Single call posts to multiple platforms. Useful for the Maya v2 auto-post
+ * queue (X / Reddit / LinkedIn / IG / TikTok / YouTube).
+ *
+ * S1 FIX: this now sends the REAL Zernio 1.0.4 `POST /api/v1/posts` body —
+ * `{ content, platforms: PlatformTarget[], publishNow | scheduledFor+timezone,
+ * mediaItems, title?, tiktokSettings? }` — replacing the old, never-verified
+ * `{ accountId, platforms: string[], mediaUrls, perPlatformOverrides,
+ * scheduleAt }` scaffold. Per-platform settings ride on each target's
+ * `platformSpecificData`. The internal `x` platform is mapped to the wire slug
+ * `twitter`.
+ *
+ * Accepts either a bare platform-name array (each target uses
+ * `ctx.zernioAccountId`) or explicit {@link MultiPlatformTarget} objects.
+ */
+export async function multiPlatformPost(
+  ctx: ZernioContext,
+  targets: ReadonlyArray<ZernioPostPlatform | MultiPlatformTarget>,
+  post: MultiPlatformPostInput
+): Promise<MultiPlatformPostResult> {
+  if (targets.length === 0) {
+    throw new ZernioApiError(0, "multiPlatformPost", "platforms must be non-empty.");
   }
-  if (!post.text || post.text.length === 0) {
-    throw new ZernioApiError(0, "multiPlatformPost", "text is required.");
+  const platformTargets = buildPlatformTargets(ctx, targets, post);
+  const mediaItems: MediaItem[] | undefined =
+    post.mediaItems ??
+    (post.media
+      ? post.media.map((m) => ({ type: m.mediaType, url: m.url }))
+      : undefined);
+  const hasMedia = (mediaItems?.length ?? 0) > 0;
+  if ((!post.text || post.text.length === 0) && !hasMedia) {
+    throw new ZernioApiError(
+      0,
+      "multiPlatformPost",
+      "content is required when no media is attached."
+    );
+  }
+  const body: Record<string, unknown> = {
+    content: post.text || undefined,
+    title: post.title,
+    platforms: platformTargets,
+    mediaItems,
+    tiktokSettings: post.tiktokSettings,
+  };
+  if (post.scheduleAt !== undefined) {
+    body.scheduledFor = new Date(post.scheduleAt).toISOString();
+    if (post.timezone !== undefined) body.timezone = post.timezone;
+  } else {
+    body.publishNow = true;
   }
   const raw = await ctx.client.request<unknown>("/api/v1/posts", {
     method: "POST",
-    body: {
-      accountId: ctx.zernioAccountId,
-      platforms,
-      content: post.text,
-      mediaUrls: post.media?.map((m) => m.url),
-      perPlatformOverrides: post.perPlatformOverrides,
-      scheduleAt: post.scheduleAt,
-    },
+    body,
   });
   const parsed = MultiPostResponseSchema.safeParse(raw);
   if (!parsed.success) {
@@ -1076,8 +1211,43 @@ export async function multiPlatformPost(
       `Unexpected multi-post payload: ${parsed.error.message}`
     );
   }
-  const perPlatform = parsed.data.perPlatform.map((row) => {
-    const platform = isZernioPlatform(row.platform) ? row.platform : null;
+  // Prefer the real `platforms[]` echo shape; fall back to the pre-S1
+  // `perPlatform[]` fixture shape. [shape-unverified-live].
+  if (parsed.data.platforms && parsed.data.platforms.length > 0) {
+    const perPlatform = parsed.data.platforms.map((row) => {
+      const platform = fromWireSlug(row.platform);
+      if (!platform) {
+        throw new ZernioApiError(
+          200,
+          "multiPlatformPost",
+          `Zernio returned an unknown platform: ${row.platform}`
+        );
+      }
+      let state: MultiPlatformPostResult["perPlatform"][number]["state"];
+      switch (row.status) {
+        case "scheduled":
+        case "pending":
+          state = "scheduled";
+          break;
+        case "failed":
+        case "error":
+          state = "failed";
+          break;
+        default:
+          state = "published";
+      }
+      return {
+        platform,
+        postId: row.platformPostId ?? parsed.data._id ?? null,
+        state,
+        error: row.errorMessage,
+      };
+    });
+    return { perPlatform };
+  }
+  const legacy = parsed.data.perPlatform ?? [];
+  const perPlatform = legacy.map((row) => {
+    const platform = fromWireSlug(row.platform);
     if (!platform) {
       throw new ZernioApiError(
         200,
@@ -1210,6 +1380,839 @@ export const tiktokCreatePost = (
   tiktokAccountId: string,
   post: SimpleSocialPostInput
 ) => postToPlatform(ctx, "tiktok", "tiktokAccountId", tiktokAccountId, post);
+
+/* ========================================================================== */
+/* S1 — Zernio 1.0.4 profile / connect / accounts / analytics / inbox /        */
+/* media / webhook wrappers (Maya v2 auto-post).                               */
+/*                                                                            */
+/* These are NOT account-scoped in the same way the GBP/service functions are: */
+/* a Zernio "profile" is the umbrella that holds connected accounts, so these  */
+/* take the raw `ZernioClient` (or a `profileId`) directly. Every wrapper has  */
+/* an EXPLICIT `Promise<T>` return type (project is at the TS DataModel         */
+/* ceiling — new code must annotate). Response parsers are permissive          */
+/* (`.passthrough()`) where the live shape is unverified — see                 */
+/* [shape-unverified-live] markers.                                            */
+/* ========================================================================== */
+
+/* -------------------------------------------------------------------------- */
+/* Profiles — POST /api/v1/profiles                                            */
+/* -------------------------------------------------------------------------- */
+
+const ProfileCreateResponseSchema = z
+  .object({
+    message: z.string().optional(),
+    profile: z
+      .object({
+        _id: z.string(),
+        userId: z.string().optional(),
+        name: z.string(),
+        description: z.string().optional(),
+        color: z.string().optional(),
+        isDefault: z.boolean().optional(),
+        isOverLimit: z.boolean().optional(),
+        createdAt: z.string().optional(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
+/**
+ * Create a Zernio profile (the umbrella holding connected accounts).
+ * `POST /api/v1/profiles` — body `{ name }` required, `{ description, color }`
+ * optional. VERIFIED LIVE 2026-06-02. Returns `{ message, profile }`.
+ */
+export async function createProfile(
+  client: ZernioClient,
+  args: { name: string; description?: string; color?: string }
+): Promise<ZernioProfile> {
+  if (!args.name || args.name.length === 0) {
+    throw new ZernioApiError(0, "createProfile", "name is required.");
+  }
+  const raw = await client.request<unknown>("/api/v1/profiles", {
+    method: "POST",
+    body: {
+      name: args.name,
+      description: args.description,
+      color: args.color,
+    },
+  });
+  const parsed = ProfileCreateResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/profiles",
+      `Unexpected create-profile payload: ${parsed.error.message}`
+    );
+  }
+  return parsed.data.profile as ZernioProfile;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Connect (OAuth kickoff) — GET /api/v1/connect/{slug}                        */
+/* -------------------------------------------------------------------------- */
+
+const ConnectUrlResponseSchema = z
+  .object({
+    authUrl: z.string(),
+    state: z.string(),
+  })
+  .passthrough();
+
+/**
+ * Get the OAuth authorization URL for connecting a platform under a profile.
+ * `GET /api/v1/connect/{slug}?profileId=...&redirect_url=...`.
+ *
+ * `profileId` is REQUIRED. The internal `x` platform maps to the wire slug
+ * `twitter` (VERIFIED LIVE 2026-06-02: `/connect/x` → 400; `/connect/twitter`
+ * → 200). Returns `{ authUrl, state }`.
+ */
+export async function getConnectUrl(
+  client: ZernioClient,
+  platform: ZernioPostPlatform,
+  profileId: string,
+  redirectUrl?: string
+): Promise<ConnectUrlResult> {
+  if (!profileId || profileId.length === 0) {
+    throw new ZernioApiError(0, "getConnectUrl", "profileId is required.");
+  }
+  const slug = zernioWireSlug(platform);
+  const raw = await client.request<unknown>(
+    `/api/v1/connect/${encodeURIComponent(slug)}`,
+    {
+      method: "GET",
+      query: {
+        profileId,
+        redirect_url: redirectUrl,
+      },
+    }
+  );
+  const parsed = ConnectUrlResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      `/api/v1/connect/${slug}`,
+      `Unexpected connect payload: ${parsed.error.message}`
+    );
+  }
+  return { authUrl: parsed.data.authUrl, state: parsed.data.state };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Accounts — GET /api/v1/accounts, /accounts/health, DELETE /accounts/{id}    */
+/* -------------------------------------------------------------------------- */
+
+const AccountsListResponseSchema = z
+  .object({
+    accounts: z.array(z.record(z.string(), z.unknown())).default([]),
+    hasAnalyticsAccess: z.boolean().optional(),
+  })
+  .passthrough();
+
+/**
+ * List connected accounts under a profile.
+ * `GET /api/v1/accounts?profileId&platform&includeOverLimit&page&limit`.
+ * [shape-unverified-live] — `accounts[]` rows passed through verbatim.
+ */
+export async function listAccounts(
+  client: ZernioClient,
+  args: {
+    profileId?: string;
+    platform?: string;
+    includeOverLimit?: boolean;
+    page?: number;
+    limit?: number;
+  } = {}
+): Promise<Array<Record<string, unknown>>> {
+  const raw = await client.request<unknown>("/api/v1/accounts", {
+    method: "GET",
+    query: {
+      profileId: args.profileId,
+      platform: args.platform,
+      includeOverLimit: args.includeOverLimit,
+      page: args.page,
+      limit: args.limit,
+    },
+  });
+  const parsed = AccountsListResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    if (Array.isArray(raw)) return raw as Array<Record<string, unknown>>;
+    throw new ZernioApiError(
+      200,
+      "/api/v1/accounts",
+      `Unexpected accounts payload: ${parsed.error.message}`
+    );
+  }
+  return parsed.data.accounts;
+}
+
+const AccountHealthResponseSchema = z
+  .object({
+    summary: z
+      .object({
+        total: z.number().optional(),
+        healthy: z.number().optional(),
+        warning: z.number().optional(),
+        error: z.number().optional(),
+        needsReconnect: z.number().optional(),
+      })
+      .passthrough()
+      .default({}),
+    accounts: z.array(z.record(z.string(), z.unknown())).default([]),
+  })
+  .passthrough();
+
+/**
+ * Health summary for connected accounts.
+ * `GET /api/v1/accounts/health?profileId&platform&status`.
+ * [shape-unverified-live].
+ */
+export async function getAccountsHealth(
+  client: ZernioClient,
+  args: { profileId?: string; platform?: string; status?: string } = {}
+): Promise<AccountHealth> {
+  const raw = await client.request<unknown>("/api/v1/accounts/health", {
+    method: "GET",
+    query: {
+      profileId: args.profileId,
+      platform: args.platform,
+      status: args.status,
+    },
+  });
+  const parsed = AccountHealthResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/accounts/health",
+      `Unexpected accounts-health payload: ${parsed.error.message}`
+    );
+  }
+  return { summary: parsed.data.summary, accounts: parsed.data.accounts };
+}
+
+/**
+ * Disconnect / delete a connected account.
+ * `DELETE /api/v1/accounts/{accountId}`.
+ */
+export async function deleteAccount(
+  client: ZernioClient,
+  accountId: string
+): Promise<{ deleted: true }> {
+  if (!accountId || accountId.length === 0) {
+    throw new ZernioApiError(0, "deleteAccount", "accountId is required.");
+  }
+  await client.request<unknown>(
+    `/api/v1/accounts/${encodeURIComponent(accountId)}`,
+    { method: "DELETE" }
+  );
+  return { deleted: true };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Analytics — GET /api/v1/analytics                                           */
+/* -------------------------------------------------------------------------- */
+
+const PostAnalyticsResponseSchema = z
+  .object({
+    impressions: z.number().optional(),
+    reach: z.number().optional(),
+    likes: z.number().optional(),
+    comments: z.number().optional(),
+    shares: z.number().optional(),
+    saves: z.number().optional(),
+    clicks: z.number().optional(),
+    views: z.number().optional(),
+    igReelsAvgWatchTime: z.number().optional(),
+    igReelsVideoViewTotalTime: z.number().optional(),
+    engagementRate: z.number().optional(),
+    lastUpdated: z.string().optional(),
+    // The spec response is oneOf(single, list); we surface either the post
+    // doc's `analytics` field or a top-level `data`/`analytics` wrapper.
+    analytics: z.unknown().optional(),
+    data: z.unknown().optional(),
+  })
+  .passthrough();
+
+/**
+ * Fetch post analytics (closed-loop attribution — the moat).
+ * `GET /api/v1/analytics?postId&platform&profileId&accountId&source&fromDate&
+ * toDate&limit&page&sortBy&order`. The spec response is
+ * `oneOf(single-post, list)`; we return the normalized {@link PostAnalytics}
+ * envelope and pass the raw through. [shape-unverified-live].
+ */
+export async function getPostAnalytics(
+  client: ZernioClient,
+  args: {
+    postId?: string;
+    platform?: string;
+    profileId?: string;
+    accountId?: string;
+    source?: string;
+    fromDate?: string;
+    toDate?: string;
+    limit?: number;
+    page?: number;
+    sortBy?: string;
+    order?: string;
+  } = {}
+): Promise<PostAnalytics & { raw: unknown }> {
+  const raw = await client.request<unknown>("/api/v1/analytics", {
+    method: "GET",
+    query: {
+      postId: args.postId,
+      platform: args.platform,
+      profileId: args.profileId,
+      accountId: args.accountId,
+      source: args.source,
+      fromDate: args.fromDate,
+      toDate: args.toDate,
+      limit: args.limit,
+      page: args.page,
+      sortBy: args.sortBy,
+      order: args.order,
+    },
+  });
+  const parsed = PostAnalyticsResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/analytics",
+      `Unexpected analytics payload: ${parsed.error.message}`
+    );
+  }
+  const { analytics: _a, data: _d, ...metrics } = parsed.data;
+  return { ...metrics, raw };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Analytics time-series — closed-loop "what converted over time" (add-on).    */
+/* -------------------------------------------------------------------------- */
+
+// Lenient passthrough — the spec returns different envelopes per endpoint
+// (timeline rows / best-time slots / decay buckets). We surface the raw and
+// let the agent reason over it. [shape-unverified-live — needs a connected
+// account with published posts to confirm against a real response].
+const TimeSeriesResponseSchema = z
+  .object({
+    overview: z.unknown().optional(),
+    timeline: z.unknown().optional(),
+    rows: z.unknown().optional(),
+    data: z.unknown().optional(),
+    slots: z.unknown().optional(),
+    buckets: z.unknown().optional(),
+    frequency: z.unknown().optional(),
+  })
+  .passthrough();
+
+/**
+ * Per-post daily metric evolution — the closed-loop attribution moat ("which
+ * post → which spike → which signup"). `GET /api/v1/analytics/post-timeline?
+ * postId&fromDate&toDate`. Analytics add-on.
+ */
+export async function getPostTimeline(
+  client: ZernioClient,
+  args: { postId: string; fromDate?: string; toDate?: string }
+): Promise<{ raw: unknown }> {
+  const raw = await client.request<unknown>("/api/v1/analytics/post-timeline", {
+    method: "GET",
+    query: { postId: args.postId, fromDate: args.fromDate, toDate: args.toDate },
+  });
+  const parsed = TimeSeriesResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/analytics/post-timeline",
+      `Unexpected post-timeline payload: ${parsed.error.message}`
+    );
+  }
+  return { raw };
+}
+
+/**
+ * Empirically-optimal posting slots per channel — feeds spread-out scheduling.
+ * `GET /api/v1/analytics/best-time?platform&profileId&accountId&source`.
+ * Analytics add-on.
+ */
+export async function getBestTime(
+  client: ZernioClient,
+  args: {
+    platform?: string;
+    profileId?: string;
+    accountId?: string;
+    source?: string;
+  } = {}
+): Promise<{ raw: unknown }> {
+  const raw = await client.request<unknown>("/api/v1/analytics/best-time", {
+    method: "GET",
+    query: {
+      platform: args.platform,
+      profileId: args.profileId,
+      accountId: args.accountId,
+      source: args.source,
+    },
+  });
+  const parsed = TimeSeriesResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/analytics/best-time",
+      `Unexpected best-time payload: ${parsed.error.message}`
+    );
+  }
+  return { raw };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Follower stats — GET /api/v1/accounts/follower-stats                        */
+/* -------------------------------------------------------------------------- */
+
+const FollowerStatsResponseSchema = z
+  .object({
+    accounts: z.array(z.record(z.string(), z.unknown())).default([]),
+    dateRange: z.record(z.string(), z.unknown()).optional(),
+    aggregation: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough();
+
+/**
+ * Follower growth time-series for one or more accounts.
+ * `GET /api/v1/accounts/follower-stats?accountIds&profileId&fromDate&toDate&
+ * granularity`. `accountIds` is a comma-joined list. [shape-unverified-live].
+ */
+export async function getFollowerStats(
+  client: ZernioClient,
+  args: {
+    accountIds: ReadonlyArray<string> | string;
+    profileId?: string;
+    fromDate?: string;
+    toDate?: string;
+    granularity?: string;
+  }
+): Promise<FollowerStats> {
+  const accountIds: string = Array.isArray(args.accountIds)
+    ? args.accountIds.join(",")
+    : (args.accountIds as string);
+  if (!accountIds || accountIds.length === 0) {
+    throw new ZernioApiError(
+      0,
+      "getFollowerStats",
+      "accountIds is required."
+    );
+  }
+  const raw = await client.request<unknown>(
+    "/api/v1/accounts/follower-stats",
+    {
+      method: "GET",
+      query: {
+        accountIds,
+        profileId: args.profileId,
+        fromDate: args.fromDate,
+        toDate: args.toDate,
+        granularity: args.granularity,
+      },
+    }
+  );
+  const parsed = FollowerStatsResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/accounts/follower-stats",
+      `Unexpected follower-stats payload: ${parsed.error.message}`
+    );
+  }
+  return {
+    accounts: parsed.data.accounts,
+    dateRange: parsed.data.dateRange,
+    aggregation: parsed.data.aggregation,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Inbox — comments + conversations                                            */
+/* -------------------------------------------------------------------------- */
+
+const InboxCommentsResponseSchema = z
+  .object({
+    data: z.array(z.record(z.string(), z.unknown())).default([]),
+    nextCursor: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+/**
+ * List inbound comments across connected accounts.
+ * `GET /api/v1/inbox/comments?profileId&platform&minComments&since&sortBy&
+ * sortOrder&limit&cursor&accountId`. [shape-unverified-live].
+ */
+export async function listInboxComments(
+  client: ZernioClient,
+  args: {
+    profileId?: string;
+    platform?: string;
+    minComments?: number;
+    since?: string;
+    sortBy?: string;
+    sortOrder?: string;
+    limit?: number;
+    cursor?: string;
+    accountId?: string;
+  } = {}
+): Promise<InboxComment[]> {
+  const raw = await client.request<unknown>("/api/v1/inbox/comments", {
+    method: "GET",
+    query: {
+      profileId: args.profileId,
+      platform: args.platform,
+      minComments: args.minComments,
+      since: args.since,
+      sortBy: args.sortBy,
+      sortOrder: args.sortOrder,
+      limit: args.limit,
+      cursor: args.cursor,
+      accountId: args.accountId,
+    },
+  });
+  const parsed = InboxCommentsResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/inbox/comments",
+      `Unexpected inbox-comments payload: ${parsed.error.message}`
+    );
+  }
+  return parsed.data.data.map((row) => row as unknown as InboxComment);
+}
+
+const ConversationsResponseSchema = z
+  .object({
+    data: z.array(z.record(z.string(), z.unknown())).default([]),
+    nextCursor: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+/**
+ * List inbound DM conversations across connected accounts.
+ * `GET /api/v1/inbox/conversations?profileId&platform&status&sortOrder&limit&
+ * cursor&accountId`. [shape-unverified-live].
+ */
+export async function listConversations(
+  client: ZernioClient,
+  args: {
+    profileId?: string;
+    platform?: string;
+    status?: string;
+    sortOrder?: string;
+    limit?: number;
+    cursor?: string;
+    accountId?: string;
+  } = {}
+): Promise<Conversation[]> {
+  const raw = await client.request<unknown>("/api/v1/inbox/conversations", {
+    method: "GET",
+    query: {
+      profileId: args.profileId,
+      platform: args.platform,
+      status: args.status,
+      sortOrder: args.sortOrder,
+      limit: args.limit,
+      cursor: args.cursor,
+      accountId: args.accountId,
+    },
+  });
+  const parsed = ConversationsResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/inbox/conversations",
+      `Unexpected conversations payload: ${parsed.error.message}`
+    );
+  }
+  return parsed.data.data.map((row) => row as unknown as Conversation);
+}
+
+const InboxActionResponseSchema = z
+  .object({
+    success: z.boolean().optional(),
+    id: z.string().optional(),
+    messageId: z.string().optional(),
+    commentId: z.string().optional(),
+    error: z.string().optional(),
+  })
+  .passthrough();
+
+/**
+ * Reply to a comment on a post.
+ * `POST /api/v1/inbox/comments/{postId}` — body requires `{ accountId,
+ * message }`; optional `commentId` (reply to a specific comment thread).
+ * [shape-unverified-live].
+ */
+export async function replyToComment(
+  client: ZernioClient,
+  args: {
+    postId: string;
+    accountId: string;
+    message: string;
+    commentId?: string;
+  }
+): Promise<{ success: boolean; id?: string; raw: unknown }> {
+  if (!args.postId) {
+    throw new ZernioApiError(0, "replyToComment", "postId is required.");
+  }
+  if (!args.accountId) {
+    throw new ZernioApiError(0, "replyToComment", "accountId is required.");
+  }
+  if (!args.message || args.message.length === 0) {
+    throw new ZernioApiError(0, "replyToComment", "message is required.");
+  }
+  const raw = await client.request<unknown>(
+    `/api/v1/inbox/comments/${encodeURIComponent(args.postId)}`,
+    {
+      method: "POST",
+      body: {
+        accountId: args.accountId,
+        message: args.message,
+        commentId: args.commentId,
+      },
+    }
+  );
+  const parsed = InboxActionResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/inbox/comments",
+      `Unexpected reply-to-comment payload: ${parsed.error.message}`
+    );
+  }
+  if (parsed.data.error) {
+    throw new ZernioApiError(
+      200,
+      "replyToComment",
+      `Zernio rejected the comment reply: ${parsed.data.error}`
+    );
+  }
+  return {
+    success: parsed.data.success ?? !parsed.data.error,
+    id: parsed.data.id ?? parsed.data.commentId,
+    raw,
+  };
+}
+
+/**
+ * Send a DM in a conversation.
+ * `POST /api/v1/inbox/conversations/{conversationId}/messages` — body requires
+ * `{ accountId }`; `message` carries the text. [shape-unverified-live].
+ */
+export async function sendDm(
+  client: ZernioClient,
+  args: {
+    conversationId: string;
+    accountId: string;
+    message: string;
+  }
+): Promise<{ success: boolean; id?: string; raw: unknown }> {
+  if (!args.conversationId) {
+    throw new ZernioApiError(0, "sendDm", "conversationId is required.");
+  }
+  if (!args.accountId) {
+    throw new ZernioApiError(0, "sendDm", "accountId is required.");
+  }
+  if (!args.message || args.message.length === 0) {
+    throw new ZernioApiError(0, "sendDm", "message is required.");
+  }
+  const raw = await client.request<unknown>(
+    `/api/v1/inbox/conversations/${encodeURIComponent(
+      args.conversationId
+    )}/messages`,
+    {
+      method: "POST",
+      body: {
+        accountId: args.accountId,
+        message: args.message,
+      },
+    }
+  );
+  const parsed = InboxActionResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/inbox/conversations/messages",
+      `Unexpected send-dm payload: ${parsed.error.message}`
+    );
+  }
+  if (parsed.data.error) {
+    throw new ZernioApiError(
+      200,
+      "sendDm",
+      `Zernio rejected the DM: ${parsed.data.error}`
+    );
+  }
+  return {
+    success: parsed.data.success ?? !parsed.data.error,
+    id: parsed.data.id ?? parsed.data.messageId,
+    raw,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Media presign — POST /api/v1/media/presign                                  */
+/* -------------------------------------------------------------------------- */
+
+const PresignResponseSchema = z
+  .object({
+    files: z.array(z.record(z.string(), z.unknown())).default([]),
+  })
+  .passthrough();
+
+/**
+ * Request a presigned upload URL for a media asset.
+ * `POST /api/v1/media/presign` — body requires `{ filename, contentType }`,
+ * optional `{ size }`. Returns `{ files: [...] }`. [shape-unverified-live].
+ */
+export async function presignMedia(
+  client: ZernioClient,
+  args: { filename: string; contentType: string; size?: number }
+): Promise<PresignResult> {
+  if (!args.filename) {
+    throw new ZernioApiError(0, "presignMedia", "filename is required.");
+  }
+  if (!args.contentType) {
+    throw new ZernioApiError(0, "presignMedia", "contentType is required.");
+  }
+  const raw = await client.request<unknown>("/api/v1/media/presign", {
+    method: "POST",
+    body: {
+      filename: args.filename,
+      contentType: args.contentType,
+      size: args.size,
+    },
+  });
+  const parsed = PresignResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/media/presign",
+      `Unexpected presign payload: ${parsed.error.message}`
+    );
+  }
+  return { files: parsed.data.files };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Webhooks — POST /api/v1/webhooks/settings                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The subset of the real Zernio 1.0.4 webhook event enum HeyMaya v2 ever
+ * subscribes to. `createWebhook` rejects any event NOT in this set so we can't
+ * accidentally request a `mention.received` / `lead.received` (which do not
+ * exist in the spec).
+ */
+const SUBSCRIBABLE_WEBHOOK_EVENTS: ReadonlyArray<ZernioWebhookSubscribableEvent> =
+  [
+    "post.published",
+    "post.failed",
+    "post.platform.published",
+    "post.platform.failed",
+    "account.connected",
+    "account.disconnected",
+    "message.received",
+    "comment.received",
+    "reaction.received",
+    "review.new",
+    "review.updated",
+  ];
+
+const WebhookCreateResponseSchema = z
+  .object({
+    _id: z.string().optional(),
+    id: z.string().optional(),
+    name: z.string().optional(),
+    url: z.string().optional(),
+    events: z.array(z.string()).optional(),
+    isActive: z.boolean().optional(),
+  })
+  .passthrough();
+
+/**
+ * List registered webhook subscriptions.
+ * `GET /api/v1/webhooks/settings`. Used to make webhook registration
+ * idempotent (find-by-url before create). The response envelope varies
+ * (`{ webhooks: [...] }` vs a bare array) so we accept both. [shape-unverified-live].
+ */
+export async function listWebhooks(
+  client: ZernioClient
+): Promise<Array<{ id: string; url: string; events: string[]; raw: unknown }>> {
+  const raw = await client.request<unknown>("/api/v1/webhooks/settings", {
+    method: "GET",
+  });
+  const rows: Array<Record<string, unknown>> = Array.isArray(raw)
+    ? (raw as Array<Record<string, unknown>>)
+    : raw && typeof raw === "object" && Array.isArray((raw as { webhooks?: unknown }).webhooks)
+      ? ((raw as { webhooks: Array<Record<string, unknown>> }).webhooks)
+      : [];
+  return rows.map((r) => ({
+    id: (typeof r._id === "string" && r._id) || (typeof r.id === "string" && r.id) || "",
+    url: typeof r.url === "string" ? r.url : "",
+    events: Array.isArray(r.events) ? (r.events.filter((e) => typeof e === "string") as string[]) : [],
+    raw: r,
+  }));
+}
+
+/**
+ * Register a webhook subscription.
+ * `POST /api/v1/webhooks/settings` — body requires `{ name, url, events }`,
+ * optional `{ secret, isActive, customHeaders }`. Rejects any event name not
+ * in {@link SUBSCRIBABLE_WEBHOOK_EVENTS}. [shape-unverified-live].
+ */
+export async function createWebhook(
+  client: ZernioClient,
+  args: {
+    name: string;
+    url: string;
+    events: ReadonlyArray<ZernioWebhookSubscribableEvent>;
+    secret?: string;
+    isActive?: boolean;
+    customHeaders?: Record<string, string>;
+  }
+): Promise<{ id: string; raw: unknown }> {
+  if (!args.name) {
+    throw new ZernioApiError(0, "createWebhook", "name is required.");
+  }
+  if (!args.url) {
+    throw new ZernioApiError(0, "createWebhook", "url is required.");
+  }
+  if (!args.events || args.events.length === 0) {
+    throw new ZernioApiError(0, "createWebhook", "events must be non-empty.");
+  }
+  for (const ev of args.events) {
+    if (!SUBSCRIBABLE_WEBHOOK_EVENTS.includes(ev)) {
+      throw new ZernioApiError(
+        0,
+        "createWebhook",
+        `Invalid / unsupported webhook event: ${String(ev)}`
+      );
+    }
+  }
+  const raw = await client.request<unknown>("/api/v1/webhooks/settings", {
+    method: "POST",
+    body: {
+      name: args.name,
+      url: args.url,
+      events: args.events,
+      secret: args.secret,
+      isActive: args.isActive,
+      customHeaders: args.customHeaders,
+    },
+  });
+  const parsed = WebhookCreateResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "/api/v1/webhooks/settings",
+      `Unexpected create-webhook payload: ${parsed.error.message}`
+    );
+  }
+  const id = parsed.data._id ?? parsed.data.id ?? "";
+  return { id, raw };
+}
 
 /* -------------------------------------------------------------------------- */
 /* Test seam                                                                   */

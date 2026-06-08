@@ -10,8 +10,9 @@
  *
  * Routing decision (per service plan § 7 dual-model architecture):
  *   - Task class: ROUTINE — short text, narrow output, no multi-hop reasoning.
- *   - Model:      Gemini 3.1 Flash Lite (`google/gemini-3-flash-lite` via
- *                  OpenRouter).
+ *   - Model:      Gemini 3.1 Flash Lite (`google/gemini-3.1-flash-lite` via
+ *                  OpenRouter — the `.1` matters; `google/gemini-3-flash-lite`
+ *                  returns 400 not-a-valid-model-id).
  *   - Thinking:   `none` — sub-300ms target on the in-thread message reply.
  *   - routedReason: "ner-routine-text-extraction"
  *
@@ -37,7 +38,7 @@ import {
 } from "../../agents/modelRouter/openRouterClient";
 
 /** Model id we route routine text-extraction tasks through. */
-export const NER_MODEL_ID = "google/gemini-3-flash-lite";
+export const NER_MODEL_ID = "google/gemini-3.1-flash-lite";
 export const NER_ROUTED_REASON = "ner-routine-text-extraction";
 
 export interface NerExtractedFields {

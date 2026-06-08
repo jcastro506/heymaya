@@ -1,8 +1,40 @@
+/**
+ * ⚠ LEGACY / TEST-SCAFFOLDING ONLY
+ *
+ * The weighted-formula channel scoring in this file (scoreEvidenceCard,
+ * evaluateChannel, evaluateChannelSet, decideChannel, confidenceFor,
+ * etc.) was replaced by the LLM channel-judge in Sprint 2.13b. Live
+ * N=3 validation (2026-05-24) showed the formula produced wrong-shape
+ * decisions on non-dev-tools products (Beehiiv → LinkedIn parked
+ * 0.00, Bezel → X parked 0.00). The LLM judge fixed both.
+ *
+ * What's still used:
+ *   - Types (GtmChannel, GtmEvidenceCard, etc.) — imported across the
+ *     codebase including by judgeChannel.ts
+ *   - evaluateChannelSet — only by runBudgetedResearchSkeleton, the
+ *     deterministic test-scaffolding mutation that provides "research
+ *     without external spend" for tests. Skeleton is NOT the
+ *     production research path. Production goes through
+ *     runBudgetedResearchJob → judgeAllChannels.
+ *
+ * DO NOT IMPORT scoreEvidenceCard / evaluateChannelSet INTO NEW
+ * PRODUCTION CODE. Use judgeChannel.ts. The functions are kept here
+ * only because deleting them would break the skeleton tests.
+ *
+ * Per [[feedback-trust-llm-judgment-no-hardcoded-rules]] — weighted
+ * heuristics are the wrong shape for "would this thread convert."
+ * Only LLM judgment with grounded product context produces useful
+ * channel decisions.
+ */
+
 export type GtmChannel =
   | "reddit"
   | "x"
+  | "hn"
   | "linkedin"
   | "tiktok"
+  | "instagram"
+  | "youtube"
   | "product_hunt";
 
 export type GtmChannelDecision = "primary" | "secondary" | "parked" | "blocked";
@@ -12,9 +44,11 @@ export type GtmEvidenceSource =
   | "google"
   | "reddit"
   | "x"
+  | "hn"
   | "linkedin"
   | "tiktok"
   | "instagram"
+  | "youtube"
   | "competitor";
 export type GtmEvidenceUse =
   | "strategy"
@@ -45,6 +79,19 @@ export interface GtmEvidenceCard {
   promotionRisk: GtmPromotionRisk;
   recommendedUse: GtmEvidenceUse;
   extractedClaims: string[];
+  /** Sprint 2.13a — LLM-emitted one-sentence reason for the scores. */
+  painLanguageReason?: string;
+  /** Sprint 2.14a — LLM-extracted summary of the comment-tree replies. */
+  commentInsights?: {
+    extractedPains: string[];
+    topCommenters: Array<{
+      author: string;
+      stance: string;
+      buyerQuality: number;
+    }>;
+    summary: string;
+    commentCount: number;
+  };
 }
 
 export interface GtmAppContext {
@@ -82,8 +129,11 @@ export interface GtmChannelEvaluation {
 const CHANNEL_SOURCE: Record<GtmChannel, GtmEvidenceSource> = {
   reddit: "reddit",
   x: "x",
+  hn: "hn",
   linkedin: "linkedin",
   tiktok: "tiktok",
+  instagram: "instagram",
+  youtube: "youtube",
   product_hunt: "competitor",
 };
 
@@ -157,12 +207,18 @@ export function evaluateChannelSet(
   cards: ReadonlyArray<GtmEvidenceCard>,
   app: GtmAppContext
 ): GtmChannelEvaluation[] {
+  // Mirror the live judge's scored set (judgeChannel.ts): the
+  // Zernio-postable BET channels Reddit / X / LinkedIn / TikTok /
+  // YouTube (TikTok + YouTube are Brief-only). HN is research-only
+  // (Algolia buyer-pain read + rare manual Show HN) and product_hunt is
+  // a one-time launch event; both are excluded from BET scoring and
+  // remain in the GtmChannel type only for backward compat.
   const channels: GtmChannel[] = [
     "reddit",
     "x",
     "linkedin",
     "tiktok",
-    "product_hunt",
+    "youtube",
   ];
   const evaluations: GtmChannelEvaluation[] = channels.map((channel) =>
     evaluateChannel(channel, cards, app)

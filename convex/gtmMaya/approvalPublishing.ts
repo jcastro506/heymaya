@@ -9,6 +9,109 @@ const PLATFORM = v.union(
   v.literal("tiktok")
 );
 
+// ─────────────────────── voice/slop approval gate ───────────────────────
+// Fail-closed server guard for gtmDraftedContent. A draft may not transition
+// to approvalState 'pending_approval' (and thus reach the operator's approval
+// queue / calendar) unless it has cleared BOTH the slop critic AND the voice
+// matcher. This is the server-side backstop so a buggy/over-eager runtime can
+// never push un-vetted, off-voice, AI-tell-laden content into the queue.
+//
+// CRITICAL low-signal carve-out: a MISSING voiceMatchScore (null/undefined —
+// e.g. the user connected no handles, so voice confidence is "none") is NOT a
+// hard block. It is PASS-WITH-WARNING: low-signal founders must still be able
+// to publish. Only an explicitly-computed score below the floor blocks.
+//
+// Deterministic — no randomness, no clock, no I/O — so the same draft always
+// yields the same verdict + reason. Exported as the single source of truth for
+// the gate; consult it anywhere a draft transitions toward approval.
+
+/** Minimum computed voice-match score (0-1) to clear the gate. */
+export const VOICE_MATCH_FLOOR = 0.7;
+
+export type ApprovalGateInput = {
+  /** Sprint 2.10 slop-critic verdict; false until the critic has run. */
+  slopCriticPassed: boolean;
+  /** 0-1 voice-match; null/undefined when no signal (no handles) — PASS-WITH-WARNING. */
+  voiceMatchScore?: number | null;
+};
+
+export type ApprovalGateResult = {
+  /** True iff the draft may transition to pending_approval / reach calendar. */
+  allowed: boolean;
+  /** True when allowed only because voiceMatchScore was missing (low-signal). */
+  warning: boolean;
+  /** Deterministic, human-readable reason for the verdict. */
+  reason: string;
+};
+
+/**
+ * The fail-closed approval gate. Pure + deterministic.
+ *
+ * Rules (in order):
+ *  1. slopCriticPassed must be true — else BLOCK (covers the "not yet checked"
+ *     default of false, so an un-critiqued draft can never sneak through).
+ *  2. voiceMatchScore:
+ *       - missing (null/undefined) → ALLOW with warning (low-signal founder).
+ *       - present and >= VOICE_MATCH_FLOOR → ALLOW.
+ *       - present and < VOICE_MATCH_FLOOR → BLOCK.
+ *       - present but non-finite (NaN/±Infinity) → BLOCK (fail closed on garbage).
+ */
+export function evaluateApprovalGate(
+  input: ApprovalGateInput
+): ApprovalGateResult {
+  if (input.slopCriticPassed !== true) {
+    return {
+      allowed: false,
+      warning: false,
+      reason:
+        "blocked: slop critic has not passed (slopCriticPassed !== true)",
+    };
+  }
+  const score = input.voiceMatchScore;
+  if (score === null || score === undefined) {
+    return {
+      allowed: true,
+      warning: true,
+      reason:
+        "allowed-with-warning: no voice-match signal (low-signal founder, e.g. no connected handles) — publishing permitted",
+    };
+  }
+  if (!Number.isFinite(score)) {
+    return {
+      allowed: false,
+      warning: false,
+      reason: "blocked: voiceMatchScore is not a finite number",
+    };
+  }
+  if (score < VOICE_MATCH_FLOOR) {
+    return {
+      allowed: false,
+      warning: false,
+      reason: `blocked: voiceMatchScore ${score} is below the ${VOICE_MATCH_FLOOR} floor`,
+    };
+  }
+  return {
+    allowed: true,
+    warning: false,
+    reason: `allowed: slop critic passed and voiceMatchScore ${score} >= ${VOICE_MATCH_FLOOR}`,
+  };
+}
+
+/**
+ * Convenience wrapper for transition call-sites: returns the gate result for a
+ * gtmDraftedContent row. Reads only the two gate-relevant fields so it is
+ * decoupled from the rest of the draft shape. Throws nothing — callers decide
+ * how to act on a blocked verdict (throw, leave as draft, route to rejected).
+ */
+export function evaluateDraftedContentApprovalGate(
+  draft: Pick<Doc<"gtmDraftedContent">, "slopCriticPassed" | "voiceMatchScore">
+): ApprovalGateResult {
+  return evaluateApprovalGate({
+    slopCriticPassed: draft.slopCriticPassed,
+    voiceMatchScore: draft.voiceMatchScore ?? null,
+  });
+}
+
 export function parseApprovalMessage(message: string): {
   approved: boolean;
   edit?: string;

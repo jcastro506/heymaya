@@ -111,6 +111,8 @@ function successMetricFor(channel: string): string {
       return "qualified replies, DMs, or signups from reply-first threads";
     case "x":
       return "profile clicks, replies from target users, and tracked signups";
+    case "hn":
+      return "Show HN points, qualified technical comments, and tracked signups";
     case "linkedin":
       return "buyer replies, demo requests, and tracked signups";
     case "tiktok":

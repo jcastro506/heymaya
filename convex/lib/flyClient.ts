@@ -159,6 +159,88 @@ export class FlyClient {
     await this.fetchJson("DELETE", `/apps/${encodeURIComponent(appName)}`);
   }
 
+  /**
+   * Sprint 2.16u-fix17 — Fly apps created via the machines API don't get
+   * public DNS automatically. We need a shared IPv4 + dedicated IPv6 so
+   * Telegram can resolve `<appName>.fly.dev` and POST webhook updates.
+   *
+   * Uses Fly's GraphQL mutation (flyctl internal). Shared IPv4 is free
+   * and unique per app.
+   */
+  async allocateSharedV4(appName: string): Promise<void> {
+    const graphqlEndpoint = "https://api.fly.io/graphql";
+    const query = `
+      mutation AllocateSharedV4($appId: ID!) {
+        allocateIpAddress(input: {appId: $appId, type: shared_v4}) {
+          app { id }
+        }
+      }
+    `;
+    const res = await this.fetchImpl(graphqlEndpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${this.apiToken}`,
+      },
+      body: JSON.stringify({ query, variables: { appId: appName } }),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new FlyError(
+        `Fly allocateSharedV4 HTTP ${res.status}: ${text}`,
+        res.status,
+        text,
+        res.status >= 500
+      );
+    }
+    const parsed = JSON.parse(text) as { errors?: Array<{ message: string }> };
+    if (parsed.errors && parsed.errors.length > 0) {
+      throw new FlyError(
+        `Fly allocateSharedV4 errors: ${parsed.errors.map((e) => e.message).join("; ")}`,
+        res.status,
+        text,
+        false
+      );
+    }
+  }
+
+  async allocateV6(appName: string): Promise<void> {
+    const graphqlEndpoint = "https://api.fly.io/graphql";
+    const query = `
+      mutation AllocateV6($appId: ID!) {
+        allocateIpAddress(input: {appId: $appId, type: v6}) {
+          app { id }
+        }
+      }
+    `;
+    const res = await this.fetchImpl(graphqlEndpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${this.apiToken}`,
+      },
+      body: JSON.stringify({ query, variables: { appId: appName } }),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new FlyError(
+        `Fly allocateV6 HTTP ${res.status}: ${text}`,
+        res.status,
+        text,
+        res.status >= 500
+      );
+    }
+    const parsed = JSON.parse(text) as { errors?: Array<{ message: string }> };
+    if (parsed.errors && parsed.errors.length > 0) {
+      throw new FlyError(
+        `Fly allocateV6 errors: ${parsed.errors.map((e) => e.message).join("; ")}`,
+        res.status,
+        text,
+        false
+      );
+    }
+  }
+
   async listApps({ first = 100 }: { first?: number } = {}): Promise<FlyAppSummary[]> {
     const graphqlEndpoint = "https://api.fly.io/graphql";
     const query = `
@@ -422,6 +504,94 @@ export class FlyClient {
         (e) =>
           `[${e.timestamp ?? ""}] ${e.source ?? ""} ${e.type ?? ""} ${e.status ?? ""}`.trim()
       )
+      .join("\n");
+  }
+
+  /**
+   * Sprint 2.16f — fetch actual stdout/stderr log lines from a Fly app via
+   * the GraphQL `vmLogs` query (the same surface flyctl now uses since
+   * `app.logs` was deprecated). Returns the last N log lines as a single
+   * newline-separated string, sufficient for one-shot debugging.
+   */
+  async recentLogs(
+    appName: string,
+    { limit = 200, vmId }: { limit?: number; vmId?: string } = {}
+  ): Promise<string> {
+    const graphqlEndpoint = "https://api.fly.io/graphql";
+    const query = `
+      query VmLogs($appName: String!, $vmId: String) {
+        app(name: $appName) {
+          vmLogs(vmId: $vmId) {
+            nodes {
+              timestamp
+              message
+              level
+              instance
+              region
+            }
+          }
+        }
+      }
+    `;
+    const res = await this.fetchImpl(graphqlEndpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${this.apiToken}`,
+      },
+      body: JSON.stringify({
+        query,
+        variables: { appName, vmId },
+      }),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new FlyError(
+        `Fly GraphQL recentLogs HTTP ${res.status}: ${text}`,
+        res.status,
+        text,
+        res.status >= 500 || res.status === 429
+      );
+    }
+    let parsed: {
+      data?: {
+        app?: {
+          vmLogs?: {
+            nodes?: Array<{
+              timestamp?: string;
+              message?: string;
+              level?: string;
+              instance?: string;
+              region?: string;
+            }>;
+          };
+        };
+      };
+      errors?: Array<{ message: string }>;
+    };
+    try {
+      parsed = JSON.parse(text) as typeof parsed;
+    } catch {
+      throw new FlyError(
+        `Fly GraphQL recentLogs: response not JSON: ${text}`,
+        res.status,
+        text,
+        false
+      );
+    }
+    if (parsed.errors && parsed.errors.length > 0) {
+      const msg = parsed.errors.map((e) => e.message).join("; ");
+      throw new FlyError(
+        `Fly GraphQL recentLogs returned errors: ${msg}`,
+        res.status,
+        text,
+        false
+      );
+    }
+    const nodes = parsed.data?.app?.vmLogs?.nodes ?? [];
+    const sliced = limit > 0 ? nodes.slice(-limit) : nodes;
+    return sliced
+      .map((n) => `[${n.timestamp ?? ""}] [${n.level ?? "info"}] ${n.message ?? ""}`)
       .join("\n");
   }
 

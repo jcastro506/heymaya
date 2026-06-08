@@ -11,7 +11,9 @@ import { assertGtmSpendAllowed } from "./betaGuards";
 const CHANNEL_PREFERENCE = v.union(
   v.literal("whatsapp"),
   v.literal("imessage"),
-  v.literal("web")
+  v.literal("web"),
+  // Sprint 15 (Part II D1) — Telegram is the default ClawLaunch channel.
+  v.literal("telegram")
 );
 
 const APP_STAGE = v.union(
@@ -88,12 +90,15 @@ const RECOMMENDED_USE = v.union(
   v.literal("competitor")
 );
 
+// Channels the agent may record scores for. Reconciled to the live
+// judge's scored set: Reddit / X / LinkedIn / TikTok. youtube and
+// product_hunt are deliberately excluded (vestigial / not in the
+// product vision); the judge no longer emits them.
 const CHANNEL = v.union(
   v.literal("reddit"),
   v.literal("x"),
   v.literal("linkedin"),
-  v.literal("tiktok"),
-  v.literal("product_hunt")
+  v.literal("tiktok")
 );
 
 const CHANNEL_DECISION = v.union(
@@ -223,6 +228,15 @@ export const setAppProfile = mutation({
     founderWhy: v.optional(v.string()),
     stage: APP_STAGE,
     weekGoal: WEEK_GOAL,
+    userCountBand: v.optional(
+      v.union(
+        v.literal("none"),
+        v.literal("1-100"),
+        v.literal("100-1k"),
+        v.literal("1k+"),
+        v.literal("unknown")
+      )
+    ),
     canRecordScreen: v.boolean(),
     canShowFace: v.boolean(),
     canRecordVoice: v.optional(v.boolean()),
@@ -231,6 +245,8 @@ export const setAppProfile = mutation({
     canPostInstagramManually: v.optional(v.boolean()),
     existingTikTokUrl: v.optional(v.string()),
     existingInstagramUrl: v.optional(v.string()),
+    existingYoutubeUrl: v.optional(v.string()),
+    existingLinkedinUrl: v.optional(v.string()),
     tiktokWarmupState: v.optional(TIKTOK_WARMUP_STATE),
     tiktokAccountAgeDays: v.optional(v.number()),
     tiktokAccountStatusChecked: v.optional(v.boolean()),
@@ -238,6 +254,19 @@ export const setAppProfile = mutation({
     creatorBudgetMonthlyUsd: v.optional(v.number()),
     maxWeeklyVisualPosts: v.optional(v.number()),
     excludedAudiences: v.array(v.string()),
+    // Sprint B — journey-stage fork captured at onboarding (the launch vs
+    // manager tab). Optional; Maya can also resolve/refine it later via
+    // /lc_gtm/set_north_star.
+    entryMode: v.optional(v.union(v.literal("launch"), v.literal("manager"))),
+    // Slideshow cluster — web-vs-mobile fork. Mobile apps carry store URLs +
+    // a screenshots-as-asset emphasis; web apps just have the site `url`.
+    appType: v.optional(v.union(v.literal("web"), v.literal("mobile"))),
+    appStoreUrl: v.optional(v.string()),
+    playStoreUrl: v.optional(v.string()),
+    // Conversion instrumentation — what counts as a win + where it lands, so
+    // the signup side of attribution can close.
+    conversionKind: v.optional(v.string()),
+    signupUrl: v.optional(v.string()),
     diagnosis: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<Id<"gtmApps">> => {
@@ -256,6 +285,7 @@ export const setAppProfile = mutation({
         founderWhy: args.founderWhy,
         stage: args.stage,
         weekGoal: args.weekGoal,
+        userCountBand: args.userCountBand,
         canRecordScreen: args.canRecordScreen,
         canShowFace: args.canShowFace,
         canRecordVoice: args.canRecordVoice ?? false,
@@ -264,6 +294,8 @@ export const setAppProfile = mutation({
         canPostInstagramManually: args.canPostInstagramManually ?? false,
         existingTikTokUrl: normalizeOptionalUrl(args.existingTikTokUrl),
         existingInstagramUrl: normalizeOptionalUrl(args.existingInstagramUrl),
+        existingYoutubeUrl: normalizeOptionalUrl(args.existingYoutubeUrl),
+        existingLinkedinUrl: normalizeOptionalUrl(args.existingLinkedinUrl),
         tiktokWarmupState: args.tiktokWarmupState ?? "unknown",
         tiktokAccountAgeDays: args.tiktokAccountAgeDays,
         tiktokAccountStatusChecked: args.tiktokAccountStatusChecked ?? false,
@@ -271,6 +303,12 @@ export const setAppProfile = mutation({
         creatorBudgetMonthlyUsd: args.creatorBudgetMonthlyUsd,
         maxWeeklyVisualPosts: args.maxWeeklyVisualPosts,
         excludedAudiences: args.excludedAudiences,
+        entryMode: args.entryMode,
+        appType: args.appType,
+        appStoreUrl: normalizeOptionalUrl(args.appStoreUrl),
+        playStoreUrl: normalizeOptionalUrl(args.playStoreUrl),
+        conversionKind: args.conversionKind,
+        signupUrl: normalizeOptionalUrl(args.signupUrl),
         diagnosis: args.diagnosis,
         updatedAt: now,
       });
@@ -300,6 +338,12 @@ export const setAppProfile = mutation({
       creatorBudgetMonthlyUsd: args.creatorBudgetMonthlyUsd,
       maxWeeklyVisualPosts: args.maxWeeklyVisualPosts,
       excludedAudiences: args.excludedAudiences,
+      entryMode: args.entryMode,
+      appType: args.appType,
+      appStoreUrl: normalizeOptionalUrl(args.appStoreUrl),
+      playStoreUrl: normalizeOptionalUrl(args.playStoreUrl),
+      conversionKind: args.conversionKind,
+      signupUrl: normalizeOptionalUrl(args.signupUrl),
       diagnosis: args.diagnosis,
       createdAt: now,
       updatedAt: now,
@@ -525,12 +569,83 @@ export const getMyGtmSnapshot = query({
   },
 });
 
+/**
+ * S3 — operator channel-selection override. The onboarding channel-selection
+ * UX shows the agent's ranked, evidence-backed recommendation; the operator
+ * confirms it or toggles which channels to bet on. This persists their pick
+ * by patching the latest research job's gtmChannelScores `decision` + stamping
+ * operatorConfirmedAt. The deploy reads `decision === "primary"/"secondary"`
+ * into GTM.md, so the operator's call flows straight to the agent's bet
+ * channels. All platforms are selectable — nothing is gated, the operator
+ * just focuses the set ("Maya proposes with evidence, the operator decides").
+ */
+export const setMyChannelDecisions = mutation({
+  args: {
+    decisions: v.array(
+      v.object({
+        channel: v.union(
+          v.literal("reddit"),
+          v.literal("x"),
+          v.literal("hn"),
+          v.literal("linkedin"),
+          v.literal("tiktok"),
+          v.literal("instagram"),
+          v.literal("youtube"),
+          v.literal("product_hunt")
+        ),
+        decision: v.union(
+          v.literal("primary"),
+          v.literal("secondary"),
+          v.literal("parked"),
+          v.literal("blocked")
+        ),
+      })
+    ),
+  },
+  handler: async (ctx, args): Promise<{ updated: number }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("channel selection requires a signed-in user.");
+    const creator = await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first();
+    if (!creator || creator.accountType !== "gtm-agent") {
+      throw new Error("GTM account not found.");
+    }
+    const jobs = await ctx.db
+      .query("gtmResearchJobs")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .collect();
+    const latestJob = jobs.sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
+    if (!latestJob) throw new Error("no research job to apply decisions to.");
+
+    const scores = await ctx.db
+      .query("gtmChannelScores")
+      .withIndex("by_research_job", (q) => q.eq("researchJobId", latestJob._id))
+      .collect();
+    const byChannel = new Map(scores.map((s) => [s.channel, s]));
+    const now = Date.now();
+    let updated = 0;
+    for (const d of args.decisions) {
+      const row = byChannel.get(d.channel);
+      // Cross-tenant safety: only patch rows under this creator's latest job.
+      if (!row || row.accountId !== creator._id) continue;
+      await ctx.db.patch(row._id, {
+        decision: d.decision,
+        operatorConfirmedAt: now,
+      });
+      updated += 1;
+    }
+    return { updated };
+  },
+});
+
 async function findOrCreateGtmAgent(
   ctx: MutationCtx,
   args: {
     clerkUserId: string;
     email: string;
-    channelPreference: "whatsapp" | "imessage" | "web";
+    channelPreference: "whatsapp" | "imessage" | "web" | "telegram";
     timezone: string;
   }
 ): Promise<{

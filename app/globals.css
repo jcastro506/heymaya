@@ -22,6 +22,41 @@
   --imessage-gray: #2c2c2e;
 }
 
+/* The signed-in ClawLaunch surfaces (Mission Control + onboarding) run the
+   editorial LIGHT treatment — white paper, black ink, lime kept as a single
+   sparing accent — to match the marketing landing. Because @theme inline
+   resolves color utilities to var(--ink)/var(--paper) at use-time, scoping these
+   overrides to the surface root flips the whole tree without touching the dark
+   creator app. Inverted spots (text on a lime/rose fill, lime-text-on-white)
+   are handled explicitly in the components. */
+[data-surface="mission"] {
+  --ink: #fbfaf6;
+  --ink-2: #ffffff;
+  --ink-3: #f1eee6;
+  --hairline: rgba(10, 10, 10, 0.08);
+  --hairline-strong: rgba(10, 10, 10, 0.16);
+  --paper: #0a0a0a;
+  --paper-dim: #57564f;
+  --paper-faint: #8c887d;
+}
+
+/* Onboarding: maximum clarity — all section text black, every box a black
+   hairline on a white interior, and ONE neutral slate-blue accent (no lime).
+   The accent rides on the --lime variable so every `*-lime` utility recolors at
+   once; swap the two values below to change the accent hue everywhere. */
+[data-surface="onboarding"] {
+  --ink: #fbfaf6;
+  --ink-2: #ffffff;
+  --ink-3: #f1eee6;
+  --hairline: rgba(10, 10, 10, 0.14);
+  --hairline-strong: rgba(10, 10, 10, 0.22);
+  --paper: #0a0a0a;
+  --paper-dim: #141414;
+  --paper-faint: #4a4a4a;
+  --lime: #3f5e8c;
+  --lime-soft: #5b7aa8;
+}
+
 @theme inline {
   --color-background: var(--ink);
   --color-foreground: var(--paper);

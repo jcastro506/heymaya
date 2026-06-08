@@ -45,3 +45,13 @@ next-env.d.ts
 # claude code local state
 .claude/
 logs/
+
+# flyctl runtime (locks/logs/cache)
+.fly/
+
+# nested service workspaces — deps + build output
+services/**/node_modules/
+services/**/dist/
+
+# stray local logs
+convex_err.txt

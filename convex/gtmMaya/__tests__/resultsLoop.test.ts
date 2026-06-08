@@ -2,13 +2,26 @@ import { describe, expect, it } from "vitest";
 import { decideLearningLoop, interpretResults } from "../resultsLoop";
 
 describe("GTM results loop", () => {
-  it("doubles down only when customer movement is strong", () => {
+  it("doubles down only when customer movement clears the conversion floor", () => {
+    // Sprint 4: 'strong' now needs real, UNWEIGHTED confirmed conversions past
+    // the shared floor (5) — replies no longer inflate it. 3 signups + 1 demo +
+    // 1 feedback = 5 confirmed conversions → strong.
     const result = interpretResults([
-      { replies: 4, signups: 2, demos: 1, feedbackItems: 1 },
+      { replies: 4, signups: 3, demos: 1, feedbackItems: 1 },
     ]);
 
     expect(result.signal).toBe("strong");
     expect(result.recommendation).toBe("double_down");
+  });
+
+  it("does NOT call a single promising-but-thin result 'strong' (no overfit)", () => {
+    // 4 real conversions from ONE snapshot is promising but below the floor —
+    // honest answer is "not yet", not "promote this winner".
+    const result = interpretResults([
+      { replies: 4, signups: 2, demos: 1, feedbackItems: 1 },
+    ]);
+    expect(result.signal).not.toBe("strong");
+    expect(result.recommendation).not.toBe("double_down");
   });
 
   it("does not overfit tiny sample sizes", () => {

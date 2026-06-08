@@ -173,11 +173,16 @@ if (!src.includes("describeMessageTool:")) {
         },
         listActions: () => ["send", "react"],`;
 
-  if (!src.includes(needle)) {
-    throw new Error("Unable to patch Claw Messenger actions interface; expected marker not found.");
+  if (src.includes(needle)) {
+    src = src.replace(needle, replacement);
+  } else {
+    // Sprint 2.16u-fix10 — tolerate claw-messenger version drift. Older
+    // versions of this plugin had a slightly different actions interface
+    // shape. If the marker isn't found, the upstream plugin has likely
+    // restructured this surface — log a warning and continue rather than
+    // breaking the entire image build for a non-critical normalization patch.
+    console.warn("[patch] skipped: Claw Messenger actions interface marker not found (plugin version drift); continuing.");
   }
-
-  src = src.replace(needle, replacement);
 }
 
 if (!src.includes("function normalizeStartedAccount(")) {
@@ -210,11 +215,16 @@ if (!src.includes("function normalizeStartedAccount(")) {
 }
 `;
 
-  if (!src.includes(needle)) {
-    throw new Error("Unable to patch Claw Messenger account normalization; expected marker not found.");
+  if (src.includes(needle)) {
+    src = src.replace(needle, replacement);
+  } else {
+    // Sprint 2.16u-fix10 — same drift-tolerance pattern as actions
+    // interface patch above. If the resolveAccount needle has shifted in
+    // a newer claw-messenger version, the normalizeStartedAccount helper
+    // won't get inserted. The downstream call sites at lines 220+ are
+    // already guarded by `if (src.includes(...))` so they no-op safely.
+    console.warn("[patch] skipped: Claw Messenger account normalization marker not found (plugin version drift); continuing.");
   }
-
-  src = src.replace(needle, replacement);
 }
 
 if (src.includes("            const account = ctx.account;")) {
@@ -282,100 +292,42 @@ if (src.includes("            running: snapshot.running ?? false,")) {
 writeFileSync(channelPath, src);
 writeFileSync(sendPath, sendSrc);
 
-const prewarmNeedle = `\t\t\tawait prewarmConfiguredPrimaryModel({
-\t\t\t\tcfg: params.cfg,
-\t\t\t\tlog: params.log
-\t\t\t});
-\t\t\tawait params.startChannels();`;
+// Sprint 2.16u-fix16 — REMOVED all four "creator runtime" startup
+// optimization patches (prewarm skip, post-channel sidecars early-return,
+// update check skip, maintenance timers skip, channel health monitor skip).
+//
+// Diagnosis: those patches saved ~5 sec at startup but BROKE the bundled
+// boot-md hook. Verified across multiple deploys today: "loaded 4 internal
+// hook handlers" appeared in logs but BOOT.md never executed, no
+// [gateway/boot] log entries, no session files written.
+//
+// Operator pushback: "I don't think it should be cron driven. OpenClaw
+// should deploy, come online, message the user. That's the canonical doc
+// path." Confirmed by docs/concepts/agent-workspace.md:
+//   "BOOT.md — Optional startup checklist run automatically on gateway
+//    restart (when internal hooks are enabled)."
+//
+// We have hooks.internal.enabled:true. The canonical flow should "just
+// work" without custom patches. Stripping the optimization patches lets
+// OpenClaw run its native gateway:startup → boot-md → BOOT.md flow.
+//
+// Cost: ~5 sec slower gateway boot (prewarm + sidecars + update check +
+// timers + health monitor all run). Worth it to get reliable BOOT.md
+// execution.
 
-if (gatewaySrc.includes(prewarmNeedle)) {
-  gatewaySrc = gatewaySrc.replace(
-    prewarmNeedle,
-    `\t\t\tparams.log.info("skipping primary model prewarm before channel startup");
-\t\t\tawait params.startChannels();`
-  );
-}
-
-const sidecarsAfterChannelsNeedle = `\tif (internalHooksConfigured || await hasGatewayStartupInternalHookListeners()) setTimeout(() => {
-\t\timport("./internal-hooks-UC389sgW.js").then(({ createInternalHookEvent, triggerInternalHook }) => {
-\t\t\ttriggerInternalHook(createInternalHookEvent("gateway", "startup", "gateway:startup", {
-\t\t\t\tcfg: params.cfg,
-\t\t\t\tdeps: params.deps,
-\t\t\t\tworkspaceDir: params.defaultWorkspaceDir
-\t\t\t}));
-\t\t}).catch((err) => {
-\t\t\tparams.log.warn(\`gateway startup internal hook failed: \${String(err)}\`);
-\t\t});
-\t}, 250);`;
-
-const actualSidecarsAfterChannelsNeedle = `\tif (internalHooksConfigured || await hasGatewayStartupInternalHookListeners()) setTimeout(() => {
-\t\timport("./internal-hooks-UC389sgW.js").then(({ createInternalHookEvent, triggerInternalHook }) => {
-\t\t\ttriggerInternalHook(createInternalHookEvent("gateway", "startup", "gateway:startup", {
-\t\t\t\tcfg: params.cfg,
-\t\t\t\tdeps: params.deps,
-\t\t\t\tworkspaceDir: params.defaultWorkspaceDir
-\t\t\t}));
-\t\t}, 250);
-\tlet pluginServices = null;`;
-
-if (gatewaySrc.includes(actualSidecarsAfterChannelsNeedle)) {
-  gatewaySrc = gatewaySrc.replace(
-    actualSidecarsAfterChannelsNeedle,
-    `\tparams.log.info("skipping optional post-channel sidecars for creator runtime");
-\treturn { pluginServices: null };
-\tlet pluginServices = null;`
-  );
-} else if (!gatewaySrc.includes("skipping optional post-channel sidecars for creator runtime")) {
-  const fallbackNeedle = `\tlet pluginServices = null;
-\tawait measureStartup(params.startupTrace, "sidecars.plugin-services", async () => {`;
-  if (!gatewaySrc.includes(fallbackNeedle)) {
-    throw new Error("Unable to patch optional post-channel sidecars; expected marker not found.");
-  }
-  gatewaySrc = gatewaySrc.replace(
-    fallbackNeedle,
-    `\tparams.log.info("skipping optional post-channel sidecars for creator runtime");
-\treturn { pluginServices: null };
-\tlet pluginServices = null;
-\tawait measureStartup(params.startupTrace, "sidecars.plugin-services", async () => {`
-  );
-}
-
-const updateCheckNeedle = `\tconst stopGatewayUpdateCheckPromise = params.minimalTestGateway ? Promise.resolve(() => {}) : measureStartup(params.startupTrace, "post-attach.update-check", () => runtimeDeps.scheduleGatewayUpdateCheck({
-\t\tcfg: params.cfgAtStart,
-\t\tlog: params.log,
-\t\tisNixMode: params.isNixMode,
-\t\tonUpdateAvailableChange: (updateAvailable) => {
-\t\t\tconst payload = { updateAvailable };
-\t\t\tparams.broadcast(GATEWAY_EVENT_UPDATE_AVAILABLE, payload, { dropIfSlow: true });
-\t\t}
-\t}));`;
-
-if (gatewaySrc.includes(updateCheckNeedle)) {
-  gatewaySrc = gatewaySrc.replace(
-    updateCheckNeedle,
-    `\tconst stopGatewayUpdateCheckPromise = Promise.resolve(() => {});
-\tparams.log.info("skipping OpenClaw startup update check for pinned creator runtime");`
-  );
-} else if (!gatewaySrc.includes("skipping OpenClaw startup update check for pinned creator runtime")) {
-  throw new Error("Unable to patch startup update check; expected marker not found.");
-}
-
-const gatewayStartHooksNeedle = `\tsidecarsPromise.then(async () => {
-\t\tif (params.minimalTestGateway) return;
-\t\tconst hookRunner = await runtimeDeps.getGlobalHookRunner();`;
-
-if (gatewaySrc.includes(gatewayStartHooksNeedle)) {
-  gatewaySrc = gatewaySrc.replace(
-    gatewayStartHooksNeedle,
-    `\tsidecarsPromise.then(async () => {
-\t\tparams.log.info("skipping gateway_start hooks for creator runtime");
-\t\treturn;
-\t\tif (params.minimalTestGateway) return;
-\t\tconst hookRunner = await runtimeDeps.getGlobalHookRunner();`
-  );
-} else if (!gatewaySrc.includes("skipping gateway_start hooks for creator runtime")) {
-  throw new Error("Unable to patch gateway_start hooks; expected marker not found.");
-}
+// Sprint 2.16u-fix10 — REMOVED the gateway_start hooks skip patch.
+//
+// Earlier sprints stripped gateway_start in the name of a "lighter creator
+// runtime". The consequence: OpenClaw's bundled `boot-md` hook (which fires
+// BOOT.md on `gateway:startup`) never ran. Result: Maya had no instant-
+// on-boot message — operators had to wait `heartbeat.every` (5m) for the
+// first message instead of getting one ~60 sec after deploy like the
+// original creator app did.
+//
+// With this patch block removed, OpenClaw runs gateway_start hooks
+// normally. Combined with `hooks.internal.enabled: true` in the gateway
+// config, the bundled `boot-md` hook fires BOOT.md on gateway-ready —
+// restoring the prior creator app's instant-hello behavior.
 
 const hooksFirstNeedle = `\t\t\tconst requestStages = [{
 \t\t\t\tname: "hooks",
@@ -429,36 +381,9 @@ gatewaySrc = gatewaySrc.replaceAll(
   "params.refreshGatewayHealthSnapshot({ probe: false })"
 );
 
-const maintenanceTimersNeedle = "function startGatewayMaintenanceTimers(params) {";
-if (gatewaySrc.includes(maintenanceTimersNeedle) && !gatewaySrc.includes("skipping gateway maintenance timers for creator runtime")) {
-  gatewaySrc = gatewaySrc.replace(
-    maintenanceTimersNeedle,
-    `function startGatewayMaintenanceTimers(params) {
-\tparams?.log?.info?.("skipping gateway maintenance timers for creator runtime");
-\treturn {
-\t\ttickInterval: null,
-\t\thealthInterval: null,
-\t\tdedupeCleanup: null,
-\t\tmediaCleanup: null
-\t};
-`
-  );
-} else if (!gatewaySrc.includes("skipping gateway maintenance timers for creator runtime")) {
-  throw new Error("Unable to patch gateway maintenance timers; expected marker not found.");
-}
-
-const channelHealthMonitorNeedle = "function startGatewayChannelHealthMonitor(params) {";
-if (gatewaySrc.includes(channelHealthMonitorNeedle) && !gatewaySrc.includes("skipping channel health monitor for creator runtime")) {
-  gatewaySrc = gatewaySrc.replace(
-    channelHealthMonitorNeedle,
-    `function startGatewayChannelHealthMonitor(params) {
-\tparams?.log?.info?.("skipping channel health monitor for creator runtime");
-\treturn null;
-`
-  );
-} else if (!gatewaySrc.includes("skipping channel health monitor for creator runtime")) {
-  throw new Error("Unable to patch channel health monitor; expected marker not found.");
-}
+// Sprint 2.16u-fix16 — REMOVED maintenance-timers + channel-health-monitor
+// skips. Same reasoning as above: tiny startup savings, but interferes with
+// OpenClaw's normal lifecycle.
 
 gatewaySrc = gatewaySrc.replace(
   "stopModelPricingRefresh: !params.minimalTestGateway && !isVitestRuntimeEnv() ? startGatewayModelPricingRefresh({ config: params.cfgAtStart }) : () => {}",
