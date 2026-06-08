@@ -264,8 +264,8 @@ export const createGtmCheckoutSession = action({
         metadata: gtmMeta,
         ...(trialDays ? { trial_period_days: trialDays } : {}),
       },
-      success_url: `${baseUrl}/gtm?checkout=success`,
-      cancel_url: `${baseUrl}/gtm?checkout=cancelled`,
+      success_url: `${baseUrl}/clawlaunch/mission/account?checkout=success`,
+      cancel_url: `${baseUrl}/clawlaunch/mission/account?checkout=cancelled`,
     });
     if (!session.url) throw new Error("createGtmCheckoutSession: Stripe returned no URL.");
     return { url: session.url };
