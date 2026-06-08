@@ -589,6 +589,7 @@ export const setMyChannelDecisions = mutation({
           v.literal("hn"),
           v.literal("linkedin"),
           v.literal("tiktok"),
+          v.literal("instagram"),
           v.literal("youtube"),
           v.literal("product_hunt")
         ),

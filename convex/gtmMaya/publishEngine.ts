@@ -32,7 +32,10 @@ import {
   multiPlatformPost,
   getPostAnalytics,
 } from "../integrations/zernio/endpoints";
-import type { ZernioPostPlatform } from "../integrations/zernio/types";
+import type {
+  ZernioPostPlatform,
+  ChannelPlatformData,
+} from "../integrations/zernio/types";
 import { planFeaturesGtm } from "./planGtm";
 import { validateOutboundText, evaluateAutoPublishGate } from "./outboundFirewall";
 import { decidePublishMode, composeAutoPostAction } from "./calendarWrite";
@@ -133,6 +136,11 @@ export const publishContentDirect = internalAction({
     // Convex storage ids; resolved to URLs Zernio fetches + attached as
     // mediaItems. Required for media-gated channels (TikTok/IG/YouTube).
     mediaAssetIds: v.optional(v.array(v.string())),
+    // API-depth S1 — the link to drop in the FIRST COMMENT instead of the
+    // caption (LinkedIn/IG/YouTube). Keeping the URL out of the caption recovers
+    // LinkedIn's ~40-50% link-in-post reach penalty. The caller decides which
+    // channels get this; here we just attach it as platformSpecificData.
+    firstComment: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<PublishDirectResult> => {
     const content = args.content.trim();
@@ -227,10 +235,15 @@ export const publishContentDirect = internalAction({
         }
         if (urls.length > 0) mediaItems = urls;
       }
+      const firstComment = args.firstComment?.trim();
+      const platformData: Partial<Record<ZernioPostPlatform, ChannelPlatformData>> | undefined =
+        firstComment && firstComment.length > 0
+          ? { [channel as ZernioPostPlatform]: { firstComment } }
+          : undefined;
       const result = await multiPlatformPost(
         zctx,
         [{ platform: channel as ZernioPostPlatform, accountId: args.zernioAccountId }],
-        { text: content, mediaItems, scheduleAt, timezone: args.timezone }
+        { text: content, mediaItems, scheduleAt, timezone: args.timezone, platformData }
       );
       const row = result.perPlatform[0];
       const zernioPostId = row?.postId ?? null;

@@ -77,6 +77,8 @@ const CHANNEL_DESCRIPTIONS: Record<GtmChannel, string> = {
     "LinkedIn — professional B2B identity, long-form posts, employer-of-record audiences. Best for sales/marketing/enterprise tools, service businesses, B2B SaaS targeting corporate buyers.",
   tiktok:
     "TikTok — short-form video, format-driven, algorithm reach. Best for consumer products, visual demos, B2C, products with a clear 30-sec hook. Requires consistent posting cadence.",
+  instagram:
+    "Instagram — Reels (short-form video, same hook-driven shape as TikTok) + carousels + a visual feed; hashtag + Explore discovery. Best for consumer/B2C, lifestyle, design-forward, and visually demonstrable products where buyers browse images/video. Link-in-bio + first-comment link pattern (caption links don't click). Strong overlap with TikTok for visual consumer apps.",
   youtube:
     "YouTube — Shorts (short-form, hook-in-first-second, like TikTok) + long-form (founder-led, search-intent, compounds over time) + comment/transcript mining. Best for products with a real demo or teachable depth. Brief-only (no UGC creation); title=CTR is the lever.",
   product_hunt:
@@ -339,26 +341,28 @@ export async function judgeAllChannels(
     hn: "hn",
     linkedin: "linkedin",
     tiktok: "tiktok",
+    instagram: "instagram",
     youtube: "youtube",
     product_hunt: "competitor",
   };
   // The live set of channels that get scored → persisted into
   // gtmChannelScores → surfaced in the onboarding picker. The scored
   // BET set is the Zernio-postable channels: Reddit / X / LinkedIn /
-  // TikTok / YouTube. TikTok and YouTube are Brief-only channels (Maya
-  // hands over scripts + filming notes; no UGC creation). HN is
-  // RESEARCH-ONLY (Algolia buyer-pain read + rare manual "Show HN") and
-  // is deliberately EXCLUDED from BET scoring — it is not a posting
-  // channel. It remains in the GtmChannel type / schema union only for
-  // backward compat with historical rows. product_hunt is likewise
-  // excluded (single-day launch event, not steady-state acquisition);
-  // it too stays in the type/union for backward compat but is not
-  // scored or surfaced here.
+  // TikTok / Instagram / YouTube. TikTok / Instagram / YouTube are the
+  // visual channels — load-bearing for consumer/B2C products (a plant-care
+  // or fitness app lives on #PlantTok / Reels / Shorts, not Reddit). They
+  // are Brief-only (Maya hands over scripts + filming notes; no UGC
+  // creation). HN is RESEARCH-ONLY (Algolia buyer-pain read + rare manual
+  // "Show HN") and is deliberately EXCLUDED from BET scoring — not a
+  // posting channel. It stays in the GtmChannel type / schema union only
+  // for backward compat with historical rows. product_hunt is likewise
+  // excluded (single-day launch event, not steady-state acquisition).
   const channels: ReadonlyArray<GtmChannel> = opts?.channels ?? [
     "reddit",
     "x",
     "linkedin",
     "tiktok",
+    "instagram",
     "youtube",
   ];
 

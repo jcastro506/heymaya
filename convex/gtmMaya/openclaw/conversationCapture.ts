@@ -381,6 +381,16 @@ export const logTurnTelemetryHttp = httpAction(async (ctx, request) => {
     accountId: auth.accountId,
   });
 
+  // Hard spend kill-switch: this turn's cost is now in the ledger, so check
+  // the rolling-window ceilings and destroy the machine if it's runaway-ing.
+  // Scheduled (not awaited) so the kill's Fly API calls don't delay this
+  // response; it fires ~immediately after.
+  await ctx.scheduler.runAfter(
+    0,
+    internal.gtmMaya.spendKill.enforceSpendKillForAgent,
+    { agentId: auth.agentId }
+  );
+
   return new Response(JSON.stringify({ ok: true, patched: result.patched }), {
     status: 200,
     headers: { "content-type": "application/json" },

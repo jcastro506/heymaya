@@ -51,14 +51,20 @@ import {
   ScrapeCreatorsRateLimitError,
 } from "../integrations/scrapeCreators/client";
 
-export type GtmPlatform = "reddit" | "tiktok" | "twitter" | "instagram" | "google";
+export type GtmPlatform =
+  | "reddit"
+  | "tiktok"
+  | "twitter"
+  | "instagram"
+  | "youtube"
+  | "google";
 
 /**
  * Normalized item every wrapper returns. Workers consume this to build
  * gtmEvidenceCards rows.
  */
 export const ResearchRawItemSchema = z.object({
-  platform: z.enum(["reddit", "tiktok", "twitter", "instagram", "google"]),
+  platform: z.enum(["reddit", "tiktok", "twitter", "instagram", "youtube", "google"]),
   /** Stable platform-side ID, used for dedup and citation. */
   externalId: z.string(),
   /** Public URL — required for citation-firewall. */
@@ -790,6 +796,233 @@ export async function instagramSearchReels(
     };
   } catch (err) {
     return softFail("instagram", err, rawRef);
+  }
+}
+
+// Instagram post/reel comments — /v2/instagram/post/comments?url=...
+// [shape-defensive] The live response field names aren't pinned in the Convex
+// path (the agent-side tool is live-verified; this mirrors that endpoint). We
+// accept several plausible shapes and soft-fail on anything else, so a shape
+// surprise yields "no comments" (IG simply stays un-comment-grounded, exactly
+// today's behavior) and never throws into the research pipeline.
+interface RawInstagramComment {
+  pk?: string;
+  id?: string;
+  text?: string;
+  comment?: string;
+  like_count?: number;
+  comment_like_count?: number;
+  created_at?: number;
+  created_at_utc?: number;
+  user?: { username?: string; full_name?: string };
+  owner?: { username?: string };
+  username?: string;
+}
+
+export async function instagramPostComments(
+  client: ScrapeCreatorsClient,
+  postUrl: string,
+  options: { amount?: number } = {}
+): Promise<WrapperResult> {
+  const params = { url: postUrl, amount: options.amount ?? 30 };
+  const rawRef = rawRefOf("instagram", "post/comments", hashParams(params));
+  try {
+    const raw = await client.request<Record<string, unknown>>(
+      "/v2/instagram/post/comments",
+      { query: params as Record<string, string | number | boolean | undefined> }
+    );
+    // Accept { comments: [...] } | { data: { comments } } | bare array.
+    const list: RawInstagramComment[] = Array.isArray(raw)
+      ? (raw as RawInstagramComment[])
+      : Array.isArray((raw as { comments?: unknown }).comments)
+        ? ((raw as { comments: RawInstagramComment[] }).comments)
+        : Array.isArray(
+              (raw as { data?: { comments?: unknown } }).data?.comments
+            )
+          ? ((raw as { data: { comments: RawInstagramComment[] } }).data.comments)
+          : [];
+    const items: ResearchRawItem[] = [];
+    for (const c of list) {
+      const text = c.text ?? c.comment;
+      const id = c.pk ?? c.id;
+      if (!text || !id) continue;
+      const author =
+        c.user?.username ?? c.owner?.username ?? c.username ?? null;
+      const createdSec = c.created_at ?? c.created_at_utc;
+      items.push({
+        platform: "instagram",
+        externalId: String(id),
+        url: postUrl,
+        title: null,
+        excerpt: text.slice(0, 2000),
+        author: author ?? c.user?.full_name ?? null,
+        createdAtMs: createdSec ? createdSec * 1000 : null,
+        engagement: {
+          likes: c.like_count ?? c.comment_like_count ?? null,
+          comments: null,
+          shares: null,
+          views: null,
+          upvotes: null,
+          downvotes: null,
+        },
+        tags: ["comment"],
+        rawRef,
+      });
+    }
+    return { items, statusDetail: "ok" };
+  } catch (err) {
+    return softFail("instagram", err, rawRef);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// YouTube — search (/v1/youtube/search) + video comments
+// (/v1/youtube/video/comments). [shape-defensive] mirrors the live-verified
+// agent-side tools; we accept several plausible field names and soft-fail so a
+// shape surprise yields "no results" rather than throwing into research.
+// ──────────────────────────────────────────────────────────────────────
+
+interface RawYouTubeVideo {
+  id?: string;
+  video_id?: string;
+  videoId?: string;
+  title?: string;
+  url?: string;
+  link?: string;
+  description?: string;
+  snippet?: string;
+  channel?: string | { name?: string; title?: string };
+  channel_name?: string;
+  author?: string;
+  view_count?: number;
+  views?: number;
+  published_time?: string;
+  publishedTimeMs?: number;
+}
+
+function ytVideoId(v: RawYouTubeVideo): string | null {
+  return v.id ?? v.video_id ?? v.videoId ?? null;
+}
+
+function ytChannel(v: RawYouTubeVideo): string | null {
+  if (typeof v.channel === "string") return v.channel;
+  if (v.channel && typeof v.channel === "object")
+    return v.channel.name ?? v.channel.title ?? null;
+  return v.channel_name ?? v.author ?? null;
+}
+
+export async function youtubeSearch(
+  client: ScrapeCreatorsClient,
+  query: string
+): Promise<WrapperResult> {
+  const params = { query };
+  const rawRef = rawRefOf("youtube", "search", hashParams(params));
+  try {
+    const raw = await client.request<Record<string, unknown>>(
+      "/v1/youtube/search",
+      { query: params as Record<string, string | number | boolean | undefined> }
+    );
+    const list: RawYouTubeVideo[] = Array.isArray(raw)
+      ? (raw as RawYouTubeVideo[])
+      : Array.isArray((raw as { videos?: unknown }).videos)
+        ? ((raw as { videos: RawYouTubeVideo[] }).videos)
+        : Array.isArray((raw as { results?: unknown }).results)
+          ? ((raw as { results: RawYouTubeVideo[] }).results)
+          : [];
+    const items: ResearchRawItem[] = [];
+    for (const v of list) {
+      const id = ytVideoId(v);
+      if (!id) continue;
+      items.push({
+        platform: "youtube",
+        externalId: id,
+        url: v.url ?? v.link ?? `https://www.youtube.com/watch?v=${id}`,
+        title: v.title ?? null,
+        excerpt: (v.description ?? v.snippet ?? v.title ?? "").slice(0, 2000),
+        author: ytChannel(v),
+        createdAtMs: v.publishedTimeMs ?? null,
+        engagement: {
+          likes: null,
+          comments: null,
+          shares: null,
+          views: v.view_count ?? v.views ?? null,
+          upvotes: null,
+          downvotes: null,
+        },
+        tags: [],
+        rawRef,
+      });
+    }
+    return { items, statusDetail: "ok" };
+  } catch (err) {
+    return softFail("youtube", err, rawRef);
+  }
+}
+
+interface RawYouTubeComment {
+  id?: string;
+  comment_id?: string;
+  text?: string;
+  comment?: string;
+  content?: string;
+  author?: string | { name?: string };
+  channel?: string;
+  like_count?: number;
+  votes?: number;
+  published_time?: string;
+}
+
+export async function youtubeVideoComments(
+  client: ScrapeCreatorsClient,
+  videoUrl: string,
+  options: { amount?: number } = {}
+): Promise<WrapperResult> {
+  const params = { url: videoUrl, amount: options.amount ?? 30 };
+  const rawRef = rawRefOf("youtube", "video/comments", hashParams(params));
+  try {
+    const raw = await client.request<Record<string, unknown>>(
+      "/v1/youtube/video/comments",
+      { query: params as Record<string, string | number | boolean | undefined> }
+    );
+    const list: RawYouTubeComment[] = Array.isArray(raw)
+      ? (raw as RawYouTubeComment[])
+      : Array.isArray((raw as { comments?: unknown }).comments)
+        ? ((raw as { comments: RawYouTubeComment[] }).comments)
+        : Array.isArray((raw as { data?: { comments?: unknown } }).data?.comments)
+          ? ((raw as { data: { comments: RawYouTubeComment[] } }).data.comments)
+          : [];
+    const items: ResearchRawItem[] = [];
+    for (const c of list) {
+      const text = c.text ?? c.comment ?? c.content;
+      const id = c.id ?? c.comment_id;
+      if (!text || !id) continue;
+      const author =
+        typeof c.author === "string"
+          ? c.author
+          : c.author?.name ?? c.channel ?? null;
+      items.push({
+        platform: "youtube",
+        externalId: String(id),
+        url: videoUrl,
+        title: null,
+        excerpt: text.slice(0, 2000),
+        author,
+        createdAtMs: null,
+        engagement: {
+          likes: c.like_count ?? c.votes ?? null,
+          comments: null,
+          shares: null,
+          views: null,
+          upvotes: null,
+          downvotes: null,
+        },
+        tags: ["comment"],
+        rawRef,
+      });
+    }
+    return { items, statusDetail: "ok" };
+  } catch (err) {
+    return softFail("youtube", err, rawRef);
   }
 }
 

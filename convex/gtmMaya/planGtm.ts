@@ -178,10 +178,11 @@ function coerceCap(value: unknown, fallback: number): number {
  *
  * Fail-closed semantics: an unset, unknown, corrupt, or none/past_due-status
  * `gtmPlanJson` returns `FAIL_CLOSED_DEFAULT` (research/draft only, caps = 0,
- * ban-safety + attribution const-true). An `active` plan returns the full
- * gtm99 feature set with caps drawn from the JSON (or the fair-use defaults if
- * the JSON omits them). A `trialing` plan can research/draft but cannot
- * auto-post — the 14-day trial downshifts to research/draft-only.
+ * ban-safety + attribution const-true). An `active`, `past_due`, or `trialing`
+ * plan returns the full gtm99 feature set with caps drawn from the JSON (or the
+ * fair-use defaults). Trial = FULL access (operator decision 2026-06-07) so the
+ * founder sees the core value; on trial expiry without payment the subscription
+ * lapses to status:"none" → FAIL_CLOSED_DEFAULT.
  *
  * This intentionally does NOT throw because reads against this helper happen
  * all over the codebase and we want consistent gating semantics rather than
@@ -243,12 +244,32 @@ export function planFeaturesGtm(agent: {
   }
 
   if (status === "trialing") {
-    // 14-day trial → research/draft-only (no auto-post). Caps = 0 so nothing
-    // posts during the trial, but research/draft/attribution/ban-safety stay
-    // on. This is the most-restrictive-valid rule applied to the trial state.
+    // Trial → FULL access (operator decision 2026-06-07). The founder must
+    // experience the core value during the trial — Maya actually posting + the
+    // closed-loop "here's what converted" — or they won't convert. Margin is
+    // protected by the short trial window (GTM_TRIAL_DAYS, default 7) + the
+    // spend kill-switch + fair-use caps, NOT by withholding the product. On
+    // trial expiry without payment the subscription lapses to status:"none" →
+    // FAIL_CLOSED_DEFAULT (research/draft only).
     return {
-      ...FAIL_CLOSED_DEFAULT,
+      ...GTM99_ACTIVE,
       status: "trialing",
+      connectedChannelCap: coerceCap(
+        parsed.connectedChannelCap,
+        DEFAULT_CAPS.connectedChannelCap
+      ),
+      autoPostChannelCap: coerceCap(
+        parsed.autoPostChannelCap,
+        DEFAULT_CAPS.autoPostChannelCap
+      ),
+      videoCreditsMonth: coerceCap(
+        parsed.videoCreditsMonth,
+        DEFAULT_CAPS.videoCreditsMonth
+      ),
+      xUrlPostsSoftCapMonth: coerceCap(
+        parsed.xUrlPostsSoftCapMonth,
+        DEFAULT_CAPS.xUrlPostsSoftCapMonth
+      ),
     };
   }
 
@@ -319,4 +340,40 @@ export function canPostXUrlGtm(
   currentPeriodXUrlPosts: number
 ): boolean {
   return currentPeriodXUrlPosts < features.xUrlPostsSoftCapMonth;
+}
+
+/**
+ * Free-trial length in days. Operator decision 2026-06-07: short trial (the
+ * program is expensive — always-on agent + research + video). 7 shows a week of
+ * real posting + early conversion signal while halving the 14-day COGS; drop to
+ * 3 by changing this one constant. Env-overridable via GTM_TRIAL_DAYS.
+ */
+export function gtmTrialDays(): number {
+  const env = Number(process.env.GTM_TRIAL_DAYS);
+  return Number.isFinite(env) && env > 0 ? Math.floor(env) : 7;
+}
+
+/**
+ * Build the `gtmPlanJson` string written onto gtmAgents by the Stripe webhook
+ * (and the operator comp path). The resolver `planFeaturesGtm` parses exactly
+ * this shape. `periodStart` lets usage counters reset per billing period.
+ */
+export function buildGtmPlanJson(input: {
+  status: GtmPlanStatus;
+  periodStartMs?: number;
+  /** Optional cap overrides; omit for the full gtm99 fair-use ceilings. */
+  caps?: Partial<{
+    connectedChannelCap: number;
+    autoPostChannelCap: number;
+    videoCreditsMonth: number;
+    xUrlPostsSoftCapMonth: number;
+  }>;
+}): string {
+  return JSON.stringify({
+    tier: "gtm99",
+    status: input.status,
+    ...(input.caps ?? {}),
+    periodStart: input.periodStartMs ?? null,
+    usage: { autoPostsThisPeriod: 0, xUrlPostsThisPeriod: 0, videosThisPeriod: 0 },
+  });
 }

@@ -443,6 +443,34 @@ describe("endpoints — YouTube", () => {
     const { client } = clientReturning({ videos: 42 });
     await expect(youtube.recentVideos("x", 30, { client })).rejects.toThrow();
   });
+
+  it("parses the current /channel-videos shape (Int variants + publishDate) and hits the hyphenated path", async () => {
+    const { client, fetchImpl } = clientReturning({
+      videos: [
+        {
+          id: "mk_wdHePbtQ",
+          url: "https://www.youtube.com/watch?v=mk_wdHePbtQ",
+          title: "I built a thing",
+          publishDate: "2026-05-01T12:00:00Z",
+          viewCountInt: 152000,
+          likeCountInt: 8800,
+          commentCountInt: 640,
+          lengthSeconds: 733,
+        },
+      ],
+    });
+    const videos = await youtube.recentVideos("@mkbhd", 30, { client });
+    expect(videos).toHaveLength(1);
+    expect(videos[0].caption).toBe("I built a thing");
+    expect(videos[0].metrics.viewCount).toBe(152000);
+    expect(videos[0].metrics.likeCount).toBe(8800);
+    expect(videos[0].metrics.commentCount).toBe(640);
+    expect(videos[0].postedAt).toBeGreaterThan(1_700_000_000);
+    // Regression: must call the current hyphenated path, not the 404ing /channel/videos.
+    const calledUrl = String(fetchImpl.mock.calls[0][0]);
+    expect(calledUrl).toContain("/v1/youtube/channel-videos");
+    expect(calledUrl).not.toContain("/channel/videos");
+  });
 });
 
 describe("endpoints — LinkedIn", () => {
@@ -489,5 +517,38 @@ describe("endpoints — X (Twitter)", () => {
   it("throws on tweets being a string", async () => {
     const { client } = clientReturning({ tweets: "nope" });
     await expect(x.recentPosts("y", 5, { client })).rejects.toThrow();
+  });
+
+  it("parses the current /user-tweets GraphQL shape (legacy.full_text + rest_id + views.count) and hits the hyphenated path", async () => {
+    const { client, fetchImpl } = clientReturning({
+      tweets: [
+        {
+          __typename: "Tweet",
+          rest_id: "1950000000000000123",
+          url: "https://x.com/paulg/status/1950000000000000123",
+          views: { count: "98000" },
+          legacy: {
+            full_text: "The best founders write their own first 100 replies.",
+            created_at: "Wed Apr 22 18:00:00 +0000 2026",
+            favorite_count: 1203,
+            reply_count: 47,
+            retweet_count: 88,
+          },
+        },
+      ],
+    });
+    const tweets = await x.recentPosts("paulg", 20, { client });
+    expect(tweets).toHaveLength(1);
+    expect(tweets[0].postId).toBe("1950000000000000123");
+    expect(tweets[0].caption).toContain("first 100 replies");
+    expect(tweets[0].metrics.likeCount).toBe(1203);
+    expect(tweets[0].metrics.commentCount).toBe(47);
+    expect(tweets[0].metrics.shareCount).toBe(88);
+    expect(tweets[0].metrics.viewCount).toBe(98000);
+    expect(tweets[0].url).toContain("x.com/paulg/status/1950000000000000123");
+    // Regression: must call the current hyphenated path, not the 404ing /user/tweets.
+    const calledUrl = String(fetchImpl.mock.calls[0][0]);
+    expect(calledUrl).toContain("/v1/twitter/user-tweets");
+    expect(calledUrl).not.toContain("/user/tweets");
   });
 });

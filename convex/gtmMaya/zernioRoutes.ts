@@ -78,8 +78,16 @@ export const zernioPostHttp = httpAction(async (ctx, request) => {
     );
   }
 
+  // Link placement: on LinkedIn/IG/YouTube a URL in the caption costs ~40-50%
+  // organic reach, so drop it in the FIRST COMMENT instead and keep the caption
+  // clean. Other channels keep the link inline (X cost is handled separately via
+  // quoteTweet; Reddit/TikTok carry it in the one-tap draft).
+  const FIRST_COMMENT_CHANNELS = new Set(["linkedin", "instagram", "youtube"]);
+  const hasUrl = !!body.url && body.url.length > 0;
+  const useFirstComment = hasUrl && FIRST_COMMENT_CHANNELS.has(body.channel);
   const content =
-    body.url && body.url.length > 0 ? `${body.content} ${body.url}` : body.content;
+    hasUrl && !useFirstComment ? `${body.content} ${body.url}` : body.content;
+  const firstComment = useFirstComment ? body.url : undefined;
 
   const result = await ctx.runAction(
     internal.gtmMaya.publishEngine.publishContentDirect,
@@ -88,6 +96,7 @@ export const zernioPostHttp = httpAction(async (ctx, request) => {
       channel: body.channel,
       zernioAccountId,
       content,
+      firstComment,
       scheduleAtMs: body.scheduleAtMs,
       targetExternalId: body.targetExternalId,
       targetCommentId: body.targetCommentId,

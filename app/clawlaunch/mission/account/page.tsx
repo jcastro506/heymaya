@@ -6,7 +6,7 @@
  */
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
   Shell,
@@ -33,8 +33,27 @@ export default function AccountPage() {
   const deleteAccount = useMutation(
     api.gtmMaya.missionControl.deleteMyGtmAccount
   );
+  const startCheckout = useAction(
+    api.billing.gtmBilling.createGtmCheckoutSession
+  );
   const [confirming, setConfirming] = useState(false);
   const [deleted, setDeleted] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  async function handleSubscribe() {
+    setCheckingOut(true);
+    setCheckoutError(null);
+    try {
+      const { url } = await startCheckout({ interval: "monthly" });
+      window.location.href = url;
+    } catch (err) {
+      setCheckoutError(
+        err instanceof Error ? err.message : "Could not start checkout."
+      );
+      setCheckingOut(false);
+    }
+  }
 
   if (account === undefined) return <Loading />;
   if (account === null) return <NeedsOnboarding />;
@@ -114,6 +133,24 @@ export default function AccountPage() {
               value={new Date(account.deployedAt).toISOString().slice(0, 10)}
             />
           ) : null}
+          <div className="mt-4 flex flex-col gap-2 border-t border-paper-faint/15 pt-4">
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm text-paper-dim">
+                HeyMaya is <span className="text-paper">$99/mo</span>. Your first
+                week is free — subscribe any time to keep Maya running.
+              </p>
+              <button
+                onClick={handleSubscribe}
+                disabled={checkingOut}
+                className="shrink-0 rounded-lg bg-lime px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink disabled:opacity-50"
+              >
+                {checkingOut ? "Starting…" : "Subscribe — $99/mo"}
+              </button>
+            </div>
+            {checkoutError ? (
+              <p className="text-xs text-[#b3261e]">{checkoutError}</p>
+            ) : null}
+          </div>
         </Card>
       </Section>
 

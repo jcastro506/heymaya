@@ -130,6 +130,10 @@ export const seedGtmAgentAndApp = internalMutation({
     stage: v.union(v.literal("idea"), v.literal("live-beta"), v.literal("paid"), v.literal("unknown")),
     weekGoal: v.union(v.literal("feedback"), v.literal("signups"), v.literal("demos"), v.literal("revenue"), v.literal("unknown")),
     budgetUsd: v.number(),
+    // Optional per-agent override of the 24h hard spend kill ceiling (see
+    // gtmMaya/spendKill.ts). Lets a watched test bound damage tighter than the
+    // default $6/24h. Unset → default applies.
+    spendKillCapUsd: v.optional(v.number()),
     channelPreference: v.optional(v.union(v.literal("whatsapp"), v.literal("imessage"), v.literal("web"), v.literal("telegram"))),
     // Verification/test deploys: force all-platform coverage in the workspace.
     verifyAllPlatforms: v.optional(v.boolean()),
@@ -171,6 +175,7 @@ export const seedGtmAgentAndApp = internalMutation({
       channelPreference: channel,
       timezone: TEST_TIMEZONE,
       verifyAllPlatforms: args.verifyAllPlatforms,
+      spendKillCapUsd: args.spendKillCapUsd,
       createdAt: now,
       updatedAt: now,
     });
@@ -736,6 +741,9 @@ export const analyzeAuxSynth = internalQuery({
         reasons: s.reasons,
         firstWeekTest: s.firstWeekTest,
         summary: s.summary,
+        workingFormats: s.workingFormatsJson
+          ? JSON.parse(s.workingFormatsJson)
+          : undefined,
       })),
       totalCards: cards.length,
       bySource,
@@ -1071,6 +1079,7 @@ export const run = internalAction({
     stage: v.optional(v.union(v.literal("idea"), v.literal("live-beta"), v.literal("paid"), v.literal("unknown"))),
     weekGoal: v.optional(v.union(v.literal("feedback"), v.literal("signups"), v.literal("demos"), v.literal("revenue"), v.literal("unknown"))),
     budgetUsd: v.optional(v.number()),
+    spendKillCapUsd: v.optional(v.number()),
     deployFly: v.optional(v.boolean()),
     telegramChatId: v.optional(v.string()),
     skipResearch: v.optional(v.boolean()),
@@ -1112,6 +1121,7 @@ export const run = internalAction({
         stage: args.stage ?? "live-beta",
         weekGoal: args.weekGoal ?? "signups",
         budgetUsd: args.budgetUsd ?? 0.5,
+        spendKillCapUsd: args.spendKillCapUsd,
         verifyAllPlatforms: args.verifyAllPlatforms,
         appType: args.appType,
         appStoreUrl: args.appStoreUrl,

@@ -17,7 +17,8 @@ import { buildResearchQueryPlan, type IcpHypothesisInput } from "./researchQuery
 import type { PlatformResearchResult } from "./platformWorkers";
 import { scoreAllCardsForProduct } from "./judgeCardsBatch";
 import { judgeAllChannels } from "./judgeChannel";
-import { mineTopRedditCards } from "./mineCommentTrees";
+import { mineTopRedditCards, mineTopVideoCards } from "./mineCommentTrees";
+import { extractWorkingFormats } from "./formatIntel";
 import { ScrapeCreatorsClient } from "../integrations/scrapeCreators/client";
 import { fireBootPhase2Webhook } from "./phase2Trigger";
 
@@ -410,6 +411,7 @@ export const recordLlmCost = internalMutation({
       cardScorer: v.number(),
       commentMiner: v.number(),
       channelJudge: v.number(),
+      formatIntel: v.number(),
     }),
   },
   handler: async (ctx, args): Promise<void> => {
@@ -718,6 +720,7 @@ export const insertChannelScores = internalMutation({
           v.literal("hn"),
           v.literal("linkedin"),
           v.literal("tiktok"),
+          v.literal("instagram"),
           v.literal("youtube"),
           v.literal("product_hunt")
         ),
@@ -742,6 +745,10 @@ export const insertChannelScores = internalMutation({
         }),
       })
     ),
+    // Format intelligence per channel, keyed by channel name → JSON-stringified
+    // WorkingFormat[] (formatIntel.extractWorkingFormats). Attached to the
+    // matching channel's score row so the plan + cron can ground "how to post".
+    workingFormatsByChannel: v.optional(v.record(v.string(), v.string())),
   },
   handler: async (ctx, args): Promise<void> => {
     const job = await ctx.db.get(args.researchJobId);
@@ -752,6 +759,7 @@ export const insertChannelScores = internalMutation({
         accountId: job.accountId,
         researchJobId: args.researchJobId,
         ...score,
+        workingFormatsJson: args.workingFormatsByChannel?.[score.channel],
         createdAt: now,
       });
     }
@@ -808,6 +816,7 @@ export const runBudgetedResearchJob = internalAction({
       cardScorer: 0,
       commentMiner: 0,
       channelJudge: 0,
+      formatIntel: 0,
     };
 
     // Sprint 2.14a.2 — safety net. Live observed: ModelHub v6/v7
@@ -931,6 +940,7 @@ export const runBudgetedResearchJob = internalAction({
       twitter: internal.gtmMaya.platformWorkers.runTwitterWorker,
       tiktok: internal.gtmMaya.platformWorkers.runTikTokWorker,
       instagram: internal.gtmMaya.platformWorkers.runInstagramWorker,
+      youtube: internal.gtmMaya.platformWorkers.runYouTubeWorker,
       google: internal.gtmMaya.platformWorkers.runGoogleWorker,
     };
     const workerPromises: Promise<PlatformResearchResult>[] = [];
@@ -1091,9 +1101,19 @@ export const runBudgetedResearchJob = internalAction({
             icpPainPhrases: expansion.icpPainPhrases ?? [],
             productCategoryKeywords: expansion.productCategoryKeywords ?? [],
           };
-          const mineResult = await mineTopRedditCards(cardsForMining, product, {
-            scrapeClient,
-          });
+          // Mine Reddit threads AND the visual bet channels (TikTok / Instagram)
+          // so the channel judge grounds the video channels on real comment
+          // buyer-language, not caption + view counts. Run in parallel.
+          const [redditMine, videoMine] = await Promise.all([
+            mineTopRedditCards(cardsForMining, product, { scrapeClient }),
+            mineTopVideoCards(cardsForMining, product, { scrapeClient }),
+          ]);
+          const mineResult = {
+            results: [...redditMine.results, ...videoMine.results],
+            attempted: redditMine.attempted + videoMine.attempted,
+            succeeded: redditMine.succeeded + videoMine.succeeded,
+            costUsd: redditMine.costUsd + videoMine.costUsd,
+          };
           const toPatch = mineResult.results
             .filter((r) => r.insights !== null)
             .map((r) => ({
@@ -1116,7 +1136,8 @@ export const runBudgetedResearchJob = internalAction({
           );
           llmCost.commentMiner = mineResult.costUsd;
           console.log(
-            `[gtm/commentMiner] attempted=${mineResult.attempted} succeeded=${mineResult.succeeded} costUsd=${mineResult.costUsd.toFixed(6)}`
+            `[gtm/commentMiner] reddit(attempted=${redditMine.attempted} ok=${redditMine.succeeded}) ` +
+              `video(attempted=${videoMine.attempted} ok=${videoMine.succeeded}) costUsd=${mineResult.costUsd.toFixed(6)}`
           );
         } else {
           console.log("[gtm/commentMiner] skipped — no ScrapeCreators API key");
@@ -1133,6 +1154,59 @@ export const runBudgetedResearchJob = internalAction({
       internal.gtmMaya.researchWorker.getEvidenceCardsForScoring,
       { researchJobId: args.researchJobId }
     );
+
+    // ── Format intelligence: "what's working in the niche" for the visual
+    // channels. Rank the niche's video posts by ENGAGEMENT (not pain) and
+    // LLM-extract the content formats that perform, with a real exemplar + hook.
+    // This is what grounds "how to post" — the pain miner above grounds "who
+    // buys / what hurts." Best-effort; never blocks the job.
+    let workingFormatsByChannel: Record<string, string> | undefined;
+    try {
+      const scrapeKeyFmt =
+        process.env.SCRAPE_CREATORS_API_KEY ??
+        process.env.SCRAPECREATORS_API_KEY;
+      const fmt = await extractWorkingFormats(
+        cardsWithInsights.map((c) => ({
+          id: c.id!,
+          source: c.source,
+          url: c.url,
+          title: c.title,
+          snippet: c.snippet,
+          engagement: c.engagement ?? {},
+          commentInsights: c.commentInsights
+            ? { summary: c.commentInsights.summary }
+            : null,
+        })),
+        { productName: app.name ?? "Untitled product", productUrl: app.url },
+        {
+          scrapeClient: scrapeKeyFmt
+            ? new ScrapeCreatorsClient({ apiKey: scrapeKeyFmt })
+            : undefined,
+          // WATCH the top performers via Gemini vision (video-synth-worker);
+          // falls back to transcript/caption text if the worker is down.
+          watch: true,
+          accountId: String(creatorId),
+        }
+      );
+      llmCost.formatIntel = fmt.costUsd;
+      const entries = Object.entries(fmt.byChannel).filter(
+        ([, f]) => f && f.length > 0
+      );
+      if (entries.length > 0) {
+        workingFormatsByChannel = Object.fromEntries(
+          entries.map(([ch, f]) => [ch, JSON.stringify(f)])
+        );
+      }
+      console.log(
+        `[gtm/formatIntel] formats for [${entries
+          .map(([c]) => `${c}:${fmt.groundedIn[c as keyof typeof fmt.groundedIn] ?? "?"}`)
+          .join(",") || "none"}] costUsd=${fmt.costUsd.toFixed(6)}`
+      );
+    } catch (err) {
+      console.warn(
+        `[gtm/formatIntel] failed (non-fatal, plan proceeds without format intel): ${(err as Error).message}`
+      );
+    }
 
     // ── Sprint 2.13b: LLM channel-judge.
     // Replaces the weighted-formula evaluateChannelSet that was
@@ -1205,12 +1279,13 @@ export const runBudgetedResearchJob = internalAction({
         internal.gtmMaya.researchWorker.insertChannelScores,
         {
           researchJobId: args.researchJobId,
-          // Defense in depth: never persist a channel we no longer score
-          // or surface in the picker (youtube/product_hunt are vestigial).
+          // Defense in depth: drop only channels we never post to. TikTok /
+          // Instagram / YouTube ARE postable bet channels (the visual set for
+          // consumer products) and must persist. HN is research-only and
+          // product_hunt is a one-day event — neither is a steady-state
+          // posting channel, so neither is surfaced in the picker.
           scores: scores
-            .filter(
-              (s) => s.channel !== "youtube" && s.channel !== "product_hunt"
-            )
+            .filter((s) => s.channel !== "product_hunt" && s.channel !== "hn")
             .map((s) => ({
             channel: s.channel,
             score: s.score,
@@ -1225,6 +1300,7 @@ export const runBudgetedResearchJob = internalAction({
             firstWeekTest: s.firstWeekTest,
             qualityGate: s.qualityGate,
           })),
+          workingFormatsByChannel,
         }
       );
     }
@@ -1334,7 +1410,8 @@ export const runBudgetedResearchJob = internalAction({
       llmCost.keywordExpansion +
       llmCost.cardScorer +
       llmCost.commentMiner +
-      llmCost.channelJudge;
+      llmCost.channelJudge +
+      llmCost.formatIntel;
     try {
       await ctx.runMutation(
         internal.gtmMaya.researchWorker.recordLlmCost,

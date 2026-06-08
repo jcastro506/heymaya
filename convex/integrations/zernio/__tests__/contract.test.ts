@@ -24,8 +24,10 @@ import {
   deleteAccount,
   getAccountsHealth,
   getConnectUrl,
+  getBestTime,
   getFollowerStats,
   getPostAnalytics,
+  getPostTimeline,
   listAccounts,
   listConversations,
   listInboxComments,
@@ -111,6 +113,25 @@ describe("multiPlatformPost — spec POST /api/v1/posts body", () => {
     expect(out.perPlatform[0].platform).toBe("x");
     expect(out.perPlatform[0].state).toBe("published");
     expect(out.perPlatform[0].postId).toBe("tw_1");
+  });
+
+  it("LinkedIn first-comment link-drop: URL rides platformSpecificData.firstComment, never the caption (recovers the reach penalty)", async () => {
+    const rec = recordingClient({
+      platforms: [{ platform: "linkedin", status: "scheduled", platformPostId: "li_1" }],
+    });
+    const ctx = makeZernioContext(rec.client, ACCOUNT);
+    await multiPlatformPost(ctx, ["linkedin"], {
+      text: "what I learned shipping in public",
+      platformData: { linkedin: { firstComment: "https://hey-maya.ai" } },
+    });
+    const body = rec.lastBody();
+    // The link is OUT of the caption:
+    expect(body.content).toBe("what I learned shipping in public");
+    expect(String(body.content)).not.toContain("hey-maya.ai");
+    // ...and rides the target's platformSpecificData.firstComment instead:
+    const platforms = body.platforms as Array<Record<string, unknown>>;
+    const psd = platforms[0].platformSpecificData as Record<string, unknown>;
+    expect(psd.firstComment).toBe("https://hey-maya.ai");
   });
 
   it("explicit per-target accountId + platformSpecificData attaches on the target (NOT a top-level overrides object)", async () => {
@@ -358,6 +379,31 @@ describe("read wrappers hit the right paths with the right query params", () => 
     expect(url.pathname).toBe("/api/v1/accounts/follower-stats");
     expect(url.searchParams.get("accountIds")).toBe("a1,a2");
     expect(url.searchParams.get("granularity")).toBe("day");
+  });
+
+  it("getPostTimeline → GET /api/v1/analytics/post-timeline (closed-loop moat)", async () => {
+    const rec = recordingClient({ timeline: [{ date: "2026-06-01", impressions: 40 }] });
+    const out = await getPostTimeline(rec.client, {
+      postId: "post_9",
+      fromDate: "2026-06-01",
+      toDate: "2026-06-07",
+    });
+    const url = new URL(rec.lastUrl());
+    expect(url.pathname).toBe("/api/v1/analytics/post-timeline");
+    expect(url.searchParams.get("postId")).toBe("post_9");
+    expect(url.searchParams.get("fromDate")).toBe("2026-06-01");
+    // lenient passthrough surfaces the raw envelope:
+    expect((out.raw as { timeline: unknown[] }).timeline).toHaveLength(1);
+  });
+
+  it("getBestTime → GET /api/v1/analytics/best-time", async () => {
+    const rec = recordingClient({ slots: [{ day_of_week: 1, hour: 9, avg_engagement: 0.04 }] });
+    const out = await getBestTime(rec.client, { platform: "linkedin", profileId: PROFILE });
+    const url = new URL(rec.lastUrl());
+    expect(url.pathname).toBe("/api/v1/analytics/best-time");
+    expect(url.searchParams.get("platform")).toBe("linkedin");
+    expect(url.searchParams.get("profileId")).toBe(PROFILE);
+    expect((out.raw as { slots: unknown[] }).slots).toHaveLength(1);
   });
 
   it("listInboxComments → GET /api/v1/inbox/comments", async () => {

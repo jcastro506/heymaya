@@ -31,4 +31,25 @@ crons.monthly(
   internal.gtmMaya.archetypeBrain.runArchetypeRollup
 );
 
+// Hard spend kill-switch backstop. The telemetry endpoint kills a runaway
+// inline on each turn, but an agent that stops POSTing telemetry while keeping
+// an alive, billing machine would slip through — this sweep catches it. Every
+// 15 min: sum each live agent's rolling-window spend and destroy any over the
+// kill ceiling. See convex/gtmMaya/spendKill.ts.
+crons.interval(
+  "gtm-spend-kill-sweep",
+  { minutes: 15 },
+  internal.gtmMaya.spendKill.sweepSpendKill
+);
+
+// Deterministic synthesis safety-net. If an agent's foundation research is
+// complete but no plan was proposed within the grace window (the LLM synthesis
+// turn flaked), assemble the plan from stored research and send it directly so
+// the founder is never left without one. See convex/gtmMaya/synthesisDelivery.ts.
+crons.interval(
+  "gtm-synthesis-safety-net",
+  { minutes: 10 },
+  internal.gtmMaya.synthesisDelivery.sweepSynthesisSafetyNet
+);
+
 export default crons;

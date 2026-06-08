@@ -16,6 +16,7 @@ import {
   BUNDLED_GTM_PLUGIN_TGZ_NAME,
 } from "../../agents/packs/maya_gtm/bundledGtmPlugin";
 import { mintHookToken } from "../../gtmMaya/openclaw/hookClient";
+import { selectActiveChannels } from "../../gtmMaya/channelSelection";
 import {
   buildDeployTimeHelloText,
   sendDirectTelegramMessage,
@@ -31,13 +32,22 @@ import {
  */
 function toPickerChannel(
   channel: Doc<"gtmChannelScores">["channel"] | undefined
-): "reddit" | "x" | "hn" | "linkedin" | "tiktok" | "youtube" | undefined {
+):
+  | "reddit"
+  | "x"
+  | "hn"
+  | "linkedin"
+  | "tiktok"
+  | "instagram"
+  | "youtube"
+  | undefined {
   switch (channel) {
     case "reddit":
     case "x":
     case "hn":
     case "linkedin":
     case "tiktok":
+    case "instagram":
     case "youtube":
       return channel;
     default:
@@ -313,6 +323,22 @@ const MODEL_ROUTING = {
   // $0.60 in / $2.50 out — trivial vs the $99 tier; brain quality is
   // the anti-slop moat, so we don't cheap out here. Workers stay on
   // cheap Gemini 3 Flash. Env override preserved for fast swaps.
+  //
+  // 2026-06-05 — model PROVIDER routing saga (K2-0905 has only 3 OpenRouter
+  // providers: Novita, AtlasCloud, Groq):
+  //   - Default PRICE routing hit slow AtlasCloud (18.4s on a trivial call) →
+  //     blew past OpenClaw's 120s idle timeout → an all-night stall.
+  //   - ":nitro" (THROUGHPUT routing) fixed latency by pinning Groq (0.18s) BUT
+  //     Groq's strict tool-call validator REJECTS our complex/parallel tool
+  //     calls ("Upstream error from Groq: tool call validation") → it silently
+  //     killed agent turns mid-reply. Measured: Groq 0.18s (breaks tools),
+  //     Novita 1.4s (reliable), AtlasCloud 0.85s now / 18s under load.
+  // We can't pin Novita via the model config — OpenClaw only passes the model
+  // SLUG, and rejects extra model params (provider routing). So: DROP :nitro →
+  // price routing to the cheap providers (Novita/AtlasCloud, both tool-reliable)
+  // and AVOID Groq. The bulletproof version is an OpenRouter dashboard action:
+  // Provider Preferences → prefer/only "Novita" (or ignore Groq + AtlasCloud) —
+  // then routing is fast AND tool-safe regardless of slug. Env-overridable.
   mainMaya: process.env.MAYA_GTM_MODEL ?? "moonshotai/kimi-k2-0905",
   // Sprint 2.18 #42 — workers DOWNGRADED from gemini-3.5-flash to
   // gemini-3-flash-preview. Per OpenRouter pricing (verified 2026-05-28):
@@ -817,9 +843,13 @@ export function buildGatewayConfig(
         // stalled flows, pending approvals, due calendar events, and
         // result scans.
         heartbeat: {
-          // 5m keeps stuck boot/launch detection quick without making
-          // heartbeat the primary launch engine.
-          every: "5m",
+          // 30m: the heartbeat is only a watchdog/recovery net — foundation is
+          // driven by the BOOT turn, and the daily cadence by dedicated crons.
+          // 5m was a debug interval; at K2 prices a 5m tick that does real
+          // reasoning (or flails reading non-existent state files) burns ~$150/day
+          // on an idle agent. 30m = 6x fewer ticks. Most ticks must return
+          // HEARTBEAT_OK silently (see HEARTBEAT.md).
+          every: "30m",
           lightContext: true,
           isolatedSession: true,
           // Sprint 2.16u-fix2 — REMOVED activeHours because timezone was
@@ -1156,6 +1186,12 @@ export const buildAndUploadGtmWorkspace = internalAction({
       { agentId: args.agentId }
     );
 
+    // Channel-activation policy: turn the judge's scored rows into the SET of
+    // channels Maya actually runs (lock all high-fit, floor of 3, quality
+    // floor, honesty escape). One pure fn shared with the mission board + the
+    // onboarding picker so deploy and UI never disagree.
+    const channelSelection = selectActiveChannels(row.channelScores);
+
     const { files } = buildMayaGtmWorkspace({
       accountEmail: row.creator.email,
       timezone: row.agent.timezone,
@@ -1204,12 +1240,16 @@ export const buildAndUploadGtmWorkspace = internalAction({
       // Sprint 2.32 — the founder's walkthrough video, for Maya to watch
       // herself on boot rather than relying on a Convex-side pre-digest.
       walkthroughVideoUrl: row.walkthroughVideoUrl,
-      primaryChannel: toPickerChannel(
-        row.channelScores.find((s) => s.decision === "primary")?.channel
-      ),
-      secondaryChannel: toPickerChannel(
-        row.channelScores.find((s) => s.decision === "secondary")?.channel
-      ),
+      // Full active set + back-compat single fields, all from the policy so
+      // GTM.md renders exactly what Maya will run (not just the first
+      // primary/secondary row).
+      activeChannels: channelSelection.active
+        .map(toPickerChannel)
+        .filter((c): c is NonNullable<typeof c> => c !== undefined),
+      channelSelectionNote: channelSelection.note,
+      channelSelectionBelowFloor: channelSelection.belowFloor,
+      primaryChannel: toPickerChannel(channelSelection.primaryChannel ?? undefined),
+      secondaryChannel: toPickerChannel(channelSelection.secondaryChannel ?? undefined),
       activeResearchJobId: row.latestResearchJobId
         ? String(row.latestResearchJobId)
         : undefined,

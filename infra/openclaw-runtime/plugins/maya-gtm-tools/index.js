@@ -346,7 +346,7 @@ export default defineToolPlugin({
       name: "research_x",
       label: "Research X/Twitter",
       description:
-        "TwitterAPI.io advanced search. X's value is the REPLIES (~80% of pre-1K acquisition is reply-driven). Use query operators (min_faves:, since:, conversation_id:) and go deep, not one page.",
+        "TwitterAPI.io advanced search. X's value is the REPLIES (~80% of pre-1K acquisition is reply-driven). Operators: min_faves:N, filter:replies / -filter:replies, conversation_id:<id>, from:/to:/@user, lang:en. TIME = `since_time:<unix>` / `until_time:<unix>` (unix SECONDS — `since:`/`min_replies:` are NOT supported). Find a hot original, then pull its thread with research_x_thread. Go deep, paginate.",
       parameters: Type.Object({
         query: Type.String({ description: "advanced_search query string (supports operators)." }),
         queryType: Type.Optional(Enum(["Latest", "Top"], "Latest or Top; default Latest.")),
@@ -356,6 +356,63 @@ export default defineToolPlugin({
         twitterApiGet(
           "/twitter/tweet/advanced_search",
           { query, queryType: queryType ?? "Latest", cursor },
+          ctx.signal
+        ),
+    }),
+    tool({
+      name: "research_x_thread",
+      label: "Research X Thread",
+      description:
+        "Pull the REPLY THREAD under a tweet (the reply-driven 80% — repliers are pre-qualified, they care about the topic). Pass the tweetId (from research_x). Returns repliers + their text in `tweets`. Mine for buyer pain language AND warm reply targets. Paginate with cursor.",
+      parameters: Type.Object({
+        tweetId: Type.String({ description: "The tweet id whose replies to pull." }),
+        queryType: Type.Optional(Enum(["Likes", "Relevance", "Latest"], "Reply sort; default Likes (best first).")),
+        cursor: Type.Optional(Type.String()),
+      }),
+      execute: async ({ tweetId, queryType, cursor }, _cfg, ctx) =>
+        twitterApiGet(
+          "/twitter/tweet/replies/v2",
+          { tweetId, queryType: queryType ?? "Likes", cursor },
+          ctx.signal
+        ),
+    }),
+    tool({
+      name: "research_x_competitor_mentions",
+      label: "Research X Competitor Mentions",
+      description:
+        "Who's talking AT a competitor — the highest-converting X lead type (a public complaint at a competitor = a warm switch lead). Pass the competitor's userName (no @). Returns `tweets` mentioning them. Pair with research_x query `to:<competitor> (\"cancel\" OR \"alternative\" OR \"too expensive\")` for the sharpest switch-intent.",
+      parameters: Type.Object({
+        userName: Type.String({ description: "Competitor's X handle (no @)." }),
+      }),
+      execute: async ({ userName }, _cfg, ctx) =>
+        twitterApiGet("/twitter/user/mentions", { userName }, ctx.signal),
+    }),
+    tool({
+      name: "research_x_engaged_audience",
+      label: "Research X Engaged Audience",
+      description:
+        "Harvest the people who AMPLIFIED a viral post about the problem you solve — a hand-raised, pre-qualified list. Pass a tweetId. Returns retweeters as `users` (full profiles → filter by bio/follower fit). Use for 'who to go engage with' lists, never spam.",
+      parameters: Type.Object({
+        tweetId: Type.String({ description: "The tweet whose retweeters to harvest." }),
+        cursor: Type.Optional(Type.String()),
+      }),
+      execute: async ({ tweetId, cursor }, _cfg, ctx) =>
+        twitterApiGet("/twitter/tweet/retweeters", { tweetId, cursor }, ctx.signal),
+    }),
+    tool({
+      name: "research_x_user_timeline",
+      label: "Research X User Timeline",
+      description:
+        "Mine a specific account's recent tweets — competitor-watch (what they ship/announce, and with includeReplies how they handle customers in replies = their unanswered complaints are your opening) or grounding a personalized reply to a named buyer. Pass userName (no @).",
+      parameters: Type.Object({
+        userName: Type.String({ description: "X handle (no @)." }),
+        includeReplies: Type.Optional(Type.Boolean({ description: "Include their replies (default true — that's where the customer signal is)." })),
+        cursor: Type.Optional(Type.String()),
+      }),
+      execute: async ({ userName, includeReplies, cursor }, _cfg, ctx) =>
+        twitterApiGet(
+          "/twitter/user/last_tweets",
+          { userName, includeReplies: includeReplies ?? true, cursor },
           ctx.signal
         ),
     }),
@@ -384,11 +441,163 @@ export default defineToolPlugin({
       execute: async ({ objectId }, _cfg, ctx) =>
         algoliaHnGet(`https://hn.algolia.com/api/v1/items/${encodeURIComponent(objectId)}`, ctx.signal),
     }),
+    // ── First-class per-channel research (depth-parity with Reddit/HN/X). ──
+    // These exist so non-Reddit bet channels get mined as DEEP as Reddit — the
+    // generic scrape_creators hatch below was under-used, biasing research to
+    // Reddit. Search → drill the COMMENTS + TRANSCRIPT, never stop at counts.
+    tool({
+      name: "research_tiktok",
+      label: "Research TikTok",
+      description:
+        "Search TikTok videos by keyword (ScrapeCreators). The buyer language + winning formats live in the COMMENTS and TRANSCRIPTS — after you find videos, drill the top ones with research_video_comments({platform:'tiktok'}) + research_video_transcript({platform:'tiktok'}). Never stop at view counts. Returns videos with aweme_id + author.unique_id → build the url https://www.tiktok.com/@<unique_id>/video/<aweme_id> for the drill.",
+      parameters: Type.Object({
+        query: Type.String({ description: "Keyword / buyer-pain phrase." }),
+      }),
+      execute: async ({ query }, _cfg, ctx) =>
+        scrapeCreatorsGet("/v1/tiktok/search/keyword", { query }, ctx.signal),
+    }),
+    tool({
+      name: "research_youtube",
+      label: "Research YouTube",
+      description:
+        "Search YouTube videos (ScrapeCreators). The richest buyer language PER CREDIT is the TRANSCRIPT of videos ranking for a buyer-pain query, plus the COMMENTS. After searching, drill with research_video_transcript({platform:'youtube'}) + research_video_comments({platform:'youtube'}) on each result's url.",
+      parameters: Type.Object({
+        query: Type.String({ description: "Search query (buyer-pain language)." }),
+      }),
+      execute: async ({ query }, _cfg, ctx) =>
+        scrapeCreatorsGet("/v1/youtube/search", { query }, ctx.signal),
+    }),
+    tool({
+      name: "research_instagram",
+      label: "Research Instagram",
+      description:
+        "Search Instagram posts by hashtag (ScrapeCreators). Drill a post's COMMENTS with research_video_comments({platform:'instagram', url}) and reels with research_video_transcript({platform:'instagram', url}) — that's where buyer intent is, not the like counts. Returns posts with a `code`/shortcode → url https://www.instagram.com/p/<code>/.",
+      parameters: Type.Object({
+        hashtag: Type.String({ description: "Hashtag WITHOUT the # (e.g. 'buildinpublic')." }),
+      }),
+      execute: async ({ hashtag }, _cfg, ctx) =>
+        scrapeCreatorsGet("/v1/instagram/search/hashtag", { hashtag }, ctx.signal),
+    }),
+    tool({
+      name: "research_linkedin",
+      label: "Research LinkedIn",
+      description:
+        "Search LinkedIn posts platform-wide by query (ScrapeCreators). Mine the posts for how the ICP talks + which angles resonate (reactions/comments counts). LinkedIn has no public comment-tree API, so the post text + engagement IS the signal — read widely, quote real lines.",
+      parameters: Type.Object({
+        query: Type.String({ description: "Search query (buyer-pain / topic language)." }),
+      }),
+      execute: async ({ query }, _cfg, ctx) =>
+        scrapeCreatorsGet("/v1/linkedin/search/posts", { query }, ctx.signal),
+    }),
+    tool({
+      name: "research_video_comments",
+      label: "Research Video Comments",
+      description:
+        "Mine the COMMENTS on a TikTok/YouTube/Instagram post for buyer pain language (the intent lives in the replies, not the captions). Pass platform + the post/video url.",
+      parameters: Type.Object({
+        platform: Enum(["tiktok", "youtube", "instagram"], "Which platform the url is on."),
+        url: Type.String({ description: "Full post/video url." }),
+      }),
+      execute: async ({ platform, url }, _cfg, ctx) => {
+        const path =
+          platform === "tiktok"
+            ? "/v1/tiktok/video/comments"
+            : platform === "youtube"
+              ? "/v1/youtube/video/comments"
+              : "/v2/instagram/post/comments";
+        return scrapeCreatorsGet(path, { url }, ctx.signal);
+      },
+    }),
+    tool({
+      name: "research_video_transcript",
+      label: "Research Video Transcript",
+      description:
+        "Pull the TRANSCRIPT of a TikTok/YouTube/Instagram video — the hook + structure of what's working, in text, to mine for native phrasing and content angles. Pass platform + the video url. (YouTube returns transcript_only_text for a clean read.)",
+      parameters: Type.Object({
+        platform: Enum(["tiktok", "youtube", "instagram"], "Which platform the url is on."),
+        url: Type.String({ description: "Full video url." }),
+      }),
+      execute: async ({ platform, url }, _cfg, ctx) => {
+        const path =
+          platform === "tiktok"
+            ? "/v1/tiktok/video/transcript"
+            : platform === "youtube"
+              ? "/v1/youtube/video/transcript"
+              : "/v2/instagram/media/transcript";
+        return scrapeCreatorsGet(path, { url }, ctx.signal);
+      },
+    }),
+    // ── Competitive intelligence (the foundation dossier upgrade). ──
+    tool({
+      name: "competitor_ads",
+      label: "Competitor Ads",
+      description:
+        "See what a competitor is PAYING to run — their live ads, copy, offers, CTAs. A long-running ad is a PROVEN hook: extract the angle and ground the founder's ORGANIC posts in messaging the market already pays for (never copy verbatim). Pass the competitor's name as `query` (Meta/Facebook ad library — resolves their page + full active ad set) and/or their `domain` (Google ads, ~1 credit). Use in the foundation competitive sweep + monthly to catch new ads.",
+      parameters: Type.Object({
+        query: Type.Optional(Type.String({ description: "Competitor/brand name (Meta ad library)." })),
+        domain: Type.Optional(Type.String({ description: "Competitor domain, e.g. notion.so (Google ads)." })),
+        country: Type.Optional(Type.String({ description: "ISO country for Meta; default US." })),
+      }),
+      execute: async ({ query, domain, country }, _cfg, ctx) => {
+        if (!query && !domain) return "Pass `query` (competitor name) and/or `domain`.";
+        const out = {};
+        if (query) {
+          const companies = await scrapeCreatorsGet(
+            "/v1/facebook/adLibrary/search/companies",
+            { query },
+            ctx.signal
+          );
+          const page = (companies && companies.searchResults ? companies.searchResults : [])[0];
+          if (page && page.page_id) {
+            out.metaCompany = { name: page.name, page_id: page.page_id };
+            out.metaAds = await scrapeCreatorsGet(
+              "/v1/facebook/adLibrary/company/ads",
+              { pageId: page.page_id, country: country ?? "US" },
+              ctx.signal
+            );
+          } else {
+            out.metaAds = await scrapeCreatorsGet(
+              "/v1/facebook/adLibrary/search/ads",
+              { query, country: country ?? "US" },
+              ctx.signal
+            );
+          }
+        }
+        if (domain) {
+          out.googleAds = await scrapeCreatorsGet(
+            "/v1/google/company/ads",
+            { domain },
+            ctx.signal
+          );
+        }
+        return out;
+      },
+    }),
+    tool({
+      name: "bio_funnel",
+      label: "Bio Funnel",
+      description:
+        "Map a competitor's or prospect's link-in-bio funnel in ONE call — all destination links (lead magnet → pricing → community → newsletter). Reverse-engineers their conversion path. Pass the bio URL (Linktree / Komi / Linkbio / Pillar).",
+      parameters: Type.Object({
+        url: Type.String({ description: "The link-in-bio page url." }),
+      }),
+      execute: async ({ url }, _cfg, ctx) => {
+        const u = String(url).toLowerCase();
+        const path = u.includes("komi.")
+          ? "/v1/komi"
+          : u.includes("linkbio") || u.includes("lnk.bio")
+            ? "/v1/linkbio"
+            : u.includes("pillar.")
+              ? "/v1/pillar"
+              : "/v1/linktree";
+        return scrapeCreatorsGet(path, { url }, ctx.signal);
+      },
+    }),
     tool({
       name: "scrape_creators",
       label: "ScrapeCreators (generic)",
       description:
-        "Escape hatch for any ScrapeCreators endpoint not covered by research_reddit/x/hn — TikTok, Instagram, YouTube, LinkedIn, profiles, transcripts, comments. Pass the path (e.g. /v1/tiktok/search/keyword) and a query object. Runs server-side with the API key; never curl scrapecreators.com by hand.",
+        "Escape hatch for any ScrapeCreators endpoint NOT covered by the first-class research_* tools (research_reddit/x/hn/tiktok/youtube/instagram/linkedin + research_video_comments/transcript + competitor_ads + bio_funnel). Prefer those — they're depth-tuned. Pass the path (e.g. /v1/tiktok/profile) and a query object. Runs server-side with the API key; never curl scrapecreators.com by hand.",
       parameters: Type.Object({
         path: Type.String({
           description:
@@ -916,9 +1125,14 @@ export default defineToolPlugin({
     tool({
       name: "subagent_complete",
       label: "Subagent Complete",
-      description: "Signal a research subagent finished. REQUIRED: researchJobId.",
+      // researchJobId is OPTIONAL: in the "Maya owns research natively" model a
+      // natively-spawned worker often has no jobId in context. Requiring it made
+      // this call fail client-side validation, the worker saw a tool error,
+      // retried/flailed, and never terminated (a zombie burning tokens). A
+      // completion signal must never be able to fail and strand a worker.
+      description: "Signal a research subagent finished. Optional researchJobId.",
       parameters: Type.Object({
-        researchJobId: Type.String(),
+        researchJobId: Type.Optional(Type.String()),
         platform: Type.Optional(Type.String()),
       }),
       execute: async (p, _cfg, ctx) => postLc("subagent_complete", p, ctx.signal),
@@ -1548,6 +1762,20 @@ export default defineToolPlugin({
         getLc("get_connection_health", undefined, ctx.signal),
     }),
     tool({
+      name: "get_connect_links",
+      label: "Get Connect Links",
+      description:
+        "Generate one-tap connect links so the founder can hook up their accounts and I can start posting. Pass `channels` IN BET-PRIORITY ORDER (my top channel first) — I get back a link per channel, already-connected ones skipped. I send the #1 channel's link first in plain words ('Your top channel is X — tap to connect and I'll start posting the replies I've queued: <link>'), then the others as follow-ups. NEVER tell them to 'go to the dashboard' — I send the actual link. Returns { ok, links:[{channel, url}], alreadyConnected }.",
+      parameters: Type.Object({
+        channels: Type.Optional(
+          Type.Array(Type.String(), {
+            description: "Channels to connect, in priority order (my bet channels). Omit = all offered, not-yet-connected.",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("get_connect_links", p, ctx.signal),
+    }),
+    tool({
       name: "get_account_analytics",
       label: "Get Account Analytics",
       description:
@@ -1562,6 +1790,29 @@ export default defineToolPlugin({
       }),
       execute: async (p, _cfg, ctx) =>
         getLc("get_account_analytics", p, ctx.signal),
+    }),
+    tool({
+      name: "get_post_timeline",
+      label: "Get Post Timeline",
+      description:
+        "Per-post DAILY metric evolution (impressions/clicks/engagement day-by-day since publish) — the closed-loop attribution moat: correlate a post's spike to the wrapped-link signups (get_my_attribution). Pass postId (from record_published). Returns { ok, timeline } — or { ok:false, addonRequired:'analytics' } if the add-on is off (say so plainly; click attribution still works). Numbers stale/empty → say it, never fabricate.",
+      parameters: Type.Object({
+        postId: Type.String({ description: "The Zernio post id whose day-by-day metrics to read." }),
+        fromDate: Type.Optional(Type.String()),
+        toDate: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("get_post_timeline", p, ctx.signal),
+    }),
+    tool({
+      name: "get_best_time",
+      label: "Get Best Time",
+      description:
+        "Empirically-optimal posting slots per channel (day-of-week + hour, by avg engagement) — feeds the spread-out daily schedule so posts land when this audience is active, not all at 9am. Optional: platform, accountId. Returns { ok, bestTime } — or { ok:false, addonRequired:'analytics' } if the add-on is off (fall back to sensible defaults from PLATFORM_ALGO). Don't invent slots if empty.",
+      parameters: Type.Object({
+        platform: Type.Optional(Type.String()),
+        accountId: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("get_best_time", p, ctx.signal),
     }),
     tool({
       name: "get_follower_stats",

@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { mineTopRedditCards, PAIN_THRESHOLD } from "../mineCommentTrees";
+import {
+  mineTopRedditCards,
+  mineTopVideoCards,
+  PAIN_THRESHOLD,
+} from "../mineCommentTrees";
 import { ScrapeCreatorsClient } from "../../integrations/scrapeCreators/client";
 
 /**
@@ -218,5 +222,96 @@ describe("mineTopRedditCards", () => {
 
   it("threshold value matches the documented constant", () => {
     expect(PAIN_THRESHOLD).toBe(0.6);
+  });
+});
+
+// ── Fix B: video-channel comment mining (TikTok + Instagram) ──────────────
+
+/** Scrape client that dispatches by endpoint path: TikTok video comments,
+ *  Instagram post comments, each in that platform's native response shape. */
+function makeVideoScrapeClient(): ScrapeCreatorsClient {
+  return new ScrapeCreatorsClient({
+    apiKey: "k",
+    fetchImpl: vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/v1/tiktok/video/comments")) {
+        return new Response(
+          JSON.stringify({
+            comments: [
+              { cid: "tc1", text: "my monstera keeps dying no matter what", user: { unique_id: "u1", nickname: "Plant U" }, digg_count: 12 },
+              { cid: "tc2", text: "overwatering is the silent killer fr", user: { unique_id: "u2", nickname: "U2" }, digg_count: 8 },
+            ],
+            has_more: 0,
+          }),
+          { status: 200 }
+        );
+      }
+      if (url.includes("/v2/instagram/post/comments")) {
+        return new Response(
+          JSON.stringify({
+            comments: [
+              { pk: "ic1", text: "what app reminds you to water?", user: { username: "iguser" }, like_count: 4 },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      if (url.includes("/v1/youtube/video/comments")) {
+        return new Response(
+          JSON.stringify({
+            comments: [
+              { id: "yc1", text: "finally a tutorial that explains light levels", author: "ytuser", like_count: 9 },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response(JSON.stringify({ comments: [] }), { status: 200 });
+    }) as unknown as typeof fetch,
+  });
+}
+
+function videoCard(
+  id: string,
+  painMatch: number,
+  source: "tiktok" | "instagram" | "youtube",
+  url: string
+) {
+  return { id, url, title: `Card ${id}`, snippet: "caption", painMatch, source };
+}
+
+describe("mineTopVideoCards", () => {
+  it("mines TikTok + Instagram + YouTube cards (not reddit) and grounds them in comments", async () => {
+    const cards = [
+      videoCard("v1", 0.5, "tiktok", "https://www.tiktok.com/@u1/video/7123456789"),
+      videoCard("v2", 0.45, "instagram", "https://www.instagram.com/reel/abc123/"),
+      videoCard("v4", 0.5, "youtube", "https://www.youtube.com/watch?v=abcDEF123"),
+      // reddit card must NOT be mined by the video miner
+      makeCard("r1", 0.95, "reddit"),
+      // below VIDEO_PAIN_THRESHOLD (0.35) — skipped
+      videoCard("v3", 0.1, "tiktok", "https://www.tiktok.com/@u3/video/7000000000"),
+    ];
+    const r = await mineTopVideoCards(cards, PRODUCT, {
+      scrapeClient: makeVideoScrapeClient(),
+      apiKey: "k",
+      fetchImpl: makeOpenRouterFetch(CLEAN_INSIGHTS),
+    });
+    expect(r.attempted).toBe(3); // v1 (tiktok) + v2 (instagram) + v4 (youtube)
+    expect(r.succeeded).toBe(3);
+    expect(r.results.map((x) => x.cardId).sort()).toEqual(["v1", "v2", "v4"]);
+  });
+
+  it("skips a TikTok card whose url has no aweme id", async () => {
+    const cards = [
+      videoCard("bad", 0.9, "tiktok", "https://www.tiktok.com/@u/profile"),
+    ];
+    const r = await mineTopVideoCards(cards, PRODUCT, {
+      scrapeClient: makeVideoScrapeClient(),
+      apiKey: "k",
+      fetchImpl: makeOpenRouterFetch(CLEAN_INSIGHTS),
+    });
+    expect(r.succeeded).toBe(0);
+    expect(r.results[0]!.insights).toBeNull();
+    expect(r.results[0]!.skipReason).toBe("no-tiktok-id");
   });
 });

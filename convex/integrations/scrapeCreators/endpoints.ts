@@ -573,9 +573,14 @@ const YtVideoSchema = z
     title: z.string().optional(),
     description: z.string().optional(),
     publishedAt: z.union([z.string(), z.number()]).optional(),
+    // `/v1/youtube/channel-videos` (current path) returns these *Int/Date variants.
+    publishDate: z.string().optional(),
     viewCount: NumberLike.optional(),
+    viewCountInt: NumberLike.optional(),
     likeCount: NumberLike.optional(),
+    likeCountInt: NumberLike.optional(),
     commentCount: NumberLike.optional(),
+    commentCountInt: NumberLike.optional(),
     thumbnail: z.string().optional(),
     url: z.string().optional(),
     lengthSeconds: NumberLike.optional(),
@@ -670,10 +675,25 @@ const XProfileResponseSchema = z
   .passthrough()
   .or(XProfileSchema);
 
+// `/v1/twitter/user-tweets` (current path) returns the raw Twitter GraphQL
+// shape: text + engagement live under `legacy`, id under `rest_id`, views
+// under `views.count`. The old flat fields are kept for back-compat.
+const XLegacySchema = z
+  .object({
+    full_text: z.string().optional(),
+    created_at: z.string().optional(),
+    favorite_count: NumberLike.optional(),
+    reply_count: NumberLike.optional(),
+    retweet_count: NumberLike.optional(),
+    quote_count: NumberLike.optional(),
+  })
+  .passthrough();
+
 const XTweetSchema = z
   .object({
     id_str: z.string().optional(),
     id: z.string().optional(),
+    rest_id: z.string().optional(),
     full_text: z.string().optional(),
     text: z.string().optional(),
     created_at: z.string().optional(),
@@ -683,6 +703,9 @@ const XTweetSchema = z
     quote_count: NumberLike.optional(),
     view_count: NumberLike.optional(),
     media_url_https: z.string().optional(),
+    legacy: XLegacySchema.optional(),
+    views: z.object({ count: NumberLike.optional() }).passthrough().optional(),
+    url: z.string().optional(),
   })
   .passthrough();
 
@@ -1078,11 +1101,12 @@ function normalizeYtVideos(raw: unknown): NormalizedPost[] {
   const parsed = YtVideosResponseSchema.parse(raw);
   const list = parsed.videos ?? parsed.items ?? parsed.data?.videos ?? [];
   return list.map((v) => {
+    const publishedRaw = v.publishedAt ?? v.publishDate;
     const publishedAt =
-      typeof v.publishedAt === "string"
-        ? Math.floor(Date.parse(v.publishedAt) / 1000) || null
-        : typeof v.publishedAt === "number"
-          ? v.publishedAt
+      typeof publishedRaw === "string"
+        ? Math.floor(Date.parse(publishedRaw) / 1000) || null
+        : typeof publishedRaw === "number"
+          ? publishedRaw
           : null;
     return NormalizedPostSchema.parse({
       platform: "youtube",
@@ -1091,9 +1115,9 @@ function normalizeYtVideos(raw: unknown): NormalizedPost[] {
       caption: str(v.title),
       postedAt: publishedAt,
       metrics: {
-        likeCount: num(v.likeCount),
-        commentCount: num(v.commentCount),
-        viewCount: num(v.viewCount),
+        likeCount: num(v.likeCountInt) ?? num(v.likeCount),
+        commentCount: num(v.commentCountInt) ?? num(v.commentCount),
+        viewCount: num(v.viewCountInt) ?? num(v.viewCount),
         shareCount: null,
         saveCount: null,
       },
@@ -1192,18 +1216,21 @@ function normalizeXTweets(raw: unknown): NormalizedPost[] {
   const parsed = XTweetsResponseSchema.parse(raw);
   const list = parsed.tweets ?? parsed.data ?? parsed.items ?? [];
   return list.map((t) => {
-    const postedAt = t.created_at ? Math.floor(Date.parse(t.created_at) / 1000) || null : null;
+    const lg = t.legacy;
+    const id = t.rest_id ?? t.id_str ?? t.id ?? "";
+    const createdAt = lg?.created_at ?? t.created_at;
+    const postedAt = createdAt ? Math.floor(Date.parse(createdAt) / 1000) || null : null;
     return NormalizedPostSchema.parse({
       platform: "x",
-      postId: t.id_str ?? t.id ?? "",
-      url: t.id_str || t.id ? `https://x.com/i/status/${t.id_str ?? t.id}` : null,
-      caption: str(t.full_text ?? t.text),
+      postId: id,
+      url: t.url ?? (id ? `https://x.com/i/status/${id}` : null),
+      caption: str(lg?.full_text ?? t.full_text ?? t.text),
       postedAt,
       metrics: {
-        likeCount: num(t.favorite_count),
-        commentCount: num(t.reply_count),
-        viewCount: num(t.view_count),
-        shareCount: num(t.retweet_count),
+        likeCount: num(lg?.favorite_count) ?? num(t.favorite_count),
+        commentCount: num(lg?.reply_count) ?? num(t.reply_count),
+        viewCount: num(t.views?.count) ?? num(t.view_count),
+        shareCount: num(lg?.retweet_count) ?? num(t.retweet_count),
         saveCount: null,
       },
       mediaType: t.media_url_https ? "image" : "text",
@@ -1569,10 +1596,13 @@ export const youtube = {
     limit: number,
     deps?: EndpointDeps
   ): Promise<NormalizedPost[]> {
-    const raw = await clientOf(deps).request<unknown>("/v1/youtube/channel/videos", {
-      query: { handle, limit },
+    // Current path is `/v1/youtube/channel-videos` (hyphenated); the old
+    // `/v1/youtube/channel/videos` 404s. No `limit` param upstream — it returns
+    // one cursor page; we truncate to the caller's limit.
+    const raw = await clientOf(deps).request<unknown>("/v1/youtube/channel-videos", {
+      query: { handle },
     });
-    return normalizeYtVideos(raw);
+    return normalizeYtVideos(raw).slice(0, limit);
   },
   async video(
     videoId: string,
@@ -1621,10 +1651,13 @@ export const x = {
     limit: number,
     deps?: EndpointDeps
   ): Promise<NormalizedPost[]> {
-    const raw = await clientOf(deps).request<unknown>("/v1/twitter/user/tweets", {
-      query: { handle, limit },
+    // Current path is `/v1/twitter/user-tweets` (hyphenated); the old
+    // `/v1/twitter/user/tweets` 404s. Returns ~100 most-popular tweets (not
+    // chronological), no `limit` param — we truncate to the caller's limit.
+    const raw = await clientOf(deps).request<unknown>("/v1/twitter/user-tweets", {
+      query: { handle },
     });
-    return normalizeXTweets(raw);
+    return normalizeXTweets(raw).slice(0, limit);
   },
 };
 

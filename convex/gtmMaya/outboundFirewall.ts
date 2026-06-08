@@ -255,6 +255,33 @@ function detectAiPunctuation(
   return failures;
 }
 
+/**
+ * Mechanically fix the deterministic AI-punctuation tells (em/en-dash,
+ * spaced-hyphen-dash, colon-as-header) so an operator-facing message is
+ * DELIVERED clean rather than blackholed by a hard firewall block. A clean
+ * message is unchanged (the patterns simply don't match). This is the
+ * sanitize-and-send path for private operator DMs (send_update) — the firewall's
+ * job there is voice quality, not ban-safety, so a bounce that reaches no one is
+ * strictly worse than a comma where an em-dash was. Public POSTS still hard-gate.
+ */
+export function sanitizeOutboundText(text: string): string {
+  let out = text;
+  // Em-dash / en-dash (with any surrounding spaces) → comma+space (grammatical
+  // clause join, no capitalization needed).
+  out = out.replace(/\s*[—–]\s*/g, ", ");
+  // Spaced hyphen used as a dash ("word - word") → comma, EXCEPT numeric ranges.
+  out = out.replace(/(\S) - (\S)/g, (full, a, b) =>
+    /\d/.test(a) && /\d/.test(b) ? full : `${a}, ${b}`
+  );
+  // Colon-as-header ("Word: " / "Word:\n") → period. Naturally exempts URLs
+  // ("://" — colon not followed by whitespace) and times ("9:30" — no letter
+  // before the colon).
+  out = out.replace(/([A-Za-z]):(\s|$)/g, "$1.$2");
+  // Collapse any accidental double punctuation / spaces the swaps introduced.
+  out = out.replace(/,\s*,/g, ",").replace(/\.\s*\./g, ".").replace(/[ \t]{2,}/g, " ");
+  return out;
+}
+
 function findMatches(
   text: string,
   candidates: string[],

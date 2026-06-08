@@ -180,3 +180,115 @@ describe("zernioConnect — connected-account isolation", () => {
     expect(res).toHaveLength(0);
   });
 });
+
+describe("zernioConnect — peek/claim split (don't burn token on empty connect)", () => {
+  it("peek resolves WITHOUT consuming; mark consumes", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "user_a");
+    const { token } = await t.mutation(
+      internal.gtmMaya.zernioConnect.issueZernioStateToken,
+      { accountId: a.accountId, agentId: a.agentId }
+    );
+
+    // Peek twice — a failed/empty connect must leave the token live to retry.
+    const peek1 = await t.query(
+      internal.gtmMaya.zernioConnect.peekZernioStateToken,
+      { token }
+    );
+    const peek2 = await t.query(
+      internal.gtmMaya.zernioConnect.peekZernioStateToken,
+      { token }
+    );
+    expect(peek1?.agentId).toBe(a.agentId);
+    expect(peek2?.agentId).toBe(a.agentId);
+
+    // Once accounts land we mark it claimed; further peeks fail (single-use).
+    await t.mutation(internal.gtmMaya.zernioConnect.markZernioStateTokenClaimed, {
+      token,
+    });
+    const peek3 = await t.query(
+      internal.gtmMaya.zernioConnect.peekZernioStateToken,
+      { token }
+    );
+    expect(peek3).toBeNull();
+  });
+
+  it("peek rejects expired / wrong-provider / unknown tokens", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "user_a");
+    await t.run(async (ctx) => {
+      await ctx.db.insert("gtmOauthStateTokens", {
+        accountId: a.accountId,
+        agentId: a.agentId,
+        token: "expired",
+        provider: "zernio",
+        expiresAt: Date.now() - 1000,
+        createdAt: Date.now() - 2000,
+      });
+      await ctx.db.insert("gtmOauthStateTokens", {
+        accountId: a.accountId,
+        agentId: a.agentId,
+        token: "google-tok",
+        provider: "google",
+        expiresAt: Date.now() + 60_000,
+        createdAt: Date.now(),
+      });
+    });
+    expect(
+      await t.query(internal.gtmMaya.zernioConnect.peekZernioStateToken, {
+        token: "expired",
+      })
+    ).toBeNull();
+    expect(
+      await t.query(internal.gtmMaya.zernioConnect.peekZernioStateToken, {
+        token: "google-tok",
+      })
+    ).toBeNull();
+    expect(
+      await t.query(internal.gtmMaya.zernioConnect.peekZernioStateToken, {
+        token: "never-issued",
+      })
+    ).toBeNull();
+  });
+});
+
+describe("zernioConnect — webhook profile routing", () => {
+  it("lookupAgentByZernioProfile resolves the owning agent only", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "user_a");
+    const b = await setupAgent(t, "user_b");
+    await t.run(async (ctx) => {
+      await ctx.db.patch(a.agentId, { zernioProfileId: "prof_a" });
+      await ctx.db.patch(b.agentId, { zernioProfileId: "prof_b" });
+    });
+
+    const hitA = await t.query(
+      internal.gtmMaya.zernioConnect.lookupAgentByZernioProfile,
+      { zernioProfileId: "prof_a" }
+    );
+    expect(hitA?.agentId).toBe(a.agentId);
+    expect(hitA?.agentId).not.toBe(b.agentId);
+
+    const miss = await t.query(
+      internal.gtmMaya.zernioConnect.lookupAgentByZernioProfile,
+      { zernioProfileId: "prof_does_not_exist" }
+    );
+    expect(miss).toBeNull();
+  });
+});
+
+describe("zernioWebhook — dedup + profile extraction", () => {
+  it("recordGtmWebhookEventIfNew is idempotent (replay defense)", async () => {
+    const t = convexTest(schema, modules);
+    const first = await t.mutation(
+      internal.gtmMaya.zernioWebhook.recordGtmWebhookEventIfNew,
+      { externalEventId: "evt_1", kind: "account.connected" }
+    );
+    const second = await t.mutation(
+      internal.gtmMaya.zernioWebhook.recordGtmWebhookEventIfNew,
+      { externalEventId: "evt_1", kind: "account.connected" }
+    );
+    expect(first.isNew).toBe(true);
+    expect(second.isNew).toBe(false);
+  });
+});

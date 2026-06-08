@@ -30,6 +30,8 @@ import { ZernioClient } from "../integrations/zernio/client";
 import { ZernioApiError } from "../integrations/zernio/types";
 import {
   getPostAnalytics,
+  getPostTimeline,
+  getBestTime,
   getFollowerStats,
   getAccountsHealth,
   listInboxComments,
@@ -141,6 +143,61 @@ export const fetchAccountAnalytics = internalAction({
         limit: args.limit,
       });
       return { ok: true, analytics };
+    } catch (err) {
+      const addon = addonError(err, "analytics");
+      if (addon) return addon;
+      return { ok: false, message: (err as Error).message };
+    }
+  },
+});
+
+export const fetchPostTimeline = internalAction({
+  args: {
+    agentId: v.id("gtmAgents"),
+    postId: v.string(),
+    fromDate: v.optional(v.string()),
+    toDate: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const agentCtx = await ctx.runQuery(
+      internal.gtmMaya.publishEngine.getAgentPublishContext,
+      { agentId: args.agentId }
+    );
+    if (!agentCtx) return { ok: false, message: "agent not found" };
+    try {
+      const timeline = await getPostTimeline(zernioClient(), {
+        postId: args.postId,
+        fromDate: args.fromDate,
+        toDate: args.toDate,
+      });
+      return { ok: true, timeline };
+    } catch (err) {
+      const addon = addonError(err, "analytics");
+      if (addon) return addon;
+      return { ok: false, message: (err as Error).message };
+    }
+  },
+});
+
+export const fetchBestTime = internalAction({
+  args: {
+    agentId: v.id("gtmAgents"),
+    platform: v.optional(v.string()),
+    accountId: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<unknown> => {
+    const agentCtx = await ctx.runQuery(
+      internal.gtmMaya.publishEngine.getAgentPublishContext,
+      { agentId: args.agentId }
+    );
+    if (!agentCtx) return { ok: false, message: "agent not found" };
+    try {
+      const bestTime = await getBestTime(zernioClient(), {
+        platform: args.platform,
+        accountId: args.accountId,
+        profileId: agentCtx.zernioProfileId ?? undefined,
+      });
+      return { ok: true, bestTime };
     } catch (err) {
       const addon = addonError(err, "analytics");
       if (addon) return addon;
@@ -271,6 +328,19 @@ export const sendCommentReply = internalAction({
 export const listConnectedAccountsHttp = httpAction(async (ctx, request) => {
   const auth = await authenticate(ctx, request);
   if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+  // Self-heal: re-read the authoritative account list from Zernio and rewrite
+  // connectedAccountsJson before answering. This covers a connection whose OAuth
+  // callback never made it back AND whose account.connected webhook was missed —
+  // the next time Maya checks "who can I post for", the truth is reconciled.
+  // Best-effort: a Zernio hiccup must not block the (still-useful) cached read.
+  try {
+    await ctx.runAction(
+      internal.gtmMaya.zernioConnect.reconcileAccountsForAgent,
+      { agentId: auth.agentId }
+    );
+  } catch {
+    /* fall back to the last-known connectedAccountsJson */
+  }
   const agentCtx = await ctx.runQuery(
     internal.gtmMaya.publishEngine.getAgentPublishContext,
     { agentId: auth.agentId }
@@ -316,6 +386,45 @@ export const getAccountAnalyticsHttp = httpAction(async (ctx, request) => {
       fromDate: url.searchParams.get("fromDate") ?? undefined,
       toDate: url.searchParams.get("toDate") ?? undefined,
       limit: limitRaw ? Number(limitRaw) : undefined,
+    }
+  );
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+export const getPostTimelineHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+  const url = new URL(request.url);
+  const postId = url.searchParams.get("postId");
+  if (!postId) return new Response("missing postId", { status: 400 });
+  const result = await ctx.runAction(
+    internal.gtmMaya.zernioReads.fetchPostTimeline,
+    {
+      agentId: auth.agentId,
+      postId,
+      fromDate: url.searchParams.get("fromDate") ?? undefined,
+      toDate: url.searchParams.get("toDate") ?? undefined,
+    }
+  );
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+export const getBestTimeHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+  const url = new URL(request.url);
+  const result = await ctx.runAction(
+    internal.gtmMaya.zernioReads.fetchBestTime,
+    {
+      agentId: auth.agentId,
+      platform: url.searchParams.get("platform") ?? undefined,
+      accountId: url.searchParams.get("accountId") ?? undefined,
     }
   );
   return new Response(JSON.stringify(result), {
