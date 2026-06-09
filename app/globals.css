@@ -70,7 +70,7 @@
   --color-lime-soft: var(--lime-soft);
   --color-rose: var(--rose);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-geist-sans);
   --font-display: var(--font-instrument-serif);
 }
 
