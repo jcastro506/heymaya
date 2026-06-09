@@ -66,6 +66,10 @@ export interface AgentLifecycle {
   foundationStartedAt: number | null;
   foundationComplete: boolean;
   foundationCompletedAt: number | null;
+  /** True once the synthesis/strategy plan was actually DELIVERED to the founder
+   *  (a strategic send_update succeeded). Onboarding cannot complete without it. */
+  strategyDelivered: boolean;
+  strategyDeliveredAt: number | null;
   lastMorningBriefAt: number | null;
   /** Unix-ms the foundation lease is held until (null if free). */
   leaseHeldUntil: number | null;
@@ -172,7 +176,18 @@ export async function computeAgentLifecycle(
   // marker (set right after the synthesis is sent) remains the authoritative
   // signal; this is the backstop that must reliably flip so the watchdog STOPS.
   const rowsComplete = targetThreadCount >= 1 && draftCount >= 1;
-  const foundationComplete = foundationCompletedAt !== null || rowsComplete;
+  // Plan-delivery gate. Onboarding's whole point is delivering the founder the
+  // synthesis plan; the live dogfood marked complete + went idle WITHOUT sending
+  // it. So completion requires the plan to have actually been delivered (a
+  // strategic send_update succeeded → strategyDeliveredAt stamped). The explicit
+  // marker already enforces this; the rows-complete backstop must too, or
+  // completion flips true on research rows alone and she goes silent. Research
+  // re-spawn stays gated on `researchComplete` (unchanged), and the 8-acquire
+  // lease cap is still the backstop against a never-delivering agent looping.
+  const strategyDeliveredAt = agent.strategyDeliveredAt ?? null;
+  const strategyDelivered = strategyDeliveredAt !== null;
+  const foundationComplete =
+    (foundationCompletedAt !== null || rowsComplete) && strategyDelivered;
 
   const helloSent = helloSentAt !== null;
   const foundationStarted = foundationStartedAt !== null || leaseActive;
@@ -202,6 +217,8 @@ export async function computeAgentLifecycle(
     foundationStartedAt,
     foundationComplete,
     foundationCompletedAt,
+    strategyDelivered,
+    strategyDeliveredAt,
     lastMorningBriefAt: agent.lastMorningBriefAt ?? null,
     leaseHeldUntil,
     leaseActive,
@@ -304,11 +321,38 @@ export const acquireFoundationLease = internalMutation({
   },
 });
 
+/** Stamp that the synthesis/strategy plan was actually delivered to the founder.
+ *  Called server-side from the send_update handler when a STRATEGIC message is
+ *  successfully delivered (the synthesis is the first such message in onboarding).
+ *  Idempotent first-write. Tolerant — the send path must never throw, so a missing
+ *  agent is a silent no-op. This is the durable signal markFoundationComplete +
+ *  the rows-complete backstop gate on, so onboarding can never finish on an
+ *  undelivered plan. */
+export const markStrategyDelivered = internalMutation({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (ctx, args): Promise<{ alreadyDelivered: boolean }> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return { alreadyDelivered: false };
+    if (agent.strategyDeliveredAt) return { alreadyDelivered: true };
+    const now = Date.now();
+    await ctx.db.patch(args.agentId, {
+      strategyDeliveredAt: now,
+      updatedAt: now,
+    });
+    return { alreadyDelivered: false };
+  },
+});
+
 /** Mark foundation done AND clear the lease. Called once, after the synthesis
- *  + the single day-1 move have actually landed in the DB. */
+ *  has actually been delivered to the founder. REFUSES (completed:false) if the
+ *  plan was never delivered — the live dogfood marked complete and went idle
+ *  without sending the plan, which is the exact failure this gate prevents. */
 export const markFoundationComplete = internalMutation({
   args: { agentId: v.id("gtmAgents") },
-  handler: async (ctx, args): Promise<{ alreadyComplete: boolean }> => {
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ alreadyComplete: boolean; completed: boolean; reason?: string }> => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent) throw new Error("markFoundationComplete: agent not found");
     const now = Date.now();
@@ -320,7 +364,16 @@ export const markFoundationComplete = internalMutation({
           updatedAt: now,
         });
       }
-      return { alreadyComplete: true };
+      return { alreadyComplete: true, completed: true };
+    }
+    // GATE: the plan must have actually reached the founder first.
+    if (!agent.strategyDeliveredAt) {
+      return {
+        alreadyComplete: false,
+        completed: false,
+        reason:
+          "strategy_not_delivered: send the founder the full synthesis plan (a strategic send_update — who's buying, where, the strategy, 'I start posting tomorrow') BEFORE marking foundation complete. Delivering the plan is the whole point of onboarding; you cannot finish without it.",
+      };
     }
     await ctx.db.patch(args.agentId, {
       foundationCompletedAt: now,
@@ -328,7 +381,7 @@ export const markFoundationComplete = internalMutation({
       foundationLeaseUntil: undefined,
       updatedAt: now,
     });
-    return { alreadyComplete: false };
+    return { alreadyComplete: false, completed: true };
   },
 });
 

@@ -4435,6 +4435,13 @@ export default defineSchema({
     helloSentAt: v.optional(v.number()),
     foundationStartedAt: v.optional(v.number()),
     foundationCompletedAt: v.optional(v.number()),
+    // Unix-ms the synthesis/strategy plan was actually DELIVERED to the founder
+    // (stamped server-side when a strategic send_update succeeds). onboarding is
+    // NOT complete until this is set — the live dogfood marked foundation_complete
+    // and went idle WITHOUT ever sending the plan ("she never sent me the plan").
+    // markFoundationComplete refuses, and the rows-complete backstop also requires
+    // this, so completion can never happen on an undelivered plan.
+    strategyDeliveredAt: v.optional(v.number()),
     lastMorningBriefAt: v.optional(v.number()),
     foundationLeaseUntil: v.optional(v.number()),
     // How many times the foundation lease has been acquired. The watchdog
