@@ -125,11 +125,24 @@ describe("#15 lifecycle — markers + phases", () => {
       draftText: "A genuine, grounded reply that helps the OP.",
     });
 
+    // Rows exist, but the plan was NEVER delivered to the founder → NOT complete.
+    // (The live dogfood: research landed, she went idle, the founder got no plan.)
     lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, {
       agentId,
     });
     expect(lc?.targetThreadCount).toBe(1);
     expect(lc?.draftCount).toBe(1);
+    expect(lc?.strategyDelivered).toBe(false);
+    expect(lc?.foundationComplete).toBe(false);
+
+    // The synthesis plan is delivered to the founder → NOW complete.
+    await t.mutation(internal.gtmMaya.agentLifecycle.markStrategyDelivered, {
+      agentId,
+    });
+    lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, {
+      agentId,
+    });
+    expect(lc?.strategyDelivered).toBe(true);
     expect(lc?.foundationComplete).toBe(true);
     expect(lc?.phase).toBe("active");
   });
@@ -170,15 +183,22 @@ describe("#15 lifecycle — markers + phases", () => {
     expect(lc1?.foundationComplete).toBe(false);
     expect(lc1?.foundationStep).toBe("finalize");
 
-    // Discovery + drafting land → complete.
+    // Discovery + drafting land — but the plan isn't delivered yet, so the step
+    // stays FINALIZE (drive the synthesis), never re-spawning research.
     const threadId = await seedThread(t, accountId, agentId, "post_step_1");
     await t.mutation(internal.gtmMaya.targetList.recordDraftedContent, {
       accountId, agentId, kind: "reply", platform: "reddit", targetThreadId: threadId,
       draftText: "A grounded reply.",
     });
     const lc2 = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
-    expect(lc2?.foundationComplete).toBe(true);
-    expect(lc2?.foundationStep).toBe("complete");
+    expect(lc2?.foundationComplete).toBe(false);
+    expect(lc2?.foundationStep).toBe("finalize");
+
+    // The synthesis plan is delivered → complete.
+    await t.mutation(internal.gtmMaya.agentLifecycle.markStrategyDelivered, { agentId });
+    const lc3 = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
+    expect(lc3?.foundationComplete).toBe(true);
+    expect(lc3?.foundationStep).toBe("complete");
   });
 
   // The HARD backstop: the lease is denied past the cap so a stuck agent
@@ -216,12 +236,51 @@ describe("#15 lifecycle — markers + phases", () => {
       draftText: "A grounded reply for a brand with only a website.",
     });
 
+    // Plan delivered (voice may be low-confidence, but the founder still gets it).
+    await t.mutation(internal.gtmMaya.agentLifecycle.markStrategyDelivered, {
+      agentId,
+    });
     const lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, {
       agentId,
     });
     expect(lc?.hasVoiceProfile).toBe(false); // legitimately — no handles
-    expect(lc?.foundationComplete).toBe(true); // but research is real → DONE
+    expect(lc?.foundationComplete).toBe(true); // research real + plan delivered → DONE
     expect(lc?.phase).toBe("active"); // watchdog stops → no re-spawn loop
+  });
+
+  // The plan-delivery gate: onboarding cannot finish until the founder actually
+  // gets the synthesis. The live dogfood marked complete + went idle WITHOUT
+  // ever sending the plan ("she never sent me the plan").
+  it("markFoundationComplete REFUSES until the plan is delivered, then succeeds", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, agentId } = await setupAgent(t, "lc_plangate");
+
+    // Research landed (threads + drafts) but plan not delivered.
+    const threadId = await seedThread(t, accountId, agentId, "post_gate_1");
+    await t.mutation(internal.gtmMaya.targetList.recordDraftedContent, {
+      accountId, agentId, kind: "reply", platform: "reddit", targetThreadId: threadId,
+      draftText: "A grounded reply.",
+    });
+
+    // Marking complete is REFUSED — nothing reached the founder.
+    const blocked = await t.mutation(
+      internal.gtmMaya.agentLifecycle.markFoundationComplete,
+      { agentId }
+    );
+    expect(blocked.completed).toBe(false);
+    expect(blocked.reason).toContain("strategy_not_delivered");
+    let lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
+    expect(lc?.foundationComplete).toBe(false);
+
+    // Deliver the plan → marking complete now succeeds.
+    await t.mutation(internal.gtmMaya.agentLifecycle.markStrategyDelivered, { agentId });
+    const ok = await t.mutation(
+      internal.gtmMaya.agentLifecycle.markFoundationComplete,
+      { agentId }
+    );
+    expect(ok.completed).toBe(true);
+    lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
+    expect(lc?.foundationComplete).toBe(true);
   });
 });
 
@@ -257,7 +316,11 @@ describe("#15 lifecycle — foundation lease (the lock)", () => {
     );
     expect(a3.acquired).toBe(true);
 
-    // Mark complete → acquire reports alreadyComplete and refuses (never re-run).
+    // Deliver the plan first (required gate), then mark complete → acquire
+    // reports alreadyComplete and refuses (never re-run).
+    await t.mutation(internal.gtmMaya.agentLifecycle.markStrategyDelivered, {
+      agentId,
+    });
     await t.mutation(internal.gtmMaya.agentLifecycle.markFoundationComplete, {
       agentId,
     });
