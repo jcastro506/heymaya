@@ -4757,6 +4757,9 @@ export default defineSchema({
     name: v.optional(v.string()),
     url: v.string(),
     founderWhy: v.optional(v.string()),
+    // Founder's own "what it does + what's different" — the differentiator,
+    // captured at onboarding so Maya never guesses it (renders into APP.md).
+    differentiator: v.optional(v.string()),
     stage: v.union(
       v.literal("idea"),
       v.literal("live-beta"),
