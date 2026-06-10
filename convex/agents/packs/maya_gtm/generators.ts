@@ -14,6 +14,7 @@ export interface MayaGtmWorkspaceInput {
     weekGoal: "feedback" | "signups" | "demos" | "revenue" | "unknown";
     userCountBand?: "none" | "1-100" | "100-1k" | "1k+" | "unknown";
     founderWhy?: string;
+    differentiator?: string;
     canRecordScreen: boolean;
     canShowFace: boolean;
     canRecordVoice?: boolean;
@@ -835,6 +836,14 @@ function renderApp(input: MayaGtmWorkspaceInput): string {
             ? "early traction — soft-launch motion: announce, gather proof + feedback, still reply-heavy, start introducing the product naturally."
             : "real traction — push the product into the buying conversations; skip the build-from-zero authority arc, lean into launch + conversion."
       }`
+    );
+  }
+  if (input.app.differentiator) {
+    lines.push(
+      `- **What it does + what's different (the founder's own words):** ${input.app.differentiator}`
+    );
+    lines.push(
+      `  ↳ This is the differentiator straight from the founder — anchor every channel/angle/draft on THIS, not a generic reframe. If research ever drifts off it, re-read this line.`
     );
   }
   if (input.app.founderWhy) {

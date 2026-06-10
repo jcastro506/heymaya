@@ -1205,6 +1205,7 @@ export const buildAndUploadGtmWorkspace = internalAction({
         weekGoal: row.app.weekGoal,
         userCountBand: row.app.userCountBand,
         founderWhy: row.app.founderWhy,
+        differentiator: row.app.differentiator,
         canRecordScreen: row.app.canRecordScreen,
         canShowFace: row.app.canShowFace,
         canRecordVoice: row.app.canRecordVoice,

@@ -226,6 +226,10 @@ export const setAppProfile = mutation({
     name: v.optional(v.string()),
     url: v.string(),
     founderWhy: v.optional(v.string()),
+    // What the product does + what's different — the founder's own words, so
+    // Maya never has to guess the differentiator (the dogfood "generic pitch"
+    // gap). Renders into APP.md; anchors every research worker.
+    differentiator: v.optional(v.string()),
     stage: APP_STAGE,
     weekGoal: WEEK_GOAL,
     userCountBand: v.optional(
@@ -283,6 +287,7 @@ export const setAppProfile = mutation({
       await ctx.db.patch(existing._id, {
         name: args.name,
         founderWhy: args.founderWhy,
+        differentiator: args.differentiator,
         stage: args.stage,
         weekGoal: args.weekGoal,
         userCountBand: args.userCountBand,
@@ -321,6 +326,7 @@ export const setAppProfile = mutation({
       name: args.name,
       url: args.url,
       founderWhy: args.founderWhy,
+      differentiator: args.differentiator,
       stage: args.stage,
       weekGoal: args.weekGoal,
       canRecordScreen: args.canRecordScreen,
