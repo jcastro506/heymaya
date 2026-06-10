@@ -57,7 +57,6 @@ export default function ClawLaunchLandingPage() {
       <ScrollLine />
       <Masthead />
       <Hero />
-      <PainQuote />
       <Channels />
       <AWeekWithMaya />
       <TelegramSection />
@@ -167,45 +166,6 @@ function Hero() {
         </div>
       </div>
 
-    </section>
-  );
-}
-
-/* -----------------------------------------------------------------
- * PainQuote — the pull. Massive italic, single sentence. The room
- * goes quiet here.
- * ----------------------------------------------------------------- */
-function PainQuote() {
-  return (
-    <section id="pain" className="relative px-6 sm:px-10">
-      <div className="mx-auto max-w-7xl">
-        {/* Beat 1 — the setup */}
-        <div className="py-32 sm:py-44 lg:py-56">
-          <RevealOnView>
-            <p className="font-display italic text-[clamp(2.4rem,6vw,5.5rem)] leading-[1.05] tracking-tight max-w-5xl">
-              You shipped a real product.
-              <br />
-              <span className="text-[#0a0a0a]/35">
-                Solo. With AI. In weeks, not years.
-              </span>
-            </p>
-          </RevealOnView>
-        </div>
-
-        {/* Beat 2 — the punchline. Lives below enough vertical space
-            that the user has to scroll between the two beats. */}
-        <div className="py-32 sm:py-44 lg:py-56">
-          <RevealOnView>
-            <p className="font-display italic text-[clamp(2.4rem,6vw,5.5rem)] leading-[1.05] tracking-tight max-w-5xl">
-              But you&apos;re a builder, not a marketer.
-            </p>
-            <p className="mt-9 max-w-xl text-[16px] leading-[1.6] text-[#0a0a0a]/55 sm:text-[18px]">
-              Every tool for shipping fast multiplied. The one for getting your
-              first hundred customers never showed up.
-            </p>
-          </RevealOnView>
-        </div>
-      </div>
     </section>
   );
 }
