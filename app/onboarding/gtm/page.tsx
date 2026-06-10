@@ -44,6 +44,7 @@ interface IntakeDraft {
   // attribution loop on the signup side (clicks are already tracked).
   conversionKind: "signup" | "install" | "waitlist" | "demo" | "purchase";
   signupUrl: string;
+  differentiator: string;
   founderWhy: string;
   stage: "idea" | "live-beta" | "paid" | "unknown";
   entryMode: "launch" | "manager";
@@ -107,6 +108,7 @@ const DEFAULT_DRAFT: IntakeDraft = {
   playStoreUrl: "",
   conversionKind: "signup",
   signupUrl: "",
+  differentiator: "",
   founderWhy: "",
   stage: "live-beta",
   entryMode: "manager",
@@ -255,6 +257,7 @@ function GtmOnboardingBody() {
             : undefined,
         conversionKind: draft.conversionKind,
         signupUrl: emptyToUndefined(draft.signupUrl),
+        differentiator: draft.differentiator.trim() || undefined,
         founderWhy: draft.founderWhy.trim() || undefined,
         stage: draft.stage,
         entryMode: draft.entryMode,
@@ -515,6 +518,16 @@ function GtmOnboardingBody() {
               />
             </Field>
           </div>
+          <Field label="What does it do, and what makes it different?">
+            <textarea
+              value={draft.differentiator}
+              onChange={(event) =>
+                setDraft((d) => ({ ...d, differentiator: event.target.value }))
+              }
+              className="input min-h-28"
+              placeholder="In your words: what it does, who it's for, and the one thing it does that the alternatives don't. This is what Maya anchors all your marketing on."
+            />
+          </Field>
           <Field label="Why did you build it?">
             <textarea
               value={draft.founderWhy}
@@ -738,45 +751,6 @@ function GtmOnboardingBody() {
               if you connected no handles, nothing renders. */}
           <ChannelWarmthSection draft={draft} setDraft={setDraft} />
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Toggle
-              label="I am open to UGC creators later"
-              checked={draft.openToUgcCreators}
-              onChange={(checked) =>
-                setDraft((d) => ({ ...d, openToUgcCreators: checked }))
-              }
-            />
-            <Field label="Creator budget per month">
-              <input
-                type="number"
-                min="0"
-                value={draft.creatorBudgetMonthlyUsd}
-                onChange={(event) =>
-                  setDraft((d) => ({
-                    ...d,
-                    creatorBudgetMonthlyUsd: event.target.value,
-                  }))
-                }
-                className="input"
-                placeholder="0"
-              />
-            </Field>
-            <Field label="Visual posts per week">
-              <input
-                type="number"
-                min="0"
-                value={draft.maxWeeklyVisualPosts}
-                onChange={(event) =>
-                  setDraft((d) => ({
-                    ...d,
-                    maxWeeklyVisualPosts: event.target.value,
-                  }))
-                }
-                className="input"
-                placeholder="3"
-              />
-            </Field>
-          </div>
           <Field label="Audiences to avoid">
             <input
               value={draft.excludedAudiences}
@@ -1148,12 +1122,9 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main data-surface="onboarding" className="min-h-screen bg-ink text-paper">
       <div className="mx-auto max-w-3xl px-6 py-12">
-        <header className="mb-10 flex items-center justify-between">
+        <header className="mb-10 flex items-center">
           <Link href="/clawlaunch" className="font-mono text-xs uppercase tracking-widest">
             ClawLaunch
-          </Link>
-          <Link href="/sign-in" className="text-sm text-paper-dim hover:text-paper">
-            sign in
           </Link>
         </header>
         {children}

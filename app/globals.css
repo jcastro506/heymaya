@@ -57,6 +57,16 @@
   --lime-soft: #5b7aa8;
 }
 
+/* Mission dashboard (dark surface): NO lime/yellow — the lime accent is the
+   landing's signature only. The operator dashboard rides a bright sky-blue
+   accent through the same --lime variable, so every `*-lime` utility in the
+   dashboard recolors at once (bright enough to keep dark-text pills legible on
+   the dark theme). */
+[data-surface="mission"] {
+  --lime: #38bdf8;
+  --lime-soft: #7dd3fc;
+}
+
 @theme inline {
   --color-background: var(--ink);
   --color-foreground: var(--paper);
