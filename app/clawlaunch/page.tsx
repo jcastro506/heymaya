@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { FaLinkedin, FaXTwitter } from "react-icons/fa6";
-import { SiReddit, SiTiktok, SiYcombinator, SiYoutube } from "react-icons/si";
+import { SiReddit, SiTelegram, SiTiktok, SiYcombinator, SiYoutube } from "react-icons/si";
 
 import { primaryCtaHref, primaryCtaLabel } from "../_components/landingMode";
 
@@ -63,7 +63,6 @@ export default function ClawLaunchLandingPage() {
       <TelegramSection />
       <Attribution />
       <BanSafety />
-      <Compared />
       <StaysCurrent />
       <FinalCTA />
       <Footer />
@@ -84,15 +83,27 @@ function Masthead() {
         >
           HeyMaya
         </Link>
-        <nav className="hidden gap-7 font-mono text-[11px] uppercase tracking-[0.22em] sm:flex">
+        <nav className="hidden items-center gap-7 font-mono text-[11px] uppercase tracking-[0.22em] sm:flex">
           <a href="#what" className="opacity-60 hover:opacity-100">
-            What she does
+            Channels
           </a>
           <a href="#week" className="opacity-60 hover:opacity-100">
-            A week with her
+            A week
+          </a>
+          <a href="#proof" className="opacity-60 hover:opacity-100">
+            Proof
+          </a>
+          <a href="#safe" className="opacity-60 hover:opacity-100">
+            Ban-safe
           </a>
           <Link href="/sign-in" className="opacity-60 hover:opacity-100">
             Sign in
+          </Link>
+          <Link
+            href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
+            className="rounded-full bg-[#0a0a0a] px-4 py-2 text-[#fbfaf6] transition-colors hover:bg-[#0a0a0a]/85"
+          >
+            Open Maya →
           </Link>
         </nav>
         <Link
@@ -172,10 +183,10 @@ function PainQuote() {
         <div className="py-32 sm:py-44 lg:py-56">
           <RevealOnView>
             <p className="font-display italic text-[clamp(2.4rem,6vw,5.5rem)] leading-[1.05] tracking-tight max-w-5xl">
-              You built it.
+              You shipped a real product.
               <br />
               <span className="text-[#0a0a0a]/35">
-                That was the easy part.
+                Solo. With AI. In weeks, not years.
               </span>
             </p>
           </RevealOnView>
@@ -186,7 +197,11 @@ function PainQuote() {
         <div className="py-32 sm:py-44 lg:py-56">
           <RevealOnView>
             <p className="font-display italic text-[clamp(2.4rem,6vw,5.5rem)] leading-[1.05] tracking-tight max-w-5xl">
-              The hard part is getting users.
+              But you&apos;re a builder, not a marketer.
+            </p>
+            <p className="mt-9 max-w-xl text-[16px] leading-[1.6] text-[#0a0a0a]/55 sm:text-[18px]">
+              Every tool for shipping fast multiplied. The one for getting your
+              first hundred customers never showed up.
             </p>
           </RevealOnView>
         </div>
@@ -792,84 +807,106 @@ function AWeekWithMaya() {
  * mockup showing a real Maya conversation thread.
  * ----------------------------------------------------------------- */
 function TelegramPhone() {
-  const messages = [
+  const messages: Array<{ from: "maya" | "you"; time: string; text: string }> = [
     {
-      time: "7:04am",
-      text: "Morning. Your r/SaaS reply from yesterday — 14 clicks, 2 signups. Three posts going live today, I'll handle all of it. One thing worth your eye: the LinkedIn post from Tuesday is still pulling comments.",
+      from: "maya",
+      time: "7:04",
+      text: "Morning. Your r/SaaS reply yesterday pulled 14 clicks, 2 signups. Three posts going live today, I'll handle all of it.",
+    },
+    { from: "you", time: "7:05", text: "love it, go" },
+    {
+      from: "maya",
+      time: "11:22",
+      text: "Both Reddit posts are live. HN reply too. Nothing you need to do.",
     },
     {
-      time: "11:22am",
-      text: "Both Reddit posts went live. HN reply too. Nothing you need to do.",
+      from: "maya",
+      time: "2:15",
+      text: "This thread's climbing faster than usual, worth jumping in before it cools? hey-maya.ai/p/r-saas",
     },
+    { from: "you", time: "2:16", text: "on it 🔥" },
     {
-      time: "2:15pm",
-      text: "This one's moving faster than usual — worth jumping in before it cools? hey-maya.ai/p/r-saas-reply",
-      highlight: true,
-    },
-    {
-      time: "8:00pm",
-      text: "Day recap: 5 posts live, 61 clicks, 2 signups. Best: Reddit r/SaaS. Weakest: X — pulling back there next week.",
+      from: "maya",
+      time: "8:00",
+      text: "Recap: 5 posts live, 61 clicks, 2 signups. Best converter: Reddit r/SaaS.",
     },
   ];
 
   return (
     <div className="mx-auto w-full max-w-[320px]">
-      {/* Phone shell */}
-      <div className="relative overflow-hidden rounded-[2.5rem] border-[6px] border-[#0a0a0a] bg-[#0a0a0a] shadow-[0_32px_80px_-20px_rgba(0,0,0,0.35)]">
-        {/* Status bar */}
-        <div className="flex items-center justify-between bg-[#0a0a0a] px-6 pt-3 pb-1">
-          <span className="text-[11px] font-semibold text-white">9:41</span>
-          <div className="h-4 w-24 rounded-full bg-[#1a1a1a]" />
-          <div className="flex items-center gap-1">
-            <div className="h-2 w-2 rounded-full bg-white/60" />
-            <div className="h-2 w-2 rounded-full bg-white/60" />
-            <div className="h-2 w-2 rounded-full bg-white/60" />
+      {/* iPhone shell — light screen, clean dark bezel */}
+      <div className="relative overflow-hidden rounded-[2.75rem] border-[5px] border-[#1b1b1d] bg-[#1b1b1d] shadow-[0_32px_80px_-20px_rgba(0,0,0,0.35)]">
+        {/* Notch */}
+        <div className="absolute left-1/2 top-[5px] z-20 h-[22px] w-28 -translate-x-1/2 rounded-b-2xl bg-[#1b1b1d]" />
+
+        {/* Status bar (iOS light) */}
+        <div className="flex items-center justify-between bg-white px-6 pt-3 pb-1.5 text-[#0a0a0a]">
+          <span className="text-[12px] font-semibold">9:41</span>
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-end gap-[2px]">
+              <div className="h-[5px] w-[2px] rounded-sm bg-[#0a0a0a]" />
+              <div className="h-[7px] w-[2px] rounded-sm bg-[#0a0a0a]" />
+              <div className="h-[9px] w-[2px] rounded-sm bg-[#0a0a0a]" />
+              <div className="h-[11px] w-[2px] rounded-sm bg-[#0a0a0a]/30" />
+            </div>
+            <div className="ml-0.5 flex h-[12px] w-[22px] items-center rounded-[3px] border border-[#0a0a0a]/40 p-[1.5px]">
+              <div className="h-full w-2/3 rounded-[1px] bg-[#0a0a0a]" />
+            </div>
           </div>
         </div>
 
-        {/* Chat header */}
-        <div className="flex items-center gap-3 bg-[#17212b] px-4 py-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#d6ff3d]">
-            <span className="text-[13px] font-bold text-[#0a0a0a]">M</span>
+        {/* Telegram chat header (light) */}
+        <div className="flex items-center gap-2.5 border-b border-[#0a0a0a]/8 bg-white px-3.5 py-2.5">
+          <span className="text-[22px] leading-none text-[#3390ec]">&#8249;</span>
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#5eb5f7] to-[#1e88e5]">
+            <span className="text-[14px] font-semibold text-white">M</span>
           </div>
-          <div>
-            <p className="text-[13px] font-semibold text-white">Maya</p>
-            <p className="text-[10px] text-white/40">your GTM manager</p>
+          <div className="flex-1 leading-tight">
+            <p className="text-[14px] font-semibold text-[#0a0a0a]">Maya</p>
+            <p className="text-[11px] text-[#3390ec]">online</p>
           </div>
+          <SiTelegram className="size-5 shrink-0" color="#229ED9" aria-label="Telegram" />
         </div>
 
-        {/* Messages */}
-        <div className="space-y-2 bg-[#0e1621] px-3 py-4">
-          {messages.map((msg, i) => (
-            <div key={i} className="flex flex-col items-start gap-0.5">
-              <div
-                className={`max-w-[88%] rounded-2xl rounded-tl-sm px-3 py-2 ${
-                  msg.highlight
-                    ? "bg-[#d6ff3d]"
-                    : "bg-[#17212b]"
-                }`}
-              >
-                <p
-                  className={`text-[12px] leading-[1.5] ${
-                    msg.highlight ? "text-[#0a0a0a]" : "text-white/85"
+        {/* Messages — Telegram light chat */}
+        <div className="space-y-1.5 bg-[#e9eef2] px-3 py-4">
+          {messages.map((msg, i) => {
+            const mine = msg.from === "you";
+            return (
+              <div key={i} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                <div
+                  className={`max-w-[82%] px-3 py-2 shadow-[0_1px_1.5px_rgba(0,0,0,0.08)] ${
+                    mine
+                      ? "rounded-2xl rounded-br-md bg-[#3390ec] text-white"
+                      : "rounded-2xl rounded-bl-md bg-white text-[#0a0a0a]"
                   }`}
                 >
-                  {msg.text}
-                </p>
+                  <p className="text-[12.5px] leading-[1.4]">{msg.text}</p>
+                  <span
+                    className={`mt-0.5 block text-right text-[9px] ${
+                      mine ? "text-white/70" : "text-[#0a0a0a]/35"
+                    }`}
+                  >
+                    {msg.time}
+                  </span>
+                </div>
               </div>
-              <span className="pl-1 text-[10px] text-white/25">{msg.time}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Input bar */}
-        <div className="flex items-center gap-2 bg-[#17212b] px-3 py-2.5">
-          <div className="flex-1 rounded-full bg-[#0e1621] px-4 py-2">
-            <span className="text-[12px] text-white/20">Message</span>
+        <div className="flex items-center gap-2 border-t border-[#0a0a0a]/8 bg-white px-3 pt-2.5 pb-3">
+          <div className="flex-1 rounded-full bg-[#f0f2f5] px-4 py-2">
+            <span className="text-[12px] text-[#0a0a0a]/35">Message</span>
           </div>
-          <div className="flex size-8 items-center justify-center rounded-full bg-[#2b5278]">
-            <span className="text-[12px] text-white">↑</span>
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#3390ec]">
+            <span className="text-[13px] leading-none text-white">&#8593;</span>
           </div>
+        </div>
+        {/* Home indicator */}
+        <div className="flex justify-center bg-white pb-2">
+          <div className="h-1 w-28 rounded-full bg-[#0a0a0a]/25" />
         </div>
       </div>
     </div>
@@ -1006,7 +1043,7 @@ function AttributionMockup() {
 
 function Attribution() {
   return (
-    <section className="relative border-t border-[#0a0a0a]/10 px-6 py-28 sm:px-10 sm:py-40">
+    <section id="proof" className="relative border-t border-[#0a0a0a]/10 px-6 py-28 sm:px-10 sm:py-40">
       <div className="mx-auto max-w-7xl">
         <div className="grid grid-cols-12 gap-x-8 gap-y-16 lg:gap-y-0">
           {/* LEFT — text */}
@@ -1088,7 +1125,7 @@ function BanSafetyMockup() {
 
 function BanSafety() {
   return (
-    <section className="relative border-t border-[#0a0a0a]/10 px-6 py-28 sm:px-10 sm:py-40">
+    <section id="safe" className="relative border-t border-[#0a0a0a]/10 px-6 py-28 sm:px-10 sm:py-40">
       <div className="mx-auto max-w-7xl">
         <div className="grid grid-cols-12 gap-x-8 gap-y-16 lg:gap-y-0">
           {/* LEFT — mockup first on this one for visual variety */}
@@ -1120,69 +1157,6 @@ function BanSafety() {
             </RevealOnView>
           </div>
         </div>
-      </div>
-    </section>
-  );
-}
-
-/* -----------------------------------------------------------------
- * Compared — what she actually does. The four things that make her a
- * go-to-market manager, not a reply bot.
- * ----------------------------------------------------------------- */
-const COMPARED_LIST: Array<{ her: string; body: string }> = [
-  {
-    her: "Finds your buyers wherever they are",
-    body: "Your first hundred users are on Reddit, in HN threads, in a niche subreddit, on LinkedIn, on X. She works all of it — digs up the exact conversations where people have the problem you solve, and tells you which channel's worth your time this week.",
-  },
-  {
-    her: "Writes it — and makes the visuals — so it sounds like you",
-    body: "She studies how you talk and how each room talks, then hands you the reply you'd actually send — helpful first, never a pitch. Need a TikTok or carousel? She builds the slides from your real screenshots, no stock photos. You read it, tweak it if you want — I post it for you.",
-  },
-  {
-    her: "Keeps you native, not nuked",
-    body: "Spray-and-pray posting gets accounts killed and products blacklisted. She stays native to each community — the right cadence, the right rooms, your account in your hands — so you build a reputation instead of torching one.",
-  },
-  {
-    her: "Proves which posts brought signups",
-    body: "Engagement isn't the goal — customers are. Every link she hands you is tracked end to end, so you find out which post turned into a real signup, not just a like. She doubles down on what actually converts and drops what doesn't.",
-  },
-];
-
-function Compared() {
-  return (
-    <section
-      id="compared"
-      className="relative border-t border-[#0a0a0a]/10 px-6 py-28 sm:px-10 sm:py-40"
-    >
-      <div className="mx-auto max-w-7xl">
-        <RevealOnView>
-          <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
-            What she does
-          </p>
-          <h2 className="mb-6 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
-            Maya runs your go-to-market. You ship the product.
-          </h2>
-          <p className="mb-14 max-w-2xl text-[16px] leading-[1.6] text-[#0a0a0a]/60 sm:text-[17px]">
-            The tools for shipping fast all multiplied. The tool for getting
-            those first hundred users never showed up. That&apos;s Maya — she
-            finds the people who want what you built, talks to them in your
-            voice, and shows you which conversations became customers.
-          </p>
-        </RevealOnView>
-        <ul className="grid grid-cols-1 gap-x-12 gap-y-10 md:grid-cols-2">
-          {COMPARED_LIST.map((item, i) => (
-            <RevealOnView key={i} delay={0.1 + i * 0.06}>
-              <li className="border-t border-[#0a0a0a]/15 pt-6">
-                <p className="font-display italic text-[1.7rem] leading-[1.1]">
-                  {item.her}
-                </p>
-                <p className="mt-4 text-[14px] leading-[1.55] text-[#0a0a0a]/65">
-                  {item.body}
-                </p>
-              </li>
-            </RevealOnView>
-          ))}
-        </ul>
       </div>
     </section>
   );
