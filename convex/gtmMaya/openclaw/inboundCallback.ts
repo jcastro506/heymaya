@@ -1156,19 +1156,50 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
   // Tactical messages can be sent with criticPassed=false but we log
   // the gap. This is data-plane enforcement of an otherwise prompt-
   // level discipline rule.
+  // ─────────────────────────────────────────────────────────────────────────
+  // GROUNDING POLICY — operator DMs: DELIVERY WINS, NEVER BLACKHOLE.
+  //
+  // send_update is the Maya↔founder channel (it only ever sends to the agent's
+  // telegramChatId). The anti-hallucination moat (criticPassed + evidence-backed
+  // claims) is the right discipline, but on THIS surface a hard block silently
+  // DROPS the message — which is exactly how the live dogfood lost the synthesis
+  // plan: a strategic message bounced at the evidence gate and the founder got
+  // nothing ("she never sent me the plan"). The cost of delivering with a soft
+  // claim is tiny (Maya talking to her own boss); the cost of dropping the plan
+  // is catastrophic. So strategic-grounding failures here are LOGGED as a
+  // grounding gap and the message is DELIVERED (sanitized below), never blocked.
+  //
+  // Hard grounding enforcement still lives where the liability is real: PUBLIC
+  // posts under the founder's name (post_to_channel / approval-publishing), where
+  // a hallucinated claim or ban-risky post is an external liability. That path is
+  // unchanged. This relaxation is scoped to operator DMs ONLY.
+  // ─────────────────────────────────────────────────────────────────────────
+  const groundingGaps: string[] = [];
   if (messageClass === "strategic" && body.criticPassed !== true) {
-    return new Response(
-      JSON.stringify({
-        ok: false,
-        reason: "critic_not_passed",
-        message:
-          "Strategic messages require criticPassed=true. Run maya-output-critic's 5 gates (grounding/voice/recipe/tier-honesty/time-box) and re-send. If this is tactical (mid-pass progress ping, ack), set messageClass: 'tactical'.",
-      }),
-      { status: 200, headers: { "content-type": "application/json" } }
-    );
+    groundingGaps.push("critic_not_passed");
   }
-  // Audit log — structured console line so operators / ops scripts
-  // can grep for critic-passed state. Future: dedicated audit table.
+  if (messageClass === "strategic") {
+    const normalizedClaims = (body.claims ?? []).map((c) => ({
+      claim: typeof c.claim === "string" ? c.claim : "",
+      evidence_ids: Array.isArray(c.evidence_ids) ? c.evidence_ids : [],
+    }));
+    if (normalizedClaims.length === 0) {
+      groundingGaps.push("no_claims");
+    } else {
+      const guard = await ctx.runAction(
+        internal.gtmMaya.evidenceGuard.validateClaims,
+        { accountId: auth.accountId, claims: normalizedClaims }
+      );
+      if (!guard.ok) {
+        groundingGaps.push(
+          `evidence_unverified:${guard.failures?.length ?? 0}/${guard.claimsCount ?? normalizedClaims.length}`
+        );
+      }
+    }
+  }
+  // Audit log — structured console line so operators / ops scripts can grep for
+  // grounding state. A non-empty groundingGaps means the message went out with a
+  // soft (un-evidenced) claim — surfaced, never silenced.
   console.log(
     JSON.stringify({
       event: "send_update.send_attempt",
@@ -1177,48 +1208,12 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
       criticPassed: body.criticPassed ?? false,
       criticReasonsCount: (body.criticReasons ?? []).length,
       textLength: body.text.length,
+      groundingGaps,
     })
   );
 
-  if (messageClass === "strategic") {
-    const normalizedClaims = (body.claims ?? []).map((c) => ({
-      claim: typeof c.claim === "string" ? c.claim : "",
-      evidence_ids: Array.isArray(c.evidence_ids) ? c.evidence_ids : [],
-    }));
-
-    if (normalizedClaims.length === 0) {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          reason: "evidence_required",
-          message:
-            "Strategic messages require at least one claim with evidence_ids. " +
-            "If this is a tactical/accountability message, pass messageClass: 'tactical'.",
-        }),
-        { status: 200, headers: { "content-type": "application/json" } }
-      );
-    }
-
-    const guard = await ctx.runAction(
-      internal.gtmMaya.evidenceGuard.validateClaims,
-      { accountId: auth.accountId, claims: normalizedClaims }
-    );
-    if (!guard.ok) {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          reason: "evidence_blocked",
-          failures: guard.failures,
-          claimsCount: guard.claimsCount,
-          evidenceCount: guard.evidenceCount,
-        }),
-        { status: 200, headers: { "content-type": "application/json" } }
-      );
-    }
-  }
-
-  // Firewall after evidence guard. For OPERATOR DMs (send_update) the firewall
-  // is voice-quality, NOT ban-safety (public posts hard-gate elsewhere). A hard
+  // Firewall (voice-quality AI-tell scan). For OPERATOR DMs the firewall is
+  // voice-quality, NOT ban-safety (public posts hard-gate elsewhere). A hard
   // block here blackholes the founder's message (the live root-cause of "hello +
   // synthesis never arrived" — bounced on an em-dash). So instead of blocking,
   // SANITIZE the mechanical AI-tells and SEND the cleaned text. Delivery wins.
@@ -1309,6 +1304,27 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
         error: err instanceof Error ? err.message : String(err),
       })
     );
+  }
+
+  // Plan-delivery signal. When a STRATEGIC message is successfully delivered, the
+  // founder has received the synthesis plan (the first strategic message in
+  // onboarding). Stamp it durably so markFoundationComplete + the rows-complete
+  // backstop can gate on it — onboarding cannot finish on an undelivered plan.
+  if (result.ok && messageClass === "strategic") {
+    try {
+      await ctx.runMutation(
+        internal.gtmMaya.agentLifecycle.markStrategyDelivered,
+        { agentId: auth.agentId }
+      );
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          event: "send_update.mark_strategy_delivered_failed",
+          agentId: auth.agentId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      );
+    }
   }
 
   return new Response(

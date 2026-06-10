@@ -1198,12 +1198,26 @@ export const markLifecycleHttp = httpAction(async (ctx, request) => {
         headers: { "content-type": "application/json" },
       });
     }
+    case "strategy_delivered": {
+      // Belt-and-suspenders: a successful strategic send_update already stamps
+      // this server-side, but the synthesis skill may also mark it explicitly.
+      const r = await ctx.runMutation(
+        internal.gtmMaya.agentLifecycle.markStrategyDelivered,
+        { agentId: auth.agentId }
+      );
+      return new Response(JSON.stringify({ ok: true, ...r }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
     case "foundation_complete": {
       const r = await ctx.runMutation(
         internal.gtmMaya.agentLifecycle.markFoundationComplete,
         { agentId: auth.agentId }
       );
-      return new Response(JSON.stringify({ ok: true, ...r }), {
+      // Surface ok:false when the plan wasn't delivered so the agent sees this
+      // as BLOCKED (must send the synthesis first), not a silent success.
+      return new Response(JSON.stringify({ ok: r.completed, ...r }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
