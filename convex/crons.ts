@@ -52,4 +52,16 @@ crons.interval(
   internal.gtmMaya.synthesisDelivery.sweepSynthesisSafetyNet
 );
 
+// Liveness / dark-day watchdog. Over weeks the likely failure isn't a crash —
+// it's quiet degradation: the machine dies or the LLM goes NO_REPLY for days and
+// nothing notices. Every 30 min: flag any live, past-onboarding agent that
+// missed a full daily cadence (dark brief) or logs zero operational spend while
+// alive (blind cost — the kill-switch can't see it), and ALERT the operator.
+// Never auto-kills (silence is a human-investigate signal). See livenessWatch.ts.
+crons.interval(
+  "gtm-liveness-watch",
+  { minutes: 30 },
+  internal.gtmMaya.livenessWatch.sweepLiveness
+);
+
 export default crons;

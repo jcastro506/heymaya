@@ -4443,6 +4443,11 @@ export default defineSchema({
     // this, so completion can never happen on an undelivered plan.
     strategyDeliveredAt: v.optional(v.number()),
     lastMorningBriefAt: v.optional(v.number()),
+    // Liveness/dark-day watchdog dedup. Stamped when the liveness sweep alerts
+    // the operator that a live agent went silent (stale morning brief) or blind
+    // (zero operational spend while alive past onboarding) — so we alert once per
+    // dedup window, not every sweep. See convex/gtmMaya/livenessWatch.ts.
+    livenessAlertedAt: v.optional(v.number()),
     foundationLeaseUntil: v.optional(v.number()),
     // How many times the foundation lease has been acquired. The watchdog
     // re-acquires it each tick to resume the pass — but a weak brain that never

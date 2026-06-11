@@ -121,6 +121,7 @@ import type * as gtmMaya_formatIntel from "../gtmMaya/formatIntel.js";
 import type * as gtmMaya_intentStrike from "../gtmMaya/intentStrike.js";
 import type * as gtmMaya_judgeCardsBatch from "../gtmMaya/judgeCardsBatch.js";
 import type * as gtmMaya_judgeChannel from "../gtmMaya/judgeChannel.js";
+import type * as gtmMaya_livenessWatch from "../gtmMaya/livenessWatch.js";
 import type * as gtmMaya_managerStore from "../gtmMaya/managerStore.js";
 import type * as gtmMaya_mediaAssets from "../gtmMaya/mediaAssets.js";
 import type * as gtmMaya_memoryLedger from "../gtmMaya/memoryLedger.js";
@@ -427,6 +428,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/intentStrike": typeof gtmMaya_intentStrike;
   "gtmMaya/judgeCardsBatch": typeof gtmMaya_judgeCardsBatch;
   "gtmMaya/judgeChannel": typeof gtmMaya_judgeChannel;
+  "gtmMaya/livenessWatch": typeof gtmMaya_livenessWatch;
   "gtmMaya/managerStore": typeof gtmMaya_managerStore;
   "gtmMaya/mediaAssets": typeof gtmMaya_mediaAssets;
   "gtmMaya/memoryLedger": typeof gtmMaya_memoryLedger;

@@ -364,6 +364,38 @@ const MODEL_ROUTING = {
     process.env.MAYA_GTM_EXTRACTION_MODEL ?? "google/gemini-3.1-flash-lite",
 };
 
+/**
+ * Reliability guardrail for the K2-0905 provider routing.
+ *
+ * OpenClaw passes only the model SLUG (it rejects per-request provider routing),
+ * so we CANNOT pin the reliable provider in code — the durable fix is an
+ * account-level OpenRouter "Provider Preferences" setting (prefer Novita, ignore
+ * Groq + AtlasCloud), set ONCE on the API key. The risk is a fresh environment
+ * where that setting was never applied → Groq breaks tool calls / AtlasCloud
+ * stalls past the idle timeout → Maya silently drops or hangs turns.
+ *
+ * This turns "operator memory" into a LOUD deploy-time surface: every deploy
+ * warns until the operator sets OPENROUTER_PROVIDER_PINNED=true to acknowledge
+ * the dashboard preference is configured. Non-blocking (a warning, not a throw)
+ * so it never blocks a deliberate test, but it can never be silently forgotten.
+ */
+export function assertModelProviderPinned(): { ok: boolean; warning?: string } {
+  if (process.env.MAYA_GTM_MODEL) {
+    // An explicit model override is in play — operator owns provider choice.
+    return { ok: true };
+  }
+  if (process.env.OPENROUTER_PROVIDER_PINNED === "true") {
+    return { ok: true };
+  }
+  const warning =
+    `[deployMayaGtm] ⚠️ RELIABILITY: main model ${MODEL_ROUTING.mainMaya} has 3 OpenRouter providers ` +
+    `(Novita reliable; Groq breaks tool calls; AtlasCloud stalls under load). Pin "Novita" in the ` +
+    `OpenRouter dashboard Provider Preferences, then set OPENROUTER_PROVIDER_PINNED=true to silence ` +
+    `this. Until then Maya may silently drop/hang turns on a fresh environment.`;
+  console.warn(warning);
+  return { ok: false, warning };
+}
+
 // Sprint 2.18 #51 — bumped from shared-cpu-1x:1024MB to
 // shared-cpu-2x:2048MB. Runs #22 (DeepSeek V4 Flash) and #28
 // (Gemma 4) both hit:
@@ -1329,6 +1361,9 @@ export const deployMayaGtm = internalAction({
   args: { agentId: v.id("gtmAgents") },
   handler: async (ctx, args): Promise<DeployMayaGtmResult> => {
     const startedAt = Date.now();
+    // Reliability guardrail: surface the OpenRouter provider-pin requirement on
+    // every deploy (can't pin in code — OpenClaw is slug-only). Non-blocking.
+    assertModelProviderPinned();
     const fail = (
       stage: DeployMayaGtmStage,
       message: string,

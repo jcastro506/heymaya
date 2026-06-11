@@ -78,6 +78,51 @@ function normalizeChannel(raw: unknown): Channel {
 }
 
 /**
+ * Model-aware price table (USD per 1M tokens), verified 2026-06 via OpenRouter.
+ * Used to DERIVE turn cost server-side when the agent runtime omits costUsd —
+ * the fix for the blind cost ledger. Before this, the gtmCostLedger mirror only
+ * fired when the agent self-reported costUsd, which the OpenClaw runtime often
+ * does not, so the spend kill-switch summed ~$0 and a runaway burned uncapped.
+ * The runtime DOES report `model` + `tokensIn/tokensOut`, so we price it here.
+ * Keyed by a substring of the model slug (most specific first).
+ */
+const MODEL_PRICE_PER_MTOK: ReadonlyArray<{
+  match: string;
+  in: number;
+  out: number;
+}> = [
+  { match: "kimi-k2", in: 0.6, out: 2.5 }, // main brain
+  { match: "gemini-3.1-flash-lite", in: 0.25, out: 1.5 }, // extraction
+  { match: "gemini-3.1-flash", in: 0.5, out: 3.0 },
+  { match: "gemini-3-flash", in: 0.5, out: 3.0 }, // workers
+];
+// Conservative fallback for an unrecognized model: priced at/above our known
+// models so an unknown slug counts GENEROUSLY toward the spend cap — the
+// kill-switch must err toward catching a runaway, never toward undercounting it.
+const FALLBACK_PRICE_PER_MTOK = { in: 1.0, out: 3.0 } as const;
+
+/**
+ * Derive turn cost (USD) from reported token usage + model slug. Returns
+ * undefined only when there are no usable token counts at all — that fully-blind
+ * case is covered by the cost-independent backstop in spendKill (machine-age).
+ */
+export function deriveTurnCostUsd(
+  model: string | undefined,
+  tokensIn: number | undefined,
+  tokensOut: number | undefined
+): number | undefined {
+  const tin = tokensIn ?? 0;
+  const tout = tokensOut ?? 0;
+  if (tin <= 0 && tout <= 0) return undefined;
+  const slug = (model ?? "").toLowerCase();
+  const price =
+    MODEL_PRICE_PER_MTOK.find((p) => slug.includes(p.match)) ??
+    FALLBACK_PRICE_PER_MTOK;
+  const cost = (tin * price.in + tout * price.out) / 1_000_000;
+  return Math.round(cost * 1e8) / 1e8;
+}
+
+/**
  * Persist one transcript row + fire the matching usage event inline (so the
  * engagement scoreboard stays accurate). Internal — both capture paths
  * (send_update inline, log_message HTTP) runMutation into this.
@@ -168,6 +213,19 @@ export const recordTurnTelemetry = internalMutation({
       .filter((r) => r.accountId === args.accountId && r.role === "maya")
       .sort((a, b) => b.ts - a.ts);
 
+    // Cost: prefer a self-reported costUsd, but DERIVE it from the reported
+    // tokens + model when the runtime omits it (the common case). Without this
+    // the ledger mirror below never fires and the spend kill-switch sums $0.
+    const reportedCost =
+      typeof args.costUsd === "number" && args.costUsd >= 0
+        ? args.costUsd
+        : undefined;
+    const derivedCost =
+      reportedCost === undefined
+        ? deriveTurnCostUsd(args.model, args.tokensIn, args.tokensOut)
+        : undefined;
+    const effectiveCostUsd = reportedCost ?? derivedCost;
+
     let patched = false;
     if (mayaRows.length > 0) {
       await ctx.db.patch(mayaRows[0]._id, {
@@ -176,14 +234,15 @@ export const recordTurnTelemetry = internalMutation({
         tokensOut: args.tokensOut,
         cacheReadTokens: args.cacheReadTokens,
         latencyMs: args.latencyMs,
-        costUsd: args.costUsd,
+        costUsd: effectiveCostUsd,
         thinkingBudget: args.thinkingBudget,
       });
       patched = true;
     }
 
-    // Mirror spend into the aggregate cost ledger (founder cost-per-user).
-    if (typeof args.costUsd === "number" && args.costUsd >= 0) {
+    // Mirror spend into the aggregate cost ledger (founder cost-per-user) —
+    // now fires whenever we have EITHER a reported OR a derived cost.
+    if (typeof effectiveCostUsd === "number" && effectiveCostUsd >= 0) {
       const units =
         (args.tokensIn ?? 0) + (args.tokensOut ?? 0) || undefined;
       await ctx.db.insert("gtmCostLedger", {
@@ -191,7 +250,7 @@ export const recordTurnTelemetry = internalMutation({
         provider: "openrouter",
         operation: "turn_completion",
         reason: "maya conversation turn",
-        costUsd: args.costUsd,
+        costUsd: effectiveCostUsd,
         units,
         cacheStatus: (args.cacheReadTokens ?? 0) > 0 ? "hit" : "called",
         metadata: {
@@ -200,6 +259,7 @@ export const recordTurnTelemetry = internalMutation({
           tokensIn: args.tokensIn,
           tokensOut: args.tokensOut,
           latencyMs: args.latencyMs,
+          costDerived: reportedCost === undefined,
         },
         createdAt: Date.now(),
       });
