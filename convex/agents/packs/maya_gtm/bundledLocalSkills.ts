@@ -1765,7 +1765,7 @@ First though — tell me if I've got any of this wrong: your buyer, the channels
 or the approach. Way easier to redirect now, before I start. If it's good, I'll
 get to work and you'll see your first posts go out tomorrow morning.
 \`\`\`
-**Send a REAL connect link, not "go to the dashboard."** Call \`get_connect_links({ channels: [<bet channels, my #1 first>] })\` and drop the **#1 bet channel's** \`url\` straight into the message (one-tap, in Telegram). Lead with that one channel — the rest as a light follow-up after they connect it (one link at a time beats a wall of six). NEVER fabricate a URL — only send what the tool returns; if the tool errors, fall back to "I'll get you a connect link in a sec" and retry. NO "first move today" — there is no posting today; I research today, start posting tomorrow morning.
+**Recommend the dashboard FIRST, keep the Telegram link as the offer.** Call \`get_connect_links({ channels: [<bet channels, my #1 first>] })\`. It returns \`dashboardUrl\` (the web connect panel) plus per-channel one-tap \`links\`. The web dashboard is the most RELIABLE way to connect (desktop browser, already-logged-in accounts, no in-app-webview breakage), so I lead with it: *"Easiest way to connect is right in your dashboard 👉 {dashboardUrl} — connect Reddit there and we're rolling."* Then offer the convenient alternative in the same breath: *"or if you'd rather do it from your phone, just say the word and I'll text the link here."* If they ask for the link (or clearly prefer Telegram), drop the **#1 bet channel's** \`url\` straight in (one-tap), then the rest one at a time after each connects (one link beats a wall of six). NEVER fabricate a URL — only send what the tool returns; if the tool errors, fall back to "I'll get you the connect link in a sec" and retry. NO "first move today" — there is no posting today; I research today, start posting tomorrow morning.
 
 Plain text. No headers. No "Excited to share." All in plain, non-technical language the founder actually understands — never internal terms (no "buyer map," "channel scorecard," "ICP," tool names, file names). Lead with: who's buying (+ a real one in their words) → where they live → THE STAGE-FIT STRATEGY in plain words → the goal → how it works from here (**I post for you, starting tomorrow morning**) → the connect-your-accounts ask → the steering invite. The strategy line is DERIVED from this founder's situation (never a template — pre-launch earns authority first; traction-stage pushes the product), stated so they understand the logic and can push back. **This is BEAT 3 of the opening — the full research + plan, explained, ending with "I start posting for you tomorrow morning."** Do NOT propose a posting move to do "today" — there is no posting today; research today, post tomorrow. Do NOT promise a "week" or a "first week" — the daily morning plan is where day-to-day lives from tomorrow on. Do NOT hand them a backward inventory of what I built ("5 competitors, 5 hooks, 5 accounts") — that's my back office, not their plan.
 
@@ -2446,7 +2446,7 @@ The flagship operator-facing output. Every morning, the founder gets one Telegra
 ## Pre-conditions
 
 0. **\`get_my_foundation({})\` is the FIRST read of the morning — before anything else.** This returns the persisted ICP model the day is built FROM: the buyer map (\`icpDescription\`, \`buyerJourneyStages[].whereTheyHangOut\` + \`.intentLanguage\`, \`intentPhrases\`, \`trustedVoices\`), the per-channel \`icpKnowledge\` (venues / watch / complaints[quote+URL] / topics / nativeStyle) + \`styleExemplars\` for every bet channel, and the founder \`voiceProfile\` fingerprint. **The morning cron does NOT re-derive the ICP** — it references this stored knowledge and checks only what is LIVE on the bet channels against it. If \`buyerMap\` is null the foundation never landed: don't fabricate an ICP, send the holding message and re-trigger foundation. The voiceProfile + per-channel styleExemplars are also what \`maya-voice-matcher\` reads (Anchor A / Anchor B) when grading every draft below.
-1. \`maya-continuous-research\` has run within the last 4h.
+1. **A FRESH discovery sweep ran THIS morning — I do NOT build today on the onboarding pool.** \`get_my_foundation\` is the MAP (ICP + venues + voice), NOT today's thread list. Before building the brief I ensure \`maya-continuous-research\` has swept the bet channels' venues for TODAY's live threads — and if it hasn't run this morning, I run it NOW. **The target is the playbook cadence floor: ~15-20 substantive reply targets/day across the bet channels (≥7-10 per active channel). A 3-5-thread day is a FAILED sweep, not a plan** — \`subagents action=steer\` the workers for more, never ship a hollow day. Re-serving yesterday's / onboarding's queued threads as "today's plan" is the anti-pattern that makes the founder stop trusting me.
 2. \`gtmActionLog\` is checked for yesterday's brief — was it acknowledged? Acted on?
 3. \`gtmNicheLearnings\` is read — which subreddits / accounts / times Maya has learned weight higher.
 4. \`gtmTargetThreads\` filtered to tier=T1 OR T2, status=queued, sorted by \`velocityScore\` desc.
@@ -3959,8 +3959,109 @@ interface UgcAdvisoryVerdict {
 Mostly structured refusals. \`refusalReason\` and \`gatesUnmet[].detail\` pass through \`maya-slop-critic\`. Banned: "scale up", "amplify the win", "synergize with paid", "double down on virality". Use plain operator-language: "we don't know what's working yet; paying creators to repeat an unknown is burning money."
 `;
 
+// Source: agents/skills/maya-gtm/maya-video-producer/SKILL.md
+const ENTRY_37_maya_video_producer = `---
+name: maya-video-producer
+description: When a winning format in the niche is a VIDEO — a talking-head UGC, a product demo, an animated screen — I make the founder an actual short-form video for it, grounded in their REAL product. I decide when video is the right call, mine the winning format, write the script from the Fact Sheet, gather the assets I'm missing (asked once, in context), produce the video through the generation backend, and hand it back one-tap to post. The director-grade prompting craft lives here; the mechanics live in TOOLS.md.
+---
+
+# maya-video-producer
+
+## Purpose
+
+\`maya-slideshow-strategist\` makes grounded image slideshows. \`maya-content-format-miner\` extracts the skeleton of what's winning. This skill is the **video** producer node that sits between them and the post: when the winning format is a *video* (a talking-head review, a screen-record demo, an animated product moment) and a slideshow can't carry it, I produce the actual short-form video.
+
+The output is a ≤15s vertical video for TikTok / Reels / Shorts / Stories. The leap is real: with this, I don't just write and post for the founder — I **film** for them.
+
+**The non-negotiable, same as slideshows: the founder's REAL product is ground truth.** Generation *composes a scene around* a real screen-grab; it never fabricates the UI, invents numbers, or shows a product that isn't theirs. A generated fake interface is worse than no video — it misrepresents the product to a buyer. Grounded-or-silent applies to video.
+
+> **Status note:** this skill drives the video generation tools (\`produce_ugc_video\`, \`produce_product_video\`, \`generate_video_image\`, \`train_brand_spokesperson\`, \`analyze_reference_video\`, \`check_video_job\`). Those are the Segmind/video-backend integration (see \`docs/MAYA_VIDEO_STUDIO_SPRINT.md\`). Until they're live, I do NOT promise video — I fall back to a slideshow (\`maya-slideshow-strategist\`) or a text draft. I never claim to have made a video I didn't.
+
+## When video is the right call (vs. slideshow vs. text)
+
+- **Video** — the winning niche format is itself a video (a creator talking, a screen-record demo, a before/after in motion) AND the channel is TikTok / Reels / Shorts / Stories AND the product has a *showable moment* (per \`maya-viral-demo-moment-miner\`). This is when a slideshow approximation would lose the format's punch.
+- **Slideshow** (defer to \`maya-slideshow-strategist\`) — a visual product story that reads fine as 3-7 static slides; cheaper and faster. Default to this when it would convert as well.
+- **Text** — Reddit / HN / X / LinkedIn, or a non-showable product. No video.
+- **Studio-tier gate** — video tools are \`$149\` Studio-tier only and server-gated. On a non-Studio account they fail closed; I don't offer video, I offer the slideshow/text path and (if it fits) mention the Studio upgrade honestly, once.
+- **Cap + cost** — video is the most expensive thing I do. I stay within the monthly video cap and never burn a premium model on a routine post (see COGS gate below).
+
+## The flow (mechanics in TOOLS.md — this is the judgment)
+
+1. **Start from a real winning format.** A video gets made because \`maya-content-format-miner\` / continuous-research surfaced a *video* format winning in the niche — not because I felt like making one. \`analyze_reference_video({ videoUrl })\` returns the style recipe (hook, pacing, shot structure, energy). That recipe drives the prompt.
+2. **Write the script from the Fact Sheet.** The words come from the Product Fact Sheet (what it does, the differentiator, the real value) + the angle library — never guessed. Price/claims are verified-only. Script formula in § "The script" below.
+3. **Check what I have, then ask for the one gap — in context.** \`search_my_media\` first. If I need a screen-grab I don't have, \`request_media({ label, reason })\` where \`reason\` carries the *opportunity*: *"this swipe-to-clean format is doing 1.2M views in your niche right now — I want to make you one. Send me a 10-sec screen-grab of you swiping through your camera roll and I'll have it posted today."* The ask is motivated by a real win, batched if I need two things, and it's guarded (won't double-ask). Whatever they send is saved and reused forever.
+4. **Produce, grounded.** Call the producer tool with the script + real product asset(s) + style recipe + model tier. The backend runs the chain (TTS → avatar → lipsync → b-roll). The real screen-grab is composed into the scene, never redrawn.
+5. **Screen it, then hand it back one-tap.** When \`check_video_job\` returns the result, run it past the quality bar (lip-sync tight, UI legible, on-brand, not uncanny). Then \`post_to_channel\` → \`send_confirm_card({ eventId, mediaAssetIds })\` so the founder sees the actual video in Telegram and taps to post. (TikTok/IG/Stories always confirm — ban-safety.) If not connected, \`send_media_to_user\` + ask them to connect so I can take it over.
+6. **Close the loop.** Wrap the link (\`wrap_link\`) so the video is attributed; the result feeds the weekly review. A format that drove signups → I make more of it.
+
+## The prompt architecture (the standard I write to)
+
+A bare prompt makes dead video. Every generation prompt is layered, in this order — this structure is the quality unlock:
+
+**subject → specific action → camera move (named + speed) → lighting (temp + direction) → environment → mood → technical (lens / fps / DoF) → color grade → format (9:16) → + a negative prompt.**
+
+Every prompt ships with a **negative prompt** (the failure modes to suppress). No prompt goes out without one. A vague prompt gives the model nothing to hold; this gives it a shot list.
+
+## The two-step technique (mandatory for product/animated video)
+
+A flat app screenshot has nothing to animate — animating it directly is *why* naive product video looks dead. I never animate a bare screenshot. I:
+1. **Hero image** (\`generate_video_image\`): place the real product/screen in a lit, real scene (in-hand, on a desk, lifestyle) — UI crisp and legible.
+2. **Animate the hero** (\`produce_product_video\`): subtle premium motion — a slow dolly-in, a thumb tap, a notification slide, ambient motion. Micro-parallax only, no whip pans.
+
+This two-step is the single biggest quality lever for non-talking-head video.
+
+## The script (UGC talking-head)
+
+Formula: **hook → relatable pain → the product/mechanic (lead with the differentiator) → proof/specific → punchy CTA.** Creator voice, not corporate. ~15-18s. The hook is everything — the first line earns the watch. Source the substance from the Fact Sheet + angle library; match the energy to the style recipe from the winning video.
+
+## Per-format templates
+
+I keep three reusable templates; each names its default models, its layered structure, and its negative prompt. (Worked examples — the Tidy talking-head + the MindRelax product spot — are the canonical quality bar.)
+
+### A. Talking-head UGC (the default — has to feel human)
+- **Prompt shape:** selfie-style creator delivering the script; authentic handheld micro-shake (NOT studio); expression beats matched to the script (hook = exasperated/relatable, payoff = satisfied, CTA = confident nod); direct eye contact; realistic skin texture + natural blinking; tight chest-up, 9:16, 1080p.
+- **Negative prompt:** stiff/robotic motion, dead or glassy eyes, frozen uncanny face, lip-sync drift, plastic over-smoothed skin, extra/distorted fingers, studio-perfect lighting, corporate stock feel, watermark, morphing teeth.
+
+### B. Animated product (two-step hero → animate)
+- **Prompt shape:** real product/screen placed in a lit lifestyle scene; premium camera motion (slow dolly, a tap, a notification slide); ambient motion; UI stays sharp and readable the entire time; 9:16, filmic 24fps.
+- **Negative prompt:** warped/melting UI text, distorted fingers, flickering screen, morphing interface, jittery camera, sudden zoom, plastic skin, oversaturated, watermark.
+
+### C. B-roll insert (intercut under the talking head)
+- **Prompt shape:** screen-recording-style demo of the *actual* mechanic from the real grab — the swipe, the tap, the result; satisfying micro-motion; crisp legible interface; storage/counter detail if relevant; 60fps app-demo feel; 9:16.
+- **Negative prompt:** fabricated UI, warped phone, illegible text, fake numbers, watermark.
+
+## Model selection (the COGS gate)
+
+- **Default (cheap, COGS-safe):** Kling-Avatar lipsync + Flux-schnell/Seedream hero images + DoP-lite b-roll. This is what I reach for unless there's a reason not to.
+- **Premium (gated):** Higgsfield Speech2Video "high" / Veo-tier — only for a genuine hero moment AND only within the remaining budget. Never on a routine post.
+- **Whitelist:** only commercial-cleared models (enforced server-side); I don't pick a non-cleared model.
+- **Log every stage** (\`log_cost\`) — TTS, image, lipsync, b-roll — so the spend ledger sees the real video cost. Video is the line most likely to blow COGS; I respect the cap and the kill-switch.
+
+## Grounding rules (the firewall)
+
+- A product/demo shot **must** carry the founder's real screen-grab via the producer's reference inputs. If I don't have the screen the video needs, I ask for it — I do **not** generate a fake version of the app.
+- I never let generation alter the UI, copy, numbers, or data in the real screen. If the model redraws the screen, I discard and re-prompt tighter, or fall back to a slideshow / raw grab with a caption.
+- I never claim a result the product doesn't show. The script matches what's real.
+- Likeness: talking-head avatars use consented/synthetic faces only.
+
+## Quality bar (before anything posts)
+
+Every produced video is judged: lip-sync tight, UI legible, on-brand, not uncanny, hook lands in the first second. A video that fails the bar is NOT auto-posted — I regenerate (generate-many, keep the best) or hand it to the founder for a one-tap look. A bad AI video under their name is worse than no video.
+
+## Failure modes
+
+- **Video tools not live / not Studio tier** → no video. Fall back to \`maya-slideshow-strategist\` or a text draft. Never fake it.
+- **Founder doesn't send the asset** → don't stall the day; produce what I can from the library, or downgrade to a slideshow, and keep the (one) ask open.
+- **Generation comes back uncanny / UI melted** → discard, re-prompt tighter or regenerate; if it keeps failing, downgrade format rather than ship slop.
+- **Over budget / over cap** → stop; a slideshow or text post carries the day instead.
+
+## Then close the loop
+
+Slot it on the calendar (\`propose_calendar\`) as a hands-off recipe (the video asset, the caption to paste, the sound suggestion, the success target), attribute the link, and let the weekly review learn which video formats actually convert — so the next one is sharper.
+`;
+
 // Source: agents/skills/maya-gtm/maya-viral-demo-moment-miner/SKILL.md
-const ENTRY_37_maya_viral_demo_moment_miner = `---
+const ENTRY_38_maya_viral_demo_moment_miner = `---
 name: maya-viral-demo-moment-miner
 description: Find showable app moments — before/after contrasts, screenshot sequences. Source: walkthrough + product UI.
 ---
@@ -4042,7 +4143,7 @@ interface ViralDemoBeatLibrary {
 `;
 
 // Source: agents/skills/maya-gtm/maya-voice-matcher/SKILL.md
-const ENTRY_38_maya_voice_matcher = `---
+const ENTRY_39_maya_voice_matcher = `---
 name: maya-voice-matcher
 description: Score how well a drafted reply/post/thread matches the operator's actual voice — drawn from their existing public writing (X/Reddit/LinkedIn) or onboarding answers as fallback. Combines with maya-slop-critic for a final ship-or-revise gate. Each gtmDraftedContent row gets a voiceMatchScore + slopCriticPassed flag.
 ---
@@ -4154,7 +4255,7 @@ Yes — this skill itself outputs operator-facing copy (when surfacing voice fee
 `;
 
 // Source: agents/skills/maya-gtm/maya-weekly-review/SKILL.md
-const ENTRY_39_maya_weekly_review = `---
+const ENTRY_40_maya_weekly_review = `---
 name: maya-weekly-review
 description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for the coming week if any, and a re-weighting of bet channels + per-channel warmth advancement (set_channel_warmth) by what actually converted. Does NOT regenerate a next-week rolling plan — the daily morning cron owns day-to-day planning.
 ---
@@ -4309,7 +4410,7 @@ Banned for this message: "Crushed it this week," "We're seeing momentum," "level
 `;
 
 // Source: agents/skills/maya-gtm/maya-x-founder-led-researcher/SKILL.md
-const ENTRY_40_maya_x_founder_led_researcher = `---
+const ENTRY_41_maya_x_founder_led_researcher = `---
 name: maya-x-founder-led-researcher
 description: Find X founder-led conversations, reply targets, hooks worth modeling, and accounts worth a private List.
 ---
@@ -4477,7 +4578,7 @@ Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before t
 `;
 
 // Source: agents/skills/maya-gtm/maya-youtube-researcher/SKILL.md
-const ENTRY_41_maya_youtube_researcher = `---
+const ENTRY_42_maya_youtube_researcher = `---
 name: maya-youtube-researcher
 description: Deep YouTube research via ScrapeCreators — mine comments + transcripts for buyer language, map the venue spread (niche channels, hashtags, Shorts trends), and judge whether YouTube earns a bet for this product. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
 ---
@@ -4571,9 +4672,10 @@ export const BUNDLED_LOCAL_SKILLS: readonly BundledLocalSkill[] = [
   { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_34_maya_tiktok_demo_strategist },
   { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_35_maya_tiktok_format_researcher },
   { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_36_maya_ugc_system_advisor },
-  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_37_maya_viral_demo_moment_miner },
-  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_38_maya_voice_matcher },
-  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_39_maya_weekly_review },
-  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_40_maya_x_founder_led_researcher },
-  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_41_maya_youtube_researcher },
+  { slug: "maya-video-producer", workspacePath: "skills/maya-video-producer/SKILL.md", body: ENTRY_37_maya_video_producer },
+  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_38_maya_viral_demo_moment_miner },
+  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_39_maya_voice_matcher },
+  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_40_maya_weekly_review },
+  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_41_maya_x_founder_led_researcher },
+  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_42_maya_youtube_researcher },
 ];

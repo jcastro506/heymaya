@@ -121,6 +121,7 @@ import type * as gtmMaya_formatIntel from "../gtmMaya/formatIntel.js";
 import type * as gtmMaya_intentStrike from "../gtmMaya/intentStrike.js";
 import type * as gtmMaya_judgeCardsBatch from "../gtmMaya/judgeCardsBatch.js";
 import type * as gtmMaya_judgeChannel from "../gtmMaya/judgeChannel.js";
+import type * as gtmMaya_livenessWatch from "../gtmMaya/livenessWatch.js";
 import type * as gtmMaya_managerStore from "../gtmMaya/managerStore.js";
 import type * as gtmMaya_mediaAssets from "../gtmMaya/mediaAssets.js";
 import type * as gtmMaya_memoryLedger from "../gtmMaya/memoryLedger.js";
@@ -131,6 +132,7 @@ import type * as gtmMaya_openclaw_conversationCapture from "../gtmMaya/openclaw/
 import type * as gtmMaya_openclaw_hookClient from "../gtmMaya/openclaw/hookClient.js";
 import type * as gtmMaya_openclaw_inboundCallback from "../gtmMaya/openclaw/inboundCallback.js";
 import type * as gtmMaya_openclaw_managerCallbacks from "../gtmMaya/openclaw/managerCallbacks.js";
+import type * as gtmMaya_openrouterSpend from "../gtmMaya/openrouterSpend.js";
 import type * as gtmMaya_outboundFirewall from "../gtmMaya/outboundFirewall.js";
 import type * as gtmMaya_phase2Trigger from "../gtmMaya/phase2Trigger.js";
 import type * as gtmMaya_planGtm from "../gtmMaya/planGtm.js";
@@ -427,6 +429,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/intentStrike": typeof gtmMaya_intentStrike;
   "gtmMaya/judgeCardsBatch": typeof gtmMaya_judgeCardsBatch;
   "gtmMaya/judgeChannel": typeof gtmMaya_judgeChannel;
+  "gtmMaya/livenessWatch": typeof gtmMaya_livenessWatch;
   "gtmMaya/managerStore": typeof gtmMaya_managerStore;
   "gtmMaya/mediaAssets": typeof gtmMaya_mediaAssets;
   "gtmMaya/memoryLedger": typeof gtmMaya_memoryLedger;
@@ -437,6 +440,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/openclaw/hookClient": typeof gtmMaya_openclaw_hookClient;
   "gtmMaya/openclaw/inboundCallback": typeof gtmMaya_openclaw_inboundCallback;
   "gtmMaya/openclaw/managerCallbacks": typeof gtmMaya_openclaw_managerCallbacks;
+  "gtmMaya/openrouterSpend": typeof gtmMaya_openrouterSpend;
   "gtmMaya/outboundFirewall": typeof gtmMaya_outboundFirewall;
   "gtmMaya/phase2Trigger": typeof gtmMaya_phase2Trigger;
   "gtmMaya/planGtm": typeof gtmMaya_planGtm;

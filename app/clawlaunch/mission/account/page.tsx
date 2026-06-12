@@ -16,6 +16,7 @@ import {
   Loading,
   NeedsOnboarding,
 } from "../_components";
+import { ConnectedAccounts } from "./_ConnectedAccounts";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -116,10 +117,12 @@ export default function AccountPage() {
             label="Telegram"
             value={<Pill tone="lime">primary channel</Pill>}
           />
-          <Row
-            label="Channels"
-            value="Managed in onboarding and your Plan"
-          />
+          <div className="mt-3 border-t border-paper-faint/15 pt-3">
+            <p className="mb-2 font-mono text-xs uppercase tracking-wide text-paper-faint">
+              Channels
+            </p>
+            <ConnectedAccounts />
+          </div>
         </Card>
       </Section>
 

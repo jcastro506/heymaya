@@ -107,7 +107,12 @@ async function snapshotAgentSpend(
   // Operational spend only — research is bounded by its own per-job budgetUsd
   // and must be free to run as long as that budget allows. The kill-switch
   // governs the uncapped loop (turns, heartbeats, posts), not research.
-  const excludeResearch = { excludeResearchJobSpend: true } as const;
+  // Exclude research (bounded by its own budget) AND the OpenRouter aggregate-
+  // poll rows (COGS-visibility only — they conflate research + operational).
+  const excludeResearch = {
+    excludeResearchJobSpend: true,
+    excludeOpenrouterPoll: true,
+  } as const;
   const hourSpendUsd = await sumLedgerForAccountSince(
     ctx,
     agent.accountId,

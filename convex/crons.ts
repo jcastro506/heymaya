@@ -52,4 +52,28 @@ crons.interval(
   internal.gtmMaya.synthesisDelivery.sweepSynthesisSafetyNet
 );
 
+// Liveness / dark-day watchdog. Over weeks the likely failure isn't a crash —
+// it's quiet degradation: the machine dies or the LLM goes NO_REPLY for days and
+// nothing notices. Every 30 min: flag any live, past-onboarding agent that
+// missed a full daily cadence (dark brief) or logs zero operational spend while
+// alive (blind cost — the kill-switch can't see it), and ALERT the operator.
+// Never auto-kills (silence is a human-investigate signal). See livenessWatch.ts.
+crons.interval(
+  "gtm-liveness-watch",
+  { minutes: 30 },
+  internal.gtmMaya.livenessWatch.sweepLiveness
+);
+
+// OpenRouter aggregate-spend poll — interim COGS visibility. The per-turn cost
+// is invisible to Convex (the LLM call lives on the Fly machine and the runtime
+// doesn't reliably self-report), so every 20 min we poll OpenRouter's account
+// usage, compute the delta, and write it to gtmCostLedger attributed to the live
+// agent(s). For the single-agent dogfood the delta IS its cost. Visibility only —
+// the spend kill-switch excludes these rows. See gtmMaya/openrouterSpend.ts.
+crons.interval(
+  "gtm-openrouter-spend-poll",
+  { minutes: 20 },
+  internal.gtmMaya.openrouterSpend.pollOpenrouterSpend
+);
+
 export default crons;

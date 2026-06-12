@@ -219,6 +219,18 @@ export const recordTargetThread = internalMutation({
   handler: async (ctx, args): Promise<Id<"gtmTargetThreads">> => {
     await assertAgentBelongsToAccount(ctx, args.accountId, args.agentId);
     const now = Date.now();
+    // Grounding gate (computed, not rejected): a thread is grounded only with a
+    // real verbatim pain quote distinct from the title — not a URL-only/title-
+    // echo stub. The surfacing layer requires this so the founder never sees an
+    // ungrounded "buyer thread", WITHOUT a save-time reject (which bounce-looped).
+    const isGrounded = (
+      painQuote: string | undefined,
+      title: string | undefined
+    ): boolean => {
+      const pq = (painQuote ?? "").trim();
+      if (pq.length === 0) return false;
+      return pq.toLowerCase() !== (title ?? "").trim().toLowerCase();
+    };
     // Dedupe scan: account-scoped so cross-tenant collisions on
     // externalId can never happen. Convex doesn't support a 3-column
     // index without naming it; we filter the by_account_and_platform
@@ -248,6 +260,10 @@ export const recordTargetThread = internalMutation({
         // preserve existing values otherwise. A re-surface that didn't
         // re-extract pain quote shouldn't blank out a prior one.
         painQuote: args.painQuote ?? existing.painQuote,
+        grounded: isGrounded(
+          args.painQuote ?? existing.painQuote,
+          args.title ?? existing.title
+        ),
         postedAt: args.postedAt ?? existing.postedAt,
         velocityScore: args.velocityScore ?? existing.velocityScore,
         authorContext: args.authorContext ?? existing.authorContext,
@@ -278,6 +294,7 @@ export const recordTargetThread = internalMutation({
       status: "queued",
       priorityScore: args.priorityScore,
       painQuote: args.painQuote,
+      grounded: isGrounded(args.painQuote, args.title),
       postedAt: args.postedAt,
       velocityScore: args.velocityScore,
       authorContext: args.authorContext,
