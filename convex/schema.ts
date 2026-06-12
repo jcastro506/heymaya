@@ -5765,6 +5765,14 @@ export default defineSchema({
     /** Verbatim quote from the post body that proves the buyer signal.
      *  Anchors the "grounded or silent" rule — never null on new rows. */
     painQuote: v.optional(v.string()),
+    /** Grounding gate (computed at save): true iff painQuote is present AND
+     *  distinct from the title — i.e. a real verbatim buyer-pain phrase, not a
+     *  URL-only or title-echo stub. The SURFACING layer requires this so an
+     *  ungrounded thread is never shown to the founder as a "buyer thread" —
+     *  without a hard SAVE-time reject (which caused 8-retry bounce loops, see
+     *  saveTargetThreadHttp). Permissive save + grounded-surface = trust without
+     *  the reliability cost. */
+    grounded: v.optional(v.boolean()),
     /** Original post timestamp (ms epoch). Drives freshness gate + velocity. */
     postedAt: v.optional(v.number()),
     /** Likes-per-hour (or platform-equivalent) at time of surfacing. */
