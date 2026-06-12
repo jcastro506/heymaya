@@ -641,8 +641,26 @@ export const getConnectLinksHttp = httpAction(async (ctx, request) => {
     }
   }
 
+  // The web dashboard connect panel — the MORE RELIABLE OAuth surface (desktop
+  // browser, existing logged-in sessions, no in-app-webview breakage). Maya
+  // leads with this; the per-channel one-tap links above stay available for the
+  // founder who'd rather connect from their phone in Telegram.
+  const appUrl = (
+    process.env.APP_URL ??
+    process.env.CONVEX_SITE_URL ??
+    ""
+  ).replace(/\/+$/, "");
+  const dashboardUrl = appUrl
+    ? `${appUrl}/clawlaunch/mission/account`
+    : null;
+
   return new Response(
-    JSON.stringify({ ok: true, links, alreadyConnected: [...connected] }),
+    JSON.stringify({
+      ok: true,
+      links,
+      dashboardUrl,
+      alreadyConnected: [...connected],
+    }),
     { status: 200, headers: { "content-type": "application/json" } }
   );
 });
