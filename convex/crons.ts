@@ -64,4 +64,16 @@ crons.interval(
   internal.gtmMaya.livenessWatch.sweepLiveness
 );
 
+// OpenRouter aggregate-spend poll — interim COGS visibility. The per-turn cost
+// is invisible to Convex (the LLM call lives on the Fly machine and the runtime
+// doesn't reliably self-report), so every 20 min we poll OpenRouter's account
+// usage, compute the delta, and write it to gtmCostLedger attributed to the live
+// agent(s). For the single-agent dogfood the delta IS its cost. Visibility only —
+// the spend kill-switch excludes these rows. See gtmMaya/openrouterSpend.ts.
+crons.interval(
+  "gtm-openrouter-spend-poll",
+  { minutes: 20 },
+  internal.gtmMaya.openrouterSpend.pollOpenrouterSpend
+);
+
 export default crons;

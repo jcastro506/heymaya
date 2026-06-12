@@ -86,7 +86,7 @@ export async function sumLedgerForAccountSince(
   ctx: Pick<QueryCtx, "db">,
   accountId: Id<"creators">,
   sinceMs: number,
-  opts?: { excludeResearchJobSpend?: boolean }
+  opts?: { excludeResearchJobSpend?: boolean; excludeOpenrouterPoll?: boolean }
 ): Promise<number> {
   const rows = await ctx.db
     .query("gtmCostLedger")
@@ -98,6 +98,13 @@ export async function sumLedgerForAccountSince(
     // governing only the uncapped operational loop (the spend kill-switch) can
     // exclude it — a legitimate deep research run must not trip a runaway kill.
     if (opts?.excludeResearchJobSpend && row.researchJobId) return sum;
+    // OpenRouter aggregate-poll rows are COGS-VISIBILITY only: the global delta
+    // conflates research + operational + Convex-side spend, so the kill-switch
+    // (which deliberately excludes research) must NOT count them. They surface
+    // in showWorkAndSpend; the kill stays on agent-attributed operational rows.
+    if (opts?.excludeOpenrouterPoll && row.operation === "openrouter_poll") {
+      return sum;
+    }
     return sum + row.costUsd;
   }, 0);
 }

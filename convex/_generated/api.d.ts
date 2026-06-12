@@ -132,6 +132,7 @@ import type * as gtmMaya_openclaw_conversationCapture from "../gtmMaya/openclaw/
 import type * as gtmMaya_openclaw_hookClient from "../gtmMaya/openclaw/hookClient.js";
 import type * as gtmMaya_openclaw_inboundCallback from "../gtmMaya/openclaw/inboundCallback.js";
 import type * as gtmMaya_openclaw_managerCallbacks from "../gtmMaya/openclaw/managerCallbacks.js";
+import type * as gtmMaya_openrouterSpend from "../gtmMaya/openrouterSpend.js";
 import type * as gtmMaya_outboundFirewall from "../gtmMaya/outboundFirewall.js";
 import type * as gtmMaya_phase2Trigger from "../gtmMaya/phase2Trigger.js";
 import type * as gtmMaya_planGtm from "../gtmMaya/planGtm.js";
@@ -439,6 +440,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/openclaw/hookClient": typeof gtmMaya_openclaw_hookClient;
   "gtmMaya/openclaw/inboundCallback": typeof gtmMaya_openclaw_inboundCallback;
   "gtmMaya/openclaw/managerCallbacks": typeof gtmMaya_openclaw_managerCallbacks;
+  "gtmMaya/openrouterSpend": typeof gtmMaya_openrouterSpend;
   "gtmMaya/outboundFirewall": typeof gtmMaya_outboundFirewall;
   "gtmMaya/phase2Trigger": typeof gtmMaya_phase2Trigger;
   "gtmMaya/planGtm": typeof gtmMaya_planGtm;
