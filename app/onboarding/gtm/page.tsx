@@ -225,8 +225,15 @@ function GtmOnboardingBody() {
   }, [startOnboarding, isAuthenticated]);
 
   const canSubmit = useMemo(() => {
-    return draft.url.trim().startsWith("http") && draft.name.trim().length > 0;
-  }, [draft.name, draft.url]);
+    // W1.3 — a mobile-only founder with no landing page can submit with just a
+    // store link; the store listing becomes Maya's product-context source.
+    const hasWebUrl = draft.url.trim().startsWith("http");
+    const hasStoreUrl =
+      draft.appType === "mobile" &&
+      (draft.appStoreUrl.trim().startsWith("http") ||
+        draft.playStoreUrl.trim().startsWith("http"));
+    return (hasWebUrl || hasStoreUrl) && draft.name.trim().length > 0;
+  }, [draft.name, draft.url, draft.appType, draft.appStoreUrl, draft.playStoreUrl]);
 
   async function saveAndQueueResearch() {
     if (!canSubmit) return;
@@ -243,9 +250,18 @@ function GtmOnboardingBody() {
         ? toTiktokWarmupState(tiktokWarmth.state)
         : "unknown";
       const tiktokAccountAgeDays = tiktokWarmth?.accountAgeDays ?? "";
+      // W1.3 — when a mobile founder has no website, fall back to the store
+      // link as the app `url` (gtmApps.url is required; the inspector detects
+      // the store URL and reads the listing instead of crawling a dead site).
+      const webUrl = draft.url.trim();
+      const effectiveUrl = webUrl.startsWith("http")
+        ? webUrl
+        : draft.appStoreUrl.trim().startsWith("http")
+          ? draft.appStoreUrl.trim()
+          : draft.playStoreUrl.trim();
       const appId = await setAppProfile({
         name: draft.name.trim(),
-        url: draft.url.trim(),
+        url: effectiveUrl,
         appType: draft.appType,
         appStoreUrl:
           draft.appType === "mobile"
@@ -433,7 +449,13 @@ function GtmOnboardingBody() {
               placeholder="Your app's name"
             />
           </Field>
-          <Field label="Product URL">
+          <Field
+            label={
+              draft.appType === "mobile"
+                ? "Product URL (optional — add your store link below)"
+                : "Product URL"
+            }
+          >
             <input
               value={draft.url}
               onChange={(event) =>
