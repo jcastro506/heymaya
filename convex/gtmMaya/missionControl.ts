@@ -203,19 +203,32 @@ export const deleteMyGtmAccount = mutation({
 
 // ───────────────────────── Today — the live activity feed ─────────────────────────
 
-/** The "what ClawLaunch is doing/thinking now" feed — Today tab. Most recent
- *  first, capped. Live-subscribed: OpenClaw POSTs → UI updates in real time. */
+/** The "what Maya is doing/thinking" feed. Most recent first, capped.
+ *  Live-subscribed: OpenClaw POSTs → UI updates in real time.
+ *
+ *  `sinceMs` (optional) bounds the window from below — this is what powers the
+ *  Thinking view's Hour / Day / Week filter. The `by_account_and_created`
+ *  index makes the range read efficient (`.gte("createdAt", sinceMs)`). When
+ *  `sinceMs` is set we raise the cap to 500 so a full week of activity fits;
+ *  the Today tab calls it with just `limit` and gets the old behavior.
+ *  Kind filtering is done client-side off this single subscription so the
+ *  filter chips toggle instantly without a re-query. */
 export const getMyAgentActivity = query({
-  args: { limit: v.optional(v.number()) },
+  args: { limit: v.optional(v.number()), sinceMs: v.optional(v.number()) },
   handler: async (ctx, args): Promise<Doc<"gtmAgentActivity">[]> => {
     const creator = await resolveMyGtmCreator(ctx);
     if (!creator) return [];
-    const limit = Math.min(Math.max(args.limit ?? 30, 1), 100);
+    const ranged = args.sinceMs !== undefined;
+    const cap = Math.min(Math.max(args.limit ?? 30, 1), ranged ? 500 : 100);
     return await ctx.db
       .query("gtmAgentActivity")
-      .withIndex("by_account_and_created", (q) => q.eq("accountId", creator._id))
+      .withIndex("by_account_and_created", (q) =>
+        ranged
+          ? q.eq("accountId", creator._id).gte("createdAt", args.sinceMs!)
+          : q.eq("accountId", creator._id)
+      )
       .order("desc")
-      .take(limit);
+      .take(cap);
   },
 });
 
@@ -252,16 +265,26 @@ export const recordAgentActivity = internalMutation({
       linkedRef: args.linkedRef,
       createdAt: Date.now(),
     });
-    // Keep the feed bounded — prune beyond the most recent 200 for this agent.
+    // Keep the feed durable enough for the Thinking view's Week filter while
+    // still bounded: retain the last 30 days, and cap at 1500 rows as a
+    // hard upper bound so a runaway-chatty agent can't grow it unbounded.
+    // (Old policy kept only 200 rows, which a busy week could blow past —
+    // breaking the Week view.)
+    const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+    const HARD_CAP = 1500;
+    const cutoff = Date.now() - RETENTION_MS;
     const all = await ctx.db
       .query("gtmAgentActivity")
       .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
       .collect();
-    if (all.length > 200) {
-      const toDelete = all
-        .sort((a, b) => a.createdAt - b.createdAt)
-        .slice(0, all.length - 200);
-      for (const row of toDelete) await ctx.db.delete(row._id);
+    const sorted = all.sort((a, b) => a.createdAt - b.createdAt);
+    // Survivors = the most-recent HARD_CAP rows; delete anything older than
+    // the survivor set OR older than the retention cutoff.
+    const keep = new Set(sorted.slice(-HARD_CAP).map((r) => r._id));
+    for (const row of sorted) {
+      if (!keep.has(row._id) || row.createdAt < cutoff) {
+        await ctx.db.delete(row._id);
+      }
     }
     return id;
   },
