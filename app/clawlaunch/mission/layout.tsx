@@ -13,6 +13,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import {
   Activity,
+  Brain,
   CalendarDays,
   FileText,
   TrendingUp,
@@ -23,6 +24,7 @@ import {
 const BASE = "/clawlaunch/mission";
 const NAV = [
   { href: BASE, label: "Today", icon: Activity },
+  { href: `${BASE}/thinking`, label: "Thinking", icon: Brain },
   { href: `${BASE}/plan`, label: "Plan", icon: CalendarDays },
   { href: `${BASE}/research`, label: "Research", icon: Telescope },
   { href: `${BASE}/drafts`, label: "Drafts", icon: FileText },

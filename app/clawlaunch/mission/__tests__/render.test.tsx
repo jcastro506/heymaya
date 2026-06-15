@@ -31,6 +31,7 @@ vi.mock("lucide-react", () => {
   const Stub = () => createElement("svg");
   return {
     Activity: Stub,
+    Brain: Stub,
     CalendarDays: Stub,
     FileText: Stub,
     TrendingUp: Stub,
@@ -58,11 +59,15 @@ vi.mock("@/convex/_generated/api", () => ({
       targetList: { getMyDraftedContent: "getMyDraftedContent" },
       postResults: { getMyRecentPostResults: "getMyRecentPostResults" },
     },
+    billing: {
+      gtmBilling: { createGtmCheckoutSession: "createGtmCheckoutSession" },
+    },
   },
 }));
 
 const TABS = [
   { name: "Today", path: "../page" },
+  { name: "Thinking", path: "../thinking/page" },
   { name: "Plan", path: "../plan/page" },
   { name: "Research", path: "../research/page" },
   { name: "Drafts", path: "../drafts/page" },
@@ -78,6 +83,7 @@ describe("Mission Control — SSR render smoke", () => {
     );
     for (const label of [
       "Today",
+      "Thinking",
       "Plan",
       "Research",
       "Drafts",

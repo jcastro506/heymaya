@@ -245,10 +245,12 @@ describe("Mission Control — activity feed (autonomous update)", () => {
     ).toBe(401); // auth
   });
 
-  it("recordAgentActivity prunes beyond 200 entries", async () => {
+  it("recordAgentActivity keeps recent entries (no longer 200-capped)", async () => {
     const t = convexTest(schema, modules);
     const a = await setupOperator(t, "u_act_prune");
-    // Insert 205 via the internal mutation directly (fast).
+    // 205 recent entries — all within 30 days and under the 1500 hard cap,
+    // so the durable-retention policy keeps every one (the Week view needs
+    // more than the old 200-row window).
     for (let i = 0; i < 205; i++) {
       await t.mutation(internal.gtmMaya.missionControl.recordAgentActivity, {
         accountId: a.accountId as Id<"creators">,
@@ -263,6 +265,72 @@ describe("Mission Control — activity feed (autonomous update)", () => {
         .withIndex("by_agent", (q) => q.eq("agentId", a.agentId))
         .collect()
     );
-    expect(total.length).toBe(200);
+    expect(total.length).toBe(205);
+  });
+
+  it("recordAgentActivity prunes entries older than the 30-day retention", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupOperator(t, "u_act_retain");
+    // Seed one ancient row (31 days old) directly.
+    const ancientId = await t.run(async (ctx) =>
+      ctx.db.insert("gtmAgentActivity", {
+        accountId: a.accountId as Id<"creators">,
+        agentId: a.agentId as Id<"gtmAgents">,
+        kind: "thinking",
+        summary: "old hunch",
+        createdAt: Date.now() - 31 * 24 * 60 * 60 * 1000,
+      })
+    );
+    // A fresh write triggers the prune pass.
+    await t.mutation(internal.gtmMaya.missionControl.recordAgentActivity, {
+      accountId: a.accountId as Id<"creators">,
+      agentId: a.agentId as Id<"gtmAgents">,
+      kind: "found",
+      summary: "fresh signal",
+    });
+    const rows = await t.run(async (ctx) =>
+      ctx.db
+        .query("gtmAgentActivity")
+        .withIndex("by_agent", (q) => q.eq("agentId", a.agentId))
+        .collect()
+    );
+    expect(rows.find((r) => r._id === ancientId)).toBeUndefined();
+    expect(rows.some((r) => r.summary === "fresh signal")).toBe(true);
+  });
+
+  it("getMyAgentActivity scopes to the sinceMs window for the Hour/Day/Week filter", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupOperator(t, "u_act_range");
+    const now = Date.now();
+    const seed = (summary: string, ageMs: number, kind: string) =>
+      t.run(async (ctx) =>
+        ctx.db.insert("gtmAgentActivity", {
+          accountId: a.accountId as Id<"creators">,
+          agentId: a.agentId as Id<"gtmAgents">,
+          kind: kind as "thinking",
+          summary,
+          createdAt: now - ageMs,
+        })
+      );
+    await seed("90 min ago", 90 * 60 * 1000, "thinking");
+    await seed("30 min ago", 30 * 60 * 1000, "researching");
+    await seed("2 min ago", 2 * 60 * 1000, "found");
+
+    // sinceMs = last hour → only the 30-min + 2-min rows.
+    const lastHour = await a.authed.query(
+      api.gtmMaya.missionControl.getMyAgentActivity,
+      { sinceMs: now - 60 * 60 * 1000, limit: 500 }
+    );
+    expect(lastHour.map((r) => r.summary).sort()).toEqual([
+      "2 min ago",
+      "30 min ago",
+    ]);
+
+    // No sinceMs → all three (within the default cap).
+    const all = await a.authed.query(
+      api.gtmMaya.missionControl.getMyAgentActivity,
+      {}
+    );
+    expect(all.length).toBe(3);
   });
 });
