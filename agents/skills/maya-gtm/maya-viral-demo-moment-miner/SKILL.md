@@ -63,6 +63,10 @@ interface ViralDemoBeatLibrary {
 }
 ```
 
+## Hand-off to video production (the grounding asset)
+
+The top-ranked beat's `sourceFrame` is the **real product screen** that grounds a Studio-tier video: when `maya-video-producer` makes a video (`clone_winning_ad` / `make_ad_from_url`), that beat's `sourceFrame` (saved in the media library) is passed as `imageAssetIds` so the video is built around the actual showable moment, never a fabricated UI. A rich beat library with a clear `sourceFrame` is what lets the video be grounded; if the best beat is `mockupOnly`/`unverifiable`, flag it so the producer doesn't present a mockup as a shipped product.
+
 ## Failure modes
 
 - **No walkthrough + thin landing page.** `status: "walkthrough_required"`. Operator intake: "Record one 30-second screen recording of you doing the single thing that makes a user say 'oh'."

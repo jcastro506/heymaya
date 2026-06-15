@@ -4365,6 +4365,14 @@ export default defineSchema({
     // small (dozens of screenshots + generated slides), always loaded with the
     // agent row, and search/dedupe run in JS over the parsed array.
     mediaLibraryJson: v.optional(v.string()),
+    // Studio-tier video jobs (Creatify). JSON-on-row (NO new table — schema is
+    // at the TS DataModel ceiling). JSON array of in-flight + finished jobs:
+    //   { jobId, mode('ad_clone'|'url_to_video'), creatifyId, status, attempts,
+    //     mediaStorageId?, creditsUsed?, costUsd?, refUrl?, productUrl?,
+    //     failedReason?, createdAt, updatedAt }
+    // The durable poll loop (creatifyVideo.pollVideoJob) reads/patches it; the
+    // finished video also lands in mediaLibraryJson as a kind:"video" entry.
+    creatifyJobsJson: v.optional(v.string()),
     // Ideal-product pillar 1 (VOICE) — the founder's voice fingerprint, built
     // at onboarding by pulling their own accounts (watch media + read text).
     // JSON string (same JSON-on-row pattern as mediaLibraryJson — NO new table,
@@ -5430,6 +5438,9 @@ export default defineSchema({
       // Maya v2: Zernio per-account fees + X $0.20/url-post metering record
       // under their own provider so margin erosion is detectable per founder.
       v.literal("zernio"),
+      // Studio-tier Creatify video COGS — recorded for visibility, excluded
+      // from the operational caps + spend-kill (own videoCreditsMonth budget).
+      v.literal("creatify"),
       v.literal("other")
     ),
     operation: v.string(),

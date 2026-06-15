@@ -1,11 +1,10 @@
 /**
- * Sprint 12.3 — HeyMaya product waitlist landing.
+ * HeyMaya product waitlist — the primary CTA target when
+ * NEXT_PUBLIC_HEYMAYA_LANDING_MODE=waitlist.
  *
- * Production CTA target when NEXT_PUBLIC_HEYMAYA_LANDING_MODE=waitlist.
- * Single-field email form. Posts to the `waitlist:mayaProductWaitlist`
- * Convex mutation. On success: shows a thank-you state.
- *
- * Server component shell + client form for the interactive bit.
+ * Matches the cream/editorial landing theme (app/clawlaunch/page.tsx):
+ * warm paper, near-black ink, serif-italic display, Geist-Mono eyebrow.
+ * Single-field email form → `waitlist:mayaProductWaitlist` mutation.
  */
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -15,42 +14,34 @@ import { WaitlistForm } from "./WaitlistForm";
 export const metadata: Metadata = {
   title: "HeyMaya — Join the Waitlist",
   description:
-    "Maya is your manager before you have one. Drop your email and we'll text you when there's a seat for you.",
+    "Drop your email and we'll let you know the moment there's a seat for you.",
 };
 
 export default function WaitlistPage() {
   return (
-    <main className="min-h-screen bg-ink text-paper">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8 lg:px-10">
+    <main className="relative min-h-screen bg-[#fbfaf6] font-sans text-[#0a0a0a] antialiased">
+      <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-7 sm:px-10">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 font-display text-xl text-paper"
+          className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/70 hover:text-[#0a0a0a]"
         >
-          <ArrowLeft className="h-4 w-4" /> HeyMaya
-        </Link>
-        <Link
-          href="/business"
-          className="text-sm text-paper-dim hover:text-paper"
-        >
-          For Businesses
+          <ArrowLeft className="h-3.5 w-3.5" /> HeyMaya
         </Link>
       </header>
 
-      <section className="mx-auto max-w-2xl px-5 pb-20 pt-20 sm:px-8 sm:pt-32 lg:px-10">
-        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-paper-faint">
+      <section className="mx-auto flex min-h-[70vh] max-w-2xl flex-col justify-center px-6 pb-24 sm:px-10">
+        <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
           Join the Waitlist
         </p>
-        <h1 className="mt-5 font-display text-5xl leading-[0.95] text-paper sm:text-7xl">
-          Maya is your manager before you have one.
+        <h1 className="font-display italic text-[clamp(2.6rem,7vw,4.5rem)] leading-[1] tracking-tight">
+          Almost ready for you.
         </h1>
-        <p className="mt-7 max-w-xl text-lg leading-relaxed text-paper-dim">
-          We&apos;re onboarding creators in waves. Drop your email and we&apos;ll
-          let you know when there&apos;s a seat — usually within a couple of
-          weeks. No spam, no decks, just a text from Maya when she&apos;s
-          ready for you.
+        <p className="mt-6 max-w-md text-[17px] leading-[1.55] text-[#0a0a0a]/65">
+          Drop your email and we&apos;ll text you the moment there&apos;s a
+          seat. No spam, no decks.
         </p>
 
-        <div className="mt-10">
+        <div className="mt-9 max-w-md">
           <WaitlistForm />
         </div>
       </section>

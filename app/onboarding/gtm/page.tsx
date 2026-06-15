@@ -401,18 +401,15 @@ function GtmOnboardingBody() {
     <Shell>
       <div className="mb-10">
         <p className="mb-3 font-mono text-xs uppercase tracking-widest text-paper">
-          ClawLaunch onboarding
+          Set up Maya
         </p>
         <h1 className="font-display text-4xl tracking-tight sm:text-5xl">
-          Give Maya the product. She'll build your GTM operating model.
+          Give Maya your product. She&apos;ll go get you customers.
         </h1>
         <p className="mt-5 max-w-2xl text-paper-dim">
-          Onboarding is short. After you finish here, Maya does ~10-15 min of
-          deep market research — your ICP, the competitive landscape, where
-          your buyers hang out, narrative angles you can run from, and the
-          specific accounts worth building relationships with. Then she
-          starts a daily cadence: morning brief, evening recap, weekly
-          strategy review.
+          Two minutes here. Then Maya researches your market — who buys, where
+          they are, what&apos;s working — and starts running your social:
+          posting, replying, and reporting back every day.
         </p>
       </div>
 
@@ -433,7 +430,7 @@ function GtmOnboardingBody() {
                 setDraft((d) => ({ ...d, name: event.target.value }))
               }
               className="input"
-              placeholder="ClawLaunch"
+              placeholder="Your app's name"
             />
           </Field>
           <Field label="Product URL">
@@ -1123,8 +1120,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     <main data-surface="onboarding" className="min-h-screen bg-ink text-paper">
       <div className="mx-auto max-w-3xl px-6 py-12">
         <header className="mb-10 flex items-center">
-          <Link href="/clawlaunch" className="font-mono text-xs uppercase tracking-widest">
-            ClawLaunch
+          <Link href="/" className="font-mono text-xs uppercase tracking-widest">
+            HeyMaya
           </Link>
         </header>
         {children}

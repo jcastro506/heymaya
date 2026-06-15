@@ -12,19 +12,22 @@ function planJson(obj: Record<string, unknown>): string {
   return JSON.stringify(obj);
 }
 
+// Real $99 gtm99: everything EXCEPT video (canVideo false, videoCreditsMonth 0).
 const ACTIVE_FULL = planJson({
   tier: "gtm99",
   status: "active",
   connectedChannelCap: 6,
   autoPostChannelCap: 6,
-  videoCreditsMonth: 15,
   xUrlPostsSoftCapMonth: 30,
   periodStart: 1717200000000,
   usage: { autoPostsThisPeriod: 0, xUrlPostsThisPeriod: 0, videosThisPeriod: 0 },
 });
 
-describe("planFeaturesGtm — active gtm99", () => {
-  it("returns all features true with caps at the gtm99 values", () => {
+// $149 studio: everything in gtm99 PLUS video.
+const STUDIO_FULL = planJson({ tier: "studio", status: "active" });
+
+describe("planFeaturesGtm — active gtm99 ($99, no video)", () => {
+  it("returns all NON-video features true, canVideo false, videoCreditsMonth 0", () => {
     const f = planFeaturesGtm({ gtmPlanJson: ACTIVE_FULL });
     expect(f.plan).toBe("gtm99");
     expect(f.status).toBe("active");
@@ -33,23 +36,25 @@ describe("planFeaturesGtm — active gtm99", () => {
     expect(f.canAutoPost).toBe(true);
     expect(f.canRead).toBe(true);
     expect(f.canMonitor).toBe(true);
-    expect(f.canVideo).toBe(true);
+    // Video is the studio upsell — OFF for gtm99.
+    expect(f.canVideo).toBe(false);
+    expect(f.videoCreditsMonth).toBe(0);
     expect(f.banSafetyManualGate).toBe(true);
     expect(f.attributionEnabled).toBe(true);
     expect(f.connectedChannelCap).toBe(6);
     expect(f.autoPostChannelCap).toBe(6);
-    expect(f.videoCreditsMonth).toBe(15);
     expect(f.xUrlPostsSoftCapMonth).toBe(30);
   });
 
-  it("uses fair-use default caps when active plan omits them", () => {
+  it("uses fair-use default caps when active plan omits them (video stays 0)", () => {
     const f = planFeaturesGtm({
       gtmPlanJson: planJson({ tier: "gtm99", status: "active" }),
     });
     expect(f.canAutoPost).toBe(true);
     expect(f.connectedChannelCap).toBe(6);
     expect(f.autoPostChannelCap).toBe(6);
-    expect(f.videoCreditsMonth).toBe(15);
+    expect(f.videoCreditsMonth).toBe(0);
+    expect(f.canVideo).toBe(false);
     expect(f.xUrlPostsSoftCapMonth).toBe(30);
   });
 
@@ -60,17 +65,15 @@ describe("planFeaturesGtm — active gtm99", () => {
         status: "active",
         connectedChannelCap: 4,
         autoPostChannelCap: 2,
-        videoCreditsMonth: 5,
         xUrlPostsSoftCapMonth: 10,
       }),
     });
     expect(f.connectedChannelCap).toBe(4);
     expect(f.autoPostChannelCap).toBe(2);
-    expect(f.videoCreditsMonth).toBe(5);
     expect(f.xUrlPostsSoftCapMonth).toBe(10);
   });
 
-  it("coerces invalid cap values back to fair-use defaults", () => {
+  it("coerces invalid cap values back to the tier's fair-use defaults", () => {
     const f = planFeaturesGtm({
       gtmPlanJson: planJson({
         tier: "gtm99",
@@ -83,8 +86,42 @@ describe("planFeaturesGtm — active gtm99", () => {
     });
     expect(f.connectedChannelCap).toBe(6);
     expect(f.autoPostChannelCap).toBe(6);
-    expect(f.videoCreditsMonth).toBe(15);
+    expect(f.videoCreditsMonth).toBe(0); // gtm99 base
     expect(f.xUrlPostsSoftCapMonth).toBe(30);
+  });
+});
+
+describe("planFeaturesGtm — active studio ($149, +video)", () => {
+  it("returns everything gtm99 has PLUS canVideo + a video cap", () => {
+    const f = planFeaturesGtm({ gtmPlanJson: STUDIO_FULL });
+    expect(f.plan).toBe("studio");
+    expect(f.status).toBe("active");
+    // All the gtm99 non-video features still on.
+    expect(f.canAutoPost).toBe(true);
+    expect(f.canResearch).toBe(true);
+    expect(f.connectedChannelCap).toBe(6);
+    // The studio unlock.
+    expect(f.canVideo).toBe(true);
+    expect(f.videoCreditsMonth).toBe(15);
+    expect(f.banSafetyManualGate).toBe(true);
+    expect(f.attributionEnabled).toBe(true);
+  });
+
+  it("studio trialing also gets video (full trial access)", () => {
+    const f = planFeaturesGtm({
+      gtmPlanJson: planJson({ tier: "studio", status: "trialing" }),
+    });
+    expect(f.status).toBe("trialing");
+    expect(f.canVideo).toBe(true);
+    expect(f.videoCreditsMonth).toBe(15);
+  });
+
+  it("honors an explicit video cap override on studio", () => {
+    const f = planFeaturesGtm({
+      gtmPlanJson: planJson({ tier: "studio", status: "active", videoCreditsMonth: 30 }),
+    });
+    expect(f.canVideo).toBe(true);
+    expect(f.videoCreditsMonth).toBe(30);
   });
 });
 
@@ -98,19 +135,21 @@ describe("planFeaturesGtm — fail-closed defaults", () => {
     ["JSON null literal", { gtmPlanJson: "null" }],
     ["JSON array", { gtmPlanJson: "[1,2,3]" }],
     ["JSON string literal", { gtmPlanJson: '"gtm99"' }],
-    ["wrong tier", { gtmPlanJson: planJson({ tier: "studio", status: "active" }) }],
+    ["unknown tier", { gtmPlanJson: planJson({ tier: "gtm299", status: "active" }) }],
     ["missing tier", { gtmPlanJson: planJson({ status: "active" }) }],
     ["status none", { gtmPlanJson: planJson({ tier: "gtm99", status: "none" }) }],
+    ["studio status none", { gtmPlanJson: planJson({ tier: "studio", status: "none" }) }],
     ["unknown status", { gtmPlanJson: planJson({ tier: "gtm99", status: "weird" }) }],
   ];
 
   it.each(failClosedInputs)(
-    "%s → research/draft true, auto-post false, caps 0, moats const-true",
+    "%s → research/draft true, auto-post + video false, caps 0, moats const-true",
     (_label, agent) => {
       const f = planFeaturesGtm(agent);
       expect(f.canResearch).toBe(true);
       expect(f.canDraft).toBe(true);
       expect(f.canAutoPost).toBe(false);
+      expect(f.canVideo).toBe(false);
       expect(f.connectedChannelCap).toBe(0);
       expect(f.autoPostChannelCap).toBe(0);
       expect(f.videoCreditsMonth).toBe(0);
@@ -134,18 +173,17 @@ describe("planFeaturesGtm — status handling (most-restrictive-valid)", () => {
     expect(f.connectedChannelCap).toBe(6);
   });
 
-  it("trialing → FULL access (operator decision 2026-06-07: trial sees the core value)", () => {
+  it("gtm99 trialing → FULL non-video access; still NO video", () => {
     const f = planFeaturesGtm({
       gtmPlanJson: planJson({ tier: "gtm99", status: "trialing" }),
     });
     expect(f.status).toBe("trialing");
     expect(f.canResearch).toBe(true);
     expect(f.canDraft).toBe(true);
-    // Full access during the (short) trial — Maya actually posts.
     expect(f.canAutoPost).toBe(true);
     expect(f.autoPostChannelCap).toBeGreaterThan(0);
     expect(f.xUrlPostsSoftCapMonth).toBeGreaterThan(0);
-    expect(f.canVideo).toBe(true);
+    expect(f.canVideo).toBe(false); // video is studio-only
     expect(f.banSafetyManualGate).toBe(true);
     expect(f.attributionEnabled).toBe(true);
   });
@@ -200,19 +238,61 @@ describe("requireFeatureGtm", () => {
   });
 });
 
-describe("requireUnderCapGtm", () => {
-  it("allows usage strictly under the cap", () => {
+describe("requireFeatureGtm — canVideo is the studio tier boundary", () => {
+  it("THROWS for active gtm99 (no video)", () => {
     const f = planFeaturesGtm({ gtmPlanJson: ACTIVE_FULL });
-    expect(() =>
-      requireUnderCapGtm(f, "videoCreditsMonth", 14)
-    ).not.toThrow();
+    expect(() => requireFeatureGtm(f, (x) => x.canVideo, "video")).toThrow(
+      GtmPlanGateError
+    );
   });
 
-  it("throws at the cap (fail-closed)", () => {
+  it("THROWS for gtm99 trialing (trial doesn't grant video)", () => {
+    const f = planFeaturesGtm({
+      gtmPlanJson: planJson({ tier: "gtm99", status: "trialing" }),
+    });
+    expect(() => requireFeatureGtm(f, (x) => x.canVideo, "video")).toThrow(
+      GtmPlanGateError
+    );
+  });
+
+  it("THROWS when fail-closed", () => {
+    const f = planFeaturesGtm({});
+    expect(() => requireFeatureGtm(f, (x) => x.canVideo, "video")).toThrow(
+      GtmPlanGateError
+    );
+  });
+
+  it("does NOT throw for active studio", () => {
+    const f = planFeaturesGtm({ gtmPlanJson: STUDIO_FULL });
+    expect(() => requireFeatureGtm(f, (x) => x.canVideo, "video")).not.toThrow();
+  });
+
+  it("does NOT throw for studio trialing", () => {
+    const f = planFeaturesGtm({
+      gtmPlanJson: planJson({ tier: "studio", status: "trialing" }),
+    });
+    expect(() => requireFeatureGtm(f, (x) => x.canVideo, "video")).not.toThrow();
+  });
+});
+
+describe("requireUnderCapGtm", () => {
+  it("allows video usage strictly under the cap (studio)", () => {
+    const f = planFeaturesGtm({ gtmPlanJson: STUDIO_FULL });
+    expect(() => requireUnderCapGtm(f, "videoCreditsMonth", 14)).not.toThrow();
+  });
+
+  it("throws at the video cap (studio, fail-closed at the boundary)", () => {
+    const f = planFeaturesGtm({ gtmPlanJson: STUDIO_FULL });
+    expect(() => requireUnderCapGtm(f, "videoCreditsMonth", 15)).toThrow(
+      GtmPlanGateError
+    );
+  });
+
+  it("gtm99 video cap is 0 → blocks the first video", () => {
     const f = planFeaturesGtm({ gtmPlanJson: ACTIVE_FULL });
-    expect(() =>
-      requireUnderCapGtm(f, "videoCreditsMonth", 15)
-    ).toThrow(GtmPlanGateError);
+    expect(() => requireUnderCapGtm(f, "videoCreditsMonth", 0)).toThrow(
+      GtmPlanGateError
+    );
   });
 
   it("throws over the cap", () => {
@@ -255,8 +335,9 @@ describe("canPostXUrlGtm — X soft cap", () => {
 
 describe("anti-churn moats are NEVER false (parametrized over all states)", () => {
   const allInputs: Array<[string, { gtmPlanJson?: string | null }]> = [
-    ["active", { gtmPlanJson: ACTIVE_FULL }],
+    ["active gtm99", { gtmPlanJson: ACTIVE_FULL }],
     ["active no caps", { gtmPlanJson: planJson({ tier: "gtm99", status: "active" }) }],
+    ["active studio", { gtmPlanJson: STUDIO_FULL }],
     ["past_due", { gtmPlanJson: planJson({ tier: "gtm99", status: "past_due" }) }],
     ["trialing", { gtmPlanJson: planJson({ tier: "gtm99", status: "trialing" }) }],
     ["none", { gtmPlanJson: planJson({ tier: "gtm99", status: "none" }) }],
@@ -264,7 +345,7 @@ describe("anti-churn moats are NEVER false (parametrized over all states)", () =
     ["null", { gtmPlanJson: null }],
     ["empty", { gtmPlanJson: "" }],
     ["corrupt", { gtmPlanJson: "{bad" }],
-    ["wrong tier", { gtmPlanJson: planJson({ tier: "studio", status: "active" }) }],
+    ["unknown tier", { gtmPlanJson: planJson({ tier: "gtm299", status: "active" }) }],
     ["JSON array", { gtmPlanJson: "[]" }],
     ["unknown status", { gtmPlanJson: planJson({ tier: "gtm99", status: "???" }) }],
   ];

@@ -42,6 +42,7 @@ const COST_PROVIDER = v.union(
   v.literal("composio"),
   v.literal("x_api"),
   v.literal("openclaw"),
+  v.literal("creatify"),
   v.literal("other")
 );
 

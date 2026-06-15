@@ -55,3 +55,11 @@ services/**/dist/
 
 # stray local logs
 convex_err.txt
+
+# Throwaway video-gen test probes + their output (not product code)
+veo-test-output/
+scripts/veo-*-test.ts
+scripts/veo-test.ts
+scripts/captions-test.ts
+scripts/captions-realworld.ts
+scripts/agentmedia-test.ts

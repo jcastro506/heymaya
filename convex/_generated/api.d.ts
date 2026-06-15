@@ -108,6 +108,7 @@ import type * as gtmMaya_contentQuality from "../gtmMaya/contentQuality.js";
 import type * as gtmMaya_contentReview from "../gtmMaya/contentReview.js";
 import type * as gtmMaya_costCap from "../gtmMaya/costCap.js";
 import type * as gtmMaya_costLedger from "../gtmMaya/costLedger.js";
+import type * as gtmMaya_creatifyVideo from "../gtmMaya/creatifyVideo.js";
 import type * as gtmMaya_deepLink from "../gtmMaya/deepLink.js";
 import type * as gtmMaya_deliveryFailures from "../gtmMaya/deliveryFailures.js";
 import type * as gtmMaya_demandIntel from "../gtmMaya/demandIntel.js";
@@ -191,6 +192,9 @@ import type * as integrations_composio_client from "../integrations/composio/cli
 import type * as integrations_composio_oauth from "../integrations/composio/oauth.js";
 import type * as integrations_composio_publishContent from "../integrations/composio/publishContent.js";
 import type * as integrations_composio_universalRunner from "../integrations/composio/universalRunner.js";
+import type * as integrations_creatify_client from "../integrations/creatify/client.js";
+import type * as integrations_creatify_endpoints from "../integrations/creatify/endpoints.js";
+import type * as integrations_creatify_types from "../integrations/creatify/types.js";
 import type * as integrations_crm_housecallpro from "../integrations/crm/housecallpro.js";
 import type * as integrations_crm_index from "../integrations/crm/index.js";
 import type * as integrations_crm_jobber from "../integrations/crm/jobber.js";
@@ -416,6 +420,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/contentReview": typeof gtmMaya_contentReview;
   "gtmMaya/costCap": typeof gtmMaya_costCap;
   "gtmMaya/costLedger": typeof gtmMaya_costLedger;
+  "gtmMaya/creatifyVideo": typeof gtmMaya_creatifyVideo;
   "gtmMaya/deepLink": typeof gtmMaya_deepLink;
   "gtmMaya/deliveryFailures": typeof gtmMaya_deliveryFailures;
   "gtmMaya/demandIntel": typeof gtmMaya_demandIntel;
@@ -499,6 +504,9 @@ declare const fullApi: ApiFromModules<{
   "integrations/composio/oauth": typeof integrations_composio_oauth;
   "integrations/composio/publishContent": typeof integrations_composio_publishContent;
   "integrations/composio/universalRunner": typeof integrations_composio_universalRunner;
+  "integrations/creatify/client": typeof integrations_creatify_client;
+  "integrations/creatify/endpoints": typeof integrations_creatify_endpoints;
+  "integrations/creatify/types": typeof integrations_creatify_types;
   "integrations/crm/housecallpro": typeof integrations_crm_housecallpro;
   "integrations/crm/index": typeof integrations_crm_index;
   "integrations/crm/jobber": typeof integrations_crm_jobber;

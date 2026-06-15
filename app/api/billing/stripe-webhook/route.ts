@@ -85,6 +85,20 @@ function isGtmProduct(
   return (obj.metadata ?? {}).product === "gtm";
 }
 
+/** Which GTM tier this sub/session entitles. Checkout stamps metadata.tier;
+ * absent/unknown → 'gtm99' (the $99 core — fail-safe under-grant, since video
+ * is server-gated). The reverse price-id map lives Convex-side (where the
+ * STRIPE_PRICE_* env lives); the route trusts the stamped metadata. */
+function gtmTier(
+  ...objs: Array<Stripe.Subscription | Stripe.Checkout.Session>
+): "gtm99" | "studio" {
+  for (const obj of objs) {
+    const t = (obj.metadata ?? {}).tier;
+    if (t === "studio" || t === "gtm99") return t;
+  }
+  return "gtm99";
+}
+
 /** Extract the unix-seconds period end from a subscription, in ms. */
 function subscriptionPeriodEndMs(sub: Stripe.Subscription): number | undefined {
   // `current_period_end` is unix seconds. Some SDK versions ship it on the
@@ -207,6 +221,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               stripeCustomerId,
               creatorId: metadataCreatorId(session) ?? metadataCreatorId(sub),
               stripeStatus: sub.status,
+              tier: gtmTier(session, sub),
               periodEndMs: subscriptionPeriodEndMs(sub),
             }
           );
@@ -315,6 +330,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               stripeCustomerId,
               creatorId: metadataCreatorId(sub),
               stripeStatus: sub.status,
+              tier: gtmTier(sub),
               periodEndMs: subscriptionPeriodEndMs(sub),
             }
           );

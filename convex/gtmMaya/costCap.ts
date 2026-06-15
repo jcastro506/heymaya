@@ -86,7 +86,11 @@ export async function sumLedgerForAccountSince(
   ctx: Pick<QueryCtx, "db">,
   accountId: Id<"creators">,
   sinceMs: number,
-  opts?: { excludeResearchJobSpend?: boolean; excludeOpenrouterPoll?: boolean }
+  opts?: {
+    excludeResearchJobSpend?: boolean;
+    excludeOpenrouterPoll?: boolean;
+    excludeCreatifyVideo?: boolean;
+  }
 ): Promise<number> {
   const rows = await ctx.db
     .query("gtmCostLedger")
@@ -103,6 +107,15 @@ export async function sumLedgerForAccountSince(
     // (which deliberately excludes research) must NOT count them. They surface
     // in showWorkAndSpend; the kill stays on agent-attributed operational rows.
     if (opts?.excludeOpenrouterPoll && row.operation === "openrouter_poll") {
+      return sum;
+    }
+    // Creatify video COGS is a deliberate, per-job Studio-tier cost bounded by
+    // its OWN fair-use cap (planFeaturesGtm.videoCreditsMonth). A single ad
+    // render ($2–7) would otherwise blow the $1/hr & $6/24h operational
+    // ceilings and trip the runaway kill. So it's recorded for COGS visibility
+    // but excluded from the operational caps + spend-kill — same treatment as
+    // research-job + openrouter-poll spend.
+    if (opts?.excludeCreatifyVideo && row.provider === "creatify") {
       return sum;
     }
     return sum + row.costUsd;
@@ -166,7 +179,8 @@ export async function checkCostCap(
       currentSpendUsd = await sumLedgerForAccountSince(
         ctx,
         args.accountId,
-        now - HOURLY_COST_WINDOW_MS
+        now - HOURLY_COST_WINDOW_MS,
+        { excludeCreatifyVideo: true }
       );
       capUsd = HOURLY_COST_CAP_USD;
       break;
@@ -175,7 +189,8 @@ export async function checkCostCap(
       currentSpendUsd = await sumLedgerForAccountSince(
         ctx,
         args.accountId,
-        now - 24 * 60 * 60 * 1000
+        now - 24 * 60 * 60 * 1000,
+        { excludeCreatifyVideo: true }
       );
       const limits = await loadSafetyLimits(ctx, args.accountId);
       capUsd = limits.dailyCostLimitUsd;
@@ -185,7 +200,8 @@ export async function checkCostCap(
       currentSpendUsd = await sumLedgerForAccountSince(
         ctx,
         args.accountId,
-        now - 30 * 24 * 60 * 60 * 1000
+        now - 30 * 24 * 60 * 60 * 1000,
+        { excludeCreatifyVideo: true }
       );
       const limits = await loadSafetyLimits(ctx, args.accountId);
       capUsd = limits.monthlyCostLimitUsd;

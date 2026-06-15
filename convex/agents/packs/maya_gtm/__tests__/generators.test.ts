@@ -342,6 +342,22 @@ describe("Maya GTM workspace pack", () => {
     expect(yt).toContain("title is the CTR lever");
   });
 
+  it("gates the video producer skill behind videoEnabled (Studio tier)", () => {
+    // Non-Studio (default INPUT): the video producer skill is NOT bundled, so a
+    // $99 Maya never even knows the video tools exist.
+    const noVideo = buildMayaGtmWorkspace(INPUT).files;
+    expect(noVideo.get("skills/maya-video-producer/SKILL.md")).toBeUndefined();
+
+    // Studio (videoEnabled:true): the skill ships, grounded + Creatify-oriented.
+    const withVideo = buildMayaGtmWorkspace({ ...INPUT, videoEnabled: true }).files;
+    const body = withVideo.get("skills/maya-video-producer/SKILL.md");
+    expect(body).toBeTruthy();
+    expect(body!).toContain("clone_winning_ad");
+    expect(body!).toContain("make_ad_from_url");
+    // The skill names CAPABILITIES, never the vendor (per CLAUDE.md isolation).
+    expect(body!).not.toContain("Creatify");
+  });
+
   it("renders bounded subagent contracts with model, budget, coverage, and failure behavior", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
     const agents = files.get("AGENTS.md") ?? "";
