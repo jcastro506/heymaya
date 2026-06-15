@@ -112,6 +112,10 @@ async function snapshotAgentSpend(
   const excludeResearch = {
     excludeResearchJobSpend: true,
     excludeOpenrouterPoll: true,
+    // Studio video COGS is bounded by its own videoCreditsMonth cap; a single
+    // render would otherwise trip this runaway kill. Visible in the ledger, not
+    // counted here.
+    excludeCreatifyVideo: true,
   } as const;
   const hourSpendUsd = await sumLedgerForAccountSince(
     ctx,

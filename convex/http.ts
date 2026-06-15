@@ -158,6 +158,11 @@ import {
   generateSlideImageHttp,
   sendMediaToUserHttp,
 } from "./gtmMaya/mediaAssets";
+import {
+  creatifyMakeAdHttp,
+  creatifyCloneAdHttp,
+  creatifyPollHttp,
+} from "./gtmMaya/creatifyVideo";
 import { getPlatformAlgoHttp } from "./gtmMaya/platformAlgo";
 // Data-collection sprint — inbound user-turn transcript capture + per-turn
 // LLM telemetry.
@@ -293,6 +298,24 @@ http.route({
   path: "/lc_gtm/send_media_to_user",
   method: "POST",
   handler: sendMediaToUserHttp,
+});
+// Studio-tier video (Creatify). make_ad = URL→edited ad (Creatify writes the
+// script); clone_ad = copy a winning reference video's format onto the product;
+// poll = on-demand job status (the durable scheduler is the real engine).
+http.route({
+  path: "/lc_gtm/creatify_make_ad",
+  method: "POST",
+  handler: creatifyMakeAdHttp,
+});
+http.route({
+  path: "/lc_gtm/creatify_clone_ad",
+  method: "POST",
+  handler: creatifyCloneAdHttp,
+});
+http.route({
+  path: "/lc_gtm/creatify_poll",
+  method: "GET",
+  handler: creatifyPollHttp,
 });
 http.route({
   path: "/lc_gtm/get_my_target_threads",

@@ -1664,6 +1664,48 @@ export default defineToolPlugin({
         postLc("send_media_to_user", p, ctx.signal),
     }),
     tool({
+      name: "clone_winning_ad",
+      label: "Clone Winning Ad",
+      description:
+        "STUDIO TIER ONLY. Make a real vertical video ad by COPYING the format of a winning video already proven in the niche, with the founder's actual product dropped in. This is the differentiator: feed the winning TikTok/Reel URL (from format research) + the product, and Creatify recreates its structure, pacing, and style for this product. REQUIRED: productUrl (the founder's app/site), referenceVideoUrl (the winning video to copy). Optional: imageAssetIds (the founder's REAL product screenshots from search_my_media — grounds the ad in the real UI; I resolve them server-side), title, description. Returns { ok, jobId, status } immediately; the render finishes in a few minutes — check_video_job with the jobId, then send_media_to_user once it's done. Server-gated to the $149 Studio tier and metered against the monthly video cap.",
+      parameters: Type.Object({
+        productUrl: Type.String(),
+        referenceVideoUrl: Type.String(),
+        imageAssetIds: Type.Optional(Type.Array(Type.String())),
+        title: Type.Optional(Type.String()),
+        description: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("creatify_clone_ad", p, ctx.signal),
+    }),
+    tool({
+      name: "make_ad_from_url",
+      label: "Make Ad From URL",
+      description:
+        "STUDIO TIER ONLY. Make a real vertical video ad from the founder's product URL — Creatify scrapes the page, writes the script, and assembles a fully-edited ad (avatar + captions + b-roll + music). REQUIRED: productUrl. Optional: script (HYBRID mode — pass YOUR grounded script instead of letting Creatify auto-write; preferred when you have the product fact sheet), imageAssetIds (the founder's real screenshots from search_my_media — I resolve them server-side), scriptStyle (e.g. ProblemSolutionV2, BenefitsV2, GenzWriter), visualStyle (e.g. DynamicProductTemplate), modelVersion (standard | aurora_v1 | aurora_v1_fast for realism), videoLength (15|30|45|60). Returns { ok, jobId, status } immediately; poll check_video_job then send_media_to_user when done. Server-gated to the $149 Studio tier + monthly video cap.",
+      parameters: Type.Object({
+        productUrl: Type.String(),
+        script: Type.Optional(Type.String()),
+        imageAssetIds: Type.Optional(Type.Array(Type.String())),
+        scriptStyle: Type.Optional(Type.String()),
+        visualStyle: Type.Optional(Type.String()),
+        modelVersion: Type.Optional(
+          Enum(["standard", "aurora_v1", "aurora_v1_fast"])
+        ),
+        videoLength: Type.Optional(Type.Number()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("creatify_make_ad", p, ctx.signal),
+    }),
+    tool({
+      name: "check_video_job",
+      label: "Check Video Job",
+      description:
+        "Check the status of a Studio-tier video job started by clone_winning_ad / make_ad_from_url. Pass jobId for one job, or omit it to list recent jobs. Returns the job(s) with { status (pending|in_queue|running|done|failed), mediaStorageId (set when done — pass to send_media_to_user), creditsUsed, costUsd, failedReason }. The render is durable server-side, so you don't have to babysit it — but check before promising the founder a finished video.",
+      parameters: Type.Object({
+        jobId: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("creatify_poll", p, ctx.signal),
+    }),
+    tool({
       name: "check_already_engaged",
       label: "Check Already Engaged",
       description:

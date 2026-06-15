@@ -11,12 +11,17 @@
  * project_maya_v2_zernio_autopost_plan / project_gtm_tiers_locked_2026_06_01).
  *
  * LOCKED PRODUCT DECISIONS encoded here:
- *   - SINGLE TIER. `GtmPlan = 'gtm99'`. There is NO 'studio' tier in v1. The
- *     product is one $99 plan, everything included. The de-tier was ratified
- *     2026-06-02 (caps are fair-use, not gates).
- *   - For an ACTIVE gtm99 founder, EVERY boolean feature is true: research,
- *     drafts, autoPost, reads, monitoring, video, banSafety, attribution.
- *     Nothing is feature-gated by tier (there is only one tier).
+ *   - TWO TIERS (additive). `GtmPlan = 'gtm99' | 'studio'`. The $99 core
+ *     (`gtm99`) is everything EXCEPT video; the $149 `studio` tier adds
+ *     Creatify video generation (`canVideo` + `videoCreditsMonth`). The de-tier
+ *     of 2026-06-02 still holds for the core caps (fair-use, not gates); the
+ *     ONLY thing tier now gates is video (operator decision 2026-06-14).
+ *   - For an ACTIVE gtm99 founder, every NON-VIDEO feature is true: research,
+ *     drafts, autoPost, reads, monitoring, banSafety, attribution — but
+ *     `canVideo` is FALSE and `videoCreditsMonth` is 0. Video is the studio
+ *     upsell; gtm99 falls back to slideshow/text.
+ *   - For an ACTIVE `studio` founder, ALL of the above PLUS `canVideo: true`
+ *     and the monthly video ceiling.
  *   - `banSafetyManualGate` and `attributionEnabled` are CONST true — they can
  *     NEVER be turned off by any state. They are the anti-churn moats; even the
  *     fail-closed default keeps them true.
@@ -46,7 +51,7 @@
  * import `Doc`/`Id` from dataModel to stay schema-decoupled and tsc-safe.
  */
 
-export type GtmPlan = "gtm99";
+export type GtmPlan = "gtm99" | "studio";
 
 /** Lifecycle status of the founder's GTM subscription. */
 export type GtmPlanStatus = "active" | "past_due" | "trialing" | "none";
@@ -90,15 +95,16 @@ export interface GtmPlanFeatures {
 }
 
 /**
- * The single full-product feature set for an ACTIVE gtm99 founder. Everything
- * is included; caps are the fair-use ceilings.
+ * The full-product feature set for an ACTIVE $99 `gtm99` founder. Everything
+ * EXCEPT video; caps are the fair-use ceilings. Video is the studio upsell, so
+ * `canVideo: false` and `videoCreditsMonth: 0` here.
  */
 const GTM99_ACTIVE: GtmPlanFeatures = {
   plan: "gtm99",
   status: "active",
   connectedChannelCap: 6,
   autoPostChannelCap: 6,
-  videoCreditsMonth: 15,
+  videoCreditsMonth: 0,
   xUrlPostsSoftCapMonth: 30,
   banSafetyManualGate: true,
   attributionEnabled: true,
@@ -107,19 +113,24 @@ const GTM99_ACTIVE: GtmPlanFeatures = {
   canDraft: true,
   canRead: true,
   canMonitor: true,
-  canVideo: true,
+  canVideo: false,
 };
 
 /**
- * Default fair-use cap values used when an active gtm99 plan supplies no
- * explicit caps (so a real subscription always gets the full ceilings).
+ * The ACTIVE $149 `studio` feature set: everything in gtm99 PLUS Creatify video
+ * generation, bounded by the monthly video ceiling.
  */
-const DEFAULT_CAPS = {
-  connectedChannelCap: GTM99_ACTIVE.connectedChannelCap,
-  autoPostChannelCap: GTM99_ACTIVE.autoPostChannelCap,
-  videoCreditsMonth: GTM99_ACTIVE.videoCreditsMonth,
-  xUrlPostsSoftCapMonth: GTM99_ACTIVE.xUrlPostsSoftCapMonth,
-} as const;
+const GTM_STUDIO_ACTIVE: GtmPlanFeatures = {
+  ...GTM99_ACTIVE,
+  plan: "studio",
+  videoCreditsMonth: 15,
+  canVideo: true,
+};
+
+/** Resolve the base ACTIVE feature set for a tier. */
+function tierBase(tier: GtmPlan): GtmPlanFeatures {
+  return tier === "studio" ? GTM_STUDIO_ACTIVE : GTM99_ACTIVE;
+}
 
 /**
  * The MOST-RESTRICTIVE VALID default. Returned on missing / corrupt /
@@ -209,66 +220,42 @@ export function planFeaturesGtm(agent: {
     return FAIL_CLOSED_DEFAULT;
   }
 
-  // The only tier in v1 is gtm99. Any other / missing tier → fail closed.
-  if (parsed.tier !== "gtm99") {
+  // Two valid tiers: gtm99 ($99, no video) + studio ($149, +video). Anything
+  // else (missing/unknown) → fail closed. The tier-base carries the right
+  // canVideo + videoCreditsMonth, so video gating is just the tier boundary.
+  const tier: GtmPlan | null =
+    parsed.tier === "studio" ? "studio" : parsed.tier === "gtm99" ? "gtm99" : null;
+  if (!tier) {
     return FAIL_CLOSED_DEFAULT;
   }
-
+  const base = tierBase(tier);
   const status = parsed.status;
 
-  if (status === "active" || status === "past_due") {
-    // past_due gets the active feature set too: we never cut off research /
-    // draft / attribution / ban-safety for a payment hiccup. (Auto-post can be
-    // throttled separately via caps if a future Stripe-dunning sprint wants to;
-    // for now past_due keeps the full ceilings — billing recovery, not a gate.)
+  // `active`/`past_due`/`trialing` all return the tier's full feature set with
+  // caps drawn from the JSON (or the tier's fair-use defaults):
+  //   - past_due keeps the active set — we never cut research/draft/attribution/
+  //     ban-safety for a payment hiccup (billing recovery, not a gate).
+  //   - trialing → FULL access (operator decision 2026-06-07): the founder must
+  //     experience the core value or won't convert; margin is protected by the
+  //     short trial window + spend kill-switch + fair-use caps, NOT by
+  //     withholding the product. On expiry without payment → status:"none" →
+  //     FAIL_CLOSED_DEFAULT.
+  if (status === "active" || status === "past_due" || status === "trialing") {
     return {
-      ...GTM99_ACTIVE,
+      ...base,
       status,
       connectedChannelCap: coerceCap(
         parsed.connectedChannelCap,
-        DEFAULT_CAPS.connectedChannelCap
+        base.connectedChannelCap
       ),
       autoPostChannelCap: coerceCap(
         parsed.autoPostChannelCap,
-        DEFAULT_CAPS.autoPostChannelCap
+        base.autoPostChannelCap
       ),
-      videoCreditsMonth: coerceCap(
-        parsed.videoCreditsMonth,
-        DEFAULT_CAPS.videoCreditsMonth
-      ),
+      videoCreditsMonth: coerceCap(parsed.videoCreditsMonth, base.videoCreditsMonth),
       xUrlPostsSoftCapMonth: coerceCap(
         parsed.xUrlPostsSoftCapMonth,
-        DEFAULT_CAPS.xUrlPostsSoftCapMonth
-      ),
-    };
-  }
-
-  if (status === "trialing") {
-    // Trial → FULL access (operator decision 2026-06-07). The founder must
-    // experience the core value during the trial — Maya actually posting + the
-    // closed-loop "here's what converted" — or they won't convert. Margin is
-    // protected by the short trial window (GTM_TRIAL_DAYS, default 7) + the
-    // spend kill-switch + fair-use caps, NOT by withholding the product. On
-    // trial expiry without payment the subscription lapses to status:"none" →
-    // FAIL_CLOSED_DEFAULT (research/draft only).
-    return {
-      ...GTM99_ACTIVE,
-      status: "trialing",
-      connectedChannelCap: coerceCap(
-        parsed.connectedChannelCap,
-        DEFAULT_CAPS.connectedChannelCap
-      ),
-      autoPostChannelCap: coerceCap(
-        parsed.autoPostChannelCap,
-        DEFAULT_CAPS.autoPostChannelCap
-      ),
-      videoCreditsMonth: coerceCap(
-        parsed.videoCreditsMonth,
-        DEFAULT_CAPS.videoCreditsMonth
-      ),
-      xUrlPostsSoftCapMonth: coerceCap(
-        parsed.xUrlPostsSoftCapMonth,
-        DEFAULT_CAPS.xUrlPostsSoftCapMonth
+        base.xUrlPostsSoftCapMonth
       ),
     };
   }
@@ -360,8 +347,10 @@ export function gtmTrialDays(): number {
  */
 export function buildGtmPlanJson(input: {
   status: GtmPlanStatus;
+  /** Which tier was purchased/comped. Default 'gtm99' (the $99 core). */
+  tier?: GtmPlan;
   periodStartMs?: number;
-  /** Optional cap overrides; omit for the full gtm99 fair-use ceilings. */
+  /** Optional cap overrides; omit for the tier's fair-use ceilings. */
   caps?: Partial<{
     connectedChannelCap: number;
     autoPostChannelCap: number;
@@ -370,7 +359,7 @@ export function buildGtmPlanJson(input: {
   }>;
 }): string {
   return JSON.stringify({
-    tier: "gtm99",
+    tier: input.tier ?? "gtm99",
     status: input.status,
     ...(input.caps ?? {}),
     periodStart: input.periodStartMs ?? null,

@@ -7,6 +7,13 @@ export interface MayaGtmWorkspaceInput {
    * OpenClaw's native BOOT.md startup hook.
    */
   bootKickoffAtMs?: number;
+  /**
+   * Studio-tier gate. When false/undefined the video producer skill is NOT
+   * bundled (the $99 core gets no video). Resolved at deploy from
+   * planFeaturesGtm(agent).canVideo. The server-side gate in creatifyVideo is
+   * the hard backstop; this just keeps a non-Studio Maya from knowing the tools.
+   */
+  videoEnabled?: boolean;
   app: {
     name: string;
     url: string;
@@ -269,6 +276,11 @@ const SKILLS = [
   "maya-connection-health",
   "maya-content-reviewer",
   "maya-slideshow-strategist",
+  // Studio-tier ($149) VIDEO producer — sibling of the slideshow strategist.
+  // Gated in buildMayaGtmWorkspace: bundled ONLY when input.videoEnabled
+  // (planFeaturesGtm.canVideo). Backed by Creatify (clone_winning_ad /
+  // make_ad_from_url); the server gate in creatifyVideo is the hard backstop.
+  "maya-video-producer",
   "maya-conversion-tracker",
   // Activation — the deeper truth: did signups STICK (come back / reach value),
   // not just land. Reports activation rate + time-to-value; routes a low rate to
@@ -312,6 +324,10 @@ export function buildMayaGtmWorkspace(
     BUNDLED_LOCAL_SKILLS.map((s) => [s.slug, s.body])
   );
   for (const skill of SKILLS) {
+    // Tier gate: the video producer skill ships only to Studio-tier agents.
+    // Non-Studio Maya never sees the video tools (the server gate is the
+    // hard backstop; this keeps her from offering what she can't make).
+    if (skill === "maya-video-producer" && !input.videoEnabled) continue;
     const bundled = bundledBySlug.get(skill);
     files.set(`skills/${skill}/SKILL.md`, bundled ?? renderSkill(skill));
   }
@@ -1866,6 +1882,8 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
       return "Watch content the founder texted me (review_media) for editor feedback, resolving the Telegram attachment to a mediaUrl. Grounded-or-silent: visual feedback only when Gemini actually watched it.";
     case "maya-slideshow-strategist":
       return "Build grounded TikTok-photo-mode + IG carousels from the real media library (save_media / search_my_media / generate_slide_image) — product slides placed UNCHANGED from real screenshots, no fabricated UI.";
+    case "maya-video-producer":
+      return "Studio-tier video producer: when the niche's winning format is a video, make the founder a real short-form ad grounded in their product — copy a proven winning video's format (clone_winning_ad) or turn the product URL into a finished ad (make_ad_from_url), then hand it back one-tap. Server-gated to the $149 Studio tier.";
     case "maya-conversion-tracker":
       return "Own the signup side of the loop: wrap every product link to signupUrl (clicks auto-tracked), then ASK the founder when there are clicks but no signups and log it via record_conversion. MVP = self-report; I do NOT hand founders code to paste (automatic tracker is roadmap, not offered yet).";
     case "maya-activation-coach":
