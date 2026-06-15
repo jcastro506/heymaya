@@ -4,7 +4,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { FaLinkedin, FaXTwitter } from "react-icons/fa6";
-import { SiReddit, SiTelegram, SiTiktok, SiYcombinator, SiYoutube } from "react-icons/si";
+import {
+  SiInstagram,
+  SiReddit,
+  SiTelegram,
+  SiTiktok,
+  SiYcombinator,
+  SiYoutube,
+} from "react-icons/si";
 
 import { primaryCtaHref, primaryCtaLabel } from "../_components/landingMode";
 
@@ -44,7 +51,7 @@ export const landingMetadata: Metadata = {
   title:
     "Maya — the GTM agent for builders Cursor unlocked.",
   description:
-    "You shipped fast. Marketing is the wall. Maya finds where your customers are, writes AND posts the content for you, and proves what actually drove signups — so your signup graph stops being a flat line.",
+    "You shipped fast. Marketing is the wall. Maya finds where your customers are, writes AND posts the content for you, and tracks which posts are actually driving traffic — so your signup graph stops being a flat line.",
 };
 
 export default function ClawLaunchLandingPage() {
@@ -63,6 +70,7 @@ export default function ClawLaunchLandingPage() {
       <Attribution />
       <BanSafety />
       <StaysCurrent />
+      <Pricing />
       <FinalCTA />
       <Footer />
     </main>
@@ -99,13 +107,15 @@ function Masthead() {
             Sign in
           </Link>
           <Link
-            href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
+            prefetch={false}
+          href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
             className="rounded-full bg-[#0a0a0a] px-4 py-2 text-[#fbfaf6] transition-colors hover:bg-[#0a0a0a]/85"
           >
             Open Maya →
           </Link>
         </nav>
         <Link
+          prefetch={false}
           href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
           className="font-mono text-[11px] uppercase tracking-[0.22em] underline-offset-[6px] hover:underline sm:hidden"
         >
@@ -145,12 +155,15 @@ function Hero() {
         >
           <p className="text-[18px] leading-[1.55] text-[#0a0a0a]/75 sm:text-[20px] sm:leading-[1.5]">
             Let Maya handle it. She finds where your customers already are —
-            Reddit, HN, TikTok, LinkedIn, YouTube, and X — writes in your
-            voice, and posts. You don&apos;t touch a thing.
+            Reddit, HN, TikTok, Instagram, LinkedIn, YouTube, and X — then{" "}
+            <span className="italic text-[#0a0a0a] pr-[0.12em]">makes</span> the content
+            (writes the posts, films the videos) and posts it. You don&apos;t
+            touch a thing.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-5">
             <Link
-              href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
+              prefetch={false}
+          href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
               className="cta-primary"
             >
               {primaryCtaLabel("Start HeyMaya")}
@@ -273,7 +286,7 @@ function HackerNewsMockup() {
           start showing up in the conversations where people already have the
           problem. Found 3 threads this week where people described exactly
           what my app solves — replied with what I learned building it, linked
-          it at the end. 12 signups in 48 hours, no cold outreach.
+          it at the end. My first real users came from that, not cold outreach.
         </p>
         <div className="mt-3 flex items-center gap-4 text-[11px] text-[#0a0a0a]/40">
           <span>reply</span>
@@ -325,61 +338,82 @@ function XLogo({ className }: { className?: string }) {
   return <FaXTwitter className={className} color="#0a0a0a" aria-label="X" />;
 }
 
-/* TikTok mockup — a Brief card. Maya gives the operator the script,
- * hook, caption, and filming notes. She does NOT shoot the video. */
-function TikTokMockup() {
+/* Instagram — brand gradient mark. */
+function InstagramLogo({ className }: { className?: string }) {
+  return <SiInstagram className={className} color="#E4405F" aria-label="Instagram" />;
+}
+
+/* -----------------------------------------------------------------
+ * Demo videos — the differentiator made visible. Maya MAKES the video
+ * (TikTok + Reels), not just posts it. Drop the founder-facing clips at
+ * the paths below and fill these in; until set, a clean placeholder
+ * frame renders (no fake content, no 404s).
+ *   public/demos/tiktok.mp4   (+ optional tiktok.jpg poster)
+ *   public/demos/instagram.mp4
+ * ----------------------------------------------------------------- */
+const DEMO_VIDEOS: Record<
+  "tiktok" | "instagram",
+  { src: string | null; poster: string | null }
+> = {
+  tiktok: { src: "/demos/tiktok.mp4", poster: "/demos/tiktok.jpg" },
+  instagram: { src: "/demos/instagram.mp4", poster: "/demos/instagram.jpg" },
+};
+
+/* A 9:16 phone showing the actual video Maya made. Real <video> when the
+ * clip is wired; a tasteful "made by Maya" placeholder until then. */
+function PlatformVideo({
+  platform,
+  label,
+}: {
+  platform: "tiktok" | "instagram";
+  label: string;
+}) {
+  const v = DEMO_VIDEOS[platform];
+  const Logo = platform === "tiktok" ? TikTokLogo : InstagramLogo;
   return (
-    <div className="overflow-hidden rounded-2xl border border-[#0a0a0a]/10 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_36px_-16px_rgba(0,0,0,0.16)]">
-      <div className="flex items-center justify-between border-b border-[#0a0a0a]/8 bg-[#0a0a0a] px-5 py-3 text-white">
-        <div className="flex items-center gap-2">
-          <SiTiktok className="size-4" color="white" />
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em]">
-            Brief
-          </span>
-        </div>
-        <span className="font-mono text-[9.5px] uppercase tracking-[0.2em] opacity-50">
-          one-tap to post
-        </span>
-      </div>
-      <div className="space-y-5 px-5 py-5 text-[13px]">
-        <div>
-          <p className="mb-1 font-mono text-[9.5px] uppercase tracking-[0.2em] opacity-50">
-            Hook · 0–3s
-          </p>
-          <p className="font-medium">
-            &ldquo;three habit-tracker apps that all made the same
-            mistake.&rdquo;
-          </p>
-        </div>
-        <div>
-          <p className="mb-1 font-mono text-[9.5px] uppercase tracking-[0.2em] opacity-50">
-            Script · 5 beats
-          </p>
-          <ol className="space-y-1.5 leading-relaxed opacity-80">
-            <li>1. open over your phone screen with the hook</li>
-            <li>2. show app #1 — boring daily prompt</li>
-            <li>3. show app #2 — overwhelming stats</li>
-            <li>4. show app #3 — streak guilt</li>
-            <li>5. then yours — &ldquo;one question. 9pm. that&apos;s it.&rdquo;</li>
-          </ol>
-        </div>
-        <div>
-          <p className="mb-1 font-mono text-[9.5px] uppercase tracking-[0.2em] opacity-50">
-            Caption
-          </p>
-          <p className="leading-relaxed opacity-80">
-            i tried all the habit apps. heres what they all got wrong (and
-            what finally worked) #productivityapps #buildinpublic
-          </p>
-        </div>
-        <div>
-          <p className="mb-1 font-mono text-[9.5px] uppercase tracking-[0.2em] opacity-50">
-            Filming
-          </p>
-          <p className="leading-relaxed opacity-60">
-            screen recording only · no face needed · 28–35 sec
-          </p>
-        </div>
+    <div className="mx-auto w-full max-w-[300px]">
+      <div className="relative aspect-[9/16] overflow-hidden rounded-[2rem] border border-[#0a0a0a]/12 bg-[#0a0a0a] shadow-[0_2px_4px_rgba(0,0,0,0.06),0_24px_60px_-24px_rgba(0,0,0,0.35)]">
+        {v.src ? (
+          <video
+            className="size-full object-cover"
+            src={v.src}
+            poster={v.poster ?? undefined}
+            autoPlay
+            muted
+            loop
+            playsInline
+            controls
+            preload="metadata"
+          />
+        ) : (
+          <div className="absolute inset-0">
+            <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a1a] to-[#0a0a0a]" />
+            <div
+              className="absolute inset-0 opacity-60"
+              style={{
+                background:
+                  "radial-gradient(circle at 50% 36%, rgba(214,255,61,0.14), transparent 58%)",
+              }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex size-14 items-center justify-center rounded-full bg-[#d6ff3d]">
+                <span className="ml-1 border-y-[9px] border-l-[15px] border-y-transparent border-l-[#0a0a0a]" />
+              </div>
+            </div>
+            <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4">
+              <Logo className="size-5" />
+              <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/55">
+                made by maya
+              </span>
+            </div>
+            <div className="absolute inset-x-0 bottom-0 p-4">
+              <p className="text-[13px] font-medium leading-[1.35] text-white/90">
+                {label}
+              </p>
+              <div className="mt-2 h-1 w-2/3 rounded-full bg-white/25" />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -584,13 +618,51 @@ function Channels() {
           </RevealOnView>
           <RevealOnView delay={0.15}>
             <p className="max-w-2xl text-[16px] leading-[1.6] text-[#0a0a0a]/70">
-              One real example per platform — the kind of thing she&apos;d
-              hand you, ready to ship.
+              Plenty of tools will post for you. Maya{" "}
+              <span className="italic text-[#0a0a0a] pr-[0.12em]">makes</span> the content
+              first — writes the posts, films the videos — then posts it. One
+              real example per platform.
             </p>
           </RevealOnView>
         </div>
 
         <div className="mt-10 sm:mt-14">
+          <ChannelPane
+            logo={<XLogo className="size-11" />}
+            name="X."
+            tagline="Where build-in-public actually turns into your first users."
+            body="She finds the conversations where your product fits. She writes the reply, the founder post, the build update — and posts it for you. She tells you when to jump in — not just to be loud."
+            mockupLabel="Here's the post she'd publish →"
+            mockup={<XMockup />}
+          />
+
+          <ChannelPane
+            logo={<LinkedInLogo className="size-11" />}
+            name="LinkedIn."
+            tagline="Where the founders, operators, and buyers in your space actually hang out."
+            body="She finds the people who'd care. She writes the post they'd actually stop scrolling for — and publishes it for you, in your voice. She tells you who to follow back and who to ignore."
+            mockupLabel="Here's the post she'd publish →"
+            mockup={<LinkedInMockup />}
+          />
+
+          <ChannelPane
+            logo={<TikTokLogo className="size-11" />}
+            name="TikTok."
+            tagline="Where the right 15 seconds turns a stranger into your next signup."
+            body="Here's the part no one else does: she doesn't hand you a brief to go film. She makes the actual video — your real product in it, captioned, on-brand — and posts it. You never open a camera or an editor."
+            mockupLabel="Here's the video she'd post →"
+            mockup={<PlatformVideo platform="tiktok" label="POV: you finally cleared your camera roll in one sitting" />}
+          />
+
+          <ChannelPane
+            logo={<InstagramLogo className="size-11" />}
+            name="Instagram."
+            tagline="Where Reels put your product in front of people who've never heard of you."
+            body="Same idea, made for Reels. She turns what's working in your niche into a real short-form video — built from your actual screens, captioned, on-brand — and posts it to your grid. The content gets made for you, not just scheduled."
+            mockupLabel="Here's the Reel she'd post →"
+            mockup={<PlatformVideo platform="instagram" label="3 apps tried to fix my camera roll. only one actually did." />}
+          />
+
           <ChannelPane
             logo={<RedditLogo className="size-11" />}
             name="Reddit."
@@ -610,24 +682,6 @@ function Channels() {
           />
 
           <ChannelPane
-            logo={<TikTokLogo className="size-11" />}
-            name="TikTok."
-            tagline="Where buyers describe exactly what they want — in every comment section."
-            body="She watches what's performing in your niche and reads every comment under those videos — pulling out the exact pain points your app solves. Then she writes the brief: hook, script, caption. You film the 30 seconds, she posts it."
-            mockupLabel="Here's the brief she'd hand you →"
-            mockup={<TikTokMockup />}
-          />
-
-          <ChannelPane
-            logo={<LinkedInLogo className="size-11" />}
-            name="LinkedIn."
-            tagline="Where the founders, operators, and buyers in your space actually hang out."
-            body="She finds the people who'd care. She writes the post they'd actually stop scrolling for — and publishes it for you, in your voice. She tells you who to follow back and who to ignore."
-            mockupLabel="Here's the post she'd publish →"
-            mockup={<LinkedInMockup />}
-          />
-
-          <ChannelPane
             logo={<YouTubeLogo className="size-11" />}
             name="YouTube."
             tagline="Where your buyers already explained the problem — in the comments."
@@ -635,18 +689,127 @@ function Channels() {
             mockupLabel="Here's the brief she'd hand you →"
             mockup={<YouTubeMockup />}
           />
-
-          <ChannelPane
-            logo={<XLogo className="size-11" />}
-            name="X."
-            tagline="Where build-in-public actually turns into your first users."
-            body="She finds the conversations where your product fits. She writes the reply, the founder post, the build update — and posts it for you. She tells you when to jump in — not just to be loud."
-            mockupLabel="Here's the post she'd publish →"
-            mockup={<XMockup />}
-          />
         </div>
 
         <div className="pb-28 sm:pb-40" aria-hidden="true" />
+      </div>
+    </section>
+  );
+}
+
+
+
+/* -----------------------------------------------------------------
+ * Pricing — two ways to let her run it. Editorial two-column, not
+ * boxy SaaS cards. The Studio column carries the lime accent.
+ * ----------------------------------------------------------------- */
+function PriceColumn({
+  accent,
+  price,
+  cadence,
+  name,
+  line,
+  features,
+  footnote,
+}: {
+  accent: boolean;
+  price: string;
+  cadence: string;
+  name: string;
+  line: string;
+  features: string[];
+  footnote: string;
+}) {
+  return (
+    <div
+      className={`h-full border-t pt-8 ${
+        accent ? "border-[#0a0a0a]" : "border-[#0a0a0a]/15"
+      }`}
+    >
+      <div className="flex items-baseline gap-2">
+        <span className="font-display italic text-[clamp(3rem,6vw,4.5rem)] leading-[0.9] tracking-tight">
+          {price}
+        </span>
+        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#0a0a0a]/45">
+          {cadence}
+        </span>
+      </div>
+      <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/55">
+        {name}
+      </p>
+      <p className="mt-2 max-w-sm font-display italic text-[1.5rem] leading-[1.15] tracking-tight">
+        {line}
+      </p>
+      <ul className="mt-7 space-y-3">
+        {features.map((f) => (
+          <li key={f} className="flex items-baseline gap-3">
+            <span
+              className={`mt-1 inline-block size-1.5 shrink-0 rounded-full ${
+                accent ? "bg-[#0a0a0a]" : "bg-[#0a0a0a]/40"
+              }`}
+            />
+            <span className="text-[15px] leading-[1.5] text-[#0a0a0a]/75">
+              {f}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-7 text-[13px] text-[#0a0a0a]/45">{footnote}</p>
+    </div>
+  );
+}
+
+function Pricing() {
+  return (
+    <section
+      id="pricing"
+      className="relative border-t border-[#0a0a0a]/10 px-6 py-28 sm:px-10 sm:py-40"
+    >
+      <div className="mx-auto max-w-7xl">
+        <RevealOnView>
+          <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
+            Pricing
+          </p>
+          <h2 className="mb-16 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
+            Two ways to let her run it.
+          </h2>
+        </RevealOnView>
+        <div className="grid grid-cols-12 gap-x-12 gap-y-14">
+          <RevealOnView delay={0.05} className="col-span-12 sm:col-span-6">
+            <PriceColumn
+              accent={false}
+              price="$99"
+              cadence="/mo"
+              name="HeyMaya"
+              line="She gets you customers."
+              features={[
+                "Finds where your buyers already are — every channel",
+                "Writes posts + replies in your learned voice",
+                "Designs grounded slideshows from your real screens",
+                "Posts for you, ban-safe, on the channels you connect",
+                "Tracks which post drove the click — not just which got likes",
+              ]}
+              footnote="7 days free, then $99/mo. Cancel anytime."
+            />
+          </RevealOnView>
+          <RevealOnView delay={0.12} className="col-span-12 sm:col-span-6">
+            <PriceColumn
+              accent
+              price="$149"
+              cadence="/mo · Studio"
+              name="HeyMaya Studio"
+              line="Everything — and she films it."
+              features={[
+                "Everything in HeyMaya, plus:",
+                "~15 short-form videos a month, done for you",
+                "Copies the video format already winning your niche",
+                "Built from your real product, never a fake UI",
+                "Posted and click-tracked, like everything else",
+              ]}
+              footnote="7 days free, then $149/mo. Upgrade or downgrade anytime."
+            />
+          </RevealOnView>
+        </div>
       </div>
     </section>
   );
@@ -771,7 +934,7 @@ function TelegramPhone() {
     {
       from: "maya",
       time: "7:04",
-      text: "Morning. Your r/SaaS reply yesterday pulled 14 clicks, 2 signups. Three posts going live today, I'll handle all of it.",
+      text: "Morning. Your r/SaaS reply yesterday pulled 14 clicks to your page — your best yet. Three posts going live today, I'll handle all of it.",
     },
     { from: "you", time: "7:05", text: "love it, go" },
     {
@@ -788,7 +951,7 @@ function TelegramPhone() {
     {
       from: "maya",
       time: "8:00",
-      text: "Recap: 5 posts live, 61 clicks, 2 signups. Best converter: Reddit r/SaaS.",
+      text: "Recap: 5 posts live, 61 clicks to your page. Reddit r/SaaS drove the most — and your Stripe logged 2 new signups today.",
     },
   ];
 
@@ -922,8 +1085,10 @@ function TelegramSection() {
 }
 
 /* -----------------------------------------------------------------
- * Attribution — the closed-loop proof section. Mockup shows a real
- * Maya morning brief with per-post click → signup attribution.
+ * Attribution — the proof section. Per-post CLICK tracking is what Maya
+ * does automatically (every link wrapped); signups are an aggregate read
+ * from the founder's connected analytics (Stripe/PostHog), never an
+ * end-to-end per-post claim we can't back.
  * ----------------------------------------------------------------- */
 function AttributionMockup() {
   return (
@@ -950,8 +1115,10 @@ function AttributionMockup() {
             </p>
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-[12px] tabular-nums text-[#0a0a0a]/50">14 clicks</p>
-            <p className="mt-0.5 text-[13px] font-semibold text-[#16a34a]">2 signups</p>
+            <p className="text-[14px] font-semibold tabular-nums">14 clicks</p>
+            <p className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-[#0a0a0a]/40">
+              to your page
+            </p>
           </div>
         </div>
 
@@ -967,8 +1134,10 @@ function AttributionMockup() {
             </p>
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-[12px] tabular-nums text-[#0a0a0a]/50">61 clicks</p>
-            <p className="mt-0.5 text-[13px] font-semibold text-[#16a34a]">1 signup</p>
+            <p className="text-[14px] font-semibold tabular-nums">61 clicks</p>
+            <p className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-[#0a0a0a]/40">
+              to your page
+            </p>
           </div>
         </div>
 
@@ -984,16 +1153,16 @@ function AttributionMockup() {
             </p>
           </div>
           <div className="shrink-0 text-right">
-            <p className="text-[12px] tabular-nums">284 impressions</p>
-            <p className="mt-0.5 text-[13px] font-semibold">0 signups</p>
+            <p className="text-[13px] tabular-nums">284 impressions</p>
+            <p className="mt-0.5 text-[12px] tabular-nums opacity-60">9 clicks</p>
           </div>
         </div>
 
         {/* Insight bar */}
         <div className="bg-[#d6ff3d]/15 px-5 py-4">
           <p className="text-[13px] leading-[1.5]">
-            <span className="font-semibold">Reddit is your best converter this week.</span>
-            <span className="text-[#0a0a0a]/65"> Pulling back on X, doubling Reddit output next week.</span>
+            <span className="font-semibold">Reddit drove your most clicks this week.</span>
+            <span className="text-[#0a0a0a]/65"> Your Stripe logged 2 new signups — pulling back on X, doubling Reddit.</span>
           </p>
         </div>
       </div>
@@ -1013,13 +1182,17 @@ function Attribution() {
                 The loop nobody else closes
               </p>
               <h2 className="mb-6 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight">
-                Maya tells you which post brought a signup. Not a like — a signup.
+                Maya tracks which post drove the click — not which got the
+                likes.
               </h2>
               <p className="max-w-md text-[16px] leading-[1.65] text-[#0a0a0a]/65">
-                Every link she posts wraps a tracker. Your morning brief shows
-                exactly which reply, which channel, which post drove someone to
-                sign up. She doubles down on what converts and drops what
-                doesn&apos;t.
+                Every link she posts is wrapped and tagged — so she knows
+                exactly which reply, which channel, which post sent someone to
+                your page, and the same clicks show up in{" "}
+                <span className="text-[#0a0a0a]">your own</span> PostHog or
+                Stripe, attributed to the post. You never just take her word for
+                it. Then she closes the loop on what converted: read from your
+                analytics, or confirmed with you.
               </p>
             </RevealOnView>
           </div>
@@ -1147,7 +1320,7 @@ function StaysCurrent() {
         </RevealOnView>
         <RevealOnView delay={0.15}>
           <div className="grid grid-cols-2 gap-x-10 gap-y-6 sm:grid-cols-3 md:grid-cols-6">
-            {["Reddit", "Hacker News", "TikTok", "YouTube", "X", "LinkedIn"].map(
+            {["Reddit", "Hacker News", "TikTok", "Instagram", "YouTube", "X", "LinkedIn"].map(
               (p) => (
                 <div
                   key={p}
@@ -1184,7 +1357,8 @@ function FinalCTA() {
         <RevealOnView delay={0.2}>
           <div className="mt-16 flex flex-wrap items-center gap-6">
             <Link
-              href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
+              prefetch={false}
+          href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
               className="cta-primary cta-primary-large"
             >
               {primaryCtaLabel("Open Maya")}
@@ -1296,9 +1470,12 @@ function ScrollLine() {
 function RevealOnView({
   children,
   delay = 0,
+  className = "",
 }: {
   children: React.ReactNode;
   delay?: number;
+  /** Extra classes (e.g. grid col-span) so the reveal wrapper can BE the item. */
+  className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
@@ -1322,7 +1499,7 @@ function RevealOnView({
   return (
     <div
       ref={ref}
-      className="reveal-on-view"
+      className={`reveal-on-view ${className}`.trim()}
       data-visible={visible ? "true" : "false"}
       style={{ transitionDelay: visible ? `${delay}s` : "0s" }}
     >

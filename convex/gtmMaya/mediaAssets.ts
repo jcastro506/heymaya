@@ -67,6 +67,7 @@ const MEDIA_SOURCES = [
   "onboarding",
   "generated",
   "auto_grab",
+  "creatify",
 ] as const;
 type MediaSource = (typeof MEDIA_SOURCES)[number];
 

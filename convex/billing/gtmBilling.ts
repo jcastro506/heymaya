@@ -25,13 +25,25 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { getStripeClient } from "./stripeClient";
 import { assertWebhookSecret } from "../lib/webhookSecret";
-import { buildGtmPlanJson, gtmTrialDays, type GtmPlanStatus } from "../gtmMaya/planGtm";
+import {
+  buildGtmPlanJson,
+  gtmTrialDays,
+  type GtmPlan,
+  type GtmPlanStatus,
+} from "../gtmMaya/planGtm";
 
 export type GtmInterval = "monthly" | "annual";
 
-/** Resolve STRIPE_PRICE_GTM99_<INTERVAL> → price id (null if unset). */
-export function gtmPriceId(interval: GtmInterval): string | null {
-  const envVar = `STRIPE_PRICE_GTM99_${interval.toUpperCase()}`;
+/**
+ * Resolve the Stripe price env var for a tier + interval → price id (null if
+ * unset). gtm99 → STRIPE_PRICE_GTM99_<INTERVAL>; studio → STRIPE_PRICE_STUDIO_<INTERVAL>.
+ */
+export function gtmPriceId(
+  interval: GtmInterval,
+  tier: GtmPlan = "gtm99"
+): string | null {
+  const prefix = tier === "studio" ? "STUDIO" : "GTM99";
+  const envVar = `STRIPE_PRICE_${prefix}_${interval.toUpperCase()}`;
   const value = process.env[envVar];
   return value && value.length > 0 ? value : null;
 }
@@ -42,6 +54,8 @@ const GTM_STATUS = v.union(
   v.literal("trialing"),
   v.literal("none")
 );
+
+const GTM_PLAN = v.union(v.literal("gtm99"), v.literal("studio"));
 
 /* -------------------------------------------------------------------------- */
 /* Plan write — the single mutation the webhook AND the operator comp call.    */
@@ -55,6 +69,7 @@ export const applyGtmPlan = internalMutation({
   args: {
     accountId: v.id("creators"),
     status: GTM_STATUS,
+    tier: v.optional(GTM_PLAN),
     periodEndMs: v.optional(v.number()),
   },
   handler: async (
@@ -74,6 +89,7 @@ export const applyGtmPlan = internalMutation({
     await ctx.db.patch(agent._id, {
       gtmPlanJson: buildGtmPlanJson({
         status: args.status as GtmPlanStatus,
+        tier: (args.tier as GtmPlan | undefined) ?? "gtm99",
         periodStartMs: Date.now(),
       }),
       updatedAt: Date.now(),
@@ -90,6 +106,7 @@ export const applyGtmPlanByStripeCustomer = internalMutation({
   args: {
     stripeCustomerId: v.string(),
     status: GTM_STATUS,
+    tier: v.optional(GTM_PLAN),
     creatorId: v.optional(v.id("creators")),
     periodEndMs: v.optional(v.number()),
   },
@@ -111,6 +128,7 @@ export const applyGtmPlanByStripeCustomer = internalMutation({
     return await ctx.runMutation(internal.billing.gtmBilling.applyGtmPlan, {
       accountId: creator._id,
       status: args.status,
+      tier: args.tier,
       periodEndMs: args.periodEndMs,
     });
   },
@@ -128,6 +146,7 @@ export const applyGtmPlanFromWebhookPublic = mutation({
     stripeCustomerId: v.string(),
     creatorId: v.optional(v.id("creators")),
     stripeStatus: v.string(),
+    tier: v.optional(GTM_PLAN),
     periodEndMs: v.optional(v.number()),
   },
   handler: async (
@@ -150,10 +169,26 @@ export const applyGtmPlanFromWebhookPublic = mutation({
     return await ctx.runMutation(internal.billing.gtmBilling.applyGtmPlan, {
       accountId: creator._id,
       status,
+      tier: args.tier,
       periodEndMs: args.periodEndMs,
     });
   },
 });
+
+/**
+ * Reverse-map a Stripe price id → GTM tier, for the webhook route's defense-in-
+ * depth when subscription metadata is absent (e.g. a portal-initiated plan
+ * change). Returns null if the price matches no configured GTM price.
+ */
+export function gtmTierFromPriceId(priceId: string | null | undefined): GtmPlan | null {
+  if (!priceId) return null;
+  for (const tier of ["studio", "gtm99"] as const) {
+    for (const interval of ["monthly", "annual"] as const) {
+      if (gtmPriceId(interval, tier) === priceId) return tier;
+    }
+  }
+  return null;
+}
 
 /** Stripe subscription.status → our GtmPlanStatus. Unknown/ended → none. */
 export function mapStripeStatusToGtm(stripeStatus: string): GtmPlanStatus {
@@ -215,7 +250,10 @@ export const setGtmStripeCustomerId = internalMutation({
  * session and the subscription so the webhook route can branch to the GTM path.
  */
 export const createGtmCheckoutSession = action({
-  args: { interval: v.optional(v.union(v.literal("monthly"), v.literal("annual"))) },
+  args: {
+    interval: v.optional(v.union(v.literal("monthly"), v.literal("annual"))),
+    tier: v.optional(GTM_PLAN),
+  },
   handler: async (ctx, args): Promise<{ url: string }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("createGtmCheckoutSession: not authenticated.");
@@ -227,10 +265,12 @@ export const createGtmCheckoutSession = action({
     if (!me) throw new Error("createGtmCheckoutSession: no gtm-agent account.");
 
     const interval: GtmInterval = args.interval ?? "monthly";
-    const priceId = gtmPriceId(interval);
+    const tier: GtmPlan = (args.tier as GtmPlan | undefined) ?? "gtm99";
+    const priceId = gtmPriceId(interval, tier);
     if (!priceId) {
+      const prefix = tier === "studio" ? "STUDIO" : "GTM99";
       throw new Error(
-        `createGtmCheckoutSession: STRIPE_PRICE_GTM99_${interval.toUpperCase()} is not set — operator must create the $99 Stripe product + set the env var.`
+        `createGtmCheckoutSession: STRIPE_PRICE_${prefix}_${interval.toUpperCase()} is not set — operator must create the Stripe product + set the env var.`
       );
     }
     const baseUrl = process.env.APP_URL;
@@ -253,7 +293,9 @@ export const createGtmCheckoutSession = action({
 
     // First-subscription-only full trial. Re-subscribers bill immediately.
     const trialDays = me.hasPriorSubscription ? undefined : gtmTrialDays();
-    const gtmMeta = { product: "gtm", creatorId: String(me.accountId) };
+    // Stamp the tier so the webhook resolves entitlement (with a price-id
+    // fallback via gtmTierFromPriceId for portal-initiated changes).
+    const gtmMeta = { product: "gtm", tier, creatorId: String(me.accountId) };
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -283,13 +325,14 @@ export const createGtmCheckoutSession = action({
  * `npx convex run billing/gtmBilling:compGtmPlanByAgent '{"agentId":"...","status":"active"}'`.
  */
 export const compGtmPlanByAgent = internalMutation({
-  args: { agentId: v.id("gtmAgents"), status: GTM_STATUS },
+  args: { agentId: v.id("gtmAgents"), status: GTM_STATUS, tier: v.optional(GTM_PLAN) },
   handler: async (ctx, args): Promise<{ ok: boolean }> => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent) return { ok: false };
     await ctx.db.patch(args.agentId, {
       gtmPlanJson: buildGtmPlanJson({
         status: args.status as GtmPlanStatus,
+        tier: (args.tier as GtmPlan | undefined) ?? "gtm99",
         periodStartMs: Date.now(),
       }),
       updatedAt: Date.now(),

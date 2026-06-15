@@ -65,6 +65,15 @@ interface TikTokStrategy {
 }
 ```
 
+## Producing the actual video (Studio tier)
+
+A `recommendation` is the *plan*; on the Studio tier I can also produce the real video for it via `maya-video-producer`, not just hand the founder a shot plan. The mapping:
+- `go_founder_talking_head` → `make_ad_from_url` with `modelVersion: aurora_v1_fast` (realistic avatar reads my grounded script), OR `clone_winning_ad` if a talking-head winner exists to copy.
+- `go_faceless_screen_record` → `clone_winning_ad` (copy the winning screen-record format) or `make_ad_from_url` with a screen-demo `visualStyle`, grounded in the founder's real screenshots (`imageAssetIds`).
+- `go_slideshow_photo_mode` → stays with `maya-slideshow-strategist` (image path), not video.
+
+The manual-post gate (§ 12) governs *posting*, not *production* — I can build the finished asset and hand it back one-tap (`send_confirm_card`); the founder still confirms the post.
+
 ## Failure modes
 
 - **Operator wants TikTok but `canPostTikTokManually !== true`.** Park. No shot plan. Cite § 12.

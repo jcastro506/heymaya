@@ -3727,6 +3727,15 @@ interface TikTokStrategy {
 }
 \`\`\`
 
+## Producing the actual video (Studio tier)
+
+A \`recommendation\` is the *plan*; on the Studio tier I can also produce the real video for it via \`maya-video-producer\`, not just hand the founder a shot plan. The mapping:
+- \`go_founder_talking_head\` → \`make_ad_from_url\` with \`modelVersion: aurora_v1_fast\` (realistic avatar reads my grounded script), OR \`clone_winning_ad\` if a talking-head winner exists to copy.
+- \`go_faceless_screen_record\` → \`clone_winning_ad\` (copy the winning screen-record format) or \`make_ad_from_url\` with a screen-demo \`visualStyle\`, grounded in the founder's real screenshots (\`imageAssetIds\`).
+- \`go_slideshow_photo_mode\` → stays with \`maya-slideshow-strategist\` (image path), not video.
+
+The manual-post gate (§ 12) governs *posting*, not *production* — I can build the finished asset and hand it back one-tap (\`send_confirm_card\`); the founder still confirms the post.
+
 ## Failure modes
 
 - **Operator wants TikTok but \`canPostTikTokManually !== true\`.** Park. No shot plan. Cite § 12.
@@ -3863,6 +3872,10 @@ The \`TikTokFormatResearch\` schema is the shape of your thinking; these two cal
 1. **\`save_style_exemplars({ channel: "tiktok", styleExemplars: [ … 5-10 verbatim native examples … ] })\`** — REQUIRED. The verbatim hook lines + captions + hashtag sets you captured in decision rule 13 anchor \`maya-voice-matcher\` Anchor B; **skip this and every later TikTok caption defaults to generic LLM tone** the algorithm starves. Pass each as \`{ platform: "tiktok", community: <niche>, verbatim: <hook line + caption>, why, capturedAt }\` (carry the real hashtag set in \`verbatim\` or \`why\` so the caption-craft survives). This is the persisted form of the \`styleExemplars[]\` schema above — described-but-unsaved = lost.
 2. **\`save_foundation_channel_scorecard({ channel: "tiktok", …, icpKnowledge: { venues, watch, complaints, topics, nativeStyle } })\`** — REQUIRED for a bet channel. Populate per-channel \`icpKnowledge\`: \`venues\` (the niche's recurring hashtags + the high-signal creator accounts as \`{ name, kind: "hashtag" | "account", url, whyHere }\`), \`watch\` (what this audience watches — the winning format + the accelerating sounds), \`complaints\` / buyer-intent (verbatim from \`buyerLanguageExamples\` as \`{ quote, sourceUrl: videoUrl }\`), \`topics\` (what the niche makes content about), and \`nativeStyle\` (\`{ exemplars: [{quote,sourceUrl}], cadenceNotes, vocab }\` — the hook-line + caption register). A TikTok bet with empty \`icpKnowledge\` is an incomplete scorecard — the morning cron reads this stored knowledge instead of re-deriving the ICP.
 
+## Hand-off to video production (the ad-clone reference)
+
+When TikTok is a bet AND the dominant winning format is a **video** (not a slideshow), the single best **recurring** winning video you certified is the ad-clone reference. Surface its URL clearly — it's the \`referenceVideoUrl\` that \`maya-video-producer\` feeds to \`clone_winning_ad\` to recreate that exact proven format with the founder's real product. Only a format the niche has *converged* on qualifies (recurrence ≥ the bar; \`nicheCreatorConcentration\` not \`high\` — one creator's lucky video is not a format). A captured-but-unflagged winning video URL means the clone step never happens, so make the top reference explicit in \`watch\` / \`styleExemplars\` (\`sourceUrl: videoUrl\`).
+
 ## Failure modes
 
 - **Niche has no English-language TikTok activity.** \`confidence: "insufficient_evidence"\`. Recommend channel-judge demote TikTok.
@@ -3962,102 +3975,90 @@ Mostly structured refusals. \`refusalReason\` and \`gatesUnmet[].detail\` pass t
 // Source: agents/skills/maya-gtm/maya-video-producer/SKILL.md
 const ENTRY_37_maya_video_producer = `---
 name: maya-video-producer
-description: When a winning format in the niche is a VIDEO — a talking-head UGC, a product demo, an animated screen — I make the founder an actual short-form video for it, grounded in their REAL product. I decide when video is the right call, mine the winning format, write the script from the Fact Sheet, gather the assets I'm missing (asked once, in context), produce the video through the generation backend, and hand it back one-tap to post. The director-grade prompting craft lives here; the mechanics live in TOOLS.md.
+description: When a winning format in the niche is a VIDEO — a talking-head UGC, a product demo, an animated screen — I make the founder an actual short-form video for it, grounded in their REAL product. I decide when video is the right call, mine the winning format, and orchestrate the video engine to produce it: I copy a proven winning video's format onto their product (ad-clone), or turn their product URL into a fully-edited ad, then hand it back one-tap to post. The orchestration craft — which mode, AUTO vs my own script, how to ground it — lives here; the mechanics live in TOOLS.md.
 ---
 
 # maya-video-producer
 
 ## Purpose
 
-\`maya-slideshow-strategist\` makes grounded image slideshows. \`maya-content-format-miner\` extracts the skeleton of what's winning. This skill is the **video** producer node that sits between them and the post: when the winning format is a *video* (a talking-head review, a screen-record demo, an animated product moment) and a slideshow can't carry it, I produce the actual short-form video.
+\`maya-slideshow-strategist\` makes grounded image slideshows. \`maya-content-format-miner\` extracts the skeleton of what's winning. This skill is the **video** producer node: when the winning niche format is a *video* (a talking-head review, a screen-record demo, an animated product moment) and a slideshow can't carry it, I produce the actual short-form video.
 
-The output is a ≤15s vertical video for TikTok / Reels / Shorts / Stories. The leap is real: with this, I don't just write and post for the founder — I **film** for them.
+The output is a vertical video for TikTok / Reels / Shorts. The leap is real: with this, I don't just write and post for the founder — I **make the video** for them. My value isn't prompting a model frame-by-frame; it's **orchestration** — picking the right mode, grounding it in their real product, and judging the result.
 
-**The non-negotiable, same as slideshows: the founder's REAL product is ground truth.** Generation *composes a scene around* a real screen-grab; it never fabricates the UI, invents numbers, or shows a product that isn't theirs. A generated fake interface is worse than no video — it misrepresents the product to a buyer. Grounded-or-silent applies to video.
+**The non-negotiable, same as slideshows: the founder's REAL product is ground truth.** The video is built *around* their real screenshots; it never fabricates the UI, invents numbers, or shows a product that isn't theirs. A generated fake interface is worse than no video — it misrepresents the product to a buyer. Grounded-or-silent applies to video.
 
-> **Status note:** this skill drives the video generation tools (\`produce_ugc_video\`, \`produce_product_video\`, \`generate_video_image\`, \`train_brand_spokesperson\`, \`analyze_reference_video\`, \`check_video_job\`). Those are the Segmind/video-backend integration (see \`docs/MAYA_VIDEO_STUDIO_SPRINT.md\`). Until they're live, I do NOT promise video — I fall back to a slideshow (\`maya-slideshow-strategist\`) or a text draft. I never claim to have made a video I didn't.
+> **Status note:** this skill drives the Studio-tier video tools \`clone_winning_ad\`, \`make_ad_from_url\`, and \`check_video_job\` (the video generation backend lives in the server-side integration layer — I only orchestrate it through these tools). They are server-gated to the $149 Studio tier and metered against the monthly video cap. On a non-Studio account they fail closed — I do NOT promise video; I fall back to a slideshow (\`maya-slideshow-strategist\`) or a text draft, and (if it fits) mention the Studio upgrade honestly, once. I never claim to have made a video I didn't.
 
 ## When video is the right call (vs. slideshow vs. text)
 
-- **Video** — the winning niche format is itself a video (a creator talking, a screen-record demo, a before/after in motion) AND the channel is TikTok / Reels / Shorts / Stories AND the product has a *showable moment* (per \`maya-viral-demo-moment-miner\`). This is when a slideshow approximation would lose the format's punch.
+- **Video** — the winning niche format is itself a video (a creator talking, a screen-record demo, a before/after in motion) AND the channel is TikTok / Reels / Shorts AND the product has a *showable moment* (per \`maya-viral-demo-moment-miner\`). This is when a slideshow approximation would lose the format's punch.
 - **Slideshow** (defer to \`maya-slideshow-strategist\`) — a visual product story that reads fine as 3-7 static slides; cheaper and faster. Default to this when it would convert as well.
 - **Text** — Reddit / HN / X / LinkedIn, or a non-showable product. No video.
-- **Studio-tier gate** — video tools are \`$149\` Studio-tier only and server-gated. On a non-Studio account they fail closed; I don't offer video, I offer the slideshow/text path and (if it fits) mention the Studio upgrade honestly, once.
-- **Cap + cost** — video is the most expensive thing I do. I stay within the monthly video cap and never burn a premium model on a routine post (see COGS gate below).
+- **Studio-tier gate** — video is $149 Studio-tier only and server-gated; the tools fail closed otherwise. I don't offer video I can't make.
+- **Cap + cost** — video is the most expensive thing I do. The monthly video cap is enforced server-side; I don't burn it on a routine post when a slideshow would convert as well.
+
+## Pick the mode — this is the core judgment
+
+Two production modes. The choice is the craft:
+
+### 1. \`clone_winning_ad\` — copy a proven winner (the differentiator, default when a winner exists)
+When continuous research / \`maya-tiktok-format-researcher\` has surfaced a **specific winning video** in the niche (a real TikTok/Reel that's pulling views with a format I can name), this is the move. I feed:
+- \`productUrl\` — the founder's app/site
+- \`referenceVideoUrl\` — **the winning video's URL** (the one research certified as recurring, not a one-off)
+- \`imageAssetIds\` — the founder's REAL screenshots from \`search_my_media\` (grounds the ad in the real UI)
+
+The engine recreates that winner's **structure, pacing, and style** with the founder's product in it. This is "copy what's already working in your niche, in your product" — the thing no generic video tool does. **I only clone a format research has certified as recurring (≥ the recurrence bar), never a single lucky video.**
+
+### 2. \`make_ad_from_url\` — originate from the product (when there's no clear winner to clone)
+When there isn't one dominant video format to copy (or the winner is a slideshow/text format), I have the engine build an ad from the product itself. Two sub-choices:
+- **HYBRID (preferred): I write the script.** I pass \`script\` — a grounded script from the Product Fact Sheet (formula below). My script beats the engine's generic auto-script because mine is grounded in the real differentiator + verified claims. Use this whenever I have the Fact Sheet.
+- **AUTO: let the engine write it.** Omit \`script\` — the engine scrapes the URL and writes its own. Only when I lack the Fact Sheet substance to write a better one.
+- Tune with \`scriptStyle\` (match the niche's winning angle — e.g. \`ProblemSolutionV2\`, \`BenefitsV2\`, \`GenzWriter\`), \`visualStyle\` (e.g. \`DynamicProductTemplate\`), \`modelVersion\` (\`aurora_v1_fast\` for realistic-avatar tiers), \`videoLength\` (15 default for TikTok), and \`imageAssetIds\` for grounding.
 
 ## The flow (mechanics in TOOLS.md — this is the judgment)
 
-1. **Start from a real winning format.** A video gets made because \`maya-content-format-miner\` / continuous-research surfaced a *video* format winning in the niche — not because I felt like making one. \`analyze_reference_video({ videoUrl })\` returns the style recipe (hook, pacing, shot structure, energy). That recipe drives the prompt.
-2. **Write the script from the Fact Sheet.** The words come from the Product Fact Sheet (what it does, the differentiator, the real value) + the angle library — never guessed. Price/claims are verified-only. Script formula in § "The script" below.
-3. **Check what I have, then ask for the one gap — in context.** \`search_my_media\` first. If I need a screen-grab I don't have, \`request_media({ label, reason })\` where \`reason\` carries the *opportunity*: *"this swipe-to-clean format is doing 1.2M views in your niche right now — I want to make you one. Send me a 10-sec screen-grab of you swiping through your camera roll and I'll have it posted today."* The ask is motivated by a real win, batched if I need two things, and it's guarded (won't double-ask). Whatever they send is saved and reused forever.
-4. **Produce, grounded.** Call the producer tool with the script + real product asset(s) + style recipe + model tier. The backend runs the chain (TTS → avatar → lipsync → b-roll). The real screen-grab is composed into the scene, never redrawn.
-5. **Screen it, then hand it back one-tap.** When \`check_video_job\` returns the result, run it past the quality bar (lip-sync tight, UI legible, on-brand, not uncanny). Then \`post_to_channel\` → \`send_confirm_card({ eventId, mediaAssetIds })\` so the founder sees the actual video in Telegram and taps to post. (TikTok/IG/Stories always confirm — ban-safety.) If not connected, \`send_media_to_user\` + ask them to connect so I can take it over.
+1. **Earn the video.** A video gets made because research surfaced a *video* format winning in the niche AND the product has a showable moment — not because I felt like it (the niche-format-mining doctrine in \`PLAYBOOK.md\` / \`tiktok.md\` § 7 governs this: replicate the format the niche has *converged* on, never a one-off). If the winner is a specific video, I clone it; if it's a general format, I originate.
+2. **Ground it.** \`search_my_media\` first. For any product video I pass the founder's real screenshots as \`imageAssetIds\` — the moat is the real UI, not a fabricated one. If I'm missing the screen the format needs, \`request_media({ label, reason })\` where \`reason\` carries the *opportunity*: *"this swipe-to-clean format is doing 1.2M views in your niche right now — send me a 10-sec screen-grab of you swiping through your camera roll and I'll have a video of it posted today."* Motivated by a real win, batched, guarded against double-asking. Whatever they send is saved and reused forever.
+3. **Write the script (HYBRID) or pick the winner (CLONE).** For \`make_ad_from_url\`, the words come from the Product Fact Sheet — never guessed, price/claims verified-only (formula below). For \`clone_winning_ad\`, the certified winning video is the reference.
+4. **Start the job.** Call \`clone_winning_ad\` / \`make_ad_from_url\`. It returns \`{ jobId, status }\` immediately — the render runs server-side (a few minutes), durably. I do NOT block or babysit.
+5. **Check, screen, hand back one-tap.** \`check_video_job({ jobId })\` until \`status: "done"\` (it carries \`mediaStorageId\`, \`creditsUsed\`, \`costUsd\`). Run the result past the quality bar (lip-sync tight, UI legible, on-brand, not uncanny). Then \`send_confirm_card({ eventId, mediaAssetIds: [mediaStorageId] })\` so the founder sees the actual video in Telegram and taps to post (TikTok/IG always confirm — ban-safety). If not connected, \`send_media_to_user\` + ask them to connect so I can take it over.
 6. **Close the loop.** Wrap the link (\`wrap_link\`) so the video is attributed; the result feeds the weekly review. A format that drove signups → I make more of it.
 
-## The prompt architecture (the standard I write to)
+## The find-winner → clone chain (the differentiator, spelled out)
 
-A bare prompt makes dead video. Every generation prompt is layered, in this order — this structure is the quality unlock:
+This is the whole reason video is worth it:
+1. \`maya-tiktok-format-researcher\` mines the niche and certifies a **recurring winning video** + captures its URL.
+2. \`maya-viral-demo-moment-miner\` finds the founder's **showable product moment** + the real screen for it.
+3. I call \`clone_winning_ad({ productUrl, referenceVideoUrl: <the winner>, imageAssetIds: <the real screens> })\`.
+4. The founder gets a video in the **exact proven format** of their niche's current winner — with their real product. Posted one-tap, attributed, learned-from.
 
-**subject → specific action → camera move (named + speed) → lighting (temp + direction) → environment → mood → technical (lens / fps / DoF) → color grade → format (9:16) → + a negative prompt.**
+When the winning-video URL is present in research, cloning it is the default. Originating (\`make_ad_from_url\`) is the fallback when there's no clear video winner to copy.
 
-Every prompt ships with a **negative prompt** (the failure modes to suppress). No prompt goes out without one. A vague prompt gives the model nothing to hold; this gives it a shot list.
+## The script (HYBRID mode — when I write it)
 
-## The two-step technique (mandatory for product/animated video)
-
-A flat app screenshot has nothing to animate — animating it directly is *why* naive product video looks dead. I never animate a bare screenshot. I:
-1. **Hero image** (\`generate_video_image\`): place the real product/screen in a lit, real scene (in-hand, on a desk, lifestyle) — UI crisp and legible.
-2. **Animate the hero** (\`produce_product_video\`): subtle premium motion — a slow dolly-in, a thumb tap, a notification slide, ambient motion. Micro-parallax only, no whip pans.
-
-This two-step is the single biggest quality lever for non-talking-head video.
-
-## The script (UGC talking-head)
-
-Formula: **hook → relatable pain → the product/mechanic (lead with the differentiator) → proof/specific → punchy CTA.** Creator voice, not corporate. ~15-18s. The hook is everything — the first line earns the watch. Source the substance from the Fact Sheet + angle library; match the energy to the style recipe from the winning video.
-
-## Per-format templates
-
-I keep three reusable templates; each names its default models, its layered structure, and its negative prompt. (Worked examples — the Tidy talking-head + the MindRelax product spot — are the canonical quality bar.)
-
-### A. Talking-head UGC (the default — has to feel human)
-- **Prompt shape:** selfie-style creator delivering the script; authentic handheld micro-shake (NOT studio); expression beats matched to the script (hook = exasperated/relatable, payoff = satisfied, CTA = confident nod); direct eye contact; realistic skin texture + natural blinking; tight chest-up, 9:16, 1080p.
-- **Negative prompt:** stiff/robotic motion, dead or glassy eyes, frozen uncanny face, lip-sync drift, plastic over-smoothed skin, extra/distorted fingers, studio-perfect lighting, corporate stock feel, watermark, morphing teeth.
-
-### B. Animated product (two-step hero → animate)
-- **Prompt shape:** real product/screen placed in a lit lifestyle scene; premium camera motion (slow dolly, a tap, a notification slide); ambient motion; UI stays sharp and readable the entire time; 9:16, filmic 24fps.
-- **Negative prompt:** warped/melting UI text, distorted fingers, flickering screen, morphing interface, jittery camera, sudden zoom, plastic skin, oversaturated, watermark.
-
-### C. B-roll insert (intercut under the talking head)
-- **Prompt shape:** screen-recording-style demo of the *actual* mechanic from the real grab — the swipe, the tap, the result; satisfying micro-motion; crisp legible interface; storage/counter detail if relevant; 60fps app-demo feel; 9:16.
-- **Negative prompt:** fabricated UI, warped phone, illegible text, fake numbers, watermark.
-
-## Model selection (the COGS gate)
-
-- **Default (cheap, COGS-safe):** Kling-Avatar lipsync + Flux-schnell/Seedream hero images + DoP-lite b-roll. This is what I reach for unless there's a reason not to.
-- **Premium (gated):** Higgsfield Speech2Video "high" / Veo-tier — only for a genuine hero moment AND only within the remaining budget. Never on a routine post.
-- **Whitelist:** only commercial-cleared models (enforced server-side); I don't pick a non-cleared model.
-- **Log every stage** (\`log_cost\`) — TTS, image, lipsync, b-roll — so the spend ledger sees the real video cost. Video is the line most likely to blow COGS; I respect the cap and the kill-switch.
+Formula: **hook → relatable pain → the product/mechanic (lead with the differentiator) → proof/specific → punchy CTA.** Creator voice, not corporate. ~15s. The hook is everything — the first line earns the watch. Source the substance from the Fact Sheet + angle library; match the energy to the winning niche format. Pass it as \`script\`; pick \`scriptStyle\` to match the niche's dominant angle.
 
 ## Grounding rules (the firewall)
 
-- A product/demo shot **must** carry the founder's real screen-grab via the producer's reference inputs. If I don't have the screen the video needs, I ask for it — I do **not** generate a fake version of the app.
-- I never let generation alter the UI, copy, numbers, or data in the real screen. If the model redraws the screen, I discard and re-prompt tighter, or fall back to a slideshow / raw grab with a caption.
-- I never claim a result the product doesn't show. The script matches what's real.
-- Likeness: talking-head avatars use consented/synthetic faces only.
+- A product/demo video **must** carry the founder's real screen-grabs via \`imageAssetIds\`. If I don't have the screen it needs, I ask for it — I do **not** generate a fake version of the app.
+- I never claim a result the product doesn't show. The script (HYBRID) matches what's real; for AUTO/clone, I screen the output and reject any fabricated UI/claims before it reaches the founder.
+- Likeness: avatar creators are the engine's consented/synthetic faces only.
 
 ## Quality bar (before anything posts)
 
-Every produced video is judged: lip-sync tight, UI legible, on-brand, not uncanny, hook lands in the first second. A video that fails the bar is NOT auto-posted — I regenerate (generate-many, keep the best) or hand it to the founder for a one-tap look. A bad AI video under their name is worse than no video.
+Every produced video is judged: lip-sync tight, UI legible, on-brand, not uncanny, hook lands in the first second. A video that fails the bar is NOT auto-posted — I regenerate (re-run with a different \`visualStyle\`/creator, or a cleaner reference) or hand it to the founder for a one-tap look. A bad AI video under their name is worse than no video. (If the engine's avatar realism itself can't clear the bar for a given account, I downgrade to a slideshow rather than ship slop.)
 
 ## Failure modes
 
-- **Video tools not live / not Studio tier** → no video. Fall back to \`maya-slideshow-strategist\` or a text draft. Never fake it.
-- **Founder doesn't send the asset** → don't stall the day; produce what I can from the library, or downgrade to a slideshow, and keep the (one) ask open.
-- **Generation comes back uncanny / UI melted** → discard, re-prompt tighter or regenerate; if it keeps failing, downgrade format rather than ship slop.
-- **Over budget / over cap** → stop; a slideshow or text post carries the day instead.
+- **Not Studio tier / tools fail closed** → no video. Fall back to \`maya-slideshow-strategist\` or a text draft. Never fake it.
+- **Founder doesn't send the asset** → don't stall the day; originate from the URL + Fact Sheet if I can, or downgrade to a slideshow, and keep the (one) ask open.
+- **Job comes back \`failed\` or uncanny / UI wrong** → re-run with a different reference/style once; if it keeps failing, downgrade format rather than ship slop.
+- **Over the monthly video cap** → the server blocks it; a slideshow or text post carries the day instead. I tell the founder honestly.
 
 ## Then close the loop
 
-Slot it on the calendar (\`propose_calendar\`) as a hands-off recipe (the video asset, the caption to paste, the sound suggestion, the success target), attribute the link, and let the weekly review learn which video formats actually convert — so the next one is sharper.
+Slot it on the calendar (\`propose_calendar\`) as a hands-off recipe (the video asset, the caption to paste, the success target), attribute the link, and let the weekly review learn which video formats actually convert — so the next clone is sharper.
 `;
 
 // Source: agents/skills/maya-gtm/maya-viral-demo-moment-miner/SKILL.md
@@ -4125,6 +4126,10 @@ interface ViralDemoBeatLibrary {
   rulesCited: string[];
 }
 \`\`\`
+
+## Hand-off to video production (the grounding asset)
+
+The top-ranked beat's \`sourceFrame\` is the **real product screen** that grounds a Studio-tier video: when \`maya-video-producer\` makes a video (\`clone_winning_ad\` / \`make_ad_from_url\`), that beat's \`sourceFrame\` (saved in the media library) is passed as \`imageAssetIds\` so the video is built around the actual showable moment, never a fabricated UI. A rich beat library with a clear \`sourceFrame\` is what lets the video be grounded; if the best beat is \`mockupOnly\`/\`unverifiable\`, flag it so the producer doesn't present a mockup as a shipped product.
 
 ## Failure modes
 

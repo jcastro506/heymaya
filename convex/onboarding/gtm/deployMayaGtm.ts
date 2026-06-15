@@ -11,6 +11,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import { FlyClient, FlyError, type FlyMachineConfig } from "../../lib/flyClient";
 import { capturePosthogEvent } from "../../lib/posthog";
 import { buildMayaGtmWorkspace } from "../../agents/packs/maya_gtm/generators";
+import { planFeaturesGtm } from "../../gtmMaya/planGtm";
 import {
   BUNDLED_GTM_PLUGIN_TGZ_BASE64,
   BUNDLED_GTM_PLUGIN_TGZ_NAME,
@@ -1230,6 +1231,8 @@ export const buildAndUploadGtmWorkspace = internalAction({
       // Verification/test deploys set this on the agent to force all-platform
       // coverage; undefined/false in production (agents stay focused).
       verifyAllPlatforms: row.agent.verifyAllPlatforms,
+      // Studio-tier gate: only a canVideo plan gets the video producer skill.
+      videoEnabled: planFeaturesGtm({ gtmPlanJson: row.agent.gtmPlanJson }).canVideo,
       app: {
         name: row.app.name ?? "Untitled app",
         url: row.app.url,

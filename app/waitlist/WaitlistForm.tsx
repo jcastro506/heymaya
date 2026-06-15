@@ -35,16 +35,16 @@ export function WaitlistForm() {
 
   if (status === "success") {
     return (
-      <div className="rounded-lg border border-[var(--hairline)] bg-ink-2 p-6">
-        <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-paper text-black">
+      <div className="rounded-xl border border-[#0a0a0a]/12 bg-white/60 p-6">
+        <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#0a0a0a] text-[#fbfaf6]">
           <Check className="h-5 w-5" />
         </div>
-        <h2 className="mt-4 font-display text-2xl text-paper">
+        <h2 className="mt-4 font-display italic text-2xl tracking-tight text-[#0a0a0a]">
           You&apos;re on the list.
         </h2>
-        <p className="mt-2 text-sm text-paper-dim">
-          We&apos;ll text you when there&apos;s a seat. Until then — keep making
-          stuff.
+        <p className="mt-2 text-sm text-[#0a0a0a]/60">
+          We&apos;ll text you the moment there&apos;s a seat. Until then — keep
+          shipping.
         </p>
       </div>
     );
@@ -62,19 +62,19 @@ export function WaitlistForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={status === "submitting"}
-          className="flex-1 rounded-md border border-[var(--hairline-strong)] bg-ink-2 px-4 py-3 text-base text-paper placeholder:text-paper-faint focus:border-paper focus:outline-none disabled:opacity-50"
+          className="flex-1 rounded-full border border-[#0a0a0a]/20 bg-white/70 px-5 py-3 text-base text-[#0a0a0a] placeholder:text-[#0a0a0a]/35 focus:border-[#0a0a0a] focus:outline-none disabled:opacity-50"
         />
         <button
           type="submit"
           disabled={status === "submitting"}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-md bg-paper px-5 text-sm font-medium text-black transition hover:bg-white disabled:opacity-50"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[#0a0a0a] px-6 text-[11px] font-medium uppercase tracking-[0.22em] text-[#fbfaf6] transition hover:bg-[#d6ff3d] hover:text-[#0a0a0a] disabled:opacity-50"
         >
           {status === "submitting" ? "..." : "Join"}
           {status !== "submitting" && <ArrowRight className="h-4 w-4" />}
         </button>
       </div>
       {status === "error" && errorMsg && (
-        <p className="text-sm text-red-400">{errorMsg}</p>
+        <p className="text-sm text-red-600">{errorMsg}</p>
       )}
     </form>
   );

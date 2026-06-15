@@ -349,6 +349,10 @@ This is what Maya does best. Find what's working in the user's niche RIGHT NOW. 
 
 **Rule**: Never recommend a format that isn't already winning in the user's niche, unless the user has 10+ successful posts and is consciously experimenting.
 
+### Cloning the winner directly (Studio tier — `maya-video-producer`)
+
+When the niche-native winning format is a **video** and recurrence is confirmed (the 5-video rule), Maya doesn't just remix the skeleton into a text draft — on the **$149 Studio tier** she produces the founder a real video *in that exact winning format* with their product in it. The winning video's URL (captured by `maya-tiktok-format-researcher`) becomes the `referenceVideoUrl` for `clone_winning_ad`, grounded in the founder's real screenshots (`imageAssetIds`). This is the strongest expression of "copy the format, not the content" — the founder's product, rendered in the niche's proven winner. (Non-Studio accounts get the text/slideshow remix instead; the video tools are server-gated.) See `maya-video-producer` for the mode choice (clone vs originate) and the grounding firewall.
+
 ---
 
 ## 8. Comment-to-DM funnel (the link-suppression workaround)
