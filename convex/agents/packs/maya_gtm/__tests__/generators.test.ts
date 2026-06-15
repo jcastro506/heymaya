@@ -171,6 +171,26 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("GTM.md")).toContain("Do not recommend TikTok/Instagram");
   });
 
+  it("makes Hacker News the one paste-delivery channel — deep-link + record_published, never send_confirm_card", () => {
+    // HN has no write API and its reply form can't be URL-prefilled, so Maya
+    // must NOT claim to auto-post it. The contract: hand the founder a one-tap
+    // deep link to the reply box + a copy block, then close the loop via
+    // record_published when they say "posted". send_confirm_card publishes via
+    // Zernio (which can't reach HN), so it must NEVER be used for HN.
+    const { files } = buildMayaGtmWorkspace(INPUT);
+    const tools = files.get("TOOLS.md") ?? "";
+
+    // The reply-box deep link is the easiest-possible paste target.
+    expect(tools).toContain("news.ycombinator.com/reply?id=");
+    // The loop closes via record_published with the hn platform.
+    expect(tools).toContain('record_published({ platform: "hn"');
+    // And the Zernio confirm card is explicitly forbidden for HN.
+    expect(tools).toMatch(/NEVER use `send_confirm_card` for HN/);
+    // Honesty: the old "HN can't be posted (research-only)" flat claim is gone,
+    // replaced by the paste-delivery flow.
+    expect(tools).not.toContain("HN can't be posted (research-only)");
+  });
+
   // Sprint B2/B3 — North Star contract + entryMode fork rendered into
   // GTM.md and APP.md (manager-mode existing-account ingestion).
   it("renders North Star + entry-mode posture into GTM.md and APP.md", () => {

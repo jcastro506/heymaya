@@ -241,7 +241,7 @@ Every event `description` must be a complete recipe the operator can act on with
 ```
 WHAT: <one-line action — "Reply to this r/LocalLLaMA thread">
 LINK: <thread URL>
-OPEN (one-tap): <the thread's deep link / intent URL — a pre-filled composer intent URL where the platform supports it (X/Twitter intent compose, Reddit submit, LinkedIn share), the exact thread/comment URL to land on where it doesn't (Reddit comment, HN item). One tap → the operator is in the right place with the right thing open.>
+OPEN (one-tap): <the thread's deep link / intent URL — a pre-filled composer intent URL where the platform supports it (X/Twitter intent compose, Reddit submit, LinkedIn share), the exact thread/comment URL to land on where it doesn't. For HN, the deep link is the reply box itself: news.ycombinator.com/reply?id=<itemId>&goto=item%3Fid%3D<itemId> (lands on the textarea; HN can't prefill text, so the YOUR REPLY copy block below is what they paste). One tap → the operator is in the right place with the right thing open.>
 WHY: <one sentence — why this thread, why now (cite the pain/velocity)>
 YOUR REPLY (verbatim — copy/paste/edit/post):
 <the draftReply already on the thread row — and if the draft includes the founder's product link, it MUST be the wrapped link from wrap_link, never the raw URL, so the click is attributable>

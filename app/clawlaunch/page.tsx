@@ -676,8 +676,8 @@ function Channels() {
             logo={<HackerNewsLogo className="size-11" />}
             name="Hacker News."
             tagline="Where the founders who'd pay for your tool are already asking for it."
-            body="She finds the Ask HN threads, Show HN launches, and comment chains where your ICP is describing the exact problem you solved. She writes the reply that sounds like a founder who built the thing — and posts it for you."
-            mockupLabel="Here's the reply she'd post →"
+            body="She finds the Ask HN threads, Show HN launches, and comment chains where your ICP is describing the exact problem you solved. She writes the reply that sounds like a founder who built the thing — and hands it to you ready to paste, one tap straight to the thread. (HN has no posting API, so this is the one channel you hit submit on — everything else she posts for you.)"
+            mockupLabel="Here's the reply she'd hand you →"
             mockup={<HackerNewsMockup />}
           />
 
@@ -940,7 +940,7 @@ function TelegramPhone() {
     {
       from: "maya",
       time: "11:22",
-      text: "Both Reddit posts are live. HN reply too. Nothing you need to do.",
+      text: "Both Reddit posts are live — handled. Your HN reply's the one I can't post for you (no API), so it's drafted and ready: tap the link, paste, hit reply. 20 seconds, link's below 👇",
     },
     {
       from: "maya",
