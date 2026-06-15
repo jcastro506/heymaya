@@ -160,6 +160,68 @@ export const setNorthStarHttp = httpAction(async (ctx, request) => {
   return new Response("ok", { status: 200 });
 });
 
+interface UpdateProductFactPayload {
+  idempotencyKey: string;
+  name?: string;
+  differentiator?: string;
+  founderWhy?: string;
+  stage?: "idea" | "live-beta" | "paid" | "unknown";
+  weekGoal?: "feedback" | "signups" | "demos" | "revenue" | "unknown";
+  userCountBand?: "none" | "1-100" | "100-1k" | "1k+" | "unknown";
+}
+
+export const updateProductFactHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: UpdateProductFactPayload;
+  try {
+    body = (await request.json()) as UpdateProductFactPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (!body.idempotencyKey) {
+    return new Response("missing required fields", { status: 400 });
+  }
+  if (
+    body.name === undefined &&
+    body.differentiator === undefined &&
+    body.founderWhy === undefined &&
+    body.stage === undefined &&
+    body.weekGoal === undefined &&
+    body.userCountBand === undefined
+  ) {
+    return new Response("nothing to set", { status: 400 });
+  }
+
+  const claim = await ctx.runMutation(
+    internal.gtmMaya.openclaw.inboundCallback.claimIdempotencyKey,
+    {
+      agentId: auth.agentId,
+      accountId: auth.accountId,
+      kind: "update_product_fact",
+      idempotencyKey: body.idempotencyKey,
+    }
+  );
+  if (claim === "duplicate") return new Response("ok (replay)", { status: 200 });
+
+  try {
+    await ctx.runMutation(internal.gtmMaya.managerStore.updateProductFact, {
+      accountId: auth.accountId,
+      agentId: auth.agentId,
+      name: body.name,
+      differentiator: body.differentiator,
+      founderWhy: body.founderWhy,
+      stage: body.stage,
+      weekGoal: body.weekGoal,
+      userCountBand: body.userCountBand,
+    });
+  } catch (err) {
+    return new Response((err as Error).message, { status: 400 });
+  }
+  return new Response("ok", { status: 200 });
+});
+
 interface SetStrategyApprovalPayload {
   idempotencyKey: string;
   state: "proposed" | "approved" | "iterating";

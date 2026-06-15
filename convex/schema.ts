@@ -4735,7 +4735,9 @@ export default defineSchema({
       // Data-collection sprint — inbound user message capture. Maya's
       // runtime POSTs one row per inbound user turn so the conversation
       // transcript persists to Convex (not just the ephemeral Fly disk).
-      v.literal("log_message")
+      v.literal("log_message"),
+      // W1.2 — founder corrects a product fact in chat; persisted to gtmApps.
+      v.literal("update_product_fact")
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
