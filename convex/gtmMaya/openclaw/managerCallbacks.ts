@@ -14,10 +14,34 @@
  * re-verifies via assertAgentBelongsToAccount.
  */
 
-import { httpAction } from "../../_generated/server";
+import { httpAction, type ActionCtx } from "../../_generated/server";
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { authenticate } from "./inboundCallback";
+
+/**
+ * W3.3 — best-effort live-pulse breadcrumb so Maya's foundation work narrates
+ * as it lands (the gap where her best research was invisible in the Thinking
+ * view). Written AFTER the row persists (Gate-1b: say only what's in the DB)
+ * and never fails the underlying save — the breadcrumb is decorative.
+ */
+async function foundationBreadcrumb(
+  ctx: ActionCtx,
+  accountId: Id<"creators">,
+  agentId: Id<"gtmAgents">,
+  summary: string
+): Promise<void> {
+  try {
+    await ctx.runMutation(internal.gtmMaya.missionControl.recordAgentActivity, {
+      accountId,
+      agentId,
+      kind: "found",
+      summary,
+    });
+  } catch {
+    /* breadcrumb is best-effort; the foundation row already persisted */
+  }
+}
 
 // ───────────────────── Foundation: buyer map ─────────────────────
 
@@ -88,6 +112,15 @@ export const foundationBuyerMapHttp = httpAction(async (ctx, request) => {
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });
   }
+  const stageCount = Array.isArray(body.buyerJourneyStages)
+    ? body.buyerJourneyStages.length
+    : 0;
+  await foundationBreadcrumb(
+    ctx,
+    auth.accountId,
+    auth.agentId,
+    `Mapped your buyer — ${stageCount} journey stage${stageCount === 1 ? "" : "s"}, grounded in real threads`
+  );
   return new Response("ok", { status: 200 });
 });
 
@@ -400,6 +433,12 @@ export const foundationCompetitorHttp = httpAction(async (ctx, request) => {
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });
   }
+  await foundationBreadcrumb(
+    ctx,
+    auth.accountId,
+    auth.agentId,
+    `Sized up ${body.competitorName} (${body.kind}) — found where they're weak`
+  );
   return new Response("ok", { status: 200 });
 });
 
@@ -511,6 +550,14 @@ export const foundationChannelScorecardHttp = httpAction(async (ctx, request) =>
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });
   }
+  await foundationBreadcrumb(
+    ctx,
+    auth.accountId,
+    auth.agentId,
+    bet
+      ? `Betting on ${body.channel} — your buyer is there (audience fit ${Math.round(audienceFit * 100)}%)`
+      : `Scored ${body.channel} — parked it for now (audience fit ${Math.round(audienceFit * 100)}%)`
+  );
   return new Response("ok", { status: 200 });
 });
 
@@ -579,6 +626,14 @@ export const foundationContentAngleHttp = httpAction(async (ctx, request) => {
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });
   }
+  await foundationBreadcrumb(
+    ctx,
+    auth.accountId,
+    auth.agentId,
+    painCitation.quote
+      ? `New angle: "${body.angle.slice(0, 60)}" — grounded in a real complaint`
+      : `New angle: "${body.angle.slice(0, 60)}"`
+  );
   return new Response("ok", { status: 200 });
 });
 
@@ -671,6 +726,12 @@ export const foundationRelationshipHttp = httpAction(async (ctx, request) => {
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });
   }
+  await foundationBreadcrumb(
+    ctx,
+    auth.accountId,
+    auth.agentId,
+    `Found someone worth knowing: ${body.handle} on ${body.platform}`
+  );
   return new Response("ok", { status: 200 });
 });
 

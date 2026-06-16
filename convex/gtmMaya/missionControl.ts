@@ -232,6 +232,176 @@ export const getMyAgentActivity = query({
   },
 });
 
+/**
+ * W3.1 — the grounded-reasoning source for the redesigned Thinking view.
+ * Reads the foundation tables directly (NOT the gtmAgentActivity pulse) so the
+ * UI can render Observation → Insight → Decision cards with verbatim quotes +
+ * clickable sources — the depth that the flattened activity log throws away.
+ * Auth-scoped + fail-closed; returns an empty (hasFoundation:false) shape for a
+ * pre-foundation agent so the UI degrades gracefully.
+ */
+export interface FoundationInsights {
+  hasFoundation: boolean;
+  synthesizedAt: number | null;
+  /** W3.4 — Maya's working product picture (W1's diagnosis.picture). Defensive
+   *  read: the field is on gtmApps.diagnosis (v.any()); null until W1 populates it. */
+  productPicture: unknown | null;
+  buyer: {
+    icpDescription: string;
+    journeyStages: Array<{
+      stage: string;
+      whereTheyHangOut: string;
+      intentLanguage: string;
+      complaints: string[];
+    }>;
+    intentPhrases: string[];
+    trustedVoices: Array<{ handle: string; platform: string; whyTrusted: string }>;
+  } | null;
+  competitors: Array<{
+    name: string;
+    kind: "direct" | "adjacent" | "substitute";
+    positioning: string;
+    pricing: string | null;
+    url: string | null;
+    complaints: Array<{ quote: string; sourceUrl: string }>;
+    vulnerabilities: string[];
+  }>;
+  channels: Array<{
+    channel: string;
+    audienceFit: number;
+    cadenceFit: number;
+    uniqueUnlock: string;
+    bet: boolean;
+    notes: string | null;
+  }>;
+  angles: Array<{
+    angle: string;
+    painQuote: string;
+    painSourceUrl: string;
+    hookVariants: string[];
+  }>;
+  voice: unknown | null;
+}
+
+export const getMyFoundationInsights = query({
+  args: {},
+  handler: async (ctx): Promise<FoundationInsights> => {
+    const empty: FoundationInsights = {
+      hasFoundation: false,
+      synthesizedAt: null,
+      productPicture: null,
+      buyer: null,
+      competitors: [],
+      channels: [],
+      angles: [],
+      voice: null,
+    };
+    const creator = await resolveMyGtmCreator(ctx);
+    if (!creator) return empty;
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    if (!agent) return empty;
+
+    const [buyerRow, competitorRows, channelRows, angleRows] = await Promise.all([
+      ctx.db
+        .query("gtmBuyerMap")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .first(),
+      ctx.db
+        .query("gtmCompetitiveMap")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+      ctx.db
+        .query("gtmChannelScorecard")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+      ctx.db
+        .query("gtmContentAngles")
+        .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
+        .collect(),
+    ]);
+
+    const app = agent.appId ? await ctx.db.get(agent.appId) : null;
+    const productPicture =
+      (app?.diagnosis as { picture?: unknown } | undefined)?.picture ?? null;
+
+    let voice: unknown | null = null;
+    if (agent.voiceProfileJson) {
+      try {
+        voice = JSON.parse(agent.voiceProfileJson);
+      } catch {
+        voice = null;
+      }
+    }
+
+    const buyer = buyerRow
+      ? {
+          icpDescription: buyerRow.icpDescription,
+          journeyStages: buyerRow.buyerJourneyStages.map((s) => ({
+            stage: s.stage,
+            whereTheyHangOut: s.whereTheyHangOut,
+            intentLanguage: s.intentLanguage,
+            complaints: s.complaints ?? [],
+          })),
+          intentPhrases: buyerRow.intentPhrases,
+          trustedVoices: buyerRow.trustedVoices,
+        }
+      : null;
+
+    const competitors = competitorRows.slice(0, 20).map((c) => ({
+      name: c.competitorName,
+      kind: c.kind,
+      positioning: c.positioning,
+      pricing: c.pricing ?? null,
+      url: c.url ?? null,
+      complaints: c.complaints,
+      vulnerabilities: c.vulnerabilities,
+    }));
+
+    // Bet channels first, then by audience fit.
+    const channels = [...channelRows]
+      .sort((a, b) =>
+        a.bet === b.bet ? b.audienceFit - a.audienceFit : a.bet ? -1 : 1
+      )
+      .map((c) => ({
+        channel: c.channel,
+        audienceFit: c.audienceFit,
+        cadenceFit: c.cadenceFit,
+        uniqueUnlock: c.uniqueUnlock,
+        bet: c.bet,
+        notes: c.notes ?? null,
+      }));
+
+    const angles = angleRows.slice(0, 30).map((a) => ({
+      angle: a.angle,
+      painQuote: a.painCitation.quote,
+      painSourceUrl: a.painCitation.sourceUrl,
+      hookVariants: a.hookVariants,
+    }));
+
+    const synthesizedAt =
+      buyerRow?.synthesizedAt ??
+      channelRows[0]?.synthesizedAt ??
+      competitorRows[0]?.synthesizedAt ??
+      null;
+
+    return {
+      hasFoundation: Boolean(
+        buyer || competitors.length || channels.length || angles.length
+      ),
+      synthesizedAt,
+      productPicture,
+      buyer,
+      competitors,
+      channels,
+      angles,
+      voice,
+    };
+  },
+});
+
 // ───────────────────────── activity write (agent-driven) ─────────────────────────
 
 const ACTIVITY_KIND = v.union(

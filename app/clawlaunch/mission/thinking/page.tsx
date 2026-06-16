@@ -28,6 +28,7 @@ import {
   timeAgo,
   ExtLink,
 } from "../_components";
+import { FoundationInsights } from "./_FoundationInsights";
 
 type Range = "hour" | "day" | "week";
 
@@ -117,6 +118,12 @@ export default function ThinkingPage() {
     limit: 500,
   }) as Activity[] | undefined;
 
+  // W3 — Maya's state of knowledge (foundation tables), rendered as grounded
+  // reasoning cards above the live pulse. Optional: never blocks the pulse.
+  const insights = useQuery(
+    api.gtmMaya.missionControl.getMyFoundationInsights
+  );
+
   if (snapshot === undefined || activity === undefined) return <Loading />;
   if (snapshot === null) return <NeedsOnboarding />;
 
@@ -153,8 +160,19 @@ export default function ThinkingPage() {
   return (
     <Shell
       title="Thinking"
-      subtitle={`What ${appName}'s manager has been thinking, researching, and deciding. Scope it to the last hour, day, or week.`}
+      subtitle={`What ${appName}'s manager has figured out — and what she's thinking right now.`}
     >
+      {/* W3 — grounded reasoning (state of knowledge), above the live pulse. */}
+      {insights ? <FoundationInsights data={insights} /> : null}
+
+      {/* Live pulse — what she's doing this hour/day/week. */}
+      <div className="mb-4 flex items-center gap-3">
+        <h2 className="font-mono text-xs uppercase tracking-[0.18em] text-paper-faint">
+          Live pulse
+        </h2>
+        <div className="h-px flex-1 bg-paper-faint/15" />
+      </div>
+
       {/* Range toggle */}
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <div className="inline-flex rounded-lg border border-paper-faint/15 bg-ink-2 p-0.5">
