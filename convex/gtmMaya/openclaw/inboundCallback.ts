@@ -73,7 +73,9 @@ const CALLBACK_KIND = v.union(
   // Mission Control — agent activity feed entry (drives the web UI Today tab).
   v.literal("post_activity"),
   // Data-collection sprint — inbound user message capture (one per turn).
-  v.literal("log_message")
+  v.literal("log_message"),
+  // W1.2 — founder corrects a product fact in chat; persisted to gtmApps.
+  v.literal("update_product_fact")
 );
 
 function constantTimeEqual(a: string, b: string): boolean {

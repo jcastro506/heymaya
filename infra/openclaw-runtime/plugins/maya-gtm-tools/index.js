@@ -917,6 +917,26 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) => postLc("set_north_star", { ...p, idempotencyKey: key(p) }, ctx.signal),
     }),
     tool({
+      name: "update_product_fact",
+      label: "Update Product Fact",
+      description:
+        "Persist a founder's correction to your working picture of the product, so it SURVIVES the turn (chat memory does not — a fact you only acknowledge will be lost). Call this whenever the founder corrects what the product does / who it's for / its differentiator / its stage / this week's goal / how many users they have. REQUIRED: at least one of name | differentiator | founderWhy | stage | weekGoal | userCountBand.",
+      parameters: Type.Object({
+        name: Type.Optional(Type.String()),
+        differentiator: Type.Optional(Type.String()),
+        founderWhy: Type.Optional(Type.String()),
+        stage: Type.Optional(Enum(["idea", "live-beta", "paid", "unknown"])),
+        weekGoal: Type.Optional(
+          Enum(["feedback", "signups", "demos", "revenue", "unknown"])
+        ),
+        userCountBand: Type.Optional(
+          Enum(["none", "1-100", "100-1k", "1k+", "unknown"])
+        ),
+        idempotencyKey: IdemKey,
+      }),
+      execute: async (p, _cfg, ctx) => postLc("update_product_fact", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+    tool({
       name: "set_strategy_approval",
       label: "Set Strategy Approval",
       description: "Set strategy approval state. REQUIRED: state (proposed|approved|iterating).",
