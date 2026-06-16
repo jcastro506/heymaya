@@ -275,6 +275,135 @@ function Enum(values, description) {
 }
 
 // ---------------------------------------------------------------------------
+// Decision-timeline tracing — auto-emit one trace row per tool call.
+//
+// withTrace() wraps every tool's execute() so the dashboard "Thinking" page
+// can show Maya's REAL decision sequence (read → judge → draft → post),
+// grounded in actual calls instead of her sparse post_activity narration.
+// It is BEST-EFFORT and fire-and-forget: the POST to /lc_gtm/log_trace is not
+// awaited and carries no abort signal, so it adds ~0 latency to the tool path
+// and still records even if the underlying tool's turn is aborted. A trace
+// failure can NEVER affect the tool's own result.
+// ---------------------------------------------------------------------------
+
+// Tools NOT traced: the logging/transport tools themselves (so the feed never
+// logs itself) + the firewall pre-check (noise, runs before every send).
+const TRACE_EXCLUDE = new Set([
+  "log_trace",
+  "log_cost",
+  "log_message",
+  "log_turn_telemetry",
+  "log_action",
+  "post_activity",
+  "validate_outbound",
+]);
+
+// Coarse lane for the UI, derived from the tool name. Mirrors the
+// gtmAgentTrace.category union (server re-validates + falls back to "other").
+function categoryForTool(name) {
+  if (/^(research_|search_|scrape_|competitor_ads$|bio_funnel$|check_already_engaged$)/.test(name))
+    return "research";
+  if (
+    /^(post_to_channel$|publish_draft$|record_published$|reply_to_comment$|send_media_to_user$|send_confirm_card$|approve_calendar$|approval_decision$)/.test(
+      name
+    )
+  )
+    return "publish";
+  if (
+    /^(save_draft$|update_draft_voice_match$|generate_slide_image$|review_media$|make_ad_from_url$|clone_winning_ad$|propose_calendar$|save_target_thread$|save_target_account$)/.test(
+      name
+    )
+  )
+    return "draft";
+  if (
+    /^(save_foundation_|set_north_star$|set_strategy_approval$|save_voice_profile$|save_style_exemplars$|set_channel_warmth$|save_competitor_move$|save_niche_pulse_signal$|save_learning$|save_diagnosis$|save_experiment$|set_channel_warmth$)/.test(
+      name
+    )
+  )
+    return "foundation";
+  if (/^(get_|list_|check_video_job$)/.test(name)) return "read";
+  return "other";
+}
+
+// postLc returns "OK …" / "BLOCKED …" / "FAILED …" / "ERROR …"; getLc returns
+// the parsed JSON object on success or a "FAILED/ERROR …" string on failure.
+function statusFromResult(result) {
+  if (typeof result === "string") {
+    if (result.startsWith("OK")) return "ok";
+    if (result.startsWith("BLOCKED")) return "blocked";
+    if (result.startsWith("FAILED")) return "failed";
+    if (result.startsWith("ERROR")) return "error";
+    return "ok";
+  }
+  // getLc success → parsed object/array.
+  return result && typeof result === "object" ? "ok" : "ok";
+}
+
+function summarizeArgs(params) {
+  if (!params || typeof params !== "object") return undefined;
+  const { idempotencyKey, ...rest } = params;
+  try {
+    const s = JSON.stringify(rest);
+    if (!s || s === "{}" || s === "null") return undefined;
+    return s.length > 500 ? s.slice(0, 500) : s;
+  } catch {
+    return undefined;
+  }
+}
+
+function summarizeResult(result) {
+  try {
+    if (typeof result === "string")
+      return result.length > 500 ? result.slice(0, 500) : result;
+    if (result && typeof result === "object") {
+      const s = JSON.stringify(result);
+      return s.length > 500 ? s.slice(0, 500) : s;
+    }
+  } catch {
+    /* fall through */
+  }
+  return undefined;
+}
+
+// Fire-and-forget the trace POST. Never throws into the tool path, never
+// awaited, no ctx.signal (so an aborted tool still records its decision).
+function logTraceBestEffort(toolName, params, result, latencyMs, ctx) {
+  try {
+    void postLc("log_trace", {
+      tool: toolName,
+      category: categoryForTool(toolName),
+      argsSummary: summarizeArgs(params),
+      resultSummary: summarizeResult(result),
+      status: statusFromResult(result),
+      latencyMs,
+      toolCallId:
+        ctx && typeof ctx.toolCallId === "string" ? ctx.toolCallId : undefined,
+    });
+  } catch {
+    /* tracing is best-effort */
+  }
+}
+
+// Wrap a tool definition so its execute() emits a trace after it resolves.
+// Tools defined via `factory` (no execute) and the excluded set pass through
+// untouched.
+function withTrace(def) {
+  if (typeof def.execute !== "function" || TRACE_EXCLUDE.has(def.name)) {
+    return def;
+  }
+  const orig = def.execute;
+  return {
+    ...def,
+    execute: async (p, cfg, ctx) => {
+      const startedAt = Date.now();
+      const result = await orig(p, cfg, ctx);
+      logTraceBestEffort(def.name, p, result, Date.now() - startedAt, ctx);
+      return result;
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // The plugin
 // ---------------------------------------------------------------------------
 
@@ -283,7 +412,12 @@ export default defineToolPlugin({
   name: "Maya GTM Tools",
   description:
     "Typed persistence + research tools for the ClawLaunch GTM agent. Replaces hand-written curl: every call is schema-validated and runs server-side against Convex /lc_gtm/* and the social research APIs.",
-  tools: (tool) => [
+  tools: (rawTool) => {
+    // Shadow the SDK-provided factory with a tracing wrapper so EVERY tool
+    // below auto-emits a decision-timeline trace (best-effort) without
+    // touching its definition. See withTrace() above.
+    const tool = (def) => rawTool(withTrace(def));
+    return [
     // =====================================================================
     // RESEARCH (read) — kills fabrication: data exists only if the call ran.
     // =====================================================================
@@ -1928,5 +2062,6 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) =>
         postLc("send_confirm_card", p, ctx.signal),
     }),
-  ],
+    ];
+  },
 });

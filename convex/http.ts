@@ -171,6 +171,8 @@ import {
   logMessageHttp,
   logTurnTelemetryHttp,
 } from "./gtmMaya/openclaw/conversationCapture";
+// Thinking decision-timeline — raw tool-call trace capture.
+import { logTraceHttp } from "./gtmMaya/openclaw/traceCapture";
 // Maya v2 — Zernio hosted-OAuth public callback (signed-state binding).
 import { zernioCallbackHttp, getConnectLinksHttp } from "./gtmMaya/zernioConnect";
 import { zernioWebhookHttp } from "./gtmMaya/zernioWebhook";
@@ -395,6 +397,16 @@ http.route({
   path: "/lc_gtm/log_turn_telemetry",
   method: "POST",
   handler: logTurnTelemetryHttp,
+});
+
+// Thinking decision-timeline — one row per tool call Maya makes (auto-emitted
+// by the plugin's withTrace wrapper, best-effort). Drives the live decision
+// timeline on the dashboard "Thinking" page. POST { tool, category?,
+// argsSummary?, resultSummary?, status?, latencyMs?, toolCallId?, isSubagent? }.
+http.route({
+  path: "/lc_gtm/log_trace",
+  method: "POST",
+  handler: logTraceHttp,
 });
 
 // ─── Sprint 2.17 Phase A — manager-mode routes ──────────────────────
