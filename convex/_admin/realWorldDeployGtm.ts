@@ -1071,6 +1071,44 @@ export const patchTelegramChatId = internalMutation({
   },
 });
 
+/** §6 diagnostic — dump the latest test agent's outbound messages with the
+ *  model + messageClass + turnId that produced each, so we can see WHY a
+ *  synthesis went out N times and WHICH model/session sent each. */
+export const peekRecentMessages = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    const all = await ctx.db.query("creators").collect();
+    const tests = all
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (tests.length === 0) return { found: false };
+    const creator = tests[0];
+    const msgs = await ctx.db
+      .query("mayaMessages")
+      .withIndex("by_account_and_ts", (q) => q.eq("accountId", creator._id))
+      .order("asc")
+      .collect();
+    return {
+      total: msgs.length,
+      mayaOutbound: msgs.filter((m) => m.role === "maya").length,
+      messages: msgs.map((m) => ({
+        at: new Date(m.ts).toLocaleTimeString("en-US", {
+          timeZone: "America/New_York",
+          hour: "numeric",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+        role: m.role,
+        messageClass: m.messageClass ?? null,
+        model: m.model ?? null,
+        turnId: m.turnId,
+        criticPassed: m.criticPassed ?? null,
+        head: m.body.slice(0, 90),
+      })),
+    };
+  },
+});
+
 export const run = internalAction({
   args: {
     productName: v.string(),

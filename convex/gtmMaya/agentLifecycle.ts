@@ -322,25 +322,63 @@ export const acquireFoundationLease = internalMutation({
 });
 
 /**
- * §6 item 1 — should this strategic send be suppressed as a duplicate of the
- * onboarding synthesis handover? True when the plan already delivered
- * (strategyDeliveredAt set) AND onboarding hasn't completed yet. The first
- * strategic send in onboarding IS the synthesis; any further strategic send
- * before completion is a recovery-turn duplicate (the live demo fired it 3×).
- * Post-onboarding strategic sends (weekly review) return false (not suppressed),
- * because foundationCompletedAt is set by then. Pure → unit-testable.
+ * §6 — atomically CLAIM the right to send the founder's onboarding synthesis
+ * handover, so only ONE main turn delivers it no matter how many sessions race
+ * to "research done → send the plan." (The live demo had TWO main Kimi-K2
+ * sessions send it 3× total: one sent the handover twice as `tactical`, another
+ * sent a re-articulated `strategic` copy.)
+ *
+ * Class-INDEPENDENT by design: the demo proved the agent labels the handover
+ * inconsistently (tactical vs strategic), so keying on messageClass is wrong.
+ * We key on lifecycle state instead:
+ *   - foundationCompletedAt set  → onboarding done; everything flows ("allow").
+ *   - no buyer map yet           → still researching; progress updates flow ("allow").
+ *   - buyer map exists, not done → the synthesis window. The FIRST founder-facing
+ *     send claims it (stamps strategyDeliveredAt → "send"); every later send in
+ *     the window is a duplicate ("suppress").
+ *
+ * Atomic: Convex mutations are serializable, so two concurrent claims can never
+ * both win — this is what actually defeats the multi-session race. strategy-
+ * DeliveredAt doubles as the completion gate (markFoundationComplete); a failed
+ * send releases it (releaseFounderSynthesisClaim) so a genuine retry re-claims.
  */
-export function isDuplicateOnboardingSynthesis(
-  messageClass: string,
-  strategyDeliveredAt: number | null | undefined,
-  foundationCompletedAt: number | null | undefined
-): boolean {
-  return (
-    messageClass === "strategic" &&
-    Boolean(strategyDeliveredAt) &&
-    !foundationCompletedAt
-  );
-}
+export const claimFounderSynthesisSend = internalMutation({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ decision: "send" | "suppress" | "allow" }> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return { decision: "allow" };
+    // Onboarding already complete → normal sends (weekly review, etc.) flow.
+    if (agent.foundationCompletedAt) return { decision: "allow" };
+    // No buyer map yet → still researching; let progress updates through.
+    const buyerMap = await ctx.db
+      .query("gtmBuyerMap")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .first();
+    if (!buyerMap) return { decision: "allow" };
+    // Synthesis window: research landed, onboarding not complete.
+    if (agent.strategyDeliveredAt) return { decision: "suppress" };
+    const now = Date.now();
+    await ctx.db.patch(args.agentId, { strategyDeliveredAt: now, updatedAt: now });
+    return { decision: "send" };
+  },
+});
+
+/** §6 — release a synthesis claim when the send FAILED, so a genuine retry can
+ *  re-claim. Never unsets after onboarding completed (the plan really landed). */
+export const releaseFounderSynthesisClaim = internalMutation({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (ctx, args): Promise<void> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent || agent.foundationCompletedAt) return;
+    await ctx.db.patch(args.agentId, {
+      strategyDeliveredAt: undefined,
+      updatedAt: Date.now(),
+    });
+  },
+});
 
 /** Stamp that the synthesis/strategy plan was actually delivered to the founder.
  *  Called server-side from the send_update handler when a STRATEGIC message is

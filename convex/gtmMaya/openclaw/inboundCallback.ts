@@ -8,7 +8,6 @@ import {
 } from "../../_generated/server";
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
-import { isDuplicateOnboardingSynthesis } from "../agentLifecycle";
 
 /**
  * Sprint 16 — Maya → Convex inbound callbacks (D4).
@@ -107,19 +106,10 @@ export const getAgentForSendUpdate = internalQuery({
   handler: async (
     ctx,
     args
-  ): Promise<{
-    telegramChatId: string | undefined;
-    strategyDeliveredAt: number | undefined;
-    foundationCompletedAt: number | undefined;
-  } | null> => {
+  ): Promise<{ telegramChatId: string | undefined } | null> => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent) return null;
-    return {
-      telegramChatId: agent.telegramChatId,
-      // §6 — for the once-only onboarding-synthesis dedup in the send handler.
-      strategyDeliveredAt: agent.strategyDeliveredAt,
-      foundationCompletedAt: agent.foundationCompletedAt,
-    };
+    return { telegramChatId: agent.telegramChatId };
   },
 });
 
@@ -1256,25 +1246,22 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
     );
   }
 
-  // §6 item 1 — send the onboarding synthesis EXACTLY ONCE. The handover plan
-  // is the first strategic send in onboarding; it stamps strategyDeliveredAt on
-  // success. If a strategic message already delivered AND onboarding hasn't
-  // completed, a second strategic send is a duplicate synthesis (recovery turns
-  // re-running the handover — the live demo sent it 3×). Swallow the duplicate.
-  // Post-onboarding strategic sends (weekly review) are NOT suppressed
-  // (foundationCompletedAt is set by then). A FAILED first send leaves
-  // strategyDeliveredAt unset, so a genuine retry still goes through.
-  if (
-    isDuplicateOnboardingSynthesis(
-      messageClass,
-      agent.strategyDeliveredAt,
-      agent.foundationCompletedAt
-    )
-  ) {
+  // §6 — send the onboarding synthesis handover EXACTLY ONCE, no matter how
+  // many main sessions race to "research done → send the plan" (the live demo
+  // had two main sessions send it 3× total, mixing tactical + strategic). This
+  // atomic, class-INDEPENDENT claim is the real fix: the FIRST founder-facing
+  // send in the synthesis window wins; the rest are swallowed. Progress updates
+  // (pre-research) and post-onboarding sends are unaffected.
+  const synthClaim = await ctx.runMutation(
+    internal.gtmMaya.agentLifecycle.claimFounderSynthesisSend,
+    { agentId: auth.agentId }
+  );
+  if (synthClaim.decision === "suppress") {
     console.warn(
       JSON.stringify({
         event: "send_update.duplicate_synthesis_suppressed",
         agentId: auth.agentId,
+        messageClass,
       })
     );
     return new Response(
@@ -1343,20 +1330,22 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
     );
   }
 
-  // Plan-delivery signal. When a STRATEGIC message is successfully delivered, the
-  // founder has received the synthesis plan (the first strategic message in
-  // onboarding). Stamp it durably so markFoundationComplete + the rows-complete
-  // backstop can gate on it — onboarding cannot finish on an undelivered plan.
-  if (result.ok && messageClass === "strategic") {
+  // §6 — the synthesis claim stamped strategyDeliveredAt (the completion gate)
+  // BEFORE this send. If WE claimed the synthesis ("send") but Telegram
+  // delivery failed, release the claim so a genuine retry re-claims + re-sends —
+  // otherwise onboarding could "complete" on a plan that never reached the
+  // founder. (A successful send keeps the stamp; that's the delivery signal
+  // markFoundationComplete + the rows-complete backstop gate on.)
+  if (synthClaim.decision === "send" && !result.ok) {
     try {
       await ctx.runMutation(
-        internal.gtmMaya.agentLifecycle.markStrategyDelivered,
+        internal.gtmMaya.agentLifecycle.releaseFounderSynthesisClaim,
         { agentId: auth.agentId }
       );
     } catch (err) {
       console.error(
         JSON.stringify({
-          event: "send_update.mark_strategy_delivered_failed",
+          event: "send_update.release_synthesis_claim_failed",
           agentId: auth.agentId,
           error: err instanceof Error ? err.message : String(err),
         })
