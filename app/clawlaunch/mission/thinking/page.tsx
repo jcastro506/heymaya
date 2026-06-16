@@ -28,6 +28,7 @@ import {
   ExtLink,
 } from "../_components";
 import { FoundationInsights } from "./_FoundationInsights";
+import { DecisionTimeline } from "./_DecisionTimeline";
 
 type Range = "hour" | "day" | "week";
 
@@ -221,13 +222,17 @@ export default function ThinkingPage() {
       title="Thinking"
       subtitle={`What ${appName}'s manager has figured out — and what she's thinking right now.`}
     >
-      {/* W3 — grounded reasoning (state of knowledge), above the live pulse. */}
+      {/* W3 — grounded reasoning (state of knowledge), above everything. */}
       {insights ? <FoundationInsights data={insights} /> : null}
 
-      {/* Live pulse — what she's doing this hour/day/week. */}
+      {/* The centerpiece — Maya's real tool-call decision trace, live. */}
+      <DecisionTimeline />
+
+      {/* Live pulse — Maya's own narration (post_activity), secondary to the
+          grounded decision timeline above. */}
       <div className="mb-4 flex items-center gap-3">
         <h2 className="font-mono text-xs uppercase tracking-[0.18em] text-paper-faint">
-          Live pulse
+          In her words
         </h2>
         <div className="h-px flex-1 bg-paper-faint/15" />
       </div>

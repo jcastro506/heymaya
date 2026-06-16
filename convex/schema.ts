@@ -6220,6 +6220,64 @@ export default defineSchema({
     .index("by_agent", ["agentId"])
     .index("by_account_and_created", ["accountId", "createdAt"]),
 
+  // ─── Thinking decision-timeline — raw tool-call trace ─────────────────
+  // The literal record of Maya (and her subagents) DECIDING: every tool
+  // call she makes, its key args, and the outcome — emitted automatically
+  // by a wrapper around the maya-gtm-tools plugin (NOT model-narrated, so
+  // it can't be skipped or embellished). This is the data behind the
+  // dashboard "Thinking" page's live decision timeline: the operator watches
+  // their manager actually work (read Reddit → judge fit → draft → validate
+  // → post), grounded in real calls rather than the sparse, optional
+  // post_activity self-narration in gtmAgentActivity.
+  //
+  // Capture path: the plugin's withTrace() wrapper POSTs one row per tool
+  // call to /lc_gtm/log_trace (token-derived agentId), best-effort — a
+  // trace failure NEVER blocks the underlying tool. The logging/transport
+  // tools themselves are excluded so the feed never logs itself.
+  //
+  // Grouping: turnId is model-passed and absent on most tools, so rows are
+  // NOT grouped at write time; the read layer buckets by time-gap "work
+  // sessions". toolCallId is the runtime's unique per-call id (dedup).
+  //
+  // Tenant isolation: accountId === Id<"creators">; all reads scope by it.
+  gtmAgentTrace: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    /** Tool name as registered in the plugin (e.g. "research_reddit"). */
+    tool: v.string(),
+    /** Coarse bucket for the UI icon/lane — derived plugin-side from tool. */
+    category: v.union(
+      v.literal("research"), // read the market (research_*, search_*, scrape_*)
+      v.literal("draft"), // produced content (save_draft, *_voice_match, slide)
+      v.literal("publish"), // pushed live / queued (post_to_channel, publish_*)
+      v.literal("foundation"), // saved strategy (save_foundation_*, set_*)
+      v.literal("read"), // read own state (get_my_*)
+      v.literal("other") // everything else not worth a dedicated lane
+    ),
+    /** Compact one-line summary of the call's key args (capped at write). */
+    argsSummary: v.optional(v.string()),
+    /** Compact summary of the result string postLc/getLc returned (capped). */
+    resultSummary: v.optional(v.string()),
+    /** Outcome derived from the result prefix (OK / BLOCKED / FAILED / ERROR). */
+    status: v.union(
+      v.literal("ok"),
+      v.literal("blocked"),
+      v.literal("failed"),
+      v.literal("error")
+    ),
+    /** Wall-clock the call took, plugin-side. */
+    latencyMs: v.optional(v.number()),
+    /** Runtime's unique per-call id — dedup key (best-effort idempotency). */
+    toolCallId: v.optional(v.string()),
+    /** True when emitted by a research subagent rather than the main brain. */
+    isSubagent: v.optional(v.boolean()),
+    ts: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_ts", ["accountId", "ts"])
+    .index("by_agent", ["agentId"])
+    .index("by_toolCallId", ["toolCallId"]),
+
   // ─── Data-collection sprint — conversation transcript ─────────────────
   // Every user↔Maya turn, persisted plaintext + tenant-isolated. Before
   // this table, inbound user messages lived only on the ephemeral OpenClaw

@@ -244,6 +244,34 @@ export const getMyAgentActivity = query({
 });
 
 /**
+ * Decision-timeline source for the Thinking view — Maya's RAW tool-call trace
+ * (gtmAgentTrace), the literal record of her deciding: every research / draft /
+ * publish / foundation / read call, with key args, outcome, and latency. Unlike
+ * getMyAgentActivity (her optional, sparse post_activity narration), this is
+ * auto-emitted by the plugin so it can't be skipped or embellished. Auth-scoped
+ * + fail-closed (empty for a signed-out / pre-deploy operator). The UI groups
+ * rows into time-gap "work sessions" since turnId isn't captured per call.
+ */
+export const getMyAgentTrace = query({
+  args: { limit: v.optional(v.number()), sinceMs: v.optional(v.number()) },
+  handler: async (ctx, args): Promise<Doc<"gtmAgentTrace">[]> => {
+    const creator = await resolveMyGtmCreator(ctx);
+    if (!creator) return [];
+    const ranged = args.sinceMs !== undefined;
+    const cap = Math.min(Math.max(args.limit ?? 100, 1), ranged ? 1000 : 200);
+    return await ctx.db
+      .query("gtmAgentTrace")
+      .withIndex("by_account_and_ts", (q) =>
+        ranged
+          ? q.eq("accountId", creator._id).gte("ts", args.sinceMs!)
+          : q.eq("accountId", creator._id)
+      )
+      .order("desc")
+      .take(cap);
+  },
+});
+
+/**
  * W3.1 — the grounded-reasoning source for the redesigned Thinking view.
  * Reads the foundation tables directly (NOT the gtmAgentActivity pulse) so the
  * UI can render Observation → Insight → Decision cards with verbatim quotes +

@@ -96,6 +96,7 @@ import type * as gtmMaya_appInspector from "../gtmMaya/appInspector.js";
 import type * as gtmMaya_approvalPublishing from "../gtmMaya/approvalPublishing.js";
 import type * as gtmMaya_archetypeBrain from "../gtmMaya/archetypeBrain.js";
 import type * as gtmMaya_attribution from "../gtmMaya/attribution.js";
+import type * as gtmMaya_autonomyPolicy from "../gtmMaya/autonomyPolicy.js";
 import type * as gtmMaya_betaGuards from "../gtmMaya/betaGuards.js";
 import type * as gtmMaya_calendarOAuth from "../gtmMaya/calendarOAuth.js";
 import type * as gtmMaya_calendarPlan from "../gtmMaya/calendarPlan.js";
@@ -133,6 +134,7 @@ import type * as gtmMaya_openclaw_conversationCapture from "../gtmMaya/openclaw/
 import type * as gtmMaya_openclaw_hookClient from "../gtmMaya/openclaw/hookClient.js";
 import type * as gtmMaya_openclaw_inboundCallback from "../gtmMaya/openclaw/inboundCallback.js";
 import type * as gtmMaya_openclaw_managerCallbacks from "../gtmMaya/openclaw/managerCallbacks.js";
+import type * as gtmMaya_openclaw_traceCapture from "../gtmMaya/openclaw/traceCapture.js";
 import type * as gtmMaya_openrouterSpend from "../gtmMaya/openrouterSpend.js";
 import type * as gtmMaya_outboundFirewall from "../gtmMaya/outboundFirewall.js";
 import type * as gtmMaya_phase2Trigger from "../gtmMaya/phase2Trigger.js";
@@ -411,6 +413,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/approvalPublishing": typeof gtmMaya_approvalPublishing;
   "gtmMaya/archetypeBrain": typeof gtmMaya_archetypeBrain;
   "gtmMaya/attribution": typeof gtmMaya_attribution;
+  "gtmMaya/autonomyPolicy": typeof gtmMaya_autonomyPolicy;
   "gtmMaya/betaGuards": typeof gtmMaya_betaGuards;
   "gtmMaya/calendarOAuth": typeof gtmMaya_calendarOAuth;
   "gtmMaya/calendarPlan": typeof gtmMaya_calendarPlan;
@@ -448,6 +451,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/openclaw/hookClient": typeof gtmMaya_openclaw_hookClient;
   "gtmMaya/openclaw/inboundCallback": typeof gtmMaya_openclaw_inboundCallback;
   "gtmMaya/openclaw/managerCallbacks": typeof gtmMaya_openclaw_managerCallbacks;
+  "gtmMaya/openclaw/traceCapture": typeof gtmMaya_openclaw_traceCapture;
   "gtmMaya/openrouterSpend": typeof gtmMaya_openrouterSpend;
   "gtmMaya/outboundFirewall": typeof gtmMaya_outboundFirewall;
   "gtmMaya/phase2Trigger": typeof gtmMaya_phase2Trigger;
