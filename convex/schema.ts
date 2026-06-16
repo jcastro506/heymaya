@@ -4810,6 +4810,8 @@ export default defineSchema({
     existingInstagramUrl: v.optional(v.string()),
     existingYoutubeUrl: v.optional(v.string()),
     existingLinkedinUrl: v.optional(v.string()),
+    // W4 — X (Twitter) handle for Phase-0 voice grounding (a primary channel).
+    existingXUrl: v.optional(v.string()),
     tiktokWarmupState: v.optional(
       v.union(
         v.literal("unknown"),

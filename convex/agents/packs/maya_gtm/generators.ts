@@ -32,6 +32,7 @@ export interface MayaGtmWorkspaceInput {
     existingInstagramUrl?: string;
     existingYoutubeUrl?: string;
     existingLinkedinUrl?: string;
+    existingXUrl?: string;
     tiktokWarmupState?:
       | "unknown"
       | "new_needs_warmup"
@@ -805,6 +806,7 @@ ${renderConnectedAccounts(input)}
 - Existing Instagram: ${input.app.existingInstagramUrl ?? "not connected"}
 - Existing YouTube: ${input.app.existingYoutubeUrl ?? "not connected"}
 - Existing LinkedIn: ${input.app.existingLinkedinUrl ?? "not connected"}
+- Existing X (Twitter): ${input.app.existingXUrl ?? "not connected"}
 - TikTok account age days: ${input.app.tiktokAccountAgeDays ?? "unknown"}
 - TikTok Account Check completed: ${
     input.app.tiktokAccountStatusChecked ? "yes" : "no"
@@ -880,6 +882,7 @@ function renderApp(input: MayaGtmWorkspaceInput): string {
     input.app.existingLinkedinUrl
       ? `LinkedIn ${input.app.existingLinkedinUrl}`
       : null,
+    input.app.existingXUrl ? `X ${input.app.existingXUrl}` : null,
   ].filter(Boolean) as string[];
   const mode = input.app.entryMode;
   lines.push("", "## Entry mode — meet them where they are", "");
