@@ -321,6 +321,27 @@ export const acquireFoundationLease = internalMutation({
   },
 });
 
+/**
+ * §6 item 1 — should this strategic send be suppressed as a duplicate of the
+ * onboarding synthesis handover? True when the plan already delivered
+ * (strategyDeliveredAt set) AND onboarding hasn't completed yet. The first
+ * strategic send in onboarding IS the synthesis; any further strategic send
+ * before completion is a recovery-turn duplicate (the live demo fired it 3×).
+ * Post-onboarding strategic sends (weekly review) return false (not suppressed),
+ * because foundationCompletedAt is set by then. Pure → unit-testable.
+ */
+export function isDuplicateOnboardingSynthesis(
+  messageClass: string,
+  strategyDeliveredAt: number | null | undefined,
+  foundationCompletedAt: number | null | undefined
+): boolean {
+  return (
+    messageClass === "strategic" &&
+    Boolean(strategyDeliveredAt) &&
+    !foundationCompletedAt
+  );
+}
+
 /** Stamp that the synthesis/strategy plan was actually delivered to the founder.
  *  Called server-side from the send_update handler when a STRATEGIC message is
  *  successfully delivered (the synthesis is the first such message in onboarding).

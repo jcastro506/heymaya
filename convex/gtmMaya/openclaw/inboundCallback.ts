@@ -8,6 +8,7 @@ import {
 } from "../../_generated/server";
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
+import { isDuplicateOnboardingSynthesis } from "../agentLifecycle";
 
 /**
  * Sprint 16 — Maya → Convex inbound callbacks (D4).
@@ -106,10 +107,19 @@ export const getAgentForSendUpdate = internalQuery({
   handler: async (
     ctx,
     args
-  ): Promise<{ telegramChatId: string | undefined } | null> => {
+  ): Promise<{
+    telegramChatId: string | undefined;
+    strategyDeliveredAt: number | undefined;
+    foundationCompletedAt: number | undefined;
+  } | null> => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent) return null;
-    return { telegramChatId: agent.telegramChatId };
+    return {
+      telegramChatId: agent.telegramChatId,
+      // §6 — for the once-only onboarding-synthesis dedup in the send handler.
+      strategyDeliveredAt: agent.strategyDeliveredAt,
+      foundationCompletedAt: agent.foundationCompletedAt,
+    };
   },
 });
 
@@ -1242,6 +1252,33 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
   if (!agent || !agent.telegramChatId) {
     return new Response(
       JSON.stringify({ ok: false, reason: "no_telegram_chat_id" }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  }
+
+  // §6 item 1 — send the onboarding synthesis EXACTLY ONCE. The handover plan
+  // is the first strategic send in onboarding; it stamps strategyDeliveredAt on
+  // success. If a strategic message already delivered AND onboarding hasn't
+  // completed, a second strategic send is a duplicate synthesis (recovery turns
+  // re-running the handover — the live demo sent it 3×). Swallow the duplicate.
+  // Post-onboarding strategic sends (weekly review) are NOT suppressed
+  // (foundationCompletedAt is set by then). A FAILED first send leaves
+  // strategyDeliveredAt unset, so a genuine retry still goes through.
+  if (
+    isDuplicateOnboardingSynthesis(
+      messageClass,
+      agent.strategyDeliveredAt,
+      agent.foundationCompletedAt
+    )
+  ) {
+    console.warn(
+      JSON.stringify({
+        event: "send_update.duplicate_synthesis_suppressed",
+        agentId: auth.agentId,
+      })
+    );
+    return new Response(
+      JSON.stringify({ ok: true, suppressed: "duplicate_synthesis" }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
   }
