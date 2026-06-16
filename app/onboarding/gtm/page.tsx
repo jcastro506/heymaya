@@ -62,6 +62,10 @@ interface IntakeDraft {
   existingInstagramUrl: string;
   existingYoutubeUrl: string;
   existingLinkedinUrl: string;
+  // W4 — X (Twitter) is one of Maya's PRIMARY posting channels, but voice
+  // extraction ran blind there with no handle to read. Capturing it lets
+  // Phase-0 voice grounding sample the founder's real X posts.
+  existingXUrl: string;
   tiktokWarmupState:
     | "unknown"
     | "new_needs_warmup"
@@ -124,6 +128,7 @@ const DEFAULT_DRAFT: IntakeDraft = {
   existingInstagramUrl: "",
   existingYoutubeUrl: "",
   existingLinkedinUrl: "",
+  existingXUrl: "",
   tiktokWarmupState: "unknown",
   tiktokAccountAgeDays: "",
   tiktokAccountStatusChecked: false,
@@ -225,8 +230,14 @@ function GtmOnboardingBody() {
   }, [startOnboarding, isAuthenticated]);
 
   const canSubmit = useMemo(() => {
-    return draft.url.trim().startsWith("http") && draft.name.trim().length > 0;
-  }, [draft.name, draft.url]);
+    // W4 — the differentiator is THE anchor for every research worker + draft;
+    // make it confirm-required so Maya never has to guess the product's wedge.
+    return (
+      draft.url.trim().startsWith("http") &&
+      draft.name.trim().length > 0 &&
+      draft.differentiator.trim().length > 0
+    );
+  }, [draft.name, draft.url, draft.differentiator]);
 
   async function saveAndQueueResearch() {
     if (!canSubmit) return;
@@ -273,6 +284,7 @@ function GtmOnboardingBody() {
         existingInstagramUrl: emptyToUndefined(draft.existingInstagramUrl),
         existingYoutubeUrl: emptyToUndefined(draft.existingYoutubeUrl),
         existingLinkedinUrl: emptyToUndefined(draft.existingLinkedinUrl),
+        existingXUrl: emptyToUndefined(draft.existingXUrl),
         tiktokWarmupState,
         tiktokAccountAgeDays: numberOrUndefined(tiktokAccountAgeDays),
         tiktokAccountStatusChecked: draft.tiktokAccountStatusChecked,
@@ -515,7 +527,7 @@ function GtmOnboardingBody() {
               />
             </Field>
           </div>
-          <Field label="What does it do, and what makes it different?">
+          <Field label="What does it do, and what makes it different? (required — Maya anchors everything on this)">
             <textarea
               value={draft.differentiator}
               onChange={(event) =>
@@ -610,7 +622,7 @@ function GtmOnboardingBody() {
               </select>
             </Field>
           </div>
-          <Field label="Mobile walkthrough recording">
+          <Field label="Walkthrough recording — your single best accuracy signal (any app type)">
             <div className="flex flex-wrap items-center gap-3">
               <label className="cursor-pointer rounded-lg border border-paper bg-ink-2 px-4 py-2 text-sm font-medium hover:bg-ink-3">
                 {walkthroughFile ? "Choose a different video" : "Choose video"}
@@ -736,6 +748,19 @@ function GtmOnboardingBody() {
                 }
                 className="input"
                 placeholder="https://www.linkedin.com/in/..."
+              />
+            </Field>
+            <Field label="X (Twitter) profile, if any">
+              <input
+                value={draft.existingXUrl}
+                onChange={(event) =>
+                  setDraft((d) => ({
+                    ...d,
+                    existingXUrl: event.target.value,
+                  }))
+                }
+                className="input"
+                placeholder="https://x.com/..."
               />
             </Field>
           </div>

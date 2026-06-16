@@ -1251,6 +1251,7 @@ export const buildAndUploadGtmWorkspace = internalAction({
         existingInstagramUrl: row.app.existingInstagramUrl,
         existingYoutubeUrl: row.app.existingYoutubeUrl,
         existingLinkedinUrl: row.app.existingLinkedinUrl,
+        existingXUrl: row.app.existingXUrl,
         tiktokWarmupState: row.app.tiktokWarmupState,
         tiktokAccountAgeDays: row.app.tiktokAccountAgeDays,
         tiktokAccountStatusChecked: row.app.tiktokAccountStatusChecked,
