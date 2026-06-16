@@ -251,6 +251,7 @@ export const setAppProfile = mutation({
     existingInstagramUrl: v.optional(v.string()),
     existingYoutubeUrl: v.optional(v.string()),
     existingLinkedinUrl: v.optional(v.string()),
+    existingXUrl: v.optional(v.string()),
     tiktokWarmupState: v.optional(TIKTOK_WARMUP_STATE),
     tiktokAccountAgeDays: v.optional(v.number()),
     tiktokAccountStatusChecked: v.optional(v.boolean()),
@@ -301,6 +302,7 @@ export const setAppProfile = mutation({
         existingInstagramUrl: normalizeOptionalUrl(args.existingInstagramUrl),
         existingYoutubeUrl: normalizeOptionalUrl(args.existingYoutubeUrl),
         existingLinkedinUrl: normalizeOptionalUrl(args.existingLinkedinUrl),
+        existingXUrl: normalizeOptionalUrl(args.existingXUrl),
         tiktokWarmupState: args.tiktokWarmupState ?? "unknown",
         tiktokAccountAgeDays: args.tiktokAccountAgeDays,
         tiktokAccountStatusChecked: args.tiktokAccountStatusChecked ?? false,
@@ -337,6 +339,7 @@ export const setAppProfile = mutation({
       canPostInstagramManually: args.canPostInstagramManually ?? false,
       existingTikTokUrl: normalizeOptionalUrl(args.existingTikTokUrl),
       existingInstagramUrl: normalizeOptionalUrl(args.existingInstagramUrl),
+      existingXUrl: normalizeOptionalUrl(args.existingXUrl),
       tiktokWarmupState: args.tiktokWarmupState ?? "unknown",
       tiktokAccountAgeDays: args.tiktokAccountAgeDays,
       tiktokAccountStatusChecked: args.tiktokAccountStatusChecked ?? false,
@@ -356,6 +359,106 @@ export const setAppProfile = mutation({
     });
     await ctx.db.patch(agent._id, { appId, updatedAt: now });
     return appId;
+  },
+});
+
+const USER_COUNT_BAND = v.union(
+  v.literal("none"),
+  v.literal("1-100"),
+  v.literal("100-1k"),
+  v.literal("1k+"),
+  v.literal("unknown")
+);
+
+const MAX_DIFFERENTIATOR = 2000;
+const MAX_FOUNDER_WHY = 2000;
+const MAX_NAME = 200;
+
+/** Trim, drop-if-empty, clamp to max length (adversarial guard). */
+function clampOptionalString(
+  value: string | undefined,
+  max: number
+): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed.slice(0, max);
+}
+
+/**
+ * W1.1 — Post-onboarding product-context correction. The founder edits Maya's
+ * working picture of the product (differentiator, why, stage, goal, traction
+ * band, name) from the Product-brain surface. Corrections persist to `gtmApps`
+ * (NOT ephemeral chat memory) and re-anchor APP.md on the next deploy. Every
+ * field is optional so the UI can patch one at a time. Auth-scoped + fail-
+ * closed: the app must belong to the signed-in founder's agent.
+ */
+export const updateProductContext = mutation({
+  args: {
+    differentiator: v.optional(v.string()),
+    founderWhy: v.optional(v.string()),
+    name: v.optional(v.string()),
+    stage: v.optional(APP_STAGE),
+    weekGoal: v.optional(WEEK_GOAL),
+    userCountBand: v.optional(USER_COUNT_BAND),
+  },
+  handler: async (ctx, args): Promise<{ ok: boolean }> => {
+    const { creator, agent } = await requireMyGtmAgent(ctx);
+    if (!agent.appId) {
+      throw new Error("updateProductContext: no app for this agent.");
+    }
+    const app = await ctx.db.get(agent.appId);
+    if (!app || app.accountId !== creator._id) {
+      throw new Error("updateProductContext: app/account mismatch.");
+    }
+    const now = Date.now();
+    const differentiator = clampOptionalString(
+      args.differentiator,
+      MAX_DIFFERENTIATOR
+    );
+    const founderWhy = clampOptionalString(args.founderWhy, MAX_FOUNDER_WHY);
+    const name = clampOptionalString(args.name, MAX_NAME);
+    await ctx.db.patch(app._id, {
+      updatedAt: now,
+      ...(differentiator !== undefined ? { differentiator } : {}),
+      ...(founderWhy !== undefined ? { founderWhy } : {}),
+      ...(name !== undefined ? { name } : {}),
+      ...(args.stage !== undefined ? { stage: args.stage } : {}),
+      ...(args.weekGoal !== undefined ? { weekGoal: args.weekGoal } : {}),
+      ...(args.userCountBand !== undefined
+        ? { userCountBand: args.userCountBand }
+        : {}),
+    });
+    return { ok: true };
+  },
+});
+
+const AUTONOMOUS_POSTING = v.union(
+  v.literal("confirm_each"),
+  v.literal("confirm_first_week"),
+  v.literal("autonomous")
+);
+
+/**
+ * W2 — the founder sets how much rope Maya gets on the auto channels (the
+ * Account settings control + the conversational set_posting_mode tool both land
+ * here). Auth-scoped + fail-closed. The publish gate enforces this inside the
+ * ban-safety floor + plan ceiling, so this is a preference, never a bypass.
+ */
+export const setMyPostingMode = mutation({
+  args: { mode: AUTONOMOUS_POSTING },
+  handler: async (ctx, args): Promise<{ ok: boolean }> => {
+    const { agent } = await requireMyGtmAgent(ctx);
+    const now = Date.now();
+    await ctx.db.patch(agent._id, {
+      autonomousPosting: args.mode,
+      // Starting/restarting the ramp: stamp the clock if entering
+      // confirm_first_week without one already running.
+      ...(args.mode === "confirm_first_week" && agent.autonomousSince == null
+        ? { autonomousSince: now }
+        : {}),
+      updatedAt: now,
+    });
+    return { ok: true };
   },
 });
 
@@ -696,6 +799,14 @@ async function findOrCreateGtmAgent(
       onboardingStep: "intake",
       channelPreference: args.channelPreference,
       timezone: args.timezone,
+      // W2 — default to the confirm-first-week trust ramp. autonomousSince
+      // starts the 7-day clock now; confirmedPostCount climbs toward the
+      // 3-confirm graduation. The founder can change this any time (settings
+      // control + set_posting_mode). Default lives here so the ramp actually
+      // runs; the publish gate fail-closes to confirm if it's ever absent.
+      autonomousPosting: "confirm_first_week",
+      autonomousSince: now,
+      confirmedPostCount: 0,
       createdAt: now,
       updatedAt: now,
     });

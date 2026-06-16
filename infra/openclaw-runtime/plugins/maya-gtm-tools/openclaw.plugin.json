@@ -45,6 +45,7 @@
       "save_foundation_content_angle",
       "save_foundation_relationship_target",
       "set_north_star",
+      "update_product_fact",
       "set_strategy_approval",
       "save_voice_profile",
       "save_style_exemplars",

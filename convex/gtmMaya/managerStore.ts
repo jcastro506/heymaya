@@ -140,6 +140,76 @@ export const setNorthStarAndMode = internalMutation({
   },
 });
 
+const PRODUCT_FACT_STAGE = v.union(
+  v.literal("idea"),
+  v.literal("live-beta"),
+  v.literal("paid"),
+  v.literal("unknown")
+);
+const PRODUCT_FACT_WEEK_GOAL = v.union(
+  v.literal("feedback"),
+  v.literal("signups"),
+  v.literal("demos"),
+  v.literal("revenue"),
+  v.literal("unknown")
+);
+const PRODUCT_FACT_USER_BAND = v.union(
+  v.literal("none"),
+  v.literal("1-100"),
+  v.literal("100-1k"),
+  v.literal("1k+"),
+  v.literal("unknown")
+);
+
+function clampFact(value: string | undefined, max: number): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed.slice(0, max);
+}
+
+/**
+ * W1.2 — Maya persists a founder's product-fact correction made IN CHAT (the
+ * `update_product_fact` tool), so it survives the turn instead of dying in
+ * ephemeral memory. Agent-context twin of the web `updateProductContext`
+ * mutation; writes the same gtmApps fields. Fail-closed: the app must belong
+ * to the authed agent's account.
+ */
+export const updateProductFact = internalMutation({
+  args: {
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    name: v.optional(v.string()),
+    differentiator: v.optional(v.string()),
+    founderWhy: v.optional(v.string()),
+    stage: v.optional(PRODUCT_FACT_STAGE),
+    weekGoal: v.optional(PRODUCT_FACT_WEEK_GOAL),
+    userCountBand: v.optional(PRODUCT_FACT_USER_BAND),
+  },
+  handler: async (ctx, args): Promise<Id<"gtmApps">> => {
+    await assertAgentBelongsToAccount(ctx, args.accountId, args.agentId);
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent || !agent.appId) throw new Error("agent has no app");
+    const app = await ctx.db.get(agent.appId);
+    if (!app || app.accountId !== args.accountId) {
+      throw new Error("app not found for account");
+    }
+    const differentiator = clampFact(args.differentiator, 2000);
+    const founderWhy = clampFact(args.founderWhy, 2000);
+    const name = clampFact(args.name, 200);
+    const patch: Partial<Doc<"gtmApps">> = { updatedAt: Date.now() };
+    if (differentiator !== undefined) patch.differentiator = differentiator;
+    if (founderWhy !== undefined) patch.founderWhy = founderWhy;
+    if (name !== undefined) patch.name = name;
+    if (args.stage !== undefined) patch.stage = args.stage;
+    if (args.weekGoal !== undefined) patch.weekGoal = args.weekGoal;
+    if (args.userCountBand !== undefined) {
+      patch.userCountBand = args.userCountBand;
+    }
+    await ctx.db.patch(agent.appId, patch);
+    return agent.appId;
+  },
+});
+
 /** Sprint J (Layer 2) — record an agent's PROPOSED improvement to a SHARED
  *  skill. Agents never edit shared skills directly; this captures the proposal
  *  for the (post-MVP) cross-tenant aggregate → A/B → gated-merge pipeline.

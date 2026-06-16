@@ -7,6 +7,17 @@ import {
 } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import {
+  generateProductPicture,
+  type GroundedFinding,
+  type ProductPicture,
+} from "./productPicture";
+import {
+  detectStoreUrl,
+  fetchAppleListing,
+  storeListingToContext,
+  type StoreListing,
+} from "../integrations/appStore/storeListing";
 
 export interface AppPageInspection {
   url: string;
@@ -37,6 +48,8 @@ export interface AppDiagnosis {
     missingContext: string[];
   };
   failures: string[];
+  /** W1.0 — grounded LLM product picture (founder verifies/corrects via W1.1). */
+  picture?: ProductPicture;
 }
 
 const COMMON_PATHS = ["/", "/pricing", "/docs", "/blog"] as const;
@@ -88,6 +101,10 @@ export const inspectMyGtmApp = action({
     if (!row) throw new Error("GTM app not found for signed-in user.");
 
     const diagnosis = await inspectApp(row.app.url);
+    // W1.0 — augment the regex crawl with a grounded LLM product picture.
+    // Soft-fails: on any failure the regex `summary` remains as the fallback.
+    const picture = await buildProductPicture(ctx, row.app, diagnosis);
+    if (picture) diagnosis.picture = picture;
     await ctx.runMutation(internal.gtmMaya.appInspector.persistAppDiagnosis, {
       appId: args.appId,
       accountId: row.accountId,
@@ -96,6 +113,99 @@ export const inspectMyGtmApp = action({
     return diagnosis;
   },
 });
+
+/* -------------------------------------------------------------------------- */
+/* W1.0 — grounded product-picture augmentation                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Build the grounded product picture from the founder's words + the crawled
+ * landing page + (mobile) the store listing + cited grounded-search findings.
+ * Returns null on any failure or when OPENROUTER_API_KEY is unset, leaving the
+ * regex `summary` as the cheap fallback.
+ */
+async function buildProductPicture(
+  ctx: ActionCtx,
+  app: Doc<"gtmApps">,
+  diagnosis: AppDiagnosis
+): Promise<ProductPicture | null> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const [storeListingContext, groundedFindings] = await Promise.all([
+      resolveStoreListing(ctx, app),
+      resolveGroundedFindings(ctx, app.name),
+    ]);
+    const { picture } = await generateProductPicture({
+      productName: app.name ?? "the product",
+      productUrl: app.url,
+      founderDifferentiator: app.differentiator ?? null,
+      founderWhy: app.founderWhy ?? null,
+      crawledSummary: {
+        productPromise: diagnosis.summary.productPromise,
+        likelyAudience: diagnosis.summary.likelyAudience,
+        visibleFeatures: diagnosis.summary.visibleFeatures,
+        conversionSurface: diagnosis.summary.conversionSurface,
+      },
+      storeListingContext,
+      groundedFindings,
+      apiKey,
+      model: process.env.OPENROUTER_DEFAULT_MODEL,
+    });
+    return picture;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve a store listing from the app's store URLs (or a store-link `url`).
+ * Apple via the keyless iTunes Lookup; Play via the "use node" scraper action.
+ */
+async function resolveStoreListing(
+  ctx: ActionCtx,
+  app: Doc<"gtmApps">
+): Promise<string | null> {
+  const candidates = [app.appStoreUrl, app.playStoreUrl, app.url].filter(
+    (u): u is string => typeof u === "string" && u.length > 0
+  );
+  for (const candidate of candidates) {
+    const detected = detectStoreUrl(candidate);
+    if (!detected) continue;
+    let listing: StoreListing | null = null;
+    if (detected.source === "app_store") {
+      listing = await fetchAppleListing(detected.id);
+    } else {
+      listing = await ctx.runAction(
+        internal.integrations.appStore.playScraper.fetchPlayListingAction,
+        { packageName: detected.id }
+      );
+    }
+    if (listing) return storeListingToContext(listing);
+  }
+  return null;
+}
+
+/** Run a grounded "what is <product>" search; soft-fails to []. */
+async function resolveGroundedFindings(
+  ctx: ActionCtx,
+  productName: string | undefined
+): Promise<GroundedFinding[]> {
+  if (!productName) return [];
+  try {
+    const res = await ctx.runAction(internal.gtmMaya.webSearch.webSearch, {
+      query: `what is ${productName}`,
+      limit: 6,
+    });
+    return res.results.map((r) => ({
+      title: r.title,
+      url: r.url,
+      excerpt: r.excerpt,
+    }));
+  } catch {
+    return [];
+  }
+}
 
 export async function inspectApp(
   appUrl: string,

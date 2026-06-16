@@ -97,6 +97,7 @@ import {
   foundationRelationshipHttp,
   setNorthStarHttp,
   setStrategyApprovalHttp,
+  updateProductFactHttp,
   proposeSkillImprovementHttp,
   postActivityHttp,
   competitorMoveHttp,
@@ -430,6 +431,12 @@ http.route({
   path: "/lc_gtm/set_north_star",
   method: "POST",
   handler: setNorthStarHttp,
+});
+// W1.2 — Maya persists a founder's product-fact correction made in chat.
+http.route({
+  path: "/lc_gtm/update_product_fact",
+  method: "POST",
+  handler: updateProductFactHttp,
 });
 // Sprint B — Maya records the strategy approval state (propose→approve gate).
 http.route({

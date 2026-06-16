@@ -142,6 +142,7 @@ import type * as gtmMaya_platformIntelligence from "../gtmMaya/platformIntellige
 import type * as gtmMaya_platformWorkers from "../gtmMaya/platformWorkers.js";
 import type * as gtmMaya_postResults from "../gtmMaya/postResults.js";
 import type * as gtmMaya_privateBeta from "../gtmMaya/privateBeta.js";
+import type * as gtmMaya_productPicture from "../gtmMaya/productPicture.js";
 import type * as gtmMaya_productionReadiness from "../gtmMaya/productionReadiness.js";
 import type * as gtmMaya_productionReality from "../gtmMaya/productionReality.js";
 import type * as gtmMaya_publishEngine from "../gtmMaya/publishEngine.js";
@@ -181,6 +182,8 @@ import type * as integrations_aggregators_unified_types from "../integrations/ag
 import type * as integrations_apify_twitterScraper from "../integrations/apify/twitterScraper.js";
 import type * as integrations_apollo_actions from "../integrations/apollo/actions.js";
 import type * as integrations_apollo_client from "../integrations/apollo/client.js";
+import type * as integrations_appStore_playScraper from "../integrations/appStore/playScraper.js";
+import type * as integrations_appStore_storeListing from "../integrations/appStore/storeListing.js";
 import type * as integrations_apple_caldav from "../integrations/apple/caldav.js";
 import type * as integrations_composio_actions_calendar from "../integrations/composio/actions/calendar.js";
 import type * as integrations_composio_actions_gmail from "../integrations/composio/actions/gmail.js";
@@ -454,6 +457,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/platformWorkers": typeof gtmMaya_platformWorkers;
   "gtmMaya/postResults": typeof gtmMaya_postResults;
   "gtmMaya/privateBeta": typeof gtmMaya_privateBeta;
+  "gtmMaya/productPicture": typeof gtmMaya_productPicture;
   "gtmMaya/productionReadiness": typeof gtmMaya_productionReadiness;
   "gtmMaya/productionReality": typeof gtmMaya_productionReality;
   "gtmMaya/publishEngine": typeof gtmMaya_publishEngine;
@@ -493,6 +497,8 @@ declare const fullApi: ApiFromModules<{
   "integrations/apify/twitterScraper": typeof integrations_apify_twitterScraper;
   "integrations/apollo/actions": typeof integrations_apollo_actions;
   "integrations/apollo/client": typeof integrations_apollo_client;
+  "integrations/appStore/playScraper": typeof integrations_appStore_playScraper;
+  "integrations/appStore/storeListing": typeof integrations_appStore_storeListing;
   "integrations/apple/caldav": typeof integrations_apple_caldav;
   "integrations/composio/actions/calendar": typeof integrations_composio_actions_calendar;
   "integrations/composio/actions/gmail": typeof integrations_composio_actions_gmail;
