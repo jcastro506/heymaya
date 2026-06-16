@@ -10,6 +10,7 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { resolveMyGtmCreator } from "./targetList";
+import { isRampGraduated } from "./autonomyPolicy";
 
 // ───────────────────────── Research / "What we know" ─────────────────────────
 
@@ -156,6 +157,8 @@ export const getMyAccount = query({
     status: string;
     app: Doc<"gtmApps"> | null;
     deployedAt?: number;
+    postingMode: string | null;
+    postingGraduated: boolean;
   } | null> => {
     const creator = await resolveMyGtmCreator(ctx);
     if (!creator) return null;
@@ -170,6 +173,14 @@ export const getMyAccount = query({
       status: creator.status,
       app: app ?? null,
       deployedAt: agent?.deployedAt,
+      postingMode: agent?.autonomousPosting ?? null,
+      postingGraduated: agent
+        ? isRampGraduated(
+            agent.autonomousSince,
+            agent.confirmedPostCount,
+            Date.now()
+          )
+        : false,
     };
   },
 });

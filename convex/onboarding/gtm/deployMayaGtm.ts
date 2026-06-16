@@ -1233,6 +1233,8 @@ export const buildAndUploadGtmWorkspace = internalAction({
       verifyAllPlatforms: row.agent.verifyAllPlatforms,
       // Studio-tier gate: only a canVideo plan gets the video producer skill.
       videoEnabled: planFeaturesGtm({ gtmPlanJson: row.agent.gtmPlanJson }).canVideo,
+      // W2 — so Maya's messaging matches her gating (the publish engine enforces it).
+      autonomousPosting: row.agent.autonomousPosting,
       app: {
         name: row.app.name ?? "Untitled app",
         url: row.app.url,

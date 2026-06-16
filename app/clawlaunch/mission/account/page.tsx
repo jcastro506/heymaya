@@ -18,6 +18,7 @@ import {
 } from "../_components";
 import { ConnectedAccounts } from "./_ConnectedAccounts";
 import { ProductBrain } from "./_ProductBrain";
+import { PostingControl } from "./_PostingControl";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -114,6 +115,13 @@ export default function AccountPage() {
 
       <Section title="What Maya understands about your product">
         <ProductBrain app={app} />
+      </Section>
+
+      <Section title="Posting">
+        <PostingControl
+          mode={account.postingMode}
+          graduated={account.postingGraduated}
+        />
       </Section>
 
       <Section title="Connected">

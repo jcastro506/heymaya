@@ -4423,6 +4423,21 @@ export default defineSchema({
     // usage:{autoPostsThisPeriod, xUrlPostsThisPeriod, videosThisPeriod}}.
     // Parsed by planFeaturesGtm; ONLY Stripe webhook handlers write it.
     gtmPlanJson: v.optional(v.string()),
+    // W2 — founder's autonomous-vs-confirm posting preference, layered INSIDE
+    // the plan ceiling (planFeaturesGtm.canAutoPost) and the ban-safety floor
+    // (Reddit/TikTok always confirm). Only ever tightens the AUTO channels
+    // (X/LI/IG/YT). Default confirm_first_week (trust ramp). Absent = fail-closed
+    // to confirm. `autonomousSince` starts the ramp clock; `confirmedPostCount`
+    // counts founder one-tap confirms toward graduation (3 posts OR 7 days).
+    autonomousPosting: v.optional(
+      v.union(
+        v.literal("confirm_each"),
+        v.literal("confirm_first_week"),
+        v.literal("autonomous")
+      )
+    ),
+    autonomousSince: v.optional(v.number()),
+    confirmedPostCount: v.optional(v.number()),
     // Off-by-default toggle: also mirror the day's plan to Google Calendar.
     // The Google flood retired; the web Today view is the primary surface.
     googleCalendarMirrorEnabled: v.optional(v.boolean()),
