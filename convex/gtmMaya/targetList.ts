@@ -859,6 +859,12 @@ export async function resolveMyGtmCreator(
     .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
     .first();
   if (!creator || creator.accountType !== "gtm-agent") return null;
+  // Fail-closed on a deleted account: even if a Clerk session lingers (e.g. the
+  // post-delete sign-out didn't land), a deleted account gets NO dashboard
+  // access — every gtm query/mutation resolves through here. The first delete
+  // still works: the account is active when deleteMyGtmAccount resolves it,
+  // then patches status="deleted".
+  if (creator.status === "deleted") return null;
   return creator;
 }
 

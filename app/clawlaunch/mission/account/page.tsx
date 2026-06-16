@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
+import { useClerk } from "@clerk/nextjs";
 import { api } from "@/convex/_generated/api";
 import {
   Shell,
@@ -39,10 +40,30 @@ export default function AccountPage() {
   const startCheckout = useAction(
     api.billing.gtmBilling.createGtmCheckoutSession
   );
+  const { signOut } = useClerk();
   const [confirming, setConfirming] = useState(false);
-  const [deleted, setDeleted] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [checkingOut, setCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  async function handleDeleteAccount() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteAccount({});
+      // Account soft-deleted (status="deleted"). Now end the Clerk session and
+      // hard-redirect to the public landing — a full reload wipes all client +
+      // Convex state so there's no stale authed dashboard left behind.
+      await signOut();
+      window.location.href = "/";
+    } catch (err) {
+      setDeleting(false);
+      setDeleteError(
+        err instanceof Error ? err.message : "Could not delete your account."
+      );
+    }
+  }
 
   async function handleSubscribe() {
     setCheckingOut(true);
@@ -172,12 +193,7 @@ export default function AccountPage() {
 
       <Section title="Danger zone">
         <Card>
-          {deleted ? (
-            <p className="text-sm text-paper-dim">
-              Your account is marked deleted. HeyMaya has stopped. Reach out
-              if you want it back.
-            </p>
-          ) : !confirming ? (
+          {!confirming ? (
             <div className="flex items-center justify-between gap-4">
               <p className="text-sm text-paper-dim">
                 Stop HeyMaya and remove your account.
@@ -192,25 +208,28 @@ export default function AccountPage() {
           ) : (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-paper">
-                This stops your manager and hides your account. Are you sure?
+                This stops your manager, deletes your account, and signs you
+                out. Are you sure?
               </p>
               <div className="flex gap-3">
                 <button
-                  onClick={async () => {
-                    await deleteAccount({});
-                    setDeleted(true);
-                  }}
-                  className="rounded-lg bg-rose px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink"
+                  onClick={handleDeleteAccount}
+                  disabled={deleting}
+                  className="rounded-lg bg-rose px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink disabled:opacity-50"
                 >
-                  Yes, delete
+                  {deleting ? "Deleting…" : "Yes, delete"}
                 </button>
                 <button
                   onClick={() => setConfirming(false)}
-                  className="rounded-lg border border-paper-faint/30 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-paper-dim"
+                  disabled={deleting}
+                  className="rounded-lg border border-paper-faint/30 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-paper-dim disabled:opacity-50"
                 >
                   Cancel
                 </button>
               </div>
+              {deleteError ? (
+                <p className="text-xs text-[#b3261e]">{deleteError}</p>
+              ) : null}
             </div>
           )}
         </Card>
