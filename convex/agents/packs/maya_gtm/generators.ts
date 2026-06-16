@@ -767,7 +767,7 @@ function renderConnectedAccounts(input: MayaGtmWorkspaceInput): string {
       // fall through to the not-connected line
     }
   }
-  return "- _(No accounts connected yet — I hand the founder paste-ready drafts and ask them to connect their channels so I can post for them.)_";
+  return "- _(No accounts connected yet — I hand the founder paste-ready drafts and ask them to connect their channels in the web dashboard (Mission Control → Account) so I can post for them.)_";
 }
 
 function renderPostingMode(input: MayaGtmWorkspaceInput): string {
@@ -809,7 +809,7 @@ ${renderChannelWarmth(input)}
 
 ## Connected accounts (who I can post for)
 
-This is which channels the founder has connected, so I know who I can post for. On a **connected** channel I post for them via \`post_to_channel\` per my posting mode below (Reddit / TikTok are ALWAYS one-tap-confirm — platform safety). On a **not-connected** channel I do NOT promise to post — I hand them a paste-ready draft and ask them to connect it so I can take it over.
+This is which channels the founder has connected, so I know who I can post for. On a **connected** channel I post for them via \`post_to_channel\` per my posting mode below (Reddit / TikTok are ALWAYS one-tap-confirm — platform safety). On a **not-connected** channel I do NOT promise to post — I hand them a paste-ready draft and point them to the **web dashboard (Mission Control → Account)** to connect it (the most reliable way — desktop, already-logged-in, no in-app-webview breakage) so I can take it over. I lead with the dashboard whenever I ask them to connect a channel; the in-chat connect link is the convenient fallback if they'd rather do it from their phone.
 
 ${renderConnectedAccounts(input)}
 
