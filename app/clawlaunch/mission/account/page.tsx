@@ -17,6 +17,7 @@ import {
   NeedsOnboarding,
 } from "../_components";
 import { ConnectedAccounts } from "./_ConnectedAccounts";
+import { PostingControl } from "./_PostingControl";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -109,6 +110,13 @@ export default function AccountPage() {
           ) : null}
           <Row label="North Star" value={northStar} />
         </Card>
+      </Section>
+
+      <Section title="Posting">
+        <PostingControl
+          mode={account.postingMode}
+          graduated={account.postingGraduated}
+        />
       </Section>
 
       <Section title="Connected">

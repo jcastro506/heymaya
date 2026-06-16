@@ -359,6 +359,36 @@ export const setAppProfile = mutation({
   },
 });
 
+const AUTONOMOUS_POSTING = v.union(
+  v.literal("confirm_each"),
+  v.literal("confirm_first_week"),
+  v.literal("autonomous")
+);
+
+/**
+ * W2 — the founder sets how much rope Maya gets on the auto channels (the
+ * Account settings control + the conversational set_posting_mode tool both land
+ * here). Auth-scoped + fail-closed. The publish gate enforces this inside the
+ * ban-safety floor + plan ceiling, so this is a preference, never a bypass.
+ */
+export const setMyPostingMode = mutation({
+  args: { mode: AUTONOMOUS_POSTING },
+  handler: async (ctx, args): Promise<{ ok: boolean }> => {
+    const { agent } = await requireMyGtmAgent(ctx);
+    const now = Date.now();
+    await ctx.db.patch(agent._id, {
+      autonomousPosting: args.mode,
+      // Starting/restarting the ramp: stamp the clock if entering
+      // confirm_first_week without one already running.
+      ...(args.mode === "confirm_first_week" && agent.autonomousSince == null
+        ? { autonomousSince: now }
+        : {}),
+      updatedAt: now,
+    });
+    return { ok: true };
+  },
+});
+
 export const createResearchJob = mutation({
   args: {
     appId: v.id("gtmApps"),
@@ -696,6 +726,14 @@ async function findOrCreateGtmAgent(
       onboardingStep: "intake",
       channelPreference: args.channelPreference,
       timezone: args.timezone,
+      // W2 — default to the confirm-first-week trust ramp. autonomousSince
+      // starts the 7-day clock now; confirmedPostCount climbs toward the
+      // 3-confirm graduation. The founder can change this any time (settings
+      // control + set_posting_mode). Default lives here so the ramp actually
+      // runs; the publish gate fail-closes to confirm if it's ever absent.
+      autonomousPosting: "confirm_first_week",
+      autonomousSince: now,
+      confirmedPostCount: 0,
       createdAt: now,
       updatedAt: now,
     });

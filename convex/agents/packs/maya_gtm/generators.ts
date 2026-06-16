@@ -14,6 +14,13 @@ export interface MayaGtmWorkspaceInput {
    * the hard backstop; this just keeps a non-Studio Maya from knowing the tools.
    */
   videoEnabled?: boolean;
+  /**
+   * W2 — the founder's autonomous-vs-confirm posting preference, so Maya's
+   * MESSAGING matches her actual gating (says "ready for your OK" vs "posted").
+   * The publish engine enforces the gate regardless; this is awareness only.
+   * Absent → confirm_first_week (the default).
+   */
+  autonomousPosting?: "confirm_each" | "confirm_first_week" | "autonomous";
   app: {
     name: string;
     url: string;
@@ -762,6 +769,18 @@ function renderConnectedAccounts(input: MayaGtmWorkspaceInput): string {
   return "- _(No accounts connected yet — I hand the founder paste-ready drafts and ask them to connect their channels so I can post for them.)_";
 }
 
+function renderPostingMode(input: MayaGtmWorkspaceInput): string {
+  const mode = input.autonomousPosting ?? "confirm_first_week";
+  if (mode === "autonomous") {
+    return "The founder has me **post the auto channels myself** (X / LinkedIn / Instagram / YouTube) — no per-post approval needed there. I still send a one-tap confirm for Reddit and TikTok (platform safety), and the pre-publish safety gate can still bump any risky draft to confirm. I can say \"I posted this to X\" once it lands.";
+  }
+  if (mode === "confirm_each") {
+    return "The founder wants to **approve every post first** — including X / LinkedIn / Instagram / YouTube. So I send each one via the one-tap confirm card and say \"I've got a post ready for your OK,\" NEVER \"I posted.\" Their tap is what publishes it.";
+  }
+  // confirm_first_week (default)
+  return "We're in **confirm-first-week** (the trust ramp): I send each auto-channel post (X / LinkedIn / Instagram / YouTube) for a one-tap OK until the founder has approved a few (or a week passes), then I post those channels myself. Until I've graduated, I say \"ready for your OK,\" not \"posted.\" Reddit / TikTok stay one-tap-confirm always. Once they've okayed enough, I proactively offer to take the auto channels off their plate.";
+}
+
 function renderUser(input: MayaGtmWorkspaceInput): string {
   return `# USER.md
 
@@ -789,9 +808,13 @@ ${renderChannelWarmth(input)}
 
 ## Connected accounts (who I can post for)
 
-This is which channels the founder has connected, so I know who I can post for. On a **connected** channel I post for them via \`post_to_channel\` (X / LinkedIn / Instagram / YouTube go out automatically; Reddit / TikTok are one-tap-confirm). On a **not-connected** channel I do NOT promise to post — I hand them a paste-ready draft and ask them to connect it so I can take it over.
+This is which channels the founder has connected, so I know who I can post for. On a **connected** channel I post for them via \`post_to_channel\` per my posting mode below (Reddit / TikTok are ALWAYS one-tap-confirm — platform safety). On a **not-connected** channel I do NOT promise to post — I hand them a paste-ready draft and ask them to connect it so I can take it over.
 
 ${renderConnectedAccounts(input)}
+
+## Posting mode (how much rope I have)
+
+${renderPostingMode(input)}
 
 ## Constraints
 
