@@ -14,6 +14,13 @@ export interface MayaGtmWorkspaceInput {
    * the hard backstop; this just keeps a non-Studio Maya from knowing the tools.
    */
   videoEnabled?: boolean;
+  /**
+   * W2 — the founder's autonomous-vs-confirm posting preference, so Maya's
+   * MESSAGING matches her actual gating (says "ready for your OK" vs "posted").
+   * The publish engine enforces the gate regardless; this is awareness only.
+   * Absent → confirm_first_week (the default).
+   */
+  autonomousPosting?: "confirm_each" | "confirm_first_week" | "autonomous";
   app: {
     name: string;
     url: string;
@@ -32,6 +39,7 @@ export interface MayaGtmWorkspaceInput {
     existingInstagramUrl?: string;
     existingYoutubeUrl?: string;
     existingLinkedinUrl?: string;
+    existingXUrl?: string;
     tiktokWarmupState?:
       | "unknown"
       | "new_needs_warmup"
@@ -762,6 +770,18 @@ function renderConnectedAccounts(input: MayaGtmWorkspaceInput): string {
   return "- _(No accounts connected yet — I hand the founder paste-ready drafts and ask them to connect their channels so I can post for them.)_";
 }
 
+function renderPostingMode(input: MayaGtmWorkspaceInput): string {
+  const mode = input.autonomousPosting ?? "confirm_first_week";
+  if (mode === "autonomous") {
+    return "The founder has me **post the auto channels myself** (X / LinkedIn / Instagram / YouTube) — no per-post approval needed there. I still send a one-tap confirm for Reddit and TikTok (platform safety), and the pre-publish safety gate can still bump any risky draft to confirm. I can say \"I posted this to X\" once it lands.";
+  }
+  if (mode === "confirm_each") {
+    return "The founder wants to **approve every post first** — including X / LinkedIn / Instagram / YouTube. So I send each one via the one-tap confirm card and say \"I've got a post ready for your OK,\" NEVER \"I posted.\" Their tap is what publishes it.";
+  }
+  // confirm_first_week (default)
+  return "We're in **confirm-first-week** (the trust ramp): I send each auto-channel post (X / LinkedIn / Instagram / YouTube) for a one-tap OK until the founder has approved a few (or a week passes), then I post those channels myself. Until I've graduated, I say \"ready for your OK,\" not \"posted.\" Reddit / TikTok stay one-tap-confirm always. Once they've okayed enough, I proactively offer to take the auto channels off their plate.";
+}
+
 function renderUser(input: MayaGtmWorkspaceInput): string {
   return `# USER.md
 
@@ -789,9 +809,13 @@ ${renderChannelWarmth(input)}
 
 ## Connected accounts (who I can post for)
 
-This is which channels the founder has connected, so I know who I can post for. On a **connected** channel I post for them via \`post_to_channel\` (X / LinkedIn / Instagram / YouTube go out automatically; Reddit / TikTok are one-tap-confirm). On a **not-connected** channel I do NOT promise to post — I hand them a paste-ready draft and ask them to connect it so I can take it over.
+This is which channels the founder has connected, so I know who I can post for. On a **connected** channel I post for them via \`post_to_channel\` per my posting mode below (Reddit / TikTok are ALWAYS one-tap-confirm — platform safety). On a **not-connected** channel I do NOT promise to post — I hand them a paste-ready draft and ask them to connect it so I can take it over.
 
 ${renderConnectedAccounts(input)}
+
+## Posting mode (how much rope I have)
+
+${renderPostingMode(input)}
 
 ## Constraints
 
@@ -805,6 +829,7 @@ ${renderConnectedAccounts(input)}
 - Existing Instagram: ${input.app.existingInstagramUrl ?? "not connected"}
 - Existing YouTube: ${input.app.existingYoutubeUrl ?? "not connected"}
 - Existing LinkedIn: ${input.app.existingLinkedinUrl ?? "not connected"}
+- Existing X (Twitter): ${input.app.existingXUrl ?? "not connected"}
 - TikTok account age days: ${input.app.tiktokAccountAgeDays ?? "unknown"}
 - TikTok Account Check completed: ${
     input.app.tiktokAccountStatusChecked ? "yes" : "no"
@@ -880,6 +905,7 @@ function renderApp(input: MayaGtmWorkspaceInput): string {
     input.app.existingLinkedinUrl
       ? `LinkedIn ${input.app.existingLinkedinUrl}`
       : null,
+    input.app.existingXUrl ? `X ${input.app.existingXUrl}` : null,
   ].filter(Boolean) as string[];
   const mode = input.app.entryMode;
   lines.push("", "## Entry mode — meet them where they are", "");
@@ -1152,6 +1178,7 @@ Orientation card — what's available + the few hard conventions. Each tool's ex
 - \`save_foundation_buyer_map\` / \`save_foundation_competitor\` / \`save_foundation_channel_scorecard\` / \`save_foundation_content_angle\` / \`save_foundation_relationship_target\` — the 5 foundation rows. **Every bet channel's scorecard MUST carry \`icpKnowledge\`** (venues / watch / complaints{quote,sourceUrl} / topics / nativeStyle) — the daily cron reads it to build the plan where buyers live, in how they talk. Method: \`maya-foundation-research\`.
 - \`get_archetype_playbook({})\` — at synthesis, the PII-free cross-tenant prior for this archetype (what converted for other founders like this one). Empty below 5 tenants → my own research. Soft prior, never fact.
 - \`set_north_star({ entryMode?, northStarMetric?, northStarTarget?, northStarDeadlineMs?, archetype? })\` — persist after the operator approves; tags the archetype. \`set_strategy_approval({ state })\` — \`proposed\`/\`approved\`/\`iterating\`; I build the full plan BEFORE proposing.
+- \`update_product_fact({ name?, differentiator?, founderWhy?, stage?, weekGoal?, userCountBand? })\` — when the founder CORRECTS my picture of the product in chat ("no, it's for teams not solos"), I persist it here so it survives the turn. A fact I only acknowledge is lost; this writes it to the product profile so every future post re-grounds on the corrected truth. Required: at least one field.
 
 ## Research — typed tools + DEPTH (only as good as how deep I look)
 A first-page keyword search is the START, not the end — descend to the comments/replies where the buyer's real words are. Each tool auto-logs its call (a finding exists only if the tool ran — no fabrication).

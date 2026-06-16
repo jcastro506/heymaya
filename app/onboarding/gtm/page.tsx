@@ -62,6 +62,10 @@ interface IntakeDraft {
   existingInstagramUrl: string;
   existingYoutubeUrl: string;
   existingLinkedinUrl: string;
+  // W4 — X (Twitter) is one of Maya's PRIMARY posting channels, but voice
+  // extraction ran blind there with no handle to read. Capturing it lets
+  // Phase-0 voice grounding sample the founder's real X posts.
+  existingXUrl: string;
   tiktokWarmupState:
     | "unknown"
     | "new_needs_warmup"
@@ -124,6 +128,7 @@ const DEFAULT_DRAFT: IntakeDraft = {
   existingInstagramUrl: "",
   existingYoutubeUrl: "",
   existingLinkedinUrl: "",
+  existingXUrl: "",
   tiktokWarmupState: "unknown",
   tiktokAccountAgeDays: "",
   tiktokAccountStatusChecked: false,
@@ -225,8 +230,28 @@ function GtmOnboardingBody() {
   }, [startOnboarding, isAuthenticated]);
 
   const canSubmit = useMemo(() => {
-    return draft.url.trim().startsWith("http") && draft.name.trim().length > 0;
-  }, [draft.name, draft.url]);
+    // W1.3 — a mobile-only founder with no landing page can submit with just a
+    // store link; the store listing becomes Maya's product-context source.
+    const hasWebUrl = draft.url.trim().startsWith("http");
+    const hasStoreUrl =
+      draft.appType === "mobile" &&
+      (draft.appStoreUrl.trim().startsWith("http") ||
+        draft.playStoreUrl.trim().startsWith("http"));
+    // W4 — the differentiator is THE anchor for every research worker + draft;
+    // make it confirm-required so Maya never has to guess the product's wedge.
+    return (
+      (hasWebUrl || hasStoreUrl) &&
+      draft.name.trim().length > 0 &&
+      draft.differentiator.trim().length > 0
+    );
+  }, [
+    draft.name,
+    draft.url,
+    draft.appType,
+    draft.appStoreUrl,
+    draft.playStoreUrl,
+    draft.differentiator,
+  ]);
 
   async function saveAndQueueResearch() {
     if (!canSubmit) return;
@@ -243,9 +268,18 @@ function GtmOnboardingBody() {
         ? toTiktokWarmupState(tiktokWarmth.state)
         : "unknown";
       const tiktokAccountAgeDays = tiktokWarmth?.accountAgeDays ?? "";
+      // W1.3 — when a mobile founder has no website, fall back to the store
+      // link as the app `url` (gtmApps.url is required; the inspector detects
+      // the store URL and reads the listing instead of crawling a dead site).
+      const webUrl = draft.url.trim();
+      const effectiveUrl = webUrl.startsWith("http")
+        ? webUrl
+        : draft.appStoreUrl.trim().startsWith("http")
+          ? draft.appStoreUrl.trim()
+          : draft.playStoreUrl.trim();
       const appId = await setAppProfile({
         name: draft.name.trim(),
-        url: draft.url.trim(),
+        url: effectiveUrl,
         appType: draft.appType,
         appStoreUrl:
           draft.appType === "mobile"
@@ -273,6 +307,7 @@ function GtmOnboardingBody() {
         existingInstagramUrl: emptyToUndefined(draft.existingInstagramUrl),
         existingYoutubeUrl: emptyToUndefined(draft.existingYoutubeUrl),
         existingLinkedinUrl: emptyToUndefined(draft.existingLinkedinUrl),
+        existingXUrl: emptyToUndefined(draft.existingXUrl),
         tiktokWarmupState,
         tiktokAccountAgeDays: numberOrUndefined(tiktokAccountAgeDays),
         tiktokAccountStatusChecked: draft.tiktokAccountStatusChecked,
@@ -433,7 +468,13 @@ function GtmOnboardingBody() {
               placeholder="Your app's name"
             />
           </Field>
-          <Field label="Product URL">
+          <Field
+            label={
+              draft.appType === "mobile"
+                ? "Product URL (optional — add your store link below)"
+                : "Product URL"
+            }
+          >
             <input
               value={draft.url}
               onChange={(event) =>
@@ -515,7 +556,7 @@ function GtmOnboardingBody() {
               />
             </Field>
           </div>
-          <Field label="What does it do, and what makes it different?">
+          <Field label="What does it do, and what makes it different? (required — Maya anchors everything on this)">
             <textarea
               value={draft.differentiator}
               onChange={(event) =>
@@ -610,7 +651,7 @@ function GtmOnboardingBody() {
               </select>
             </Field>
           </div>
-          <Field label="Mobile walkthrough recording">
+          <Field label="Walkthrough recording — your single best accuracy signal (any app type)">
             <div className="flex flex-wrap items-center gap-3">
               <label className="cursor-pointer rounded-lg border border-paper bg-ink-2 px-4 py-2 text-sm font-medium hover:bg-ink-3">
                 {walkthroughFile ? "Choose a different video" : "Choose video"}
@@ -736,6 +777,19 @@ function GtmOnboardingBody() {
                 }
                 className="input"
                 placeholder="https://www.linkedin.com/in/..."
+              />
+            </Field>
+            <Field label="X (Twitter) profile, if any">
+              <input
+                value={draft.existingXUrl}
+                onChange={(event) =>
+                  setDraft((d) => ({
+                    ...d,
+                    existingXUrl: event.target.value,
+                  }))
+                }
+                className="input"
+                placeholder="https://x.com/..."
               />
             </Field>
           </div>

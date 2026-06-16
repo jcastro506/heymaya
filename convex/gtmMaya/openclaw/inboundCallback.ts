@@ -73,7 +73,9 @@ const CALLBACK_KIND = v.union(
   // Mission Control — agent activity feed entry (drives the web UI Today tab).
   v.literal("post_activity"),
   // Data-collection sprint — inbound user message capture (one per turn).
-  v.literal("log_message")
+  v.literal("log_message"),
+  // W1.2 — founder corrects a product fact in chat; persisted to gtmApps.
+  v.literal("update_product_fact")
 );
 
 function constantTimeEqual(a: string, b: string): boolean {
@@ -1246,6 +1248,30 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
     );
   }
 
+  // §6 — send the onboarding synthesis handover EXACTLY ONCE, no matter how
+  // many main sessions race to "research done → send the plan" (the live demo
+  // had two main sessions send it 3× total, mixing tactical + strategic). This
+  // atomic, class-INDEPENDENT claim is the real fix: the FIRST founder-facing
+  // send in the synthesis window wins; the rest are swallowed. Progress updates
+  // (pre-research) and post-onboarding sends are unaffected.
+  const synthClaim = await ctx.runMutation(
+    internal.gtmMaya.agentLifecycle.claimFounderSynthesisSend,
+    { agentId: auth.agentId }
+  );
+  if (synthClaim.decision === "suppress") {
+    console.warn(
+      JSON.stringify({
+        event: "send_update.duplicate_synthesis_suppressed",
+        agentId: auth.agentId,
+        messageClass,
+      })
+    );
+    return new Response(
+      JSON.stringify({ ok: true, suppressed: "duplicate_synthesis" }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  }
+
   // Send via Telegram Bot API. Sprint 2.26 — prefer per-tenant bot
   // token; fall back to shared env var for dev/test deploys only.
   const { resolveBotForAgent } = await import("../telegramBotPerTenant");
@@ -1306,20 +1332,22 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
     );
   }
 
-  // Plan-delivery signal. When a STRATEGIC message is successfully delivered, the
-  // founder has received the synthesis plan (the first strategic message in
-  // onboarding). Stamp it durably so markFoundationComplete + the rows-complete
-  // backstop can gate on it — onboarding cannot finish on an undelivered plan.
-  if (result.ok && messageClass === "strategic") {
+  // §6 — the synthesis claim stamped strategyDeliveredAt (the completion gate)
+  // BEFORE this send. If WE claimed the synthesis ("send") but Telegram
+  // delivery failed, release the claim so a genuine retry re-claims + re-sends —
+  // otherwise onboarding could "complete" on a plan that never reached the
+  // founder. (A successful send keeps the stamp; that's the delivery signal
+  // markFoundationComplete + the rows-complete backstop gate on.)
+  if (synthClaim.decision === "send" && !result.ok) {
     try {
       await ctx.runMutation(
-        internal.gtmMaya.agentLifecycle.markStrategyDelivered,
+        internal.gtmMaya.agentLifecycle.releaseFounderSynthesisClaim,
         { agentId: auth.agentId }
       );
     } catch (err) {
       console.error(
         JSON.stringify({
-          event: "send_update.mark_strategy_delivered_failed",
+          event: "send_update.release_synthesis_claim_failed",
           agentId: auth.agentId,
           error: err instanceof Error ? err.message : String(err),
         })

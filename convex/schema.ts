@@ -4423,6 +4423,21 @@ export default defineSchema({
     // usage:{autoPostsThisPeriod, xUrlPostsThisPeriod, videosThisPeriod}}.
     // Parsed by planFeaturesGtm; ONLY Stripe webhook handlers write it.
     gtmPlanJson: v.optional(v.string()),
+    // W2 — founder's autonomous-vs-confirm posting preference, layered INSIDE
+    // the plan ceiling (planFeaturesGtm.canAutoPost) and the ban-safety floor
+    // (Reddit/TikTok always confirm). Only ever tightens the AUTO channels
+    // (X/LI/IG/YT). Default confirm_first_week (trust ramp). Absent = fail-closed
+    // to confirm. `autonomousSince` starts the ramp clock; `confirmedPostCount`
+    // counts founder one-tap confirms toward graduation (3 posts OR 7 days).
+    autonomousPosting: v.optional(
+      v.union(
+        v.literal("confirm_each"),
+        v.literal("confirm_first_week"),
+        v.literal("autonomous")
+      )
+    ),
+    autonomousSince: v.optional(v.number()),
+    confirmedPostCount: v.optional(v.number()),
     // Off-by-default toggle: also mirror the day's plan to Google Calendar.
     // The Google flood retired; the web Today view is the primary surface.
     googleCalendarMirrorEnabled: v.optional(v.boolean()),
@@ -4735,7 +4750,9 @@ export default defineSchema({
       // Data-collection sprint — inbound user message capture. Maya's
       // runtime POSTs one row per inbound user turn so the conversation
       // transcript persists to Convex (not just the ephemeral Fly disk).
-      v.literal("log_message")
+      v.literal("log_message"),
+      // W1.2 — founder corrects a product fact in chat; persisted to gtmApps.
+      v.literal("update_product_fact")
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
@@ -4808,6 +4825,8 @@ export default defineSchema({
     existingInstagramUrl: v.optional(v.string()),
     existingYoutubeUrl: v.optional(v.string()),
     existingLinkedinUrl: v.optional(v.string()),
+    // W4 — X (Twitter) handle for Phase-0 voice grounding (a primary channel).
+    existingXUrl: v.optional(v.string()),
     tiktokWarmupState: v.optional(
       v.union(
         v.literal("unknown"),

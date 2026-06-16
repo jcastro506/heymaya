@@ -23,7 +23,7 @@
  */
 
 import { v } from "convex/values";
-import { internalAction, internalQuery } from "../_generated/server";
+import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { ZernioClient } from "../integrations/zernio/client";
@@ -40,6 +40,7 @@ import { planFeaturesGtm } from "./planGtm";
 import { validateOutboundText, evaluateAutoPublishGate } from "./outboundFirewall";
 import { decidePublishMode, composeAutoPostAction } from "./calendarWrite";
 import { evaluateDedupGate } from "./engagementLedger";
+import { autonomyGranted, resolvePublishMode } from "./autonomyPolicy";
 
 const CONFIRM_LANDED_DELAY_MS = 24 * 60 * 60 * 1000;
 
@@ -89,6 +90,9 @@ export const getAgentPublishContext = internalQuery({
     voiceProfileJson: string | null;
     zernioProfileId: string | null;
     connectedAccountsJson: string | null;
+    autonomousPosting: string | null;
+    autonomousSince: number | null;
+    confirmedPostCount: number | null;
   } | null> => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent) return null;
@@ -98,7 +102,22 @@ export const getAgentPublishContext = internalQuery({
       voiceProfileJson: agent.voiceProfileJson ?? null,
       zernioProfileId: agent.zernioProfileId ?? null,
       connectedAccountsJson: agent.connectedAccountsJson ?? null,
+      autonomousPosting: agent.autonomousPosting ?? null,
+      autonomousSince: agent.autonomousSince ?? null,
+      confirmedPostCount: agent.confirmedPostCount ?? null,
     };
+  },
+});
+
+/** W2 — bump the confirm_first_week ramp counter on a landed founder confirm. */
+export const incrementConfirmedPostCount = internalMutation({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (ctx, args): Promise<void> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return;
+    await ctx.db.patch(args.agentId, {
+      confirmedPostCount: (agent.confirmedPostCount ?? 0) + 1,
+    });
   },
 });
 
@@ -170,7 +189,22 @@ export const publishContentDirect = internalAction({
     // Gate 1: ban-safety. A founder one-tap confirm overrides the manual-confirm
     // FORCE on Reddit/TikTok (the human just consented behind a real preview —
     // which is also what satisfies TikTok's content_preview_confirmed flag).
-    const mode = args.founderConfirmed ? "auto" : decidePublishMode(channel);
+    // Gate 1 + 1b: ban-safety floor, then the founder's autonomy preference
+    // layered inside it. resolvePublishMode only ever TIGHTENS an otherwise-auto
+    // channel (X/LI/IG/YT) to manual_confirm when autonomy hasn't been granted
+    // (confirm_each, or confirm_first_week not yet graduated). Ban-safety
+    // channels (reddit/tiktok) stay manual_confirm; a founder one-tap wins.
+    const granted = autonomyGranted(
+      agentCtx.autonomousPosting,
+      agentCtx.autonomousSince,
+      agentCtx.confirmedPostCount,
+      Date.now()
+    );
+    const mode = resolvePublishMode(
+      decidePublishMode(channel),
+      args.founderConfirmed === true,
+      granted
+    );
     // Gate 2: plan allows auto-post (ALWAYS applies, even on confirm).
     const plan = planFeaturesGtm({ gtmPlanJson: agentCtx.gtmPlanJson });
     // Gate 3: the S2.7 three-verdict gate. Skipped on founderConfirmed — the
@@ -262,6 +296,14 @@ export const publishContentDirect = internalAction({
           targetCommentId: args.targetCommentId,
           intentionalFollowUp: args.intentionalFollowUp,
         });
+      }
+      // W2 — a founder one-tap confirm that lands counts toward
+      // confirm_first_week graduation (3 confirmed posts OR 7 days).
+      if (args.founderConfirmed) {
+        await ctx.runMutation(
+          internal.gtmMaya.publishEngine.incrementConfirmedPostCount,
+          { agentId: args.agentId }
+        );
       }
       return {
         action: "auto",
