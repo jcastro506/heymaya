@@ -24,6 +24,11 @@ import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import {
+  buildGtmPlanJson,
+  type GtmPlan,
+  type GtmPlanStatus,
+} from "../gtmMaya/planGtm";
 
 const TEST_CLERK_USER_ID_PREFIX = "test_gtm_synth_";
 const TEST_EMAIL = "gtm-synth-test@heymaya.local";
@@ -1068,6 +1073,179 @@ export const patchTelegramChatId = internalMutation({
       telegramPairedAt: Date.now(),
       updatedAt: Date.now(),
     });
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* Real-signup demo helpers (Stripe-bypass comp + live peek + repoint).        */
+/*                                                                            */
+/* These drive a real prod signup through a demo without Stripe: comp the     */
+/* agent to active, peek its live state, and (for synthetic runs) repoint the  */
+/* latest test creator onto the operator's real email so dashboard +          */
+/* comp-by-email resolve. Restored 2026-06-15 after a `git reset --hard`       */
+/* wiped them from git while they stayed deployed to prod.                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Comp the REAL (non-synthetic) agent owned by `email` to an active GTM plan,
+ * bypassing Stripe. For demoing a real prod signup before/without billing.
+ *   npx convex run _admin/realWorldDeployGtm:compRealAgentByEmail \
+ *     '{"email":"founder@example.com"}'   # tier defaults to gtm99
+ */
+export const compRealAgentByEmail = internalMutation({
+  args: {
+    email: v.string(),
+    tier: v.optional(v.union(v.literal("gtm99"), v.literal("studio"))),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; agentId?: string; reason?: string }> => {
+    const creator = await ctx.db
+      .query("creators")
+      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .order("desc")
+      .first();
+    if (!creator) return { ok: false, reason: `no creator for email ${args.email}` };
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    if (!agent) return { ok: false, reason: "no gtmAgent for creator" };
+    await ctx.db.patch(agent._id, {
+      gtmPlanJson: buildGtmPlanJson({
+        status: "active" as GtmPlanStatus,
+        tier: (args.tier as GtmPlan | undefined) ?? "gtm99",
+        periodStartMs: Date.now(),
+      }),
+      updatedAt: Date.now(),
+    });
+    return { ok: true, agentId: agent._id };
+  },
+});
+
+/**
+ * Peek the latest REAL (non-synthetic) agent's live state: deploy + plan +
+ * telegram pairing + recent activity + recent Maya messages. The triage view
+ * for "what is the operator's real signup actually doing right now."
+ *   npx convex run _admin/realWorldDeployGtm:peekLatestRealAgent
+ */
+export const peekLatestRealAgent = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<unknown> => {
+    const all = await ctx.db.query("creators").collect();
+    const reals = all
+      .filter((c) => !c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (reals.length === 0) return { found: false };
+    const creator = reals[0];
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    if (!agent) {
+      return { found: true, creatorEmail: creator.email, agent: null };
+    }
+    const app = agent.appId ? await ctx.db.get(agent.appId) : null;
+    const [activity, messages] = await Promise.all([
+      ctx.db
+        .query("gtmAgentActivity")
+        .withIndex("by_account_and_created", (q) => q.eq("accountId", creator._id))
+        .order("desc")
+        .take(10),
+      ctx.db
+        .query("mayaMessages")
+        .withIndex("by_account_and_ts", (q) => q.eq("accountId", creator._id))
+        .order("desc")
+        .take(10),
+    ]);
+    let plan: unknown = null;
+    if (agent.gtmPlanJson) {
+      try {
+        plan = JSON.parse(agent.gtmPlanJson);
+      } catch {
+        plan = agent.gtmPlanJson;
+      }
+    }
+    const iso = (ms?: number) => (ms ? new Date(ms).toISOString() : null);
+    return {
+      found: true,
+      creatorEmail: creator.email,
+      clerkUserId: creator.clerkUserId,
+      deploy: {
+        flyAppId: agent.openClawFlyAppId ?? null,
+        deployedAt: iso(agent.deployedAt),
+        foundationCompletedAt: iso(agent.foundationCompletedAt),
+        strategyDeliveredAt: iso(agent.strategyDeliveredAt),
+      },
+      plan,
+      telegram: {
+        chatId: agent.telegramChatId ?? null,
+        pairedAt: iso(agent.telegramPairedAt),
+      },
+      product: {
+        name: (app as { name?: string } | null)?.name ?? null,
+        url: (app as { url?: string } | null)?.url ?? null,
+      },
+      recentActivity: activity.map((a) => ({
+        kind: a.kind,
+        summary: a.summary,
+        at: iso(a.createdAt),
+      })),
+      recentMessages: messages.map((m) => ({
+        role: m.role,
+        channel: m.channel,
+        body: m.body.slice(0, 200),
+        at: iso(m.ts),
+      })),
+    };
+  },
+});
+
+/**
+ * Repoint the latest synthetic test creator onto a real `clerkUserId` + email,
+ * so a real web sign-in (or dashboard lookup) maps onto the already-deployed
+ * test agent instead of spinning up a fresh one.
+ *   npx convex run _admin/realWorldDeployGtm:repointLatestTestCreator \
+ *     '{"clerkUserId":"user_abc","email":"founder@example.com"}'
+ */
+export const repointLatestTestCreator = internalMutation({
+  args: { clerkUserId: v.string(), email: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; creatorId?: string; reason?: string }> => {
+    const all = await ctx.db.query("creators").collect();
+    const tests = all
+      .filter((c) => c.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX))
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (tests.length === 0) return { ok: false, reason: "no test creator" };
+    await ctx.db.patch(tests[0]._id, {
+      clerkUserId: args.clerkUserId,
+      email: args.email,
+    });
+    return { ok: true, creatorId: tests[0]._id };
+  },
+});
+
+/**
+ * Convenience wrapper: attach the latest synthetic test creator to a real
+ * email by deriving a stable non-test clerkUserId, then repointing. Lets a
+ * demo bind the just-deployed test agent to the operator's email in one call.
+ *   npx convex run _admin/realWorldDeployGtm:attachLatestAgentToEmail \
+ *     '{"email":"founder@example.com"}'
+ */
+export const attachLatestAgentToEmail = internalAction({
+  args: { email: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; creatorId?: string; reason?: string }> => {
+    const clerkUserId = `attached_${args.email.replace(/[^a-zA-Z0-9]/g, "_")}`;
+    return await ctx.runMutation(
+      internal._admin.realWorldDeployGtm.repointLatestTestCreator,
+      { clerkUserId, email: args.email }
+    );
   },
 });
 
