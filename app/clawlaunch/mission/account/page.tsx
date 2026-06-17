@@ -18,6 +18,7 @@ import {
   NeedsOnboarding,
 } from "../_components";
 import { ConnectedAccounts } from "./_ConnectedAccounts";
+import { TelegramConnect } from "./_TelegramConnect";
 import { ProductBrain } from "./_ProductBrain";
 import { PostingControl } from "./_PostingControl";
 
@@ -151,6 +152,9 @@ export default function AccountPage() {
             label="Telegram"
             value={<Pill tone="lime">primary channel</Pill>}
           />
+          <div className="mt-3 border-t border-paper-faint/15 pt-3">
+            <TelegramConnect />
+          </div>
           <div className="mt-3 border-t border-paper-faint/15 pt-3">
             <p className="mb-2 font-mono text-xs uppercase tracking-wide text-paper-faint">
               Channels

@@ -1497,25 +1497,31 @@ export const deployMayaGtm = internalAction({
       }
     }
 
-    // Sprint 2.16u-fix17 — mint a per-machine webhook secret. OpenClaw's
-    // telegram channel uses this to verify incoming webhook signatures
-    // (X-Telegram-Bot-Api-Secret-Token header). 32 hex bytes is plenty.
-    const telegramWebhookSecret = row.agent.telegramChatId
-      ? Array.from(crypto.getRandomValues(new Uint8Array(32)))
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join("")
-      : undefined;
+    // SHARED-BOT model (real-time operator sprint): the SINGLE shared @Maya
+    // bot webhook is owned by Convex (registered ONCE via
+    // gtmMaya/telegramRouter:setSharedBotWebhook). Convex is the switchboard —
+    // it maps each chat to this machine and FORWARDS the update to the
+    // machine's /telegram-webhook, where OpenClaw validates it against the
+    // SHARED forward secret. So the machine's webhookSecret = that shared
+    // secret, set UNCONDITIONALLY (the chat is paired AFTER deploy now, via
+    // the QR, so we can't gate on telegramChatId). Legacy fallback: a
+    // per-deploy random secret only when no shared bot is configured.
+    const sharedForwardSecret = process.env.TELEGRAM_MACHINE_FORWARD_SECRET;
+    const telegramWebhookSecret =
+      sharedForwardSecret ??
+      (row.agent.telegramChatId
+        ? Array.from(crypto.getRandomValues(new Uint8Array(32)))
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("")
+        : undefined);
 
-    // Sprint 2.16u-fix18 — register the Telegram webhook from CONVEX,
-    // not from OpenClaw on Fly. Fly's outbound network to api.telegram.org
-    // is unreliable; setWebhook from inside the Fly machine fails with
-    // "Network request for 'setWebhook' failed!" (verified live
-    // 2026-05-27 on clawlaunch-ws74j011acjqk48b7s).
-    //
-    // Convex's network → api.telegram.org IS reliable (verified earlier
-    // — direct sendMessage curl from Convex worked instantly with
-    // message_id 129). So we register the webhook here once, idempotent.
-    if (row.agent.telegramChatId && telegramWebhookSecret) {
+    // LEGACY per-tenant path ONLY (no shared bot configured): register the
+    // bot's webhook → THIS machine from Convex. In SHARED-BOT mode this is
+    // SKIPPED — pointing the one shared webhook at a machine per-deploy would
+    // hijack it away from Convex (the exact disaster the switchboard fixes).
+    // Convex's network → api.telegram.org is reliable (Fly's is not), which is
+    // why registration was moved here originally (Sprint 2.16u-fix18).
+    if (!sharedForwardSecret && row.agent.telegramChatId && telegramWebhookSecret) {
       const botToken = process.env.TELEGRAM_BOT_TOKEN;
       if (!botToken) {
         return fail(
