@@ -103,23 +103,20 @@ function Masthead() {
           <a href="#safe" className="opacity-60 hover:opacity-100">
             Ban-safe
           </a>
-          <Link href="/sign-in" className="opacity-60 hover:opacity-100">
-            Sign in
-          </Link>
           <Link
             prefetch={false}
-          href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
+            href="/sign-in"
             className="rounded-full bg-[#0a0a0a] px-4 py-2 text-[#fbfaf6] transition-colors hover:bg-[#0a0a0a]/85"
           >
-            Open Maya →
+            Sign in →
           </Link>
         </nav>
         <Link
           prefetch={false}
-          href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
+          href="/sign-in"
           className="font-mono text-[11px] uppercase tracking-[0.22em] underline-offset-[6px] hover:underline sm:hidden"
         >
-          Open Maya →
+          Sign in →
         </Link>
       </div>
     </header>
@@ -1358,10 +1355,10 @@ function FinalCTA() {
           <div className="mt-16 flex flex-wrap items-center gap-6">
             <Link
               prefetch={false}
-          href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
+              href="/sign-in"
               className="cta-primary cta-primary-large"
             >
-              {primaryCtaLabel("Open Maya")}
+              Sign in
               <span className="cta-arrow">→</span>
             </Link>
             <div className="max-w-sm">
