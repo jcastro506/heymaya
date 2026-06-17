@@ -93,8 +93,21 @@ function clearsPromotionFloor(s: ChannelScoreInput): boolean {
  * Decide which channels Maya actually runs, from the judge's scored rows.
  * Pure + deterministic — same input always yields the same selection.
  */
+export interface SelectActiveChannelsOpts {
+  /**
+   * Tier ceiling on how many channels Maya RUNS (the per-tier paywall — the #1
+   * COGS/margin lever, since Zernio bills per connected account). Undefined =
+   * NO cap (legacy behavior, all high-fit primaries run). When set, the active
+   * set is trimmed to the top-N by priority (primaries first, then promoted),
+   * and the cap WINS over the floor-of-3 (a tier that only pays for 2 channels
+   * runs 2). Resolve from `planFeaturesGtm(agent).autoPostChannelCap`.
+   */
+  maxActiveChannels?: number;
+}
+
 export function selectActiveChannels(
-  scores: ReadonlyArray<ChannelScoreInput>
+  scores: ReadonlyArray<ChannelScoreInput>,
+  opts: SelectActiveChannelsOpts = {}
 ): ActiveChannelSelection {
   // Only ongoing bet channels are eligible. De-dupe by channel (keep the
   // highest-scored row if a channel somehow appears twice) and drop blocked.
@@ -139,6 +152,21 @@ export function selectActiveChannels(
     if (fallback.decision !== "primary") promoted.push(fallback.channel);
   }
 
+  // Tier cap: trim the active set to the per-tier ceiling (the paywall + the
+  // Zernio per-account COGS lever). `active` is already in priority order
+  // (primaries by score, then promoted), so a head-slice keeps the bets and
+  // drops the lowest-priority extras into parked. The cap WINS over the floor
+  // (a 2-channel tier runs 2, even though the portfolio floor wants 3). A cap
+  // <= 0 (fail-closed/inactive) runs nothing.
+  let capped = false;
+  if (
+    typeof opts.maxActiveChannels === "number" &&
+    active.length > Math.max(0, opts.maxActiveChannels)
+  ) {
+    active.length = Math.max(0, opts.maxActiveChannels);
+    capped = true;
+  }
+
   const activeChannels = active.map((s) => s.channel);
   const activeSet = new Set<GtmChannel>(activeChannels);
   const parked = eligible
@@ -146,29 +174,41 @@ export function selectActiveChannels(
     .sort(byScoreDesc)
     .map((s) => s.channel);
 
-  const belowFloor = activeChannels.length < MIN_ACTIVE_CHANNELS;
+  // The floor only "fails" on thin evidence — NOT when the tier cap itself is
+  // below the floor (that's a paid ceiling, not a research gap).
+  const belowFloor =
+    !capped && activeChannels.length < MIN_ACTIVE_CHANNELS;
+
+  // A channel trimmed by the cap is no longer "promoted-and-active".
+  const promotedActive = promoted.filter((c) => activeSet.has(c));
 
   // 3. Honesty note.
   let note: string;
   if (activeChannels.length === 0) {
-    note = "No channels cleared the evidence bar — research is incomplete.";
+    note =
+      capped && opts.maxActiveChannels === 0
+        ? "Plan allows 0 channels — nothing is running (inactive/fail-closed)."
+        : "No channels cleared the evidence bar — research is incomplete.";
   } else if (belowFloor) {
     note =
       `Only ${activeChannels.length} channel(s) clear the bar ` +
       `(${activeChannels.join(", ")}). Activating just those rather than ` +
       `padding the mix with channels the evidence doesn't support yet.`;
   } else {
-    const promotedNote = promoted.length
-      ? ` (${promoted.join(", ")} promoted to meet the 3-channel floor)`
+    const promotedNote = promotedActive.length
+      ? ` (${promotedActive.join(", ")} promoted to meet the 3-channel floor)`
       : "";
-    note = `Running ${activeChannels.length} channels: ${activeChannels.join(", ")}${promotedNote}.`;
+    const capNote = capped
+      ? ` — capped to your plan's ${opts.maxActiveChannels}-channel limit`
+      : "";
+    note = `Running ${activeChannels.length} channels: ${activeChannels.join(", ")}${promotedNote}${capNote}.`;
   }
 
   return {
     active: activeChannels,
     primaryChannel: activeChannels[0] ?? null,
     secondaryChannel: activeChannels[1] ?? null,
-    promoted,
+    promoted: promotedActive,
     parked,
     belowFloor,
     note,

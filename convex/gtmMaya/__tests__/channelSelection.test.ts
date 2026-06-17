@@ -134,3 +134,74 @@ describe("selectActiveChannels", () => {
     expect(sel.active).toEqual(["reddit", "x", "tiktok"]);
   });
 });
+
+describe("selectActiveChannels — tier cap (maxActiveChannels)", () => {
+  it("trims the active set to the cap, dropping lowest-priority into parked", () => {
+    const sel = selectActiveChannels(
+      [
+        row("reddit", "primary", { score: 0.95 }),
+        row("tiktok", "primary", { score: 0.9 }),
+        row("instagram", "primary", { score: 0.88 }),
+        row("youtube", "primary", { score: 0.86 }),
+        row("x", "primary", { score: 0.8 }),
+      ],
+      { maxActiveChannels: 3 }
+    );
+    expect(sel.active).toEqual(["reddit", "tiktok", "instagram"]);
+    expect(sel.parked).toEqual(["youtube", "x"]);
+    expect(sel.belowFloor).toBe(false);
+    expect(sel.note).toContain("capped to your plan's 3-channel limit");
+  });
+
+  it("cap WINS over the floor of 3 (a 2-channel tier runs 2, not belowFloor)", () => {
+    const sel = selectActiveChannels(
+      [
+        row("reddit", "primary", { score: 0.9 }),
+        row("x", "secondary", { score: 0.7 }),
+        row("linkedin", "secondary", { score: 0.6 }),
+      ],
+      { maxActiveChannels: 2 }
+    );
+    expect(sel.active).toEqual(["reddit", "x"]);
+    expect(sel.belowFloor).toBe(false); // capped, not thin evidence
+    expect(sel.promoted).toEqual(["x"]); // trimmed linkedin no longer "promoted"
+    expect(sel.parked).toContain("linkedin");
+  });
+
+  it("cap of 0 runs nothing (inactive / fail-closed)", () => {
+    const sel = selectActiveChannels(
+      [row("reddit", "primary", { score: 0.9 })],
+      { maxActiveChannels: 0 }
+    );
+    expect(sel.active).toEqual([]);
+    expect(sel.primaryChannel).toBeNull();
+    expect(sel.note).toContain("0 channels");
+  });
+
+  it("cap >= active count is a no-op (no trim, no cap note)", () => {
+    const sel = selectActiveChannels(
+      [
+        row("reddit", "primary", { score: 0.9 }),
+        row("tiktok", "primary", { score: 0.85 }),
+        row("x", "primary", { score: 0.8 }),
+      ],
+      { maxActiveChannels: 6 }
+    );
+    expect(sel.active).toEqual(["reddit", "tiktok", "x"]);
+    expect(sel.belowFloor).toBe(false);
+    expect(sel.note).not.toContain("capped");
+  });
+
+  it("no opts (or empty opts) = NO cap — legacy behavior preserved", () => {
+    const scores = [
+      row("reddit", "primary", { score: 0.95 }),
+      row("tiktok", "primary", { score: 0.9 }),
+      row("instagram", "primary", { score: 0.88 }),
+      row("youtube", "primary", { score: 0.86 }),
+    ];
+    const withoutOpts = selectActiveChannels(scores);
+    const withEmptyOpts = selectActiveChannels(scores, {});
+    expect(withoutOpts.active).toEqual(withEmptyOpts.active);
+    expect(withoutOpts.active.length).toBe(4); // all 4 primaries, uncapped
+  });
+});
