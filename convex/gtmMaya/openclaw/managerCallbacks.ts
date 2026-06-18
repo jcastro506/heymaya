@@ -1051,6 +1051,81 @@ export const actionLoggedHttp = httpAction(async (ctx, request) => {
   return new Response("ok", { status: 200 });
 });
 
+// ───────────────────── Weekly: strategic review ─────────────────────
+
+/**
+ * Sun-9pm weekly strategic review. Maya authors it agent-side (the
+ * `maya-results-reviewer` skill) and POSTs the structured form here so it
+ * persists durably and surfaces in the Results UI's "Strategic Review"
+ * section — previously it only ever reached Telegram as prose and evaporated.
+ *
+ * `weekStartLocal` is the Monday of the reviewed week as YYYY-MM-DD.
+ *
+ * Idempotency is structural, not key-based: the underlying mutation upserts on
+ * (account, weekStartLocal), so any number of POSTs for the same week collapse
+ * to one row — a retry AND a genuine re-author both land on the single row for
+ * that week. This is a stronger guarantee than a per-POST idempotency key
+ * (which would only de-dup byte-identical retries), so this callback does not
+ * claim a `gtmHookCallbacks` key. `idempotencyKey` is accepted-but-ignored for
+ * wire-shape parity with the other manager callbacks.
+ */
+interface WeeklyReviewPayload {
+  idempotencyKey?: string;
+  weekStartLocal: string;
+  markdown: string;
+  winsArray?: string[];
+  lossesArray?: string[];
+  nextWeekRecommendations?: string[];
+}
+
+/** YYYY-MM-DD shape check — keeps the lexicographic-ordering contract on the
+ *  index honest (the query relies on string order == chronological order). */
+function isWeekStartLocal(s: unknown): s is string {
+  return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+}
+
+function toStringArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((x): x is string => typeof x === "string");
+}
+
+export const weeklyReviewHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let body: WeeklyReviewPayload;
+  try {
+    body = (await request.json()) as WeeklyReviewPayload;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (!isWeekStartLocal(body.weekStartLocal) || !body.markdown) {
+    return new Response("missing required fields", { status: 400 });
+  }
+
+  try {
+    await ctx.runMutation(internal.gtmMaya.managerStore.upsertWeeklyReview, {
+      accountId: auth.accountId,
+      agentId: auth.agentId,
+      weekStartLocal: body.weekStartLocal,
+      markdown: body.markdown,
+      winsArray: toStringArray(body.winsArray),
+      lossesArray: toStringArray(body.lossesArray),
+      nextWeekRecommendations: toStringArray(body.nextWeekRecommendations),
+    });
+  } catch (err) {
+    return new Response((err as Error).message, { status: 400 });
+  }
+
+  await foundationBreadcrumb(
+    ctx,
+    auth.accountId,
+    auth.agentId,
+    `Weekly strategic review saved (week of ${body.weekStartLocal}).`
+  );
+  return new Response("ok", { status: 200 });
+});
+
 // ───────────────────── Continuous: niche learning ─────────────────────
 
 const LEARNING_KINDS = [

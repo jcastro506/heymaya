@@ -165,6 +165,67 @@ describe("Mission Control — read queries", () => {
       ).length
     ).toBe(2);
   });
+
+  it("getMyLatestWeeklyReview: null for unauthed, returns latest by week, cross-tenant isolated", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupOperator(t, "u_wr_q_a");
+    const b = await setupOperator(t, "u_wr_q_b");
+
+    // No identity → fail-closed null.
+    expect(
+      await t.query(api.gtmMaya.missionControl.getMyLatestWeeklyReview)
+    ).toBeNull();
+
+    // Before any review exists → null for the authed caller.
+    expect(
+      await a.authed.query(api.gtmMaya.missionControl.getMyLatestWeeklyReview)
+    ).toBeNull();
+
+    // Seed two weeks for A (out of order) + one for B.
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      await ctx.db.insert("weeklyReviews", {
+        creatorId: a.accountId,
+        weekStartLocal: "2026-06-08",
+        markdown: "A week 1",
+        winsArray: ["a-win-1"],
+        lossesArray: [],
+        nextWeekRecommendations: [],
+        generatedAt: now - 1000,
+      });
+      await ctx.db.insert("weeklyReviews", {
+        creatorId: a.accountId,
+        weekStartLocal: "2026-06-15",
+        markdown: "A week 2 (latest)",
+        winsArray: ["a-win-2"],
+        lossesArray: [],
+        nextWeekRecommendations: [],
+        generatedAt: now,
+      });
+      await ctx.db.insert("weeklyReviews", {
+        creatorId: b.accountId,
+        weekStartLocal: "2026-06-22",
+        markdown: "B-only review",
+        winsArray: [],
+        lossesArray: [],
+        nextWeekRecommendations: [],
+        generatedAt: now + 1000,
+      });
+    });
+
+    // A gets the latest week (by weekStartLocal desc), never B's.
+    const aLatest = await a.authed.query(
+      api.gtmMaya.missionControl.getMyLatestWeeklyReview
+    );
+    expect(aLatest?.weekStartLocal).toBe("2026-06-15");
+    expect(aLatest?.markdown).toBe("A week 2 (latest)");
+
+    // B sees only its own — never A's, even though A has more recent rows.
+    const bLatest = await b.authed.query(
+      api.gtmMaya.missionControl.getMyLatestWeeklyReview
+    );
+    expect(bLatest?.markdown).toBe("B-only review");
+  });
 });
 
 describe("Mission Control — activity feed (autonomous update)", () => {

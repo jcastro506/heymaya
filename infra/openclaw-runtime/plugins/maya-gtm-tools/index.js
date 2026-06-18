@@ -1471,6 +1471,25 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) => postLc("record_conversion", { ...p, idempotencyKey: key(p) }, ctx.signal),
     }),
     tool({
+      name: "save_steering_directive",
+      label: "Save Steering Directive",
+      description:
+        "Persist a STEERING directive the FOUNDER gave you ('focus more on LinkedIn', 'stop posting on X', 'go harder on the pricing angle'). Call this whenever the founder tells you to change WHERE you focus, WHAT angle to push, or HOW MUCH to post. REQUIRED: directive (verbatim founder text). Optionally pass laneHints (lowercased channels/angles, e.g. ['linkedin','pricing']) and intent ('focus' | 'avoid' | 'angle' | 'pace' | 'other'). This makes the direction durable so the engine + your future turns honor it — capturing it here is how you actually obey, not just acknowledge.",
+      parameters: Type.Object({
+        directive: Type.String({ description: "Verbatim founder directive." }),
+        laneHints: Type.Optional(
+          Type.Array(Type.String(), {
+            description: "Lowercased channel/angle hints, e.g. ['linkedin','pricing'].",
+          })
+        ),
+        intent: Type.Optional(Enum(["focus", "avoid", "angle", "pace", "other"])),
+        turnId: Type.Optional(Type.String()),
+        idempotencyKey: IdemKey,
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("save_steering_directive", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+    tool({
       name: "wrap_link",
       label: "Wrap Link (attribution)",
       description: "Wrap a destination URL in a tracked redirect for signup attribution. REQUIRED: destinationUrl (http/https).",

@@ -143,6 +143,31 @@ export const getMyPostAttribution = query({
   },
 });
 
+/**
+ * Latest weekly strategic review (Sun-9pm cadence) — Results tab "Strategic
+ * Review" section. Returns the single most-recent row (or null if Maya hasn't
+ * run her first weekly review yet). Auth-scoped to the caller's own account
+ * (`creatorId` on `weeklyReviews` IS the gtm-agent's account id); fail-closed
+ * to null for non-gtm / unauthenticated callers, so operator B can never read
+ * operator A's review. `weekStartLocal` is a YYYY-MM-DD string whose
+ * lexicographic order matches chronological order, so the latest row is the
+ * last one on the `by_creator_and_weekStartLocal` index.
+ */
+export const getMyLatestWeeklyReview = query({
+  args: {},
+  handler: async (ctx): Promise<Doc<"weeklyReviews"> | null> => {
+    const creator = await resolveMyGtmCreator(ctx);
+    if (!creator) return null;
+    return await ctx.db
+      .query("weeklyReviews")
+      .withIndex("by_creator_and_weekStartLocal", (q) =>
+        q.eq("creatorId", creator._id)
+      )
+      .order("desc")
+      .first();
+  },
+});
+
 // ───────────────────────── Account ─────────────────────────
 
 /** Account/profile view for the Account tab — the operator's product, North
