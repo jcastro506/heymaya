@@ -1,17 +1,28 @@
 /**
- * GTM ($99 single-tier "gtm99") billing — reuses the creator-product Stripe
- * plumbing (stripeClient singleton, the signed webhook route, stripeWebhookEvents
- * idempotency) and adds the GTM-specific write path: subscription status →
- * `gtmAgents.gtmPlanJson` (parsed by planFeaturesGtm).
+ * GTM 3-tier billing — reuses the creator-product Stripe plumbing (stripeClient
+ * singleton, the signed webhook route, stripeWebhookEvents idempotency) and adds
+ * the GTM-specific write path: subscription status → `gtmAgents.gtmPlanJson`
+ * (parsed by planFeaturesGtm).
  *
- * Single tier, 7-day full-access trial (see planGtm.gtmTrialDays). The creator
- * row's `plan`/`stripeSubscriptionId` fields stay UNTOUCHED for gtm-agents —
- * the GTM plan lives entirely in gtmPlanJson so the two products never collide.
+ * Three tiers (see planGtm.ts for the feature matrix):
+ *   - starter ($99/mo)  — up to 3 active channels, no video.
+ *   - growth  ($149/mo) — up to 6 active channels, no video.
+ *   - studio  ($199/mo) — up to 6 active channels + Creatify video.
+ * 7-day full-access trial on the first subscription (see planGtm.gtmTrialDays).
+ * The legacy `gtm99` tier is accepted on READ only (planGtm maps it to starter);
+ * it is never emitted here. The creator row's `plan`/`stripeSubscriptionId`
+ * fields stay UNTOUCHED for gtm-agents — the GTM plan lives entirely in
+ * gtmPlanJson so the two products never collide.
  *
  * Operator setup required before checkout works (can't be code-side):
- *   1. Create a $99/mo Stripe Product + Price (optional $999/yr).
- *   2. Set STRIPE_PRICE_GTM99_MONTHLY (and _ANNUAL) in Convex env.
- * Until then `gtmPriceId` returns null and checkout rejects with a clear error.
+ *   1. Create the Stripe Product + Price for each tier ($99 / $149 / $199,
+ *      optional annual variants).
+ *   2. Set STRIPE_PRICE_<TIER>_<INTERVAL> in Convex env for each tier:
+ *      STRIPE_PRICE_STARTER_MONTHLY / _ANNUAL,
+ *      STRIPE_PRICE_GROWTH_MONTHLY  / _ANNUAL,
+ *      STRIPE_PRICE_STUDIO_MONTHLY  / _ANNUAL.
+ * Until then `gtmPriceId` returns null for that tier and checkout rejects with
+ * a clear error naming the missing env var.
  */
 
 import { v } from "convex/values";
@@ -34,16 +45,25 @@ import {
 
 export type GtmInterval = "monthly" | "annual";
 
+/** Map a GTM tier → its STRIPE_PRICE_* env-var prefix. */
+function tierEnvPrefix(tier: GtmPlan): "STARTER" | "GROWTH" | "STUDIO" {
+  if (tier === "studio") return "STUDIO";
+  if (tier === "growth") return "GROWTH";
+  return "STARTER";
+}
+
 /**
  * Resolve the Stripe price env var for a tier + interval → price id (null if
- * unset). gtm99 → STRIPE_PRICE_GTM99_<INTERVAL>; studio → STRIPE_PRICE_STUDIO_<INTERVAL>.
+ * unset). Env convention: STRIPE_PRICE_<TIER>_<INTERVAL>, e.g.
+ *   starter → STRIPE_PRICE_STARTER_<INTERVAL>
+ *   growth  → STRIPE_PRICE_GROWTH_<INTERVAL>
+ *   studio  → STRIPE_PRICE_STUDIO_<INTERVAL>
  */
 export function gtmPriceId(
   interval: GtmInterval,
-  tier: GtmPlan = "gtm99"
+  tier: GtmPlan = "starter"
 ): string | null {
-  const prefix = tier === "studio" ? "STUDIO" : "GTM99";
-  const envVar = `STRIPE_PRICE_${prefix}_${interval.toUpperCase()}`;
+  const envVar = `STRIPE_PRICE_${tierEnvPrefix(tier)}_${interval.toUpperCase()}`;
   const value = process.env[envVar];
   return value && value.length > 0 ? value : null;
 }
@@ -55,7 +75,11 @@ const GTM_STATUS = v.union(
   v.literal("none")
 );
 
-const GTM_PLAN = v.union(v.literal("gtm99"), v.literal("studio"));
+const GTM_PLAN = v.union(
+  v.literal("starter"),
+  v.literal("growth"),
+  v.literal("studio")
+);
 
 /* -------------------------------------------------------------------------- */
 /* Plan write — the single mutation the webhook AND the operator comp call.    */
@@ -89,7 +113,7 @@ export const applyGtmPlan = internalMutation({
     await ctx.db.patch(agent._id, {
       gtmPlanJson: buildGtmPlanJson({
         status: args.status as GtmPlanStatus,
-        tier: (args.tier as GtmPlan | undefined) ?? "gtm99",
+        tier: (args.tier as GtmPlan | undefined) ?? "starter",
         periodStartMs: Date.now(),
       }),
       updatedAt: Date.now(),
@@ -182,7 +206,7 @@ export const applyGtmPlanFromWebhookPublic = mutation({
  */
 export function gtmTierFromPriceId(priceId: string | null | undefined): GtmPlan | null {
   if (!priceId) return null;
-  for (const tier of ["studio", "gtm99"] as const) {
+  for (const tier of ["studio", "growth", "starter"] as const) {
     for (const interval of ["monthly", "annual"] as const) {
       if (gtmPriceId(interval, tier) === priceId) return tier;
     }
@@ -265,10 +289,10 @@ export const createGtmCheckoutSession = action({
     if (!me) throw new Error("createGtmCheckoutSession: no gtm-agent account.");
 
     const interval: GtmInterval = args.interval ?? "monthly";
-    const tier: GtmPlan = (args.tier as GtmPlan | undefined) ?? "gtm99";
+    const tier: GtmPlan = (args.tier as GtmPlan | undefined) ?? "starter";
     const priceId = gtmPriceId(interval, tier);
     if (!priceId) {
-      const prefix = tier === "studio" ? "STUDIO" : "GTM99";
+      const prefix = tierEnvPrefix(tier);
       throw new Error(
         `createGtmCheckoutSession: STRIPE_PRICE_${prefix}_${interval.toUpperCase()} is not set — operator must create the Stripe product + set the env var.`
       );
@@ -332,7 +356,7 @@ export const compGtmPlanByAgent = internalMutation({
     await ctx.db.patch(args.agentId, {
       gtmPlanJson: buildGtmPlanJson({
         status: args.status as GtmPlanStatus,
-        tier: (args.tier as GtmPlan | undefined) ?? "gtm99",
+        tier: (args.tier as GtmPlan | undefined) ?? "starter",
         periodStartMs: Date.now(),
       }),
       updatedAt: Date.now(),

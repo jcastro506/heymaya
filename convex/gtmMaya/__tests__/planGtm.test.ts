@@ -12,47 +12,97 @@ function planJson(obj: Record<string, unknown>): string {
   return JSON.stringify(obj);
 }
 
-// Real $99 gtm99: everything EXCEPT video (canVideo false, videoCreditsMonth 0).
-const ACTIVE_FULL = planJson({
-  tier: "gtm99",
+// $99 starter: up to 3 active channels, everything EXCEPT video.
+const STARTER_FULL = planJson({
+  tier: "starter",
   status: "active",
   connectedChannelCap: 6,
-  autoPostChannelCap: 6,
+  autoPostChannelCap: 3,
   xUrlPostsSoftCapMonth: 30,
   periodStart: 1717200000000,
   usage: { autoPostsThisPeriod: 0, xUrlPostsThisPeriod: 0, videosThisPeriod: 0 },
 });
 
-// $149 studio: everything in gtm99 PLUS video.
+// $149 growth: starter + up to 6 active channels. Still no video.
+const GROWTH_FULL = planJson({ tier: "growth", status: "active" });
+
+// $199 studio: growth + video.
 const STUDIO_FULL = planJson({ tier: "studio", status: "active" });
 
-describe("planFeaturesGtm — active gtm99 ($99, no video)", () => {
+// Legacy single-$99 tier, must back-compat-resolve to starter.
+const LEGACY_GTM99 = planJson({ tier: "gtm99", status: "active" });
+
+describe("planFeaturesGtm — 3-tier maxActiveChannels + video matrix", () => {
+  it("starter → maxActiveChannels 3, canVideo false", () => {
+    const f = planFeaturesGtm({ gtmPlanJson: STARTER_FULL });
+    expect(f.plan).toBe("starter");
+    expect(f.status).toBe("active");
+    expect(f.maxActiveChannels).toBe(3);
+    expect(f.canVideo).toBe(false);
+    expect(f.videoCreditsMonth).toBe(0);
+  });
+
+  it("growth → maxActiveChannels 6, canVideo false", () => {
+    const f = planFeaturesGtm({ gtmPlanJson: GROWTH_FULL });
+    expect(f.plan).toBe("growth");
+    expect(f.maxActiveChannels).toBe(6);
+    expect(f.canVideo).toBe(false);
+    expect(f.videoCreditsMonth).toBe(0);
+  });
+
+  it("studio → maxActiveChannels 6, canVideo true, videoCreditsMonth > 0", () => {
+    const f = planFeaturesGtm({ gtmPlanJson: STUDIO_FULL });
+    expect(f.plan).toBe("studio");
+    expect(f.maxActiveChannels).toBe(6);
+    expect(f.canVideo).toBe(true);
+    expect(f.videoCreditsMonth).toBeGreaterThan(0);
+  });
+
+  it("fail-closed default → maxActiveChannels 0", () => {
+    expect(planFeaturesGtm({}).maxActiveChannels).toBe(0);
+    expect(planFeaturesGtm({ gtmPlanJson: "{corrupt" }).maxActiveChannels).toBe(0);
+    expect(
+      planFeaturesGtm({
+        gtmPlanJson: planJson({ tier: "starter", status: "none" }),
+      }).maxActiveChannels
+    ).toBe(0);
+  });
+
+  it("legacy gtm99 plan JSON resolves to starter (maxActiveChannels 3)", () => {
+    const f = planFeaturesGtm({ gtmPlanJson: LEGACY_GTM99 });
+    expect(f.plan).toBe("starter");
+    expect(f.maxActiveChannels).toBe(3);
+    expect(f.canVideo).toBe(false);
+  });
+});
+
+describe("planFeaturesGtm — active starter ($99, no video)", () => {
   it("returns all NON-video features true, canVideo false, videoCreditsMonth 0", () => {
-    const f = planFeaturesGtm({ gtmPlanJson: ACTIVE_FULL });
-    expect(f.plan).toBe("gtm99");
+    const f = planFeaturesGtm({ gtmPlanJson: STARTER_FULL });
+    expect(f.plan).toBe("starter");
     expect(f.status).toBe("active");
     expect(f.canResearch).toBe(true);
     expect(f.canDraft).toBe(true);
     expect(f.canAutoPost).toBe(true);
     expect(f.canRead).toBe(true);
     expect(f.canMonitor).toBe(true);
-    // Video is the studio upsell — OFF for gtm99.
+    // Video is the studio upsell — OFF for starter.
     expect(f.canVideo).toBe(false);
     expect(f.videoCreditsMonth).toBe(0);
     expect(f.banSafetyManualGate).toBe(true);
     expect(f.attributionEnabled).toBe(true);
     expect(f.connectedChannelCap).toBe(6);
-    expect(f.autoPostChannelCap).toBe(6);
+    expect(f.autoPostChannelCap).toBe(3);
     expect(f.xUrlPostsSoftCapMonth).toBe(30);
   });
 
   it("uses fair-use default caps when active plan omits them (video stays 0)", () => {
     const f = planFeaturesGtm({
-      gtmPlanJson: planJson({ tier: "gtm99", status: "active" }),
+      gtmPlanJson: planJson({ tier: "starter", status: "active" }),
     });
     expect(f.canAutoPost).toBe(true);
     expect(f.connectedChannelCap).toBe(6);
-    expect(f.autoPostChannelCap).toBe(6);
+    expect(f.autoPostChannelCap).toBe(3);
     expect(f.videoCreditsMonth).toBe(0);
     expect(f.canVideo).toBe(false);
     expect(f.xUrlPostsSoftCapMonth).toBe(30);
@@ -61,7 +111,7 @@ describe("planFeaturesGtm — active gtm99 ($99, no video)", () => {
   it("honors explicit fair-use cap overrides from the JSON", () => {
     const f = planFeaturesGtm({
       gtmPlanJson: planJson({
-        tier: "gtm99",
+        tier: "starter",
         status: "active",
         connectedChannelCap: 4,
         autoPostChannelCap: 2,
@@ -76,7 +126,7 @@ describe("planFeaturesGtm — active gtm99 ($99, no video)", () => {
   it("coerces invalid cap values back to the tier's fair-use defaults", () => {
     const f = planFeaturesGtm({
       gtmPlanJson: planJson({
-        tier: "gtm99",
+        tier: "starter",
         status: "active",
         connectedChannelCap: -3,
         autoPostChannelCap: "lots",
@@ -85,18 +135,18 @@ describe("planFeaturesGtm — active gtm99 ($99, no video)", () => {
       }),
     });
     expect(f.connectedChannelCap).toBe(6);
-    expect(f.autoPostChannelCap).toBe(6);
-    expect(f.videoCreditsMonth).toBe(0); // gtm99 base
+    expect(f.autoPostChannelCap).toBe(3); // starter base
+    expect(f.videoCreditsMonth).toBe(0); // starter base
     expect(f.xUrlPostsSoftCapMonth).toBe(30);
   });
 });
 
-describe("planFeaturesGtm — active studio ($149, +video)", () => {
-  it("returns everything gtm99 has PLUS canVideo + a video cap", () => {
+describe("planFeaturesGtm — active studio ($199, +video)", () => {
+  it("returns everything growth has PLUS canVideo + a video cap", () => {
     const f = planFeaturesGtm({ gtmPlanJson: STUDIO_FULL });
     expect(f.plan).toBe("studio");
     expect(f.status).toBe("active");
-    // All the gtm99 non-video features still on.
+    // All the non-video features still on.
     expect(f.canAutoPost).toBe(true);
     expect(f.canResearch).toBe(true);
     expect(f.connectedChannelCap).toBe(6);
@@ -134,12 +184,12 @@ describe("planFeaturesGtm — fail-closed defaults", () => {
     ["corrupt JSON", { gtmPlanJson: "{not json" }],
     ["JSON null literal", { gtmPlanJson: "null" }],
     ["JSON array", { gtmPlanJson: "[1,2,3]" }],
-    ["JSON string literal", { gtmPlanJson: '"gtm99"' }],
+    ["JSON string literal", { gtmPlanJson: '"starter"' }],
     ["unknown tier", { gtmPlanJson: planJson({ tier: "gtm299", status: "active" }) }],
     ["missing tier", { gtmPlanJson: planJson({ status: "active" }) }],
-    ["status none", { gtmPlanJson: planJson({ tier: "gtm99", status: "none" }) }],
+    ["status none", { gtmPlanJson: planJson({ tier: "starter", status: "none" }) }],
     ["studio status none", { gtmPlanJson: planJson({ tier: "studio", status: "none" }) }],
-    ["unknown status", { gtmPlanJson: planJson({ tier: "gtm99", status: "weird" }) }],
+    ["unknown status", { gtmPlanJson: planJson({ tier: "starter", status: "weird" }) }],
   ];
 
   it.each(failClosedInputs)(
@@ -150,6 +200,7 @@ describe("planFeaturesGtm — fail-closed defaults", () => {
       expect(f.canDraft).toBe(true);
       expect(f.canAutoPost).toBe(false);
       expect(f.canVideo).toBe(false);
+      expect(f.maxActiveChannels).toBe(0);
       expect(f.connectedChannelCap).toBe(0);
       expect(f.autoPostChannelCap).toBe(0);
       expect(f.videoCreditsMonth).toBe(0);
@@ -164,18 +215,19 @@ describe("planFeaturesGtm — fail-closed defaults", () => {
 describe("planFeaturesGtm — status handling (most-restrictive-valid)", () => {
   it("past_due keeps the full active feature set (billing recovery, not a gate)", () => {
     const f = planFeaturesGtm({
-      gtmPlanJson: planJson({ tier: "gtm99", status: "past_due" }),
+      gtmPlanJson: planJson({ tier: "starter", status: "past_due" }),
     });
     expect(f.status).toBe("past_due");
     expect(f.canResearch).toBe(true);
     expect(f.canDraft).toBe(true);
     expect(f.canAutoPost).toBe(true);
     expect(f.connectedChannelCap).toBe(6);
+    expect(f.maxActiveChannels).toBe(3);
   });
 
-  it("gtm99 trialing → FULL non-video access; still NO video", () => {
+  it("starter trialing → FULL non-video access; still NO video", () => {
     const f = planFeaturesGtm({
-      gtmPlanJson: planJson({ tier: "gtm99", status: "trialing" }),
+      gtmPlanJson: planJson({ tier: "starter", status: "trialing" }),
     });
     expect(f.status).toBe("trialing");
     expect(f.canResearch).toBe(true);
@@ -190,7 +242,7 @@ describe("planFeaturesGtm — status handling (most-restrictive-valid)", () => {
 
   it("none → fail-closed default", () => {
     const f = planFeaturesGtm({
-      gtmPlanJson: planJson({ tier: "gtm99", status: "none" }),
+      gtmPlanJson: planJson({ tier: "starter", status: "none" }),
     });
     expect(f.canAutoPost).toBe(false);
     expect(f.canResearch).toBe(true);
@@ -199,7 +251,7 @@ describe("planFeaturesGtm — status handling (most-restrictive-valid)", () => {
 
 describe("requireFeatureGtm", () => {
   it("does not throw when feature is true (active auto-post)", () => {
-    const f = planFeaturesGtm({ gtmPlanJson: ACTIVE_FULL });
+    const f = planFeaturesGtm({ gtmPlanJson: STARTER_FULL });
     expect(() =>
       requireFeatureGtm(f, (x) => x.canAutoPost, "auto-post")
     ).not.toThrow();
@@ -221,7 +273,7 @@ describe("requireFeatureGtm", () => {
 
   it("does NOT throw on trialing auto-post (trial has full access)", () => {
     const f = planFeaturesGtm({
-      gtmPlanJson: planJson({ tier: "gtm99", status: "trialing" }),
+      gtmPlanJson: planJson({ tier: "starter", status: "trialing" }),
     });
     expect(() =>
       requireFeatureGtm(f, (x) => x.canAutoPost, "auto-post")
@@ -230,7 +282,7 @@ describe("requireFeatureGtm", () => {
 
   it("throws on auto-post attempt with no subscription (status none)", () => {
     const f = planFeaturesGtm({
-      gtmPlanJson: planJson({ tier: "gtm99", status: "none" }),
+      gtmPlanJson: planJson({ tier: "starter", status: "none" }),
     });
     expect(() =>
       requireFeatureGtm(f, (x) => x.canAutoPost, "auto-post")
@@ -239,16 +291,23 @@ describe("requireFeatureGtm", () => {
 });
 
 describe("requireFeatureGtm — canVideo is the studio tier boundary", () => {
-  it("THROWS for active gtm99 (no video)", () => {
-    const f = planFeaturesGtm({ gtmPlanJson: ACTIVE_FULL });
+  it("THROWS for active starter (no video)", () => {
+    const f = planFeaturesGtm({ gtmPlanJson: STARTER_FULL });
     expect(() => requireFeatureGtm(f, (x) => x.canVideo, "video")).toThrow(
       GtmPlanGateError
     );
   });
 
-  it("THROWS for gtm99 trialing (trial doesn't grant video)", () => {
+  it("THROWS for active growth (no video)", () => {
+    const f = planFeaturesGtm({ gtmPlanJson: GROWTH_FULL });
+    expect(() => requireFeatureGtm(f, (x) => x.canVideo, "video")).toThrow(
+      GtmPlanGateError
+    );
+  });
+
+  it("THROWS for starter trialing (trial doesn't grant video)", () => {
     const f = planFeaturesGtm({
-      gtmPlanJson: planJson({ tier: "gtm99", status: "trialing" }),
+      gtmPlanJson: planJson({ tier: "starter", status: "trialing" }),
     });
     expect(() => requireFeatureGtm(f, (x) => x.canVideo, "video")).toThrow(
       GtmPlanGateError
@@ -288,15 +347,15 @@ describe("requireUnderCapGtm", () => {
     );
   });
 
-  it("gtm99 video cap is 0 → blocks the first video", () => {
-    const f = planFeaturesGtm({ gtmPlanJson: ACTIVE_FULL });
+  it("starter video cap is 0 → blocks the first video", () => {
+    const f = planFeaturesGtm({ gtmPlanJson: STARTER_FULL });
     expect(() => requireUnderCapGtm(f, "videoCreditsMonth", 0)).toThrow(
       GtmPlanGateError
     );
   });
 
   it("throws over the cap", () => {
-    const f = planFeaturesGtm({ gtmPlanJson: ACTIVE_FULL });
+    const f = planFeaturesGtm({ gtmPlanJson: STARTER_FULL });
     expect(() =>
       requireUnderCapGtm(f, "autoPostChannelCap", 99)
     ).toThrow(GtmPlanGateError);
@@ -312,18 +371,18 @@ describe("requireUnderCapGtm", () => {
 
 describe("canPostXUrlGtm — X soft cap", () => {
   it("allows when under the cap", () => {
-    const f = planFeaturesGtm({ gtmPlanJson: ACTIVE_FULL });
+    const f = planFeaturesGtm({ gtmPlanJson: STARTER_FULL });
     expect(canPostXUrlGtm(f, 0)).toBe(true);
     expect(canPostXUrlGtm(f, 29)).toBe(true);
   });
 
   it("blocks at the cap (fail-closed)", () => {
-    const f = planFeaturesGtm({ gtmPlanJson: ACTIVE_FULL });
+    const f = planFeaturesGtm({ gtmPlanJson: STARTER_FULL });
     expect(canPostXUrlGtm(f, 30)).toBe(false);
   });
 
   it("blocks over the cap", () => {
-    const f = planFeaturesGtm({ gtmPlanJson: ACTIVE_FULL });
+    const f = planFeaturesGtm({ gtmPlanJson: STARTER_FULL });
     expect(canPostXUrlGtm(f, 31)).toBe(false);
   });
 
@@ -335,19 +394,21 @@ describe("canPostXUrlGtm — X soft cap", () => {
 
 describe("anti-churn moats are NEVER false (parametrized over all states)", () => {
   const allInputs: Array<[string, { gtmPlanJson?: string | null }]> = [
-    ["active gtm99", { gtmPlanJson: ACTIVE_FULL }],
-    ["active no caps", { gtmPlanJson: planJson({ tier: "gtm99", status: "active" }) }],
+    ["active starter", { gtmPlanJson: STARTER_FULL }],
+    ["active growth", { gtmPlanJson: GROWTH_FULL }],
+    ["active no caps", { gtmPlanJson: planJson({ tier: "starter", status: "active" }) }],
     ["active studio", { gtmPlanJson: STUDIO_FULL }],
-    ["past_due", { gtmPlanJson: planJson({ tier: "gtm99", status: "past_due" }) }],
-    ["trialing", { gtmPlanJson: planJson({ tier: "gtm99", status: "trialing" }) }],
-    ["none", { gtmPlanJson: planJson({ tier: "gtm99", status: "none" }) }],
+    ["legacy gtm99", { gtmPlanJson: LEGACY_GTM99 }],
+    ["past_due", { gtmPlanJson: planJson({ tier: "starter", status: "past_due" }) }],
+    ["trialing", { gtmPlanJson: planJson({ tier: "starter", status: "trialing" }) }],
+    ["none", { gtmPlanJson: planJson({ tier: "starter", status: "none" }) }],
     ["missing field", {}],
     ["null", { gtmPlanJson: null }],
     ["empty", { gtmPlanJson: "" }],
     ["corrupt", { gtmPlanJson: "{bad" }],
     ["unknown tier", { gtmPlanJson: planJson({ tier: "gtm299", status: "active" }) }],
     ["JSON array", { gtmPlanJson: "[]" }],
-    ["unknown status", { gtmPlanJson: planJson({ tier: "gtm99", status: "???" }) }],
+    ["unknown status", { gtmPlanJson: planJson({ tier: "starter", status: "???" }) }],
   ];
 
   it.each(allInputs)(

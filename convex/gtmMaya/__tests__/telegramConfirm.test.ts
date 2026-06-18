@@ -50,7 +50,7 @@ async function setupAgent(
         { accountId: "acct_rd", platform: "reddit" },
       ]),
       ...(opts.activePlan
-        ? { gtmPlanJson: JSON.stringify({ status: "active", tier: "gtm99" }) }
+        ? { gtmPlanJson: JSON.stringify({ status: "active", tier: "starter" }) }
         : {}),
     });
   });

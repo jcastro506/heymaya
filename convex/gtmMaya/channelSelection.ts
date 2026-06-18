@@ -71,8 +71,27 @@ export interface ActiveChannelSelection {
   parked: GtmChannel[];
   /** True when we could not reach MIN_ACTIVE_CHANNELS on evidence alone. */
   belowFloor: boolean;
+  /**
+   * True when the active set was TRIMMED to honor the plan's
+   * `maxActiveChannels` cap (i.e. more channels fit than the tier allows).
+   * When capped, `belowFloor` is false — hitting the paid ceiling is not an
+   * evidence shortfall.
+   */
+  capped: boolean;
   /** Human-readable summary of what was activated and why (for GTM.md). */
   note: string;
+}
+
+/** Options for {@link selectActiveChannels}. */
+export interface SelectActiveChannelsOpts {
+  /**
+   * Plan-tier ceiling on active channels (from `planFeaturesGtm.maxActiveChannels`:
+   * starter 3 / growth 6 / studio 6; fail-closed 0). When set, the final active
+   * set is trimmed to the top `maxActiveChannels` by score — the cap BEATS the
+   * floor (a cap of 0 yields zero active channels). Omit for NO cap (legacy
+   * behavior: floor-of-3, no ceiling).
+   */
+  maxActiveChannels?: number;
 }
 
 function isBetChannel(channel: GtmChannel): boolean {
@@ -94,7 +113,8 @@ function clearsPromotionFloor(s: ChannelScoreInput): boolean {
  * Pure + deterministic — same input always yields the same selection.
  */
 export function selectActiveChannels(
-  scores: ReadonlyArray<ChannelScoreInput>
+  scores: ReadonlyArray<ChannelScoreInput>,
+  opts: SelectActiveChannelsOpts = {}
 ): ActiveChannelSelection {
   // Only ongoing bet channels are eligible. De-dupe by channel (keep the
   // highest-scored row if a channel somehow appears twice) and drop blocked.
@@ -139,18 +159,44 @@ export function selectActiveChannels(
     if (fallback.decision !== "primary") promoted.push(fallback.channel);
   }
 
+  // 5. PLAN-TIER CAP. Trim the active set to the tier's `maxActiveChannels`
+  //    ceiling (starter 3 / growth 6 / studio 6; fail-closed 0). The cap BEATS
+  //    the floor — a cap below the number of fitting channels (incl. a cap of
+  //    0) wins. Keep the highest-scored; demote the rest to parked. Omit the
+  //    opt entirely → no cap (legacy floor-of-3 behavior).
+  let capped = false;
+  let capLimit = 0;
+  const cap = opts.maxActiveChannels;
+  if (typeof cap === "number") {
+    capLimit = Math.max(0, cap);
+    if (active.length > capLimit) {
+      capped = true;
+      active.sort(byScoreDesc);
+      active.length = capLimit;
+    }
+  }
+
   const activeChannels = active.map((s) => s.channel);
   const activeSet = new Set<GtmChannel>(activeChannels);
+  // Promotions that survived the cap (a trimmed promotion is no longer active).
+  const survivingPromoted = promoted.filter((c) => activeSet.has(c));
   const parked = eligible
     .filter((s) => !activeSet.has(s.channel))
     .sort(byScoreDesc)
     .map((s) => s.channel);
 
-  const belowFloor = activeChannels.length < MIN_ACTIVE_CHANNELS;
+  // A cap-trim is an intentional paid ceiling, NOT an evidence shortfall.
+  const belowFloor = !capped && activeChannels.length < MIN_ACTIVE_CHANNELS;
 
   // 3. Honesty note.
   let note: string;
-  if (activeChannels.length === 0) {
+  if (capped) {
+    note =
+      `Plan allows up to ${capLimit} active channel(s); running the ` +
+      `top ${activeChannels.length} by fit` +
+      (activeChannels.length ? `: ${activeChannels.join(", ")}` : "") +
+      `. Upgrade to run more.`;
+  } else if (activeChannels.length === 0) {
     note = "No channels cleared the evidence bar — research is incomplete.";
   } else if (belowFloor) {
     note =
@@ -158,8 +204,8 @@ export function selectActiveChannels(
       `(${activeChannels.join(", ")}). Activating just those rather than ` +
       `padding the mix with channels the evidence doesn't support yet.`;
   } else {
-    const promotedNote = promoted.length
-      ? ` (${promoted.join(", ")} promoted to meet the 3-channel floor)`
+    const promotedNote = survivingPromoted.length
+      ? ` (${survivingPromoted.join(", ")} promoted to meet the 3-channel floor)`
       : "";
     note = `Running ${activeChannels.length} channels: ${activeChannels.join(", ")}${promotedNote}.`;
   }
@@ -168,9 +214,10 @@ export function selectActiveChannels(
     active: activeChannels,
     primaryChannel: activeChannels[0] ?? null,
     secondaryChannel: activeChannels[1] ?? null,
-    promoted,
+    promoted: survivingPromoted,
     parked,
     belowFloor,
+    capped,
     note,
   };
 }
