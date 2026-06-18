@@ -378,6 +378,33 @@ describe("Maya GTM workspace pack", () => {
     expect(body!).not.toContain("Creatify");
   });
 
+  it("ships the nightly dreaming cron always, and the discovery_pulse cron only when pulseEnabled", () => {
+    // Dreaming (0015) is always shipped — cheap, silent, safe nightly learning.
+    const base = JSON.parse(buildMayaGtmWorkspace(INPUT).files.get("jobs.json") ?? "{}");
+    const baseIds = base.jobs.map((j: { id: string }) => j.id);
+    expect(baseIds).toContain("0015_dreaming");
+    // Pulse (0016) is GATED: off by default (proven batch cadence).
+    expect(baseIds).not.toContain("0016_discovery_pulse");
+
+    // With pulseEnabled: the hourly discovery pulse ships, lean + budget-gated.
+    const pulsed = JSON.parse(
+      buildMayaGtmWorkspace({ ...INPUT, pulseEnabled: true }).files.get("jobs.json") ?? "{}"
+    );
+    const pulseJob = pulsed.jobs.find(
+      (j: { id: string }) => j.id === "0016_discovery_pulse"
+    );
+    expect(pulseJob).toBeTruthy();
+    expect(pulseJob.schedule.expr).toBe("0 * * * *"); // hourly
+    expect(pulseJob.payload.lightContext).toBe(true); // lean tick = cheap
+    expect(pulseJob.payload.thinking).toBe("low");
+    // The pulse MUST consult the budget gate (the runaway-stop).
+    expect(pulseJob.payload.message).toContain("check_discovery_budget");
+    expect(pulseJob.payload.message).toContain("next_watch_lane");
+    // Dreaming is silent (never messages the founder).
+    const dreamJob = base.jobs.find((j: { id: string }) => j.id === "0015_dreaming");
+    expect(dreamJob.payload.message).toContain("SILENT");
+  });
+
   it("renders bounded subagent contracts with model, budget, coverage, and failure behavior", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
     const agents = files.get("AGENTS.md") ?? "";
@@ -584,9 +611,10 @@ describe("Maya GTM workspace pack", () => {
       "channel discovery must NOT be baked into deploy-time jobs.json"
     ).toBeUndefined();
 
-    // jobs.json now contains exactly the kickstart + the 5 deterministic
-    // recurring crons (#15). No old heavy boot crons, no Maya-added crons.
-    expect(jobs.jobs).toHaveLength(6);
+    // jobs.json contains the kickstart + the 5 deterministic recurring crons
+    // + the always-on nightly dreaming cron (Phase 3). The discovery_pulse cron
+    // is GATED (pulseEnabled) and absent here. No old heavy boot crons.
+    expect(jobs.jobs).toHaveLength(7);
     expect(jobs.jobs[0].id).toBe("0001_kickstart");
     expect(jobs.jobs.map((j) => j.id).sort()).toEqual([
       "0001_kickstart",
@@ -595,7 +623,10 @@ describe("Maya GTM workspace pack", () => {
       "0012_evening_recap",
       "0013_weekly_review",
       "0014_monthly_reset",
+      "0015_dreaming",
     ]);
+    // The hourly discovery pulse is OFF by default (proven batch cadence).
+    expect(jobs.jobs.find((j) => j.id === "0016_discovery_pulse")).toBeUndefined();
   });
 
   it("Sprint 2.16u-fix8 — kickstart cron references SOUL.md for voice (firewall removed)", () => {

@@ -1240,6 +1240,10 @@ export const buildAndUploadGtmWorkspace = internalAction({
       videoEnabled: planFeaturesGtm({ gtmPlanJson: row.agent.gtmPlanJson }).canVideo,
       // W2 — so Maya's messaging matches her gating (the publish engine enforces it).
       autonomousPosting: row.agent.autonomousPosting,
+      // Phase 3 — ship the hourly discovery_pulse cron only when the env flag is
+      // on. Default off: agents keep the proven batch cadence. Flip to "true" on
+      // a test deploy to cost-soak the real-time pulse (budget-gated).
+      pulseEnabled: process.env.MAYA_GTM_PULSE_ENABLED === "true",
       app: {
         name: row.app.name ?? "Untitled app",
         url: row.app.url,

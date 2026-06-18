@@ -4755,7 +4755,10 @@ export default defineSchema({
       v.literal("update_product_fact"),
       // Real-time operator Phase-1 — founder steering directive idempotency
       // lane (Maya's save_steering_directive tool POSTs with this kind).
-      v.literal("save_steering_directive")
+      v.literal("save_steering_directive"),
+      // Real-time operator Phase-3 — discovery-pulse channel watermark advance
+      // idempotency lane (the advance_watermark tool POSTs with this kind).
+      v.literal("advance_watermark")
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
