@@ -160,6 +160,40 @@ export class FlyClient {
   }
 
   /**
+   * Find-or-create a persistent volume for an app. Per-tenant apps run exactly
+   * ONE machine + ONE volume, so we LIST first and reuse any existing volume
+   * (never create a second — that would orphan the old one + lose the memory it
+   * holds). Only creates when the app has none. The volume survives machine
+   * destroy/recreate (volumes are independent of machines), so mounting it at
+   * /data persists OpenClaw's native memory (recall sqlite, daily notes) across
+   * our redeploys while the bootstrap re-extracts the prompt bundle fresh each
+   * boot. Region MUST match the machine's region (a volume only attaches to a
+   * machine in its own region).
+   */
+  async findOrCreateVolume(
+    appName: string,
+    opts: { name: string; sizeGb: number; region?: string }
+  ): Promise<{ id: string; name: string; region: string }> {
+    const region = opts.region ?? this.defaultRegion;
+    const existing = (await this.fetchJson(
+      "GET",
+      `/apps/${encodeURIComponent(appName)}/volumes`
+    )) as Array<{ id: string; name: string; region: string; state?: string }>;
+    const reusable = (existing ?? []).find(
+      (v) => v.state !== "destroyed" && v.region === region
+    );
+    if (reusable) {
+      return { id: reusable.id, name: reusable.name, region: reusable.region };
+    }
+    const created = (await this.fetchJson(
+      "POST",
+      `/apps/${encodeURIComponent(appName)}/volumes`,
+      { name: opts.name, size_gb: opts.sizeGb, region }
+    )) as { id: string; name: string; region: string };
+    return { id: created.id, name: created.name, region: created.region };
+  }
+
+  /**
    * Sprint 2.16u-fix17 — Fly apps created via the machines API don't get
    * public DNS automatically. We need a shared IPv4 + dedicated IPv6 so
    * Telegram can resolve `<appName>.fly.dev` and POST webhook updates.
