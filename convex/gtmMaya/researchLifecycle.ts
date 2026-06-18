@@ -7,6 +7,7 @@ import {
 } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { assertGtmSpendAllowed } from "./betaGuards";
+import { priceUsd } from "./providerPricing";
 
 const CHANNEL_PREFERENCE = v.union(
   v.literal("whatsapp"),
@@ -580,7 +581,22 @@ export const recordCost = mutation({
   handler: async (ctx, args): Promise<Id<"gtmCostLedger">> => {
     if (args.costUsd < 0) throw new Error("costUsd cannot be negative.");
     const { creator } = await requireMyGtmAgent(ctx);
-    await assertGtmSpendAllowed(ctx, creator._id, args.costUsd);
+
+    // Provider-complete metering (Phase-2 ⓪): the high-frequency READ
+    // providers (ScrapeCreators / TwitterAPI.io / DataForSEO) often log
+    // costUsd: 0 because the call site never knew the rate. When the caller
+    // passes 0 AND a unit count, derive the REAL cost from the sourced unit
+    // rates. An explicit non-zero costUsd stays authoritative — never
+    // overridden. Token providers (gemini/openrouter) price to 0 here because
+    // they're already metered upstream via openrouterSpend (usage.costUsd).
+    // This single hook prices both the Convex workers and any plugin
+    // read-endpoint that routes through recordCost.
+    const effectiveCostUsd =
+      args.costUsd === 0 && args.units !== undefined
+        ? priceUsd(args.provider, args.units, args.operation)
+        : args.costUsd;
+
+    await assertGtmSpendAllowed(ctx, creator._id, effectiveCostUsd);
     let job: Doc<"gtmResearchJobs"> | null = null;
     if (args.researchJobId) {
       job = await requireMyResearchJob(ctx, creator._id, args.researchJobId);
@@ -592,7 +608,7 @@ export const recordCost = mutation({
       provider: args.provider,
       operation: args.operation,
       reason: args.reason,
-      costUsd: args.costUsd,
+      costUsd: effectiveCostUsd,
       units: args.units,
       cacheStatus: args.cacheStatus,
       metadata: args.metadata,
@@ -600,7 +616,7 @@ export const recordCost = mutation({
     });
     if (job) {
       await ctx.db.patch(job._id, {
-        spentUsd: Math.round((job.spentUsd + args.costUsd) * 10000) / 10000,
+        spentUsd: Math.round((job.spentUsd + effectiveCostUsd) * 10000) / 10000,
         updatedAt: now,
       });
     }

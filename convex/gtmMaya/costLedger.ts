@@ -34,6 +34,7 @@ import {
   type OpenRouterCallOptions,
   type OpenRouterCompletion,
 } from "../agents/modelRouter/openRouterClient";
+import { priceUsd } from "./providerPricing";
 
 const COST_PROVIDER = v.union(
   v.literal("scrapecreators"),
@@ -71,12 +72,25 @@ export const recordGtmCostInternal = internalMutation({
     costUsd: v.number(),
     units: v.optional(v.number()),
     cacheStatus: CACHE_STATUS,
+    // Phase 2 ⑤ — discovery-budget tagging. The plugin's hunt-loop reads pass
+    // `discovery: true` (+ the watch `lane`) so discoveryBudgetGate can sum
+    // them independently of research/operational spend.
+    discovery: v.optional(v.boolean()),
+    lane: v.optional(v.string()),
     metadata: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<Id<"gtmCostLedger">> => {
     if (args.costUsd < 0) {
       throw new Error("recordGtmCostInternal: costUsd cannot be negative");
     }
+    // Phase 2 ⓪ — provider-complete metering. The OpenClaw plugin's read tools
+    // (ScrapeCreators / x_api / DataForSEO) post here with costUsd:0; derive the
+    // real cost from the sourced per-provider rates when units are present. An
+    // explicit non-zero costUsd stays authoritative (e.g. OpenRouter usage.cost).
+    const effectiveCostUsd =
+      args.costUsd === 0 && args.units !== undefined
+        ? priceUsd(args.provider, args.units, args.operation)
+        : args.costUsd;
     const now = Date.now();
     const id = await ctx.db.insert("gtmCostLedger", {
       accountId: args.accountId,
@@ -84,9 +98,11 @@ export const recordGtmCostInternal = internalMutation({
       provider: args.provider,
       operation: args.operation,
       reason: args.reason,
-      costUsd: args.costUsd,
+      costUsd: effectiveCostUsd,
       units: args.units,
       cacheStatus: args.cacheStatus,
+      discovery: args.discovery,
+      lane: args.lane,
       metadata: args.metadata,
       createdAt: now,
     });
@@ -97,7 +113,7 @@ export const recordGtmCostInternal = internalMutation({
       if (job && job.accountId === args.accountId) {
         await ctx.db.patch(args.researchJobId, {
           spentUsd:
-            Math.round(((job.spentUsd ?? 0) + args.costUsd) * 10000) / 10000,
+            Math.round(((job.spentUsd ?? 0) + effectiveCostUsd) * 10000) / 10000,
           updatedAt: now,
         });
       }

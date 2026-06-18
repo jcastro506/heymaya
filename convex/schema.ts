@@ -5476,12 +5476,56 @@ export default defineSchema({
       v.literal("skipped"),
       v.literal("failed")
     ),
+    // Phase 2 ⑤ — discovery-budget tagging. `discovery: true` marks spend from
+    // the continuous hunt loop (read-API scans + cheap-model scoring) so the
+    // per-hour/per-day discovery budget gate can sum it independently of
+    // research/foundation/operational spend. `lane` records which watch lane
+    // (buyer_intent / switch_intent / competitor / own_perf / go_time) drove it.
+    discovery: v.optional(v.boolean()),
+    lane: v.optional(v.string()),
     metadata: v.optional(v.any()),
     createdAt: v.number(),
   })
     .index("by_account", ["accountId"])
     .index("by_research_job", ["researchJobId"])
-    .index("by_account_and_provider", ["accountId", "provider"]),
+    .index("by_account_and_provider", ["accountId", "provider"])
+    // Phase 2 — time-windowed sums (discovery budget gate, hourly/daily caps).
+    .index("by_account_and_created", ["accountId", "createdAt"])
+    .index("by_account_discovery_created", ["accountId", "discovery", "createdAt"]),
+
+  // Phase 2 ④ — per-channel read watermark. Bounds delta-only reads so the
+  // hunt loop never re-pulls history: each (account, channel) records the
+  // newest item already seen (timestamp + opaque cursor/id), and the next read
+  // asks only for items past it. Per channel because each read API cursors
+  // differently.
+  gtmChannelWatermarks: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    channel: v.string(),
+    lastObservedAtMs: v.optional(v.number()),
+    lastSeenId: v.optional(v.string()),
+    cursor: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_channel", ["accountId", "channel"])
+    .index("by_agent", ["agentId"]),
+
+  // Phase 2 ④ — rotating watch-lane scheduler state. The pulse rotates across
+  // lanes rather than sweeping all every tick; this tracks when each lane last
+  // ran + its next-due time so the engine round-robins without re-scanning.
+  gtmWatchLaneState: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    lane: v.string(),
+    lastRunAtMs: v.optional(v.number()),
+    nextDueAtMs: v.optional(v.number()),
+    consecutiveDryRuns: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_lane", ["accountId", "lane"])
+    .index("by_agent", ["agentId"]),
 
   gtmToolCallLog: defineTable({
     accountId: v.id("creators"),
