@@ -130,6 +130,12 @@ import {
 } from "./gtmMaya/attribution";
 import { saveSteeringDirectiveHttp } from "./gtmMaya/steering";
 import {
+  checkDiscoveryBudgetHttp,
+  nextWatchLaneHttp,
+  advanceWatermarkHttp,
+  getWatermarkHttp,
+} from "./gtmMaya/openclaw/pulseCallbacks";
+import {
   saveExperimentHttp,
   assignArmHttp,
 } from "./gtmMaya/experiments";
@@ -508,6 +514,29 @@ http.route({
   path: "/lc_gtm/save_steering_directive",
   method: "POST",
   handler: saveSteeringDirectiveHttp,
+});
+// Real-time operator Phase-3 — discovery-pulse engine tools. check_budget is
+// THE pulse gate (monitoring_only → do nothing); next_watch_lane advances the
+// round-robin; advance_watermark / get_watermark bound each channel read.
+http.route({
+  path: "/lc_gtm/check_discovery_budget",
+  method: "POST",
+  handler: checkDiscoveryBudgetHttp,
+});
+http.route({
+  path: "/lc_gtm/next_watch_lane",
+  method: "POST",
+  handler: nextWatchLaneHttp,
+});
+http.route({
+  path: "/lc_gtm/advance_watermark",
+  method: "POST",
+  handler: advanceWatermarkHttp,
+});
+http.route({
+  path: "/lc_gtm/get_watermark",
+  method: "GET",
+  handler: getWatermarkHttp,
 });
 // Read-back — Maya GETs per-post clicks → signups (closed-loop attribution)
 // from her runtime so the differentiator surfaces on Telegram, not just web.
