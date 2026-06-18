@@ -33,10 +33,19 @@ import { v } from "convex/values";
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 
-/** Default foundation lease window. A foundation pass that genuinely needs
- *  longer re-acquires on the next heartbeat tick; a crashed pass frees the slot
- *  when the lease expires. */
-export const FOUNDATION_LEASE_MS = 15 * 60 * 1000;
+/** Default foundation lease window. Sessions hold the lease for ONE step then
+ *  release it (mark_lifecycle release_lease) so a healthy pass never relies on
+ *  the TTL — the TTL only matters when a session DIES mid-step without
+ *  releasing. At 15m a dead holder used to lock the slot for 15m and, with the
+ *  30m heartbeat as the only resumer, agents stalled for up to ~30m mid-onboard
+ *  (foundationComplete hung at step=active). Shortened to 7m so a crashed/timed-
+ *  out session frees the slot fast; the one-shot foundation-resume ladder
+ *  (jobs.json, +8/+16/+24m) then re-acquires + resumes within minutes. Safe
+ *  against concurrency: re-acquisition is acquire-only-when-free AND the
+ *  watchdog dedup-guards re-spawn (reads get_my_foundation + subagents list,
+ *  never re-spawns existing work), with FOUNDATION_MAX_LEASE_ACQUIRES as the
+ *  hard backstop. A single legit step completes well under 7m. */
+export const FOUNDATION_LEASE_MS = 7 * 60 * 1000;
 /** Hard cap on foundation-lease acquisitions. The watchdog re-acquires the lease
  *  each tick to resume the pass; past this many, with foundation still
  *  incomplete, the lease is DENIED so a stuck agent cannot re-spawn the research

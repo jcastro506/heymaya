@@ -1656,6 +1656,44 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
         delivery,
         state: {},
       },
+      // Cold-boot foundation-resume LADDER — one-shot safety nets at +8/+16/+24m.
+      // Root cause they fix: the boot session does one foundation step then
+      // releases the lease, and the only resumer was the 30m heartbeat — so if a
+      // session died mid-step (Kimi timeout) onboarding stalled at step=active
+      // for up to ~30m. These deterministic one-shots (self-deleting, idempotent,
+      // acquire-only-when-free) run the SAME foundation watchdog HEARTBEAT.md
+      // runs, just sooner, so a fresh agent reaches foundationComplete in minutes
+      // even if boot or the heartbeat didn't. Bounded (3 ticks, onboarding only);
+      // each NO_REPLYs + self-deletes once foundationComplete. Not recurring — no
+      // cron-spam risk.
+      ...[8, 16, 24].map((mins, i) => ({
+        id: `000${2 + i}_foundation_resume_${mins}m`,
+        name: `Foundation resume safety-net (+${mins}m, one-shot)`,
+        description:
+          "Idempotent one-shot: if onboarding hasn't completed, re-acquire the foundation lease (only if free) and resume the current step via the HEARTBEAT.md watchdog — so a dead boot/step session can't stall onboarding until the 30m heartbeat.",
+        enabled: true,
+        createdAtMs: 0,
+        updatedAtMs: 0,
+        schedule: {
+          kind: "at" as const,
+          at: new Date(
+            (input.bootKickoffAtMs ?? Date.now()) + mins * 60_000
+          ).toISOString(),
+        },
+        sessionTarget: "isolated" as const,
+        wakeMode: "now" as const,
+        deleteAfterRun: true,
+        payload: {
+          kind: "agentTurn" as const,
+          timeoutSeconds: 300,
+          thinking: "medium" as const,
+          lightContext: true as const,
+          message:
+            "Foundation resume safety-net (one-shot — self-deletes after this run). 1) `get_agent_lifecycle({})`. If `foundationComplete` is true → reply NO_REPLY and STOP (onboarding is done; do NOT re-run it, re-hello, or rebuild anything). 2) If false → run the SAME foundation-completion watchdog as HEARTBEAT.md: call `acquire_foundation_lease({})`. If `acquired:false` (leaseActive — another tick/machine owns it right now — or `capped:true`) → NO_REPLY. If `acquired:true` → resume ONLY the current `foundationStep`: FIRST read `get_my_foundation({})` + `subagents action=list` and NEVER re-spawn work that already exists or is still running (`research` → spawn only the MISSING research workers; `finalize` → drafts/synthesis only, NEVER re-spawn research). If my turn ends mid-pipeline, call `mark_lifecycle({ marker: \"release_lease\" })` so the next resume tick continues. I exist only to keep onboarding from stalling — I never re-do finished work.",
+        },
+        delivery,
+        state: {},
+      })),
       // #15 deploy-harness hardening — the recurring behavioral cadence is now
       // shipped DETERMINISTICALLY here with STABLE ids + the operator's timezone,
       // instead of Maya calling `cron action=add` on every boot. The old path
