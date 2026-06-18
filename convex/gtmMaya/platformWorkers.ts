@@ -39,6 +39,7 @@ import { twitterApiIoSearch } from "../integrations/twitterApiIo/twitterSearch";
 import { geminiGroundedSearch } from "../integrations/gemini/groundedSearch";
 import { hackerNewsSearch } from "../integrations/hackerNews/algoliaSearch";
 import { checkAllCostCaps } from "./costCap";
+import { priceUsd } from "./providerPricing";
 
 /**
  * Sprint 4 — platform workers.
@@ -220,6 +221,13 @@ export const recordPlatformCost = internalMutation({
     if (!job || job.accountId !== args.accountId) {
       throw new Error("recordPlatformCost: job does not belong to accountId");
     }
+    // Provider-complete metering (Phase-2 ⓪): if the caller logged costUsd: 0
+    // but gave a unit count, derive the real cost from the sourced unit rates.
+    // An explicit non-zero costUsd stays authoritative.
+    const effectiveCostUsd =
+      args.costUsd === 0 && args.units !== undefined
+        ? priceUsd(args.provider, args.units, args.operation)
+        : args.costUsd;
     const now = Date.now();
     const id = await ctx.db.insert("gtmCostLedger", {
       accountId: args.accountId,
@@ -227,16 +235,16 @@ export const recordPlatformCost = internalMutation({
       provider: args.provider,
       operation: args.operation,
       reason: args.reason,
-      costUsd: args.costUsd,
+      costUsd: effectiveCostUsd,
       units: args.units,
       cacheStatus: args.cacheStatus,
       metadata: args.metadata,
       createdAt: now,
     });
     // Update job.spentUsd
-    if (args.cacheStatus === "called" && args.costUsd > 0) {
+    if (args.cacheStatus === "called" && effectiveCostUsd > 0) {
       await ctx.db.patch(args.researchJobId, {
-        spentUsd: Math.round((job.spentUsd + args.costUsd) * 10000) / 10000,
+        spentUsd: Math.round((job.spentUsd + effectiveCostUsd) * 10000) / 10000,
         updatedAt: now,
       });
     }
@@ -347,7 +355,11 @@ async function runWorker(
         provider: "scrapecreators",
         operation: `${wc.platform}.${kind}`,
         reason: `query: ${query.slice(0, 100)}`,
+        // Failed call returned nothing → 0 billable units. Pricing derives $0,
+        // matching the provider's no-charge-on-failure behavior, but makes the
+        // unit count explicit instead of an opaque hardcoded zero.
         costUsd: 0,
+        units: 0,
         cacheStatus: "failed",
         metadata: { error: (err as Error).message },
       });
