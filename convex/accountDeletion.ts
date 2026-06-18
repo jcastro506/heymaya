@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import {
+  internalMutation,
   mutation,
   type MutationCtx,
   type QueryCtx,
@@ -403,6 +404,43 @@ export const purgeByClerkUserIdPublic = mutation({
         clerkUserId: args.clerkUserId,
         reason: "creator-not-found",
         flyAppIds: [],
+      } as const;
+    }
+    const result = await purgeCreatorAccount(ctx, creator, args.source);
+    return { ok: true, deleted: true, ...result } as const;
+  },
+});
+
+/**
+ * Authoritative table-purge for a GTM account by creator id. The CALLER (the
+ * `hardDeleteMyGtmAccount` action, or the retention sweep) is responsible for
+ * verifying ownership / eligibility BEFORE invoking this — it does no auth of
+ * its own beyond confirming the row is a gtm-agent (a defense-in-depth guard so
+ * this can never be mis-pointed at a creator/business account). Returns the
+ * collected `flyAppIds` so the calling ACTION can destroy the Fly app(s) +
+ * delete the Stripe customer (network work the mutation can't do). Idempotent:
+ * a missing/already-purged creator returns `deleted:false` with empty flyAppIds.
+ */
+export const purgeGtmAccountByCreatorId = internalMutation({
+  args: { creatorId: v.id("creators"), source: sourceValidator },
+  handler: async (ctx, args) => {
+    const creator = await ctx.db.get(args.creatorId);
+    if (!creator) {
+      return {
+        ok: true,
+        deleted: false,
+        reason: "creator-not-found",
+        flyAppIds: [] as string[],
+      } as const;
+    }
+    if (creator.accountType !== "gtm-agent") {
+      // Hard guard: this entry point only ever purges GTM accounts. A
+      // creator/business account must go through the existing creator path.
+      return {
+        ok: false,
+        deleted: false,
+        reason: "not-a-gtm-account",
+        flyAppIds: [] as string[],
       } as const;
     }
     const result = await purgeCreatorAccount(ctx, creator, args.source);

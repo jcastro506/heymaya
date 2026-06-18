@@ -76,4 +76,17 @@ crons.interval(
   internal.gtmMaya.openrouterSpend.pollOpenrouterSpend
 );
 
+// 30-day cancellation-retention purge. A canceled GTM account keeps its data
+// for 30 days (resumable) while its Fly machine is torn down at period end to
+// stop COGS. After 30 days with the plan lapsed to `none`, this sweep hard-
+// purges the account (same path as an explicit hard-delete) + destroys the Fly
+// app. Never touches an active/trialing/past_due/resubscribed account. Runs
+// every 6h — far below the 30-day granularity it gates on. See
+// convex/gtmMaya/accountLifecycle.ts.
+crons.interval(
+  "gtm-canceled-retention-purge",
+  { hours: 6 },
+  internal.gtmMaya.accountLifecycle.sweepCanceledRetention
+);
+
 export default crons;
