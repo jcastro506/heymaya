@@ -611,13 +611,17 @@ describe("Maya GTM workspace pack", () => {
       "channel discovery must NOT be baked into deploy-time jobs.json"
     ).toBeUndefined();
 
-    // jobs.json contains the kickstart + the 5 deterministic recurring crons
-    // + the always-on nightly dreaming cron (Phase 3). The discovery_pulse cron
-    // is GATED (pulseEnabled) and absent here. No old heavy boot crons.
-    expect(jobs.jobs).toHaveLength(7);
+    // jobs.json contains the kickstart + the 3 one-shot cold-boot foundation-
+    // resume safety-nets (+8/+16/+24m) + the 5 deterministic recurring crons +
+    // the always-on nightly dreaming cron (Phase 3). The discovery_pulse cron is
+    // GATED (pulseEnabled) and absent here. No old heavy boot crons.
+    expect(jobs.jobs).toHaveLength(10);
     expect(jobs.jobs[0].id).toBe("0001_kickstart");
     expect(jobs.jobs.map((j) => j.id).sort()).toEqual([
       "0001_kickstart",
+      "0002_foundation_resume_8m",
+      "0003_foundation_resume_16m",
+      "0004_foundation_resume_24m",
       "0010_morning_brief",
       "0011_midday_pulse",
       "0012_evening_recap",
@@ -627,6 +631,12 @@ describe("Maya GTM workspace pack", () => {
     ]);
     // The hourly discovery pulse is OFF by default (proven batch cadence).
     expect(jobs.jobs.find((j) => j.id === "0016_discovery_pulse")).toBeUndefined();
+    // The resume ladder is one-shot + self-deleting + idempotent.
+    const resume = jobs.jobs.find((j) => j.id === "0002_foundation_resume_8m")!;
+    expect(resume.deleteAfterRun).toBe(true);
+    expect(resume.schedule.kind).toBe("at");
+    expect(resume.payload.message).toContain("acquire_foundation_lease");
+    expect(resume.payload.message).toContain("foundationComplete");
   });
 
   it("Sprint 2.16u-fix8 — kickstart cron references SOUL.md for voice (firewall removed)", () => {
