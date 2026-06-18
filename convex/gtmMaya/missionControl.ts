@@ -11,6 +11,7 @@ import { internalMutation, mutation, query } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { resolveMyGtmCreator } from "./targetList";
 import { isRampGraduated } from "./autonomyPolicy";
+import { planFeaturesGtm } from "./planGtm";
 
 // ───────────────────────── Research / "What we know" ─────────────────────────
 
@@ -184,6 +185,12 @@ export const getMyAccount = query({
     deployedAt?: number;
     postingMode: string | null;
     postingGraduated: boolean;
+    // Cancellation lifecycle (accountLifecycle.ts). When `canceledAt` is set the
+    // founder canceled; the plan stays active until `canceledPeriodEndMs`, then
+    // pauses. The UI shows "active until <date>, then paused" + a Resume button.
+    canceledAt: number | null;
+    canceledPeriodEndMs: number | null;
+    gtmPlanStatus: string | null;
   } | null> => {
     const creator = await resolveMyGtmCreator(ctx);
     if (!creator) return null;
@@ -192,6 +199,9 @@ export const getMyAccount = query({
       .withIndex("by_account", (q) => q.eq("accountId", creator._id))
       .first();
     const app = agent?.appId ? await ctx.db.get(agent.appId) : null;
+    const gtmPlanStatus = agent
+      ? planFeaturesGtm({ gtmPlanJson: agent.gtmPlanJson }).status
+      : null;
     return {
       email: creator.email,
       plan: creator.plan,
@@ -206,6 +216,9 @@ export const getMyAccount = query({
             Date.now()
           )
         : false,
+      canceledAt: agent?.gtmCanceledAt ?? null,
+      canceledPeriodEndMs: agent?.gtmCanceledPeriodEndMs ?? null,
+      gtmPlanStatus,
     };
   },
 });

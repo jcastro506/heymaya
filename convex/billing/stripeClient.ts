@@ -34,6 +34,15 @@ export interface StripeClientLike {
       params: Stripe.CustomerCreateParams,
       options?: Stripe.RequestOptions
     ): Promise<Stripe.Response<Stripe.Customer>>;
+    // Hard-delete the Stripe customer (account deletion). Stripe cancels all
+    // of the customer's subscriptions as a side effect. OPTIONAL on the seam so
+    // existing partial-mock tests (which only stub `create`) keep compiling;
+    // production always has it. Lifecycle code asserts presence at call time.
+    del?(
+      id: string,
+      params?: Stripe.CustomerDeleteParams,
+      options?: Stripe.RequestOptions
+    ): Promise<Stripe.Response<Stripe.DeletedCustomer>>;
   };
   checkout: {
     sessions: {
@@ -55,6 +64,24 @@ export interface StripeClientLike {
     retrieve(
       id: string,
       params?: Stripe.SubscriptionRetrieveParams,
+      options?: Stripe.RequestOptions
+    ): Promise<Stripe.Response<Stripe.Subscription>>;
+    // List a customer's subscriptions — used to resolve the active sub id when
+    // the creator row doesn't carry one (GTM subs live by metadata, not on the
+    // creator's stripeSubscriptionId field). OPTIONAL on the seam (see `del`).
+    list?(
+      params?: Stripe.SubscriptionListParams,
+      options?: Stripe.RequestOptions
+    ): Promise<Stripe.Response<Stripe.ApiList<Stripe.Subscription>>>;
+    // cancel_at_period_end toggle (cancel + resume) and immediate cancel.
+    update?(
+      id: string,
+      params?: Stripe.SubscriptionUpdateParams,
+      options?: Stripe.RequestOptions
+    ): Promise<Stripe.Response<Stripe.Subscription>>;
+    cancel?(
+      id: string,
+      params?: Stripe.SubscriptionCancelParams,
       options?: Stripe.RequestOptions
     ): Promise<Stripe.Response<Stripe.Subscription>>;
   };

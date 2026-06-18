@@ -443,6 +443,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               stripeStatus: "canceled",
             }
           );
+          // Tear down the Fly MACHINE (not the app/volume — data retained for a
+          // 30-day resume window) to stop COGS now that the paid period ended.
+          // Best-effort + scheduled async: never block / fail the webhook.
+          try {
+            await convex.mutation(
+              api.gtmMaya.accountLifecycle.scheduleMachineTeardownPublic,
+              { secret: bridge, stripeCustomerId }
+            );
+          } catch (teardownErr) {
+            await convex.mutation(
+              api.billing.webhook.recordWebhookEventPublic,
+              {
+                secret: bridge,
+                eventId: `${eventId}.machine-teardown-failed`,
+                type: event.type,
+                livemode,
+                status: "errored",
+                detail: `scheduleMachineTeardown threw: ${
+                  (teardownErr as Error).message?.slice(0, 300) ?? "unknown"
+                }`,
+                customerId: stripeCustomerId,
+                rawPayload: event as unknown,
+              }
+            );
+          }
           return NextResponse.json({ ok: true, product: "gtm" });
         }
 

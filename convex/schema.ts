@@ -4423,6 +4423,18 @@ export default defineSchema({
     // usage:{autoPostsThisPeriod, xUrlPostsThisPeriod, videosThisPeriod}}.
     // Parsed by planFeaturesGtm; ONLY Stripe webhook handlers write it.
     gtmPlanJson: v.optional(v.string()),
+    // ─── Cancellation lifecycle (accountLifecycle.ts) ───────────────────────
+    // Stamped when the founder cancels (Stripe cancel_at_period_end:true). The
+    // plan stays ACTIVE until period end (Stripe keeps emitting status:"active"
+    // until customer.subscription.deleted lapses it to none), then the machine
+    // is torn down to stop COGS while DATA is retained for resume. The 30-day
+    // retention purge (crons.ts → accountLifecycle.sweepCanceledRetention) hard-
+    // purges accounts whose plan is `none` AND were canceled >30d ago. Cleared
+    // (set to undefined-via-omit semantics: we patch it back to 0/clear) on
+    // resume so a resubscribe is never swept. `gtmCanceledPeriodEndMs` records
+    // the Stripe period end so the UI can show "active until <date>, then paused".
+    gtmCanceledAt: v.optional(v.number()),
+    gtmCanceledPeriodEndMs: v.optional(v.number()),
     // W2 — founder's autonomous-vs-confirm posting preference, layered INSIDE
     // the plan ceiling (planFeaturesGtm.canAutoPost) and the ban-safety floor
     // (Reddit/TikTok always confirm). Only ever tightens the AUTO channels
