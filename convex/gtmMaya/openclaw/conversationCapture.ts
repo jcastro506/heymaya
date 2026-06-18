@@ -357,6 +357,36 @@ export const logMessageHttp = httpAction(async (ctx, request) => {
     }
   );
 
+  // Real-time operator Phase-1 — capture founder STEERING directives inline.
+  // A PURE deterministic heuristic (no LLM, no extra latency on this hot path)
+  // decides whether this inbound founder message is a directive ("focus more
+  // on LinkedIn", "stop posting on X") and, if so, persists it durably so the
+  // engine/pulse + Maya's prompts can read it. Best-effort: a classifier or
+  // write hiccup must never fail the capture response.
+  try {
+    const { classifySteeringIntent } = await import("../steering");
+    const cls = classifySteeringIntent(body.body);
+    if (cls.isSteering) {
+      await ctx.runMutation(internal.gtmMaya.steering.saveSteeringDirective, {
+        accountId: auth.accountId,
+        agentId: auth.agentId,
+        directive: body.body.slice(0, 2000),
+        laneHints: cls.laneHints,
+        intent: cls.intent,
+        source: "founder",
+        turnId: body.turnId,
+      });
+    }
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        event: "log_message.steering_capture_failed",
+        agentId: auth.agentId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    );
+  }
+
   return new Response(JSON.stringify({ ok: true, messageId }), {
     status: 200,
     headers: { "content-type": "application/json" },

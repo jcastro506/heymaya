@@ -104,6 +104,7 @@ import {
   // (attribution handlers imported separately below)
   nichePulseSignalHttp,
   actionLoggedHttp,
+  weeklyReviewHttp,
   learningExtractedHttp,
   getMyFoundationHttp,
   getMyCompetitorMovesHttp,
@@ -127,6 +128,7 @@ import {
   getAttributeOutcomesHttp,
   experimentVerdictHttp,
 } from "./gtmMaya/attribution";
+import { saveSteeringDirectiveHttp } from "./gtmMaya/steering";
 import {
   saveExperimentHttp,
   assignArmHttp,
@@ -500,6 +502,13 @@ http.route({
   method: "POST",
   handler: recordConversionHttp,
 });
+// Real-time operator Phase-1 — Maya persists a founder steering directive she
+// parsed during a turn ("focus more on LinkedIn", "stop posting on X").
+http.route({
+  path: "/lc_gtm/save_steering_directive",
+  method: "POST",
+  handler: saveSteeringDirectiveHttp,
+});
 // Read-back — Maya GETs per-post clicks → signups (closed-loop attribution)
 // from her runtime so the differentiator surfaces on Telegram, not just web.
 http.route({
@@ -722,6 +731,11 @@ http.route({
   path: "/lc_gtm/action_logged",
   method: "POST",
   handler: actionLoggedHttp,
+});
+http.route({
+  path: "/lc_gtm/weekly_review",
+  method: "POST",
+  handler: weeklyReviewHttp,
 });
 http.route({
   path: "/lc_gtm/learning_extracted",

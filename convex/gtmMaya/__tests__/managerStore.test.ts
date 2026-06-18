@@ -956,3 +956,88 @@ describe("Sprint 2.17 — gtmTargetThreads new optional fields", () => {
     expect(all).toHaveLength(0);
   });
 });
+
+// ───────────────────── weekly review (upsert) ─────────────────────
+
+describe("Real-time operator Phase-1 — weeklyReviews (upsert)", () => {
+  it("upsertWeeklyReview inserts, then re-running the same week patches in place (idempotent)", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId, accountId } = await setupAgent(t, "u_wr_upsert");
+
+    const id1 = await t.mutation(
+      internal.gtmMaya.managerStore.upsertWeeklyReview,
+      {
+        accountId,
+        agentId,
+        weekStartLocal: "2026-06-08",
+        markdown: "Reddit OP-replies up 3x. Cut X — pure founder echo.",
+        winsArray: ["Reddit OP-reply rate up 3x"],
+        lossesArray: ["X is 80% other founders"],
+        nextWeekRecommendations: ["Double down on r/SaaS", "Pause X"],
+      }
+    );
+
+    // Re-run the SAME week with revised content — must patch the existing
+    // row, never create a second one.
+    const id2 = await t.mutation(
+      internal.gtmMaya.managerStore.upsertWeeklyReview,
+      {
+        accountId,
+        agentId,
+        weekStartLocal: "2026-06-08",
+        markdown: "Revised: Reddit holding, one signup landed.",
+        winsArray: ["First signup from r/SaaS"],
+        lossesArray: [],
+        nextWeekRecommendations: ["Keep r/SaaS cadence"],
+      }
+    );
+    expect(id2).toBe(id1);
+
+    const rows = await t.run(async (ctx) =>
+      ctx.db
+        .query("weeklyReviews")
+        .withIndex("by_creator", (q) => q.eq("creatorId", accountId))
+        .collect()
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].markdown).toContain("one signup landed");
+    expect(rows[0].winsArray).toEqual(["First signup from r/SaaS"]);
+    expect(rows[0].lossesArray).toEqual([]);
+
+    // A DIFFERENT week is a separate row.
+    await t.mutation(internal.gtmMaya.managerStore.upsertWeeklyReview, {
+      accountId,
+      agentId,
+      weekStartLocal: "2026-06-15",
+      markdown: "Next week's review.",
+      winsArray: [],
+      lossesArray: [],
+      nextWeekRecommendations: [],
+    });
+    const all = await t.run(async (ctx) =>
+      ctx.db
+        .query("weeklyReviews")
+        .withIndex("by_creator", (q) => q.eq("creatorId", accountId))
+        .collect()
+    );
+    expect(all).toHaveLength(2);
+  });
+
+  it("rejects a write for an agent that does not belong to the account (defense in depth)", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "u_wr_iso_a");
+    const b = await setupAgent(t, "u_wr_iso_b");
+    // A's account id + B's agent id → assertAgentBelongsToAccount throws.
+    await expect(
+      t.mutation(internal.gtmMaya.managerStore.upsertWeeklyReview, {
+        accountId: a.accountId,
+        agentId: b.agentId,
+        weekStartLocal: "2026-06-08",
+        markdown: "cross-tenant attempt",
+        winsArray: [],
+        lossesArray: [],
+        nextWeekRecommendations: [],
+      })
+    ).rejects.toThrow();
+  });
+});

@@ -70,13 +70,17 @@ export default function ResultsPage() {
     api.gtmMaya.missionControl.getMyPostAttribution,
     {}
   );
+  const weeklyReview = useQuery(
+    api.gtmMaya.missionControl.getMyLatestWeeklyReview
+  );
 
   if (
     snapshot === undefined ||
     conversions === undefined ||
     learnings === undefined ||
     posts === undefined ||
-    attribution === undefined
+    attribution === undefined ||
+    weeklyReview === undefined
   ) {
     return <Loading />;
   }
@@ -97,7 +101,8 @@ export default function ResultsPage() {
     conversionRows.length > 0 ||
     learningRows.length > 0 ||
     postRows.length > 0 ||
-    attributionRows.length > 0;
+    attributionRows.length > 0 ||
+    weeklyReview !== null;
 
   if (!hasAnything) {
     return (
@@ -256,6 +261,81 @@ export default function ResultsPage() {
               Maya in Telegram to lock it in and this turns into a live pace
               tracker.
             </p>
+          </Card>
+        )}
+      </Section>
+
+      {/* ── Strategic Review (weekly) ── */}
+      <Section title="Strategic Review">
+        {weeklyReview === null ? (
+          <Card>
+            <p className="text-sm leading-relaxed text-paper-dim">
+              Your first weekly review lands Sunday. Every week Maya steps back
+              from the day-to-day, reads what converted, and writes up the wins,
+              the losses, and what she&apos;s changing next week — grounded in
+              your real numbers, not vibes. It&apos;ll show up here.
+            </p>
+          </Card>
+        ) : (
+          <Card>
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-mono text-xs uppercase tracking-[0.22em] text-paper">
+                week of {weeklyReview.weekStartLocal}
+              </p>
+              <span className="shrink-0 font-mono text-[11px] text-paper-faint">
+                {timeAgo(weeklyReview.generatedAt)}
+              </span>
+            </div>
+            {weeklyReview.markdown ? (
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-paper-dim">
+                {weeklyReview.markdown}
+              </p>
+            ) : null}
+            {weeklyReview.winsArray.length > 0 ? (
+              <div className="mt-4">
+                <p className="mb-1 font-mono text-[11px] uppercase tracking-wide text-paper-faint">
+                  Wins
+                </p>
+                <ul className="space-y-1">
+                  {weeklyReview.winsArray.map((w, i) => (
+                    <li key={`win-${i}`} className="flex gap-2 text-sm leading-relaxed text-paper">
+                      <span className="select-none text-lime">+</span>
+                      <span>{w}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {weeklyReview.lossesArray.length > 0 ? (
+              <div className="mt-4">
+                <p className="mb-1 font-mono text-[11px] uppercase tracking-wide text-paper-faint">
+                  Losses
+                </p>
+                <ul className="space-y-1">
+                  {weeklyReview.lossesArray.map((l, i) => (
+                    <li key={`loss-${i}`} className="flex gap-2 text-sm leading-relaxed text-paper">
+                      <span className="select-none text-rose">−</span>
+                      <span>{l}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {weeklyReview.nextWeekRecommendations.length > 0 ? (
+              <div className="mt-4">
+                <p className="mb-1 font-mono text-[11px] uppercase tracking-wide text-paper-faint">
+                  Next week
+                </p>
+                <ul className="space-y-1">
+                  {weeklyReview.nextWeekRecommendations.map((r, i) => (
+                    <li key={`next-${i}`} className="flex gap-2 text-sm leading-relaxed text-paper">
+                      <span className="select-none text-paper-faint">→</span>
+                      <span>{r}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </Card>
         )}
       </Section>

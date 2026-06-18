@@ -68,6 +68,7 @@
       "save_post_result",
       "record_published",
       "record_conversion",
+      "save_steering_directive",
       "wrap_link",
       "review_media",
       "log_cost",

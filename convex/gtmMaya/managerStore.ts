@@ -812,6 +812,62 @@ export const recordActionLog = internalMutation({
   },
 });
 
+// ───────────────────── Weekly: strategic review ─────────────────────
+
+/**
+ * Persist (upsert) Maya's Sun-9pm weekly strategic review. The review is
+ * authored agent-side (the `maya-results-reviewer` skill) and POSTed in via
+ * the `/lc_gtm/weekly_review` callback; this is the durable record the Results
+ * UI's "Strategic Review" section reads.
+ *
+ * `weeklyReviews.creatorId` is `v.id("creators")` and a gtm-agent IS a
+ * `creators` row, so `creatorId` == the agent's `accountId`. Idempotent on
+ * (creatorId, weekStartLocal): a re-run of the same week patches the existing
+ * row instead of inserting a duplicate (the agent may re-author mid-week, and
+ * the callback's idempotency key only de-dups exact retries — a fresh review
+ * for the same week must still collapse to one row).
+ */
+export const upsertWeeklyReview = internalMutation({
+  args: {
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    weekStartLocal: v.string(),
+    markdown: v.string(),
+    winsArray: v.array(v.string()),
+    lossesArray: v.array(v.string()),
+    nextWeekRecommendations: v.array(v.string()),
+  },
+  handler: async (ctx, args): Promise<Id<"weeklyReviews">> => {
+    await assertAgentBelongsToAccount(ctx, args.accountId, args.agentId);
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("weeklyReviews")
+      .withIndex("by_creator_and_weekStartLocal", (q) =>
+        q.eq("creatorId", args.accountId).eq("weekStartLocal", args.weekStartLocal)
+      )
+      .first();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        markdown: args.markdown,
+        winsArray: args.winsArray,
+        lossesArray: args.lossesArray,
+        nextWeekRecommendations: args.nextWeekRecommendations,
+        generatedAt: now,
+      });
+      return existing._id;
+    }
+    return await ctx.db.insert("weeklyReviews", {
+      creatorId: args.accountId,
+      weekStartLocal: args.weekStartLocal,
+      markdown: args.markdown,
+      winsArray: args.winsArray,
+      lossesArray: args.lossesArray,
+      nextWeekRecommendations: args.nextWeekRecommendations,
+      generatedAt: now,
+    });
+  },
+});
+
 // ───────────────────── Continuous: niche learnings ─────────────────────
 
 const LEARNING_KIND = v.union(

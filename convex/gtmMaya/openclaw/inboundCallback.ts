@@ -75,7 +75,11 @@ const CALLBACK_KIND = v.union(
   // Data-collection sprint — inbound user message capture (one per turn).
   v.literal("log_message"),
   // W1.2 — founder corrects a product fact in chat; persisted to gtmApps.
-  v.literal("update_product_fact")
+  v.literal("update_product_fact"),
+  // Real-time operator Phase-1 — founder gives Maya a steering directive
+  // ("focus more on LinkedIn", "stop posting on X"); persisted to
+  // gtmSteeringDirectives for the engine + prompts to read.
+  v.literal("save_steering_directive")
 );
 
 function constantTimeEqual(a: string, b: string): boolean {
