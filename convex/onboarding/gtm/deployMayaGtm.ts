@@ -1588,6 +1588,32 @@ export const deployMayaGtm = internalAction({
       );
     }
 
+    // Phase 3 — persistent memory volume (OPT-IN via MAYA_GTM_PERSIST_VOLUME).
+    // Mount a per-app volume at /data so OpenClaw's native memory (recall sqlite,
+    // daily notes) survives our redeploys; the bootstrap re-extracts the prompt
+    // bundle OVER it each boot, so prompt/skill updates still take effect. OFF by
+    // default — the proven ephemeral-rootfs path is untouched until this is
+    // verified with a watched deploy→redeploy→file-check. Best-effort: a volume
+    // failure falls back to ephemeral rather than blocking the deploy.
+    let memoryVolumeName: string | undefined;
+    if (process.env.MAYA_GTM_PERSIST_VOLUME === "true") {
+      try {
+        const vol = await fly.findOrCreateVolume(bundle.flyAppName, {
+          name: "maya_data",
+          sizeGb: 1,
+          region: process.env.FLY_REGION ?? undefined,
+        });
+        memoryVolumeName = vol.name;
+        console.log(
+          `[deployMayaGtm] mounting persistent volume ${vol.id} (${vol.name}, ${vol.region}) at /data`
+        );
+      } catch (err) {
+        console.warn(
+          `[deployMayaGtm] volume ensure failed (continuing ephemeral): ${(err as Error).message}`
+        );
+      }
+    }
+
     let machine;
     try {
       machine = await fly.createMachine({
@@ -1600,6 +1626,7 @@ export const deployMayaGtm = internalAction({
           pluginBundleUrl: bundle.pluginBundleUrl,
           telegramChatId: row.agent.telegramChatId,
           telegramWebhookSecret,
+          memoryVolumeName,
         }),
       });
     } catch (err) {
@@ -1723,9 +1750,17 @@ export function buildGtmMachineConfig(input: {
    *  this + passes it down; OpenClaw config uses it; setWebhook registers
    *  it with Telegram. Per docs/channels/telegram.md webhook mode. */
   telegramWebhookSecret?: string;
+  /** Phase 3 — when set, mount this app's persistent volume at /data so native
+   *  OpenClaw memory survives redeploys. Undefined = ephemeral rootfs (default).
+   *  The bootstrap re-extracts the prompt bundle over /data each boot, so prompt
+   *  updates still take effect even with the volume mounted. */
+  memoryVolumeName?: string;
 }): FlyMachineConfig {
   return {
     image: OPENCLAW_IMAGE,
+    ...(input.memoryVolumeName
+      ? { mounts: [{ volume: input.memoryVolumeName, path: "/data" }] }
+      : {}),
     env: {
       OPENCLAW_STATE_DIR: "/data",
       OPENCLAW_CONFIG_PATH: "/data/openclaw.json",
