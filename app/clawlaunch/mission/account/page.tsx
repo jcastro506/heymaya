@@ -6,7 +6,7 @@
  */
 
 import { useState } from "react";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { useClerk } from "@clerk/nextjs";
 import { api } from "@/convex/_generated/api";
 import {
@@ -45,29 +45,47 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+const DELETE_PHRASE = "DELETE";
+
 export default function AccountPage() {
   const account = useQuery(api.gtmMaya.missionControl.getMyAccount);
-  const deleteAccount = useMutation(
-    api.gtmMaya.missionControl.deleteMyGtmAccount
+  const hardDeleteAccount = useAction(
+    api.gtmMaya.accountLifecycle.hardDeleteMyGtmAccount
+  );
+  const cancelSubscription = useAction(
+    api.gtmMaya.accountLifecycle.cancelMyGtmSubscription
+  );
+  const resumeSubscription = useAction(
+    api.gtmMaya.accountLifecycle.resumeMyGtmSubscription
   );
   const startCheckout = useAction(
     api.billing.gtmBilling.createGtmCheckoutSession
   );
   const { signOut } = useClerk();
   const [confirming, setConfirming] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [checkingOut, setCheckingOut] = useState<GtmTier | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   async function handleDeleteAccount() {
+    if (confirmText.trim().toUpperCase() !== DELETE_PHRASE) return;
     setDeleting(true);
     setDeleteError(null);
     try {
-      await deleteAccount({});
-      // Account soft-deleted (status="deleted"). Now end the Clerk session and
-      // hard-redirect to the public landing — a full reload wipes all client +
-      // Convex state so there's no stale authed dashboard left behind.
+      // Hard, irreversible delete: cancels + deletes the Stripe customer, purges
+      // ALL gtm* rows (cross-tenant learnings exempt), and destroys the Fly app.
+      // The DB purge is authoritative; Stripe/Fly teardown is best-effort.
+      const result = await hardDeleteAccount({});
+      if (!result.deleted) {
+        throw new Error(result.reason ?? "Could not delete your account.");
+      }
+      // Now end the Clerk session and hard-redirect to the public landing — a
+      // full reload wipes all client + Convex state so there's no stale authed
+      // dashboard left behind.
       await signOut();
       window.location.href = "/";
     } catch (err) {
@@ -75,6 +93,50 @@ export default function AccountPage() {
       setDeleteError(
         err instanceof Error ? err.message : "Could not delete your account."
       );
+    }
+  }
+
+  async function handleCancel() {
+    setCancelBusy(true);
+    setCancelError(null);
+    try {
+      const result = await cancelSubscription({});
+      if (!result.ok) {
+        setCancelError(
+          result.reason === "no-active-subscription"
+            ? "No active subscription to cancel."
+            : (result.reason ?? "Could not cancel.")
+        );
+      }
+    } catch (err) {
+      setCancelError(
+        err instanceof Error ? err.message : "Could not cancel."
+      );
+    } finally {
+      setCancelBusy(false);
+    }
+  }
+
+  async function handleResume() {
+    setCancelBusy(true);
+    setCancelError(null);
+    try {
+      const result = await resumeSubscription({});
+      if (!result.ok) {
+        if (result.reason === "subscription-ended-resubscribe") {
+          setCancelError(
+            "Your subscription already ended — pick a plan below to resume."
+          );
+        } else {
+          setCancelError(result.reason ?? "Could not resume.");
+        }
+      }
+    } catch (err) {
+      setCancelError(
+        err instanceof Error ? err.message : "Could not resume."
+      );
+    } finally {
+      setCancelBusy(false);
     }
   }
 
@@ -183,33 +245,81 @@ export default function AccountPage() {
               value={new Date(account.deployedAt).toISOString().slice(0, 10)}
             />
           ) : null}
-          <div className="mt-4 flex flex-col gap-3 border-t border-paper-faint/15 pt-4">
-            <p className="text-sm text-paper-dim">
-              Your first week is free — pick a plan any time to keep Maya
-              running.
-            </p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {GTM_TIERS.map((t) => (
-                <button
-                  key={t.tier}
-                  onClick={() => handleSubscribe(t.tier)}
-                  disabled={checkingOut !== null}
-                  className="flex flex-col gap-0.5 rounded-lg border border-lime/40 bg-lime/5 px-3 py-2 text-left hover:bg-lime/10 disabled:opacity-50"
-                >
-                  <span className="font-mono text-xs uppercase tracking-wide text-paper">
-                    {t.name} — {t.price}
-                  </span>
-                  <span className="text-xs text-paper-dim">{t.blurb}</span>
-                  <span className="mt-1 font-mono text-[10px] uppercase tracking-wide text-lime">
-                    {checkingOut === t.tier ? "Starting…" : "Subscribe"}
-                  </span>
-                </button>
-              ))}
+          {account.canceledAt ? (
+            <div className="mt-4 flex flex-col gap-3 border-t border-paper-faint/15 pt-4">
+              <p className="text-sm text-paper">
+                Subscription canceled.{" "}
+                {account.canceledPeriodEndMs ? (
+                  <>
+                    Active until{" "}
+                    <span className="font-mono text-paper">
+                      {new Date(account.canceledPeriodEndMs)
+                        .toISOString()
+                        .slice(0, 10)}
+                    </span>
+                    , then paused. Your data is kept for 30 days so you can
+                    resume.
+                  </>
+                ) : (
+                  <>Your data is kept for 30 days so you can resume.</>
+                )}
+              </p>
+              <button
+                onClick={handleResume}
+                disabled={cancelBusy}
+                className="self-start rounded-lg border border-lime/40 bg-lime/5 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-lime hover:bg-lime/10 disabled:opacity-50"
+              >
+                {cancelBusy ? "Working…" : "Resume subscription"}
+              </button>
+              {cancelError ? (
+                <p className="text-xs text-[#b3261e]">{cancelError}</p>
+              ) : null}
             </div>
-            {checkoutError ? (
-              <p className="text-xs text-[#b3261e]">{checkoutError}</p>
-            ) : null}
-          </div>
+          ) : (
+            <div className="mt-4 flex flex-col gap-3 border-t border-paper-faint/15 pt-4">
+              <p className="text-sm text-paper-dim">
+                Your first week is free — pick a plan any time to keep Maya
+                running.
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {GTM_TIERS.map((t) => (
+                  <button
+                    key={t.tier}
+                    onClick={() => handleSubscribe(t.tier)}
+                    disabled={checkingOut !== null}
+                    className="flex flex-col gap-0.5 rounded-lg border border-lime/40 bg-lime/5 px-3 py-2 text-left hover:bg-lime/10 disabled:opacity-50"
+                  >
+                    <span className="font-mono text-xs uppercase tracking-wide text-paper">
+                      {t.name} — {t.price}
+                    </span>
+                    <span className="text-xs text-paper-dim">{t.blurb}</span>
+                    <span className="mt-1 font-mono text-[10px] uppercase tracking-wide text-lime">
+                      {checkingOut === t.tier ? "Starting…" : "Subscribe"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {checkoutError ? (
+                <p className="text-xs text-[#b3261e]">{checkoutError}</p>
+              ) : null}
+              {(account.gtmPlanStatus === "active" ||
+                account.gtmPlanStatus === "trialing" ||
+                account.gtmPlanStatus === "past_due") && (
+                <div className="border-t border-paper-faint/15 pt-3">
+                  <button
+                    onClick={handleCancel}
+                    disabled={cancelBusy}
+                    className="font-mono text-xs uppercase tracking-wide text-paper-faint underline decoration-paper-faint/30 underline-offset-2 hover:text-paper-dim disabled:opacity-50"
+                  >
+                    {cancelBusy ? "Working…" : "Cancel subscription"}
+                  </button>
+                  {cancelError ? (
+                    <p className="mt-2 text-xs text-[#b3261e]">{cancelError}</p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          )}
         </Card>
       </Section>
 
@@ -230,19 +340,38 @@ export default function AccountPage() {
           ) : (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-paper">
-                This stops your manager, deletes your account, and signs you
-                out. Are you sure?
+                This permanently deletes your account and all of Maya&apos;s
+                research, cancels billing, and shuts down your manager. This
+                cannot be undone. Type{" "}
+                <span className="font-mono text-paper">{DELETE_PHRASE}</span> to
+                confirm.
               </p>
+              <input
+                type="text"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder={DELETE_PHRASE}
+                autoComplete="off"
+                disabled={deleting}
+                className="w-40 rounded-lg border border-rose/40 bg-transparent px-3 py-1.5 font-mono text-sm text-paper outline-none placeholder:text-paper-faint/50 focus:border-rose disabled:opacity-50"
+              />
               <div className="flex gap-3">
                 <button
                   onClick={handleDeleteAccount}
-                  disabled={deleting}
+                  disabled={
+                    deleting ||
+                    confirmText.trim().toUpperCase() !== DELETE_PHRASE
+                  }
                   className="rounded-lg bg-rose px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink disabled:opacity-50"
                 >
-                  {deleting ? "Deleting…" : "Yes, delete"}
+                  {deleting ? "Deleting…" : "Permanently delete"}
                 </button>
                 <button
-                  onClick={() => setConfirming(false)}
+                  onClick={() => {
+                    setConfirming(false);
+                    setConfirmText("");
+                    setDeleteError(null);
+                  }}
                   disabled={deleting}
                   className="rounded-lg border border-paper-faint/30 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-paper-dim disabled:opacity-50"
                 >
