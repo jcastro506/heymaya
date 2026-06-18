@@ -1489,6 +1489,58 @@ export default defineToolPlugin({
       execute: async (p, _cfg, ctx) =>
         postLc("save_steering_directive", { ...p, idempotencyKey: key(p) }, ctx.signal),
     }),
+    // ── Discovery-pulse engine (real-time operator Phase-3). The pulse cron
+    // drives the continuous discovery loop through these four tools. ──
+    tool({
+      name: "check_discovery_budget",
+      label: "Check Discovery Budget",
+      description:
+        "THE PULSE GATE — call this FIRST every discovery-pulse tick. Reports whether NEW discovery reads are allowed right now under this founder's plan, server-side from the windowed spend. No args. Returns { allowed, mode, spentHourUsd, spentDayUsd, hourCapUsd, dayCapUsd, reason }. If mode === 'monitoring_only' the budget is exhausted: DO NOTHING this tick except keep watching your own posts + inbox — do not initiate any new research_* reads. Only proceed with the rest of the pulse (next_watch_lane → scan → save) when mode === 'full'.",
+      parameters: Type.Object({}),
+      execute: async (_p, _cfg, ctx) => postLc("check_discovery_budget", {}, ctx.signal),
+    }),
+    tool({
+      name: "next_watch_lane",
+      label: "Next Watch Lane",
+      description:
+        "Pick the watch lane most due to run this pulse tick (round-robin) and mark it picked so the rotation advances. Optional: lanes (override the default set ['buyer_intent','switch_intent','competitor','own_perf','go_time']). Returns { lane } — the lane string to scan this tick, or null if you passed an empty set. Call this AFTER check_discovery_budget returns mode 'full', then do the reads for that one lane (don't scan all lanes every tick — rotate).",
+      parameters: Type.Object({
+        lanes: Type.Optional(
+          Type.Array(Type.String(), {
+            description:
+              "Override lanes. Default ['buyer_intent','switch_intent','competitor','own_perf','go_time'].",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("next_watch_lane", p, ctx.signal),
+    }),
+    tool({
+      name: "get_watermark",
+      label: "Get Channel Watermark",
+      description:
+        "Read a channel's current watermark (last read position) BEFORE you scan it, so you can bound the read to only NEW items since last tick. REQUIRED: channel. Returns the row { channel, lastObservedAtMs?, lastSeenId?, cursor?, updatedAt } or null if never set (first read — scan from the top, bounded by COUNT).",
+      parameters: Type.Object({
+        channel: Type.String({ description: "Channel key, e.g. 'reddit', 'x', 'hn'." }),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("get_watermark", p, ctx.signal),
+    }),
+    tool({
+      name: "advance_watermark",
+      label: "Advance Channel Watermark",
+      description:
+        "Persist a channel's NEW read position AFTER you scan it, so the next pulse tick reads only items newer than this. REQUIRED: channel. Pass lastObservedAtMs (epoch ms of the newest item you saw — monotonic, a regressing value is ignored), lastSeenId (its stable id), and/or cursor (opaque pagination state to resume from, persisted even on a dry page). Returns { ok: true }. Skipping this means you'll re-read the same items every tick.",
+      parameters: Type.Object({
+        channel: Type.String({ description: "Channel key, e.g. 'reddit', 'x', 'hn'." }),
+        lastObservedAtMs: Type.Optional(
+          Type.Number({ description: "Epoch ms of the newest item seen (monotonic)." })
+        ),
+        lastSeenId: Type.Optional(Type.String({ description: "Stable id of the newest item." })),
+        cursor: Type.Optional(Type.String({ description: "Opaque pagination cursor to resume from." })),
+        idempotencyKey: IdemKey,
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("advance_watermark", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
     tool({
       name: "wrap_link",
       label: "Wrap Link (attribution)",

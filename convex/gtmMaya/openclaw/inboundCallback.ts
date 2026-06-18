@@ -79,7 +79,12 @@ const CALLBACK_KIND = v.union(
   // Real-time operator Phase-1 — founder gives Maya a steering directive
   // ("focus more on LinkedIn", "stop posting on X"); persisted to
   // gtmSteeringDirectives for the engine + prompts to read.
-  v.literal("save_steering_directive")
+  v.literal("save_steering_directive"),
+  // Real-time operator Phase-3 — discovery-pulse channel watermark advance.
+  // The pulse persists a channel's read position (advance_watermark tool) so
+  // the next tick bounds its read to only new items; the only pulse endpoint
+  // that claims idempotency (next_watch_lane / the reads don't write/claim).
+  v.literal("advance_watermark")
 );
 
 function constantTimeEqual(a: string, b: string): boolean {

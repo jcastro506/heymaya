@@ -128,6 +128,15 @@ export interface MayaGtmWorkspaceInput {
    */
   verifyAllPlatforms?: boolean;
   /**
+   * Phase 3 (real-time operator) — when true, ship the hourly `discovery_pulse`
+   * cron (continuous buyer-thread discovery on bet channels, budget-gated +
+   * watermark-bounded). Off by default: the agent keeps the proven batch
+   * cadence (morning_brief + midday_pulse own discovery; heartbeat monitors
+   * only). Sourced from MAYA_GTM_PULSE_ENABLED at deploy. The discovery budget
+   * gate (degrade-to-monitoring) is the runaway-stop.
+   */
+  pulseEnabled?: boolean;
+  /**
    * Active durable GTM research job created by Convex before deploying the
    * workspace. BOOT.md reads this from MEMORY.md and uses it as the workflow
    * id for subagent callbacks, evidence rows, calendar events, and recovery.
@@ -1679,6 +1688,39 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
         delivery,
         state: {},
       })),
+      // Phase 3 — hourly discovery pulse (real-time operator). Shipped ONLY when
+      // pulseEnabled. LEAN by design: lightContext + thinking:low keep the
+      // orchestration tick cheap (the cheap scan worker does the reading); the
+      // budget gate (check_discovery_budget) degrades to monitoring-only when the
+      // day's discovery allowance is spent, so it can never run away.
+      ...(input.pulseEnabled
+        ? [
+            {
+              id: DISCOVERY_PULSE_CRON.id,
+              name: DISCOVERY_PULSE_CRON.name,
+              description: DISCOVERY_PULSE_CRON.description,
+              enabled: true,
+              createdAtMs: 0,
+              updatedAtMs: 0,
+              schedule: {
+                kind: "cron" as const,
+                expr: DISCOVERY_PULSE_CRON.expr,
+                tz: input.timezone,
+              },
+              sessionTarget: "isolated" as const,
+              wakeMode: "now" as const,
+              payload: {
+                kind: "agentTurn" as const,
+                timeoutSeconds: 300,
+                thinking: "low" as const,
+                lightContext: true as const,
+                message: DISCOVERY_PULSE_CRON.message,
+              },
+              delivery,
+              state: {},
+            },
+          ]
+        : []),
     ],
   };
 
@@ -1744,7 +1786,42 @@ const recurringCrons: ReadonlyArray<{
     message:
       "Monthly reset. 1) `get_agent_lifecycle({})`; if `foundationComplete` is false, reply NO_REPLY (onboarding still owns the first pass). 2) Read `skills/maya-foundation-research/SKILL.md` § monthly-refresh: re-ingest the founder's newest posts to refresh voiceProfileJson + per-channel style exemplars, and re-check whether the channel mix still fits. SILENT-on-progress — no replay of onboarding pings; send at most ONE Telegram only if the month's diff is genuinely operator-worthy (channel changed, new buyer pocket).",
   },
+  {
+    // Phase 3 — nightly DREAMING consolidation (OpenClaw dreaming, Path A).
+    // OpenClaw's native memory-core dreaming promotes into MEMORY.md, which is
+    // WIPED on every Fly redeploy — our durable state is Convex. So we mirror
+    // dreaming's SHAPE (nightly, silent, cross-day consolidation) but land the
+    // durable output in Convex via save_learning / the voice tool /
+    // propose_skill_improvement. Cheap + silent + 3am; complements (not dupes)
+    // weekly_review (founder-facing strategy) + monthly_reset (re-ingest posts).
+    id: "0015_dreaming",
+    name: "Dreaming — nightly consolidation (3am, silent)",
+    expr: "0 3 * * *",
+    description:
+      "Internal, silent, cross-day learning consolidation: promote what repeatedly WORKED to durable memory, sharpen the founder's voice fingerprint, retire dead tactics. Never messages the founder — the fruit shows up in tomorrow's brief.",
+    message:
+      "Nightly dreaming — SILENT, NEVER send a Telegram. 1) `get_agent_lifecycle({})`; if `foundationComplete` is false → NO_REPLY. 2) Read the last ~7 `memory/YYYY-MM-DD.md` daily notes + `DREAMS.md` open hypotheses; pull real outcomes via `get_my_attribution({ windowDays: 7 })` + `get_my_action_log`. 3) DEEP consolidation — only for a hypothesis with REPEATED cross-day signal (NOT a single data point): (a) what WORKED → `save_learning` (a hook/angle/subreddit/posting-window that repeatedly converted; save_learning dedups, so a re-run is safe); (b) sharpen the voice fingerprint from the founder's observed reactions (note a dated refinement); (c) RETIRE dead tactics — strike disconfirmed hypotheses out of `DREAMS.md`; (d) if a win looks cross-tenant-general, emit `propose_skill_improvement` (NEVER self-edit shared skills — Layer 2 is governed). 4) Rewrite `DREAMS.md` 'Open hypotheses / Drift watch' into a clean dated current state, then NO_REPLY. CHEAP: local files + Convex only — no research fleet, no new reads, low thinking.",
+  },
 ];
+
+/**
+ * Phase 3 — the hourly DISCOVERY PULSE (real-time operator). Shipped ONLY when
+ * `pulseEnabled` (MAYA_GTM_PULSE_ENABLED). Lean tick (lightContext + thinking:low)
+ * that orchestrates ONE budget-gated, watermark-bounded lane scan per hour and
+ * escalates only genuine hits — continuous buyer-thread discovery without the
+ * batch-cron latency, hard-stopped by check_discovery_budget (degrade-to-
+ * monitoring) so it can never run away. Kept OUT of `recurringCrons` so the
+ * default deploy stays on the proven batch cadence.
+ */
+const DISCOVERY_PULSE_CRON = {
+  id: "0016_discovery_pulse",
+  name: "Discovery pulse (hourly, real-time operator)",
+  expr: "0 * * * *",
+  description:
+    "Hourly continuous discovery: one budget-gated, watermark-bounded lane scan per tick; escalates only genuine ICP-fit hits to today's queue. Degrades to monitoring-only when the discovery budget is spent.",
+  message:
+    "Discovery pulse (hourly). BOUNDED + BUDGET-GATED — one lane per tick, cheap scan, escalate only real hits. 1) `get_agent_lifecycle({})`; if `foundationComplete` is false → NO_REPLY. 2) `check_discovery_budget({})` — if `mode` is `\"monitoring_only\"` → NO_REPLY (the day's discovery allowance is spent; keep monitoring own posts + inbound, do NOT initiate new discovery reads until the rolling window frees up). 3) `next_watch_lane({})` → the ONE lane to work this tick. 4) `get_watermark({ channel })` for that lane's bet channel, then spawn ONE cheap scan worker bounded to items NEWER than the watermark (read `skills/maya-continuous-research/SKILL.md`) — bet channels only, ONE lane. 5) Judge for genuine ICP fit + velocity. For a REAL hit ONLY: ADD it to today's queue (`propose_calendar` — NEVER replace existing events) and fire ONE one-tap ping / auto-post a drafted reply on a connected channel. No hit → NO_REPLY. 6) `advance_watermark({ channel, ... })` for the channel you scanned so the next tick reads only newer items. Never exceed the budget gate; never re-sweep history (the watermark bounds you).",
+} as const;
 
 
 function renderSkill(slug: (typeof SKILLS)[number]): string {
