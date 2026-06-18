@@ -76,7 +76,7 @@ function metadataCreatorId(
   return undefined;
 }
 
-/** GTM ($99) subscribers carry metadata.product === "gtm" on both the Checkout
+/** GTM subscribers carry metadata.product === "gtm" on both the Checkout
  * session and the subscription. Routes them to the GTM plan-write path instead
  * of the creator (coach/manager) handlers. */
 function isGtmProduct(
@@ -85,18 +85,25 @@ function isGtmProduct(
   return (obj.metadata ?? {}).product === "gtm";
 }
 
-/** Which GTM tier this sub/session entitles. Checkout stamps metadata.tier;
- * absent/unknown → 'gtm99' (the $99 core — fail-safe under-grant, since video
- * is server-gated). The reverse price-id map lives Convex-side (where the
- * STRIPE_PRICE_* env lives); the route trusts the stamped metadata. */
+type GtmTier = "starter" | "growth" | "studio";
+
+/** Which GTM tier this sub/session entitles. Checkout stamps metadata.tier
+ * (`createGtmCheckoutSession`). The three live tiers are starter ($99) /
+ * growth ($149) / studio ($199, +video). The legacy `gtm99` value is mapped
+ * defensively to `starter` (the prior single-$99 tier). Absent/unknown →
+ * `starter`, the fail-safe under-grant (video + the wider channel cap are
+ * server-gated by planFeaturesGtm, so under-granting can never over-entitle).
+ * The reverse price-id map lives Convex-side (where the STRIPE_PRICE_* env
+ * lives); the route trusts the stamped metadata. */
 function gtmTier(
   ...objs: Array<Stripe.Subscription | Stripe.Checkout.Session>
-): "gtm99" | "studio" {
+): GtmTier {
   for (const obj of objs) {
     const t = (obj.metadata ?? {}).tier;
-    if (t === "studio" || t === "gtm99") return t;
+    if (t === "starter" || t === "growth" || t === "studio") return t;
+    if (t === "gtm99") return "starter"; // legacy alias → starter
   }
-  return "gtm99";
+  return "starter";
 }
 
 /** Extract the unix-seconds period end from a subscription, in ms. */

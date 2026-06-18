@@ -29,6 +29,7 @@ import {
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { selectActiveChannels } from "./channelSelection";
+import { planFeaturesGtm } from "./planGtm";
 import type { GtmChannel } from "./channelScoring";
 import type { WorkingFormat } from "./formatIntel";
 
@@ -64,6 +65,13 @@ export interface SynthesisPlanInput {
     workingFormats?: WorkingFormat[];
   }>;
   contentAngles: Array<{ angle: string; hookVariants: string[] }>;
+  /**
+   * Plan-tier ceiling on active channels (from
+   * `planFeaturesGtm.maxActiveChannels`). Optional: omit for no cap (legacy
+   * floor-of-3 behavior). Threaded into selectActiveChannels so the safety-net
+   * plan never lists more channels than the founder's tier paid for.
+   */
+  maxActiveChannels?: number;
 }
 
 /**
@@ -75,7 +83,9 @@ export interface SynthesisPlanInput {
 export function assembleDeterministicPlan(
   input: SynthesisPlanInput
 ): string | null {
-  const selection = selectActiveChannels(input.channelScores);
+  const selection = selectActiveChannels(input.channelScores, {
+    maxActiveChannels: input.maxActiveChannels,
+  });
   // Grounded-or-silent: if we have neither a buyer picture nor any active
   // channel, there's nothing honest to send.
   if (!input.icpDescription && selection.active.length === 0) return null;
@@ -216,6 +226,12 @@ async function buildCandidate(
             angle: a.angle,
             hookVariants: a.hookVariants,
           })),
+          // Plan-tier cap (starter 3 / growth 6 / studio 6; fail-closed 0) so
+          // the safety-net plan never lists more channels than the tier paid
+          // for.
+          maxActiveChannels: planFeaturesGtm({
+            gtmPlanJson: agent.gtmPlanJson,
+          }).maxActiveChannels,
         }
       : null;
 

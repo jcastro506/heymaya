@@ -36,6 +36,7 @@ describe("selectActiveChannels", () => {
     expect(sel.promoted).toEqual([]);
     expect(sel.parked).toEqual(["x"]);
     expect(sel.belowFloor).toBe(false);
+    expect(sel.capped).toBe(false);
     expect(sel.primaryChannel).toBe("reddit");
     expect(sel.secondaryChannel).toBe("tiktok");
   });
@@ -52,6 +53,7 @@ describe("selectActiveChannels", () => {
     expect(sel.promoted).toEqual(["x", "linkedin"]);
     expect(sel.parked).toEqual(["tiktok"]);
     expect(sel.belowFloor).toBe(false);
+    expect(sel.capped).toBe(false);
     expect(sel.active.length).toBe(MIN_ACTIVE_CHANNELS);
   });
 
@@ -71,6 +73,7 @@ describe("selectActiveChannels", () => {
     ]);
     expect(sel.active).toEqual(["reddit", "x"]);
     expect(sel.belowFloor).toBe(true);
+    expect(sel.capped).toBe(false);
     expect(sel.note).toContain("Only 2 channel");
     expect(sel.parked).toEqual(
       expect.arrayContaining(["linkedin", "tiktok", "instagram"])
@@ -87,6 +90,7 @@ describe("selectActiveChannels", () => {
     expect(sel.active).not.toContain("x");
     expect(sel.parked).not.toContain("x"); // blocked is excluded entirely
     expect(sel.active).toEqual(["reddit", "tiktok", "linkedin"]);
+    expect(sel.capped).toBe(false);
   });
 
   it("excludes research-only / launch channels (hn, product_hunt)", () => {
@@ -97,6 +101,7 @@ describe("selectActiveChannels", () => {
     ]);
     expect(sel.active).toEqual(["reddit"]);
     expect(sel.belowFloor).toBe(true);
+    expect(sel.capped).toBe(false);
   });
 
   it("floor-of-1 safety: activates the top non-blocked channel when nothing clears", () => {
@@ -109,6 +114,7 @@ describe("selectActiveChannels", () => {
     expect(sel.active).toEqual(["x"]);
     expect(sel.promoted).toEqual(["x"]);
     expect(sel.belowFloor).toBe(true);
+    expect(sel.capped).toBe(false);
   });
 
   it("returns an empty, honest selection when there is nothing eligible", () => {
@@ -119,6 +125,7 @@ describe("selectActiveChannels", () => {
     expect(sel.active).toEqual([]);
     expect(sel.primaryChannel).toBeNull();
     expect(sel.belowFloor).toBe(true);
+    expect(sel.capped).toBe(false);
     expect(sel.note).toContain("No channels");
   });
 
@@ -132,5 +139,87 @@ describe("selectActiveChannels", () => {
     expect(sel.active.filter((c) => c === "reddit").length).toBe(1);
     expect(sel.primaryChannel).toBe("reddit");
     expect(sel.active).toEqual(["reddit", "x", "tiktok"]);
+    expect(sel.capped).toBe(false);
+  });
+
+  describe("plan-tier maxActiveChannels cap", () => {
+    it("trims to the cap when more channels fit (4 primaries, cap 3)", () => {
+      const sel = selectActiveChannels(
+        [
+          row("reddit", "primary", { score: 0.95 }),
+          row("tiktok", "primary", { score: 0.9 }),
+          row("instagram", "primary", { score: 0.88 }),
+          row("youtube", "primary", { score: 0.86 }),
+        ],
+        { maxActiveChannels: 3 }
+      );
+      // Top 3 by score survive; the lowest-scored primary is demoted to parked.
+      expect(sel.active).toEqual(["reddit", "tiktok", "instagram"]);
+      expect(sel.parked).toEqual(["youtube"]);
+      expect(sel.capped).toBe(true);
+      expect(sel.belowFloor).toBe(false);
+      expect(sel.note).toContain("Plan allows up to 3");
+    });
+
+    it("cap beats the floor (3 fit, cap 2)", () => {
+      const sel = selectActiveChannels(
+        [
+          row("reddit", "primary", { score: 0.9 }),
+          row("x", "primary", { score: 0.8 }),
+          row("tiktok", "primary", { score: 0.7 }),
+        ],
+        { maxActiveChannels: 2 }
+      );
+      expect(sel.active).toEqual(["reddit", "x"]);
+      expect(sel.capped).toBe(true);
+      // A cap below the floor is an intentional paid ceiling, not a shortfall.
+      expect(sel.belowFloor).toBe(false);
+      expect(sel.parked).toEqual(["tiktok"]);
+    });
+
+    it("cap of 0 yields zero active channels (fail-closed default)", () => {
+      const sel = selectActiveChannels(
+        [
+          row("reddit", "primary", { score: 0.9 }),
+          row("x", "primary", { score: 0.8 }),
+        ],
+        { maxActiveChannels: 0 }
+      );
+      expect(sel.active).toEqual([]);
+      expect(sel.primaryChannel).toBeNull();
+      expect(sel.capped).toBe(true);
+      expect(sel.belowFloor).toBe(false);
+      expect(sel.parked).toEqual(expect.arrayContaining(["reddit", "x"]));
+    });
+
+    it("cap >= fitting count leaves the set unchanged (not capped)", () => {
+      const sel = selectActiveChannels(
+        [
+          row("reddit", "primary", { score: 0.9 }),
+          row("x", "primary", { score: 0.8 }),
+          row("tiktok", "primary", { score: 0.7 }),
+        ],
+        { maxActiveChannels: 6 }
+      );
+      expect(sel.active).toEqual(["reddit", "x", "tiktok"]);
+      expect(sel.capped).toBe(false);
+      expect(sel.belowFloor).toBe(false);
+    });
+
+    it("omitting opts preserves legacy no-cap behavior", () => {
+      const withoutOpts = selectActiveChannels([
+        row("reddit", "primary", { score: 0.95 }),
+        row("tiktok", "primary", { score: 0.9 }),
+        row("instagram", "primary", { score: 0.88 }),
+        row("youtube", "primary", { score: 0.86 }),
+      ]);
+      expect(withoutOpts.active).toEqual([
+        "reddit",
+        "tiktok",
+        "instagram",
+        "youtube",
+      ]);
+      expect(withoutOpts.capped).toBe(false);
+    });
   });
 });

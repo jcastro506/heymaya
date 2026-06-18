@@ -1222,8 +1222,13 @@ export const buildAndUploadGtmWorkspace = internalAction({
     // Channel-activation policy: turn the judge's scored rows into the SET of
     // channels Maya actually runs (lock all high-fit, floor of 3, quality
     // floor, honesty escape). One pure fn shared with the mission board + the
-    // onboarding picker so deploy and UI never disagree.
-    const channelSelection = selectActiveChannels(row.channelScores);
+    // onboarding picker so deploy and UI never disagree. The plan-tier
+    // `maxActiveChannels` cap (starter 3 / growth 6 / studio 6; fail-closed 0)
+    // trims the set server-side so a tier never runs more than it paid for.
+    const channelSelection = selectActiveChannels(row.channelScores, {
+      maxActiveChannels: planFeaturesGtm({ gtmPlanJson: row.agent.gtmPlanJson })
+        .maxActiveChannels,
+    });
 
     const { files } = buildMayaGtmWorkspace({
       accountEmail: row.creator.email,
