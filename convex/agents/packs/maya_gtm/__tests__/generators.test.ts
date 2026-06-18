@@ -631,12 +631,20 @@ describe("Maya GTM workspace pack", () => {
     ]);
     // The hourly discovery pulse is OFF by default (proven batch cadence).
     expect(jobs.jobs.find((j) => j.id === "0016_discovery_pulse")).toBeUndefined();
-    // The resume ladder is one-shot + self-deleting + idempotent.
-    const resume = jobs.jobs.find((j) => j.id === "0002_foundation_resume_8m")!;
+    // The resume ladder is one-shot + self-deleting + idempotent. Cast: the
+    // jobs array is a heterogeneous union (only one-shots carry deleteAfterRun
+    // and schedule is optional across the union), so read these loosely.
+    const resume = jobs.jobs.find(
+      (j) => j.id === "0002_foundation_resume_8m"
+    ) as unknown as {
+      deleteAfterRun?: boolean;
+      schedule?: { kind?: string };
+      payload?: { message?: string };
+    };
     expect(resume.deleteAfterRun).toBe(true);
-    expect(resume.schedule.kind).toBe("at");
-    expect(resume.payload.message).toContain("acquire_foundation_lease");
-    expect(resume.payload.message).toContain("foundationComplete");
+    expect(resume.schedule?.kind).toBe("at");
+    expect(resume.payload?.message).toContain("acquire_foundation_lease");
+    expect(resume.payload?.message).toContain("foundationComplete");
   });
 
   it("Sprint 2.16u-fix8 — kickstart cron references SOUL.md for voice (firewall removed)", () => {
