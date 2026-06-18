@@ -1090,12 +1090,18 @@ export const patchTelegramChatId = internalMutation({
  * Comp the REAL (non-synthetic) agent owned by `email` to an active GTM plan,
  * bypassing Stripe. For demoing a real prod signup before/without billing.
  *   npx convex run _admin/realWorldDeployGtm:compRealAgentByEmail \
- *     '{"email":"founder@example.com"}'   # tier defaults to gtm99
+ *     '{"email":"founder@example.com"}'   # tier defaults to starter
  */
 export const compRealAgentByEmail = internalMutation({
   args: {
     email: v.string(),
-    tier: v.optional(v.union(v.literal("gtm99"), v.literal("studio"))),
+    tier: v.optional(
+      v.union(
+        v.literal("starter"),
+        v.literal("growth"),
+        v.literal("studio")
+      )
+    ),
   },
   handler: async (
     ctx,
@@ -1115,7 +1121,7 @@ export const compRealAgentByEmail = internalMutation({
     await ctx.db.patch(agent._id, {
       gtmPlanJson: buildGtmPlanJson({
         status: "active" as GtmPlanStatus,
-        tier: (args.tier as GtmPlan | undefined) ?? "gtm99",
+        tier: (args.tier as GtmPlan | undefined) ?? "starter",
         periodStartMs: Date.now(),
       }),
       updatedAt: Date.now(),

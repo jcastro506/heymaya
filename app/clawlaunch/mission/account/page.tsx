@@ -21,6 +21,19 @@ import { ConnectedAccounts } from "./_ConnectedAccounts";
 import { ProductBrain } from "./_ProductBrain";
 import { PostingControl } from "./_PostingControl";
 
+type GtmTier = "starter" | "growth" | "studio";
+
+const GTM_TIERS: ReadonlyArray<{
+  tier: GtmTier;
+  name: string;
+  price: string;
+  blurb: string;
+}> = [
+  { tier: "starter", name: "Starter", price: "$99/mo", blurb: "Up to 3 channels" },
+  { tier: "growth", name: "Growth", price: "$149/mo", blurb: "Up to 6 channels" },
+  { tier: "studio", name: "Studio", price: "$199/mo", blurb: "6 channels + video" },
+];
+
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-2">
@@ -44,7 +57,7 @@ export default function AccountPage() {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [checkingOut, setCheckingOut] = useState(false);
+  const [checkingOut, setCheckingOut] = useState<GtmTier | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   async function handleDeleteAccount() {
@@ -65,17 +78,17 @@ export default function AccountPage() {
     }
   }
 
-  async function handleSubscribe() {
-    setCheckingOut(true);
+  async function handleSubscribe(tier: GtmTier) {
+    setCheckingOut(tier);
     setCheckoutError(null);
     try {
-      const { url } = await startCheckout({ interval: "monthly" });
+      const { url } = await startCheckout({ interval: "monthly", tier });
       window.location.href = url;
     } catch (err) {
       setCheckoutError(
         err instanceof Error ? err.message : "Could not start checkout."
       );
-      setCheckingOut(false);
+      setCheckingOut(null);
     }
   }
 
@@ -170,19 +183,28 @@ export default function AccountPage() {
               value={new Date(account.deployedAt).toISOString().slice(0, 10)}
             />
           ) : null}
-          <div className="mt-4 flex flex-col gap-2 border-t border-paper-faint/15 pt-4">
-            <div className="flex items-center justify-between gap-4">
-              <p className="text-sm text-paper-dim">
-                HeyMaya is <span className="text-paper">$99/mo</span>. Your first
-                week is free — subscribe any time to keep Maya running.
-              </p>
-              <button
-                onClick={handleSubscribe}
-                disabled={checkingOut}
-                className="shrink-0 rounded-lg bg-lime px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-ink disabled:opacity-50"
-              >
-                {checkingOut ? "Starting…" : "Subscribe — $99/mo"}
-              </button>
+          <div className="mt-4 flex flex-col gap-3 border-t border-paper-faint/15 pt-4">
+            <p className="text-sm text-paper-dim">
+              Your first week is free — pick a plan any time to keep Maya
+              running.
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {GTM_TIERS.map((t) => (
+                <button
+                  key={t.tier}
+                  onClick={() => handleSubscribe(t.tier)}
+                  disabled={checkingOut !== null}
+                  className="flex flex-col gap-0.5 rounded-lg border border-lime/40 bg-lime/5 px-3 py-2 text-left hover:bg-lime/10 disabled:opacity-50"
+                >
+                  <span className="font-mono text-xs uppercase tracking-wide text-paper">
+                    {t.name} — {t.price}
+                  </span>
+                  <span className="text-xs text-paper-dim">{t.blurb}</span>
+                  <span className="mt-1 font-mono text-[10px] uppercase tracking-wide text-lime">
+                    {checkingOut === t.tier ? "Starting…" : "Subscribe"}
+                  </span>
+                </button>
+              ))}
             </div>
             {checkoutError ? (
               <p className="text-xs text-[#b3261e]">{checkoutError}</p>

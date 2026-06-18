@@ -10,18 +10,24 @@
  * operator-ratified product decisions of 2026-06-02 (memory:
  * project_maya_v2_zernio_autopost_plan / project_gtm_tiers_locked_2026_06_01).
  *
- * LOCKED PRODUCT DECISIONS encoded here:
- *   - TWO TIERS (additive). `GtmPlan = 'gtm99' | 'studio'`. The $99 core
- *     (`gtm99`) is everything EXCEPT video; the $149 `studio` tier adds
- *     Creatify video generation (`canVideo` + `videoCreditsMonth`). The de-tier
- *     of 2026-06-02 still holds for the core caps (fair-use, not gates); the
- *     ONLY thing tier now gates is video (operator decision 2026-06-14).
- *   - For an ACTIVE gtm99 founder, every NON-VIDEO feature is true: research,
- *     drafts, autoPost, reads, monitoring, banSafety, attribution — but
- *     `canVideo` is FALSE and `videoCreditsMonth` is 0. Video is the studio
- *     upsell; gtm99 falls back to slideshow/text.
- *   - For an ACTIVE `studio` founder, ALL of the above PLUS `canVideo: true`
- *     and the monthly video ceiling.
+ * LOCKED PRODUCT DECISIONS encoded here (3-tier, channel-gated — see
+ * `docs/SPRINT_PLAN_REALTIME_OPERATOR_V1.md` §15.1/§16):
+ *   - THREE TIERS. `GtmPlan = 'starter' | 'growth' | 'studio'`. The axis is
+ *     ACTIVE CHANNEL COUNT (the #1 COGS lever) + video on the top tier:
+ *       starter ($99)  — up to 3 active channels, no video.
+ *       growth  ($149) — up to 6 active channels, no video.
+ *       studio  ($199) — up to 6 active channels + Creatify video.
+ *     `maxActiveChannels` (3 / 6 / 6) is the load-bearing gate — enforced
+ *     server-side by `selectActiveChannels` so a tier can NEVER run more
+ *     channels than it paid for. Channel gating doubles as pulse-cost
+ *     governance. Video stays Studio-only (`canVideo` + `videoCreditsMonth`).
+ *   - BACK-COMPAT: a legacy `gtmPlanJson` with `tier:"gtm99"` (the prior $99
+ *     single tier) resolves to `starter`; the prior `studio` ($149+video)
+ *     keeps mapping to `studio`. No stranded comped agents.
+ *   - For an ACTIVE founder, every NON-VIDEO feature is true: research,
+ *     drafts, autoPost, reads, monitoring, banSafety, attribution. `canVideo`
+ *     is FALSE on starter/growth (they fall back to slideshow/text) and TRUE
+ *     on studio with the monthly video ceiling.
  *   - `banSafetyManualGate` and `attributionEnabled` are CONST true — they can
  *     NEVER be turned off by any state. They are the anti-churn moats; even the
  *     fail-closed default keeps them true.
@@ -51,7 +57,13 @@
  * import `Doc`/`Id` from dataModel to stay schema-decoupled and tsc-safe.
  */
 
-export type GtmPlan = "gtm99" | "studio";
+export type GtmPlan = "starter" | "growth" | "studio";
+
+/**
+ * Legacy tier name from the prior single-$99 era. Accepted on READ (back-compat
+ * for already-written gtmPlanJson) and mapped to `starter`. Never emitted.
+ */
+type LegacyGtmPlan = "gtm99";
 
 /** Lifecycle status of the founder's GTM subscription. */
 export type GtmPlanStatus = "active" | "past_due" | "trialing" | "none";
@@ -61,6 +73,14 @@ export interface GtmPlanFeatures {
   status: GtmPlanStatus;
 
   // ── Fair-use cost circuit-breakers (NOT paywalls) ──────────────────────
+  /**
+   * TIER GATE — max channels Maya may keep ACTIVE (running + posting) at once.
+   * starter 3 / growth 6 / studio 6. Enforced server-side by
+   * `selectActiveChannels`. This is the #1 COGS lever and the primary paid
+   * differentiator; fail-closed default is 0 (paused). Distinct from
+   * `connectedChannelCap` (how many a founder may link).
+   */
+  maxActiveChannels: number;
   /** Max channels the founder may CONNECT. 6 = all offered channels. */
   connectedChannelCap: number;
   /** Max channels that may AUTO-POST. */
@@ -95,15 +115,16 @@ export interface GtmPlanFeatures {
 }
 
 /**
- * The full-product feature set for an ACTIVE $99 `gtm99` founder. Everything
- * EXCEPT video; caps are the fair-use ceilings. Video is the studio upsell, so
- * `canVideo: false` and `videoCreditsMonth: 0` here.
+ * The ACTIVE $99 `starter` feature set: full real-time operator on up to 3
+ * channels, no video. Caps are fair-use ceilings; `maxActiveChannels: 3` is the
+ * paid gate. Video is the studio upsell → `canVideo: false`.
  */
-const GTM99_ACTIVE: GtmPlanFeatures = {
-  plan: "gtm99",
+const GTM_STARTER_ACTIVE: GtmPlanFeatures = {
+  plan: "starter",
   status: "active",
+  maxActiveChannels: 3,
   connectedChannelCap: 6,
-  autoPostChannelCap: 6,
+  autoPostChannelCap: 3,
   videoCreditsMonth: 0,
   xUrlPostsSoftCapMonth: 30,
   banSafetyManualGate: true,
@@ -117,11 +138,22 @@ const GTM99_ACTIVE: GtmPlanFeatures = {
 };
 
 /**
- * The ACTIVE $149 `studio` feature set: everything in gtm99 PLUS Creatify video
- * generation, bounded by the monthly video ceiling.
+ * The ACTIVE $149 `growth` feature set: everything in starter but on up to 6
+ * channels (the breadth upgrade). Still no video.
+ */
+const GTM_GROWTH_ACTIVE: GtmPlanFeatures = {
+  ...GTM_STARTER_ACTIVE,
+  plan: "growth",
+  maxActiveChannels: 6,
+  autoPostChannelCap: 6,
+};
+
+/**
+ * The ACTIVE $199 `studio` feature set: 6 channels (like growth) PLUS Creatify
+ * video generation, bounded by the monthly video ceiling.
  */
 const GTM_STUDIO_ACTIVE: GtmPlanFeatures = {
-  ...GTM99_ACTIVE,
+  ...GTM_GROWTH_ACTIVE,
   plan: "studio",
   videoCreditsMonth: 15,
   canVideo: true,
@@ -129,7 +161,9 @@ const GTM_STUDIO_ACTIVE: GtmPlanFeatures = {
 
 /** Resolve the base ACTIVE feature set for a tier. */
 function tierBase(tier: GtmPlan): GtmPlanFeatures {
-  return tier === "studio" ? GTM_STUDIO_ACTIVE : GTM99_ACTIVE;
+  if (tier === "studio") return GTM_STUDIO_ACTIVE;
+  if (tier === "growth") return GTM_GROWTH_ACTIVE;
+  return GTM_STARTER_ACTIVE;
 }
 
 /**
@@ -139,8 +173,9 @@ function tierBase(tier: GtmPlan): GtmPlanFeatures {
  * so nothing auto-posts. This is a safe floor, not a paywall.
  */
 const FAIL_CLOSED_DEFAULT: GtmPlanFeatures = {
-  plan: "gtm99",
+  plan: "starter",
   status: "none",
+  maxActiveChannels: 0,
   connectedChannelCap: 0,
   autoPostChannelCap: 0,
   videoCreditsMonth: 0,
@@ -174,6 +209,17 @@ interface ParsedGtmPlan {
     xUrlPostsThisPeriod?: unknown;
     videosThisPeriod?: unknown;
   };
+}
+
+/**
+ * Resolve a raw `tier` value (from gtmPlanJson) to a valid GtmPlan, or null if
+ * unrecognized. Accepts the three live tiers plus the legacy `gtm99` alias,
+ * which maps to `starter` so pre-3-tier plan JSON keeps working.
+ */
+function resolveTier(raw: unknown): GtmPlan | null {
+  if (raw === "starter" || raw === "growth" || raw === "studio") return raw;
+  if (raw === ("gtm99" satisfies LegacyGtmPlan)) return "starter";
+  return null;
 }
 
 /** A non-negative finite integer cap, or the supplied fallback. */
@@ -220,11 +266,12 @@ export function planFeaturesGtm(agent: {
     return FAIL_CLOSED_DEFAULT;
   }
 
-  // Two valid tiers: gtm99 ($99, no video) + studio ($149, +video). Anything
-  // else (missing/unknown) → fail closed. The tier-base carries the right
-  // canVideo + videoCreditsMonth, so video gating is just the tier boundary.
-  const tier: GtmPlan | null =
-    parsed.tier === "studio" ? "studio" : parsed.tier === "gtm99" ? "gtm99" : null;
+  // Three valid tiers: starter ($99/3ch) · growth ($149/6ch) · studio
+  // ($199/6ch+video). The legacy `gtm99` tier maps to `starter` (back-compat
+  // for already-written plan JSON). Anything else (missing/unknown) → fail
+  // closed. The tier-base carries the right maxActiveChannels + canVideo +
+  // videoCreditsMonth, so both channel- and video-gating are the tier boundary.
+  const tier: GtmPlan | null = resolveTier(parsed.tier);
   if (!tier) {
     return FAIL_CLOSED_DEFAULT;
   }
@@ -347,7 +394,7 @@ export function gtmTrialDays(): number {
  */
 export function buildGtmPlanJson(input: {
   status: GtmPlanStatus;
-  /** Which tier was purchased/comped. Default 'gtm99' (the $99 core). */
+  /** Which tier was purchased/comped. Default 'starter' (the $99 core). */
   tier?: GtmPlan;
   periodStartMs?: number;
   /** Optional cap overrides; omit for the tier's fair-use ceilings. */
@@ -359,7 +406,7 @@ export function buildGtmPlanJson(input: {
   }>;
 }): string {
   return JSON.stringify({
-    tier: input.tier ?? "gtm99",
+    tier: input.tier ?? "starter",
     status: input.status,
     ...(input.caps ?? {}),
     periodStart: input.periodStartMs ?? null,

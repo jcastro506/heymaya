@@ -2,6 +2,7 @@ import { query } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { decideLearningLoop } from "./resultsLoop";
 import { selectActiveChannels } from "./channelSelection";
+import { planFeaturesGtm } from "./planGtm";
 
 export interface MissionBoardItem {
   label: string;
@@ -102,6 +103,13 @@ export const getMyMissionBoard = query({
       .withIndex("by_account", (q) => q.eq("accountId", creator._id))
       .collect();
 
+    // Plan-tier cap on active channels (starter 3 / growth 6 / studio 6;
+    // fail-closed 0). Enforced server-side so the mission board's Plan card
+    // never shows more channels than the founder's tier paid for.
+    const maxActiveChannels = planFeaturesGtm({
+      gtmPlanJson: agent.gtmPlanJson,
+    }).maxActiveChannels;
+
     return projectMissionBoard({
       agent,
       app,
@@ -110,6 +118,7 @@ export const getMyMissionBoard = query({
       channelScores,
       drafts,
       snapshots,
+      maxActiveChannels,
     });
   },
 });
@@ -157,6 +166,12 @@ export function projectMissionBoard(input: {
       "replies" | "clicks" | "signups" | "demos" | "feedbackItems" | "capturedAt"
     >
   >;
+  /**
+   * Plan-tier ceiling on active channels (from
+   * `planFeaturesGtm.maxActiveChannels`). Optional: omit for no cap (legacy
+   * floor-of-3 behavior) so existing callers/tests keep working.
+   */
+  maxActiveChannels?: number;
 }): MissionBoardData {
   const latestJob = input.latestJob;
   const appName = input.app?.name?.trim() || "Your product";
@@ -172,7 +187,9 @@ export function projectMissionBoard(input: {
   // The Plan card shows the channels Maya actually RUNS — the activation
   // policy's set (lock all high-fit + floor of 3), not the raw judge decisions,
   // so the mission board matches what deploy renders into GTM.md.
-  const channelSelection = selectActiveChannels(input.channelScores);
+  const channelSelection = selectActiveChannels(input.channelScores, {
+    maxActiveChannels: input.maxActiveChannels,
+  });
   const activeChannels = channelSelection.active;
   // Same set as full score rows (carrying firstWeekTest), in policy order, for
   // the task/test builders below.

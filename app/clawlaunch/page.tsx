@@ -700,13 +700,16 @@ function Channels() {
 
 
 /* -----------------------------------------------------------------
- * Pricing — two ways to let her run it. Editorial two-column, not
- * boxy SaaS cards. The Studio column carries the lime accent.
+ * Pricing — three ways to let her run it. Editorial three-column,
+ * not boxy SaaS cards. Same operator + same proof on every tier;
+ * the columns differ only in breadth (channels) and whether she
+ * also films it. The Studio column carries the lime accent.
  * ----------------------------------------------------------------- */
 function PriceColumn({
   accent,
   price,
   cadence,
+  annual,
   name,
   line,
   features,
@@ -715,6 +718,7 @@ function PriceColumn({
   accent: boolean;
   price: string;
   cadence: string;
+  annual: string;
   name: string;
   line: string;
   features: string[];
@@ -722,22 +726,25 @@ function PriceColumn({
 }) {
   return (
     <div
-      className={`h-full border-t pt-8 ${
+      className={`flex h-full flex-col border-t pt-8 ${
         accent ? "border-[#0a0a0a]" : "border-[#0a0a0a]/15"
       }`}
     >
       <div className="flex items-baseline gap-2">
-        <span className="font-display italic text-[clamp(3rem,6vw,4.5rem)] leading-[0.9] tracking-tight">
+        <span className="font-display italic text-[clamp(2.6rem,5vw,4rem)] leading-[0.9] tracking-tight">
           {price}
         </span>
         <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#0a0a0a]/45">
           {cadence}
         </span>
       </div>
+      <p className="mt-2 font-mono text-[11px] tracking-[0.05em] text-[#0a0a0a]/40">
+        {annual}
+      </p>
       <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/55">
         {name}
       </p>
-      <p className="mt-2 max-w-sm font-display italic text-[1.5rem] leading-[1.15] tracking-tight">
+      <p className="mt-2 max-w-sm font-display italic text-[1.35rem] leading-[1.15] tracking-tight">
         {line}
       </p>
       <ul className="mt-7 space-y-3">
@@ -745,7 +752,7 @@ function PriceColumn({
           <li key={f} className="flex items-baseline gap-3">
             <span
               className={`mt-1 inline-block size-1.5 shrink-0 rounded-full ${
-                accent ? "bg-[#0a0a0a]" : "bg-[#0a0a0a]/40"
+                accent ? "bg-[#d6ff3d]" : "bg-[#0a0a0a]/40"
               }`}
             />
             <span className="text-[15px] leading-[1.5] text-[#0a0a0a]/75">
@@ -754,7 +761,21 @@ function PriceColumn({
           </li>
         ))}
       </ul>
-      <p className="mt-7 text-[13px] text-[#0a0a0a]/45">{footnote}</p>
+      <div className="mt-auto pt-8">
+        <Link
+          prefetch={false}
+          href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
+          className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[14px] transition-colors ${
+            accent
+              ? "bg-[#0a0a0a] text-[#d6ff3d] hover:bg-[#0a0a0a]/85"
+              : "border border-[#0a0a0a]/20 text-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#fbfaf6]"
+          }`}
+        >
+          {primaryCtaLabel("Start free")}
+          <span>→</span>
+        </Link>
+        <p className="mt-5 text-[13px] text-[#0a0a0a]/45">{footnote}</p>
+      </div>
     </div>
   );
 }
@@ -770,43 +791,71 @@ function Pricing() {
           <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
             Pricing
           </p>
-          <h2 className="mb-16 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
-            Two ways to let her run it.
+          <h2 className="mb-6 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
+            Three ways to let her run it.
           </h2>
+          <p className="mb-16 max-w-2xl text-[16px] leading-[1.6] text-[#0a0a0a]/70">
+            Same always-on operator on every tier — she watches your market,
+            finds the right conversations, writes in your voice, and proves
+            which post produced a customer. You&apos;re only choosing how many
+            channels she runs, and whether she films it too.
+          </p>
         </RevealOnView>
         <div className="grid grid-cols-12 gap-x-12 gap-y-14">
-          <RevealOnView delay={0.05} className="col-span-12 sm:col-span-6">
+          <RevealOnView delay={0.05} className="col-span-12 sm:col-span-4">
             <PriceColumn
               accent={false}
               price="$99"
               cadence="/mo"
-              name="HeyMaya"
+              annual="or $999/yr"
+              name="HeyMaya Starter"
               line="She gets you customers."
               features={[
-                "Finds where your buyers already are — every channel",
+                "Up to 3 channels, run for you",
+                "Finds where your buyers already are",
                 "Writes posts + replies in your learned voice",
                 "Designs grounded slideshows from your real screens",
                 "Posts for you, ban-safe, on the channels you connect",
-                "Tracks which post drove the click — not just which got likes",
+                "Proves which post drove the click — not just likes",
               ]}
               footnote="7 days free, then $99/mo. Cancel anytime."
             />
           </RevealOnView>
-          <RevealOnView delay={0.12} className="col-span-12 sm:col-span-6">
+          <RevealOnView delay={0.1} className="col-span-12 sm:col-span-4">
+            <PriceColumn
+              accent={false}
+              price="$149"
+              cadence="/mo"
+              annual="or $1,499/yr"
+              name="HeyMaya Growth"
+              line="More surface, same proof."
+              features={[
+                "Up to 6 channels, run for you",
+                "Everything in Starter, across twice the surface",
+                "She works every channel your audience actually lives on",
+                "One voice, one operator, coordinated across all of them",
+                "Same click-level attribution on every post",
+              ]}
+              footnote="7 days free, then $149/mo. Upgrade or downgrade anytime."
+            />
+          </RevealOnView>
+          <RevealOnView delay={0.15} className="col-span-12 sm:col-span-4">
             <PriceColumn
               accent
-              price="$149"
+              price="$199"
               cadence="/mo · Studio"
+              annual="or $1,999/yr"
               name="HeyMaya Studio"
               line="Everything — and she films it."
               features={[
-                "Everything in HeyMaya, plus:",
-                "~15 short-form videos a month, done for you",
+                "Up to 6 channels, run for you",
+                "Everything in Growth, plus:",
+                "~15 short-form AI videos a month, done for you",
                 "Copies the video format already winning your niche",
                 "Built from your real product, never a fake UI",
                 "Posted and click-tracked, like everything else",
               ]}
-              footnote="7 days free, then $149/mo. Upgrade or downgrade anytime."
+              footnote="7 days free, then $199/mo. Upgrade or downgrade anytime."
             />
           </RevealOnView>
         </div>
@@ -1370,7 +1419,7 @@ function FinalCTA() {
                 her on. She takes it from there.
               </p>
               <p className="mt-3 text-[13px] text-[#0a0a0a]/40">
-                7 days free &mdash; then $99/mo. Cancel any time.
+                7 days free &mdash; plans from $99/mo. Cancel any time.
               </p>
             </div>
           </div>

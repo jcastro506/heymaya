@@ -17,6 +17,7 @@
 import { v } from "convex/values";
 import {
   httpAction,
+  internalAction,
   internalMutation,
   internalQuery,
 } from "../_generated/server";
@@ -28,6 +29,10 @@ import {
   type Arm,
   type ExperimentVerdict,
 } from "./experimentStats";
+import {
+  composeConversionPing,
+  type ConversionKind,
+} from "./conversionPing";
 
 /** The content-attribute dimensions Maya can run an experiment across — the
  *  keys of gtmDraftedContent.attributes. */
@@ -146,7 +151,7 @@ export const recordConversion = internalMutation({
         .first();
       if (wrap && wrap.agentId === args.agentId) linkWrapId = wrap._id;
     }
-    return await ctx.db.insert("gtmConversions", {
+    const conversionId = await ctx.db.insert("gtmConversions", {
       accountId: args.accountId,
       agentId: args.agentId,
       kind: args.kind,
@@ -156,6 +161,221 @@ export const recordConversion = internalMutation({
       occurredAt: Date.now(),
       note: args.note,
     });
+
+    // NOTE: the event-driven conversion ping is fired by the ACTION callers
+    // (recordConversionHttp + the pixel httpAction) AFTER this mutation commits
+    // — not scheduled from here. Keeping the mutation pure (DB write only) means
+    // a Telegram failure can never roll back the recorded conversion, and it
+    // avoids scheduling an action from a mutation. The HTTP/pixel paths claim an
+    // idempotency key upstream, so each conversion fires the ping exactly once.
+    // This is ADDITIVE to the 8pm recap.
+    return conversionId;
+  },
+});
+
+/**
+ * Count this agent's conversions of a given kind that occurred "today" (since
+ * local-ish midnight, computed in the agent's timezone when known, else UTC).
+ * Used by the conversion ping's "that's N today" tail — grounded, not guessed.
+ */
+export const countConversionsTodayByKind = internalQuery({
+  args: {
+    agentId: v.id("gtmAgents"),
+    accountId: v.id("creators"),
+    kind: CONVERSION_KIND,
+  },
+  handler: async (ctx, args): Promise<number> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent || agent.accountId !== args.accountId) return 0;
+
+    // Day boundary in the agent's timezone when we have one; UTC otherwise.
+    const tz =
+      typeof agent.timezone === "string" && agent.timezone.trim() !== ""
+        ? agent.timezone.trim()
+        : "UTC";
+    const now = Date.now();
+    let dayStart: number;
+    try {
+      // tz offset (ms) = (wall-clock in tz, read as if UTC) − (true UTC now).
+      const offsetMs = wallClockAsUtc(now, tz) - now;
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(new Date(now));
+      const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+      // Local midnight read as UTC, then shifted back by the offset = the true
+      // UTC instant of midnight in `tz`.
+      const localMidnightAsUtc = Date.parse(
+        `${get("year")}-${get("month")}-${get("day")}T00:00:00Z`
+      );
+      dayStart = localMidnightAsUtc - offsetMs;
+      if (!Number.isFinite(dayStart)) dayStart = now - (now % 86_400_000);
+    } catch {
+      dayStart = now - (now % 86_400_000);
+    }
+
+    const convs = await ctx.db
+      .query("gtmConversions")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    return convs
+      .filter(
+        (c) =>
+          c.accountId === args.accountId &&
+          c.kind === args.kind &&
+          c.occurredAt >= dayStart
+      )
+      .reduce((s, c) => s + c.count, 0);
+  },
+});
+
+/** The wall-clock time in `tz` for instant `now`, parsed back as a UTC instant.
+ *  (wallClockAsUtc(now, tz) − now) is the tz's current UTC offset in ms. */
+function wallClockAsUtc(now: number, tz: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(now));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+  // "24" hour can appear at midnight in some engines — normalize to "00".
+  const hour = get("hour") === "24" ? "00" : get("hour");
+  return Date.parse(
+    `${get("year")}-${get("month")}-${get("day")}T${hour}:${get("minute")}:${get("second")}Z`
+  );
+}
+
+/** Load everything the conversion ping needs: agent chat id + product, the
+ *  conversion's kind/count, and the grounded channel/token from its wrap. */
+export const peekConversionForPing = internalQuery({
+  args: { conversionId: v.id("gtmConversions") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    agentId: Id<"gtmAgents">;
+    accountId: Id<"creators">;
+    telegramChatId: string | null;
+    kind: ConversionKind;
+    count: number;
+    channel: string | null;
+    token: string | null;
+  } | null> => {
+    const conv = await ctx.db.get(args.conversionId);
+    if (!conv) return null;
+    const agent = await ctx.db.get(conv.agentId);
+    // Fail-closed cross-tenant check: agent must exist and own this conversion.
+    if (!agent || agent.accountId !== conv.accountId) return null;
+
+    let channel: string | null = null;
+    let token: string | null = null;
+    if (conv.linkWrapId) {
+      const wrap = await ctx.db.get(conv.linkWrapId);
+      // Only ground the channel if the wrap belongs to the SAME agent/account.
+      if (
+        wrap &&
+        wrap.agentId === conv.agentId &&
+        wrap.accountId === conv.accountId
+      ) {
+        channel = wrap.platform ?? null;
+        token = wrap.token;
+      }
+    }
+
+    return {
+      agentId: conv.agentId,
+      accountId: conv.accountId,
+      telegramChatId: agent.telegramChatId ?? null,
+      kind: conv.kind,
+      count: conv.count,
+      channel,
+      token,
+    };
+  },
+});
+
+/**
+ * Phase-1 ① — event-driven conversion ping.
+ *
+ * Fires (scheduled, non-blocking) the moment a conversion is recorded. Loads
+ * the agent's Telegram chat, grounds the driving channel/post from the wrap
+ * token when present, composes a short anti-sycophantic ping, and sends it via
+ * the shared bot. No chat id → silent no-op. A send failure is logged, never
+ * thrown (the conversion is already committed).
+ *
+ * Grounded-or-silent: the channel/link clause only appears when the wrap
+ * resolved to a real platform for THIS agent; otherwise the ping is generic.
+ */
+export const notifyConversion = internalAction({
+  args: { conversionId: v.id("gtmConversions") },
+  handler: async (ctx, args): Promise<{ sent: boolean; reason: string }> => {
+    // Best-effort throughout: a proactive ping must NEVER throw into the
+    // scheduler (no retry storms, no surfaced errors on a transient Telegram
+    // hiccup or unconfigured test env). Any failure → log + return.
+    try {
+      const info = await ctx.runQuery(
+        internal.gtmMaya.attribution.peekConversionForPing,
+        { conversionId: args.conversionId }
+      );
+      if (!info) return { sent: false, reason: "conversion or agent not found" };
+      if (!info.telegramChatId) return { sent: false, reason: "no telegram chat" };
+
+      // Grounded running total for today (incl. the one that just landed).
+      const totalToday = await ctx.runQuery(
+        internal.gtmMaya.attribution.countConversionsTodayByKind,
+        { agentId: info.agentId, accountId: info.accountId, kind: info.kind }
+      );
+
+      // Build the wrapped redirect link only when we have a grounded channel.
+      const base = (process.env.CONVEX_SITE_URL ?? "").replace(/\/+$/, "");
+      const link =
+        info.channel && info.token && base ? `${base}/r/${info.token}` : null;
+
+      const text = composeConversionPing({
+        kind: info.kind,
+        count: info.count,
+        totalToday,
+        channel: info.channel,
+        link,
+      });
+
+      const { resolveBotForAgent } = await import("./telegramBotPerTenant");
+      const bot = await resolveBotForAgent(
+        ctx as { runQuery: <T>(ref: unknown, args: unknown) => Promise<T> },
+        info.agentId,
+        {
+          sharedToken: process.env.TELEGRAM_BOT_TOKEN,
+          sharedUsername: process.env.TELEGRAM_BOT_USERNAME,
+        }
+      );
+      const { sendDirectTelegramMessage } = await import(
+        "../integrations/telegram/sendDirectMessage"
+      );
+      const result = await sendDirectTelegramMessage({
+        botToken: bot.token ?? undefined,
+        chatId: info.telegramChatId,
+        text,
+      });
+      if (!result.ok) {
+        console.warn(
+          `[conversionPing] send failed for ${info.agentId}: ${result.reason}`
+        );
+        return { sent: false, reason: `send failed: ${result.reason}` };
+      }
+      return { sent: true, reason: "sent" };
+    } catch (err) {
+      console.warn(
+        `[conversionPing] notifyConversion error: ${(err as Error)?.message ?? "unknown"}`
+      );
+      return { sent: false, reason: "error" };
+    }
   },
 });
 
@@ -554,14 +774,25 @@ export const conversionPixelHttp = httpAction(async (ctx, request) => {
     return new Response(null, { status: 204, headers: PIXEL_CORS_HEADERS });
   }
 
-  await ctx.runMutation(internal.gtmMaya.attribution.recordConversion, {
-    accountId: wrap.accountId,
-    agentId: wrap.agentId,
-    kind,
-    count: 1,
-    source: "pixel",
-    linkWrapToken: token,
-    note: selfSource ? `conversion pixel · heard via: ${selfSource}` : "conversion pixel",
+  const pixelConversionId = await ctx.runMutation(
+    internal.gtmMaya.attribution.recordConversion,
+    {
+      accountId: wrap.accountId,
+      agentId: wrap.agentId,
+      kind,
+      count: 1,
+      source: "pixel",
+      linkWrapToken: token,
+      note: selfSource
+        ? `conversion pixel · heard via: ${selfSource}`
+        : "conversion pixel",
+    }
+  );
+  // Event-driven conversion ping (best-effort; notifyConversion swallows its
+  // own errors and no-ops without a telegramChatId). Fired from this action
+  // context AFTER the mutation committed, so a send failure can't roll it back.
+  await ctx.runAction(internal.gtmMaya.attribution.notifyConversion, {
+    conversionId: pixelConversionId,
   });
   // Mark the automatic path live so Maya can stop asking for self-reports.
   await ctx.runMutation(
@@ -612,14 +843,21 @@ export const recordConversionHttp = httpAction(async (ctx, request) => {
   );
   if (claim === "duplicate") return new Response("ok (replay)", { status: 200 });
 
-  await ctx.runMutation(internal.gtmMaya.attribution.recordConversion, {
-    accountId: auth.accountId,
-    agentId: auth.agentId,
-    kind: body.kind,
-    count,
-    source,
-    linkWrapToken: body.linkWrapToken,
-    note: body.note,
+  const conversionId = await ctx.runMutation(
+    internal.gtmMaya.attribution.recordConversion,
+    {
+      accountId: auth.accountId,
+      agentId: auth.agentId,
+      kind: body.kind,
+      count,
+      source,
+      linkWrapToken: body.linkWrapToken,
+      note: body.note,
+    }
+  );
+  // Event-driven conversion ping (best-effort; see pixel path above).
+  await ctx.runAction(internal.gtmMaya.attribution.notifyConversion, {
+    conversionId,
   });
   return new Response("ok", { status: 200 });
 });

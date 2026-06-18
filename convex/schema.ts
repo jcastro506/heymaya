@@ -4752,7 +4752,10 @@ export default defineSchema({
       // transcript persists to Convex (not just the ephemeral Fly disk).
       v.literal("log_message"),
       // W1.2 — founder corrects a product fact in chat; persisted to gtmApps.
-      v.literal("update_product_fact")
+      v.literal("update_product_fact"),
+      // Real-time operator Phase-1 — founder steering directive idempotency
+      // lane (Maya's save_steering_directive tool POSTs with this kind).
+      v.literal("save_steering_directive")
     ),
     idempotencyKey: v.string(),
     receivedAt: v.number(),
@@ -6731,6 +6734,50 @@ export default defineSchema({
     .index("by_agent_and_key", ["agentId", "learningKey"])
     .index("by_agent_and_kind", ["agentId", "learningKind"])
     .index("by_agent_and_retired", ["agentId", "retired"]),
+
+  // ─── Real-time operator — founder steering directives ─────────────────
+  // When the founder texts Maya a directive ("focus more on LinkedIn",
+  // "stop posting on X", "go harder on the pricing angle"), it is captured
+  // as a DURABLE steering row that future engine code (heartbeat/pulse) and
+  // Maya's prompts read to bias channel/angle selection. Additive + minimal:
+  // it never mutates strategy tables — it is an operator-intent overlay the
+  // engine consults. Captured from the inbound founder-text path (a
+  // lightweight deterministic classifier, no hot-path LLM call) and/or via
+  // the `save_steering_directive` typed tool when Maya parses one explicitly.
+  gtmSteeringDirectives: defineTable({
+    accountId: v.id("creators"),
+    agentId: v.id("gtmAgents"),
+    /** Verbatim founder directive text (capped at capture time). */
+    directive: v.string(),
+    /** Lowercased channel/angle hints the classifier (or Maya) extracted,
+     *  e.g. ["linkedin", "pricing"]. Engine reads these to bias selection. */
+    laneHints: v.optional(v.array(v.string())),
+    /** Coarse parsed intent — what the founder is asking for. */
+    intent: v.optional(
+      v.union(
+        v.literal("focus"),
+        v.literal("avoid"),
+        v.literal("angle"),
+        v.literal("pace"),
+        v.literal("other")
+      )
+    ),
+    /** How this row was captured. */
+    source: v.union(
+      v.literal("founder"),
+      v.literal("maya_tool")
+    ),
+    /** turnId of the inbound message this came from (if captured inline). */
+    turnId: v.optional(v.string()),
+    /** Active until explicitly superseded by a later contradicting directive
+     *  or by the founder. The engine reads only active rows. */
+    active: v.boolean(),
+    supersededAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_account_and_active", ["accountId", "active"])
+    .index("by_agent", ["agentId"]),
 
   // ─── end ClawLaunch / Maya GTM product ────────────────────────────────
 });
