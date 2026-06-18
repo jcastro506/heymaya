@@ -97,6 +97,20 @@ export const searchDemandHttp = httpAction(async (ctx, request) => {
     locationCode: body.locationCode,
     languageCode: body.languageCode,
   });
+  // Phase 2 ⓪ — meter DataForSEO. It returns its own `cost`; record it (the
+  // ledger auto-pricer also catches it by the "dataforseo" operation if 0).
+  // Previously this spend was invisible — no ledger row was ever written.
+  if (result.ok) {
+    await ctx.runMutation(internal.gtmMaya.costLedger.recordGtmCostInternal, {
+      accountId: auth.accountId,
+      provider: "other",
+      operation: "dataforseo.search_volume",
+      reason: "search_demand keyword volumes",
+      costUsd: result.cost ?? 0,
+      units: result.keywords.length,
+      cacheStatus: "called",
+    });
+  }
   return new Response(JSON.stringify(result), {
     status: 200,
     headers: { "content-type": "application/json" },
