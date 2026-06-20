@@ -311,6 +311,97 @@ export function planFeaturesGtm(agent: {
   return FAIL_CLOSED_DEFAULT;
 }
 
+/**
+ * Per-tier headline price (USD/mo), for Maya's plan-awareness summary. Source of
+ * truth is the locked 3-tier pricing (planGtm header / SPRINT_PLAN_REALTIME_
+ * OPERATOR_V1 §15.1): starter $99 / growth $149 / studio $199. Used ONLY for the
+ * human-readable summary — never for gating.
+ */
+const GTM_TIER_PRICE_USD: Record<GtmPlan, number> = {
+  starter: 99,
+  growth: 149,
+  studio: 199,
+};
+
+/** Title-case tier label for operator-facing copy. */
+function tierLabel(plan: GtmPlan): string {
+  return plan.charAt(0).toUpperCase() + plan.slice(1);
+}
+
+/**
+ * Pure, side-effect-free human-readable summary of a resolved feature set, for
+ * Maya to read (rendered into PLAN.md + returned by `get_my_plan`). This is
+ * AWARENESS ONLY — the server-side gate (`planFeaturesGtm` + `requireFeatureGtm`)
+ * stays the sole authority; this string just lets Maya tell the founder their
+ * tier, explain her limits, and nudge upgrades honestly.
+ *
+ * Output shape (newline-joined):
+ *   - line 1: tier + price + status (e.g. "Growth plan ($149/mo) — active.")
+ *   - line 2: active-channel allowance ("Up to 6 active channels.")
+ *   - line 3: video capability ("Video: yes, ~15/mo." | "Video: not on this
+ *             tier (Studio only).")
+ *   - final note: the single most-relevant call to action —
+ *       · fail-closed (status "none") → "NOT ACTIVE — tell the founder to start
+ *         their plan so you can post."
+ *       · starter at/near the 3-channel cap → "Growth unlocks 6 channels."
+ *       · non-Studio (no video) → "Studio unlocks video."
+ *       · otherwise (active Studio) → a steady "You're on the top tier." note.
+ */
+export function describePlanForMaya(features: GtmPlanFeatures): string {
+  const lines: string[] = [];
+  const price = GTM_TIER_PRICE_USD[features.plan];
+  const label = tierLabel(features.plan);
+
+  // Line 1 — tier + price + lifecycle status, in plain words.
+  const statusWord =
+    features.status === "active"
+      ? "active"
+      : features.status === "trialing"
+        ? "on a free trial (full access)"
+        : features.status === "past_due"
+          ? "past due (still active — a payment needs updating)"
+          : "NOT active";
+  lines.push(`${label} plan ($${price}/mo) — ${statusWord}.`);
+
+  // Line 2 — active-channel allowance (the load-bearing paid gate).
+  if (features.maxActiveChannels <= 0) {
+    lines.push(
+      "Active channels: 0 right now (the plan isn't running — see the note below)."
+    );
+  } else {
+    lines.push(`Up to ${features.maxActiveChannels} active channels.`);
+  }
+
+  // Line 3 — video capability (Studio-only).
+  if (features.canVideo) {
+    lines.push(`Video: yes, ~${features.videoCreditsMonth}/mo.`);
+  } else {
+    lines.push("Video: not on this tier (Studio only).");
+  }
+
+  // Final note — the single most-relevant call to action.
+  if (features.status === "none" || features.maxActiveChannels <= 0) {
+    lines.push(
+      "NOT ACTIVE — tell the founder to start their plan so you can post. Don't go silent; ask them to start/renew it."
+    );
+  } else if (features.plan === "starter") {
+    // Starter is always at/near the 3-channel cap relative to Growth's 6, and
+    // has no video — surface the breadth upgrade first, then video.
+    lines.push(
+      "Growth unlocks 6 channels; Studio adds video. Only nudge when they're actually hitting the limit."
+    );
+  } else if (!features.canVideo) {
+    // Growth — full breadth, but no video.
+    lines.push(
+      "Studio unlocks video. Only nudge it if they actually want video."
+    );
+  } else {
+    lines.push("You're on the top tier — no upgrade to push.");
+  }
+
+  return lines.join("\n");
+}
+
 export class GtmPlanGateError extends Error {
   constructor(
     public plan: GtmPlan,

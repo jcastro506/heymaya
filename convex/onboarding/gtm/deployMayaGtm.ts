@@ -11,7 +11,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import { FlyClient, FlyError, type FlyMachineConfig } from "../../lib/flyClient";
 import { capturePosthogEvent } from "../../lib/posthog";
 import { buildMayaGtmWorkspace } from "../../agents/packs/maya_gtm/generators";
-import { planFeaturesGtm } from "../../gtmMaya/planGtm";
+import { planFeaturesGtm, describePlanForMaya } from "../../gtmMaya/planGtm";
 import {
   BUNDLED_GTM_PLUGIN_TGZ_BASE64,
   BUNDLED_GTM_PLUGIN_TGZ_NAME,
@@ -1225,9 +1225,11 @@ export const buildAndUploadGtmWorkspace = internalAction({
     // onboarding picker so deploy and UI never disagree. The plan-tier
     // `maxActiveChannels` cap (starter 3 / growth 6 / studio 6; fail-closed 0)
     // trims the set server-side so a tier never runs more than it paid for.
+    // Resolve the plan feature set ONCE — the channel cap, the video gate, and
+    // the human-readable plan summary all derive from it.
+    const planFeatures = planFeaturesGtm({ gtmPlanJson: row.agent.gtmPlanJson });
     const channelSelection = selectActiveChannels(row.channelScores, {
-      maxActiveChannels: planFeaturesGtm({ gtmPlanJson: row.agent.gtmPlanJson })
-        .maxActiveChannels,
+      maxActiveChannels: planFeatures.maxActiveChannels,
     });
 
     const { files } = buildMayaGtmWorkspace({
@@ -1237,7 +1239,11 @@ export const buildAndUploadGtmWorkspace = internalAction({
       // coverage; undefined/false in production (agents stay focused).
       verifyAllPlatforms: row.agent.verifyAllPlatforms,
       // Studio-tier gate: only a canVideo plan gets the video producer skill.
-      videoEnabled: planFeaturesGtm({ gtmPlanJson: row.agent.gtmPlanJson }).canVideo,
+      videoEnabled: planFeatures.canVideo,
+      // Plan-awareness — render PLAN.md so Maya boots knowing her tier, caps,
+      // status, and the relevant upgrade nudge. Awareness only; the server gate
+      // (planFeaturesGtm) stays authoritative.
+      planSummary: describePlanForMaya(planFeatures),
       // W2 — so Maya's messaging matches her gating (the publish engine enforces it).
       autonomousPosting: row.agent.autonomousPosting,
       // Phase 3 — ship the hourly discovery_pulse cron only when the env flag is

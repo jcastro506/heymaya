@@ -77,6 +77,7 @@
       "review_media",
       "log_cost",
       "record_memory_written",
+      "get_my_plan",
       "get_my_foundation",
       "get_my_target_threads",
       "get_my_recent_post_results",

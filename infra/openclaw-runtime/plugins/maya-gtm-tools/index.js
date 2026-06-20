@@ -1605,6 +1605,14 @@ export default defineToolPlugin({
     // READ-BACK (GET) — let Maya inspect her own persisted state.
     // =====================================================================
     tool({
+      name: "get_my_plan",
+      label: "Get My Plan",
+      description:
+        "Read my LIVE plan tier + caps + status. No args. Call this BEFORE I tell the founder anything about their plan, explain a limit, or consider an upgrade nudge — PLAN.md is a deploy-time snapshot, this is the current truth. Returns { summary (human-readable), plan ('starter'|'growth'|'studio'), status ('active'|'trialing'|'past_due'|'none'), maxActiveChannels, connectedChannelCap, autoPostChannelCap, videoCreditsMonth, canVideo, canAutoPost }. If status is 'none' or maxActiveChannels is 0 the plan is NOT active — tell the founder to start/renew it so I can post; don't go silent. Never promise a capability the caps say I don't have (e.g. video when canVideo is false).",
+      parameters: Type.Object({}),
+      execute: async (_p, _cfg, ctx) => getLc("get_my_plan", undefined, ctx.signal),
+    }),
+    tool({
       name: "get_my_foundation",
       label: "Get My Foundation",
       description: "Read back all 5 foundation outputs (buyer map, competitors, channels, angles, relationships).",
