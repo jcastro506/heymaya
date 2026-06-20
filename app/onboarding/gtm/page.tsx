@@ -8,6 +8,11 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { selectActiveChannels } from "@/convex/gtmMaya/channelSelection";
 import type { GtmChannelDecision } from "@/convex/gtmMaya/channelScoring";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
+import {
+  TierSelector,
+  type GtmTier,
+  type GtmInterval,
+} from "@/components/billing/TierSelector";
 
 type Stage = "intake" | "research" | "deploy";
 
@@ -187,6 +192,15 @@ function GtmOnboardingBody() {
   const setChannelDecisions = useMutation(
     api.gtmMaya.researchLifecycle.setMyChannelDecisions
   );
+  // Tier selection → Stripe checkout. Picking a plan starts the 7-day trial;
+  // the webhook grants the trialing plan (so planFeaturesGtm flips from the
+  // fail-closed maxActiveChannels:0 default to the chosen tier's caps) on the
+  // founder's return to the app. This is the funnel step that turns a fresh
+  // signup into a payer — without it gtmPlanJson stays unset and Maya can
+  // research/draft but never POST.
+  const startCheckout = useAction(
+    api.billing.gtmBilling.createGtmCheckoutSession
+  );
 
   const [draft, setDraft] = useState<IntakeDraft>(DEFAULT_DRAFT);
   const [walkthroughFile, setWalkthroughFile] = useState<File | null>(null);
@@ -202,6 +216,12 @@ function GtmOnboardingBody() {
   const [savingChannels, setSavingChannels] = useState(false);
   // Sprint 2.26b — Telegram bot state. Operator can connect their own
   // bot from BotFather OR opt into the shared dev fallback.
+  // Tier-selection state. `interval` toggles monthly/annual; `checkoutTier`
+  // marks the card mid-redirect so it shows a pending state.
+  const [billingInterval, setBillingInterval] =
+    useState<GtmInterval>("monthly");
+  const [checkoutTier, setCheckoutTier] = useState<GtmTier | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [botToken, setBotToken] = useState("");
   const [botStatus, setBotStatus] = useState<
     | { kind: "idle" }
@@ -404,6 +424,21 @@ function GtmOnboardingBody() {
       setError(friendlyError(err));
     } finally {
       setSavingChannels(false);
+    }
+  }
+
+  async function chooseTier(tier: GtmTier, interval: GtmInterval) {
+    setCheckoutTier(tier);
+    setCheckoutError(null);
+    try {
+      track(ANALYTICS_EVENTS.CHECKOUT_STARTED, { tier, interval });
+      const { url } = await startCheckout({ tier, interval });
+      // Hard redirect to Stripe Checkout. On return, the webhook has granted
+      // the trialing plan; the founder lands back in the app ready to deploy.
+      window.location.href = url;
+    } catch (err) {
+      setCheckoutError(friendlyError(err));
+      setCheckoutTier(null);
     }
   }
 
@@ -956,6 +991,34 @@ function GtmOnboardingBody() {
               </div>
             </div>
           )}
+
+          {/* Tier-selection / go-live gate. Maya has shown her value (the
+              ranked channel plan above); now the founder picks a plan to
+              start the 7-day trial so she can actually POST. Without this
+              step gtmPlanJson stays unset and planFeaturesGtm is fail-closed
+              (maxActiveChannels:0, canAutoPost:false) — Maya researches and
+              drafts but can never post. Selecting a tier → Stripe Checkout →
+              the webhook grants the trialing plan on return. */}
+          <div className="mt-6 border border-paper bg-ink p-5">
+            <h3 className="mb-2 font-display text-lg">
+              Pick a plan and let Maya start posting
+            </h3>
+            <p className="mb-4 text-sm text-paper-dim">
+              Start your 7-day free trial so Maya can go live and start posting
+              for you. Cancel any time before it ends and you won&apos;t be
+              charged. More channels (and Maya making your videos) unlock as you
+              go up.
+            </p>
+            <TierSelector
+              interval={billingInterval}
+              onIntervalChange={setBillingInterval}
+              busyTier={checkoutTier}
+              onSelect={chooseTier}
+            />
+            {checkoutError ? (
+              <p className="mt-3 text-sm text-red-400">{checkoutError}</p>
+            ) : null}
+          </div>
 
           {/* Sprint 2.26b — Telegram bot setup gate. Operator either
               connects their own bot from BotFather (recommended for

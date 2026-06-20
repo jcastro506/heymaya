@@ -4,6 +4,7 @@ import {
   mayaGtmSkillSlugs,
   type MayaGtmWorkspaceInput,
 } from "../generators";
+import { BUNDLED_GTM_PLUGIN_TOOLS } from "../bundledGtmPlugin";
 
 const INPUT: MayaGtmWorkspaceInput = {
   accountEmail: "founder@clawlaunch.test",
@@ -693,7 +694,12 @@ describe("Maya GTM workspace pack", () => {
     //   agent stalled with no instructions). Headroom kept below the cap.
     // - bootstrapMaxChars (30_000) — PER FILE; over this a single file is
     //   truncated. TOOLS.md is the historical offender — keep it terse.
-    expect(promptContextChars).toBeLessThan(105_000); // under the 110K total cap
+    // 106_500 ceiling: plan-awareness added PLAN.md (every-turn plan tier/caps
+    // snapshot) + the SOUL.md "Know my plan" conduct rules — ~970 legitimate
+    // every-turn chars. Still ~3.5K under the real 110K bootstrapTotalMaxChars
+    // cap, so nothing gets silently dropped; this guard keeps that headroom.
+    expect(promptContextChars).toBeLessThan(106_500); // under the 110K total cap
+    expect(files.get("PLAN.md")?.length).toBeLessThan(2_000); // plan snapshot stays terse
     expect(files.get("TOOLS.md")?.length).toBeLessThan(28_000); // under the 30K per-file cap
     expect(files.get("BOOT.md")?.length).toBeLessThan(28_000);
     expect(files.get("AGENTS.md")?.length).toBeLessThan(25_000);
@@ -744,5 +750,44 @@ describe("Maya GTM workspace pack", () => {
     expect(all).not.toMatch(/\bsk-[A-Za-z0-9]{20,}/);
     expect(all).not.toMatch(/api[_-]?key\s*[:=]\s*['"][A-Za-z0-9_-]/i);
     expect(all).not.toMatch(/\bsecret\s*[:=]\s*['"][A-Za-z0-9_-]/i);
+  });
+});
+
+describe("Maya GTM workspace pack — PLAN.md plan awareness", () => {
+  it("renders PLAN.md containing the deploy-time planSummary verbatim", () => {
+    const summary =
+      "Growth plan ($149/mo) — active.\nUp to 6 active channels.\nVideo: not on this tier (Studio only).\nStudio unlocks video.";
+    const { files } = buildMayaGtmWorkspace({ ...INPUT, planSummary: summary });
+    const plan = files.get("PLAN.md") ?? "";
+    expect(plan).toContain("# PLAN.md");
+    // The tier summary is rendered into the file.
+    expect(plan).toContain("Growth plan ($149/mo)");
+    expect(plan).toContain("Up to 6 active channels");
+    expect(plan).toContain("Studio unlocks video");
+    // The live-truth tool pointer is present in PLAN.md; the full conduct rules
+    // live in SOUL.md (asserted separately below).
+    expect(plan).toContain("get_my_plan");
+  });
+
+  it("SOUL.md carries the plan-awareness conduct rules (never over-promise / surface a lapsed plan / nudge honestly)", () => {
+    const soul = buildMayaGtmWorkspace(INPUT).files.get("SOUL.md") ?? "";
+    expect(soul).toContain("Know my plan");
+    expect(soul).toContain("Never promise a capability I don't have");
+    expect(soul).toContain("get_my_plan");
+    expect(soul.toLowerCase()).toContain("not active");
+    expect(soul).toContain("Growth");
+    expect(soul).toContain("Studio");
+  });
+
+  it("falls back to a get_my_plan pointer when no planSummary is supplied", () => {
+    const plan = buildMayaGtmWorkspace(INPUT).files.get("PLAN.md") ?? "";
+    expect(plan).toContain("get_my_plan");
+    expect(plan).toContain("Plan summary not rendered at deploy");
+  });
+
+  it("the get_my_plan tool is registered in the bundled plugin (live-truth tool)", () => {
+    // Sibling-file coherence: PLAN.md points Maya at get_my_plan, so the plugin
+    // bundle must actually register it.
+    expect(BUNDLED_GTM_PLUGIN_TOOLS).toContain("get_my_plan");
   });
 });

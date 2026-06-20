@@ -135,6 +135,7 @@ import {
   advanceWatermarkHttp,
   getWatermarkHttp,
 } from "./gtmMaya/openclaw/pulseCallbacks";
+import { getMyPlanHttp } from "./gtmMaya/openclaw/planCallbacks";
 import {
   saveExperimentHttp,
   assignArmHttp,
@@ -778,6 +779,14 @@ http.route({
   path: "/lc_gtm/get_my_foundation",
   method: "GET",
   handler: getMyFoundationHttp,
+});
+// Plan-awareness — Maya GETs her live plan tier + caps + status before she
+// tells the founder anything about their plan, hits a cap, or nudges an
+// upgrade. Awareness only; planFeaturesGtm stays the authoritative gate.
+http.route({
+  path: "/lc_gtm/get_my_plan",
+  method: "GET",
+  handler: getMyPlanHttp,
 });
 http.route({
   path: "/lc_gtm/get_my_competitor_moves",

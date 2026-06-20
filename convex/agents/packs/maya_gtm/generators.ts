@@ -15,6 +15,16 @@ export interface MayaGtmWorkspaceInput {
    */
   videoEnabled?: boolean;
   /**
+   * Plan-awareness — a concise human-readable summary of the founder's plan
+   * tier + caps + status, computed at deploy by `describePlanForMaya(
+   * planFeaturesGtm(agent))`. Rendered into PLAN.md so Maya ALWAYS has her plan
+   * in context (tier name, active-channel allowance, video capability, trial /
+   * fail-closed status, and the relevant upgrade nudge). This is awareness only
+   * — the server-side gate stays authoritative. Undefined → PLAN.md renders a
+   * fail-closed fallback telling Maya to check `get_my_plan` for live truth.
+   */
+  planSummary?: string;
+  /**
    * W2 — the founder's autonomous-vs-confirm posting preference, so Maya's
    * MESSAGING matches her actual gating (says "ready for your OK" vs "posted").
    * The publish engine enforces the gate regardless; this is awareness only.
@@ -320,6 +330,7 @@ export function buildMayaGtmWorkspace(
     ["AGENTS.md", renderAgents(input)],
     ["SOUL.md", renderSoul(input)],
     ["USER.md", renderUser(input)],
+    ["PLAN.md", renderPlan(input)],
     ["IDENTITY.md", renderIdentity(input)],
     ["APP.md", renderApp(input)],
     ["GTM.md", renderGtm(input)],
@@ -579,6 +590,14 @@ If I imitate a working format from the niche, I map it honestly onto ${input.app
 
 The product is **${input.app.name}** (${input.app.url}) — what the founder built for THEIR customers. I am the tool that grows it. Before I write ANY buyer-facing claim, draft, pitch, or plan, the promise I anchor on is what the founder ACTUALLY sells (from their landing page + walkthrough) — never what I inferred from their shorthand, and never my own infrastructure. I never describe the agent, OpenClaw, my runtime, my tools/workers/phases, or "an AI GTM agent" as if it were the product. If a draft or plan starts to sound like it's pitching the agent itself, I've lost grounding — I stop and re-read ${input.app.url}. (This is the failure that turns a plant-care app into an "AI habit tracker" pitch.)
 
+## Know my plan (and act on it honestly)
+
+My plan tier governs what I can actually do. It's in PLAN.md, and the live truth is the \`get_my_plan\` tool (call it before I claim anything about the plan, hit a cap, or weigh an upgrade).
+
+- **Never promise a capability I don't have.** No video off Studio (I use slideshows / text / paste-ready drafts instead). Nothing above my active-channel allowance.
+- **If my plan is NOT active** (fail-closed / trial expired / status "none"), I do NOT silently go quiet. I tell the founder plainly I can't post until they start or renew their plan, and ask them to. Once, clearly, not naggy.
+- **Nudge an upgrade ONLY when it unlocks real value they're hitting.** At the channel cap with a strong channel waiting, mention Growth (6 channels); they want video, mention Studio. Otherwise no pricing talk. One honest line in my normal voice, never a sales pitch, then back to the work.
+
 ## Banned phrases (from operator-visible Telegram only — these are real failures I've made)
 
 - Internal task labels in operator messages: \`[Heartbeat check]\`, \`[Status]\`, \`[Boot]\`, \`[Internal]\`, any \`[Label]:\` prefix
@@ -789,6 +808,26 @@ function renderPostingMode(input: MayaGtmWorkspaceInput): string {
   }
   // confirm_first_week (default)
   return "We're in **confirm-first-week** (the trust ramp): I send each auto-channel post (X / LinkedIn / Instagram / YouTube) for a one-tap OK until the founder has approved a few (or a week passes), then I post those channels myself. Until I've graduated, I say \"ready for your OK,\" not \"posted.\" Reddit / TikTok stay one-tap-confirm always. Once they've okayed enough, I proactively offer to take the auto channels off their plate.";
+}
+
+/**
+ * Plan-awareness — render the founder's plan tier + caps + status into PLAN.md
+ * so Maya always boots knowing what she can and can't do. `planSummary` is the
+ * deploy-time output of describePlanForMaya(planFeaturesGtm(agent)); when absent
+ * we render a fail-closed fallback that points Maya at the live `get_my_plan`
+ * tool. The behavior rules below are what turn this from passive data into
+ * correct conduct (never over-promise; surface a lapsed plan; nudge honestly).
+ */
+function renderPlan(input: MayaGtmWorkspaceInput): string {
+  const summary =
+    input.planSummary ??
+    "Plan summary not rendered at deploy — call `get_my_plan` for the live tier, caps, and status before you tell the founder anything about their plan or limits.";
+  return `# PLAN.md — my plan tier + what I can do
+
+The founder's current plan. The server enforces it for real; this is so I KNOW it and can talk about it honestly. Deploy-time snapshot — for live tier/caps/status call **\`get_my_plan\`** (no args) before I claim anything about the plan, hit a cap, or weigh an upgrade nudge. Conduct rules (never over-promise, surface a lapsed plan, nudge honestly) are in SOUL.md.
+
+${summary}
+`;
 }
 
 function renderUser(input: MayaGtmWorkspaceInput): string {

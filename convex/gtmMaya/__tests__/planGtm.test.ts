@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canPostXUrlGtm,
+  describePlanForMaya,
   GtmPlanGateError,
   planFeaturesGtm,
   requireFeatureGtm,
@@ -419,4 +420,72 @@ describe("anti-churn moats are NEVER false (parametrized over all states)", () =
       expect(f.attributionEnabled).toBe(true);
     }
   );
+});
+
+describe("describePlanForMaya — human-readable plan awareness", () => {
+  it("starter: names the tier + price, the 3-channel allowance, no-video wording, active status, and the Growth/Studio nudge", () => {
+    const s = describePlanForMaya(planFeaturesGtm({ gtmPlanJson: STARTER_FULL }));
+    expect(s).toContain("Starter plan ($99/mo)");
+    expect(s).toContain("active");
+    expect(s).toContain("Up to 3 active channels");
+    // Video wording — NOT available off Studio.
+    expect(s.toLowerCase()).toContain("video: not on this tier");
+    expect(s).not.toMatch(/Video: yes/);
+    // Upgrade nudge present (Growth = 6 channels; Studio = video).
+    expect(s).toContain("Growth unlocks 6 channels");
+    expect(s).toContain("Studio");
+    // Active plans never tell the founder to start their plan.
+    expect(s).not.toContain("NOT ACTIVE");
+  });
+
+  it("growth: 6-channel allowance, still no video, Studio-for-video nudge", () => {
+    const s = describePlanForMaya(planFeaturesGtm({ gtmPlanJson: GROWTH_FULL }));
+    expect(s).toContain("Growth plan ($149/mo)");
+    expect(s).toContain("Up to 6 active channels");
+    expect(s.toLowerCase()).toContain("video: not on this tier");
+    expect(s).toContain("Studio unlocks video");
+    expect(s).not.toContain("NOT ACTIVE");
+  });
+
+  it("studio: 6 channels + video allowance, top-tier note, no upgrade push", () => {
+    const s = describePlanForMaya(planFeaturesGtm({ gtmPlanJson: STUDIO_FULL }));
+    expect(s).toContain("Studio plan ($199/mo)");
+    expect(s).toContain("Up to 6 active channels");
+    // Video IS available — wording asserts the affirmative + the monthly count.
+    expect(s).toMatch(/Video: yes, ~15\/mo/);
+    expect(s.toLowerCase()).toContain("top tier");
+    expect(s).not.toContain("NOT ACTIVE");
+  });
+
+  it("fail-closed (missing plan): NOT ACTIVE + the explicit 'start your plan so you can post' note, and 0 active channels", () => {
+    const s = describePlanForMaya(planFeaturesGtm({}));
+    expect(s).toContain("NOT active");
+    expect(s).toContain("NOT ACTIVE");
+    expect(s.toLowerCase()).toContain("start their plan so you can post");
+    expect(s).toContain("0 right now");
+    // Never claims video on the fail-closed default.
+    expect(s.toLowerCase()).toContain("video: not on this tier");
+  });
+
+  it("fail-closed (status none): same 'start your plan' note", () => {
+    const s = describePlanForMaya(
+      planFeaturesGtm({ gtmPlanJson: planJson({ tier: "starter", status: "none" }) })
+    );
+    expect(s).toContain("NOT ACTIVE");
+    expect(s.toLowerCase()).toContain("start their plan so you can post");
+  });
+
+  it("trialing: full-access wording, never NOT ACTIVE", () => {
+    const s = describePlanForMaya(
+      planFeaturesGtm({ gtmPlanJson: planJson({ tier: "starter", status: "trialing" }) })
+    );
+    expect(s.toLowerCase()).toContain("free trial");
+    expect(s).toContain("Up to 3 active channels");
+    expect(s).not.toContain("NOT ACTIVE");
+  });
+
+  it("is pure — same input yields identical output", () => {
+    const f = planFeaturesGtm({ gtmPlanJson: GROWTH_FULL });
+    expect(describePlanForMaya(f)).toBe(describePlanForMaya(f));
+  });
 });
