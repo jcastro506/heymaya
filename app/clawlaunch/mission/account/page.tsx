@@ -20,19 +20,7 @@ import {
 import { ConnectedAccounts } from "./_ConnectedAccounts";
 import { ProductBrain } from "./_ProductBrain";
 import { PostingControl } from "./_PostingControl";
-
-type GtmTier = "starter" | "growth" | "studio";
-
-const GTM_TIERS: ReadonlyArray<{
-  tier: GtmTier;
-  name: string;
-  price: string;
-  blurb: string;
-}> = [
-  { tier: "starter", name: "Starter", price: "$99/mo", blurb: "Up to 3 channels" },
-  { tier: "growth", name: "Growth", price: "$149/mo", blurb: "Up to 6 channels" },
-  { tier: "studio", name: "Studio", price: "$199/mo", blurb: "6 channels + video" },
-];
+import { TierSelector, type GtmTier } from "@/components/billing/TierSelector";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -281,24 +269,12 @@ export default function AccountPage() {
                 Your first week is free — pick a plan any time to keep Maya
                 running.
               </p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                {GTM_TIERS.map((t) => (
-                  <button
-                    key={t.tier}
-                    onClick={() => handleSubscribe(t.tier)}
-                    disabled={checkingOut !== null}
-                    className="flex flex-col gap-0.5 rounded-lg border border-lime/40 bg-lime/5 px-3 py-2 text-left hover:bg-lime/10 disabled:opacity-50"
-                  >
-                    <span className="font-mono text-xs uppercase tracking-wide text-paper">
-                      {t.name} — {t.price}
-                    </span>
-                    <span className="text-xs text-paper-dim">{t.blurb}</span>
-                    <span className="mt-1 font-mono text-[10px] uppercase tracking-wide text-lime">
-                      {checkingOut === t.tier ? "Starting…" : "Subscribe"}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              <TierSelector
+                interval="monthly"
+                showIntervalToggle={false}
+                busyTier={checkingOut}
+                onSelect={(tier) => handleSubscribe(tier)}
+              />
               {checkoutError ? (
                 <p className="text-xs text-[#b3261e]">{checkoutError}</p>
               ) : null}
