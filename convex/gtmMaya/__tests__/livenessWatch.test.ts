@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { classifyLiveness } from "../livenessWatch";
+import { classifyAgentLiveness, classifyLiveness } from "../livenessWatch";
 
 const HOUR = 60 * 60 * 1000;
+const MIN = 60 * 1000;
 const NOW = 1_000_000_000_000;
 
 const base = {
@@ -55,10 +56,25 @@ describe("classifyLiveness", () => {
     expect(classifyLiveness({ ...base, hasFlyApp: false, recentOperationalSpendUsd: 0 })).toBeNull();
   });
 
-  it("does NOT flag an agent still in onboarding (no foundationCompletedAt)", () => {
+  it("a pre-foundation agent is judged by the stalled-onboarding watch, NOT the dark/blind watches", () => {
+    // Within the stall threshold → still healthy (the cold-boot grace).
     expect(
-      classifyLiveness({ ...base, foundationCompletedAt: null, recentOperationalSpendUsd: 0 })
+      classifyLiveness({
+        ...base,
+        foundationCompletedAt: null,
+        deployedAt: NOW - 5 * MIN,
+        recentOperationalSpendUsd: 0,
+      })
     ).toBeNull();
+    // Past the threshold with no progress → flagged as a cold-boot stall.
+    expect(
+      classifyLiveness({
+        ...base,
+        foundationCompletedAt: null,
+        deployedAt: NOW - 40 * MIN,
+        recentOperationalSpendUsd: 0,
+      })
+    ).toBe("stalled_onboarding");
   });
 
   it("dedups — skips an agent alerted within the dedup window", () => {
@@ -69,5 +85,83 @@ describe("classifyLiveness", () => {
         livenessAlertedAt: NOW - 2 * HOUR, // ...but alerted recently
       })
     ).toBeNull();
+  });
+});
+
+// ── GAP 1: stalled-onboarding (cold-boot) detection ──────────────────────────
+// A pre-foundation agent (foundationCompletedAt === null) that was deployed but
+// never finished onboarding and shows no recent progress.
+const onboardingBase = {
+  now: NOW,
+  killed: false,
+  hasFlyApp: true,
+  foundationCompletedAt: null as number | null,
+  deployedAt: NOW - 40 * MIN, // well past the 25-min stall threshold
+  lastMorningBriefAt: null,
+  livenessAlertedAt: null,
+  recentOperationalSpendUsd: 0,
+  lastProgressAt: null as number | null,
+};
+
+describe("classifyAgentLiveness — stalled onboarding", () => {
+  it("flags STALLED_ONBOARDING: deployed past threshold, no recent progress", () => {
+    expect(classifyAgentLiveness(onboardingBase)).toBe("stalled_onboarding");
+  });
+
+  it("flags STALLED_ONBOARDING when last progress is older than the progress window", () => {
+    expect(
+      classifyAgentLiveness({ ...onboardingBase, lastProgressAt: NOW - 30 * MIN })
+    ).toBe("stalled_onboarding");
+  });
+
+  it("does NOT flag an onboarding agent within the stall threshold", () => {
+    expect(
+      classifyAgentLiveness({ ...onboardingBase, deployedAt: NOW - 10 * MIN })
+    ).toBeNull();
+  });
+
+  it("does NOT flag when there is recent onboarding progress (still working)", () => {
+    expect(
+      classifyAgentLiveness({ ...onboardingBase, lastProgressAt: NOW - 2 * MIN })
+    ).toBeNull();
+  });
+
+  it("does NOT flag a not-yet-deployed (still provisioning) agent", () => {
+    expect(
+      classifyAgentLiveness({ ...onboardingBase, deployedAt: null })
+    ).toBeNull();
+  });
+
+  it("does NOT flag a killed / no-fly-app onboarding agent", () => {
+    expect(
+      classifyAgentLiveness({ ...onboardingBase, killed: true })
+    ).toBeNull();
+    expect(
+      classifyAgentLiveness({ ...onboardingBase, hasFlyApp: false })
+    ).toBeNull();
+  });
+
+  it("dedups a stalled-onboarding agent alerted within the dedup window", () => {
+    expect(
+      classifyAgentLiveness({
+        ...onboardingBase,
+        livenessAlertedAt: NOW - 2 * HOUR,
+      })
+    ).toBeNull();
+  });
+
+  it("a foundationComplete-but-silent agent yields the existing went-silent class, not stalled_onboarding", () => {
+    expect(
+      classifyAgentLiveness({
+        ...base,
+        foundationCompletedAt: NOW - 40 * HOUR,
+        lastMorningBriefAt: NOW - 30 * HOUR, // dark
+        lastProgressAt: null,
+      })
+    ).toBe("dark_brief");
+  });
+
+  it("a healthy active (post-onboarding) agent is never flagged", () => {
+    expect(classifyAgentLiveness({ ...base, lastProgressAt: NOW })).toBeNull();
   });
 });

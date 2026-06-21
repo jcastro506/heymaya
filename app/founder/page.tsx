@@ -183,7 +183,10 @@ function Overview({
         <Stat label="Accounts" value={String(t.accounts)} />
         <Stat label="Deployed" value={String(t.deployed)} />
         <Stat label="In error" value={String(t.inError)} />
-        <Stat label="Spend" value={usd(t.totalCostUsd)} />
+        {/* Windowed COGS — the "are we about to be surprised by a bill" numbers. */}
+        <Stat label="Spend · 24h" value={usd(t.spendTodayUsd)} />
+        <Stat label="Spend · 7d" value={usd(t.spendLast7dUsd)} />
+        <Stat label="Spend · all" value={usd(t.totalCostUsd)} />
         <Stat label="User msgs" value={String(t.totalUserMsgs)} />
         <Stat label="Maya msgs" value={String(t.totalMayaMsgs)} />
       </div>
@@ -278,7 +281,13 @@ function Overview({
               >
                 {a.deployed ? "● live" : "○ not deployed"}
               </span>
-              <span className="text-paper-faint">· {usd(a.costUsd)}</span>
+              {/* Today's COGS is the actionable per-tenant number; discovery
+                  (the all-day hunt loop) split out so a runaway pulse is obvious. */}
+              <span className="text-paper-faint">
+                · {usd(a.spend.today.totalUsd)}/24h
+                {a.spend.today.discoveryUsd > 0 &&
+                  ` (${usd(a.spend.today.discoveryUsd)} disc.)`}
+              </span>
               {a.errorState && (
                 <span className="text-rose-400">· {a.errorState}</span>
               )}

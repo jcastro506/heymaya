@@ -10,6 +10,8 @@ import {
   summarizeDiscoverySpend,
   evaluateDiscoveryBudget,
   gatingTierForAgent,
+  isCountableDiscoveryRow,
+  READ_PROVIDERS,
   type DiscoveryLedgerRow,
 } from "../discoveryBudgetGate";
 
@@ -44,13 +46,16 @@ describe("discovery budget table — per tier", () => {
 // summarizeDiscoverySpend — windowing (pure)
 // ───────────────────────────────────────────────────────────────────────────
 
+// A non-read LLM provider — counts ONLY when explicitly discovery:true.
+const LLM = "openrouter";
+
 describe("summarizeDiscoverySpend — windowing", () => {
-  it("sums only discovery=true rows; ignores non-discovery spend", () => {
+  it("sums only countable rows; ignores non-discovery LLM spend", () => {
     const rows: DiscoveryLedgerRow[] = [
-      { discovery: true, costUsd: 0.1, createdAt: NOW - 5 * 60 * 1000 },
-      { discovery: false, costUsd: 5.0, createdAt: NOW - 5 * 60 * 1000 },
-      { discovery: undefined, costUsd: 9.0, createdAt: NOW - 5 * 60 * 1000 },
-      { costUsd: 9.0, createdAt: NOW - 5 * 60 * 1000 }, // no discovery field
+      { discovery: true, provider: LLM, costUsd: 0.1, createdAt: NOW - 5 * 60 * 1000 },
+      { discovery: false, provider: LLM, costUsd: 5.0, createdAt: NOW - 5 * 60 * 1000 },
+      { discovery: undefined, provider: LLM, costUsd: 9.0, createdAt: NOW - 5 * 60 * 1000 },
+      { provider: LLM, costUsd: 9.0, createdAt: NOW - 5 * 60 * 1000 }, // no discovery field
     ];
     const out = summarizeDiscoverySpend(rows, NOW);
     expect(out.spentHourUsd).toBeCloseTo(0.1, 4);
@@ -60,11 +65,11 @@ describe("summarizeDiscoverySpend — windowing", () => {
   it("splits hour vs day windows correctly", () => {
     const rows: DiscoveryLedgerRow[] = [
       // within the hour (also within the day)
-      { discovery: true, costUsd: 0.2, createdAt: NOW - 30 * 60 * 1000 },
+      { discovery: true, provider: LLM, costUsd: 0.2, createdAt: NOW - 30 * 60 * 1000 },
       // older than an hour but within the day
-      { discovery: true, costUsd: 0.3, createdAt: NOW - 5 * HOUR_MS },
+      { discovery: true, provider: LLM, costUsd: 0.3, createdAt: NOW - 5 * HOUR_MS },
       // older than a day — excluded entirely
-      { discovery: true, costUsd: 9.9, createdAt: NOW - 2 * DAY_MS },
+      { discovery: true, provider: LLM, costUsd: 9.9, createdAt: NOW - 2 * DAY_MS },
     ];
     const out = summarizeDiscoverySpend(rows, NOW);
     expect(out.spentHourUsd).toBeCloseTo(0.2, 4);
@@ -73,8 +78,8 @@ describe("summarizeDiscoverySpend — windowing", () => {
 
   it("treats the window boundaries as inclusive lower bounds", () => {
     const rows: DiscoveryLedgerRow[] = [
-      { discovery: true, costUsd: 0.11, createdAt: NOW - HOUR_MS }, // exactly 1h ago
-      { discovery: true, costUsd: 0.22, createdAt: NOW - DAY_MS }, // exactly 24h ago
+      { discovery: true, provider: LLM, costUsd: 0.11, createdAt: NOW - HOUR_MS }, // exactly 1h ago
+      { discovery: true, provider: LLM, costUsd: 0.22, createdAt: NOW - DAY_MS }, // exactly 24h ago
     ];
     const out = summarizeDiscoverySpend(rows, NOW);
     // The 1h-ago row counts toward both hour and day.
@@ -85,11 +90,120 @@ describe("summarizeDiscoverySpend — windowing", () => {
 
   it("ignores future-dated rows", () => {
     const rows: DiscoveryLedgerRow[] = [
-      { discovery: true, costUsd: 5.0, createdAt: NOW + HOUR_MS },
+      { discovery: true, provider: LLM, costUsd: 5.0, createdAt: NOW + HOUR_MS },
     ];
     const out = summarizeDiscoverySpend(rows, NOW);
     expect(out.spentHourUsd).toBe(0);
     expect(out.spentDayUsd).toBe(0);
+  });
+
+  it("counts un-jobbed read-provider spend as the pulse (no discovery tag needed)", () => {
+    const rows: DiscoveryLedgerRow[] = [
+      // ScrapeCreators read, no researchJobId, NOT tagged → still counts.
+      { provider: "scrapecreators", costUsd: 0.2, createdAt: NOW - 10 * 60 * 1000 },
+      // X API read, no researchJobId, NOT tagged → counts.
+      { provider: "x_api", costUsd: 0.3, createdAt: NOW - 40 * 60 * 1000 },
+      // DataForSEO under `other`, no researchJobId → counts.
+      {
+        provider: "other",
+        operation: "dataforseo.search_volume",
+        costUsd: 0.1,
+        createdAt: NOW - 50 * 60 * 1000,
+      },
+    ];
+    const out = summarizeDiscoverySpend(rows, NOW);
+    expect(out.spentHourUsd).toBeCloseTo(0.6, 4);
+    expect(out.spentDayUsd).toBeCloseTo(0.6, 4);
+  });
+
+  it("excludes foundation reads (read-provider WITH a researchJobId)", () => {
+    const rows: DiscoveryLedgerRow[] = [
+      {
+        provider: "scrapecreators",
+        researchJobId: "job_abc" as unknown as DiscoveryLedgerRow["researchJobId"],
+        costUsd: 9.0,
+        createdAt: NOW - 10 * 60 * 1000,
+      },
+    ];
+    const out = summarizeDiscoverySpend(rows, NOW);
+    expect(out.spentDayUsd).toBe(0);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// isCountableDiscoveryRow — the counting predicate (pure)
+// ───────────────────────────────────────────────────────────────────────────
+
+describe("isCountableDiscoveryRow — discovery proxy predicate", () => {
+  it("counts un-jobbed read-provider rows (scrapecreators / x_api)", () => {
+    expect(
+      isCountableDiscoveryRow({ provider: "scrapecreators", costUsd: 0.1 } as never)
+    ).toBe(true);
+    expect(
+      isCountableDiscoveryRow({ provider: "x_api", costUsd: 0.1 } as never)
+    ).toBe(true);
+  });
+
+  it("counts un-jobbed DataForSEO rows (provider=other, dataforseo.* op)", () => {
+    expect(
+      isCountableDiscoveryRow({
+        provider: "other",
+        operation: "dataforseo.search_volume",
+      } as never)
+    ).toBe(true);
+  });
+
+  it("does NOT count `other`-provider rows whose op is not dataforseo", () => {
+    expect(
+      isCountableDiscoveryRow({
+        provider: "other",
+        operation: "misc.whatever",
+      } as never)
+    ).toBe(false);
+  });
+
+  it("does NOT count read-provider rows that carry a researchJobId (foundation)", () => {
+    expect(
+      isCountableDiscoveryRow({
+        provider: "scrapecreators",
+        researchJobId: "job_1",
+      } as never)
+    ).toBe(false);
+    // null researchJobId is treated as absent → counts.
+    expect(
+      isCountableDiscoveryRow({
+        provider: "scrapecreators",
+        researchJobId: null,
+      } as never)
+    ).toBe(true);
+  });
+
+  it("does NOT count non-read providers (LLM) unless explicitly tagged", () => {
+    expect(
+      isCountableDiscoveryRow({ provider: "openrouter" } as never)
+    ).toBe(false);
+    expect(isCountableDiscoveryRow({ provider: "gemini" } as never)).toBe(false);
+    // explicit override beats provider/researchJobId.
+    expect(
+      isCountableDiscoveryRow({ provider: "gemini", discovery: true } as never)
+    ).toBe(true);
+  });
+
+  it("explicit discovery:true counts even WITH a researchJobId", () => {
+    expect(
+      isCountableDiscoveryRow({
+        provider: "openrouter",
+        discovery: true,
+        researchJobId: "job_1",
+      } as never)
+    ).toBe(true);
+  });
+
+  it("READ_PROVIDERS contains the pure read layers only", () => {
+    expect(READ_PROVIDERS.has("scrapecreators")).toBe(true);
+    expect(READ_PROVIDERS.has("x_api")).toBe(true);
+    expect(READ_PROVIDERS.has("openrouter")).toBe(false);
+    expect(READ_PROVIDERS.has("gemini")).toBe(false);
   });
 });
 
@@ -238,6 +352,74 @@ async function insertDiscoveryRow(
   });
 }
 
+/** Insert an arbitrary ledger row (used to exercise the read-provider proxy:
+ * un-tagged read spend that should still count, and foundation reads that
+ * should not). */
+async function insertLedgerRow(
+  t: ReturnType<typeof convexTest>,
+  accountId: Id<"creators">,
+  row: {
+    costUsd: number;
+    createdAt: number;
+    provider:
+      | "scrapecreators"
+      | "x_api"
+      | "other"
+      | "openrouter"
+      | "gemini";
+    operation?: string;
+    discovery?: boolean;
+    researchJobId?: Id<"gtmResearchJobs">;
+  }
+): Promise<void> {
+  await t.run(async (ctx) => {
+    await ctx.db.insert("gtmCostLedger", {
+      accountId,
+      provider: row.provider,
+      operation: row.operation ?? "read.scan",
+      reason: "discovery budget gate test",
+      costUsd: row.costUsd,
+      cacheStatus: "called",
+      ...(row.discovery !== undefined ? { discovery: row.discovery } : {}),
+      ...(row.researchJobId !== undefined
+        ? { researchJobId: row.researchJobId }
+        : {}),
+      lane: "buyer_intent",
+      createdAt: row.createdAt,
+    });
+  });
+}
+
+/** Create a research job so foundation rows can carry a real researchJobId. */
+async function makeResearchJob(
+  t: ReturnType<typeof convexTest>,
+  accountId: Id<"creators">
+): Promise<Id<"gtmResearchJobs">> {
+  return await t.run(async (ctx) => {
+    const appId = await ctx.db.insert("gtmApps", {
+      accountId,
+      url: "https://example.test",
+      stage: "live-beta",
+      weekGoal: "signups",
+      canRecordScreen: true,
+      canShowFace: true,
+      excludedAudiences: [],
+      createdAt: NOW - DAY_MS,
+      updatedAt: NOW - DAY_MS,
+    } as never);
+    return await ctx.db.insert("gtmResearchJobs", {
+      accountId,
+      appId,
+      status: "running",
+      phase: "channel_research",
+      budgetUsd: 5,
+      spentUsd: 0,
+      createdAt: NOW - HOUR_MS,
+      updatedAt: NOW - HOUR_MS,
+    } as never);
+  });
+}
+
 describe("checkDiscoveryBudget — DB-backed soft gate", () => {
   it("returns mode=full when discovery spend is under both caps", async () => {
     const t = convexTest(schema, modules);
@@ -298,11 +480,18 @@ describe("checkDiscoveryBudget — DB-backed soft gate", () => {
     expect(v.reason).toContain("daily discovery budget exhausted");
   });
 
-  it("ignores non-discovery spend entirely", async () => {
+  it("ignores non-discovery LLM spend entirely", async () => {
     const t = convexTest(schema, modules);
     const accountId = await makeAccount(t, "disc_nondisc");
-    // $9 of NON-discovery spend in the last hour must not affect the gate.
-    await insertDiscoveryRow(t, accountId, 9.0, NOW - 10 * 60 * 1000, false);
+    // $9 of NON-discovery LLM spend (openrouter) in the last hour must not
+    // affect the gate — the gate bounds read-driven discovery, not the LLM tick.
+    await insertLedgerRow(t, accountId, {
+      provider: "openrouter",
+      operation: "score.tick",
+      costUsd: 9.0,
+      createdAt: NOW - 10 * 60 * 1000,
+      discovery: false,
+    });
 
     const v = await t.query(
       internal.gtmMaya.discoveryBudgetGate.checkDiscoveryBudget,
@@ -311,6 +500,121 @@ describe("checkDiscoveryBudget — DB-backed soft gate", () => {
     expect(v.allowed).toBe(true);
     expect(v.mode).toBe("full");
     expect(v.spentDayUsd).toBe(0);
+  });
+
+  it("SEES the pulse: un-tagged read-provider spend (no researchJobId) degrades the gate", async () => {
+    const t = convexTest(schema, modules);
+    const accountId = await makeAccount(t, "disc_pulse");
+    // The pulse's reads are NOT tagged discovery:true and carry no researchJobId.
+    // $0.30 of ScrapeCreators reads in the last 30 min on starter ($0.25/hr cap)
+    // → the gate must now see them and flip to monitoring_only.
+    await insertLedgerRow(t, accountId, {
+      provider: "scrapecreators",
+      operation: "pulse.buyer_intent_scan",
+      costUsd: 0.15,
+      createdAt: NOW - 10 * 60 * 1000,
+    });
+    await insertLedgerRow(t, accountId, {
+      provider: "x_api",
+      operation: "pulse.x_search",
+      costUsd: 0.15,
+      createdAt: NOW - 20 * 60 * 1000,
+    });
+
+    const v = await t.query(
+      internal.gtmMaya.discoveryBudgetGate.checkDiscoveryBudget,
+      { accountId, planTier: "starter", nowMs: NOW }
+    );
+    expect(v.allowed).toBe(false);
+    expect(v.mode).toBe("monitoring_only");
+    expect(v.spentHourUsd).toBeCloseTo(0.3, 4);
+    expect(v.reason).toContain("hourly discovery budget exhausted");
+  });
+
+  it("EXCLUDES foundation reads: read-provider spend WITH a researchJobId is not counted", async () => {
+    const t = convexTest(schema, modules);
+    const accountId = await makeAccount(t, "disc_foundation");
+    const jobId = await makeResearchJob(t, accountId);
+    // $9 of ScrapeCreators reads attached to a research job (foundation /
+    // onboarding) — governed by the job's own budget, NOT this gate.
+    await insertLedgerRow(t, accountId, {
+      provider: "scrapecreators",
+      operation: "foundation.channel_research",
+      costUsd: 9.0,
+      createdAt: NOW - 10 * 60 * 1000,
+      researchJobId: jobId,
+    });
+
+    const v = await t.query(
+      internal.gtmMaya.discoveryBudgetGate.checkDiscoveryBudget,
+      { accountId, planTier: "starter", nowMs: NOW }
+    );
+    expect(v.allowed).toBe(true);
+    expect(v.mode).toBe("full");
+    expect(v.spentDayUsd).toBe(0);
+  });
+
+  it("counts un-jobbed DataForSEO (provider=other, dataforseo.* op)", async () => {
+    const t = convexTest(schema, modules);
+    const accountId = await makeAccount(t, "disc_dfs");
+    // $1.00 of DataForSEO search-volume reads spread across the day → day cap met.
+    for (let i = 0; i < 10; i++) {
+      await insertLedgerRow(t, accountId, {
+        provider: "other",
+        operation: "dataforseo.search_volume",
+        costUsd: 0.1,
+        createdAt: NOW - (2 + i) * HOUR_MS,
+      });
+    }
+
+    const v = await t.query(
+      internal.gtmMaya.discoveryBudgetGate.checkDiscoveryBudget,
+      { accountId, planTier: "starter", nowMs: NOW }
+    );
+    expect(v.allowed).toBe(false);
+    expect(v.mode).toBe("monitoring_only");
+    expect(v.spentDayUsd).toBeCloseTo(1.0, 4);
+    expect(v.reason).toContain("daily discovery budget exhausted");
+  });
+
+  it("does NOT count generic `other`-provider spend (non-dataforseo op)", async () => {
+    const t = convexTest(schema, modules);
+    const accountId = await makeAccount(t, "disc_other_generic");
+    await insertLedgerRow(t, accountId, {
+      provider: "other",
+      operation: "misc.bookkeeping",
+      costUsd: 9.0,
+      createdAt: NOW - 10 * 60 * 1000,
+    });
+
+    const v = await t.query(
+      internal.gtmMaya.discoveryBudgetGate.checkDiscoveryBudget,
+      { accountId, planTier: "starter", nowMs: NOW }
+    );
+    expect(v.mode).toBe("full");
+    expect(v.spentDayUsd).toBe(0);
+  });
+
+  it("explicit discovery:true on an LLM row still counts (override path)", async () => {
+    const t = convexTest(schema, modules);
+    const accountId = await makeAccount(t, "disc_override");
+    // An openrouter row explicitly tagged discovery:true must count regardless
+    // of provider — $0.30 in the hour → starter hour cap met.
+    await insertLedgerRow(t, accountId, {
+      provider: "openrouter",
+      operation: "discovery.scoring",
+      costUsd: 0.3,
+      createdAt: NOW - 15 * 60 * 1000,
+      discovery: true,
+    });
+
+    const v = await t.query(
+      internal.gtmMaya.discoveryBudgetGate.checkDiscoveryBudget,
+      { accountId, planTier: "starter", nowMs: NOW }
+    );
+    expect(v.allowed).toBe(false);
+    expect(v.mode).toBe("monitoring_only");
+    expect(v.spentHourUsd).toBeCloseTo(0.3, 4);
   });
 
   it("applies the fail-closed $0.10/day floor for an unknown (null) tier", async () => {
