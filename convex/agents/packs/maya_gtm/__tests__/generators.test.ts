@@ -478,7 +478,7 @@ describe("Maya GTM workspace pack", () => {
     // and run a morning brief it never missed. The 7am cron owns the brief; the
     // heartbeat never runs cadence messages inline.
     expect(heartbeat).not.toContain("missed-cadence recovery");
-    expect(heartbeat).toContain("the 7am cron's job");
+    expect(heartbeat).toContain("is the crons' job"); // cadence + pulse owned by crons, not the heartbeat
     expect(heartbeat).toContain("published-results-scan");
     // Sprint E — relationship cadence engine + continuous inbound polling.
     expect(heartbeat).toContain("relationship-cadence");
@@ -701,12 +701,13 @@ describe("Maya GTM workspace pack", () => {
     //   agent stalled with no instructions). Headroom kept below the cap.
     // - bootstrapMaxChars (30_000) — PER FILE; over this a single file is
     //   truncated. TOOLS.md is the historical offender — keep it terse.
-    // 107_000 ceiling: plan-awareness (PLAN.md snapshot + SOUL.md conduct) plus
-    // the FLAT-FLAGS live-awareness (BOOT "call get_my_plan before a tier-gated
-    // capability" + HEARTBEAT plan-refresh bullet) — ~250 more legitimate
-    // every-turn chars on top. Still ~3K under the real 110K bootstrapTotalMaxChars
-    // cap, so nothing gets silently dropped; this guard keeps that headroom.
-    expect(promptContextChars).toBeLessThan(107_000); // under the 110K total cap
+    // 108_000 ceiling: plan-awareness + flat-flags live-awareness, PLUS the
+    // ALL-DAY REAL-TIME OPERATOR reframe (approval-kickoff timing + the hourly
+    // discovery_pulse cadence across BOOT/HEARTBEAT/GTM/AGENTS) — ~1K of
+    // legitimate every-turn cadence prose, already aggressively trimmed. Still
+    // ~2K under the real 110K bootstrapTotalMaxChars cap (the per-file ceilings
+    // below protect the critical files); keep new prose terse to hold this.
+    expect(promptContextChars).toBeLessThan(108_000); // under the 110K total cap
     expect(files.get("PLAN.md")?.length).toBeLessThan(2_000); // plan snapshot stays terse
     expect(files.get("TOOLS.md")?.length).toBeLessThan(28_000); // under the 30K per-file cap
     expect(files.get("BOOT.md")?.length).toBeLessThan(28_000);
@@ -797,5 +798,63 @@ describe("Maya GTM workspace pack — PLAN.md plan awareness", () => {
     // Sibling-file coherence: PLAN.md points Maya at get_my_plan, so the plugin
     // bundle must actually register it.
     expect(BUNDLED_GTM_PLUGIN_TOOLS).toContain("get_my_plan");
+  });
+
+  // ── All-day real-time operator: approval-kickoff + hourly pulse ─────────────
+  describe("all-day real-time operator framing", () => {
+    const files = buildMayaGtmWorkspace(INPUT).files;
+    const boot = files.get("BOOT.md") ?? "";
+    const gtm = files.get("GTM.md") ?? "";
+    const agents = files.get("AGENTS.md") ?? "";
+    const heartbeat = files.get("HEARTBEAT.md") ?? "";
+
+    it("BOOT/GTM/AGENTS describe the approval-kickoff (start on approval, not next morning)", () => {
+      expect(boot).toContain("APPROVAL KICKOFF");
+      // The first move posts the same day on approval + a connected channel.
+      expect(boot.toLowerCase()).toContain("that same day");
+      expect(gtm.toLowerCase()).toContain("same day");
+      expect(agents.toLowerCase()).toContain("connected");
+    });
+
+    it("SIBLING-FILE COHERENCE: no prompt still says start-tomorrow / no-posting-today", () => {
+      // The exact failure framing that contradicts the approval-kickoff. If any
+      // file regresses to it, the agent gets contradictory instructions.
+      for (const [name, body] of [
+        ["BOOT.md", boot],
+        ["GTM.md", gtm],
+        ["AGENTS.md", agents],
+        ["HEARTBEAT.md", heartbeat],
+      ] as const) {
+        expect(body, `${name} must not promise no-posting-today`).not.toContain(
+          "there is no posting today"
+        );
+        expect(body, `${name} must not promise start-tomorrow`).not.toContain(
+          "start posting tomorrow"
+        );
+      }
+    });
+
+    it("the hourly discovery_pulse is framed as a continuous discovery layer (not 7am-only)", () => {
+      expect(gtm.toLowerCase()).toContain("hourly");
+      expect(gtm).toContain("discovery_pulse");
+      expect(heartbeat).toContain("discovery_pulse");
+    });
+
+    it("HEARTBEAT still asserts monitoring-only (it never gained inline discovery)", () => {
+      // The pulse is a cron; the heartbeat must NOT discover, or we'd burn budget
+      // + duplicate the pulse.
+      expect(heartbeat).toContain("not the heartbeat's");
+      expect(heartbeat).toContain("I do NOT re-sweep");
+    });
+
+    it("the foundation skill grounds the synthesis in the persisted bet channels", () => {
+      // The Cal AI fix: synthesis must read the scorecard + name only real bets,
+      // never default to a favorite.
+      const skill =
+        files.get("skills/maya-foundation-research/SKILL.md") ?? "";
+      expect(skill).toContain("bet=true");
+      expect(skill.toLowerCase()).toContain("never name a channel that isn't a persisted bet".toLowerCase());
+      expect(skill).toContain("approval kickoff"); // the start-on-approval behavior is in the skill
+    });
   });
 });
