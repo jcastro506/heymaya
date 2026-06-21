@@ -49,6 +49,14 @@ function clock(ts: number): string {
   });
 }
 
+function Flag({ on, label }: { on: boolean; label: string }) {
+  return (
+    <span className={on ? "text-lime-400" : "text-paper-faint/60"}>
+      {on ? "✓" : "✗"} {label}
+    </span>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-paper/10 bg-paper/[0.03] px-3 py-2">
@@ -262,6 +270,17 @@ function Overview({
                 <div className="mt-0.5 truncate text-xs text-paper-faint">
                   {a.who} · {a.plan} · {a.stage ?? "—"}
                   {a.betChannels.length > 0 && ` · ${a.betChannels.join(", ")}`}
+                </div>
+                {/* LIVE tier flags (flat-control observability): these flip the
+                    moment gtmPlanJson changes, with no redeploy. */}
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+                  <span className="rounded bg-paper/10 px-1.5 py-0.5 uppercase tracking-wide text-paper">
+                    {a.tier.plan}/{a.tier.status}
+                  </span>
+                  <Flag on={a.tier.canVideo} label="video" />
+                  <Flag on={a.tier.canImage} label="image" />
+                  <Flag on={a.tier.canAutoPost} label="autopost" />
+                  <span className="text-paper-faint">{a.tier.maxActiveChannels}ch</span>
                 </div>
               </div>
               <div className="shrink-0 text-right">

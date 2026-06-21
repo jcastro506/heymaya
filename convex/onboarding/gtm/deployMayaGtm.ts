@@ -1238,8 +1238,10 @@ export const buildAndUploadGtmWorkspace = internalAction({
       // Verification/test deploys set this on the agent to force all-platform
       // coverage; undefined/false in production (agents stay focused).
       verifyAllPlatforms: row.agent.verifyAllPlatforms,
-      // Studio-tier gate: only a canVideo plan gets the video producer skill.
-      videoEnabled: planFeatures.canVideo,
+      // FLAT TIER FLAGS: creative skills ship on every tier now; capability is the
+      // LIVE server gate (planFeaturesGtm.canVideo/canImage), so we no longer bake
+      // videoEnabled/imageEnabled into the workspace. An upgrade flips the gates
+      // live with no redeploy. planSummary (below) stays as the deploy snapshot.
       // Plan-awareness — render PLAN.md so Maya boots knowing her tier, caps,
       // status, and the relevant upgrade nudge. Awareness only; the server gate
       // (planFeaturesGtm) stays authoritative.

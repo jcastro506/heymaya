@@ -82,11 +82,12 @@ describe("claimFounderSynthesisSend", () => {
     expect((await t.mutation(claim, { agentId })).decision).toBe("send");
   });
 
-  it("post-onboarding sends flow freely (not suppressed)", async () => {
+  it("post-onboarding sends flow freely when no handover was delivered (legacy)", async () => {
     const t = convexTest(schema, modules);
     const { accountId, agentId } = await setupAgent(t, "synth_post");
     await seedBuyerMap(t, accountId, agentId);
-    // Mark onboarding complete.
+    // Mark onboarding complete WITHOUT a delivered handover (strategyDeliveredAt
+    // null) — the cooldown only bites when a handover timestamp exists.
     await t.run((ctx) =>
       ctx.db.patch(agentId, { foundationCompletedAt: Date.now() })
     );
@@ -95,5 +96,40 @@ describe("claimFounderSynthesisSend", () => {
     await t.mutation(release, { agentId });
     const agent = await t.run((ctx) => ctx.db.get(agentId));
     expect(typeof agent?.foundationCompletedAt).toBe("number");
+  });
+
+  // REGRESSION (Cal AI, 2026-06-21): the 3× duplicate handover. Session A sends +
+  // marks complete; Session B's re-articulated copy lands seconds later. The old
+  // gate waved it through (foundationCompletedAt → "allow"). It must now suppress.
+  it("suppresses a concurrent duplicate that lands just AFTER completion (the straddle)", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, agentId } = await setupAgent(t, "synth_straddle");
+    await seedBuyerMap(t, accountId, agentId);
+    // Session A claims + sends the handover (stamps strategyDeliveredAt).
+    expect((await t.mutation(claim, { agentId })).decision).toBe("send");
+    // Session A marks foundation complete seconds later.
+    await t.run((ctx) =>
+      ctx.db.patch(agentId, { foundationCompletedAt: Date.now() })
+    );
+    // Session B's re-articulated handover lands seconds after → SUPPRESS, even
+    // though foundation is now complete (the former hole that sent it 3×).
+    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
+    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
+  });
+
+  it("allows a genuine later proactive send once past the handover cooldown", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, agentId } = await setupAgent(t, "synth_cooldown");
+    await seedBuyerMap(t, accountId, agentId);
+    // Handover delivered + completed 31 min ago (past the 30-min cooldown).
+    const longAgo = Date.now() - 31 * 60 * 1000;
+    await t.run((ctx) =>
+      ctx.db.patch(agentId, {
+        strategyDeliveredAt: longAgo,
+        foundationCompletedAt: longAgo,
+      })
+    );
+    // The next morning brief (proactive) flows — it's not a duplicate handover.
+    expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
   });
 });

@@ -363,16 +363,23 @@ describe("Maya GTM workspace pack", () => {
     expect(yt).toContain("title is the CTR lever");
   });
 
-  it("gates the video producer skill behind videoEnabled (Studio tier)", () => {
-    // Non-Studio (default INPUT): the video producer skill is NOT bundled, so a
-    // $99 Maya never even knows the video tools exist.
-    const noVideo = buildMayaGtmWorkspace(INPUT).files;
-    expect(noVideo.get("skills/maya-video-producer/SKILL.md")).toBeUndefined();
-
-    // Studio (videoEnabled:true): the skill ships, grounded + Creatify-oriented.
-    const withVideo = buildMayaGtmWorkspace({ ...INPUT, videoEnabled: true }).files;
-    const body = withVideo.get("skills/maya-video-producer/SKILL.md");
-    expect(body).toBeTruthy();
+  it("FLAT TIER FLAGS: creative skills ship on EVERY tier (no deploy-time gate)", () => {
+    // The former videoEnabled/imageEnabled bundling gates are gone. All creative
+    // skills bundle unconditionally on every Maya; capability is enforced solely
+    // by the LIVE server gate (creatifyVideo.startVideoJob/startAssetJob check
+    // canVideo/canImage), so a tier upgrade needs no machine redeploy.
+    const files = buildMayaGtmWorkspace(INPUT).files;
+    for (const slug of [
+      "maya-video-producer",
+      "maya-static-asset-producer",
+      "maya-inspiration-scout",
+    ]) {
+      expect(
+        files.get(`skills/${slug}/SKILL.md`),
+        `${slug} must ship flat on every tier`
+      ).toBeTruthy();
+    }
+    const body = files.get("skills/maya-video-producer/SKILL.md");
     expect(body!).toContain("clone_winning_ad");
     expect(body!).toContain("make_ad_from_url");
     // The skill names CAPABILITIES, never the vendor (per CLAUDE.md isolation).
@@ -694,11 +701,12 @@ describe("Maya GTM workspace pack", () => {
     //   agent stalled with no instructions). Headroom kept below the cap.
     // - bootstrapMaxChars (30_000) — PER FILE; over this a single file is
     //   truncated. TOOLS.md is the historical offender — keep it terse.
-    // 106_500 ceiling: plan-awareness added PLAN.md (every-turn plan tier/caps
-    // snapshot) + the SOUL.md "Know my plan" conduct rules — ~970 legitimate
-    // every-turn chars. Still ~3.5K under the real 110K bootstrapTotalMaxChars
+    // 107_000 ceiling: plan-awareness (PLAN.md snapshot + SOUL.md conduct) plus
+    // the FLAT-FLAGS live-awareness (BOOT "call get_my_plan before a tier-gated
+    // capability" + HEARTBEAT plan-refresh bullet) — ~250 more legitimate
+    // every-turn chars on top. Still ~3K under the real 110K bootstrapTotalMaxChars
     // cap, so nothing gets silently dropped; this guard keeps that headroom.
-    expect(promptContextChars).toBeLessThan(106_500); // under the 110K total cap
+    expect(promptContextChars).toBeLessThan(107_000); // under the 110K total cap
     expect(files.get("PLAN.md")?.length).toBeLessThan(2_000); // plan snapshot stays terse
     expect(files.get("TOOLS.md")?.length).toBeLessThan(28_000); // under the 30K per-file cap
     expect(files.get("BOOT.md")?.length).toBeLessThan(28_000);

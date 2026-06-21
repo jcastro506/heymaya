@@ -24,10 +24,14 @@ import { CreatifyClient, getDefaultClient } from "./client";
 import type {
   AdCloneInput,
   AiScriptInput,
+  AssetGenInput,
+  CreatifyInspiration,
   CreatifyJob,
+  CreatifyJobMode,
   CreatifyLink,
   CreatifyScript,
   CreatifyVideoMode,
+  IabImagesInput,
   LinkToVideoInput,
 } from "./types";
 
@@ -183,11 +187,110 @@ export async function generateAiScript(
   return assertId(res, "generateAiScript");
 }
 
+// ── IAB Images (static ad-banner set — the Growth $149 static path) ───────────
+// ⚠ UNVERIFIED LIVE — docs-derived (POST /api/iab_images/ → 2 cr → output[].url).
+
+export async function createIabImages(
+  input: IabImagesInput,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  const res = await client.request<CreatifyJob>("/api/iab_images/", {
+    method: "POST",
+    body: compact({
+      link: input.link,
+      image_urls: input.image_urls,
+      prompt: input.prompt,
+      format: input.format,
+      webhook_url: input.webhook_url,
+    }),
+  });
+  return assertId(res, "createIabImages");
+}
+
+export async function getIabImages(
+  id: string,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  return client.request<CreatifyJob>(`/api/iab_images/${id}/`, { method: "GET" });
+}
+
+// ── Asset Generator (raw image models; schema-driven) ─────────────────────────
+// ⚠ UNVERIFIED LIVE — model roster is runtime-only via the schemas endpoint.
+
+/** Free GET of the available asset-generator models + their param schemas. */
+export async function getAssetGeneratorSchemas(
+  client: CreatifyClient = getDefaultClient()
+): Promise<unknown> {
+  return client.request<unknown>("/api/asset_generator/schemas/", { method: "GET" });
+}
+
+export async function createAssetGen(
+  input: AssetGenInput,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  const res = await client.request<CreatifyJob>("/api/asset_generator/", {
+    method: "POST",
+    body: compact({
+      model: input.model,
+      prompt: input.prompt,
+      image_urls: input.image_urls,
+      webhook_url: input.webhook_url,
+      ...(input.params ?? {}),
+    }),
+  });
+  return assertId(res, "createAssetGen");
+}
+
+export async function getAssetGen(
+  id: string,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  return client.request<CreatifyJob>(`/api/asset_generator/${id}/`, { method: "GET" });
+}
+
+// ── Inspiration (recipe/format catalog — NOT a competitor-ad feed) ────────────
+// GET /api/inspirations/ is FREE (catalog). A job renders a recipe (per-recipe cost).
+
+/** Free: fetch the recipe/format catalog. Maya reads it as a brief input. */
+export async function getInspirations(
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyInspiration[]> {
+  const res = await client.request<unknown>("/api/inspirations/", { method: "GET" });
+  // The endpoint may return an array or a {results:[…]} envelope; normalize.
+  if (Array.isArray(res)) return res as CreatifyInspiration[];
+  if (res && typeof res === "object" && Array.isArray((res as { results?: unknown }).results)) {
+    return (res as { results: CreatifyInspiration[] }).results;
+  }
+  return [];
+}
+
+export async function createInspirationJob(
+  body: Record<string, unknown>,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  const res = await client.request<CreatifyJob>("/api/inspiration_jobs/", {
+    method: "POST",
+    body: compact(body),
+  });
+  return assertId(res, "createInspirationJob");
+}
+
+export async function getInspirationJob(
+  id: string,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  return client.request<CreatifyJob>(`/api/inspiration_jobs/${id}/`, { method: "GET" });
+}
+
 // ── Unified poll router — the orchestration layer calls this from the scheduler ─
 
-/** Poll the right GET endpoint for a given video mode. */
-export async function getVideoJob(
-  mode: CreatifyVideoMode,
+/**
+ * Poll the right GET endpoint for a given job mode (video OR static image).
+ * Video and image jobs share the async {id,status}→poll shape, so the durable
+ * poll loop routes both through here off the persisted `CreatifyJobMode`.
+ */
+export async function getCreatifyJob(
+  mode: CreatifyJobMode,
   id: string,
   client: CreatifyClient = getDefaultClient()
 ): Promise<CreatifyJob> {
@@ -198,9 +301,22 @@ export async function getVideoJob(
       return getLinkToVideo(id, client);
     case "aurora":
       return getAurora(id, client);
+    case "iab_images":
+      return getIabImages(id, client);
+    case "asset_gen":
+      return getAssetGen(id, client);
     default: {
       const _exhaustive: never = mode;
-      throw new Error(`Creatify getVideoJob: unknown mode ${String(_exhaustive)}`);
+      throw new Error(`Creatify getCreatifyJob: unknown mode ${String(_exhaustive)}`);
     }
   }
+}
+
+/** Back-compat alias — video-only callers. Delegates to {@link getCreatifyJob}. */
+export async function getVideoJob(
+  mode: CreatifyVideoMode,
+  id: string,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  return getCreatifyJob(mode, id, client);
 }

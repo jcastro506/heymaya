@@ -138,6 +138,20 @@ Status enum here is its own: `initializing → image_generating → image_genera
 
 ---
 
+## 3.6 Static creative + Inspiration — WIRED for the Growth $149 tier
+
+Beyond video (Studio), Maya now produces **designed static images** on the Growth ($149) tier and can read the **Inspiration recipe catalog** as a brief input. Both reuse the existing durable job engine (`creatifyJobsJson` + `pollVideoJob`) — no new table.
+
+- **Static images (`make_static_asset` tool → `POST /lc_gtm/creatify_make_asset` → `startAssetJob`).** Mode `iab_images` (`POST /api/iab_images/`, ~2 cr, `output[].url`). Grounds a Link in the founder's real product + screenshots, renders a banner set, re-hosts the first image into the media library as `kind:"image"`, records COGS `provider:"creatify" operation:"creatify_image"`. Server-gated on **`canImage` + `assetCreditsMonth`** (Starter 0 / Growth 50 / Studio 100), fail-closed. Skill: `maya-static-asset-producer`.
+- **Inspiration (`get_inspirations` tool → `GET /lc_gtm/creatify_inspirations` → `startInspirationQuery`).** Free `GET /api/inspirations/`. ⚠ A **recipe/format catalog, NOT a competitor-ad feed** (that's in-app only). Used only as a brief input; the organic-vs-paid judgment stays in Maya. Skill: `maya-inspiration-scout`.
+- **Spend-kill:** no new flag needed — `costCap.ts` / `spendKill.ts` already exclude `provider==='creatify'`, so a burst of asset jobs can't trip the $6/24h machine-kill. Image COGS is bounded by `assetCreditsMonth` instead.
+- ⚠ **Unverified live:** `iab_images` / `asset_generator` / `inspirations` request/response shapes are docs-derived. Only `ads_clone` / `link_to_videos` / `aurora` are live-confirmed. **Smoke-test these before relying.** Re-ground the `estimatedCreatifyCostUsd` figures once real `credits_used` come back.
+- **Deferred stubs:** Asset Generator (schema-driven, `asset_gen` mode typed but not orchestrated), Aurora-2-step, Text-to-Speech, lipsync, product_video, persona/voice rosters.
+
+**Studio pre-deploy checklist:** (1) set `CREATIFY_API_ID`/`CREATIFY_API_KEY`; (2) `npx convex run gtmMaya/creatifyVideo:e2eSmoke` for video; (3) live smoke `make_static_asset` + `get_inspirations`; (4) written resale confirmation from Creatify; (5) include `videoCreditsMonth` + `assetCreditsMonth` in Growth/Studio `gtmPlanJson` when creating Stripe products.
+
+---
+
 ## 5. URL→video param cheat-sheet (the rich one)
 
 `POST /api/link_to_videos/` writeable fields:

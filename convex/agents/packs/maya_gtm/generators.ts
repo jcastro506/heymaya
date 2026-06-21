@@ -8,13 +8,14 @@ export interface MayaGtmWorkspaceInput {
    */
   bootKickoffAtMs?: number;
   /**
-   * Studio-tier gate. When false/undefined the video producer skill is NOT
-   * bundled (the $99 core gets no video). Resolved at deploy from
-   * planFeaturesGtm(agent).canVideo. The server-side gate in creatifyVideo is
-   * the hard backstop; this just keeps a non-Studio Maya from knowing the tools.
-   */
-  videoEnabled?: boolean;
-  /**
+   * FLAT TIER FLAGS (2026-06-21): the former `videoEnabled` / `imageEnabled`
+   * deploy-time bundling gates are GONE. All creative skills ship on every Maya
+   * regardless of tier; capability is enforced solely by the LIVE server gate
+   * (planFeaturesGtm.canVideo/canImage, read at call time). This is what makes a
+   * tier upgrade take effect with no machine redeploy. Awareness is kept live via
+   * `planSummary` (a deploy snapshot) + the BOOT/HEARTBEAT "call get_my_plan"
+   * instructions; the snapshot is never a gate.
+   *
    * Plan-awareness — a concise human-readable summary of the founder's plan
    * tier + caps + status, computed at deploy by `describePlanForMaya(
    * planFeaturesGtm(agent))`. Rendered into PLAN.md so Maya ALWAYS has her plan
@@ -303,11 +304,19 @@ const SKILLS = [
   "maya-connection-health",
   "maya-content-reviewer",
   "maya-slideshow-strategist",
-  // Studio-tier ($149) VIDEO producer — sibling of the slideshow strategist.
-  // Gated in buildMayaGtmWorkspace: bundled ONLY when input.videoEnabled
-  // (planFeaturesGtm.canVideo). Backed by Creatify (clone_winning_ad /
-  // make_ad_from_url); the server gate in creatifyVideo is the hard backstop.
+  // Studio-tier VIDEO producer. Shipped FLAT on every tier; the sole authority is
+  // the live server gate in creatifyVideo.startVideoJob (canVideo) — the skill is
+  // fail-closed + self-gates on get_my_plan, so a non-Studio Maya just can't fire
+  // clone_winning_ad / make_ad_from_url until her plan allows.
   "maya-video-producer",
+  // Growth+ STATIC creative producer (designed IAB images via make_static_asset).
+  // Shipped FLAT; sole authority is the live server gate
+  // creatifyVideo.startAssetJob (canImage). Fail-closed + self-gating.
+  "maya-static-asset-producer",
+  // Inspiration scout — reads Creatify's recipe/format catalog (get_inspirations)
+  // as a brief input for the video + static producers. Bundled when EITHER
+  // creative path is enabled.
+  "maya-inspiration-scout",
   "maya-conversion-tracker",
   // Activation — the deeper truth: did signups STICK (come back / reach value),
   // not just land. Reports activation rate + time-to-value; routes a low rate to
@@ -352,10 +361,15 @@ export function buildMayaGtmWorkspace(
     BUNDLED_LOCAL_SKILLS.map((s) => [s.slug, s.body])
   );
   for (const skill of SKILLS) {
-    // Tier gate: the video producer skill ships only to Studio-tier agents.
-    // Non-Studio Maya never sees the video tools (the server gate is the
-    // hard backstop; this keeps her from offering what she can't make).
-    if (skill === "maya-video-producer" && !input.videoEnabled) continue;
+    // FLAT TIER FLAGS: every skill — including the creative ones (video-producer,
+    // static-asset-producer, inspiration-scout) — ships on EVERY Maya regardless
+    // of tier. Capability is enforced ENTIRELY by the LIVE server gate
+    // (creatifyVideo.startVideoJob/startAssetJob check canVideo/canImage from the
+    // live gtmPlanJson at call time, fail-closed). The skills are written
+    // fail-closed + self-gating on get_my_plan, so a Starter Maya simply can't
+    // fire the tools until her plan allows. This makes a tier UPGRADE take effect
+    // with NO machine redeploy: the Stripe webhook flips gtmPlanJson → the gates
+    // open live → Maya discovers it on her next get_my_plan.
     const bundled = bundledBySlug.get(skill);
     files.set(`skills/${skill}/SKILL.md`, bundled ?? renderSkill(skill));
   }
@@ -824,7 +838,7 @@ function renderPlan(input: MayaGtmWorkspaceInput): string {
     "Plan summary not rendered at deploy — call `get_my_plan` for the live tier, caps, and status before you tell the founder anything about their plan or limits.";
   return `# PLAN.md — my plan tier + what I can do
 
-The founder's current plan. The server enforces it for real; this is so I KNOW it and can talk about it honestly. Deploy-time snapshot — for live tier/caps/status call **\`get_my_plan\`** (no args) before I claim anything about the plan, hit a cap, or weigh an upgrade nudge. Conduct rules (never over-promise, surface a lapsed plan, nudge honestly) are in SOUL.md.
+The founder's current plan — the server enforces it; this is so I KNOW it. **SNAPSHOT from launch — if they upgraded/downgraded since, it's STALE.** Live truth is **\`get_my_plan\`** (no args): call it before I claim anything about the plan, make/offer creative, hit a cap, or nudge an upgrade. After an upgrade the new capability is mine immediately — no redeploy. Conduct rules in SOUL.md.
 
 ${summary}
 `;
@@ -1304,6 +1318,10 @@ I'm Maya, ${input.accountEmail}'s GTM manager. This file fires once at gateway s
    - **Crons are already registered — I do nothing here.** The recurring crons (morning_brief 7am, midday_pulse 1pm, evening_recap 8pm, weekly_review Sun 7pm, monthly_reset 1st 6am) ship DETERMINISTICALLY in jobs.json with stable ids and fire automatically in the operator's timezone. I do NOT add, re-add, or invent crons (no "recovery" cron — a slipped cadence is recovered inline by the HEARTBEAT, see HEARTBEAT.md). Inventing a cron is how a bogus "morning_brief_recovery" cron once timed out and spammed failures — never again.
      - **midday_pulse (\`0 13 * * *\`, ~1pm operator-local) is a LIGHT velocity sweep.** It re-checks ONLY the 1-2 bet channels for FRESH hot-strike threads since the 7am brief. If one is genuinely hot (judged on *velocity* — likes/upvotes per hour) AND a real ICP fit: ADD it to today's queue (per maya-continuous-research — **NEVER replace** existing events) and fire ONE one-tap ping. Silent if nothing's hot. Discovery of NEW threads is the *crons'* job; the heartbeat only reminds + monitors.
 
+## Plan awareness — live, not baked
+
+PLAN.md is a launch **snapshot**; the live truth is **\`get_my_plan({})\`**. I call it before I claim or attempt any tier-gated capability — offering/making video or static-image creative, judging channel allowance, an upgrade nudge. The live server gates are the real authority (creative tools fail closed on their own), so an upgrade takes effect **immediately, no redeploy** — I just see it on my next \`get_my_plan\`. Status \`none\` → tell the founder once to start/renew, never go silent.
+
 ## The hello — compose it, don't transcribe it
 
 When I need to send the hello, I **compose** it in my own voice. Not a template, not a recital. The text should feel like a competent manager texting a founder for the first time — different every deploy because I'm reading different context.
@@ -1393,6 +1411,7 @@ These run on the tick and self-heal the cadence — they don't ping unless there
 - **published-results-scan.** The T+2h/24h/7d result polls are scheduled at publish time (\`record_published\`) and are the primary path. As a safety net, if I see a published draft whose latest \`gtmPostResults\` snapshot is stale relative to its post age (a poll looks dropped — e.g. a machine restart ate the scheduled job), fetch its current metrics and write a fresh snapshot so the weekly review isn't reading stale data. Don't double-poll what's fresh.
 - **relationship-cadence.** The static \`gtmRelationshipTargets\` / \`gtmTargetAccounts\` list is only worth keeping if it's a *motion*. Check each target's \`lastTouchAt\` against its cadence (judgment by tier — a warm reciprocal contact more often than a cold one). For any target overdue for a touch, draft a genuine, non-spammy engagement (a real reply to something they actually posted — pull it via ScrapeCreators; value first, never a pitch), surface it to the operator as a one-tap action, and update \`lastTouchAt\` once acted on. Turn the list into recurring relationship-building, not a graveyard.
 - **inbound-poll.** Replies/mentions on the operator's OWN posts are the highest-intent inbound. For platforms where a webhook fires, triage on the event. For platforms without one, poll owned-post engagement here (rate-limited — not every tick; only posts published in the last ~7 days) and run \`maya-inbound-triage\` on anything new. A buyer asking "how does this work?" under their post is the warmest lead they'll get — never let it sit unseen.
+- **plan-refresh (only before a tier-dependent decision).** My tier can change with no redeploy. Before any tier-gated move on a tick — offering/making video or image creative, a NEW active channel, an upgrade nudge — I call \`get_my_plan({})\` and act on the LIVE tier (an upgrade is usable at once; a flip to \`none\` I surface once, then stay quiet). Not every silent tick — only when the decision depends on the tier.
 
 ## Quiet rules
 
@@ -2066,6 +2085,10 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
       return "Build grounded TikTok-photo-mode + IG carousels from the real media library (save_media / search_my_media / generate_slide_image) — product slides placed UNCHANGED from real screenshots, no fabricated UI.";
     case "maya-video-producer":
       return "Studio-tier video producer: when the niche's winning format is a video, make the founder a real short-form ad grounded in their product — copy a proven winning video's format (clone_winning_ad) or turn the product URL into a finished ad (make_ad_from_url), then hand it back one-tap. Server-gated to the $149 Studio tier.";
+    case "maya-static-asset-producer":
+      return "Growth-tier static creative producer: when a channel wants a designed still (a polished product banner / ad-creative image), make it grounded in the founder's REAL screenshots via make_static_asset, then hand it back one-tap. Server-gated to canImage (Growth + Studio); fail-closed to slideshow/screenshot on Starter.";
+    case "maya-inspiration-scout":
+      return "Read Creatify's recipe/format catalog (get_inspirations) as ONE input to a grounded creative brief — a format-idea catalog, NOT a competitor-ad feed and NOT a strategy. Borrow structure only; ground the copy/visuals in the real product; stay organic-first.";
     case "maya-conversion-tracker":
       return "Own the signup side of the loop: wrap every product link to signupUrl (clicks auto-tracked), then ASK the founder when there are clicks but no signups and log it via record_conversion. MVP = self-report; I do NOT hand founders code to paste (automatic tracker is roadmap, not offered yet).";
     case "maya-activation-coach":

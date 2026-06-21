@@ -172,6 +172,8 @@ import {
   creatifyMakeAdHttp,
   creatifyCloneAdHttp,
   creatifyPollHttp,
+  creatifyMakeAssetHttp,
+  creatifyInspirationsHttp,
 } from "./gtmMaya/creatifyVideo";
 import { getPlatformAlgoHttp } from "./gtmMaya/platformAlgo";
 // Data-collection sprint — inbound user-turn transcript capture + per-turn
@@ -328,6 +330,18 @@ http.route({
   path: "/lc_gtm/creatify_poll",
   method: "GET",
   handler: creatifyPollHttp,
+});
+// make_asset = grounded IAB static-image set (Growth $149 tier, canImage);
+// inspirations = free read of the recipe/format catalog (a brief input).
+http.route({
+  path: "/lc_gtm/creatify_make_asset",
+  method: "POST",
+  handler: creatifyMakeAssetHttp,
+});
+http.route({
+  path: "/lc_gtm/creatify_inspirations",
+  method: "GET",
+  handler: creatifyInspirationsHttp,
 });
 http.route({
   path: "/lc_gtm/get_my_target_threads",
