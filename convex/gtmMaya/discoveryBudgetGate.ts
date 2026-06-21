@@ -9,8 +9,8 @@ import { planFeaturesGtm, type GtmPlan } from "./planGtm";
  * This is the SOFT counterpart to the HARD-KILL caps in `spendKill.ts` /
  * `costCap.ts`. Those caps 403 the agent and DESTROY its Fly machine when a
  * runaway burn crosses a ceiling — the right behavior for an out-of-control
- * loop. The continuous discovery hunt (read-API scans + cheap-model scoring,
- * tagged `discovery: true` on `gtmCostLedger`) needs the OPPOSITE: when the
+ * loop. The continuous discovery hunt (read-API scans + cheap-model scoring)
+ * needs the OPPOSITE: when the
  * day's discovery budget is exhausted, Maya must NOT die. She must DEGRADE TO
  * MONITORING-ONLY — keep watching her own posts + the inbox (cheap, bounded by
  * watermarks) and simply STOP INITIATING NEW DISCOVERY READS until the rolling
@@ -20,6 +20,16 @@ import { planFeaturesGtm, type GtmPlan } from "./planGtm";
  * destroys. The pulse/workers consult it (Phase 3 wiring) and, on
  * `mode === "monitoring_only"`, skip the discovery legs of the loop while
  * leaving own-post + inbox monitoring untouched.
+ *
+ * WHAT COUNTS AS DISCOVERY SPEND (`isCountableDiscoveryRow`): the pulse's read
+ * provider calls are NOT individually tagged `discovery: true`, so the gate uses
+ * ongoing read-provider spend as the discovery proxy. A row counts iff it is
+ * explicitly `discovery: true` OR it is a READ-provider row (ScrapeCreators / X
+ * API / DataForSEO-under-`other`) that carries NO `researchJobId`. Foundation +
+ * onboarding reads always carry a `researchJobId` (governed by that job's own
+ * budget) and are therefore excluded; un-jobbed read spend is exactly the pulse's
+ * ongoing discovery burn. LLM ticks (gemini/openrouter) only count if explicitly
+ * tagged — this gate bounds read-driven discovery, not the cheap-model tick.
  *
  * PER-TIER DAILY DISCOVERY BUDGET (sized to the COGS ceilings in
  * `docs/SPRINT_PLAN_REALTIME_OPERATOR_V1.md` §9b — the discovery loop is the #1
@@ -80,6 +90,69 @@ export function discoveryHourlyBudgetUsd(planTier: GtmPlan | null): number {
   return round4(discoveryDailyBudgetUsd(planTier) * HOURLY_FRACTION);
 }
 
+/**
+ * READ providers whose ongoing spend IS the discovery pulse. ScrapeCreators
+ * (27+ social read layer) and the X API are pure read-side data pulls; DataForSEO
+ * records under provider `"other"` with a `dataforseo.*` operation (see
+ * `demandIntel.ts`). LLM providers (gemini/openrouter) are the cheap-model
+ * *scoring* tick — they are NOT bounded by THIS gate (the gate bounds read-driven
+ * discovery, the #1 variable-COGS driver; the LLM tick is governed elsewhere),
+ * so they are deliberately excluded unless explicitly tagged `discovery: true`.
+ */
+export const READ_PROVIDERS: ReadonlySet<string> = new Set([
+  "scrapecreators",
+  "x_api",
+]);
+
+/** Is this `other`-provider row a DataForSEO read? DataForSEO records under
+ * provider `"other"` with a `dataforseo.*` operation. Pure helper. */
+function isDataForSeoRow(provider: string, operation?: string): boolean {
+  return (
+    provider === "other" &&
+    typeof operation === "string" &&
+    operation.toLowerCase().includes("dataforseo")
+  );
+}
+
+/**
+ * PURE predicate — does this ledger row count toward the discovery budget?
+ *
+ * A row counts iff EITHER:
+ *   (a) `discovery === true` — the explicit fast-path / override. Anything the
+ *       pulse tags by hand counts regardless of provider/researchJobId; OR
+ *   (b) it is a READ-PROVIDER row (ScrapeCreators / X API, or DataForSEO under
+ *       provider `other`) AND it carries NO `researchJobId`.
+ *
+ * The `researchJobId`-absent clause is the discovery proxy: foundation /
+ * onboarding reads are always attached to a `gtmResearchJobs` row and are
+ * governed by that job's own budget — so they MUST be excluded here or we'd
+ * double-bound them. Ongoing post-onboarding read spend (the continuous pulse +
+ * intra-day discovery) has no `researchJobId`, so counting un-jobbed read-provider
+ * spend captures the pulse's burn without requiring every read tool to set
+ * `discovery: true`. This is why read-provider-without-researchJobId is the right
+ * proxy: it is exactly the set of reads the pulse initiates, and nothing else.
+ *
+ * Non-read providers (gemini / openrouter LLM ticks) never count via clause (b);
+ * they only count if explicitly tagged via clause (a). Exported + DB-free for unit
+ * testing.
+ */
+export function isCountableDiscoveryRow(row: {
+  discovery?: boolean;
+  provider: string;
+  operation?: string;
+  researchJobId?: unknown;
+}): boolean {
+  // (a) explicit override — counts regardless of provider / researchJobId.
+  if (row.discovery === true) return true;
+  // (b) ongoing read-provider spend with no research job attached = the pulse.
+  const isRead =
+    READ_PROVIDERS.has(row.provider) ||
+    isDataForSeoRow(row.provider, row.operation);
+  if (!isRead) return false;
+  // Foundation/onboarding reads carry a researchJobId and are budgeted per-job.
+  return row.researchJobId === undefined || row.researchJobId === null;
+}
+
 export type DiscoveryBudgetMode = "full" | "monitoring_only";
 
 export interface DiscoveryBudgetVerdict {
@@ -100,20 +173,27 @@ export interface DiscoveryBudgetVerdict {
 }
 
 /** A minimal ledger-row shape the windowing math needs. Keeps the pure helper
- * decoupled from the full `Doc<"gtmCostLedger">` type. */
+ * decoupled from the full `Doc<"gtmCostLedger">` type. Carries the fields
+ * `isCountableDiscoveryRow` needs (`provider` / `operation` / `researchJobId`)
+ * so the counting predicate is applied inside the pure windowing math. */
 export interface DiscoveryLedgerRow {
   discovery?: boolean;
+  provider: string;
+  operation?: string;
+  researchJobId?: Id<"gtmResearchJobs"> | null;
   costUsd: number;
   createdAt: number;
 }
 
 /**
- * PURE windowing math — sum discovery-tagged spend over the last hour and last
+ * PURE windowing math — sum discovery-counting spend over the last hour and last
  * 24h relative to `nowMs`. Unit-testable without a DB.
  *
- * Only rows with `discovery === true` count: foundation/research/operational
- * spend is governed by the hard caps, never by this discovery gate. A row at
- * EXACTLY the window boundary (`createdAt === nowMs - WINDOW`) is included
+ * A row counts iff `isCountableDiscoveryRow(row)` (explicit `discovery:true`, OR
+ * un-jobbed read-provider spend = the pulse). Foundation/onboarding reads carry a
+ * `researchJobId` and are governed by that job's own budget, so they are excluded
+ * here. LLM ticks (gemini/openrouter) are excluded unless explicitly tagged. A row
+ * at EXACTLY the window boundary (`createdAt === nowMs - WINDOW`) is included
  * (inclusive lower bound); future-dated rows (`createdAt > nowMs`) are ignored.
  */
 export function summarizeDiscoverySpend(
@@ -125,7 +205,7 @@ export function summarizeDiscoverySpend(
   let spentHourUsd = 0;
   let spentDayUsd = 0;
   for (const row of ledgerRows) {
-    if (row.discovery !== true) continue;
+    if (!isCountableDiscoveryRow(row)) continue;
     if (row.createdAt > nowMs) continue; // ignore future-dated rows
     if (row.createdAt >= dayFloor) {
       spentDayUsd += row.costUsd;
@@ -200,11 +280,15 @@ export function gatingTierForAgent(agent: {
 }
 
 /**
- * Sum discovery-tagged `gtmCostLedger` rows for an account over the last 24h,
- * using the `by_account_discovery_created` index so we read ONLY this account's
- * discovery rows in-window (cross-tenant isolation is enforced by the
- * accountId-prefixed index range). The hour window is a subset of the day
- * window, so we collect the 24h slice once and let the pure helper split it.
+ * Sum discovery-COUNTING `gtmCostLedger` rows for an account over the last 24h,
+ * using the `by_account_and_created` index so we read ALL of THIS account's rows
+ * in-window (cross-tenant isolation is enforced by the accountId-prefixed index
+ * range). We can no longer scope the index read to `discovery === true`: the
+ * pulse's reads are NOT tagged, so the counting predicate must inspect each row's
+ * `provider` / `operation` / `researchJobId` (via `isCountableDiscoveryRow`,
+ * applied inside `summarizeDiscoverySpend`). The hour window is a subset of the
+ * day window, so we collect the 24h slice once and let the pure helper split +
+ * filter it.
  */
 async function loadDiscoverySpend(
   ctx: Pick<QueryCtx, "db">,
@@ -214,11 +298,8 @@ async function loadDiscoverySpend(
   const dayFloor = nowMs - DAY_MS;
   const rows = await ctx.db
     .query("gtmCostLedger")
-    .withIndex("by_account_discovery_created", (q) =>
-      q
-        .eq("accountId", accountId)
-        .eq("discovery", true)
-        .gte("createdAt", dayFloor)
+    .withIndex("by_account_and_created", (q) =>
+      q.eq("accountId", accountId).gte("createdAt", dayFloor)
     )
     .collect();
   return summarizeDiscoverySpend(rows, nowMs);
