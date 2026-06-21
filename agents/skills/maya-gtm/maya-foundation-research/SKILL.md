@@ -64,7 +64,7 @@ The lifecycle uses OpenClaw native tools — **do not hand-roll watchdog state.*
 5. As each worker completes or self-terminates (returns NO_REPLY), evaluate quality against the gates below.
 6. If a worker has been in `processing` state for longer than the work warrants in Maya's judgment (a small buyer-map sweep shouldn't take as long as a deep competitive scan), `subagents kill` it. The lane unblocks immediately — verified from OpenClaw source.
 7. If a worker returned thin output, `subagents steer` it with a refinement message — preserves accumulated context. Do not respawn unless steering fails.
-8. Once Maya judges all 5 outputs meet the bar, the STRATEGY phase is done — but **do NOT announce synthesis yet, and do NOT mark foundation complete.** Call `log_action({ kind: "strategy_complete", summary })` and proceed straight into Phase 2 (discovery). **The synthesis message is Phase 4 — it goes out ONLY after the voice profile + the research pool have actually landed** (Phase 2/2.5 + the completion gate in BOOT.md: re-check `get_my_foundation({})` shows a saved `voiceProfileJson` + real `gtmTargetThreads` + `gtmDraftedContent` + the buyer map / channel scorecard before telling the founder the full picture + the plan). There is NO day-1 calendar event — onboarding seeds the research + the draft pool; the daily `morning_brief` posts the first plan tomorrow morning. Announcing after only the strategy phase = a plan with no real research behind it — the exact failure this guards against.
+8. Once Maya judges all 5 outputs meet the bar, the STRATEGY phase is done — but **do NOT announce synthesis yet, and do NOT mark foundation complete.** Call `log_action({ kind: "strategy_complete", summary })` and proceed straight into Phase 2 (discovery). **The synthesis message is Phase 4 — it goes out ONLY after the voice profile + the research pool have actually landed** (Phase 2/2.5 + the completion gate in BOOT.md: re-check `get_my_foundation({})` shows a saved `voiceProfileJson` + real `gtmTargetThreads` + `gtmDraftedContent` + the buyer map / channel scorecard before telling the founder the full picture + the plan). There is NO day-1 calendar event during the research phases — onboarding seeds the research + the draft pool; the first move is created by the approval kickoff (Phase 5) once the founder approves + connects a channel, then the daily `morning_brief` runs every morning after. Announcing after only the strategy phase = a plan with no real research behind it — the exact failure this guards against.
 
 ### Progress while I work — web view, not the phone
 The running play-by-play of the pass (first signal → channel call → real prospect found → plan taking shape) goes to the **web Mission Control view via `post_activity`**, NOT to Telegram. Each `post_activity` entry carries a real, specific, grounded finding (looked everywhere → narrowed with reasoning → found their people → shaping the plan) in plain manager voice, no internal terms. The founder watches the work happen on the web; the phone stays quiet.
@@ -113,9 +113,9 @@ This is Maya's judgment, not a checklist. Numbers below are not thresholds — t
 
 If any output reads thin to Maya's judgment, steer the worker for more. If steering doesn't help, ship with the gap surfaced honestly to the operator ("competitive map landed light on substitutes — I'll keep watching as I do daily research"). Maya decides what "enough" means — there is no minimum count.
 
-## Phases 2 / 2.5 — discovery + composition (seed the pool; no posting today)
+## Phases 2 / 2.5 — discovery + composition (seed the pool; first move posts on approval)
 
-Foundation does NOT stop at the operating model. The research has to land a real **pool** of reply targets + drafts so tomorrow's first daily plan is grounded, not generic. The split: per-item **workers find AND draft** reply targets (one self-contained draft per thread — the reliable shape, and the pool the daily cron draws from going forward), then **Maya curates** the drafts editorially (Phase 2.5). Composition lives in the per-item worker loop, not a single inline end-of-run loop. **Onboarding does NOT post anything and does NOT build a day-1 event** — it seeds the pool + the per-channel read; the daily `morning_brief` (7am, starting tomorrow) is what builds and posts each day's plan from that pool + what's hot that morning. There is no onboarding week and no "first move today."
+Foundation does NOT stop at the operating model. The research has to land a real **pool** of reply targets + drafts so the first move + the daily plan are grounded, not generic. The split: per-item **workers find AND draft** reply targets (one self-contained draft per thread — the reliable shape, and the pool the daily cron draws from going forward), then **Maya curates** the drafts editorially (Phase 2.5). Composition lives in the per-item worker loop, not a single inline end-of-run loop. **During the research phases onboarding does NOT post and does NOT build a calendar event** — it seeds the pool + the per-channel read; the first move is fired by the approval kickoff (Phase 5) on approval + a connected channel, and the daily `morning_brief` (7am) builds each day's plan from that pool + what's hot (the hourly pulse + that morning's check). There is no onboarding week.
 
 ### Phase 2 — DISCOVERY + DRAFT (workers find threads AND draft the reply, one POST per item)
 
@@ -169,7 +169,7 @@ Do 1→4 per thread before the next. Skip not-worth-it threads (set the action;
 don't draft). Focus on buyers about to try something new — frustration with
 current tools, asking for alternatives, comparing options. Those convert.
 Do NOT build a calendar and do NOT post anything — you build the thread +
-draft POOL. The daily morning plan draws from this pool starting tomorrow.
+draft POOL. The approval kickoff + the daily morning plan draw from this pool.
 No propose_calendar in this worker.
 
 ALSO, before finishing, persist the per-channel ICP knowledge for <channel>:
@@ -203,7 +203,7 @@ This keeps the editorial bar without the brittle "Maya drafts all N replies inli
 
 ### Phase 2.5 completeness gate — the POOL is deep enough (no day-1 event)
 
-Threads + drafts + per-channel ICP knowledge have landed (Phase 2/2.5). **Onboarding builds NO calendar event and posts nothing** — its job is to seed a real pool the daily plan draws from. Maya does NOT compose a "first move for today" and does NOT call `propose_calendar` here. The daily `morning_brief` (7am, starting tomorrow) is what turns the pool into a posted plan each day.
+Threads + drafts + per-channel ICP knowledge have landed (Phase 2/2.5). **During the research phases onboarding builds NO calendar event and posts nothing** — its job is to seed a real pool. Maya does NOT compose a first move or call `propose_calendar` *here* (in the research phases); the first event is created by the approval kickoff (Phase 5) after the founder approves + connects a channel, and the daily `morning_brief` (7am) turns the pool into a posted plan each day after.
 
 Before Phase 4 (the synthesis), Maya confirms the **pool is deep enough** for tomorrow's plan to be strong:
 - a saved voice profile (`voiceProfileJson`, or confidence 'low' if they had no handles to learn from),
@@ -213,7 +213,7 @@ Before Phase 4 (the synthesis), Maya confirms the **pool is deep enough** for to
 
 **The pool gate is the backstop.** Maya does NOT claim the picture + plan are ready (Phase 4) until she re-reads `get_my_foundation({})` and sees the voice profile + a real thread/draft pool + the per-channel read. If it's thin, the research didn't land — steer the workers for more; never send a plan with no real research behind it.
 
-ONLY after the voice profile + the pool + the per-channel read are genuinely landed does Maya proceed to Phase 4 (the synthesis message — beat 3 of the opening: full research + plan explained + "I start posting for you tomorrow morning"). The founder's "approve" reply is the final gate; the posting itself begins with tomorrow's `morning_brief`.
+ONLY after the voice profile + the pool + the per-channel read are genuinely landed does Maya proceed to Phase 4 (the synthesis message — beat 3 of the opening: full research + plan explained + "approve + connect and I'm rolling today"). The founder's "approve" reply + a connected bet channel are the gates; the first move posts that same day (the approval kickoff), and the daily `morning_brief` runs every morning after.
 
 ## Synthesis message — what the operator gets after the FULL pass
 
@@ -228,8 +228,14 @@ Who's actually buying this: [one-sentence persona, named if possible — e.g.
 Here's one of them, in their own words: "[verbatim quote + where]" — this is
 who we're going after.
 
-Where they live (and where they don't): [bet channels + one-line why each; +
-what I ruled out, so they see the call was deliberate]
+Where they live (and where they don't): [Read `get_my_foundation`'s saved channel
+scorecard and name ONLY the channels with bet=true — in their own ranked order,
+one plain why each, grounded in what the research actually found (e.g. "Reddit —
+23 ICP threads venting about X in r/Y"; "TikTok — your buyers are 18-30 and these
+demos go viral"). NEVER name a channel that isn't a persisted bet, and never
+default to a favorite — the scorecard decides. Add what I ruled out, so they see
+the call was deliberate. If the scorecard is empty/thin, say "still finalizing
+your channel list — back shortly" and do NOT invent channels.]
 
 The play — fit to where you are right now: [THE STAGE-ADAPTIVE STRATEGY, plain,
 1-2 sentences. Pre-launch / no audience → "you're starting cold, so we earn an
@@ -244,51 +250,54 @@ deadline, fit to their stage, e.g. "100 installs in your first 30 days" /
 "your first 25 signups this month". Ask them to confirm it. Then ACTUALLY
 SAVE it with set_north_star — a plan with no target is not a plan.]
 
-How this works from here: starting tomorrow morning, I run your plan every
-day — I write the posts and replies in your voice and post them for you on the
-channels you've connected (your X, LinkedIn, Instagram, YouTube go out
-automatically; for Reddit and TikTok I'll line it up and you tap once to send,
-so you never get flagged). You'll see the whole day in your app anytime, and
-I'll text you when something needs you.
+How this works from here: the moment you approve and connect your first channel,
+I post your first move that same day — then every morning I run your full plan,
+writing the posts and replies in your voice and posting them for you. For each of
+YOUR bet channels I name its mode honestly (auto-post channels go out
+automatically; the one-tap channels I line up and you tap once to send, so you
+never get flagged). I'm watching your channels through the day for hot moments,
+not just at 7am. You'll see the whole day in your app anytime, and I'll text you
+when something needs you.
 
 To let me post for you, I need access to the channels we're betting on
-([BET CHANNELS, plain names]). Let's connect them now — one at a time, takes a
-minute each. Start with [TOP BET CHANNEL], tap here: [REAL connect link for the
-#1 bet channel]. The second that's in, I'll send you the next one.
+([the ACTUAL bet channels from the scorecard, plain names — never placeholders or
+a default]). Let's connect them now — one at a time, takes a minute each. Start
+with [the #1 bet channel by rating/evidence], tap here: [REAL connect link for it].
+The second that's in, I'm rolling on it — and I'll send you the next one.
 
 First though — tell me if I've got any of this wrong: your buyer, the channels,
-or the approach. Way easier to redirect now, before I start. If it's good, I'll
-get to work and you'll see your first posts go out tomorrow morning.
+or the approach. Way easier to redirect now, before I start. Approve it and
+connect a channel and I'm moving today.
 ```
-**Recommend the dashboard FIRST, keep the Telegram link as the offer.** Call `get_connect_links({ channels: [<bet channels, my #1 first>] })`. It returns `dashboardUrl` (the web connect panel) plus per-channel one-tap `links`. The web dashboard is the most RELIABLE way to connect (desktop browser, already-logged-in accounts, no in-app-webview breakage), so I lead with it: *"Easiest way to connect is right in your dashboard 👉 {dashboardUrl} — connect Reddit there and we're rolling."* Then offer the convenient alternative in the same breath: *"or if you'd rather do it from your phone, just say the word and I'll text the link here."* If they ask for the link (or clearly prefer Telegram), drop the **#1 bet channel's** `url` straight in (one-tap), then the rest one at a time after each connects (one link beats a wall of six). NEVER fabricate a URL — only send what the tool returns; if the tool errors, fall back to "I'll get you the connect link in a sec" and retry. NO "first move today" — there is no posting today; I research today, start posting tomorrow morning.
+**Recommend the dashboard FIRST, keep the Telegram link as the offer.** Call `get_connect_links({ channels: [<bet channels, my #1 first>] })`. It returns `dashboardUrl` (the web connect panel) plus per-channel one-tap `links`. The web dashboard is the most RELIABLE way to connect (desktop browser, already-logged-in accounts, no in-app-webview breakage), so I lead with it: *"Easiest way to connect is right in your dashboard 👉 {dashboardUrl} — connect your top channel there and I'm rolling."* (I use the founder's ACTUAL #1 bet channel by name, never a default.) Then offer the convenient alternative in the same breath: *"or if you'd rather do it from your phone, just say the word and I'll text the link here."* If they ask for the link (or clearly prefer Telegram), drop the **#1 bet channel's** `url` straight in (one-tap), then the rest one at a time after each connects (one link beats a wall of six). NEVER fabricate a URL — only send what the tool returns; if the tool errors, fall back to "I'll get you the connect link in a sec" and retry. The moment a bet channel connects, the approval kickoff posts the first move on it that same day (warmth permitting).
 
-Plain text. No headers. No "Excited to share." All in plain, non-technical language the founder actually understands — never internal terms (no "buyer map," "channel scorecard," "ICP," tool names, file names). Lead with: who's buying (+ a real one in their words) → where they live → THE STAGE-FIT STRATEGY in plain words → the goal → how it works from here (**I post for you, starting tomorrow morning**) → the connect-your-accounts ask → the steering invite. The strategy line is DERIVED from this founder's situation (never a template — pre-launch earns authority first; traction-stage pushes the product), stated so they understand the logic and can push back. **This is BEAT 3 of the opening — the full research + plan, explained, ending with "I start posting for you tomorrow morning."** Do NOT propose a posting move to do "today" — there is no posting today; research today, post tomorrow. Do NOT promise a "week" or a "first week" — the daily morning plan is where day-to-day lives from tomorrow on. Do NOT hand them a backward inventory of what I built ("5 competitors, 5 hooks, 5 accounts") — that's my back office, not their plan.
+Plain text. No headers. No "Excited to share." All in plain, non-technical language the founder actually understands — never internal terms (no "buyer map," "channel scorecard," "ICP," tool names, file names). Lead with: who's buying (+ a real one in their words) → where they live → THE STAGE-FIT STRATEGY in plain words → the goal → how it works from here (**the moment you approve + connect, I post your first move that same day; then a fresh plan every morning, and I watch your channels through the day**) → the connect-your-accounts ask → the steering invite. The strategy line is DERIVED from this founder's situation (never a template — pre-launch earns authority first; traction-stage pushes the product), stated so they understand the logic and can push back. **This is BEAT 3 of the opening — the full research + plan, explained, ending with "approve + connect and I'm rolling today."** **GROUNDING (non-negotiable): the channels I name MUST be the actual persisted bet channels from the scorecard, and I offer auto-post ONLY on bet channels that support it. Naming a channel that isn't a bet, or defaulting to a favorite (the Cal AI failure — said X/LinkedIn when the bets were tiktok/reddit/instagram), is forbidden.** Do NOT promise a "week" or a "first week" — the daily morning plan is where day-to-day lives. Do NOT hand them a backward inventory of what I built ("5 competitors, 5 hooks, 5 accounts") — that's my back office, not their plan.
 
 ### If the research isn't fully landed yet (honest-partial — never go silent)
 
 The full synthesis above assumes the voice profile + the research (who's buying, where they are, the per-channel read) all landed. If the watchdog has been carrying the pass and the **strategy is solid but some research is still landing** after a reasonable window, do NOT stay silent and do NOT fake certainty. Send the **strategy now** — who's buying (+ a real one in their words), where they live and where they don't, the stage-fit play — and be honest that you're still finishing the deep read:
 
-> "Here's the read + the play. Your customer is [X], they spend time on [channels], and here's how I'll get in front of them: [stage-fit strategy]. I'm finishing the deep dive on a couple of channels now, then I start posting for you tomorrow morning."
+> "Here's the read + the play. Your customer is [X], they spend time on [their actual bet channels], and here's how I'll get in front of them: [stage-fit strategy]. I'm finishing the deep dive on a couple of channels now — approve it and connect a channel and I'm rolling today."
 
 This delivers the substantive thinking the instant it's solid (what the founder actually wants the moment research is done). Mark it with `mark_lifecycle({ marker: "strategy_delivered" })` if available, but **do NOT call `mark_lifecycle({ marker: "foundation_complete" })`** until the full research has landed and you've sent the complete plan — the watchdog keeps driving the research to completion. Silence after the hello is never acceptable; the read plus an honest "still finishing" always beats it.
 
 ### Strategy approval gate
 
-This synthesis is a **proposal, and I invite a pivot** — it leads with the strategy (who's buying / where to play / the wedge / the North Star) and ends with "I start posting for you tomorrow morning." The close invites real pushback on the *direction* ("tell me if I've got your buyer or the channels wrong — easy to redirect now, before I start").
+This synthesis is a **proposal, and I invite a pivot** — it leads with the strategy (who's buying / where to play / the wedge / the North Star) and ends with "approve + connect a channel and I'm rolling today." The close invites real pushback on the *direction* ("tell me if I've got your buyer or the channels wrong — easy to redirect now, before I start").
 
 - When I send the synthesis, call `set_strategy_approval({ state: "proposed" })`, and also propose the North Star via `set_north_star({ ... })` (adaptive to entry mode). **Also tag the app `archetype`** in that same call (e.g. "dev-tool" / "consumer-mobile" / "b2b-saas" / "creator-tool") — cheap to set, and it's how this app joins the cross-tenant playbook.
 - **Warm-start from the cross-tenant archetype brain (Sprint 8 — now LIVE).** Early in the foundation pass, once I have a working sense of the archetype, I call **`get_archetype_playbook({})`** — it returns what's CONVERTED for other founders of this same archetype (`playbook:[{kind, learning, supportingTenantCount, confidence}]`), **PII-free** (only patterns + how many founders back them, never anyone's identity). I fold it in as a **soft prior, never fact**: *"dev-tool founders like you convert best in r/X with the founder-story hook (seen across 7 founders) — let me check it holds for you,"* then my own research confirms or overrides it. It's EMPTY until an archetype has ≥5 attributed founders (the k-anonymity floor) — when empty I just run my own research + `platformAlgoCache`, no warm-start, no mention. The flywheel: every founder's converting `save_learning({ ..., structured })` feeds the monthly rollup → the next founder of their archetype starts smarter.
-- Nothing is posted during onboarding — there is no posting today, so proposing costs nothing irreversible. The actual posting starts tomorrow morning via the daily plan.
-- On the founder's **approval**, call `set_strategy_approval({ state: "approved" })`, then `mark_lifecycle({ marker: "foundation_complete" })`. On **pushback**, call `set_strategy_approval({ state: "iterating" })`, revise the strategy (re-weight channels / re-frame the POV), and re-propose — don't dig in.
+- Nothing is posted *before approval* — proposing the plan costs nothing irreversible. Posting begins the moment the founder approves AND a bet channel is connected (the approval kickoff, below).
+- On the founder's **approval**, call `set_strategy_approval({ state: "approved" })`. **Then the APPROVAL KICKOFF:** check connected bet channels via `list_connected_accounts` / `get_connection_health`. **If ≥1 bet channel is connected, run the `morning_brief` logic INLINE NOW** (read `skills/maya-morning-brief/SKILL.md`) to build + post the founder's **first move that same day** from the seeded pool — posting ONLY on connected channels, respecting `channelWarmthJson` (a cold channel = warmup/engagement only, NO promo blast). Keep the inline kickoff FAST: post the single top-priority move synchronously; the next 7am `morning_brief` builds the full day. **The kickoff stamps `mark_lifecycle({ marker: "morning_brief" })` exactly as the 7am cron does**, so when the 7am cron fires later the same day it sees `lastMorningBriefAt` is today and NO_REPLYs — the founder is never double-briefed. If NO bet channel is connected yet, I do NOT post; the connection webhook wakes me and I fire the kickoff the moment a channel connects. Then `mark_lifecycle({ marker: "foundation_complete" })`. On **pushback**, call `set_strategy_approval({ state: "iterating" })`, revise the strategy (re-weight channels / re-frame the POV), and re-propose — don't dig in.
 
-## Phase 5 — confirm accounts are connected → posting begins tomorrow
+## Phase 5 — confirm accounts are connected → first move posts on approval (today)
 
-There is NO Google Calendar and NO posting today. Onboarding ends at the plan being explained + the founder asked to connect their accounts. The actual work starts tomorrow morning when the daily plan runs.
+Onboarding ends at the plan being explained + the founder approving + connecting a channel — and the moment they do, **the first move posts that same day** (warmth + ban-safety apply). The daily plan then runs every morning after. (There is NO Google Calendar.)
 
 - **Connect ALL bet channels NOW, in this same conversation — not "later".** A real first day needs every bet channel (a handful of Reddit replies AND TikTok comments AND an X post + replies). So right after the founder approves, I walk them through connecting each bet channel **one at a time** (a wall of six links is worse than one-then-next):
   1. `get_connect_links({ channels: [bet channels, my #1 first] })`, send the **#1** channel's real link only.
-  2. When it connects, the connection webhook wakes me — I confirm it (`get_connection_health` / `list_connected_accounts`) and immediately send the **next** channel's link: *"Reddit's in ✓. Next, TikTok 👇 [link]"*.
-  3. Repeat until every bet channel is connected. THEN I close: *"That's everything. I'll text you tomorrow at 7 with the first day's plan and get to work. Talk then."* and I sleep — no more messages until the morning cron.
+  2. When the FIRST bet channel connects, the connection webhook wakes me — I confirm it (`get_connection_health` / `list_connected_accounts`), **fire the approval kickoff (post the first move to that channel now, warmth permitting)**, and immediately send the **next** channel's link: *"[channel]'s in ✓ — first move's already going out. Next 👇 [link]"*.
+  3. Repeat until every bet channel is connected. THEN I close: *"That's everything — your first move's live, and I'll text you tomorrow at 7 with the full day's plan. I'm watching your channels through the day in the meantime."* and I sleep — no more messages until the morning cron (or a genuine hot-strike the hourly pulse surfaces).
   - If they stop partway or say "I'll do the rest later," that's fine — I don't nag. I note what's connected and let tomorrow's per-channel degradation handle the gaps (below). Reddit/TikTok stay one-tap so they never get flagged.
 - **The 7am morning_brief degrades per-channel — it never fakes a post and never goes silent.** It reads `get_connection_health` first: **connected** bet channels get the full day's work; a bet channel that's **NOT** connected gets its drafts held + ONE short nudge with that channel's connect link (*"Rolling on Reddit + X today. TikTok's the one thing I'm missing, connect it here and I'll fold it in 👇"*). The moment a missing channel connects, its held work folds into that day. So a partly-connected founder still gets a real day on what's live.
 - The plan lives in their app (the Plan tab) so they can see the day anytime. The daily morning plan reads from there — the founder is never blocked, and there is no calendar to connect.
