@@ -58,11 +58,31 @@ type AccountRow = {
   mayaMsgCount: number;
   lastMsgAt: number | null;
   costUsd: number;
+  /**
+   * Windowed COGS-per-tenant — so a runaway bill is visible per agent, not just
+   * in the aggregate. `today` = trailing 24h, `last7d` = trailing 7d. Each
+   * splits discovery (continuous hunt-loop read+score spend) from everything
+   * else (operational LLM turns, research jobs, OpenRouter poll, etc.).
+   */
+  spend: {
+    today: { totalUsd: number; discoveryUsd: number; otherUsd: number };
+    last7d: { totalUsd: number; discoveryUsd: number; otherUsd: number };
+  };
   models: string[];
   betChannels: string[];
   /** A short, human-readable health flag, or null when nothing's wrong. */
   errorState: string | null;
 };
+
+type SpendWindow = { totalUsd: number; discoveryUsd: number; otherUsd: number };
+
+function emptySpendWindow(): SpendWindow {
+  return { totalUsd: 0, discoveryUsd: 0, otherUsd: 0 };
+}
+
+function round4(n: number): number {
+  return Math.round(n * 10000) / 10000;
+}
 
 /**
  * Top-level overview: one row per GTM agent, plus portfolio totals and the
@@ -86,10 +106,41 @@ export const overview = query({
       if (arr) arr.push(m);
       else msgsByAgent.set(k, [m]);
     }
+    const now = Date.now();
+    const DAY_MS = 1000 * 60 * 60 * 24;
+    const dayCutoff = now - DAY_MS;
+    const weekCutoff = now - 7 * DAY_MS;
+
     const costByAccount = new Map<string, number>();
+    // Windowed per-account spend (today / last-7d, discovery-split). Built from
+    // the same single ledger collect — no extra reads, isolated per account.
+    const spendByAccount = new Map<
+      string,
+      { today: SpendWindow; last7d: SpendWindow }
+    >();
     for (const c of allCost) {
       const k = c.accountId as string;
-      costByAccount.set(k, (costByAccount.get(k) ?? 0) + (c.costUsd ?? 0));
+      const usd = c.costUsd ?? 0;
+      costByAccount.set(k, (costByAccount.get(k) ?? 0) + usd);
+
+      const createdAt = c.createdAt ?? c._creationTime;
+      if (createdAt < weekCutoff) continue;
+      let win = spendByAccount.get(k);
+      if (!win) {
+        win = { today: emptySpendWindow(), last7d: emptySpendWindow() };
+        spendByAccount.set(k, win);
+      }
+      const isDiscovery = c.discovery === true;
+      // 7d bucket (all rows past weekCutoff land here).
+      win.last7d.totalUsd += usd;
+      if (isDiscovery) win.last7d.discoveryUsd += usd;
+      else win.last7d.otherUsd += usd;
+      // 24h bucket (subset).
+      if (createdAt >= dayCutoff) {
+        win.today.totalUsd += usd;
+        if (isDiscovery) win.today.discoveryUsd += usd;
+        else win.today.otherUsd += usd;
+      }
     }
     const betsByAgent = new Map<string, string[]>();
     for (const s of allScorecards) {
@@ -100,7 +151,6 @@ export const overview = query({
       else betsByAgent.set(k, [s.channel]);
     }
 
-    const now = Date.now();
     const STALE_MS = 1000 * 60 * 60 * 24; // 24h with no activity = "quiet"
 
     const rows: AccountRow[] = [];
@@ -130,6 +180,20 @@ export const overview = query({
 
       const deployed = Boolean(agent.openClawFlyAppId);
       const betChannels = (betsByAgent.get(agent._id as string) ?? []).sort();
+
+      const rawSpend = spendByAccount.get(account._id as string);
+      const spend = {
+        today: {
+          totalUsd: round4(rawSpend?.today.totalUsd ?? 0),
+          discoveryUsd: round4(rawSpend?.today.discoveryUsd ?? 0),
+          otherUsd: round4(rawSpend?.today.otherUsd ?? 0),
+        },
+        last7d: {
+          totalUsd: round4(rawSpend?.last7d.totalUsd ?? 0),
+          discoveryUsd: round4(rawSpend?.last7d.discoveryUsd ?? 0),
+          otherUsd: round4(rawSpend?.last7d.otherUsd ?? 0),
+        },
+      };
 
       // Health heuristic — purely descriptive, no scoring.
       let errorState: string | null = null;
@@ -165,6 +229,7 @@ export const overview = query({
         mayaMsgCount,
         lastMsgAt,
         costUsd,
+        spend,
         models: [...models],
         betChannels,
         errorState,
@@ -181,6 +246,14 @@ export const overview = query({
         .length,
       inError: rows.filter((r) => r.errorState !== null).length,
       totalCostUsd: rows.reduce((s, r) => s + r.costUsd, 0),
+      // Windowed portfolio COGS — the "are we about to be surprised by a bill?"
+      // top-line. Sum of the per-agent windows.
+      spendTodayUsd: round4(
+        rows.reduce((s, r) => s + r.spend.today.totalUsd, 0)
+      ),
+      spendLast7dUsd: round4(
+        rows.reduce((s, r) => s + r.spend.last7d.totalUsd, 0)
+      ),
       totalUserMsgs: rows.reduce((s, r) => s + r.userMsgCount, 0),
       totalMayaMsgs: rows.reduce((s, r) => s + r.mayaMsgCount, 0),
     };
@@ -217,6 +290,76 @@ export const overview = query({
       channelInsight,
       accounts: rows,
     };
+  },
+});
+
+/**
+ * Pure windowing helper — folds a set of ledger rows into today/last-7d totals
+ * with a discovery split. Unit-testable without a Convex ctx. Callers pass only
+ * rows for ONE account (isolation is the caller's responsibility — see the
+ * indexed read in `agentSpend`).
+ */
+export function windowLedgerSpend(
+  rows: Array<{ costUsd: number; createdAt: number; discovery?: boolean }>,
+  now: number
+): { today: SpendWindow; last7d: SpendWindow } {
+  const DAY_MS = 1000 * 60 * 60 * 24;
+  const dayCutoff = now - DAY_MS;
+  const weekCutoff = now - 7 * DAY_MS;
+  const out = { today: emptySpendWindow(), last7d: emptySpendWindow() };
+  for (const r of rows) {
+    const usd = r.costUsd ?? 0;
+    if (r.createdAt < weekCutoff) continue;
+    const isDiscovery = r.discovery === true;
+    out.last7d.totalUsd += usd;
+    if (isDiscovery) out.last7d.discoveryUsd += usd;
+    else out.last7d.otherUsd += usd;
+    if (r.createdAt >= dayCutoff) {
+      out.today.totalUsd += usd;
+      if (isDiscovery) out.today.discoveryUsd += usd;
+      else out.today.otherUsd += usd;
+    }
+  }
+  for (const win of [out.today, out.last7d]) {
+    win.totalUsd = round4(win.totalUsd);
+    win.discoveryUsd = round4(win.discoveryUsd);
+    win.otherUsd = round4(win.otherUsd);
+  }
+  return out;
+}
+
+/**
+ * Per-agent windowed spend (today / last-7d, discovery-split) for ONE account.
+ * Admin-scoped (ADMIN_DASH_TOKEN, fail-closed) like the rest of this module.
+ * Reads ONLY the requested account's ledger rows via the `by_account` index —
+ * never sums across tenants. Use this for a per-agent COGS drill-down without
+ * loading the whole portfolio.
+ */
+export const agentSpend = query({
+  args: { token: v.string(), accountId: v.id("creators") },
+  handler: async (ctx, { token, accountId }) => {
+    if (!authorized(token)) return { ok: false as const };
+
+    const now = Date.now();
+    const weekCutoff = now - 7 * 1000 * 60 * 60 * 24;
+    // Account-scoped, time-windowed read — only this tenant's recent rows.
+    const rows = await ctx.db
+      .query("gtmCostLedger")
+      .withIndex("by_account_and_created", (q) =>
+        q.eq("accountId", accountId).gte("createdAt", weekCutoff)
+      )
+      .collect();
+
+    const spend = windowLedgerSpend(
+      rows.map((r) => ({
+        costUsd: r.costUsd,
+        createdAt: r.createdAt ?? r._creationTime,
+        discovery: r.discovery,
+      })),
+      now
+    );
+
+    return { ok: true as const, accountId, generatedAt: now, spend };
   },
 });
 
