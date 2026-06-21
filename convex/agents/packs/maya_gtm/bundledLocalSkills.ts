@@ -1541,8 +1541,6 @@ Before voice, before any worker spawns, I anchor on what the product actually IS
 
 **No worker spawns until Phase -1 lands a real, landing-grounded product picture in APP.md.** A plan built on an un-grounded premise is a fabrication.
 
-**When the founder corrects my picture in chat, PERSIST it — don't just nod.** If they tell me what the product actually does, who it's really for, what's different, their stage/goal/user count ("no, it's for teams not solos"), I call \`update_product_fact({ ... })\` immediately. A correction I only acknowledge dies with the turn; persisting it re-anchors every future post on the corrected truth. This is the loop that keeps me accurate after onboarding.
-
 ## Phase 0 — Build the founder's voice (ALWAYS, before any niche research)
 
 **This runs for EVERY user with handles — launch mode, manager mode, unresolved mode alike. Voice is not manager-gated and not optional.** Before any niche research, ingest the founder's OWN existing accounts and persist a real voice fingerprint:
@@ -2107,8 +2105,54 @@ Per inbound: 1 main_maya call for classify + draft + critic (low thinking). 0-1 
 The drafted reply must pass slop-critic. The surface-to-operator message itself ("@alice asked …") is plain manager dispatch — no "Heads up, hot one!" or "Buyer alert!"
 `;
 
+// Source: agents/skills/maya-gtm/maya-inspiration-scout/SKILL.md
+const ENTRY_20_maya_inspiration_scout = `---
+name: maya-inspiration-scout
+description: A quick read of Creatify's recipe/format catalog — a library of proven creative FORMATS (hook shapes, structures, styles) — that I use ONLY as one input to my own grounded brief before I make a video or a static asset. It is a format-idea catalog, NOT a competitor-ad feed and NOT a trend strategy. I skim it for a structure that fits the founder's angle, then ground the actual copy and visuals in their real product. I never let a recipe drive the strategy or pull me toward paid-ad framing — I'm organic-first.
+---
+
+# maya-inspiration-scout
+
+## Purpose
+
+Before \`maya-video-producer\` or \`maya-static-asset-producer\` makes something, this skill gives me a fast look at Creatify's **recipe/format catalog** via \`get_inspirations\` — a library of proven creative *formats*: hook shapes, structures, visual styles. I use it as **one input to my brief**, never as the plan.
+
+This is a small, sharp helper, not a research engine. The strategy — which channel, what angle, what's working in the niche — already comes from my own grounded research (\`maya-continuous-research\`, \`maya-content-format-miner\`, the read layer). The catalog just gives me a vocabulary of formats to choose a structure from once I've decided what to say.
+
+## What it is — and what it is NOT
+
+- **It IS:** a free, read-only catalog of creative *recipes/templates* (format ideas). \`get_inspirations\` returns \`{ ok, recipes: [{ id, name }] }\`.
+- **It is NOT a competitor-ad feed.** Creatify's competitor/"winning ads" tracking is an in-app feature, not this API. So I do not present these as "what your competitors are running" — they're generic format ideas.
+- **It is NOT a strategy.** A recipe never decides the channel, the angle, or the message. If I let the catalog steer me, every founder gets the same generic creative — the opposite of grounded.
+- **It is NOT a license to drift to paid-ad framing.** Many recipes are ad-shaped. I'm organic-first; I borrow the *structure* (a hook, a beat order) and ground it in organic, product-true content. I do not turn the founder into an ad.
+
+## How I use it
+
+1. **Only when I'm about to make creative** (a video or a designed static asset) and I want a format reference. Not on every turn — it's a brief input, not a habit.
+2. Call \`get_inspirations\` (free, read-only). Skim the recipe names for a *structure* that fits the angle I already chose.
+3. **Ground it.** Take only the format skeleton; write the actual copy from the Product Fact Sheet (claims verified-only) and build the visuals around the founder's real screenshots.
+4. Hand the grounded brief to \`maya-video-producer\` (\`clone_winning_ad\` / \`make_ad_from_url\`) or \`maya-static-asset-producer\` (\`make_static_asset\`).
+
+## Honesty rules (hard)
+
+- A recipe is a format reference, never the strategy or the truth. Grounded-or-silent still applies to everything I make from it.
+- I never claim a recipe reflects a specific competitor's ads — it's a generic catalog.
+- I stay organic-first: borrow structure, never the paid-ad posture.
+
+## Grounding in shipped doctrine
+
+The recipe catalog is a vocabulary, not a strategy — the strategy comes from **PLAYBOOK.md** + the per-platform playbooks (which channel, what cadence, what's ban-safe) and my own grounded niche research. I only reach for a recipe AFTER the playbook and my research have decided the angle; a catalog format never overrides PLAYBOOK.md doctrine or pulls me off the organic motion it prescribes.
+
+## See also
+
+- \`maya-video-producer\` / \`maya-static-asset-producer\` — the producers I feed.
+- \`maya-content-format-miner\` — grounded, niche-specific winning formats (the real signal; this catalog only supplements it).
+- \`PLAYBOOK.md\` — the launch doctrine that decides the strategy this catalog only dresses.
+- \`TOOLS.md\` — \`get_inspirations\` mechanics.
+`;
+
 // Source: agents/skills/maya-gtm/maya-instagram-researcher/SKILL.md
-const ENTRY_20_maya_instagram_researcher = `---
+const ENTRY_21_maya_instagram_researcher = `---
 name: maya-instagram-researcher
 description: Find where this product's buyers already live on Instagram and what they actually watch RIGHT NOW. Mine Reels + comments for buyer language, watch representative Reels multimodally for native register, and judge whether IG earns a bet. Instagram is the strongest mobile-app-wedge discovery surface. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
 ---
@@ -2220,7 +2264,7 @@ Max ~12 ScrapeCreators calls: 3-5 keywords × \`/v2/instagram/reels/search\` + 2
 `;
 
 // Source: agents/skills/maya-gtm/maya-linkedin-fit-researcher/SKILL.md
-const ENTRY_21_maya_linkedin_fit_researcher = `---
+const ENTRY_22_maya_linkedin_fit_researcher = `---
 name: maya-linkedin-fit-researcher
 description: Decide whether LinkedIn is the right channel per playbook/linkedin.md LI-1.1 - LI-1.3 + LI-10.2. Refuse if rule LI-10.2 applies.
 ---
@@ -2366,7 +2410,7 @@ LinkedIn is the slop epicenter. Every \`suggestedCommentDraft\` and \`caption.op
 `;
 
 // Source: agents/skills/maya-gtm/maya-linkedin-researcher/SKILL.md
-const ENTRY_22_maya_linkedin_researcher = `---
+const ENTRY_23_maya_linkedin_researcher = `---
 name: maya-linkedin-researcher
 description: For B2B / prosumer products where the buyer is a professional, find LinkedIn reply targets + engagement opportunities — posts where the buyer is describing the pain, mined for comment-level buyer intent. Runs AFTER maya-linkedin-fit-researcher clears LinkedIn as a bet; this is the research worker, not the fit gate.
 ---
@@ -2446,7 +2490,7 @@ The first ~2 lines show before "see more" — they carry the whole open decision
 `;
 
 // Source: agents/skills/maya-gtm/maya-morning-brief/SKILL.md
-const ENTRY_23_maya_morning_brief = `---
+const ENTRY_24_maya_morning_brief = `---
 name: maya-morning-brief
 description: The 7am-local daily message + calendar populate. One Telegram, as tight as possible while useful, self-graded (Strong / Thin / Warmup), top priority named first, calendar events with full hands-off recipes. Reads gtmNicheLearnings to weight what surfaces.
 ---
@@ -2651,7 +2695,7 @@ Brief faces slop-critic. Banned for this message: "I've put together," "comprehe
 `;
 
 // Source: agents/skills/maya-gtm/maya-open-web-read/SKILL.md
-const ENTRY_24_maya_open_web_read = `---
+const ENTRY_25_maya_open_web_read = `---
 name: maya-open-web-read
 description: How I use search_web to read actual web pages (competitor landing pages, review sites, the founder's OWN site) and extract GTM intelligence — not just summarize. Covers the landing-page teardown checklist, review/forum mining, the "clicks-but-no-signups" diagnostic, and a when-to-read rubric so I don't waste reads. Output is always verbatim quote + URL + a tag, never my paraphrase. Grounded-or-silent.
 ---
@@ -2739,7 +2783,7 @@ Every open-web finding = a **verbatim quote + the source URL + a tag**. If I can
 `;
 
 // Source: agents/skills/maya-gtm/maya-output-critic/SKILL.md
-const ENTRY_25_maya_output_critic = `---
+const ENTRY_26_maya_output_critic = `---
 name: maya-output-critic
 description: The 5-gate quality framework Maya consults before shipping any user-facing message — morning brief, evening recap, calendar event description, drafted reply, weekly review. Grounding / voice / recipe / tier-honesty / time-box. Fail → iterate or escalate, never silently ship low quality.
 ---
@@ -2861,7 +2905,7 @@ Self-referential: the critic must itself pass voice + grounding + tier-honesty b
 `;
 
 // Source: agents/skills/maya-gtm/maya-performance-reader/SKILL.md
-const ENTRY_26_maya_performance_reader = `---
+const ENTRY_27_maya_performance_reader = `---
 name: maya-performance-reader
 description: Read Zernio post analytics + follower stats and fold them into attribution as the slower ground-truth, WITHOUT ever overriding the faster wrapped-link click signal. Encodes staleness windows and the uneven read coverage across the 6 offered channels (X, Reddit, LinkedIn, Instagram, TikTok, YouTube). Grounded-or-silent: stale or empty numbers get said plainly, never fabricated.
 ---
@@ -2942,7 +2986,7 @@ Any founder-facing summary of performance is plain manager language ("your Tuesd
 `;
 
 // Source: agents/skills/maya-gtm/maya-publisher/SKILL.md
-const ENTRY_27_maya_publisher = `---
+const ENTRY_28_maya_publisher = `---
 name: maya-publisher
 description: Turn a planned post recipe (WHAT to say / LINK / VOICE NOTES from a gtmCalendarEvent) into a correct Zernio post for the channel, then gate it. Encodes per-platform write SHAPE as prose for the 6 offered channels (X, Reddit, LinkedIn, Instagram, TikTok, YouTube). The one place Maya turns a queued event into a live post, with ban-safety + cost + connection-health gates fail-closed before anything ships.
 ---
@@ -3050,7 +3094,7 @@ The final draft passes the PLAYBOOK § 6 ban list before it ships, because a pub
 `;
 
 // Source: agents/skills/maya-gtm/maya-reddit-demand-researcher/SKILL.md
-const ENTRY_28_maya_reddit_demand_researcher = `---
+const ENTRY_29_maya_reddit_demand_researcher = `---
 name: maya-reddit-demand-researcher
 description: Find Reddit buyer intent for the product's pain — surface reply targets ranked by purchase signal, map the live comment tree for follow-up questions, return promotion-risk score. Budget-bounded.
 ---
@@ -3252,7 +3296,7 @@ Max 8 \`research_reddit\` calls: 3 × subreddit/search, 2 × general search, 2 �
 `;
 
 // Source: agents/skills/maya-gtm/maya-results-reviewer/SKILL.md
-const ENTRY_29_maya_results_reviewer = `---
+const ENTRY_30_maya_results_reviewer = `---
 name: maya-results-reviewer
 description: Review published results. Recommend double_down / iterate / do_not_overfit per PLAYBOOK format-market-fit detection. Counter-overfitting checks.
 ---
@@ -3366,7 +3410,7 @@ Max 4 ScrapeCreators calls (1 per platform). Cache aggressively. 1 main_maya syn
 `;
 
 // Source: agents/skills/maya-gtm/maya-safety-critic/SKILL.md
-const ENTRY_30_maya_safety_critic = `---
+const ENTRY_31_maya_safety_critic = `---
 name: maya-safety-critic
 description: The mandatory outbound ban-safety FORCE gate that maya-publisher runs before any post ships. Blocks unsafe publishes, FORCES Reddit/TikTok to one-tap-confirm, and is one of the three verdicts (voice-match + slop + safety) every post must clear. Backed server-side by convex/gtmMaya/outboundFirewall.ts + approvalPublishing.ts.
 ---
@@ -3423,7 +3467,7 @@ This gate's own founder-facing notes ("held your Reddit post for a tap" / "X isn
 `;
 
 // Source: agents/skills/maya-gtm/maya-slideshow-strategist/SKILL.md
-const ENTRY_31_maya_slideshow_strategist = `---
+const ENTRY_32_maya_slideshow_strategist = `---
 name: maya-slideshow-strategist
 description: When a post wants a visual — a TikTok photo-mode slideshow or an IG carousel — I build it grounded in the founder's REAL screenshots, never stock images. I decide when a slideshow is the right format, pull the screenshots I already have (or ask once for the one I'm missing), generate each slide framing the real screen unchanged, and hand the finished set back for the founder to post. Strategy + format + hooks live here; the mechanics live in TOOLS.md.
 ---
@@ -3498,7 +3542,7 @@ Every slideshow passes the same bar as everything I send (maya-slop-critic + SOU
 `;
 
 // Source: agents/skills/maya-gtm/maya-slop-critic/SKILL.md
-const ENTRY_32_maya_slop_critic = `---
+const ENTRY_33_maya_slop_critic = `---
 name: maya-slop-critic
 description: The anti-slop / AI-tell critic. Apply PLAYBOOK § 6 banned-phrase list + banned-structure scan + LLM-judgment structural AI-tell pass + voice match + read-aloud test. Returns "rejected with reasons" on any trip. The bar is native-voice fidelity, NOT detector-dodging.
 ---
@@ -3624,8 +3668,61 @@ interface SlopCriticVerdict {
 Self-referential: this skill IS the anti-slop check. The \`suggestion\` strings inside \`hits[]\` must themselves pass the rules — don't suggest "leverage your voice" as the rewrite for "leverage X". Suggest plain English instead.
 `;
 
+// Source: agents/skills/maya-gtm/maya-static-asset-producer/SKILL.md
+const ENTRY_34_maya_static_asset_producer = `---
+name: maya-static-asset-producer
+description: When a channel wants a designed STATIC image — a polished product banner, an ad-creative still, a feed image that needs to look made-not-screenshotted — I produce it grounded in the founder's REAL product via Creatify. This is the Growth ($149) tier's creative upgrade over a bare screenshot or a Gemini slideshow: designed IAB image creative, built around their actual UI, never a fabricated interface. I decide when a designed still beats a slideshow or a raw screenshot, write the grounded copy brief, and orchestrate the image engine. The craft — when to reach for it, how to ground it — lives here; the mechanics live in TOOLS.md.
+---
+
+# maya-static-asset-producer
+
+## Purpose
+
+\`maya-slideshow-strategist\` assembles 3–7 grounded slides (cheap, Gemini-backed, every tier). \`maya-video-producer\` makes short-form video (Studio only). This skill is the **designed static image** node: when a channel wants one polished, made-looking still — a product banner, an ad-creative image, a feed image that should look *designed* rather than screenshotted — I produce it via Creatify, grounded in the founder's real product.
+
+The output is a static image / IAB ad-banner set for IG / X / LinkedIn / Reddit feed posts. My value isn't prompting an image model; it's **orchestration + grounding**: picking when a designed still earns its cost, writing the grounded copy brief, feeding the real screenshots, and judging the result.
+
+**The non-negotiable, same as slideshows and video: the founder's REAL product is ground truth.** The image is built *around* their real screenshots; it never fabricates the UI, invents numbers, or shows a product that isn't theirs. A polished fake is worse than a plain screenshot — it misrepresents the product to a buyer. Grounded-or-silent applies to images.
+
+> **Status note:** this skill drives the static-creative tool \`make_static_asset\` (and \`check_video_job\` to poll it — the same durable job engine backs both). The generation backend lives in the server-side integration layer; I only orchestrate it. It is server-gated to **canImage (Growth $149 + Studio $199)** and metered against the monthly asset cap. On a **Starter** account it fails closed — I do NOT promise designed creative; I fall back to a slideshow (\`maya-slideshow-strategist\`) or a plain grounded screenshot, and (if it fits) mention the Growth upgrade honestly, once. I never claim to have made designed creative I didn't.
+
+## When a designed still is the right call (vs. slideshow vs. raw screenshot)
+
+- **Designed static asset** — the channel rewards a polished feed image (an IG single image, an X image post, a LinkedIn image, a Reddit image post) AND a bare screenshot would read as low-effort AND the product has a *showable moment* worth designing around. This is when a slideshow is overkill but a raw screenshot undersells.
+- **Slideshow** (defer to \`maya-slideshow-strategist\`) — a multi-beat visual story that reads as 3–7 slides; cheaper, every tier. Default to this when the story needs sequence.
+- **Raw screenshot** — when the real screen *is* the asset (a genuine before/after, a real result) and design would only get in the way. Honest and free.
+- **canImage gate** — designed creative is Growth+; the tool fails closed on Starter. I don't offer what I can't make.
+- **Cap + cost** — designed images are cheap (~2 credits each) but not free. The monthly asset cap is enforced server-side; I don't burn it on a post a screenshot would carry.
+
+## How I produce it
+
+1. **Ground it first.** Pull the founder's real screenshots with \`search_my_media\` → pass their ids as \`imageAssetIds\` (I resolve them server-side). The designed image is built around the real UI, never a generated fake.
+2. **Write the brief, grounded.** \`prompt\` carries MY headline/copy — written from the Product Fact Sheet, claims and numbers verified-only (never invented). Optionally pass \`title\` / \`description\` to ground Creatify's scrape, and \`format\` for the banner size set.
+3. **Start the job.** Call \`make_static_asset\` with \`productUrl\` + the grounded brief. It returns \`{ ok, jobId, status }\` immediately — the render runs server-side, durably. I do NOT block or babysit.
+4. **Finish the hand-off.** Poll \`check_video_job\` with the \`jobId\`; when \`status\` is \`done\`, the image is in the media library (\`mediaStorageId\`) — deliver it with \`send_media_to_user\`, then it's ready for \`maya-publisher\` to post. If it \`failed\`, I fall back to a slideshow or a plain screenshot — I never present a missing asset as made.
+
+## Grounding + honesty rules (hard)
+
+- Real screenshots in, or it doesn't ship. No fabricated UI, no invented metrics, no competitor's product dressed as theirs.
+- The copy on the image is verified-only: prices, counts, and claims come from the fact sheet, never guessed.
+- Fail-closed is silent-and-fallback, never a fake promise: on Starter or a failed render, I say what I CAN do (slideshow / screenshot) and, at most once, mention the upgrade honestly.
+- A designed image is a *format choice*, not a strategy. \`maya-content-reviewer\` / \`maya-safety-critic\` still gate it before it posts.
+
+## Grounding in shipped doctrine
+
+Everything here sits under the launch doctrine in **PLAYBOOK.md** + the per-platform playbooks — channel fit, cadence, and ban-safety come from there, not first principles. A designed image is a *format choice* inside that doctrine; it never overrides the playbook's channel/cadence rules. When I'm unsure whether a channel even wants a designed still, I defer to PLAYBOOK.md and the platform playbook before spending an asset credit.
+
+## See also
+
+- \`maya-inspiration-scout\` — format ideas (recipe catalog) to inform the brief.
+- \`maya-slideshow-strategist\` — the cheaper, every-tier sequence path.
+- \`maya-video-producer\` — the Studio video path.
+- \`PLAYBOOK.md\` — the launch doctrine this skill operates under.
+- \`TOOLS.md\` — \`make_static_asset\`, \`search_my_media\`, \`check_video_job\`, \`send_media_to_user\` mechanics.
+`;
+
 // Source: agents/skills/maya-gtm/maya-strategic-diagnostician/SKILL.md
-const ENTRY_33_maya_strategic_diagnostician = `---
+const ENTRY_35_maya_strategic_diagnostician = `---
 name: maya-strategic-diagnostician
 description: How I tell the hardest truths — that the problem isn't the post, it's the positioning, the messaging, maybe the product or the price. Grounded, humble, evidence-required, and tier-capped. PMF and pricing verdicts are HARD-CAPPED at "lean" and always paired with "this is what I can't see from outside; run this". A wrong hard truth is worse than silence — every verdict fails toward suspicion + evidence + what would confirm it.
 ---
@@ -3690,7 +3787,7 @@ Operator-facing, so it runs \`maya-slop-critic\` + SOUL.md. A hard truth must re
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-demo-strategist/SKILL.md
-const ENTRY_34_maya_tiktok_demo_strategist = `---
+const ENTRY_36_maya_tiktok_demo_strategist = `---
 name: maya-tiktok-demo-strategist
 description: Pick TikTok format (faceless screen-record vs founder-on-camera vs slideshow) given showability + constraints. Refuse if user can't post manually (V1 constraint).
 ---
@@ -3787,7 +3884,7 @@ This is a format/shot-plan strategist, not a niche miner. The TikTok channel's *
 `;
 
 // Source: agents/skills/maya-gtm/maya-tiktok-format-researcher/SKILL.md
-const ENTRY_35_maya_tiktok_format_researcher = `---
+const ENTRY_37_maya_tiktok_format_researcher = `---
 name: maya-tiktok-format-researcher
 description: Find what's working in the operator's niche on TikTok RIGHT NOW. Identify the format that clearly recurs across the strongest recent videos in the niche (tiktok.md § 7).
 ---
@@ -3923,7 +4020,7 @@ Structured taxonomy output, slop-critic NOT invoked. \`excerpt\` strings and eve
 `;
 
 // Source: agents/skills/maya-gtm/maya-ugc-system-advisor/SKILL.md
-const ENTRY_36_maya_ugc_system_advisor = `---
+const ENTRY_38_maya_ugc_system_advisor = `---
 name: maya-ugc-system-advisor
 description: ADVISORY-ONLY in V1. UGC creators are a Phase 4+ lever per PLAYBOOK. Refuse to recommend before format-market-fit.
 ---
@@ -4003,7 +4100,7 @@ Mostly structured refusals. \`refusalReason\` and \`gatesUnmet[].detail\` pass t
 `;
 
 // Source: agents/skills/maya-gtm/maya-video-producer/SKILL.md
-const ENTRY_37_maya_video_producer = `---
+const ENTRY_39_maya_video_producer = `---
 name: maya-video-producer
 description: When a winning format in the niche is a VIDEO — a talking-head UGC, a product demo, an animated screen — I make the founder an actual short-form video for it, grounded in their REAL product. I decide when video is the right call, mine the winning format, and orchestrate the video engine to produce it: I copy a proven winning video's format onto their product (ad-clone), or turn their product URL into a fully-edited ad, then hand it back one-tap to post. The orchestration craft — which mode, AUTO vs my own script, how to ground it — lives here; the mechanics live in TOOLS.md.
 ---
@@ -4092,7 +4189,7 @@ Slot it on the calendar (\`propose_calendar\`) as a hands-off recipe (the video 
 `;
 
 // Source: agents/skills/maya-gtm/maya-viral-demo-moment-miner/SKILL.md
-const ENTRY_38_maya_viral_demo_moment_miner = `---
+const ENTRY_40_maya_viral_demo_moment_miner = `---
 name: maya-viral-demo-moment-miner
 description: Find showable app moments — before/after contrasts, screenshot sequences. Source: walkthrough + product UI.
 ---
@@ -4178,7 +4275,7 @@ The top-ranked beat's \`sourceFrame\` is the **real product screen** that ground
 `;
 
 // Source: agents/skills/maya-gtm/maya-voice-matcher/SKILL.md
-const ENTRY_39_maya_voice_matcher = `---
+const ENTRY_41_maya_voice_matcher = `---
 name: maya-voice-matcher
 description: Score how well a drafted reply/post/thread matches the operator's actual voice — drawn from their existing public writing (X/Reddit/LinkedIn) or onboarding answers as fallback. Combines with maya-slop-critic for a final ship-or-revise gate. Each gtmDraftedContent row gets a voiceMatchScore + slopCriticPassed flag.
 ---
@@ -4290,7 +4387,7 @@ Yes — this skill itself outputs operator-facing copy (when surfacing voice fee
 `;
 
 // Source: agents/skills/maya-gtm/maya-weekly-review/SKILL.md
-const ENTRY_40_maya_weekly_review = `---
+const ENTRY_42_maya_weekly_review = `---
 name: maya-weekly-review
 description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for the coming week if any, and a re-weighting of bet channels + per-channel warmth advancement (set_channel_warmth) by what actually converted. Does NOT regenerate a next-week rolling plan — the daily morning cron owns day-to-day planning.
 ---
@@ -4445,7 +4542,7 @@ Banned for this message: "Crushed it this week," "We're seeing momentum," "level
 `;
 
 // Source: agents/skills/maya-gtm/maya-x-founder-led-researcher/SKILL.md
-const ENTRY_41_maya_x_founder_led_researcher = `---
+const ENTRY_43_maya_x_founder_led_researcher = `---
 name: maya-x-founder-led-researcher
 description: Find X founder-led conversations, reply targets, hooks worth modeling, and accounts worth a private List.
 ---
@@ -4613,7 +4710,7 @@ Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before t
 `;
 
 // Source: agents/skills/maya-gtm/maya-youtube-researcher/SKILL.md
-const ENTRY_42_maya_youtube_researcher = `---
+const ENTRY_44_maya_youtube_researcher = `---
 name: maya-youtube-researcher
 description: Deep YouTube research via ScrapeCreators — mine comments + transcripts for buyer language, map the venue spread (niche channels, hashtags, Shorts trends), and judge whether YouTube earns a bet for this product. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
 ---
@@ -4690,27 +4787,29 @@ export const BUNDLED_LOCAL_SKILLS: readonly BundledLocalSkill[] = [
   { slug: "maya-hn-researcher", workspacePath: "skills/maya-hn-researcher/SKILL.md", body: ENTRY_17_maya_hn_researcher },
   { slug: "maya-icp-hypothesis", workspacePath: "skills/maya-icp-hypothesis/SKILL.md", body: ENTRY_18_maya_icp_hypothesis },
   { slug: "maya-inbound-triage", workspacePath: "skills/maya-inbound-triage/SKILL.md", body: ENTRY_19_maya_inbound_triage },
-  { slug: "maya-instagram-researcher", workspacePath: "skills/maya-instagram-researcher/SKILL.md", body: ENTRY_20_maya_instagram_researcher },
-  { slug: "maya-linkedin-fit-researcher", workspacePath: "skills/maya-linkedin-fit-researcher/SKILL.md", body: ENTRY_21_maya_linkedin_fit_researcher },
-  { slug: "maya-linkedin-researcher", workspacePath: "skills/maya-linkedin-researcher/SKILL.md", body: ENTRY_22_maya_linkedin_researcher },
-  { slug: "maya-morning-brief", workspacePath: "skills/maya-morning-brief/SKILL.md", body: ENTRY_23_maya_morning_brief },
-  { slug: "maya-open-web-read", workspacePath: "skills/maya-open-web-read/SKILL.md", body: ENTRY_24_maya_open_web_read },
-  { slug: "maya-output-critic", workspacePath: "skills/maya-output-critic/SKILL.md", body: ENTRY_25_maya_output_critic },
-  { slug: "maya-performance-reader", workspacePath: "skills/maya-performance-reader/SKILL.md", body: ENTRY_26_maya_performance_reader },
-  { slug: "maya-publisher", workspacePath: "skills/maya-publisher/SKILL.md", body: ENTRY_27_maya_publisher },
-  { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_28_maya_reddit_demand_researcher },
-  { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_29_maya_results_reviewer },
-  { slug: "maya-safety-critic", workspacePath: "skills/maya-safety-critic/SKILL.md", body: ENTRY_30_maya_safety_critic },
-  { slug: "maya-slideshow-strategist", workspacePath: "skills/maya-slideshow-strategist/SKILL.md", body: ENTRY_31_maya_slideshow_strategist },
-  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_32_maya_slop_critic },
-  { slug: "maya-strategic-diagnostician", workspacePath: "skills/maya-strategic-diagnostician/SKILL.md", body: ENTRY_33_maya_strategic_diagnostician },
-  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_34_maya_tiktok_demo_strategist },
-  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_35_maya_tiktok_format_researcher },
-  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_36_maya_ugc_system_advisor },
-  { slug: "maya-video-producer", workspacePath: "skills/maya-video-producer/SKILL.md", body: ENTRY_37_maya_video_producer },
-  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_38_maya_viral_demo_moment_miner },
-  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_39_maya_voice_matcher },
-  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_40_maya_weekly_review },
-  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_41_maya_x_founder_led_researcher },
-  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_42_maya_youtube_researcher },
+  { slug: "maya-inspiration-scout", workspacePath: "skills/maya-inspiration-scout/SKILL.md", body: ENTRY_20_maya_inspiration_scout },
+  { slug: "maya-instagram-researcher", workspacePath: "skills/maya-instagram-researcher/SKILL.md", body: ENTRY_21_maya_instagram_researcher },
+  { slug: "maya-linkedin-fit-researcher", workspacePath: "skills/maya-linkedin-fit-researcher/SKILL.md", body: ENTRY_22_maya_linkedin_fit_researcher },
+  { slug: "maya-linkedin-researcher", workspacePath: "skills/maya-linkedin-researcher/SKILL.md", body: ENTRY_23_maya_linkedin_researcher },
+  { slug: "maya-morning-brief", workspacePath: "skills/maya-morning-brief/SKILL.md", body: ENTRY_24_maya_morning_brief },
+  { slug: "maya-open-web-read", workspacePath: "skills/maya-open-web-read/SKILL.md", body: ENTRY_25_maya_open_web_read },
+  { slug: "maya-output-critic", workspacePath: "skills/maya-output-critic/SKILL.md", body: ENTRY_26_maya_output_critic },
+  { slug: "maya-performance-reader", workspacePath: "skills/maya-performance-reader/SKILL.md", body: ENTRY_27_maya_performance_reader },
+  { slug: "maya-publisher", workspacePath: "skills/maya-publisher/SKILL.md", body: ENTRY_28_maya_publisher },
+  { slug: "maya-reddit-demand-researcher", workspacePath: "skills/maya-reddit-demand-researcher/SKILL.md", body: ENTRY_29_maya_reddit_demand_researcher },
+  { slug: "maya-results-reviewer", workspacePath: "skills/maya-results-reviewer/SKILL.md", body: ENTRY_30_maya_results_reviewer },
+  { slug: "maya-safety-critic", workspacePath: "skills/maya-safety-critic/SKILL.md", body: ENTRY_31_maya_safety_critic },
+  { slug: "maya-slideshow-strategist", workspacePath: "skills/maya-slideshow-strategist/SKILL.md", body: ENTRY_32_maya_slideshow_strategist },
+  { slug: "maya-slop-critic", workspacePath: "skills/maya-slop-critic/SKILL.md", body: ENTRY_33_maya_slop_critic },
+  { slug: "maya-static-asset-producer", workspacePath: "skills/maya-static-asset-producer/SKILL.md", body: ENTRY_34_maya_static_asset_producer },
+  { slug: "maya-strategic-diagnostician", workspacePath: "skills/maya-strategic-diagnostician/SKILL.md", body: ENTRY_35_maya_strategic_diagnostician },
+  { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_36_maya_tiktok_demo_strategist },
+  { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_37_maya_tiktok_format_researcher },
+  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_38_maya_ugc_system_advisor },
+  { slug: "maya-video-producer", workspacePath: "skills/maya-video-producer/SKILL.md", body: ENTRY_39_maya_video_producer },
+  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_40_maya_viral_demo_moment_miner },
+  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_41_maya_voice_matcher },
+  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_42_maya_weekly_review },
+  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_43_maya_x_founder_led_researcher },
+  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_44_maya_youtube_researcher },
 ];

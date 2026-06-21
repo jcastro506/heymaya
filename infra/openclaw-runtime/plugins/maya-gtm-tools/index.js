@@ -310,7 +310,7 @@ function categoryForTool(name) {
   )
     return "publish";
   if (
-    /^(save_draft$|update_draft_voice_match$|generate_slide_image$|review_media$|make_ad_from_url$|clone_winning_ad$|propose_calendar$|save_target_thread$|save_target_account$)/.test(
+    /^(save_draft$|update_draft_voice_match$|generate_slide_image$|review_media$|make_ad_from_url$|clone_winning_ad$|make_static_asset$|propose_calendar$|save_target_thread$|save_target_account$)/.test(
       name
     )
   )
@@ -1937,6 +1937,29 @@ export default defineToolPlugin({
         jobId: Type.Optional(Type.String()),
       }),
       execute: async (p, _cfg, ctx) => getLc("creatify_poll", p, ctx.signal),
+    }),
+    tool({
+      name: "make_static_asset",
+      label: "Make Static Asset",
+      description:
+        "GROWTH ($149) + STUDIO TIER. Make a grounded static image / ad-banner set from the founder's product — Creatify renders designed creative (IAB banners) built around the REAL product, for static posts (no video). REQUIRED: productUrl. Optional: prompt (YOUR grounded headline/copy brief — write it from the product fact sheet, claims verified-only), imageAssetIds (the founder's real screenshots from search_my_media — grounds the creative in the real UI; I resolve them server-side), title, description, format (IAB banner size set). Returns { ok, jobId, status } immediately; the render finishes shortly — check_video_job with the jobId, then send_media_to_user once done. Server-gated to canImage (Growth + Studio) and metered against the monthly asset cap. On a Starter account this fails closed — fall back to a slideshow/text draft; never claim you made designed creative you didn't.",
+      parameters: Type.Object({
+        productUrl: Type.String(),
+        prompt: Type.Optional(Type.String()),
+        imageAssetIds: Type.Optional(Type.Array(Type.String())),
+        title: Type.Optional(Type.String()),
+        description: Type.Optional(Type.String()),
+        format: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("creatify_make_asset", p, ctx.signal),
+    }),
+    tool({
+      name: "get_inspirations",
+      label: "Get Inspirations",
+      description:
+        "Read Creatify's recipe/format catalog — a library of proven creative FORMATS/templates (hooks, structures, styles). This is a format-idea catalog, NOT a competitor-ad feed and NOT a trend strategy. Use it ONLY as one input to YOUR grounded brief: skim the recipes for a format that fits the founder's angle, then ground the actual copy/visuals in their real product. Never let a recipe drive the strategy or pull you toward paid-ad framing — you are organic-first. Free + read-only; returns { ok, recipes: [{ id, name }] }.",
+      parameters: Type.Object({}),
+      execute: async (p, _cfg, ctx) => getLc("creatify_inspirations", p, ctx.signal),
     }),
     tool({
       name: "check_already_engaged",

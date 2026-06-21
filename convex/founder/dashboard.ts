@@ -22,6 +22,7 @@
 import { query } from "../_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
+import { planFeaturesGtm } from "../gtmMaya/planGtm";
 
 const TEST_CLERK_USER_ID_PREFIX = "test_gtm_synth_";
 
@@ -52,6 +53,23 @@ type AccountRow = {
   flyAppId: string | null;
   isTest: boolean;
   plan: string;
+  /**
+   * LIVE-resolved GTM tier capability flags — planFeaturesGtm(agent.gtmPlanJson)
+   * computed at query time, NOT baked at deploy. Lets the operator observe the
+   * flat tier gates: the booleans flip the moment gtmPlanJson changes (an
+   * upgrade), with no machine redeploy. This is the observability surface for the
+   * flat-flags work.
+   */
+  tier: {
+    plan: string;
+    status: string;
+    canVideo: boolean;
+    canImage: boolean;
+    canAutoPost: boolean;
+    maxActiveChannels: number;
+    videoCreditsMonth: number;
+    assetCreditsMonth: number;
+  };
   who: string;
   createdAt: number;
   userMsgCount: number;
@@ -223,6 +241,19 @@ export const overview = query({
         flyAppId: agent.openClawFlyAppId ?? null,
         isTest: account.clerkUserId.startsWith(TEST_CLERK_USER_ID_PREFIX),
         plan: account.plan,
+        tier: (() => {
+          const f = planFeaturesGtm({ gtmPlanJson: agent.gtmPlanJson });
+          return {
+            plan: f.plan,
+            status: f.status,
+            canVideo: f.canVideo,
+            canImage: f.canImage,
+            canAutoPost: f.canAutoPost,
+            maxActiveChannels: f.maxActiveChannels,
+            videoCreditsMonth: f.videoCreditsMonth,
+            assetCreditsMonth: f.assetCreditsMonth,
+          };
+        })(),
         who: maskClerkId(account.clerkUserId),
         createdAt: agent.createdAt,
         userMsgCount,

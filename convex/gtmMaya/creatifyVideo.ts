@@ -35,9 +35,11 @@ import { planFeaturesGtm } from "./planGtm";
 import { isCreatifyConfigured } from "../integrations/creatify/client";
 import {
   createAdClone,
+  createIabImages,
   createLinkFromUrl,
   createLinkToVideo,
-  getVideoJob,
+  getCreatifyJob,
+  getInspirations,
   updateLink,
 } from "../integrations/creatify/endpoints";
 import {
@@ -46,8 +48,18 @@ import {
   type CreatifyJob,
 } from "../integrations/creatify/types";
 
-// The two production flows wired in Phase 2 (aurora/product_video land later).
+// The two production VIDEO flows wired in Phase 2 (aurora/product_video later).
 type VideoMode = "ad_clone" | "url_to_video";
+// Static-image flow for the Growth $149 tier (canImage). iab_images is the
+// clean 2cr path; asset_gen stays deferred (schema-driven/runtime roster).
+type ImageMode = "iab_images";
+/** Any persisted Creatify job — video or static image — share the poll loop. */
+type JobMode = VideoMode | ImageMode;
+
+/** True for the static-image modes (gated by canImage + assetCreditsMonth). */
+function isImageMode(mode: JobMode): mode is ImageMode {
+  return mode === "iab_images";
+}
 
 const POLL_INTERVAL_MS = 30_000;
 const MAX_POLL_ATTEMPTS = 30; // ~15 min at 30s — well past typical render time.
@@ -61,7 +73,7 @@ function usdPerCredit(): number {
 /** One row in gtmAgents.creatifyJobsJson. */
 interface CreatifyJobEntry {
   jobId: string; // our id (links the agent's tool call → this job)
-  mode: VideoMode;
+  mode: JobMode;
   creatifyId: string; // Creatify's job id (what we poll)
   status: string; // last-seen Creatify status
   attempts: number;
@@ -88,7 +100,7 @@ interface StartResult {
 }
 interface JobView {
   jobId: string;
-  mode: VideoMode;
+  mode: JobMode;
   status: string;
   mediaStorageId: string | null;
   creditsUsed: number | null;
@@ -136,13 +148,35 @@ export const getAgentVideoContext = internalQuery({
   },
 });
 
-/** Jobs created in the trailing 30 days that weren't outright failures — the
- *  monthly fair-use usage counted against videoCreditsMonth. */
+/** VIDEO jobs created in the trailing 30 days that weren't outright failures —
+ *  the monthly fair-use usage counted against videoCreditsMonth. Image jobs are
+ *  counted separately so they never consume the video budget (or vice-versa). */
 function countRecentVideos(jobsJson: string | null): number {
   const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
   return parseJobs(jobsJson ?? undefined).filter(
-    (j) => j.createdAt >= since && j.status !== "failed"
+    (j) => j.createdAt >= since && j.status !== "failed" && !isImageMode(j.mode)
   ).length;
+}
+
+/** STATIC-IMAGE jobs in the trailing 30 days — counted against assetCreditsMonth. */
+function countRecentAssets(jobsJson: string | null): number {
+  const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  return parseJobs(jobsJson ?? undefined).filter(
+    (j) => j.createdAt >= since && j.status !== "failed" && isImageMode(j.mode)
+  ).length;
+}
+
+/**
+ * Docs-derived per-job cost ESTIMATE in USD, for ledger metadata + a soft
+ * preflight log only — NOT a hard gate (the hard gates are canVideo/canImage +
+ * the monthly count caps). ⚠ These are docs estimates; the real cost comes from
+ * `credits_used` on the finished job. Re-ground if the live numbers differ.
+ */
+function estimatedCreatifyCostUsd(mode: JobMode): number {
+  const perCredit = usdPerCredit();
+  // ad_clone ~24cr/10s · url_to_video ~5cr/30s · iab_images ~2cr.
+  const credits = mode === "ad_clone" ? 24 : mode === "iab_images" ? 2 : 5;
+  return Math.round(credits * perCredit * 10000) / 10000;
 }
 
 export const appendJob = internalMutation({
@@ -162,7 +196,7 @@ export const appendJob = internalMutation({
     const now = Date.now();
     jobs.push({
       jobId: args.jobId,
-      mode: args.mode as VideoMode,
+      mode: args.mode as JobMode,
       creatifyId: args.creatifyId,
       status: args.status,
       attempts: 0,
@@ -374,6 +408,136 @@ export const startVideoJob = internalAction({
 });
 
 /**
+ * Static-image (IAB Images) job — the Growth $149 tier creative path. Grounds a
+ * banner set in the founder's REAL product (Link + screenshots), persists it on
+ * the same creatifyJobsJson, and reuses the durable poller. Gated server-side on
+ * canImage + assetCreditsMonth (fail-closed). Mirrors startVideoJob.
+ */
+export const startAssetJob = internalAction({
+  args: {
+    agentId: v.id("gtmAgents"),
+    productUrl: v.string(),
+    imageAssetIds: v.optional(v.array(v.string())),
+    imageUrls: v.optional(v.array(v.string())),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    /** Maya's grounded headline/copy brief to render onto the banner set. */
+    prompt: v.optional(v.string()),
+    /** IAB banner format/size set; Creatify defaults if omitted. */
+    format: v.optional(v.string()),
+    noSchedule: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<StartResult> => {
+    if (!isCreatifyConfigured()) {
+      return { ok: false, reason: "creatify_not_configured" };
+    }
+
+    // ── Server-side tier gate (fail-closed) ────────────────────────────────
+    // Static images are Growth + Studio only (canImage). A starter / trial-
+    // lapsed / corrupt-plan agent resolves to canImage:false and CANNOT
+    // generate. Enforce the monthly fair-use cap so COGS stays bounded.
+    const gctx = await ctx.runQuery(
+      internal.gtmMaya.creatifyVideo.getAgentVideoContext,
+      { agentId: args.agentId }
+    );
+    const plan = planFeaturesGtm({ gtmPlanJson: gctx.gtmPlanJson });
+    if (!plan.canImage) {
+      return { ok: false, reason: "growth_tier_required" };
+    }
+    const used = countRecentAssets(gctx.jobsJson);
+    if (used >= plan.assetCreditsMonth) {
+      return {
+        ok: false,
+        reason: `asset_cap_reached (${used}/${plan.assetCreditsMonth} this month)`,
+      };
+    }
+
+    try {
+      // Resolve the founder's real screenshots (tenant-isolated), like video.
+      let imageUrls: string[] = [...(args.imageUrls ?? [])];
+      if (args.imageAssetIds && args.imageAssetIds.length > 0) {
+        const resolved: Array<{ url: string }> = await ctx.runAction(
+          internal.gtmMaya.mediaAssets.resolveDeliveryUrls,
+          { agentId: args.agentId, ids: args.imageAssetIds }
+        );
+        imageUrls = [...imageUrls, ...resolved.map((r) => r.url)];
+      }
+
+      // Ground a Link in the product (gives Creatify scraped title/desc/images).
+      const link = await createLinkFromUrl(args.productUrl);
+      if (args.title || args.description || imageUrls.length > 0) {
+        await updateLink(link.id, {
+          title: args.title,
+          description: args.description,
+          image_urls: imageUrls.length > 0 ? imageUrls : undefined,
+        });
+      }
+
+      const job: CreatifyJob = await createIabImages({
+        link: link.id,
+        image_urls: imageUrls.length > 0 ? imageUrls : undefined,
+        prompt: args.prompt ?? null,
+        format: args.format ?? null,
+      });
+
+      const jobId = newJobId(job.id, 0);
+      await ctx.runMutation(internal.gtmMaya.creatifyVideo.appendJob, {
+        agentId: args.agentId,
+        jobId,
+        mode: "iab_images",
+        creatifyId: job.id,
+        status: job.status ?? "pending",
+        productUrl: args.productUrl,
+      });
+
+      if (!args.noSchedule) {
+        await ctx.scheduler.runAfter(
+          POLL_INTERVAL_MS,
+          internal.gtmMaya.creatifyVideo.pollVideoJob,
+          { agentId: args.agentId, jobId }
+        );
+      }
+      return { ok: true, jobId, creatifyId: job.id, status: job.status ?? "pending" };
+    } catch (err) {
+      return {
+        ok: false,
+        reason: `start_failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  },
+});
+
+/**
+ * Read-only: fetch the Creatify Inspiration recipe/format catalog (FREE GET).
+ * This is a format-idea catalog, NOT a competitor-ad feed — Maya reads it as one
+ * grounded input to her brief, never as the strategy. No tier gate (free + read-
+ * only), but still requires Creatify to be configured.
+ */
+export const startInspirationQuery = internalAction({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (
+    _ctx,
+    _args
+  ): Promise<{ ok: boolean; reason?: string; recipes?: Array<{ id: string; name: string | null }> }> => {
+    if (!isCreatifyConfigured()) {
+      return { ok: false, reason: "creatify_not_configured" };
+    }
+    try {
+      const list = await getInspirations();
+      return {
+        ok: true,
+        recipes: list.slice(0, 40).map((r) => ({ id: r.id, name: r.name ?? null })),
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        reason: `inspiration_failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  },
+});
+
+/**
  * Finalize a job whose Creatify status just went terminal-done: re-host the
  * video into Convex storage + record cost. Returns the media storageId.
  * Shared by the durable poller and the e2e smoke.
@@ -384,23 +548,42 @@ async function finalizeDoneJob(
   job: CreatifyJobEntry,
   terminal: CreatifyJob
 ): Promise<{ mediaStorageId: string | null; creditsUsed: number; costUsd: number }> {
-  const videoUrl = (terminal.video_output ?? "") as string;
+  const image = isImageMode(job.mode);
   const creditsUsed = Number(terminal.credits_used ?? 0) || 0;
   const costUsd = Math.round(creditsUsed * usdPerCredit() * 10000) / 10000;
 
+  // Resolve the finished asset URL: video jobs land in `video_output`; static
+  // image jobs land in `output[].url` (first image is the primary deliverable).
+  let assetUrl = "";
+  if (image) {
+    const out = terminal.output;
+    if (Array.isArray(out)) {
+      const first = out.find((o) => o && typeof o.url === "string" && o.url);
+      assetUrl = (first?.url as string) ?? "";
+    } else if (typeof out === "string") {
+      assetUrl = out;
+    }
+  } else {
+    assetUrl = (terminal.video_output ?? "") as string;
+  }
+
   let mediaStorageId: string | null = null;
-  if (videoUrl) {
+  if (assetUrl) {
     const ingest = await ctx.runAction(internal.gtmMaya.mediaAssets.ingestFromUrl, {
       agentId,
-      mediaUrl: videoUrl,
-      label: `${job.mode === "ad_clone" ? "Ad clone" : "Video ad"} (${job.productUrl ?? "product"})`,
-      kindHint: "video",
+      mediaUrl: assetUrl,
+      label: image
+        ? `Static creative (${job.productUrl ?? "product"})`
+        : `${job.mode === "ad_clone" ? "Ad clone" : "Video ad"} (${job.productUrl ?? "product"})`,
+      kindHint: image ? "image" : "video",
       source: "creatify",
     });
     if (ingest.ok) mediaStorageId = ingest.assetId;
   }
 
-  // Record COGS (visible in the ledger; excluded from caps/kill by provider).
+  // Record COGS (visible in the ledger; excluded from caps/kill by provider —
+  // costCap.ts / spendKill.ts already key the exclusion on provider==='creatify',
+  // so a burst of asset jobs can't trip the $6/24h machine-kill).
   const vctx = await ctx.runQuery(internal.gtmMaya.creatifyVideo.getAgentVideoContext, {
     agentId,
   });
@@ -408,8 +591,8 @@ async function finalizeDoneJob(
     await ctx.runMutation(internal.gtmMaya.costLedger.recordGtmCostInternal, {
       accountId: vctx.accountId,
       provider: "creatify",
-      operation: "creatify_video",
-      reason: `${job.mode} video (${creditsUsed} cr)`,
+      operation: image ? "creatify_image" : "creatify_video",
+      reason: `${job.mode} ${image ? "image" : "video"} (${creditsUsed} cr)`,
       costUsd,
       units: creditsUsed,
       cacheStatus: "called",
@@ -443,7 +626,7 @@ export const pollVideoJob = internalAction({
 
     let terminal: CreatifyJob;
     try {
-      terminal = await getVideoJob(job.mode, job.creatifyId);
+      terminal = await getCreatifyJob(job.mode, job.creatifyId);
     } catch (err) {
       // Transient — reschedule unless we're out of attempts.
       const attempts = job.attempts + 1;
@@ -567,7 +750,7 @@ export const e2eSmoke = internalAction({
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       let terminal: CreatifyJob;
       try {
-        terminal = await getVideoJob(job.mode, job.creatifyId);
+        terminal = await getCreatifyJob(job.mode, job.creatifyId);
       } catch {
         continue;
       }
@@ -689,6 +872,56 @@ export const creatifyPollHttp = httpAction(async (ctx, request) => {
     agentId: auth.agentId,
   });
   return new Response(JSON.stringify({ ok: true, jobs }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+/** make_static_asset: product (+ real screenshots) → grounded IAB banner set.
+ *  Growth $149 tier (canImage). Gated server-side in startAssetJob. */
+export const creatifyMakeAssetHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (!body.productUrl || typeof body.productUrl !== "string") {
+    return new Response("missing required field (productUrl)", { status: 400 });
+  }
+  const result: StartResult = await ctx.runAction(
+    internal.gtmMaya.creatifyVideo.startAssetJob,
+    {
+      agentId: auth.agentId,
+      productUrl: body.productUrl,
+      imageAssetIds: Array.isArray(body.imageAssetIds)
+        ? (body.imageAssetIds as string[])
+        : undefined,
+      imageUrls: Array.isArray(body.imageUrls) ? (body.imageUrls as string[]) : undefined,
+      title: typeof body.title === "string" ? body.title : undefined,
+      description: typeof body.description === "string" ? body.description : undefined,
+      prompt: typeof body.prompt === "string" ? body.prompt : undefined,
+      format: typeof body.format === "string" ? body.format : undefined,
+    }
+  );
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+/** get_inspirations: free read of the Creatify recipe/format catalog (a brief
+ *  input, NOT a competitor-ad feed). */
+export const creatifyInspirationsHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+  const result = await ctx.runAction(
+    internal.gtmMaya.creatifyVideo.startInspirationQuery,
+    { agentId: auth.agentId }
+  );
+  return new Response(JSON.stringify(result), {
     status: 200,
     headers: { "content-type": "application/json" },
   });

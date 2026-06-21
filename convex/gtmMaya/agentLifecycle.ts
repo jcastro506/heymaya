@@ -54,6 +54,15 @@ export const FOUNDATION_LEASE_MS = 7 * 60 * 1000;
  *  the rest. Generous enough that a healthy multi-tick pass never hits it. */
 export const FOUNDATION_MAX_LEASE_ACQUIRES = 8;
 
+/** Window after the onboarding handover is delivered during which a re-articulated
+ *  DUPLICATE from a concurrent session — landing seconds after the first send
+ *  marked foundation complete — or a later resume tick is still suppressed.
+ *  Live trace (Cal AI, 2026-06-21): send #1 14:26:07 → markComplete 14:26:09 →
+ *  send #2 14:26:12; the resume ladder fires up to 24min out. 30min covers both
+ *  straddle + resume, while the next LEGITIMATE proactive send (morning brief) is
+ *  hours later. Replies to an inbound turn bypass this gate entirely. */
+export const SYNTH_HANDOVER_COOLDOWN_MS = 30 * 60 * 1000;
+
 export type AgentLifecyclePhase =
   | "fresh"
   | "hello_sent"
@@ -359,8 +368,21 @@ export const claimFounderSynthesisSend = internalMutation({
   ): Promise<{ decision: "send" | "suppress" | "allow" }> => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent) return { decision: "allow" };
-    // Onboarding already complete → normal sends (weekly review, etc.) flow.
-    if (agent.foundationCompletedAt) return { decision: "allow" };
+    // Onboarding already complete → normal proactive sends (morning brief,
+    // weekly review) flow. BUT the FORMER hole: a re-articulated handover from a
+    // CONCURRENT session lands seconds after the first send marked foundation
+    // complete, and this branch waved it straight through (the live 3× dupe).
+    // So within the handover cooldown, still SUPPRESS — the dup is the same
+    // onboarding plan, not a genuine later message.
+    if (agent.foundationCompletedAt) {
+      if (
+        agent.strategyDeliveredAt &&
+        Date.now() - agent.strategyDeliveredAt < SYNTH_HANDOVER_COOLDOWN_MS
+      ) {
+        return { decision: "suppress" };
+      }
+      return { decision: "allow" };
+    }
     // No buyer map yet → still researching; let progress updates through.
     const buyerMap = await ctx.db
       .query("gtmBuyerMap")
