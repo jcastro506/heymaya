@@ -97,6 +97,31 @@ describe("requireUnderCapGtm('assetCreditsMonth') — cap enforcement", () => {
   });
 });
 
+describe("flat tier control — capability is live, upgrade needs no redeploy", () => {
+  it("the live gtmPlanJson drives capability; upgrade flips canVideo/canImage ON", () => {
+    // Starter: creative gates closed.
+    const starter = planFeaturesGtm({ gtmPlanJson: json({ tier: "starter", status: "active" }) });
+    expect(starter.canVideo).toBe(false);
+    expect(starter.canImage).toBe(false);
+    // Upgrade = the Stripe webhook rewrites gtmPlanJson on the SAME agent row. No
+    // workspace change, no machine redeploy — the next planFeaturesGtm read (from
+    // startVideoJob / get_my_plan / the founder dashboard) returns the new caps.
+    // The creative skills already shipped flat, so Maya can use them at once.
+    const studio = planFeaturesGtm({ gtmPlanJson: json({ tier: "studio", status: "active" }) });
+    expect(studio.canVideo).toBe(true);
+    expect(studio.canImage).toBe(true);
+    expect(studio.maxActiveChannels).toBe(6);
+  });
+
+  it("downgrade / lapse flips the gates CLOSED live (fail-closed)", () => {
+    const lapsed = planFeaturesGtm({ gtmPlanJson: json({ tier: "studio", status: "none" }) });
+    expect(lapsed.canVideo).toBe(false);
+    expect(lapsed.canImage).toBe(false);
+    expect(lapsed.canAutoPost).toBe(false);
+    expect(lapsed.maxActiveChannels).toBe(0);
+  });
+});
+
 describe("describePlanForMaya — static-image awareness line", () => {
   it("starter says images are not on this tier", () => {
     const s = describePlanForMaya(
