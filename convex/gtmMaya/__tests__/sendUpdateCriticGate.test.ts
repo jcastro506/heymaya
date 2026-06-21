@@ -173,3 +173,53 @@ describe("send_update grounding policy — operator DMs never blackhole", () => 
     expect(GROUNDING_BLOCK_REASONS).not.toContain(result.reason);
   });
 });
+
+describe("send_update — internal-chatter + reply safety", () => {
+  // REGRESSION (2026-06-21): the foundation-resume safety-net's NO_REPLY status
+  // ("Foundation is NOT complete… STEP DOWN… NO_REPLY") leaked to a real
+  // founder's Telegram. The NO_REPLY sentinel must be swallowed, never delivered.
+  it("suppresses a NO_REPLY internal-status message (lease-coordination leak)", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId } = await setupAgent(t, "u_no_reply");
+    const result = await callSendUpdate(t, agentId, {
+      text:
+        "Foundation is NOT complete. The lease is currently ACTIVE (held by another tick until 18:20 UTC), so I will STEP DOWN.\n\nNO_REPLY — Foundation resume safety-net standing by.",
+      messageClass: "tactical",
+    });
+    expect(result.status).toBe(200);
+    expect((result.body as { suppressed?: string }).suppressed).toBe("no_reply");
+  });
+
+  // A REPLY to the founder (turnId present) must NEVER be eaten by the synthesis
+  // dedup — that would resurrect the "she never got back to me" bug.
+  it("a reply (turnId present) is never suppressed by the synthesis dedup", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, agentId } = await setupAgent(t, "u_reply_bypass");
+    // Put the agent squarely in the post-handover cooldown, where a PROACTIVE
+    // send would be suppressed as a duplicate.
+    await t.run(async (ctx) => {
+      await ctx.db.insert("gtmBuyerMap", {
+        accountId,
+        agentId,
+        icpDescription: "ICP",
+        buyerJourneyStages: [],
+        intentPhrases: [],
+        trustedVoices: [],
+        synthesizedAt: 1,
+      });
+      await ctx.db.patch(agentId, {
+        strategyDeliveredAt: Date.now(),
+        foundationCompletedAt: Date.now(),
+      });
+    });
+    const result = await callSendUpdate(t, agentId, {
+      text: "Yes — connecting Reddit now, I'll queue those replies.",
+      messageClass: "tactical",
+      turnId: "turn-123",
+    });
+    expect(result.status).toBe(200);
+    expect((result.body as { suppressed?: string }).suppressed).not.toBe(
+      "duplicate_synthesis"
+    );
+  });
+});

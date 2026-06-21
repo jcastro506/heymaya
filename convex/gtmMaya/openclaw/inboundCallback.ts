@@ -1157,6 +1157,26 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
     return new Response("text too long (>1500 chars)", { status: 400 });
   }
 
+  // Internal coordination chatter must NEVER reach the founder. The foundation-
+  // resume safety-net / heartbeat watchdog, when it steps down because another
+  // tick holds the lease, emits a status tagged NO_REPLY ("Foundation is NOT
+  // complete… I will STEP DOWN… NO_REPLY"). The agent sometimes routes that into
+  // a send_update instead of staying silent — it leaked to a real founder's
+  // Telegram (2026-06-21). The NO_REPLY sentinel is an unambiguous "do not
+  // deliver" signal: swallow it.
+  if (/\bNO_REPLY\b/i.test(body.text)) {
+    console.warn(
+      JSON.stringify({
+        event: "send_update.no_reply_suppressed",
+        agentId: auth.agentId,
+      })
+    );
+    return new Response(
+      JSON.stringify({ ok: true, suppressed: "no_reply" }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  }
+
   // Sprint 2.16j — evidence guard for strategic messages. Defaults to
   // strategic on ambiguity (under-classifying defeats the moat).
   const { classifyMessage } = await import("../evidenceGuard");
@@ -1263,22 +1283,32 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
   // atomic, class-INDEPENDENT claim is the real fix: the FIRST founder-facing
   // send in the synthesis window wins; the rest are swallowed. Progress updates
   // (pre-research) and post-onboarding sends are unaffected.
-  const synthClaim = await ctx.runMutation(
-    internal.gtmMaya.agentLifecycle.claimFounderSynthesisSend,
-    { agentId: auth.agentId }
+  // The dedup applies to PROACTIVE sends only (the onboarding handover + cron
+  // pings have no inbound turn). A REPLY to the founder (turnId present, mirrored
+  // from the inbound /lc_gtm/log_message) ALWAYS flows — we never suppress a real
+  // reply, or we resurrect the "she never got back to me" bug.
+  const isProactiveSend = !(
+    typeof body.turnId === "string" && body.turnId.length > 0
   );
-  if (synthClaim.decision === "suppress") {
-    console.warn(
-      JSON.stringify({
-        event: "send_update.duplicate_synthesis_suppressed",
-        agentId: auth.agentId,
-        messageClass,
-      })
+  let synthClaim: { decision: "send" | "suppress" | "allow" } | null = null;
+  if (isProactiveSend) {
+    synthClaim = await ctx.runMutation(
+      internal.gtmMaya.agentLifecycle.claimFounderSynthesisSend,
+      { agentId: auth.agentId }
     );
-    return new Response(
-      JSON.stringify({ ok: true, suppressed: "duplicate_synthesis" }),
-      { status: 200, headers: { "content-type": "application/json" } }
-    );
+    if (synthClaim.decision === "suppress") {
+      console.warn(
+        JSON.stringify({
+          event: "send_update.duplicate_synthesis_suppressed",
+          agentId: auth.agentId,
+          messageClass,
+        })
+      );
+      return new Response(
+        JSON.stringify({ ok: true, suppressed: "duplicate_synthesis" }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
   }
 
   // Send via Telegram Bot API. Sprint 2.26 — prefer per-tenant bot
@@ -1347,7 +1377,7 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
   // otherwise onboarding could "complete" on a plan that never reached the
   // founder. (A successful send keeps the stamp; that's the delivery signal
   // markFoundationComplete + the rows-complete backstop gate on.)
-  if (synthClaim.decision === "send" && !result.ok) {
+  if (synthClaim?.decision === "send" && !result.ok) {
     try {
       await ctx.runMutation(
         internal.gtmMaya.agentLifecycle.releaseFounderSynthesisClaim,
