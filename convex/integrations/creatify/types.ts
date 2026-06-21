@@ -27,6 +27,12 @@ export interface CreatifyJob {
   credits_used?: number | null;
   /** Populated on failure. */
   failed_reason?: string | null;
+  /**
+   * Finished static-image set — present on IAB Images / Asset Generator jobs
+   * once status is terminal-done (`output[].url`). Video jobs use
+   * `video_output` instead.
+   */
+  output?: Array<{ url?: string | null }> | string | null;
   [key: string]: unknown;
 }
 
@@ -117,4 +123,68 @@ export interface AiScriptInput {
   url?: string | null;
   title?: string | null;
   description?: string | null;
+}
+
+// ── Static image / ad-creative modes (Growth $149 tier) ───────────────────────
+
+/**
+ * Static-image generation modes. These produce ad-banner / product images
+ * (NOT video) — gated by `canImage` + `assetCreditsMonth` (Growth + Studio).
+ *   - iab_images: a grounded IAB ad-banner set (2 cr, simplest path).
+ *   - asset_gen:  raw image models via the Asset Generator (per-model cost,
+ *                 schema-driven; roster is runtime-only).
+ * ⚠ Endpoint request/response shapes are docs-derived and UNVERIFIED LIVE —
+ * smoke-test before relying (only ad_clone / link_to_videos / aurora are
+ * live-confirmed).
+ */
+export type CreatifyImageMode = "iab_images" | "asset_gen";
+
+/**
+ * Unified job mode for the create→poll router. Video and image jobs share the
+ * same async {id,status}→poll shape, so the orchestration layer persists either
+ * under one `CreatifyJobMode` discriminator and polls via `getCreatifyJob`.
+ */
+export type CreatifyJobMode = CreatifyVideoMode | CreatifyImageMode;
+
+/**
+ * Inputs for an IAB Images job — a grounded ad-banner set. Ground it in the
+ * founder's REAL product (a Link id and/or screenshot image URLs) so the
+ * creative is never fabricated. ⚠ UNVERIFIED LIVE.
+ */
+export interface IabImagesInput {
+  /** UUID of a pre-created Link (grounds the banners in the real product). */
+  link?: string | null;
+  /** Direct product/screenshot image URLs to ground the creative. */
+  image_urls?: string[] | null;
+  /** Headline / copy to render onto the banner set (Maya's grounded brief). */
+  prompt?: string | null;
+  /** IAB size set / banner format; Creatify defaults if omitted. */
+  format?: string | null;
+  webhook_url?: string | null;
+}
+
+/**
+ * Inputs for an Asset Generator job (raw image/video models; schema-driven).
+ * `model` comes from GET /api/asset_generator/schemas/ (runtime-only roster).
+ * ⚠ UNVERIFIED LIVE.
+ */
+export interface AssetGenInput {
+  model?: string | null;
+  prompt?: string | null;
+  image_urls?: string[] | null;
+  /** Free-form params per the chosen model's schema. */
+  params?: Record<string, unknown> | null;
+  webhook_url?: string | null;
+}
+
+/**
+ * An Inspiration recipe — a format/template catalog entry. NOT a competitor-ad
+ * feed (that's an in-app-only feature). Maya reads these as format ideas to feed
+ * her grounded brief, never as the strategy.
+ */
+export interface CreatifyInspiration {
+  id: string;
+  name?: string | null;
+  description?: string | null;
+  [key: string]: unknown;
 }

@@ -1240,6 +1240,9 @@ export const buildAndUploadGtmWorkspace = internalAction({
       verifyAllPlatforms: row.agent.verifyAllPlatforms,
       // Studio-tier gate: only a canVideo plan gets the video producer skill.
       videoEnabled: planFeatures.canVideo,
+      // Growth-tier gate: a canImage plan (Growth + Studio) gets the static-asset
+      // producer skill; inspiration-scout bundles when either is on.
+      imageEnabled: planFeatures.canImage,
       // Plan-awareness — render PLAN.md so Maya boots knowing her tier, caps,
       // status, and the relevant upgrade nudge. Awareness only; the server gate
       // (planFeaturesGtm) stays authoritative.

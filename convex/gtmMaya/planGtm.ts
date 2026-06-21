@@ -88,6 +88,12 @@ export interface GtmPlanFeatures {
   /** Monthly fair-use video-generation ceiling. */
   videoCreditsMonth: number;
   /**
+   * Monthly fair-use static-image / ad-creative generation ceiling (Creatify
+   * IAB Images / Asset Generator). 0 on starter, 50 on growth, 100 on studio.
+   * Gates `canImage` the same way `videoCreditsMonth` gates `canVideo`.
+   */
+  assetCreditsMonth: number;
+  /**
    * Monthly soft cap on X URL/link posts — the $0.20/link-post margin guard
    * that doubles as a ban-safe cadence ceiling.
    */
@@ -112,6 +118,12 @@ export interface GtmPlanFeatures {
   canMonitor: boolean;
   /** Whether Maya may generate videos (subject to videoCreditsMonth cap). */
   canVideo: boolean;
+  /**
+   * Whether Maya may generate static images / ad creative via Creatify
+   * (subject to assetCreditsMonth cap). FALSE on starter (text + her own
+   * Gemini slideshow only), TRUE on growth + studio.
+   */
+  canImage: boolean;
 }
 
 /**
@@ -126,6 +138,7 @@ const GTM_STARTER_ACTIVE: GtmPlanFeatures = {
   connectedChannelCap: 6,
   autoPostChannelCap: 3,
   videoCreditsMonth: 0,
+  assetCreditsMonth: 0,
   xUrlPostsSoftCapMonth: 30,
   banSafetyManualGate: true,
   attributionEnabled: true,
@@ -135,6 +148,7 @@ const GTM_STARTER_ACTIVE: GtmPlanFeatures = {
   canRead: true,
   canMonitor: true,
   canVideo: false,
+  canImage: false,
 };
 
 /**
@@ -146,6 +160,10 @@ const GTM_GROWTH_ACTIVE: GtmPlanFeatures = {
   plan: "growth",
   maxActiveChannels: 6,
   autoPostChannelCap: 6,
+  // The breadth upgrade also unlocks Creatify static image / ad creative
+  // (still no video — that's the Studio line).
+  canImage: true,
+  assetCreditsMonth: 50,
 };
 
 /**
@@ -157,6 +175,9 @@ const GTM_STUDIO_ACTIVE: GtmPlanFeatures = {
   plan: "studio",
   videoCreditsMonth: 15,
   canVideo: true,
+  // Studio gets a higher static-image ceiling on top of video (inherits
+  // canImage:true from growth).
+  assetCreditsMonth: 100,
 };
 
 /** Resolve the base ACTIVE feature set for a tier. */
@@ -179,6 +200,7 @@ const FAIL_CLOSED_DEFAULT: GtmPlanFeatures = {
   connectedChannelCap: 0,
   autoPostChannelCap: 0,
   videoCreditsMonth: 0,
+  assetCreditsMonth: 0,
   xUrlPostsSoftCapMonth: 0,
   banSafetyManualGate: true,
   attributionEnabled: true,
@@ -188,6 +210,7 @@ const FAIL_CLOSED_DEFAULT: GtmPlanFeatures = {
   canRead: true,
   canMonitor: false,
   canVideo: false,
+  canImage: false,
 };
 
 /**
@@ -202,12 +225,14 @@ interface ParsedGtmPlan {
   connectedChannelCap?: unknown;
   autoPostChannelCap?: unknown;
   videoCreditsMonth?: unknown;
+  assetCreditsMonth?: unknown;
   xUrlPostsSoftCapMonth?: unknown;
   periodStart?: unknown;
   usage?: {
     autoPostsThisPeriod?: unknown;
     xUrlPostsThisPeriod?: unknown;
     videosThisPeriod?: unknown;
+    imagesThisPeriod?: unknown;
   };
 }
 
@@ -300,6 +325,10 @@ export function planFeaturesGtm(agent: {
         base.autoPostChannelCap
       ),
       videoCreditsMonth: coerceCap(parsed.videoCreditsMonth, base.videoCreditsMonth),
+      assetCreditsMonth: coerceCap(
+        parsed.assetCreditsMonth,
+        base.assetCreditsMonth
+      ),
       xUrlPostsSoftCapMonth: coerceCap(
         parsed.xUrlPostsSoftCapMonth,
         base.xUrlPostsSoftCapMonth
@@ -372,7 +401,14 @@ export function describePlanForMaya(features: GtmPlanFeatures): string {
     lines.push(`Up to ${features.maxActiveChannels} active channels.`);
   }
 
-  // Line 3 — video capability (Studio-only).
+  // Line 3 — static image / ad-creative capability (Growth + Studio).
+  if (features.canImage) {
+    lines.push(`Static images: yes, ~${features.assetCreditsMonth}/mo.`);
+  } else {
+    lines.push("Static images: not on this tier (Growth+).");
+  }
+
+  // Line 4 — video capability (Studio-only).
   if (features.canVideo) {
     lines.push(`Video: yes, ~${features.videoCreditsMonth}/mo.`);
   } else {
@@ -385,10 +421,11 @@ export function describePlanForMaya(features: GtmPlanFeatures): string {
       "NOT ACTIVE — tell the founder to start their plan so you can post. Don't go silent; ask them to start/renew it."
     );
   } else if (features.plan === "starter") {
-    // Starter is always at/near the 3-channel cap relative to Growth's 6, and
-    // has no video — surface the breadth upgrade first, then video.
+    // Starter is at/near the 3-channel cap relative to Growth's 6, and has
+    // neither static-image creative nor video — surface the breadth + image
+    // upgrade first, then video.
     lines.push(
-      "Growth unlocks 6 channels; Studio adds video. Only nudge when they're actually hitting the limit."
+      "Growth unlocks 6 channels + designed image creative; Studio adds video. Only nudge when they're actually hitting the limit."
     );
   } else if (!features.canVideo) {
     // Growth — full breadth, but no video.
@@ -442,6 +479,7 @@ export function requireUnderCapGtm(
     | "connectedChannelCap"
     | "autoPostChannelCap"
     | "videoCreditsMonth"
+    | "assetCreditsMonth"
     | "xUrlPostsSoftCapMonth",
   currentUsage: number
 ): void {
@@ -493,6 +531,7 @@ export function buildGtmPlanJson(input: {
     connectedChannelCap: number;
     autoPostChannelCap: number;
     videoCreditsMonth: number;
+    assetCreditsMonth: number;
     xUrlPostsSoftCapMonth: number;
   }>;
 }): string {
@@ -501,6 +540,11 @@ export function buildGtmPlanJson(input: {
     status: input.status,
     ...(input.caps ?? {}),
     periodStart: input.periodStartMs ?? null,
-    usage: { autoPostsThisPeriod: 0, xUrlPostsThisPeriod: 0, videosThisPeriod: 0 },
+    usage: {
+      autoPostsThisPeriod: 0,
+      xUrlPostsThisPeriod: 0,
+      videosThisPeriod: 0,
+      imagesThisPeriod: 0,
+    },
   });
 }

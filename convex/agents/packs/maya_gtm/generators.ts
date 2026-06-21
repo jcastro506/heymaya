@@ -15,6 +15,16 @@ export interface MayaGtmWorkspaceInput {
    */
   videoEnabled?: boolean;
   /**
+   * Growth-tier gate. When false/undefined the static-asset producer skill is
+   * NOT bundled (Starter gets no Creatify image creative — text + Gemini
+   * slideshow only). Resolved at deploy from planFeaturesGtm(agent).canImage.
+   * The server-side gate in creatifyVideo (startAssetJob) is the hard backstop;
+   * this just keeps a Starter Maya from knowing the make_static_asset /
+   * get_inspirations tools. (Inspiration-scout bundles when EITHER image or
+   * video is enabled — it feeds both creative paths.)
+   */
+  imageEnabled?: boolean;
+  /**
    * Plan-awareness — a concise human-readable summary of the founder's plan
    * tier + caps + status, computed at deploy by `describePlanForMaya(
    * planFeaturesGtm(agent))`. Rendered into PLAN.md so Maya ALWAYS has her plan
@@ -308,6 +318,15 @@ const SKILLS = [
   // (planFeaturesGtm.canVideo). Backed by Creatify (clone_winning_ad /
   // make_ad_from_url); the server gate in creatifyVideo is the hard backstop.
   "maya-video-producer",
+  // Growth-tier ($149) STATIC creative producer — designed IAB image/ad
+  // creative via Creatify (make_static_asset). Gated on input.imageEnabled
+  // (planFeaturesGtm.canImage); server gate in creatifyVideo.startAssetJob is
+  // the hard backstop.
+  "maya-static-asset-producer",
+  // Inspiration scout — reads Creatify's recipe/format catalog (get_inspirations)
+  // as a brief input for the video + static producers. Bundled when EITHER
+  // creative path is enabled.
+  "maya-inspiration-scout",
   "maya-conversion-tracker",
   // Activation — the deeper truth: did signups STICK (come back / reach value),
   // not just land. Reports activation rate + time-to-value; routes a low rate to
@@ -356,6 +375,15 @@ export function buildMayaGtmWorkspace(
     // Non-Studio Maya never sees the video tools (the server gate is the
     // hard backstop; this keeps her from offering what she can't make).
     if (skill === "maya-video-producer" && !input.videoEnabled) continue;
+    // Static-asset producer ships only to canImage tiers (Growth + Studio).
+    if (skill === "maya-static-asset-producer" && !input.imageEnabled) continue;
+    // Inspiration scout ships when EITHER creative path is enabled.
+    if (
+      skill === "maya-inspiration-scout" &&
+      !input.imageEnabled &&
+      !input.videoEnabled
+    )
+      continue;
     const bundled = bundledBySlug.get(skill);
     files.set(`skills/${skill}/SKILL.md`, bundled ?? renderSkill(skill));
   }
@@ -2066,6 +2094,10 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
       return "Build grounded TikTok-photo-mode + IG carousels from the real media library (save_media / search_my_media / generate_slide_image) — product slides placed UNCHANGED from real screenshots, no fabricated UI.";
     case "maya-video-producer":
       return "Studio-tier video producer: when the niche's winning format is a video, make the founder a real short-form ad grounded in their product — copy a proven winning video's format (clone_winning_ad) or turn the product URL into a finished ad (make_ad_from_url), then hand it back one-tap. Server-gated to the $149 Studio tier.";
+    case "maya-static-asset-producer":
+      return "Growth-tier static creative producer: when a channel wants a designed still (a polished product banner / ad-creative image), make it grounded in the founder's REAL screenshots via make_static_asset, then hand it back one-tap. Server-gated to canImage (Growth + Studio); fail-closed to slideshow/screenshot on Starter.";
+    case "maya-inspiration-scout":
+      return "Read Creatify's recipe/format catalog (get_inspirations) as ONE input to a grounded creative brief — a format-idea catalog, NOT a competitor-ad feed and NOT a strategy. Borrow structure only; ground the copy/visuals in the real product; stay organic-first.";
     case "maya-conversion-tracker":
       return "Own the signup side of the loop: wrap every product link to signupUrl (clicks auto-tracked), then ASK the founder when there are clicks but no signups and log it via record_conversion. MVP = self-report; I do NOT hand founders code to paste (automatic tracker is roadmap, not offered yet).";
     case "maya-activation-coach":
