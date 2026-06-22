@@ -403,7 +403,11 @@ describe("Maya GTM workspace pack", () => {
       (j: { id: string }) => j.id === "0016_discovery_pulse"
     );
     expect(pulseJob).toBeTruthy();
-    expect(pulseJob.schedule.expr).toBe("0 * * * *"); // hourly
+    // Default cadence is every 3h (8/day) — ~3x cheaper than hourly, the token
+    // lever; env-tunable via MAYA_GTM_PULSE_CRON_EXPR. Must be an interval/step
+    // expr so it stays timezone-invariant (localCronToUtc no-ops it).
+    expect(pulseJob.schedule.expr).toBe("0 */3 * * *");
+    expect(pulseJob.schedule.expr).not.toMatch(/^0 \d+ /); // not a fixed hour
     expect(pulseJob.payload.lightContext).toBe(true); // lean tick = cheap
     expect(pulseJob.payload.thinking).toBe("low");
     // The pulse MUST consult the budget gate (the runaway-stop).
@@ -716,7 +720,11 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("PLAN.md")?.length).toBeLessThan(2_000); // plan snapshot stays terse
     expect(files.get("TOOLS.md")?.length).toBeLessThan(28_000); // under the 30K per-file cap
     expect(files.get("BOOT.md")?.length).toBeLessThan(28_000);
-    expect(files.get("AGENTS.md")?.length).toBeLessThan(25_000);
+    // 25_500: AGENTS.md holds THE ONE RULE + THE COMPLEMENT (the single
+    // send-discipline rule that REPLACED ~4 scattered per-cron "don't narrate"
+    // notes — net fewer rules, ~1.5K trimmed elsewhere in the file). Still well
+    // under the 28K its siblings use and the 30K per-file injection cap.
+    expect(files.get("AGENTS.md")?.length).toBeLessThan(25_500);
   });
 
   it("playbook reference files ship with the workspace and are substantive", () => {
@@ -839,8 +847,9 @@ describe("Maya GTM workspace pack — PLAN.md plan awareness", () => {
       }
     });
 
-    it("the hourly discovery_pulse is framed as a continuous discovery layer (not 7am-only)", () => {
-      expect(gtm.toLowerCase()).toContain("hourly");
+    it("the periodic discovery_pulse is framed as a continuous discovery layer (not 7am-only)", () => {
+      // Cadence default is every-3h ("periodic"), not "hourly" (cost lever).
+      expect(gtm.toLowerCase()).toContain("periodic");
       expect(gtm).toContain("discovery_pulse");
       expect(heartbeat).toContain("discovery_pulse");
     });
