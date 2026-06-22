@@ -136,6 +136,7 @@ import type * as gtmMaya_missionControl from "../gtmMaya/missionControl.js";
 import type * as gtmMaya_openclaw_conversationCapture from "../gtmMaya/openclaw/conversationCapture.js";
 import type * as gtmMaya_openclaw_hookClient from "../gtmMaya/openclaw/hookClient.js";
 import type * as gtmMaya_openclaw_inboundCallback from "../gtmMaya/openclaw/inboundCallback.js";
+import type * as gtmMaya_openclaw_llmGateway from "../gtmMaya/openclaw/llmGateway.js";
 import type * as gtmMaya_openclaw_managerCallbacks from "../gtmMaya/openclaw/managerCallbacks.js";
 import type * as gtmMaya_openclaw_planCallbacks from "../gtmMaya/openclaw/planCallbacks.js";
 import type * as gtmMaya_openclaw_pulseCallbacks from "../gtmMaya/openclaw/pulseCallbacks.js";
@@ -461,6 +462,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/openclaw/conversationCapture": typeof gtmMaya_openclaw_conversationCapture;
   "gtmMaya/openclaw/hookClient": typeof gtmMaya_openclaw_hookClient;
   "gtmMaya/openclaw/inboundCallback": typeof gtmMaya_openclaw_inboundCallback;
+  "gtmMaya/openclaw/llmGateway": typeof gtmMaya_openclaw_llmGateway;
   "gtmMaya/openclaw/managerCallbacks": typeof gtmMaya_openclaw_managerCallbacks;
   "gtmMaya/openclaw/planCallbacks": typeof gtmMaya_openclaw_planCallbacks;
   "gtmMaya/openclaw/pulseCallbacks": typeof gtmMaya_openclaw_pulseCallbacks;

@@ -86,6 +86,9 @@ import {
   // Sprint 2.16b — progressive update channel.
   sendUpdateHttp,
 } from "./gtmMaya/openclaw/inboundCallback";
+// LLM metering gateway — OpenClaw's OpenRouter base URL points here; we meter
+// every call synchronously into gtmCostLedger, then forward. See llmGateway.ts.
+import { llmGatewayHttp } from "./gtmMaya/openclaw/llmGateway";
 // Sprint 2.17 Phase A — manager-mode HTTP handlers (foundation +
 // continuous research + action log + niche learnings). Auth shares the
 // hookToken path with inboundCallback.ts.
@@ -572,6 +575,16 @@ http.route({
   pathPrefix: "/r/",
   method: "GET",
   handler: redirectHttp,
+});
+// LLM metering gateway. OpenClaw's OpenRouter base URL is repointed to
+// `<convex-site>/lc_gtm/llm`; the OpenAI client appends `/chat/completions`
+// (and possibly `/v1`), so we match the whole prefix. Per-agent hookToken auth,
+// pre-flight budget gate, forward to OpenRouter, meter the real cost
+// synchronously into gtmCostLedger. See gtmMaya/openclaw/llmGateway.ts.
+http.route({
+  pathPrefix: "/lc_gtm/llm/",
+  method: "POST",
+  handler: llmGatewayHttp,
 });
 // Maya v2 — Zernio hosted-OAuth callback (PUBLIC, no auth). Zernio redirects
 // the founder's browser here after they authorize a channel. Trusts only the
