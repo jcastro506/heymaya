@@ -720,7 +720,11 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("PLAN.md")?.length).toBeLessThan(2_000); // plan snapshot stays terse
     expect(files.get("TOOLS.md")?.length).toBeLessThan(28_000); // under the 30K per-file cap
     expect(files.get("BOOT.md")?.length).toBeLessThan(28_000);
-    expect(files.get("AGENTS.md")?.length).toBeLessThan(25_000);
+    // 25_500: AGENTS.md holds THE ONE RULE + THE COMPLEMENT (the single
+    // send-discipline rule that REPLACED ~4 scattered per-cron "don't narrate"
+    // notes — net fewer rules, ~1.5K trimmed elsewhere in the file). Still well
+    // under the 28K its siblings use and the 30K per-file injection cap.
+    expect(files.get("AGENTS.md")?.length).toBeLessThan(25_500);
   });
 
   it("playbook reference files ship with the workspace and are substantive", () => {
