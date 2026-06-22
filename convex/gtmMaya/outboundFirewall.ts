@@ -318,29 +318,37 @@ function findMatches(
 }
 
 /**
- * Outbound-discipline gate (2026-06-22): drop a PROACTIVE send that is pure
- * pipeline-narration — the agent reporting its own cron run ("Midday pulse
- * complete", "Just finished the midday pulse") rather than something the founder
- * needs to ACT ON. Banned by SOUL.md, but it leaked live (the hourly pulse
- * narrated every tick). Server-enforced so it can't reach Telegram regardless of
- * what the model emits.
+ * Outbound-discipline DRIFT DETECTOR (2026-06-22, demoted to log-only 2026-06-22).
  *
- * SAFETY (the don't-eat-the-synthesis rule): returns true ONLY when the text
- * BOTH (a) matches a cron-run-narration structure AND (b) carries NO grounded,
- * actionable content. Content beats pattern — any message with a URL, an
- * @handle, or a real thread/action reference is delivered even if it mentions a
- * "pulse." Callers MUST gate this behind isProactiveSend (a reply with a turnId
- * is never narration).
+ * Flags a PROACTIVE send that LOOKS like pure pipeline-narration — the agent
+ * reporting its own cron run ("Midday pulse complete", "Just finished the midday
+ * pulse") rather than something the founder needs to ACT ON.
+ *
+ * ⚠️ This is NOT an enforcement gate. The PRIMARY control is the SOUL prompt
+ * (Banned phrases → cron/pass-completion narration). This detector exists only so
+ * the callsite can LOG `send_update.status_narration_detected` — an observability
+ * counter that tells us whether the prompt is actually holding on Kimi. If it
+ * starts firing often, the fix is to strengthen the PROMPT (or add an LLM check),
+ * NOT to grow these brittle phrase regexes. We deliberately do not drop the
+ * message: status narration is annoying, not catastrophic (unlike a leaked token
+ * or skill slug — those stay on the hard `validateOutboundText` denylist), so it
+ * does not earn a deterministic phrase-matcher in the send path.
+ *
+ * Content-beats-pattern still applies: a message with a URL / @handle / r/sub is
+ * never even flagged, so the counter doesn't get muddied by real updates that
+ * happen to mention a "pulse."
  */
 const CRON_NARRATION_RE =
   /\b(pulse|brief|recap|review|sweep|scan)\s+(complete|completed|done|finished)\b/i;
 const SELF_REPORT_RE = /^\s*(just\s+)?(now\s+)?(finished|done|completed|wrapped up|ran)\b/i;
-/** Grounded-content signals — if ANY is present the message is actionable, never dropped. */
+/** Grounded-content signals — if ANY is present the message is actionable, not narration. */
 const GROUNDED_CONTENT_RE = /(https?:\/\/|\bwww\.|@[A-Za-z0-9_]{2,}|r\/[A-Za-z0-9_]{2,})/;
 
-export function shouldDropStatusNarration(text: string): boolean {
+/** Detector only — see the doc comment. True = "looks like cron narration, worth
+ *  logging as prompt-drift." Callers must NOT drop on this; the prompt is the gate. */
+export function looksLikeStatusNarration(text: string): boolean {
   if (typeof text !== "string" || text.trim() === "") return false;
-  // Actionable content present → never a pure-narration drop.
+  // Actionable content present → not narration.
   if (GROUNDED_CONTENT_RE.test(text)) return false;
   return CRON_NARRATION_RE.test(text) || SELF_REPORT_RE.test(text);
 }

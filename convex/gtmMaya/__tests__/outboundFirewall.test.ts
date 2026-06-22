@@ -1,11 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
   validateOutboundText,
-  shouldDropStatusNarration,
+  looksLikeStatusNarration,
 } from "../outboundFirewall";
 
-describe("shouldDropStatusNarration — drop cron-run narration, never grounded content", () => {
-  it("drops pure pipeline-run narration", () => {
+// looksLikeStatusNarration is a LOG-ONLY drift DETECTOR (the SOUL prompt is the
+// real control; this only powers the `status_narration_detected` counter). These
+// tests pin detection accuracy, NOT a drop decision — the callsite never drops.
+describe("looksLikeStatusNarration — flags cron-run narration, ignores grounded content", () => {
+  it("flags pure pipeline-run narration", () => {
     for (const t of [
       "Midday pulse complete.",
       "Just finished the midday pulse.",
@@ -13,24 +16,24 @@ describe("shouldDropStatusNarration — drop cron-run narration, never grounded 
       "Now done with the morning brief.",
       "Finished my sweep.",
     ]) {
-      expect(shouldDropStatusNarration(t), `should drop: ${t}`).toBe(true);
+      expect(looksLikeStatusNarration(t), `should flag: ${t}`).toBe(true);
     }
   });
 
-  it("NEVER drops a message carrying grounded, actionable content", () => {
+  it("NEVER flags a message carrying grounded, actionable content", () => {
     for (const t of [
       "Midday pulse complete — but this thread is hot: https://reddit.com/r/loseit/x",
       "Found a great thread to jump on in r/loseit",
       "Reply to @founder — they asked how it works",
       "Here's the play: your customer is on TikTok.",
     ]) {
-      expect(shouldDropStatusNarration(t), `should KEEP: ${t}`).toBe(false);
+      expect(looksLikeStatusNarration(t), `should NOT flag: ${t}`).toBe(false);
     }
   });
 
-  it("empty / non-narration text is kept", () => {
-    expect(shouldDropStatusNarration("")).toBe(false);
-    expect(shouldDropStatusNarration("Posted your first reply on Reddit.")).toBe(false);
+  it("empty / non-narration text is not flagged", () => {
+    expect(looksLikeStatusNarration("")).toBe(false);
+    expect(looksLikeStatusNarration("Posted your first reply on Reddit.")).toBe(false);
   });
 });
 
