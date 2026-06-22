@@ -1473,6 +1473,53 @@ export const deployMayaGtm = internalAction({
       const sharedTelegramSecrets = collectDeploySecrets();
       const telegramBotToken =
         personalBot.token ?? sharedTelegramSecrets.TELEGRAM_BOT_TOKEN;
+      // ⚠️ REPOINT MECHANISM — PINNED, LAST-MILE PENDING (2026-06-22).
+      // Live testing on OpenClaw 5.26 proved the env-var repoint does NOT work:
+      //   - the built-in `openrouter` provider IGNORES OPENROUTER_BASE_URL (→ it
+      //     hit openrouter.ai with our hookToken → "Missing Authentication header")
+      //   - the built-in `openai` provider HONORS OPENAI_BASE_URL + key (auth
+      //     worked!) but REJECTS the OpenRouter slugs locally → `model_not_found`
+      // The real knob is OpenClaw's CONFIG provider-override map (in openclaw.json,
+      // built by buildGatewayConfig), shape (from 5.26 .d.ts):
+      //   providers: { openrouter: { baseUrl?, api?, headers?: Record<string, SecretInput> } }
+      // i.e. keep the `openrouter` provider (it accepts our slugs) and override
+      // its baseUrl → the gateway, with the hookToken supplied as the key/header.
+      // TODO(gateway phase 2 last-mile): wire that `providers` block into
+      // buildGatewayConfig (confirm api-vs-headers/SecretInput semantics on a
+      // running image first), then this env-override block is unnecessary.
+      //
+      // Until then this flag stays OFF (default) = today's working direct path.
+      // When MAYA_GTM_LLM_GATEWAY_ENABLED is on, OpenClaw's OpenRouter
+      // calls are routed to our metering gateway instead of OpenRouter directly:
+      //  - present the per-agent hookToken AS the "OpenRouter key" (the gateway
+      //    auths by it) → the REAL OpenRouter key never reaches the tenant machine
+      //  - override the OpenRouter base URL → <site>/lc_gtm/llm
+      // The OpenAI client appends /chat/completions; the route is a pathPrefix so
+      // it catches that (and a /v1 segment if OpenClaw adds one). Both common base
+      // env names set since 5.26's exact knob is verified by this first live run.
+      const gatewayEnabled =
+        process.env.MAYA_GTM_LLM_GATEWAY_ENABLED === "true";
+      const siteUrl = sharedTelegramSecrets.CONVEX_SITE_URL?.replace(/\/$/, "");
+      const gatewayOverrides: Record<string, string> =
+        gatewayEnabled && siteUrl
+          ? {
+              // Route via OpenClaw's `openai` provider (model refs become
+              // openai/<slug>; see toOpenClawModelRef). It honors OPENAI_BASE_URL
+              // + OPENAI_API_KEY. We present the hookToken as the key (gateway
+              // auths by it); the real OpenRouter key stays server-side.
+              OPENAI_API_KEY: hookTokenForFly,
+              OPENAI_BASE_URL: `${siteUrl}/lc_gtm/llm`,
+              // Also neutralize the raw OpenRouter key on the machine + set the
+              // openrouter base in case any path still uses the openrouter provider.
+              OPENROUTER_API_KEY: hookTokenForFly,
+              OPENROUTER_BASE_URL: `${siteUrl}/lc_gtm/llm`,
+            }
+          : {};
+      if (gatewayEnabled && !siteUrl) {
+        console.warn(
+          `[deployMayaGtm] LLM gateway enabled but CONVEX_SITE_URL missing — falling back to direct OpenRouter for agent ${args.agentId}`
+        );
+      }
       await fly.setAppSecrets(bundle.flyAppName, {
         ...sharedTelegramSecrets,
         OPENCLAW_GATEWAY_TOKEN: gatewayToken,
@@ -1480,7 +1527,13 @@ export const deployMayaGtm = internalAction({
         ...(telegramBotToken
           ? { TELEGRAM_BOT_TOKEN: telegramBotToken }
           : {}),
+        ...gatewayOverrides,
       });
+      if (gatewayEnabled && siteUrl) {
+        console.log(
+          `[deployMayaGtm] LLM metering gateway ON for agent ${args.agentId} → ${siteUrl}/lc_gtm/llm (machine holds hookToken, not the real OpenRouter key)`
+        );
+      }
       if (personalBot.token) {
         console.log(
           `[deployMayaGtm] using per-tenant Telegram bot for agent ${args.agentId} (source: per_tenant)`
@@ -1982,8 +2035,19 @@ export function collectDeploySecrets(
 }
 
 function toOpenClawModelRef(model: string): string {
+  // When the metering gateway is on, route via OpenClaw's built-in `openai`
+  // provider (which honors OPENAI_BASE_URL — verified that the `openrouter`
+  // provider does NOT honor OPENROUTER_BASE_URL on 5.26). The gateway is
+  // OpenAI-compatible in / OpenRouter out, so the slug passes straight through.
+  const prefix =
+    process.env.MAYA_GTM_LLM_GATEWAY_ENABLED === "true" ? "openai" : "openrouter";
   if (model.includes("/")) {
-    return model.startsWith("openrouter/") ? model : `openrouter/${model}`;
+    const slug = model.startsWith("openrouter/")
+      ? model.slice("openrouter/".length)
+      : model.startsWith("openai/")
+        ? model.slice("openai/".length)
+        : model;
+    return `${prefix}/${slug}`;
   }
   return model;
 }

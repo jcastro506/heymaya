@@ -105,6 +105,17 @@ export const recordGatewaySpend = internalMutation({
  * base URL here; this forwards to the real OpenRouter, meters, and returns.
  */
 export const llmGatewayHttp = httpAction(async (ctx, request) => {
+  // Entry log (observability) — definitively proves OpenClaw reached the gateway
+  // and whether it attached a bearer, so a repoint that silently bypasses us is
+  // visible immediately in the Convex logs rather than guessed at.
+  const hasBearer = (request.headers.get("authorization") ?? "").startsWith("Bearer ");
+  console.warn(
+    JSON.stringify({
+      event: "llm_gateway.hit",
+      path: new URL(request.url).pathname,
+      hasBearer,
+    })
+  );
   // 1. Auth (per-agent hookToken). The machine presents its hookToken as the
   //    bearer — so it never needs the real OpenRouter key.
   const auth = await authenticate(ctx, request);
