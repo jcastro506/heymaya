@@ -28,10 +28,21 @@ import { sumLedgerForAccountSince } from "./costCap";
  * gtmAgents.spendKillCapUsd. GTM_COST_CAP_OVERRIDE (the costCap escape hatch)
  * also suspends the kill so a deliberate smoke isn't reaped mid-run.
  *
- * RESEARCH IS EXCLUDED. Research-job spend is bounded by the job's own
- * budgetUsd, so it must run as long as that budget allows — the kill-switch
- * sums only OPERATIONAL ledger rows (no researchJobId), governing the uncapped
- * loop, not research. A deep research run never trips a runaway kill.
+ * THREE checks (highest priority first):
+ *   - actual-total wall: the TRUE 24h spend from the OpenRouter aggregate poll
+ *     (research + operational + everything) vs the daily cap. This is the
+ *     de-blind fix — the operational sums below read ~$0 live (per-turn
+ *     self-report is unreliable), so a 7-day agent burned $28 with nothing
+ *     firing. The poll rows are the only honest measure, so they get a hard
+ *     wall that research cannot escape. (Single-agent-accurate; the poll is
+ *     account-aggregate, so with multiple live agents it over-attributes —
+ *     fail-safe direction. Per-agent attribution is the follow-up.)
+ *   - hourly velocity (operational rows): catches a spiky runaway fast.
+ *   - 24h sustained (operational rows): catches a slow operational leak.
+ *
+ * The operational windows EXCLUDE research (bounded by the job's own budgetUsd)
+ * so a deep research burst doesn't trip the loop-velocity catch — but the
+ * actual-total wall above still counts it, so true total spend is always capped.
  */
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -64,7 +75,22 @@ export function evaluateSpendKill(input: {
   daySpendUsd: number;
   hourlyCapUsd: number;
   dailyCapUsd: number;
+  // TRUE total 24h spend from the OpenRouter aggregate poll (the only measure
+  // that isn't blind — per-turn self-report reads $0, which is why a 7-day
+  // agent burned $28 with the operational-row check seeing nothing). When
+  // present, this hard actual-total wall is checked FIRST: it counts research +
+  // operational + everything, so it cannot be evaded by the blind-ledger gap.
+  dayActualTotalUsd?: number;
 }): SpendKillVerdict {
+  if (
+    input.dayActualTotalUsd !== undefined &&
+    input.dayActualTotalUsd > input.dailyCapUsd
+  ) {
+    return {
+      shouldKill: true,
+      reason: `actual spend wall: $${input.dayActualTotalUsd.toFixed(2)} of real OpenRouter spend in the last 24h exceeds the $${input.dailyCapUsd.toFixed(2)}/24h cap (true total, incl. research)`,
+    };
+  }
   if (input.hourSpendUsd > input.hourlyCapUsd) {
     return {
       shouldKill: true,
@@ -91,6 +117,7 @@ interface AgentSpendSnapshot {
   alreadyKilled: boolean;
   hourSpendUsd: number;
   daySpendUsd: number;
+  dayActualTotalUsd: number;
   hourlyCapUsd: number;
   dailyCapUsd: number;
   shouldKill: boolean;
@@ -129,11 +156,22 @@ async function snapshotAgentSpend(
     now - DAY_MS,
     excludeResearch
   );
+  // TRUE total 24h spend — the OpenRouter aggregate-poll rows ONLY (the global
+  // account delta, which already subsumes research + operational). This is the
+  // de-blind fix: the operational-only sums above read ~$0 live (per-turn
+  // self-report is unreliable), so without this the kill-switch never fires.
+  const dayActualTotalUsd = await sumLedgerForAccountSince(
+    ctx,
+    agent.accountId,
+    now - DAY_MS,
+    { onlyOpenrouterPoll: true }
+  );
   const hourlyCapUsd = agentKillHourlyUsd();
   const dailyCapUsd = agent.spendKillCapUsd ?? agentKillDailyUsd();
   const verdict = evaluateSpendKill({
     hourSpendUsd,
     daySpendUsd,
+    dayActualTotalUsd,
     hourlyCapUsd,
     dailyCapUsd,
   });
@@ -143,6 +181,7 @@ async function snapshotAgentSpend(
     alreadyKilled: Boolean(agent.killedAt),
     hourSpendUsd,
     daySpendUsd,
+    dayActualTotalUsd,
     hourlyCapUsd,
     dailyCapUsd,
     ...verdict,

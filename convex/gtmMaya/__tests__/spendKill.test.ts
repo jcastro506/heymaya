@@ -56,6 +56,60 @@ describe("evaluateSpendKill", () => {
     expect(v.shouldKill).toBe(true);
     expect(v.reason).toContain("sustained burn");
   });
+
+  // THE $28 REGRESSION (2026-06-22): a 7-day agent burned $28 while the
+  // operational sums read ~$0 (per-turn self-report is blind), so neither the
+  // hourly nor the 24h operational check ever fired. The actual-total wall —
+  // the OpenRouter poll's true total — must catch it even at operational $0.
+  it("kills on the actual-total wall even when operational spend reads $0 (the blind-ledger fix)", () => {
+    const v = evaluateSpendKill({
+      hourSpendUsd: 0, // blind — per-turn self-report never landed
+      daySpendUsd: 0, // blind
+      dayActualTotalUsd: 7.2, // the REAL OpenRouter spend, over the $6 cap
+      ...caps,
+    });
+    expect(v.shouldKill).toBe(true);
+    expect(v.reason).toContain("actual spend wall");
+  });
+
+  it("enforces a $1/day cap on real spend (the watched-test config)", () => {
+    const under = evaluateSpendKill({
+      hourSpendUsd: 0,
+      daySpendUsd: 0,
+      dayActualTotalUsd: 0.9,
+      hourlyCapUsd: 3,
+      dailyCapUsd: 1,
+    });
+    expect(under.shouldKill).toBe(false);
+    const over = evaluateSpendKill({
+      hourSpendUsd: 0,
+      daySpendUsd: 0,
+      dayActualTotalUsd: 1.05,
+      hourlyCapUsd: 3,
+      dailyCapUsd: 1,
+    });
+    expect(over.shouldKill).toBe(true);
+    expect(over.reason).toContain("actual spend wall");
+  });
+
+  it("actual-total wall is strict-exceed (exactly at cap does not kill)", () => {
+    const v = evaluateSpendKill({
+      hourSpendUsd: 0,
+      daySpendUsd: 0,
+      dayActualTotalUsd: 6.0,
+      ...caps,
+    });
+    expect(v.shouldKill).toBe(false);
+  });
+
+  it("absent actual-total (no poll rows yet) falls back to operational checks only", () => {
+    const v = evaluateSpendKill({
+      hourSpendUsd: 0.4,
+      daySpendUsd: 1.8,
+      ...caps, // dayActualTotalUsd undefined → wall skipped, operational under
+    });
+    expect(v.shouldKill).toBe(false);
+  });
 });
 
 describe("spend kill — research spend is excluded", () => {

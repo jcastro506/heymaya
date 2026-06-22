@@ -2240,11 +2240,17 @@ export const destroyAllClawlaunchApps = internalAction({
     const { FlyClient } = await import("../lib/flyClient");
     const fly = new FlyClient();
     const all = await fly.listApps({ first: 500 });
+    // Per-agent test machines deploy under TWO prefixes — `clawlaunch-*` (the
+    // GTM admin path) and `maya-*` (the onboarding deploy path). Matching only
+    // clawlaunch-* let a `maya-*` agent run 7 days unnoticed and burn $28
+    // (2026-06-22). Match both ephemeral prefixes; NEVER touch the persistent
+    // shared infra apps (`heymaya-openclaw`, `heymaya-video-synth`).
+    const EPHEMERAL_PREFIXES = ["clawlaunch-", "maya-"];
     const targets = all
       .map((a) => a.name)
-      .filter((n) => n.startsWith("clawlaunch-"));
+      .filter((n) => EPHEMERAL_PREFIXES.some((p) => n.startsWith(p)));
     console.log(
-      `[destroyAllClawlaunchApps] listed ${all.length} apps, ${targets.length} match clawlaunch-*`
+      `[destroyAllClawlaunchApps] listed ${all.length} apps, ${targets.length} match clawlaunch-*/maya-*`
     );
     const destroyed: string[] = [];
     const failed: string[] = [];
