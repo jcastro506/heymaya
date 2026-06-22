@@ -90,6 +90,13 @@ export async function sumLedgerForAccountSince(
     excludeResearchJobSpend?: boolean;
     excludeOpenrouterPoll?: boolean;
     excludeCreatifyVideo?: boolean;
+    // ONLY count the OpenRouter aggregate-poll rows. These are the single
+    // authoritative measure of TRUE total spend (the global account delta,
+    // which already includes research + operational + Convex-side). The spend
+    // kill-switch uses this for its hard actual-total daily wall — counting
+    // anything ELSE alongside it would double-count (research rows are a subset
+    // already inside the poll delta). Mutually exclusive with the exclude flags.
+    onlyOpenrouterPoll?: boolean;
   }
 ): Promise<number> {
   const rows = await ctx.db
@@ -98,6 +105,10 @@ export async function sumLedgerForAccountSince(
     .collect();
   return rows.reduce<number>((sum, row) => {
     if (row.createdAt < sinceMs) return sum;
+    // True-total mode: count ONLY the aggregate-poll rows, skip everything else.
+    if (opts?.onlyOpenrouterPoll) {
+      return row.operation === "openrouter_poll" ? sum + row.costUsd : sum;
+    }
     // Research-job spend is bounded by the job's own budgetUsd, so callers
     // governing only the uncapped operational loop (the spend kill-switch) can
     // exclude it — a legitimate deep research run must not trip a runaway kill.
