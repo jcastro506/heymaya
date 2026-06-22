@@ -105,6 +105,19 @@ const BANNED_INTERNAL_TERMS = [
   "gtmTargetThreads",
   "gtmDraftedContent",
   "gtmPostResults",
+  // Non-technical-tone pass (2026-06-22) — strategy/marketing JARGON the founder
+  // (not a marketing/tech expert) shouldn't see. Sanitized on the delivery-wins
+  // path so the message still goes out, just plain. Multi-word + distinctive
+  // ONLY — bare "ICP"/"persona" are too short for the indexOf matcher (the
+  // bare-"LLM" lesson above) and are handled by SOUL + the synthesis template.
+  "buyer map",
+  "channel scorecard",
+  "content angle",
+  "relationship target",
+  "stage-adaptive",
+  "buyer journey",
+  "T1 thread",
+  "ICP threads",
 ];
 
 // Sprint 2.10 — AI references — Maya is "your launch manager," not
@@ -302,6 +315,34 @@ function findMatches(
     });
   }
   return failures;
+}
+
+/**
+ * Outbound-discipline gate (2026-06-22): drop a PROACTIVE send that is pure
+ * pipeline-narration — the agent reporting its own cron run ("Midday pulse
+ * complete", "Just finished the midday pulse") rather than something the founder
+ * needs to ACT ON. Banned by SOUL.md, but it leaked live (the hourly pulse
+ * narrated every tick). Server-enforced so it can't reach Telegram regardless of
+ * what the model emits.
+ *
+ * SAFETY (the don't-eat-the-synthesis rule): returns true ONLY when the text
+ * BOTH (a) matches a cron-run-narration structure AND (b) carries NO grounded,
+ * actionable content. Content beats pattern — any message with a URL, an
+ * @handle, or a real thread/action reference is delivered even if it mentions a
+ * "pulse." Callers MUST gate this behind isProactiveSend (a reply with a turnId
+ * is never narration).
+ */
+const CRON_NARRATION_RE =
+  /\b(pulse|brief|recap|review|sweep|scan)\s+(complete|completed|done|finished)\b/i;
+const SELF_REPORT_RE = /^\s*(just\s+)?(now\s+)?(finished|done|completed|wrapped up|ran)\b/i;
+/** Grounded-content signals — if ANY is present the message is actionable, never dropped. */
+const GROUNDED_CONTENT_RE = /(https?:\/\/|\bwww\.|@[A-Za-z0-9_]{2,}|r\/[A-Za-z0-9_]{2,})/;
+
+export function shouldDropStatusNarration(text: string): boolean {
+  if (typeof text !== "string" || text.trim() === "") return false;
+  // Actionable content present → never a pure-narration drop.
+  if (GROUNDED_CONTENT_RE.test(text)) return false;
+  return CRON_NARRATION_RE.test(text) || SELF_REPORT_RE.test(text);
 }
 
 /**

@@ -222,23 +222,28 @@ One Telegram message — as tight as Maya can make it while still being useful (
 ```
 Got the full picture — here's how I'm going to get you customers.
 
-Who's actually buying this: [one-sentence persona, named if possible — e.g.
-"a Mac dev running 3-5 local tools at once, 60-80GB of models on their SSD"]
+Your customer: [one plain-English sentence describing the real person — NO
+jargon labels ("persona"/"ICP"/"segment"/"Optimization-Seeker"), just who they
+are — e.g. "a Mac dev running 3-5 local tools at once, 60-80GB of models on
+their SSD"]
 
 Here's one of them, in their own words: "[verbatim quote + where]" — this is
 who we're going after.
 
 Where they live (and where they don't): [Read `get_my_foundation`'s saved channel
 scorecard and name ONLY the channels with bet=true — in their own ranked order,
-one plain why each, grounded in what the research actually found (e.g. "Reddit —
-23 ICP threads venting about X in r/Y"; "TikTok — your buyers are 18-30 and these
-demos go viral"). NEVER name a channel that isn't a persisted bet, and never
+one plain why each, grounded in what the research actually found, in PLAIN words
+(e.g. "Reddit — 23 threads from people who sound just like your customer,
+venting about X in r/Y"; "TikTok — your customers are 18-30 and these demos go
+viral"). NEVER say "ICP", "bet channel", or "scorecard" to the founder. NEVER
+name a channel that isn't a persisted bet, and never
 default to a favorite — the scorecard decides. Add what I ruled out, so they see
 the call was deliberate. If the scorecard is empty/thin, say "still finalizing
 your channel list — back shortly" and do NOT invent channels.]
 
-The play — fit to where you are right now: [THE STAGE-ADAPTIVE STRATEGY, plain,
-1-2 sentences. Pre-launch / no audience → "you're starting cold, so we earn an
+How I'll get you in front of them — fit to where you are right now: [the plan in
+plain words (no "stage-adaptive"/"funnel"/"strategy" jargon), 1-2 sentences.
+Pre-launch / no audience → "you're starting cold, so we earn an
 authoritative voice first — I keep you in the right rooms being genuinely useful
 — then introduce [product] once you're known." Has traction/users → "you've got
 real traction, so we skip the build-from-zero arc and push [product] straight

@@ -1,5 +1,38 @@
 import { describe, it, expect } from "vitest";
-import { validateOutboundText } from "../outboundFirewall";
+import {
+  validateOutboundText,
+  shouldDropStatusNarration,
+} from "../outboundFirewall";
+
+describe("shouldDropStatusNarration — drop cron-run narration, never grounded content", () => {
+  it("drops pure pipeline-run narration", () => {
+    for (const t of [
+      "Midday pulse complete.",
+      "Just finished the midday pulse.",
+      "Pulse complete — nothing hot.",
+      "Now done with the morning brief.",
+      "Finished my sweep.",
+    ]) {
+      expect(shouldDropStatusNarration(t), `should drop: ${t}`).toBe(true);
+    }
+  });
+
+  it("NEVER drops a message carrying grounded, actionable content", () => {
+    for (const t of [
+      "Midday pulse complete — but this thread is hot: https://reddit.com/r/loseit/x",
+      "Found a great thread to jump on in r/loseit",
+      "Reply to @founder — they asked how it works",
+      "Here's the play: your customer is on TikTok.",
+    ]) {
+      expect(shouldDropStatusNarration(t), `should KEEP: ${t}`).toBe(false);
+    }
+  });
+
+  it("empty / non-narration text is kept", () => {
+    expect(shouldDropStatusNarration("")).toBe(false);
+    expect(shouldDropStatusNarration("Posted your first reply on Reddit.")).toBe(false);
+  });
+});
 
 /**
  * Sprint 2.10 — outbound firewall covers SOUL.md voice contract +

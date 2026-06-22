@@ -1290,6 +1290,27 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
   const isProactiveSend = !(
     typeof body.turnId === "string" && body.turnId.length > 0
   );
+  // Outbound discipline (2026-06-22): drop pure cron-run NARRATION on proactive
+  // sends ("Midday pulse complete", "Just finished the pulse") before it reaches
+  // Telegram. A reply (turnId present → !isProactiveSend) is never touched, and
+  // anything carrying grounded content (URL/@handle/thread) is delivered — so
+  // this can't eat the synthesis or a real reply.
+  if (isProactiveSend) {
+    const { shouldDropStatusNarration } = await import("../outboundFirewall");
+    if (shouldDropStatusNarration(body.text)) {
+      console.warn(
+        JSON.stringify({
+          event: "send_update.status_narration_suppressed",
+          agentId: auth.agentId,
+          messageClass,
+        })
+      );
+      return new Response(
+        JSON.stringify({ ok: true, suppressed: "status_narration" }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
+  }
   let synthClaim: { decision: "send" | "suppress" | "allow" } | null = null;
   if (isProactiveSend) {
     synthClaim = await ctx.runMutation(

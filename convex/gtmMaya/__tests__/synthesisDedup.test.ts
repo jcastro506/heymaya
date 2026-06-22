@@ -23,7 +23,53 @@ async function setupAgent(t: ReturnType<typeof convexTest>, subject: string) {
   };
 }
 
+/** Seed the FULL research-complete state (buyer map + ≥1 competitor + ≥1 channel
+ *  scorecard) — the bar the synthesis claim now gates on (researchComplete), not
+ *  buyer-map-alone. */
 async function seedBuyerMap(
+  t: ReturnType<typeof convexTest>,
+  accountId: Id<"creators">,
+  agentId: Id<"gtmAgents">
+) {
+  await t.run(async (ctx) => {
+    await ctx.db.insert("gtmBuyerMap", {
+      accountId,
+      agentId,
+      icpDescription: "ICP",
+      buyerJourneyStages: [],
+      intentPhrases: [],
+      trustedVoices: [],
+      synthesizedAt: 1,
+    });
+    await ctx.db.insert("gtmCompetitiveMap", {
+      accountId,
+      agentId,
+      competitorKey: "rival",
+      competitorName: "Rival",
+      kind: "direct",
+      positioning: "the incumbent",
+      complaints: [],
+      vulnerabilities: [],
+      synthesizedAt: 1,
+      updatedAt: 1,
+    });
+    await ctx.db.insert("gtmChannelScorecard", {
+      accountId,
+      agentId,
+      channel: "reddit",
+      audienceFit: 1,
+      cadenceFit: 1,
+      uniqueUnlock: "buyers vent here",
+      bet: true,
+      synthesizedAt: 1,
+      updatedAt: 1,
+    });
+  });
+}
+
+/** Seed buyer map ONLY (research still in progress — competitor/scorecard
+ *  missing) for the gate test. */
+async function seedBuyerMapOnly(
   t: ReturnType<typeof convexTest>,
   accountId: Id<"creators">,
   agentId: Id<"gtmAgents">
@@ -50,6 +96,30 @@ describe("claimFounderSynthesisSend", () => {
     const { agentId } = await setupAgent(t, "synth_research");
     expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
     // strategyDeliveredAt must NOT be stamped by a progress update.
+    const agent = await t.run((ctx) => ctx.db.get(agentId));
+    expect(agent?.strategyDeliveredAt ?? null).toBeNull();
+  });
+
+  it("hello burst: first send allows + stamps hello; rapid repeats suppress within the cooldown (the 4-duplicate-hellos fix)", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId } = await setupAgent(t, "synth_hello_burst");
+    // No research yet, no prior hello → first send flows AND records the hello.
+    expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
+    const afterHello = await t.run((ctx) => ctx.db.get(agentId));
+    expect(typeof afterHello?.helloSentAt).toBe("number");
+    // Rapid follow-ups inside the burst window → suppressed (no 2nd/3rd/4th hello).
+    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
+    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
+  });
+
+  it("buyer map alone is NOT enough — research-incomplete sends are 'allow', never the synthesis 'send' (premature-synthesis fix)", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, agentId } = await setupAgent(t, "synth_research_gate");
+    await seedBuyerMapOnly(t, accountId, agentId); // buyer map, but no competitor/scorecard
+    // Research not complete → progress flows ("allow"), but the synthesis is NOT
+    // claimed (strategyDeliveredAt stays null) — the live "shipped the play on a
+    // half-built foundation" bug.
+    expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
     const agent = await t.run((ctx) => ctx.db.get(agentId));
     expect(agent?.strategyDeliveredAt ?? null).toBeNull();
   });

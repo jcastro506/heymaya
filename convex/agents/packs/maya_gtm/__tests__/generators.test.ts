@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMayaGtmWorkspace,
+  localCronToUtc,
   mayaGtmSkillSlugs,
   type MayaGtmWorkspaceInput,
 } from "../generators";
@@ -540,7 +541,10 @@ describe("Maya GTM workspace pack", () => {
       const job = jobs.jobs.find((j) => j.id === r.id);
       expect(job, `recurring cron ${r.id} must ship in jobs.json`).toBeTruthy();
       expect(job?.schedule?.kind).toBe("cron");
-      expect(job?.schedule?.expr).toBe(r.expr);
+      // OpenClaw fires cron exprs in UTC + ignores tz, so the shipped expr is the
+      // operator-local expr converted to UTC (DST-correct for the deploy instant);
+      // the tz field is preserved too. Compare against the same converter.
+      expect(job?.schedule?.expr).toBe(localCronToUtc(r.expr, INPUT.timezone, Date.now()));
       expect(job?.schedule?.tz).toBe(INPUT.timezone);
       // Each guards on the durable lifecycle before doing work.
       expect(job?.payload.message).toContain("get_agent_lifecycle");
@@ -701,13 +705,12 @@ describe("Maya GTM workspace pack", () => {
     //   agent stalled with no instructions). Headroom kept below the cap.
     // - bootstrapMaxChars (30_000) — PER FILE; over this a single file is
     //   truncated. TOOLS.md is the historical offender — keep it terse.
-    // 108_000 ceiling: plan-awareness + flat-flags live-awareness, PLUS the
-    // ALL-DAY REAL-TIME OPERATOR reframe (approval-kickoff timing + the hourly
-    // discovery_pulse cadence across BOOT/HEARTBEAT/GTM/AGENTS) — ~1K of
-    // legitimate every-turn cadence prose, already aggressively trimmed. Still
-    // ~2K under the real 110K bootstrapTotalMaxChars cap (the per-file ceilings
-    // below protect the critical files); keep new prose terse to hold this.
-    expect(promptContextChars).toBeLessThan(108_000); // under the 110K total cap
+    // 108_500 ceiling: plan-awareness + flat-flags + all-day-operator reframe,
+    // PLUS the non-technical-tone SOUL block (jargon→plain). ~1.5K under the real
+    // 110K bootstrapTotalMaxChars cap. ⚠️ HEADROOM IS ERODING (was 3.5K) — the next
+    // workspace-prose addition should TRIM elsewhere, not bump this again; if it
+    // must grow, move detail into a skill (skills/* are excluded from this bundle).
+    expect(promptContextChars).toBeLessThan(108_500); // under the 110K total cap
     expect(files.get("PLAN.md")?.length).toBeLessThan(2_000); // plan snapshot stays terse
     expect(files.get("TOOLS.md")?.length).toBeLessThan(28_000); // under the 30K per-file cap
     expect(files.get("BOOT.md")?.length).toBeLessThan(28_000);
@@ -855,6 +858,35 @@ describe("Maya GTM workspace pack — PLAN.md plan awareness", () => {
       expect(skill).toContain("bet=true");
       expect(skill.toLowerCase()).toContain("never name a channel that isn't a persisted bet".toLowerCase());
       expect(skill).toContain("approval kickoff"); // the start-on-approval behavior is in the skill
+    });
+  });
+
+  // Timezone — OpenClaw fires crons in UTC + ignores tz, so we rewrite local→UTC.
+  describe("localCronToUtc (cron timezone conversion)", () => {
+    const t = Date.UTC(2026, 0, 15); // mid-Jan, a stable instant (no-DST tz used below)
+
+    it("no-ops on the hourly pulse (wildcard hour is timezone-invariant)", () => {
+      expect(localCronToUtc("0 * * * *", "America/New_York", t)).toBe("0 * * * *");
+      expect(localCronToUtc("0 * * * *", "Asia/Tokyo", t)).toBe("0 * * * *");
+    });
+
+    it("converts a fixed local hour to UTC for a no-DST tz (Asia/Tokyo, UTC+9)", () => {
+      // 1pm Tokyo = 04:00 UTC.
+      expect(localCronToUtc("0 13 * * *", "Asia/Tokyo", t)).toBe("0 4 * * *");
+      // 7am Tokyo = 22:00 UTC the previous day (daily — no day field to shift).
+      expect(localCronToUtc("0 7 * * *", "Asia/Tokyo", t)).toBe("0 22 * * *");
+    });
+
+    it("no-ops when tz is missing or UTC", () => {
+      expect(localCronToUtc("0 7 * * *", undefined, t)).toBe("0 7 * * *");
+      expect(localCronToUtc("0 7 * * *", "UTC", t)).toBe("0 7 * * *");
+    });
+
+    it("shifts day-of-week on a midnight-crossing weekly cron", () => {
+      // Sun 11pm Tokyo (23:00) = 14:00 UTC Sun (no cross) — stays Sun(0).
+      expect(localCronToUtc("0 23 * * 0", "Asia/Tokyo", t)).toBe("0 14 * * 0");
+      // Sun 7am Tokyo = 22:00 UTC Sat → dow shifts 0→6.
+      expect(localCronToUtc("0 7 * * 0", "Asia/Tokyo", t)).toBe("0 22 * * 6");
     });
   });
 });

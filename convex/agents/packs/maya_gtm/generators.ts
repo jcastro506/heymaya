@@ -627,6 +627,10 @@ My plan tier governs what I can actually do. It's in PLAN.md, and the live truth
 - Session control tokens in the message text: "NO_REPLY", "HEARTBEAT_OK", "EOF" — these live in my session reply, never in operator-facing text
 - AI self-references: "as an AI", "I'm an AI", "AI assistant", "AI manager", "your AI" — I'm Maya. (Domain vocabulary like "local LLM workflows" is fine — the ban is on self-identification.)
 
+## Plain language — the founder is NOT a marketing or tech expert
+
+I talk like a sharp friend who runs their marketing, not a strategist with a deck — short, clear, concrete. **Strategy/marketing jargon is banned to the founder; say the plain thing:** ICP/persona → **your customer**; bet channels/channel scorecard → **where your customers hang out**; buyer map/buyer journey → **who's buying and why**; content angles → **what we'll say**; stage-adaptive strategy → **what fits where you are now**; T1/high-intent thread → **a great thread to jump on**; relationship targets → **people worth knowing**; ICP threads → **threads from people just like your customer**; funnel/TOFU/leverage/synergy → drop it. Keep the grounded specifics (they ARE the warmth) — strip the label, never the substance.
+
 ## Cadence — the running play-by-play lives on the web, not the phone
 
 The phone gets FEW high-value, act-on-it messages — not a progress feed. While I work, the running arc goes to the web view via \`post_activity\` (one clean operator-facing line per entry), NOT Telegram. **Telegram stays silent during the pass** — the ONE exception is the never-silent floor: if a foundation pass runs long (>~10 min) and the operator has heard nothing since the hello, I send ONE optional content-grounded line so they don't think I died. That's it — phone budget for onboarding is hello + synthesis.
@@ -1621,6 +1625,54 @@ function buildCronDelivery(
 
 
 
+/** Minutes the IANA `tz` is AHEAD of UTC at instant `atMs` (DST-correct for
+ *  that instant). e.g. America/New_York in summer (EDT) → -240. */
+function tzOffsetMinutes(tz: string, atMs: number): number {
+  try {
+    const d = new Date(atMs);
+    const asUtc = new Date(d.toLocaleString("en-US", { timeZone: "UTC" }));
+    const asLocal = new Date(d.toLocaleString("en-US", { timeZone: tz }));
+    return Math.round((asLocal.getTime() - asUtc.getTime()) / 60000);
+  } catch {
+    return 0; // unknown tz → treat as UTC (no shift)
+  }
+}
+
+/**
+ * Convert a FIXED-HOUR cron expression from the operator's local tz to UTC.
+ * OpenClaw's scheduler fires cron expressions in UTC and IGNORES the tz field
+ * (verified live 2026-06-22: a `0 13 * * *` cron on America/New_York fired at
+ * 13:00 UTC = 9am ET instead of 1pm ET). So we rewrite the hour ourselves.
+ *
+ *  - NO-OP on a non-single-integer HOUR field (`*`, lists, ranges, steps) — the
+ *    hourly discovery pulse `0 * * * *` is timezone-INVARIANT and must pass
+ *    through unchanged, or the budget-paced cadence breaks.
+ *  - Shifts day-of-week / day-of-month when the conversion crosses midnight
+ *    (single-int fields only; best-effort for the rare monthly backward cross).
+ *  - Uses the offset at `atMs` (deploy time) → DST-correct now; the machine `TZ`
+ *    env (set in deployMayaGtm) is the belt-and-suspenders for the twice-yearly
+ *    DST flip until the next redeploy.
+ */
+export function localCronToUtc(expr: string, tz: string | undefined, atMs: number): string {
+  if (!tz) return expr;
+  const parts = expr.trim().split(/\s+/);
+  if (parts.length !== 5) return expr;
+  const [min, hour, dom, mon, dow] = parts;
+  if (!/^\d+$/.test(hour)) return expr; // wildcard/list/range/step → tz-invariant
+  const offsetHours = tzOffsetMinutes(tz, atMs) / 60;
+  let utc = parseInt(hour, 10) - offsetHours; // local = utc + offset
+  let dayDelta = 0;
+  while (utc < 0) { utc += 24; dayDelta -= 1; }
+  while (utc >= 24) { utc -= 24; dayDelta += 1; }
+  let newDom = dom;
+  let newDow = dow;
+  if (dayDelta !== 0) {
+    if (/^\d+$/.test(dow)) newDow = String(((parseInt(dow, 10) + dayDelta) % 7 + 7) % 7);
+    if (/^\d+$/.test(dom)) newDom = String(parseInt(dom, 10) + dayDelta);
+  }
+  return [min, String(Math.round(utc)), newDom, mon, newDow].join(" ");
+}
+
 function renderJobs(input: MayaGtmWorkspaceInput): string {
   // jobs.json ships the 0001_kickstart one-shot hello PLUS the recurring
   // behavioral cadence (0010-0014), all DETERMINISTICALLY with stable ids and
@@ -1674,7 +1726,11 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
   // HEARTBEAT.md missed-cadence task catches the foundation/morning-brief
   // recovery cases.
   const delivery = buildCronDelivery(input);
-  const kickstartAtMs = (input.bootKickoffAtMs ?? Date.now()) + 300_000;
+  // Instant used to compute the tz→UTC offset for cron rewriting (DST-correct
+  // at deploy). The machine TZ env covers the twice-yearly DST flip until the
+  // next redeploy.
+  const cronBaseMs = input.bootKickoffAtMs ?? Date.now();
+  const kickstartAtMs = cronBaseMs + 300_000;
   const telegramTarget = input.telegramChatId ?? "operator";
   const jobs = {
     version: 1,
@@ -1771,7 +1827,10 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
         updatedAtMs: 0,
         schedule: {
           kind: "cron" as const,
-          expr: c.expr,
+          // OpenClaw fires cron exprs in UTC + ignores `tz`, so rewrite the
+          // fixed-hour exprs to UTC ourselves. `tz` is kept too (harmless if
+          // ignored, correct if a future runtime honors it).
+          expr: localCronToUtc(c.expr, input.timezone, cronBaseMs),
           tz: input.timezone,
         },
         sessionTarget: "isolated" as const,
@@ -1802,7 +1861,8 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
               updatedAtMs: 0,
               schedule: {
                 kind: "cron" as const,
-                expr: DISCOVERY_PULSE_CRON.expr,
+                // `0 * * * *` (hourly) is tz-invariant → localCronToUtc no-ops.
+                expr: localCronToUtc(DISCOVERY_PULSE_CRON.expr, input.timezone, cronBaseMs),
                 tz: input.timezone,
               },
               sessionTarget: "isolated" as const,
