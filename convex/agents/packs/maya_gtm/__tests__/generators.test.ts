@@ -403,7 +403,11 @@ describe("Maya GTM workspace pack", () => {
       (j: { id: string }) => j.id === "0016_discovery_pulse"
     );
     expect(pulseJob).toBeTruthy();
-    expect(pulseJob.schedule.expr).toBe("0 * * * *"); // hourly
+    // Default cadence is every 3h (8/day) — ~3x cheaper than hourly, the token
+    // lever; env-tunable via MAYA_GTM_PULSE_CRON_EXPR. Must be an interval/step
+    // expr so it stays timezone-invariant (localCronToUtc no-ops it).
+    expect(pulseJob.schedule.expr).toBe("0 */3 * * *");
+    expect(pulseJob.schedule.expr).not.toMatch(/^0 \d+ /); // not a fixed hour
     expect(pulseJob.payload.lightContext).toBe(true); // lean tick = cheap
     expect(pulseJob.payload.thinking).toBe("low");
     // The pulse MUST consult the budget gate (the runaway-stop).

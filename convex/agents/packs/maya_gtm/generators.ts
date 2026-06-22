@@ -1863,8 +1863,10 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
               updatedAtMs: 0,
               schedule: {
                 kind: "cron" as const,
-                // `0 * * * *` (hourly) is tz-invariant → localCronToUtc no-ops.
-                expr: localCronToUtc(DISCOVERY_PULSE_CRON.expr, input.timezone, cronBaseMs),
+                // Default `0 */3 * * *` (every 3h), env-tunable via
+                // MAYA_GTM_PULSE_CRON_EXPR. An interval/step expr is tz-invariant
+                // → localCronToUtc no-ops it.
+                expr: localCronToUtc(discoveryPulseExpr(), input.timezone, cronBaseMs),
                 tz: input.timezone,
               },
               sessionTarget: "isolated" as const,
@@ -1973,14 +1975,31 @@ const recurringCrons: ReadonlyArray<{
  * monitoring) so it can never run away. Kept OUT of `recurringCrons` so the
  * default deploy stays on the proven batch cadence.
  */
+/**
+ * Token-cost lever (2026-06-22): the pulse's per-tick cost is already lean
+ * (one budget-gated, watermark-bounded lane), so the spend driver is FREQUENCY.
+ * Hourly (24/day) is the most expensive setting; the default is now every 3h
+ * (8/day, ~3x cheaper) — still an all-day operator, far lower token burn.
+ * Env-overridable per deploy (e.g. "0 * * * *" for a paid agent that wants
+ * hourly). MUST stay timezone-INVARIANT (an interval/step expr, not a fixed
+ * hour) so localCronToUtc no-ops it; the de-blinded $1/day kill-switch is the
+ * hard backstop regardless of cadence.
+ */
+const DISCOVERY_PULSE_DEFAULT_EXPR = "0 */3 * * *";
+export function discoveryPulseExpr(
+  env: Partial<Record<string, string | undefined>> = process.env
+): string {
+  return env.MAYA_GTM_PULSE_CRON_EXPR || DISCOVERY_PULSE_DEFAULT_EXPR;
+}
+
 const DISCOVERY_PULSE_CRON = {
   id: "0016_discovery_pulse",
-  name: "Discovery pulse (hourly, real-time operator)",
-  expr: "0 * * * *",
+  name: "Discovery pulse (periodic, real-time operator)",
+  expr: DISCOVERY_PULSE_DEFAULT_EXPR,
   description:
-    "Hourly continuous discovery: one budget-gated, watermark-bounded lane scan per tick; escalates only genuine ICP-fit hits to today's queue. Degrades to monitoring-only when the discovery budget is spent.",
+    "Periodic continuous discovery (default every 3h, env-tunable): one budget-gated, watermark-bounded lane scan per tick; escalates only genuine ICP-fit hits to today's queue. Degrades to monitoring-only when the discovery budget is spent.",
   message:
-    "Discovery pulse (hourly). BOUNDED + BUDGET-GATED — one lane per tick, cheap scan, escalate only real hits. 1) `get_agent_lifecycle({})`; if `foundationComplete` is false → NO_REPLY. 2) `check_discovery_budget({})` — if `mode` is `\"monitoring_only\"` → NO_REPLY (the day's discovery allowance is spent; keep monitoring own posts + inbound, do NOT initiate new discovery reads until the rolling window frees up). 3) `next_watch_lane({})` → the ONE lane to work this tick. 4) `get_watermark({ channel })` for that lane's bet channel, then spawn ONE cheap scan worker bounded to items NEWER than the watermark (read `skills/maya-continuous-research/SKILL.md`) — bet channels only, ONE lane. 5) Judge for genuine ICP fit + velocity. For a REAL hit ONLY: ADD it to today's queue (`propose_calendar` — NEVER replace existing events) and fire ONE one-tap ping / auto-post a drafted reply on a connected channel. No hit → NO_REPLY. 6) `advance_watermark({ channel, ... })` for the channel you scanned so the next tick reads only newer items. Never exceed the budget gate; never re-sweep history (the watermark bounds you).",
+    "Discovery pulse (periodic). BOUNDED + BUDGET-GATED — one lane per tick, cheap scan, escalate only real hits. 1) `get_agent_lifecycle({})`; if `foundationComplete` is false → NO_REPLY. 2) `check_discovery_budget({})` — if `mode` is `\"monitoring_only\"` → NO_REPLY (the day's discovery allowance is spent; keep monitoring own posts + inbound, do NOT initiate new discovery reads until the rolling window frees up). 3) `next_watch_lane({})` → the ONE lane to work this tick. 4) `get_watermark({ channel })` for that lane's bet channel, then spawn ONE cheap scan worker bounded to items NEWER than the watermark (read `skills/maya-continuous-research/SKILL.md`) — bet channels only, ONE lane. 5) Judge for genuine ICP fit + velocity. For a REAL hit ONLY: ADD it to today's queue (`propose_calendar` — NEVER replace existing events) and fire ONE one-tap ping / auto-post a drafted reply on a connected channel. No hit → NO_REPLY. 6) `advance_watermark({ channel, ... })` for the channel you scanned so the next tick reads only newer items. Never exceed the budget gate; never re-sweep history (the watermark bounds you).",
 } as const;
 
 
