@@ -28,6 +28,42 @@ import {
   RETIRE_CONFIDENCE,
 } from "./experimentStats";
 
+/**
+ * Coerce a tool-supplied "JSON string" argument into guaranteed-valid stored
+ * JSON, NEVER throwing on formatting.
+ *
+ * Several fields (icpKnowledge, styleExemplarsJson, structuredJson) are string
+ * columns that are expected to HOLD JSON — the model has to hand-encode a JSON
+ * document into a string argument. Models format that inconsistently: Gemini
+ * emits clean escaped JSON, but on the 2026-06-22 cost run DeepSeek V4 Flash
+ * emitted prose / half-formed JSON for icpKnowledge, the old `JSON.parse`-or-
+ * throw hard-400'd the save, and the worker stalled retrying it → 0 threads,
+ * no synthesis. A capable model should not be blocked by our string-encoding
+ * convention. So instead of throwing:
+ *   - undefined            → undefined (field stays absent)
+ *   - a valid-JSON string  → stored as-is
+ *   - any other string     → wrapped via JSON.stringify so the column ALWAYS
+ *                            holds valid JSON (every consumer's JSON.parse
+ *                            succeeds, yielding the raw text); logged so we can
+ *                            see which model/field needed coercing.
+ * The save then fails ONLY on real auth / bounds errors, never on arg shape.
+ */
+export function coerceStoredJson(
+  value: string | undefined,
+  field: string
+): string | undefined {
+  if (value === undefined) return undefined;
+  try {
+    JSON.parse(value);
+    return value;
+  } catch {
+    console.warn(
+      JSON.stringify({ event: "store.json_coerced", field, length: value.length })
+    );
+    return JSON.stringify(value);
+  }
+}
+
 async function assertAgentBelongsToAccount(
   ctx: { db: { get: <T>(id: T) => Promise<unknown> } },
   accountId: Id<"creators">,
@@ -428,20 +464,14 @@ export const upsertChannelScorecard = internalMutation({
     if (args.cadenceFit < 0 || args.cadenceFit > 1) {
       throw new Error("cadenceFit must be in [0, 1]");
     }
-    if (args.icpKnowledge !== undefined) {
-      try {
-        JSON.parse(args.icpKnowledge);
-      } catch {
-        throw new Error("icpKnowledge must be a valid JSON string");
-      }
-    }
-    if (args.styleExemplarsJson !== undefined) {
-      try {
-        JSON.parse(args.styleExemplarsJson);
-      } catch {
-        throw new Error("styleExemplarsJson must be a valid JSON string");
-      }
-    }
+    // Tolerant coercion (NOT throw) — see coerceStoredJson. A capable agentic
+    // model must not be blocked by our JSON-in-a-string convention (DeepSeek
+    // hard-400'd here on 2026-06-22, stalling the worker → 0 threads).
+    const icpKnowledge = coerceStoredJson(args.icpKnowledge, "icpKnowledge");
+    const styleExemplarsJson = coerceStoredJson(
+      args.styleExemplarsJson,
+      "styleExemplarsJson"
+    );
     const now = Date.now();
     const existing = await ctx.db
       .query("gtmChannelScorecard")
@@ -458,9 +488,8 @@ export const upsertChannelScorecard = internalMutation({
         notes: args.notes,
         // Preserve prior ICP knowledge / exemplars unless the caller passes new
         // ones — a scores-only re-run must not wipe a populated scorecard.
-        icpKnowledge: args.icpKnowledge ?? existing.icpKnowledge,
-        styleExemplarsJson:
-          args.styleExemplarsJson ?? existing.styleExemplarsJson,
+        icpKnowledge: icpKnowledge ?? existing.icpKnowledge,
+        styleExemplarsJson: styleExemplarsJson ?? existing.styleExemplarsJson,
         synthesizedAt: now,
         updatedAt: now,
       });
@@ -475,8 +504,8 @@ export const upsertChannelScorecard = internalMutation({
       uniqueUnlock: args.uniqueUnlock,
       bet: args.bet,
       notes: args.notes,
-      icpKnowledge: args.icpKnowledge,
-      styleExemplarsJson: args.styleExemplarsJson,
+      icpKnowledge,
+      styleExemplarsJson,
       synthesizedAt: now,
       updatedAt: now,
     });
@@ -906,6 +935,7 @@ export const upsertNicheLearning = internalMutation({
     if (args.confidenceScore < 0 || args.confidenceScore > 1) {
       throw new Error("confidenceScore must be in [0, 1]");
     }
+    const structuredJson = coerceStoredJson(args.structuredJson, "structuredJson");
     const now = Date.now();
     const existing = await ctx.db
       .query("gtmNicheLearnings")
@@ -935,7 +965,7 @@ export const upsertNicheLearning = internalMutation({
         evidenceCount,
         lastReinforcedAt: now,
         retired,
-        structuredJson: args.structuredJson ?? existing.structuredJson,
+        structuredJson: structuredJson ?? existing.structuredJson,
         updatedAt: now,
       });
       return existing._id;
@@ -951,7 +981,7 @@ export const upsertNicheLearning = internalMutation({
       firstObservedAt: now,
       lastReinforcedAt: now,
       retired,
-      structuredJson: args.structuredJson,
+      structuredJson,
       createdAt: now,
       updatedAt: now,
     });
