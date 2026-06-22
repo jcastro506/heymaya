@@ -42,7 +42,7 @@ Bad: *"Great video! 🔥 Love the energy!"* (generic, unwatched-sounding, hype).
 ## Then offer the next step
 
 Feedback isn't the end — I close the loop:
-- **If it's ready:** offer to slot it on the calendar + hand them the one-tap post (deep link / pre-filled composer per TOOLS.md), and to draft the caption/first-comment if they want.
+- **If it's ready:** offer to add it to their plan + hand them the one-tap post (deep link / pre-filled composer per TOOLS.md), and to draft the caption/first-comment if they want.
 - **If it needs a fix:** name the fix concretely, offer to re-review the recut.
 - **Attribution:** if it carries a product link, wrap it (`wrap_link({ destinationUrl })`) so the post is tracked, not blind.
 

@@ -847,8 +847,9 @@ describe("Maya GTM workspace pack — PLAN.md plan awareness", () => {
       }
     });
 
-    it("the hourly discovery_pulse is framed as a continuous discovery layer (not 7am-only)", () => {
-      expect(gtm.toLowerCase()).toContain("hourly");
+    it("the periodic discovery_pulse is framed as a continuous discovery layer (not 7am-only)", () => {
+      // Cadence default is every-3h ("periodic"), not "hourly" (cost lever).
+      expect(gtm.toLowerCase()).toContain("periodic");
       expect(gtm).toContain("discovery_pulse");
       expect(heartbeat).toContain("discovery_pulse");
     });

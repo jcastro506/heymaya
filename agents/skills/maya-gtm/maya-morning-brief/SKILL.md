@@ -7,7 +7,7 @@ description: The 7am-local daily message + calendar populate. One Telegram, as t
 
 ## Purpose
 
-The flagship operator-facing output. Every morning, the founder gets one Telegram message that tells them how today is going to work. They tap into the calendar, do the things, close the loop. The brief is short, graded, and prioritized. It is NOT a research dump.
+The flagship operator-facing output. Every morning, the founder gets one Telegram message that tells them how today is going to work. They tap into the plan, do the things, close the loop. The brief is short, graded, and prioritized. It is NOT a research dump.
 
 ## When to invoke
 
@@ -61,9 +61,9 @@ A single Telegram message — as tight as Maya can make it while still being use
 
 Lead with Maya's grade. The grade reflects what data she has, honest:
 
-- **Strong signal day** — Maya has enough good T1/T2 threads that today's plan is real action, not filler. Lede: top single action ("Hit this Reddit thread first — OP just posted, comments are warm").
-- **Thin day** — 1-2 T1/T2 total. Lede: "Thin morning. One real target + a content draft block."
-- **Warmup day** — 0 T1/T2. Lede: "No fresh buyer signal today. Today is for warmup + writing."
+- **Strong signal day** — Maya has enough good high-priority threads that today's plan is real action, not filler. Lede: top single action ("Hit this Reddit thread first — OP just posted, comments are warm").
+- **Thin day** — 1-2 real targets total. Lede: "Thin morning. One real target + a content draft block."
+- **Warmup day** — no fresh buyer threads. Lede: "No fresh buyer signal today. Today is for warmup + writing."
 
 **Fold in the last day's result (one clause, only if real).** If `get_my_attribution({ windowDays: 1 })` shows a post that drove signups in the last day, lead the framing off it so today builds on what's working — naming the link/draft, not asserting a published post: "The link you shared on r/LocalLLaMA pulled 2 signups in the last day — let's run that play again." Cite the per-post row (`posts[i]`). Phrase the window as "in the last day", never "yesterday".
 

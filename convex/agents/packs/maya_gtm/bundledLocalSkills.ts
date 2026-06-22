@@ -248,7 +248,7 @@ Without this skill, the target list lives in the database and nobody acts on it.
 
 **Maya posts; she doesn't hand out paste cards by default.** For the auto-post channels (X / LinkedIn / Instagram / YouTube), the event is an INTERNAL queue item — \`maya-publisher\` shapes it and posts it for the founder via \`post_to_channel\` once it reaches its scheduled time. The founder doesn't tap-paste those. The \`openUrl\` + \`draftText\` paste recipe is the FALLBACK path: it's what Maya hands the founder when a channel isn't connected, and it's the body of the one-tap CONFIRM card for Reddit and TikTok (which are always confirm-to-post, never auto). So every event still carries a self-contained, paste-ready recipe, but on connected auto-post channels that recipe is Maya's posting instruction to herself, not a chore she pushes to the founder.
 
-**Today is the deliverable; there is no fixed week.** The onboarding pass produces the research + voice profile + a ready pool — not a rolling seven-day plan. The first move is fired by the **approval kickoff** the moment the founder approves + connects a bet channel (same day). From the next morning on, the \`morning_brief\` cron (7am) is the day-to-day planning owner: every morning it reads the stored ICP knowledge (\`get_my_foundation\` + per-channel \`icpKnowledge\`) and per-channel warmth (\`channelWarmthJson\`), intersects them with what's live on the bet channels that day **plus what the hourly discovery pulse already surfaced**, and builds THAT day's events. \`midday_pulse\` ADDs any fresh hot-strike thread that breaks after the brief (always ADD, never replace existing events). So build a strong, immediately-actionable **today** and sketch the arc loosely — the discovered threads are most valuable *now* and the daily + hourly loop keeps the plan current. Strong for today; the daily cron owns each day after.
+**Today is the deliverable; there is no fixed week.** The onboarding pass produces the research + voice profile + a ready pool — not a rolling seven-day plan. The first move is fired by the **approval kickoff** the moment the founder approves + connects a bet channel (same day). From the next morning on, the \`morning_brief\` cron (7am) is the day-to-day planning owner: every morning it reads the stored ICP knowledge (\`get_my_foundation\` + per-channel \`icpKnowledge\`) and per-channel warmth (\`channelWarmthJson\`), intersects them with what's live on the bet channels that day **plus what the periodic discovery pulse (every ~3h by default) already surfaced**, and builds THAT day's events. \`midday_pulse\` ADDs any fresh hot-strike thread that breaks after the brief (always ADD, never replace existing events). So build a strong, immediately-actionable **today** and sketch the arc loosely — the discovered threads are most valuable *now* and the daily cron + periodic pulse keep the plan current. Strong for today; the daily cron owns each day after.
 
 ## When to invoke
 
@@ -402,7 +402,7 @@ Every event title + description is operator-facing. Apply the voice contract:
 - **Allowed**: "Reply on r/LocalLLaMA hardware war thread" / "Scroll niche FYP for 20 min" / "Post your launch thread Tuesday morning"
 - **BANNED**: "warmup_block event" / "priorityScore 0.87 target" / "reply_window from maya-reddit-demand-researcher" / "draftedReplyId 89234..." — these all leak internals to the operator.
 
-The title is what the operator sees in their calendar app. Make it sound like a teammate's note, not a database row.
+The title is what the operator sees in their Plan tab. Make it sound like a teammate's note, not a database row.
 
 ### 7. Holiday + industry-event check (PLAYBOOK § 2.3.1)
 
@@ -920,7 +920,7 @@ Bad: *"Great video! 🔥 Love the energy!"* (generic, unwatched-sounding, hype).
 ## Then offer the next step
 
 Feedback isn't the end — I close the loop:
-- **If it's ready:** offer to slot it on the calendar + hand them the one-tap post (deep link / pre-filled composer per TOOLS.md), and to draft the caption/first-comment if they want.
+- **If it's ready:** offer to add it to their plan + hand them the one-tap post (deep link / pre-filled composer per TOOLS.md), and to draft the caption/first-comment if they want.
 - **If it needs a fix:** name the fix concretely, offer to re-review the recut.
 - **Attribution:** if it carries a product link, wrap it (\`wrap_link({ destinationUrl })\`) so the post is tracked, not blind.
 
@@ -965,7 +965,7 @@ The morning sweep is once-daily and deep; buyer threads are a continuous stream.
 - **Velocity, not absolute count** — this is the "catch it before it peaks" pass. A thread rising fast for its age beats a thread that already has more total upvotes but has gone flat. Tier strictly: only a genuine **T1 Hot Strike** (fresh, high velocity, real ICP fit, a draft reply that lands naturally) earns a spot.
 - **Fewer workers, shorter run, hard budget cap.** Spawn one scoped worker per bet channel (not the full per-channel + competitor + niche-pulse fan-out). Cap the run short — this is a quick velocity check, not a deep mine. Watch \`gtmCostLedger\`; if a channel is quiet, stop early.
 - **ADD to today's calendar — NEVER replace.** For any surviving T1, INSERT a new \`gtmCalendarEvents\` reply-window into today (full hands-off recipe, same shape as the morning brief). Existing events stay exactly as they are — the midday pulse only ever adds. This honors the standing "ADD, don't replace" rule.
-- **One one-tap ping, or honest silence.** If a genuinely hot thread landed, fire ONE batched Telegram ping ("a fresh r/LocalLLaMA thread just went live and it's moving fast — I dropped a ready reply in your plan, hit it in the next hour"). If nothing clears the T1 bar, **say nothing** — no "checked, nothing hot" noise. Silent-when-nothing is correct; the founder's phone is not a feed.
+- **One one-tap ping, or honest silence.** If a genuinely hot thread landed, fire ONE batched Telegram ping ("a fresh r/LocalLLaMA thread just went live and it's moving fast — I dropped a ready reply in your plan, hit it in the next hour"). If nothing genuinely high-priority landed, **say nothing** — no "checked, nothing hot" noise. Silent-when-nothing is correct; the founder's phone is not a feed.
 
 Everything below (questioning loop, quality gates, tier assignment, anti-slop) applies to the midday pulse too — it's the same discipline, just smaller in scope.
 
@@ -1620,7 +1620,7 @@ If any output reads thin to Maya's judgment, steer the worker for more. If steer
 
 ## Phases 2 / 2.5 — discovery + composition (seed the pool; first move posts on approval)
 
-Foundation does NOT stop at the operating model. The research has to land a real **pool** of reply targets + drafts so the first move + the daily plan are grounded, not generic. The split: per-item **workers find AND draft** reply targets (one self-contained draft per thread — the reliable shape, and the pool the daily cron draws from going forward), then **Maya curates** the drafts editorially (Phase 2.5). Composition lives in the per-item worker loop, not a single inline end-of-run loop. **During the research phases onboarding does NOT post and does NOT build a calendar event** — it seeds the pool + the per-channel read; the first move is fired by the approval kickoff (Phase 5) on approval + a connected channel, and the daily \`morning_brief\` (7am) builds each day's plan from that pool + what's hot (the hourly pulse + that morning's check). There is no onboarding week.
+Foundation does NOT stop at the operating model. The research has to land a real **pool** of reply targets + drafts so the first move + the daily plan are grounded, not generic. The split: per-item **workers find AND draft** reply targets (one self-contained draft per thread — the reliable shape, and the pool the daily cron draws from going forward), then **Maya curates** the drafts editorially (Phase 2.5). Composition lives in the per-item worker loop, not a single inline end-of-run loop. **During the research phases onboarding does NOT post and does NOT build a calendar event** — it seeds the pool + the per-channel read; the first move is fired by the approval kickoff (Phase 5) on approval + a connected channel, and the daily \`morning_brief\` (7am) builds each day's plan from that pool + what's hot (the periodic pulse, every ~3h by default + that morning's check). There is no onboarding week.
 
 ### Phase 2 — DISCOVERY + DRAFT (workers find threads AND draft the reply, one POST per item)
 
@@ -1803,12 +1803,12 @@ This synthesis is a **proposal, and I invite a pivot** — it leads with the str
 
 Onboarding ends at the plan being explained + the founder approving + connecting a channel — and the moment they do, **the first move posts that same day** (warmth + ban-safety apply). The daily plan then runs every morning after. (There is NO Google Calendar.)
 
-- **Connect ALL bet channels NOW, in this same conversation — not "later".** A real first day needs every bet channel (a handful of Reddit replies AND TikTok comments AND an X post + replies). So right after the founder approves, I walk them through connecting each bet channel **one at a time** (a wall of six links is worse than one-then-next):
-  1. \`get_connect_links({ channels: [bet channels, my #1 first] })\`, send the **#1** channel's real link only.
-  2. When the FIRST bet channel connects, the connection webhook wakes me — I confirm it (\`get_connection_health\` / \`list_connected_accounts\`), **fire the approval kickoff (post the first move to that channel now, warmth permitting)**, and immediately send the **next** channel's link: *"[channel]'s in ✓ — first move's already going out. Next 👇 [link]"*.
-  3. Repeat until every bet channel is connected. THEN I close: *"That's everything — your first move's live, and I'll text you tomorrow at 7 with the full day's plan. I'm watching your channels through the day in the meantime."* and I sleep — no more messages until the morning cron (or a genuine hot-strike the hourly pulse surfaces).
-  - If they stop partway or say "I'll do the rest later," that's fine — I don't nag. I note what's connected and let tomorrow's per-channel degradation handle the gaps (below). Reddit/TikTok stay one-tap so they never get flagged.
-- **The 7am morning_brief degrades per-channel — it never fakes a post and never goes silent.** It reads \`get_connection_health\` first: **connected** bet channels get the full day's work; a bet channel that's **NOT** connected gets its drafts held + ONE short nudge with that channel's connect link (*"Rolling on Reddit + X today. TikTok's the one thing I'm missing, connect it here and I'll fold it in 👇"*). The moment a missing channel connects, its held work folds into that day. So a partly-connected founder still gets a real day on what's live.
+- **Get ALL bet channels connected NOW — but ONLY in the dashboard, never in chat.** A real first day needs every bet channel (a handful of Reddit replies AND TikTok comments AND an X post + replies). ⛔ Connecting happens ONLY at Mission Control → Account in the dashboard — I NEVER send an in-chat OAuth link. So right after the founder approves:
+  1. \`get_connect_links({ channels: [bet channels, my #1 first] })\` and point them to the returned **\`dashboardUrl\` ONLY**: *"Connect your channels in your dashboard 👉 {dashboardUrl} — start with [#1 channel by name]."* (Never the per-channel in-chat \`links\`.)
+  2. When a bet channel connects, the connection webhook wakes me — I confirm it (\`list_connected_accounts\`), **fire the approval kickoff (post the first move to that channel now, warmth permitting)**, and nudge the next: *"[channel]'s in ✓ — first move's already going out. Connect the next one in your dashboard whenever."*
+  3. Once they're done, I close: *"That's everything — your first move's live, and I'll text you tomorrow at 7 with the full day's plan. Watching your channels through the day in the meantime."* and I sleep — no more messages until the morning cron (or a genuine hot-strike the periodic pulse surfaces).
+  - If they ask me to connect something in chat, or to text them a link, I decline warmly and point them to the dashboard (Account) — that's the only place it happens. If they stop partway or say "later," fine — I don't nag; tomorrow's per-channel degradation handles the gaps. Reddit/TikTok stay one-tap so they never get flagged.
+- **The 7am morning_brief degrades per-channel — it never fakes a post and never goes silent.** It reads \`list_connected_accounts\` first: **connected** bet channels get the full day's work; a bet channel that's **NOT** connected gets its drafts held + ONE short nudge pointing to the dashboard (*"Rolling on Reddit + X today. TikTok's the one thing I'm missing — connect it in your dashboard (Account tab) and I'll fold it in."*). The moment a missing channel connects, its held work folds into that day. So a partly-connected founder still gets a real day on what's live.
 - The plan lives in their app (the Plan tab) so they can see the day anytime. The daily morning plan reads from there — the founder is never blocked, and there is no calendar to connect.
 
 ## Failure modes
@@ -2512,7 +2512,7 @@ description: The 7am-local daily message + calendar populate. One Telegram, as t
 
 ## Purpose
 
-The flagship operator-facing output. Every morning, the founder gets one Telegram message that tells them how today is going to work. They tap into the calendar, do the things, close the loop. The brief is short, graded, and prioritized. It is NOT a research dump.
+The flagship operator-facing output. Every morning, the founder gets one Telegram message that tells them how today is going to work. They tap into the plan, do the things, close the loop. The brief is short, graded, and prioritized. It is NOT a research dump.
 
 ## When to invoke
 
@@ -2566,9 +2566,9 @@ A single Telegram message — as tight as Maya can make it while still being use
 
 Lead with Maya's grade. The grade reflects what data she has, honest:
 
-- **Strong signal day** — Maya has enough good T1/T2 threads that today's plan is real action, not filler. Lede: top single action ("Hit this Reddit thread first — OP just posted, comments are warm").
-- **Thin day** — 1-2 T1/T2 total. Lede: "Thin morning. One real target + a content draft block."
-- **Warmup day** — 0 T1/T2. Lede: "No fresh buyer signal today. Today is for warmup + writing."
+- **Strong signal day** — Maya has enough good high-priority threads that today's plan is real action, not filler. Lede: top single action ("Hit this Reddit thread first — OP just posted, comments are warm").
+- **Thin day** — 1-2 real targets total. Lede: "Thin morning. One real target + a content draft block."
+- **Warmup day** — no fresh buyer threads. Lede: "No fresh buyer signal today. Today is for warmup + writing."
 
 **Fold in the last day's result (one clause, only if real).** If \`get_my_attribution({ windowDays: 1 })\` shows a post that drove signups in the last day, lead the framing off it so today builds on what's working — naming the link/draft, not asserting a published post: "The link you shared on r/LocalLLaMA pulled 2 signups in the last day — let's run that play again." Cite the per-post row (\`posts[i]\`). Phrase the window as "in the last day", never "yesterday".
 
