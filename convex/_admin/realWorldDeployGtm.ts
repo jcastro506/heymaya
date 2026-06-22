@@ -1313,6 +1313,14 @@ export const run = internalAction({
     playStoreUrl: v.optional(v.string()),
     conversionKind: v.optional(v.string()),
     signupUrl: v.optional(v.string()),
+    // Set true to NOT wipe existing test creators first — lets several test
+    // agents (e.g. one per pricing tier) run side by side. Each run still gets a
+    // unique clerkUserId, so no collision.
+    skipWipe: v.optional(v.boolean()),
+    // Optional pricing tier to comp this test agent to (starter/growth/studio).
+    tier: v.optional(
+      v.union(v.literal("starter"), v.literal("growth"), v.literal("studio"))
+    ),
   },
   handler: async (
     ctx,
@@ -1326,11 +1334,15 @@ export const run = internalAction({
     deploy: unknown;
     research: unknown;
   }> => {
-    const wipe = await ctx.runMutation(
-      internal._admin.realWorldDeployGtm.wipeExistingGtmTestCreators,
-      {}
-    );
-    console.log(`[gtmSynth] wiped: ${JSON.stringify(wipe)}`);
+    if (!args.skipWipe) {
+      const wipe = await ctx.runMutation(
+        internal._admin.realWorldDeployGtm.wipeExistingGtmTestCreators,
+        {}
+      );
+      console.log(`[gtmSynth] wiped: ${JSON.stringify(wipe)}`);
+    } else {
+      console.log(`[gtmSynth] skipWipe — leaving existing test creators in place`);
+    }
 
     const clerkUserId = `${TEST_CLERK_USER_ID_PREFIX}${Date.now().toString(36)}`;
     const seed = await ctx.runMutation(
@@ -1362,6 +1374,15 @@ export const run = internalAction({
         { agentId: seed.agentId, telegramChatId: args.telegramChatId }
       );
       console.log(`[gtmSynth] patched telegramChatId=${args.telegramChatId}`);
+    }
+
+    if (args.tier) {
+      await ctx.runMutation(internal.billing.gtmBilling.compGtmPlanByAgent, {
+        agentId: seed.agentId as Id<"gtmAgents">,
+        status: "active",
+        tier: args.tier,
+      });
+      console.log(`[gtmSynth] comped agent ${seed.agentId} to tier ${args.tier}`);
     }
 
     // Sprint 2.16f — Convex no longer runs research before deploy. Maya
