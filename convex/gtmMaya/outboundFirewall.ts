@@ -105,6 +105,19 @@ const BANNED_INTERNAL_TERMS = [
   "gtmTargetThreads",
   "gtmDraftedContent",
   "gtmPostResults",
+  // Non-technical-tone pass (2026-06-22) — strategy/marketing JARGON the founder
+  // (not a marketing/tech expert) shouldn't see. Sanitized on the delivery-wins
+  // path so the message still goes out, just plain. Multi-word + distinctive
+  // ONLY — bare "ICP"/"persona" are too short for the indexOf matcher (the
+  // bare-"LLM" lesson above) and are handled by SOUL + the synthesis template.
+  "buyer map",
+  "channel scorecard",
+  "content angle",
+  "relationship target",
+  "stage-adaptive",
+  "buyer journey",
+  "T1 thread",
+  "ICP threads",
 ];
 
 // Sprint 2.10 — AI references — Maya is "your launch manager," not
@@ -302,6 +315,42 @@ function findMatches(
     });
   }
   return failures;
+}
+
+/**
+ * Outbound-discipline DRIFT DETECTOR (2026-06-22, demoted to log-only 2026-06-22).
+ *
+ * Flags a PROACTIVE send that LOOKS like pure pipeline-narration — the agent
+ * reporting its own cron run ("Midday pulse complete", "Just finished the midday
+ * pulse") rather than something the founder needs to ACT ON.
+ *
+ * ⚠️ This is NOT an enforcement gate. The PRIMARY control is the SOUL prompt
+ * (Banned phrases → cron/pass-completion narration). This detector exists only so
+ * the callsite can LOG `send_update.status_narration_detected` — an observability
+ * counter that tells us whether the prompt is actually holding on Kimi. If it
+ * starts firing often, the fix is to strengthen the PROMPT (or add an LLM check),
+ * NOT to grow these brittle phrase regexes. We deliberately do not drop the
+ * message: status narration is annoying, not catastrophic (unlike a leaked token
+ * or skill slug — those stay on the hard `validateOutboundText` denylist), so it
+ * does not earn a deterministic phrase-matcher in the send path.
+ *
+ * Content-beats-pattern still applies: a message with a URL / @handle / r/sub is
+ * never even flagged, so the counter doesn't get muddied by real updates that
+ * happen to mention a "pulse."
+ */
+const CRON_NARRATION_RE =
+  /\b(pulse|brief|recap|review|sweep|scan)\s+(complete|completed|done|finished)\b/i;
+const SELF_REPORT_RE = /^\s*(just\s+)?(now\s+)?(finished|done|completed|wrapped up|ran)\b/i;
+/** Grounded-content signals — if ANY is present the message is actionable, not narration. */
+const GROUNDED_CONTENT_RE = /(https?:\/\/|\bwww\.|@[A-Za-z0-9_]{2,}|r\/[A-Za-z0-9_]{2,})/;
+
+/** Detector only — see the doc comment. True = "looks like cron narration, worth
+ *  logging as prompt-drift." Callers must NOT drop on this; the prompt is the gate. */
+export function looksLikeStatusNarration(text: string): boolean {
+  if (typeof text !== "string" || text.trim() === "") return false;
+  // Actionable content present → not narration.
+  if (GROUNDED_CONTENT_RE.test(text)) return false;
+  return CRON_NARRATION_RE.test(text) || SELF_REPORT_RE.test(text);
 }
 
 /**

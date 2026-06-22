@@ -63,6 +63,11 @@ export const FOUNDATION_MAX_LEASE_ACQUIRES = 8;
  *  hours later. Replies to an inbound turn bypass this gate entirely. */
 export const SYNTH_HANDOVER_COOLDOWN_MS = 30 * 60 * 1000;
 
+/** Window after the first intro/hello during which further pre-research proactive
+ *  sends are suppressed as the concurrent-burst duplicate (observed: 4 hellos in
+ *  17s). Short — genuine progress updates land minutes later, past this. */
+export const HELLO_BURST_COOLDOWN_MS = 3 * 60 * 1000;
+
 export type AgentLifecyclePhase =
   | "fresh"
   | "hello_sent"
@@ -383,15 +388,38 @@ export const claimFounderSynthesisSend = internalMutation({
       }
       return { decision: "allow" };
     }
-    // No buyer map yet → still researching; let progress updates through.
-    const buyerMap = await ctx.db
-      .query("gtmBuyerMap")
-      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
-      .first();
-    if (!buyerMap) return { decision: "allow" };
-    // Synthesis window: research landed, onboarding not complete.
-    if (agent.strategyDeliveredAt) return { decision: "suppress" };
+    // RESEARCH-COMPLETE GATE (the live premature-synthesis fix). The old check
+    // was buyerMap-only, so a synthesis shipped the moment a buyer map existed —
+    // before competitors/scorecards landed (observed live: "here's the play"
+    // sent on a half-built foundation). Gate on the REAL strategy bar:
+    // researchComplete = buyerMap + ≥1 competitor + ≥1 channel scorecard. Below
+    // it → "allow" (still researching; honest progress updates flow — NEVER
+    // suppress, that would resurrect the post-hello silence). We deliberately do
+    // NOT require threads/drafts/voice to SEND the plan (that would silence the
+    // sanctioned honest-partial); those are enforced at COMPLETION via
+    // rowsComplete in computeAgentLifecycle.
     const now = Date.now();
+    const lifecycle = await computeAgentLifecycle(ctx, agent, now);
+    if (!lifecycle.researchComplete) {
+      if (agent.strategyDeliveredAt) return { decision: "suppress" };
+      // HELLO-ONCE: kill the concurrent intro burst (observed live: 4 near-
+      // identical hellos in 17s from racing boot/kickstart/resume sessions). The
+      // FIRST pre-research proactive send atomically claims the hello (stamps
+      // helloSentAt); further proactive sends within the burst window suppress;
+      // genuine later progress updates (past the window) flow. Reuses the
+      // existing helloSentAt field — no schema change, idempotent with the
+      // agent's own mark_lifecycle(hello_sent).
+      if (agent.helloSentAt) {
+        if (now - agent.helloSentAt < HELLO_BURST_COOLDOWN_MS) {
+          return { decision: "suppress" };
+        }
+        return { decision: "allow" };
+      }
+      await ctx.db.patch(args.agentId, { helloSentAt: now, updatedAt: now });
+      return { decision: "allow" };
+    }
+    // Synthesis window: the strategy is real (researchComplete), onboarding not done.
+    if (agent.strategyDeliveredAt) return { decision: "suppress" };
     await ctx.db.patch(args.agentId, { strategyDeliveredAt: now, updatedAt: now });
     return { decision: "send" };
   },

@@ -1290,6 +1290,26 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
   const isProactiveSend = !(
     typeof body.turnId === "string" && body.turnId.length > 0
   );
+  // Outbound discipline (2026-06-22): cron-run NARRATION ("Midday pulse complete")
+  // is banned by the SOUL prompt — that's the PRIMARY control. Here we only LOG
+  // when a proactive send still looks like narration, as a prompt-drift counter
+  // (`status_narration_detected`). We deliberately do NOT drop: narration is
+  // annoying, not catastrophic, so it doesn't earn a brittle phrase-matcher in the
+  // send path. If this fires often, strengthen the prompt — don't grow the regex.
+  // (Catastrophic leaks — tokens, skill slugs — stay hard-blocked by
+  // validateOutboundText.) Replies (turnId present) are never even checked.
+  if (isProactiveSend) {
+    const { looksLikeStatusNarration } = await import("../outboundFirewall");
+    if (looksLikeStatusNarration(body.text)) {
+      console.warn(
+        JSON.stringify({
+          event: "send_update.status_narration_detected",
+          agentId: auth.agentId,
+          messageClass,
+        })
+      );
+    }
+  }
   let synthClaim: { decision: "send" | "suppress" | "allow" } | null = null;
   if (isProactiveSend) {
     synthClaim = await ctx.runMutation(

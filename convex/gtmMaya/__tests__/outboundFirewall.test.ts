@@ -1,5 +1,41 @@
 import { describe, it, expect } from "vitest";
-import { validateOutboundText } from "../outboundFirewall";
+import {
+  validateOutboundText,
+  looksLikeStatusNarration,
+} from "../outboundFirewall";
+
+// looksLikeStatusNarration is a LOG-ONLY drift DETECTOR (the SOUL prompt is the
+// real control; this only powers the `status_narration_detected` counter). These
+// tests pin detection accuracy, NOT a drop decision — the callsite never drops.
+describe("looksLikeStatusNarration — flags cron-run narration, ignores grounded content", () => {
+  it("flags pure pipeline-run narration", () => {
+    for (const t of [
+      "Midday pulse complete.",
+      "Just finished the midday pulse.",
+      "Pulse complete — nothing hot.",
+      "Now done with the morning brief.",
+      "Finished my sweep.",
+    ]) {
+      expect(looksLikeStatusNarration(t), `should flag: ${t}`).toBe(true);
+    }
+  });
+
+  it("NEVER flags a message carrying grounded, actionable content", () => {
+    for (const t of [
+      "Midday pulse complete — but this thread is hot: https://reddit.com/r/loseit/x",
+      "Found a great thread to jump on in r/loseit",
+      "Reply to @founder — they asked how it works",
+      "Here's the play: your customer is on TikTok.",
+    ]) {
+      expect(looksLikeStatusNarration(t), `should NOT flag: ${t}`).toBe(false);
+    }
+  });
+
+  it("empty / non-narration text is not flagged", () => {
+    expect(looksLikeStatusNarration("")).toBe(false);
+    expect(looksLikeStatusNarration("Posted your first reply on Reddit.")).toBe(false);
+  });
+});
 
 /**
  * Sprint 2.10 — outbound firewall covers SOUL.md voice contract +
