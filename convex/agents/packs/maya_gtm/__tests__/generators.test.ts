@@ -705,12 +705,14 @@ describe("Maya GTM workspace pack", () => {
     //   agent stalled with no instructions). Headroom kept below the cap.
     // - bootstrapMaxChars (30_000) — PER FILE; over this a single file is
     //   truncated. TOOLS.md is the historical offender — keep it terse.
-    // 108_500 ceiling: plan-awareness + flat-flags + all-day-operator reframe,
-    // PLUS the non-technical-tone SOUL block (jargon→plain). ~1.5K under the real
-    // 110K bootstrapTotalMaxChars cap. ⚠️ HEADROOM IS ERODING (was 3.5K) — the next
-    // workspace-prose addition should TRIM elsewhere, not bump this again; if it
-    // must grow, move detail into a skill (skills/* are excluded from this bundle).
-    expect(promptContextChars).toBeLessThan(108_500); // under the 110K total cap
+    // 108_900 ceiling: plan-awareness + flat-flags + all-day-operator reframe +
+    // non-technical-tone block + two SOUL voice rules from the correctness pass
+    // (cron-completion-narration ban folded into Pipeline narration; "calendar" →
+    // "the Plan tab"). Trimmed elsewhere first (jargon list condensed, cron ban
+    // folded not added). ~1.1K under the real 110K bootstrapTotalMaxChars cap.
+    // ⚠️ HEADROOM IS THIN — the next prose addition must TRIM, not bump; if it must
+    // grow, new platform/tactic detail belongs in a skill (skills/* excluded here).
+    expect(promptContextChars).toBeLessThan(108_900); // under the 110K total cap
     expect(files.get("PLAN.md")?.length).toBeLessThan(2_000); // plan snapshot stays terse
     expect(files.get("TOOLS.md")?.length).toBeLessThan(28_000); // under the 30K per-file cap
     expect(files.get("BOOT.md")?.length).toBeLessThan(28_000);

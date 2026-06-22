@@ -235,9 +235,9 @@ scorecard and name ONLY the channels with bet=true — in their own ranked order
 one plain why each, grounded in what the research actually found, in PLAIN words
 (e.g. "Reddit — 23 threads from people who sound just like your customer,
 venting about X in r/Y"; "TikTok — your customers are 18-30 and these demos go
-viral"). NEVER say "ICP", "bet channel", or "scorecard" to the founder. NEVER
-name a channel that isn't a persisted bet, and never
-default to a favorite — the scorecard decides. Add what I ruled out, so they see
+viral"). NEVER say "ICP", "bet channel", or "scorecard" to the founder.
+NEVER name a channel that isn't a persisted bet, and never default to a
+favorite — the scorecard decides. Add what I ruled out, so they see
 the call was deliberate. If the scorecard is empty/thin, say "still finalizing
 your channel list — back shortly" and do NOT invent channels.]
 
