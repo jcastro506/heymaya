@@ -47,6 +47,18 @@ export const listLiveAgentsWithAccount = internalQuery({
   },
 });
 
+/** Any account to anchor a $0 baseline marker on when no agent is live, so the
+ * running OpenRouter total still advances (else a deploy-time gap accumulates and
+ * the first attributed poll dumps phantom history onto the fresh agent). Most
+ * recent agent by creation; null only when no agents exist at all. */
+export const peekAnyAccountForBaseline = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<Id<"creators"> | null> => {
+    const recent = await ctx.db.query("gtmAgents").order("desc").take(1);
+    return recent[0]?.accountId ?? null;
+  },
+});
+
 /** The absolute OpenRouter total from the most recent poll (null on first run). */
 export const peekLastOpenrouterTotal = internalQuery({
   args: {},
@@ -163,8 +175,27 @@ export const pollOpenrouterSpend = internalAction({
 
     const delta = Math.max(0, totalUsage - lastTotal);
     if (liveAgents.length === 0) {
+      // No agent to attribute to — but STILL advance the baseline with a $0
+      // marker so this gap-spend doesn't accumulate and get dumped onto the next
+      // freshly-deployed agent's first poll (which would false-trip the kill).
+      const anchor = await ctx.runQuery(
+        internal.gtmMaya.openrouterSpend.peekAnyAccountForBaseline,
+        {}
+      );
+      if (anchor) {
+        await ctx.runMutation(
+          internal.gtmMaya.openrouterSpend.recordPollLedgerRow,
+          {
+            accountId: anchor,
+            costUsd: 0, // not attributed — baseline advance only
+            totalUsage,
+            globalDelta: delta,
+            agents: 0,
+          }
+        );
+      }
       console.log(
-        `[openrouterSpend] +$${delta.toFixed(4)} but NO live agents — not attributed; total=$${totalUsage.toFixed(4)}`
+        `[openrouterSpend] +$${delta.toFixed(4)} but NO live agents — baseline advanced to $${totalUsage.toFixed(4)} (not attributed)`
       );
       return { ok: true, totalUsage, delta, agents: 0 };
     }
