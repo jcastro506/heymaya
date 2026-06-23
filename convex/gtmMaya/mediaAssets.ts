@@ -36,10 +36,12 @@ import {
   internalAction,
   internalMutation,
   internalQuery,
+  query,
 } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { authenticate } from "./openclaw/inboundCallback";
+import { resolveMyGtmCreator } from "./targetList";
 
 // Image ingest ceiling — screenshots/recordings are small; reject anything
 // that smells like a mis-handed huge file (protects storage + Gemini cost).
@@ -151,6 +153,74 @@ export const getLibrary = internalQuery({
     const agent = await ctx.db.get(args.agentId);
     if (!agent) return [];
     return parseLibrary(agent.mediaLibraryJson).filter((e) => !e.archivedAt);
+  },
+});
+
+/** One gallery card for the founder-facing Assets tab. */
+export interface MediaGalleryItem {
+  id: string;
+  kind: MediaKind;
+  source: MediaSource;
+  isVideo: boolean;
+  url: string | null;
+  label: string | null;
+  createdAt: number;
+  groundedCount: number;
+  /** true = Maya created it (slide/video/Creatify/generated); false = a
+   *  screenshot/recording the founder supplied (source material). */
+  generatedByMaya: boolean;
+}
+
+/**
+ * Assets tab (web UI). Every non-archived media asset for the SIGNED-IN
+ * operator's agent, newest first, with a fetch-on-demand storage URL. Auth-
+ * scoped via resolveMyGtmCreator (cross-tenant isolation, fail-closed → []).
+ * Explicit return type — keeps the DataModel inference budget bounded (see the
+ * note above IngestResult).
+ */
+export const getMyMediaAssets = query({
+  args: {},
+  handler: async (ctx): Promise<MediaGalleryItem[]> => {
+    const creator = await resolveMyGtmCreator(ctx);
+    if (!creator) return [];
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    if (!agent?.mediaLibraryJson) return [];
+    const entries = parseLibrary(agent.mediaLibraryJson).filter(
+      (e) => !e.archivedAt
+    );
+    const items: MediaGalleryItem[] = [];
+    for (const e of entries) {
+      let url: string | null = null;
+      try {
+        url = await ctx.storage.getUrl(e.storageId as Id<"_storage">);
+      } catch {
+        url = null;
+      }
+      const isVideo =
+        (e.mimeType ?? "").startsWith("video/") ||
+        e.kind === "video" ||
+        e.kind === "screen_recording";
+      items.push({
+        id: e.storageId,
+        kind: e.kind,
+        source: e.source,
+        isVideo,
+        url,
+        label: e.label ?? null,
+        createdAt: e.createdAt,
+        groundedCount: e.referenceStorageIds?.length ?? 0,
+        generatedByMaya:
+          e.source === "generated" ||
+          e.source === "creatify" ||
+          e.kind === "slide" ||
+          e.kind === "video",
+      });
+    }
+    items.sort((a, b) => b.createdAt - a.createdAt);
+    return items;
   },
 });
 
