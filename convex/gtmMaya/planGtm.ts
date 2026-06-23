@@ -88,6 +88,15 @@ export interface GtmPlanFeatures {
   /** Monthly fair-use video-generation ceiling. */
   videoCreditsMonth: number;
   /**
+   * Monthly creative-CREDIT budget for Aurora UGC avatar video (distinct from
+   * `videoCreditsMonth`, which is the standard/ad-clone ceiling). Billed in
+   * Creatify credits, NOT a video count, so a 15s fast clip (~7.5cr) is cheaper
+   * than a 30s realistic one — Maya is incentivized to pick the cheap format.
+   * Paced across the billing month by `creativeBudgetGate`. 0 on starter/growth,
+   * 60 on studio (~$9 COGS on the $199 line). Gates `canUgc`.
+   */
+  ugcCreditsMonth: number;
+  /**
    * Monthly fair-use static-image / ad-creative generation ceiling (Creatify
    * IAB Images / Asset Generator). 0 on starter, 50 on growth, 100 on studio.
    * Gates `canImage` the same way `videoCreditsMonth` gates `canVideo`.
@@ -119,6 +128,11 @@ export interface GtmPlanFeatures {
   /** Whether Maya may generate videos (subject to videoCreditsMonth cap). */
   canVideo: boolean;
   /**
+   * Whether Maya may generate Aurora UGC avatar video (subject to the paced
+   * `ugcCreditsMonth` credit budget). Studio-only — FALSE on starter + growth.
+   */
+  canUgc: boolean;
+  /**
    * Whether Maya may generate static images / ad creative via Creatify
    * (subject to assetCreditsMonth cap). FALSE on starter (text + her own
    * Gemini slideshow only), TRUE on growth + studio.
@@ -138,6 +152,7 @@ const GTM_STARTER_ACTIVE: GtmPlanFeatures = {
   connectedChannelCap: 6,
   autoPostChannelCap: 3,
   videoCreditsMonth: 0,
+  ugcCreditsMonth: 0,
   assetCreditsMonth: 0,
   xUrlPostsSoftCapMonth: 30,
   banSafetyManualGate: true,
@@ -148,6 +163,7 @@ const GTM_STARTER_ACTIVE: GtmPlanFeatures = {
   canRead: true,
   canMonitor: true,
   canVideo: false,
+  canUgc: false,
   canImage: false,
 };
 
@@ -175,6 +191,10 @@ const GTM_STUDIO_ACTIVE: GtmPlanFeatures = {
   plan: "studio",
   videoCreditsMonth: 15,
   canVideo: true,
+  // Aurora UGC avatar video — Studio-only, paced credit budget (~$9 COGS/mo at
+  // 60 cr on the $199 line). Distinct from the standard video ceiling above.
+  ugcCreditsMonth: 60,
+  canUgc: true,
   // Studio gets a higher static-image ceiling on top of video (inherits
   // canImage:true from growth).
   assetCreditsMonth: 100,
@@ -200,6 +220,7 @@ const FAIL_CLOSED_DEFAULT: GtmPlanFeatures = {
   connectedChannelCap: 0,
   autoPostChannelCap: 0,
   videoCreditsMonth: 0,
+  ugcCreditsMonth: 0,
   assetCreditsMonth: 0,
   xUrlPostsSoftCapMonth: 0,
   banSafetyManualGate: true,
@@ -210,6 +231,7 @@ const FAIL_CLOSED_DEFAULT: GtmPlanFeatures = {
   canRead: true,
   canMonitor: false,
   canVideo: false,
+  canUgc: false,
   canImage: false,
 };
 
@@ -225,6 +247,7 @@ interface ParsedGtmPlan {
   connectedChannelCap?: unknown;
   autoPostChannelCap?: unknown;
   videoCreditsMonth?: unknown;
+  ugcCreditsMonth?: unknown;
   assetCreditsMonth?: unknown;
   xUrlPostsSoftCapMonth?: unknown;
   periodStart?: unknown;
@@ -325,6 +348,9 @@ export function planFeaturesGtm(agent: {
         base.autoPostChannelCap
       ),
       videoCreditsMonth: coerceCap(parsed.videoCreditsMonth, base.videoCreditsMonth),
+      // UGC credit budget can be overridden per-plan but never widens canUgc
+      // (which stays the tier boundary above) — fail-closed if base is 0.
+      ugcCreditsMonth: coerceCap(parsed.ugcCreditsMonth, base.ugcCreditsMonth),
       assetCreditsMonth: coerceCap(
         parsed.assetCreditsMonth,
         base.assetCreditsMonth
@@ -413,6 +439,16 @@ export function describePlanForMaya(features: GtmPlanFeatures): string {
     lines.push(`Video: yes, ~${features.videoCreditsMonth}/mo.`);
   } else {
     lines.push("Video: not on this tier (Studio only).");
+  }
+
+  // Line 5 — UGC avatar video (Studio-only, paced credit budget). Check the
+  // live remaining budget with check_creative_budget before any render.
+  if (features.canUgc) {
+    lines.push(
+      `UGC avatar video: yes, ~${features.ugcCreditsMonth} credits/mo (paced across the month — check_creative_budget before each render).`
+    );
+  } else {
+    lines.push("UGC avatar video: not on this tier (Studio only).");
   }
 
   // Final note — the single most-relevant call to action.

@@ -68,7 +68,7 @@ interface TikTokStrategy {
 ## Producing the actual video (Studio tier)
 
 A `recommendation` is the *plan*; on the Studio tier I can also produce the real video for it via `maya-video-producer`, not just hand the founder a shot plan. The mapping:
-- `go_founder_talking_head` → `make_ad_from_url` with `modelVersion: aurora_v1_fast` (realistic avatar reads my grounded script), OR `clone_winning_ad` if a talking-head winner exists to copy.
+- `go_founder_talking_head` → `make_ugc_video` (via `maya-ugc-producer`; an Aurora avatar reads my grounded, voice-passed script, `modelVersion: aurora_v1_fast` default). ALWAYS `check_creative_budget` first; on `graceful_degrade`/`hard_block` fall back to a slideshow or static still. Use `clone_winning_ad` instead only if a talking-head winner exists to copy.
 - `go_faceless_screen_record` → `clone_winning_ad` (copy the winning screen-record format) or `make_ad_from_url` with a screen-demo `visualStyle`, grounded in the founder's real screenshots (`imageAssetIds`).
 - `go_slideshow_photo_mode` → stays with `maya-slideshow-strategist` (image path), not video.
 

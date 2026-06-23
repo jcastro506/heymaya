@@ -38,6 +38,7 @@ import {
   createIabImages,
   createLinkFromUrl,
   createLinkToVideo,
+  createLipsyncWithAurora,
   getCreatifyJob,
   getInspirations,
   updateLink,
@@ -53,12 +54,26 @@ type VideoMode = "ad_clone" | "url_to_video";
 // Static-image flow for the Growth $149 tier (canImage). iab_images is the
 // clean 2cr path; asset_gen stays deferred (schema-driven/runtime roster).
 type ImageMode = "iab_images";
-/** Any persisted Creatify job — video or static image — share the poll loop. */
-type JobMode = VideoMode | ImageMode;
+// Aurora UGC avatar video — Studio-only, paced by the creative CREDIT budget
+// (creativeBudgetGate), NOT the standard videoCreditsMonth count cap.
+type UgcMode = "ugc_avatar";
+/** Any persisted Creatify job — video, static image, or UGC — share the poll loop. */
+type JobMode = VideoMode | ImageMode | UgcMode;
 
 /** True for the static-image modes (gated by canImage + assetCreditsMonth). */
 function isImageMode(mode: JobMode): mode is ImageMode {
   return mode === "iab_images";
+}
+
+/** True for the Aurora UGC avatar mode (gated by canUgc + the credit budget). */
+function isUgcMode(mode: JobMode): mode is UgcMode {
+  return mode === "ugc_avatar";
+}
+
+/** Map a persisted job mode to the integration poll mode. UGC polls the lipsync
+ *  endpoint; all other modes are already valid CreatifyJobMode values. */
+function toPollMode(mode: JobMode): "ad_clone" | "url_to_video" | "lipsync" | "iab_images" {
+  return isUgcMode(mode) ? "lipsync" : (mode as "ad_clone" | "url_to_video" | "iab_images");
 }
 
 const POLL_INTERVAL_MS = 30_000;
@@ -97,6 +112,10 @@ interface StartResult {
   creatifyId?: string;
   status?: string;
   reason?: string;
+  /** Creative-budget pacing mode when a UGC render was gated (full/graceful_degrade/hard_block). */
+  budgetMode?: string;
+  /** On graceful_degrade — the cheaper format Maya should fall back to. */
+  suggest?: string;
 }
 interface JobView {
   jobId: string;
@@ -167,6 +186,20 @@ function countRecentAssets(jobsJson: string | null): number {
 }
 
 /**
+ * UGC CREDITS spent in the trailing 30 days — a SECONDARY per-agent signal for
+ * visibility. The AUTHORITATIVE budget gate is `creativeBudgetGate.checkCreativeBudget`
+ * (per-ACCOUNT, ledger-sourced) — multi-agent accounts share the ceiling, which a
+ * per-agent jobsJson count would miss. Sums `creditsUsed` (NOT a count — credit
+ * semantics) for non-failed UGC jobs; failed renders cost 0 (free retry).
+ */
+function countRecentUgcCredits(jobsJson: string | null): number {
+  const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  return parseJobs(jobsJson ?? undefined)
+    .filter((j) => j.createdAt >= since && j.status !== "failed" && isUgcMode(j.mode))
+    .reduce((sum, j) => sum + (j.creditsUsed ?? 0), 0);
+}
+
+/**
  * Docs-derived per-job cost ESTIMATE in USD, for ledger metadata + a soft
  * preflight log only — NOT a hard gate (the hard gates are canVideo/canImage +
  * the monthly count caps). ⚠ These are docs estimates; the real cost comes from
@@ -174,8 +207,16 @@ function countRecentAssets(jobsJson: string | null): number {
  */
 function estimatedCreatifyCostUsd(mode: JobMode): number {
   const perCredit = usdPerCredit();
-  // ad_clone ~24cr/10s · url_to_video ~5cr/30s · iab_images ~2cr.
-  const credits = mode === "ad_clone" ? 24 : mode === "iab_images" ? 2 : 5;
+  // ad_clone ~24cr/10s · url_to_video ~5cr/30s · iab_images ~2cr ·
+  // ugc_avatar ~7.5cr (aurora_v1_fast 15s @ 0.5cr/s).
+  const credits =
+    mode === "ad_clone"
+      ? 24
+      : mode === "iab_images"
+        ? 2
+        : mode === "ugc_avatar"
+          ? 7.5
+          : 5;
   return Math.round(credits * perCredit * 10000) / 10000;
 }
 
@@ -508,6 +549,115 @@ export const startAssetJob = internalAction({
 });
 
 /**
+ * Aurora UGC AVATAR video — the Studio $199 talking-head/testimonial path. The
+ * avatar performs a GROUNDED, voice-passed `avatarScript` (Maya writes it in the
+ * founder's voice from the grounded fact sheet; see maya-ugc-producer SKILL). Two
+ * fail-closed server gates run BEFORE any paid render:
+ *   1. canUgc — Studio-only (a starter/growth/lapsed/corrupt plan → false → blocked).
+ *   2. creativeBudgetGate — the paced credit budget (full → render; graceful_degrade
+ *      → refuse + suggest a cheaper format; hard_block → refuse, ceiling hit).
+ * Uses the 1-step lipsync path (aurora_v1_fast default). Persists on the shared
+ * creatifyJobsJson with mode 'ugc_avatar' and reuses the durable poller.
+ */
+export const startUgcVideoJob = internalAction({
+  args: {
+    agentId: v.id("gtmAgents"),
+    avatarScript: v.string(),
+    // Recorded on the job for traceability (the script is grounded in the
+    // product; the lipsync render itself is avatar+script, no image input).
+    productUrl: v.optional(v.string()),
+    modelVersion: v.optional(v.string()),
+    aspectRatio: v.optional(v.string()),
+    overrideAvatar: v.optional(v.string()),
+    overrideVoice: v.optional(v.string()),
+    noSchedule: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<StartResult> => {
+    if (!isCreatifyConfigured()) {
+      return { ok: false, reason: "creatify_not_configured" };
+    }
+    if (!args.avatarScript.trim()) {
+      return { ok: false, reason: "missing avatarScript" };
+    }
+
+    const gctx = await ctx.runQuery(
+      internal.gtmMaya.creatifyVideo.getAgentVideoContext,
+      { agentId: args.agentId }
+    );
+
+    // ── Gate 1: Studio-only canUgc (fail-closed) ───────────────────────────
+    const plan = planFeaturesGtm({ gtmPlanJson: gctx.gtmPlanJson });
+    if (!plan.canUgc) {
+      return { ok: false, reason: "studio_tier_required" };
+    }
+    if (!gctx.accountId) {
+      return { ok: false, reason: "account_not_resolved" };
+    }
+
+    // ── Gate 2: paced creative-credit budget (per-account, fail-closed) ─────
+    const verdict = await ctx.runQuery(
+      internal.gtmMaya.creativeBudgetGate.checkCreativeBudget,
+      { accountId: gctx.accountId, gtmPlanJson: gctx.gtmPlanJson, now: Date.now() }
+    );
+    if (!verdict.allowed) {
+      return {
+        ok: false,
+        reason: verdict.reason,
+        budgetMode: verdict.mode,
+        // On a soft degrade, point Maya at the cheap fallback (no render burned).
+        suggest: verdict.mode === "graceful_degrade" ? "static_asset" : undefined,
+      };
+    }
+
+    try {
+      const job: CreatifyJob = await createLipsyncWithAurora({
+        script: args.avatarScript,
+        aspect_ratio:
+          (args.aspectRatio as "9x16" | "16x9" | "1x1" | undefined) ?? "9x16",
+        model_version:
+          (args.modelVersion as
+            | "standard"
+            | "aurora_v1"
+            | "aurora_v1_fast"
+            | undefined) ?? "aurora_v1_fast",
+        override_avatar: args.overrideAvatar ?? null,
+        override_voice: args.overrideVoice ?? null,
+      });
+
+      const jobId = newJobId(job.id, 0);
+      await ctx.runMutation(internal.gtmMaya.creatifyVideo.appendJob, {
+        agentId: args.agentId,
+        jobId,
+        mode: "ugc_avatar",
+        creatifyId: job.id,
+        status: job.status ?? "pending",
+        productUrl: args.productUrl,
+      });
+
+      if (!args.noSchedule) {
+        await ctx.scheduler.runAfter(
+          POLL_INTERVAL_MS,
+          internal.gtmMaya.creatifyVideo.pollVideoJob,
+          { agentId: args.agentId, jobId }
+        );
+      }
+      return {
+        ok: true,
+        jobId,
+        creatifyId: job.id,
+        status: job.status ?? "pending",
+        budgetMode: verdict.mode,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        reason: `start_failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  },
+});
+
+/**
  * Read-only: fetch the Creatify Inspiration recipe/format catalog (FREE GET).
  * This is a format-idea catalog, NOT a competitor-ad feed — Maya reads it as one
  * grounded input to her brief, never as the strategy. No tier gate (free + read-
@@ -549,6 +699,7 @@ async function finalizeDoneJob(
   terminal: CreatifyJob
 ): Promise<{ mediaStorageId: string | null; creditsUsed: number; costUsd: number }> {
   const image = isImageMode(job.mode);
+  const ugc = isUgcMode(job.mode);
   const creditsUsed = Number(terminal.credits_used ?? 0) || 0;
   const costUsd = Math.round(creditsUsed * usdPerCredit() * 10000) / 10000;
 
@@ -574,7 +725,9 @@ async function finalizeDoneJob(
       mediaUrl: assetUrl,
       label: image
         ? `Static creative (${job.productUrl ?? "product"})`
-        : `${job.mode === "ad_clone" ? "Ad clone" : "Video ad"} (${job.productUrl ?? "product"})`,
+        : ugc
+          ? `UGC avatar video (${job.productUrl ?? "product"})`
+          : `${job.mode === "ad_clone" ? "Ad clone" : "Video ad"} (${job.productUrl ?? "product"})`,
       kindHint: image ? "image" : "video",
       source: "creatify",
     });
@@ -591,11 +744,18 @@ async function finalizeDoneJob(
     await ctx.runMutation(internal.gtmMaya.costLedger.recordGtmCostInternal, {
       accountId: vctx.accountId,
       provider: "creatify",
-      operation: image ? "creatify_image" : "creatify_video",
-      reason: `${job.mode} ${image ? "image" : "video"} (${creditsUsed} cr)`,
+      operation: ugc
+        ? "creatify_ugc_avatar"
+        : image
+          ? "creatify_image"
+          : "creatify_video",
+      reason: `${job.mode} (${creditsUsed} cr)`,
       costUsd,
       units: creditsUsed,
       cacheStatus: "called",
+      // `creative: true` is how creativeBudgetGate identifies UGC rows to pace.
+      // Only UGC is tagged — standard video/image keep their own count caps.
+      creative: ugc ? true : undefined,
       metadata: { mode: job.mode, creatifyId: job.creatifyId, mediaStorageId },
     });
   }
@@ -626,7 +786,7 @@ export const pollVideoJob = internalAction({
 
     let terminal: CreatifyJob;
     try {
-      terminal = await getCreatifyJob(job.mode, job.creatifyId);
+      terminal = await getCreatifyJob(toPollMode(job.mode), job.creatifyId);
     } catch (err) {
       // Transient — reschedule unless we're out of attempts.
       const attempts = job.attempts + 1;
@@ -750,7 +910,7 @@ export const e2eSmoke = internalAction({
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       let terminal: CreatifyJob;
       try {
-        terminal = await getCreatifyJob(job.mode, job.creatifyId);
+        terminal = await getCreatifyJob(toPollMode(job.mode), job.creatifyId);
       } catch {
         continue;
       }
@@ -907,6 +1067,68 @@ export const creatifyMakeAssetHttp = httpAction(async (ctx, request) => {
     }
   );
   return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+/** make_ugc_video: grounded, voice-passed script → Aurora UGC avatar video.
+ *  Studio $199 tier (canUgc) + the paced creative-credit budget. Both gates are
+ *  enforced server-side in startUgcVideoJob (fail-closed). */
+export const makeUgcVideoHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (!body.avatarScript || typeof body.avatarScript !== "string") {
+    return new Response("missing required field (avatarScript)", { status: 400 });
+  }
+  const result: StartResult = await ctx.runAction(
+    internal.gtmMaya.creatifyVideo.startUgcVideoJob,
+    {
+      agentId: auth.agentId,
+      avatarScript: body.avatarScript,
+      productUrl: typeof body.productUrl === "string" ? body.productUrl : undefined,
+      modelVersion:
+        typeof body.modelVersion === "string" ? body.modelVersion : undefined,
+      aspectRatio: typeof body.aspectRatio === "string" ? body.aspectRatio : undefined,
+      overrideAvatar:
+        typeof body.overrideAvatar === "string" ? body.overrideAvatar : undefined,
+      overrideVoice:
+        typeof body.overrideVoice === "string" ? body.overrideVoice : undefined,
+    }
+  );
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+/** check_creative_budget: read-only. Returns remaining creative credits + the
+ *  pacing mode (full/graceful_degrade/hard_block). Maya calls this BEFORE any
+ *  paid render. Tier + period resolved server-side from the agent's plan. */
+export const checkCreativeBudgetHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+  const gctx = await ctx.runQuery(
+    internal.gtmMaya.creatifyVideo.getAgentVideoContext,
+    { agentId: auth.agentId }
+  );
+  if (!gctx.accountId) {
+    return new Response(JSON.stringify({ ok: false, reason: "account_not_resolved" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  const verdict = await ctx.runQuery(
+    internal.gtmMaya.creativeBudgetGate.checkCreativeBudget,
+    { accountId: gctx.accountId, gtmPlanJson: gctx.gtmPlanJson, now: Date.now() }
+  );
+  return new Response(JSON.stringify({ ok: true, ...verdict }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });

@@ -33,6 +33,7 @@ import type {
   CreatifyVideoMode,
   IabImagesInput,
   LinkToVideoInput,
+  LipsyncInput,
 } from "./types";
 
 function assertId<T extends { id?: unknown }>(obj: T, what: string): T & { id: string } {
@@ -170,6 +171,35 @@ export async function getAurora(
   return client.request<CreatifyJob>(`/api/aurora/${id}/`, { method: "GET" });
 }
 
+// ── Lipsync (1-step UGC avatar: script → TTS + Aurora lip-sync) ───────────────
+// Docs §3.3 recommend this over the 2-step text_to_speech → aurora flow.
+
+export async function createLipsyncWithAurora(
+  input: LipsyncInput,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  const res = await client.request<CreatifyJob>("/api/lipsyncs/", {
+    method: "POST",
+    body: compact({
+      script: input.script,
+      aspect_ratio: input.aspect_ratio ?? "9x16",
+      // Default to the CHEAP realism tier (0.5 cr/s) — Maya can opt up explicitly.
+      model_version: input.model_version ?? "aurora_v1_fast",
+      override_avatar: input.override_avatar,
+      override_voice: input.override_voice,
+      webhook_url: input.webhook_url,
+    }),
+  });
+  return assertId(res, "createLipsyncWithAurora");
+}
+
+export async function getLipsync(
+  id: string,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  return client.request<CreatifyJob>(`/api/lipsyncs/${id}/`, { method: "GET" });
+}
+
 // ── AI Scripts (grounded script from URL or title+description) ────────────────
 
 export async function generateAiScript(
@@ -301,6 +331,8 @@ export async function getCreatifyJob(
       return getLinkToVideo(id, client);
     case "aurora":
       return getAurora(id, client);
+    case "lipsync":
+      return getLipsync(id, client);
     case "iab_images":
       return getIabImages(id, client);
     case "asset_gen":

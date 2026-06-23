@@ -177,6 +177,8 @@ import {
   creatifyPollHttp,
   creatifyMakeAssetHttp,
   creatifyInspirationsHttp,
+  makeUgcVideoHttp,
+  checkCreativeBudgetHttp,
 } from "./gtmMaya/creatifyVideo";
 import { getPlatformAlgoHttp } from "./gtmMaya/platformAlgo";
 // Data-collection sprint — inbound user-turn transcript capture + per-turn
@@ -345,6 +347,19 @@ http.route({
   path: "/lc_gtm/creatify_inspirations",
   method: "GET",
   handler: creatifyInspirationsHttp,
+});
+// make_ugc_video = grounded, voice-passed script → Aurora UGC avatar video
+// (Studio $199 tier, canUgc + paced creative-credit budget). check_creative_budget
+// = read-only pacing check Maya calls BEFORE any paid render.
+http.route({
+  path: "/lc_gtm/make_ugc_video",
+  method: "POST",
+  handler: makeUgcVideoHttp,
+});
+http.route({
+  path: "/lc_gtm/check_creative_budget",
+  method: "POST",
+  handler: checkCreativeBudgetHttp,
 });
 http.route({
   path: "/lc_gtm/get_my_target_threads",

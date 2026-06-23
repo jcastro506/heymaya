@@ -108,6 +108,8 @@
       "check_video_job",
       "make_static_asset",
       "get_inspirations",
+      "check_creative_budget",
+      "make_ugc_video",
       "check_already_engaged",
       "post_to_channel",
       "get_agent_lifecycle",

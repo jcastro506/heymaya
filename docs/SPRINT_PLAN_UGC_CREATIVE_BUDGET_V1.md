@@ -2,6 +2,21 @@
 
 **Branch off `main`. Convex staging `precise-canary-781`. Studio-tier feature.**
 
+> **BUILT 2026-06-23** — all layers landed (schema `creative` field + index · `ugcCreditsMonth`/`canUgc` matrix · `creativeBudgetGate.ts` · `createLipsyncWithAurora` · `startUgcVideoJob` + `make_ugc_video`/`check_creative_budget` tools · `maya-ugc-producer` skill · tests). Convex tsc 0; planGtm/creativeBudgetGate/creatify/costCap tests green. **Creatify live-render + endpoint-200 test remain BLOCKED on operator providing `CREATIFY_API_ID`/`CREATIFY_API_KEY`** — every Creatify call no-ops cleanly (`isCreatifyConfigured()` → `creatify_not_configured`) until the keys land, so a missing key can never break a deployed agent.
+
+## 0. CANONICAL CONTENT PIPELINE (locked decision — 2026-06-23)
+
+Settled after grounding against Creatify's docs ([AI Scripts](https://docs.creatify.ai/api-reference/ai-scripts/post-ai-scripts) takes `script_styles` + audience but **no voice/tone input**; `link_to_videos`/`lipsyncs` accept `override_script`):
+
+**`AI Scripts (structure) → Maya voice-pass + grounding → override_script → render`**
+
+- **Outsource the structure.** Creatify's script writer is tuned on what performs (19 proven `script_styles`). Use it as the *skeleton* — don't write a 30s ad structure from a blank page.
+- **Own the voice.** Creatify's writer is voice-blind by API design. Maya rewrites the words into the **founder's voice** (from `voiceProfileJson` + the grounded fact sheet), preserving the structure. This is the moat and the day-one-churn guard.
+- **Ground every claim** (grounded-or-silent: verified-only prices/counts/claims), then pass as `override_script` / `avatarScript`.
+- **Weight by surface:** voice matters most for TEXT (Reddit/X — most of Maya's work, Creatify-free); for rendered VIDEO/UGC structure > literal voice, so the voice-pass is lighter (a brand/claims guardrail). Attribution decides how heavy.
+
+Encoded in `maya-ugc-producer/SKILL.md` § "The script pipeline".
+
 Switch on Creatify Aurora UGC avatar video, give each tier a **creative CREDIT budget** (not a video count), and **pace it across the billing month** so Maya can't blow it in week 1. Every paid render is preceded by a server-enforced, fail-closed budget check.
 
 ---

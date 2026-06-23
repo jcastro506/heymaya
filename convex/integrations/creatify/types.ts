@@ -79,7 +79,8 @@ export function isTerminalStatus(status: string | null | undefined): boolean {
 export type CreatifyVideoMode =
   | "ad_clone" // copy a winning reference video's format onto the product
   | "url_to_video" // scrape the product URL → fully edited ad
-  | "aurora"; // ultra-realistic talking head from one photo + audio
+  | "aurora" // ultra-realistic talking head from one photo + audio (2-step)
+  | "lipsync"; // 1-step UGC avatar: script → TTS + Aurora avatar in one call
 
 /** Inputs for an ad-clone job (the differentiator: copy a winning TikTok). */
 export interface AdCloneInput {
@@ -123,6 +124,25 @@ export interface AiScriptInput {
   url?: string | null;
   title?: string | null;
   description?: string | null;
+}
+
+/**
+ * Inputs for a 1-step Aurora UGC lipsync job (`POST /api/lipsyncs/`): the avatar
+ * performs `script` with TTS + lip-sync in a single call (docs §3.3 recommend
+ * this over the 2-step text_to_speech → aurora). Cost scales with model_version:
+ * aurora_v1 = 1 cr/s, aurora_v1_fast = 0.5 cr/s (the default — cheaper).
+ */
+export interface LipsyncInput {
+  /** The (grounded, voice-passed) script the avatar speaks. */
+  script: string;
+  aspect_ratio?: CreatifyAspectRatio;
+  /** Realism tier; default aurora_v1_fast (0.5 cr/s — the cheap path). */
+  model_version?: CreatifyModelVersion;
+  /** Persona id (from /api/personas/) to pin the avatar; Creatify default if omitted. */
+  override_avatar?: string | null;
+  /** Voice/accent id (from /api/voices/); Creatify default if omitted. */
+  override_voice?: string | null;
+  webhook_url?: string | null;
 }
 
 // ── Static image / ad-creative modes (Growth $149 tier) ───────────────────────

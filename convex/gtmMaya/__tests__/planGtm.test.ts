@@ -69,6 +69,28 @@ describe("planFeaturesGtm — 3-tier maxActiveChannels + video matrix", () => {
     ).toBe(0);
   });
 
+  it("UGC avatar video — canUgc + ugcCreditsMonth only on studio", () => {
+    const starter = planFeaturesGtm({ gtmPlanJson: STARTER_FULL });
+    expect(starter.canUgc).toBe(false);
+    expect(starter.ugcCreditsMonth).toBe(0);
+
+    const growth = planFeaturesGtm({ gtmPlanJson: GROWTH_FULL });
+    expect(growth.canUgc).toBe(false);
+    expect(growth.ugcCreditsMonth).toBe(0);
+
+    const studio = planFeaturesGtm({ gtmPlanJson: STUDIO_FULL });
+    expect(studio.canUgc).toBe(true);
+    expect(studio.ugcCreditsMonth).toBeGreaterThan(0);
+
+    // Fail-closed: missing / corrupt / none → no UGC budget at all.
+    expect(planFeaturesGtm({}).canUgc).toBe(false);
+    expect(planFeaturesGtm({}).ugcCreditsMonth).toBe(0);
+    expect(
+      planFeaturesGtm({ gtmPlanJson: planJson({ tier: "studio", status: "none" }) })
+        .canUgc
+    ).toBe(false);
+  });
+
   it("legacy gtm99 plan JSON resolves to starter (maxActiveChannels 3)", () => {
     const f = planFeaturesGtm({ gtmPlanJson: LEGACY_GTM99 });
     expect(f.plan).toBe("starter");

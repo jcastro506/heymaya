@@ -112,6 +112,7 @@ import type * as gtmMaya_conversionPing from "../gtmMaya/conversionPing.js";
 import type * as gtmMaya_costCap from "../gtmMaya/costCap.js";
 import type * as gtmMaya_costLedger from "../gtmMaya/costLedger.js";
 import type * as gtmMaya_creatifyVideo from "../gtmMaya/creatifyVideo.js";
+import type * as gtmMaya_creativeBudgetGate from "../gtmMaya/creativeBudgetGate.js";
 import type * as gtmMaya_deepLink from "../gtmMaya/deepLink.js";
 import type * as gtmMaya_deliveryFailures from "../gtmMaya/deliveryFailures.js";
 import type * as gtmMaya_demandIntel from "../gtmMaya/demandIntel.js";
@@ -438,6 +439,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/costCap": typeof gtmMaya_costCap;
   "gtmMaya/costLedger": typeof gtmMaya_costLedger;
   "gtmMaya/creatifyVideo": typeof gtmMaya_creatifyVideo;
+  "gtmMaya/creativeBudgetGate": typeof gtmMaya_creativeBudgetGate;
   "gtmMaya/deepLink": typeof gtmMaya_deepLink;
   "gtmMaya/deliveryFailures": typeof gtmMaya_deliveryFailures;
   "gtmMaya/demandIntel": typeof gtmMaya_demandIntel;

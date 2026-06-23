@@ -313,6 +313,11 @@ const SKILLS = [
   // Shipped FLAT; sole authority is the live server gate
   // creatifyVideo.startAssetJob (canImage). Fail-closed + self-gating.
   "maya-static-asset-producer",
+  // Studio-tier UGC AVATAR producer (Aurora talking-head via make_ugc_video).
+  // Shipped FLAT; sole authority is the live server gate creatifyVideo.
+  // startUgcVideoJob (canUgc) + the paced creativeBudgetGate. Self-gates on
+  // check_creative_budget; fail-closed to slideshow/static on non-Studio/over-budget.
+  "maya-ugc-producer",
   // Inspiration scout — reads Creatify's recipe/format catalog (get_inspirations)
   // as a brief input for the video + static producers. Bundled when EITHER
   // creative path is enabled.
@@ -2164,6 +2169,8 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
       return "Studio-tier video producer: when the niche's winning format is a video, make the founder a real short-form ad grounded in their product — copy a proven winning video's format (clone_winning_ad) or turn the product URL into a finished ad (make_ad_from_url), then hand it back one-tap. Server-gated to the $149 Studio tier.";
     case "maya-static-asset-producer":
       return "Growth-tier static creative producer: when a channel wants a designed still (a polished product banner / ad-creative image), make it grounded in the founder's REAL screenshots via make_static_asset, then hand it back one-tap. Server-gated to canImage (Growth + Studio); fail-closed to slideshow/screenshot on Starter.";
+    case "maya-ugc-producer":
+      return "Studio-tier UGC avatar producer: when a talking-head/testimonial format beats a slideshow or still, an Aurora avatar performs MY grounded, voice-passed script (make_ugc_video). ALWAYS check_creative_budget FIRST — the monthly creative-credit budget is paced so it can't be blown in week 1; on graceful_degrade/hard_block fall back to a cheaper format. Server-gated to Studio (canUgc).";
     case "maya-inspiration-scout":
       return "Read Creatify's recipe/format catalog (get_inspirations) as ONE input to a grounded creative brief — a format-idea catalog, NOT a competitor-ad feed and NOT a strategy. Borrow structure only; ground the copy/visuals in the real product; stay organic-first.";
     case "maya-conversion-tracker":

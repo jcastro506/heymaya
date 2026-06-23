@@ -77,6 +77,9 @@ export const recordGtmCostInternal = internalMutation({
     // them independently of research/operational spend.
     discovery: v.optional(v.boolean()),
     lane: v.optional(v.string()),
+    // Creative-budget tagging — `creative: true` marks a paid Creatify render
+    // (UGC / video / image) so creativeBudgetGate can sum it per billing period.
+    creative: v.optional(v.boolean()),
     metadata: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<Id<"gtmCostLedger">> => {
@@ -103,6 +106,7 @@ export const recordGtmCostInternal = internalMutation({
       cacheStatus: args.cacheStatus,
       discovery: args.discovery,
       lane: args.lane,
+      creative: args.creative,
       metadata: args.metadata,
       createdAt: now,
     });

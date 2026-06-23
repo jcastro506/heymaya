@@ -3870,7 +3870,7 @@ interface TikTokStrategy {
 ## Producing the actual video (Studio tier)
 
 A \`recommendation\` is the *plan*; on the Studio tier I can also produce the real video for it via \`maya-video-producer\`, not just hand the founder a shot plan. The mapping:
-- \`go_founder_talking_head\` → \`make_ad_from_url\` with \`modelVersion: aurora_v1_fast\` (realistic avatar reads my grounded script), OR \`clone_winning_ad\` if a talking-head winner exists to copy.
+- \`go_founder_talking_head\` → \`make_ugc_video\` (via \`maya-ugc-producer\`; an Aurora avatar reads my grounded, voice-passed script, \`modelVersion: aurora_v1_fast\` default). ALWAYS \`check_creative_budget\` first; on \`graceful_degrade\`/\`hard_block\` fall back to a slideshow or static still. Use \`clone_winning_ad\` instead only if a talking-head winner exists to copy.
 - \`go_faceless_screen_record\` → \`clone_winning_ad\` (copy the winning screen-record format) or \`make_ad_from_url\` with a screen-demo \`visualStyle\`, grounded in the founder's real screenshots (\`imageAssetIds\`).
 - \`go_slideshow_photo_mode\` → stays with \`maya-slideshow-strategist\` (image path), not video.
 
@@ -4032,8 +4032,75 @@ Max 12 ScrapeCreators calls: 3-5 keywords × 1 \`/search/top\` + 2-3 \`/search/h
 Structured taxonomy output, slop-critic NOT invoked. \`excerpt\` strings and every \`styleExemplars[]\` field (\`hookLineVerbatim\`, \`captionVerbatim\`, \`hashtagsVerbatim\`) from real videos are VERBATIM — do not paraphrase. Exemplars are voice/register references only; downstream caption drafting matches their cadence/length/hashtag-shape but NEVER copies an exemplar's content. Drop any exemplar whose caption itself reads templated/AI.
 `;
 
+// Source: agents/skills/maya-gtm/maya-ugc-producer/SKILL.md
+const ENTRY_38_maya_ugc_producer = `---
+name: maya-ugc-producer
+description: When a talking-head / testimonial / UGC-style video beats a slideshow or a static still for a validated angle, I produce it — an Aurora avatar performing a grounded, in-the-founder's-voice script. Studio ($199) only, paced by a monthly creative-credit BUDGET so it can't be blown in week 1. I ALWAYS check the budget before rendering, write the script structure-first then voice-pass it, and ground every claim. The craft — when to reach for UGC, how to keep it on-voice and on-budget — lives here; the mechanics live in TOOLS.md.
+---
+
+# maya-ugc-producer
+
+## Purpose
+
+This is the **Aurora UGC avatar** node: when a channel rewards a talking-head / testimonial / "person-to-camera" format — and a slideshow (\`maya-slideshow-strategist\`) or a designed still (\`maya-static-asset-producer\`) wouldn't carry the angle — I produce a short UGC-style video where an avatar performs MY grounded script. Studio ($199) only.
+
+> **Not the same as \`maya-ugc-system-advisor\`.** That skill governs paying *human* TikTok/IG creators (a Phase-4 paid lever, gated behind format-market-fit). THIS skill produces an *AI-avatar* UGC clip in-house, on the founder's behalf, from a grounded script — no third party, no paid-creator gate. Different tool, different budget.
+
+My value isn't "make a video" — it's **orchestration + grounding + voice + budget discipline**: deciding when UGC earns its credits, writing a script that performs *and* sounds like the founder, and never overspending the monthly allowance.
+
+## HARD RULE — never render blind
+
+**ALWAYS call \`check_creative_budget\` BEFORE \`make_ugc_video\`. Every time.** The budget is a per-month creative-CREDIT allowance, *paced across the billing period* so it can't all be spent in week 1. The verdict has three modes:
+
+- **\`full\`** → on pace; go ahead and render.
+- **\`graceful_degrade\`** → I've run ahead of this month's pace. I do NOT render. I either wait for the drip to advance (a day or two) OR drop to a cheaper format — a \`maya-static-asset-producer\` still or a Gemini slideshow — for this post. No credit is burned on a degrade.
+- **\`hard_block\`** → the monthly ceiling is hit (or this tier has no UGC budget at all). I do NOT attempt. I tell the founder, plainly, that UGC video resumes next billing period, and use a free format in the meantime.
+
+The server enforces all three fail-closed regardless of what I do — but I check first so I never promise a video I can't make, and so I pace myself like a manager spreading a budget, not a kid in a candy store.
+
+## The script pipeline — structure first, then VOICE (this is the whole game)
+
+If the video isn't in the founder's voice, with their real product, accurately, the user churns on day one. So:
+
+1. **Borrow the structure from the specialist.** Creatify's script writer is trained on what performs on social (proven hooks, pacing, retention beats). I use it as the *skeleton* — I don't write a 30s ad structure from a blank page. (Via \`get_inspirations\` for proven format recipes, and/or a structurally-strong first draft.)
+2. **Voice-pass it — mine, not theirs.** I rewrite the words into the FOUNDER'S voice from the Voice Profile + the grounded Product Fact Sheet. Their phrasing, their positioning. The structure stays; the voice becomes theirs. Creatify's writer is voice-blind by design — this step is the moat.
+3. **Ground every claim.** Prices, counts, outcomes, the activation moment — all from the fact sheet, verified-only. Never invent a product claim or a metric. Grounded-or-silent applies to video.
+4. **Pass the final script as \`avatarScript\`.** That's the in-voice, grounded script the avatar performs.
+
+For video specifically, structure matters more than literal voice (a UGC clip is *supposed* to sound like a punchy testimonial, not a tweet) — so the voice-pass is lighter than for a text post, and acts mostly as a brand/claims guardrail. But it always runs.
+
+## Lifecycle
+
+\`check_creative_budget\` (FIRST) → write + voice-pass the script → \`make_ugc_video\` (avatarScript) → poll \`check_video_job\` to terminal → \`send_media_to_user\`. The render is durable server-side; I don't babysit it, but I check before promising a finished video.
+
+## Cost cue
+
+Default \`modelVersion: aurora_v1_fast\` (0.5 cr/s ≈ **$1.12** for a 15s clip). Only reach for \`aurora_v1\` (1 cr/s, max realism) when the budget is flush and the realism genuinely matters. Prefer fast. Prefer short. A 15s clip that lands beats a 30s one that drains two clips' worth of budget.
+
+## Tier honesty
+
+Server-gated to Studio (\`canUgc\`). On a non-Studio account \`make_ugc_video\` fails closed — I never claim to have made a video I couldn't. I fall back to a slideshow or a static still and, at most once and only if it fits, mention the Studio upgrade honestly.
+
+## See also
+
+- \`maya-static-asset-producer\` — the designed-still path (Growth+); the cheaper fallback on degrade.
+- \`maya-slideshow-strategist\` — the every-tier sequence path; the free fallback on hard_block.
+- \`maya-video-producer\` — standard short-form video (clone_winning_ad / make_ad_from_url; the videoCreditsMonth budget).
+- \`maya-ugc-system-advisor\` — the PAID HUMAN creator gate (a different lever entirely).
+- \`PLAYBOOK.md\` — the launch doctrine this skill operates under.
+
+## Tools reference
+
+- \`check_creative_budget\` — poll the creative-credit budget + pacing mode FIRST, before any render.
+- \`make_ugc_video\` — start the Aurora UGC render with the grounded, voice-passed \`avatarScript\`.
+- \`check_video_job\` — poll the job to terminal (\`done\` → \`mediaStorageId\`).
+- \`send_media_to_user\` — deliver the finished video.
+- \`search_my_media\` / \`get_my_foundation\` — ground the script in real product + buyer truth.
+- \`get_inspirations\` — proven format recipes to seed the structure.
+`;
+
 // Source: agents/skills/maya-gtm/maya-ugc-system-advisor/SKILL.md
-const ENTRY_38_maya_ugc_system_advisor = `---
+const ENTRY_39_maya_ugc_system_advisor = `---
 name: maya-ugc-system-advisor
 description: ADVISORY-ONLY in V1. UGC creators are a Phase 4+ lever per PLAYBOOK. Refuse to recommend before format-market-fit.
 ---
@@ -4113,7 +4180,7 @@ Mostly structured refusals. \`refusalReason\` and \`gatesUnmet[].detail\` pass t
 `;
 
 // Source: agents/skills/maya-gtm/maya-video-producer/SKILL.md
-const ENTRY_39_maya_video_producer = `---
+const ENTRY_40_maya_video_producer = `---
 name: maya-video-producer
 description: When a winning format in the niche is a VIDEO — a talking-head UGC, a product demo, an animated screen — I make the founder an actual short-form video for it, grounded in their REAL product. I decide when video is the right call, mine the winning format, and orchestrate the video engine to produce it: I copy a proven winning video's format onto their product (ad-clone), or turn their product URL into a fully-edited ad, then hand it back one-tap to post. The orchestration craft — which mode, AUTO vs my own script, how to ground it — lives here; the mechanics live in TOOLS.md.
 ---
@@ -4202,7 +4269,7 @@ Slot it on the calendar (\`propose_calendar\`) as a hands-off recipe (the video 
 `;
 
 // Source: agents/skills/maya-gtm/maya-viral-demo-moment-miner/SKILL.md
-const ENTRY_40_maya_viral_demo_moment_miner = `---
+const ENTRY_41_maya_viral_demo_moment_miner = `---
 name: maya-viral-demo-moment-miner
 description: Find showable app moments — before/after contrasts, screenshot sequences. Source: walkthrough + product UI.
 ---
@@ -4288,7 +4355,7 @@ The top-ranked beat's \`sourceFrame\` is the **real product screen** that ground
 `;
 
 // Source: agents/skills/maya-gtm/maya-voice-matcher/SKILL.md
-const ENTRY_41_maya_voice_matcher = `---
+const ENTRY_42_maya_voice_matcher = `---
 name: maya-voice-matcher
 description: Score how well a drafted reply/post/thread matches the operator's actual voice — drawn from their existing public writing (X/Reddit/LinkedIn) or onboarding answers as fallback. Combines with maya-slop-critic for a final ship-or-revise gate. Each gtmDraftedContent row gets a voiceMatchScore + slopCriticPassed flag.
 ---
@@ -4400,7 +4467,7 @@ Yes — this skill itself outputs operator-facing copy (when surfacing voice fee
 `;
 
 // Source: agents/skills/maya-gtm/maya-weekly-review/SKILL.md
-const ENTRY_42_maya_weekly_review = `---
+const ENTRY_43_maya_weekly_review = `---
 name: maya-weekly-review
 description: Sunday-19:00-local strategic review. Last week's score across channels + North-Star on-track/at-risk, what we learned (extracted to gtmNicheLearnings), strategic shift for the coming week if any, and a re-weighting of bet channels + per-channel warmth advancement (set_channel_warmth) by what actually converted. Does NOT regenerate a next-week rolling plan — the daily morning cron owns day-to-day planning.
 ---
@@ -4555,7 +4622,7 @@ Banned for this message: "Crushed it this week," "We're seeing momentum," "level
 `;
 
 // Source: agents/skills/maya-gtm/maya-x-founder-led-researcher/SKILL.md
-const ENTRY_43_maya_x_founder_led_researcher = `---
+const ENTRY_44_maya_x_founder_led_researcher = `---
 name: maya-x-founder-led-researcher
 description: Find X founder-led conversations, reply targets, hooks worth modeling, and accounts worth a private List.
 ---
@@ -4723,7 +4790,7 @@ Every \`draftReply.p1/p2/p3SoftMention\` MUST pass \`maya-slop-critic\` before t
 `;
 
 // Source: agents/skills/maya-gtm/maya-youtube-researcher/SKILL.md
-const ENTRY_44_maya_youtube_researcher = `---
+const ENTRY_45_maya_youtube_researcher = `---
 name: maya-youtube-researcher
 description: Deep YouTube research via ScrapeCreators — mine comments + transcripts for buyer language, map the venue spread (niche channels, hashtags, Shorts trends), and judge whether YouTube earns a bet for this product. Judgment-only, signups-not-likes, Brief-only (no UGC creation).
 ---
@@ -4818,11 +4885,12 @@ export const BUNDLED_LOCAL_SKILLS: readonly BundledLocalSkill[] = [
   { slug: "maya-strategic-diagnostician", workspacePath: "skills/maya-strategic-diagnostician/SKILL.md", body: ENTRY_35_maya_strategic_diagnostician },
   { slug: "maya-tiktok-demo-strategist", workspacePath: "skills/maya-tiktok-demo-strategist/SKILL.md", body: ENTRY_36_maya_tiktok_demo_strategist },
   { slug: "maya-tiktok-format-researcher", workspacePath: "skills/maya-tiktok-format-researcher/SKILL.md", body: ENTRY_37_maya_tiktok_format_researcher },
-  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_38_maya_ugc_system_advisor },
-  { slug: "maya-video-producer", workspacePath: "skills/maya-video-producer/SKILL.md", body: ENTRY_39_maya_video_producer },
-  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_40_maya_viral_demo_moment_miner },
-  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_41_maya_voice_matcher },
-  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_42_maya_weekly_review },
-  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_43_maya_x_founder_led_researcher },
-  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_44_maya_youtube_researcher },
+  { slug: "maya-ugc-producer", workspacePath: "skills/maya-ugc-producer/SKILL.md", body: ENTRY_38_maya_ugc_producer },
+  { slug: "maya-ugc-system-advisor", workspacePath: "skills/maya-ugc-system-advisor/SKILL.md", body: ENTRY_39_maya_ugc_system_advisor },
+  { slug: "maya-video-producer", workspacePath: "skills/maya-video-producer/SKILL.md", body: ENTRY_40_maya_video_producer },
+  { slug: "maya-viral-demo-moment-miner", workspacePath: "skills/maya-viral-demo-moment-miner/SKILL.md", body: ENTRY_41_maya_viral_demo_moment_miner },
+  { slug: "maya-voice-matcher", workspacePath: "skills/maya-voice-matcher/SKILL.md", body: ENTRY_42_maya_voice_matcher },
+  { slug: "maya-weekly-review", workspacePath: "skills/maya-weekly-review/SKILL.md", body: ENTRY_43_maya_weekly_review },
+  { slug: "maya-x-founder-led-researcher", workspacePath: "skills/maya-x-founder-led-researcher/SKILL.md", body: ENTRY_44_maya_x_founder_led_researcher },
+  { slug: "maya-youtube-researcher", workspacePath: "skills/maya-youtube-researcher/SKILL.md", body: ENTRY_45_maya_youtube_researcher },
 ];

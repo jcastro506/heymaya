@@ -5498,6 +5498,10 @@ export default defineSchema({
     // (buyer_intent / switch_intent / competitor / own_perf / go_time) drove it.
     discovery: v.optional(v.boolean()),
     lane: v.optional(v.string()),
+    // Creative-budget tagging. `creative: true` marks a paid render (Creatify
+    // UGC / video / image) so creativeBudgetGate can sum monthly creative-credit
+    // spend independently of discovery + operational spend. Mirrors `discovery`.
+    creative: v.optional(v.boolean()),
     metadata: v.optional(v.any()),
     createdAt: v.number(),
   })
@@ -5506,7 +5510,9 @@ export default defineSchema({
     .index("by_account_and_provider", ["accountId", "provider"])
     // Phase 2 — time-windowed sums (discovery budget gate, hourly/daily caps).
     .index("by_account_and_created", ["accountId", "createdAt"])
-    .index("by_account_discovery_created", ["accountId", "discovery", "createdAt"]),
+    .index("by_account_discovery_created", ["accountId", "discovery", "createdAt"])
+    // Creative budget gate — billing-period-windowed sums of creative spend.
+    .index("by_account_creative_created", ["accountId", "creative", "createdAt"]),
 
   // Phase 2 ④ — per-channel read watermark. Bounds delta-only reads so the
   // hunt loop never re-pulls history: each (account, channel) records the

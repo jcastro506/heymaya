@@ -310,7 +310,7 @@ function categoryForTool(name) {
   )
     return "publish";
   if (
-    /^(save_draft$|update_draft_voice_match$|generate_slide_image$|review_media$|make_ad_from_url$|clone_winning_ad$|make_static_asset$|propose_calendar$|save_target_thread$|save_target_account$)/.test(
+    /^(save_draft$|update_draft_voice_match$|generate_slide_image$|review_media$|make_ad_from_url$|clone_winning_ad$|make_static_asset$|make_ugc_video$|propose_calendar$|save_target_thread$|save_target_account$)/.test(
       name
     )
   )
@@ -321,7 +321,7 @@ function categoryForTool(name) {
     )
   )
     return "foundation";
-  if (/^(get_|list_|check_video_job$)/.test(name)) return "read";
+  if (/^(get_|list_|check_video_job$|check_creative_budget$)/.test(name)) return "read";
   return "other";
 }
 
@@ -1960,6 +1960,29 @@ export default defineToolPlugin({
         "Read Creatify's recipe/format catalog — a library of proven creative FORMATS/templates (hooks, structures, styles). This is a format-idea catalog, NOT a competitor-ad feed and NOT a trend strategy. Use it ONLY as one input to YOUR grounded brief: skim the recipes for a format that fits the founder's angle, then ground the actual copy/visuals in their real product. Never let a recipe drive the strategy or pull you toward paid-ad framing — you are organic-first. Free + read-only; returns { ok, recipes: [{ id, name }] }.",
       parameters: Type.Object({}),
       execute: async (p, _cfg, ctx) => getLc("creatify_inspirations", p, ctx.signal),
+    }),
+    tool({
+      name: "check_creative_budget",
+      label: "Check Creative Budget",
+      description:
+        "READ-ONLY. Call this BEFORE make_ugc_video — never render blind. Returns the founder's creative-credit budget for UGC avatar video this billing period: { ok, mode (full | graceful_degrade | hard_block), usedCreditsThisPeriod, allowedThroughNowCredits, monthlyCapCredits, reason }. mode 'full' → go ahead. mode 'graceful_degrade' → you've run ahead of this month's pace; WAIT or drop to a cheaper format (make_static_asset / a Gemini slideshow). mode 'hard_block' → the monthly ceiling is hit (or this tier has no UGC budget); do NOT attempt, tell the founder UGC resumes next billing period. The budget is paced across the month so it can't all be spent in week 1 — respect it.",
+      parameters: Type.Object({}),
+      execute: async (p, _cfg, ctx) => postLc("check_creative_budget", p, ctx.signal),
+    }),
+    tool({
+      name: "make_ugc_video",
+      label: "Make UGC Avatar Video",
+      description:
+        "STUDIO ($199) TIER ONLY. Make a real UGC-style talking-head/testimonial video: an Aurora avatar performs YOUR grounded, voice-passed script. ALWAYS call check_creative_budget FIRST — if it's not 'full', do not render. PIPELINE: (1) get a structurally-strong draft (Creatify's AI-scripts writer is trained on what performs — use it as the skeleton), (2) rewrite it in the FOUNDER'S voice from the grounded fact sheet, claims verified-only (never invent product claims), (3) pass that as avatarScript here. REQUIRED: avatarScript (the final, in-voice, grounded script). Optional: productUrl (recorded for traceability), modelVersion (aurora_v1_fast default = cheap 0.5cr/s; aurora_v1 = max realism 1cr/s — prefer fast unless the budget is flush), aspectRatio (9x16 default), overrideAvatar, overrideVoice. Returns { ok, jobId, status, budgetMode } immediately; the render finishes in a few minutes — check_video_job with the jobId, then send_media_to_user once done. Server-gated to Studio (canUgc) + the paced credit budget — both fail closed. On a non-Studio account this returns ok:false; never claim you made a video you couldn't.",
+      parameters: Type.Object({
+        avatarScript: Type.String(),
+        productUrl: Type.Optional(Type.String()),
+        modelVersion: Type.Optional(Type.String()),
+        aspectRatio: Type.Optional(Type.String()),
+        overrideAvatar: Type.Optional(Type.String()),
+        overrideVoice: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("make_ugc_video", p, ctx.signal),
     }),
     tool({
       name: "check_already_engaged",
