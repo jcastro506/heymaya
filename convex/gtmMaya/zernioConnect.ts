@@ -620,31 +620,16 @@ export const getConnectLinksHttp = httpAction(async (ctx, request) => {
     });
   }
 
-  const site = (process.env.CONVEX_SITE_URL ?? "").replace(/\/+$/, "");
-  const links: Array<{ channel: string; url: string }> = [];
-  for (const platform of channels) {
-    try {
-      const { token } = await ctx.runMutation(
-        internal.gtmMaya.zernioConnect.issueZernioStateToken,
-        { accountId: agentCtx.accountId, agentId: auth.agentId }
-      );
-      const redirectUrl = `${site}/lc_gtm/zernio_callback?token=${encodeURIComponent(token)}`;
-      const { authUrl } = await getConnectUrl(
-        client,
-        platform as ZernioPostPlatform,
-        profileId,
-        redirectUrl
-      );
-      links.push({ channel: platform, url: authUrl });
-    } catch {
-      // Skip a channel that errors rather than failing the whole batch.
-    }
-  }
-
-  // The web dashboard connect panel — the MORE RELIABLE OAuth surface (desktop
-  // browser, existing logged-in sessions, no in-app-webview breakage). Maya
-  // leads with this; the per-channel one-tap links above stay available for the
-  // founder who'd rather connect from their phone in Telegram.
+  // ⛔ HARD RULE — connecting is DASHBOARD-ONLY, never in chat. We deliberately
+  // do NOT generate or return the per-channel in-chat OAuth links anymore: the
+  // model would paste them straight into Telegram (it did, despite the prompt
+  // saying not to — 2026-06-22). The web dashboard (Mission Control → Account)
+  // runs the OAuth flow itself, and it's the more reliable surface anyway
+  // (desktop browser, existing logged-in sessions, no in-app-webview breakage).
+  // So the ONLY connect surface this tool exposes is the dashboard URL — the
+  // model physically cannot leak an in-chat OAuth link because it never receives
+  // one. (profileId above is still provisioned so the dashboard flow works.)
+  void profileId;
   const appUrl = (
     process.env.APP_URL ??
     process.env.CONVEX_SITE_URL ??
@@ -657,7 +642,10 @@ export const getConnectLinksHttp = httpAction(async (ctx, request) => {
   return new Response(
     JSON.stringify({
       ok: true,
-      links,
+      // Intentionally empty: connecting happens ONLY in the dashboard. Do not
+      // re-add per-channel links — that resurrects the in-chat-OAuth leak.
+      links: [],
+      connectInChatDisabled: true,
       dashboardUrl,
       alreadyConnected: [...connected],
     }),
