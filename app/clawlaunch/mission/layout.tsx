@@ -16,6 +16,7 @@ import {
   Brain,
   CalendarDays,
   FileText,
+  Images,
   TrendingUp,
   Telescope,
   Settings,
@@ -28,6 +29,7 @@ const NAV = [
   { href: `${BASE}/plan`, label: "Plan", icon: CalendarDays },
   { href: `${BASE}/research`, label: "Research", icon: Telescope },
   { href: `${BASE}/drafts`, label: "Drafts", icon: FileText },
+  { href: `${BASE}/assets`, label: "Assets", icon: Images },
   { href: `${BASE}/results`, label: "Results", icon: TrendingUp },
   { href: `${BASE}/account`, label: "Account", icon: Settings },
 ] as const;
