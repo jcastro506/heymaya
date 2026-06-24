@@ -177,6 +177,7 @@ import type * as gtmMaya_telegramBotPerTenant from "../gtmMaya/telegramBotPerTen
 import type * as gtmMaya_telegramConfirm from "../gtmMaya/telegramConfirm.js";
 import type * as gtmMaya_telegramHandoff from "../gtmMaya/telegramHandoff.js";
 import type * as gtmMaya_telegramPairing from "../gtmMaya/telegramPairing.js";
+import type * as gtmMaya_telegramRouter from "../gtmMaya/telegramRouter.js";
 import type * as gtmMaya_telegramWebhook from "../gtmMaya/telegramWebhook.js";
 import type * as gtmMaya_tiktokWarmup from "../gtmMaya/tiktokWarmup.js";
 import type * as gtmMaya_voiceProfile from "../gtmMaya/voiceProfile.js";
@@ -504,6 +505,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/telegramConfirm": typeof gtmMaya_telegramConfirm;
   "gtmMaya/telegramHandoff": typeof gtmMaya_telegramHandoff;
   "gtmMaya/telegramPairing": typeof gtmMaya_telegramPairing;
+  "gtmMaya/telegramRouter": typeof gtmMaya_telegramRouter;
   "gtmMaya/telegramWebhook": typeof gtmMaya_telegramWebhook;
   "gtmMaya/tiktokWarmup": typeof gtmMaya_tiktokWarmup;
   "gtmMaya/voiceProfile": typeof gtmMaya_voiceProfile;
