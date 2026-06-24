@@ -111,7 +111,7 @@ function Masthead() {
           href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
             className="rounded-full bg-[#0a0a0a] px-4 py-2 text-[#fbfaf6] transition-colors hover:bg-[#0a0a0a]/85"
           >
-            Open Maya →
+            Get started →
           </Link>
         </nav>
         <Link
@@ -119,7 +119,7 @@ function Masthead() {
           href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
           className="font-mono text-[11px] uppercase tracking-[0.22em] underline-offset-[6px] hover:underline sm:hidden"
         >
-          Open Maya →
+          Get started →
         </Link>
       </div>
     </header>
@@ -1410,7 +1410,7 @@ function FinalCTA() {
           href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
               className="cta-primary cta-primary-large"
             >
-              {primaryCtaLabel("Open Maya")}
+              {primaryCtaLabel("Get started")}
               <span className="cta-arrow">→</span>
             </Link>
             <div className="max-w-sm">
