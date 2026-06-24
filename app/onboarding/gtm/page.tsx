@@ -933,6 +933,16 @@ function GtmOnboardingBody() {
           the picker and go straight to Launch. */}
       {stage === "plan" && (
         <section className="border border-paper bg-ink-2 p-6">
+          {/* Back to Product to change anything before launching. Safe here
+              (pre-deploy); the draft is still in state so the form is filled in.
+              No back on Connect — by then her machine is already deployed. */}
+          <button
+            onClick={() => setStage("intake")}
+            disabled={deploying}
+            className="mb-4 text-sm text-paper-dim underline underline-offset-2 hover:text-paper disabled:opacity-50"
+          >
+            ← Back to your product
+          </button>
           {(() => {
             const pf = snapshot
               ? planFeaturesGtm({ gtmPlanJson: snapshot.agent.gtmPlanJson })
