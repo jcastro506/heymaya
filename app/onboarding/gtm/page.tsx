@@ -174,9 +174,13 @@ function GtmOnboardingBody() {
   // Sprint 2.26b — operator pastes their personal Telegram bot token
   // (from BotFather). Action validates via getMe, encrypts, stores on
   // gtmAgents row, then deploy reads it back via internal query.
-  const setPersonalTelegramBot = useAction(
-    api.gtmMaya.telegramBotPerTenant.validateAndSetPersonalTelegramBot
+  // Shared-Maya-bot pairing. `createPairingToken` mints a single-use deep link
+  // to @Maya; `getMyPairingStatus` is reactive so the Connect step advances the
+  // moment the founder presses Start in Telegram (the webhook claims the token).
+  const createPairingToken = useMutation(
+    api.gtmMaya.telegramPairing.createPairingToken
   );
+  const pairingStatus = useQuery(api.gtmMaya.telegramPairing.getMyPairingStatus);
   // Tier selection → Stripe checkout. Picking a plan starts the 7-day trial;
   // the webhook grants the trialing plan (so planFeaturesGtm flips from the
   // fail-closed maxActiveChannels:0 default to the chosen tier's caps) on the
@@ -196,23 +200,17 @@ function GtmOnboardingBody() {
   // clear full-screen spinner instead of just flipping a button label — and
   // keep it up right through the auto-redirect into the HQ.
   const [deploying, setDeploying] = useState(false);
-  const [deployResult, setDeployResult] = useState<string | null>(null);
-  // Sprint 2.26b — Telegram bot state. Operator can connect their own
-  // bot from BotFather OR opt into the shared dev fallback.
   // Tier-selection state. `interval` toggles monthly/annual; `checkoutTier`
   // marks the card mid-redirect so it shows a pending state.
   const [billingInterval, setBillingInterval] =
     useState<GtmInterval>("monthly");
   const [checkoutTier, setCheckoutTier] = useState<GtmTier | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [botToken, setBotToken] = useState("");
-  const [botStatus, setBotStatus] = useState<
-    | { kind: "idle" }
-    | { kind: "validating" }
-    | { kind: "connected"; username: string }
-    | { kind: "error"; message: string }
-    | { kind: "shared_fallback" }
-  >({ kind: "idle" });
+  // The minted pairing deep link (+ bot username) for the Connect step.
+  const [pairing, setPairing] = useState<{
+    deepLink: string;
+    botUsername: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -245,6 +243,27 @@ function GtmOnboardingBody() {
     }, 2600);
     return () => clearTimeout(t);
   }, [stage]);
+
+  // Mint the Telegram pairing deep link when the founder reaches the Connect
+  // step (and isn't already paired). Idempotent server-side — a refresh reuses
+  // the live token rather than minting a new one.
+  useEffect(() => {
+    if (stage !== "connect") return;
+    if (pairing || pairingStatus?.paired) return;
+    let cancelled = false;
+    void createPairingToken({})
+      .then((res) => {
+        if (!cancelled) {
+          setPairing({ deepLink: res.deepLink, botUsername: res.botUsername });
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setError(friendlyError(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [stage, pairing, pairingStatus?.paired, createPairingToken]);
 
   const canSubmit = useMemo(() => {
     // W1.3 — a mobile-only founder with no landing page can submit with just a
@@ -372,26 +391,11 @@ function GtmOnboardingBody() {
         connected_channels: connectedWarmthChannels(draft),
         ...(channelWarmthJson ? { channel_warmth_json: channelWarmthJson } : {}),
       });
-      setStage("plan");
+      setStage("connect");
     } catch (err) {
       setError(friendlyError(err));
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function connectBot() {
-    setBotStatus({ kind: "validating" });
-    try {
-      const result = await setPersonalTelegramBot({
-        botToken: botToken.trim(),
-      });
-      setBotStatus({ kind: "connected", username: result.botUsername });
-    } catch (err) {
-      setBotStatus({
-        kind: "error",
-        message: (err as Error).message || "validation failed",
-      });
     }
   }
 
@@ -415,11 +419,6 @@ function GtmOnboardingBody() {
     setError(null);
     try {
       const result = await deployMaya({});
-      setDeployResult(
-        result.ok
-          ? `Deployed to ${result.flyAppId} (${result.machineId})`
-          : `${result.stage}: ${result.message}`
-      );
       if (result.ok) {
         track(ANALYTICS_EVENTS.PLAN_READY, { fly_app_id: result.flyAppId });
         // Move to the "live" beat; the redirect effect below drops the founder
@@ -428,6 +427,7 @@ function GtmOnboardingBody() {
         setStage("deploy");
       } else {
         // Non-ok deploy → surface the reason, drop the spinner so they can retry.
+        setError(`${result.stage}: ${result.message}`);
         setDeploying(false);
       }
     } catch (err) {
@@ -691,50 +691,6 @@ function GtmOnboardingBody() {
             </div>
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Toggle
-              label="I can record my screen"
-              checked={draft.canRecordScreen}
-              onChange={(checked) =>
-                setDraft((d) => ({ ...d, canRecordScreen: checked }))
-              }
-            />
-            <Toggle
-              label="I can record voiceover"
-              checked={draft.canRecordVoice}
-              onChange={(checked) =>
-                setDraft((d) => ({ ...d, canRecordVoice: checked }))
-              }
-            />
-            <Toggle
-              label="I am willing to show my face"
-              checked={draft.canShowFace}
-              onChange={(checked) =>
-                setDraft((d) => ({ ...d, canShowFace: checked }))
-              }
-            />
-            <Toggle
-              label="I can provide screenshots or slides"
-              checked={draft.canProvideScreenshots}
-              onChange={(checked) =>
-                setDraft((d) => ({ ...d, canProvideScreenshots: checked }))
-              }
-            />
-            <Toggle
-              label="I will manually post on TikTok"
-              checked={draft.canPostTikTokManually}
-              onChange={(checked) =>
-                setDraft((d) => ({ ...d, canPostTikTokManually: checked }))
-              }
-            />
-            <Toggle
-              label="I'll connect Instagram so Maya posts for me"
-              checked={draft.canPostInstagramManually}
-              onChange={(checked) =>
-                setDraft((d) => ({ ...d, canPostInstagramManually: checked }))
-              }
-            />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="TikTok profile, if any">
               <input
                 value={draft.existingTikTokUrl}
@@ -839,12 +795,114 @@ function GtmOnboardingBody() {
         </section>
       )}
 
+      {/* STEP 2 — Connect Maya on Telegram (the shared Maya bot). The founder
+          opens @Maya and presses Start; the webhook claims the pairing token and
+          this screen advances automatically (getMyPairingStatus is reactive). */}
+      {stage === "connect" && (
+        <section className="border border-paper bg-ink-2 p-6">
+          <h2 className="mb-2 font-display text-2xl">Connect Maya on Telegram</h2>
+          <p className="mb-6 max-w-xl text-sm text-paper-dim">
+            Maya lives in your texts. Connect Telegram and she&apos;ll message you
+            there — your daily plan, what she posted, what landed, and your
+            questions answered, all in one chat.
+          </p>
+
+          {pairingStatus?.paired ? (
+            <div className="rounded border border-lime/40 bg-ink p-5">
+              <p className="text-sm text-paper">
+                ✓ Connected
+                {pairingStatus.username ? (
+                  <>
+                    {" "}
+                    as{" "}
+                    <span className="font-mono">@{pairingStatus.username}</span>
+                  </>
+                ) : null}
+                . Maya can text you now.
+              </p>
+              <button
+                onClick={() => setStage("plan")}
+                className="mt-5 rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink"
+              >
+                Continue →
+              </button>
+            </div>
+          ) : (
+            <div className="border border-paper bg-ink p-5">
+              <ol className="space-y-4 text-sm text-paper-dim">
+                <li>
+                  <span className="font-medium text-paper">1. Get Telegram</span>{" "}
+                  — a free messaging app.{" "}
+                  <a
+                    className="underline"
+                    href="https://telegram.org/dl"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Download it here
+                  </a>{" "}
+                  if you don&apos;t already have it.
+                </li>
+                <li>
+                  <span className="font-medium text-paper">2. Open Maya</span> —
+                  on this device, tap the button. On your phone, scan the QR.
+                  {pairing ? (
+                    <>
+                      <div className="mt-3 flex flex-wrap items-center gap-5">
+                        <a
+                          href={pairing.deepLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-full bg-paper px-5 py-2 text-sm font-medium text-ink"
+                        >
+                          Open Maya in Telegram
+                        </a>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          alt="Scan to open Maya in Telegram"
+                          width={140}
+                          height={140}
+                          className="rounded bg-white p-1"
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(
+                            pairing.deepLink
+                          )}`}
+                        />
+                      </div>
+                      <p className="mt-2 text-xs text-paper-faint">
+                        Or search{" "}
+                        <span className="font-mono text-paper">
+                          @{pairing.botUsername}
+                        </span>{" "}
+                        in Telegram and tap Start.
+                      </p>
+                    </>
+                  ) : (
+                    <div className="mt-3 flex items-center gap-2 text-paper-dim">
+                      <Spinner className="text-lime" /> Preparing your link…
+                    </div>
+                  )}
+                </li>
+                <li>
+                  <span className="font-medium text-paper">3. Press Start</span>{" "}
+                  in the chat with Maya — this screen updates automatically the
+                  moment you&apos;re linked.
+                </li>
+              </ol>
+              <div className="mt-5 flex items-center gap-2 text-sm text-paper-dim">
+                <Spinner className="text-lime" /> Waiting for you to open Maya and
+                press Start…
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* STEP 3 — Pick a plan (LAST), then launch. For a comped/active account
+          we confirm the plan and go straight to launch; otherwise the founder
+          picks a tier (→ Stripe) here. Deploy is the final action. */}
       {stage === "plan" && (
         <section className="border border-paper bg-ink-2 p-6">
           {(() => {
-            // If the founder already has an active plan (comped, or returned
-            // from Stripe trial), confirm it and let them continue — no need to
-            // re-pick. Otherwise show the tier picker below.
             const pf = snapshot
               ? planFeaturesGtm({ gtmPlanJson: snapshot.agent.gtmPlanJson })
               : null;
@@ -854,17 +912,15 @@ function GtmOnboardingBody() {
             const tierName =
               pf.plan.charAt(0).toUpperCase() + pf.plan.slice(1);
             return (
-              <div className="mb-2 rounded border border-lime/40 bg-ink p-4 text-sm text-paper">
+              <div className="mb-4 rounded border border-lime/40 bg-ink p-4 text-sm text-paper">
                 You&apos;re on <strong>{tierName}</strong> — you&apos;re all set.
-                Continue below to connect your Telegram bot.
+                Launch Maya below.
               </div>
             );
           })()}
 
-          <div className="mt-2 border border-paper bg-ink p-5">
-            <h3 className="mb-2 font-display text-lg">
-              Pick a plan and let Maya start posting
-            </h3>
+          <div className="border border-paper bg-ink p-5">
+            <h3 className="mb-2 font-display text-lg">Pick your plan</h3>
             <p className="mb-4 text-sm text-paper-dim">
               Start your 7-day free trial so Maya can go live and start posting
               for you. Cancel any time before it ends and you won&apos;t be
@@ -883,101 +939,16 @@ function GtmOnboardingBody() {
           </div>
 
           <button
-            onClick={() => setStage("connect")}
-            className="mt-6 rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink"
-          >
-            Continue →
-          </button>
-        </section>
-      )}
-
-      {stage === "connect" && (
-        <section className="border border-paper bg-ink-2 p-6">
-          {/* Sprint 2.26b — Telegram bot setup gate. Operator either
-              connects their own bot from BotFather (recommended for
-              production) or uses the shared dev fallback (testing). */}
-          <div className="border border-paper bg-ink p-5">
-            <h3 className="mb-2 font-display text-lg">
-              Connect your Telegram bot
-            </h3>
-            <p className="text-sm text-paper-dim">
-              Your Maya lives in Telegram. Create your own bot (free, takes
-              ~60 seconds) so messages route to YOU, not a shared dev bot.
-            </p>
-
-            {botStatus.kind === "connected" ? (
-              <div className="mt-4 rounded border border-paper bg-ink-2 p-3 text-sm">
-                Connected as{" "}
-                <span className="font-mono">@{botStatus.username}</span>
-              </div>
-            ) : botStatus.kind === "shared_fallback" ? (
-              <div className="mt-4 rounded border border-paper bg-ink-2 p-3 text-sm text-paper-dim">
-                Using shared dev bot. Fine for testing — connect your own
-                later from /profile.
-              </div>
-            ) : (
-              <>
-                <ol className="mt-4 list-decimal space-y-1 pl-5 text-sm text-paper-dim">
-                  <li>
-                    Open Telegram, search{" "}
-                    <span className="font-mono text-paper">@BotFather</span>
-                  </li>
-                  <li>
-                    Send{" "}
-                    <span className="font-mono text-paper">/newbot</span>,
-                    pick a name + handle
-                  </li>
-                  <li>Copy the token BotFather sends back</li>
-                  <li>Paste it below — we validate + encrypt it</li>
-                </ol>
-                <div className="mt-4 flex gap-2">
-                  <input
-                    type="password"
-                    placeholder="1234567890:ABC-XYZ-bot-token-here"
-                    value={botToken}
-                    onChange={(event) => setBotToken(event.target.value)}
-                    className="input flex-1 font-mono text-xs"
-                    disabled={botStatus.kind === "validating"}
-                  />
-                  <button
-                    onClick={connectBot}
-                    disabled={
-                      botStatus.kind === "validating" ||
-                      botToken.trim().length < 20
-                    }
-                    className="rounded-full bg-paper px-5 py-2 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {botStatus.kind === "validating"
-                      ? "Validating..."
-                      : "Connect"}
-                  </button>
-                </div>
-                {botStatus.kind === "error" && (
-                  <p className="mt-2 text-sm text-red-400">
-                    {botStatus.message}
-                  </p>
-                )}
-                <button
-                  onClick={() => setBotStatus({ kind: "shared_fallback" })}
-                  className="mt-3 text-xs text-paper-dim underline"
-                >
-                  Skip — use shared dev bot for testing
-                </button>
-              </>
-            )}
-          </div>
-
-          <button
             onClick={deploy}
-            disabled={deploying || botStatus.kind === "idle"}
+            disabled={deploying}
             className="mt-6 inline-flex items-center gap-2 rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
             {deploying ? (
               <>
-                <Spinner className="text-ink" /> Deploying…
+                <Spinner className="text-ink" /> Launching…
               </>
             ) : (
-              "Deploy Maya"
+              "Launch Maya"
             )}
           </button>
         </section>
@@ -1148,10 +1119,10 @@ function StepRail({ stage }: { stage: Stage }) {
   // success beat — it keeps the final "Connect" step lit (all done).
   const steps: { key: Stage; label: string }[] = [
     { key: "intake", label: "Product" },
-    { key: "plan", label: "Plan" },
     { key: "connect", label: "Connect" },
+    { key: "plan", label: "Plan" },
   ];
-  const order: Stage[] = ["intake", "plan", "connect", "deploy"];
+  const order: Stage[] = ["intake", "connect", "plan", "deploy"];
   const current = order.indexOf(stage);
   return (
     <div className="mb-10 grid gap-3 sm:grid-cols-3">
@@ -1198,28 +1169,6 @@ function Field({
     <label className="block">
       <span className="mb-2 block text-sm text-paper-dim">{label}</span>
       {children}
-    </label>
-  );
-}
-
-function Toggle({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <label className="flex items-center justify-between border border-paper bg-ink-2 p-4 text-sm">
-      <span>{label}</span>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="h-5 w-5 accent-lime"
-      />
     </label>
   );
 }

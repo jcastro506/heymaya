@@ -47,9 +47,9 @@ vi.mock("@/convex/_generated/api", () => ({
         generateWalkthroughUploadUrl: "generateWalkthroughUploadUrl",
         registerWalkthroughUpload: "registerWalkthroughUpload",
       },
-      telegramBotPerTenant: {
-        validateAndSetPersonalTelegramBot:
-          "validateAndSetPersonalTelegramBot",
+      telegramPairing: {
+        createPairingToken: "createPairingToken",
+        getMyPairingStatus: "getMyPairingStatus",
       },
     },
     billing: {
@@ -73,18 +73,17 @@ describe("GTM onboarding page", () => {
     // The differentiator field — the founder's own "what it does + what's
     // different", captured up front so Maya never guesses it.
     expect(html).toContain("What does it do, and what makes it different?");
-    expect(html).toContain("I can record voiceover");
     expect(html).toContain("Walkthrough recording");
-    expect(html).toContain("I can provide screenshots or slides");
-    expect(html).toContain("I will manually post on TikTok");
-    expect(html).toContain("connect Instagram so Maya posts for me");
     expect(html).toContain("TikTok profile, if any");
-    // The TikTok-only account-status/age/check toggles were replaced by the
-    // generalized per-channel warmth UI (shown only for channels the founder
-    // actually connected), so they're no longer in the empty-form render.
     expect(html).toContain("Instagram profile, if any");
-    // The creator-budget / UGC / visual-posts-per-week fields were removed from
-    // intake (Phase 0) — Maya sets cadence + handles UGC herself, post-research.
+    // The capability checkboxes (record screen/voice/face, manual-post toggles)
+    // were removed — Maya figures out format/cadence herself. They must NOT
+    // render anymore.
+    expect(html).not.toContain("I can record voiceover");
+    expect(html).not.toContain("I will manually post on TikTok");
+    // Channel research is no longer pre-run in onboarding (Maya owns it in BOOT),
+    // so the "where Maya wants to play" channel-ranking screen is gone.
+    expect(html).not.toContain("Where Maya wants to play");
   });
 
   it("wires the tier-selection step to the GTM checkout action", async () => {

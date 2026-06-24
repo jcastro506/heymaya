@@ -59,6 +59,13 @@ export default function AccountPage() {
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
 
+  async function handleSignOut() {
+    // Plain log out — ends the Clerk session and returns to the public landing.
+    // A full reload clears all client + Convex state (distinct from deleting).
+    await signOut();
+    window.location.href = "/";
+  }
+
   async function handleDeleteAccount() {
     if (confirmText.trim().toUpperCase() !== DELETE_PHRASE) return;
     setDeleting(true);
@@ -296,6 +303,23 @@ export default function AccountPage() {
               )}
             </div>
           )}
+        </Card>
+      </Section>
+
+      <Section title="Session">
+        <Card>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-paper-dim">
+              Log out of HeyMaya on this device. Maya keeps running — you can sign
+              back in any time.
+            </p>
+            <button
+              onClick={handleSignOut}
+              className="rounded-lg border border-paper/40 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-paper hover:bg-paper/10"
+            >
+              Log out
+            </button>
+          </div>
         </Card>
       </Section>
 
