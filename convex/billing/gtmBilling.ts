@@ -277,6 +277,11 @@ export const createGtmCheckoutSession = action({
   args: {
     interval: v.optional(v.union(v.literal("monthly"), v.literal("annual"))),
     tier: v.optional(GTM_PLAN),
+    // Where Stripe sends the founder back. "onboarding" returns them to the
+    // onboarding flow to finish (Launch Maya); default "account" is the
+    // in-app upgrade path. Without this, an onboarding payer lands on the
+    // account page and never deploys.
+    returnTo: v.optional(v.union(v.literal("onboarding"), v.literal("account"))),
   },
   handler: async (ctx, args): Promise<{ url: string }> => {
     const identity = await ctx.auth.getUserIdentity();
@@ -330,8 +335,14 @@ export const createGtmCheckoutSession = action({
         metadata: gtmMeta,
         ...(trialDays ? { trial_period_days: trialDays } : {}),
       },
-      success_url: `${baseUrl}/clawlaunch/mission/account?checkout=success`,
-      cancel_url: `${baseUrl}/clawlaunch/mission/account?checkout=cancelled`,
+      success_url:
+        args.returnTo === "onboarding"
+          ? `${baseUrl}/onboarding/gtm?checkout=success`
+          : `${baseUrl}/clawlaunch/mission/account?checkout=success`,
+      cancel_url:
+        args.returnTo === "onboarding"
+          ? `${baseUrl}/onboarding/gtm?checkout=cancelled`
+          : `${baseUrl}/clawlaunch/mission/account?checkout=cancelled`,
     });
     if (!session.url) throw new Error("createGtmCheckoutSession: Stripe returned no URL.");
     return { url: session.url };

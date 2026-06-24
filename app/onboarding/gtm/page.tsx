@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -211,6 +211,12 @@ function GtmOnboardingBody() {
     deepLink: string;
     botUsername: string;
   } | null>(null);
+  // Retry counter for minting the pairing link (the agent row can still be
+  // settling right after onboarding) so the Connect screen never hangs.
+  const [pairRetry, setPairRetry] = useState(0);
+  // One-shot guard: resume the founder at the furthest-reached step on initial
+  // load (refresh / return-from-Stripe), instead of always restarting at intake.
+  const resumedRef = useRef(false);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -257,13 +263,45 @@ function GtmOnboardingBody() {
           setPairing({ deepLink: res.deepLink, botUsername: res.botUsername });
         }
       })
-      .catch((err) => {
-        if (!cancelled) setError(friendlyError(err));
+      .catch(() => {
+        // The agent row may still be settling — retry a few times so the
+        // "Preparing your link…" state can never hang forever.
+        if (!cancelled && pairRetry < 5) {
+          setTimeout(() => {
+            if (!cancelled) setPairRetry((n) => n + 1);
+          }, 1500);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [stage, pairing, pairingStatus?.paired, createPairingToken]);
+  }, [stage, pairing, pairingStatus?.paired, createPairingToken, pairRetry]);
+
+  // Resume at the furthest-reached step on initial load (refresh, or returning
+  // from Stripe) instead of restarting at Product. Runs once; forward in-page
+  // navigation is unaffected.
+  useEffect(() => {
+    if (resumedRef.current) return;
+    if (!snapshot) return; // loading (undefined) or no agent yet (null) — wait
+    resumedRef.current = true;
+    const agent = snapshot.agent;
+    if (agent.openClawFlyAppId) {
+      // Already deployed — don't re-onboard; go straight to the HQ.
+      window.location.href = "/clawlaunch/mission";
+      return;
+    }
+    const pf = planFeaturesGtm({ gtmPlanJson: agent.gtmPlanJson });
+    const planActive = pf.status !== "none" && pf.maxActiveChannels > 0;
+    const paired = Boolean(agent.telegramChatId);
+    // Advance forward only (never knock them back from intake's default).
+    let next: Stage | null = null;
+    if (agent.appId && (paired || planActive)) next = "plan";
+    else if (agent.appId) next = "connect";
+    // Justified: resume-once derivation from async-loaded snapshot, guarded by
+    // resumedRef so it runs a single time and never fights forward navigation.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (next) setStage(next);
+  }, [snapshot]);
 
   const canSubmit = useMemo(() => {
     // W1.3 — a mobile-only founder with no landing page can submit with just a
@@ -404,9 +442,9 @@ function GtmOnboardingBody() {
     setCheckoutError(null);
     try {
       track(ANALYTICS_EVENTS.CHECKOUT_STARTED, { tier, interval });
-      const { url } = await startCheckout({ tier, interval });
-      // Hard redirect to Stripe Checkout. On return, the webhook has granted
-      // the trialing plan; the founder lands back in the app ready to deploy.
+      // returnTo:"onboarding" → Stripe sends them BACK here (not the account
+      // page) so the resume effect lands them on the plan step to Launch Maya.
+      const { url } = await startCheckout({ tier, interval, returnTo: "onboarding" });
       window.location.href = url;
     } catch (err) {
       setCheckoutError(friendlyError(err));
