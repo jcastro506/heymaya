@@ -5,8 +5,7 @@ import Link from "next/link";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { selectActiveChannels } from "@/convex/gtmMaya/channelSelection";
-import type { GtmChannelDecision } from "@/convex/gtmMaya/channelScoring";
+import { planFeaturesGtm } from "@/convex/gtmMaya/planGtm";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import {
   TierSelector,
@@ -14,7 +13,11 @@ import {
   type GtmInterval,
 } from "@/components/billing/TierSelector";
 
-type Stage = "intake" | "research" | "deploy";
+// Onboarding is three clean steps: Product → Plan → Connect. Maya does ALL her
+// own market/channel research natively in her BOOT turn after deploy — Convex no
+// longer pre-runs research or makes the founder rank "buyer fit" up front.
+// "deploy" is the terminal success beat (auto-redirects into the HQ).
+type Stage = "intake" | "plan" | "connect" | "deploy";
 
 // Per-channel warmth state captured at onboarding. Mirrors the
 // tiktokWarmupState arc generalized to every channel: a brand-new
@@ -103,12 +106,6 @@ const CHANNEL_LABELS: Record<string, string> = {
   youtube: "YouTube",
 };
 
-// Channels we no longer score or surface (vestigial — not in the
-// product vision). YouTube is now a first-class Brief-only channel and
-// is NO LONGER hidden; only product_hunt stays filtered out so stale
-// historical rows can never resurface it.
-const HIDDEN_CHANNELS = new Set(["product_hunt"]);
-
 const DEFAULT_DRAFT: IntakeDraft = {
   name: "",
   url: "",
@@ -169,14 +166,6 @@ function GtmOnboardingBody() {
   const registerWalkthroughUpload = useMutation(
     api.gtmMaya.walkthrough.registerWalkthroughUpload
   );
-  const createResearchJob = useMutation(
-    api.gtmMaya.researchLifecycle.createResearchJob
-  );
-  // Sprint 1 — real research orchestrator (Sprint 3 + Sprint 4).
-  // Replaces the prior runBudgetedResearchSkeleton call. The skeleton
-  // mutation is kept in the Convex codebase for tests + emergency
-  // fallback but is no longer in the production onboarding path.
-  const runResearch = useAction(api.gtmMaya.researchWorker.runMyResearch);
   const inspectApp = useAction(api.gtmMaya.appInspector.inspectMyGtmApp);
   const analyzeWalkthrough = useAction(
     api.gtmMaya.walkthrough.analyzeMyWalkthroughUpload
@@ -187,10 +176,6 @@ function GtmOnboardingBody() {
   // gtmAgents row, then deploy reads it back via internal query.
   const setPersonalTelegramBot = useAction(
     api.gtmMaya.telegramBotPerTenant.validateAndSetPersonalTelegramBot
-  );
-  // S3 — operator confirms/overrides the channel recommendation before deploy.
-  const setChannelDecisions = useMutation(
-    api.gtmMaya.researchLifecycle.setMyChannelDecisions
   );
   // Tier selection → Stripe checkout. Picking a plan starts the 7-day trial;
   // the webhook grants the trialing plan (so planFeaturesGtm flips from the
@@ -211,13 +196,7 @@ function GtmOnboardingBody() {
   // clear full-screen spinner instead of just flipping a button label — and
   // keep it up right through the auto-redirect into the HQ.
   const [deploying, setDeploying] = useState(false);
-  const [researchJobId, setResearchJobId] = useState<string | null>(null);
   const [deployResult, setDeployResult] = useState<string | null>(null);
-  // S3 — operator overrides to the channel recommendation (channel → decision).
-  // Effective decision in render = override ?? the agent's scored decision.
-  const [channelPicks, setChannelPicks] = useState<Record<string, string>>({});
-  const [channelsConfirmed, setChannelsConfirmed] = useState(false);
-  const [savingChannels, setSavingChannels] = useState(false);
   // Sprint 2.26b — Telegram bot state. Operator can connect their own
   // bot from BotFather OR opt into the shared dev fallback.
   // Tier-selection state. `interval` toggles monthly/annual; `checkoutTier`
@@ -383,24 +362,17 @@ function GtmOnboardingBody() {
         });
         await analyzeWalkthrough({ uploadId });
       }
-      const jobId = await createResearchJob({ appId, budgetUsd: 3 });
-      // Sprint 1: real research orchestrator. This action may take
-      // 1-3 minutes (5 platform workers in parallel, ~30 ScrapeCreators
-      // calls total at the default budget). The mission board polls
-      // gtmResearchJobs.phase for live progress.
-      void runResearch({ researchJobId: jobId });
-      setResearchJobId(String(jobId));
-      // Capture the founder-confirmed per-channel warmth alongside
-      // submission. Deploy reconstructs the authoritative channelWarmthJson
-      // server-side (from connected handles + the ScrapeCreators pull); this
-      // surfaces what the founder explicitly told us so it's observable.
+      // NOTE: Maya owns her market + channel research natively in her BOOT turn
+      // after deploy — Convex no longer pre-runs a research job here or asks the
+      // founder to rank channels. Onboarding just captures the product + plan +
+      // bot; `appInspector` above gives the product picture, and the rest is hers.
       const channelWarmthJson = buildChannelWarmthJson(draft);
       track(ANALYTICS_EVENTS.ONBOARDING_SUBMITTED, {
         app_id: String(appId),
         connected_channels: connectedWarmthChannels(draft),
         ...(channelWarmthJson ? { channel_warmth_json: channelWarmthJson } : {}),
       });
-      setStage("research");
+      setStage("plan");
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -420,28 +392,6 @@ function GtmOnboardingBody() {
         kind: "error",
         message: (err as Error).message || "validation failed",
       });
-    }
-  }
-
-  async function confirmChannels() {
-    if (!snapshot) return;
-    setSavingChannels(true);
-    setError(null);
-    try {
-      const decisions = snapshot.channelScores.map((s) => ({
-        channel: s.channel,
-        decision: (channelPicks[s.channel] ?? s.decision) as
-          | "primary"
-          | "secondary"
-          | "parked"
-          | "blocked",
-      }));
-      await setChannelDecisions({ decisions });
-      setChannelsConfirmed(true);
-    } catch (err) {
-      setError(friendlyError(err));
-    } finally {
-      setSavingChannels(false);
     }
   }
 
@@ -889,161 +839,29 @@ function GtmOnboardingBody() {
         </section>
       )}
 
-      {stage === "research" && (
+      {stage === "plan" && (
         <section className="border border-paper bg-ink-2 p-6">
-          <h2 className="mb-3 font-display text-2xl">Research pass complete</h2>
-          <p className="text-paper-dim">
-            Job: <span className="font-mono text-paper">{researchJobId}</span>
-          </p>
-          <p className="mt-4 max-w-2xl text-paper-dim">
-            Here&apos;s where Maya thinks your buyers are — ranked, with the
-            reasoning. This is her recommendation; you have the final call.
-            Confirm it or change any channel before you deploy.
-          </p>
-
-          {/* Research still running — channels haven't landed yet. Show a clear
-              spinner instead of an empty panel so it never looks stalled. The
-              snapshot query is live, so this swaps to the picker automatically
-              the moment the scored channels persist. */}
-          {snapshot && snapshot.channelScores.length === 0 && (
-            <div className="mt-6 flex items-center gap-3 rounded border border-paper bg-ink p-5">
-              <Spinner className="text-lime" />
-              <p className="text-sm text-paper-dim">
-                Maya&apos;s researching your market — who buys, where they are,
-                what&apos;s working. This usually takes a minute or two; your
-                channel plan will appear here automatically.
-              </p>
-            </div>
-          )}
-
-          {/* S3 — channel-selection UX. Maya proposes with evidence; the
-              operator confirms or overrides. All platforms are selectable —
-              nothing is gated; the operator just focuses the set. The deploy
-              reads decision === "primary"/"secondary" into the agent's GTM.md. */}
-          {snapshot && snapshot.channelScores.length > 0 && (
-            <div className="mt-6 border border-paper bg-ink p-5">
-              <h3 className="mb-1 font-display text-lg">
-                Where Maya wants to play
-              </h3>
-              <p className="mb-4 text-sm text-paper-dim">
-                Ranked by buyer-fit. Set each to <strong>Primary</strong> (her
-                main bet), <strong>Secondary</strong>, or <strong>Park</strong>{" "}
-                (skip for now).
-              </p>
-              <div className="space-y-3">
-                {[...snapshot.channelScores]
-                  .filter((s) => !HIDDEN_CHANNELS.has(s.channel))
-                  .sort((a, b) => b.score - a.score)
-                  .map((s) => {
-                    const pick = channelPicks[s.channel] ?? s.decision;
-                    return (
-                      <div
-                        key={s.channel}
-                        className="rounded border border-paper bg-ink-2 p-3"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-paper">
-                              {CHANNEL_LABELS[s.channel] ??
-                                s.channel.replace("_", " ")}
-                            </span>
-                            <span className="text-xs text-paper-dim">
-                              {s.confidence} confidence
-                            </span>
-                          </div>
-                          <select
-                            value={pick}
-                            disabled={channelsConfirmed}
-                            onChange={(e) =>
-                              setChannelPicks((prev) => ({
-                                ...prev,
-                                [s.channel]: e.target.value,
-                              }))
-                            }
-                            className="input text-xs disabled:opacity-50"
-                          >
-                            <option value="primary">Primary</option>
-                            <option value="secondary">Secondary</option>
-                            <option value="parked">Park</option>
-                          </select>
-                        </div>
-                        {s.reasons.length > 0 && (
-                          <p className="mt-2 text-sm text-paper-dim">
-                            {s.reasons[0]}
-                          </p>
-                        )}
-                        {s.risks.length > 0 && (
-                          <p className="mt-1 text-xs text-amber-300/80">
-                            Watch: {s.risks[0]}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
+          {(() => {
+            // If the founder already has an active plan (comped, or returned
+            // from Stripe trial), confirm it and let them continue — no need to
+            // re-pick. Otherwise show the tier picker below.
+            const pf = snapshot
+              ? planFeaturesGtm({ gtmPlanJson: snapshot.agent.gtmPlanJson })
+              : null;
+            const planActive =
+              !!pf && pf.status !== "none" && pf.maxActiveChannels > 0;
+            if (!planActive || !pf) return null;
+            const tierName =
+              pf.plan.charAt(0).toUpperCase() + pf.plan.slice(1);
+            return (
+              <div className="mb-2 rounded border border-lime/40 bg-ink p-4 text-sm text-paper">
+                You&apos;re on <strong>{tierName}</strong> — you&apos;re all set.
+                Continue below to connect your Telegram bot.
               </div>
-              {(() => {
-                // Live preview of the activation policy: shows which channels
-                // Maya will actually RUN given the current picks (lock all
-                // high-fit, floor of 3). Same pure fn the deploy path uses, so
-                // what the operator sees here is exactly what ships.
-                const preview = selectActiveChannels(
-                  snapshot.channelScores.map((s) => ({
-                    channel: s.channel,
-                    score: s.score,
-                    decision: (channelPicks[s.channel] ??
-                      s.decision) as GtmChannelDecision,
-                    confidence: s.confidence,
-                    qualityGate: s.qualityGate,
-                  }))
-                );
-                if (preview.active.length === 0) return null;
-                return (
-                  <div className="mt-4 rounded border border-paper/40 bg-ink-2 p-3">
-                    <p className="text-sm text-paper">
-                      Maya will run{" "}
-                      <strong>
-                        {preview.active
-                          .map((c) => CHANNEL_LABELS[c] ?? c)
-                          .join(", ")}
-                      </strong>
-                      .
-                    </p>
-                    <p className="mt-1 text-xs text-paper-dim">{preview.note}</p>
-                  </div>
-                );
-              })()}
-              <div className="mt-4 flex items-center gap-3">
-                <button
-                  onClick={confirmChannels}
-                  disabled={savingChannels}
-                  className="rounded-full bg-paper px-5 py-2 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {savingChannels
-                    ? "Saving..."
-                    : channelsConfirmed
-                      ? "Channels confirmed ✓"
-                      : "Confirm channels"}
-                </button>
-                {channelsConfirmed && (
-                  <button
-                    onClick={() => setChannelsConfirmed(false)}
-                    className="text-xs text-paper-dim underline"
-                  >
-                    Change
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
-          {/* Tier-selection / go-live gate. Maya has shown her value (the
-              ranked channel plan above); now the founder picks a plan to
-              start the 7-day trial so she can actually POST. Without this
-              step gtmPlanJson stays unset and planFeaturesGtm is fail-closed
-              (maxActiveChannels:0, canAutoPost:false) — Maya researches and
-              drafts but can never post. Selecting a tier → Stripe Checkout →
-              the webhook grants the trialing plan on return. */}
-          <div className="mt-6 border border-paper bg-ink p-5">
+          <div className="mt-2 border border-paper bg-ink p-5">
             <h3 className="mb-2 font-display text-lg">
               Pick a plan and let Maya start posting
             </h3>
@@ -1064,10 +882,21 @@ function GtmOnboardingBody() {
             ) : null}
           </div>
 
+          <button
+            onClick={() => setStage("connect")}
+            className="mt-6 rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink"
+          >
+            Continue →
+          </button>
+        </section>
+      )}
+
+      {stage === "connect" && (
+        <section className="border border-paper bg-ink-2 p-6">
           {/* Sprint 2.26b — Telegram bot setup gate. Operator either
               connects their own bot from BotFather (recommended for
               production) or uses the shared dev fallback (testing). */}
-          <div className="mt-6 border border-paper bg-ink p-5">
+          <div className="border border-paper bg-ink p-5">
             <h3 className="mb-2 font-display text-lg">
               Connect your Telegram bot
             </h3>
@@ -1315,22 +1144,32 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function StepRail({ stage }: { stage: Stage }) {
-  const steps: Stage[] = ["intake", "research", "deploy"];
-  const current = steps.indexOf(stage);
+  // Three founder-facing steps flowed across the top. "deploy" is the terminal
+  // success beat — it keeps the final "Connect" step lit (all done).
+  const steps: { key: Stage; label: string }[] = [
+    { key: "intake", label: "Product" },
+    { key: "plan", label: "Plan" },
+    { key: "connect", label: "Connect" },
+  ];
+  const order: Stage[] = ["intake", "plan", "connect", "deploy"];
+  const current = order.indexOf(stage);
   return (
     <div className="mb-10 grid gap-3 sm:grid-cols-3">
-      {steps.map((step, index) => (
-        <div
-          key={step}
-          className={
-            index <= current
-              ? "bg-lime p-3 text-sm text-white"
-              : "border border-paper bg-ink-2 p-3 text-sm text-paper-faint"
-          }
-        >
-          {step}
-        </div>
-      ))}
+      {steps.map((step) => {
+        const reached = current >= order.indexOf(step.key);
+        return (
+          <div
+            key={step.key}
+            className={
+              reached
+                ? "bg-lime p-3 text-sm text-white"
+                : "border border-paper bg-ink-2 p-3 text-sm text-paper-faint"
+            }
+          >
+            {step.label}
+          </div>
+        );
+      })}
     </div>
   );
 }
