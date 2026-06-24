@@ -37,9 +37,6 @@ const DELETE_PHRASE = "DELETE";
 
 export default function AccountPage() {
   const account = useQuery(api.gtmMaya.missionControl.getMyAccount);
-  const hardDeleteAccount = useAction(
-    api.gtmMaya.accountLifecycle.hardDeleteMyGtmAccount
-  );
   const cancelSubscription = useAction(
     api.gtmMaya.accountLifecycle.cancelMyGtmSubscription
   );
@@ -71,17 +68,27 @@ export default function AccountPage() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      // Hard, irreversible delete: cancels + deletes the Stripe customer, purges
-      // ALL gtm* rows (cross-tenant learnings exempt), and destroys the Fly app.
-      // The DB purge is authoritative; Stripe/Fly teardown is best-effort.
-      const result = await hardDeleteAccount({});
-      if (!result.deleted) {
-        throw new Error(result.reason ?? "Could not delete your account.");
+      // Route through /api/account/delete so the delete is COMPLETE: it purges
+      // Convex (Stripe customer + ALL gtm* rows), destroys the Fly app, AND
+      // deletes the Clerk identity (clerk.users.deleteUser). This closes the
+      // ghost-account gap where the old in-app action left the login behind, so
+      // a "deleted" user could still sign in to a fresh onboarding.
+      const res = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirmation: "DELETE MAYA" }),
+      });
+      const result = (await res.json()) as { deleted?: boolean; error?: string };
+      if (!res.ok || !result.deleted) {
+        throw new Error(result.error ?? "Could not delete your account.");
       }
-      // Now end the Clerk session and hard-redirect to the public landing — a
-      // full reload wipes all client + Convex state so there's no stale authed
-      // dashboard left behind.
-      await signOut();
+      // Clerk identity is already gone server-side; clear the local session too
+      // (best-effort — it may already be invalid) and hard-redirect home.
+      try {
+        await signOut();
+      } catch {
+        /* session already invalidated by the user delete — ignore */
+      }
       window.location.href = "/";
     } catch (err) {
       setDeleting(false);
