@@ -13,11 +13,12 @@ import {
   type GtmInterval,
 } from "@/components/billing/TierSelector";
 
-// Onboarding is three clean steps: Product → Plan → Connect. Maya does ALL her
-// own market/channel research natively in her BOOT turn after deploy — Convex no
-// longer pre-runs research or makes the founder rank "buyer fit" up front.
-// "deploy" is the terminal success beat (auto-redirects into the HQ).
-type Stage = "intake" | "plan" | "connect" | "deploy";
+// Onboarding is three clean steps: Product → Plan → Connect. Launch (the Fly
+// deploy) happens when the founder hits "Launch Maya" on the Plan step; Connect
+// is reached AFTER that, so her OpenClaw machine already exists and she can text
+// back the instant they press Start. Maya does ALL her own market/channel
+// research natively in her BOOT turn — Convex never pre-ranks "buyer fit".
+type Stage = "intake" | "plan" | "connect";
 
 // Per-channel warmth state captured at onboarding. Mirrors the
 // tiktokWarmupState arc generalized to every channel: a brand-new
@@ -236,20 +237,6 @@ function GtmOnboardingBody() {
     };
   }, [startOnboarding, isAuthenticated]);
 
-  // Once Maya is deployed, drop the founder straight into their HQ. We hold a
-  // brief "she's live" beat (so the success registers) then push to the mission
-  // dashboard, which hydrates live via Convex subscriptions. The spinner stays
-  // up the whole time so there's never a blank or "is it stuck?" moment.
-  useEffect(() => {
-    if (stage !== "deploy") return;
-    const t = setTimeout(() => {
-      // Hard navigation (matches the Stripe-checkout redirect pattern above) —
-      // the mission dashboard then hydrates live via Convex subscriptions.
-      window.location.href = "/clawlaunch/mission";
-    }, 2600);
-    return () => clearTimeout(t);
-  }, [stage]);
-
   // Mint the Telegram pairing deep link when the founder reaches the Connect
   // step (and isn't already paired). Idempotent server-side — a refresh reuses
   // the live token rather than minting a new one.
@@ -285,18 +272,19 @@ function GtmOnboardingBody() {
     if (!snapshot) return; // loading (undefined) or no agent yet (null) — wait
     resumedRef.current = true;
     const agent = snapshot.agent;
-    if (agent.openClawFlyAppId) {
-      // Already deployed — don't re-onboard; go straight to the HQ.
+    const deployed = Boolean(agent.openClawFlyAppId);
+    const paired = Boolean(agent.telegramChatId);
+    if (deployed && paired) {
+      // Fully set up — don't re-onboard; go straight to the HQ.
       window.location.href = "/clawlaunch/mission";
       return;
     }
-    const pf = planFeaturesGtm({ gtmPlanJson: agent.gtmPlanJson });
-    const planActive = pf.status !== "none" && pf.maxActiveChannels > 0;
-    const paired = Boolean(agent.telegramChatId);
     // Advance forward only (never knock them back from intake's default).
+    // Order: Product → Plan(+launch) → Connect. Deployed-but-unpaired resumes
+    // at Connect; product-captured-but-not-launched resumes at Plan.
     let next: Stage | null = null;
-    if (agent.appId && (paired || planActive)) next = "plan";
-    else if (agent.appId) next = "connect";
+    if (deployed) next = "connect";
+    else if (agent.appId) next = "plan";
     // Justified: resume-once derivation from async-loaded snapshot, guarded by
     // resumedRef so it runs a single time and never fights forward navigation.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -429,7 +417,7 @@ function GtmOnboardingBody() {
         connected_channels: connectedWarmthChannels(draft),
         ...(channelWarmthJson ? { channel_warmth_json: channelWarmthJson } : {}),
       });
-      setStage("connect");
+      setStage("plan");
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -459,10 +447,10 @@ function GtmOnboardingBody() {
       const result = await deployMaya({});
       if (result.ok) {
         track(ANALYTICS_EVENTS.PLAN_READY, { fly_app_id: result.flyAppId });
-        // Move to the "live" beat; the redirect effect below drops the founder
-        // into their HQ. Keep `deploying` true so the spinner never flickers
-        // off between the deploy resolving and the dashboard loading.
-        setStage("deploy");
+        // Machine is up → advance to Connect. Now her OpenClaw exists, so the
+        // moment they press Start in Telegram she routes + texts back.
+        setStage("connect");
+        setDeploying(false);
       } else {
         // Non-ok deploy → surface the reason, drop the spinner so they can retry.
         setError(`${result.stage}: ${result.message}`);
@@ -833,16 +821,20 @@ function GtmOnboardingBody() {
         </section>
       )}
 
-      {/* STEP 2 — Connect Maya on Telegram (the shared Maya bot). The founder
-          opens @Maya and presses Start; the webhook claims the pairing token and
-          this screen advances automatically (getMyPairingStatus is reactive). */}
+      {/* FINAL STEP — Connect Maya on Telegram. Reached AFTER deploy, so her
+          OpenClaw machine already exists: the moment the founder presses Start,
+          Convex routes their DM to a live agent and Maya texts back. The webhook
+          claims the pairing token and this screen advances (getMyPairingStatus
+          is reactive). */}
       {stage === "connect" && (
         <section className="border border-paper bg-ink-2 p-6">
-          <h2 className="mb-2 font-display text-2xl">Connect Maya on Telegram</h2>
+          <h2 className="mb-2 font-display text-2xl">
+            Maya&apos;s live — say hi on Telegram
+          </h2>
           <p className="mb-6 max-w-xl text-sm text-paper-dim">
-            Maya lives in your texts. Connect Telegram and she&apos;ll message you
-            there — your daily plan, what she posted, what landed, and your
-            questions answered, all in one chat.
+            Maya&apos;s up and running. Connect Telegram and she&apos;ll text you
+            right back — that&apos;s where everything happens: your daily plan,
+            what she posted, what landed, and any question you have.
           </p>
 
           {pairingStatus?.paired ? (
@@ -856,14 +848,14 @@ function GtmOnboardingBody() {
                     <span className="font-mono">@{pairingStatus.username}</span>
                   </>
                 ) : null}
-                . Maya can text you now.
+                . Maya just texted you — check Telegram.
               </p>
-              <button
-                onClick={() => setStage("plan")}
-                className="mt-5 rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink"
+              <Link
+                href="/clawlaunch/mission"
+                className="mt-5 inline-block rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink"
               >
-                Continue →
-              </button>
+                Open your HQ →
+              </Link>
             </div>
           ) : (
             <div className="border border-paper bg-ink p-5">
@@ -935,9 +927,10 @@ function GtmOnboardingBody() {
         </section>
       )}
 
-      {/* STEP 3 — Pick a plan (LAST), then launch. For a comped/active account
-          we confirm the plan and go straight to launch; otherwise the founder
-          picks a tier (→ Stripe) here. Deploy is the final action. */}
+      {/* STEP 2 — Pick a plan, then Launch. "Launch Maya" runs the deploy (the
+          spinner overlay) and, on success, advances to Connect — where her now-
+          live OpenClaw lets her text back instantly. Comped/active accounts skip
+          the picker and go straight to Launch. */}
       {stage === "plan" && (
         <section className="border border-paper bg-ink-2 p-6">
           {(() => {
@@ -992,25 +985,10 @@ function GtmOnboardingBody() {
         </section>
       )}
 
-      {stage === "deploy" && (
-        <section className="flex flex-col items-center justify-center border border-paper bg-ink-2 p-10 text-center">
-          <Spinner className="mb-5 size-8 text-lime" />
-          <h2 className="mb-2 font-display text-2xl">Maya&apos;s live ✓</h2>
-          <p className="text-sm text-paper-dim">
-            Opening your HQ — everything she does, live…
-          </p>
-          <Link
-            href="/clawlaunch/mission"
-            className="mt-6 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-white"
-          >
-            Open your HQ →
-          </Link>
-        </section>
-      )}
-
-      {/* Full-screen deploy spinner — the Fly provision takes ~30-60s, so we
+      {/* Full-screen launch spinner — the Fly provision takes ~30-60s, so we
           cover the page with a clear, reassuring loader (never a frozen-looking
-          button) and hold it right through the redirect into the HQ. */}
+          button). On success we land on the Connect step where Maya — now live —
+          texts the founder back the moment they press Start. */}
       {deploying && (
         <div
           className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-ink/95 px-6 text-center backdrop-blur"
@@ -1019,11 +997,11 @@ function GtmOnboardingBody() {
         >
           <Spinner className="size-10 text-lime" />
           <h2 className="mt-6 font-display text-2xl text-paper">
-            Setting up your Maya…
+            Launching your Maya…
           </h2>
           <p className="mt-3 max-w-sm text-sm text-paper-dim">
             Provisioning her workspace and bringing her online. This takes about
-            a minute — hang tight, we&apos;ll drop you straight into your HQ.
+            a minute — then you&apos;ll connect Telegram and she&apos;ll text you.
           </p>
         </div>
       )}
@@ -1157,10 +1135,10 @@ function StepRail({ stage }: { stage: Stage }) {
   // success beat — it keeps the final "Connect" step lit (all done).
   const steps: { key: Stage; label: string }[] = [
     { key: "intake", label: "Product" },
-    { key: "connect", label: "Connect" },
     { key: "plan", label: "Plan" },
+    { key: "connect", label: "Connect" },
   ];
-  const order: Stage[] = ["intake", "connect", "plan", "deploy"];
+  const order: Stage[] = ["intake", "plan", "connect"];
   const current = order.indexOf(stage);
   return (
     <div className="mb-10 grid gap-3 sm:grid-cols-3">
