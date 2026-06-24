@@ -207,6 +207,10 @@ function GtmOnboardingBody() {
   const [stage, setStage] = useState<Stage>("intake");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Dedicated flag for the Fly-provision deploy (~30-60s) so we can show a
+  // clear full-screen spinner instead of just flipping a button label — and
+  // keep it up right through the auto-redirect into the HQ.
+  const [deploying, setDeploying] = useState(false);
   const [researchJobId, setResearchJobId] = useState<string | null>(null);
   const [deployResult, setDeployResult] = useState<string | null>(null);
   // S3 — operator overrides to the channel recommendation (channel → decision).
@@ -248,6 +252,20 @@ function GtmOnboardingBody() {
       cancelled = true;
     };
   }, [startOnboarding, isAuthenticated]);
+
+  // Once Maya is deployed, drop the founder straight into their HQ. We hold a
+  // brief "she's live" beat (so the success registers) then push to the mission
+  // dashboard, which hydrates live via Convex subscriptions. The spinner stays
+  // up the whole time so there's never a blank or "is it stuck?" moment.
+  useEffect(() => {
+    if (stage !== "deploy") return;
+    const t = setTimeout(() => {
+      // Hard navigation (matches the Stripe-checkout redirect pattern above) —
+      // the mission dashboard then hydrates live via Convex subscriptions.
+      window.location.href = "/clawlaunch/mission";
+    }, 2600);
+    return () => clearTimeout(t);
+  }, [stage]);
 
   const canSubmit = useMemo(() => {
     // W1.3 — a mobile-only founder with no landing page can submit with just a
@@ -443,7 +461,7 @@ function GtmOnboardingBody() {
   }
 
   async function deploy() {
-    setBusy(true);
+    setDeploying(true);
     setError(null);
     try {
       const result = await deployMaya({});
@@ -454,12 +472,17 @@ function GtmOnboardingBody() {
       );
       if (result.ok) {
         track(ANALYTICS_EVENTS.PLAN_READY, { fly_app_id: result.flyAppId });
+        // Move to the "live" beat; the redirect effect below drops the founder
+        // into their HQ. Keep `deploying` true so the spinner never flickers
+        // off between the deploy resolving and the dashboard loading.
         setStage("deploy");
+      } else {
+        // Non-ok deploy → surface the reason, drop the spinner so they can retry.
+        setDeploying(false);
       }
     } catch (err) {
       setError(friendlyError(err));
-    } finally {
-      setBusy(false);
+      setDeploying(false);
     }
   }
 
@@ -853,9 +876,15 @@ function GtmOnboardingBody() {
           <button
             onClick={saveAndQueueResearch}
             disabled={!canSubmit || busy}
-            className="rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? "Researching..." : "Start research"}
+            {busy ? (
+              <>
+                <Spinner className="text-ink" /> Reading your product…
+              </>
+            ) : (
+              "Start research"
+            )}
           </button>
         </section>
       )}
@@ -871,6 +900,21 @@ function GtmOnboardingBody() {
             reasoning. This is her recommendation; you have the final call.
             Confirm it or change any channel before you deploy.
           </p>
+
+          {/* Research still running — channels haven't landed yet. Show a clear
+              spinner instead of an empty panel so it never looks stalled. The
+              snapshot query is live, so this swaps to the picker automatically
+              the moment the scored channels persist. */}
+          {snapshot && snapshot.channelScores.length === 0 && (
+            <div className="mt-6 flex items-center gap-3 rounded border border-paper bg-ink p-5">
+              <Spinner className="text-lime" />
+              <p className="text-sm text-paper-dim">
+                Maya&apos;s researching your market — who buys, where they are,
+                what&apos;s working. This usually takes a minute or two; your
+                channel plan will appear here automatically.
+              </p>
+            </div>
+          )}
 
           {/* S3 — channel-selection UX. Maya proposes with evidence; the
               operator confirms or overrides. All platforms are selectable —
@@ -1096,31 +1140,54 @@ function GtmOnboardingBody() {
 
           <button
             onClick={deploy}
-            disabled={busy || botStatus.kind === "idle"}
-            className="mt-6 rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={deploying || botStatus.kind === "idle"}
+            className="mt-6 inline-flex items-center gap-2 rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? "Deploying..." : "Deploy Maya"}
+            {deploying ? (
+              <>
+                <Spinner className="text-ink" /> Deploying…
+              </>
+            ) : (
+              "Deploy Maya"
+            )}
           </button>
         </section>
       )}
 
       {stage === "deploy" && (
-        <section className="border border-paper bg-ink-2 p-6">
-          <h2 className="mb-3 font-display text-2xl">Maya deployment started</h2>
-          <p className="text-paper-dim">{deployResult}</p>
-          <p className="mt-4 text-sm text-paper-dim">
-            She&apos;ll text you on Telegram shortly with links to connect your
-            channels. Tap each one, and from tomorrow morning Maya plans and
-            posts your whole day for you. Everything — what&apos;s going out, what
-            landed, how it performed, and your inbox — auto-updates in your HQ.
+        <section className="flex flex-col items-center justify-center border border-paper bg-ink-2 p-10 text-center">
+          <Spinner className="mb-5 size-8 text-lime" />
+          <h2 className="mb-2 font-display text-2xl">Maya&apos;s live ✓</h2>
+          <p className="text-sm text-paper-dim">
+            Opening your HQ — everything she does, live…
           </p>
           <Link
             href="/clawlaunch/mission"
-            className="mt-4 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-white"
+            className="mt-6 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-white"
           >
             Open your HQ →
           </Link>
         </section>
+      )}
+
+      {/* Full-screen deploy spinner — the Fly provision takes ~30-60s, so we
+          cover the page with a clear, reassuring loader (never a frozen-looking
+          button) and hold it right through the redirect into the HQ. */}
+      {deploying && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-ink/95 px-6 text-center backdrop-blur"
+          role="status"
+          aria-live="polite"
+        >
+          <Spinner className="size-10 text-lime" />
+          <h2 className="mt-6 font-display text-2xl text-paper">
+            Setting up your Maya…
+          </h2>
+          <p className="mt-3 max-w-sm text-sm text-paper-dim">
+            Provisioning her workspace and bringing her online. This takes about
+            a minute — hang tight, we&apos;ll drop you straight into your HQ.
+          </p>
+        </div>
       )}
     </Shell>
   );
@@ -1265,6 +1332,19 @@ function StepRail({ stage }: { stage: Stage }) {
         </div>
       ))}
     </div>
+  );
+}
+
+// Inline spinner — a spinning ring drawn with current text color, so callers
+// size + tint it via className (e.g. `size-8 text-lime`). No dependency, no
+// asset; just CSS animation. Defaults to a button-sized 1rem ring.
+function Spinner({ className = "" }: { className?: string }) {
+  return (
+    <span
+      role="status"
+      aria-label="Loading"
+      className={`inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent ${className}`}
+    />
   );
 }
 
