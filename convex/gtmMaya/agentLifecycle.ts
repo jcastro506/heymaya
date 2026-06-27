@@ -160,19 +160,19 @@ export async function computeAgentLifecycle(
     (e) => e.status !== "cancelled"
   ).length;
 
-  // Foundation RESEARCH output (the ~16-worker fleet's product): a buyer map, at
-  // least one competitor, at least one channel scorecard. Once these exist the
-  // research is done and must never be re-spawned.
+  // Foundation RESEARCH output. Research is "done" on the CORE signals — a buyer
+  // map + ≥1 channel scorecard. Competitors ENRICH the strategy but are
+  // best-effort: requiring ≥1 competitor as a HARD gate meant a single failed
+  // competitor-worker (observed live on a real deploy: competitiveMapCount=0)
+  // kept researchComplete FALSE forever → the watchdog re-ran the synthesis step
+  // → the main brain re-wrote + re-sent "foundation complete" 6× to the founder.
+  // The simplified architecture is a bounded pass that runs ONCE and STOPS; the
+  // durable researchCompletedAt marker (below) makes "done" permanent. Maya notes
+  // a missing competitive map in the plan rather than looping on it.
   const buyerMap = await ctx.db
     .query("gtmBuyerMap")
     .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
     .first();
-  const competitorCount = (
-    await ctx.db
-      .query("gtmCompetitiveMap")
-      .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
-      .collect()
-  ).length;
   const scorecardCount = (
     await ctx.db
       .query("gtmChannelScorecard")
@@ -185,7 +185,7 @@ export async function computeAgentLifecycle(
   const researchCompletedAt = agent.researchCompletedAt ?? null;
   const researchComplete =
     researchCompletedAt !== null ||
-    (buyerMap !== null && competitorCount >= 1 && scorecardCount >= 1);
+    (buyerMap !== null && scorecardCount >= 1);
 
   const hasVoiceProfile =
     typeof agent.voiceProfileJson === "string" &&

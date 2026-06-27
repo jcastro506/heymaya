@@ -337,6 +337,32 @@ describe("#15 lifecycle — markers + phases", () => {
     expect(lc?.researchComplete).toBe(true);
     expect(lc?.engagementReady).toBe(true);
   });
+
+  // THE LIVE DOGFOOD FIX (2026-06-27): on a real deploy the competitor worker
+  // persisted 0 rows, so the old `buyerMap && competitor>=1 && scorecard>=1` gate
+  // stayed FALSE forever → the watchdog re-ran the synthesis → 6 duplicate
+  // "foundation complete" messages. Research is now "done" on the CORE signals
+  // (buyer map + ≥1 scorecard); a missing competitor map can't loop it.
+  it("researchComplete flips on buyer map + scorecard ALONE — a failed competitor worker can't loop", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, agentId } = await setupAgent(t, "lc_nocompetitor");
+    await t.mutation(internal.gtmMaya.managerStore.upsertBuyerMap, {
+      accountId, agentId,
+      icpDescription: "Solo devs shipping micro-SaaS with no audience.",
+      buyerJourneyStages: [{ stage: "aware", whereTheyHangOut: "r/SaaS", intentLanguage: "no users yet" }],
+      intentPhrases: ["how to get first users"],
+      trustedVoices: [],
+    });
+    await t.mutation(internal.gtmMaya.managerStore.upsertChannelScorecard, {
+      accountId, agentId, channel: "reddit", audienceFit: 0.8, cadenceFit: 0.7,
+      uniqueUnlock: "answer-strike on first-users threads", bet: true,
+    });
+    // NO competitor rows landed — but research is DONE on the core signals.
+    const lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
+    expect(lc?.researchComplete).toBe(true);
+    expect(lc?.engagementReady).toBe(true);
+    expect(lc?.foundationStep).toBe("finalize"); // advances — does NOT loop on "research"
+  });
 });
 
 describe("#15 lifecycle — foundation lease (the lock)", () => {
