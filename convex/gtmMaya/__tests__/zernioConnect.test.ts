@@ -292,3 +292,60 @@ describe("zernioWebhook — dedup + profile extraction", () => {
     expect(second.isNew).toBe(false);
   });
 });
+
+describe("zernioConnect — connect-cap guard (§9.1)", () => {
+  async function setStarterWithPlatforms(
+    t: ReturnType<typeof convexTest>,
+    agentId: Id<"gtmAgents">,
+    platforms: string[]
+  ) {
+    await t.run(async (ctx) => {
+      await ctx.db.patch(agentId, {
+        gtmPlanJson: JSON.stringify({ tier: "starter", status: "active" }),
+        connectedAccountsJson: JSON.stringify(
+          platforms.map((p, i) => ({
+            accountId: `acct_${p}_${i}`,
+            platform: p,
+            isActive: true,
+            needsReconnect: false,
+            connectedAt: 1,
+          }))
+        ),
+      });
+    });
+  }
+
+  it("refuses a NEW platform at the tier cap, allows re-connecting an existing one", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "cap_user");
+    // Starter cap = 3; seed 3 distinct connected platforms.
+    await setStarterWithPlatforms(t, a.agentId, ["reddit", "x", "youtube"]);
+
+    const fourth = await t.query(
+      internal.gtmMaya.zernioConnect.checkConnectCap,
+      { agentId: a.agentId, platform: "linkedin" }
+    );
+    expect(fourth.allowed).toBe(false);
+    expect(fourth.cap).toBe(3);
+    expect(fourth.connectedCount).toBe(3);
+
+    // Re-connecting an already-linked platform never consumes a new slot.
+    const recon = await t.query(
+      internal.gtmMaya.zernioConnect.checkConnectCap,
+      { agentId: a.agentId, platform: "reddit" }
+    );
+    expect(recon.allowed).toBe(true);
+  });
+
+  it("allows a new platform while under the cap", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "cap_under");
+    await setStarterWithPlatforms(t, a.agentId, ["reddit", "x"]); // 2 of 3
+    const third = await t.query(
+      internal.gtmMaya.zernioConnect.checkConnectCap,
+      { agentId: a.agentId, platform: "linkedin" }
+    );
+    expect(third.allowed).toBe(true);
+    expect(third.connectedCount).toBe(2);
+  });
+});

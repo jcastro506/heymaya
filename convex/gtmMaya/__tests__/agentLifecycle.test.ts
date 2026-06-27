@@ -282,6 +282,61 @@ describe("#15 lifecycle — markers + phases", () => {
     lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
     expect(lc?.foundationComplete).toBe(true);
   });
+
+  // The DECOUPLING fix: steady-state engagement (engagementReady) starts on
+  // research-done, INDEPENDENT of whether the synthesis plan was delivered — so a
+  // flaked send never leaves the agent idle. And research-done is durably stamped
+  // so it survives a row moving (the fleet is never re-spawned).
+  it("engagementReady decouples from strategy delivery + researchCompletedAt is durable", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, agentId } = await setupAgent(t, "lc_engageready");
+
+    let lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
+    expect(lc?.engagementReady).toBe(false);
+    expect(lc?.researchCompletedAt).toBeNull();
+
+    // Foundation research lands (buyer map + competitor + scorecard).
+    await t.mutation(internal.gtmMaya.managerStore.upsertBuyerMap, {
+      accountId, agentId,
+      icpDescription: "Privacy-conscious SaaS founders.",
+      buyerJourneyStages: [{ stage: "aware", whereTheyHangOut: "r/SaaS", intentLanguage: "GA4 sucks" }],
+      intentPhrases: ["GA4 alternative"],
+      trustedVoices: [],
+    });
+    await t.mutation(internal.gtmMaya.managerStore.upsertCompetitor, {
+      accountId, agentId, competitorKey: "fathom", competitorName: "Fathom",
+      kind: "direct", positioning: "Simple privacy analytics", complaints: [], vulnerabilities: [],
+    });
+    await t.mutation(internal.gtmMaya.managerStore.upsertChannelScorecard, {
+      accountId, agentId, channel: "reddit", audienceFit: 0.8, cadenceFit: 0.7,
+      uniqueUnlock: "answer-strike on GA4 threads", bet: true,
+    });
+
+    // Engagement READY even though the plan was never delivered + onboarding NOT complete.
+    lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
+    expect(lc?.researchComplete).toBe(true);
+    expect(lc?.engagementReady).toBe(true);
+    expect(lc?.strategyDelivered).toBe(false);
+    expect(lc?.foundationComplete).toBe(false);
+
+    // acquireFoundationLease durably stamps researchCompletedAt.
+    await t.mutation(internal.gtmMaya.agentLifecycle.acquireFoundationLease, { agentId });
+    lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
+    expect(lc?.researchCompletedAt).not.toBeNull();
+
+    // Durable: remove a research row → research STILL reads done (marker holds),
+    // so the fleet is never re-spawned.
+    await t.run(async (ctx) => {
+      const bm = await ctx.db
+        .query("gtmBuyerMap")
+        .withIndex("by_agent", (q) => q.eq("agentId", agentId))
+        .first();
+      if (bm) await ctx.db.delete(bm._id);
+    });
+    lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
+    expect(lc?.researchComplete).toBe(true);
+    expect(lc?.engagementReady).toBe(true);
+  });
 });
 
 describe("#15 lifecycle — foundation lease (the lock)", () => {

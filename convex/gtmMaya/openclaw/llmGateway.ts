@@ -31,7 +31,7 @@ import { internal } from "../../_generated/api";
 import { v } from "convex/values";
 import type { Id } from "../../_generated/dataModel";
 import { authenticate } from "./inboundCallback";
-import { agentKillDailyUsd } from "../spendKill";
+import { spendThrottleDailyUsd } from "../spendKill";
 
 const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -62,7 +62,7 @@ export const peekGatewayBudget = internalQuery({
       0
     );
     const agent = await ctx.db.get(args.agentId);
-    const capUsd = agent?.spendKillCapUsd ?? agentKillDailyUsd();
+    const capUsd = agent?.spendKillCapUsd ?? spendThrottleDailyUsd();
     return { spentUsd, capUsd };
   },
 });

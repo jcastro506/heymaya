@@ -149,6 +149,12 @@ export const seedGtmAgentAndApp = internalMutation({
     playStoreUrl: v.optional(v.string()),
     conversionKind: v.optional(v.string()),
     signupUrl: v.optional(v.string()),
+    // Founder's "what's different" + existing social handles, so the deployed
+    // agent's workspace bakes in real voice/channel grounding from boot.
+    differentiator: v.optional(v.string()),
+    existingTikTokUrl: v.optional(v.string()),
+    existingInstagramUrl: v.optional(v.string()),
+    existingXUrl: v.optional(v.string()),
   },
   handler: async (
     ctx,
@@ -204,6 +210,10 @@ export const seedGtmAgentAndApp = internalMutation({
       playStoreUrl: args.playStoreUrl,
       conversionKind: args.conversionKind,
       signupUrl: args.signupUrl,
+      differentiator: args.differentiator,
+      existingTikTokUrl: args.existingTikTokUrl,
+      existingInstagramUrl: args.existingInstagramUrl,
+      existingXUrl: args.existingXUrl,
       createdAt: now,
       updatedAt: now,
     });
@@ -1235,6 +1245,72 @@ export const repointLatestTestCreator = internalMutation({
 });
 
 /**
+ * Bind the MOST-RECENT creator (regardless of clerk-id prefix) to a real
+ * Clerk user + email. Unlike repointLatestTestCreator, this works even after
+ * the creator has already been repointed once (no test-prefix requirement) —
+ * so a demo agent can be re-bound to a different login without redeploying.
+ *   npx convex run _admin/realWorldDeployGtm:bindLatestAgentToClerkUser \
+ *     '{"clerkUserId":"user_...","email":"founder@example.com"}'
+ */
+export const bindLatestAgentToClerkUser = internalMutation({
+  args: { clerkUserId: v.string(), email: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; creatorId?: string; reason?: string }> => {
+    const all = await ctx.db.query("creators").collect();
+    const latest = all.sort((a, b) => b.createdAt - a.createdAt)[0];
+    if (!latest) return { ok: false, reason: "no creator" };
+    await ctx.db.patch(latest._id, {
+      clerkUserId: args.clerkUserId,
+      email: args.email,
+    });
+    return { ok: true, creatorId: latest._id };
+  },
+});
+
+/**
+ * Bind the deployed gtm-agent creator to a real login AND delete the stray
+ * default creator that the Clerk `user.created` webhook auto-spawns
+ * (accountType 'service-business' during creator-product suppression) — which
+ * otherwise collides on the same clerkUserId and routes the founder to the
+ * wrong product. The clean one-shot for "bind this demo agent to my login".
+ *   npx convex run _admin/realWorldDeployGtm:bindGtmAgentToClerkUser \
+ *     '{"clerkUserId":"user_...","email":"me@example.com"}'
+ */
+export const bindGtmAgentToClerkUser = internalMutation({
+  args: { clerkUserId: v.string(), email: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    ok: boolean;
+    creatorId?: string;
+    removedStrays?: number;
+    reason?: string;
+  }> => {
+    const all = await ctx.db.query("creators").collect();
+    // Drop any NON-gtm creator squatting on this clerkUserId (the webhook spawn).
+    let removedStrays = 0;
+    for (const c of all) {
+      if (c.clerkUserId === args.clerkUserId && c.accountType !== "gtm-agent") {
+        await ctx.db.delete(c._id);
+        removedStrays += 1;
+      }
+    }
+    const gtm = all
+      .filter((c) => c.accountType === "gtm-agent")
+      .sort((a, b) => b.createdAt - a.createdAt)[0];
+    if (!gtm) return { ok: false, reason: "no gtm-agent creator", removedStrays };
+    await ctx.db.patch(gtm._id, {
+      clerkUserId: args.clerkUserId,
+      email: args.email,
+    });
+    return { ok: true, creatorId: gtm._id, removedStrays };
+  },
+});
+
+/**
  * Convenience wrapper: attach the latest synthetic test creator to a real
  * email by deriving a stable non-test clerkUserId, then repointing. Lets a
  * demo bind the just-deployed test agent to the operator's email in one call.
@@ -1313,6 +1389,12 @@ export const run = internalAction({
     playStoreUrl: v.optional(v.string()),
     conversionKind: v.optional(v.string()),
     signupUrl: v.optional(v.string()),
+    // Founder's differentiator + existing social handles → baked into the
+    // workspace so the agent grounds in real voice/channels from boot.
+    differentiator: v.optional(v.string()),
+    existingTikTokUrl: v.optional(v.string()),
+    existingInstagramUrl: v.optional(v.string()),
+    existingXUrl: v.optional(v.string()),
     // Set true to NOT wipe existing test creators first — lets several test
     // agents (e.g. one per pricing tier) run side by side. Each run still gets a
     // unique clerkUserId, so no collision.
@@ -1362,6 +1444,10 @@ export const run = internalAction({
         playStoreUrl: args.playStoreUrl,
         conversionKind: args.conversionKind,
         signupUrl: args.signupUrl,
+        differentiator: args.differentiator,
+        existingTikTokUrl: args.existingTikTokUrl,
+        existingInstagramUrl: args.existingInstagramUrl,
+        existingXUrl: args.existingXUrl,
       }
     );
     console.log(

@@ -68,6 +68,16 @@ type LegacyGtmPlan = "gtm99";
 /** Lifecycle status of the founder's GTM subscription. */
 export type GtmPlanStatus = "active" | "past_due" | "trialing" | "none";
 
+/**
+ * Creative production mode per tier — how Maya handles VIDEO specifically
+ * (AGENT_REDESIGN_V2.md §9.2):
+ *   script_only — Maya writes a script + shot list; the USER films it (the
+ *     authentic founder video that actually wins organically).
+ *   images — + Maya generates images/graphics (Creatify); video still scripted.
+ *   video — + Maya generates the video herself (Creatify); no filming.
+ */
+export type GtmCreativeMode = "script_only" | "images" | "video";
+
 export interface GtmPlanFeatures {
   plan: GtmPlan;
   status: GtmPlanStatus;
@@ -138,6 +148,20 @@ export interface GtmPlanFeatures {
    * Gemini slideshow only), TRUE on growth + studio.
    */
   canImage: boolean;
+
+  // ── v2 redesign additions (AGENT_REDESIGN_V2.md §9.1/§9.2) ──────────────
+  /**
+   * Creative production mode (§9.2). Tier-derived: starter=script_only (Maya
+   * scripts, the user films), growth=images, studio=video. Maya reads this to
+   * fork her behavior (write-a-script vs generate-the-video); `make-creative`
+   * also hard-gates on it server-side.
+   */
+  creative: GtmCreativeMode;
+  /**
+   * How many curated cold-strike opportunities Maya surfaces to the user per
+   * day in the Telegram digest (§7.6). starter ~3 / growth ~6 / studio ~10.
+   */
+  coldStrikesPerDay: number;
 }
 
 /**
@@ -149,7 +173,9 @@ const GTM_STARTER_ACTIVE: GtmPlanFeatures = {
   plan: "starter",
   status: "active",
   maxActiveChannels: 3,
-  connectedChannelCap: 6,
+  // §9.1: cap CONNECTION at the tier (connected == active) so a starter can't
+  // link more than they can run. The cap is an upgrade lever, not a wall.
+  connectedChannelCap: 3,
   autoPostChannelCap: 3,
   videoCreditsMonth: 0,
   ugcCreditsMonth: 0,
@@ -165,6 +191,9 @@ const GTM_STARTER_ACTIVE: GtmPlanFeatures = {
   canVideo: false,
   canUgc: false,
   canImage: false,
+  // Starter: Maya writes scripts; the user films video. ~3 curated strikes/day.
+  creative: "script_only",
+  coldStrikesPerDay: 3,
 };
 
 /**
@@ -175,11 +204,15 @@ const GTM_GROWTH_ACTIVE: GtmPlanFeatures = {
   ...GTM_STARTER_ACTIVE,
   plan: "growth",
   maxActiveChannels: 6,
+  connectedChannelCap: 6,
   autoPostChannelCap: 6,
   // The breadth upgrade also unlocks Creatify static image / ad creative
   // (still no video — that's the Studio line).
   canImage: true,
   assetCreditsMonth: 50,
+  // Growth: Maya generates images; video still scripted-for-the-user. ~6 strikes/day.
+  creative: "images",
+  coldStrikesPerDay: 6,
 };
 
 /**
@@ -198,6 +231,9 @@ const GTM_STUDIO_ACTIVE: GtmPlanFeatures = {
   // Studio gets a higher static-image ceiling on top of video (inherits
   // canImage:true from growth).
   assetCreditsMonth: 100,
+  // Studio: Maya generates the video herself (no filming). ~10 strikes/day.
+  creative: "video",
+  coldStrikesPerDay: 10,
 };
 
 /** Resolve the base ACTIVE feature set for a tier. */
@@ -233,6 +269,9 @@ const FAIL_CLOSED_DEFAULT: GtmPlanFeatures = {
   canVideo: false,
   canUgc: false,
   canImage: false,
+  // Fail-closed: scripts only, no auto-surfaced strikes.
+  creative: "script_only",
+  coldStrikesPerDay: 0,
 };
 
 /**

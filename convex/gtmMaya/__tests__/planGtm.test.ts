@@ -59,6 +59,24 @@ describe("planFeaturesGtm — 3-tier maxActiveChannels + video matrix", () => {
     expect(f.videoCreditsMonth).toBeGreaterThan(0);
   });
 
+  it("creative ladder + cold-strike cap + connection==tier across tiers (§9.1/§9.2)", () => {
+    const starter = planFeaturesGtm({ gtmPlanJson: planJson({ tier: "starter", status: "active" }) });
+    const growth = planFeaturesGtm({ gtmPlanJson: GROWTH_FULL });
+    const studio = planFeaturesGtm({ gtmPlanJson: STUDIO_FULL });
+    expect([starter.creative, growth.creative, studio.creative]).toEqual([
+      "script_only",
+      "images",
+      "video",
+    ]);
+    expect([starter.coldStrikesPerDay, growth.coldStrikesPerDay, studio.coldStrikesPerDay]).toEqual([3, 6, 10]);
+    // Connection capped at the tier: starter 3, growth/studio 6.
+    expect([starter.connectedChannelCap, growth.connectedChannelCap, studio.connectedChannelCap]).toEqual([3, 6, 6]);
+    // Fail-closed: scripts only, no strikes.
+    const closed = planFeaturesGtm({});
+    expect(closed.creative).toBe("script_only");
+    expect(closed.coldStrikesPerDay).toBe(0);
+  });
+
   it("fail-closed default → maxActiveChannels 0", () => {
     expect(planFeaturesGtm({}).maxActiveChannels).toBe(0);
     expect(planFeaturesGtm({ gtmPlanJson: "{corrupt" }).maxActiveChannels).toBe(0);
@@ -124,9 +142,11 @@ describe("planFeaturesGtm — active starter ($99, no video)", () => {
       gtmPlanJson: planJson({ tier: "starter", status: "active" }),
     });
     expect(f.canAutoPost).toBe(true);
-    expect(f.connectedChannelCap).toBe(6);
+    expect(f.connectedChannelCap).toBe(3); // §9.1 — connection capped at the tier
     expect(f.autoPostChannelCap).toBe(3);
     expect(f.videoCreditsMonth).toBe(0);
+    expect(f.creative).toBe("script_only"); // starter: Maya scripts, user films
+    expect(f.coldStrikesPerDay).toBe(3);
     expect(f.canVideo).toBe(false);
     expect(f.xUrlPostsSoftCapMonth).toBe(30);
   });
@@ -157,7 +177,7 @@ describe("planFeaturesGtm — active starter ($99, no video)", () => {
         xUrlPostsSoftCapMonth: null,
       }),
     });
-    expect(f.connectedChannelCap).toBe(6);
+    expect(f.connectedChannelCap).toBe(3); // starter base (§9.1)
     expect(f.autoPostChannelCap).toBe(3); // starter base
     expect(f.videoCreditsMonth).toBe(0); // starter base
     expect(f.xUrlPostsSoftCapMonth).toBe(30);
@@ -244,7 +264,7 @@ describe("planFeaturesGtm — status handling (most-restrictive-valid)", () => {
     expect(f.canResearch).toBe(true);
     expect(f.canDraft).toBe(true);
     expect(f.canAutoPost).toBe(true);
-    expect(f.connectedChannelCap).toBe(6);
+    expect(f.connectedChannelCap).toBe(3);
     expect(f.maxActiveChannels).toBe(3);
   });
 

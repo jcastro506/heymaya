@@ -105,8 +105,16 @@ export interface AgentLifecycle {
   calendarEventCount: number;
   // ─── Phase-aware re-spawn control (the 283-session fix) ───────────────────
   /** Foundation RESEARCH output exists (buyer map + ≥1 competitor + ≥1 channel
-   *  scorecard). Once true, the watchdog must NEVER re-spawn the research fleet. */
+   *  scorecard) OR the durable `researchCompletedAt` marker is set. Once true, the
+   *  watchdog must NEVER re-spawn the research fleet. */
   researchComplete: boolean;
+  /** Unix-ms research first completed (durable). Null until research lands. */
+  researchCompletedAt: number | null;
+  /** Steady-state engagement may begin. = `researchComplete` — DELIBERATELY
+   *  independent of `strategyDelivered`/`foundationComplete`, so a flaked
+   *  synthesis send never leaves the agent idle. The engage crons + HEARTBEAT
+   *  gate on THIS, not on foundationComplete. */
+  engagementReady: boolean;
   /** The current onboarding step to act on — research / finalize / complete. */
   foundationStep: FoundationStep;
   /** How many times the foundation lease has been acquired (the cap counter). */
@@ -171,8 +179,13 @@ export async function computeAgentLifecycle(
       .withIndex("by_agent", (q) => q.eq("agentId", agent._id))
       .collect()
   ).length;
+  // Durable-first: once `researchCompletedAt` is stamped, research is done
+  // forever (even if a row later moves); otherwise fall back to live row
+  // presence. acquireFoundationLease stamps the marker on first detection.
+  const researchCompletedAt = agent.researchCompletedAt ?? null;
   const researchComplete =
-    buyerMap !== null && competitorCount >= 1 && scorecardCount >= 1;
+    researchCompletedAt !== null ||
+    (buyerMap !== null && competitorCount >= 1 && scorecardCount >= 1);
 
   const hasVoiceProfile =
     typeof agent.voiceProfileJson === "string" &&
@@ -250,6 +263,8 @@ export async function computeAgentLifecycle(
     draftCount,
     calendarEventCount,
     researchComplete,
+    researchCompletedAt,
+    engagementReady: researchComplete,
     foundationStep,
     leaseAcquireCount,
   };
@@ -318,6 +333,16 @@ export const acquireFoundationLease = internalMutation({
     if (!agent) throw new Error("acquireFoundationLease: agent not found");
     const now = Date.now();
     const lifecycle = await computeAgentLifecycle(ctx, agent, now);
+    // Durably stamp research-done on first detection — so engagement can start
+    // (engagementReady) even if the synthesis send later flakes, and so research
+    // is never re-spawned. Stamped before the branches below so it persists
+    // regardless of which path this tick returns on.
+    if (lifecycle.researchComplete && !agent.researchCompletedAt) {
+      await ctx.db.patch(args.agentId, {
+        researchCompletedAt: now,
+        updatedAt: now,
+      });
+    }
     const base = {
       foundationStep: lifecycle.foundationStep,
       researchComplete: lifecycle.researchComplete,
