@@ -4418,6 +4418,19 @@ export default defineSchema({
     //   lastPolledAt?:number }. Compiled from gtmBuyerMap.intentPhrases + bet
     //   channels. The Convex-owned poller reads it; the dedup + budget live here.
     intentWatchJson: v.optional(v.string()),
+    // v2 §5.1 — the morning-plan "day-plan" (JSON-on-row, NO new table). JSON:
+    // { planDate:"YYYY-MM-DD", posture:string, originalPost?:{channel,angle,
+    //   needsCreative}, funnelBudget:{tier1:"hunt"|number, tier2:number,
+    //   tier3:number}, productMentionRatio:number, watchFor:[string],
+    //   generatedAt:number }. The morning-plan cron compiles it; the heartbeat
+    //   reads it for direction (hunt intent first, then build credibility).
+    dayPlanJson: v.optional(v.string()),
+    // v2 §7.6/§7.7 — the cold-strike QUEUE the daily Telegram digest drains
+    // (JSON-on-row, NO new table). JSON: { candidates:[{threadId, platform,
+    //   title, url, matchedPhrase, priorityScore, ageMinutes, tier, addedAt}],
+    //   lastDigestSentAt?:number }. The heartbeat enqueues tap-channel strikes;
+    //   the digest cron drains the top `coldStrikesPerDay` into one message.
+    coldStrikeQueueJson: v.optional(v.string()),
     // Single-tier plan state (gtm99). JSON: {tier, status, connectedChannelCap,
     // autoPostChannelCap, videoCreditsMonth, xUrlPostsSoftCapMonth, periodStart,
     // usage:{autoPostsThisPeriod, xUrlPostsThisPeriod, videosThisPeriod}}.
@@ -5869,6 +5882,17 @@ export default defineSchema({
     ),
     /** 0-1; subagent's confidence this is a strong target. */
     priorityScore: v.number(),
+    // v2 §1.1 — funnel-tier reasoning/audit. The tier value itself reuses the
+    // EXISTING `tier` field below (T1 hot buying-intent → T4 trash). This records
+    // WHY it was judged that tier + who/when, so the digest can explain itself.
+    tierJudgment: v.optional(
+      v.object({
+        tier: v.string(),
+        reason: v.string(),
+        judgedAt: v.number(),
+        judgedBy: v.string(),
+      })
+    ),
     // Sprint 2.17 Phase A — manager-mode depth fields. All optional so
     // existing rows continue to validate. Subagents in 2.17+ are
     // expected to populate every one; Maya's output critic drops T4 and
