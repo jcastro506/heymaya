@@ -4470,6 +4470,14 @@ export default defineSchema({
     helloSentAt: v.optional(v.number()),
     foundationStartedAt: v.optional(v.number()),
     foundationCompletedAt: v.optional(v.number()),
+    // Unix-ms the foundation RESEARCH first completed (buyer map + ≥1 competitor
+    // + ≥1 channel scorecard). DURABLE marker — once stamped, research is "done"
+    // forever even if rows later move. This DECOUPLES engage-start from strategy
+    // DELIVERY: steady-state engagement gates on `engagementReady` (= research
+    // done), so a flaked synthesis send no longer leaves the agent idle. The
+    // synthesis-once + onboarding-complete semantics still gate on
+    // strategyDeliveredAt below (unchanged).
+    researchCompletedAt: v.optional(v.number()),
     // Unix-ms the synthesis/strategy plan was actually DELIVERED to the founder
     // (stamped server-side when a strategic send_update succeeds). onboarding is
     // NOT complete until this is set — the live dogfood marked foundation_complete
@@ -4491,20 +4499,25 @@ export default defineSchema({
     // server-side cap: past FOUNDATION_MAX_LEASE_ACQUIRES with foundation still
     // incomplete, the lease is DENIED so the agent physically cannot re-run it.
     foundationLeaseAcquireCount: v.optional(v.number()),
-    // ─── Hard spend kill-switch (runaway-burn backstop) ─────────────────────
-    // The throttle caps in costCap.ts (hour/day/month) assume the agent honors
-    // a 403 and stops. A runaway loop (observed: an old-model agent burned
-    // ~$30 in 7h) does NOT. These fields back a HARD kill: when ROLLING-window
-    // spend crosses a ceiling ($3/hr velocity OR $6/24h sustained, defaults in
-    // spendKill.ts, env-overridable), the agent's Fly machine is DESTROYED
-    // (billing physically stops), its hookToken rotated, and these stamped.
-    // Rolling windows (not lifetime) so a long-lived daily driver under normal
-    // ~$2/day spend is never killed — only a runaway trips it.
-    //   spendKillCapUsd — OPTIONAL per-agent override of the 24h kill ceiling,
-    //     for one-off watched tests that want a tighter bound than the default.
-    //   killedAt / killReason — stamped when the kill fires; a killed agent is
-    //     skipped by the sweep + telemetry enforcer (idempotent).
+    // ─── Spend THROTTLE (runaway-burn backstop — degrade, never destroy) ─────
+    // RULE: a cost ceiling THROTTLES, it never destroys a user's agent. When
+    // ROLLING-window spend crosses a ceiling ($3/hr velocity OR $6/24h
+    // sustained, defaults in spendKill.ts, env-overridable), the agent is
+    // stamped with a 24h throttle: its expensive discretionary work (the
+    // discovery/research pulse) self-pauses to monitoring-only (the discovery
+    // gate reads spendThrottledUntil), while the Fly machine KEEPS RUNNING
+    // indefinitely and the agent still answers the user. Rolling windows (not
+    // lifetime) so a normal ~$2/day driver never trips it.
+    //   spendKillCapUsd — OPTIONAL per-agent override of the 24h ceiling.
+    //   spendThrottledUntil — epoch-ms; while > now the agent is throttled
+    //     (discovery paused). Auto-clears; the sweep re-stamps if still over.
+    //   spendThrottledAt / spendThrottleReason — when/why it last fired.
+    //   killedAt / killReason — reserved for EXPLICIT cancellation
+    //     (accountLifecycle), NEVER a spend cap; a killed agent is skipped.
     spendKillCapUsd: v.optional(v.number()),
+    spendThrottledUntil: v.optional(v.number()),
+    spendThrottledAt: v.optional(v.number()),
+    spendThrottleReason: v.optional(v.string()),
     killedAt: v.optional(v.number()),
     killReason: v.optional(v.string()),
     // Deterministic synthesis safety-net (#1 onboarding deliverable). The plan

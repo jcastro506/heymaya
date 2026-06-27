@@ -265,8 +265,8 @@ describe("evaluateDiscoveryBudget — degrade-to-monitoring", () => {
       dayCapUsd: 1.0,
     });
     expect(v.mode).toBe("monitoring_only");
-    // The verdict surface has no kill/destroy concept — it only flips mode.
-    expect(Object.keys(v)).not.toContain("shouldKill");
+    // The verdict surface has no throttle/destroy concept — it only flips mode.
+    expect(Object.keys(v)).not.toContain("shouldThrottle");
     expect(v.reason).toContain("monitoring-only");
   });
 });
