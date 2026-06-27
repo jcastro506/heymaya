@@ -19,6 +19,7 @@ import {
 } from "../integrations/zernio/endpoints";
 import type { ZernioPostPlatform } from "../integrations/zernio/types";
 import { authenticate } from "./openclaw/inboundCallback";
+import { planFeaturesGtm } from "./planGtm";
 
 /**
  * Maya v2 — Zernio social-connect flow (S2).
@@ -303,6 +304,34 @@ function toConnectedAccount(raw: Record<string, unknown>, now: number): Connecte
   };
 }
 
+/**
+ * §9.1 connect-cap guard. Reports whether the founder may CONNECT `platform`
+ * under their plan's `connectedChannelCap` (= maxActiveChannels per tier).
+ * Re-connecting an already-linked platform is always allowed (no new slot).
+ * Fail-closed on a missing agent.
+ */
+export const checkConnectCap = internalQuery({
+  args: { agentId: v.id("gtmAgents"), platform: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ allowed: boolean; cap: number; connectedCount: number }> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return { allowed: false, cap: 0, connectedCount: 0 };
+    const cap = planFeaturesGtm({
+      gtmPlanJson: agent.gtmPlanJson,
+    }).connectedChannelCap;
+    const platforms = new Set(
+      parseConnectedAccounts(agent.connectedAccountsJson).map((a) => a.platform)
+    );
+    // Re-connecting an already-linked platform never consumes a new slot.
+    if (platforms.has(args.platform)) {
+      return { allowed: true, cap, connectedCount: platforms.size };
+    }
+    return { allowed: platforms.size < cap, cap, connectedCount: platforms.size };
+  },
+});
+
 /* ────────────────────────────────────────────────────────────────────────
  * Public action — mint a connect URL for a channel
  * ──────────────────────────────────────────────────────────────────────── */
@@ -321,6 +350,21 @@ export const getZernioConnectUrl = action({
       { clerkUserId: identity.subject }
     );
     if (!resolved) throw new Error("GTM agent not found");
+
+    // §9.1 — fail-closed at the connect mutation: a tier can never LINK more
+    // channels than its connectedChannelCap. The cap is an upgrade lever, not
+    // an arbitrary wall (Settings shows over-cap channels as "upgrade to add").
+    const capCheck = await ctx.runQuery(
+      internal.gtmMaya.zernioConnect.checkConnectCap,
+      { agentId: resolved.agentId, platform: args.platform }
+    );
+    if (!capCheck.allowed) {
+      throw new Error(
+        `channel limit reached — your plan connects up to ${capCheck.cap} channel${
+          capCheck.cap === 1 ? "" : "s"
+        } (you have ${capCheck.connectedCount}). Upgrade to add more.`
+      );
+    }
 
     const client = zernioClient();
 
