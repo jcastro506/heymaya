@@ -25,6 +25,7 @@ This is the load-bearing decision skill. Takes product diagnosis, ICPs, per-plat
 
 ## Decision rules
 
+0. **FAIRNESS PRECONDITION — equal evidence before you score (v2 §4.1).** Every offered channel must have been probed to a *comparable* bar before you rank anything — the SAME intent-phrase set, a comparable search budget — so no channel is favored or dismissed for lack of *looking*. Before scoring, check the per-platform reports: if one channel's report is thin *relative to the others* (e.g. Reddit got a deep sweep but Instagram got a single search), it was under-probed, not low-fit — return `status: "uneven_evidence"` naming the thin channels so they get a uniform probe first. **Never park a channel because you didn't look hard enough.** Score on buyer-fit (is the ICP here, is there engageable intent) as the PRIMARY signal; operational viability (can Maya autonomously engage, vs one-tap — `operationalMode`) is a SEPARATE field, never folded into the fit score and never a reason to hide that the buyer is somewhere.
 1. **Run the failure-mode pre-check first (PLAYBOOK § 5).** Is this product/operator at risk of void / skip / cringe / feature / post-and-pray? Surface in the verdict.
 2. **PLAYBOOK § 3 channel tree runs before any affinity table.** First match wins.
 3. **PLAYBOOK § 8 hard refuse cases.** Enterprise (>$25k ACV) / hardware / regulated / hyper-local / pre-PMF-thin → refuse social-channel launch. Route to outbound / SEO / partnerships per rule 9.14.
@@ -58,6 +59,22 @@ interface ChannelStrategyVerdict {
   audienceMinimumsCheck: { channel: string; minThreshold: string; operatorActual: string; passes: boolean };
   reEvaluationTriggers: string[];
   rulesCited: string[];
+  // v2 §4.1 — the FULL ranked board (EVERY offered channel), surfaced to the
+  // founder in the plan so the call is transparent. `fitScore` is PURE buyer-fit;
+  // `operationalMode` is a SEPARATE axis (autonomous via API / one-tap / own-post
+  // community-manage) — never folded into fitScore. A high-fit channel Maya can't
+  // autonomously work is still shown as high-fit + flagged one-tap, never hidden.
+  rankedBoard: Array<{
+    channel: typeof primaryChannel;
+    fitScore: number; // 0-1, pure buyer-fit
+    operationalMode: "autonomous" | "tap" | "community_manage";
+    bet: boolean;
+    reason: string; // why this fit + why bet/parked (plain words)
+  }>;
+  // Set when channels were probed unevenly — the named channels need a uniform
+  // probe BEFORE a trustworthy verdict (decision rule 0).
+  status?: "uneven_evidence";
+  underProbedChannels?: string[];
 }
 ```
 

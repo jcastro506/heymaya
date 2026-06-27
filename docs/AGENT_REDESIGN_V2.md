@@ -130,14 +130,17 @@ Full niche research takes ~15 min, but we want to recommend channels *before* th
 
 **Principle: enough to sound native on the bet channels. Count-bounded, not time-bounded.**
 
-### 4.1 The boot research pass (once)
+### 4.1 The research pipeline — five bounded passes (fair by construction)
 
-- Mostly **sequential, in the main brain** (or at most one bounded child call). **No fleet.**
-- Pull the top *N* voices and top *M* threads per candidate channel. Skip empty platforms. **One** synthesis pass.
-- Hard ceiling (~$3–4) that is **separate from the daily steady-state cap** — conflating the two is what made every v1 cap either kill a healthy boot or let a loop burn.
-- Writes the synthesis **row** → stamps `researchDoneAt` → produces the **SOUL**.
+**This replaces the 18-worker fan-out.** Fairness is *structural*: every channel is judged on the SAME probe, scored TOGETHER in one call — so no channel can be pre-favored. (Live dogfood 2026-06-27: the old fleet researched Reddit with 17 searches but IG/TikTok with 1 each, then scored on that uneven evidence — the exact bias this removes.)
 
-**Output = SOUL + the bet board:** 1–3 primary channels (each with a fit/confidence score), the voice spec, the ICP map (who / where / pains / how they talk), and a topic-and-angle library the engage loop draws from.
+1. **Product pass (zero channel bias).** Read the product → three product-LEVEL artifacts: the **competitor map** (who else does this — product-level, NOT per-channel; researching competitors per-channel is what made them flaky + return 0 rows live), the **buyer hypothesis** (ICP + a canonical intent-phrase set + pain language), and **voice direction**. This produces the ONE intent-phrase set every channel is probed with — the fairness anchor.
+2. **Uniform fit-probe across ALL offered channels.** Apply the SAME intent-phrase set to EVERY channel with the SAME bounded budget (~3–5 searches each, not 17-vs-1), extracting the SAME four signals: (a) ICP present/active here? (b) engageable intent/pain language? (c) volume + freshness? (d) can she add value natively? **Scan every channel — never pre-eliminate one** ("obviously irrelevant" IS the bias; a dead channel costs ~4 calls to prove dead). Equal *effort*, not equal call-count — thin results on a platform are themselves a real fit signal, captured honestly.
+3. **ONE judge call scores all channels together.** The single most important anti-bias move: feed ALL channels' fit-evidence into one LLM call that ranks them side-by-side on one rubric — never score per-channel in isolation (that anchors each). Output: fit score + one-line reason per channel + a SEPARATE `operationalMode` field (autonomous / tap-only / community-manage), NOT folded into the fit score.
+4. **Bet selection — fit-primary, viability-secondary, transparent.** Buyer-fit is primary; operational viability (§7.6) is a secondary tiebreaker among comparable-fit channels. Cap at the tier's `maxChannels`. The full ranked board — including parked channels + WHY — is shown to the user (§4.4). Fit is never hidden behind viability ("your buyers are on TikTok, but I can only engage one-tap there, so it's manual, not a bet").
+5. **Deep pass on the BETS only.** Now spend the depth — target threads, voice extraction, first drafts, buyer-map enrichment — exclusively on the 1–3 channels she'll operate. Depth is *earned by winning the scan*.
+
+All five are **bounded + sequential + run-once**, with a hard research ceiling (~$3–4) separate from the daily cap. Each pass writes durable rows; "research done" is row-driven (§2). **Output = SOUL + the ranked bet board.**
 
 ### 4.2 The monthly refresh (cron)
 
@@ -149,6 +152,22 @@ A **light, diff-based** refresh — not the full boot pass. Re-checks: are the b
 - **X/Twitter API** — search + conversation threads + real-time listening; first-class for X reply engagement (post/reply/quote direct).
 - **Reddit** — subreddit discovery + thread reading. A primary engage surface for most B2C/B2B niches, not an afterthought.
 - **The product itself** — read the URL/app-store listing at onboarding to ground "what it is / what's different." The anti-hallucination anchor: Maya never invents a differentiator she didn't read.
+
+### 4.4 The plan sign-off — gate the ACTIONS, not the thinking
+
+After research, Maya presents the plan and gets the user's blessing BEFORE operating their accounts — the highest-trust moment in onboarding. **The rule: she researches, plans, and drafts freely; she does NOT post or comment from the user's accounts until they sign off** (consent + ban-safety). She is *never idle waiting* — she preps the first drafts in the background, so "go" is instant. (The old "she went silent waiting" failure came from waiting to *think*; here she only waits to *act*.)
+
+**The plan message — one scannable thing:**
+1. **The read** — who's buying + where they're venting, grounded (1–2 lines).
+2. **The bet board, fully transparent** — channels she's betting AND the ones she parked, with why (the §4.1 board, surfaced).
+3. **The motion** — what she'll do (engage ~N threads/day, post cadence, in your voice, approve-first).
+4. **The ask** — *"Does this look right? Want to change the channels / angle / voice? Otherwise I'll prep your first drafts."*
+
+**Steerable, not yes/no:** the user replies in plain language ("drop LinkedIn", "my buyers are on YouTube", "be more technical") → Maya re-scores, re-bets, updates SOUL (`save_steering_directive`). The plan stays visible + editable forever, not just at onboarding. A channel beyond the tier cap = the upgrade-lever moment (§9.1).
+
+**Soft-start, hard-consent:**
+- *The plan:* **soft** — shown, invites changes, she starts *preparing* regardless (no idle).
+- *The first action from the account:* **hard** — nothing posts/comments until plan sign-off (or that first draft's approval). Then ongoing it's approve-first per tier (tap-to-post); autopilot tiers unlock FROM the sign-off.
 
 ---
 
