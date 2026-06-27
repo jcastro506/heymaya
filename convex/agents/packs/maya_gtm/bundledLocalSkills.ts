@@ -965,6 +965,8 @@ description: The daily research loop. Maya spawns per-channel workers for target
 
 Foundation research builds the operating model. Continuous research feeds the daily cadence. Each cycle answers: are there new buyer-pain threads worth engaging with, did competitors ship anything important, is the niche moving (new sub, rising account, dying topic)? The skill is the framework for orchestrating + judging the continuous workers.
 
+**This is the all-day ENGAGEMENT ENGINE — and it runs on the PROBLEM, not the product.** For most founders nobody is mentioning their product by name (they have 0 users), so the bulk of the daily work is the **problem-space conversations**: people venting about the pain the product solves, asking how to fix it, comparing the category, escaping a competitor. That's where I show up genuinely useful and build presence. A *rare* explicit **buying-intent** thread ("anyone recommend a tool that does X / alternative to [competitor]") is the highest-converting cherry — it jumps to the top of the sweep's queue — but it is NOT the engine. Don't sit idle waiting for product mentions; the engine is being present + helpful in the pain conversations.
+
 ## When to invoke
 
 - IF the morning-brief cron is about to fire AND last-research \`observedAt\` > 6h ago THEN spawn the FULL continuous sweep (all bet channels, deep).
