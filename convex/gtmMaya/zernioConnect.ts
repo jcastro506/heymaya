@@ -247,6 +247,14 @@ export const replaceConnectedAccounts = internalMutation({
       connectedAccountsJson: JSON.stringify(args.accounts),
       updatedAt: Date.now(),
     });
+    // ENUM REFACTOR — an account connecting is a transition EVENT. If the plan is
+    // ready + already approved, this completes the pair → flip to `active`.
+    // Cheap no-op otherwise.
+    await ctx.scheduler.runAfter(
+      0,
+      internal.gtmMaya.agentLifecycle.tryActivateAgent,
+      { agentId: args.agentId }
+    );
   },
 });
 

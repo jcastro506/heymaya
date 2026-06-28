@@ -248,39 +248,54 @@ describe("#15 lifecycle — markers + phases", () => {
     expect(lc?.phase).toBe("active"); // watchdog stops → no re-spawn loop
   });
 
-  // The plan-delivery gate: onboarding cannot finish until the founder actually
-  // gets the synthesis. The live dogfood marked complete + went idle WITHOUT
-  // ever sending the plan ("she never sent me the plan").
-  it("markFoundationComplete REFUSES until the plan is delivered, then succeeds", async () => {
+  // ENUM REFACTOR — completion gates on the plan being GENERATED, not DELIVERED.
+  // The live $22 run looped re-synthesis forever because a no-channel founder
+  // never "received" the plan → completion was blocked → the watchdog re-ran.
+  // Now: refuse only on an empty foundation; succeed the moment research is done
+  // / a plan exists, WITHOUT requiring delivery.
+  it("markFoundationComplete succeeds on plan GENERATED, not delivery (the loop fix)", async () => {
     const t = convexTest(schema, modules);
     const { accountId, agentId } = await setupAgent(t, "lc_plangate");
 
-    // Research landed (threads + drafts) but plan not delivered.
+    // Threads + drafts exist but research isn't complete and no plan generated →
+    // refuse on a half-built foundation (can't complete on nothing).
     const threadId = await seedThread(t, accountId, agentId, "post_gate_1");
     await t.mutation(internal.gtmMaya.targetList.recordDraftedContent, {
       accountId, agentId, kind: "reply", platform: "reddit", targetThreadId: threadId,
       draftText: "A grounded reply.",
     });
-
-    // Marking complete is REFUSED — nothing reached the founder.
     const blocked = await t.mutation(
       internal.gtmMaya.agentLifecycle.markFoundationComplete,
       { agentId }
     );
     expect(blocked.completed).toBe(false);
-    expect(blocked.reason).toContain("strategy_not_delivered");
+    expect(blocked.reason).toContain("plan_not_generated");
     let lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
     expect(lc?.foundationComplete).toBe(false);
 
-    // Deliver the plan → marking complete now succeeds.
-    await t.mutation(internal.gtmMaya.agentLifecycle.markStrategyDelivered, { agentId });
+    // Research lands (buyer map + channel scorecard) → completion SUCCEEDS even
+    // though the plan was NEVER delivered (strategyDeliveredAt stays null). A
+    // missing channel can no longer block completion → no re-synthesis loop.
+    await t.run(async (ctx) => {
+      await ctx.db.insert("gtmBuyerMap", {
+        accountId, agentId, icpDescription: "ICP", buyerJourneyStages: [],
+        intentPhrases: [], trustedVoices: [], synthesizedAt: 1,
+      });
+      await ctx.db.insert("gtmChannelScorecard", {
+        accountId, agentId, channel: "reddit", audienceFit: 1, cadenceFit: 1,
+        uniqueUnlock: "buyers vent here", bet: true, synthesizedAt: 1, updatedAt: 1,
+      });
+    });
     const ok = await t.mutation(
       internal.gtmMaya.agentLifecycle.markFoundationComplete,
       { agentId }
     );
     expect(ok.completed).toBe(true);
+    const agent = await t.run((ctx) => ctx.db.get(agentId));
+    expect(agent?.strategyDeliveredAt ?? null).toBeNull(); // completed WITHOUT delivery
     lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
     expect(lc?.foundationComplete).toBe(true);
+    expect(lc?.lifecycleState).toBe("plan_ready");
   });
 
   // The DECOUPLING fix: steady-state engagement (engagementReady) starts on
@@ -368,7 +383,7 @@ describe("#15 lifecycle — markers + phases", () => {
 describe("#15 lifecycle — foundation lease (the lock)", () => {
   it("acquires when free, blocks a concurrent re-acquire, releases, completes", async () => {
     const t = convexTest(schema, modules);
-    const { agentId } = await setupAgent(t, "lc_lease");
+    const { accountId, agentId } = await setupAgent(t, "lc_lease");
 
     // First acquire succeeds.
     const a1 = await t.mutation(
@@ -397,10 +412,18 @@ describe("#15 lifecycle — foundation lease (the lock)", () => {
     );
     expect(a3.acquired).toBe(true);
 
-    // Deliver the plan first (required gate), then mark complete → acquire
-    // reports alreadyComplete and refuses (never re-run).
-    await t.mutation(internal.gtmMaya.agentLifecycle.markStrategyDelivered, {
-      agentId,
+    // Research lands (the completion gate — plan generated/research done, NOT
+    // delivery), then mark complete → acquire reports alreadyComplete and refuses
+    // (never re-run).
+    await t.run(async (ctx) => {
+      await ctx.db.insert("gtmBuyerMap", {
+        accountId, agentId, icpDescription: "ICP", buyerJourneyStages: [],
+        intentPhrases: [], trustedVoices: [], synthesizedAt: 1,
+      });
+      await ctx.db.insert("gtmChannelScorecard", {
+        accountId, agentId, channel: "reddit", audienceFit: 1, cadenceFit: 1,
+        uniqueUnlock: "buyers vent here", bet: true, synthesizedAt: 1, updatedAt: 1,
+      });
     });
     await t.mutation(internal.gtmMaya.agentLifecycle.markFoundationComplete, {
       agentId,
@@ -576,5 +599,110 @@ describe("#15 cross-tenant isolation", () => {
     );
     expect(aEvents).toHaveLength(1);
     expect(bEvents).toHaveLength(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE ENUM REFACTOR — the explicit lifecycleState machine + deliver-on-connect.
+// Locks in the fix for the live $22 no-channel re-synthesis loop: Maya's WORK is
+// done when the plan is GENERATED (plan_ready), independent of whether the
+// founder ever received it; delivery + approval + connect are EVENTS, never work
+// she spins on.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("enum lifecycle — plan_ready + deliver-on-connect + activate", () => {
+  const claim = internal.gtmMaya.agentLifecycle.claimFounderSynthesisSend;
+
+  async function seedResearchComplete(
+    t: ReturnType<typeof convexTest>,
+    accountId: Id<"creators">,
+    agentId: Id<"gtmAgents">
+  ) {
+    await t.run(async (ctx) => {
+      await ctx.db.insert("gtmBuyerMap", {
+        accountId, agentId, icpDescription: "ICP", buyerJourneyStages: [],
+        intentPhrases: [], trustedVoices: [], synthesizedAt: 1,
+      });
+      await ctx.db.insert("gtmChannelScorecard", {
+        accountId, agentId, channel: "reddit", audienceFit: 1, cadenceFit: 1,
+        uniqueUnlock: "buyers vent here", bet: true, synthesizedAt: 1, updatedAt: 1,
+      });
+    });
+  }
+
+  it("no channel: synthesis claim → plan_ready + complete WITHOUT delivery; a re-claim SUPPRESSES (loop dead); plan is cached", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, agentId } = await setupAgent(t, "enum_nochannel");
+    await seedResearchComplete(t, accountId, agentId);
+
+    // The synthesis send claims it → plan_ready, work done.
+    expect((await t.mutation(claim, { agentId })).decision).toBe("send");
+    // The handler caches the composed plan (no channel paired, so the real send
+    // would fail — but the plan is HELD, not lost).
+    await t.mutation(internal.gtmMaya.agentLifecycle.cacheSynthesisPlan, {
+      agentId,
+      text: "Here's your plan: buyers, channels, the play.",
+    });
+
+    const lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
+    expect(lc?.lifecycleState).toBe("plan_ready");
+    expect(lc?.foundationComplete).toBe(true);      // work done…
+    expect(lc?.strategyDelivered).toBe(false);      // …WITHOUT the founder receiving it
+    expect(lc?.hasCachedPlan).toBe(true);
+    expect(lc?.foundationStep).toBe("complete");    // watchdog STOPS — no finalize re-run
+
+    // The loop is dead: another proactive send does NOT re-claim/re-generate.
+    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
+  });
+
+  it("plan delivery attempts are bounded (dormant, not an infinite retry)", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId } = await setupAgent(t, "enum_cap");
+    let last = { attempts: 0, capped: false };
+    for (let i = 0; i < 6; i++) {
+      last = await t.mutation(
+        internal.gtmMaya.agentLifecycle.bumpPlanDeliveryAttempt,
+        { agentId }
+      );
+    }
+    expect(last.attempts).toBe(6);
+    expect(last.capped).toBe(true);
+  });
+
+  it("tryActivateAgent stays a no-op until approved AND connected, then flips to active", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, agentId } = await setupAgent(t, "enum_activate");
+    await seedResearchComplete(t, accountId, agentId);
+    // Reach plan_ready.
+    await t.mutation(internal.gtmMaya.agentLifecycle.markFoundationComplete, { agentId });
+
+    // Plan ready but nothing connected + not approved → no-op.
+    expect((await t.mutation(internal.gtmMaya.agentLifecycle.tryActivateAgent, { agentId })).activated).toBe(false);
+
+    // Wire an app + an APPROVED research job + a connected account.
+    const appId = await t.run((ctx) =>
+      ctx.db.insert("gtmApps", {
+        accountId, name: "Acme", url: "https://acme.test", stage: "live-beta",
+        weekGoal: "signups", canRecordScreen: true, canShowFace: false,
+        excludedAudiences: [], createdAt: 1, updatedAt: 1,
+      })
+    );
+    await t.run((ctx) => ctx.db.patch(agentId, {
+      appId,
+      connectedAccountsJson: JSON.stringify([
+        { accountId: "x1", platform: "reddit", isActive: true, needsReconnect: false, connectedAt: 1 },
+      ]),
+    }));
+    await t.run((ctx) =>
+      ctx.db.insert("gtmResearchJobs", {
+        accountId, appId, status: "running", phase: "complete", budgetUsd: 3,
+        spentUsd: 1, strategyApprovalState: "approved", createdAt: 2, updatedAt: 2,
+      })
+    );
+
+    // Now the pair is complete → active.
+    const res = await t.mutation(internal.gtmMaya.agentLifecycle.tryActivateAgent, { agentId });
+    expect(res.activated).toBe(true);
+    const lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
+    expect(lc?.lifecycleState).toBe("active");
   });
 });

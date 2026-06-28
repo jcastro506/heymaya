@@ -21,6 +21,7 @@
 
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { computeAgentLifecycle, type AgentLifecycle } from "./agentLifecycle";
 import {
@@ -349,6 +350,16 @@ export const setStrategyApproval = internalMutation({
       strategyApprovalState: args.state,
       updatedAt: Date.now(),
     });
+    // ENUM REFACTOR — approval is a transition EVENT. If the plan is ready + ≥1
+    // account is connected, this completes the pair → flip to `active`. Cheap
+    // no-op when not yet (e.g. approved but nothing connected). Only on approval.
+    if (args.state === "approved") {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.gtmMaya.agentLifecycle.tryActivateAgent,
+        { agentId: args.agentId }
+      );
+    }
     return latest._id;
   },
 });

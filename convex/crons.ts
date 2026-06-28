@@ -53,6 +53,17 @@ crons.interval(
   internal.gtmMaya.synthesisDelivery.sweepSynthesisSafetyNet
 );
 
+// Deliver-on-connect backstop (the enum refactor). The agent's OWN plan is
+// cached when it sends; if delivery didn't land (no channel then, or a transient
+// failure), Convex re-pushes the cached text — cheap (one send, no LLM), bounded
+// by planDeliveryAttempts. The telegram-pairing event is the primary trigger;
+// this sweep catches the rest. See convex/gtmMaya/synthesisDelivery.ts.
+crons.interval(
+  "gtm-cached-plan-delivery",
+  { minutes: 10 },
+  internal.gtmMaya.synthesisDelivery.sweepCachedPlanDelivery
+);
+
 // Liveness / dark-day watchdog. Over weeks the likely failure isn't a crash —
 // it's quiet degradation: the machine dies or the LLM goes NO_REPLY for days and
 // nothing notices. Every 30 min: flag any live, past-onboarding agent that

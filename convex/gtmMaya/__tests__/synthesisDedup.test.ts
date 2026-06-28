@@ -95,9 +95,9 @@ describe("claimFounderSynthesisSend", () => {
     const t = convexTest(schema, modules);
     const { agentId } = await setupAgent(t, "synth_research");
     expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
-    // strategyDeliveredAt must NOT be stamped by a progress update.
+    // The claim token (planGeneratedAt) must NOT be stamped by a progress update.
     const agent = await t.run((ctx) => ctx.db.get(agentId));
-    expect(agent?.strategyDeliveredAt ?? null).toBeNull();
+    expect(agent?.planGeneratedAt ?? null).toBeNull();
   });
 
   it("hello burst: first send allows + stamps hello; rapid repeats suppress within the cooldown (the 4-duplicate-hellos fix)", async () => {
@@ -117,14 +117,14 @@ describe("claimFounderSynthesisSend", () => {
     const { accountId, agentId } = await setupAgent(t, "synth_research_gate");
     await seedBuyerMapOnly(t, accountId, agentId); // buyer map, but no competitor/scorecard
     // Research not complete → progress flows ("allow"), but the synthesis is NOT
-    // claimed (strategyDeliveredAt stays null) — the live "shipped the play on a
+    // claimed (planGeneratedAt stays null) — the live "shipped the play on a
     // half-built foundation" bug.
     expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
     const agent = await t.run((ctx) => ctx.db.get(agentId));
-    expect(agent?.strategyDeliveredAt ?? null).toBeNull();
+    expect(agent?.planGeneratedAt ?? null).toBeNull();
   });
 
-  it("first send in the synthesis window claims it; the rest are suppressed", async () => {
+  it("first send in the synthesis window claims it (stamps planGeneratedAt + plan_ready); the rest are suppressed", async () => {
     const t = convexTest(schema, modules);
     const { accountId, agentId } = await setupAgent(t, "synth_window");
     await seedBuyerMap(t, accountId, agentId);
@@ -132,24 +132,30 @@ describe("claimFounderSynthesisSend", () => {
     // First founder-facing send → claims the handover.
     expect((await t.mutation(claim, { agentId })).decision).toBe("send");
     const afterClaim = await t.run((ctx) => ctx.db.get(agentId));
-    expect(typeof afterClaim?.strategyDeliveredAt).toBe("number");
+    // ENUM REFACTOR: the claim token is planGeneratedAt (work done), NOT
+    // strategyDeliveredAt (which is set only on a successful SEND, separately).
+    expect(typeof afterClaim?.planGeneratedAt).toBe("number");
+    expect(afterClaim?.strategyDeliveredAt ?? null).toBeNull();
+    expect(afterClaim?.lifecycleState).toBe("plan_ready");
 
     // Every subsequent send in the window → suppressed (no matter the source).
     expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
     expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
   });
 
-  it("releasing a failed send lets a genuine retry re-claim", async () => {
+  it("a FAILED send does NOT re-claim or re-generate (the loop fix) — release is a no-op", async () => {
     const t = convexTest(schema, modules);
     const { accountId, agentId } = await setupAgent(t, "synth_retry");
     await seedBuyerMap(t, accountId, agentId);
     expect((await t.mutation(claim, { agentId })).decision).toBe("send");
-    // Send failed → release.
+    // Send failed → the OLD model released the claim so the agent re-generated +
+    // re-sent (the delivery-failure re-synthesis loop). The NEW model holds the
+    // cached plan for Convex to re-push: release is a no-op, planGeneratedAt
+    // stays, and a retry SUPPRESSES (never re-generates the whole strategy).
     await t.mutation(release, { agentId });
     const afterRelease = await t.run((ctx) => ctx.db.get(agentId));
-    expect(afterRelease?.strategyDeliveredAt ?? null).toBeNull();
-    // Retry re-claims + sends.
-    expect((await t.mutation(claim, { agentId })).decision).toBe("send");
+    expect(typeof afterRelease?.planGeneratedAt).toBe("number"); // still claimed
+    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
   });
 
   it("post-onboarding sends flow freely when no handover was delivered (legacy)", async () => {

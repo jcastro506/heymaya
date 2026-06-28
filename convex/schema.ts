@@ -4512,6 +4512,42 @@ export default defineSchema({
     // server-side cap: past FOUNDATION_MAX_LEASE_ACQUIRES with foundation still
     // incomplete, the lease is DENIED so the agent physically cannot re-run it.
     foundationLeaseAcquireCount: v.optional(v.number()),
+    // ─── Explicit lifecycle state machine (the enum refactor) ────────────────
+    // The SINGLE authority for "where is this agent." Replaces inferring state
+    // from ~6 scalar flags (which conflated "Maya's work done" with "the user
+    // received it" and produced the delivery-failure re-synthesis loop). States:
+    //   fresh        — deployed, no work yet.
+    //   researching  — the bounded foundation pass (research + plan generation).
+    //                  The ONLY heavy-work state; lease + acquire-cap apply here.
+    //   plan_ready   — the plan is GENERATED + cached. Maya's work is DONE; she
+    //                  goes idle. Delivery (push the cached plan) + approval +
+    //                  account-connect are now EVENTS, never work she spins on.
+    //   active       — approved AND ≥1 account connected → the daily engage loop.
+    // Optional for back-compat: legacy agents have undefined → computeAgentLife-
+    // cycle derives + write-repairs it from durable evidence each read.
+    lifecycleState: v.optional(
+      v.union(
+        v.literal("fresh"),
+        v.literal("researching"),
+        v.literal("plan_ready"),
+        v.literal("active")
+      )
+    ),
+    // Unix-ms the synthesis plan was GENERATED (the agent composed it and the
+    // send_update handler claimed/cached it). This — NOT delivery — is the
+    // "Maya's work is done" marker: foundationComplete flips on it, so the
+    // watchdog stops the moment the plan exists, whether or not the send landed.
+    // Doubles as the atomic synthesis CLAIM token (only one session stamps it).
+    planGeneratedAt: v.optional(v.number()),
+    // The exact synthesis plan text, cached so Convex can RE-PUSH it on the
+    // channel-connected event (deliver-on-connect) without the agent ever
+    // re-generating. This is what makes a failed/again send cheap (cents to
+    // re-push) instead of a full strategy rebuild (dollars), killing the loop.
+    cachedSynthesisText: v.optional(v.string()),
+    // Bounded delivery-retry counter. Each Convex push attempt of the cached
+    // plan increments it; past the cap the agent stays dormant (plan held) and
+    // we alert, rather than retry a dead channel forever.
+    planDeliveryAttempts: v.optional(v.number()),
     // ─── Spend THROTTLE (runaway-burn backstop — degrade, never destroy) ─────
     // RULE: a cost ceiling THROTTLES, it never destroys a user's agent. When
     // ROLLING-window spend crosses a ceiling ($3/hr velocity OR $6/24h
