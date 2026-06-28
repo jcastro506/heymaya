@@ -273,10 +273,11 @@ describe("#15 lifecycle — markers + phases", () => {
     let lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
     expect(lc?.foundationComplete).toBe(false);
 
-    // Research lands — but completion is STILL refused until the plan is actually
-    // GENERATED (sent). Research-done alone is too loose: it let the live agent
-    // mark plan_ready off bare research without ever sending → no cached plan to
-    // deliver on connect (the 2026-06-28 finding). The gate requires the send.
+    // Research lands (buyer map + channel scorecard) → completion SUCCEEDS even
+    // though the plan was NEVER delivered (strategyDeliveredAt stays null). A
+    // missing channel can no longer block completion → no re-synthesis loop. The
+    // gate is on a non-empty foundation, never on delivery; the Convex synthesis
+    // safety-net guarantees the founder still gets a plan on connect.
     await t.run(async (ctx) => {
       await ctx.db.insert("gtmBuyerMap", {
         accountId, agentId, icpDescription: "ICP", buyerJourneyStages: [],
@@ -287,17 +288,6 @@ describe("#15 lifecycle — markers + phases", () => {
         uniqueUnlock: "buyers vent here", bet: true, synthesizedAt: 1, updatedAt: 1,
       });
     });
-    const stillBlocked = await t.mutation(
-      internal.gtmMaya.agentLifecycle.markFoundationComplete,
-      { agentId }
-    );
-    expect(stillBlocked.completed).toBe(false);
-    expect(stillBlocked.reason).toContain("plan_not_generated");
-
-    // The synthesis send claims it (stamps planGeneratedAt) → completion now
-    // SUCCEEDS even though the plan was NEVER delivered (strategyDeliveredAt stays
-    // null). A missing channel can no longer block completion → no re-synthesis loop.
-    expect((await t.mutation(internal.gtmMaya.agentLifecycle.claimFounderSynthesisSend, { agentId })).decision).toBe("send");
     const ok = await t.mutation(
       internal.gtmMaya.agentLifecycle.markFoundationComplete,
       { agentId }

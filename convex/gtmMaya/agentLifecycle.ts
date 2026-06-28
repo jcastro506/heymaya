@@ -573,21 +573,25 @@ export const markFoundationComplete = internalMutation({
       }
       return { alreadyComplete: true, completed: true };
     }
-    // GATE: the plan must have been GENERATED first — `planGeneratedAt` is
-    // stamped by the synthesis send (send_update → claimFounderSynthesisSend),
-    // which ALSO caches the plan text for deliver-on-connect. Requiring it (NOT
-    // researchComplete, which is too loose) forces the agent to actually compose
-    // + send the plan before marking done — otherwise it can mark plan_ready off
-    // bare research and the plan is never cached, so a later connect has nothing
-    // to deliver (observed live 2026-06-28: mayaOutbound=0, cachedText=null). The
-    // gate is on GENERATION, never on DELIVERY (the founder controls the channel).
-    // The 8-acquire lease cap remains the backstop if the agent never sends.
-    if (agent.planGeneratedAt == null) {
+    // GATE: refuse only on a truly EMPTY foundation (no plan generated AND no
+    // research) so completion can't fire on nothing — but NOT a hard
+    // planGeneratedAt requirement. Rationale (live 2026-06-28): hard-requiring the
+    // send made the no-channel case loop to the lease cap, because the agent
+    // doesn't send the synthesis when there's no channel — and it bought nothing,
+    // since the Convex synthesis SAFETY-NET (synthesisDelivery.ts) is what
+    // actually guarantees the founder gets a plan: it assembles one from research
+    // and delivers it the moment a channel exists, and it only fires AFTER
+    // completion (keys on foundationCompletedAt). So BLOCKING completion would
+    // disable the very backstop. Loose gate + safety-net + deliver-on-connect
+    // covers every case with no loop. The gate is never on DELIVERY (the founder
+    // controls the channel) — that was the original $22-loop mistake.
+    const lifecycle = await computeAgentLifecycle(ctx, agent, now);
+    if (agent.planGeneratedAt == null && !lifecycle.researchComplete) {
       return {
         alreadyComplete: false,
         completed: false,
         reason:
-          "plan_not_generated: compose + SEND the synthesis plan via send_update FIRST — it works even with NO channel connected (the plan is cached server-side and delivered automatically the moment they connect). Sending is what marks the plan generated; only THEN call plan_ready. Never mark done before sending.",
+          "plan_not_generated: finish the research and SEND the founder the synthesis plan (send_update — works even with no channel, it's cached + delivered on connect) before marking done.",
       };
     }
     await ctx.db.patch(args.agentId, {
