@@ -273,9 +273,10 @@ describe("#15 lifecycle — markers + phases", () => {
     let lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
     expect(lc?.foundationComplete).toBe(false);
 
-    // Research lands (buyer map + channel scorecard) → completion SUCCEEDS even
-    // though the plan was NEVER delivered (strategyDeliveredAt stays null). A
-    // missing channel can no longer block completion → no re-synthesis loop.
+    // Research lands — but completion is STILL refused until the plan is actually
+    // GENERATED (sent). Research-done alone is too loose: it let the live agent
+    // mark plan_ready off bare research without ever sending → no cached plan to
+    // deliver on connect (the 2026-06-28 finding). The gate requires the send.
     await t.run(async (ctx) => {
       await ctx.db.insert("gtmBuyerMap", {
         accountId, agentId, icpDescription: "ICP", buyerJourneyStages: [],
@@ -286,6 +287,17 @@ describe("#15 lifecycle — markers + phases", () => {
         uniqueUnlock: "buyers vent here", bet: true, synthesizedAt: 1, updatedAt: 1,
       });
     });
+    const stillBlocked = await t.mutation(
+      internal.gtmMaya.agentLifecycle.markFoundationComplete,
+      { agentId }
+    );
+    expect(stillBlocked.completed).toBe(false);
+    expect(stillBlocked.reason).toContain("plan_not_generated");
+
+    // The synthesis send claims it (stamps planGeneratedAt) → completion now
+    // SUCCEEDS even though the plan was NEVER delivered (strategyDeliveredAt stays
+    // null). A missing channel can no longer block completion → no re-synthesis loop.
+    expect((await t.mutation(internal.gtmMaya.agentLifecycle.claimFounderSynthesisSend, { agentId })).decision).toBe("send");
     const ok = await t.mutation(
       internal.gtmMaya.agentLifecycle.markFoundationComplete,
       { agentId }
@@ -424,6 +436,10 @@ describe("#15 lifecycle — foundation lease (the lock)", () => {
         accountId, agentId, channel: "reddit", audienceFit: 1, cadenceFit: 1,
         uniqueUnlock: "buyers vent here", bet: true, synthesizedAt: 1, updatedAt: 1,
       });
+    });
+    // The synthesis send claims it (stamps planGeneratedAt — the completion gate).
+    await t.mutation(internal.gtmMaya.agentLifecycle.claimFounderSynthesisSend, {
+      agentId,
     });
     await t.mutation(internal.gtmMaya.agentLifecycle.markFoundationComplete, {
       agentId,
@@ -672,7 +688,8 @@ describe("enum lifecycle — plan_ready + deliver-on-connect + activate", () => 
     const t = convexTest(schema, modules);
     const { accountId, agentId } = await setupAgent(t, "enum_activate");
     await seedResearchComplete(t, accountId, agentId);
-    // Reach plan_ready.
+    // Reach plan_ready (the synthesis send claims it → planGeneratedAt → mark).
+    await t.mutation(claim, { agentId });
     await t.mutation(internal.gtmMaya.agentLifecycle.markFoundationComplete, { agentId });
 
     // Plan ready but nothing connected + not approved → no-op.

@@ -573,16 +573,21 @@ export const markFoundationComplete = internalMutation({
       }
       return { alreadyComplete: true, completed: true };
     }
-    // GATE: the plan must have been GENERATED first (planGeneratedAt, stamped by
-    // the synthesis send). Refuse only on a truly empty foundation so we can't
-    // complete on nothing — but NOT on delivery, which the founder controls.
-    const lifecycle = await computeAgentLifecycle(ctx, agent, now);
-    if (agent.planGeneratedAt == null && !lifecycle.researchComplete) {
+    // GATE: the plan must have been GENERATED first — `planGeneratedAt` is
+    // stamped by the synthesis send (send_update → claimFounderSynthesisSend),
+    // which ALSO caches the plan text for deliver-on-connect. Requiring it (NOT
+    // researchComplete, which is too loose) forces the agent to actually compose
+    // + send the plan before marking done — otherwise it can mark plan_ready off
+    // bare research and the plan is never cached, so a later connect has nothing
+    // to deliver (observed live 2026-06-28: mayaOutbound=0, cachedText=null). The
+    // gate is on GENERATION, never on DELIVERY (the founder controls the channel).
+    // The 8-acquire lease cap remains the backstop if the agent never sends.
+    if (agent.planGeneratedAt == null) {
       return {
         alreadyComplete: false,
         completed: false,
         reason:
-          "plan_not_generated: finish the research and SEND the founder the synthesis plan (a strategic send_update — who's buying, where, the strategy) before marking done. Delivery to their channel is handled for you; you just need to have generated + sent it.",
+          "plan_not_generated: compose + SEND the synthesis plan via send_update FIRST — it works even with NO channel connected (the plan is cached server-side and delivered automatically the moment they connect). Sending is what marks the plan generated; only THEN call plan_ready. Never mark done before sending.",
       };
     }
     await ctx.db.patch(args.agentId, {
