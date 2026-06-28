@@ -1727,6 +1727,17 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
   // HEARTBEAT.md missed-cadence task catches the foundation/morning-brief
   // recovery cases.
   const delivery = buildCronDelivery(input);
+  // Robust leak fix (2026-06-28): OpenClaw's `announce` delivery forwards a cron
+  // turn's RAW reply to Telegram, and only suppresses a CLEAN `NO_REPLY` token —
+  // so any internal/no-op cron that embellishes its reply (the "Hello already
+  // sent" no-op, the discovery_pulse "lane complete / no hot strikes" status)
+  // LEAKS to the founder. Internal + conditional crons (kickstart-hello,
+  // foundation-resume, dreaming, discovery_pulse) reach the founder ONLY via the
+  // explicit `send_update` tool (the Convex→Telegram path, independent of this
+  // delivery), so we give them a SILENT delivery: their turn reply is never
+  // announced, making the leak structurally impossible. The genuinely
+  // founder-facing daily crons (brief / midday / recap / weekly) keep `announce`.
+  const silentDelivery: Record<string, unknown> = { mode: "none", bestEffort: true };
   // Instant used to compute the tz→UTC offset for cron rewriting (DST-correct
   // at deploy). The machine TZ env covers the twice-yearly DST flip until the
   // next redeploy.
@@ -1885,6 +1896,22 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
     ],
   };
 
+  // Robust leak fix — silence the internal/conditional crons (see silentDelivery
+  // above). They reach the founder ONLY via the explicit send_update tool, so
+  // their raw turn reply must never be announced. Founder-facing daily crons
+  // (brief / midday / recap / weekly / monthly) keep `announce`.
+  const SILENT_JOB_IDS = new Set([
+    "0001_kickstart",
+    "0002_foundation_resume_8m",
+    "0003_foundation_resume_16m",
+    "0004_foundation_resume_24m",
+    "0015_dreaming",
+    "0016_discovery_pulse",
+  ]);
+  for (const job of jobs.jobs as Array<{ id: string; delivery: unknown }>) {
+    if (SILENT_JOB_IDS.has(job.id)) job.delivery = silentDelivery;
+  }
+
   return JSON.stringify(jobs, null, 2) + "\n";
 }
 
@@ -1998,7 +2025,7 @@ const DISCOVERY_PULSE_CRON = {
   description:
     "Periodic continuous discovery (default every 3h, env-tunable): one budget-gated, watermark-bounded lane scan per tick; escalates only genuine ICP-fit hits to today's queue. Degrades to monitoring-only when the discovery budget is spent.",
   message:
-    "Discovery pulse (periodic). BOUNDED + BUDGET-GATED — one lane per tick, cheap scan, escalate only real hits. 1) `get_agent_lifecycle({})`; if `foundationComplete` is false → NO_REPLY. 2) `check_discovery_budget({})` — if `mode` is `\"monitoring_only\"` → NO_REPLY (the day's discovery allowance is spent; keep monitoring own posts + inbound, do NOT initiate new discovery reads until the rolling window frees up). 3) `next_watch_lane({})` → the ONE lane to work this tick. 4) `get_watermark({ channel })` for that lane's bet channel, then spawn ONE cheap scan worker bounded to items NEWER than the watermark (read `skills/maya-continuous-research/SKILL.md`) — bet channels only, ONE lane. 5) Judge for genuine ICP fit + velocity. For a REAL hit ONLY: ADD it to today's queue (`propose_calendar` — NEVER replace existing events) and fire ONE one-tap ping / auto-post a drafted reply on a connected channel. No hit → NO_REPLY. 6) `advance_watermark({ channel, ... })` for the channel you scanned so the next tick reads only newer items. Never exceed the budget gate; never re-sweep history (the watermark bounds you).",
+    "Discovery pulse (periodic). BOUNDED + BUDGET-GATED — one lane per tick, cheap scan, escalate only real hits. 1) `get_agent_lifecycle({})`; if `foundationComplete` is false → NO_REPLY. 2) `check_discovery_budget({})` — if `mode` is `\"monitoring_only\"` → NO_REPLY (the day's discovery allowance is spent; keep monitoring own posts + inbound, do NOT initiate new discovery reads until the rolling window frees up). 3) `next_watch_lane({})` → the ONE lane to work this tick. 4) `get_watermark({ channel })` for that lane's bet channel, then spawn ONE cheap scan worker bounded to items NEWER than the watermark (read `skills/maya-continuous-research/SKILL.md`) — bet channels only, ONE lane. 5) Judge for genuine ICP fit + velocity. For a REAL hit ONLY: ADD it to today's queue (`propose_calendar` — NEVER replace existing events) and fire ONE one-tap ping **via `send_update`** (that is the ONLY thing that reaches the founder — my turn reply is NOT delivered) / auto-post a drafted reply on a connected channel. No hit → NO_REPLY (and NO_REPLY is all I reply — never a status report). 6) `advance_watermark({ channel, ... })` for the channel you scanned so the next tick reads only newer items. Never exceed the budget gate; never re-sweep history (the watermark bounds you).",
 } as const;
 
 
