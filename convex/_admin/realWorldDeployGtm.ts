@@ -1245,6 +1245,94 @@ export const repointLatestTestCreator = internalMutation({
 });
 
 /**
+ * Provision an email+password Clerk login for the staging test agent, so the
+ * operator can sign in with credentials instead of Google + console-fishing for
+ * their user id. Creates (or updates the password of) a Clerk user via the
+ * Backend API, then optionally binds the latest test creator to it.
+ * NOTE: only lets them log in if the staging Clerk instance has PASSWORD sign-in
+ * enabled (vs social-only). Returns the userId either way.
+ *   npx convex run _admin/realWorldDeployGtm:provisionClerkLogin \
+ *     '{"email":"founder@hey-maya.ai","password":"...","bind":true}'
+ */
+export const provisionClerkLogin = internalAction({
+  args: {
+    email: v.string(),
+    password: v.string(),
+    bind: v.optional(v.boolean()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    ok: boolean;
+    userId?: string;
+    created?: boolean;
+    bound?: boolean;
+    reason?: string;
+  }> => {
+    const key = process.env.CLERK_SECRET_KEY;
+    if (!key) return { ok: false, reason: "no CLERK_SECRET_KEY in env" };
+    const base = "https://api.clerk.com/v1";
+    const authJson = {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    };
+    let userId: string | undefined;
+    let created = false;
+    // Find an existing user with this email.
+    const found = await fetch(
+      `${base}/users?email_address[]=${encodeURIComponent(args.email)}`,
+      { headers: { Authorization: `Bearer ${key}` } }
+    );
+    if (found.ok) {
+      const arr = (await found.json()) as Array<{ id: string }>;
+      if (Array.isArray(arr) && arr.length > 0) userId = arr[0].id;
+    }
+    if (userId) {
+      const patch = await fetch(`${base}/users/${userId}`, {
+        method: "PATCH",
+        headers: authJson,
+        body: JSON.stringify({ password: args.password, skip_password_checks: true }),
+      });
+      if (!patch.ok) {
+        return {
+          ok: false,
+          userId,
+          reason: `password update failed: ${patch.status} ${await patch.text()}`,
+        };
+      }
+    } else {
+      const create = await fetch(`${base}/users`, {
+        method: "POST",
+        headers: authJson,
+        body: JSON.stringify({
+          email_address: [args.email],
+          password: args.password,
+          skip_password_checks: true,
+        }),
+      });
+      if (!create.ok) {
+        return {
+          ok: false,
+          reason: `create failed: ${create.status} ${await create.text()}`,
+        };
+      }
+      userId = ((await create.json()) as { id: string }).id;
+      created = true;
+    }
+    let bound = false;
+    if (args.bind && userId) {
+      const r = await ctx.runMutation(
+        internal._admin.realWorldDeployGtm.repointLatestTestCreator,
+        { clerkUserId: userId, email: args.email }
+      );
+      bound = r.ok;
+    }
+    return { ok: true, userId, created, bound };
+  },
+});
+
+/**
  * Bind the MOST-RECENT creator (regardless of clerk-id prefix) to a real
  * Clerk user + email. Unlike repointLatestTestCreator, this works even after
  * the creator has already been repointed once (no test-prefix requirement) —
