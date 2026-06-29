@@ -125,24 +125,20 @@ describe("#15 lifecycle — markers + phases", () => {
       draftText: "A genuine, grounded reply that helps the OP.",
     });
 
-    // Rows exist, but the plan was NEVER delivered to the founder → NOT complete.
-    // (The live dogfood: research landed, she went idle, the founder got no plan.)
+    // Pool exists, but the synthesis plan was NEVER generated/sent → NOT complete.
     lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, {
       agentId,
     });
     expect(lc?.targetThreadCount).toBe(1);
     expect(lc?.draftCount).toBe(1);
-    expect(lc?.strategyDelivered).toBe(false);
     expect(lc?.foundationComplete).toBe(false);
 
-    // The synthesis plan is delivered to the founder → NOW complete.
-    await t.mutation(internal.gtmMaya.agentLifecycle.markStrategyDelivered, {
-      agentId,
-    });
+    // The synthesis plan is generated/sent (planGeneratedAt) → with the pool, NOW
+    // complete. Completion requires BOTH the plan AND the actionable pool.
+    await t.run((ctx) => ctx.db.patch(agentId, { planGeneratedAt: Date.now() }));
     lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, {
       agentId,
     });
-    expect(lc?.strategyDelivered).toBe(true);
     expect(lc?.foundationComplete).toBe(true);
     expect(lc?.phase).toBe("active");
   });
@@ -194,8 +190,8 @@ describe("#15 lifecycle — markers + phases", () => {
     expect(lc2?.foundationComplete).toBe(false);
     expect(lc2?.foundationStep).toBe("finalize");
 
-    // The synthesis plan is delivered → complete.
-    await t.mutation(internal.gtmMaya.agentLifecycle.markStrategyDelivered, { agentId });
+    // The synthesis plan is generated/sent → with the pool, complete.
+    await t.run((ctx) => ctx.db.patch(agentId, { planGeneratedAt: Date.now() }));
     const lc3 = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
     expect(lc3?.foundationComplete).toBe(true);
     expect(lc3?.foundationStep).toBe("complete");
@@ -236,15 +232,13 @@ describe("#15 lifecycle — markers + phases", () => {
       draftText: "A grounded reply for a brand with only a website.",
     });
 
-    // Plan delivered (voice may be low-confidence, but the founder still gets it).
-    await t.mutation(internal.gtmMaya.agentLifecycle.markStrategyDelivered, {
-      agentId,
-    });
+    // Plan generated/sent (voice may be low-confidence, but the founder still gets it).
+    await t.run((ctx) => ctx.db.patch(agentId, { planGeneratedAt: Date.now() }));
     const lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, {
       agentId,
     });
     expect(lc?.hasVoiceProfile).toBe(false); // legitimately — no handles
-    expect(lc?.foundationComplete).toBe(true); // research real + plan delivered → DONE
+    expect(lc?.foundationComplete).toBe(true); // research real + pool + plan → DONE
     expect(lc?.phase).toBe("active"); // watchdog stops → no re-spawn loop
   });
 
@@ -253,40 +247,30 @@ describe("#15 lifecycle — markers + phases", () => {
   // never "received" the plan → completion was blocked → the watchdog re-ran.
   // Now: refuse only on an empty foundation; succeed the moment research is done
   // / a plan exists, WITHOUT requiring delivery.
-  it("markFoundationComplete succeeds on plan GENERATED, not delivery (the loop fix)", async () => {
+  it("markFoundationComplete requires the POOL and the PLAN (loop fix + thin-pool fix)", async () => {
     const t = convexTest(schema, modules);
     const { accountId, agentId } = await setupAgent(t, "lc_plangate");
 
-    // Threads + drafts exist but research isn't complete and no plan generated →
-    // refuse on a half-built foundation (can't complete on nothing).
+    // (a) Plan generated but NO pool (no threads/drafts) → refuse (the thin-pool
+    // fix: the live agent rushed to plan_ready with 0 threads, nothing to post).
+    await t.run((ctx) => ctx.db.patch(agentId, { planGeneratedAt: Date.now() }));
+    const noPool = await t.mutation(
+      internal.gtmMaya.agentLifecycle.markFoundationComplete,
+      { agentId }
+    );
+    expect(noPool.completed).toBe(false);
+    expect(noPool.reason).toContain("not_ready");
+    let lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
+    expect(lc?.foundationComplete).toBe(false);
+
+    // (b) Build the actionable pool (thread + draft) → with the plan generated,
+    // completion SUCCEEDS even though it was NEVER delivered (strategyDeliveredAt
+    // null). No founder-channel dependency → no $22 loop; the safety-net +
+    // deliver-on-connect still get the founder a plan.
     const threadId = await seedThread(t, accountId, agentId, "post_gate_1");
     await t.mutation(internal.gtmMaya.targetList.recordDraftedContent, {
       accountId, agentId, kind: "reply", platform: "reddit", targetThreadId: threadId,
       draftText: "A grounded reply.",
-    });
-    const blocked = await t.mutation(
-      internal.gtmMaya.agentLifecycle.markFoundationComplete,
-      { agentId }
-    );
-    expect(blocked.completed).toBe(false);
-    expect(blocked.reason).toContain("plan_not_generated");
-    let lc = await t.query(internal.gtmMaya.agentLifecycle.getAgentLifecycle, { agentId });
-    expect(lc?.foundationComplete).toBe(false);
-
-    // Research lands (buyer map + channel scorecard) → completion SUCCEEDS even
-    // though the plan was NEVER delivered (strategyDeliveredAt stays null). A
-    // missing channel can no longer block completion → no re-synthesis loop. The
-    // gate is on a non-empty foundation, never on delivery; the Convex synthesis
-    // safety-net guarantees the founder still gets a plan on connect.
-    await t.run(async (ctx) => {
-      await ctx.db.insert("gtmBuyerMap", {
-        accountId, agentId, icpDescription: "ICP", buyerJourneyStages: [],
-        intentPhrases: [], trustedVoices: [], synthesizedAt: 1,
-      });
-      await ctx.db.insert("gtmChannelScorecard", {
-        accountId, agentId, channel: "reddit", audienceFit: 1, cadenceFit: 1,
-        uniqueUnlock: "buyers vent here", bet: true, synthesizedAt: 1, updatedAt: 1,
-      });
     });
     const ok = await t.mutation(
       internal.gtmMaya.agentLifecycle.markFoundationComplete,
@@ -414,9 +398,9 @@ describe("#15 lifecycle — foundation lease (the lock)", () => {
     );
     expect(a3.acquired).toBe(true);
 
-    // Research lands (the completion gate — plan generated/research done, NOT
-    // delivery), then mark complete → acquire reports alreadyComplete and refuses
-    // (never re-run).
+    // Research + the actionable pool land (the completion gate — plan generated +
+    // pool, NOT delivery), then mark complete → acquire reports alreadyComplete
+    // and refuses (never re-run).
     await t.run(async (ctx) => {
       await ctx.db.insert("gtmBuyerMap", {
         accountId, agentId, icpDescription: "ICP", buyerJourneyStages: [],
@@ -426,6 +410,11 @@ describe("#15 lifecycle — foundation lease (the lock)", () => {
         accountId, agentId, channel: "reddit", audienceFit: 1, cadenceFit: 1,
         uniqueUnlock: "buyers vent here", bet: true, synthesizedAt: 1, updatedAt: 1,
       });
+    });
+    const leaseThread = await seedThread(t, accountId, agentId, "post_lease_1");
+    await t.mutation(internal.gtmMaya.targetList.recordDraftedContent, {
+      accountId, agentId, kind: "reply", platform: "reddit", targetThreadId: leaseThread,
+      draftText: "A grounded reply.",
     });
     // The synthesis send claims it (stamps planGeneratedAt — the completion gate).
     await t.mutation(internal.gtmMaya.agentLifecycle.claimFounderSynthesisSend, {
@@ -632,6 +621,12 @@ describe("enum lifecycle — plan_ready + deliver-on-connect + activate", () => 
         accountId, agentId, channel: "reddit", audienceFit: 1, cadenceFit: 1,
         uniqueUnlock: "buyers vent here", bet: true, synthesizedAt: 1, updatedAt: 1,
       });
+    });
+    // The actionable pool (thread + draft) — completion now requires it too.
+    const poolThread = await seedThread(t, accountId, agentId, "post_enum_1");
+    await t.mutation(internal.gtmMaya.targetList.recordDraftedContent, {
+      accountId, agentId, kind: "reply", platform: "reddit", targetThreadId: poolThread,
+      draftText: "A grounded reply.",
     });
   }
 

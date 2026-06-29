@@ -164,6 +164,11 @@ interface SynthesisCandidate {
   openClawFlyAppId: string | null;
   telegramChatId: string | null;
   foundationCompletedAt: number | null;
+  // Decoupled trigger (2026-06-28): the safety-net now fires on RESEARCH being
+  // done + grace, NOT on foundationCompletedAt — because the completion gate now
+  // requires the actionable pool (threads + drafts), so a thin/flaked agent may
+  // never reach foundationCompletedAt yet the founder still needs a plan.
+  researchCompletedAt: number | null;
   killedAt: number | null;
   synthesisSafetyNetFiredAt: number | null;
   strategyApprovalState: string | null;
@@ -244,6 +249,7 @@ async function buildCandidate(
     openClawFlyAppId: agent.openClawFlyAppId ?? null,
     telegramChatId: agent.telegramChatId ?? null,
     foundationCompletedAt: agent.foundationCompletedAt ?? null,
+    researchCompletedAt: agent.researchCompletedAt ?? null,
     killedAt: agent.killedAt ?? null,
     synthesisSafetyNetFiredAt: agent.synthesisSafetyNetFiredAt ?? null,
     strategyApprovalState: latestJob?.strategyApprovalState ?? null,
@@ -260,13 +266,16 @@ function safeParse(s: string): unknown {
   }
 }
 
-/** Is this candidate overdue for synthesis (agent failed to deliver)? */
+/** Is this candidate overdue for synthesis (agent failed to deliver)? Keys on
+ *  RESEARCH being done + grace (not foundationCompletedAt) — so it still fires
+ *  when the completion gate is blocked by a thin pool but the founder needs a
+ *  plan. */
 function isOverdue(c: SynthesisCandidate, now: number): boolean {
   return (
     !c.killedAt &&
     !c.synthesisSafetyNetFiredAt &&
-    c.foundationCompletedAt !== null &&
-    now - c.foundationCompletedAt > SYNTHESIS_GRACE_MS &&
+    c.researchCompletedAt !== null &&
+    now - c.researchCompletedAt > SYNTHESIS_GRACE_MS &&
     c.strategyApprovalState === null &&
     Boolean(c.telegramChatId)
   );
@@ -289,7 +298,7 @@ export const listAgentsForSynthesisCheck = internalQuery({
         (a) =>
           a.openClawFlyAppId &&
           !a.killedAt &&
-          a.foundationCompletedAt &&
+          a.researchCompletedAt &&
           !a.synthesisSafetyNetFiredAt
       )
       .map((a) => a._id);

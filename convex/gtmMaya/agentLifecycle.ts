@@ -232,26 +232,28 @@ export async function computeAgentLifecycle(
   // (target threads + at least one draft). The explicit `foundationCompletedAt`
   // marker (set right after the synthesis is sent) remains the authoritative
   // signal; this is the backstop that must reliably flip so the watchdog STOPS.
+  // The ACTIONABLE POOL — the agent's tactical output: ≥1 buyer thread to reply
+  // to AND ≥1 drafted reply. Without it, onboarding "completes" with nothing for
+  // Maya to post on connect (observed live 2026-06-28: rich strategy synthesis,
+  // but 0 threads + 0 drafts — the agent rushed past the discovery/draft phase).
   const rowsComplete = targetThreadCount >= 1 && draftCount >= 1;
-  // WORK-DONE gate (the enum refactor). "Maya's work is done" = the synthesis
-  // plan was GENERATED — NOT that the founder received it. `planGeneratedAt` is
-  // stamped by the send_update handler the instant the agent composes + sends the
-  // plan, whether or not Telegram delivery lands. foundationComplete (which the
-  // watchdog gates "stop the pipeline" on) flips on plan generation — so a failed
-  // send no longer keeps her in the expensive finalize/synthesis step forever
-  // (the live $22 no-channel loop). Delivery is a SEPARATE Convex push
-  // (deliver-on-connect, pushCachedPlan); `strategyDeliveredAt` is now PURELY the
-  // "founder received it" signal, never a completion or claim gate. The explicit
-  // `foundationCompletedAt` marker still counts, and `rowsComplete &&
-  // strategyDelivered` stays as a BACK-COMPAT backstop so legacy in-flight agents
-  // (deployed before planGeneratedAt existed) are still recognized as done.
+  // WORK-DONE gate. Maya's work is done = the synthesis plan was GENERATED
+  // (`planGeneratedAt`, stamped by the send_update handler when she composes +
+  // sends the plan, whether or not delivery lands) AND the actionable pool is
+  // built (`rowsComplete`). Gating on plan-generation (NOT delivery) is what
+  // killed the $22 no-channel loop — delivery is a separate Convex push, and
+  // `strategyDeliveredAt` is PURELY the "founder received it" signal. Adding
+  // `rowsComplete` is what stops a THIN completion: the watchdog keeps running
+  // `finalize` (discovery → drafts) until the pool exists, so she never goes idle
+  // with an empty queue. Both gates are her OWN work (controllable), so no
+  // founder-channel dependency → no loop; the 8-acquire lease cap bounds a
+  // genuinely thread-less niche. Legacy agents pass via `foundationCompletedAt`.
   const planGeneratedAt = agent.planGeneratedAt ?? null;
   const strategyDeliveredAt = agent.strategyDeliveredAt ?? null;
   const strategyDelivered = strategyDeliveredAt !== null;
   const foundationComplete =
     foundationCompletedAt !== null ||
-    planGeneratedAt !== null ||
-    (rowsComplete && strategyDelivered);
+    (planGeneratedAt !== null && rowsComplete);
 
   const helloSent = helloSentAt !== null;
   const foundationStarted = foundationStartedAt !== null || leaseActive;
@@ -573,25 +575,26 @@ export const markFoundationComplete = internalMutation({
       }
       return { alreadyComplete: true, completed: true };
     }
-    // GATE: refuse only on a truly EMPTY foundation (no plan generated AND no
-    // research) so completion can't fire on nothing — but NOT a hard
-    // planGeneratedAt requirement. Rationale (live 2026-06-28): hard-requiring the
-    // send made the no-channel case loop to the lease cap, because the agent
-    // doesn't send the synthesis when there's no channel — and it bought nothing,
-    // since the Convex synthesis SAFETY-NET (synthesisDelivery.ts) is what
-    // actually guarantees the founder gets a plan: it assembles one from research
-    // and delivers it the moment a channel exists, and it only fires AFTER
-    // completion (keys on foundationCompletedAt). So BLOCKING completion would
-    // disable the very backstop. Loose gate + safety-net + deliver-on-connect
-    // covers every case with no loop. The gate is never on DELIVERY (the founder
-    // controls the channel) — that was the original $22-loop mistake.
+    // GATE: completing requires BOTH (1) the synthesis plan GENERATED + sent
+    // (planGeneratedAt) AND (2) the actionable pool built — ≥1 buyer thread with
+    // ≥1 drafted reply (rowsComplete). The pool requirement stops a THIN
+    // completion (live 2026-06-28: rich strategy synthesis but 0 threads/drafts —
+    // the agent rushed past discovery/drafting, so connect-and-go had nothing to
+    // post). Both are the agent's OWN work (not the founder's channel), so this
+    // is NOT the $22 delivery-loop mistake; the 8-acquire lease cap bounds a
+    // genuinely thread-less niche. The Convex synthesis SAFETY-NET still
+    // guarantees the founder gets a plan even while this is blocked — it now fires
+    // on researchCompletedAt (NOT foundationCompletedAt, see synthesisDelivery.ts)
+    // so blocking completion no longer disables it.
     const lifecycle = await computeAgentLifecycle(ctx, agent, now);
-    if (agent.planGeneratedAt == null && !lifecycle.researchComplete) {
+    const poolBuilt =
+      lifecycle.targetThreadCount >= 1 && lifecycle.draftCount >= 1;
+    if (agent.planGeneratedAt == null || !poolBuilt) {
       return {
         alreadyComplete: false,
         completed: false,
         reason:
-          "plan_not_generated: finish the research and SEND the founder the synthesis plan (send_update — works even with no channel, it's cached + delivered on connect) before marking done.",
+          "not_ready: before marking done you must BOTH (1) SEND the founder the synthesis plan via send_update (works even with no channel — it's cached + delivered on connect), AND (2) build the actionable pool — at least one real buyer thread (save_target_thread) with a drafted reply (save_draft). Keep running the finalize step (discovery → drafts) until both exist.",
       };
     }
     await ctx.db.patch(args.agentId, {
