@@ -1666,6 +1666,57 @@ export const tailLatestMaya = internalAction({
   },
 });
 
+/** Inspect a SPECIFIC agent's plan + intended posts by agentId (works after the
+ *  creator has been re-bound to a real login, unlike the latest-test-creator
+ *  peeks). Returns the buyer read, bet channels, the target threads, and the
+ *  actual drafted replies/posts. */
+export const peekAgentPlan = internalQuery({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (ctx, args): Promise<unknown> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return { found: false };
+    const buyerMap = await ctx.db
+      .query("gtmBuyerMap")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .first();
+    const scorecards = await ctx.db
+      .query("gtmChannelScorecard")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    const threads = (
+      await ctx.db
+        .query("gtmTargetThreads")
+        .withIndex("by_account", (q) => q.eq("accountId", agent.accountId))
+        .collect()
+    ).filter((t) => t.agentId === args.agentId);
+    const drafts = await ctx.db
+      .query("gtmDraftedContent")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    return {
+      found: true,
+      icp: buyerMap?.icpDescription ?? null,
+      intentPhrases: buyerMap?.intentPhrases ?? [],
+      betChannels: scorecards
+        .filter((s) => s.bet)
+        .map((s) => ({ channel: s.channel, unlock: s.uniqueUnlock })),
+      threadCount: threads.length,
+      threads: threads.slice(0, 12).map((t) => ({
+        platform: t.platform,
+        tier: t.tier,
+        title: (t.title ?? "").slice(0, 120),
+        url: t.url,
+      })),
+      draftCount: drafts.length,
+      drafts: drafts.slice(0, 8).map((d) => ({
+        platform: d.platform,
+        kind: d.kind,
+        text: (d.draftText ?? "").slice(0, 400),
+      })),
+    };
+  },
+});
+
 export const peekFoundationDetails = internalQuery({
   args: {},
   handler: async (ctx): Promise<unknown> => {
