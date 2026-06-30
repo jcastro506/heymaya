@@ -22,8 +22,8 @@ describe("Maya GTM OpenClaw deploy config", () => {
     expect(config.image).toContain("heymaya-openclaw");
     expect(config.guest).toEqual({
       cpu_kind: "shared",
-      cpus: 1,
-      memory_mb: 1024,
+      cpus: 2,
+      memory_mb: 2048,
     });
     expect(config.env?.OPENCLAW_STATE_DIR).toBe("/data");
     expect(config.env?.OPENCLAW_CONFIG_PATH).toBe("/data/openclaw.json");
@@ -39,8 +39,10 @@ describe("Maya GTM OpenClaw deploy config", () => {
 
     const bootstrap = JSON.parse(config.env?.MAYA_BOOTSTRAP_JSON ?? "{}");
     expect(bootstrap.product).toBe("clawlaunch-gtm");
-    expect(bootstrap.modelRouting.mainMaya).toBe("anthropic/claude-sonnet-4.5");
-    expect(bootstrap.modelRouting.hardResearchBeta).toContain("claude-sonnet");
+    // V2 redesign: main brain is Kimi K2-0905 (handles the long workspace +
+    // research build-up that broke gemini); workers stay on Gemini 3 Flash.
+    expect(bootstrap.modelRouting.mainMaya).toBe("moonshotai/kimi-k2-0905");
+    expect(bootstrap.modelRouting.hardResearchBeta).toContain("gemini-3-flash");
     expect(bootstrap.directPingSmoke).toBe(true);
     // Sprint 2.1 expanded the agent list from 2 → 11 (six platform
     // research subagents + channel_judge + slop_critic +
@@ -57,7 +59,7 @@ describe("Maya GTM OpenClaw deploy config", () => {
         // allowlist (deny-by-default). External-architect cited known
         // OpenClaw bug where doctor-bundled-plugin-runtime-deps still
         // installed disabled-channel deps via a health path.
-        allow: ["telegram"],
+        allow: ["telegram", "maya-gtm-tools"],
         entries: {
           telegram: { enabled: true },
         },
@@ -74,7 +76,7 @@ describe("Maya GTM OpenClaw deploy config", () => {
       // for refinement waves + weekly fans without queuing.
       maxConcurrent: 8,
       maxChildrenPerAgent: 4,
-      runTimeoutSeconds: 900,
+      runTimeoutSeconds: 1500,
     });
     // Sprint 2.16j — hooks.internal.enabled at TOP LEVEL of config
     // (sibling of `agents`, `plugins`, `gateway`) per OpenClaw 2026.4.23
@@ -83,32 +85,29 @@ describe("Maya GTM OpenClaw deploy config", () => {
     expect(bootstrap.gatewayConfig.hooks).toEqual({
       internal: { enabled: true },
     });
-    // Sprint 2.16h — LLM idle watchdog bumped from default 120s to 300s so
-    // slow Gemini 3.5 Flash thinking turns don't trip "LLM request timed
-    // out" mid-stream.
-    expect(bootstrap.gatewayConfig.agents.defaults.llm).toEqual({
-      idleTimeoutSeconds: 300,
-    });
-    // main + hard_research_beta must always exist; platform research
-    // subagents are gated by enabled channels but main + beta are
-    // always on.
+    // (The `llm.idleTimeoutSeconds` sub-key was valid in 4.23 but 5.x dropped
+    // it from the agent-defaults schema — OpenClaw's stream-establishment idle
+    // timer supersedes it, so the config no longer emits an `llm` block.)
+    expect(bootstrap.gatewayConfig.agents.defaults.llm).toBeUndefined();
+    // `main` must always exist + be default. (Sprint 2.18 #3 retired
+    // hard_research_beta from agents.list — it's no longer a registered agent.)
     const agentIds = bootstrap.gatewayConfig.agents.list.map(
       (a: { id: string }) => a.id
     );
     expect(agentIds).toContain("main");
-    expect(agentIds).toContain("hard_research_beta");
+    expect(agentIds).not.toContain("hard_research_beta");
     const main = bootstrap.gatewayConfig.agents.list.find(
       (a: { id: string }) => a.id === "main"
     );
     expect(main.default).toBe(true);
-    expect(main.model).toBe("openrouter/anthropic/claude-sonnet-4.5");
+    expect(main.model).toBe("openrouter/moonshotai/kimi-k2-0905");
     expect(config.init?.cmd?.join(" ")).toContain(
       "cp /data/workspace/jobs.json /data/cron/jobs.json"
     );
     expect(config.init?.cmd?.join(" ")).toContain("chmod 700 /data/cron");
   });
 
-  it("uses Sonnet as the default GTM OpenClaw model", () => {
+  it("uses Kimi K2-0905 as the default GTM OpenClaw model", () => {
     const config = buildGtmMachineConfig({
       agentId: "agent",
       flyAppName: "clawlaunch-agent",
@@ -116,7 +115,7 @@ describe("Maya GTM OpenClaw deploy config", () => {
     });
 
     expect(config.env?.OPENCLAW_MODEL).toBe(
-      "openrouter/anthropic/claude-sonnet-4.5"
+      "openrouter/moonshotai/kimi-k2-0905"
     );
     expect(config.env?.OPENCLAW_DISABLE_BONJOUR).toBe("1");
     expect(config.env?.MAYA_GTM_MODEL_ROUTING_JSON).toContain(

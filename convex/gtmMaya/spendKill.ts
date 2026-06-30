@@ -10,59 +10,61 @@ import type { Id } from "../_generated/dataModel";
 import { sumLedgerForAccountSince } from "./costCap";
 
 /**
- * Hard spend kill-switch — the runaway-burn backstop.
+ * Spend THROTTLE — the runaway-burn backstop that DEGRADES, never destroys.
  *
- * The throttle caps in costCap.ts (hour/day/month) only return a 403 and trust
- * the agent to stop. A runaway loop does not stop (observed live: an old-model
- * agent burned ~$30 in 7h). This module DESTROYS the agent's Fly machine when
- * rolling-window spend crosses a kill ceiling, so billing physically stops.
+ * RULE: a cost ceiling is a SPENDING throttle, not a kill switch. When
+ * rolling-window spend crosses a ceiling we stamp a 24h throttle on the agent;
+ * its expensive discretionary work (the discovery/research pulse) self-pauses
+ * to monitoring-only (honored by the discovery-budget gate in pulseCallbacks),
+ * while the Fly machine KEEPS RUNNING INDEFINITELY and the agent still monitors
+ * + answers the user. The throttle auto-clears after the window; if spend is
+ * still over, the sweep re-stamps it. Machine teardown is reserved for explicit
+ * cancellation (accountLifecycle) — NEVER a spend cap.
+ *
+ * Prevention is the real fix: the idempotent lifecycle + no-subagent-fan-out
+ * loop means a true non-honoring runaway shouldn't happen. This throttle is the
+ * soft backstop for an honoring agent that merely drifts over budget.
  *
  * Two rolling windows (NOT a lifetime cap — that would punish a long-lived
  * daily driver under normal ~$2/day spend):
- *   - hourly velocity: catches a spiky runaway fast (killed in the first hour
- *     at ~$3 spent instead of $30).
+ *   - hourly velocity: catches a spiky over-spend fast.
  *   - 24h sustained: catches a slow leak that slips under the hourly bar.
  *
  * Both sit ABOVE the costCap throttle ceilings ($1/hr, $2/day) so normal
  * operation never trips them. Env-overridable; per-agent 24h override via
- * gtmAgents.spendKillCapUsd. GTM_COST_CAP_OVERRIDE (the costCap escape hatch)
- * also suspends the kill so a deliberate smoke isn't reaped mid-run.
+ * gtmAgents.spendKillCapUsd. GTM_COST_CAP_OVERRIDE suspends the throttle.
  *
  * THREE checks (highest priority first):
  *   - actual-total wall: the TRUE 24h spend from the OpenRouter aggregate poll
- *     (research + operational + everything) vs the daily cap. This is the
- *     de-blind fix — the operational sums below read ~$0 live (per-turn
- *     self-report is unreliable), so a 7-day agent burned $28 with nothing
- *     firing. The poll rows are the only honest measure, so they get a hard
- *     wall that research cannot escape. (Single-agent-accurate; the poll is
- *     account-aggregate, so with multiple live agents it over-attributes —
- *     fail-safe direction. Per-agent attribution is the follow-up.)
- *   - hourly velocity (operational rows): catches a spiky runaway fast.
+ *     (research + operational + everything) vs the daily cap. The de-blind fix —
+ *     the operational sums below read ~$0 live (per-turn self-report is
+ *     unreliable), so a 7-day agent burned $28 with nothing firing.
+ *   - hourly velocity (operational rows): catches a spiky over-spend fast.
  *   - 24h sustained (operational rows): catches a slow operational leak.
  *
- * The operational windows EXCLUDE research (bounded by the job's own budgetUsd)
- * so a deep research burst doesn't trip the loop-velocity catch — but the
- * actual-total wall above still counts it, so true total spend is always capped.
+ * The operational windows EXCLUDE research (bounded by the job's own budgetUsd).
  */
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
+/** How long a throttle holds before auto-clearing (re-checked each sweep). */
+const THROTTLE_WINDOW_MS = DAY_MS;
 
-/** $/hr velocity ceiling. Normal use is <$1/hr; a runaway does $4+/hr. */
-export function agentKillHourlyUsd(): number {
+/** $/hr velocity ceiling. Normal use is <$1/hr; over-spend does $4+/hr. */
+export function spendThrottleHourlyUsd(): number {
   const env = Number(process.env.GTM_AGENT_KILL_HOURLY_USD);
   return Number.isFinite(env) && env > 0 ? env : 3.0;
 }
 
 /** $/24h sustained ceiling (default; per-agent override wins). 3x the $2/day
  * throttle so a normal day never trips it. */
-export function agentKillDailyUsd(): number {
+export function spendThrottleDailyUsd(): number {
   const env = Number(process.env.GTM_AGENT_KILL_DAILY_USD);
   return Number.isFinite(env) && env > 0 ? env : 6.0;
 }
 
-export interface SpendKillVerdict {
-  shouldKill: boolean;
+export interface SpendThrottleVerdict {
+  shouldThrottle: boolean;
   reason?: string;
 }
 
@@ -70,40 +72,39 @@ export interface SpendKillVerdict {
  * Pure evaluator — unit-testable without a Convex ctx. A window is breached
  * when spend STRICTLY exceeds its ceiling (so a cap of $3 allows exactly $3).
  */
-export function evaluateSpendKill(input: {
+export function evaluateSpendThrottle(input: {
   hourSpendUsd: number;
   daySpendUsd: number;
   hourlyCapUsd: number;
   dailyCapUsd: number;
   // TRUE total 24h spend from the OpenRouter aggregate poll (the only measure
-  // that isn't blind — per-turn self-report reads $0, which is why a 7-day
-  // agent burned $28 with the operational-row check seeing nothing). When
-  // present, this hard actual-total wall is checked FIRST: it counts research +
-  // operational + everything, so it cannot be evaded by the blind-ledger gap.
+  // that isn't blind — per-turn self-report reads $0). When present, this hard
+  // actual-total wall is checked FIRST: it counts research + operational +
+  // everything, so it cannot be evaded by the blind-ledger gap.
   dayActualTotalUsd?: number;
-}): SpendKillVerdict {
+}): SpendThrottleVerdict {
   if (
     input.dayActualTotalUsd !== undefined &&
     input.dayActualTotalUsd > input.dailyCapUsd
   ) {
     return {
-      shouldKill: true,
+      shouldThrottle: true,
       reason: `actual spend wall: $${input.dayActualTotalUsd.toFixed(2)} of real OpenRouter spend in the last 24h exceeds the $${input.dailyCapUsd.toFixed(2)}/24h cap (true total, incl. research)`,
     };
   }
   if (input.hourSpendUsd > input.hourlyCapUsd) {
     return {
-      shouldKill: true,
-      reason: `runaway velocity: $${input.hourSpendUsd.toFixed(2)} in the last hour exceeds the $${input.hourlyCapUsd.toFixed(2)}/hr kill ceiling`,
+      shouldThrottle: true,
+      reason: `runaway velocity: $${input.hourSpendUsd.toFixed(2)} in the last hour exceeds the $${input.hourlyCapUsd.toFixed(2)}/hr throttle ceiling`,
     };
   }
   if (input.daySpendUsd > input.dailyCapUsd) {
     return {
-      shouldKill: true,
-      reason: `sustained burn: $${input.daySpendUsd.toFixed(2)} in the last 24h exceeds the $${input.dailyCapUsd.toFixed(2)}/24h kill ceiling`,
+      shouldThrottle: true,
+      reason: `sustained burn: $${input.daySpendUsd.toFixed(2)} in the last 24h exceeds the $${input.dailyCapUsd.toFixed(2)}/24h throttle ceiling`,
     };
   }
-  return { shouldKill: false };
+  return { shouldThrottle: false };
 }
 
 function overrideActive(): boolean {
@@ -114,13 +115,16 @@ function overrideActive(): boolean {
 interface AgentSpendSnapshot {
   accountId: Id<"creators">;
   openClawFlyAppId: string | null;
+  /** Cancelled agent (accountLifecycle stamped killedAt) — skip entirely. */
   alreadyKilled: boolean;
+  /** Throttle window still active — skip re-stamping (idempotent + no spam). */
+  alreadyThrottled: boolean;
   hourSpendUsd: number;
   daySpendUsd: number;
   dayActualTotalUsd: number;
   hourlyCapUsd: number;
   dailyCapUsd: number;
-  shouldKill: boolean;
+  shouldThrottle: boolean;
   reason?: string;
 }
 
@@ -132,16 +136,13 @@ async function snapshotAgentSpend(
   const agent = await ctx.db.get(agentId);
   if (!agent) return null;
   // Operational spend only — research is bounded by its own per-job budgetUsd
-  // and must be free to run as long as that budget allows. The kill-switch
-  // governs the uncapped loop (turns, heartbeats, posts), not research.
-  // Exclude research (bounded by its own budget) AND the OpenRouter aggregate-
-  // poll rows (COGS-visibility only — they conflate research + operational).
+  // and must be free to run as long as that budget allows. The throttle governs
+  // the uncapped loop (turns, heartbeats, posts), not research. Exclude research
+  // AND the OpenRouter aggregate-poll rows (counted separately as the wall) AND
+  // Studio video (bounded by its own videoCreditsMonth cap).
   const excludeResearch = {
     excludeResearchJobSpend: true,
     excludeOpenrouterPoll: true,
-    // Studio video COGS is bounded by its own videoCreditsMonth cap; a single
-    // render would otherwise trip this runaway kill. Visible in the ledger, not
-    // counted here.
     excludeCreatifyVideo: true,
   } as const;
   const hourSpendUsd = await sumLedgerForAccountSince(
@@ -157,18 +158,17 @@ async function snapshotAgentSpend(
     excludeResearch
   );
   // TRUE total 24h spend — the OpenRouter aggregate-poll rows ONLY (the global
-  // account delta, which already subsumes research + operational). This is the
-  // de-blind fix: the operational-only sums above read ~$0 live (per-turn
-  // self-report is unreliable), so without this the kill-switch never fires.
+  // account delta, which already subsumes research + operational). The de-blind
+  // fix: the operational-only sums above read ~$0 live without it.
   const dayActualTotalUsd = await sumLedgerForAccountSince(
     ctx,
     agent.accountId,
     now - DAY_MS,
     { onlyOpenrouterPoll: true }
   );
-  const hourlyCapUsd = agentKillHourlyUsd();
-  const dailyCapUsd = agent.spendKillCapUsd ?? agentKillDailyUsd();
-  const verdict = evaluateSpendKill({
+  const hourlyCapUsd = spendThrottleHourlyUsd();
+  const dailyCapUsd = agent.spendKillCapUsd ?? spendThrottleDailyUsd();
+  const verdict = evaluateSpendThrottle({
     hourSpendUsd,
     daySpendUsd,
     dayActualTotalUsd,
@@ -179,6 +179,9 @@ async function snapshotAgentSpend(
     accountId: agent.accountId,
     openClawFlyAppId: agent.openClawFlyAppId ?? null,
     alreadyKilled: Boolean(agent.killedAt),
+    alreadyThrottled: Boolean(
+      agent.spendThrottledUntil && agent.spendThrottledUntil > now
+    ),
     hourSpendUsd,
     daySpendUsd,
     dayActualTotalUsd,
@@ -189,15 +192,27 @@ async function snapshotAgentSpend(
 }
 
 /** Read-only spend + verdict for one agent. */
-export const peekAgentSpendForKill = internalQuery({
+export const peekAgentSpendForThrottle = internalQuery({
   args: { agentId: v.id("gtmAgents") },
   handler: async (ctx, args): Promise<AgentSpendSnapshot | null> => {
     return await snapshotAgentSpend(ctx, args.agentId, Date.now());
   },
 });
 
-/** Every live (deployed, not-yet-killed) agent — the sweep's work list. */
-export const listLiveAgentsForKill = internalQuery({
+/** Is this agent currently in a spend-throttle window? (degrade gate reads this) */
+export const isAgentSpendThrottled = internalQuery({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (ctx, args): Promise<boolean> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return false;
+    return Boolean(
+      agent.spendThrottledUntil && agent.spendThrottledUntil > Date.now()
+    );
+  },
+});
+
+/** Every live (deployed, not-cancelled) agent — the sweep's work list. */
+export const listLiveAgentsForThrottle = internalQuery({
   args: {},
   handler: async (ctx): Promise<Array<Id<"gtmAgents">>> => {
     const agents = await ctx.db.query("gtmAgents").collect();
@@ -207,120 +222,123 @@ export const listLiveAgentsForKill = internalQuery({
   },
 });
 
-export const markAgentKilled = internalMutation({
+/**
+ * Stamp the spend-throttle on ONE agent. Idempotent: no-op if the agent is
+ * gone, cancelled, or already in an active throttle window. NEVER destroys the
+ * machine — only degrades (the discovery gate reads spendThrottledUntil).
+ */
+export const markAgentThrottled = internalMutation({
   args: { agentId: v.id("gtmAgents"), reason: v.string() },
   handler: async (ctx, args): Promise<void> => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent || agent.killedAt) return;
+    const now = Date.now();
+    if (agent.spendThrottledUntil && agent.spendThrottledUntil > now) return;
     await ctx.db.patch(args.agentId, {
-      killedAt: Date.now(),
-      killReason: args.reason,
-      updatedAt: Date.now(),
+      spendThrottledUntil: now + THROTTLE_WINDOW_MS,
+      spendThrottledAt: now,
+      spendThrottleReason: args.reason,
+      updatedAt: now,
     });
   },
 });
 
 /**
- * Destroy ONE agent's Fly machine, rotate its hookToken, and stamp the kill.
- * Idempotent: a no-op if the agent is gone or already killed.
+ * Throttle ONE agent's spend (degrade-not-destroy). Idempotent: a no-op if the
+ * agent is gone, cancelled, or already throttled. The Fly machine stays ALIVE.
  */
-export const killAgentForSpend = internalAction({
+export const throttleAgentForSpend = internalAction({
   args: { agentId: v.id("gtmAgents"), reason: v.string() },
   handler: async (
     ctx,
     args
-  ): Promise<{ killed: boolean; reason: string }> => {
+  ): Promise<{ throttled: boolean; reason: string }> => {
     const snap = await ctx.runQuery(
-      internal.gtmMaya.spendKill.peekAgentSpendForKill,
+      internal.gtmMaya.spendKill.peekAgentSpendForThrottle,
       { agentId: args.agentId }
     );
-    if (!snap) return { killed: false, reason: "agent not found" };
-    if (snap.alreadyKilled) return { killed: false, reason: "already killed" };
+    if (!snap) return { throttled: false, reason: "agent not found" };
+    if (snap.alreadyKilled)
+      return { throttled: false, reason: "agent cancelled" };
+    if (snap.alreadyThrottled)
+      return { throttled: false, reason: "already throttled" };
 
-    if (snap.openClawFlyAppId) {
-      const { FlyClient } = await import("../lib/flyClient");
-      const fly = new FlyClient();
-      try {
-        await fly.destroyApp(snap.openClawFlyAppId);
-        console.log(
-          `[spendKill] destroyed Fly app ${snap.openClawFlyAppId} — ${args.reason}`
-        );
-      } catch (err) {
-        // The machine may already be gone; still rotate token + stamp so we
-        // don't loop. Log loudly — a failed destroy means it could still bill.
-        console.error(
-          `[spendKill] destroyApp(${snap.openClawFlyAppId}) failed: ${
-            err instanceof Error ? err.message : String(err)
-          }`
-        );
-      }
-      await ctx.runMutation(
-        internal._admin.realWorldDeployGtm.rotateHookTokensForDestroyedApps,
-        { destroyedAppNames: [snap.openClawFlyAppId] }
-      );
-    }
-
-    await ctx.runMutation(internal.gtmMaya.spendKill.markAgentKilled, {
+    await ctx.runMutation(internal.gtmMaya.spendKill.markAgentThrottled, {
       agentId: args.agentId,
       reason: args.reason,
     });
-    return { killed: true, reason: args.reason };
+    // Machine is left RUNNING on purpose. The discovery gate now returns
+    // monitoring_only for this agent, so expensive new work self-pauses while
+    // it keeps watching + answering the user.
+    console.warn(
+      `[spendThrottle] throttled agent ${args.agentId} for 24h (machine ALIVE; discovery paused) — ${args.reason}`
+    );
+    return { throttled: true, reason: args.reason };
   },
 });
 
 /**
- * Check one agent and kill it if over a ceiling. Safe to call on every turn
+ * Check one agent and throttle it if over a ceiling. Safe to call on every turn
  * (via the telemetry endpoint) and from the sweep cron. Honors the override.
  */
-export const enforceSpendKillForAgent = internalAction({
+export const enforceSpendThrottleForAgent = internalAction({
   args: { agentId: v.id("gtmAgents") },
   handler: async (
     ctx,
     args
-  ): Promise<{ killed: boolean; reason?: string }> => {
-    if (overrideActive()) return { killed: false, reason: "override active" };
+  ): Promise<{ throttled: boolean; reason?: string }> => {
+    if (overrideActive()) return { throttled: false, reason: "override active" };
     const snap = await ctx.runQuery(
-      internal.gtmMaya.spendKill.peekAgentSpendForKill,
+      internal.gtmMaya.spendKill.peekAgentSpendForThrottle,
       { agentId: args.agentId }
     );
-    if (!snap || snap.alreadyKilled || !snap.shouldKill) {
-      return { killed: false };
+    if (
+      !snap ||
+      snap.alreadyKilled ||
+      snap.alreadyThrottled ||
+      !snap.shouldThrottle
+    ) {
+      return { throttled: false };
     }
-    return await ctx.runAction(internal.gtmMaya.spendKill.killAgentForSpend, {
-      agentId: args.agentId,
-      reason: snap.reason ?? "spend kill ceiling exceeded",
-    });
+    return await ctx.runAction(
+      internal.gtmMaya.spendKill.throttleAgentForSpend,
+      {
+        agentId: args.agentId,
+        reason: snap.reason ?? "spend throttle ceiling exceeded",
+      }
+    );
   },
 });
 
 /**
- * Backstop cron: sweep every live agent and kill any over a ceiling. Catches
- * runaways that stop POSTing telemetry (so the inline enforcer never fires) but
- * keep an alive, billing machine.
+ * Backstop cron: sweep every live agent and throttle any over a ceiling.
+ * Catches an over-spending agent that stops POSTing telemetry (so the inline
+ * enforcer never fires) but keeps an alive, billing machine. Re-stamps an
+ * expired throttle if spend is still over.
  */
-export const sweepSpendKill = internalAction({
+export const sweepSpendThrottle = internalAction({
   args: {},
   handler: async (
     ctx
-  ): Promise<{ checked: number; killed: number }> => {
-    if (overrideActive()) return { checked: 0, killed: 0 };
+  ): Promise<{ checked: number; throttled: number }> => {
+    if (overrideActive()) return { checked: 0, throttled: 0 };
     const agentIds = await ctx.runQuery(
-      internal.gtmMaya.spendKill.listLiveAgentsForKill,
+      internal.gtmMaya.spendKill.listLiveAgentsForThrottle,
       {}
     );
-    let killed = 0;
+    let throttled = 0;
     for (const agentId of agentIds) {
       const result = await ctx.runAction(
-        internal.gtmMaya.spendKill.enforceSpendKillForAgent,
+        internal.gtmMaya.spendKill.enforceSpendThrottleForAgent,
         { agentId }
       );
-      if (result.killed) killed += 1;
+      if (result.throttled) throttled += 1;
     }
-    if (killed > 0) {
-      console.log(
-        `[spendKill] sweep killed ${killed} of ${agentIds.length} live agents`
+    if (throttled > 0) {
+      console.warn(
+        `[spendThrottle] sweep throttled ${throttled} of ${agentIds.length} live agents`
       );
     }
-    return { checked: agentIds.length, killed };
+    return { checked: agentIds.length, throttled };
   },
 });

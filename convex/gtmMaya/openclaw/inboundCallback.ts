@@ -1329,6 +1329,26 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
         { status: 200, headers: { "content-type": "application/json" } }
       );
     }
+    // ENUM REFACTOR: when WE claimed the synthesis ("send"), CACHE the plan text
+    // NOW — before the Telegram attempt — so a failed send holds the composed
+    // plan for Convex to re-push on connect (pushCachedPlan). No re-generation,
+    // no loop. The claim already stamped planGeneratedAt (work done).
+    if (synthClaim.decision === "send") {
+      try {
+        await ctx.runMutation(
+          internal.gtmMaya.agentLifecycle.cacheSynthesisPlan,
+          { agentId: auth.agentId, text: outboundText }
+        );
+      } catch (err) {
+        console.error(
+          JSON.stringify({
+            event: "send_update.cache_plan_failed",
+            agentId: auth.agentId,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        );
+      }
+    }
   }
 
   // Send via Telegram Bot API. Sprint 2.26 — prefer per-tenant bot
@@ -1391,22 +1411,22 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
     );
   }
 
-  // §6 — the synthesis claim stamped strategyDeliveredAt (the completion gate)
-  // BEFORE this send. If WE claimed the synthesis ("send") but Telegram
-  // delivery failed, release the claim so a genuine retry re-claims + re-sends —
-  // otherwise onboarding could "complete" on a plan that never reached the
-  // founder. (A successful send keeps the stamp; that's the delivery signal
-  // markFoundationComplete + the rows-complete backstop gate on.)
-  if (synthClaim?.decision === "send" && !result.ok) {
+  // ENUM REFACTOR: the synthesis claim stamped planGeneratedAt (work done) and
+  // we cached the plan above. On a SUCCESSFUL send, stamp delivery
+  // (strategyDeliveredAt = "founder received it"). On a FAILED send we do NOT
+  // un-claim or re-generate — the cached plan is held and Convex re-pushes it the
+  // moment a channel connects (telegramPairing → pushCachedPlan). This is the fix
+  // for the delivery-failure re-synthesis loop (the live $22 no-channel run).
+  if (synthClaim?.decision === "send" && result.ok) {
     try {
       await ctx.runMutation(
-        internal.gtmMaya.agentLifecycle.releaseFounderSynthesisClaim,
+        internal.gtmMaya.agentLifecycle.markStrategyDelivered,
         { agentId: auth.agentId }
       );
     } catch (err) {
       console.error(
         JSON.stringify({
-          event: "send_update.release_synthesis_claim_failed",
+          event: "send_update.mark_delivered_failed",
           agentId: auth.agentId,
           error: err instanceof Error ? err.message : String(err),
         })

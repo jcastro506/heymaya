@@ -64,6 +64,45 @@ async function seedBuyerMap(
       synthesizedAt: 1,
       updatedAt: 1,
     });
+    // Hardened 2026-06-30: the synthesis "send" claim gates on the EXPLICIT
+    // researchCompletedAt stamp, not the derived researchComplete boolean. A
+    // genuine research-done state has both the rows AND the stamp — seed both.
+    await ctx.db.patch(agentId, { researchCompletedAt: 1, updatedAt: 1 });
+  });
+}
+
+/** Seed the full research ROWS (buyerMap + competitor + scorecard) but WITHOUT
+ *  the explicit researchCompletedAt stamp — the exact live failure mode (agent
+ *  ws7bk96g, 2026-06-30) where the derived researchComplete flag is true
+ *  mid-research but the run hasn't actually finished, so a tactical holding
+ *  message must NOT be allowed to claim the synthesis send. */
+async function seedResearchRowsNoStamp(
+  t: ReturnType<typeof convexTest>,
+  accountId: Id<"creators">,
+  agentId: Id<"gtmAgents">
+) {
+  await t.run(async (ctx) => {
+    await ctx.db.insert("gtmBuyerMap", {
+      accountId,
+      agentId,
+      icpDescription: "ICP",
+      buyerJourneyStages: [],
+      intentPhrases: [],
+      trustedVoices: [],
+      synthesizedAt: 1,
+    });
+    await ctx.db.insert("gtmChannelScorecard", {
+      accountId,
+      agentId,
+      channel: "reddit",
+      audienceFit: 1,
+      cadenceFit: 1,
+      uniqueUnlock: "buyers vent here",
+      bet: true,
+      synthesizedAt: 1,
+      updatedAt: 1,
+    });
+    // Deliberately NO researchCompletedAt patch.
   });
 }
 
@@ -95,9 +134,9 @@ describe("claimFounderSynthesisSend", () => {
     const t = convexTest(schema, modules);
     const { agentId } = await setupAgent(t, "synth_research");
     expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
-    // strategyDeliveredAt must NOT be stamped by a progress update.
+    // The claim token (planGeneratedAt) must NOT be stamped by a progress update.
     const agent = await t.run((ctx) => ctx.db.get(agentId));
-    expect(agent?.strategyDeliveredAt ?? null).toBeNull();
+    expect(agent?.planGeneratedAt ?? null).toBeNull();
   });
 
   it("hello burst: first send allows + stamps hello; rapid repeats suppress within the cooldown (the 4-duplicate-hellos fix)", async () => {
@@ -117,14 +156,38 @@ describe("claimFounderSynthesisSend", () => {
     const { accountId, agentId } = await setupAgent(t, "synth_research_gate");
     await seedBuyerMapOnly(t, accountId, agentId); // buyer map, but no competitor/scorecard
     // Research not complete → progress flows ("allow"), but the synthesis is NOT
-    // claimed (strategyDeliveredAt stays null) — the live "shipped the play on a
+    // claimed (planGeneratedAt stays null) — the live "shipped the play on a
     // half-built foundation" bug.
     expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
     const agent = await t.run((ctx) => ctx.db.get(agentId));
-    expect(agent?.strategyDeliveredAt ?? null).toBeNull();
+    expect(agent?.planGeneratedAt ?? null).toBeNull();
   });
 
-  it("first send in the synthesis window claims it; the rest are suppressed", async () => {
+  // REGRESSION (agent ws7bk96g, 2026-06-30): the derived researchComplete flag
+  // (buyerMap + ≥1 scorecard) flips true EARLY, while Maya is still mid-research
+  // and only sending tactical holding messages ("still digging, back in a bit").
+  // The old gate used that derived flag, so a holding message won the synthesis
+  // claim, was cached as "the plan", and flipped the agent to plan_ready — the
+  // REAL post-research plan was then suppressed and the operator NEVER got it.
+  // The claim must gate on the EXPLICIT researchCompletedAt stamp: rows-but-no-
+  // stamp is "allow" (progress), never "send".
+  it("research ROWS present but researchCompletedAt NOT stamped → 'allow', never 'send' (the holding-message-steals-the-plan fix)", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, agentId } = await setupAgent(t, "synth_rows_no_stamp");
+    await seedResearchRowsNoStamp(t, accountId, agentId);
+    // Derived researchComplete is TRUE (rows exist) but the run isn't done.
+    expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
+    const midResearch = await t.run((ctx) => ctx.db.get(agentId));
+    expect(midResearch?.planGeneratedAt ?? null).toBeNull();
+    expect(midResearch?.lifecycleState ?? "fresh").not.toBe("plan_ready");
+    // Now research genuinely completes (stamp lands) → the NEXT send claims it.
+    await t.run((ctx) =>
+      ctx.db.patch(agentId, { researchCompletedAt: Date.now() })
+    );
+    expect((await t.mutation(claim, { agentId })).decision).toBe("send");
+  });
+
+  it("first send in the synthesis window claims it (stamps planGeneratedAt + plan_ready); the rest are suppressed", async () => {
     const t = convexTest(schema, modules);
     const { accountId, agentId } = await setupAgent(t, "synth_window");
     await seedBuyerMap(t, accountId, agentId);
@@ -132,24 +195,30 @@ describe("claimFounderSynthesisSend", () => {
     // First founder-facing send → claims the handover.
     expect((await t.mutation(claim, { agentId })).decision).toBe("send");
     const afterClaim = await t.run((ctx) => ctx.db.get(agentId));
-    expect(typeof afterClaim?.strategyDeliveredAt).toBe("number");
+    // ENUM REFACTOR: the claim token is planGeneratedAt (work done), NOT
+    // strategyDeliveredAt (which is set only on a successful SEND, separately).
+    expect(typeof afterClaim?.planGeneratedAt).toBe("number");
+    expect(afterClaim?.strategyDeliveredAt ?? null).toBeNull();
+    expect(afterClaim?.lifecycleState).toBe("plan_ready");
 
     // Every subsequent send in the window → suppressed (no matter the source).
     expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
     expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
   });
 
-  it("releasing a failed send lets a genuine retry re-claim", async () => {
+  it("a FAILED send does NOT re-claim or re-generate (the loop fix) — release is a no-op", async () => {
     const t = convexTest(schema, modules);
     const { accountId, agentId } = await setupAgent(t, "synth_retry");
     await seedBuyerMap(t, accountId, agentId);
     expect((await t.mutation(claim, { agentId })).decision).toBe("send");
-    // Send failed → release.
+    // Send failed → the OLD model released the claim so the agent re-generated +
+    // re-sent (the delivery-failure re-synthesis loop). The NEW model holds the
+    // cached plan for Convex to re-push: release is a no-op, planGeneratedAt
+    // stays, and a retry SUPPRESSES (never re-generates the whole strategy).
     await t.mutation(release, { agentId });
     const afterRelease = await t.run((ctx) => ctx.db.get(agentId));
-    expect(afterRelease?.strategyDeliveredAt ?? null).toBeNull();
-    // Retry re-claims + sends.
-    expect((await t.mutation(claim, { agentId })).decision).toBe("send");
+    expect(typeof afterRelease?.planGeneratedAt).toBe("number"); // still claimed
+    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
   });
 
   it("post-onboarding sends flow freely when no handover was delivered (legacy)", async () => {

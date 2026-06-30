@@ -19,6 +19,7 @@ import {
 } from "../integrations/zernio/endpoints";
 import type { ZernioPostPlatform } from "../integrations/zernio/types";
 import { authenticate } from "./openclaw/inboundCallback";
+import { planFeaturesGtm } from "./planGtm";
 
 /**
  * Maya v2 — Zernio social-connect flow (S2).
@@ -246,6 +247,14 @@ export const replaceConnectedAccounts = internalMutation({
       connectedAccountsJson: JSON.stringify(args.accounts),
       updatedAt: Date.now(),
     });
+    // ENUM REFACTOR — an account connecting is a transition EVENT. If the plan is
+    // ready + already approved, this completes the pair → flip to `active`.
+    // Cheap no-op otherwise.
+    await ctx.scheduler.runAfter(
+      0,
+      internal.gtmMaya.agentLifecycle.tryActivateAgent,
+      { agentId: args.agentId }
+    );
   },
 });
 
@@ -303,6 +312,34 @@ function toConnectedAccount(raw: Record<string, unknown>, now: number): Connecte
   };
 }
 
+/**
+ * §9.1 connect-cap guard. Reports whether the founder may CONNECT `platform`
+ * under their plan's `connectedChannelCap` (= maxActiveChannels per tier).
+ * Re-connecting an already-linked platform is always allowed (no new slot).
+ * Fail-closed on a missing agent.
+ */
+export const checkConnectCap = internalQuery({
+  args: { agentId: v.id("gtmAgents"), platform: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ allowed: boolean; cap: number; connectedCount: number }> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return { allowed: false, cap: 0, connectedCount: 0 };
+    const cap = planFeaturesGtm({
+      gtmPlanJson: agent.gtmPlanJson,
+    }).connectedChannelCap;
+    const platforms = new Set(
+      parseConnectedAccounts(agent.connectedAccountsJson).map((a) => a.platform)
+    );
+    // Re-connecting an already-linked platform never consumes a new slot.
+    if (platforms.has(args.platform)) {
+      return { allowed: true, cap, connectedCount: platforms.size };
+    }
+    return { allowed: platforms.size < cap, cap, connectedCount: platforms.size };
+  },
+});
+
 /* ────────────────────────────────────────────────────────────────────────
  * Public action — mint a connect URL for a channel
  * ──────────────────────────────────────────────────────────────────────── */
@@ -321,6 +358,21 @@ export const getZernioConnectUrl = action({
       { clerkUserId: identity.subject }
     );
     if (!resolved) throw new Error("GTM agent not found");
+
+    // §9.1 — fail-closed at the connect mutation: a tier can never LINK more
+    // channels than its connectedChannelCap. The cap is an upgrade lever, not
+    // an arbitrary wall (Settings shows over-cap channels as "upgrade to add").
+    const capCheck = await ctx.runQuery(
+      internal.gtmMaya.zernioConnect.checkConnectCap,
+      { agentId: resolved.agentId, platform: args.platform }
+    );
+    if (!capCheck.allowed) {
+      throw new Error(
+        `channel limit reached — your plan connects up to ${capCheck.cap} channel${
+          capCheck.cap === 1 ? "" : "s"
+        } (you have ${capCheck.connectedCount}). Upgrade to add more.`
+      );
+    }
 
     const client = zernioClient();
 
@@ -468,6 +520,38 @@ export const getMyConnectedAccounts = query({
       .first();
     if (!agent) return [];
     return parseConnectedAccounts(agent.connectedAccountsJson);
+  },
+});
+
+/** Public: the founder's connect cap + current connected count, so the UI can
+ *  grey out Connect buttons once they're at their tier limit and show an upgrade
+ *  CTA. The server guard in getZernioConnectUrl is the REAL (fail-closed)
+ *  enforcement; this is purely the UX affordance so they never hit a raw error. */
+export const getMyConnectCap = query({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{ cap: number; connectedCount: number; atCap: boolean }> => {
+    const denied = { cap: 0, connectedCount: 0, atCap: true };
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return denied;
+    const creator = await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first();
+    if (!creator || creator.accountType !== "gtm-agent") return denied;
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    if (!agent) return denied;
+    const cap = planFeaturesGtm({
+      gtmPlanJson: agent.gtmPlanJson,
+    }).connectedChannelCap;
+    const connectedCount = new Set(
+      parseConnectedAccounts(agent.connectedAccountsJson).map((a) => a.platform)
+    ).size;
+    return { cap, connectedCount, atCap: connectedCount >= cap };
   },
 });
 

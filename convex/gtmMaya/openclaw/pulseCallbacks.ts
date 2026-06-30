@@ -69,6 +69,29 @@ export const checkDiscoveryBudgetHttp = httpAction(async (ctx, request) => {
   const auth = await authenticate(ctx, request);
   if (!auth.ok) return new Response(auth.reason, { status: auth.status });
 
+  // Spend-throttle degrade: if this agent is over its cost ceiling, the machine
+  // stays ALIVE but new discovery work pauses — return monitoring_only directly
+  // (the throttle is the degrade lever; we never destroy the machine).
+  const throttled = await ctx.runQuery(
+    internal.gtmMaya.spendKill.isAgentSpendThrottled,
+    { agentId: auth.agentId }
+  );
+  if (throttled) {
+    return new Response(
+      JSON.stringify({
+        allowed: false,
+        mode: "monitoring_only",
+        spentHourUsd: 0,
+        spentDayUsd: 0,
+        hourCapUsd: 0,
+        dayCapUsd: 0,
+        reason:
+          "spend-throttled: new discovery reads paused; machine alive, keep monitoring own posts + inbox only",
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  }
+
   const planTier = await ctx.runQuery(
     internal.gtmMaya.openclaw.pulseCallbacks.resolveAgentGatingTier,
     { agentId: auth.agentId }

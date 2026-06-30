@@ -31,15 +31,16 @@ crons.monthly(
   internal.gtmMaya.archetypeBrain.runArchetypeRollup
 );
 
-// Hard spend kill-switch backstop. The telemetry endpoint kills a runaway
-// inline on each turn, but an agent that stops POSTing telemetry while keeping
-// an alive, billing machine would slip through — this sweep catches it. Every
-// 15 min: sum each live agent's rolling-window spend and destroy any over the
-// kill ceiling. See convex/gtmMaya/spendKill.ts.
+// Spend-throttle backstop (degrade, never destroy). The telemetry endpoint
+// throttles an over-spending agent inline on each turn, but one that stops
+// POSTing telemetry while keeping an alive, billing machine would slip through —
+// this sweep catches it. Every 15 min: sum each live agent's rolling-window
+// spend and throttle (pause discovery, machine stays alive) any over the
+// ceiling. See convex/gtmMaya/spendKill.ts.
 crons.interval(
-  "gtm-spend-kill-sweep",
+  "gtm-spend-throttle-sweep",
   { minutes: 15 },
-  internal.gtmMaya.spendKill.sweepSpendKill
+  internal.gtmMaya.spendKill.sweepSpendThrottle
 );
 
 // Deterministic synthesis safety-net. If an agent's foundation research is
@@ -50,6 +51,17 @@ crons.interval(
   "gtm-synthesis-safety-net",
   { minutes: 10 },
   internal.gtmMaya.synthesisDelivery.sweepSynthesisSafetyNet
+);
+
+// Deliver-on-connect backstop (the enum refactor). The agent's OWN plan is
+// cached when it sends; if delivery didn't land (no channel then, or a transient
+// failure), Convex re-pushes the cached text — cheap (one send, no LLM), bounded
+// by planDeliveryAttempts. The telegram-pairing event is the primary trigger;
+// this sweep catches the rest. See convex/gtmMaya/synthesisDelivery.ts.
+crons.interval(
+  "gtm-cached-plan-delivery",
+  { minutes: 10 },
+  internal.gtmMaya.synthesisDelivery.sweepCachedPlanDelivery
 );
 
 // Liveness / dark-day watchdog. Over weeks the likely failure isn't a crash —

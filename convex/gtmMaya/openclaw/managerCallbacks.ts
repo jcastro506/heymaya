@@ -1408,13 +1408,18 @@ export const markLifecycleHttp = httpAction(async (ctx, request) => {
         headers: { "content-type": "application/json" },
       });
     }
+    // `plan_ready` is the enum-refactor name; `foundation_complete` is the
+    // back-compat alias — both mark Maya's onboarding WORK done (plan generated).
+    // Delivery to the founder's channel is handled for the agent (Convex re-pushes
+    // on connect), so this no longer gates on the plan having reached them.
+    case "plan_ready":
     case "foundation_complete": {
       const r = await ctx.runMutation(
         internal.gtmMaya.agentLifecycle.markFoundationComplete,
         { agentId: auth.agentId }
       );
-      // Surface ok:false when the plan wasn't delivered so the agent sees this
-      // as BLOCKED (must send the synthesis first), not a silent success.
+      // Surface ok:false only when there's literally no plan/research yet (so the
+      // agent sees BLOCKED, not a silent success) — never for an undelivered send.
       return new Response(JSON.stringify({ ok: r.completed, ...r }), {
         status: 200,
         headers: { "content-type": "application/json" },

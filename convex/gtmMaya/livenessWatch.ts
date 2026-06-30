@@ -152,7 +152,12 @@ export const listLivenessAnomalies = internalQuery({
       }
 
       // ── Pre-onboarding regime: stalled-onboarding watch. ──
-      if (!a.foundationCompletedAt) {
+      // ENUM REFACTOR: "past onboarding" = the plan was GENERATED. The raw
+      // foundationCompletedAt marker can lag plan_ready (the agent generated +
+      // sent the plan but crashed before calling mark_lifecycle), so we also
+      // accept planGeneratedAt — else a done agent would be mis-flagged "stalled."
+      const workDoneAt = a.foundationCompletedAt ?? a.planGeneratedAt ?? null;
+      if (!workDoneAt) {
         if (!a.deployedAt) continue; // still provisioning, not yet a stall
         if (now - a.deployedAt < STALLED_ONBOARDING_MS) continue;
         // Most-recent sign of forward motion: foundationStartedAt, or the newest
@@ -191,7 +196,7 @@ export const listLivenessAnomalies = internalQuery({
       }
 
       // ── Post-onboarding regime: dark-brief / blind-cost. ──
-      const deployedAt = a.deployedAt ?? a.foundationCompletedAt;
+      const deployedAt = a.deployedAt ?? workDoneAt;
       if (now - deployedAt < GRACE_AFTER_DEPLOY_MS) continue;
       const lastBrief = a.lastMorningBriefAt ?? 0;
       // Dark brief is the higher-confidence signal — check it without a ledger read.
