@@ -90,9 +90,36 @@ describe("Sprint 2.22 — calendar approval-gate split", () => {
     expect(drafts.every((r) => r.createdBy === "maya")).toBe(true);
   });
 
-  it("pushApprovedCalendarEvents returns needsOAuth when no Google connection", async () => {
+  it("pushApprovedCalendarEvents is a clean no-op by default (Google mirror RETIRED in v2)", async () => {
+    const t = convexTest(schema, modules);
+    const { agentId, accountId } = await setupAgent(t, "u_push_default_off");
+    await t.action(
+      internal.gtmMaya.calendarWrite.storeProposedCalendarEvents,
+      { agentId, accountId, events: [SAMPLE_EVENT()] }
+    );
+    // The day's plan is Maya's internal auto-post queue (web Today view), NOT a
+    // Google Calendar flood. With the off-by-default mirror toggle untouched the
+    // push no-ops cleanly — no OAuth prompt, nothing pushed.
+    const push = await t.action(
+      internal.gtmMaya.calendarWrite.pushApprovedCalendarEvents,
+      { agentId, accountId }
+    );
+    expect(push.mirrorDisabled).toBe(true);
+    expect(push.needsOAuth).toBe(false);
+    expect(push.pushed).toBe(0);
+    const drafts = await t.run(async (ctx) =>
+      ctx.db.query("gtmCalendarEvents").collect()
+    );
+    expect(drafts[0]?.status).toBe("draft"); // untouched
+  });
+
+  it("pushApprovedCalendarEvents returns needsOAuth when the opt-in mirror is on but no Google connection", async () => {
     const t = convexTest(schema, modules);
     const { agentId, accountId } = await setupAgent(t, "u_push_no_oauth");
+    // Opt the rare founder into the dormant Google-mirror toggle.
+    await t.run((ctx) =>
+      ctx.db.patch(agentId, { googleCalendarMirrorEnabled: true })
+    );
 
     // Store one draft.
     await t.action(
@@ -118,9 +145,13 @@ describe("Sprint 2.22 — calendar approval-gate split", () => {
     expect(drafts[0]?.status).toBe("draft");
   });
 
-  it("pushApprovedCalendarEvents flips drafts to scheduled when OAuth + Google succeed", async () => {
+  it("pushApprovedCalendarEvents flips drafts to scheduled when the opt-in mirror is on + OAuth + Google succeed", async () => {
     const t = convexTest(schema, modules);
     const { agentId, accountId } = await setupAgent(t, "u_push_ok");
+    // Opt into the dormant Google-mirror toggle so the push path runs.
+    await t.run((ctx) =>
+      ctx.db.patch(agentId, { googleCalendarMirrorEnabled: true })
+    );
 
     // Connect Google Calendar (token expires in 1 hour, encrypted with
     // real encrypt() so ensureFreshAccessToken can decrypt + skip refresh).

@@ -143,11 +143,14 @@ describe("Maya GTM workspace pack", () => {
     // Sprint E — shared, monthly-refreshed platform-algorithm intelligence.
     const platformAlgo = files.get("PLATFORM_ALGO.md") ?? "";
     expect(platformAlgo).toContain("what's working on each platform");
-    expect(platformAlgo).toContain("Refresh contract");
-    expect(platformAlgo).toContain("monthly_reset");
+    // The per-file Refresh contract/log was replaced by a CENTRAL refresh:
+    // a `platform-algo-refresh` cron writes shared rows read via the
+    // `get_platform_algo` tool; this file is the at-deploy fallback.
+    expect(platformAlgo).toContain("get_platform_algo");
+    expect(platformAlgo).toContain("platform-algo-refresh");
     expect(platformAlgo).toContain("## Reddit");
     expect(platformAlgo).toContain("## YouTube");
-    expect(platformAlgo).toContain("Refresh log");
+    expect(platformAlgo).toContain("at-deploy fallback");
     // Sprint J — DREAMS.md is the per-tenant self-improvement nursery (Layer 1)
     // and points to the governed Layer-2 propose path; core contracts are
     // explicitly never self-editable.
@@ -311,14 +314,24 @@ describe("Maya GTM workspace pack", () => {
     for (const slug of mayaGtmSkillSlugs()) {
       const body = files.get(`skills/${slug}/SKILL.md`);
       expect(body).toBeTruthy();
-      // Sprint 17 part B: skills now ship real SOPs (>1000 chars) instead
-      // of 7-line stubs. Each must reference PLAYBOOK.md (the launch
-      // doctrine) OR cite ScrapeCreators (the read layer) so Maya
-      // grounds against shipped doctrine, not first-principles.
-      expect(body!.length).toBeGreaterThan(800);
-      const groundedReference =
-        body!.includes("PLAYBOOK.md") || body!.includes("ScrapeCreators");
-      expect(groundedReference).toBe(true);
+      // Skills ship real SOPs, not first-principles stubs: each must be
+      // substantial AND ground against a SHIPPED surface — a workspace doc
+      // (APP.md / USER.md / GTM.md / TOOLS.md / SOUL.md / AGENTS.md /
+      // PLAYBOOK.md / PLATFORM_ALGO …), the ScrapeCreators read layer, or a
+      // typed tool (get_/save_/list_/record_/reply_/post_/check_/send_/search_).
+      // That's the V2 grounding layer; the old PLAYBOOK-or-ScrapeCreators-only
+      // check missed skills grounded via the foundation DB + typed tools.
+      // Deprecated tombstone skills are exempt — their job is to point a stale
+      // reference at the live skill, not to carry an SOP.
+      const isDeprecated = body!.includes("DEPRECATED");
+      expect(body!.length).toBeGreaterThan(isDeprecated ? 400 : 800);
+      const groundsAgainstShippedSurface =
+        /[A-Z][A-Z_]+\.md/.test(body!) ||
+        body!.includes("ScrapeCreators") ||
+        /\b(get|save|list|record|reply|post|check|send|search)_[a-z_]+/.test(
+          body!
+        );
+      expect(isDeprecated || groundsAgainstShippedSurface).toBe(true);
     }
     expect(files.get("skills/scrapecreators-api/SKILL.md")).toContain(
       "ScrapeCreators"
@@ -326,8 +339,11 @@ describe("Maya GTM workspace pack", () => {
     expect(files.get("skills/scrapecreators-api/SKILL.md")).toContain(
       "x-api-key"
     );
+    // V2: ScrapeCreators is called via the typed `scrape_creators` tool (GET
+    // server-side with the x-api-key header) — the old hand-written-curl
+    // POST/GET warning is obsolete because the tool owns the request.
     expect(files.get("skills/scrapecreators-api/SKILL.md")).toContain(
-      "Never use POST for search endpoints"
+      "scrape_creators"
     );
     expect(files.get("skills/scrapecreators-api/SKILL.md")).toContain(
       "/v1/reddit/search"
