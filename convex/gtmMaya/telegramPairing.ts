@@ -5,6 +5,7 @@ import {
   query,
   type MutationCtx,
 } from "../_generated/server";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import {
   buildPairingDeepLink,
@@ -230,6 +231,16 @@ export const claimPairingToken = internalMutation({
       channelPreference: "telegram",
       updatedAt: now,
     });
+
+    // ENUM REFACTOR — deliver-on-connect. If the agent already generated its plan
+    // but couldn't deliver it (no channel was paired at synthesis time), re-push
+    // the CACHED plan now that a channel exists. pushCachedPlan is a cheap no-op
+    // when there's nothing to deliver / it already landed.
+    await ctx.scheduler.runAfter(
+      0,
+      internal.gtmMaya.synthesisDelivery.pushCachedPlan,
+      { agentId: agent._id }
+    );
 
     return {
       ok: true,

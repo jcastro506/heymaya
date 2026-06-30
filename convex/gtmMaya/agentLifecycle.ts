@@ -119,7 +119,28 @@ export interface AgentLifecycle {
   foundationStep: FoundationStep;
   /** How many times the foundation lease has been acquired (the cap counter). */
   leaseAcquireCount: number;
+  /** The explicit lifecycle state — the SINGLE authority. `fresh` → `researching`
+   *  → `plan_ready` (Maya's work DONE; plan generated+cached; she goes idle) →
+   *  `active` (approved + ≥1 account connected). Persisted once advanced; derived
+   *  from durable evidence for legacy/unset agents. */
+  lifecycleState: LifecycleState;
+  /** Unix-ms the synthesis plan was generated (the work-done marker — NOT
+   *  delivery). foundationComplete flips on this. Null until the plan exists. */
+  planGeneratedAt: number | null;
+  /** True once the plan text is cached for Convex re-push (deliver-on-connect). */
+  hasCachedPlan: boolean;
+  /** How many times Convex has attempted to push the cached plan. */
+  planDeliveryAttempts: number;
 }
+
+/** The explicit lifecycle state machine — the single source of truth for "where
+ *  is this agent." See the schema field for the full doctrine. */
+export type LifecycleState = "fresh" | "researching" | "plan_ready" | "active";
+
+/** Bounded Convex-side delivery retries of the cached plan before we stop and
+ *  hold it dormant (the channel is dead / never connected). The pairing event
+ *  re-pushes regardless; this only caps blind time-based retries. */
+export const MAX_PLAN_DELIVERY_ATTEMPTS = 6;
 
 /**
  * Compute the durable lifecycle for an agent from its row + foundation rows.
@@ -211,19 +232,28 @@ export async function computeAgentLifecycle(
   // (target threads + at least one draft). The explicit `foundationCompletedAt`
   // marker (set right after the synthesis is sent) remains the authoritative
   // signal; this is the backstop that must reliably flip so the watchdog STOPS.
+  // The ACTIONABLE POOL — the agent's tactical output: ≥1 buyer thread to reply
+  // to AND ≥1 drafted reply. Without it, onboarding "completes" with nothing for
+  // Maya to post on connect (observed live 2026-06-28: rich strategy synthesis,
+  // but 0 threads + 0 drafts — the agent rushed past the discovery/draft phase).
   const rowsComplete = targetThreadCount >= 1 && draftCount >= 1;
-  // Plan-delivery gate. Onboarding's whole point is delivering the founder the
-  // synthesis plan; the live dogfood marked complete + went idle WITHOUT sending
-  // it. So completion requires the plan to have actually been delivered (a
-  // strategic send_update succeeded → strategyDeliveredAt stamped). The explicit
-  // marker already enforces this; the rows-complete backstop must too, or
-  // completion flips true on research rows alone and she goes silent. Research
-  // re-spawn stays gated on `researchComplete` (unchanged), and the 8-acquire
-  // lease cap is still the backstop against a never-delivering agent looping.
+  // WORK-DONE gate. Maya's work is done = the synthesis plan was GENERATED
+  // (`planGeneratedAt`, stamped by the send_update handler when she composes +
+  // sends the plan, whether or not delivery lands) AND the actionable pool is
+  // built (`rowsComplete`). Gating on plan-generation (NOT delivery) is what
+  // killed the $22 no-channel loop — delivery is a separate Convex push, and
+  // `strategyDeliveredAt` is PURELY the "founder received it" signal. Adding
+  // `rowsComplete` is what stops a THIN completion: the watchdog keeps running
+  // `finalize` (discovery → drafts) until the pool exists, so she never goes idle
+  // with an empty queue. Both gates are her OWN work (controllable), so no
+  // founder-channel dependency → no loop; the 8-acquire lease cap bounds a
+  // genuinely thread-less niche. Legacy agents pass via `foundationCompletedAt`.
+  const planGeneratedAt = agent.planGeneratedAt ?? null;
   const strategyDeliveredAt = agent.strategyDeliveredAt ?? null;
   const strategyDelivered = strategyDeliveredAt !== null;
   const foundationComplete =
-    (foundationCompletedAt !== null || rowsComplete) && strategyDelivered;
+    foundationCompletedAt !== null ||
+    (planGeneratedAt !== null && rowsComplete);
 
   const helloSent = helloSentAt !== null;
   const foundationStarted = foundationStartedAt !== null || leaseActive;
@@ -238,6 +268,27 @@ export async function computeAgentLifecycle(
       ? "finalize"
       : "research";
   const leaseAcquireCount = agent.foundationLeaseAcquireCount ?? 0;
+
+  const planDeliveryAttempts = agent.planDeliveryAttempts ?? 0;
+  const hasCachedPlan =
+    typeof agent.cachedSynthesisText === "string" &&
+    agent.cachedSynthesisText.trim().length > 0;
+
+  // Explicit lifecycle state — THE authority. `active` is only ever set
+  // explicitly (markActive, on approval + a connected account), so we honor the
+  // persisted value; everything below it is derivable from durable evidence, so a
+  // legacy/unset agent still resolves correctly. fresh → researching (work
+  // begun) → plan_ready (plan generated = work done; idle) → active.
+  let lifecycleState: LifecycleState;
+  if (agent.lifecycleState === "active") {
+    lifecycleState = "active";
+  } else if (foundationComplete) {
+    lifecycleState = "plan_ready";
+  } else if (foundationStarted || researchComplete) {
+    lifecycleState = "researching";
+  } else {
+    lifecycleState = "fresh";
+  }
 
   let phase: AgentLifecyclePhase;
   if (foundationComplete) phase = "active";
@@ -265,6 +316,10 @@ export async function computeAgentLifecycle(
     researchComplete,
     researchCompletedAt,
     engagementReady: researchComplete,
+    lifecycleState,
+    planGeneratedAt,
+    hasCachedPlan,
+    planDeliveryAttempts,
     foundationStep,
     leaseAcquireCount,
   };
@@ -363,6 +418,10 @@ export const acquireFoundationLease = internalMutation({
       foundationLeaseUntil: leaseUntil,
       foundationStartedAt: agent.foundationStartedAt ?? now,
       foundationLeaseAcquireCount: lifecycle.leaseAcquireCount + 1,
+      // Persist the explicit state — acquiring the lease means the research pass
+      // is running (only ever reached when !foundationComplete, so never a
+      // downgrade). fresh → researching.
+      ...(agent.lifecycleState ? {} : { lifecycleState: "researching" as const }),
       updatedAt: now,
     });
     return { acquired: true, alreadyComplete: false, leaseActive: false, leaseUntil, capped: false, ...base };
@@ -379,16 +438,19 @@ export const acquireFoundationLease = internalMutation({
  * Class-INDEPENDENT by design: the demo proved the agent labels the handover
  * inconsistently (tactical vs strategic), so keying on messageClass is wrong.
  * We key on lifecycle state instead:
- *   - foundationCompletedAt set  → onboarding done; everything flows ("allow").
- *   - no buyer map yet           → still researching; progress updates flow ("allow").
- *   - buyer map exists, not done → the synthesis window. The FIRST founder-facing
- *     send claims it (stamps strategyDeliveredAt → "send"); every later send in
- *     the window is a duplicate ("suppress").
+ *   - work done (plan generated) → normal proactive sends flow ("allow"); the
+ *     immediate concurrent handover dup is still suppressed within the cooldown.
+ *   - research not done yet       → progress updates flow ("allow") + hello-once.
+ *   - synthesis window (research done, plan not yet generated) → the FIRST send
+ *     CLAIMS it: stamps `planGeneratedAt` (the work-done marker + claim token)
+ *     and moves to `plan_ready` → "send"; every later send is a dup ("suppress").
  *
  * Atomic: Convex mutations are serializable, so two concurrent claims can never
- * both win — this is what actually defeats the multi-session race. strategy-
- * DeliveredAt doubles as the completion gate (markFoundationComplete); a failed
- * send releases it (releaseFounderSynthesisClaim) so a genuine retry re-claims.
+ * both win — this is what defeats the multi-session race. THE ENUM REFACTOR: the
+ * claim token is now `planGeneratedAt`, NOT `strategyDeliveredAt`. Claim ≠
+ * delivery — a failed send no longer un-claims (no releaseFounderSynthesisClaim
+ * loop) and no longer re-generates the plan; the cached plan is re-pushed by
+ * Convex on connect. `strategyDeliveredAt` is set ONLY on a successful send.
  */
 export const claimFounderSynthesisSend = internalMutation({
   args: { agentId: v.id("gtmAgents") },
@@ -398,16 +460,16 @@ export const claimFounderSynthesisSend = internalMutation({
   ): Promise<{ decision: "send" | "suppress" | "allow" }> => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent) return { decision: "allow" };
-    // Onboarding already complete → normal proactive sends (morning brief,
-    // weekly review) flow. BUT the FORMER hole: a re-articulated handover from a
-    // CONCURRENT session lands seconds after the first send marked foundation
-    // complete, and this branch waved it straight through (the live 3× dupe).
-    // So within the handover cooldown, still SUPPRESS — the dup is the same
-    // onboarding plan, not a genuine later message.
-    if (agent.foundationCompletedAt) {
+    const now = Date.now();
+    const lifecycle = await computeAgentLifecycle(ctx, agent, now);
+    // Work done (plan generated) → normal proactive sends (morning brief, weekly
+    // review) flow. BUT a re-articulated handover from a CONCURRENT session lands
+    // seconds after the first claim (the live 3× dupe), so within the handover
+    // cooldown of plan generation, still SUPPRESS — same plan, not a new message.
+    if (lifecycle.foundationComplete) {
       if (
-        agent.strategyDeliveredAt &&
-        Date.now() - agent.strategyDeliveredAt < SYNTH_HANDOVER_COOLDOWN_MS
+        agent.planGeneratedAt &&
+        now - agent.planGeneratedAt < SYNTH_HANDOVER_COOLDOWN_MS
       ) {
         return { decision: "suppress" };
       }
@@ -417,16 +479,11 @@ export const claimFounderSynthesisSend = internalMutation({
     // was buyerMap-only, so a synthesis shipped the moment a buyer map existed —
     // before competitors/scorecards landed (observed live: "here's the play"
     // sent on a half-built foundation). Gate on the REAL strategy bar:
-    // researchComplete = buyerMap + ≥1 competitor + ≥1 channel scorecard. Below
-    // it → "allow" (still researching; honest progress updates flow — NEVER
-    // suppress, that would resurrect the post-hello silence). We deliberately do
-    // NOT require threads/drafts/voice to SEND the plan (that would silence the
-    // sanctioned honest-partial); those are enforced at COMPLETION via
-    // rowsComplete in computeAgentLifecycle.
-    const now = Date.now();
-    const lifecycle = await computeAgentLifecycle(ctx, agent, now);
+    // researchComplete = buyerMap + ≥1 channel scorecard. Below it → "allow"
+    // (still researching; honest progress updates flow — NEVER suppress, that
+    // would resurrect the post-hello silence).
     if (!lifecycle.researchComplete) {
-      if (agent.strategyDeliveredAt) return { decision: "suppress" };
+      if (agent.planGeneratedAt) return { decision: "suppress" };
       // HELLO-ONCE: kill the concurrent intro burst (observed live: 4 near-
       // identical hellos in 17s from racing boot/kickstart/resume sessions). The
       // FIRST pre-research proactive send atomically claims the hello (stamps
@@ -443,24 +500,30 @@ export const claimFounderSynthesisSend = internalMutation({
       await ctx.db.patch(args.agentId, { helloSentAt: now, updatedAt: now });
       return { decision: "allow" };
     }
-    // Synthesis window: the strategy is real (researchComplete), onboarding not done.
-    if (agent.strategyDeliveredAt) return { decision: "suppress" };
-    await ctx.db.patch(args.agentId, { strategyDeliveredAt: now, updatedAt: now });
+    // Synthesis window: research is real, plan not yet generated. CLAIM it —
+    // stamp planGeneratedAt (work done) + advance to plan_ready. The handler then
+    // caches the plan text + (on a successful send) stamps strategyDeliveredAt.
+    if (agent.planGeneratedAt) return { decision: "suppress" };
+    await ctx.db.patch(args.agentId, {
+      planGeneratedAt: now,
+      lifecycleState: "plan_ready",
+      updatedAt: now,
+    });
     return { decision: "send" };
   },
 });
 
-/** §6 — release a synthesis claim when the send FAILED, so a genuine retry can
- *  re-claim. Never unsets after onboarding completed (the plan really landed). */
+/** DEPRECATED no-op (the enum refactor). A failed synthesis send no longer
+ *  un-claims: the plan was GENERATED (planGeneratedAt stays = work done), and the
+ *  cached plan is re-pushed by Convex on connect (pushCachedPlan) rather than
+ *  re-generated. Un-claiming was the delivery-failure re-synthesis loop. Kept as
+ *  an exported no-op so any stale caller is harmless. */
 export const releaseFounderSynthesisClaim = internalMutation({
   args: { agentId: v.id("gtmAgents") },
   handler: async (ctx, args): Promise<void> => {
-    const agent = await ctx.db.get(args.agentId);
-    if (!agent || agent.foundationCompletedAt) return;
-    await ctx.db.patch(args.agentId, {
-      strategyDeliveredAt: undefined,
-      updatedAt: Date.now(),
-    });
+    // Intentionally does nothing — see the doc comment above.
+    void args;
+    return;
   },
 });
 
@@ -486,10 +549,13 @@ export const markStrategyDelivered = internalMutation({
   },
 });
 
-/** Mark foundation done AND clear the lease. Called once, after the synthesis
- *  has actually been delivered to the founder. REFUSES (completed:false) if the
- *  plan was never delivered — the live dogfood marked complete and went idle
- *  without sending the plan, which is the exact failure this gate prevents. */
+/** Mark Maya's onboarding WORK done (→ `plan_ready`) AND clear the lease. The
+ *  enum refactor: the gate is now "the plan was GENERATED" (planGeneratedAt, set
+ *  when the agent composed + sent the synthesis), NOT "the founder received it."
+ *  Delivery is a SEPARATE Convex push (deliver-on-connect), so a missing channel
+ *  can never block completion → no re-synthesis loop. We still refuse on a
+ *  totally empty foundation (no plan, no rows) so completion can't fire on
+ *  nothing. The `active` transition (approved + connected) is markActive, later. */
 export const markFoundationComplete = internalMutation({
   args: { agentId: v.id("gtmAgents") },
   handler: async (
@@ -509,22 +575,167 @@ export const markFoundationComplete = internalMutation({
       }
       return { alreadyComplete: true, completed: true };
     }
-    // GATE: the plan must have actually reached the founder first.
-    if (!agent.strategyDeliveredAt) {
+    // GATE: completing requires BOTH (1) the synthesis plan GENERATED + sent
+    // (planGeneratedAt) AND (2) the actionable pool built — ≥1 buyer thread with
+    // ≥1 drafted reply (rowsComplete). The pool requirement stops a THIN
+    // completion (live 2026-06-28: rich strategy synthesis but 0 threads/drafts —
+    // the agent rushed past discovery/drafting, so connect-and-go had nothing to
+    // post). Both are the agent's OWN work (not the founder's channel), so this
+    // is NOT the $22 delivery-loop mistake; the 8-acquire lease cap bounds a
+    // genuinely thread-less niche. The Convex synthesis SAFETY-NET still
+    // guarantees the founder gets a plan even while this is blocked — it now fires
+    // on researchCompletedAt (NOT foundationCompletedAt, see synthesisDelivery.ts)
+    // so blocking completion no longer disables it.
+    const lifecycle = await computeAgentLifecycle(ctx, agent, now);
+    const poolBuilt =
+      lifecycle.targetThreadCount >= 1 && lifecycle.draftCount >= 1;
+    if (agent.planGeneratedAt == null || !poolBuilt) {
       return {
         alreadyComplete: false,
         completed: false,
         reason:
-          "strategy_not_delivered: send the founder the full synthesis plan (a strategic send_update — who's buying, where, the strategy, 'I start posting tomorrow') BEFORE marking foundation complete. Delivering the plan is the whole point of onboarding; you cannot finish without it.",
+          "not_ready: before marking done you must BOTH (1) SEND the founder the synthesis plan via send_update (works even with no channel — it's cached + delivered on connect), AND (2) build the actionable pool — at least one real buyer thread (save_target_thread) with a drafted reply (save_draft). Keep running the finalize step (discovery → drafts) until both exist.",
       };
     }
     await ctx.db.patch(args.agentId, {
       foundationCompletedAt: now,
       foundationStartedAt: agent.foundationStartedAt ?? now,
       foundationLeaseUntil: undefined,
+      // Work done → plan_ready (idle, awaiting delivery/approval/connect events).
+      // Never downgrade an agent already explicitly active.
+      ...(agent.lifecycleState === "active"
+        ? {}
+        : { lifecycleState: "plan_ready" as const }),
       updatedAt: now,
     });
     return { alreadyComplete: false, completed: true };
+  },
+});
+
+/** Mark the agent ACTIVE — approved AND ≥1 account connected → the daily engage
+ *  loop may post. Event-driven (called from the approval + account-connect
+ *  hooks). Idempotent. Requires foundation work done first (plan_ready). */
+export const markActive = internalMutation({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ activated: boolean; reason?: string }> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return { activated: false, reason: "agent_not_found" };
+    if (agent.lifecycleState === "active") return { activated: true };
+    const now = Date.now();
+    const lifecycle = await computeAgentLifecycle(ctx, agent, now);
+    if (!lifecycle.foundationComplete) {
+      return { activated: false, reason: "plan_not_ready" };
+    }
+    await ctx.db.patch(args.agentId, {
+      lifecycleState: "active",
+      // Backfill the explicit completion marker if the agent never called it
+      // (e.g. a no-channel onboarding that only finished once they connected).
+      foundationCompletedAt: agent.foundationCompletedAt ?? now,
+      foundationLeaseUntil: undefined,
+      updatedAt: now,
+    });
+    return { activated: true };
+  },
+});
+
+/** Event-driven activation gate. Called from BOTH transition events (account
+ *  connected, plan approved) — whichever one COMPLETES the pair flips the agent
+ *  to `active`. Re-checks the full condition from the DB each time: foundation
+ *  work done (plan_ready) AND strategy approved AND ≥1 active connected account.
+ *  Idempotent + cheap; a no-op until all three hold. Does NOT post — it only
+ *  records the state; the agent's Phase-5 kickoff / the morning_brief cron owns
+ *  the first post. */
+export const tryActivateAgent = internalMutation({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ activated: boolean; reason?: string }> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return { activated: false, reason: "agent_not_found" };
+    if (agent.lifecycleState === "active") return { activated: true };
+    const now = Date.now();
+    const lifecycle = await computeAgentLifecycle(ctx, agent, now);
+    if (!lifecycle.foundationComplete) {
+      return { activated: false, reason: "plan_not_ready" };
+    }
+    // ≥1 active connected account (parse the JSON-on-row; schema is at the TS
+    // ceiling so accounts live as a JSON string).
+    let connectedActive = 0;
+    try {
+      const arr = JSON.parse(agent.connectedAccountsJson ?? "[]") as Array<{
+        isActive?: boolean;
+      }>;
+      connectedActive = arr.filter((a) => a?.isActive !== false).length;
+    } catch {
+      connectedActive = 0;
+    }
+    if (connectedActive < 1) {
+      return { activated: false, reason: "no_connected_account" };
+    }
+    // Strategy approved (on the latest research job for this app).
+    let approved = false;
+    if (agent.appId) {
+      const jobs = await ctx.db
+        .query("gtmResearchJobs")
+        .withIndex("by_app", (q) => q.eq("appId", agent.appId!))
+        .collect();
+      const latest = jobs.sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
+      approved = latest?.strategyApprovalState === "approved";
+    }
+    if (!approved) {
+      return { activated: false, reason: "not_approved" };
+    }
+    await ctx.db.patch(args.agentId, {
+      lifecycleState: "active",
+      foundationCompletedAt: agent.foundationCompletedAt ?? now,
+      foundationLeaseUntil: undefined,
+      updatedAt: now,
+    });
+    return { activated: true };
+  },
+});
+
+/** Cache the synthesis plan text for Convex re-push (deliver-on-connect), and
+ *  stamp planGeneratedAt as a belt-and-suspenders (the claim already did). Called
+ *  server-side from the send_update handler the instant the synthesis is
+ *  composed — BEFORE the Telegram attempt — so the text survives a failed send. */
+export const cacheSynthesisPlan = internalMutation({
+  args: { agentId: v.id("gtmAgents"), text: v.string() },
+  handler: async (ctx, args): Promise<void> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return;
+    const now = Date.now();
+    await ctx.db.patch(args.agentId, {
+      cachedSynthesisText: args.text,
+      planGeneratedAt: agent.planGeneratedAt ?? now,
+      ...(agent.lifecycleState === "active"
+        ? {}
+        : { lifecycleState: "plan_ready" as const }),
+      updatedAt: now,
+    });
+  },
+});
+
+/** Record a Convex-side delivery attempt of the cached plan (increment the
+ *  bounded counter). Returns the new count + whether we've hit the cap. */
+export const bumpPlanDeliveryAttempt = internalMutation({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ attempts: number; capped: boolean }> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return { attempts: 0, capped: true };
+    const attempts = (agent.planDeliveryAttempts ?? 0) + 1;
+    await ctx.db.patch(args.agentId, {
+      planDeliveryAttempts: attempts,
+      updatedAt: Date.now(),
+    });
+    return { attempts, capped: attempts >= MAX_PLAN_DELIVERY_ATTEMPTS };
   },
 });
 

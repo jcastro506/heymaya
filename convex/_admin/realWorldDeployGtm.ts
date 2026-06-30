@@ -1244,6 +1244,229 @@ export const repointLatestTestCreator = internalMutation({
   },
 });
 
+/** AUDIT: list EVERY Fly app in the org + every machine's state, with NO name
+ *  filter — so a burning machine under any name (clawlaunch-*, maya-*, or
+ *  anything else) is visible. A machine in state "started" is consuming. */
+export const auditFlyMachines = internalAction({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{
+    runningCount: number;
+    running: Array<{ app: string; machine: string; state: string }>;
+    apps: Array<{ app: string; machines: Array<{ name: string; state: string }> }>;
+  }> => {
+    const { FlyClient } = await import("../lib/flyClient");
+    const fly = new FlyClient();
+    const apps = await fly.listApps({ first: 500 });
+    const out: Array<{ app: string; machines: Array<{ name: string; state: string }> }> = [];
+    const running: Array<{ app: string; machine: string; state: string }> = [];
+    for (const a of apps) {
+      try {
+        const machines = await fly.listMachines(a.name);
+        const ms = machines.map((m) => ({ name: m.name, state: m.state }));
+        out.push({ app: a.name, machines: ms });
+        for (const m of ms) {
+          if (m.state === "started" || m.state === "starting" || m.state === "replacing") {
+            running.push({ app: a.name, machine: m.name, state: m.state });
+          }
+        }
+      } catch (e) {
+        out.push({ app: a.name, machines: [{ name: "LIST_ERROR", state: String(e).slice(0, 80) }] });
+      }
+    }
+    return { runningCount: running.length, running, apps: out };
+  },
+});
+
+/** Read-only: look up a Clerk user id by email (no create, no modify). Used to
+ *  bind a test agent to the operator's REAL Google account after they sign in,
+ *  without touching their account. */
+export const lookupClerkUser = internalAction({
+  args: { email: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ found: boolean; userId?: string; reason?: string }> => {
+    const key = process.env.CLERK_SECRET_KEY;
+    if (!key) return { found: false, reason: "no CLERK_SECRET_KEY" };
+    const res = await fetch(
+      `https://api.clerk.com/v1/users?email_address[]=${encodeURIComponent(args.email)}`,
+      { headers: { Authorization: `Bearer ${key}` } }
+    );
+    if (!res.ok) return { found: false, reason: `lookup ${res.status}` };
+    const arr = (await res.json()) as Array<{ id: string }>;
+    if (Array.isArray(arr) && arr.length > 0) {
+      return { found: true, userId: arr[0].id };
+    }
+    return { found: false };
+  },
+});
+
+/** Deterministic bind: point clerkUserId at a SPECIFIC agent's creator, and
+ *  orphan every other creator that currently has that clerkUserId (repoint to a
+ *  dead id). No "latest"/"live-app" guessing — ends the multi-bind mess. */
+export const bindSpecificAgentToClerkUser = internalMutation({
+  args: {
+    agentId: v.id("gtmAgents"),
+    clerkUserId: v.string(),
+    email: v.string(),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; creatorId?: string; orphaned: number; reason?: string }> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return { ok: false, orphaned: 0, reason: "agent not found" };
+    const targetCreatorId = agent.accountId;
+    // Orphan every OTHER creator currently on this clerkUserId.
+    const existing = await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", args.clerkUserId))
+      .collect();
+    let orphaned = 0;
+    for (const c of existing) {
+      if (c._id === targetCreatorId) continue;
+      await ctx.db.patch(c._id, { clerkUserId: `dead_${c._id}` });
+      orphaned += 1;
+    }
+    await ctx.db.patch(targetCreatorId, {
+      clerkUserId: args.clerkUserId,
+      email: args.email,
+    });
+    return { ok: true, creatorId: targetCreatorId, orphaned };
+  },
+});
+
+/** Collapse multiple creators bound to one clerkUserId down to ONE — keeps the
+ *  creator whose agent has a live Fly app (else the newest), and repoints the
+ *  rest to dead ids so the dashboard's .first() resolves to the live agent.
+ *  Fixes the multi-bind mess from repeated test deploys. */
+export const dedupeCreatorsForClerkUser = internalMutation({
+  args: { clerkUserId: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ kept: string | null; repointed: number }> => {
+    const creators = await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", args.clerkUserId))
+      .collect();
+    if (creators.length <= 1) {
+      return { kept: creators[0]?._id ?? null, repointed: 0 };
+    }
+    let keep: (typeof creators)[number] | null = null;
+    for (const c of creators) {
+      const agent = await ctx.db
+        .query("gtmAgents")
+        .withIndex("by_account", (q) => q.eq("accountId", c._id))
+        .first();
+      if (agent?.openClawFlyAppId) {
+        keep = c;
+        break;
+      }
+    }
+    if (!keep) {
+      keep = [...creators].sort((a, b) => b.createdAt - a.createdAt)[0];
+    }
+    let repointed = 0;
+    for (const c of creators) {
+      if (c._id === keep._id) continue;
+      await ctx.db.patch(c._id, { clerkUserId: `dead_${c._id}` });
+      repointed += 1;
+    }
+    return { kept: keep._id, repointed };
+  },
+});
+
+/**
+ * Provision an email+password Clerk login for the staging test agent, so the
+ * operator can sign in with credentials instead of Google + console-fishing for
+ * their user id. Creates (or updates the password of) a Clerk user via the
+ * Backend API, then optionally binds the latest test creator to it.
+ * NOTE: only lets them log in if the staging Clerk instance has PASSWORD sign-in
+ * enabled (vs social-only). Returns the userId either way.
+ *   npx convex run _admin/realWorldDeployGtm:provisionClerkLogin \
+ *     '{"email":"founder@hey-maya.ai","password":"...","bind":true}'
+ */
+export const provisionClerkLogin = internalAction({
+  args: {
+    email: v.string(),
+    password: v.string(),
+    bind: v.optional(v.boolean()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    ok: boolean;
+    userId?: string;
+    created?: boolean;
+    bound?: boolean;
+    reason?: string;
+  }> => {
+    const key = process.env.CLERK_SECRET_KEY;
+    if (!key) return { ok: false, reason: "no CLERK_SECRET_KEY in env" };
+    const base = "https://api.clerk.com/v1";
+    const authJson = {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    };
+    let userId: string | undefined;
+    let created = false;
+    // Find an existing user with this email.
+    const found = await fetch(
+      `${base}/users?email_address[]=${encodeURIComponent(args.email)}`,
+      { headers: { Authorization: `Bearer ${key}` } }
+    );
+    if (found.ok) {
+      const arr = (await found.json()) as Array<{ id: string }>;
+      if (Array.isArray(arr) && arr.length > 0) userId = arr[0].id;
+    }
+    if (userId) {
+      const patch = await fetch(`${base}/users/${userId}`, {
+        method: "PATCH",
+        headers: authJson,
+        body: JSON.stringify({ password: args.password, skip_password_checks: true }),
+      });
+      if (!patch.ok) {
+        return {
+          ok: false,
+          userId,
+          reason: `password update failed: ${patch.status} ${await patch.text()}`,
+        };
+      }
+    } else {
+      const create = await fetch(`${base}/users`, {
+        method: "POST",
+        headers: authJson,
+        body: JSON.stringify({
+          email_address: [args.email],
+          password: args.password,
+          skip_password_checks: true,
+        }),
+      });
+      if (!create.ok) {
+        return {
+          ok: false,
+          reason: `create failed: ${create.status} ${await create.text()}`,
+        };
+      }
+      userId = ((await create.json()) as { id: string }).id;
+      created = true;
+    }
+    let bound = false;
+    if (args.bind && userId) {
+      const r = await ctx.runMutation(
+        internal._admin.realWorldDeployGtm.repointLatestTestCreator,
+        { clerkUserId: userId, email: args.email }
+      );
+      bound = r.ok;
+    }
+    return { ok: true, userId, created, bound };
+  },
+});
+
 /**
  * Bind the MOST-RECENT creator (regardless of clerk-id prefix) to a real
  * Clerk user + email. Unlike repointLatestTestCreator, this works even after
@@ -1575,6 +1798,57 @@ export const tailLatestMaya = internalAction({
       .recentLogs(latest.flyAppId, { limit: args.limit ?? 200 })
       .catch((e: Error) => `logs-fetch-error: ${e.message}`);
     return { flyAppId: latest.flyAppId, logs };
+  },
+});
+
+/** Inspect a SPECIFIC agent's plan + intended posts by agentId (works after the
+ *  creator has been re-bound to a real login, unlike the latest-test-creator
+ *  peeks). Returns the buyer read, bet channels, the target threads, and the
+ *  actual drafted replies/posts. */
+export const peekAgentPlan = internalQuery({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (ctx, args): Promise<unknown> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return { found: false };
+    const buyerMap = await ctx.db
+      .query("gtmBuyerMap")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .first();
+    const scorecards = await ctx.db
+      .query("gtmChannelScorecard")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    const threads = (
+      await ctx.db
+        .query("gtmTargetThreads")
+        .withIndex("by_account", (q) => q.eq("accountId", agent.accountId))
+        .collect()
+    ).filter((t) => t.agentId === args.agentId);
+    const drafts = await ctx.db
+      .query("gtmDraftedContent")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    return {
+      found: true,
+      icp: buyerMap?.icpDescription ?? null,
+      intentPhrases: buyerMap?.intentPhrases ?? [],
+      betChannels: scorecards
+        .filter((s) => s.bet)
+        .map((s) => ({ channel: s.channel, unlock: s.uniqueUnlock })),
+      threadCount: threads.length,
+      threads: threads.slice(0, 12).map((t) => ({
+        platform: t.platform,
+        tier: t.tier,
+        title: (t.title ?? "").slice(0, 120),
+        url: t.url,
+      })),
+      draftCount: drafts.length,
+      drafts: drafts.slice(0, 8).map((d) => ({
+        platform: d.platform,
+        kind: d.kind,
+        text: (d.draftText ?? "").slice(0, 400),
+      })),
+    };
   },
 });
 

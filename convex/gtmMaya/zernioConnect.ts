@@ -247,6 +247,14 @@ export const replaceConnectedAccounts = internalMutation({
       connectedAccountsJson: JSON.stringify(args.accounts),
       updatedAt: Date.now(),
     });
+    // ENUM REFACTOR — an account connecting is a transition EVENT. If the plan is
+    // ready + already approved, this completes the pair → flip to `active`.
+    // Cheap no-op otherwise.
+    await ctx.scheduler.runAfter(
+      0,
+      internal.gtmMaya.agentLifecycle.tryActivateAgent,
+      { agentId: args.agentId }
+    );
   },
 });
 
@@ -512,6 +520,38 @@ export const getMyConnectedAccounts = query({
       .first();
     if (!agent) return [];
     return parseConnectedAccounts(agent.connectedAccountsJson);
+  },
+});
+
+/** Public: the founder's connect cap + current connected count, so the UI can
+ *  grey out Connect buttons once they're at their tier limit and show an upgrade
+ *  CTA. The server guard in getZernioConnectUrl is the REAL (fail-closed)
+ *  enforcement; this is purely the UX affordance so they never hit a raw error. */
+export const getMyConnectCap = query({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{ cap: number; connectedCount: number; atCap: boolean }> => {
+    const denied = { cap: 0, connectedCount: 0, atCap: true };
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return denied;
+    const creator = await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first();
+    if (!creator || creator.accountType !== "gtm-agent") return denied;
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_account", (q) => q.eq("accountId", creator._id))
+      .first();
+    if (!agent) return denied;
+    const cap = planFeaturesGtm({
+      gtmPlanJson: agent.gtmPlanJson,
+    }).connectedChannelCap;
+    const connectedCount = new Set(
+      parseConnectedAccounts(agent.connectedAccountsJson).map((a) => a.platform)
+    ).size;
+    return { cap, connectedCount, atCap: connectedCount >= cap };
   },
 });
 

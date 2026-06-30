@@ -36,6 +36,7 @@ export function ConnectedAccounts() {
   const accounts = useQuery(api.gtmMaya.zernioConnect.getMyConnectedAccounts) as
     | ConnectedAccount[]
     | undefined;
+  const capInfo = useQuery(api.gtmMaya.zernioConnect.getMyConnectCap);
   const getConnectUrl = useAction(
     api.gtmMaya.zernioConnect.getZernioConnectUrl
   );
@@ -47,6 +48,13 @@ export function ConnectedAccounts() {
 
   const byPlatform = new Map<string, ConnectedAccount>();
   for (const a of accounts ?? []) byPlatform.set(a.platform, a);
+
+  // Tier connect-cap: once the founder has linked their plan's allotment, the
+  // Connect buttons for NOT-yet-connected channels grey out (the server in
+  // getZernioConnectUrl is the real fail-closed guard; this is the UX so they
+  // never click into a raw error). Reconnecting an already-linked channel never
+  // consumes a slot, so it's never blocked.
+  const atCap = capInfo?.atCap ?? false;
 
   async function handleConnect(platform: string) {
     setBusy(platform);
@@ -93,6 +101,9 @@ export function ConnectedAccounts() {
       {OFFERED.map(({ key, label, auto }) => {
         const acct = byPlatform.get(key);
         const isBusy = busy === key;
+        // A not-yet-connected channel is blocked once the founder is at their
+        // tier cap. Connected / needs-reconnect channels are never blocked.
+        const capBlocked = atCap && !acct;
         return (
           <div
             key={key}
@@ -105,9 +116,11 @@ export function ConnectedAccounts() {
                   ? acct.needsReconnect
                     ? "needs reconnect"
                     : `connected${acct.username ? ` · @${acct.username}` : ""}`
-                  : auto
-                    ? "auto-post once connected"
-                    : "one-tap confirm"}
+                  : capBlocked
+                    ? "plan limit reached"
+                    : auto
+                      ? "auto-post once connected"
+                      : "one-tap confirm"}
               </span>
             </div>
             {acct && !acct.needsReconnect ? (
@@ -121,7 +134,12 @@ export function ConnectedAccounts() {
             ) : (
               <button
                 onClick={() => handleConnect(key)}
-                disabled={isBusy}
+                disabled={isBusy || capBlocked}
+                title={
+                  capBlocked
+                    ? `Your plan connects up to ${capInfo?.cap} channels — disconnect one or upgrade to add more.`
+                    : undefined
+                }
                 className="shrink-0 rounded-lg bg-lime px-3 py-1 font-mono text-[11px] uppercase tracking-wide text-ink disabled:opacity-50"
               >
                 {isBusy ? "…" : acct?.needsReconnect ? "Reconnect" : "Connect"}
@@ -130,6 +148,13 @@ export function ConnectedAccounts() {
           </div>
         );
       })}
+
+      {atCap ? (
+        <p className="mt-2 font-mono text-[10px] uppercase tracking-wide text-paper-faint">
+          {capInfo?.connectedCount}/{capInfo?.cap} channels connected — your plan&apos;s
+          limit. Disconnect one or upgrade to add more.
+        </p>
+      ) : null}
 
       {error ? (
         <p className="mt-2 text-xs text-[#b3261e]">{error}</p>
