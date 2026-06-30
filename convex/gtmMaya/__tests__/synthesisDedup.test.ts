@@ -64,6 +64,45 @@ async function seedBuyerMap(
       synthesizedAt: 1,
       updatedAt: 1,
     });
+    // Hardened 2026-06-30: the synthesis "send" claim gates on the EXPLICIT
+    // researchCompletedAt stamp, not the derived researchComplete boolean. A
+    // genuine research-done state has both the rows AND the stamp — seed both.
+    await ctx.db.patch(agentId, { researchCompletedAt: 1, updatedAt: 1 });
+  });
+}
+
+/** Seed the full research ROWS (buyerMap + competitor + scorecard) but WITHOUT
+ *  the explicit researchCompletedAt stamp — the exact live failure mode (agent
+ *  ws7bk96g, 2026-06-30) where the derived researchComplete flag is true
+ *  mid-research but the run hasn't actually finished, so a tactical holding
+ *  message must NOT be allowed to claim the synthesis send. */
+async function seedResearchRowsNoStamp(
+  t: ReturnType<typeof convexTest>,
+  accountId: Id<"creators">,
+  agentId: Id<"gtmAgents">
+) {
+  await t.run(async (ctx) => {
+    await ctx.db.insert("gtmBuyerMap", {
+      accountId,
+      agentId,
+      icpDescription: "ICP",
+      buyerJourneyStages: [],
+      intentPhrases: [],
+      trustedVoices: [],
+      synthesizedAt: 1,
+    });
+    await ctx.db.insert("gtmChannelScorecard", {
+      accountId,
+      agentId,
+      channel: "reddit",
+      audienceFit: 1,
+      cadenceFit: 1,
+      uniqueUnlock: "buyers vent here",
+      bet: true,
+      synthesizedAt: 1,
+      updatedAt: 1,
+    });
+    // Deliberately NO researchCompletedAt patch.
   });
 }
 
@@ -122,6 +161,30 @@ describe("claimFounderSynthesisSend", () => {
     expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
     const agent = await t.run((ctx) => ctx.db.get(agentId));
     expect(agent?.planGeneratedAt ?? null).toBeNull();
+  });
+
+  // REGRESSION (agent ws7bk96g, 2026-06-30): the derived researchComplete flag
+  // (buyerMap + ≥1 scorecard) flips true EARLY, while Maya is still mid-research
+  // and only sending tactical holding messages ("still digging, back in a bit").
+  // The old gate used that derived flag, so a holding message won the synthesis
+  // claim, was cached as "the plan", and flipped the agent to plan_ready — the
+  // REAL post-research plan was then suppressed and the operator NEVER got it.
+  // The claim must gate on the EXPLICIT researchCompletedAt stamp: rows-but-no-
+  // stamp is "allow" (progress), never "send".
+  it("research ROWS present but researchCompletedAt NOT stamped → 'allow', never 'send' (the holding-message-steals-the-plan fix)", async () => {
+    const t = convexTest(schema, modules);
+    const { accountId, agentId } = await setupAgent(t, "synth_rows_no_stamp");
+    await seedResearchRowsNoStamp(t, accountId, agentId);
+    // Derived researchComplete is TRUE (rows exist) but the run isn't done.
+    expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
+    const midResearch = await t.run((ctx) => ctx.db.get(agentId));
+    expect(midResearch?.planGeneratedAt ?? null).toBeNull();
+    expect(midResearch?.lifecycleState ?? "fresh").not.toBe("plan_ready");
+    // Now research genuinely completes (stamp lands) → the NEXT send claims it.
+    await t.run((ctx) =>
+      ctx.db.patch(agentId, { researchCompletedAt: Date.now() })
+    );
+    expect((await t.mutation(claim, { agentId })).decision).toBe("send");
   });
 
   it("first send in the synthesis window claims it (stamps planGeneratedAt + plan_ready); the rest are suppressed", async () => {

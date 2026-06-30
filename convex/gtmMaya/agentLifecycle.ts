@@ -475,14 +475,21 @@ export const claimFounderSynthesisSend = internalMutation({
       }
       return { decision: "allow" };
     }
-    // RESEARCH-COMPLETE GATE (the live premature-synthesis fix). The old check
-    // was buyerMap-only, so a synthesis shipped the moment a buyer map existed —
-    // before competitors/scorecards landed (observed live: "here's the play"
-    // sent on a half-built foundation). Gate on the REAL strategy bar:
-    // researchComplete = buyerMap + ≥1 channel scorecard. Below it → "allow"
-    // (still researching; honest progress updates flow — NEVER suppress, that
-    // would resurrect the post-hello silence).
-    if (!lifecycle.researchComplete) {
+    // RESEARCH-COMPLETE GATE (the live premature-synthesis fix, hardened
+    // 2026-06-30). We gate on the EXPLICIT `researchCompletedAt` stamp, NOT the
+    // derived `lifecycle.researchComplete` boolean. WHY: the derived flag flips
+    // true on a LOW bar (buyerMap + ≥1 scorecard), which is reached early —
+    // while Maya is still mid-research and only sending holding messages
+    // ("still digging, back in a bit"). Observed live (agent ws7bk96g): a
+    // TACTICAL holding message won the synthesis "send" claim at T+335s, was
+    // cached as "the plan", and flipped the agent to plan_ready — the REAL
+    // post-research plan (composed after researchCompletedAt at T+371s) was then
+    // suppressed (planGeneratedAt already set). The operator got the holding
+    // message and NEVER the plan. The explicit stamp is the HIGH bar (full
+    // 5-pass research done) and is what the synthesis safety-net also keys on,
+    // so the first proactive send AFTER it is the genuine plan handover. Below
+    // it → "allow" (still researching; honest progress flows — NEVER suppress).
+    if (!agent.researchCompletedAt) {
       if (agent.planGeneratedAt) return { decision: "suppress" };
       // HELLO-ONCE: kill the concurrent intro burst (observed live: 4 near-
       // identical hellos in 17s from racing boot/kickstart/resume sessions). The

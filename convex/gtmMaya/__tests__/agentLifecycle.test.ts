@@ -410,6 +410,8 @@ describe("#15 lifecycle — foundation lease (the lock)", () => {
         accountId, agentId, channel: "reddit", audienceFit: 1, cadenceFit: 1,
         uniqueUnlock: "buyers vent here", bet: true, synthesizedAt: 1, updatedAt: 1,
       });
+      // Hardened 2026-06-30: synthesis claim gates on the explicit stamp.
+      await ctx.db.patch(agentId, { researchCompletedAt: 1, updatedAt: 1 });
     });
     const leaseThread = await seedThread(t, accountId, agentId, "post_lease_1");
     await t.mutation(internal.gtmMaya.targetList.recordDraftedContent, {
@@ -621,6 +623,10 @@ describe("enum lifecycle — plan_ready + deliver-on-connect + activate", () => 
         accountId, agentId, channel: "reddit", audienceFit: 1, cadenceFit: 1,
         uniqueUnlock: "buyers vent here", bet: true, synthesizedAt: 1, updatedAt: 1,
       });
+      // Hardened 2026-06-30: the synthesis "send" claim gates on the EXPLICIT
+      // researchCompletedAt stamp (not the derived flag). Research-done = rows
+      // AND stamp.
+      await ctx.db.patch(agentId, { researchCompletedAt: 1, updatedAt: 1 });
     });
     // The actionable pool (thread + draft) — completion now requires it too.
     const poolThread = await seedThread(t, accountId, agentId, "post_enum_1");

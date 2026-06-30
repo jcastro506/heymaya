@@ -2703,3 +2703,25 @@ export const rotateHookTokensForDestroyedApps = internalMutation({
     return rotated;
   },
 });
+
+/**
+ * Read-only: dump recent mayaMessages for an agent (both roles), newest first.
+ * Diagnostic only — used to inspect exactly what Maya sent to Telegram.
+ */
+export const peekAgentMessages = internalQuery({
+  args: { agentId: v.id("gtmAgents"), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("mayaMessages")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    rows.sort((a, b) => b.ts - a.ts);
+    return rows.slice(0, args.limit ?? 20).map((r) => ({
+      ts: r.ts,
+      role: r.role,
+      channel: r.channel,
+      messageClass: r.messageClass ?? null,
+      bodyHead: r.body.slice(0, 240),
+    }));
+  },
+});
