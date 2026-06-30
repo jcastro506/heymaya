@@ -2725,3 +2725,32 @@ export const peekAgentMessages = internalQuery({
     }));
   },
 });
+
+/**
+ * Read-only: list every creator on this deployment with the key identity
+ * fields + their gtmAgent count. Diagnostic for a pre-wipe audit — shows
+ * exactly who exists before any destructive clear. Safe to run against prod.
+ */
+export const auditAllCreators = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const creators = await ctx.db.query("creators").collect();
+    const rows = [];
+    for (const c of creators) {
+      const agents = await ctx.db
+        .query("gtmAgents")
+        .withIndex("by_account", (q) => q.eq("accountId", c._id))
+        .collect();
+      rows.push({
+        creatorId: c._id,
+        email: (c as { email?: string }).email ?? null,
+        clerkUserId: c.clerkUserId,
+        accountType: (c as { accountType?: string }).accountType ?? null,
+        agentCount: agents.length,
+        agentIds: agents.map((a) => a._id),
+        createdAt: c._creationTime,
+      });
+    }
+    return { totalCreators: creators.length, rows };
+  },
+});
