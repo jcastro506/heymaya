@@ -23,7 +23,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Doc, Id, TableNames } from "../_generated/dataModel";
 import {
   buildGtmPlanJson,
   type GtmPlan,
@@ -2764,14 +2764,8 @@ export const auditAllCreators = internalQuery({
  * Does NOT touch Fly machines or Clerk — call wipeAllClerkUsers + the Fly
  * teardown separately.
  */
-export const wipeAllTenants = internalMutation({
-  args: { confirm: v.string() },
-  handler: async (ctx, args): Promise<Record<string, number>> => {
-    if (args.confirm !== "WIPE_ALL") {
-      throw new Error("refusing: pass { confirm: \"WIPE_ALL\" }");
-    }
-    const TABLES = [
-      "creators", "connectedAccounts", "oauthStateTokens",
+const WIPE_TABLES = [
+  "creators", "connectedAccounts", "oauthStateTokens",
       "gtmActionLog", "gtmAgentActivity", "gtmAgentTrace", "gtmAgents",
       "gtmApps", "gtmArchetypeLearnings", "gtmAuditEvents", "gtmBetaCohort",
       "gtmBuyerMap", "gtmBuyerSegments", "gtmCalendarConnections",
@@ -2789,14 +2783,43 @@ export const wipeAllTenants = internalMutation({
       "gtmSkillImprovementProposals", "gtmSteeringDirectives",
       "gtmTargetAccounts", "gtmTargetThreads", "gtmTelegramPairingTokens",
       "gtmToolCallLog", "gtmUgcReadinessReports", "gtmUserReportedSignals",
-      "gtmWalkthroughUploads", "gtmWatchLaneState", "gtmWorkspaceMutations",
-      "mayaMessages",
-    ] as const;
+  "gtmWalkthroughUploads", "gtmWatchLaneState", "gtmWorkspaceMutations",
+  "mayaMessages",
+] as const;
+
+/** Delete up to 1000 rows from one table (stays under Convex's 4096-read
+ *  per-transaction limit). Returns how many it deleted; the orchestrating
+ *  action loops until a table returns < 1000. */
+export const wipeTableBatch = internalMutation({
+  args: { table: v.string(), confirm: v.string() },
+  handler: async (ctx, args): Promise<number> => {
+    if (args.confirm !== "WIPE_ALL") {
+      throw new Error("refusing: pass { confirm: \"WIPE_ALL\" }");
+    }
+    const rows = await ctx.db.query(args.table as TableNames).take(1000);
+    for (const row of rows) await ctx.db.delete(row._id);
+    return rows.length;
+  },
+});
+
+export const wipeAllTenants = internalAction({
+  args: { confirm: v.string() },
+  handler: async (ctx, args): Promise<Record<string, number>> => {
+    if (args.confirm !== "WIPE_ALL") {
+      throw new Error("refusing: pass { confirm: \"WIPE_ALL\" }");
+    }
     const counts: Record<string, number> = {};
-    for (const table of TABLES) {
-      const rows = await ctx.db.query(table).collect();
-      for (const row of rows) await ctx.db.delete(row._id);
-      if (rows.length > 0) counts[table] = rows.length;
+    for (const table of WIPE_TABLES) {
+      let total = 0;
+      for (;;) {
+        const n: number = await ctx.runMutation(
+          internal._admin.realWorldDeployGtm.wipeTableBatch,
+          { table, confirm: "WIPE_ALL" }
+        );
+        total += n;
+        if (n < 1000) break;
+      }
+      if (total > 0) counts[table] = total;
     }
     return counts;
   },
