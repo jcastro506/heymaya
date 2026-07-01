@@ -2754,3 +2754,101 @@ export const auditAllCreators = internalQuery({
     return { totalCreators: creators.length, rows };
   },
 });
+
+/**
+ * COMPLETE tenant wipe — clears every creator + the entire GTM data surface
+ * (all gtm* tables + mayaMessages) + the creator-side connect/oauth tables.
+ * Unlike wipeStagingCleanSlate this is prod-capable (guarded by an explicit
+ * confirm token) and complete (mayaMessages + newer tables the older wipes
+ * missed). Use for a full clean-slate reset before a fresh onboarding test.
+ * Does NOT touch Fly machines or Clerk — call wipeAllClerkUsers + the Fly
+ * teardown separately.
+ */
+export const wipeAllTenants = internalMutation({
+  args: { confirm: v.string() },
+  handler: async (ctx, args): Promise<Record<string, number>> => {
+    if (args.confirm !== "WIPE_ALL") {
+      throw new Error("refusing: pass { confirm: \"WIPE_ALL\" }");
+    }
+    const TABLES = [
+      "creators", "connectedAccounts", "oauthStateTokens",
+      "gtmActionLog", "gtmAgentActivity", "gtmAgentTrace", "gtmAgents",
+      "gtmApps", "gtmArchetypeLearnings", "gtmAuditEvents", "gtmBetaCohort",
+      "gtmBuyerMap", "gtmBuyerSegments", "gtmCalendarConnections",
+      "gtmCalendarEvents", "gtmChannelScorecard", "gtmChannelScores",
+      "gtmChannelWatermarks", "gtmCompetitiveMap", "gtmCompetitorMoves",
+      "gtmConnectionHealth", "gtmContentAngles", "gtmContentBankItems",
+      "gtmContentDrafts", "gtmConversions", "gtmCostLedger",
+      "gtmDeliveryFailures", "gtmDistributionMotions", "gtmDraftedContent",
+      "gtmEvidenceCards", "gtmFormatExperiments", "gtmHookCallbacks",
+      "gtmHumanPlanReviews", "gtmLinkClicks", "gtmLinkWraps", "gtmMachineHealth",
+      "gtmMemoryWrites", "gtmNicheLearnings", "gtmNichePulse",
+      "gtmOauthStateTokens", "gtmPlatformBriefs", "gtmPlatformClaims",
+      "gtmPlatformRefreshRuns", "gtmPostResults", "gtmRelationshipTargets",
+      "gtmResearchJobs", "gtmResultSnapshots", "gtmSafetyStates",
+      "gtmSkillImprovementProposals", "gtmSteeringDirectives",
+      "gtmTargetAccounts", "gtmTargetThreads", "gtmTelegramPairingTokens",
+      "gtmToolCallLog", "gtmUgcReadinessReports", "gtmUserReportedSignals",
+      "gtmWalkthroughUploads", "gtmWatchLaneState", "gtmWorkspaceMutations",
+      "mayaMessages",
+    ] as const;
+    const counts: Record<string, number> = {};
+    for (const table of TABLES) {
+      const rows = await ctx.db.query(table).collect();
+      for (const row of rows) await ctx.db.delete(row._id);
+      if (rows.length > 0) counts[table] = rows.length;
+    }
+    return counts;
+  },
+});
+
+/**
+ * Delete EVERY Clerk user on this deployment's Clerk instance (via CLERK_SECRET_KEY).
+ * Paginates the list endpoint and DELETEs each. Guarded by an explicit confirm.
+ * Staging + prod use DIFFERENT Clerk instances (different secret) — run once per
+ * deployment. The user's own Google sign-in recreates a fresh Clerk user on next
+ * login, so this is safe for a clean-slate onboarding test.
+ */
+export const wipeAllClerkUsers = internalAction({
+  args: { confirm: v.string() },
+  handler: async (
+    _ctx,
+    args
+  ): Promise<{ deleted: number; failed: number; errors: string[] }> => {
+    if (args.confirm !== "WIPE_ALL") {
+      throw new Error("refusing: pass { confirm: \"WIPE_ALL\" }");
+    }
+    const key = process.env.CLERK_SECRET_KEY;
+    if (!key) throw new Error("no CLERK_SECRET_KEY in env");
+    const base = "https://api.clerk.com/v1";
+    const auth = { Authorization: `Bearer ${key}` };
+    let deleted = 0;
+    let failed = 0;
+    const errors: string[] = [];
+    // Page through all users (limit 100) and delete each. Re-fetch from offset 0
+    // each round since deletions shrink the set.
+    for (let guard = 0; guard < 100; guard++) {
+      const res = await fetch(`${base}/users?limit=100&offset=0`, {
+        headers: auth,
+      });
+      if (!res.ok) {
+        errors.push(`list: ${res.status} ${await res.text()}`);
+        break;
+      }
+      const arr = (await res.json()) as Array<{ id: string }>;
+      if (!Array.isArray(arr) || arr.length === 0) break;
+      for (const u of arr) {
+        const del = await fetch(`${base}/users/${u.id}`, {
+          method: "DELETE",
+          headers: auth,
+        });
+        if (del.ok) deleted += 1;
+        else {
+          failed += 1;
+          errors.push(`${u.id}: ${del.status}`);
+        }
+      }
+    }
+    return { deleted, failed, errors: errors.slice(0, 10) };
+  },
+});
