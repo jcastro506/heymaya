@@ -730,6 +730,25 @@ export const markCalendarEventAutoPost = internalMutation({
   },
 });
 
+/**
+ * Atomic compare-and-set claim for the auto-post path. Flips `queued` →
+ * `posting` in a SINGLE serializable mutation so only ONE invocation of
+ * publishQueuedEvent proceeds to the external Zernio POST. Without it, two
+ * concurrent fires (a re-scheduled event, an agent retry, a sweep + direct
+ * call) both read status `queued` and both publish — a duplicate post. The
+ * caller publishes only on `{ claimed: true }`; on publish failure the outcome
+ * handlers move `posting` → `failed`/`needs_confirm` as before.
+ */
+export const claimQueuedEventForPublish = internalMutation({
+  args: { eventId: v.id("gtmCalendarEvents") },
+  handler: async (ctx, args): Promise<{ claimed: boolean }> => {
+    const ev = await ctx.db.get(args.eventId);
+    if (!ev || ev.status !== "queued") return { claimed: false };
+    await ctx.db.patch(args.eventId, { status: "posting", updatedAt: Date.now() });
+    return { claimed: true };
+  },
+});
+
 export const getCalendarEventForAgent = internalQuery({
   args: { eventId: v.id("gtmCalendarEvents") },
   handler: async (ctx, args): Promise<Doc<"gtmCalendarEvents"> | null> => {

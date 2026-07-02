@@ -236,6 +236,34 @@ export const setConfirmEventStatus = internalMutation({
   },
 });
 
+/**
+ * Atomic compare-and-set claim for the founder-confirm → publish path. Flips
+ * `needs_confirm` → `posting` in a SINGLE serializable mutation and reports
+ * whether THIS caller won. This is the double-tap / callback-redelivery guard:
+ * without it the action reads status, then patches in a SEPARATE mutation, so
+ * two concurrent taps both pass the read-check and both publish the same content
+ * twice — a duplicate comment on Reddit/TikTok, the exact ban signal. Only the
+ * caller that gets `{ claimed: true }` may proceed to publish.
+ */
+export const claimConfirmEventForPublish = internalMutation({
+  args: { eventId: v.id("gtmCalendarEvents"), expectedAgentId: v.id("gtmAgents") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ claimed: boolean; status?: string }> => {
+    const ev = await ctx.db.get(args.eventId);
+    if (!ev) return { claimed: false, status: "gone" };
+    if (ev.agentId !== args.expectedAgentId) {
+      return { claimed: false, status: "not_yours" };
+    }
+    if (ev.status !== "needs_confirm") {
+      return { claimed: false, status: ev.status };
+    }
+    await ctx.db.patch(args.eventId, { status: "posting", updatedAt: Date.now() });
+    return { claimed: true };
+  },
+});
+
 // ───────────────────── send the card ─────────────────────
 
 export const sendPostConfirmCard = internalAction({
@@ -378,11 +406,21 @@ export const handleConfirmCallback = internalAction({
       );
       return;
     }
+    // ATOMIC CLAIM (needs_confirm → posting). A double-tap or Telegram callback
+    // redelivery would otherwise pass the read-check above twice and publish the
+    // same post twice (a ban signal on Reddit/TikTok). Only the winner proceeds.
+    const claim = await ctx.runMutation(
+      internal.gtmMaya.telegramConfirm.claimConfirmEventForPublish,
+      {
+        eventId: eventIdRaw as Id<"gtmCalendarEvents">,
+        expectedAgentId: agentIdByChat,
+      }
+    );
+    if (!claim.claimed) {
+      await ans(`Already ${claim.status ?? "handled"}.`);
+      return;
+    }
     await ans("Posting…");
-    await ctx.runMutation(internal.gtmMaya.telegramConfirm.setConfirmEventStatus, {
-      eventId: eventIdRaw as Id<"gtmCalendarEvents">,
-      status: "posting",
-    });
     // founderConfirmed overrides the Reddit/TikTok manual-force; dedup + plan
     // caps still apply. The slideshow media persisted on the event posts through
     // Zernio as the actual carousel/photo-mode slides (S6.1).
