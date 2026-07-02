@@ -21,7 +21,11 @@ export const createFromClerk = internalMutation({
     email: v.string(),
     timezone: v.optional(v.string()),
     accountType: v.optional(
-      v.union(v.literal("creator"), v.literal("service-business"))
+      v.union(
+        v.literal("creator"),
+        v.literal("service-business"),
+        v.literal("gtm-agent")
+      )
     ),
   },
   handler: async (ctx, args) => {
@@ -30,13 +34,12 @@ export const createFromClerk = internalMutation({
       .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", args.clerkUserId))
       .first();
     if (existing) {
-      // Patch accountType if missing — happens when this row was created
-      // pre-cleanup (no accountType column populated) and the new flow needs
-      // it set. Idempotent for already-set rows.
-      if (
-        args.accountType !== undefined &&
-        existing.accountType !== args.accountType
-      ) {
+      // Patch accountType ONLY if MISSING (legacy pre-cleanup rows). NEVER
+      // overwrite an already-set type: the Clerk webhook fires async and is
+      // svix-retried for hours, so overwriting would DOWNGRADE a live gtm-agent
+      // (set by startGtmOnboarding once the user reached onboarding) back to
+      // the signup default — blanking their Mission Control mid-flow.
+      if (args.accountType !== undefined && existing.accountType === undefined) {
         await ctx.db.patch(existing._id, { accountType: args.accountType });
       }
       return existing._id;
@@ -74,7 +77,11 @@ export const createFromClerkPublic = mutation({
     email: v.string(),
     timezone: v.optional(v.string()),
     accountType: v.optional(
-      v.union(v.literal("creator"), v.literal("service-business"))
+      v.union(
+        v.literal("creator"),
+        v.literal("service-business"),
+        v.literal("gtm-agent")
+      )
     ),
   },
   handler: async (ctx, args): Promise<Id<"creators">> => {
@@ -84,10 +91,10 @@ export const createFromClerkPublic = mutation({
       .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", args.clerkUserId))
       .first();
     if (existing) {
-      if (
-        args.accountType !== undefined &&
-        existing.accountType !== args.accountType
-      ) {
+      // No-downgrade: only set accountType when MISSING, never overwrite a live
+      // type (async/retried webhook must not downgrade a gtm-agent). See
+      // createFromClerk above.
+      if (args.accountType !== undefined && existing.accountType === undefined) {
         await ctx.db.patch(existing._id, { accountType: args.accountType });
       }
       return existing._id;

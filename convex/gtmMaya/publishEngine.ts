@@ -339,6 +339,16 @@ export const publishQueuedEvent = internalAction({
     }
     const content = (event.draftText ?? event.title ?? "").trim();
 
+    // ATOMIC CLAIM (queued → posting) BEFORE the external POST. Two concurrent
+    // fires would otherwise both see status `queued` and double-publish; only
+    // the winner proceeds. On publish failure the handlers below move
+    // posting → failed/needs_confirm.
+    const claim = await ctx.runMutation(
+      internal.gtmMaya.calendarWrite.claimQueuedEventForPublish,
+      { eventId: args.eventId }
+    );
+    if (!claim.claimed) return { outcome: "skipped" };
+
     const result: PublishDirectResult = await ctx.runAction(
       internal.gtmMaya.publishEngine.publishContentDirect,
       {

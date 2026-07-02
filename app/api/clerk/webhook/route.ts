@@ -53,17 +53,17 @@ export async function POST(req: NextRequest) {
     if (!email) {
       return NextResponse.json({ error: "no email on user" }, { status: 400 });
     }
-    // Service-product Sprint 0 cleanup follow-up: when the creator product is
-    // disabled (the default in production), every new signup defaults to
-    // `accountType: "service-business"` — the public surface is service-only
-    // until `NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT === "true"` flips dual-track
-    // signup back on. The Convex `createFromClerkPublic` mutation accepts the
-    // optional accountType field; older / creator-product builds simply
-    // ignore it.
+    // The live product is the GTM agent ("Maya"), so a new signup defaults to
+    // `accountType: "gtm-agent"` — startGtmOnboarding then creates the agent row
+    // when the user reaches /onboarding/gtm. (Was "service-business", the now-
+    // dead trades product — a fresh signup was landing in the wrong product.)
+    // When the creator product is re-enabled the flag yields a bare row (the
+    // account-type picker sets it). createFromClerkPublic only ever SETS a
+    // missing accountType, never overwrites a live one.
     const accountType =
       process.env.NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT === "true"
         ? undefined
-        : ("service-business" as const);
+        : ("gtm-agent" as const);
     await convex.mutation(api.creators.createFromClerkPublic, {
       secret: bridgeSecret(),
       clerkUserId: data.id,
