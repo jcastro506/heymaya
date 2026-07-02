@@ -19,6 +19,12 @@ export default async function SignInPage({
         signUpUrl="/sign-up"
         fallbackRedirectUrl="/clawlaunch/mission"
         forceRedirectUrl={redirectUrl}
+        // A new user who clicks "Sign in with Google" has no account; Clerk's
+        // OAuth transfer routes them through the sign-UP flow. Without these,
+        // that new user falls back to /clawlaunch/mission (→ "No agent yet") or
+        // /. Land them in Maya's onboarding so they actually reach the product.
+        signUpFallbackRedirectUrl="/onboarding/gtm"
+        signUpForceRedirectUrl={redirectUrl}
       />
     </main>
   );
