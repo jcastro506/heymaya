@@ -1788,6 +1788,21 @@ export const runMyGtmDeploy = action({
         durationMs: 0,
       };
     }
+    // SERVER-SIDE DEPLOY PAYWALL. A Fly machine is real COGS, so we never spin
+    // one up without an active plan. The UI orders payment before deploy, but
+    // that's not a real gate (this action is directly callable) — confirm the
+    // trial/paid/comped plan here and fail closed. Mirrors the "plan-tier gating
+    // must always be server-side, fail-closed" rule.
+    const planFeatures = planFeaturesGtm({ gtmPlanJson: creator.gtmPlanJson });
+    if (planFeatures.status === "none" || planFeatures.maxActiveChannels <= 0) {
+      return {
+        ok: false,
+        stage: "load-agent",
+        message: "Start your plan before Maya can deploy.",
+        retryable: false,
+        durationMs: 0,
+      };
+    }
     return await ctx.runAction(internal.onboarding.gtm.deployMayaGtm.deployMayaGtm, {
       agentId: creator.agentId,
     });

@@ -181,6 +181,7 @@ export const getGtmCreatorForDeploy = internalQuery({
   ): Promise<{
     accountId: Id<"creators">;
     agentId: Id<"gtmAgents"> | null;
+    gtmPlanJson: string | null;
   } | null> => {
     const creator = await ctx.db
       .query("creators")
@@ -194,6 +195,9 @@ export const getGtmCreatorForDeploy = internalQuery({
     return {
       accountId: creator._id,
       agentId: agent?._id ?? null,
+      // For the server-side deploy paywall: a Fly machine is real COGS, so
+      // runMyGtmDeploy confirms an active plan before provisioning.
+      gtmPlanJson: agent?.gtmPlanJson ?? null,
     };
   },
 });
