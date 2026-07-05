@@ -95,6 +95,23 @@ export const telegramWebhookHttp = httpAction(async (ctx, request) => {
       );
       return new Response("ok", { status: 200 });
     }
+    return new Response("ok", { status: 200 });
+  }
+
+  // SWITCHBOARD: a normal text message (NOT a /start command) → forward to the
+  // agent that owns this chat. The shared bot's webhook points HERE, so Convex
+  // is the single router for every tenant. Scheduled (fire-and-forget) so we
+  // return 200 fast and Telegram never retry-poisons the queue. Maya replies
+  // via her send_update tool (→ Convex → Telegram).
+  if (update.message?.text && !startPayload) {
+    const chatId = String(update.message.chat.id);
+    const username =
+      update.message.chat.username ?? update.message.from?.username;
+    await ctx.scheduler.runAfter(
+      0,
+      internal.gtmMaya.telegramHandoff.routeInboundToMachine,
+      { chatId, text: update.message.text, username }
+    );
   }
 
   return new Response("ok", { status: 200 });
