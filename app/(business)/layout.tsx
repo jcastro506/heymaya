@@ -21,7 +21,7 @@
  *   marketing pages into a `(marketing)` route group, Today can move back
  *   to `/`. Until then, signed-in operators land at `/today` post-deploy.
  *
- * Auth: Clerk middleware protects every URL under this layout. Sprint 0
+ * Auth: Clerk Proxy protects every URL under this layout. Sprint 0
  * just renders shell + placeholder; Sprint 4 wires real Convex queries.
  */
 
