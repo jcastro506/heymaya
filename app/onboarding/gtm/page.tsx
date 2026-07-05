@@ -291,6 +291,26 @@ function GtmOnboardingBody() {
     if (next) setStage(next);
   }, [snapshot]);
 
+  // AUTO-DEPLOY once the plan goes active. The plan stage no longer has a
+  // manual "Launch Maya" button — the moment the Stripe webhook grants the
+  // trial (snapshot is a live query, so `planActive` flips reactively on
+  // return), we fire the deploy + spinner automatically. Fires exactly once
+  // (deployFiredRef), and never before a plan exists (so the tier picker still
+  // shows for an unpaid founder).
+  const deployFiredRef = useRef(false);
+  useEffect(() => {
+    if (stage !== "plan" || deploying || deployFiredRef.current) return;
+    if (!snapshot) return;
+    const pf = planFeaturesGtm({ gtmPlanJson: snapshot.agent.gtmPlanJson });
+    const planActive = pf.status !== "none" && pf.maxActiveChannels > 0;
+    const deployed = Boolean(snapshot.agent.openClawFlyAppId);
+    if (planActive && !deployed) {
+      deployFiredRef.current = true;
+      void deploy();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, snapshot, deploying]);
+
   const canSubmit = useMemo(() => {
     // W1.3 — a mobile-only founder with no landing page can submit with just a
     // store link; the store listing becomes Maya's product-context source.
@@ -815,7 +835,7 @@ function GtmOnboardingBody() {
                 <Spinner className="text-ink" /> Reading your product…
               </>
             ) : (
-              "Start research"
+              "Continue →"
             )}
           </button>
         </section>
@@ -931,69 +951,60 @@ function GtmOnboardingBody() {
           spinner overlay) and, on success, advances to Connect — where her now-
           live OpenClaw lets her text back instantly. Comped/active accounts skip
           the picker and go straight to Launch. */}
-      {stage === "plan" && (
-        <section className="border border-paper bg-ink-2 p-6">
-          {/* Back to Product to change anything before launching. Safe here
-              (pre-deploy); the draft is still in state so the form is filled in.
-              No back on Connect — by then her machine is already deployed. */}
-          <button
-            onClick={() => setStage("intake")}
-            disabled={deploying}
-            className="mb-4 text-sm text-paper-dim underline underline-offset-2 hover:text-paper disabled:opacity-50"
-          >
-            ← Back to your product
-          </button>
-          {(() => {
-            const pf = snapshot
-              ? planFeaturesGtm({ gtmPlanJson: snapshot.agent.gtmPlanJson })
-              : null;
-            const planActive =
-              !!pf && pf.status !== "none" && pf.maxActiveChannels > 0;
-            if (!planActive || !pf) return null;
-            const tierName =
-              pf.plan.charAt(0).toUpperCase() + pf.plan.slice(1);
+      {stage === "plan" &&
+        (() => {
+          const pf = snapshot
+            ? planFeaturesGtm({ gtmPlanJson: snapshot.agent.gtmPlanJson })
+            : null;
+          const planActive =
+            !!pf && pf.status !== "none" && pf.maxActiveChannels > 0;
+
+          // Paid → the tier picker is gone; auto-deploy is firing (see the
+          // AUTO-DEPLOY effect) and the full-screen spinner takes over. This
+          // is the fix for "why am I still looking at plans after I paid?".
+          if (planActive) {
             return (
-              <div className="mb-4 rounded border border-lime/40 bg-ink p-4 text-sm text-paper">
-                You&apos;re on <strong>{tierName}</strong> — you&apos;re all set.
-                Launch Maya below.
-              </div>
+              <section className="border border-paper bg-ink-2 p-8 text-center">
+                <Spinner className="mx-auto size-6 text-lime" />
+                <p className="mt-4 text-sm text-paper-dim">
+                  You&apos;re all set — bringing Maya online…
+                </p>
+              </section>
             );
-          })()}
+          }
 
-          <div className="border border-paper bg-ink p-5">
-            <h3 className="mb-2 font-display text-lg">Pick your plan</h3>
-            <p className="mb-4 text-sm text-paper-dim">
-              Start your 7-day free trial so Maya can go live and start posting
-              for you. Cancel any time before it ends and you won&apos;t be
-              charged. More channels (and Maya making your videos) unlock as you
-              go up.
-            </p>
-            <TierSelector
-              interval={billingInterval}
-              onIntervalChange={setBillingInterval}
-              busyTier={checkoutTier}
-              onSelect={chooseTier}
-            />
-            {checkoutError ? (
-              <p className="mt-3 text-sm text-red-400">{checkoutError}</p>
-            ) : null}
-          </div>
-
-          <button
-            onClick={deploy}
-            disabled={deploying}
-            className="mt-6 inline-flex items-center gap-2 rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {deploying ? (
-              <>
-                <Spinner className="text-ink" /> Launching…
-              </>
-            ) : (
-              "Launch Maya"
-            )}
-          </button>
-        </section>
-      )}
+          // Not paid yet → pick a plan. Choosing a tier starts the trial via
+          // Stripe; on return the plan goes active and deploy fires on its own.
+          return (
+            <section className="border border-paper bg-ink-2 p-6">
+              <button
+                onClick={() => setStage("intake")}
+                disabled={deploying}
+                className="mb-4 text-sm text-paper-dim underline underline-offset-2 hover:text-paper disabled:opacity-50"
+              >
+                ← Back to your product
+              </button>
+              <div className="border border-paper bg-ink p-5">
+                <h3 className="mb-2 font-display text-lg">Pick your plan</h3>
+                <p className="mb-4 text-sm text-paper-dim">
+                  Start your 7-day free trial so Maya can go live and start
+                  posting for you. Cancel any time before it ends and you
+                  won&apos;t be charged. More channels (and Maya making your
+                  videos) unlock as you go up.
+                </p>
+                <TierSelector
+                  interval={billingInterval}
+                  onIntervalChange={setBillingInterval}
+                  busyTier={checkoutTier}
+                  onSelect={chooseTier}
+                />
+                {checkoutError ? (
+                  <p className="mt-3 text-sm text-red-400">{checkoutError}</p>
+                ) : null}
+              </div>
+            </section>
+          );
+        })()}
 
       {/* Full-screen launch spinner — the Fly provision takes ~30-60s, so we
           cover the page with a clear, reassuring loader (never a frozen-looking
@@ -1007,11 +1018,11 @@ function GtmOnboardingBody() {
         >
           <Spinner className="size-10 text-lime" />
           <h2 className="mt-6 font-display text-2xl text-paper">
-            Launching your Maya…
+            Setting myself up…
           </h2>
           <p className="mt-3 max-w-sm text-sm text-paper-dim">
-            Provisioning her workspace and bringing her online. This takes about
-            a minute — then you&apos;ll connect Telegram and she&apos;ll text you.
+            Getting my workspace ready and coming online — about a minute. Next
+            you&apos;ll say hi on Telegram, and I&apos;ll take it from there.
           </p>
         </div>
       )}
