@@ -11,7 +11,7 @@
  *
  * Gating is server-side: every query fails closed against ADMIN_DASH_TOKEN.
  * The token lives in the URL (bookmark it); treat the link as a secret.
- * Route is in the public matcher (middleware) because there is no Clerk admin
+ * Route is in the public matcher (Proxy) because there is no Clerk admin
  * role — the Convex token check IS the gate.
  */
 

@@ -24,7 +24,7 @@ import { NextResponse } from "next/server";
  *     keeps the door open for any future flow that might POST to a creator URL.
  *
  * IMPORTANT: read at module-eval time. Next.js inlines `NEXT_PUBLIC_*` env at
- * build time for client bundles, but middleware runs server-side at request
+ * build time for client bundles, but Proxy runs server-side at request
  * time, so this picks up the deployed env without a rebuild flip.
  */
 const CREATOR_PRODUCT_ENABLED =
@@ -60,7 +60,7 @@ const isPublic = createRouteMatcher([
   "/clawlaunch(.*)",
   // Founder God-view — gated server-side by ADMIN_DASH_TOKEN (the Convex
   // queries fail closed without it). No Clerk role exists for this, so the
-  // route is "public" at the middleware layer and the token IS the gate.
+  // route is "public" at the Proxy layer and the token IS the gate.
   "/founder(.*)",
   "/privacy",
   "/terms",
@@ -74,7 +74,7 @@ const isPublic = createRouteMatcher([
   // Sprint 7 Slice B + Sprint 9.8 — iMessage-tap OAuth callback. The
   // state token in the URL IS the auth (bound to the creator's id in
   // `oauthStateTokens`); Clerk auth must not interpose. Without this,
-  // Clerk middleware redirects the OAuth callback to /sign-in and the
+  // Clerk Proxy redirects the OAuth callback to /sign-in and the
   // code/state never reach the route handler, breaking the iMessage
   // flow entirely.
   "/api/google-calendar/callback-imessage",
@@ -82,7 +82,7 @@ const isPublic = createRouteMatcher([
   "/api/account/delete/from-imessage",
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
+const proxy = clerkMiddleware(async (auth, req) => {
   // Feature-flag gate runs BEFORE auth.protect() so unauth visitors hitting
   // creator URLs get redirected to /business (a public route) instead of
   // /sign-in (which would land them in a flow that ultimately routes to
@@ -149,6 +149,8 @@ export default clerkMiddleware(async (auth, req) => {
     await auth.protect();
   }
 });
+
+export default proxy;
 
 export const config = {
   matcher: [
