@@ -21,7 +21,7 @@
  *   12. Deploy + first message.
  *
  * Single client component holds the full `OnboardingState` and renders the
- * active step. The Clerk Proxy (see `proxy.ts`) gates access — any
+ * active step. The Clerk middleware (see `middleware.ts`) gates access — any
  * unauthenticated visitor lands on `/sign-in` first.
  */
 

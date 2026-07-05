@@ -21,7 +21,7 @@ const instrumentSerif = Instrument_Serif({
  * `app/creators/page.tsx`) overrides this for the routes that have their
  * own. The default is flag-aware so unconfigured routes (sign-in, sign-up,
  * any future page that inherits) reflect whichever product is publicly
- * exposed — see `NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT` in `proxy.ts`.
+ * exposed — see `NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT` in `middleware.ts`.
  */
 const CREATOR_PRODUCT_ENABLED =
   process.env.NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT === "true";

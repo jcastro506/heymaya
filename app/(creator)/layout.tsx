@@ -18,7 +18,7 @@
  *   lead can either (a) redirect signed-in users from `/` → `/today` in the
  *   middleware or (b) move the landing under `(marketing)/` later.
  *
- * Auth: every URL under this layout is protected by `proxy.ts` — Clerk
+ * Auth: every URL under this layout is protected by `middleware.ts` — Clerk
  * redirects unauth visitors to /sign-in. The layout itself doesn't need an
  * extra auth gate; the queries each fail-closed if `getUserIdentity()` is
  * null.
