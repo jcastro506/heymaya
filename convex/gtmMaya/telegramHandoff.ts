@@ -55,6 +55,82 @@ export const getHandoffContext = internalQuery({
   },
 });
 
+/**
+ * SWITCHBOARD INBOUND ROUTER — the scalable shared-bot model.
+ *
+ * One shared @HeyMaya bot; its webhook points at CONVEX (never at a machine).
+ * Convex looks up which agent owns the chat and forwards the user's message to
+ * THAT agent's Fly machine as an agent turn. The machine answers via the
+ * `send_update` tool → Convex → Telegram (the single outbound pipe). This is the
+ * only model that works with a shared bot across many tenants — a per-machine
+ * webhook means only the LAST-deployed agent ever receives inbound.
+ */
+export const getInboundContextByChat = internalQuery({
+  args: { chatId: v.string() },
+  handler: async (ctx, args): Promise<GtmHandoffContext | null> => {
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", args.chatId))
+      .first();
+    if (!agent) return null;
+    return {
+      agent,
+      telegramChatId: agent.telegramChatId,
+      hookToken: agent.hookToken,
+      hookBaseUrl: agent.openClawFlyAppId
+        ? deriveHookBaseUrl(agent.openClawFlyAppId)
+        : undefined,
+    };
+  },
+});
+
+export const routeInboundToMachine = internalAction({
+  args: {
+    chatId: v.string(),
+    text: v.string(),
+    username: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ status: "ok" | "skipped"; reason: string }> => {
+    const ctxRow = await ctx.runQuery(
+      internal.gtmMaya.telegramHandoff.getInboundContextByChat,
+      { chatId: args.chatId }
+    );
+    if (!ctxRow) return { status: "skipped", reason: "no agent for this chat" };
+    if (!ctxRow.hookBaseUrl || !ctxRow.hookToken) {
+      return { status: "skipped", reason: "agent not deployed yet" };
+    }
+    const endpoint: HookEndpoint = {
+      baseUrl: ctxRow.hookBaseUrl,
+      token: ctxRow.hookToken,
+    };
+    try {
+      // deliver:false — Maya replies via her `send_update` tool (→ Convex →
+      // Telegram), the single outbound pipe; we only inject the inbound turn.
+      const result = await runAgentTurn(endpoint, {
+        message: args.text,
+        deliver: false,
+        thinking: "medium",
+        timeoutSeconds: 90,
+      });
+      if (!result.ok) {
+        console.warn(
+          `[inbound-route] runAgentTurn ${result.status}: ${result.error ?? "?"}`
+        );
+        return { status: "skipped", reason: `hook ${result.status}` };
+      }
+      return { status: "ok", reason: "forwarded to machine" };
+    } catch (err) {
+      console.warn(
+        `[inbound-route] forward failed: ${(err as Error).message}`
+      );
+      return { status: "skipped", reason: "forward error" };
+    }
+  },
+});
+
 export interface ResearchHandoffSummary {
   researchJobId: Id<"gtmResearchJobs">;
   primaryChannel?: string;
