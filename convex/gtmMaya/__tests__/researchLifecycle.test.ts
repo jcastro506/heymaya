@@ -12,6 +12,73 @@ function authedGtm(t: ReturnType<typeof convexTest>, subject: string) {
 }
 
 describe("GTM Maya research lifecycle", () => {
+  it("creates the missing agent row when Clerk webhook already created the creator", async () => {
+    const t = convexTest(schema, modules);
+    const user = authedGtm(t, "u_gtm_webhook_only");
+
+    const creatorId = await t.run((ctx) =>
+      ctx.db.insert("creators", {
+        clerkUserId: "u_gtm_webhook_only",
+        email: "u_gtm_webhook_only@clawlaunch.test",
+        channelPreference: "web",
+        timezone: "America/Los_Angeles",
+        status: "onboarding",
+        plan: "coach",
+        accountType: "gtm-agent",
+        createdAt: 1,
+      })
+    );
+
+    const appId = await user.mutation(
+      api.gtmMaya.researchLifecycle.setAppProfile,
+      {
+        name: "Maya",
+        url: "https://hey-maya.ai",
+        appType: "web",
+        conversionKind: "signup",
+        signupUrl: "https://hey-maya.ai",
+        differentiator:
+          "AI growth marketer that finds buyers and proves which posts drove signups.",
+        stage: "live-beta",
+        entryMode: "manager",
+        weekGoal: "signups",
+        userCountBand: "none",
+        canRecordScreen: false,
+        canShowFace: false,
+        canRecordVoice: false,
+        canProvideScreenshots: false,
+        canPostTikTokManually: false,
+        canPostInstagramManually: false,
+        existingTikTokUrl: "",
+        existingInstagramUrl: "",
+        existingYoutubeUrl: "",
+        existingLinkedinUrl: "",
+        existingXUrl: "",
+        tiktokWarmupState: "unknown",
+        tiktokAccountStatusChecked: false,
+        openToUgcCreators: false,
+        maxWeeklyVisualPosts: 3,
+        excludedAudiences: [],
+      }
+    );
+
+    const rows = await t.run(async (ctx) => {
+      const agent = await ctx.db
+        .query("gtmAgents")
+        .withIndex("by_account", (q) => q.eq("accountId", creatorId))
+        .first();
+      const app = await ctx.db.get(appId);
+      return { agent, app };
+    });
+
+    expect(rows.agent?.accountId).toStrictEqual(creatorId);
+    expect(rows.agent?.appId).toStrictEqual(appId);
+    expect(rows.agent?.channelPreference).toBe("web");
+    expect(rows.agent?.timezone).toBe("America/Los_Angeles");
+    expect(rows.app?.accountId).toStrictEqual(creatorId);
+    expect(rows.app?.name).toBe("Maya");
+  });
+
   it("creates an account, app, research job, evidence, scores, and cost ledger", async () => {
     const t = convexTest(schema, modules);
     const user = authedGtm(t, "u_gtm_lifecycle");
