@@ -280,7 +280,7 @@ export const setAppProfile = mutation({
     diagnosis: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<Id<"gtmApps">> => {
-    const { creator, agent } = await requireMyGtmAgent(ctx);
+    const { creator, agent } = await ensureMyGtmAgent(ctx);
     const now = Date.now();
     const existing = await ctx.db
       .query("gtmApps")
@@ -854,6 +854,36 @@ async function requireMyGtmAgent(
     .withIndex("by_account", (q) => q.eq("accountId", creator._id))
     .first();
   if (!agent) throw new Error("GTM Maya agent row missing.");
+  return { creator, agent };
+}
+
+async function ensureMyGtmAgent(
+  ctx: MutationCtx
+): Promise<{ creator: Doc<"creators">; agent: Doc<"gtmAgents"> }> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("GTM Maya mutation requires a signed-in user.");
+  const existingCreator = await ctx.db
+    .query("creators")
+    .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+    .first();
+  const channelPreference =
+    existingCreator?.channelPreference === "web" ||
+    existingCreator?.channelPreference === "telegram" ||
+    existingCreator?.channelPreference === "whatsapp" ||
+    existingCreator?.channelPreference === "imessage"
+      ? existingCreator.channelPreference
+      : "telegram";
+  const { accountId, agentId } = await findOrCreateGtmAgent(ctx, {
+    clerkUserId: identity.subject,
+    email: identity.email ?? `${identity.subject}@unknown.clawlaunch`,
+    channelPreference,
+    timezone: existingCreator?.timezone ?? "America/New_York",
+  });
+  const creator = await ctx.db.get(accountId);
+  const agent = await ctx.db.get(agentId);
+  if (!creator || creator.accountType !== "gtm-agent" || !agent) {
+    throw new Error("GTM Maya account bootstrap failed.");
+  }
   return { creator, agent };
 }
 
