@@ -227,12 +227,19 @@ function GtmOnboardingBody() {
     deepLink: string;
     botUsername: string;
   } | null>(null);
+  const [clerkLoadTimedOut, setClerkLoadTimedOut] = useState(false);
   // Retry counter for minting the pairing link (the agent row can still be
   // settling right after onboarding) so the Connect screen never hangs.
   const [pairRetry, setPairRetry] = useState(0);
   // One-shot guard: resume the founder at the furthest-reached step on initial
   // load (refresh / return-from-Stripe), instead of always restarting at intake.
   const resumedRef = useRef(false);
+
+  useEffect(() => {
+    if (isClerkLoaded) return;
+    const timeout = setTimeout(() => setClerkLoadTimedOut(true), 6000);
+    return () => clearTimeout(timeout);
+  }, [isClerkLoaded]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -330,8 +337,10 @@ function GtmOnboardingBody() {
     draft.differentiator,
   ]);
   const authPending =
-    !isClerkLoaded || (Boolean(isSignedIn) && isConvexAuthLoading);
-  const signedOut = isClerkLoaded && !isSignedIn;
+    !clerkLoadTimedOut &&
+    (!isClerkLoaded || (Boolean(isSignedIn) && isConvexAuthLoading));
+  const signedOut =
+    (isClerkLoaded && !isSignedIn) || (!isClerkLoaded && clerkLoadTimedOut);
   const authMismatch =
     isClerkLoaded &&
     Boolean(isSignedIn) &&
