@@ -981,10 +981,12 @@ export function buildGatewayConfig(
           : {}),
       },
     },
-    // Enable internal hook runtime so BOOT.md fires on gateway startup
-    // as a real native primitive (not just a workspace file Maya happens
-    // to read). BOOT.md owns the immediate hello and first GTM launch
-    // wave. HEARTBEAT.md is only the watchdog/recovery lane.
+    // Enable external webhooks so Convex can wake Maya via /hooks/{agent,wake}
+    // using the per-agent HOOK_TOKEN Fly secret. `internal` also stays enabled
+    // so BOOT.md fires on gateway startup as a real native primitive (not just
+    // a workspace file Maya happens to read). BOOT.md owns the immediate hello
+    // and first GTM launch wave. HEARTBEAT.md is only the watchdog/recovery
+    // lane.
     //
     // `hooks` is a TOP-LEVEL config key per OpenClaw 2026.4.23 zod
     // schema (sibling of `gateway`, `agents`, `plugins`) — NOT a key
@@ -992,6 +994,10 @@ export function buildGatewayConfig(
     // it under `agents.defaults` and the gateway rejected the config
     // with "agents.defaults: Unrecognized key: hooks".
     hooks: {
+      enabled: true,
+      path: "/hooks",
+      token: "$HOOK_TOKEN",
+      allowedAgentIds: ["main"],
       internal: {
         enabled: true,
       },
