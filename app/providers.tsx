@@ -61,24 +61,27 @@ export function Providers({ children }: { children: ReactNode }) {
 }
 
 function useConvexAuthFromClerk() {
-  const { isLoaded, isSignedIn, getToken, sessionClaims } = useAuth();
-  const sessionAudience = sessionClaims?.aud;
+  const { isLoaded, isSignedIn, sessionId } = useAuth();
 
   const fetchAccessToken = useCallback(
     async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
+      if (!isLoaded || !isSignedIn || !sessionId) return null;
       try {
-        return await getToken({
-          template: sessionAudience === "convex" ? undefined : "convex",
-          skipCache: forceRefreshToken,
+        const res = await fetch("/api/auth/convex-token", {
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: forceRefreshToken
+            ? { "x-convex-force-refresh": "1" }
+            : undefined,
         });
+        if (!res.ok) return null;
+        const body = (await res.json()) as { token?: unknown };
+        return typeof body.token === "string" ? body.token : null;
       } catch {
         return null;
       }
     },
-    // `getToken` may not be referentially stable; key Convex auth refreshes on
-    // Clerk auth state instead so setAuth is not repeatedly torn down.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLoaded, isSignedIn, sessionAudience]
+    [isLoaded, isSignedIn, sessionId]
   );
 
   return useMemo(
