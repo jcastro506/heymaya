@@ -80,7 +80,11 @@ describe("Maya GTM OpenClaw deploy config", () => {
     // (sibling of `agents`, `plugins`, `gateway`) per OpenClaw 2026.4.23
     // schema. BOOT.md fires on gateway startup as a real native primitive
     // (not just a workspace file).
-    expect(bootstrap.gatewayConfig.hooks).toEqual({
+    expect(bootstrap.gatewayConfig.hooks).toMatchObject({
+      enabled: true,
+      path: "/hooks",
+      token: "$HOOK_TOKEN",
+      allowedAgentIds: ["main"],
       internal: { enabled: true },
     });
     // (The `llm.idleTimeoutSeconds` sub-key was valid in 4.23 but 5.x dropped
