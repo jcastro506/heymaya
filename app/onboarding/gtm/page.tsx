@@ -165,10 +165,7 @@ function GtmOnboardingBody() {
   // required" — a race, not a real error.
   const { isLoaded: isClerkLoaded, isSignedIn } = useAuth();
   const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
-  const snapshot = useQuery(
-    api.gtmMaya.researchLifecycle.getMyGtmSnapshot,
-    isAuthenticated ? {} : "skip"
-  );
+  const snapshot = useQuery(api.gtmMaya.researchLifecycle.getMyGtmSnapshot);
   const startOnboarding = useMutation(
     api.gtmMaya.researchLifecycle.startGtmOnboarding
   );
@@ -193,10 +190,7 @@ function GtmOnboardingBody() {
   const createPairingToken = useMutation(
     api.gtmMaya.telegramPairing.createPairingToken
   );
-  const pairingStatus = useQuery(
-    api.gtmMaya.telegramPairing.getMyPairingStatus,
-    isAuthenticated ? {} : "skip"
-  );
+  const pairingStatus = useQuery(api.gtmMaya.telegramPairing.getMyPairingStatus);
   // Tier selection → Stripe checkout. Picking a plan starts the 7-day trial;
   // the webhook grants the trialing plan (so planFeaturesGtm flips from the
   // fail-closed maxActiveChannels:0 default to the chosen tier's caps) on the
