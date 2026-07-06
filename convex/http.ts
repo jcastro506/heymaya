@@ -54,6 +54,7 @@ import {
   calendarListEventsHttp,
   calendarUpdateEventHttp,
 } from "./lcMaya/calendarHttp";
+import { stripeWebhookHttp } from "./billing/stripeWebhookHttp";
 import { telegramWebhookHttp } from "./gtmMaya/telegramWebhook";
 import { deliveryFailureHttp } from "./gtmMaya/deliveryFailures";
 import {
@@ -218,6 +219,14 @@ const http = httpRouter();
 // (later sprints) inbound user messages. Authenticated by the
 // X-Telegram-Bot-Api-Secret-Token header. See
 // convex/gtmMaya/telegramWebhook.ts for the contract.
+// Stripe billing webhook — lives on Convex so delivery never depends on the
+// web deployment being publicly reachable (staging's Vercel SSO blocked the
+// Next route → checkout loop, 2026-07-06). Signature-verified inside.
+http.route({
+  path: "/stripe/webhook",
+  method: "POST",
+  handler: stripeWebhookHttp,
+});
 http.route({
   path: "/telegram/webhook",
   method: "POST",

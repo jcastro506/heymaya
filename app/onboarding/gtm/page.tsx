@@ -176,7 +176,9 @@ function GtmOnboardingBody() {
   const registerWalkthroughUpload = useMutation(
     api.gtmMaya.walkthrough.registerWalkthroughUpload
   );
-  const inspectApp = useAction(api.gtmMaya.appInspector.inspectMyGtmApp);
+  // Queued server-side (10-30s crawl + LLM picture) — the Continue button must
+  // never block on work the next screen doesn't need.
+  const queueInspection = useMutation(api.gtmMaya.appInspector.queueMyAppInspection);
   const analyzeWalkthrough = useAction(
     api.gtmMaya.walkthrough.analyzeMyWalkthroughUpload
   );
@@ -474,7 +476,7 @@ function GtmOnboardingBody() {
       // walkthrough analysis: persistAppDiagnosis REPLACES gtmApps.diagnosis,
       // while analyzeWalkthrough MERGES its result under `.walkthrough` — so
       // inspecting first preserves both signals; the reverse order clobbers.
-      await inspectApp({ appId });
+      await queueInspection({ appId }); // returns immediately; inspection runs server-side
       if (walkthroughFile) {
         const uploadUrl = await generateWalkthroughUploadUrl({});
         const uploadRes = await fetch(uploadUrl, {
