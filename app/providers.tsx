@@ -75,7 +75,10 @@ function useConvexAuthFromClerk() {
         return null;
       }
     },
-    [getToken, sessionAudience]
+    // `getToken` may not be referentially stable; key Convex auth refreshes on
+    // Clerk auth state instead so setAuth is not repeatedly torn down.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isLoaded, isSignedIn, sessionAudience]
   );
 
   return useMemo(
