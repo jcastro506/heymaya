@@ -69,6 +69,10 @@ vi.mock("@/convex/_generated/api", () => ({
         reportMyConversion: "reportMyConversion",
       },
       steering: { listMySteeringDirectives: "listMySteeringDirectives" },
+      planDoc: {
+        getMyPlanDoc: "getMyPlanDoc",
+        approveMyPlan: "approveMyPlan",
+      },
       mediaAssets: { getMyMediaAssets: "getMyMediaAssets" },
       researchLifecycle: { getMyGtmSnapshot: "getMyGtmSnapshot" },
       calendarWrite: { getMyCalendarEvents: "getMyCalendarEvents" },

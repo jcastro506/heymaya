@@ -136,6 +136,15 @@ function DraftCard({ d }: { d: QueueDraft }) {
 
       {d.thread ? <ThreadContext thread={d.thread} /> : null}
 
+      {d.rationale ? (
+        <p className="mt-3 rounded-lg bg-paper/5 p-2.5 text-xs leading-relaxed text-paper-dim">
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
+            Why{" "}
+          </span>
+          {d.rationale}
+        </p>
+      ) : null}
+
       {segments ? (
         <ol className="mt-3 space-y-2">
           {segments.map((seg, i) => (

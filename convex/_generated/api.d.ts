@@ -64,6 +64,7 @@ import type * as billing_gtmBilling from "../billing/gtmBilling.js";
 import type * as billing_portal from "../billing/portal.js";
 import type * as billing_priceIds from "../billing/priceIds.js";
 import type * as billing_stripeClient from "../billing/stripeClient.js";
+import type * as billing_stripeWebhookHttp from "../billing/stripeWebhookHttp.js";
 import type * as billing_webhook from "../billing/webhook.js";
 import type * as businessReadiness from "../businessReadiness.js";
 import type * as creatorMayaV0_backend from "../creatorMayaV0/backend.js";
@@ -146,6 +147,7 @@ import type * as gtmMaya_openclaw_traceCapture from "../gtmMaya/openclaw/traceCa
 import type * as gtmMaya_openrouterSpend from "../gtmMaya/openrouterSpend.js";
 import type * as gtmMaya_outboundFirewall from "../gtmMaya/outboundFirewall.js";
 import type * as gtmMaya_phase2Trigger from "../gtmMaya/phase2Trigger.js";
+import type * as gtmMaya_planDoc from "../gtmMaya/planDoc.js";
 import type * as gtmMaya_planGtm from "../gtmMaya/planGtm.js";
 import type * as gtmMaya_platformAlgo from "../gtmMaya/platformAlgo.js";
 import type * as gtmMaya_platformIntelligence from "../gtmMaya/platformIntelligence.js";
@@ -392,6 +394,7 @@ declare const fullApi: ApiFromModules<{
   "billing/portal": typeof billing_portal;
   "billing/priceIds": typeof billing_priceIds;
   "billing/stripeClient": typeof billing_stripeClient;
+  "billing/stripeWebhookHttp": typeof billing_stripeWebhookHttp;
   "billing/webhook": typeof billing_webhook;
   businessReadiness: typeof businessReadiness;
   "creatorMayaV0/backend": typeof creatorMayaV0_backend;
@@ -474,6 +477,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/openrouterSpend": typeof gtmMaya_openrouterSpend;
   "gtmMaya/outboundFirewall": typeof gtmMaya_outboundFirewall;
   "gtmMaya/phase2Trigger": typeof gtmMaya_phase2Trigger;
+  "gtmMaya/planDoc": typeof gtmMaya_planDoc;
   "gtmMaya/planGtm": typeof gtmMaya_planGtm;
   "gtmMaya/platformAlgo": typeof gtmMaya_platformAlgo;
   "gtmMaya/platformIntelligence": typeof gtmMaya_platformIntelligence;

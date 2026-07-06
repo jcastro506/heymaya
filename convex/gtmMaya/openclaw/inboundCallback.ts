@@ -716,6 +716,7 @@ interface DraftedContentPayload {
   targetThreadId?: string;
   targetAccountId?: string;
   draftText: string;
+  rationale?: string;
   draftSegments?: string[];
   researchJobId?: string;
   // Sprint C — content-attribute tags for attribute→outcome learning.
@@ -779,6 +780,7 @@ export const draftedContentHttp = httpAction(async (ctx, request) => {
         | Id<"gtmTargetAccounts">
         | undefined,
       draftText: body.draftText,
+      rationale: typeof body.rationale === "string" ? body.rationale : undefined,
       draftSegments: body.draftSegments,
       attributes: body.attributes,
     });

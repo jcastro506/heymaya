@@ -55,6 +55,7 @@ import {
   calendarUpdateEventHttp,
 } from "./lcMaya/calendarHttp";
 import { stripeWebhookHttp } from "./billing/stripeWebhookHttp";
+import { savePlanDocHttp } from "./gtmMaya/planDoc";
 import { telegramWebhookHttp } from "./gtmMaya/telegramWebhook";
 import { deliveryFailureHttp } from "./gtmMaya/deliveryFailures";
 import {
@@ -524,6 +525,13 @@ http.route({
   handler: updateProductFactHttp,
 });
 // Sprint B — Maya records the strategy approval state (propose→approve gate).
+// PLAN_APPROVAL_LOOP_V1 — Maya saves the STRUCTURED plan (versioned,
+// amendable) that the web approval screen renders.
+http.route({
+  path: "/lc_gtm/save_plan_doc",
+  method: "POST",
+  handler: savePlanDocHttp,
+});
 http.route({
   path: "/lc_gtm/set_strategy_approval",
   method: "POST",

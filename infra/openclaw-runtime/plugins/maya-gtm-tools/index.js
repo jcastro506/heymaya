@@ -316,7 +316,7 @@ function categoryForTool(name) {
   )
     return "draft";
   if (
-    /^(save_foundation_|set_north_star$|set_strategy_approval$|save_voice_profile$|save_style_exemplars$|set_channel_warmth$|save_competitor_move$|save_niche_pulse_signal$|save_learning$|save_diagnosis$|save_experiment$|set_channel_warmth$)/.test(
+    /^(save_foundation_|set_north_star$|set_strategy_approval$|save_plan_doc$|save_voice_profile$|save_style_exemplars$|set_channel_warmth$|save_competitor_move$|save_niche_pulse_signal$|save_learning$|save_diagnosis$|save_experiment$|set_channel_warmth$)/.test(
       name
     )
   )
@@ -807,11 +807,12 @@ export default defineToolPlugin({
       name: "save_draft",
       label: "Save Drafted Content",
       description:
-        "Persist a drafted reply/post/thread/comment/dm. REQUIRED: kind, platform, draftText (<=12000 chars). This is the actionable output — drafting in chat without calling this means nothing reaches the operator's queue.",
+        "Persist a drafted reply/post/thread/comment/dm. REQUIRED: kind, platform, draftText (<=12000 chars), and rationale — one or two plain sentences the FOUNDER reads on the draft card: why this thread, why this angle, what outcome you expect (e.g. 'r/SaaS founder asking exactly what we solve, 2h old. Plan bet #1. Expect profile clicks.'). A draft without a rationale is an incomplete save. Drafting in chat without calling this means nothing reaches the operator's queue.",
       parameters: Type.Object({
         kind: Enum(["reply", "thread", "post", "comment", "dm"]),
         platform: Enum(PLATFORM_7),
         draftText: Type.String({ description: "<= 12000 chars." }),
+        rationale: Type.Optional(Type.String({ description: "Why this thread + angle + expected outcome, founder-readable, <=600 chars." })),
         targetThreadId: Type.Optional(Type.String()),
         targetAccountId: Type.Optional(Type.String()),
         researchJobId: Type.Optional(Type.String()),
@@ -1079,6 +1080,18 @@ export default defineToolPlugin({
         idempotencyKey: IdemKey,
       }),
       execute: async (p, _cfg, ctx) => postLc("set_strategy_approval", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+    tool({
+      name: "save_plan_doc",
+      label: "Save Plan Document",
+      description:
+        "PLAN_APPROVAL_LOOP: whenever you present or amend your plan to the founder, ALSO save it here as a STRUCTURED object — this is what their web approval screen renders and what versions/amendments diff against. Pass plan = { read (what their product is, 1-2 sentences), goal { metric, target, byMs }, moves (2-4: { name, channel, intent, budget, expect, horizon }), notDoing ([{ channel, why }] — reasoned omissions are mandatory), week (postsPerWeek, repliesPerDay, tone), asks (['approve','connect reddit'…]) }. On an AMENDMENT (founder asked for a change): pass the full updated plan PLUS directive (their ask, verbatim-ish) and diff (one line: what changed). Versioning is server-owned; saving after approval returns the plan to proposed for re-approval. Returns { ok, version }.",
+      parameters: Type.Object({
+        plan: Type.Record(Type.String(), Type.Unknown()),
+        directive: Type.Optional(Type.String()),
+        diff: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("save_plan_doc", p, ctx.signal),
     }),
 
     // --- Voice + per-channel warmth (Phase 0 + ban-safety arc) ---

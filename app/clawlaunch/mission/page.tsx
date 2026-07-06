@@ -130,6 +130,7 @@ export default function TodayPage() {
   const health = useQuery(api.gtmMaya.missionActions.getMyConnectionHealth);
   const attribution = useQuery(api.gtmMaya.missionControl.getMyPostAttribution, {});
   const conversions = useQuery(api.gtmMaya.missionControl.getMyConversions);
+  const planDoc = useQuery(api.gtmMaya.planDoc.getMyPlanDoc);
 
   const sessions = useMemo(
     () => groupIntoSessions(activity ?? []),
@@ -162,7 +163,8 @@ export default function TodayPage() {
   const broken = (health ?? []).filter(
     (h) => h.status === "reconnect_required" || h.status === "error"
   );
-  const needsYouCount = awaitingApproval.length + broken.length;
+  const planAwaiting = planDoc?.plan?.status === "proposed";
+  const needsYouCount = awaitingApproval.length + broken.length + (planAwaiting ? 1 : 0);
 
   // ── Today's plan rail ───────────────────────────────────────────────────
   const todayStart = startOfTodayMs();
@@ -209,6 +211,24 @@ export default function TodayPage() {
       {needsYouCount > 0 ? (
         <Section title="Needs you" count={needsYouCount}>
           <div className="space-y-2">
+            {planAwaiting ? (
+              <Card className="flex items-center justify-between gap-4 border-l-2 border-l-lime">
+                <div className="min-w-0">
+                  <p className="text-sm text-paper">
+                    Her plan for your product is ready (v{planDoc?.plan?.version})
+                  </p>
+                  <p className="mt-0.5 text-xs text-paper-dim">
+                    Read it, push back in Telegram, or approve — nothing runs until you do.
+                  </p>
+                </div>
+                <Link
+                  href="/clawlaunch/mission/brain"
+                  className="shrink-0 rounded-full bg-paper px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-ink hover:opacity-85"
+                >
+                  Review
+                </Link>
+              </Card>
+            ) : null}
             {awaitingApproval.length > 0 ? (
               <Card className="flex items-center justify-between gap-4 border-l-2 border-l-lime">
                 <div className="min-w-0">

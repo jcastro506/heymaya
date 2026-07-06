@@ -25,6 +25,7 @@ import {
   ExtLink,
 } from "../_components";
 import { FoundationInsights } from "./_FoundationInsights";
+import { PlanApproval } from "./_PlanApproval";
 
 const KIND_TONE: Record<string, "lime" | "paper" | "rose"> = {
   direct: "rose",
@@ -96,6 +97,9 @@ export default function BrainPage() {
       title="Brain"
       subtitle="Everything Maya knows and every call she's made — grounded in real threads, not guesses."
     >
+      {/* ───────── The plan — read, argue (in Telegram), approve ───────── */}
+      <PlanApproval />
+
       {/* ───────── Her strategy read: product picture, channel bets, angles ───────── */}
       {insights ? <FoundationInsights data={insights} /> : null}
 

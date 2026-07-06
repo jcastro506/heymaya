@@ -395,6 +395,8 @@ export const recordDraftedContent = internalMutation({
     targetThreadId: v.optional(v.id("gtmTargetThreads")),
     targetAccountId: v.optional(v.id("gtmTargetAccounts")),
     draftText: v.string(),
+    /** PLAN_APPROVAL_LOOP_V1 §6 — why this thread/angle + expected outcome. */
+    rationale: v.optional(v.string()),
     draftSegments: v.optional(v.array(v.string())),
     // Sprint C — content-attribute tags for attribute→outcome learning.
     attributes: v.optional(
@@ -467,6 +469,7 @@ export const recordDraftedContent = internalMutation({
       targetThreadId: args.targetThreadId,
       targetAccountId: args.targetAccountId,
       draftText: args.draftText,
+      rationale: args.rationale?.slice(0, 600),
       draftSegments: args.draftSegments,
       attributes: args.attributes,
       voiceMatchScore: args.voiceMatchScore,

@@ -1,0 +1,150 @@
+"use client";
+
+/**
+ * PLAN_APPROVAL_LOOP_V1 — the plan as the founder reads, argues with, and
+ * approves it. Renders planDocJson: her read, the goal, the moves, what she's
+ * deliberately NOT doing, the week shape, and the amendment history. One
+ * button. Discussion happens in Telegram; every exchange shows up here as a
+ * new version.
+ */
+
+import { useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { Card, Pill, Section, ActionButton, timeAgo } from "../_components";
+
+export function PlanApproval() {
+  const data = useQuery(api.gtmMaya.planDoc.getMyPlanDoc);
+  const approve = useMutation(api.gtmMaya.planDoc.approveMyPlan);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!data?.plan) return null;
+  const { plan } = data;
+  const approved = plan.status === "approved";
+
+  const doApprove = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await approve({});
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section title={approved ? "The plan (approved)" : "Her plan — your call"}>
+      <Card className={approved ? "" : "border-l-2 border-l-lime"}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Pill tone={approved ? "lime" : "paper"}>
+            {approved ? "approved" : "waiting on you"}
+          </Pill>
+          <span className="font-mono text-[11px] text-paper-faint">v{plan.version}</span>
+        </div>
+
+        {plan.read ? (
+          <p className="mt-3 font-display text-lg italic leading-snug text-paper">
+            “{plan.read}”
+          </p>
+        ) : null}
+
+        {plan.goal?.metric ? (
+          <p className="mt-3 text-sm text-paper">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
+              Goal{" "}
+            </span>
+            {plan.goal.target ? `${plan.goal.target} ` : ""}
+            {plan.goal.metric}
+            {plan.goal.byMs
+              ? ` by ${new Date(plan.goal.byMs).toLocaleDateString([], { month: "short", day: "numeric" })}`
+              : ""}
+          </p>
+        ) : null}
+
+        {(plan.moves ?? []).length > 0 ? (
+          <div className="mt-4">
+            <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
+              The moves
+            </p>
+            <ol className="space-y-2">
+              {(plan.moves ?? []).map((m, i) => (
+                <li key={i} className="rounded-lg border border-paper-faint/15 bg-ink p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-paper">{m.name}</span>
+                    {m.channel ? <Pill tone="paper">{m.channel === "x" ? "X" : m.channel}</Pill> : null}
+                  </div>
+                  {m.intent ? (
+                    <p className="mt-1 text-xs leading-relaxed text-paper-dim">{m.intent}</p>
+                  ) : null}
+                  {m.expect ? (
+                    <p className="mt-1 text-[11px] text-paper-faint">Expecting: {m.expect}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
+
+        {(plan.notDoing ?? []).length > 0 ? (
+          <div className="mt-4">
+            <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
+              Deliberately not doing
+            </p>
+            <ul className="space-y-1">
+              {(plan.notDoing ?? []).map((n, i) => (
+                <li key={i} className="text-xs leading-relaxed text-paper-dim">
+                  <span className="text-paper">{n.channel ?? "—"}</span> · {n.why}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {plan.week ? (
+          <p className="mt-4 text-xs leading-relaxed text-paper-dim">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
+              A normal week{" "}
+            </span>
+            {Object.entries(plan.week)
+              .map(([k, v]) => `${k.replace(/([A-Z])/g, " $1").toLowerCase()}: ${String(v)}`)
+              .join(" · ")}
+          </p>
+        ) : null}
+
+        {(plan.amendments ?? []).length > 0 ? (
+          <details className="mt-4 border-t border-paper-faint/10 pt-3">
+            <summary className="cursor-pointer font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
+              Changes you asked for · {(plan.amendments ?? []).length}
+            </summary>
+            <ol className="mt-2 space-y-1.5">
+              {(plan.amendments ?? []).map((a, i) => (
+                <li key={i} className="text-xs leading-relaxed text-paper-dim">
+                  <span className="font-mono text-[10px] text-paper-faint">v{a.v}</span> “
+                  {a.directive}” → {a.diff}
+                  <span className="ml-1 font-mono text-[10px] text-paper-faint">
+                    {timeAgo(a.atMs)}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </details>
+        ) : null}
+
+        {!approved ? (
+          <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-paper-faint/10 pt-4">
+            <ActionButton onClick={() => void doApprove()} busy={busy}>
+              Approve the plan
+            </ActionButton>
+            <span className="text-[11px] text-paper-faint">
+              Want changes? Just tell her in Telegram — the plan updates here.
+            </span>
+          </div>
+        ) : null}
+        {error ? <p className="mt-2 text-xs text-[#b3261e]">{error}</p> : null}
+      </Card>
+    </Section>
+  );
+}
