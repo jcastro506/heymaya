@@ -30,13 +30,16 @@ If the video isn't in the founder's voice, with their real product, accurately, 
 1. **Borrow the structure from the specialist.** Creatify's script writer is trained on what performs on social (proven hooks, pacing, retention beats). I use it as the *skeleton* — I don't write a 30s ad structure from a blank page. (Via `get_inspirations` for proven format recipes, and/or a structurally-strong first draft.)
 2. **Voice-pass it — mine, not theirs.** I rewrite the words into the FOUNDER'S voice from the Voice Profile + the grounded Product Fact Sheet. Their phrasing, their positioning. The structure stays; the voice becomes theirs. Creatify's writer is voice-blind by design — this step is the moat.
 3. **Ground every claim.** Prices, counts, outcomes, the activation moment — all from the fact sheet, verified-only. Never invent a product claim or a metric. Grounded-or-silent applies to video.
-4. **Pass the final script as `avatarScript`.** That's the in-voice, grounded script the avatar performs.
+4. **Build the sandwich, not a statue.** A single static talking head is the WEAK form of UGC. My default is the multi-scene sandwich via `scenes`:
+   `[{ script: <hook, avatar to camera> }, { script: <proof, as voiceover>, brollUrl: <REAL product footage/screenshot from search_my_media> }, { script: <CTA, avatar> }]`
+   The b-roll is the founder's real product — never generated fake UI. `avatarScript` still carries the full script (used as the single scene only when `scenes` is omitted, e.g. a quick reaction clip).
+5. **Pick the creator ONCE.** `scenes` requires an explicit avatar: `list_ugc_avatars({ style: "selfie" })`, choose the persona whose vibe matches the ICP, note its id + a voice id, and `save_learning` the choice. Every future UGC video reuses the SAME `overrideAvatar` + `overrideVoice` — one consistent face and voice is what makes the founder's channel read as a real creator instead of rotating AI slop.
 
 For video specifically, structure matters more than literal voice (a UGC clip is *supposed* to sound like a punchy testimonial, not a tweet) — so the voice-pass is lighter than for a text post, and acts mostly as a brand/claims guardrail. But it always runs.
 
 ## Lifecycle
 
-`check_creative_budget` (FIRST) → write + voice-pass the script → `make_ugc_video` (avatarScript) → poll `check_video_job` to terminal → `send_media_to_user`. The render is durable server-side; I don't babysit it, but I check before promising a finished video.
+`check_creative_budget` (FIRST — its `remainingCredits` is the REAL account balance; if it's lower than the plan math implies, trust it) → write + voice-pass the script → `make_ugc_video` (scenes sandwich + pinned avatar/voice; avatarScript fallback) → poll `check_video_job` to terminal → `send_media_to_user`. The render is durable server-side; I don't babysit it, but I check before promising a finished video.
 
 ## Cost cue
 
@@ -57,7 +60,8 @@ Server-gated to Studio (`canUgc`). On a non-Studio account `make_ugc_video` fail
 ## Tools reference
 
 - `check_creative_budget` — poll the creative-credit budget + pacing mode FIRST, before any render.
-- `make_ugc_video` — start the Aurora UGC render with the grounded, voice-passed `avatarScript`.
+- `make_ugc_video` — start the UGC render: `scenes` sandwich (avatar hook → real-product b-roll → avatar CTA) with the pinned avatar/voice; `avatarScript` alone for a single-scene clip.
+- `list_ugc_avatars` — free read of personas + voices; used once to pick (then pin) the founder's "creator".
 - `check_video_job` — poll the job to terminal (`done` → `mediaStorageId`).
 - `send_media_to_user` — deliver the finished video.
 - `search_my_media` / `get_my_foundation` — ground the script in real product + buyer truth.

@@ -41,8 +41,12 @@ import {
   createLinkToVideoPreviews,
   createLipsyncV2,
   createLipsyncWithAurora,
+  createInspirationJob,
   getCreatifyJob,
   getInspirations,
+  getPersonasV2,
+  getRemainingCredits,
+  getVoices,
   renderLinkToVideoPreview,
   updateLink,
 } from "../integrations/creatify/endpoints";
@@ -60,12 +64,20 @@ type ImageMode = "iab_images";
 // Aurora UGC avatar video — Studio-only, paced by the creative CREDIT budget
 // (creativeBudgetGate), NOT the standard videoCreditsMonth count cap.
 type UgcMode = "ugc_avatar" | "ugc_avatar_v2";
-/** Any persisted Creatify job — video, static image, or UGC — share the poll loop. */
-type JobMode = VideoMode | ImageMode | UgcMode;
+/** Inspiration template renders (gen_type image|video decided per template). */
+type InspirationMode = "inspiration";
+/** Any persisted Creatify job — video, image, UGC, or inspiration — share the poll loop. */
+type JobMode = VideoMode | ImageMode | UgcMode | InspirationMode;
 
 /** True for the static-image modes (gated by canImage + assetCreditsMonth). */
 function isImageMode(mode: JobMode): mode is ImageMode {
   return mode === "iab_images";
+}
+
+/** Does this job produce an IMAGE deliverable (drives caps + ingest kind)? */
+function producesImage(j: { mode: JobMode; genType?: "image" | "video" }): boolean {
+  if (isImageMode(j.mode)) return true;
+  return j.mode === "inspiration" && j.genType === "image";
 }
 
 /** True for the Aurora UGC avatar mode (gated by canUgc + the credit budget). */
@@ -110,6 +122,8 @@ interface CreatifyJobEntry {
   attempts: number;
   productUrl?: string;
   refUrl?: string; // reference video (ad_clone)
+  /** Inspiration renders: what the template produces (drives cap + ingest kind). */
+  genType?: "image" | "video";
   /** Preview-first url_to_video: "preview" until Maya picks, then "render". */
   phase?: "preview" | "render";
   /** Preview candidates surfaced by preview_list_async (Maya picks one). */
@@ -194,7 +208,7 @@ export function countRecentVideos(jobsJson: string | null): number {
   const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
   return parseJobs(jobsJson ?? undefined)
     .filter(
-      (j) => j.createdAt >= since && j.status !== "failed" && !isImageMode(j.mode)
+      (j) => j.createdAt >= since && j.status !== "failed" && !producesImage(j)
     )
     .reduce((sum, j) => sum + (j.mode === "ad_clone" ? AD_CLONE_CAP_WEIGHT : 1), 0);
 }
@@ -203,7 +217,7 @@ export function countRecentVideos(jobsJson: string | null): number {
 function countRecentAssets(jobsJson: string | null): number {
   const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
   return parseJobs(jobsJson ?? undefined).filter(
-    (j) => j.createdAt >= since && j.status !== "failed" && isImageMode(j.mode)
+    (j) => j.createdAt >= since && j.status !== "failed" && producesImage(j)
   ).length;
 }
 
@@ -252,6 +266,7 @@ export const appendJob = internalMutation({
     productUrl: v.optional(v.string()),
     refUrl: v.optional(v.string()),
     phase: v.optional(v.union(v.literal("preview"), v.literal("render"))),
+    genType: v.optional(v.union(v.literal("image"), v.literal("video"))),
   },
   handler: async (ctx, args): Promise<void> => {
     const agent = await ctx.db.get(args.agentId);
@@ -265,6 +280,7 @@ export const appendJob = internalMutation({
       status: args.status,
       attempts: 0,
       phase: args.phase,
+      genType: args.genType,
       productUrl: args.productUrl,
       refUrl: args.refUrl,
       createdAt: now,
@@ -770,7 +786,20 @@ export const startInspirationQuery = internalAction({
   handler: async (
     _ctx,
     _args
-  ): Promise<{ ok: boolean; reason?: string; recipes?: Array<{ id: string; name: string | null }> }> => {
+  ): Promise<{
+    ok: boolean;
+    reason?: string;
+    recipes?: Array<{
+      id: string;
+      name: string | null;
+      genType: string | null;
+      creditCost: number | null;
+      previewImage: string | null;
+      previewVideo: string | null;
+      categories: string[];
+      requiredInputs: string[];
+    }>;
+  }> => {
     if (!isCreatifyConfigured()) {
       return { ok: false, reason: "creatify_not_configured" };
     }
@@ -778,7 +807,26 @@ export const startInspirationQuery = internalAction({
       const list = await getInspirations();
       return {
         ok: true,
-        recipes: list.slice(0, 40).map((r) => ({ id: r.id, name: r.name ?? null })),
+        recipes: list.slice(0, 40).map((r) => {
+          const x = r as unknown as Record<string, unknown>;
+          return {
+            id: r.id,
+            name: r.name ?? null,
+            genType: typeof x.gen_type === "string" ? (x.gen_type as string) : null,
+            creditCost: typeof x.credit_cost === "number" ? (x.credit_cost as number) : null,
+            previewImage: typeof x.preview_image === "string" ? (x.preview_image as string) : null,
+            previewVideo: typeof x.preview_video === "string" ? (x.preview_video as string) : null,
+            categories: Array.isArray(x.categories) ? (x.categories as string[]) : [],
+            requiredInputs:
+              x.input_params_schema && typeof x.input_params_schema === "object"
+                ? Object.keys(
+                    ((x.input_params_schema as Record<string, unknown>).properties as
+                      | Record<string, unknown>
+                      | undefined) ?? {}
+                  )
+                : [],
+          };
+        }),
       };
     } catch (err) {
       return {
@@ -834,7 +882,7 @@ async function finalizeDoneJob(
   job: CreatifyJobEntry,
   terminal: CreatifyJob
 ): Promise<{ mediaStorageId: string | null; creditsUsed: number; costUsd: number }> {
-  const image = isImageMode(job.mode);
+  const image = producesImage(job);
   const ugc = isUgcMode(job.mode);
   const creditsUsed = Number(terminal.credits_used ?? 0) || 0;
   const costUsd = Math.round(creditsUsed * usdPerCredit() * 10000) / 10000;
@@ -1095,6 +1143,139 @@ export const e2eSmoke = internalAction({
 // =====================================================================
 
 /**
+ * Render one of Creatify's curated Inspiration templates with the founder's
+ * grounded inputs. gen_type decides the gate: image templates bill against the
+ * Growth image cap (canImage), video templates against the Studio video cap
+ * (canVideo). ⚠ API credit_cost is 4x in-app per docs — Maya sees the cost in
+ * the catalog BEFORE rendering and must treat it as part of the budget.
+ */
+export const startInspirationRenderJob = internalAction({
+  args: {
+    agentId: v.id("gtmAgents"),
+    inspirationId: v.string(),
+    genType: v.union(v.literal("image"), v.literal("video")),
+    /** Template inputs per its input_params_schema (from get_inspirations). */
+    inputParams: v.optional(v.any()),
+    productUrl: v.optional(v.string()),
+    noSchedule: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<StartResult> => {
+    if (!isCreatifyConfigured()) {
+      return { ok: false, reason: "creatify_not_configured" };
+    }
+    const gctx = await ctx.runQuery(
+      internal.gtmMaya.creatifyVideo.getAgentVideoContext,
+      { agentId: args.agentId }
+    );
+    const plan = planFeaturesGtm({ gtmPlanJson: gctx.gtmPlanJson });
+    if (args.genType === "image") {
+      if (!plan.canImage) return { ok: false, reason: "growth_tier_required" };
+      const used = countRecentAssets(gctx.jobsJson);
+      if (used >= plan.assetCreditsMonth) {
+        return {
+          ok: false,
+          reason: `asset_cap_reached (${used}/${plan.assetCreditsMonth} this month)`,
+        };
+      }
+    } else {
+      if (!plan.canVideo) return { ok: false, reason: "studio_tier_required" };
+      const used = countRecentVideos(gctx.jobsJson);
+      if (used + 1 > plan.videoCreditsMonth) {
+        return {
+          ok: false,
+          reason: `video_cap_reached (${used}/${plan.videoCreditsMonth} this month)`,
+        };
+      }
+    }
+    try {
+      const job = await createInspirationJob({
+        inspiration_id: args.inspirationId,
+        input_params: args.inputParams ?? undefined,
+      });
+      const jobId = newJobId(job.id, 0);
+      await ctx.runMutation(internal.gtmMaya.creatifyVideo.appendJob, {
+        agentId: args.agentId,
+        jobId,
+        mode: "inspiration",
+        creatifyId: job.id,
+        status: job.status ?? "pending",
+        productUrl: args.productUrl,
+        genType: args.genType,
+      });
+      if (!args.noSchedule) {
+        await ctx.scheduler.runAfter(
+          POLL_INTERVAL_MS,
+          internal.gtmMaya.creatifyVideo.pollVideoJob,
+          { agentId: args.agentId, jobId }
+        );
+      }
+      return { ok: true, jobId, creatifyId: job.id, status: job.status ?? "pending" };
+    } catch (err) {
+      return {
+        ok: false,
+        reason: `start_failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  },
+});
+
+/**
+ * Free read: UGC avatar personas (+ voices) so Maya can PICK an avatar_id for
+ * the lipsync_v2 sandwich and pin one consistent voice. No tier gate (read-only).
+ */
+export const listUgcAvatarsAction = internalAction({
+  args: {
+    style: v.optional(v.string()),
+    gender: v.optional(v.string()),
+  },
+  handler: async (
+    _ctx,
+    args
+  ): Promise<{
+    ok: boolean;
+    reason?: string;
+    avatars?: Array<{
+      id: string;
+      gender: string | null;
+      style: string | null;
+      previewImage: string | null;
+      previewVideo: string | null;
+    }>;
+    voices?: Array<{ id: string; name: string | null; gender: string | null }>;
+  }> => {
+    if (!isCreatifyConfigured()) {
+      return { ok: false, reason: "creatify_not_configured" };
+    }
+    try {
+      const [personas, voices] = await Promise.all([
+        getPersonasV2({ style: args.style, gender: args.gender }),
+        getVoices().catch(() => []),
+      ]);
+      return {
+        ok: true,
+        avatars: personas.slice(0, 24).map((p) => ({
+          id: p.id,
+          gender: (p.gender as string | null) ?? null,
+          style: (p.style as string | null) ?? null,
+          previewImage: (p.preview_image_9_16 as string | null) ?? null,
+          previewVideo: (p.preview_video_9_16 as string | null) ?? null,
+        })),
+        voices: voices.slice(0, 24).map((v2) => ({
+          id: String(v2.voice_id ?? v2.id ?? ""),
+          name: (v2.name as string | null) ?? null,
+          gender: (v2.gender as string | null) ?? null,
+        })),
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        reason: `personas_failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  },
+});
+
+/**
  * Preview-first phase 2: Maya picked a preview — render ONLY that one.
  * Resets the poll counter and flips the job to the render phase; the durable
  * poller then finalizes exactly like a classic url_to_video render.
@@ -1341,7 +1522,19 @@ export const checkCreativeBudgetHttp = httpAction(async (ctx, request) => {
     internal.gtmMaya.creativeBudgetGate.checkCreativeBudget,
     { accountId: gctx.accountId, gtmPlanJson: gctx.gtmPlanJson, now: Date.now() }
   );
-  return new Response(JSON.stringify({ ok: true, ...verdict }), {
+  // Best-effort REAL account balance from Creatify so the paced ledger can't
+  // drift from what the API will actually accept. Never blocks the verdict.
+  let remainingCredits: number | null = null;
+  if (isCreatifyConfigured()) {
+    try {
+      const rc = await getRemainingCredits();
+      remainingCredits =
+        typeof rc.remaining_credits === "number" ? rc.remaining_credits : null;
+    } catch {
+      remainingCredits = null;
+    }
+  }
+  return new Response(JSON.stringify({ ok: true, ...verdict, remainingCredits }), {
     status: 200,
     headers: { "content-type": "application/json" },
   });
@@ -1384,6 +1577,64 @@ export const renderChosenPreviewHttp = httpAction(async (ctx, request) => {
   const result: StartResult = await ctx.runAction(
     internal.gtmMaya.creatifyVideo.renderPreviewChoice,
     { agentId: auth.agentId, jobId: body.jobId, mediaJob: body.mediaJob }
+  );
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+
+/** render_inspiration: render one of Creatify's curated templates (image or
+ *  video) with grounded inputs. Cost known upfront from get_inspirations. */
+export const renderInspirationHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (!body.inspirationId || typeof body.inspirationId !== "string") {
+    return new Response("missing required field (inspirationId)", { status: 400 });
+  }
+  if (body.genType !== "image" && body.genType !== "video") {
+    return new Response("genType must be 'image' or 'video' (from get_inspirations)", {
+      status: 400,
+    });
+  }
+  const result: StartResult = await ctx.runAction(
+    internal.gtmMaya.creatifyVideo.startInspirationRenderJob,
+    {
+      agentId: auth.agentId,
+      inspirationId: body.inspirationId,
+      genType: body.genType,
+      inputParams:
+        body.inputParams && typeof body.inputParams === "object"
+          ? body.inputParams
+          : undefined,
+      productUrl: typeof body.productUrl === "string" ? body.productUrl : undefined,
+    }
+  );
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+/** list_ugc_avatars: personas + voices so Maya can pick (and pin) an avatar
+ *  for the multi-scene UGC sandwich. Free read. */
+export const listUgcAvatarsHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+  const url = new URL(request.url);
+  const result = await ctx.runAction(
+    internal.gtmMaya.creatifyVideo.listUgcAvatarsAction,
+    {
+      style: url.searchParams.get("style") ?? undefined,
+      gender: url.searchParams.get("gender") ?? undefined,
+    }
   );
   return new Response(JSON.stringify(result), {
     status: 200,

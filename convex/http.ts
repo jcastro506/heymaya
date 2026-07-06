@@ -174,6 +174,8 @@ import {
 import {
   creatifyMakeAdHttp,
   renderChosenPreviewHttp,
+  renderInspirationHttp,
+  listUgcAvatarsHttp,
   creatifyCloneAdHttp,
   creatifyPollHttp,
   creatifyMakeAssetHttp,
@@ -355,6 +357,19 @@ http.route({
   path: "/lc_gtm/creatify_inspirations",
   method: "GET",
   handler: creatifyInspirationsHttp,
+});
+// render_inspiration = render a curated Creatify template (image OR video;
+// gated by genType server-side). list_ugc_avatars = free personas+voices read
+// so Maya can pick + pin an avatar for the multi-scene UGC sandwich.
+http.route({
+  path: "/lc_gtm/creatify_render_inspiration",
+  method: "POST",
+  handler: renderInspirationHttp,
+});
+http.route({
+  path: "/lc_gtm/creatify_avatars",
+  method: "GET",
+  handler: listUgcAvatarsHttp,
 });
 // make_ugc_video = grounded, voice-passed script → Aurora UGC avatar video
 // (Studio $199 tier, canUgc + paced creative-credit budget). check_creative_budget

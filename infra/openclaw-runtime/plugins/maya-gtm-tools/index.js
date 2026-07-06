@@ -1970,15 +1970,40 @@ export default defineToolPlugin({
       name: "get_inspirations",
       label: "Get Inspirations",
       description:
-        "Read Creatify's recipe/format catalog — a library of proven creative FORMATS/templates (hooks, structures, styles). This is a format-idea catalog, NOT a competitor-ad feed and NOT a trend strategy. Use it ONLY as one input to YOUR grounded brief: skim the recipes for a format that fits the founder's angle, then ground the actual copy/visuals in their real product. Never let a recipe drive the strategy or pull you toward paid-ad framing — you are organic-first. Free + read-only; returns { ok, recipes: [{ id, name }] }.",
+        "Read Creatify's recipe/format catalog — a library of proven creative FORMATS/templates (hooks, structures, styles). This is a format-idea catalog, NOT a competitor-ad feed and NOT a trend strategy. Use it ONLY as one input to YOUR grounded brief: skim the recipes for a format that fits the founder's angle, then ground the actual copy/visuals in their real product. Never let a recipe drive the strategy or pull you toward paid-ad framing — you are organic-first. Free + read-only; returns { ok, recipes: [{ id, name, genType (image|video), creditCost (⚠ API price — treat as real money), previewImage, previewVideo, categories, requiredInputs }] }. To actually render a recipe with the founder's grounded inputs, use render_inspiration — but ONLY when the preview clearly fits the niche's winning format and the creditCost is justified.",
       parameters: Type.Object({}),
       execute: async (p, _cfg, ctx) => getLc("creatify_inspirations", p, ctx.signal),
+    }),
+    tool({
+      name: "render_inspiration",
+      label: "Render Inspiration Template",
+      description:
+        "Render one of Creatify's curated templates (from get_inspirations) with the FOUNDER'S grounded inputs. genType comes from the catalog entry: 'image' templates are gated to Growth+ (canImage, image cap), 'video' to Studio (canVideo, video cap) — server-enforced, fail closed. WORKFLOW: (1) get_inspirations, (2) judge the previewImage/previewVideo against the niche's winning format, (3) check creditCost is worth it (API pricing is 4x the in-app price — never render a template you wouldn't pay for), (4) fill inputParams per the template's requiredInputs using REAL product material (search_my_media), (5) render. REQUIRED: inspirationId, genType. Optional: inputParams (object matching the template schema), productUrl. Returns { ok, jobId, status }; poll check_video_job, then send_media_to_user / send_confirm_card.",
+      parameters: Type.Object({
+        inspirationId: Type.String(),
+        genType: Enum(["image", "video"]),
+        inputParams: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+        productUrl: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("creatify_render_inspiration", p, ctx.signal),
+    }),
+    tool({
+      name: "list_ugc_avatars",
+      label: "List UGC Avatars",
+      description:
+        "FREE READ. Browse the avatar personas (+ voices) available for UGC video. Returns { ok, avatars: [{ id, gender, style, previewImage, previewVideo }], voices: [{ id, name, gender }] }. Use this ONCE to pick the founder's 'creator': choose an avatar whose vibe matches the ICP (selfie-style for UGC authenticity), note its id, SAVE the choice as a learning, and reuse the SAME avatar id (overrideAvatar) + voice id (overrideVoice) on every make_ugc_video — a consistent face/voice across posts is what makes the channel feel like a real creator, not AI slop. Optional filters: style (selfie|presenter), gender (m|f|nb).",
+      parameters: Type.Object({
+        style: Type.Optional(Type.String()),
+        gender: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("creatify_avatars", p, ctx.signal),
     }),
     tool({
       name: "check_creative_budget",
       label: "Check Creative Budget",
       description:
-        "READ-ONLY. Call this BEFORE make_ugc_video — never render blind. Returns the founder's creative-credit budget for UGC avatar video this billing period: { ok, mode (full | graceful_degrade | hard_block), usedCreditsThisPeriod, allowedThroughNowCredits, monthlyCapCredits, reason }. mode 'full' → go ahead. mode 'graceful_degrade' → you've run ahead of this month's pace; WAIT or drop to a cheaper format (make_static_asset / a Gemini slideshow). mode 'hard_block' → the monthly ceiling is hit (or this tier has no UGC budget); do NOT attempt, tell the founder UGC resumes next billing period. The budget is paced across the month so it can't all be spent in week 1 — respect it.",
+        "READ-ONLY. Call this BEFORE make_ugc_video — never render blind. Returns the founder's creative-credit budget for UGC avatar video this billing period: { ok, mode (full | graceful_degrade | hard_block), usedCreditsThisPeriod, allowedThroughNowCredits, monthlyCapCredits, reason, remainingCredits (the REAL Creatify account balance — if it's lower than the plan math implies, trust IT and mention it in your judgment) }. mode 'full' → go ahead. mode 'graceful_degrade' → you've run ahead of this month's pace; WAIT or drop to a cheaper format (make_static_asset / a Gemini slideshow). mode 'hard_block' → the monthly ceiling is hit (or this tier has no UGC budget); do NOT attempt, tell the founder UGC resumes next billing period. The budget is paced across the month so it can't all be spent in week 1 — respect it.",
       parameters: Type.Object({}),
       execute: async (p, _cfg, ctx) => postLc("check_creative_budget", p, ctx.signal),
     }),
@@ -1986,7 +2011,7 @@ export default defineToolPlugin({
       name: "make_ugc_video",
       label: "Make UGC Avatar Video",
       description:
-        "STUDIO ($199) TIER ONLY. Make a real UGC-style talking-head/testimonial video: an Aurora avatar performs YOUR grounded, voice-passed script. ALWAYS call check_creative_budget FIRST — if it's not 'full', do not render. PIPELINE: (1) get a structurally-strong draft (Creatify's AI-scripts writer is trained on what performs — use it as the skeleton), (2) rewrite it in the FOUNDER'S voice from the grounded fact sheet, claims verified-only (never invent product claims), (3) pass that as avatarScript here. REQUIRED: avatarScript (the final, in-voice, grounded script — used as the single scene when scenes is omitted). PREFERRED FORMAT — the UGC sandwich: pass scenes = [{script: hook (avatar)}, {script: voiceover, brollUrl: REAL product footage/screenshot url from search_my_media}, {script: CTA (avatar)}]. Avatar scenes show the avatar speaking; brollUrl scenes show the founder's real product with the script as voiceover — this multi-scene cut converts far better than one static talking head. scenes REQUIRES overrideAvatar (pick a persona id and STICK with it — same face across videos builds a recognizable creator). Optional: productUrl (recorded for traceability), modelVersion (aurora_v1_fast default = cheap 0.5cr/s; aurora_v1 = max realism 1cr/s — prefer fast unless the budget is flush), aspectRatio (9x16 default), overrideAvatar, overrideVoice. Returns { ok, jobId, status, budgetMode } immediately; the render finishes in a few minutes — check_video_job with the jobId, then send_media_to_user once done. Server-gated to Studio (canUgc) + the paced credit budget — both fail closed. On a non-Studio account this returns ok:false; never claim you made a video you couldn't.",
+        "STUDIO ($199) TIER ONLY. Make a real UGC-style talking-head/testimonial video: an Aurora avatar performs YOUR grounded, voice-passed script. ALWAYS call check_creative_budget FIRST — if it's not 'full', do not render. PIPELINE: (1) get a structurally-strong draft (Creatify's AI-scripts writer is trained on what performs — use it as the skeleton), (2) rewrite it in the FOUNDER'S voice from the grounded fact sheet, claims verified-only (never invent product claims), (3) pass that as avatarScript here. REQUIRED: avatarScript (the final, in-voice, grounded script — used as the single scene when scenes is omitted). PREFERRED FORMAT — the UGC sandwich: pass scenes = [{script: hook (avatar)}, {script: voiceover, brollUrl: REAL product footage/screenshot url from search_my_media}, {script: CTA (avatar)}]. Avatar scenes show the avatar speaking; brollUrl scenes show the founder's real product with the script as voiceover — this multi-scene cut converts far better than one static talking head. scenes REQUIRES overrideAvatar — pick it ONCE via list_ugc_avatars (selfie-style fits UGC) and STICK with it; same face + voice across videos builds a recognizable creator. Optional: productUrl (recorded for traceability), modelVersion (aurora_v1_fast default = cheap 0.5cr/s; aurora_v1 = max realism 1cr/s — prefer fast unless the budget is flush), aspectRatio (9x16 default), overrideAvatar, overrideVoice. Returns { ok, jobId, status, budgetMode } immediately; the render finishes in a few minutes — check_video_job with the jobId, then send_media_to_user once done. Server-gated to Studio (canUgc) + the paced credit budget — both fail closed. On a non-Studio account this returns ok:false; never claim you made a video you couldn't.",
       parameters: Type.Object({
         avatarScript: Type.String(),
         productUrl: Type.Optional(Type.String()),

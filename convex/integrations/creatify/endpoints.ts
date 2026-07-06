@@ -419,6 +419,8 @@ export async function getCreatifyJob(
       return getIabImages(id, client);
     case "asset_gen":
       return getAssetGen(id, client);
+    case "inspiration":
+      return getInspirationJob(id, client);
     default: {
       const _exhaustive: never = mode;
       throw new Error(`Creatify getCreatifyJob: unknown mode ${String(_exhaustive)}`);
@@ -433,4 +435,55 @@ export async function getVideoJob(
   client: CreatifyClient = getDefaultClient()
 ): Promise<CreatifyJob> {
   return getCreatifyJob(mode, id, client);
+}
+
+
+// ── Supporting reads: personas, voices, remaining credits ─────────────────────
+// Free GETs. Personas power the lipsync_v2 avatar pick (scenes REQUIRE an
+// explicit avatar id); voices pin one consistent voice; remaining_credits keeps
+// the creative budget honest against the REAL account balance.
+
+export interface CreatifyPersona {
+  id: string;
+  gender?: string | null;
+  style?: string | null;
+  age_range?: string | null;
+  preview_image_9_16?: string | null;
+  preview_video_9_16?: string | null;
+  [key: string]: unknown;
+}
+
+export async function getPersonasV2(
+  params: { gender?: string; style?: string; age_range?: string } = {},
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyPersona[]> {
+  const qs = new URLSearchParams();
+  if (params.gender) qs.set("gender", params.gender);
+  if (params.style) qs.set("style", params.style);
+  if (params.age_range) qs.set("age_range", params.age_range);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return client.request<CreatifyPersona[]>(`/api/personas_v2/${suffix}`, { method: "GET" });
+}
+
+export interface CreatifyVoice {
+  voice_id?: string;
+  id?: string;
+  name?: string | null;
+  gender?: string | null;
+  accents?: unknown;
+  [key: string]: unknown;
+}
+
+export async function getVoices(
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyVoice[]> {
+  return client.request<CreatifyVoice[]>("/api/voices/", { method: "GET" });
+}
+
+export async function getRemainingCredits(
+  client: CreatifyClient = getDefaultClient()
+): Promise<{ remaining_credits?: number; [key: string]: unknown }> {
+  return client.request<{ remaining_credits?: number }>("/api/remaining_credits/", {
+    method: "GET",
+  });
 }

@@ -207,7 +207,15 @@ export type CreatifyImageMode = "iab_images" | "asset_gen";
  * same async {id,status}→poll shape, so the orchestration layer persists either
  * under one `CreatifyJobMode` discriminator and polls via `getCreatifyJob`.
  */
-export type CreatifyJobMode = CreatifyVideoMode | CreatifyImageMode;
+/** Inspiration renders: Creatify's curated template recipes ("Community
+ *  Creations") — gen_type per template is image OR video; the poll shape is
+ *  the same async job. ⚠ API credit_cost is 4x the in-app price per docs. */
+export type CreatifyInspirationMode = "inspiration";
+
+export type CreatifyJobMode =
+  | CreatifyVideoMode
+  | CreatifyImageMode
+  | CreatifyInspirationMode;
 
 /**
  * Inputs for an IAB Images job — a grounded ad-banner set. Ground it in the

@@ -13,7 +13,7 @@ This is a small, sharp helper, not a research engine. The strategy — which cha
 
 ## What it is — and what it is NOT
 
-- **It IS:** a free, read-only catalog of creative *recipes/templates* (format ideas). `get_inspirations` returns `{ ok, recipes: [{ id, name }] }`.
+- **It IS:** a free, read-only catalog of creative *recipes/templates* (format ideas). `get_inspirations` returns `{ ok, recipes: [{ id, name, genType (image|video), creditCost, previewImage, previewVideo, categories, requiredInputs }] }` — I can SEE each recipe's preview and its exact price before deciding anything.
 - **It is NOT a competitor-ad feed.** Creatify's competitor/"winning ads" tracking is an in-app feature, not this API. So I do not present these as "what your competitors are running" — they're generic format ideas.
 - **It is NOT a strategy.** A recipe never decides the channel, the angle, or the message. If I let the catalog steer me, every founder gets the same generic creative — the opposite of grounded.
 - **It is NOT a license to drift to paid-ad framing.** Many recipes are ad-shaped. I'm organic-first; I borrow the *structure* (a hook, a beat order) and ground it in organic, product-true content. I do not turn the founder into an ad.
@@ -21,7 +21,8 @@ This is a small, sharp helper, not a research engine. The strategy — which cha
 ## How I use it
 
 1. **Only when I'm about to make creative** (a video or a designed static asset) and I want a format reference. Not on every turn — it's a brief input, not a habit.
-2. Call `get_inspirations` (free, read-only). Skim the recipe names for a *structure* that fits the angle I already chose.
+2. Call `get_inspirations` (free, read-only). Skim names AND watch/see the previews for a *structure* that fits the angle I already chose.
+3. **Rendering a recipe is allowed but earned:** `render_inspiration({ inspirationId, genType, inputParams })` renders it with the founder's REAL material. I only do this when (a) the preview clearly matches the niche's certified winning format, (b) the `creditCost` is justified (⚠ API pricing is 4x the in-app price — this is real money), and (c) I've filled `inputParams` from `search_my_media` — real screenshots, never fabricated. Image recipes bill the Growth image cap; video recipes the Studio video cap (both server-gated). When in doubt, my own preview-first `make_ad_from_url` flow is usually the better spend.
 3. **Ground it.** Take only the format skeleton; write the actual copy from the Product Fact Sheet (claims verified-only) and build the visuals around the founder's real screenshots.
 4. Hand the grounded brief to `maya-video-producer` (`clone_winning_ad` / `make_ad_from_url`) or `maya-static-asset-producer` (`make_static_asset`).
 
