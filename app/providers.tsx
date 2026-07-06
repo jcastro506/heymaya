@@ -1,9 +1,9 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useCallback, useMemo } from "react";
 import { ClerkProvider, useAuth } from "@clerk/nextjs";
 import { ConvexReactClient } from "convex/react";
-import { ConvexProviderWithClerk } from "convex/react-clerk";
+import { ConvexProviderWithAuth } from "convex/react";
 import { PostHogProvider } from "@/components/analytics/PostHogProvider";
 
 const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
@@ -53,9 +53,37 @@ export function Providers({ children }: { children: ReactNode }) {
       allowedRedirectOrigins={allowedRedirectOrigins}
       appearance={clerkAppearance}
     >
-      <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+      <ConvexProviderWithAuth client={convex} useAuth={useConvexAuthFromClerk}>
         <PostHogProvider>{children}</PostHogProvider>
-      </ConvexProviderWithClerk>
+      </ConvexProviderWithAuth>
     </ClerkProvider>
+  );
+}
+
+function useConvexAuthFromClerk() {
+  const { isLoaded, isSignedIn, getToken, sessionClaims } = useAuth();
+  const sessionAudience = sessionClaims?.aud;
+
+  const fetchAccessToken = useCallback(
+    async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
+      try {
+        return await getToken({
+          template: sessionAudience === "convex" ? undefined : "convex",
+          skipCache: forceRefreshToken,
+        });
+      } catch {
+        return null;
+      }
+    },
+    [getToken, sessionAudience]
+  );
+
+  return useMemo(
+    () => ({
+      isLoading: !isLoaded,
+      isAuthenticated: isSignedIn ?? false,
+      fetchAccessToken,
+    }),
+    [fetchAccessToken, isLoaded, isSignedIn]
   );
 }
