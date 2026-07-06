@@ -520,7 +520,12 @@ function GtmOnboardingBody() {
       track(ANALYTICS_EVENTS.CHECKOUT_STARTED, { tier, interval });
       // returnTo:"onboarding" → Stripe sends them BACK here (not the account
       // page) so the resume effect lands them on the plan step to Launch Maya.
-      const { url } = await startCheckout({ tier, interval, returnTo: "onboarding" });
+      const { url } = await startCheckout({
+        tier,
+        interval,
+        returnTo: "onboarding",
+        returnBaseUrl: window.location.origin,
+      });
       window.location.href = url;
     } catch (err) {
       setCheckoutError(friendlyError(err));

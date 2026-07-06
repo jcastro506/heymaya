@@ -146,7 +146,11 @@ export default function AccountPage() {
     setCheckingOut(tier);
     setCheckoutError(null);
     try {
-      const { url } = await startCheckout({ interval: "monthly", tier });
+      const { url } = await startCheckout({
+        interval: "monthly",
+        tier,
+        returnBaseUrl: window.location.origin,
+      });
       window.location.href = url;
     } catch (err) {
       setCheckoutError(
