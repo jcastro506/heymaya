@@ -228,6 +228,7 @@ function GtmOnboardingBody() {
     botUsername: string;
   } | null>(null);
   const [clerkLoadTimedOut, setClerkLoadTimedOut] = useState(false);
+  const [convexAuthTimedOut, setConvexAuthTimedOut] = useState(false);
   // Retry counter for minting the pairing link (the agent row can still be
   // settling right after onboarding) so the Connect screen never hangs.
   const [pairRetry, setPairRetry] = useState(0);
@@ -240,6 +241,12 @@ function GtmOnboardingBody() {
     const timeout = setTimeout(() => setClerkLoadTimedOut(true), 6000);
     return () => clearTimeout(timeout);
   }, [isClerkLoaded]);
+
+  useEffect(() => {
+    if (!isSignedIn || !isConvexAuthLoading || isAuthenticated) return;
+    const timeout = setTimeout(() => setConvexAuthTimedOut(true), 8000);
+    return () => clearTimeout(timeout);
+  }, [isAuthenticated, isConvexAuthLoading, isSignedIn]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -337,6 +344,7 @@ function GtmOnboardingBody() {
     draft.differentiator,
   ]);
   const authPending =
+    !convexAuthTimedOut &&
     !clerkLoadTimedOut &&
     (!isClerkLoaded || (Boolean(isSignedIn) && isConvexAuthLoading));
   const signedOut =
@@ -344,7 +352,7 @@ function GtmOnboardingBody() {
   const authMismatch =
     isClerkLoaded &&
     Boolean(isSignedIn) &&
-    !isConvexAuthLoading &&
+    (!isConvexAuthLoading || convexAuthTimedOut) &&
     !isAuthenticated;
 
   const deploy = useCallback(async () => {
