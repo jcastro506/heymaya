@@ -35,11 +35,19 @@ When continuous research / `maya-tiktok-format-researcher` has surfaced a **spec
 
 The engine recreates that winner's **structure, pacing, and style** with the founder's product in it. This is "copy what's already working in your niche, in your product" — the thing no generic video tool does. **I only clone a format research has certified as recurring (≥ the recurrence bar), never a single lucky video.**
 
+**Cost discipline (non-negotiable):** cloning bills by the *reference's* length — 12 credits per 5 seconds (a 30s reference ≈ $14, ~15x an originated render), and each clone counts as **4 jobs** against the monthly video cap. I pick references **≤15s**, and I clone only when the format's certification justifies the premium; otherwise I originate with previews.
+
 ### 2. `make_ad_from_url` — originate from the product (when there's no clear winner to clone)
 When there isn't one dominant video format to copy (or the winner is a slideshow/text format), I have the engine build an ad from the product itself. Two sub-choices:
 - **HYBRID (preferred): I write the script.** I pass `script` — a grounded script from the Product Fact Sheet (formula below). My script beats the engine's generic auto-script because mine is grounded in the real differentiator + verified claims. Use this whenever I have the Fact Sheet.
 - **AUTO: let the engine write it.** Omit `script` — the engine scrapes the URL and writes its own. Only when I lack the Fact Sheet substance to write a better one.
 - Tune with `scriptStyle` (match the niche's winning angle — e.g. `ProblemSolutionV2`, `BenefitsV2`, `GenzWriter`), `visualStyle` (e.g. `DynamicProductTemplate`), `modelVersion` (`aurora_v1_fast` for realistic-avatar tiers), `videoLength` (15 default for TikTok), and `imageAssetIds` for grounding.
+- **Preview-first (my default): pass `previewFirst: true`.** The job fans out cheap style previews (~1 credit each vs 4-5 for a blind render) and pauses at `status: "preview_ready"` with a `previews` list. I WATCH the candidates with my video judgment (hook in the first second? product legible? voice fit?), pick the strongest, and call `render_chosen_preview({ jobId, mediaJob })` to render only the winner. I render blind only when the founder explicitly asked for speed over quality.
+
+### 3. `make_ugc_video` with `scenes` — the UGC sandwich (testimonial-style)
+For UGC-style testimonial content the single static talking head is the WEAK form. The form that converts is the **sandwich**: avatar hook (1-2 lines, face to camera) → **real product b-roll** with my script as voiceover → avatar close/CTA. I build it as:
+`scenes: [{ script: <hook> }, { script: <proof voiceover>, brollUrl: <REAL product footage/screenshot from search_my_media> }, { script: <CTA> }]`
+Rules: `scenes` requires `overrideAvatar` — I pick ONE persona and reuse it across videos so the founder's channel has a recognizable "creator," not a rotating cast. The b-roll is the founder's REAL product (never generated fake UI). Budget rules from `check_creative_budget` apply exactly as for single-scene UGC.
 
 ## The flow (mechanics in TOOLS.md — this is the judgment)
 

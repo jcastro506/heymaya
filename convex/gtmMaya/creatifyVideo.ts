@@ -38,9 +38,12 @@ import {
   createIabImages,
   createLinkFromUrl,
   createLinkToVideo,
+  createLinkToVideoPreviews,
+  createLipsyncV2,
   createLipsyncWithAurora,
   getCreatifyJob,
   getInspirations,
+  renderLinkToVideoPreview,
   updateLink,
 } from "../integrations/creatify/endpoints";
 import {
@@ -56,7 +59,7 @@ type VideoMode = "ad_clone" | "url_to_video";
 type ImageMode = "iab_images";
 // Aurora UGC avatar video — Studio-only, paced by the creative CREDIT budget
 // (creativeBudgetGate), NOT the standard videoCreditsMonth count cap.
-type UgcMode = "ugc_avatar";
+type UgcMode = "ugc_avatar" | "ugc_avatar_v2";
 /** Any persisted Creatify job — video, static image, or UGC — share the poll loop. */
 type JobMode = VideoMode | ImageMode | UgcMode;
 
@@ -67,14 +70,27 @@ function isImageMode(mode: JobMode): mode is ImageMode {
 
 /** True for the Aurora UGC avatar mode (gated by canUgc + the credit budget). */
 function isUgcMode(mode: JobMode): mode is UgcMode {
-  return mode === "ugc_avatar";
+  return mode === "ugc_avatar" || mode === "ugc_avatar_v2";
 }
 
 /** Map a persisted job mode to the integration poll mode. UGC polls the lipsync
  *  endpoint; all other modes are already valid CreatifyJobMode values. */
-function toPollMode(mode: JobMode): "ad_clone" | "url_to_video" | "lipsync" | "iab_images" {
-  return isUgcMode(mode) ? "lipsync" : (mode as "ad_clone" | "url_to_video" | "iab_images");
+function toPollMode(
+  mode: JobMode
+): "ad_clone" | "url_to_video" | "lipsync" | "lipsync_v2" | "iab_images" {
+  if (mode === "ugc_avatar") return "lipsync";
+  if (mode === "ugc_avatar_v2") return "lipsync_v2";
+  return mode as "ad_clone" | "url_to_video" | "iab_images";
 }
+
+/**
+ * Ad-clone is the expensive path: 12 credits per 5s of REFERENCE video
+ * (a 30s reference = 72 cr ≈ $14 vs ~4-5 cr for a url_to_video render).
+ * Count each clone as several jobs against the monthly fair-use cap so a
+ * month of clones can't silently run 10x the COGS of a month of renders.
+ * The skill/tool guidance additionally tells Maya to pick refs ≤15s.
+ */
+export const AD_CLONE_CAP_WEIGHT = 4;
 
 const POLL_INTERVAL_MS = 30_000;
 const MAX_POLL_ATTEMPTS = 30; // ~15 min at 30s — well past typical render time.
@@ -94,6 +110,10 @@ interface CreatifyJobEntry {
   attempts: number;
   productUrl?: string;
   refUrl?: string; // reference video (ad_clone)
+  /** Preview-first url_to_video: "preview" until Maya picks, then "render". */
+  phase?: "preview" | "render";
+  /** Preview candidates surfaced by preview_list_async (Maya picks one). */
+  previews?: Array<{ mediaJob: string; url: string | null }>;
   mediaStorageId?: string; // set once re-hosted
   creditsUsed?: number;
   costUsd?: number;
@@ -170,11 +190,13 @@ export const getAgentVideoContext = internalQuery({
 /** VIDEO jobs created in the trailing 30 days that weren't outright failures —
  *  the monthly fair-use usage counted against videoCreditsMonth. Image jobs are
  *  counted separately so they never consume the video budget (or vice-versa). */
-function countRecentVideos(jobsJson: string | null): number {
+export function countRecentVideos(jobsJson: string | null): number {
   const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  return parseJobs(jobsJson ?? undefined).filter(
-    (j) => j.createdAt >= since && j.status !== "failed" && !isImageMode(j.mode)
-  ).length;
+  return parseJobs(jobsJson ?? undefined)
+    .filter(
+      (j) => j.createdAt >= since && j.status !== "failed" && !isImageMode(j.mode)
+    )
+    .reduce((sum, j) => sum + (j.mode === "ad_clone" ? AD_CLONE_CAP_WEIGHT : 1), 0);
 }
 
 /** STATIC-IMAGE jobs in the trailing 30 days — counted against assetCreditsMonth. */
@@ -229,6 +251,7 @@ export const appendJob = internalMutation({
     status: v.string(),
     productUrl: v.optional(v.string()),
     refUrl: v.optional(v.string()),
+    phase: v.optional(v.union(v.literal("preview"), v.literal("render"))),
   },
   handler: async (ctx, args): Promise<void> => {
     const agent = await ctx.db.get(args.agentId);
@@ -241,6 +264,7 @@ export const appendJob = internalMutation({
       creatifyId: args.creatifyId,
       status: args.status,
       attempts: 0,
+      phase: args.phase,
       productUrl: args.productUrl,
       refUrl: args.refUrl,
       createdAt: now,
@@ -259,6 +283,8 @@ export const patchJob = internalMutation({
     jobId: v.string(),
     status: v.optional(v.string()),
     attempts: v.optional(v.number()),
+    phase: v.optional(v.union(v.literal("preview"), v.literal("render"))),
+    previewsJson: v.optional(v.string()),
     mediaStorageId: v.optional(v.string()),
     creditsUsed: v.optional(v.number()),
     costUsd: v.optional(v.number()),
@@ -275,6 +301,10 @@ export const patchJob = internalMutation({
       ...j,
       status: args.status ?? j.status,
       attempts: args.attempts ?? j.attempts,
+      phase: args.phase ?? j.phase,
+      previews: args.previewsJson
+        ? (JSON.parse(args.previewsJson) as CreatifyJobEntry["previews"])
+        : j.previews,
       mediaStorageId: args.mediaStorageId ?? j.mediaStorageId,
       creditsUsed: args.creditsUsed ?? j.creditsUsed,
       costUsd: args.costUsd ?? j.costUsd,
@@ -344,6 +374,9 @@ export const startVideoJob = internalAction({
     visualStyle: v.optional(v.string()),
     modelVersion: v.optional(v.string()),
     videoLength: v.optional(v.number()),
+    /** url_to_video only: fan out cheap style previews (1 cr/30s each) and
+     *  wait for renderPreviewChoice instead of a blind 4-5 cr full render. */
+    previewFirst: v.optional(v.boolean()),
     // skip scheduling the durable poller (the e2e smoke polls inline instead).
     noSchedule: v.optional(v.boolean()),
   },
@@ -369,10 +402,15 @@ export const startVideoJob = internalAction({
       return { ok: false, reason: "studio_tier_required" };
     }
     const used = countRecentVideos(gctx.jobsJson);
-    if (used >= plan.videoCreditsMonth) {
+    // Ad-clone weighs AD_CLONE_CAP_WEIGHT jobs (12cr/5s of reference video).
+    const weight = args.mode === "ad_clone" ? AD_CLONE_CAP_WEIGHT : 1;
+    if (used + weight > plan.videoCreditsMonth) {
       return {
         ok: false,
-        reason: `video_cap_reached (${used}/${plan.videoCreditsMonth} this month)`,
+        reason:
+          args.mode === "ad_clone"
+            ? `video_cap_reached (${used}/${plan.videoCreditsMonth}; an ad clone counts as ${AD_CLONE_CAP_WEIGHT} — use make_ad_from_url instead this month)`
+            : `video_cap_reached (${used}/${plan.videoCreditsMonth} this month)`,
       };
     }
     try {
@@ -400,6 +438,7 @@ export const startVideoJob = internalAction({
 
       // 2) Start the chosen flow.
       let job: CreatifyJob;
+      const previewFirst = args.previewFirst === true && args.mode === "url_to_video";
       if (args.mode === "ad_clone") {
         job = await createAdClone({
           link: link.id,
@@ -407,9 +446,9 @@ export const startVideoJob = internalAction({
           aspect_ratio: "9x16",
         });
       } else {
-        job = await createLinkToVideo({
+        const input = {
           link: link.id,
-          aspect_ratio: "9x16",
+          aspect_ratio: "9x16" as const,
           video_length: (args.videoLength as 15 | 30 | 45 | 60 | undefined) ?? 15,
           override_script: args.overrideScript ?? null,
           script_style: args.scriptStyle ?? null,
@@ -417,7 +456,13 @@ export const startVideoJob = internalAction({
           model_version:
             (args.modelVersion as "standard" | "aurora_v1" | "aurora_v1_fast" | undefined) ??
             "standard",
-        });
+        };
+        // Preview-first (the cost lever): fan out style previews at 1 cr/30s
+        // each instead of a blind 4-5 cr render; Maya reviews + picks, then
+        // renderPreviewChoice renders only the winner.
+        job = previewFirst
+          ? await createLinkToVideoPreviews(input)
+          : await createLinkToVideo(input);
       }
 
       const jobId = newJobId(job.id, 0);
@@ -429,6 +474,7 @@ export const startVideoJob = internalAction({
         status: job.status ?? "pending",
         productUrl: args.productUrl,
         refUrl: args.referenceVideoUrl,
+        phase: previewFirst ? ("preview" as const) : undefined,
       });
 
       if (!args.noSchedule) {
@@ -570,6 +616,21 @@ export const startUgcVideoJob = internalAction({
     aspectRatio: v.optional(v.string()),
     overrideAvatar: v.optional(v.string()),
     overrideVoice: v.optional(v.string()),
+    /**
+     * Multi-scene UGC (lipsync v2): the avatar/b-roll "sandwich" that actually
+     * performs — avatar hook → product b-roll → avatar CTA. Each scene is
+     * either avatar-speaking (script) or b-roll (brollUrl, with the script as
+     * voiceover). Requires overrideAvatar (v2 scenes need an explicit avatar
+     * id). When omitted or a single script-only scene → classic v1 lipsync.
+     */
+    scenes: v.optional(
+      v.array(
+        v.object({
+          script: v.string(),
+          brollUrl: v.optional(v.string()),
+        })
+      )
+    ),
     noSchedule: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<StartResult> => {
@@ -609,26 +670,67 @@ export const startUgcVideoJob = internalAction({
       };
     }
 
+    // Multi-scene v2 needs an explicit avatar id per avatar scene; without one
+    // we fall back to single-scene v1 (which has a provider default avatar).
+    const wantsScenes = (args.scenes?.length ?? 0) > 0;
+    const useV2 = wantsScenes && Boolean(args.overrideAvatar);
+
     try {
-      const job: CreatifyJob = await createLipsyncWithAurora({
-        script: args.avatarScript,
-        aspect_ratio:
-          (args.aspectRatio as "9x16" | "16x9" | "1x1" | undefined) ?? "9x16",
-        model_version:
-          (args.modelVersion as
-            | "standard"
-            | "aurora_v1"
-            | "aurora_v1_fast"
-            | undefined) ?? "aurora_v1_fast",
-        override_avatar: args.overrideAvatar ?? null,
-        override_voice: args.overrideVoice ?? null,
-      });
+      const aspect =
+        (args.aspectRatio as "9x16" | "16x9" | "1x1" | undefined) ?? "9x16";
+      const model =
+        (args.modelVersion as
+          | "standard"
+          | "aurora_v1"
+          | "aurora_v1_fast"
+          | undefined) ?? "aurora_v1_fast";
+
+      let job: CreatifyJob;
+      if (useV2) {
+        const IMAGE_EXT = /\.(png|jpe?g|webp|gif)(\?|$)/i;
+        job = await createLipsyncV2({
+          video_inputs: (args.scenes ?? []).map((scene) => ({
+            // B-roll scenes keep the voiceover but swap the visual for the
+            // founder's real product footage/stills; avatar scenes show the
+            // avatar speaking. Same voice throughout = one coherent speaker.
+            character: scene.brollUrl
+              ? null
+              : {
+                  type: "avatar" as const,
+                  avatar_id: args.overrideAvatar as string,
+                },
+            voice: {
+              type: "text" as const,
+              input_text: scene.script,
+              voice_id: args.overrideVoice ?? null,
+            },
+            background: scene.brollUrl
+              ? {
+                  type: IMAGE_EXT.test(scene.brollUrl)
+                    ? ("image" as const)
+                    : ("video" as const),
+                  url: scene.brollUrl,
+                }
+              : null,
+          })),
+          aspect_ratio: aspect,
+          model_version: model,
+        });
+      } else {
+        job = await createLipsyncWithAurora({
+          script: args.avatarScript,
+          aspect_ratio: aspect,
+          model_version: model,
+          override_avatar: args.overrideAvatar ?? null,
+          override_voice: args.overrideVoice ?? null,
+        });
+      }
 
       const jobId = newJobId(job.id, 0);
       await ctx.runMutation(internal.gtmMaya.creatifyVideo.appendJob, {
         agentId: args.agentId,
         jobId,
-        mode: "ugc_avatar",
+        mode: useV2 ? "ugc_avatar_v2" : "ugc_avatar",
         creatifyId: job.id,
         status: job.status ?? "pending",
         productUrl: args.productUrl,
@@ -686,6 +788,40 @@ export const startInspirationQuery = internalAction({
     }
   },
 });
+
+/**
+ * Pull the preview candidates out of a done preview_list_async job. The docs
+ * shape the previews as media-job entries carrying an id + a playable URL;
+ * field names are docs-derived (⚠ unverified live, like iab_images), so this
+ * reads defensively: any array of objects with an id-ish and/or url-ish field.
+ */
+function extractPreviewCandidates(
+  terminal: CreatifyJob
+): Array<{ mediaJob: string; url: string | null }> {
+  const t = terminal as unknown as Record<string, unknown>;
+  const candidates: Array<{ mediaJob: string; url: string | null }> = [];
+  const arrays = [t.previews, t.media_jobs, t.preview_list, t.output].filter(
+    Array.isArray
+  ) as unknown[][];
+  for (const arr of arrays) {
+    for (const item of arr) {
+      if (!item || typeof item !== "object") continue;
+      const o = item as Record<string, unknown>;
+      const id =
+        (typeof o.media_job === "string" && o.media_job) ||
+        (typeof o.id === "string" && o.id) ||
+        "";
+      const url =
+        (typeof o.video_output === "string" && o.video_output) ||
+        (typeof o.url === "string" && o.url) ||
+        (typeof o.preview_url === "string" && o.preview_url) ||
+        null;
+      if (id) candidates.push({ mediaJob: id, url });
+    }
+    if (candidates.length > 0) break;
+  }
+  return candidates;
+}
 
 /**
  * Finalize a job whose Creatify status just went terminal-done: re-host the
@@ -814,6 +950,20 @@ export const pollVideoJob = internalAction({
     }
 
     if (isDoneStatus(terminal.status)) {
+      // Preview-first url_to_video: "done" in the preview phase means the
+      // PREVIEW LIST is ready, not the ad. Surface the candidates on the job
+      // (status preview_ready) and stop polling — Maya reviews via
+      // check_creative_status and calls render_chosen_preview to continue.
+      if (job.mode === "url_to_video" && job.phase === "preview") {
+        const previews = extractPreviewCandidates(terminal);
+        await ctx.runMutation(internal.gtmMaya.creatifyVideo.patchJob, {
+          agentId: args.agentId,
+          jobId: args.jobId,
+          status: "preview_ready",
+          previewsJson: JSON.stringify(previews),
+        });
+        return;
+      }
       await finalizeDoneJob(ctx, args.agentId, job, terminal);
       return;
     }
@@ -944,6 +1094,60 @@ export const e2eSmoke = internalAction({
 // HTTP endpoints (agent-facing typed tools land in Phase 3)
 // =====================================================================
 
+/**
+ * Preview-first phase 2: Maya picked a preview — render ONLY that one.
+ * Resets the poll counter and flips the job to the render phase; the durable
+ * poller then finalizes exactly like a classic url_to_video render.
+ */
+export const renderPreviewChoice = internalAction({
+  args: {
+    agentId: v.id("gtmAgents"),
+    jobId: v.string(),
+    mediaJob: v.string(),
+  },
+  handler: async (ctx, args): Promise<StartResult> => {
+    if (!isCreatifyConfigured()) {
+      return { ok: false, reason: "creatify_not_configured" };
+    }
+    const job = await ctx.runQuery(internal.gtmMaya.creatifyVideo.getJob, {
+      agentId: args.agentId,
+      jobId: args.jobId,
+    });
+    if (!job) return { ok: false, reason: "job_not_found" };
+    if (job.mode !== "url_to_video" || job.phase !== "preview") {
+      return { ok: false, reason: "not_a_preview_job" };
+    }
+    if (job.status !== "preview_ready") {
+      return { ok: false, reason: `previews_not_ready (status ${job.status})` };
+    }
+    const known = (job.previews ?? []).some((p) => p.mediaJob === args.mediaJob);
+    if (!known) {
+      return { ok: false, reason: "unknown_mediaJob (pick one from the job's previews)" };
+    }
+    try {
+      await renderLinkToVideoPreview(job.creatifyId, args.mediaJob);
+      await ctx.runMutation(internal.gtmMaya.creatifyVideo.patchJob, {
+        agentId: args.agentId,
+        jobId: args.jobId,
+        status: "pending",
+        phase: "render",
+        attempts: 0,
+      });
+      await ctx.scheduler.runAfter(
+        POLL_INTERVAL_MS,
+        internal.gtmMaya.creatifyVideo.pollVideoJob,
+        { agentId: args.agentId, jobId: args.jobId }
+      );
+      return { ok: true, jobId: args.jobId, creatifyId: job.creatifyId, status: "pending" };
+    } catch (err) {
+      return {
+        ok: false,
+        reason: `render_failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  },
+});
+
 async function startFromHttp(
   ctx: Parameters<Parameters<typeof httpAction>[0]>[0],
   agentId: Id<"gtmAgents">,
@@ -969,6 +1173,7 @@ async function startFromHttp(
       visualStyle: typeof body.visualStyle === "string" ? body.visualStyle : undefined,
       modelVersion: typeof body.modelVersion === "string" ? body.modelVersion : undefined,
       videoLength: typeof body.videoLength === "number" ? body.videoLength : undefined,
+      previewFirst: body.previewFirst === true ? true : undefined,
     }
   );
   return new Response(JSON.stringify(result), {
@@ -1100,6 +1305,14 @@ export const makeUgcVideoHttp = httpAction(async (ctx, request) => {
         typeof body.overrideAvatar === "string" ? body.overrideAvatar : undefined,
       overrideVoice:
         typeof body.overrideVoice === "string" ? body.overrideVoice : undefined,
+      scenes: Array.isArray(body.scenes)
+        ? (body.scenes as Array<Record<string, unknown>>)
+            .filter((s) => s && typeof s.script === "string")
+            .map((s) => ({
+              script: s.script as string,
+              brollUrl: typeof s.brollUrl === "string" ? s.brollUrl : undefined,
+            }))
+        : undefined,
     }
   );
   return new Response(JSON.stringify(result), {
@@ -1142,6 +1355,35 @@ export const creatifyInspirationsHttp = httpAction(async (ctx, request) => {
   const result = await ctx.runAction(
     internal.gtmMaya.creatifyVideo.startInspirationQuery,
     { agentId: auth.agentId }
+  );
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
+
+/** render_chosen_preview: phase 2 of the preview-first flow — Maya reviewed the
+ *  style previews and picked one; render only that winner (4-5 cr once, instead
+ *  of gambling the full render blind). */
+export const renderChosenPreviewHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (!body.jobId || typeof body.jobId !== "string") {
+    return new Response("missing required field (jobId)", { status: 400 });
+  }
+  if (!body.mediaJob || typeof body.mediaJob !== "string") {
+    return new Response("missing required field (mediaJob)", { status: 400 });
+  }
+  const result: StartResult = await ctx.runAction(
+    internal.gtmMaya.creatifyVideo.renderPreviewChoice,
+    { agentId: auth.agentId, jobId: body.jobId, mediaJob: body.mediaJob }
   );
   return new Response(JSON.stringify(result), {
     status: 200,

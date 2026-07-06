@@ -34,6 +34,7 @@ import type {
   IabImagesInput,
   LinkToVideoInput,
   LipsyncInput,
+  LipsyncV2Input,
 } from "./types";
 
 function assertId<T extends { id?: unknown }>(obj: T, what: string): T & { id: string } {
@@ -151,6 +152,49 @@ export async function getLinkToVideo(
   return client.request<CreatifyJob>(`/api/link_to_videos/${id}/`, { method: "GET" });
 }
 
+// ── Preview-first URL→video (the cost lever) ──────────────────────────────────
+// preview_list_async fans out multiple visual-style previews at 1 cr/30s EACH
+// vs 4-5 cr/30s per blind render. Flow: previews → Maya (or her critic) picks →
+// render_single_preview with the chosen preview's media_job id. Both phases
+// poll the SAME /api/link_to_videos/{id}/ job.
+
+export async function createLinkToVideoPreviews(
+  input: LinkToVideoInput,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  const res = await client.request<CreatifyJob>("/api/link_to_videos/preview_list_async/", {
+    method: "POST",
+    body: compact({
+      link: input.link,
+      aspect_ratio: input.aspect_ratio ?? "9x16",
+      video_length: input.video_length,
+      override_script: input.override_script,
+      script_style: input.script_style,
+      model_version: input.model_version,
+      override_avatar: input.override_avatar,
+      override_voice: input.override_voice,
+      target_platform: input.target_platform,
+      target_audience: input.target_audience,
+      language: input.language,
+      webhook_url: input.webhook_url,
+    }),
+  });
+  return assertId(res, "createLinkToVideoPreviews");
+}
+
+export async function renderLinkToVideoPreview(
+  id: string,
+  mediaJob: string,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  const res = await client.request<CreatifyJob>(
+    `/api/link_to_videos/${id}/render_single_preview/`,
+    { method: "POST", body: { media_job: mediaJob } }
+  );
+  // Render responses reuse the parent job id; fall back to it if omitted.
+  return { ...res, id: (res as { id?: string }).id ?? id };
+}
+
 // ── Aurora (ultra-realistic talking head: one photo + audio) ──────────────────
 
 export async function createAurora(
@@ -198,6 +242,42 @@ export async function getLipsync(
   client: CreatifyClient = getDefaultClient()
 ): Promise<CreatifyJob> {
   return client.request<CreatifyJob>(`/api/lipsyncs/${id}/`, { method: "GET" });
+}
+
+// ── Lipsync v2 (multi-scene UGC: avatar scenes + b-roll scenes) ───────────────
+// The avatar/b-roll "sandwich" format. Same credit schedule as v1.
+// ⚠ Docs-derived, UNVERIFIED LIVE — smoke via scripts/creatify-test.ts first.
+
+export async function createLipsyncV2(
+  input: LipsyncV2Input,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  const res = await client.request<CreatifyJob>("/api/lipsyncs_v2/", {
+    method: "POST",
+    body: compact({
+      video_inputs: input.video_inputs.map((scene) =>
+        compact({
+          character: scene.character ? compact({ ...scene.character }) : undefined,
+          voice: scene.voice ? compact({ ...scene.voice }) : undefined,
+          background: scene.background ? compact({ ...scene.background }) : undefined,
+          caption_setting: scene.caption_setting
+            ? compact({ ...scene.caption_setting })
+            : undefined,
+        })
+      ),
+      aspect_ratio: input.aspect_ratio ?? "9x16",
+      model_version: input.model_version ?? "aurora_v1_fast",
+      webhook_url: input.webhook_url,
+    }),
+  });
+  return assertId(res, "createLipsyncV2");
+}
+
+export async function getLipsyncV2(
+  id: string,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  return client.request<CreatifyJob>(`/api/lipsyncs_v2/${id}/`, { method: "GET" });
 }
 
 // ── AI Scripts (grounded script from URL or title+description) ────────────────
@@ -333,6 +413,8 @@ export async function getCreatifyJob(
       return getAurora(id, client);
     case "lipsync":
       return getLipsync(id, client);
+    case "lipsync_v2":
+      return getLipsyncV2(id, client);
     case "iab_images":
       return getIabImages(id, client);
     case "asset_gen":

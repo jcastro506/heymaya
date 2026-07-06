@@ -173,6 +173,7 @@ import {
 } from "./gtmMaya/mediaAssets";
 import {
   creatifyMakeAdHttp,
+  renderChosenPreviewHttp,
   creatifyCloneAdHttp,
   creatifyPollHttp,
   creatifyMakeAssetHttp,
@@ -330,6 +331,13 @@ http.route({
   path: "/lc_gtm/creatify_clone_ad",
   method: "POST",
   handler: creatifyCloneAdHttp,
+});
+// render_chosen_preview = phase 2 of the preview-first url_to_video flow:
+// Maya reviewed the cheap style previews and renders only the winner.
+http.route({
+  path: "/lc_gtm/creatify_render_preview",
+  method: "POST",
+  handler: renderChosenPreviewHttp,
 });
 http.route({
   path: "/lc_gtm/creatify_poll",
