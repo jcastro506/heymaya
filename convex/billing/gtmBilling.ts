@@ -81,6 +81,26 @@ const GTM_PLAN = v.union(
   v.literal("studio")
 );
 
+function checkoutReturnBaseUrl(candidate: string | undefined): string {
+  const fallback = process.env.APP_URL;
+  const raw = candidate ?? fallback;
+  if (!raw) throw new Error("createGtmCheckoutSession: APP_URL is not set.");
+
+  const url = new URL(raw);
+  if (url.protocol !== "https:" && url.hostname !== "localhost") {
+    throw new Error("createGtmCheckoutSession: invalid return origin.");
+  }
+  if (
+    url.hostname !== "localhost" &&
+    url.hostname !== "hey-maya.ai" &&
+    !url.hostname.endsWith(".hey-maya.ai") &&
+    !url.hostname.endsWith(".vercel.app")
+  ) {
+    throw new Error("createGtmCheckoutSession: return origin is not allowed.");
+  }
+  return url.origin;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Plan write — the single mutation the webhook AND the operator comp call.    */
 /* -------------------------------------------------------------------------- */
@@ -282,6 +302,7 @@ export const createGtmCheckoutSession = action({
     // in-app upgrade path. Without this, an onboarding payer lands on the
     // account page and never deploys.
     returnTo: v.optional(v.union(v.literal("onboarding"), v.literal("account"))),
+    returnBaseUrl: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ url: string }> => {
     const identity = await ctx.auth.getUserIdentity();
@@ -302,8 +323,7 @@ export const createGtmCheckoutSession = action({
         `createGtmCheckoutSession: STRIPE_PRICE_${prefix}_${interval.toUpperCase()} is not set — operator must create the Stripe product + set the env var.`
       );
     }
-    const baseUrl = process.env.APP_URL;
-    if (!baseUrl) throw new Error("createGtmCheckoutSession: APP_URL is not set.");
+    const baseUrl = checkoutReturnBaseUrl(args.returnBaseUrl);
 
     const stripe = getStripeClient();
 
