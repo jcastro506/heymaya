@@ -171,4 +171,17 @@ describe("Maya GTM OpenClaw deploy config", () => {
       }).TELEGRAM_BOT_TOKEN
     ).toBe("prod-token");
   });
+
+  it("carries the Convex switchboard URL and Telegram webhook secret into deploy secrets", () => {
+    expect(
+      collectDeploySecrets({
+        NEXT_PUBLIC_CONVEX_SITE_URL: "https://example.convex.site",
+        TELEGRAM_WEBHOOK_SECRET: "secret",
+      })
+    ).toMatchObject({
+      CONVEX_SITE_URL: "https://example.convex.site",
+      NEXT_PUBLIC_CONVEX_SITE_URL: "https://example.convex.site",
+      TELEGRAM_WEBHOOK_SECRET: "secret",
+    });
+  });
 });

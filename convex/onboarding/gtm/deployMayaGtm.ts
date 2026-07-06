@@ -1951,6 +1951,7 @@ export function collectDeploySecrets(
   for (const key of [
     "CONVEX_URL",
     "CONVEX_SITE_URL",
+    "NEXT_PUBLIC_CONVEX_SITE_URL",
     "COMPOSIO_API_KEY",
     "SCRAPE_CREATORS_API_KEY",
     "SCRAPECREATORS_API_KEY",
@@ -1964,6 +1965,7 @@ export function collectDeploySecrets(
     // telegram` drops with no recipient). Verified live 2026-05-24:
     // synth Maya booted with 0 channels because token wasn't propagated.
     "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_WEBHOOK_SECRET",
     // Sprint 1.1 — TwitterAPI.io is now the X keyword-search backend (the
     // Convex-side wrapper calls it from researchWorker, but Maya's runtime
     // skills may also reference it via the kaitoInfra/twitterapi-io skill
@@ -1985,6 +1987,9 @@ export function collectDeploySecrets(
   }
   if (!secrets.GOOGLE_GENERATIVE_AI_API_KEY && env.GEMINI_API_KEY) {
     secrets.GOOGLE_GENERATIVE_AI_API_KEY = env.GEMINI_API_KEY;
+  }
+  if (!secrets.CONVEX_SITE_URL && env.NEXT_PUBLIC_CONVEX_SITE_URL) {
+    secrets.CONVEX_SITE_URL = env.NEXT_PUBLIC_CONVEX_SITE_URL;
   }
   const stage = (env.CONVEX_DEPLOYMENT ?? "").includes("precise-canary-781")
     ? "staging"
