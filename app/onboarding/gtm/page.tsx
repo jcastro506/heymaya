@@ -337,6 +337,16 @@ function GtmOnboardingBody() {
 
   async function saveAndQueueResearch() {
     if (!canSubmit) return;
+    // Don't fire the mutation until Convex has actually accepted the Clerk
+    // token. Otherwise `setAppProfile` lands with a null identity and throws
+    // "requires a signed-in user" — a confusing raw error the founder can't
+    // act on. This window is a fraction of a second on a warm client but can
+    // linger on a cold load, so surface a plain "still connecting" state and
+    // let the founder retry rather than crashing the step.
+    if (!isAuthenticated) {
+      setError("Still connecting to your account — give it a second and tap Continue again.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -827,12 +837,16 @@ function GtmOnboardingBody() {
           </Field>
           <button
             onClick={saveAndQueueResearch}
-            disabled={!canSubmit || busy}
+            disabled={!canSubmit || busy || !isAuthenticated}
             className="inline-flex items-center gap-2 rounded-full bg-paper px-7 py-3 text-sm font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? (
               <>
                 <Spinner className="text-ink" /> Reading your product…
+              </>
+            ) : !isAuthenticated ? (
+              <>
+                <Spinner className="text-ink" /> Connecting…
               </>
             ) : (
               "Continue →"
