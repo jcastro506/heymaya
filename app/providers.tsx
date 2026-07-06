@@ -8,6 +8,11 @@ import { PostHogProvider } from "@/components/analytics/PostHogProvider";
 
 const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
+const allowedRedirectOrigins = [
+  /^https:\/\/([a-z0-9-]+\.)?hey-maya\.ai$/,
+  /^http:\/\/localhost(:\d+)?$/,
+];
+
 const clerkAppearance = {
   variables: {
     colorPrimary: "#ffffff",
@@ -44,7 +49,10 @@ const clerkAppearance = {
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <ClerkProvider appearance={clerkAppearance}>
+    <ClerkProvider
+      allowedRedirectOrigins={allowedRedirectOrigins}
+      appearance={clerkAppearance}
+    >
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
         <PostHogProvider>{children}</PostHogProvider>
       </ConvexProviderWithClerk>

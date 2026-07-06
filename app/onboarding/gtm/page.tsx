@@ -1,7 +1,15 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
+import { SignOutButton, useAuth } from "@clerk/nextjs";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -155,7 +163,8 @@ function GtmOnboardingBody() {
   // auth-required mutation. Right after sign-up the token takes a beat to
   // propagate; firing startOnboarding too early throws "signed-in user
   // required" — a race, not a real error.
-  const { isAuthenticated } = useConvexAuth();
+  const { isLoaded: isClerkLoaded, isSignedIn } = useAuth();
+  const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
   const snapshot = useQuery(api.gtmMaya.researchLifecycle.getMyGtmSnapshot);
   const startOnboarding = useMutation(
     api.gtmMaya.researchLifecycle.startGtmOnboarding
@@ -291,26 +300,6 @@ function GtmOnboardingBody() {
     if (next) setStage(next);
   }, [snapshot]);
 
-  // AUTO-DEPLOY once the plan goes active. The plan stage no longer has a
-  // manual "Launch Maya" button — the moment the Stripe webhook grants the
-  // trial (snapshot is a live query, so `planActive` flips reactively on
-  // return), we fire the deploy + spinner automatically. Fires exactly once
-  // (deployFiredRef), and never before a plan exists (so the tier picker still
-  // shows for an unpaid founder).
-  const deployFiredRef = useRef(false);
-  useEffect(() => {
-    if (stage !== "plan" || deploying || deployFiredRef.current) return;
-    if (!snapshot) return;
-    const pf = planFeaturesGtm({ gtmPlanJson: snapshot.agent.gtmPlanJson });
-    const planActive = pf.status !== "none" && pf.maxActiveChannels > 0;
-    const deployed = Boolean(snapshot.agent.openClawFlyAppId);
-    if (planActive && !deployed) {
-      deployFiredRef.current = true;
-      void deploy();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, snapshot, deploying]);
-
   const canSubmit = useMemo(() => {
     // W1.3 — a mobile-only founder with no landing page can submit with just a
     // store link; the store listing becomes Maya's product-context source.
@@ -334,6 +323,58 @@ function GtmOnboardingBody() {
     draft.playStoreUrl,
     draft.differentiator,
   ]);
+  const authPending =
+    !isClerkLoaded || (Boolean(isSignedIn) && isConvexAuthLoading);
+  const signedOut = isClerkLoaded && !isSignedIn;
+  const authMismatch =
+    isClerkLoaded &&
+    Boolean(isSignedIn) &&
+    !isConvexAuthLoading &&
+    !isAuthenticated;
+
+  const deploy = useCallback(async () => {
+    setDeploying(true);
+    setError(null);
+    try {
+      const result = await deployMaya({});
+      if (result.ok) {
+        track(ANALYTICS_EVENTS.PLAN_READY, { fly_app_id: result.flyAppId });
+        // Machine is up → advance to Connect. Now her OpenClaw exists, so the
+        // moment they press Start in Telegram she routes + texts back.
+        setStage("connect");
+        setDeploying(false);
+      } else {
+        // Non-ok deploy → surface the reason, drop the spinner so they can retry.
+        setError(`${result.stage}: ${result.message}`);
+        setDeploying(false);
+      }
+    } catch (err) {
+      setError(friendlyError(err));
+      setDeploying(false);
+    }
+  }, [deployMaya]);
+
+  // AUTO-DEPLOY once the plan goes active. The plan stage no longer has a
+  // manual "Launch Maya" button — the moment the Stripe webhook grants the
+  // trial (snapshot is a live query, so `planActive` flips reactively on
+  // return), we fire the deploy + spinner automatically. Fires exactly once
+  // (deployFiredRef), and never before a plan exists (so the tier picker still
+  // shows for an unpaid founder).
+  const deployFiredRef = useRef(false);
+  useEffect(() => {
+    if (stage !== "plan" || deploying || deployFiredRef.current) return;
+    if (!snapshot) return;
+    const pf = planFeaturesGtm({ gtmPlanJson: snapshot.agent.gtmPlanJson });
+    const planActive = pf.status !== "none" && pf.maxActiveChannels > 0;
+    const deployed = Boolean(snapshot.agent.openClawFlyAppId);
+    if (planActive && !deployed) {
+      deployFiredRef.current = true;
+      // Justified: this is an external deployment side effect triggered by a
+      // live Stripe/Convex state transition, guarded so it fires once.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void deploy();
+    }
+  }, [stage, snapshot, deploying, deploy]);
 
   async function saveAndQueueResearch() {
     if (!canSubmit) return;
@@ -470,28 +511,6 @@ function GtmOnboardingBody() {
     }
   }
 
-  async function deploy() {
-    setDeploying(true);
-    setError(null);
-    try {
-      const result = await deployMaya({});
-      if (result.ok) {
-        track(ANALYTICS_EVENTS.PLAN_READY, { fly_app_id: result.flyAppId });
-        // Machine is up → advance to Connect. Now her OpenClaw exists, so the
-        // moment they press Start in Telegram she routes + texts back.
-        setStage("connect");
-        setDeploying(false);
-      } else {
-        // Non-ok deploy → surface the reason, drop the spinner so they can retry.
-        setError(`${result.stage}: ${result.message}`);
-        setDeploying(false);
-      }
-    } catch (err) {
-      setError(friendlyError(err));
-      setDeploying(false);
-    }
-  }
-
   if (snapshot === undefined) {
     return <Shell>Loading...</Shell>;
   }
@@ -517,6 +536,33 @@ function GtmOnboardingBody() {
       {error && (
         <div className="mb-6 rounded border border-red-600 bg-red-50 p-4 text-sm text-red-700">
           {error}
+        </div>
+      )}
+
+      {signedOut && (
+        <div className="mb-6 rounded border border-paper/20 bg-ink-2 p-4 text-sm text-paper-dim">
+          Sign up or sign in to finish setting up Maya.
+          <Link
+            href="/sign-up?redirect_url=/onboarding/gtm"
+            className="ml-2 font-medium text-paper underline underline-offset-4"
+          >
+            Continue with an account
+          </Link>
+        </div>
+      )}
+
+      {authMismatch && (
+        <div className="mb-6 rounded border border-red-600 bg-red-50 p-4 text-sm text-red-700">
+          Your browser is signed in, but Maya could not connect that session to
+          the workspace yet. Sign in again, then return here.
+          <SignOutButton redirectUrl="/sign-up?redirect_url=/onboarding/gtm">
+            <button
+              type="button"
+              className="ml-2 font-medium underline underline-offset-4"
+            >
+              Reconnect account
+            </button>
+          </SignOutButton>
         </div>
       )}
 
@@ -844,10 +890,14 @@ function GtmOnboardingBody() {
               <>
                 <Spinner className="text-ink" /> Reading your product…
               </>
-            ) : !isAuthenticated ? (
+            ) : authPending ? (
               <>
                 <Spinner className="text-ink" /> Connecting…
               </>
+            ) : signedOut ? (
+              "Sign in to continue"
+            ) : authMismatch ? (
+              "Reconnect account"
             ) : (
               "Continue →"
             )}
