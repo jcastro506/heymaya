@@ -103,6 +103,16 @@ describe("Maya GTM OpenClaw deploy config", () => {
       "cp /data/workspace/jobs.json /data/cron/jobs.json"
     );
     expect(config.init?.cmd?.join(" ")).toContain("chmod 700 /data/cron");
+    expect(config.services).toEqual([
+      {
+        protocol: "tcp",
+        internal_port: 18789,
+        ports: [
+          { port: 443, handlers: ["tls", "http"] },
+          { port: 80, handlers: ["http"] },
+        ],
+      },
+    ]);
   });
 
   it("keeps Telegram in Convex switchboard webhook mode when configured", () => {
