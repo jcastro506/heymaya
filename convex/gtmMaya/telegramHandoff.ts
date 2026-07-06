@@ -84,23 +84,65 @@ export const getInboundContextByChat = internalQuery({
   },
 });
 
+/**
+ * Retry schedule for inbound forwards. A founder's message must NEVER be
+ * silently dropped because the machine is mid-boot/redeploy (root-caused live
+ * 2026-07-06: messages sent during a deploy window hit a dead hostname and
+ * vanished). Machine boots take ~1-2 min; a redeploy up to ~5. Backoff spans
+ * ~6.5 min total, then we surface the failure to the founder's activity feed
+ * instead of pretending nothing happened.
+ */
+const INBOUND_RETRY_DELAYS_MS = [30_000, 60_000, 120_000, 180_000];
+
 export const routeInboundToMachine = internalAction({
   args: {
     chatId: v.string(),
     text: v.string(),
     username: v.optional(v.string()),
+    attempt: v.optional(v.number()),
   },
   handler: async (
     ctx,
     args
-  ): Promise<{ status: "ok" | "skipped"; reason: string }> => {
+  ): Promise<{ status: "ok" | "skipped" | "retrying"; reason: string }> => {
+    const attempt = args.attempt ?? 0;
     const ctxRow = await ctx.runQuery(
       internal.gtmMaya.telegramHandoff.getInboundContextByChat,
       { chatId: args.chatId }
     );
     if (!ctxRow) return { status: "skipped", reason: "no agent for this chat" };
+
+    const retryOrGiveUp = async (reason: string): Promise<{
+      status: "skipped" | "retrying";
+      reason: string;
+    }> => {
+      if (attempt < INBOUND_RETRY_DELAYS_MS.length) {
+        await ctx.scheduler.runAfter(
+          INBOUND_RETRY_DELAYS_MS[attempt],
+          internal.gtmMaya.telegramHandoff.routeInboundToMachine,
+          { ...args, attempt: attempt + 1 }
+        );
+        return { status: "retrying", reason: `${reason} — retry ${attempt + 1}` };
+      }
+      // Out of retries — leave a visible trace so the drop is never silent.
+      console.warn(
+        `[inbound-route] giving up after ${attempt} retries: ${reason}`
+      );
+      await ctx.runMutation(internal.gtmMaya.missionControl.recordAgentActivity, {
+        accountId: ctxRow.agent.accountId,
+        agentId: ctxRow.agent._id,
+        kind: "status",
+        summary:
+          "A Telegram message from you couldn't reach Maya's machine — she may have missed it. Say it again and she'll pick it up.",
+        detail: reason,
+      }).catch(() => {});
+      return { status: "skipped", reason };
+    };
+
     if (!ctxRow.hookBaseUrl || !ctxRow.hookToken) {
-      return { status: "skipped", reason: "agent not deployed yet" };
+      // Mid-deploy window: the row exists but the machine isn't addressable
+      // yet. Retry — the deploy stamps hookToken/flyApp when the machine is up.
+      return await retryOrGiveUp("agent not deployed yet");
     }
     const endpoint: HookEndpoint = {
       baseUrl: ctxRow.hookBaseUrl,
@@ -119,6 +161,10 @@ export const routeInboundToMachine = internalAction({
         console.warn(
           `[inbound-route] runAgentTurn ${result.status}: ${result.error ?? "?"}`
         );
+        // 0 = network/unreachable, 5xx = machine unhealthy → both retryable.
+        if (result.status === 0 || result.status >= 500) {
+          return await retryOrGiveUp(`hook ${result.status}`);
+        }
         return { status: "skipped", reason: `hook ${result.status}` };
       }
       return { status: "ok", reason: "forwarded to machine" };
@@ -126,7 +172,7 @@ export const routeInboundToMachine = internalAction({
       console.warn(
         `[inbound-route] forward failed: ${(err as Error).message}`
       );
-      return { status: "skipped", reason: "forward error" };
+      return await retryOrGiveUp("forward error");
     }
   },
 });
