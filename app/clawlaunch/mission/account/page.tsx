@@ -20,6 +20,7 @@ import {
 import { ConnectedAccounts } from "./_ConnectedAccounts";
 import { ProductBrain } from "./_ProductBrain";
 import { PostingControl } from "./_PostingControl";
+import { StandingInstructions } from "./_StandingInstructions";
 import { TierSelector, type GtmTier } from "@/components/billing/TierSelector";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -239,6 +240,10 @@ export default function AccountPage() {
             <ConnectedAccounts />
           </div>
         </Card>
+      </Section>
+
+      <Section title="Standing instructions">
+        <StandingInstructions />
       </Section>
 
       <Section title="Plan">

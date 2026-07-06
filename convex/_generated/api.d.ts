@@ -132,6 +132,7 @@ import type * as gtmMaya_managerStore from "../gtmMaya/managerStore.js";
 import type * as gtmMaya_mediaAssets from "../gtmMaya/mediaAssets.js";
 import type * as gtmMaya_memoryLedger from "../gtmMaya/memoryLedger.js";
 import type * as gtmMaya_mineCommentTrees from "../gtmMaya/mineCommentTrees.js";
+import type * as gtmMaya_missionActions from "../gtmMaya/missionActions.js";
 import type * as gtmMaya_missionBoard from "../gtmMaya/missionBoard.js";
 import type * as gtmMaya_missionControl from "../gtmMaya/missionControl.js";
 import type * as gtmMaya_openclaw_conversationCapture from "../gtmMaya/openclaw/conversationCapture.js";
@@ -459,6 +460,7 @@ declare const fullApi: ApiFromModules<{
   "gtmMaya/mediaAssets": typeof gtmMaya_mediaAssets;
   "gtmMaya/memoryLedger": typeof gtmMaya_memoryLedger;
   "gtmMaya/mineCommentTrees": typeof gtmMaya_mineCommentTrees;
+  "gtmMaya/missionActions": typeof gtmMaya_missionActions;
   "gtmMaya/missionBoard": typeof gtmMaya_missionBoard;
   "gtmMaya/missionControl": typeof gtmMaya_missionControl;
   "gtmMaya/openclaw/conversationCapture": typeof gtmMaya_openclaw_conversationCapture;

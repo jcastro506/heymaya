@@ -18,16 +18,10 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
   Shell,
-  Section,
-  Card,
-  Pill,
   Loading,
   Empty,
   NeedsOnboarding,
-  timeAgo,
-  ExtLink,
 } from "../_components";
-import { FoundationInsights } from "./_FoundationInsights";
 import { DecisionTimeline } from "./_DecisionTimeline";
 
 type Range = "hour" | "day" | "week";
@@ -142,8 +136,8 @@ function Thought({ a, live }: { a: Activity; live: boolean }) {
           </span>
         ) : null}
       </div>
-      {/* the insight — the headline she's making */}
-      <p className="mt-1 text-[15px] font-medium leading-snug text-paper">
+      {/* the insight — her voice, set like a line from a letter */}
+      <p className="mt-1 font-display text-[17px] italic leading-snug text-paper">
         {a.summary}
       </p>
       {/* her reasoning */}
@@ -178,12 +172,6 @@ export default function ThinkingPage() {
     sinceMs,
     limit: 500,
   }) as Activity[] | undefined;
-
-  // W3 — Maya's state of knowledge (foundation tables), rendered as grounded
-  // reasoning cards above the live pulse. Optional: never blocks the pulse.
-  const insights = useQuery(
-    api.gtmMaya.missionControl.getMyFoundationInsights
-  );
 
   if (snapshot === undefined || activity === undefined) return <Loading />;
   if (snapshot === null) return <NeedsOnboarding />;
@@ -220,23 +208,8 @@ export default function ThinkingPage() {
   return (
     <Shell
       title="Thinking"
-      subtitle={`What ${appName}'s manager has figured out — and what she's thinking right now.`}
+      subtitle={`Maya, thinking out loud about ${appName} — her insights first, the receipts underneath. What she's learned lives in Brain.`}
     >
-      {/* W3 — grounded reasoning (state of knowledge), above everything. */}
-      {insights ? <FoundationInsights data={insights} /> : null}
-
-      {/* The centerpiece — Maya's real tool-call decision trace, live. */}
-      <DecisionTimeline />
-
-      {/* Live pulse — Maya's own narration (post_activity), secondary to the
-          grounded decision timeline above. */}
-      <div className="mb-4 flex items-center gap-3">
-        <h2 className="font-mono text-xs uppercase tracking-[0.18em] text-paper-faint">
-          In her words
-        </h2>
-        <div className="h-px flex-1 bg-paper-faint/15" />
-      </div>
-
       {/* Range toggle */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="inline-flex rounded-lg border border-paper-faint/15 bg-ink-2 p-0.5">
@@ -294,7 +267,7 @@ export default function ThinkingPage() {
           body={
             selected.size > 0
               ? "Nothing of those kinds in this window. Widen the range or clear the filter."
-              : "No thoughts in this window yet. As your manager reads, reasons, and decides, her trace streams in here live."
+              : "No thoughts in this window yet. As Maya reads, reasons, and decides, her trace streams in here live."
           }
         />
       ) : (
@@ -320,6 +293,18 @@ export default function ThinkingPage() {
           ))}
         </div>
       )}
+
+      {/* The receipts — every literal tool call she made, collapsed by
+          default. The narrative above is the product; this is the audit. */}
+      <details className="group mt-12 border-t border-paper-faint/15 pt-6">
+        <summary className="flex cursor-pointer select-none items-center gap-3 font-mono text-xs uppercase tracking-[0.18em] text-paper-faint transition-colors hover:text-paper">
+          <span className="inline-block transition-transform group-open:rotate-90">▸</span>
+          The receipts — every call she actually made
+        </summary>
+        <div className="mt-6">
+          <DecisionTimeline />
+        </div>
+      </details>
     </Shell>
   );
 }
