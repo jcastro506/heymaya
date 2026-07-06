@@ -1434,6 +1434,16 @@ export const deployMayaGtm = internalAction({
       }
     }
 
+    // Convex routes Telegram switchboard updates and lifecycle nudges back into
+    // OpenClaw via https://<app>.fly.dev/hooks/*. Machines API apps do not get
+    // public DNS/ingress by default, so allocate addresses before creating the
+    // machine. Duplicate allocations are non-fatal on redeploys.
+    try {
+      await ensurePublicFlyIngress(fly, bundle.flyAppName);
+    } catch (err) {
+      return fail("create-app", (err as Error).message, isRetryable(err));
+    }
+
     try {
       // Sprint 2.18 — mint a per-deploy OPENCLAW_GATEWAY_TOKEN. OpenClaw
       // 2026.5.x refuses to start the gateway in container environments
@@ -1858,18 +1868,14 @@ export function buildGtmMachineConfig(input: {
     },
     guest: MACHINE_GUEST,
     restart: { policy: "always" },
-    // Sprint 2.16u-fix17 — services block exposes OpenClaw's Telegram
-    // webhook port (8787) publicly so Telegram can push updates to this
-    // machine. Per docs/channels/telegram.md "Long polling vs webhook":
-    // webhookHost:0.0.0.0 + webhookPort:8787 + Fly proxy → https://<flyApp>.fly.dev
-    // routes external 443 traffic to internal 8787.
-    //
-    // Gateway WebSocket port (18789) stays loopback-only (no controlUi
-    // exposure on the public internet — only the webhook surface).
+    // Public 443 must terminate at OpenClaw's gateway port because Convex calls
+    // https://<flyApp>.fly.dev/hooks/{agent,wake} from the Telegram switchboard
+    // and lifecycle workers. Telegram itself points at Convex, not this machine,
+    // so the local Telegram listener on 8787 stays private.
     services: [
       {
         protocol: "tcp" as const,
-        internal_port: 8787,
+        internal_port: 18789,
         ports: [
           { port: 443, handlers: ["tls" as const, "http" as const] },
           { port: 80, handlers: ["http" as const] },
@@ -1885,6 +1891,31 @@ export function buildGtmMachineConfig(input: {
       cmd: ["/bin/sh", "-c", buildBootstrapShell()],
     },
   };
+}
+
+async function ensurePublicFlyIngress(
+  fly: FlyClient,
+  appName: string
+): Promise<void> {
+  await ignoreAlreadyAllocated(() => fly.allocateSharedV4(appName));
+  await ignoreAlreadyAllocated(() => fly.allocateV6(appName));
+}
+
+async function ignoreAlreadyAllocated(fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    const message = (err as Error).message.toLowerCase();
+    if (
+      message.includes("already") &&
+      (message.includes("allocated") ||
+        message.includes("exists") ||
+        message.includes("taken"))
+    ) {
+      return;
+    }
+    throw err;
+  }
 }
 
 export function flyAppNameForGtmAgent(agentId: Id<"gtmAgents"> | string): string {
