@@ -59,10 +59,8 @@ describe("Maya GTM OpenClaw deploy config", () => {
         // allowlist (deny-by-default). External-architect cited known
         // OpenClaw bug where doctor-bundled-plugin-runtime-deps still
         // installed disabled-channel deps via a health path.
-        allow: ["telegram", "maya-gtm-tools"],
-        entries: {
-          telegram: { enabled: true },
-        },
+        allow: ["maya-gtm-tools"],
+        entries: {},
       },
       discovery: { mdns: { mode: "off" } },
       skills: { load: { watch: true } },
@@ -105,6 +103,33 @@ describe("Maya GTM OpenClaw deploy config", () => {
       "cp /data/workspace/jobs.json /data/cron/jobs.json"
     );
     expect(config.init?.cmd?.join(" ")).toContain("chmod 700 /data/cron");
+  });
+
+  it("keeps Telegram in Convex switchboard webhook mode when configured", () => {
+    const config = buildGtmMachineConfig({
+      agentId: "agent",
+      flyAppName: "clawlaunch-agent",
+      workspaceBundleUrl: "https://storage.test/workspace.tar",
+      telegramChatId: "123456",
+      telegramWebhookUrl: "https://example.convex.site/telegram/webhook",
+      telegramWebhookSecret: "webhook-secret",
+    });
+
+    const bootstrap = JSON.parse(config.env?.MAYA_BOOTSTRAP_JSON ?? "{}");
+    expect(bootstrap.gatewayConfig.plugins).toMatchObject({
+      allow: ["telegram", "maya-gtm-tools"],
+      entries: { telegram: { enabled: true } },
+    });
+    expect(bootstrap.gatewayConfig.channels.telegram).toMatchObject({
+      enabled: true,
+      dmPolicy: "allowlist",
+      allowFrom: [123456],
+      webhookUrl: "https://example.convex.site/telegram/webhook",
+      webhookSecret: "webhook-secret",
+      webhookHost: "0.0.0.0",
+      webhookPort: 8787,
+      webhookPath: "/telegram-webhook",
+    });
   });
 
   it("uses Kimi K2-0905 as the default GTM OpenClaw model", () => {
