@@ -575,7 +575,7 @@ function ChannelPane({
   return (
     <article className="border-b border-[#0a0a0a]/10 py-28 first:pt-6 sm:py-40 sm:first:pt-10 lg:py-48 lg:first:pt-12 last:border-b-0">
       <RevealOnView>
-        <div className="grid grid-cols-12 gap-x-8 gap-y-12 lg:gap-y-0">
+        <div className="grid grid-cols-12 gap-y-12 lg:gap-x-8 lg:gap-y-0">
           {/* LEFT — text */}
           <div className="col-span-12 lg:col-span-5">
             <div className="mb-5">{logo}</div>
@@ -801,7 +801,7 @@ function Pricing() {
             channels she runs, and whether she films it too.
           </p>
         </RevealOnView>
-        <div className="grid grid-cols-12 gap-x-12 gap-y-14">
+        <div className="grid grid-cols-12 gap-y-14 sm:gap-x-12">
           <RevealOnView delay={0.05} className="col-span-12 sm:col-span-4">
             <PriceColumn
               accent={false}
@@ -1089,7 +1089,7 @@ function TelegramSection() {
   return (
     <section className="relative border-t border-[#0a0a0a]/10 px-6 py-28 sm:px-10 sm:py-40">
       <div className="mx-auto max-w-7xl">
-        <div className="grid grid-cols-12 items-center gap-x-8 gap-y-16 lg:gap-y-0">
+        <div className="grid grid-cols-12 items-center gap-y-16 lg:gap-x-8 lg:gap-y-0">
           {/* LEFT — text */}
           <div className="col-span-12 lg:col-span-6">
             <RevealOnView>
@@ -1223,7 +1223,7 @@ function Attribution() {
   return (
     <section id="proof" className="relative border-t border-[#0a0a0a]/10 px-6 py-28 sm:px-10 sm:py-40">
       <div className="mx-auto max-w-7xl">
-        <div className="grid grid-cols-12 gap-x-8 gap-y-16 lg:gap-y-0">
+        <div className="grid grid-cols-12 gap-y-16 lg:gap-x-8 lg:gap-y-0">
           {/* LEFT — text */}
           <div className="col-span-12 lg:col-span-5 lg:pt-4">
             <RevealOnView>
@@ -1309,7 +1309,7 @@ function BanSafety() {
   return (
     <section id="safe" className="relative border-t border-[#0a0a0a]/10 px-6 py-28 sm:px-10 sm:py-40">
       <div className="mx-auto max-w-7xl">
-        <div className="grid grid-cols-12 gap-x-8 gap-y-16 lg:gap-y-0">
+        <div className="grid grid-cols-12 gap-y-16 lg:gap-x-8 lg:gap-y-0">
           {/* LEFT — mockup first on this one for visual variety */}
           <div className="col-span-12 lg:col-span-7">
             <RevealOnView>
