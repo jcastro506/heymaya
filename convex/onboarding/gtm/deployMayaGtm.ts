@@ -996,7 +996,7 @@ export function buildGatewayConfig(
     hooks: {
       enabled: true,
       path: "/hooks",
-      token: { source: "env", provider: "default", id: "HOOK_TOKEN" },
+      token: "${HOOK_TOKEN}",
       allowedAgentIds: ["main"],
       internal: {
         enabled: true,
