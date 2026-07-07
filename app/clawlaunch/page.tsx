@@ -63,9 +63,14 @@ export default function ClawLaunchLandingPage() {
       <PageStyles />
       <ScrollLine />
       <Masthead />
+      <StickyCTA />
       <Hero />
       <Channels />
       <AWeekWithMaya />
+      <InlineCTA
+        kicker="This is the week you keep skipping"
+        line="She runs it. You keep building."
+      />
       <TelegramSection />
       <Attribution />
       <BanSafety />
@@ -131,6 +136,79 @@ function Masthead() {
  * headline left-weighted; right column carries the eyebrow + meta
  * datum (mono, like the colophon of a magazine).
  * ----------------------------------------------------------------- */
+/* -----------------------------------------------------------------
+ * StickyCTA — the CTA desert fix. A slim bar that fades in once the hero
+ * scrolls out, so a "sold at any scroll depth" visitor always has a button.
+ * Editorial-quiet: paper bg, hairline, one dark pill. Hidden until ~1 screen.
+ * ----------------------------------------------------------------- */
+function StickyCTA() {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShown(window.scrollY > window.innerHeight * 0.9);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  return (
+    <div
+      aria-hidden={!shown}
+      className={`fixed inset-x-0 top-0 z-30 border-b border-[#0a0a0a]/10 bg-[#fbfaf6]/90 backdrop-blur transition-all duration-300 ${
+        shown ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0"
+      }`}
+    >
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3 sm:px-10">
+        <span className="hidden font-mono text-[11px] uppercase tracking-[0.22em] sm:block">
+          HeyMaya
+        </span>
+        <p className="min-w-0 flex-1 truncate font-display italic text-[15px] sm:flex-none sm:text-[17px]">
+          Stop staring at the flat line.
+        </p>
+        <Link
+          prefetch={false}
+          href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
+          tabIndex={shown ? 0 : -1}
+          className="shrink-0 rounded-full bg-[#0a0a0a] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-[#fbfaf6] transition-opacity hover:opacity-85"
+        >
+          {primaryCtaLabel("Start free")} →
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/* -----------------------------------------------------------------
+ * InlineCTA — a mid-page capture point at a peak-desire moment, so the
+ * reader never has to scroll to pricing to act. One line, one button.
+ * ----------------------------------------------------------------- */
+function InlineCTA({ kicker, line }: { kicker: string; line: string }) {
+  return (
+    <section className="relative px-6 py-20 sm:px-10 sm:py-28">
+      <div className="mx-auto max-w-7xl">
+        <RevealOnView>
+          <div className="flex flex-col items-start gap-6 border-y border-[#0a0a0a]/15 py-12 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
+                {kicker}
+              </p>
+              <p className="font-display italic text-[clamp(1.6rem,3.2vw,2.6rem)] leading-[1.1] tracking-tight">
+                {line}
+              </p>
+            </div>
+            <Link
+              prefetch={false}
+              href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
+              className="cta-primary shrink-0"
+            >
+              {primaryCtaLabel("Start HeyMaya")}
+              <span className="cta-arrow">→</span>
+            </Link>
+          </div>
+        </RevealOnView>
+      </div>
+    </section>
+  );
+}
+
 function Hero() {
   return (
     <section className="relative px-6 pt-24 pb-32 sm:px-10 sm:pt-36 sm:pb-48 lg:pt-44 lg:pb-56">
