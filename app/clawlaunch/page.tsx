@@ -356,7 +356,8 @@ const DEMO_VIDEOS: Record<
   { src: string | null; poster: string | null }
 > = {
   tiktok: { src: "/demos/tiktok.mp4", poster: "/demos/tiktok.jpg" },
-  instagram: { src: "/demos/instagram.mp4", poster: "/demos/instagram.jpg" },
+  // Reuse the real avatar testimonial Maya cut for HeyMaya (also the YouTube pane).
+  instagram: { src: "/demos/youtube.mp4", poster: "/demos/youtube.jpg" },
   // The avatar testimonial Maya cut for HeyMaya itself — a Short, dogfooded.
   youtube: { src: "/demos/youtube.mp4", poster: "/demos/youtube.jpg" },
 };
