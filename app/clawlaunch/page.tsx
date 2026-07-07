@@ -356,8 +356,7 @@ const DEMO_VIDEOS: Record<
   { src: string | null; poster: string | null }
 > = {
   tiktok: { src: "/demos/tiktok.mp4", poster: "/demos/tiktok.jpg" },
-  // Reuse the real avatar testimonial Maya cut for HeyMaya (also the YouTube pane).
-  instagram: { src: "/demos/youtube.mp4", poster: "/demos/youtube.jpg" },
+  instagram: { src: "/demos/instagram.mp4", poster: "/demos/instagram.jpg" },
   // The avatar testimonial Maya cut for HeyMaya itself — a Short, dogfooded.
   youtube: { src: "/demos/youtube.mp4", poster: "/demos/youtube.jpg" },
 };
@@ -613,6 +612,14 @@ function Channels() {
             mockupLabel="Here's the Reel she'd post →"
             mockup={<PlatformVideo platform="instagram" label="3 apps tried to fix my camera roll. only one actually did." />}
           />
+          <ChannelPane
+            logo={<YouTubeLogo className="size-11" />}
+            name="YouTube."
+            tagline="Where your buyers already explained the problem, in the comments."
+            body="She mines comment sections across your niche's top videos to find the exact language your buyers use when they describe the problem. That becomes the script. Then she makes the Short, your real product in it, and uploads it to your channel."
+            mockupLabel="Here's one she made →"
+            mockup={<PlatformVideo platform="youtube" label="Built by hand. Marketed by Maya." />}
+          />
 
           <ChannelPane
             logo={<RedditLogo className="size-11" />}
@@ -632,14 +639,6 @@ function Channels() {
             mockup={<HackerNewsMockup />}
           />
 
-          <ChannelPane
-            logo={<YouTubeLogo className="size-11" />}
-            name="YouTube."
-            tagline="Where your buyers already explained the problem, in the comments."
-            body="She mines comment sections across your niche's top videos to find the exact language your buyers use when they describe the problem. That becomes the script. Then she makes the Short, your real product in it, and uploads it to your channel."
-            mockupLabel="Here's one she made →"
-            mockup={<PlatformVideo platform="youtube" label="Built by hand. Marketed by Maya." />}
-          />
         </div>
 
         <div className="pb-28 sm:pb-40" aria-hidden="true" />
