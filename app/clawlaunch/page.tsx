@@ -2,7 +2,7 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FaLinkedin, FaXTwitter } from "react-icons/fa6";
 import {
   SiInstagram,
@@ -65,6 +65,7 @@ export default function ClawLaunchLandingPage() {
       <Masthead />
       <StickyCTA />
       <Hero />
+      <HowItWorks />
       <Channels />
       <AWeekWithMaya />
       <InlineCTA
@@ -583,6 +584,60 @@ sometimes the fix is removing features, not adding them.`}
   );
 }
 
+const HOW_STEPS: Array<{ n: string; head: string; body: string }> = [
+  {
+    n: "01",
+    head: "She finds them",
+    body: "Maya reads the subreddits, threads, and comment sections where people are already describing the exact problem you built for.",
+  },
+  {
+    n: "02",
+    head: "She writes and posts",
+    body: "In your voice, from your accounts, without tripping spam filters. You approve the plan. She runs the day-to-day.",
+  },
+  {
+    n: "03",
+    head: "She proves it",
+    body: "Every link is tracked. You see which post drove the click and the signup. Not likes. Signups.",
+  },
+];
+
+/* -----------------------------------------------------------------
+ * HowItWorks — the mechanism in one glance, right after the hook, so the
+ * reader has a spine before the channel-by-channel detail. Three steps:
+ * find -> write & post -> prove.
+ * ----------------------------------------------------------------- */
+function HowItWorks() {
+  return (
+    <section className="relative border-t border-[#0a0a0a]/10 px-6 py-24 sm:px-10 sm:py-32">
+      <div className="mx-auto max-w-7xl">
+        <RevealOnView>
+          <p className="mb-12 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
+            The whole thing, in three moves
+          </p>
+        </RevealOnView>
+        <div className="grid gap-x-12 gap-y-12 sm:grid-cols-3">
+          {HOW_STEPS.map((step, i) => (
+            <RevealOnView key={step.n} delay={0.08 + i * 0.1}>
+              <div className="border-t border-[#0a0a0a]/20 pt-5">
+                <span className="font-mono text-[11px] tracking-[0.2em] text-[#0a0a0a]/45">
+                  {step.n}
+                </span>
+                <h3 className="mt-3 font-display italic text-[clamp(1.7rem,3vw,2.3rem)] leading-tight">
+                  {step.head}
+                </h3>
+                <p className="mt-3 text-[15px] leading-[1.65] text-[#0a0a0a]/70">
+                  {step.body}
+                </p>
+              </div>
+            </RevealOnView>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 interface ChannelPaneProps {
   logo: React.ReactNode;
   name: string;
@@ -601,7 +656,7 @@ function ChannelPane({
   mockup,
 }: ChannelPaneProps) {
   return (
-    <article className="border-b border-[#0a0a0a]/10 py-28 first:pt-6 sm:py-40 sm:first:pt-10 lg:py-48 lg:first:pt-12 last:border-b-0">
+    <article className="border-b border-[#0a0a0a]/10 py-16 first:pt-6 sm:py-24 sm:first:pt-8 lg:py-28 lg:first:pt-10 last:border-b-0">
       <RevealOnView>
         <div className="grid grid-cols-12 gap-y-12 lg:gap-x-8 lg:gap-y-0">
           {/* LEFT — text */}
@@ -631,6 +686,36 @@ function ChannelPane({
   );
 }
 
+/* Compact channel card — the text channels (X, LinkedIn, Reddit, HN) in a
+ * grid instead of four full-screen panes. The video channels keep their big
+ * panes because the clip IS the proof; text replies just need one line. */
+function ChannelCard({
+  logo,
+  name,
+  tagline,
+  body,
+}: {
+  logo: ReactNode;
+  name: string;
+  tagline: string;
+  body: string;
+}) {
+  return (
+    <div className="border-t border-[#0a0a0a]/15 pt-6">
+      <div className="flex items-center gap-3">
+        {logo}
+        <h3 className="font-display italic text-[2rem] leading-none tracking-tight">
+          {name}
+        </h3>
+      </div>
+      <p className="mt-3 font-display italic text-[1.15rem] leading-[1.25] text-[#0a0a0a]/85">
+        {tagline}
+      </p>
+      <p className="mt-3 text-[15px] leading-[1.6] text-[#0a0a0a]/70">{body}</p>
+    </div>
+  );
+}
+
 function Channels() {
   return (
     <section
@@ -656,24 +741,6 @@ function Channels() {
 
         <div className="mt-10 sm:mt-14">
           <ChannelPane
-            logo={<XLogo className="size-11" />}
-            name="X."
-            tagline="Where build-in-public actually turns into your first users."
-            body="She finds the conversations where your product fits. She writes the reply, the founder post, the build update, and posts it for you. She tells you when to jump in, not just when to be loud."
-            mockupLabel="Here's the post she'd publish →"
-            mockup={<XMockup />}
-          />
-
-          <ChannelPane
-            logo={<LinkedInLogo className="size-11" />}
-            name="LinkedIn."
-            tagline="Where the founders, operators, and buyers in your space actually hang out."
-            body="She finds the people who'd care. She writes the post they'd actually stop scrolling for and publishes it in your voice. She tells you who to follow back and who to ignore."
-            mockupLabel="Here's the post she'd publish →"
-            mockup={<LinkedInMockup />}
-          />
-
-          <ChannelPane
             logo={<TikTokLogo className="size-11" />}
             name="TikTok."
             tagline="Where the right 15 seconds turns a stranger into your next signup."
@@ -690,6 +757,7 @@ function Channels() {
             mockupLabel="Here's the Reel she'd post →"
             mockup={<PlatformVideo platform="instagram" label="3 apps tried to fix my camera roll. only one actually did." />}
           />
+
           <ChannelPane
             logo={<YouTubeLogo className="size-11" />}
             name="YouTube."
@@ -698,25 +766,42 @@ function Channels() {
             mockupLabel="Here's one she made →"
             mockup={<PlatformVideo platform="youtube" label="Built by hand. Marketed by Maya." />}
           />
+        </div>
 
-          <ChannelPane
-            logo={<RedditLogo className="size-11" />}
-            name="Reddit."
-            tagline="Where your users are literally asking the question your app answers."
-            body="She finds the thread the second it lands. She writes the reply so it sounds like a real person, then posts it for you."
-            mockupLabel="Here's what she'd send to this thread →"
-            mockup={<RedditMockup />}
-          />
-
-          <ChannelPane
-            logo={<HackerNewsLogo className="size-11" />}
-            name="Hacker News."
-            tagline="Where the founders who'd pay for your tool are already asking for it."
-            body="She finds the Ask HN threads, Show HN launches, and comment chains where your ICP is describing the exact problem you solved. She writes the reply that sounds like a founder who built the thing and hands it to you ready to paste, one tap straight to the thread. (HN has no posting API, so this is the one channel where you hit submit. Everything else she posts for you.)"
-            mockupLabel="Here's the reply she'd hand you →"
-            mockup={<HackerNewsMockup />}
-          />
-
+        <div className="mt-24 sm:mt-32">
+          <RevealOnView>
+            <p className="mb-10 font-mono text-[11px] uppercase tracking-[0.22em] text-[#0a0a0a]/50">
+              And she works the text channels the same way
+            </p>
+          </RevealOnView>
+          <RevealOnView delay={0.1}>
+            <div className="grid gap-x-12 gap-y-12 pb-8 sm:grid-cols-2">
+              <ChannelCard
+                logo={<XLogo className="size-9" />}
+                name="X."
+                tagline="Where build-in-public turns into your first users."
+                body="She finds the conversations where you fit, writes the reply or the founder post in your voice, and posts it. She tells you when to jump in, not just when to be loud."
+              />
+              <ChannelCard
+                logo={<LinkedInLogo className="size-9" />}
+                name="LinkedIn."
+                tagline="Where the operators and buyers in your space actually hang out."
+                body="She writes the post they'd stop scrolling for and publishes it in your voice, then tells you who to follow back and who to ignore."
+              />
+              <ChannelCard
+                logo={<RedditLogo className="size-9" />}
+                name="Reddit."
+                tagline="Where your users are literally asking the question your app answers."
+                body="She finds the thread the second it lands, writes the reply so it reads like a real person, and posts it for you."
+              />
+              <ChannelCard
+                logo={<HackerNewsLogo className="size-9" />}
+                name="Hacker News."
+                tagline="Where the founders who'd pay for your tool are already asking for it."
+                body="She finds the Ask HN and Show HN threads where your buyers describe the exact problem you solved and hands you a founder-grade reply, ready to paste. (HN has no posting API, so this is the one channel where you hit submit. Everything else she posts for you.)"
+              />
+            </div>
+          </RevealOnView>
         </div>
 
         <div className="pb-28 sm:pb-40" aria-hidden="true" />
