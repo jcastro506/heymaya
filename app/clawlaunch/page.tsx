@@ -352,11 +352,13 @@ function InstagramLogo({ className }: { className?: string }) {
  *   public/demos/instagram.mp4
  * ----------------------------------------------------------------- */
 const DEMO_VIDEOS: Record<
-  "tiktok" | "instagram",
+  "tiktok" | "instagram" | "youtube",
   { src: string | null; poster: string | null }
 > = {
   tiktok: { src: "/demos/tiktok.mp4", poster: "/demos/tiktok.jpg" },
   instagram: { src: "/demos/instagram.mp4", poster: "/demos/instagram.jpg" },
+  // The avatar testimonial Maya cut for HeyMaya itself — a Short, dogfooded.
+  youtube: { src: "/demos/youtube.mp4", poster: "/demos/youtube.jpg" },
 };
 
 /* A 9:16 phone showing the actual video Maya made. Real <video> when the
@@ -365,11 +367,16 @@ function PlatformVideo({
   platform,
   label,
 }: {
-  platform: "tiktok" | "instagram";
+  platform: "tiktok" | "instagram" | "youtube";
   label: string;
 }) {
   const v = DEMO_VIDEOS[platform];
-  const Logo = platform === "tiktok" ? TikTokLogo : InstagramLogo;
+  const Logo =
+    platform === "tiktok"
+      ? TikTokLogo
+      : platform === "instagram"
+        ? InstagramLogo
+        : YouTubeLogo;
   return (
     <div className="mx-auto w-full max-w-[300px]">
       <div className="relative aspect-[9/16] overflow-hidden rounded-[2rem] border border-[#0a0a0a]/12 bg-[#0a0a0a] shadow-[0_2px_4px_rgba(0,0,0,0.06),0_24px_60px_-24px_rgba(0,0,0,0.35)]">
@@ -457,63 +464,6 @@ Sometimes the answer is making it simpler, not adding another feature.`}
       <div className="flex items-center justify-between border-t border-[#0a0a0a]/8 px-5 py-2.5 text-[11px] opacity-60">
         <span>👍 ❤️ 🎉 &nbsp;142</span>
         <span>28 comments · 12 reposts</span>
-      </div>
-    </div>
-  );
-}
-
-/* YouTube mockup — a video brief card. Maya hands over title, thumbnail
- * concept, chapter outline, and description. No filming required from Maya. */
-function YouTubeMockup() {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-[#0a0a0a]/10 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_36px_-16px_rgba(0,0,0,0.16)]">
-      <div className="flex items-center justify-between border-b border-[#0a0a0a]/8 bg-[#FF0000] px-5 py-3 text-white">
-        <div className="flex items-center gap-2">
-          <SiYoutube className="size-4" color="white" />
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em]">
-            Brief
-          </span>
-        </div>
-        <span className="font-mono text-[9.5px] uppercase tracking-[0.2em] opacity-70">
-          one-tap to publish
-        </span>
-      </div>
-      <div className="space-y-5 px-5 py-5 text-[13px]">
-        <div>
-          <p className="mb-1 font-mono text-[9.5px] uppercase tracking-[0.2em] opacity-50">
-            Title
-          </p>
-          <p className="font-medium leading-snug">
-            &ldquo;I built a habit tracker nobody asked for. Here&apos;s what happened.&rdquo;
-          </p>
-        </div>
-        <div>
-          <p className="mb-1 font-mono text-[9.5px] uppercase tracking-[0.2em] opacity-50">
-            Thumbnail concept
-          </p>
-          <p className="leading-relaxed opacity-80">
-            Split: left = pile of habit apps, right = your app on phone. Bold text overlay: &ldquo;47 days straight.&rdquo;
-          </p>
-        </div>
-        <div>
-          <p className="mb-1 font-mono text-[9.5px] uppercase tracking-[0.2em] opacity-50">
-            Chapters · 4 beats
-          </p>
-          <ol className="space-y-1.5 leading-relaxed opacity-80">
-            <li>0:00 — why every habit app failed me</li>
-            <li>1:20 — the one thing they all get wrong</li>
-            <li>3:10 — what I built instead (screen demo)</li>
-            <li>5:45 — 47-day result + what I learned</li>
-          </ol>
-        </div>
-        <div>
-          <p className="mb-1 font-mono text-[9.5px] uppercase tracking-[0.2em] opacity-50">
-            Format
-          </p>
-          <p className="leading-relaxed opacity-60">
-            screen recording + voiceover · no face needed · 7–9 min
-          </p>
-        </div>
       </div>
     </div>
   );
@@ -685,9 +635,9 @@ function Channels() {
             logo={<YouTubeLogo className="size-11" />}
             name="YouTube."
             tagline="Where your buyers already explained the problem, in the comments."
-            body="She mines comment sections across your niche's top videos to find the exact language your buyers use when they describe the problem. That becomes your content brief: title, thumbnail, chapters, description. You record the demo, she uploads it."
-            mockupLabel="Here's the brief she'd hand you →"
-            mockup={<YouTubeMockup />}
+            body="She mines comment sections across your niche's top videos to find the exact language your buyers use when they describe the problem. That becomes the script. Then she makes the Short, your real product in it, and uploads it to your channel."
+            mockupLabel="Here's one she made →"
+            mockup={<PlatformVideo platform="youtube" label="Built by hand. Marketed by Maya." />}
           />
         </div>
 
