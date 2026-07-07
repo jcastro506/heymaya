@@ -145,6 +145,11 @@ export const resolveAgentFromHookToken = internalQuery({
       }
     }
     if (!matched) return null;
+    // Deletion guard (2026-07-06 audit): a hook token from an orphaned machine
+    // (Fly destroy failed / in-flight callback during the purge window) must
+    // never write into a deleted account. Fail closed like resolveMyGtmCreator.
+    const creator = await ctx.db.get(matched.accountId);
+    if (!creator || creator.status === "deleted") return null;
     return { agentId: matched._id, accountId: matched.accountId };
   },
 });
