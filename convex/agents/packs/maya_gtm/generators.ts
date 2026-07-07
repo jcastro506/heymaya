@@ -1859,7 +1859,14 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
           timeoutSeconds: 600,
           thinking: "medium" as const,
           lightContext: false as const,
-          message: c.message,
+          // Pulse deploys rebalance the morning brief: commit the warmest
+          // 5-8 now, the pulse fills the 15-20/day rolling budget as threads
+          // are born. Batch deploys keep the morning as the day's full
+          // inventory (no pulse to fill behind it).
+          message:
+            c.id === "0010_morning_brief" && input.pulseEnabled
+              ? MORNING_BRIEF_PULSE_MESSAGE
+              : c.message,
         },
         delivery,
         state: {},
@@ -2025,6 +2032,17 @@ export function discoveryPulseExpr(
   return env.MAYA_GTM_PULSE_CRON_EXPR || DISCOVERY_PULSE_DEFAULT_EXPR;
 }
 
+/**
+ * 2026-07-07 — pulse-mode morning brief. When the deploy ships the
+ * discovery_pulse, the 7am brief stops inventorying the whole day (a 7am
+ * snapshot structurally misses the day's best threads — they don't exist
+ * yet) and instead commits only what's live AND warm right now; the pulse
+ * fills the rolling daily budget as threads are born. Steps 1/3/4 match the
+ * batch message; only the step-2 commit rule differs.
+ */
+const MORNING_BRIEF_PULSE_MESSAGE =
+  "Morning brief. 1) Call `get_agent_lifecycle({})`. If `lifecycleState` is not `\"active\"` → NO_REPLY (heartbeat owns onboarding). **IDEMPOTENCY — if `lastMorningBriefAt` is already TODAY (operator-local), a brief already went out: reply NO_REPLY, do NOT send a second one.** A cron re-fire / timeout-retry must never double-message the founder. 2) **HUNT FRESH — do NOT reheat onboarding's threads.** `get_my_foundation({})` is the MAP (the ICP, the VENUES where buyers live, how they talk, the voice) — it is NOT today's thread list. Spawn a fresh per-bet-channel discovery sweep now (read `skills/maya-continuous-research/SKILL.md`) and commit the **5-8 WARMEST live threads** to this morning's queue. **~15-20 substantive replies is the DAY'S rolling budget, not the morning's inventory** — this deploy runs the discovery_pulse, which ADDs fresh threads to today's queue every few hours as they are born. Rank hard by thread age + velocity (a 1-hour-old thread beats a 12-hour-old one); NEVER pad the morning with stale threads to hit a count — freshness beats volume, and the pulse fills the rest. If even the warm pool is thin, `subagents action=steer` the workers once, then trust the pulse. 3) Read `skills/maya-morning-brief/SKILL.md` and build today's queue from the FRESH pool + `channelWarmthJson` + `get_my_attribution({ windowDays: 1 })`, replies-heavy (post sparingly). I POST on connected channels (X/LinkedIn/IG/YT auto via post_to_channel; Reddit/TikTok one-tap-confirm). 4) **Send ONE grounded brief, then IMMEDIATELY call `mark_lifecycle({ marker: \"morning_brief\" })`** — marking right after the send is what makes a retry see today's brief already went out and skip it.";
+
 const DISCOVERY_PULSE_CRON = {
   id: "0016_discovery_pulse",
   name: "Discovery pulse (periodic, real-time operator)",
@@ -2032,7 +2050,7 @@ const DISCOVERY_PULSE_CRON = {
   description:
     "Periodic continuous discovery (default every 3h, env-tunable): one budget-gated, watermark-bounded lane scan per tick; escalates only genuine ICP-fit hits to today's queue. Degrades to monitoring-only when the discovery budget is spent.",
   message:
-    "Discovery pulse (periodic). BOUNDED + BUDGET-GATED — one lane per tick, cheap scan, escalate only real hits. 1) `get_agent_lifecycle({})`; if `lifecycleState` is not `\"active\"` → NO_REPLY. 2) `check_discovery_budget({})` — if `mode` is `\"monitoring_only\"` → NO_REPLY (the day's discovery allowance is spent; keep monitoring own posts + inbound, do NOT initiate new discovery reads until the rolling window frees up). 3) `next_watch_lane({})` → the ONE lane to work this tick. 4) `get_watermark({ channel })` for that lane's bet channel, then spawn ONE cheap scan worker bounded to items NEWER than the watermark (read `skills/maya-continuous-research/SKILL.md`) — bet channels only, ONE lane. 5) Judge for genuine ICP fit + velocity. For a REAL hit ONLY: ADD it to today's queue (`propose_calendar` — NEVER replace existing events) and fire ONE one-tap ping **via `send_update`** (that is the ONLY thing that reaches the founder — my turn reply is NOT delivered) / auto-post a drafted reply on a connected channel. No hit → NO_REPLY (and NO_REPLY is all I reply — never a status report). 6) `advance_watermark({ channel, ... })` for the channel you scanned so the next tick reads only newer items. Never exceed the budget gate; never re-sweep history (the watermark bounds you).",
+    "Discovery pulse (periodic). BOUNDED + BUDGET-GATED — one lane per tick, cheap scan, escalate only real hits. 1) `get_agent_lifecycle({})`; if `lifecycleState` is not `\"active\"` → NO_REPLY. 2) `check_discovery_budget({})` — if `mode` is `\"monitoring_only\"` → NO_REPLY (the day's discovery allowance is spent; keep monitoring own posts + inbound, do NOT initiate new discovery reads until the rolling window frees up). 3) `next_watch_lane({})` → the ONE lane to work this tick. 4) `get_watermark({ channel })` for that lane's bet channel, then `sessions_spawn({ agentId: \"pulse_scan\", task: ... })` — ONE scan worker, bounded to items NEWER than the watermark (task string per `skills/maya-continuous-research/SKILL.md`), bet channels only, ONE lane. Always `pulse_scan` (it runs on the cheap scan model), never the deep research workers — they are the morning brief's. 5) Judge for genuine ICP fit + velocity. For a REAL hit ONLY: ADD it to today's queue (`propose_calendar` — NEVER replace existing events) and fire ONE one-tap ping **via `send_update`** (that is the ONLY thing that reaches the founder — my turn reply is NOT delivered) / auto-post a drafted reply on a connected channel. No hit → NO_REPLY (and NO_REPLY is all I reply — never a status report). 6) `advance_watermark({ channel, ... })` for the channel you scanned so the next tick reads only newer items. Never exceed the budget gate; never re-sweep history (the watermark bounds you).",
 } as const;
 
 

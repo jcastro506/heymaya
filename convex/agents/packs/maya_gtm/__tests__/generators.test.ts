@@ -434,6 +434,37 @@ describe("Maya GTM workspace pack", () => {
     expect(dreamJob.payload.message).toContain("SILENT");
   });
 
+  it("pulse mode rebalances the morning brief and pins the cheap pulse_scan worker", () => {
+    // 2026-07-07 — the pulse tick spawns the DEDICATED Flash-Lite scan worker,
+    // never the deep research workers (those are the morning brief's).
+    const pulsed = JSON.parse(
+      buildMayaGtmWorkspace({ ...INPUT, pulseEnabled: true }).files.get("jobs.json") ?? "{}"
+    );
+    const pulseJob = pulsed.jobs.find(
+      (j: { id: string }) => j.id === "0016_discovery_pulse"
+    );
+    expect(pulseJob.payload.message).toContain("pulse_scan");
+
+    // Pulse-mode morning brief: commit the warmest 5-8, 15-20 becomes the
+    // DAY'S rolling budget the pulse fills — never a 7am full-day inventory.
+    const pulsedBrief = pulsed.jobs.find(
+      (j: { id: string }) => j.id === "0010_morning_brief"
+    );
+    expect(pulsedBrief.payload.message).toContain("5-8 WARMEST");
+    expect(pulsedBrief.payload.message).toContain("rolling budget");
+    // The idempotency + lifecycle guards survive the rebalance verbatim.
+    expect(pulsedBrief.payload.message).toContain("lastMorningBriefAt");
+    expect(pulsedBrief.payload.message).toContain("mark_lifecycle");
+
+    // Batch mode keeps the full-day morning inventory (no pulse behind it).
+    const base = JSON.parse(buildMayaGtmWorkspace(INPUT).files.get("jobs.json") ?? "{}");
+    const batchBrief = base.jobs.find(
+      (j: { id: string }) => j.id === "0010_morning_brief"
+    );
+    expect(batchBrief.payload.message).toContain("15-20 substantive reply targets/day");
+    expect(batchBrief.payload.message).not.toContain("5-8 WARMEST");
+  });
+
   it("renders bounded subagent contracts with model, budget, coverage, and failure behavior", () => {
     const { files } = buildMayaGtmWorkspace(INPUT);
     const agents = files.get("AGENTS.md") ?? "";

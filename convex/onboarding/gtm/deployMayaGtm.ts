@@ -363,6 +363,13 @@ const MODEL_ROUTING = {
     process.env.MAYA_GTM_RESEARCH_MODEL ?? "google/gemini-3-flash-preview",
   extractionWorker:
     process.env.MAYA_GTM_EXTRACTION_MODEL ?? "google/gemini-3.1-flash-lite",
+  // 2026-07-07 — the discovery_pulse's dedicated scan worker. Watermark-bounded
+  // "read new items on one channel, judge fit" is structured scanning, not
+  // strategic reasoning — Flash Lite ($0.075 in / $0.30 out vs Flash's
+  // $0.50/$3) is what makes an all-day pulse cost pennies per tick. The
+  // morning brief's deep research workers stay on full Flash (subagent above).
+  pulseScan:
+    process.env.MAYA_GTM_PULSE_SCAN_MODEL ?? "google/gemini-3.1-flash-lite",
 };
 
 /**
@@ -471,6 +478,7 @@ export function buildGatewayConfig(
   // longer a configured agent. The MODEL_ROUTING.hardResearchBeta
   // entry stays in the routing table for narrative / cost docs.
   const extractionModel = toOpenClawModelRef(MODEL_ROUTING.extractionWorker);
+  const pulseScanModel = toOpenClawModelRef(MODEL_ROUTING.pulseScan);
   const memorySearch = buildMemorySearchConfig();
 
   // Sprint 20 — Maya-side subagent lane. Registers per-platform research
@@ -781,6 +789,23 @@ export function buildGatewayConfig(
       id: "calendar_worker",
       name: "Calendar Assembler",
       model: subagentModel,
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
+      subagents: { allowAgents: [] as string[] },
+    },
+    {
+      // 2026-07-07 — the discovery_pulse's dedicated cheap scan worker.
+      // One per tick, watermark-bounded to NEW items on ONE bet channel.
+      // Runs on Flash Lite (pulseScanModel) so 8+ ticks/day cost pennies;
+      // the deep morning-brief researchers above keep full Flash quality.
+      // alsoAllow group:plugins — same reason as every worker: without it
+      // the maya-gtm-tools typed tools (research_* + save_* + watermark)
+      // get filtered out and the worker fabricates instead of persisting.
+      id: "pulse_scan",
+      name: "Discovery Pulse Scanner",
+      model: pulseScanModel,
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
@@ -1258,10 +1283,13 @@ export const buildAndUploadGtmWorkspace = internalAction({
       planSummary: describePlanForMaya(planFeatures),
       // W2 — so Maya's messaging matches her gating (the publish engine enforces it).
       autonomousPosting: row.agent.autonomousPosting,
-      // Phase 3 — ship the hourly discovery_pulse cron only when the env flag is
-      // on. Default off: agents keep the proven batch cadence. Flip to "true" on
-      // a test deploy to cost-soak the real-time pulse (budget-gated).
-      pulseEnabled: process.env.MAYA_GTM_PULSE_ENABLED === "true",
+      // Phase 3 — ship the periodic discovery_pulse cron. Per-agent override
+      // (gtmAgents.pulseEnabledOverride) beats the deployment-wide env flag so
+      // one dogfood agent can cost-soak the pulse before fleet rollout; unset →
+      // env decides. Default off: agents keep the proven batch cadence.
+      pulseEnabled:
+        row.agent.pulseEnabledOverride ??
+        process.env.MAYA_GTM_PULSE_ENABLED === "true",
       app: {
         name: row.app.name ?? "Untitled app",
         url: row.app.url,

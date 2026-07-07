@@ -4316,6 +4316,12 @@ export default defineSchema({
     // rule) so a dogfood deploy exercises every platform's research + tools +
     // video-watch end-to-end. NOT product behavior — real agents stay focused.
     verifyAllPlatforms: v.optional(v.boolean()),
+    // 2026-07-07 — per-agent override for the all-day discovery_pulse cron.
+    // Beats the deployment-wide MAYA_GTM_PULSE_ENABLED env var at deploy time
+    // (unset → env decides). Exists so ONE dogfood agent can cost-soak the
+    // pulse before any fleet rollout. Takes effect on the agent's next
+    // (re)deploy — jobs.json is rendered into the workspace at deploy.
+    pulseEnabledOverride: v.optional(v.boolean()),
     openClawFlyAppId: v.optional(v.string()),
     deployedAt: v.optional(v.number()),
     // Sprint 15 (D1) — Telegram is the default ClawLaunch channel because

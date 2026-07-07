@@ -1,12 +1,15 @@
 import { v } from "convex/values";
 import {
+  internalAction,
   internalMutation,
   mutation,
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { assertWebhookSecret } from "./lib/webhookSecret";
+import { FlyClient, FlyError } from "./lib/flyClient";
 
 const CONFIRMATION_PHRASE = "DELETE MAYA";
 const REQUEST_TTL_MS = 30 * 60 * 1000;
@@ -528,6 +531,19 @@ async function purgeCreatorAccount(
   ].filter((id): id is string => typeof id === "string" && id.length > 0);
   const flyAppIds = await flyAppIdsForAccount(ctx, creator, businesses);
 
+  // Fly teardown MUST happen Convex-side: FLY_API_TOKEN lives in this
+  // deployment's env, not on the web host (the Vercel route's best-effort
+  // destroy silently no-ops without a token — that gap orphaned a machine on
+  // 2026-07-06 that burned OpenRouter spend all night with its agent row gone).
+  // Scheduling from the purge makes teardown follow the row delete atomically
+  // for every entry point (web route, Clerk webhook, iMessage, retention sweep).
+  if (flyAppIds.length > 0) {
+    await ctx.scheduler.runAfter(0, internal.accountDeletion.destroyFlyAppsInternal, {
+      flyAppIds,
+      attempt: 1,
+    });
+  }
+
   const creatorDeleted = await deleteCreatorScopedRows(ctx, creator._id);
   const accountDeleted = await deleteAccountScopedRows(ctx, creator._id);
   let businessDeleted = 0;
@@ -557,6 +573,57 @@ async function purgeCreatorAccount(
     flyAppIds,
   };
 }
+
+const FLY_DESTROY_MAX_ATTEMPTS = 4;
+const FLY_DESTROY_RETRY_MS = 60_000;
+
+/**
+ * Destroy the per-user OpenClaw Fly apps collected during an account purge.
+ * Runs Convex-side so it always has FLY_API_TOKEN. 404 = already gone =
+ * success. Any app that fails is re-scheduled (60s backoff, max 4 attempts);
+ * a final failure is loud in the logs — an orphaned machine keeps burning
+ * LLM spend with no owning agent row, so this must never fail silently.
+ */
+export const destroyFlyAppsInternal = internalAction({
+  args: { flyAppIds: v.array(v.string()), attempt: v.number() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ destroyed: number; failed: string[] }> => {
+    const fly = new FlyClient();
+    const failed: string[] = [];
+    let destroyed = 0;
+    for (const appId of [...new Set(args.flyAppIds.filter(Boolean))]) {
+      try {
+        await fly.destroyApp(appId);
+        destroyed += 1;
+        console.log(`[accountDeletion] destroyed Fly app ${appId}`);
+      } catch (error) {
+        if (error instanceof FlyError && error.status === 404) continue;
+        failed.push(appId);
+        console.error(
+          `[accountDeletion] Fly destroy failed for ${appId} (attempt ${args.attempt}): ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+    if (failed.length > 0) {
+      if (args.attempt < FLY_DESTROY_MAX_ATTEMPTS) {
+        await ctx.scheduler.runAfter(
+          FLY_DESTROY_RETRY_MS,
+          internal.accountDeletion.destroyFlyAppsInternal,
+          { flyAppIds: failed, attempt: args.attempt + 1 }
+        );
+      } else {
+        console.error(
+          `[accountDeletion] ORPHANED FLY APPS after ${args.attempt} attempts: ${failed.join(", ")} — destroy manually (they burn LLM spend headlessly).`
+        );
+      }
+    }
+    return { destroyed, failed };
+  },
+});
 
 async function flyAppIdsForAccount(
   ctx: QueryCtx | MutationCtx,

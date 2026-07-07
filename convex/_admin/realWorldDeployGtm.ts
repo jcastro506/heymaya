@@ -1086,6 +1086,22 @@ export const patchTelegramChatId = internalMutation({
   },
 });
 
+/**
+ * 2026-07-07 — flip the per-agent discovery_pulse override for a cost-soak.
+ * Takes effect on the agent's NEXT redeploy (jobs.json renders at deploy):
+ *   npx convex run _admin/realWorldDeployGtm:setPulseOverride '{"agentId":"...","enabled":true}'
+ * then redeploy the agent so the workspace re-renders with the pulse cron.
+ */
+export const setPulseOverride = internalMutation({
+  args: { agentId: v.id("gtmAgents"), enabled: v.boolean() },
+  handler: async (ctx, args): Promise<void> => {
+    await ctx.db.patch(args.agentId, {
+      pulseEnabledOverride: args.enabled,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 /* -------------------------------------------------------------------------- */
 /* Real-signup demo helpers (Stripe-bypass comp + live peek + repoint).        */
 /*                                                                            */
