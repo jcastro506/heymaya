@@ -49,7 +49,7 @@ import { primaryCtaHref, primaryCtaLabel } from "../_components/landingMode";
 // own metadata from a server boundary.
 export const landingMetadata: Metadata = {
   title:
-    "Maya — the marketing hire for builders Cursor unlocked.",
+    "Maya, the marketing hire for builders Cursor unlocked.",
   description:
     "You shipped fast. Marketing is the wall. Maya finds where your customers are, writes AND posts the content for you, and tracks which posts are actually driving traffic, so your signup graph stops being a flat line.",
 };
@@ -315,7 +315,7 @@ function RedditMockup() {
           <span className="opacity-40">· just now</span>
         </div>
         <p className="mt-2 text-[13px] leading-relaxed">
-          had this exact problem with mine — what worked was switching the
+          had this exact problem with mine. what worked was switching the
           evening check-in from a generic &ldquo;log your habits&rdquo;
           notification to one specific question, like &ldquo;did you do the
           thing today.&rdquo; built a small app last month that does this if
@@ -364,7 +364,7 @@ function HackerNewsMockup() {
           The thing that actually worked for me: stop asking for feedback and
           start showing up in the conversations where people already have the
           problem. Found 3 threads this week where people described exactly
-          what my app solves — replied with what I learned building it, linked
+          what my app solves. Replied with what I learned building it, linked
           it at the end. My first real users came from that, not cold outreach.
         </p>
         <div className="mt-3 flex items-center gap-4 text-[11px] text-[#0a0a0a]/40">
@@ -733,8 +733,8 @@ function Channels() {
             <p className="max-w-2xl text-[16px] leading-[1.6] text-[#0a0a0a]/70">
               Plenty of tools will post for you. Maya{" "}
               <span className="italic text-[#0a0a0a] pr-[0.12em]">makes</span> the content
-              first — writes the posts, films the videos — then posts it. One
-              real example per platform.
+              first. She writes the posts and films the videos, then posts
+              them. One real example per platform.
             </p>
           </RevealOnView>
         </div>
@@ -900,7 +900,7 @@ function Pricing() {
             Three ways to let her run it.
           </h2>
           <p className="mb-16 max-w-2xl text-[16px] leading-[1.6] text-[#0a0a0a]/70">
-            Same always-on operator on every tier — she watches your market,
+            Same always-on operator on every tier. She watches your market,
             finds the right conversations, writes in your voice, and proves
             which post produced a customer. You&apos;re only choosing how many
             channels she runs, and whether she films it too.
@@ -1438,7 +1438,7 @@ function BanSafety() {
                 Tools that blast every community get accounts suspended and
                 products blacklisted. Before anything posts, Maya checks that
                 it fits the room, matches your voice, and isn&apos;t pitching
-                too hard too often. Your Reddit, your LinkedIn, your X — they
+                too hard too often. Your Reddit, your LinkedIn, and your X
                 build value over time. She never burns them for a shortcut.
               </p>
             </RevealOnView>
@@ -1556,7 +1556,7 @@ function FinalCTA() {
                 her on. She takes it from there.
               </p>
               <p className="mt-3 text-[13px] text-[#0a0a0a]/40">
-                7 days free &mdash; plans from $99/mo. Cancel any time.
+                7 days free, plans from $99/mo. Cancel any time.
               </p>
             </div>
           </div>
