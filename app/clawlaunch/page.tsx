@@ -67,6 +67,7 @@ export default function ClawLaunchLandingPage() {
       <Hero />
       <HowItWorks />
       <Channels />
+      <ResearchLayer />
       <AWeekWithMaya />
       <InlineCTA
         kicker="This is the week you keep skipping"
@@ -75,7 +76,6 @@ export default function ClawLaunchLandingPage() {
       <TelegramSection />
       <Attribution />
       <BanSafety />
-      <ResearchLayer />
       <Pricing />
       <FinalCTA />
       <Footer />
