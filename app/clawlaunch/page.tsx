@@ -863,11 +863,7 @@ function PriceColumn({
       <ul className="mt-7 space-y-3">
         {features.map((f) => (
           <li key={f} className="flex items-baseline gap-3">
-            <span
-              className={`mt-1 inline-block size-1.5 shrink-0 rounded-full ${
-                accent ? "bg-[#d6ff3d]" : "bg-[#0a0a0a]/40"
-              }`}
-            />
+            <span className="mt-1 inline-block size-1.5 shrink-0 rounded-full bg-[#0a0a0a]/40" />
             <span className="text-[15px] leading-[1.5] text-[#0a0a0a]/75">
               {f}
             </span>
@@ -878,11 +874,7 @@ function PriceColumn({
         <Link
           prefetch={false}
           href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
-          className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[14px] transition-colors ${
-            accent
-              ? "bg-[#0a0a0a] text-[#d6ff3d] hover:bg-[#0a0a0a]/85"
-              : "border border-[#0a0a0a]/20 text-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#fbfaf6]"
-          }`}
+          className="inline-flex items-center gap-2 rounded-full border border-[#0a0a0a]/20 px-5 py-2.5 text-[14px] text-[#0a0a0a] transition-colors hover:bg-[#0a0a0a] hover:text-[#fbfaf6]"
         >
           {primaryCtaLabel("Start free")}
           <span>→</span>
