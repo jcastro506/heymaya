@@ -69,7 +69,7 @@ export default function ClawLaunchLandingPage() {
       <TelegramSection />
       <Attribution />
       <BanSafety />
-      <StaysCurrent />
+      <ResearchLayer />
       <Pricing />
       <FinalCTA />
       <Footer />
@@ -1295,44 +1295,76 @@ function BanSafety() {
 }
 
 /* -----------------------------------------------------------------
- * StaysCurrent — the platforms change their rules constantly; Maya keeps
- * up so the founder never has to. Dark band for contrast.
+ * ResearchLayer — the intelligence pillar (dark band). Answers "why won't
+ * this read like generic AI": she studies the niche, learns the buyers'
+ * language + the founder's voice, and rebuilds winning formats. Closes on
+ * the monthly-refresh (stays-current) beat.
  * ----------------------------------------------------------------- */
-function StaysCurrent() {
+const RESEARCH_PILLARS: Array<{ n: string; head: string; body: string }> = [
+  {
+    n: "01",
+    head: "She learns what\u2019s actually winning",
+    body: "She reads the threads, the top videos, the posts pulling real engagement in your niche, and clocks the format underneath. The hook. The structure. The thing that makes someone stop scrolling.",
+  },
+  {
+    n: "02",
+    head: "She learns how your buyers talk",
+    body: "The exact words they use for the problem. What they complain about. Which accounts they trust. That language becomes your content, so it reads like their world instead of a brochure.",
+  },
+  {
+    n: "03",
+    head: "She learns your voice",
+    body: "From your real posts and your real product. Every reply sounds like you wrote it at your desk, because it\u2019s built from how you actually talk, not a template with your name on it.",
+  },
+  {
+    n: "04",
+    head: "She rebuilds what works, for you",
+    body: "She takes a format already winning in your niche and rebuilds it around your real product. Not a copy. The same shape that\u2019s pulling attention, with your substance inside it.",
+  },
+];
+
+function ResearchLayer() {
   return (
     <section className="relative bg-[#0a0a0a] px-6 py-28 text-[#fbfaf6] sm:px-10 sm:py-40">
       <div className="mx-auto max-w-7xl">
         <RevealOnView>
           <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.22em] text-white/50">
-            Maya keeps up so you don&apos;t
+            Before she writes a word
           </p>
           <h2 className="mb-6 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight max-w-3xl">
-            The algorithms change every month. Maya already read the memo.
+            She studies your corner of the internet like it&apos;s her job. It is.
           </h2>
         </RevealOnView>
         <RevealOnView delay={0.1}>
-          <p className="mb-14 max-w-2xl text-[16px] leading-[1.6] text-white/70 sm:text-[18px]">
-            Every month Maya researches what&apos;s actually working on each
-            channel and bakes it into your plan. You never have to read a
-            thinkpiece again.
+          <p className="mb-16 max-w-2xl text-[16px] leading-[1.6] text-white/70 sm:text-[18px]">
+            This is why her posts don&apos;t read like a bot wrote them. She does
+            the homework a good marketer would, on your niche specifically,
+            before she opens her mouth.
           </p>
         </RevealOnView>
         <RevealOnView delay={0.15}>
-          <div className="grid grid-cols-2 gap-x-10 gap-y-6 sm:grid-cols-3 md:grid-cols-6">
-            {["Reddit", "Hacker News", "TikTok", "Instagram", "YouTube", "X", "LinkedIn"].map(
-              (p) => (
-                <div
-                  key={p}
-                  className="border-t border-white/15 pt-4 font-display italic text-[1.3rem] leading-tight"
-                >
-                  {p}
-                  <span className="mt-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-white/40">
-                    refreshed monthly
-                  </span>
-                </div>
-              )
-            )}
+          <div className="grid gap-x-12 gap-y-12 sm:grid-cols-2">
+            {RESEARCH_PILLARS.map((pillar) => (
+              <div key={pillar.n} className="border-t border-white/15 pt-5">
+                <span className="font-mono text-[11px] tracking-[0.2em] text-[#d6ff3d]">
+                  {pillar.n}
+                </span>
+                <h3 className="mt-3 font-display italic text-[1.7rem] leading-tight">
+                  {pillar.head}
+                </h3>
+                <p className="mt-3 max-w-md text-[15px] leading-[1.65] text-white/70">
+                  {pillar.body}
+                </p>
+              </div>
+            ))}
           </div>
+        </RevealOnView>
+        <RevealOnView delay={0.2}>
+          <p className="mt-16 max-w-2xl border-t border-white/15 pt-6 text-[15px] leading-[1.6] text-white/55">
+            And she never goes stale. Every month she re-reads what&apos;s working
+            on each channel and updates your plan, so you never have to read
+            another marketing thinkpiece again.
+          </p>
         </RevealOnView>
       </div>
     </section>
