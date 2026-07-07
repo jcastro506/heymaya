@@ -20,13 +20,14 @@ import {
   type GtmTier,
   type GtmInterval,
 } from "@/components/billing/TierSelector";
+import { PostingControl } from "@/app/clawlaunch/mission/account/_PostingControl";
 
 // Onboarding is three clean steps: Product → Plan → Connect. Launch (the Fly
 // deploy) happens when the founder hits "Launch Maya" on the Plan step; Connect
 // is reached AFTER that, so her OpenClaw machine already exists and she can text
 // back the instant they press Start. Maya does ALL her own market/channel
 // research natively in her BOOT turn — Convex never pre-ranks "buyer fit".
-type Stage = "intake" | "plan" | "connect";
+type Stage = "intake" | "plan" | "posting-mode" | "connect";
 
 // Per-channel warmth state captured at onboarding. Mirrors the
 // tiktokWarmupState arc generalized to every channel: a brand-new
@@ -212,6 +213,7 @@ function GtmOnboardingBody() {
   // clear full-screen spinner instead of just flipping a button label — and
   // keep it up right through the auto-redirect into the HQ.
   const [deploying, setDeploying] = useState(false);
+  const [deployDone, setDeployDone] = useState(false);
   // Tier-selection state. `interval` toggles monthly/annual; `checkoutTier`
   // marks the card mid-redirect so it shows a pending state.
   const [billingInterval, setBillingInterval] =
@@ -358,9 +360,10 @@ function GtmOnboardingBody() {
       const result = await deployMaya({});
       if (result.ok) {
         track(ANALYTICS_EVENTS.PLAN_READY, { fly_app_id: result.flyAppId });
-        // Machine is up → advance to Connect. Now her OpenClaw exists, so the
-        // moment they press Start in Telegram she routes + texts back.
-        setStage("connect");
+        // Machine is up. The founder is (usually) still on the posting-mode
+        // step — mark done and let that screen's Continue take them to
+        // Connect the moment both are ready.
+        setDeployDone(true);
         setDeploying(false);
       } else {
         // Non-ok deploy → surface the reason, drop the spinner so they can retry.
@@ -391,6 +394,7 @@ function GtmOnboardingBody() {
       // Justified: this is an external deployment side effect triggered by a
       // live Stripe/Convex state transition, guarded so it fires once.
       // eslint-disable-next-line react-hooks/set-state-in-effect
+      setStage("posting-mode");
       void deploy();
     }
   }, [stage, snapshot, deploying, deploy]);
@@ -934,6 +938,46 @@ function GtmOnboardingBody() {
           Convex routes their DM to a live agent and Maya texts back. The webhook
           claims the pairing token and this screen advances (getMyPairingStatus
           is reactive). */}
+      {stage === "posting-mode" && (
+        <section className="mx-auto max-w-xl">
+          <h1 className="font-display text-3xl sm:text-4xl">
+            Before she speaks for you
+          </h1>
+          <p className="mt-3 text-sm leading-relaxed text-paper-dim">
+            Maya is coming online in the background. One decision while she
+            boots: how much do you want to sign off on? You can change this
+            anytime in your Account tab, and she will ask you to loosen the
+            leash once she has earned it.
+          </p>
+          <div className="mt-6">
+            <PostingControl mode={snapshot?.agent.autonomousPosting ?? null} graduated={false} />
+          </div>
+          <div className="mt-8 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setStage("connect")}
+              disabled={!deployDone}
+              className="rounded-full bg-paper px-5 py-2.5 font-mono text-xs uppercase tracking-[0.14em] text-ink transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {deployDone ? "Continue" : "Maya is booting…"}
+            </button>
+            {!deployDone && !error ? (
+              <span className="text-xs text-paper-faint">
+                usually under a minute
+              </span>
+            ) : null}
+          </div>
+          {error ? (
+            <div className="mt-4 text-sm text-rose">
+              {error}{" "}
+              <button type="button" className="underline" onClick={() => void deploy()}>
+                Retry launch
+              </button>
+            </div>
+          ) : null}
+        </section>
+      )}
+
       {stage === "connect" && (
         <section className="border border-paper bg-ink-2 p-6">
           <h2 className="mb-2 font-display text-2xl">
@@ -1245,12 +1289,13 @@ function StepRail({ stage }: { stage: Stage }) {
   const steps: { key: Stage; label: string }[] = [
     { key: "intake", label: "Product" },
     { key: "plan", label: "Plan" },
+    { key: "posting-mode", label: "Ground rules" },
     { key: "connect", label: "Connect" },
   ];
-  const order: Stage[] = ["intake", "plan", "connect"];
+  const order: Stage[] = ["intake", "plan", "posting-mode", "connect"];
   const current = order.indexOf(stage);
   return (
-    <div className="mb-10 grid gap-3 sm:grid-cols-3">
+    <div className="mb-10 grid gap-3 sm:grid-cols-4">
       {steps.map((step) => {
         const reached = current >= order.indexOf(step.key);
         return (

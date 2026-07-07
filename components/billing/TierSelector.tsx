@@ -72,6 +72,7 @@ export function TierSelector({
   busyTier,
   disabled,
   showIntervalToggle = true,
+  currentTier = null,
 }: {
   interval: GtmInterval;
   onIntervalChange?: (interval: GtmInterval) => void;
@@ -82,6 +83,9 @@ export function TierSelector({
   /** Disable all cards (e.g. while any checkout is in flight). */
   disabled?: boolean;
   showIntervalToggle?: boolean;
+  /** The tier the founder is CURRENTLY on — its card reads "current plan"
+   *  instead of a buy button (Account page; onboarding passes nothing). */
+  currentTier?: GtmTier | null;
 }) {
   const checkingOut = busyTier ?? null;
   const showToggle = showIntervalToggle && onIntervalChange !== undefined;
@@ -113,25 +117,32 @@ export function TierSelector({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {GTM_TIERS.map((spec) => {
           const isBusy = checkingOut === spec.tier;
+          const isCurrent = currentTier === spec.tier;
           return (
             <button
               key={spec.tier}
               type="button"
               onClick={() => onSelect(spec.tier, interval)}
-              disabled={disabled || checkingOut !== null}
+              disabled={disabled || checkingOut !== null || isCurrent}
               data-tier={spec.tier}
               className={[
                 "flex flex-col gap-2 rounded-xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-60",
-                spec.highlight
-                  ? "border-lime/60 bg-lime/10 hover:bg-lime/15"
-                  : "border-paper-faint/30 bg-ink-2 hover:border-paper/50 hover:bg-ink-3",
+                isCurrent
+                  ? "border-lime bg-lime/15 disabled:opacity-100"
+                  : spec.highlight
+                    ? "border-lime/60 bg-lime/10 hover:bg-lime/15"
+                    : "border-paper-faint/30 bg-ink-2 hover:border-paper/50 hover:bg-ink-3",
               ].join(" ")}
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span className="font-display text-lg text-paper">
                   {spec.name}
                 </span>
-                {spec.highlight ? (
+                {isCurrent ? (
+                  <span className="rounded-full bg-lime px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-ink">
+                    Current plan
+                  </span>
+                ) : spec.highlight ? (
                   <span className="rounded-full bg-lime/20 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-lime">
                     Popular
                   </span>
