@@ -836,7 +836,7 @@ const WEEK_ROWS: Array<{
     day: "Mon",
     time: "11:20a",
     title: "Posts and replies, out the door",
-    body: "She found the conversations where people are describing the exact problem your app solves, and wrote the replies. She drafted the original posts for the channels where your audience lives. All of it goes live. You don't touch a thing.",
+    body: "She found the threads where people are describing the exact problem your app solves, wrote the replies, drafted the posts. All of it goes live, running the plan you approved.",
   },
   {
     day: "Tue",
@@ -864,7 +864,7 @@ const WEEK_ROWS: Array<{
     time: "6:00p",
     ping: true,
     title: "The week, reviewed",
-    body: "How last week really went. What worked, what didn't, and what she figured out about your audience. Then next week's plan, already drafted. You start Monday knowing exactly what's happening.",
+    body: "How last week really went. What worked, what didn't, and what she figured out about your audience. Then next week's plan, drafted and waiting on your one-tap approval. Nothing runs without it.",
   },
 ];
 
