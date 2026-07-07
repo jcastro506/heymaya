@@ -49,9 +49,9 @@ import { primaryCtaHref, primaryCtaLabel } from "../_components/landingMode";
 // own metadata from a server boundary.
 export const landingMetadata: Metadata = {
   title:
-    "Maya — the GTM agent for builders Cursor unlocked.",
+    "Maya — the marketing hire for builders Cursor unlocked.",
   description:
-    "You shipped fast. Marketing is the wall. Maya finds where your customers are, writes AND posts the content for you, and tracks which posts are actually driving traffic — so your signup graph stops being a flat line.",
+    "You shipped fast. Marketing is the wall. Maya finds where your customers are, writes AND posts the content for you, and tracks which posts are actually driving traffic, so your signup graph stops being a flat line.",
 };
 
 export default function ClawLaunchLandingPage() {
@@ -111,7 +111,7 @@ function Masthead() {
           href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
             className="rounded-full bg-[#0a0a0a] px-4 py-2 text-[#fbfaf6] transition-colors hover:bg-[#0a0a0a]/85"
           >
-            Get started →
+            {primaryCtaLabel("Get started")} →
           </Link>
         </nav>
         <Link
@@ -119,7 +119,7 @@ function Masthead() {
           href={primaryCtaHref("/sign-up?redirect_url=/onboarding/gtm")}
           className="font-mono text-[11px] uppercase tracking-[0.22em] underline-offset-[6px] hover:underline sm:hidden"
         >
-          Get started →
+          {primaryCtaLabel("Get started")} →
         </Link>
       </div>
     </header>
@@ -154,11 +154,11 @@ function Hero() {
           style={{ animationDelay: "3.6s" }}
         >
           <p className="text-[18px] leading-[1.55] text-[#0a0a0a]/75 sm:text-[20px] sm:leading-[1.5]">
-            Let Maya handle it. She finds where your customers already are —
-            Reddit, HN, TikTok, Instagram, LinkedIn, YouTube, and X — then{" "}
-            <span className="italic text-[#0a0a0a] pr-[0.12em]">makes</span> the content
-            (writes the posts, films the videos) and posts it. You don&apos;t
-            touch a thing.
+            Maya finds the people already looking for what you built. She writes
+            like a person, posts from your accounts without getting them banned,
+            and shows you which post got the signup.{" "}
+            <span className="italic text-[#0a0a0a] pr-[0.12em]">You approve the plan.
+            She does the rest.</span>
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-5">
             <Link
@@ -631,7 +631,7 @@ function Channels() {
             logo={<XLogo className="size-11" />}
             name="X."
             tagline="Where build-in-public actually turns into your first users."
-            body="She finds the conversations where your product fits. She writes the reply, the founder post, the build update — and posts it for you. She tells you when to jump in — not just to be loud."
+            body="She finds the conversations where your product fits. She writes the reply, the founder post, the build update, and posts it for you. She tells you when to jump in, not just when to be loud."
             mockupLabel="Here's the post she'd publish →"
             mockup={<XMockup />}
           />
@@ -640,7 +640,7 @@ function Channels() {
             logo={<LinkedInLogo className="size-11" />}
             name="LinkedIn."
             tagline="Where the founders, operators, and buyers in your space actually hang out."
-            body="She finds the people who'd care. She writes the post they'd actually stop scrolling for — and publishes it for you, in your voice. She tells you who to follow back and who to ignore."
+            body="She finds the people who'd care. She writes the post they'd actually stop scrolling for and publishes it in your voice. She tells you who to follow back and who to ignore."
             mockupLabel="Here's the post she'd publish →"
             mockup={<LinkedInMockup />}
           />
@@ -649,7 +649,7 @@ function Channels() {
             logo={<TikTokLogo className="size-11" />}
             name="TikTok."
             tagline="Where the right 15 seconds turns a stranger into your next signup."
-            body="Here's the part no one else does: she doesn't hand you a brief to go film. She makes the actual video — your real product in it, captioned, on-brand — and posts it. You never open a camera or an editor."
+            body="Here's the part no one else does: she doesn't hand you a brief to go film. She makes the actual video, with your real product in it, captioned and on brand, then posts it. You never open a camera or an editor."
             mockupLabel="Here's the video she'd post →"
             mockup={<PlatformVideo platform="tiktok" label="POV: you finally cleared your camera roll in one sitting" />}
           />
@@ -658,7 +658,7 @@ function Channels() {
             logo={<InstagramLogo className="size-11" />}
             name="Instagram."
             tagline="Where Reels put your product in front of people who've never heard of you."
-            body="Same idea, made for Reels. She turns what's working in your niche into a real short-form video — built from your actual screens, captioned, on-brand — and posts it to your grid. The content gets made for you, not just scheduled."
+            body="Same idea, made for Reels. She turns what's working in your niche into a real short-form video built from your actual screens, then posts it to your grid. The content gets made for you, not just scheduled."
             mockupLabel="Here's the Reel she'd post →"
             mockup={<PlatformVideo platform="instagram" label="3 apps tried to fix my camera roll. only one actually did." />}
           />
@@ -667,7 +667,7 @@ function Channels() {
             logo={<RedditLogo className="size-11" />}
             name="Reddit."
             tagline="Where your users are literally asking the question your app answers."
-            body="She finds the thread the second it lands. She writes the reply so it sounds like a real person — and posts it for you."
+            body="She finds the thread the second it lands. She writes the reply so it sounds like a real person, then posts it for you."
             mockupLabel="Here's what she'd send to this thread →"
             mockup={<RedditMockup />}
           />
@@ -676,7 +676,7 @@ function Channels() {
             logo={<HackerNewsLogo className="size-11" />}
             name="Hacker News."
             tagline="Where the founders who'd pay for your tool are already asking for it."
-            body="She finds the Ask HN threads, Show HN launches, and comment chains where your ICP is describing the exact problem you solved. She writes the reply that sounds like a founder who built the thing — and hands it to you ready to paste, one tap straight to the thread. (HN has no posting API, so this is the one channel you hit submit on — everything else she posts for you.)"
+            body="She finds the Ask HN threads, Show HN launches, and comment chains where your ICP is describing the exact problem you solved. She writes the reply that sounds like a founder who built the thing and hands it to you ready to paste, one tap straight to the thread. (HN has no posting API, so this is the one channel where you hit submit. Everything else she posts for you.)"
             mockupLabel="Here's the reply she'd hand you →"
             mockup={<HackerNewsMockup />}
           />
@@ -684,7 +684,7 @@ function Channels() {
           <ChannelPane
             logo={<YouTubeLogo className="size-11" />}
             name="YouTube."
-            tagline="Where your buyers already explained the problem — in the comments."
+            tagline="Where your buyers already explained the problem, in the comments."
             body="She mines comment sections across your niche's top videos to find the exact language your buyers use when they describe the problem. That becomes your content brief: title, thumbnail, chapters, description. You record the demo, she uploads it."
             mockupLabel="Here's the brief she'd hand you →"
             mockup={<YouTubeMockup />}
@@ -815,8 +815,8 @@ function Pricing() {
                 "Finds where your buyers already are",
                 "Writes posts + replies in your learned voice",
                 "Designs grounded slideshows from your real screens",
-                "Posts for you, ban-safe, on the channels you connect",
-                "Proves which post drove the click — not just likes",
+                "Posts for you, ban safe, on the channels you connect",
+                "Proves which post drove the click, not just likes",
               ]}
               footnote="7 days free, then $99/mo. Cancel anytime."
             />
@@ -846,11 +846,11 @@ function Pricing() {
               cadence="/mo · Studio"
               annual="or $1,999/yr"
               name="HeyMaya Studio"
-              line="Everything — and she films it."
+              line="Everything above, and she films it."
               features={[
                 "Up to 6 channels, run for you",
                 "Everything in Growth, plus:",
-                "~15 short-form AI videos a month, done for you",
+                "~15 short-form videos a month, made for you",
                 "Copies the video format already winning your niche",
                 "Built from your real product, never a fake UI",
                 "Posted and click-tracked, like everything else",
@@ -886,35 +886,35 @@ const WEEK_ROWS: Array<{
     day: "Mon",
     time: "11:20a",
     title: "Posts and replies, out the door",
-    body: "She found the conversations where people are describing the exact problem your app solves — and wrote the replies. She drafted the original posts for the channels where your audience lives. All of it goes live. You don't touch a thing.",
+    body: "She found the conversations where people are describing the exact problem your app solves, and wrote the replies. She drafted the original posts for the channels where your audience lives. All of it goes live. You don't touch a thing.",
   },
   {
     day: "Tue",
     time: "8:00p",
     ping: true,
     title: "Evening check-in",
-    body: "What went out today, and how it's actually doing. This morning's post is pulling comments; one reply already got a “where can I try this?” And when something flops, she tells you straight — no spin.",
+    body: "What went out today, and how it's actually doing. This morning's post is pulling comments; one reply already got a “where can I try this?” And when something flops, she tells you straight. No spin.",
   },
   {
     day: "Wed",
     time: "2:15p",
     ping: true,
     title: "Something's catching",
-    body: "Something she posted is moving faster than usual. She pings you while it’s still hot — worth jumping in before it cools? You decide whether to ride it.",
+    body: "Something she posted is moving faster than usual. She pings you while it’s still hot. Worth jumping in before it cools? You decide.",
   },
   {
     day: "Thu",
     time: "4:40p",
     ping: true,
     title: "A real buyer shows up",
-    body: "A comment lands that reads like a customer, not a fan — “wait, how much is this?” She catches it, drafts your answer, hands it over in one line. You never go digging through notifications to find it.",
+    body: "A comment lands that reads like a customer, not a fan. “Wait, how much is this?” She catches it, drafts your answer, hands it over in one line. You never go digging through notifications to find it.",
   },
   {
     day: "Sun",
     time: "6:00p",
     ping: true,
     title: "The week, reviewed",
-    body: "How last week really went — what worked, what didn't, and what she figured out about your audience. Then next week's plan, already drafted. You start Monday knowing exactly what's happening.",
+    body: "How last week really went. What worked, what didn't, and what she figured out about your audience. Then next week's plan, already drafted. You start Monday knowing exactly what's happening.",
   },
 ];
 
@@ -983,13 +983,13 @@ function TelegramPhone() {
     {
       from: "maya",
       time: "7:04",
-      text: "Morning. Your r/SaaS reply yesterday pulled 14 clicks to your page — your best yet. Three posts going live today, I'll handle all of it.",
+      text: "Morning. Your r/SaaS reply yesterday pulled 14 clicks to your page, your best yet. Three posts going live today. I'll handle all of it.",
     },
     { from: "you", time: "7:05", text: "love it, go" },
     {
       from: "maya",
       time: "11:22",
-      text: "Both Reddit posts are live — handled. Your HN reply's the one I can't post for you (no API), so it's drafted and ready: tap the link, paste, hit reply. 20 seconds, link's below 👇",
+      text: "Both Reddit posts are live. Your HN reply is the one I can't post for you (no API), so it's drafted and ready. Tap the link, paste, hit reply. 20 seconds, link's below 👇",
     },
     {
       from: "maya",
@@ -1000,7 +1000,7 @@ function TelegramPhone() {
     {
       from: "maya",
       time: "8:00",
-      text: "Recap: 5 posts live, 61 clicks to your page. Reddit r/SaaS drove the most — and your Stripe logged 2 new signups today.",
+      text: "Recap: 5 posts live, 61 clicks to your page. Reddit r/SaaS drove the most, and your Stripe logged 2 new signups today.",
     },
   ];
 
@@ -1211,7 +1211,7 @@ function AttributionMockup() {
         <div className="bg-[#d6ff3d]/15 px-5 py-4">
           <p className="text-[13px] leading-[1.5]">
             <span className="font-semibold">Reddit drove your most clicks this week.</span>
-            <span className="text-[#0a0a0a]/65"> Your Stripe logged 2 new signups — pulling back on X, doubling Reddit.</span>
+            <span className="text-[#0a0a0a]/65"> Your Stripe logged 2 new signups. Pulling back on X, doubling Reddit.</span>
           </p>
         </div>
       </div>
@@ -1231,13 +1231,13 @@ function Attribution() {
                 The loop nobody else closes
               </p>
               <h2 className="mb-6 font-display italic text-[clamp(2rem,4.5vw,3.4rem)] leading-[1.1] tracking-tight">
-                Maya tracks which post drove the click — not which got the
+                Maya tracks which post drove the click, not which got the
                 likes.
               </h2>
               <p className="max-w-md text-[16px] leading-[1.65] text-[#0a0a0a]/65">
-                Every link she posts is wrapped and tagged — so she knows
-                exactly which reply, which channel, which post sent someone to
-                your page, and the same clicks show up in{" "}
+                Every link she posts is wrapped and tagged. She knows exactly
+                which reply, which channel, which post sent someone to your
+                page, and the same clicks show up in{" "}
                 <span className="text-[#0a0a0a]">your own</span> PostHog or
                 Stripe, attributed to the post. You never just take her word for
                 it. Then she closes the loop on what converted: read from your
