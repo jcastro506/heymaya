@@ -73,6 +73,11 @@ export const getInboundContextByChat = internalQuery({
       .withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", args.chatId))
       .first();
     if (!agent) return null;
+    // Deletion guard (2026-07-06 audit): a chat still bound to a deleted
+    // account's agent (purge in flight, or a failed teardown) must route
+    // NOWHERE — not to a machine that may still be running. Fail closed.
+    const creator = await ctx.db.get(agent.accountId);
+    if (!creator || creator.status === "deleted") return null;
     return {
       agent,
       telegramChatId: agent.telegramChatId,
