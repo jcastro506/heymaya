@@ -543,6 +543,16 @@ async function purgeCreatorAccount(
       attempt: 1,
     });
   }
+  // Stripe delete is Convex-side for the same reason (STRIPE_SECRET_KEY lives
+  // here, not on Vercel). Deleting the customer cancels every subscription —
+  // without this, a web-route deletion kept billing the user (the complete
+  // hardDeleteMyGtmAccount action existed but no UI path invoked it).
+  if (stripeCustomerIds.length > 0) {
+    await ctx.scheduler.runAfter(0, internal.accountDeletion.deleteStripeCustomersInternal, {
+      stripeCustomerIds,
+      attempt: 1,
+    });
+  }
 
   const creatorDeleted = await deleteCreatorScopedRows(ctx, creator._id);
   const accountDeleted = await deleteAccountScopedRows(ctx, creator._id);
@@ -576,6 +586,59 @@ async function purgeCreatorAccount(
 
 const FLY_DESTROY_MAX_ATTEMPTS = 4;
 const FLY_DESTROY_RETRY_MS = 60_000;
+
+/**
+ * Delete the Stripe customers collected during an account purge. Deleting a
+ * customer cancels all of their subscriptions immediately (same semantics the
+ * hardDeleteMyGtmAccount action relies on). Runs Convex-side where
+ * STRIPE_SECRET_KEY lives. Already-deleted customers are success; failures
+ * re-schedule with the same backoff as the Fly teardown, then log loudly —
+ * a missed delete means the user keeps getting billed after deleting their
+ * account.
+ */
+export const deleteStripeCustomersInternal = internalAction({
+  args: { stripeCustomerIds: v.array(v.string()), attempt: v.number() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ deleted: number; failed: string[] }> => {
+    const { getStripeClient } = await import("./billing/stripeClient");
+    const stripe = getStripeClient();
+    const failed: string[] = [];
+    let deleted = 0;
+    for (const customerId of [...new Set(args.stripeCustomerIds.filter(Boolean))]) {
+      try {
+        if (stripe.customers.del) {
+          await stripe.customers.del(customerId);
+        }
+        deleted += 1;
+        console.log(`[accountDeletion] deleted Stripe customer ${customerId}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // Stripe raises resource_missing for an already-deleted customer.
+        if (/no such customer|resource_missing/i.test(message)) continue;
+        failed.push(customerId);
+        console.error(
+          `[accountDeletion] Stripe customer delete failed for ${customerId} (attempt ${args.attempt}): ${message}`
+        );
+      }
+    }
+    if (failed.length > 0) {
+      if (args.attempt < FLY_DESTROY_MAX_ATTEMPTS) {
+        await ctx.scheduler.runAfter(
+          FLY_DESTROY_RETRY_MS,
+          internal.accountDeletion.deleteStripeCustomersInternal,
+          { stripeCustomerIds: failed, attempt: args.attempt + 1 }
+        );
+      } else {
+        console.error(
+          `[accountDeletion] STRIPE CUSTOMERS NOT DELETED after ${args.attempt} attempts: ${failed.join(", ")} — the user may still be billed; delete manually in the Stripe dashboard.`
+        );
+      }
+    }
+    return { deleted, failed };
+  },
+});
 
 /**
  * Destroy the per-user OpenClaw Fly apps collected during an account purge.

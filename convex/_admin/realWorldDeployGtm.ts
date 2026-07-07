@@ -1102,6 +1102,29 @@ export const setPulseOverride = internalMutation({
   },
 });
 
+/** 2026-07-07 — test-only: attach a Stripe customer to a seeded creator so the
+ * deletion cascade's Convex-side Stripe delete can be verified end-to-end. */
+export const patchCreatorStripeCustomerId = internalMutation({
+  args: { creatorId: v.id("creators"), stripeCustomerId: v.string() },
+  handler: async (ctx, args): Promise<void> => {
+    await ctx.db.patch(args.creatorId, {
+      stripeCustomerId: args.stripeCustomerId,
+    });
+  },
+});
+
+/** 2026-07-07 — test-only: point a seeded agent at a Fly app so the account-
+ * deletion cascade's Convex-side Fly destroy can be verified end-to-end. */
+export const patchOpenClawFlyAppId = internalMutation({
+  args: { agentId: v.id("gtmAgents"), openClawFlyAppId: v.string() },
+  handler: async (ctx, args): Promise<void> => {
+    await ctx.db.patch(args.agentId, {
+      openClawFlyAppId: args.openClawFlyAppId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 /* -------------------------------------------------------------------------- */
 /* Real-signup demo helpers (Stripe-bypass comp + live peek + repoint).        */
 /*                                                                            */
