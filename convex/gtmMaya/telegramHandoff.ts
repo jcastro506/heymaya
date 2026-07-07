@@ -151,8 +151,22 @@ export const routeInboundToMachine = internalAction({
     try {
       // deliver:false — Maya replies via her `send_update` tool (→ Convex →
       // Telegram), the single outbound pipe; we only inject the inbound turn.
+      //
+      // ENVELOPE (2026-07-06): hook turns run as ISOLATED sessions, and live
+      // machines showed them completing "without announcement" — Maya answered
+      // in plain turn text (invisible) instead of calling send_update, so the
+      // founder saw silence. The contract now rides ON the turn itself instead
+      // of relying on whatever workspace context the isolated session loaded.
+      const envelope = [
+        "INBOUND TELEGRAM DM FROM YOUR FOUNDER (verbatim below).",
+        "Non-negotiable: your reply ONLY reaches their phone through the send_update tool. Plain turn text is invisible to them and reads as you ghosting.",
+        "Before this turn ends you MUST call send_update with your actual answer (short, in your voice, per SOUL.md). If the work needs time, send_update a one-line ack now and the substance when done.",
+        "Also call log_message with their text first, per AGENTS.md.",
+        "FOUNDER SAYS:",
+        args.text,
+      ].join("\n");
       const result = await runAgentTurn(endpoint, {
-        message: args.text,
+        message: envelope,
         deliver: false,
         thinking: "medium",
         timeoutSeconds: 90,
