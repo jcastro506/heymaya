@@ -34,6 +34,7 @@ import type {
   IabImagesInput,
   LinkToVideoInput,
   LipsyncInput,
+  LipsyncV2Input,
 } from "./types";
 
 function assertId<T extends { id?: unknown }>(obj: T, what: string): T & { id: string } {
@@ -151,6 +152,49 @@ export async function getLinkToVideo(
   return client.request<CreatifyJob>(`/api/link_to_videos/${id}/`, { method: "GET" });
 }
 
+// ── Preview-first URL→video (the cost lever) ──────────────────────────────────
+// preview_list_async fans out multiple visual-style previews at 1 cr/30s EACH
+// vs 4-5 cr/30s per blind render. Flow: previews → Maya (or her critic) picks →
+// render_single_preview with the chosen preview's media_job id. Both phases
+// poll the SAME /api/link_to_videos/{id}/ job.
+
+export async function createLinkToVideoPreviews(
+  input: LinkToVideoInput,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  const res = await client.request<CreatifyJob>("/api/link_to_videos/preview_list_async/", {
+    method: "POST",
+    body: compact({
+      link: input.link,
+      aspect_ratio: input.aspect_ratio ?? "9x16",
+      video_length: input.video_length,
+      override_script: input.override_script,
+      script_style: input.script_style,
+      model_version: input.model_version,
+      override_avatar: input.override_avatar,
+      override_voice: input.override_voice,
+      target_platform: input.target_platform,
+      target_audience: input.target_audience,
+      language: input.language,
+      webhook_url: input.webhook_url,
+    }),
+  });
+  return assertId(res, "createLinkToVideoPreviews");
+}
+
+export async function renderLinkToVideoPreview(
+  id: string,
+  mediaJob: string,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  const res = await client.request<CreatifyJob>(
+    `/api/link_to_videos/${id}/render_single_preview/`,
+    { method: "POST", body: { media_job: mediaJob } }
+  );
+  // Render responses reuse the parent job id; fall back to it if omitted.
+  return { ...res, id: (res as { id?: string }).id ?? id };
+}
+
 // ── Aurora (ultra-realistic talking head: one photo + audio) ──────────────────
 
 export async function createAurora(
@@ -198,6 +242,42 @@ export async function getLipsync(
   client: CreatifyClient = getDefaultClient()
 ): Promise<CreatifyJob> {
   return client.request<CreatifyJob>(`/api/lipsyncs/${id}/`, { method: "GET" });
+}
+
+// ── Lipsync v2 (multi-scene UGC: avatar scenes + b-roll scenes) ───────────────
+// The avatar/b-roll "sandwich" format. Same credit schedule as v1.
+// ⚠ Docs-derived, UNVERIFIED LIVE — smoke via scripts/creatify-test.ts first.
+
+export async function createLipsyncV2(
+  input: LipsyncV2Input,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  const res = await client.request<CreatifyJob>("/api/lipsyncs_v2/", {
+    method: "POST",
+    body: compact({
+      video_inputs: input.video_inputs.map((scene) =>
+        compact({
+          character: scene.character ? compact({ ...scene.character }) : undefined,
+          voice: scene.voice ? compact({ ...scene.voice }) : undefined,
+          background: scene.background ? compact({ ...scene.background }) : undefined,
+          caption_setting: scene.caption_setting
+            ? compact({ ...scene.caption_setting })
+            : undefined,
+        })
+      ),
+      aspect_ratio: input.aspect_ratio ?? "9x16",
+      model_version: input.model_version ?? "aurora_v1_fast",
+      webhook_url: input.webhook_url,
+    }),
+  });
+  return assertId(res, "createLipsyncV2");
+}
+
+export async function getLipsyncV2(
+  id: string,
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyJob> {
+  return client.request<CreatifyJob>(`/api/lipsyncs_v2/${id}/`, { method: "GET" });
 }
 
 // ── AI Scripts (grounded script from URL or title+description) ────────────────
@@ -333,10 +413,14 @@ export async function getCreatifyJob(
       return getAurora(id, client);
     case "lipsync":
       return getLipsync(id, client);
+    case "lipsync_v2":
+      return getLipsyncV2(id, client);
     case "iab_images":
       return getIabImages(id, client);
     case "asset_gen":
       return getAssetGen(id, client);
+    case "inspiration":
+      return getInspirationJob(id, client);
     default: {
       const _exhaustive: never = mode;
       throw new Error(`Creatify getCreatifyJob: unknown mode ${String(_exhaustive)}`);
@@ -351,4 +435,55 @@ export async function getVideoJob(
   client: CreatifyClient = getDefaultClient()
 ): Promise<CreatifyJob> {
   return getCreatifyJob(mode, id, client);
+}
+
+
+// ── Supporting reads: personas, voices, remaining credits ─────────────────────
+// Free GETs. Personas power the lipsync_v2 avatar pick (scenes REQUIRE an
+// explicit avatar id); voices pin one consistent voice; remaining_credits keeps
+// the creative budget honest against the REAL account balance.
+
+export interface CreatifyPersona {
+  id: string;
+  gender?: string | null;
+  style?: string | null;
+  age_range?: string | null;
+  preview_image_9_16?: string | null;
+  preview_video_9_16?: string | null;
+  [key: string]: unknown;
+}
+
+export async function getPersonasV2(
+  params: { gender?: string; style?: string; age_range?: string } = {},
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyPersona[]> {
+  const qs = new URLSearchParams();
+  if (params.gender) qs.set("gender", params.gender);
+  if (params.style) qs.set("style", params.style);
+  if (params.age_range) qs.set("age_range", params.age_range);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return client.request<CreatifyPersona[]>(`/api/personas_v2/${suffix}`, { method: "GET" });
+}
+
+export interface CreatifyVoice {
+  voice_id?: string;
+  id?: string;
+  name?: string | null;
+  gender?: string | null;
+  accents?: unknown;
+  [key: string]: unknown;
+}
+
+export async function getVoices(
+  client: CreatifyClient = getDefaultClient()
+): Promise<CreatifyVoice[]> {
+  return client.request<CreatifyVoice[]>("/api/voices/", { method: "GET" });
+}
+
+export async function getRemainingCredits(
+  client: CreatifyClient = getDefaultClient()
+): Promise<{ remaining_credits?: number; [key: string]: unknown }> {
+  return client.request<{ remaining_credits?: number }>("/api/remaining_credits/", {
+    method: "GET",
+  });
 }

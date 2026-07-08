@@ -63,6 +63,33 @@ export function spendThrottleDailyUsd(): number {
   return Number.isFinite(env) && env > 0 ? env : 6.0;
 }
 
+/** Foundation-grace daily ceiling. Onboarding research legitimately burns
+ * $5-15 real in a burst; throttling mid-foundation pauses research → the
+ * lease caps out → the agent bricks in "researching" and never messages
+ * (observed 2026-07-06: four agents dead this way). While foundation is
+ * incomplete AND the agent is <48h old, the 24h walls use
+ * max(agent cap, this) — a raised hard ceiling, never no ceiling. */
+export function foundationGraceDailyUsd(): number {
+  const env = Number(process.env.GTM_FOUNDATION_GRACE_DAILY_USD);
+  return Number.isFinite(env) && env > 0 ? env : 15.0;
+}
+
+const FOUNDATION_GRACE_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
+/** Pure: the 24h wall for an agent, foundation grace applied. Unit-testable. */
+export function effectiveDailyCapUsd(input: {
+  spendKillCapUsd?: number;
+  foundationCompletedAt?: number;
+  createdAt: number;
+  now: number;
+}): number {
+  const base = input.spendKillCapUsd ?? spendThrottleDailyUsd();
+  const inGrace =
+    !input.foundationCompletedAt &&
+    input.now - input.createdAt < FOUNDATION_GRACE_MAX_AGE_MS;
+  return inGrace ? Math.max(base, foundationGraceDailyUsd()) : base;
+}
+
 export interface SpendThrottleVerdict {
   shouldThrottle: boolean;
   reason?: string;
@@ -167,7 +194,16 @@ async function snapshotAgentSpend(
     { onlyOpenrouterPoll: true }
   );
   const hourlyCapUsd = spendThrottleHourlyUsd();
-  const dailyCapUsd = agent.spendKillCapUsd ?? spendThrottleDailyUsd();
+  // Foundation grace: onboarding research is a legitimate burst. Raising (not
+  // removing) the 24h ceiling while foundation runs keeps the wall from
+  // bricking a brand-new agent mid-research. Bounded by age so a permanently
+  // stuck foundation can't hold the grace forever.
+  const dailyCapUsd = effectiveDailyCapUsd({
+    spendKillCapUsd: agent.spendKillCapUsd,
+    foundationCompletedAt: agent.foundationCompletedAt,
+    createdAt: agent.createdAt,
+    now,
+  });
   const verdict = evaluateSpendThrottle({
     hourSpendUsd,
     daySpendUsd,

@@ -1,8 +1,10 @@
 import { v } from "convex/values";
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
+  mutation,
   type ActionCtx,
 } from "../_generated/server";
 import { internal } from "../_generated/api";
@@ -99,20 +101,69 @@ export const inspectMyGtmApp = action({
       clerkUserId: identity.subject,
     });
     if (!row) throw new Error("GTM app not found for signed-in user.");
-
-    const diagnosis = await inspectApp(row.app.url);
-    // W1.0 — augment the regex crawl with a grounded LLM product picture.
-    // Soft-fails: on any failure the regex `summary` remains as the fallback.
-    const picture = await buildProductPicture(ctx, row.app, diagnosis);
-    if (picture) diagnosis.picture = picture;
-    await ctx.runMutation(internal.gtmMaya.appInspector.persistAppDiagnosis, {
-      appId: args.appId,
-      accountId: row.accountId,
-      diagnosis,
-    });
-    return diagnosis;
+    return await runInspection(ctx, args.appId, row);
   },
 });
+
+/**
+ * Onboarding path — fire-and-forget. The crawl + grounded LLM product picture
+ * take 10-30s and NOTHING on the next onboarding screen needs the result (it
+ * feeds Maya's BOOT research + the Brain tab later), so the Continue button
+ * must not block on it. This mutation auth-checks + schedules the heavy work
+ * server-side (survives tab close) and returns immediately.
+ */
+export const queueMyAppInspection = mutation({
+  args: { appId: v.id("gtmApps") },
+  handler: async (ctx, args): Promise<{ queued: boolean }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("queueMyAppInspection requires a signed-in user.");
+    // Reuse the same ownership check the action does (fail-closed).
+    const creator = await ctx.db
+      .query("creators")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .first();
+    const app = await ctx.db.get(args.appId);
+    if (!creator || !app || app.accountId !== creator._id) {
+      throw new Error("GTM app not found for signed-in user.");
+    }
+    await ctx.scheduler.runAfter(0, internal.gtmMaya.appInspector.inspectAppInternal, {
+      appId: args.appId,
+      clerkUserId: identity.subject,
+    });
+    return { queued: true };
+  },
+});
+
+/** Scheduled variant of inspectMyGtmApp — same work, no client waiting on it. */
+export const inspectAppInternal = internalAction({
+  args: { appId: v.id("gtmApps"), clerkUserId: v.string() },
+  handler: async (ctx: ActionCtx, args): Promise<void> => {
+    const row = await ctx.runQuery(internal.gtmMaya.appInspector.getAppForInspection, {
+      appId: args.appId,
+      clerkUserId: args.clerkUserId,
+    });
+    if (!row) return;
+    await runInspection(ctx, args.appId, row);
+  },
+});
+
+async function runInspection(
+  ctx: ActionCtx,
+  appId: Id<"gtmApps">,
+  row: { app: Doc<"gtmApps">; accountId: Id<"creators"> }
+): Promise<AppDiagnosis> {
+  const diagnosis = await inspectApp(row.app.url);
+  // W1.0 — augment the regex crawl with a grounded LLM product picture.
+  // Soft-fails: on any failure the regex `summary` remains as the fallback.
+  const picture = await buildProductPicture(ctx, row.app, diagnosis);
+  if (picture) diagnosis.picture = picture;
+  await ctx.runMutation(internal.gtmMaya.appInspector.persistAppDiagnosis, {
+    appId,
+    accountId: row.accountId,
+    diagnosis,
+  });
+  return diagnosis;
+}
 
 /* -------------------------------------------------------------------------- */
 /* W1.0 — grounded product-picture augmentation                               */

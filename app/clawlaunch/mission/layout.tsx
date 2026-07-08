@@ -14,22 +14,28 @@ import type { ReactNode } from "react";
 import {
   Activity,
   Brain,
-  CalendarDays,
-  FileText,
-  Images,
+  Inbox,
   TrendingUp,
-  Telescope,
   Settings,
+  Sparkles,
 } from "lucide-react";
 
+/**
+ * v2 information architecture — six tabs, each owning ONE question:
+ *   Today    → is she working, does she need me?
+ *   Thinking → what is she thinking right now?
+ *   Queue    → what did she write, and do I approve? (drafts + media)
+ *   Brain    → what does she know and what did she decide? (research + bets)
+ *   Results  → is it working? (funnel, attribution, reviews)
+ *   Account  → settings, plan, connections.
+ * Old routes (/plan /research /drafts /assets) redirect to their new homes.
+ */
 const BASE = "/clawlaunch/mission";
 const NAV = [
   { href: BASE, label: "Today", icon: Activity },
-  { href: `${BASE}/thinking`, label: "Thinking", icon: Brain },
-  { href: `${BASE}/plan`, label: "Plan", icon: CalendarDays },
-  { href: `${BASE}/research`, label: "Research", icon: Telescope },
-  { href: `${BASE}/drafts`, label: "Drafts", icon: FileText },
-  { href: `${BASE}/assets`, label: "Assets", icon: Images },
+  { href: `${BASE}/thinking`, label: "Thinking", icon: Sparkles },
+  { href: `${BASE}/queue`, label: "Queue", icon: Inbox },
+  { href: `${BASE}/brain`, label: "Brain", icon: Brain },
   { href: `${BASE}/results`, label: "Results", icon: TrendingUp },
   { href: `${BASE}/account`, label: "Account", icon: Settings },
 ] as const;

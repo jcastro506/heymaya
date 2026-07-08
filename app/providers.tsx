@@ -1,12 +1,17 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useCallback, useMemo } from "react";
 import { ClerkProvider, useAuth } from "@clerk/nextjs";
 import { ConvexReactClient } from "convex/react";
-import { ConvexProviderWithClerk } from "convex/react-clerk";
+import { ConvexProviderWithAuth } from "convex/react";
 import { PostHogProvider } from "@/components/analytics/PostHogProvider";
 
 const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+
+const allowedRedirectOrigins = [
+  /^https:\/\/([a-z0-9-]+\.)?hey-maya\.ai$/,
+  /^http:\/\/localhost(:\d+)?$/,
+];
 
 const clerkAppearance = {
   variables: {
@@ -44,10 +49,47 @@ const clerkAppearance = {
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <ClerkProvider appearance={clerkAppearance}>
-      <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+    <ClerkProvider
+      allowedRedirectOrigins={allowedRedirectOrigins}
+      appearance={clerkAppearance}
+    >
+      <ConvexProviderWithAuth client={convex} useAuth={useConvexAuthFromClerk}>
         <PostHogProvider>{children}</PostHogProvider>
-      </ConvexProviderWithClerk>
+      </ConvexProviderWithAuth>
     </ClerkProvider>
+  );
+}
+
+function useConvexAuthFromClerk() {
+  const { isLoaded, isSignedIn, sessionId } = useAuth();
+
+  const fetchAccessToken = useCallback(
+    async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
+      if (!isLoaded || !isSignedIn || !sessionId) return null;
+      try {
+        const res = await fetch("/api/auth/convex-token", {
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: forceRefreshToken
+            ? { "x-convex-force-refresh": "1" }
+            : undefined,
+        });
+        if (!res.ok) return null;
+        const body = (await res.json()) as { token?: unknown };
+        return typeof body.token === "string" ? body.token : null;
+      } catch {
+        return null;
+      }
+    },
+    [isLoaded, isSignedIn, sessionId]
+  );
+
+  return useMemo(
+    () => ({
+      isLoading: !isLoaded,
+      isAuthenticated: isSignedIn ?? false,
+      fetchAccessToken,
+    }),
+    [fetchAccessToken, isLoaded, isSignedIn]
   );
 }

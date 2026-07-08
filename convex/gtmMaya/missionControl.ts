@@ -191,6 +191,7 @@ export const getMyAccount = query({
     canceledAt: number | null;
     canceledPeriodEndMs: number | null;
     gtmPlanStatus: string | null;
+    gtmPlanTier: string | null;
   } | null> => {
     const creator = await resolveMyGtmCreator(ctx);
     if (!creator) return null;
@@ -205,6 +206,9 @@ export const getMyAccount = query({
     return {
       email: creator.email,
       plan: creator.plan,
+      // The GTM tier the founder actually bought (gtmPlanJson), NOT the legacy
+      // creator coach/manager field — the Account page displays THIS.
+      gtmPlanTier: agent ? planFeaturesGtm({ gtmPlanJson: agent.gtmPlanJson }).plan : null,
       status: creator.status,
       app: app ?? null,
       deployedAt: agent?.deployedAt,

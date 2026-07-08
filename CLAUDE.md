@@ -14,7 +14,7 @@ This is a fresh consumer SaaS product. Branded HeyMaya. Target customer: creator
 
 > **"Maya turns every completed job into local marketing."**
 
-> **Creator product is suppressed behind `NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT` (default `false`). Code, tests, and Convex tables are preserved — flipping the env var to `true` restores the dual-track surface.** Default new signups during suppression are `accountType: 'service-business'`. Implementation: `proxy.ts` 308-redirects `/creators`, `/onboarding/maya`, and creator HQ paths (`/today`, `/performance`, `/plan`, `/trends`, `/deals`, `/profile`) to their service equivalents; `app/page.tsx` server-renders the business landing in-place at `/` when the flag is off.
+> **Creator product is suppressed behind `NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT` (default `false`). Code, tests, and Convex tables are preserved — flipping the env var to `true` restores the dual-track surface.** Default new signups during suppression are `accountType: 'service-business'`. Implementation: `middleware.ts` 308-redirects `/creators`, `/onboarding/maya`, and creator HQ paths (`/today`, `/performance`, `/plan`, `/trends`, `/deals`, `/profile`) to their service equivalents; `app/page.tsx` server-renders the business landing in-place at `/` when the flag is off.
 
 The wedge: photos / voice in (from a job site, via text or voice call) → GBP posts + review requests + FB/IG content + brand-voice review replies out, all driven through the operator's text thread or phone. Same single-agent shape as the creator product; different ICP, different stack edges, different pricing.
 

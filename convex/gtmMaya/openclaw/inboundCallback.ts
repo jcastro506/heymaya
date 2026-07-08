@@ -145,6 +145,11 @@ export const resolveAgentFromHookToken = internalQuery({
       }
     }
     if (!matched) return null;
+    // Deletion guard (2026-07-06 audit): a hook token from an orphaned machine
+    // (Fly destroy failed / in-flight callback during the purge window) must
+    // never write into a deleted account. Fail closed like resolveMyGtmCreator.
+    const creator = await ctx.db.get(matched.accountId);
+    if (!creator || creator.status === "deleted") return null;
     return { agentId: matched._id, accountId: matched.accountId };
   },
 });
@@ -716,6 +721,7 @@ interface DraftedContentPayload {
   targetThreadId?: string;
   targetAccountId?: string;
   draftText: string;
+  rationale?: string;
   draftSegments?: string[];
   researchJobId?: string;
   // Sprint C — content-attribute tags for attribute→outcome learning.
@@ -779,6 +785,7 @@ export const draftedContentHttp = httpAction(async (ctx, request) => {
         | Id<"gtmTargetAccounts">
         | undefined,
       draftText: body.draftText,
+      rationale: typeof body.rationale === "string" ? body.rationale : undefined,
       draftSegments: body.draftSegments,
       attributes: body.attributes,
     });

@@ -310,13 +310,13 @@ function categoryForTool(name) {
   )
     return "publish";
   if (
-    /^(save_draft$|update_draft_voice_match$|generate_slide_image$|review_media$|make_ad_from_url$|clone_winning_ad$|make_static_asset$|make_ugc_video$|propose_calendar$|save_target_thread$|save_target_account$)/.test(
+    /^(save_draft$|update_draft_voice_match$|generate_slide_image$|review_media$|make_ad_from_url$|render_chosen_preview$|clone_winning_ad$|make_static_asset$|make_ugc_video$|propose_calendar$|save_target_thread$|save_target_account$)/.test(
       name
     )
   )
     return "draft";
   if (
-    /^(save_foundation_|set_north_star$|set_strategy_approval$|save_voice_profile$|save_style_exemplars$|set_channel_warmth$|save_competitor_move$|save_niche_pulse_signal$|save_learning$|save_diagnosis$|save_experiment$|set_channel_warmth$)/.test(
+    /^(save_foundation_|set_north_star$|set_strategy_approval$|save_plan_doc$|save_voice_profile$|save_style_exemplars$|set_channel_warmth$|save_competitor_move$|save_niche_pulse_signal$|save_learning$|save_diagnosis$|save_experiment$|set_channel_warmth$)/.test(
       name
     )
   )
@@ -807,11 +807,12 @@ export default defineToolPlugin({
       name: "save_draft",
       label: "Save Drafted Content",
       description:
-        "Persist a drafted reply/post/thread/comment/dm. REQUIRED: kind, platform, draftText (<=12000 chars). This is the actionable output — drafting in chat without calling this means nothing reaches the operator's queue.",
+        "Persist a drafted reply/post/thread/comment/dm. REQUIRED: kind, platform, draftText (<=12000 chars), and rationale — one or two plain sentences the FOUNDER reads on the draft card: why this thread, why this angle, what outcome you expect (e.g. 'r/SaaS founder asking exactly what we solve, 2h old. Plan bet #1. Expect profile clicks.'). A draft without a rationale is an incomplete save. Drafting in chat without calling this means nothing reaches the operator's queue.",
       parameters: Type.Object({
         kind: Enum(["reply", "thread", "post", "comment", "dm"]),
         platform: Enum(PLATFORM_7),
         draftText: Type.String({ description: "<= 12000 chars." }),
+        rationale: Type.Optional(Type.String({ description: "Why this thread + angle + expected outcome, founder-readable, <=600 chars." })),
         targetThreadId: Type.Optional(Type.String()),
         targetAccountId: Type.Optional(Type.String()),
         researchJobId: Type.Optional(Type.String()),
@@ -1079,6 +1080,18 @@ export default defineToolPlugin({
         idempotencyKey: IdemKey,
       }),
       execute: async (p, _cfg, ctx) => postLc("set_strategy_approval", { ...p, idempotencyKey: key(p) }, ctx.signal),
+    }),
+    tool({
+      name: "save_plan_doc",
+      label: "Save Plan Document",
+      description:
+        "PLAN_APPROVAL_LOOP: whenever you present or amend your plan to the founder, ALSO save it here as a STRUCTURED object — this is what their web approval screen renders and what versions/amendments diff against. Pass plan = { read (what their product is, 1-2 sentences), goal { metric, target, byMs }, moves (2-4: { name, channel, intent, budget, expect, horizon }), notDoing ([{ channel, why }] — reasoned omissions are mandatory), week (postsPerWeek, repliesPerDay, tone), asks (['approve','connect reddit'…]) }. On an AMENDMENT (founder asked for a change): pass the full updated plan PLUS directive (their ask, verbatim-ish) and diff (one line: what changed). Versioning is server-owned; saving after approval returns the plan to proposed for re-approval. Returns { ok, version }.",
+      parameters: Type.Object({
+        plan: Type.Record(Type.String(), Type.Unknown()),
+        directive: Type.Optional(Type.String()),
+        diff: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => postLc("save_plan_doc", p, ctx.signal),
     }),
 
     // --- Voice + per-channel warmth (Phase 0 + ban-safety arc) ---
@@ -1900,7 +1913,7 @@ export default defineToolPlugin({
       name: "clone_winning_ad",
       label: "Clone Winning Ad",
       description:
-        "STUDIO TIER ONLY. Make a real vertical video ad by COPYING the format of a winning video already proven in the niche, with the founder's actual product dropped in. This is the differentiator: feed the winning TikTok/Reel URL (from format research) + the product, and Creatify recreates its structure, pacing, and style for this product. REQUIRED: productUrl (the founder's app/site), referenceVideoUrl (the winning video to copy). Optional: imageAssetIds (the founder's REAL product screenshots from search_my_media — grounds the ad in the real UI; I resolve them server-side), title, description. Returns { ok, jobId, status } immediately; the render finishes in a few minutes — check_video_job with the jobId, then send_media_to_user once it's done. Server-gated to the $149 Studio tier and metered against the monthly video cap.",
+        "STUDIO TIER ONLY. Make a real vertical video ad by COPYING the format of a winning video already proven in the niche, with the founder's actual product dropped in. This is the differentiator: feed the winning TikTok/Reel URL (from format research) + the product, and Creatify recreates its structure, pacing, and style for this product. REQUIRED: productUrl (the founder's app/site), referenceVideoUrl (the winning video to copy). Optional: imageAssetIds (the founder's REAL product screenshots from search_my_media — grounds the ad in the real UI; I resolve them server-side), title, description. COST DISCIPLINE: cloning bills 12 credits per 5 SECONDS of the reference video (a 30s ref ≈ $14 — ~15x a make_ad_from_url render), so each clone counts as 4 jobs against the monthly video cap. Pick references ≤15s, and clone only formats your research shows are PROVEN winners — for everything else use make_ad_from_url with previewFirst. Returns { ok, jobId, status } immediately; the render finishes in a few minutes — check_video_job with the jobId, then send_media_to_user once it's done. Server-gated to the $149 Studio tier and metered (weighted 4x) against the monthly video cap.",
       parameters: Type.Object({
         productUrl: Type.String(),
         referenceVideoUrl: Type.String(),
@@ -1914,7 +1927,7 @@ export default defineToolPlugin({
       name: "make_ad_from_url",
       label: "Make Ad From URL",
       description:
-        "STUDIO TIER ONLY. Make a real vertical video ad from the founder's product URL — Creatify scrapes the page, writes the script, and assembles a fully-edited ad (avatar + captions + b-roll + music). REQUIRED: productUrl. Optional: script (HYBRID mode — pass YOUR grounded script instead of letting Creatify auto-write; preferred when you have the product fact sheet), imageAssetIds (the founder's real screenshots from search_my_media — I resolve them server-side), scriptStyle (e.g. ProblemSolutionV2, BenefitsV2, GenzWriter), visualStyle (e.g. DynamicProductTemplate), modelVersion (standard | aurora_v1 | aurora_v1_fast for realism), videoLength (15|30|45|60). Returns { ok, jobId, status } immediately; poll check_video_job then send_media_to_user when done. Server-gated to the $149 Studio tier + monthly video cap.",
+        "STUDIO TIER ONLY. Make a real vertical video ad from the founder's product URL — Creatify scrapes the page, writes the script, and assembles a fully-edited ad (avatar + captions + b-roll + music). REQUIRED: productUrl. Optional: script (HYBRID mode — pass YOUR grounded script instead of letting Creatify auto-write; preferred when you have the product fact sheet), imageAssetIds (the founder's real screenshots from search_my_media — I resolve them server-side), scriptStyle (e.g. ProblemSolutionV2, BenefitsV2, GenzWriter), visualStyle (e.g. DynamicProductTemplate), modelVersion (standard | aurora_v1 | aurora_v1_fast for realism), videoLength (15|30|45|60), previewFirst (RECOMMENDED true — fans out cheap style PREVIEWS ~1cr each instead of one blind 4-5cr render; the job pauses at status 'preview_ready' with a previews list; WATCH the preview urls with your video judgment, pick the strongest, then call render_chosen_preview with its mediaJob id). Returns { ok, jobId, status } immediately; poll check_video_job then send_media_to_user when done. Server-gated to the $149 Studio tier + monthly video cap.",
       parameters: Type.Object({
         productUrl: Type.String(),
         script: Type.Optional(Type.String()),
@@ -1925,8 +1938,21 @@ export default defineToolPlugin({
           Enum(["standard", "aurora_v1", "aurora_v1_fast"])
         ),
         videoLength: Type.Optional(Type.Number()),
+        previewFirst: Type.Optional(Type.Boolean()),
       }),
       execute: async (p, _cfg, ctx) => postLc("creatify_make_ad", p, ctx.signal),
+    }),
+    tool({
+      name: "render_chosen_preview",
+      label: "Render Chosen Preview",
+      description:
+        "Phase 2 of the preview-first flow. After a make_ad_from_url job with previewFirst reaches status 'preview_ready' (via check_video_job), its previews list holds candidate styles as { mediaJob, url }. WATCH the preview urls, judge them like a producer (hook strength, product clarity, voice fit), then pass the winner's mediaJob here to render ONLY that one at full quality. REQUIRED: jobId (the preview job), mediaJob (the chosen preview's id). Returns { ok, jobId, status }; the same job then finishes as a normal render — poll check_video_job.",
+      parameters: Type.Object({
+        jobId: Type.String(),
+        mediaJob: Type.String(),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("creatify_render_preview", p, ctx.signal),
     }),
     tool({
       name: "check_video_job",
@@ -1957,15 +1983,40 @@ export default defineToolPlugin({
       name: "get_inspirations",
       label: "Get Inspirations",
       description:
-        "Read Creatify's recipe/format catalog — a library of proven creative FORMATS/templates (hooks, structures, styles). This is a format-idea catalog, NOT a competitor-ad feed and NOT a trend strategy. Use it ONLY as one input to YOUR grounded brief: skim the recipes for a format that fits the founder's angle, then ground the actual copy/visuals in their real product. Never let a recipe drive the strategy or pull you toward paid-ad framing — you are organic-first. Free + read-only; returns { ok, recipes: [{ id, name }] }.",
+        "Read Creatify's recipe/format catalog — a library of proven creative FORMATS/templates (hooks, structures, styles). This is a format-idea catalog, NOT a competitor-ad feed and NOT a trend strategy. Use it ONLY as one input to YOUR grounded brief: skim the recipes for a format that fits the founder's angle, then ground the actual copy/visuals in their real product. Never let a recipe drive the strategy or pull you toward paid-ad framing — you are organic-first. Free + read-only; returns { ok, recipes: [{ id, name, genType (image|video), creditCost (⚠ API price — treat as real money), previewImage, previewVideo, categories, requiredInputs }] }. To actually render a recipe with the founder's grounded inputs, use render_inspiration — but ONLY when the preview clearly fits the niche's winning format and the creditCost is justified.",
       parameters: Type.Object({}),
       execute: async (p, _cfg, ctx) => getLc("creatify_inspirations", p, ctx.signal),
+    }),
+    tool({
+      name: "render_inspiration",
+      label: "Render Inspiration Template",
+      description:
+        "Render one of Creatify's curated templates (from get_inspirations) with the FOUNDER'S grounded inputs. genType comes from the catalog entry: 'image' templates are gated to Growth+ (canImage, image cap), 'video' to Studio (canVideo, video cap) — server-enforced, fail closed. WORKFLOW: (1) get_inspirations, (2) judge the previewImage/previewVideo against the niche's winning format, (3) check creditCost is worth it (API pricing is 4x the in-app price — never render a template you wouldn't pay for), (4) fill inputParams per the template's requiredInputs using REAL product material (search_my_media), (5) render. REQUIRED: inspirationId, genType. Optional: inputParams (object matching the template schema), productUrl. Returns { ok, jobId, status }; poll check_video_job, then send_media_to_user / send_confirm_card.",
+      parameters: Type.Object({
+        inspirationId: Type.String(),
+        genType: Enum(["image", "video"]),
+        inputParams: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+        productUrl: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("creatify_render_inspiration", p, ctx.signal),
+    }),
+    tool({
+      name: "list_ugc_avatars",
+      label: "List UGC Avatars",
+      description:
+        "FREE READ. Browse the avatar personas (+ voices) available for UGC video. Returns { ok, avatars: [{ id, gender, style, previewImage, previewVideo }], voices: [{ id, name, gender }] }. Use this ONCE to pick the founder's 'creator': choose an avatar whose vibe matches the ICP (selfie-style for UGC authenticity), note its id, SAVE the choice as a learning, and reuse the SAME avatar id (overrideAvatar) + voice id (overrideVoice) on every make_ugc_video — a consistent face/voice across posts is what makes the channel feel like a real creator, not AI slop. Optional filters: style (selfie|presenter), gender (m|f|nb).",
+      parameters: Type.Object({
+        style: Type.Optional(Type.String()),
+        gender: Type.Optional(Type.String()),
+      }),
+      execute: async (p, _cfg, ctx) => getLc("creatify_avatars", p, ctx.signal),
     }),
     tool({
       name: "check_creative_budget",
       label: "Check Creative Budget",
       description:
-        "READ-ONLY. Call this BEFORE make_ugc_video — never render blind. Returns the founder's creative-credit budget for UGC avatar video this billing period: { ok, mode (full | graceful_degrade | hard_block), usedCreditsThisPeriod, allowedThroughNowCredits, monthlyCapCredits, reason }. mode 'full' → go ahead. mode 'graceful_degrade' → you've run ahead of this month's pace; WAIT or drop to a cheaper format (make_static_asset / a Gemini slideshow). mode 'hard_block' → the monthly ceiling is hit (or this tier has no UGC budget); do NOT attempt, tell the founder UGC resumes next billing period. The budget is paced across the month so it can't all be spent in week 1 — respect it.",
+        "READ-ONLY. Call this BEFORE make_ugc_video — never render blind. Returns the founder's creative-credit budget for UGC avatar video this billing period: { ok, mode (full | graceful_degrade | hard_block), usedCreditsThisPeriod, allowedThroughNowCredits, monthlyCapCredits, reason, remainingCredits (the REAL Creatify account balance — if it's lower than the plan math implies, trust IT and mention it in your judgment) }. mode 'full' → go ahead. mode 'graceful_degrade' → you've run ahead of this month's pace; WAIT or drop to a cheaper format (make_static_asset / a Gemini slideshow). mode 'hard_block' → the monthly ceiling is hit (or this tier has no UGC budget); do NOT attempt, tell the founder UGC resumes next billing period. The budget is paced across the month so it can't all be spent in week 1 — respect it.",
       parameters: Type.Object({}),
       execute: async (p, _cfg, ctx) => postLc("check_creative_budget", p, ctx.signal),
     }),
@@ -1973,7 +2024,7 @@ export default defineToolPlugin({
       name: "make_ugc_video",
       label: "Make UGC Avatar Video",
       description:
-        "STUDIO ($199) TIER ONLY. Make a real UGC-style talking-head/testimonial video: an Aurora avatar performs YOUR grounded, voice-passed script. ALWAYS call check_creative_budget FIRST — if it's not 'full', do not render. PIPELINE: (1) get a structurally-strong draft (Creatify's AI-scripts writer is trained on what performs — use it as the skeleton), (2) rewrite it in the FOUNDER'S voice from the grounded fact sheet, claims verified-only (never invent product claims), (3) pass that as avatarScript here. REQUIRED: avatarScript (the final, in-voice, grounded script). Optional: productUrl (recorded for traceability), modelVersion (aurora_v1_fast default = cheap 0.5cr/s; aurora_v1 = max realism 1cr/s — prefer fast unless the budget is flush), aspectRatio (9x16 default), overrideAvatar, overrideVoice. Returns { ok, jobId, status, budgetMode } immediately; the render finishes in a few minutes — check_video_job with the jobId, then send_media_to_user once done. Server-gated to Studio (canUgc) + the paced credit budget — both fail closed. On a non-Studio account this returns ok:false; never claim you made a video you couldn't.",
+        "STUDIO ($199) TIER ONLY. Make a real UGC-style talking-head/testimonial video: an Aurora avatar performs YOUR grounded, voice-passed script. ALWAYS call check_creative_budget FIRST — if it's not 'full', do not render. PIPELINE: (1) get a structurally-strong draft (Creatify's AI-scripts writer is trained on what performs — use it as the skeleton), (2) rewrite it in the FOUNDER'S voice from the grounded fact sheet, claims verified-only (never invent product claims), (3) pass that as avatarScript here. REQUIRED: avatarScript (the final, in-voice, grounded script — used as the single scene when scenes is omitted). PREFERRED FORMAT — the UGC sandwich: pass scenes = [{script: hook (avatar)}, {script: voiceover, brollUrl: REAL product footage/screenshot url from search_my_media}, {script: CTA (avatar)}]. Avatar scenes show the avatar speaking; brollUrl scenes show the founder's real product with the script as voiceover — this multi-scene cut converts far better than one static talking head. scenes REQUIRES overrideAvatar — pick it ONCE via list_ugc_avatars (selfie-style fits UGC) and STICK with it; same face + voice across videos builds a recognizable creator. Optional: productUrl (recorded for traceability), modelVersion (aurora_v1_fast default = cheap 0.5cr/s; aurora_v1 = max realism 1cr/s — prefer fast unless the budget is flush), aspectRatio (9x16 default), overrideAvatar, overrideVoice. Returns { ok, jobId, status, budgetMode } immediately; the render finishes in a few minutes — check_video_job with the jobId, then send_media_to_user once done. Server-gated to Studio (canUgc) + the paced credit budget — both fail closed. On a non-Studio account this returns ok:false; never claim you made a video you couldn't.",
       parameters: Type.Object({
         avatarScript: Type.String(),
         productUrl: Type.Optional(Type.String()),
@@ -1981,6 +2032,14 @@ export default defineToolPlugin({
         aspectRatio: Type.Optional(Type.String()),
         overrideAvatar: Type.Optional(Type.String()),
         overrideVoice: Type.Optional(Type.String()),
+        scenes: Type.Optional(
+          Type.Array(
+            Type.Object({
+              script: Type.String(),
+              brollUrl: Type.Optional(Type.String()),
+            })
+          )
+        ),
       }),
       execute: async (p, _cfg, ctx) => postLc("make_ugc_video", p, ctx.signal),
     }),

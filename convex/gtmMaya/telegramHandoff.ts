@@ -55,6 +55,147 @@ export const getHandoffContext = internalQuery({
   },
 });
 
+/**
+ * SWITCHBOARD INBOUND ROUTER — the scalable shared-bot model.
+ *
+ * One shared @HeyMaya bot; its webhook points at CONVEX (never at a machine).
+ * Convex looks up which agent owns the chat and forwards the user's message to
+ * THAT agent's Fly machine as an agent turn. The machine answers via the
+ * `send_update` tool → Convex → Telegram (the single outbound pipe). This is the
+ * only model that works with a shared bot across many tenants — a per-machine
+ * webhook means only the LAST-deployed agent ever receives inbound.
+ */
+export const getInboundContextByChat = internalQuery({
+  args: { chatId: v.string() },
+  handler: async (ctx, args): Promise<GtmHandoffContext | null> => {
+    const agent = await ctx.db
+      .query("gtmAgents")
+      .withIndex("by_telegram_chat", (q) => q.eq("telegramChatId", args.chatId))
+      .first();
+    if (!agent) return null;
+    // Deletion guard (2026-07-06 audit): a chat still bound to a deleted
+    // account's agent (purge in flight, or a failed teardown) must route
+    // NOWHERE — not to a machine that may still be running. Fail closed.
+    const creator = await ctx.db.get(agent.accountId);
+    if (!creator || creator.status === "deleted") return null;
+    return {
+      agent,
+      telegramChatId: agent.telegramChatId,
+      hookToken: agent.hookToken,
+      hookBaseUrl: agent.openClawFlyAppId
+        ? deriveHookBaseUrl(agent.openClawFlyAppId)
+        : undefined,
+    };
+  },
+});
+
+/**
+ * Retry schedule for inbound forwards. A founder's message must NEVER be
+ * silently dropped because the machine is mid-boot/redeploy (root-caused live
+ * 2026-07-06: messages sent during a deploy window hit a dead hostname and
+ * vanished). Machine boots take ~1-2 min; a redeploy up to ~5. Backoff spans
+ * ~6.5 min total, then we surface the failure to the founder's activity feed
+ * instead of pretending nothing happened.
+ */
+const INBOUND_RETRY_DELAYS_MS = [30_000, 60_000, 120_000, 180_000];
+
+export const routeInboundToMachine = internalAction({
+  args: {
+    chatId: v.string(),
+    text: v.string(),
+    username: v.optional(v.string()),
+    attempt: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ status: "ok" | "skipped" | "retrying"; reason: string }> => {
+    const attempt = args.attempt ?? 0;
+    const ctxRow = await ctx.runQuery(
+      internal.gtmMaya.telegramHandoff.getInboundContextByChat,
+      { chatId: args.chatId }
+    );
+    if (!ctxRow) return { status: "skipped", reason: "no agent for this chat" };
+
+    const retryOrGiveUp = async (reason: string): Promise<{
+      status: "skipped" | "retrying";
+      reason: string;
+    }> => {
+      if (attempt < INBOUND_RETRY_DELAYS_MS.length) {
+        await ctx.scheduler.runAfter(
+          INBOUND_RETRY_DELAYS_MS[attempt],
+          internal.gtmMaya.telegramHandoff.routeInboundToMachine,
+          { ...args, attempt: attempt + 1 }
+        );
+        return { status: "retrying", reason: `${reason} — retry ${attempt + 1}` };
+      }
+      // Out of retries — leave a visible trace so the drop is never silent.
+      console.warn(
+        `[inbound-route] giving up after ${attempt} retries: ${reason}`
+      );
+      await ctx.runMutation(internal.gtmMaya.missionControl.recordAgentActivity, {
+        accountId: ctxRow.agent.accountId,
+        agentId: ctxRow.agent._id,
+        kind: "status",
+        summary:
+          "A Telegram message from you couldn't reach Maya's machine — she may have missed it. Say it again and she'll pick it up.",
+        detail: reason,
+      }).catch(() => {});
+      return { status: "skipped", reason };
+    };
+
+    if (!ctxRow.hookBaseUrl || !ctxRow.hookToken) {
+      // Mid-deploy window: the row exists but the machine isn't addressable
+      // yet. Retry — the deploy stamps hookToken/flyApp when the machine is up.
+      return await retryOrGiveUp("agent not deployed yet");
+    }
+    const endpoint: HookEndpoint = {
+      baseUrl: ctxRow.hookBaseUrl,
+      token: ctxRow.hookToken,
+    };
+    try {
+      // deliver:false — Maya replies via her `send_update` tool (→ Convex →
+      // Telegram), the single outbound pipe; we only inject the inbound turn.
+      //
+      // ENVELOPE (2026-07-06): hook turns run as ISOLATED sessions, and live
+      // machines showed them completing "without announcement" — Maya answered
+      // in plain turn text (invisible) instead of calling send_update, so the
+      // founder saw silence. The contract now rides ON the turn itself instead
+      // of relying on whatever workspace context the isolated session loaded.
+      const envelope = [
+        "INBOUND TELEGRAM DM FROM YOUR FOUNDER (verbatim below).",
+        "Non-negotiable: your reply ONLY reaches their phone through the send_update tool. Plain turn text is invisible to them and reads as you ghosting.",
+        "Before this turn ends you MUST call send_update with your actual answer (short, in your voice, per SOUL.md). If the work needs time, send_update a one-line ack now and the substance when done.",
+        "Also call log_message with their text first, per AGENTS.md.",
+        "FOUNDER SAYS:",
+        args.text,
+      ].join("\n");
+      const result = await runAgentTurn(endpoint, {
+        message: envelope,
+        deliver: false,
+        thinking: "medium",
+        timeoutSeconds: 90,
+      });
+      if (!result.ok) {
+        console.warn(
+          `[inbound-route] runAgentTurn ${result.status}: ${result.error ?? "?"}`
+        );
+        // 0 = network/unreachable, 5xx = machine unhealthy → both retryable.
+        if (result.status === 0 || result.status >= 500) {
+          return await retryOrGiveUp(`hook ${result.status}`);
+        }
+        return { status: "skipped", reason: `hook ${result.status}` };
+      }
+      return { status: "ok", reason: "forwarded to machine" };
+    } catch (err) {
+      console.warn(
+        `[inbound-route] forward failed: ${(err as Error).message}`
+      );
+      return await retryOrGiveUp("forward error");
+    }
+  },
+});
+
 export interface ResearchHandoffSummary {
   researchJobId: Id<"gtmResearchJobs">;
   primaryChannel?: string;

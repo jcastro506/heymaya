@@ -3,7 +3,59 @@ import { describe, expect, it } from "vitest";
 import { api, internal } from "../../_generated/api";
 import schema from "../../schema";
 import { modules } from "../../../tests/_modules";
-import { evaluateSpendThrottle } from "../spendKill";
+import { effectiveDailyCapUsd, evaluateSpendThrottle } from "../spendKill";
+
+describe("effectiveDailyCapUsd — foundation grace", () => {
+  const HOUR = 60 * 60 * 1000;
+  const now = 1_800_000_000_000;
+
+  it("raises the 24h wall to the grace ceiling while foundation is incomplete", () => {
+    // A fresh agent mid-foundation: default $6 wall would brick research
+    // (observed 2026-07-06 — four agents throttled mid-research, never active).
+    const cap = effectiveDailyCapUsd({
+      createdAt: now - 2 * HOUR,
+      now,
+    });
+    expect(cap).toBe(15);
+  });
+
+  it("keeps a per-agent cap when it already exceeds the grace ceiling", () => {
+    const cap = effectiveDailyCapUsd({
+      spendKillCapUsd: 25,
+      createdAt: now - 2 * HOUR,
+      now,
+    });
+    expect(cap).toBe(25);
+  });
+
+  it("drops back to the base cap once foundation completes", () => {
+    const cap = effectiveDailyCapUsd({
+      foundationCompletedAt: now - HOUR,
+      createdAt: now - 5 * HOUR,
+      now,
+    });
+    expect(cap).toBe(6);
+  });
+
+  it("expires the grace after 48h even if foundation never completed", () => {
+    // A permanently stuck foundation must not hold the raised wall forever.
+    const cap = effectiveDailyCapUsd({
+      createdAt: now - 49 * HOUR,
+      now,
+    });
+    expect(cap).toBe(6);
+  });
+
+  it("a tight per-agent test cap is still raised during grace, not below it", () => {
+    // The 0.75 watched-test caps from 7/6 throttled agents during onboarding.
+    const cap = effectiveDailyCapUsd({
+      spendKillCapUsd: 0.75,
+      createdAt: now - HOUR,
+      now,
+    });
+    expect(cap).toBe(15);
+  });
+});
 
 describe("evaluateSpendThrottle", () => {
   const caps = { hourlyCapUsd: 3, dailyCapUsd: 6 };

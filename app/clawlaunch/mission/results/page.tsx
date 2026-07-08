@@ -15,7 +15,8 @@
  *     when), so the operator sees reach without mistaking it for the goal.
  */
 
-import { useQuery } from "convex/react";
+import { useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
   Shell,
@@ -26,7 +27,83 @@ import {
   Empty,
   NeedsOnboarding,
   timeAgo,
+  BigStat,
+  ActionButton,
 } from "../_components";
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Self-report quick-add — the attribution floor. A customer told you where
+ *  they came from; one tap logs it so the loop stays honest. */
+function LogAWin() {
+  const report = useMutation(api.gtmMaya.missionActions.reportMyConversion);
+  const [kind, setKind] = useState<"signup" | "demo" | "revenue" | "activated" | "feedback">(
+    "signup"
+  );
+  const [count, setCount] = useState(1);
+  const [note, setNote] = useState("");
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+
+  const submit = async () => {
+    if (state === "busy") return;
+    setState("busy");
+    try {
+      await report({ kind, count, note: note.trim() || undefined });
+      setNote("");
+      setCount(1);
+      setState("done");
+      setTimeout(() => setState("idle"), 2500);
+    } catch {
+      setState("error");
+      setTimeout(() => setState("idle"), 3000);
+    }
+  };
+
+  return (
+    <Card className="mb-3 border-paper-faint/25">
+      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-paper-faint">
+        Log a win
+      </p>
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        <input
+          type="number"
+          min={1}
+          max={10000}
+          value={count}
+          onChange={(e) => setCount(Math.max(1, Number(e.target.value) || 1))}
+          className="w-16 rounded-lg border border-paper-faint/25 bg-transparent px-2.5 py-1.5 text-sm tabular-nums text-paper outline-none focus:border-paper-faint/50"
+          aria-label="How many"
+        />
+        <select
+          value={kind}
+          onChange={(e) => setKind(e.target.value as typeof kind)}
+          className="rounded-lg border border-paper-faint/25 bg-ink-2 px-2.5 py-1.5 text-sm text-paper outline-none focus:border-paper-faint/50"
+          aria-label="Kind of win"
+        >
+          <option value="signup">signups</option>
+          <option value="demo">demos</option>
+          <option value="revenue">paying customers</option>
+          <option value="activated">came back</option>
+          <option value="feedback">feedback</option>
+        </select>
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder='where from? — "said they saw the Reddit post"'
+          className="min-w-0 flex-1 rounded-lg border border-paper-faint/25 bg-transparent px-2.5 py-1.5 text-sm text-paper outline-none placeholder:text-paper-faint focus:border-paper-faint/50"
+        />
+        <ActionButton onClick={() => void submit()} busy={state === "busy"}>
+          Log it
+        </ActionButton>
+      </div>
+      {state === "done" ? (
+        <p className="mt-2 text-xs text-paper-dim">Logged — it counts toward the goal now.</p>
+      ) : state === "error" ? (
+        <p className="mt-2 text-xs text-[#b3261e]">Didn&apos;t save — try again.</p>
+      ) : null}
+    </Card>
+  );
+}
 
 const CONVERSION_LABEL: Record<string, string> = {
   signup: "signups",
@@ -219,11 +296,53 @@ export default function ResultsPage() {
     };
   }
 
+  // ── The funnel, this week vs last ────────────────────────────────────
+  const now = Date.now();
+  const inWindow = (t: number, weeksBack: number) =>
+    t >= now - WEEK_MS * (weeksBack + 1) && t < now - WEEK_MS * weeksBack;
+  const funnel = (weeksBack: number) => ({
+    linked: (attribution ?? []).filter((a) => inWindow(a.createdAt, weeksBack)).length,
+    clicks: (attribution ?? [])
+      .filter((a) => inWindow(a.createdAt, weeksBack))
+      .reduce((s, a) => s + a.clicks, 0),
+    signups: conversionRows
+      .filter(
+        (c) =>
+          inWindow(c.occurredAt, weeksBack) &&
+          (c.kind === "signup" || c.kind === "activated" || c.kind === "revenue")
+      )
+      .reduce((s, c) => s + c.count, 0),
+  });
+  const thisWeek = funnel(0);
+  const lastWeek = funnel(1);
+  const delta = (cur: number, prev: number): string | undefined =>
+    prev > 0 ? `${cur >= prev ? "+" : ""}${cur - prev} vs last week` : undefined;
+
   return (
     <Shell
       title="Results"
       subtitle="Signups, not likes. What's actually working, and whether we're on track for your goal."
     >
+      {/* ── The funnel strip — the whole story in three numbers ── */}
+      <div className="mb-10 grid grid-cols-3 gap-x-6 border-y border-paper-faint/15 py-6">
+        <BigStat
+          label="Tracked posts · 7d"
+          value={thisWeek.linked}
+          hint={delta(thisWeek.linked, lastWeek.linked)}
+        />
+        <BigStat
+          label="Clicks · 7d"
+          value={thisWeek.clicks}
+          hint={delta(thisWeek.clicks, lastWeek.clicks)}
+        />
+        <BigStat
+          label="Signups · 7d"
+          value={thisWeek.signups}
+          accent={thisWeek.signups > 0}
+          hint={delta(thisWeek.signups, lastWeek.signups)}
+        />
+      </div>
+
       {/* ── North Star ── */}
       <Section title="North Star">
         {northStar ? (
@@ -342,6 +461,7 @@ export default function ResultsPage() {
 
       {/* ── Conversions ── */}
       <Section title="Conversions" count={conversionsTotal}>
+        <LogAWin />
         {conversionRows.length === 0 ? (
           <Empty
             title="No conversions logged yet"
@@ -417,6 +537,55 @@ export default function ResultsPage() {
           </ol>
         )}
       </Section>
+
+      {/* ── By channel — where the signups actually come from ── */}
+      {attributionRows.length > 0 ? (
+        <Section title="By channel">
+          {(() => {
+            const byChannel = new Map<string, { clicks: number; conversions: number }>();
+            for (const a of attribution ?? []) {
+              const key = a.platform ?? "unattributed";
+              const cur = byChannel.get(key) ?? { clicks: 0, conversions: 0 };
+              cur.clicks += a.clicks;
+              cur.conversions += a.conversions;
+              byChannel.set(key, cur);
+            }
+            const rows = [...byChannel.entries()]
+              .filter(([, v]) => v.clicks > 0 || v.conversions > 0)
+              .sort((a, b) => b[1].conversions - a[1].conversions || b[1].clicks - a[1].clicks);
+            const maxClicks = Math.max(1, ...rows.map(([, v]) => v.clicks));
+            return (
+              <Card>
+                <ol className="space-y-3">
+                  {rows.map(([channel, v]) => (
+                    <li key={channel} className="flex items-center gap-3">
+                      <span className="w-24 shrink-0 truncate font-mono text-[11px] uppercase tracking-wide text-paper-dim">
+                        {channel === "x" ? "X" : channel}
+                      </span>
+                      <span className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-paper/10">
+                        <span
+                          className="absolute inset-y-0 left-0 rounded-full bg-lime"
+                          style={{ width: `${Math.round((v.clicks / maxClicks) * 100)}%` }}
+                        />
+                      </span>
+                      <span className="w-32 shrink-0 text-right font-mono text-[11px] tabular-nums text-paper-dim">
+                        {v.clicks} clicks
+                        {v.conversions > 0 ? (
+                          <span className="text-paper"> · {v.conversions} signups</span>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+                <p className="mt-3 text-[11px] leading-relaxed text-paper-faint">
+                  This is the data Maya re-weights the week on — channels that convert
+                  get more of her time.
+                </p>
+              </Card>
+            );
+          })()}
+        </Section>
+      ) : null}
 
       {/* ── What's working ── */}
       <Section title="What's working" count={learningRows.length}>

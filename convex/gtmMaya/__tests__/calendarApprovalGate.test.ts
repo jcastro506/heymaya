@@ -74,7 +74,9 @@ describe("Sprint 2.22 — calendar approval-gate split", () => {
     // No Google Calendar connection — but storage MUST succeed.
     const result = await t.action(
       internal.gtmMaya.calendarWrite.storeProposedCalendarEvents,
-      { agentId, accountId, events: [SAMPLE_EVENT(), SAMPLE_EVENT(2 * 60 * 60 * 1000)] }
+      // 24h + 48h out — always DIFFERENT UTC calendar days, so the day-bucketed
+      // dedupe key can't collapse them (a 2h offset flaked at some times of day).
+      { agentId, accountId, events: [SAMPLE_EVENT(), SAMPLE_EVENT(48 * 60 * 60 * 1000)] }
     );
 
     expect(result.stored).toBe(2);

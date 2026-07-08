@@ -20,6 +20,7 @@ import {
 import { ConnectedAccounts } from "./_ConnectedAccounts";
 import { ProductBrain } from "./_ProductBrain";
 import { PostingControl } from "./_PostingControl";
+import { StandingInstructions } from "./_StandingInstructions";
 import { TierSelector, type GtmTier } from "@/components/billing/TierSelector";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -146,7 +147,11 @@ export default function AccountPage() {
     setCheckingOut(tier);
     setCheckoutError(null);
     try {
-      const { url } = await startCheckout({ interval: "monthly", tier });
+      const { url } = await startCheckout({
+        interval: "monthly",
+        tier,
+        returnBaseUrl: window.location.origin,
+      });
       window.location.href = url;
     } catch (err) {
       setCheckoutError(
@@ -237,9 +242,22 @@ export default function AccountPage() {
         </Card>
       </Section>
 
+      <Section title="Standing instructions">
+        <StandingInstructions />
+      </Section>
+
       <Section title="Plan">
         <Card>
-          <Row label="Plan" value={account.plan} />
+          <Row
+            label="Plan"
+            value={
+              account.gtmPlanTier
+                ? { starter: "Starter · $99/mo", growth: "Growth · $149/mo", studio: "Studio · $199/mo" }[
+                    account.gtmPlanTier as "starter" | "growth" | "studio"
+                  ] ?? account.gtmPlanTier
+                : "—"
+            }
+          />
           <Row label="Status" value={<Pill>{account.status}</Pill>} />
           {account.deployedAt ? (
             <Row
@@ -287,6 +305,7 @@ export default function AccountPage() {
                 interval="monthly"
                 showIntervalToggle={false}
                 busyTier={checkingOut}
+                currentTier={(account.gtmPlanTier as GtmTier | null) ?? null}
                 onSelect={(tier) => handleSubscribe(tier)}
               />
               {checkoutError ? (

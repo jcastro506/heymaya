@@ -363,6 +363,13 @@ const MODEL_ROUTING = {
     process.env.MAYA_GTM_RESEARCH_MODEL ?? "google/gemini-3-flash-preview",
   extractionWorker:
     process.env.MAYA_GTM_EXTRACTION_MODEL ?? "google/gemini-3.1-flash-lite",
+  // 2026-07-07 — the discovery_pulse's dedicated scan worker. Watermark-bounded
+  // "read new items on one channel, judge fit" is structured scanning, not
+  // strategic reasoning — Flash Lite ($0.075 in / $0.30 out vs Flash's
+  // $0.50/$3) is what makes an all-day pulse cost pennies per tick. The
+  // morning brief's deep research workers stay on full Flash (subagent above).
+  pulseScan:
+    process.env.MAYA_GTM_PULSE_SCAN_MODEL ?? "google/gemini-3.1-flash-lite",
 };
 
 /**
@@ -433,21 +440,27 @@ export interface BuildGatewayConfigInput {
    */
   telegramChatId?: string;
   /**
-   * Sprint 2.16u-fix17 — webhook mode for Telegram. Per OpenClaw
-   * docs/channels/telegram.md, "Default is long polling. For webhook mode set
-   * channels.telegram.webhookUrl and channels.telegram.webhookSecret."
+   * SWITCHBOARD — the shared bot's webhook must point at the CONVEX router
+   * (`https://<convex-site>/telegram/webhook`, see gtmMaya/telegramWebhook.ts),
+   * never at an individual machine. We still configure the channel in WEBHOOK
+   * mode on every machine because of two verified OpenClaw 2026.4.23 behaviors:
    *
-   * Long polling on Fly machines has hit 4-12 minute stalls every deploy
-   * because Fly's outbound network path to api.telegram.org is unreliable.
-   * Webhook mode flips the direction — Telegram pushes updates to a public
-   * URL on our Fly machine, no polling required.
+   *   1. Polling mode calls `deleteWebhook` during channel setup (and again on
+   *      every recoverable-error retry) — a single polling machine makes the
+   *      shared bot deaf for every tenant. Verified live 2026-07-05: the
+   *      switchboard webhook was wiped within ~10s of registration by an
+   *      unpaired machine polling via the TELEGRAM_BOT_TOKEN env fallback.
+   *   2. Webhook mode calls `setWebhook(webhookUrl, {secret_token})` on channel
+   *      start — so pointing webhookUrl at the Convex router turns the old
+   *      "self-register landmine" into self-healing: every machine boot
+   *      re-registers the correct shared webhook.
    *
-   * For our per-user product (one bot per user, one Fly machine per user),
-   * each bot has a unique webhook URL pointing at its dedicated Fly machine.
-   * No multi-tenant relay needed.
+   * The machine's local webhook listener (webhookHost/Port/Path) still binds so
+   * the channel starts cleanly; Telegram simply never posts to it. Inbound user
+   * messages arrive via Convex → routeInboundToMachine → /hooks/agent.
    *
-   * webhookUrl is `https://<flyAppName>.fly.dev/telegram-webhook`.
-   * webhookSecret is a 32-byte hex per machine for Telegram signature verify.
+   * webhookUrl is `https://<convex-site>/telegram/webhook`.
+   * webhookSecret is the deployment-wide TELEGRAM_WEBHOOK_SECRET.
    */
   telegramWebhookUrl?: string;
   telegramWebhookSecret?: string;
@@ -457,11 +470,15 @@ export function buildGatewayConfig(
   input: BuildGatewayConfigInput = {}
 ): Record<string, unknown> {
   const mainModel = toOpenClawModelRef(MODEL_ROUTING.mainMaya);
+  const telegramWebhookEnabled = Boolean(
+    input.telegramWebhookUrl && input.telegramWebhookSecret
+  );
   const subagentModel = toOpenClawModelRef(MODEL_ROUTING.subagent);
   // Sprint 2.18 — hardModel const dropped; hard_research_beta is no
   // longer a configured agent. The MODEL_ROUTING.hardResearchBeta
   // entry stays in the routing table for narrative / cost docs.
   const extractionModel = toOpenClawModelRef(MODEL_ROUTING.extractionWorker);
+  const pulseScanModel = toOpenClawModelRef(MODEL_ROUTING.pulseScan);
   const memorySearch = buildMemorySearchConfig();
 
   // Sprint 20 — Maya-side subagent lane. Registers per-platform research
@@ -778,6 +795,23 @@ export function buildGatewayConfig(
       },
       subagents: { allowAgents: [] as string[] },
     },
+    {
+      // 2026-07-07 — the discovery_pulse's dedicated cheap scan worker.
+      // One per tick, watermark-bounded to NEW items on ONE bet channel.
+      // Runs on Flash Lite (pulseScanModel) so 8+ ticks/day cost pennies;
+      // the deep morning-brief researchers above keep full Flash quality.
+      // alsoAllow group:plugins — same reason as every worker: without it
+      // the maya-gtm-tools typed tools (research_* + save_* + watermark)
+      // get filtered out and the worker fabricates instead of persisting.
+      id: "pulse_scan",
+      name: "Discovery Pulse Scanner",
+      model: pulseScanModel,
+      tools: {
+        profile: "coding" as const,
+        alsoAllow: ["group:plugins"] as const,
+      },
+      subagents: { allowAgents: [] as string[] },
+    },
   ];
 
   // The set of subagent IDs main can spawn. Sprint 2.18 — removed
@@ -957,18 +991,27 @@ export function buildGatewayConfig(
       // its tools won't reach Maya or her subagents. Subagents inherit the
       // parent's plugin tools (OpenClaw subagent tool-policy), so listing it
       // once here makes it available to every research worker too.
-      allow: ["telegram", "maya-gtm-tools"],
+      allow: [
+        ...(telegramWebhookEnabled ? ["telegram"] : []),
+        "maya-gtm-tools",
+      ],
       entries: {
-        // Keep telegram explicitly enabled. Channel-config in
-        // `channels.telegram` (lower in this config) does the actual
-        // dmPolicy + allowFrom wiring; this just confirms enablement.
-        telegram: { enabled: true },
+        ...(telegramWebhookEnabled
+          ? {
+              // Keep telegram explicitly in webhook mode. Without the channel
+              // block below, OpenClaw falls back to long polling and competes
+              // with every other staging tenant using the shared bot token.
+              telegram: { enabled: true },
+            }
+          : {}),
       },
     },
-    // Enable internal hook runtime so BOOT.md fires on gateway startup
-    // as a real native primitive (not just a workspace file Maya happens
-    // to read). BOOT.md owns the immediate hello and first GTM launch
-    // wave. HEARTBEAT.md is only the watchdog/recovery lane.
+    // Enable external webhooks so Convex can wake Maya via /hooks/{agent,wake}
+    // using the per-agent HOOK_TOKEN Fly secret. `internal` also stays enabled
+    // so BOOT.md fires on gateway startup as a real native primitive (not just
+    // a workspace file Maya happens to read). BOOT.md owns the immediate hello
+    // and first GTM launch wave. HEARTBEAT.md is only the watchdog/recovery
+    // lane.
     //
     // `hooks` is a TOP-LEVEL config key per OpenClaw 2026.4.23 zod
     // schema (sibling of `gateway`, `agents`, `plugins`) — NOT a key
@@ -976,6 +1019,10 @@ export function buildGatewayConfig(
     // it under `agents.defaults` and the gateway rejected the config
     // with "agents.defaults: Unrecognized key: hooks".
     hooks: {
+      enabled: true,
+      path: "/hooks",
+      token: "${HOOK_TOKEN}",
+      allowedAgentIds: ["main"],
       internal: {
         enabled: true,
       },
@@ -987,10 +1034,10 @@ export function buildGatewayConfig(
     // TELEGRAM_BOT_TOKEN env). dmPolicy allowlist scoped to the paired
     // user means inbound DMs from any other Telegram user are dropped —
     // critical when multiple Mayas share the same staging bot token.
-    // Pre-pairing creators (no telegramChatId yet) get the channel
-    // OMITTED — cleanest behavior since handoff/heartbeat code already
-    // checks for telegramChatId presence before scheduling delivery.
-    ...(input.telegramChatId
+    // Pre-pairing creators still get webhook mode so they never fall back to
+    // long polling. With no chat id the allowlist is empty and delivery code
+    // already skips Telegram sends until pairing completes.
+    ...(telegramWebhookEnabled
       ? {
           channels: {
             telegram: {
@@ -998,23 +1045,11 @@ export function buildGatewayConfig(
               dmPolicy: "allowlist" as const,
               allowFrom: [Number(input.telegramChatId)].filter(Number.isFinite),
               streaming: { mode: "off" as const },
-              // Sprint 2.16u-fix17 — webhook mode to bypass Fly's flaky
-              // outbound long-poll path to api.telegram.org. Per
-              // docs/channels/telegram.md "Long polling vs webhook":
-              //   set channels.telegram.webhookUrl + webhookSecret;
-              //   optional webhookPath (default /telegram-webhook),
-              //   webhookHost (default 127.0.0.1 — we override to
-              //   0.0.0.0 so Fly's public proxy can route to it),
-              //   webhookPort (default 8787).
-              ...(input.telegramWebhookUrl && input.telegramWebhookSecret
-                ? {
-                    webhookUrl: input.telegramWebhookUrl,
-                    webhookSecret: input.telegramWebhookSecret,
-                    webhookHost: "0.0.0.0" as const,
-                    webhookPort: 8787,
-                    webhookPath: "/telegram-webhook" as const,
-                  }
-                : {}),
+              webhookUrl: input.telegramWebhookUrl,
+              webhookSecret: input.telegramWebhookSecret,
+              webhookHost: "0.0.0.0" as const,
+              webhookPort: 8787,
+              webhookPath: "/telegram-webhook" as const,
             },
           },
         }
@@ -1248,10 +1283,13 @@ export const buildAndUploadGtmWorkspace = internalAction({
       planSummary: describePlanForMaya(planFeatures),
       // W2 — so Maya's messaging matches her gating (the publish engine enforces it).
       autonomousPosting: row.agent.autonomousPosting,
-      // Phase 3 — ship the hourly discovery_pulse cron only when the env flag is
-      // on. Default off: agents keep the proven batch cadence. Flip to "true" on
-      // a test deploy to cost-soak the real-time pulse (budget-gated).
-      pulseEnabled: process.env.MAYA_GTM_PULSE_ENABLED === "true",
+      // Phase 3 — ship the periodic discovery_pulse cron. Per-agent override
+      // (gtmAgents.pulseEnabledOverride) beats the deployment-wide env flag so
+      // one dogfood agent can cost-soak the pulse before fleet rollout; unset →
+      // env decides. Default off: agents keep the proven batch cadence.
+      pulseEnabled:
+        row.agent.pulseEnabledOverride ??
+        process.env.MAYA_GTM_PULSE_ENABLED === "true",
       app: {
         name: row.app.name ?? "Untitled app",
         url: row.app.url,
@@ -1410,6 +1448,8 @@ export const deployMayaGtm = internalAction({
       workspaceBundleUrl: string;
       pluginBundleUrl: string;
     };
+    let telegramWebhookUrl: string | undefined;
+    let telegramWebhookSecret: string | undefined;
     try {
       bundle = await ctx.runAction(
         internal.onboarding.gtm.deployMayaGtm.buildAndUploadGtmWorkspace,
@@ -1426,6 +1466,16 @@ export const deployMayaGtm = internalAction({
       if (!isAlreadyExists(err)) {
         return fail("create-app", (err as Error).message, isRetryable(err));
       }
+    }
+
+    // Convex routes Telegram switchboard updates and lifecycle nudges back into
+    // OpenClaw via https://<app>.fly.dev/hooks/*. Machines API apps do not get
+    // public DNS/ingress by default, so allocate addresses before creating the
+    // machine. Duplicate allocations are non-fatal on redeploys.
+    try {
+      await ensurePublicFlyIngress(fly, bundle.flyAppName);
+    } catch (err) {
+      return fail("create-app", (err as Error).message, isRetryable(err));
     }
 
     try {
@@ -1471,6 +1521,15 @@ export const deployMayaGtm = internalAction({
         { agentId: args.agentId }
       );
       const sharedTelegramSecrets = collectDeploySecrets();
+      const convexSiteUrl = sharedTelegramSecrets.CONVEX_SITE_URL?.replace(
+        /\/$/,
+        ""
+      );
+      telegramWebhookSecret = sharedTelegramSecrets.TELEGRAM_WEBHOOK_SECRET;
+      telegramWebhookUrl =
+        convexSiteUrl && telegramWebhookSecret
+          ? `${convexSiteUrl}/telegram/webhook`
+          : undefined;
       const telegramBotToken =
         personalBot.token ?? sharedTelegramSecrets.TELEGRAM_BOT_TOKEN;
       // ⚠️ REPOINT MECHANISM — PINNED, LAST-MILE PENDING (2026-06-22).
@@ -1499,23 +1558,22 @@ export const deployMayaGtm = internalAction({
       // env names set since 5.26's exact knob is verified by this first live run.
       const gatewayEnabled =
         process.env.MAYA_GTM_LLM_GATEWAY_ENABLED === "true";
-      const siteUrl = sharedTelegramSecrets.CONVEX_SITE_URL?.replace(/\/$/, "");
       const gatewayOverrides: Record<string, string> =
-        gatewayEnabled && siteUrl
+        gatewayEnabled && convexSiteUrl
           ? {
               // Route via OpenClaw's `openai` provider (model refs become
               // openai/<slug>; see toOpenClawModelRef). It honors OPENAI_BASE_URL
               // + OPENAI_API_KEY. We present the hookToken as the key (gateway
               // auths by it); the real OpenRouter key stays server-side.
               OPENAI_API_KEY: hookTokenForFly,
-              OPENAI_BASE_URL: `${siteUrl}/lc_gtm/llm`,
+              OPENAI_BASE_URL: `${convexSiteUrl}/lc_gtm/llm`,
               // Also neutralize the raw OpenRouter key on the machine + set the
               // openrouter base in case any path still uses the openrouter provider.
               OPENROUTER_API_KEY: hookTokenForFly,
-              OPENROUTER_BASE_URL: `${siteUrl}/lc_gtm/llm`,
+              OPENROUTER_BASE_URL: `${convexSiteUrl}/lc_gtm/llm`,
             }
           : {};
-      if (gatewayEnabled && !siteUrl) {
+      if (gatewayEnabled && !convexSiteUrl) {
         console.warn(
           `[deployMayaGtm] LLM gateway enabled but CONVEX_SITE_URL missing — falling back to direct OpenRouter for agent ${args.agentId}`
         );
@@ -1529,9 +1587,9 @@ export const deployMayaGtm = internalAction({
           : {}),
         ...gatewayOverrides,
       });
-      if (gatewayEnabled && siteUrl) {
+      if (gatewayEnabled && convexSiteUrl) {
         console.log(
-          `[deployMayaGtm] LLM metering gateway ON for agent ${args.agentId} → ${siteUrl}/lc_gtm/llm (machine holds hookToken, not the real OpenRouter key)`
+          `[deployMayaGtm] LLM metering gateway ON for agent ${args.agentId} → ${convexSiteUrl}/lc_gtm/llm (machine holds hookToken, not the real OpenRouter key)`
         );
       }
       if (personalBot.token) {
@@ -1547,80 +1605,18 @@ export const deployMayaGtm = internalAction({
           `[deployMayaGtm] NO Telegram bot token for agent ${args.agentId} — outbound delivery will fail`
         );
       }
+      if (telegramBotToken && !telegramWebhookUrl) {
+        console.warn(
+          `[deployMayaGtm] Telegram bot token is set but CONVEX_SITE_URL or TELEGRAM_WEBHOOK_SECRET is missing; leaving Telegram plugin disabled to avoid shared-bot polling`
+        );
+      }
     } catch (err) {
       return fail("set-secrets", (err as Error).message, isRetryable(err));
     }
 
-    // Sprint 2.16u-fix17 — allocate public IPs so <flyApp>.fly.dev resolves.
-    // Apps created via machines API have no public DNS by default. Telegram
-    // setWebhook needs to resolve the host to register the URL.
-    if (row.agent.telegramChatId) {
-      try {
-        await fly.allocateSharedV4(bundle.flyAppName);
-        await fly.allocateV6(bundle.flyAppName);
-      } catch (err) {
-        // Idempotent — if IPs are already allocated, ignore "already exists"
-        const msg = (err as Error).message;
-        if (!msg.includes("already") && !msg.includes("duplicate")) {
-          return fail("allocate-ips", msg, isRetryable(err));
-        }
-      }
-    }
-
-    // Sprint 2.16u-fix17 — mint a per-machine webhook secret. OpenClaw's
-    // telegram channel uses this to verify incoming webhook signatures
-    // (X-Telegram-Bot-Api-Secret-Token header). 32 hex bytes is plenty.
-    const telegramWebhookSecret = row.agent.telegramChatId
-      ? Array.from(crypto.getRandomValues(new Uint8Array(32)))
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join("")
-      : undefined;
-
-    // Sprint 2.16u-fix18 — register the Telegram webhook from CONVEX,
-    // not from OpenClaw on Fly. Fly's outbound network to api.telegram.org
-    // is unreliable; setWebhook from inside the Fly machine fails with
-    // "Network request for 'setWebhook' failed!" (verified live
-    // 2026-05-27 on clawlaunch-ws74j011acjqk48b7s).
-    //
-    // Convex's network → api.telegram.org IS reliable (verified earlier
-    // — direct sendMessage curl from Convex worked instantly with
-    // message_id 129). So we register the webhook here once, idempotent.
-    if (row.agent.telegramChatId && telegramWebhookSecret) {
-      const botToken = process.env.TELEGRAM_BOT_TOKEN;
-      if (!botToken) {
-        return fail(
-          "set-telegram-webhook",
-          "TELEGRAM_BOT_TOKEN env var missing — required for Sprint 2.16u-fix18 webhook registration",
-          false
-        );
-      }
-      const webhookUrl = `https://${bundle.flyAppName}.fly.dev/telegram-webhook`;
-      try {
-        const swRes = await fetch(
-          `https://api.telegram.org/bot${botToken}/setWebhook`,
-          {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              url: webhookUrl,
-              secret_token: telegramWebhookSecret,
-              drop_pending_updates: true,
-            }),
-          }
-        );
-        const swBody = (await swRes.json()) as { ok?: boolean; description?: string };
-        if (!swRes.ok || !swBody.ok) {
-          return fail(
-            "set-telegram-webhook",
-            `Telegram setWebhook returned ${swRes.status}: ${swBody.description ?? "unknown"}`,
-            swRes.status >= 500
-          );
-        }
-        console.log(`[deployMayaGtm] registered Telegram webhook → ${webhookUrl}`);
-      } catch (err) {
-        return fail("set-telegram-webhook", (err as Error).message, true);
-      }
-    }
+    // SWITCHBOARD: the shared Telegram bot webhook belongs to Convex, not to
+    // any individual Fly machine. OpenClaw is configured in webhook mode with
+    // this same URL so machine boot cannot fall back to polling/deleteWebhook.
 
     // #15 deploy-harness hardening — DESTROY any existing machine on this app
     // BEFORE creating a new one. A redeploy used to leave the old machine
@@ -1686,6 +1682,7 @@ export const deployMayaGtm = internalAction({
           workspaceBundleUrl: bundle.workspaceBundleUrl,
           pluginBundleUrl: bundle.pluginBundleUrl,
           telegramChatId: row.agent.telegramChatId,
+          telegramWebhookUrl,
           telegramWebhookSecret,
           memoryVolumeName,
           timezone: row.agent.timezone,
@@ -1820,12 +1817,14 @@ export function buildGtmMachineConfig(input: {
   pluginBundleUrl?: string;
   /** Sprint 1.3 — passed through to buildGatewayConfig so the OpenClaw
    *  channels.telegram adapter is enabled with allowlist scoped to this
-   *  user. Pre-pairing agents pass undefined; the channel is omitted. */
+   *  user. Pre-pairing agents pass undefined for the chat id, while webhook
+   *  mode still prevents long polling when the switchboard URL is set. */
   telegramChatId?: string;
-  /** Sprint 2.16u-fix17 — webhook secret. Random 32-byte hex per machine
-   *  used for Telegram signature verification. Convex deploy action mints
-   *  this + passes it down; OpenClaw config uses it; setWebhook registers
-   *  it with Telegram. Per docs/channels/telegram.md webhook mode. */
+  /** Switchboard webhook URL. This must be the Convex router URL, not a
+   *  per-machine Fly URL, so shared Telegram bots do not get stolen by the
+   *  last deployed tenant machine. */
+  telegramWebhookUrl?: string;
+  /** Deployment-wide Telegram webhook secret used by the Convex router. */
   telegramWebhookSecret?: string;
   /** Phase 3 — when set, mount this app's persistent volume at /data so native
    *  OpenClaw memory survives redeploys. Undefined = ephemeral rootfs (default).
@@ -1896,30 +1895,21 @@ export function buildGtmMachineConfig(input: {
         directPingSmoke: true,
         gatewayConfig: buildGatewayConfig({
           telegramChatId: input.telegramChatId,
-          // Sprint 2.16u-fix17 — webhook URL is deterministic from the
-          // Fly app name. Telegram POSTs to https://<app>.fly.dev:443/
-          // telegram-webhook → Fly proxy → internal 8787 → OpenClaw.
-          telegramWebhookUrl: input.telegramWebhookSecret
-            ? `https://${input.flyAppName}.fly.dev/telegram-webhook`
-            : undefined,
+          telegramWebhookUrl: input.telegramWebhookUrl,
           telegramWebhookSecret: input.telegramWebhookSecret,
         }),
       }),
     },
     guest: MACHINE_GUEST,
     restart: { policy: "always" },
-    // Sprint 2.16u-fix17 — services block exposes OpenClaw's Telegram
-    // webhook port (8787) publicly so Telegram can push updates to this
-    // machine. Per docs/channels/telegram.md "Long polling vs webhook":
-    // webhookHost:0.0.0.0 + webhookPort:8787 + Fly proxy → https://<flyApp>.fly.dev
-    // routes external 443 traffic to internal 8787.
-    //
-    // Gateway WebSocket port (18789) stays loopback-only (no controlUi
-    // exposure on the public internet — only the webhook surface).
+    // Public 443 must terminate at OpenClaw's gateway port because Convex calls
+    // https://<flyApp>.fly.dev/hooks/{agent,wake} from the Telegram switchboard
+    // and lifecycle workers. Telegram itself points at Convex, not this machine,
+    // so the local Telegram listener on 8787 stays private.
     services: [
       {
         protocol: "tcp" as const,
-        internal_port: 8787,
+        internal_port: 18789,
         ports: [
           { port: 443, handlers: ["tls" as const, "http" as const] },
           { port: 80, handlers: ["http" as const] },
@@ -1935,6 +1925,31 @@ export function buildGtmMachineConfig(input: {
       cmd: ["/bin/sh", "-c", buildBootstrapShell()],
     },
   };
+}
+
+async function ensurePublicFlyIngress(
+  fly: FlyClient,
+  appName: string
+): Promise<void> {
+  await ignoreAlreadyAllocated(() => fly.allocateSharedV4(appName));
+  await ignoreAlreadyAllocated(() => fly.allocateV6(appName));
+}
+
+async function ignoreAlreadyAllocated(fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    const message = (err as Error).message.toLowerCase();
+    if (
+      message.includes("already") &&
+      (message.includes("allocated") ||
+        message.includes("exists") ||
+        message.includes("taken"))
+    ) {
+      return;
+    }
+    throw err;
+  }
 }
 
 export function flyAppNameForGtmAgent(agentId: Id<"gtmAgents"> | string): string {
@@ -2001,6 +2016,7 @@ export function collectDeploySecrets(
   for (const key of [
     "CONVEX_URL",
     "CONVEX_SITE_URL",
+    "NEXT_PUBLIC_CONVEX_SITE_URL",
     "COMPOSIO_API_KEY",
     "SCRAPE_CREATORS_API_KEY",
     "SCRAPECREATORS_API_KEY",
@@ -2014,6 +2030,7 @@ export function collectDeploySecrets(
     // telegram` drops with no recipient). Verified live 2026-05-24:
     // synth Maya booted with 0 channels because token wasn't propagated.
     "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_WEBHOOK_SECRET",
     // Sprint 1.1 — TwitterAPI.io is now the X keyword-search backend (the
     // Convex-side wrapper calls it from researchWorker, but Maya's runtime
     // skills may also reference it via the kaitoInfra/twitterapi-io skill
@@ -2035,6 +2052,9 @@ export function collectDeploySecrets(
   }
   if (!secrets.GOOGLE_GENERATIVE_AI_API_KEY && env.GEMINI_API_KEY) {
     secrets.GOOGLE_GENERATIVE_AI_API_KEY = env.GEMINI_API_KEY;
+  }
+  if (!secrets.CONVEX_SITE_URL && env.NEXT_PUBLIC_CONVEX_SITE_URL) {
+    secrets.CONVEX_SITE_URL = env.NEXT_PUBLIC_CONVEX_SITE_URL;
   }
   const stage = (env.CONVEX_DEPLOYMENT ?? "").includes("precise-canary-781")
     ? "staging"

@@ -145,3 +145,35 @@ describe("describePlanForMaya — static-image awareness line", () => {
     expect(s).toContain("Video: yes, ~15/mo.");
   });
 });
+
+// ── Ad-clone cap weighting (12 cr per 5s of reference ≈ 4x a render) ─────────
+import { AD_CLONE_CAP_WEIGHT, countRecentVideos } from "../creatifyVideo";
+
+describe("countRecentVideos — ad-clone weighting", () => {
+  const now = Date.now();
+  const job = (mode: string, over: Record<string, unknown> = {}) => ({
+    jobId: `j-${mode}-${Math.random()}`,
+    mode,
+    creatifyId: "c",
+    status: "done",
+    attempts: 1,
+    createdAt: now - 1000,
+    updatedAt: now,
+    ...over,
+  });
+
+  it("weights an ad_clone as AD_CLONE_CAP_WEIGHT jobs, renders as 1", () => {
+    const jobs = JSON.stringify([job("url_to_video"), job("ad_clone")]);
+    expect(countRecentVideos(jobs)).toBe(1 + AD_CLONE_CAP_WEIGHT);
+  });
+
+  it("still excludes failed jobs, image jobs, and stale (>30d) jobs", () => {
+    const jobs = JSON.stringify([
+      job("ad_clone", { status: "failed" }),
+      job("iab_images"),
+      job("ad_clone", { createdAt: now - 31 * 24 * 60 * 60 * 1000 }),
+      job("url_to_video"),
+    ]);
+    expect(countRecentVideos(jobs)).toBe(1);
+  });
+});

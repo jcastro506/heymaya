@@ -54,6 +54,8 @@ import {
   calendarListEventsHttp,
   calendarUpdateEventHttp,
 } from "./lcMaya/calendarHttp";
+import { stripeWebhookHttp } from "./billing/stripeWebhookHttp";
+import { savePlanDocHttp } from "./gtmMaya/planDoc";
 import { telegramWebhookHttp } from "./gtmMaya/telegramWebhook";
 import { deliveryFailureHttp } from "./gtmMaya/deliveryFailures";
 import {
@@ -173,6 +175,9 @@ import {
 } from "./gtmMaya/mediaAssets";
 import {
   creatifyMakeAdHttp,
+  renderChosenPreviewHttp,
+  renderInspirationHttp,
+  listUgcAvatarsHttp,
   creatifyCloneAdHttp,
   creatifyPollHttp,
   creatifyMakeAssetHttp,
@@ -215,6 +220,14 @@ const http = httpRouter();
 // (later sprints) inbound user messages. Authenticated by the
 // X-Telegram-Bot-Api-Secret-Token header. See
 // convex/gtmMaya/telegramWebhook.ts for the contract.
+// Stripe billing webhook — lives on Convex so delivery never depends on the
+// web deployment being publicly reachable (staging's Vercel SSO blocked the
+// Next route → checkout loop, 2026-07-06). Signature-verified inside.
+http.route({
+  path: "/stripe/webhook",
+  method: "POST",
+  handler: stripeWebhookHttp,
+});
 http.route({
   path: "/telegram/webhook",
   method: "POST",
@@ -331,6 +344,13 @@ http.route({
   method: "POST",
   handler: creatifyCloneAdHttp,
 });
+// render_chosen_preview = phase 2 of the preview-first url_to_video flow:
+// Maya reviewed the cheap style previews and renders only the winner.
+http.route({
+  path: "/lc_gtm/creatify_render_preview",
+  method: "POST",
+  handler: renderChosenPreviewHttp,
+});
 http.route({
   path: "/lc_gtm/creatify_poll",
   method: "GET",
@@ -347,6 +367,19 @@ http.route({
   path: "/lc_gtm/creatify_inspirations",
   method: "GET",
   handler: creatifyInspirationsHttp,
+});
+// render_inspiration = render a curated Creatify template (image OR video;
+// gated by genType server-side). list_ugc_avatars = free personas+voices read
+// so Maya can pick + pin an avatar for the multi-scene UGC sandwich.
+http.route({
+  path: "/lc_gtm/creatify_render_inspiration",
+  method: "POST",
+  handler: renderInspirationHttp,
+});
+http.route({
+  path: "/lc_gtm/creatify_avatars",
+  method: "GET",
+  handler: listUgcAvatarsHttp,
 });
 // make_ugc_video = grounded, voice-passed script → Aurora UGC avatar video
 // (Studio $199 tier, canUgc + paced creative-credit budget). check_creative_budget
@@ -492,6 +525,13 @@ http.route({
   handler: updateProductFactHttp,
 });
 // Sprint B — Maya records the strategy approval state (propose→approve gate).
+// PLAN_APPROVAL_LOOP_V1 — Maya saves the STRUCTURED plan (versioned,
+// amendable) that the web approval screen renders.
+http.route({
+  path: "/lc_gtm/save_plan_doc",
+  method: "POST",
+  handler: savePlanDocHttp,
+});
 http.route({
   path: "/lc_gtm/set_strategy_approval",
   method: "POST",

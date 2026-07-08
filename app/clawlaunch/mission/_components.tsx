@@ -181,3 +181,155 @@ export function ExtLink({ href, children }: { href: string; children: ReactNode 
     </a>
   );
 }
+
+/* ───────────────────────── Mission Control v2 primitives ─────────────────
+ * The cockpit language: big serif numbers, tracked micro-labels, one accent.
+ * Everything below composes the same ink/paper/accent variables as the rest
+ * of the surface — no new colors, no boxes-for-the-sake-of-boxes. */
+
+/** A breathing dot — "Maya is live". Pure CSS, respects reduced motion. */
+export function LiveDot({ className = "" }: { className?: string }) {
+  return (
+    <span className={`relative inline-flex size-2 ${className}`} aria-hidden>
+      <span className="absolute inline-flex size-full animate-ping rounded-full bg-lime opacity-60 motion-reduce:animate-none" />
+      <span className="relative inline-flex size-2 rounded-full bg-lime" />
+    </span>
+  );
+}
+
+/** One big editorial number with a tracked label under it. The stat strip is
+ *  typography, not boxes — numbers do the talking. */
+export function BigStat({
+  label,
+  value,
+  hint,
+  accent = false,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: string;
+  accent?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <p
+        className={`font-display text-3xl leading-none tabular-nums sm:text-4xl ${
+          accent ? "text-lime" : "text-paper"
+        }`}
+      >
+        {value}
+      </p>
+      <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.22em] text-paper-faint">
+        {label}
+      </p>
+      {hint ? <p className="mt-0.5 text-[11px] text-paper-dim">{hint}</p> : null}
+    </div>
+  );
+}
+
+/** Primary / quiet action buttons for the decision surfaces (Queue, quick-add).
+ *  Kept deliberately small — decisions should feel light, not ceremonial. */
+export function ActionButton({
+  children,
+  onClick,
+  tone = "primary",
+  disabled = false,
+  busy = false,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  tone?: "primary" | "quiet" | "danger";
+  disabled?: boolean;
+  busy?: boolean;
+}) {
+  const cls =
+    tone === "primary"
+      ? "bg-paper text-ink hover:opacity-85"
+      : tone === "danger"
+        ? "border border-rose/40 text-[#b3261e] hover:bg-rose/10"
+        : "border border-paper-faint/25 text-paper-dim hover:border-paper-faint/50 hover:text-paper";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled || busy}
+      className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:opacity-40 ${cls}`}
+    >
+      {busy ? (
+        <span className="inline-block size-3 animate-spin rounded-full border border-current border-t-transparent" />
+      ) : null}
+      {children}
+    </button>
+  );
+}
+
+/** Maya speaking in first person — serif italic, like a line from a letter.
+ *  This is the voice treatment for the narrative stream. */
+export function MayaLine({ children }: { children: ReactNode }) {
+  return (
+    <p className="font-display text-[17px] italic leading-snug text-paper sm:text-lg">
+      {children}
+    </p>
+  );
+}
+
+/** Session grouping for activity rollups: consecutive activity rows within
+ *  GAP_MS of each other collapse into one working session. */
+export interface ActivityRowLike {
+  _id: string;
+  kind: string;
+  summary: string;
+  detail?: string;
+  linkedRef?: string;
+  createdAt: number;
+}
+
+export interface ActivitySession<T extends ActivityRowLike> {
+  startMs: number;
+  endMs: number;
+  rows: T[]; // newest first
+  counts: Record<string, number>;
+}
+
+const SESSION_GAP_MS = 20 * 60 * 1000;
+
+export function groupIntoSessions<T extends ActivityRowLike>(
+  rows: T[] // newest first
+): ActivitySession<T>[] {
+  const sessions: ActivitySession<T>[] = [];
+  for (const row of rows) {
+    const current = sessions[sessions.length - 1];
+    if (current && current.startMs - row.createdAt <= SESSION_GAP_MS) {
+      current.rows.push(row);
+      current.startMs = row.createdAt;
+      current.counts[row.kind] = (current.counts[row.kind] ?? 0) + 1;
+    } else {
+      sessions.push({
+        startMs: row.createdAt,
+        endMs: row.createdAt,
+        rows: [row],
+        counts: { [row.kind]: 1 },
+      });
+    }
+  }
+  return sessions;
+}
+
+/** "read 12 · drafted 3 · posted 1" — the session receipt line. */
+export function sessionSummary(counts: Record<string, number>): string {
+  const LABELS: Record<string, [string, string]> = {
+    researching: ["swept", "sweeps"],
+    found: ["find", "finds"],
+    drafted: ["draft", "drafts"],
+    posted: ["posted", "posted"],
+    plan_changed: ["plan change", "plan changes"],
+    thinking: ["note", "notes"],
+    status: ["update", "updates"],
+  };
+  return Object.entries(counts)
+    .map(([kind, n]) => {
+      const [one, many] = LABELS[kind] ?? [kind, kind];
+      return kind === "posted" ? `posted ${n}` : `${n} ${n === 1 ? one : many}`;
+    })
+    .join(" · ");
+}

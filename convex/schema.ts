@@ -4316,6 +4316,12 @@ export default defineSchema({
     // rule) so a dogfood deploy exercises every platform's research + tools +
     // video-watch end-to-end. NOT product behavior — real agents stay focused.
     verifyAllPlatforms: v.optional(v.boolean()),
+    // 2026-07-07 — per-agent override for the all-day discovery_pulse cron.
+    // Beats the deployment-wide MAYA_GTM_PULSE_ENABLED env var at deploy time
+    // (unset → env decides). Exists so ONE dogfood agent can cost-soak the
+    // pulse before any fleet rollout. Takes effect on the agent's next
+    // (re)deploy — jobs.json is rendered into the workspace at deploy.
+    pulseEnabledOverride: v.optional(v.boolean()),
     openClawFlyAppId: v.optional(v.string()),
     deployedAt: v.optional(v.number()),
     // Sprint 15 (D1) — Telegram is the default ClawLaunch channel because
@@ -4544,6 +4550,12 @@ export default defineSchema({
     // re-generating. This is what makes a failed/again send cheap (cents to
     // re-push) instead of a full strategy rebuild (dollars), killing the loop.
     cachedSynthesisText: v.optional(v.string()),
+    // PLAN_APPROVAL_LOOP_V1 §2 — the plan as a STRUCTURED, VERSIONED object
+    // (JSON string per the 138-table TS ceiling: read/goal/moves/notDoing/
+    // week/asks/amendments/version/status). cachedSynthesisText stays the
+    // prose she delivers in chat; this is what the web approval screen
+    // renders and what amendments diff against. Written via save_plan_doc.
+    planDocJson: v.optional(v.string()),
     // Bounded delivery-retry counter. Each Convex push attempt of the cached
     // plan increments it; past the cap the agent stays dormant (plan held) and
     // we alert, rather than retry a dead channel forever.
@@ -6096,6 +6108,9 @@ export default defineSchema({
     /** For dm / specific-account engagement kinds. */
     targetAccountId: v.optional(v.id("gtmTargetAccounts")),
     draftText: v.string(),
+    /** PLAN_APPROVAL_LOOP_V1 §6 — why this action: why this thread, why this
+     *  angle, expected outcome. Set at save_draft; rendered on Queue cards. */
+    rationale: v.optional(v.string()),
     /** For thread kind — one tweet / post per segment. */
     draftSegments: v.optional(v.array(v.string())),
     // Sprint C — content-attribute tags (Maya's own judgment, free strings —

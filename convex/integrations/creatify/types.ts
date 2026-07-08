@@ -80,7 +80,8 @@ export type CreatifyVideoMode =
   | "ad_clone" // copy a winning reference video's format onto the product
   | "url_to_video" // scrape the product URL → fully edited ad
   | "aurora" // ultra-realistic talking head from one photo + audio (2-step)
-  | "lipsync"; // 1-step UGC avatar: script → TTS + Aurora avatar in one call
+  | "lipsync" // 1-step UGC avatar: script → TTS + Aurora avatar in one call
+  | "lipsync_v2"; // multi-scene UGC composer: avatar scenes + b-roll scenes
 
 /** Inputs for an ad-clone job (the differentiator: copy a winning TikTok). */
 export interface AdCloneInput {
@@ -145,6 +146,48 @@ export interface LipsyncInput {
   webhook_url?: string | null;
 }
 
+// ── Lipsync v2 — the multi-scene UGC composer ─────────────────────────────────
+// The format that actually performs for UGC ads: avatar scene → product b-roll
+// scene → avatar scene, per-scene voice + captions. One render, one credit
+// schedule (same as v1: standard 5cr/30s, aurora per-second).
+// ⚠ Docs-derived and UNVERIFIED LIVE (same status as iab_images) — smoke-test
+// via scripts/creatify-test.ts before relying in production.
+
+/** One scene in a lipsync_v2 render. Exactly one of the two shapes:
+ *   - avatar scene: `character` + `voice` (the avatar speaks `input_text`)
+ *   - b-roll scene: `background` video/image, optional voiceover `voice`     */
+export interface LipsyncV2SceneInput {
+  character?: {
+    type: "avatar";
+    avatar_id: string;
+    /** Creatify scene style (e.g. "normal"); provider default if omitted. */
+    avatar_style?: string | null;
+    /** 0-1 relative scale; provider default if omitted. */
+    scale?: number | null;
+  } | null;
+  voice?: {
+    type: "text";
+    input_text: string;
+    /** Voice id (from /api/voices/); provider default if omitted. */
+    voice_id?: string | null;
+  } | null;
+  background?: {
+    type: "image" | "video";
+    url: string;
+    /** How the background fills the frame (e.g. "cover"). */
+    fit?: string | null;
+  } | null;
+  caption_setting?: { style?: string | null } | null;
+}
+
+export interface LipsyncV2Input {
+  video_inputs: LipsyncV2SceneInput[];
+  aspect_ratio?: CreatifyAspectRatio;
+  /** Realism tier; default aurora_v1_fast (0.5 cr/s — the cheap path). */
+  model_version?: CreatifyModelVersion;
+  webhook_url?: string | null;
+}
+
 // ── Static image / ad-creative modes (Growth $149 tier) ───────────────────────
 
 /**
@@ -164,7 +207,15 @@ export type CreatifyImageMode = "iab_images" | "asset_gen";
  * same async {id,status}→poll shape, so the orchestration layer persists either
  * under one `CreatifyJobMode` discriminator and polls via `getCreatifyJob`.
  */
-export type CreatifyJobMode = CreatifyVideoMode | CreatifyImageMode;
+/** Inspiration renders: Creatify's curated template recipes ("Community
+ *  Creations") — gen_type per template is image OR video; the poll shape is
+ *  the same async job. ⚠ API credit_cost is 4x the in-app price per docs. */
+export type CreatifyInspirationMode = "inspiration";
+
+export type CreatifyJobMode =
+  | CreatifyVideoMode
+  | CreatifyImageMode
+  | CreatifyInspirationMode;
 
 /**
  * Inputs for an IAB Images job — a grounded ad-banner set. Ground it in the
