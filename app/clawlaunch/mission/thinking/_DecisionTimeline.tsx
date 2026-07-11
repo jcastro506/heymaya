@@ -53,7 +53,7 @@ const SESSION_GAP_MS = 4 * 60 * 1000;
 const CAT_META: Record<Category, { label: string; dot: string; text: string }> =
   {
     research: { label: "Research", dot: "bg-sky-300", text: "text-sky-300" },
-    draft: { label: "Draft", dot: "bg-amber-300", text: "text-amber-300" },
+    draft: { label: "Draft", dot: "bg-emerald-300", text: "text-emerald-300" },
     publish: { label: "Publish", dot: "bg-lime", text: "text-lime" },
     foundation: {
       label: "Strategy",
@@ -166,7 +166,7 @@ const STATUS_META: Record<
   { mark: string; cls: string; word: string }
 > = {
   ok: { mark: "✓", cls: "text-lime", word: "" },
-  blocked: { mark: "⊘", cls: "text-amber-300", word: "held" },
+  blocked: { mark: "⊘", cls: "text-paper-faint", word: "held" },
   failed: { mark: "✕", cls: "text-red-400", word: "failed" },
   error: { mark: "!", cls: "text-red-400", word: "errored" },
 };
