@@ -4,7 +4,10 @@ primary_region = "iad"
 [build]
   dockerfile = "Dockerfile"
   [build.args]
-    OPENCLAW_VERSION = "2026.4.23"
+    # Must match the Dockerfile default + the OPENCLAW_IMAGE_TARGET tag in
+    # deployMayaGtm.ts. Was stale at 2026.4.23 while the fleet image ran
+    # 2026.5.26 — bit us on the 2026-07-10 registry rebuild.
+    OPENCLAW_VERSION = "2026.5.26"
 
 [env]
   OPENCLAW_STATE_DIR = "/data"

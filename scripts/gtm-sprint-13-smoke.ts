@@ -88,7 +88,7 @@ function checkOpenClawImageConstants(): void {
     return;
   }
   const expectedPinned =
-    "registry.fly.io/heymaya-openclaw@sha256:49fa411e417ffe260789a9ea8d62a0122b54ee904995fca35e2a82a73c4bc7a2";
+    "registry.fly.io/heymaya-openclaw:v2026.5.26@sha256:3856db33c587c2404c71b4a662d0a20ef5027422834e48dfe5f597406e228d0f";
   if (OPENCLAW_IMAGE_PINNED !== expectedPinned) {
     fail(
       "openclaw-image-pinned",
