@@ -176,7 +176,42 @@ describe("sendDirectTelegramMessage", () => {
     expect(call[0]).toBe("https://api.telegram.org/botbot-123/sendMessage");
     const body = JSON.parse(call[1].body as string);
     expect(body.chat_id).toBe("8376373926");
-    expect(body.text).toBe("Hey there — Maya here.");
+    // 2026-07-10 — the DM path SANITIZES punctuation AI-tells before sending
+    // (em-dash → comma) instead of hard-blocking: a bounce that reaches no
+    // one is worse than a comma where an em-dash was.
+    expect(body.text).toBe("Hey there, Maya here.");
     expect(body.disable_web_page_preview).toBe(true);
+  });
+
+  it("sends jargon-drift text instead of blocking it (log-only policy)", async () => {
+    // The live 2026-07-10 failure: the foundation synthesis said "content
+    // angles" + "relationship targets" and the blanket firewall blackholed
+    // the founder's plan. Jargon is drift, not a leak — it must DELIVER.
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ ok: true, result: { message_id: 7 } }), {
+        status: 200,
+      })
+    );
+    globalThis.fetch = fetchMock;
+    const result = await sendDirectTelegramMessage({
+      botToken: "bot-123",
+      chatId: "8376373926",
+      text: "Content angles locked. Relationship targets mapped. Connect your channels and I start posting.",
+    });
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("still hard-blocks true leaks (skill slugs, workspace files, technical internals)", async () => {
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock;
+    const result = await sendDirectTelegramMessage({
+      botToken: "bot-123",
+      chatId: "8376373926",
+      text: "I ran maya-slop-critic and updated SOUL.md via /lc_gtm/ callbacks.",
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("firewall_blocked");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

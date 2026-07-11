@@ -105,11 +105,20 @@ const BANNED_INTERNAL_TERMS = [
   "gtmTargetThreads",
   "gtmDraftedContent",
   "gtmPostResults",
-  // Non-technical-tone pass (2026-06-22) — strategy/marketing JARGON the founder
-  // (not a marketing/tech expert) shouldn't see. Sanitized on the delivery-wins
-  // path so the message still goes out, just plain. Multi-word + distinctive
-  // ONLY — bare "ICP"/"persona" are too short for the indexOf matcher (the
-  // bare-"LLM" lesson above) and are handled by SOUL + the synthesis template.
+];
+
+/**
+ * Strategy/marketing JARGON the founder (not a marketing/tech expert)
+ * shouldn't see (non-technical-tone pass, 2026-06-22). LOG-ONLY on the
+ * private-DM send path: jargon is annoying, not catastrophic, and per the
+ * no-regex-enforcement rule a non-catastrophic drift NEVER drops a message.
+ * 2026-07-10 — these lived in BANNED_INTERNAL_TERMS, which the direct-send
+ * firewall treats as blocking: "content angle" + "relationship target" in
+ * the foundation synthesis blackholed the founder's plan (delivery stamped
+ * nothing, pushCachedPlan retried into the same wall). The SOUL prompt is
+ * the primary control; this list only feeds the drift counter.
+ */
+export const JARGON_DRIFT_TERMS = [
   "buyer map",
   "channel scorecard",
   "content angle",
@@ -119,6 +128,13 @@ const BANNED_INTERNAL_TERMS = [
   "T1 thread",
   "ICP threads",
 ];
+
+/** Drift detector only — callers LOG these, never drop (see JARGON_DRIFT_TERMS). */
+export function detectJargonDrift(
+  text: string
+): ValidateOutboundResult["failures"] {
+  return findMatches(text, JARGON_DRIFT_TERMS, "internal_term");
+}
 
 // Sprint 2.10 — AI references — Maya is "your launch manager," not
 // "your AI assistant" (per feedback_no_ai_in_marketing_copy memory,
