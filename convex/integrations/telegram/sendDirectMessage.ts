@@ -15,7 +15,31 @@
  * never touch the agent loop.
  */
 
-import { validateOutboundText } from "../../gtmMaya/outboundFirewall";
+import {
+  detectJargonDrift,
+  sanitizeOutboundText,
+  validateOutboundText,
+} from "../../gtmMaya/outboundFirewall";
+
+/**
+ * 2026-07-10 — private-DM firewall policy. This path delivers PRIVATE
+ * operator messages (deploy hello, cached-plan push, send_update relay);
+ * per the no-regex-enforcement rule, a bounce that reaches no one is worse
+ * than an imperfect message that arrives. So:
+ *   - punctuation AI-tells are mechanically SANITIZED (never block),
+ *   - true leak categories (skill slugs, workspace files, technical
+ *     internals, AI self-reference) still hard-block,
+ *   - lexical slop + marketing jargon are LOG-ONLY drift counters.
+ * The live failure this fixes: the foundation synthesis said "content
+ * angle" + "relationship target" (jargon), the old blanket block
+ * blackholed the founder's plan, and every retry hit the same wall.
+ */
+const BLOCKING_CATEGORIES = new Set([
+  "skill_slug",
+  "workspace_file",
+  "internal_term",
+  "ai_reference",
+]);
 
 export interface DirectTelegramSendResult {
   ok: boolean;
@@ -44,20 +68,37 @@ export async function sendDirectTelegramMessage(
     };
   }
 
-  const firewall = validateOutboundText(input.text);
-  if (!firewall.ok) {
+  // Sanitize punctuation tells mechanically, THEN validate the clean text.
+  const text = sanitizeOutboundText(input.text);
+  const firewall = validateOutboundText(text);
+  const blocking = firewall.failures.filter((f) =>
+    BLOCKING_CATEGORIES.has(f.category)
+  );
+  if (blocking.length > 0) {
     return {
       ok: false,
       reason: "firewall_blocked",
       messageId: null,
-      firewallFailures: firewall.failures,
+      firewallFailures: blocking,
     };
+  }
+  // Non-catastrophic drift (lexical slop) + jargon: LOG-ONLY, never drop.
+  const drift = [
+    ...firewall.failures.filter((f) => !BLOCKING_CATEGORIES.has(f.category)),
+    ...detectJargonDrift(text),
+  ];
+  if (drift.length > 0) {
+    console.warn(
+      `[sendDirectTelegramMessage] voice-drift (sent anyway): ${drift
+        .map((f) => `${f.category}:${f.matched}`)
+        .join(", ")}`
+    );
   }
 
   const url = `https://api.telegram.org/bot${input.botToken}/sendMessage`;
   const body = {
     chat_id: input.chatId,
-    text: input.text,
+    text,
     disable_web_page_preview: true,
   };
 
@@ -179,5 +220,5 @@ export function buildDeployTimeHelloText(input: {
     input.firstName && input.firstName.trim() !== ""
       ? input.firstName.trim()
       : "there";
-  return `Hey ${name} — Maya here. Just spun up for ${input.productName}. Studying where your buyer actually hangs out + lining up your first 2 weeks of moves. End-to-end this takes me about 15-30 min — I'll send your full plan when it's ready. Sit tight.`;
+  return `Hey ${name}, Maya here. Just spun up for ${input.productName}. Studying where your buyer actually hangs out + lining up your first 2 weeks of moves. End-to-end this takes me about 15-30 min. I'll send your full plan when it's ready. Sit tight.`;
 }
