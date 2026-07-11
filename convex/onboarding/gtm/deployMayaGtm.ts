@@ -217,8 +217,16 @@ export const OPENCLAW_IMAGE_TARGET = "registry.fly.io/heymaya-openclaw:v2026.5.2
 // pollution), and subagent context default trim. The image is fully
 // VANILLA — no patch-claw-messenger-plugin patches (file kept in
 // source for reference; not copied into image). See Dockerfile.
+// 2026-07-10 — digest rotated. The heymaya-openclaw Fly app (the registry
+// HOST for this image — infrastructure, NEVER fleet-teardown scope) was
+// destroyed during an agent-machine sweep, which deleted the image with it.
+// Rebuilt from infra/openclaw-runtime (same vanilla openclaw@2026.5.26,
+// current plugins) and re-pushed. Old digest 49fa411e… no longer exists.
+// NOTE the tag@digest form: Fly's Machines API now rejects a bare @digest
+// image identifier ("invalid image identifier") — verified live 2026-07-10.
+// tag@digest is still immutable (digest wins) and boots correctly.
 export const OPENCLAW_IMAGE_PINNED =
-  "registry.fly.io/heymaya-openclaw@sha256:49fa411e417ffe260789a9ea8d62a0122b54ee904995fca35e2a82a73c4bc7a2";
+  "registry.fly.io/heymaya-openclaw:v2026.5.26@sha256:3856db33c587c2404c71b4a662d0a20ef5027422834e48dfe5f597406e228d0f";
 
 const OPENCLAW_IMAGE =
   process.env.MAYA_GTM_OPENCLAW_IMAGE ??
