@@ -15,8 +15,11 @@
   --paper: #f4f1ea;
   --paper-dim: #b9b4a8;
   --paper-faint: #6e6a60;
-  --lime: #d6ff3d;
-  --lime-soft: #e8ff86;
+  /* 2026-07-10 — operator: no yellow anywhere. The default accent (still
+     named --lime for utility compat) is now the same sky-blue the mission
+     surface uses; every `*-lime` utility recolors from here. */
+  --lime: #38bdf8;
+  --lime-soft: #7dd3fc;
   --rose: #ff6b6b;
   --imessage-blue: #1c8cff;
   --imessage-gray: #2c2c2e;
@@ -102,7 +105,7 @@ body::before {
   z-index: 0;
   background-image: radial-gradient(
       circle at 20% 12%,
-      rgba(214, 255, 61, 0.06),
+      rgba(56, 189, 248, 0.06),
       transparent 38%
     ),
     radial-gradient(

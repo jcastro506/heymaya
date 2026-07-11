@@ -67,7 +67,7 @@ export function WaitlistForm() {
         <button
           type="submit"
           disabled={status === "submitting"}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[#0a0a0a] px-6 text-[11px] font-medium uppercase tracking-[0.22em] text-[#fbfaf6] transition hover:bg-[#d6ff3d] hover:text-[#0a0a0a] disabled:opacity-50"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[#0a0a0a] px-6 text-[11px] font-medium uppercase tracking-[0.22em] text-[#fbfaf6] transition hover:bg-[#2e2e2e] hover:text-[#fbfaf6] disabled:opacity-50"
         >
           {status === "submitting" ? "..." : "Join"}
           {status !== "submitting" && <ArrowRight className="h-4 w-4" />}

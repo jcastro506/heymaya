@@ -478,11 +478,11 @@ function PlatformVideo({
               className="absolute inset-0 opacity-60"
               style={{
                 background:
-                  "radial-gradient(circle at 50% 36%, rgba(214,255,61,0.14), transparent 58%)",
+                  "radial-gradient(circle at 50% 36%, rgba(251,250,246,0.16), transparent 58%)",
               }}
             />
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="flex size-14 items-center justify-center rounded-full bg-[#d6ff3d]">
+              <div className="flex size-14 items-center justify-center rounded-full bg-[#fbfaf6]">
                 <span className="ml-1 border-y-[9px] border-l-[15px] border-y-transparent border-l-[#0a0a0a]" />
               </div>
             </div>
@@ -1249,7 +1249,7 @@ function AttributionMockup() {
     <div className="overflow-hidden rounded-2xl border border-[#0a0a0a]/10 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_24px_64px_-24px_rgba(0,0,0,0.18)]">
       {/* Header bar */}
       <div className="flex items-center gap-3 border-b border-[#0a0a0a]/8 bg-[#0a0a0a] px-5 py-3.5">
-        <span className="inline-block size-2 rounded-full bg-[#d6ff3d]" />
+        <span className="inline-block size-2 rounded-full bg-white/50" />
         <span className="text-[11px] uppercase tracking-[0.2em] text-white/60">
           Maya · Monday · 7:04am
         </span>
@@ -1313,7 +1313,7 @@ function AttributionMockup() {
         </div>
 
         {/* Insight bar */}
-        <div className="bg-[#d6ff3d]/15 px-5 py-4">
+        <div className="bg-[#0a0a0a]/[0.05] px-5 py-4">
           <p className="text-[13px] leading-[1.5]">
             <span className="font-semibold">Reddit drove your most clicks this week.</span>
             <span className="text-[#0a0a0a]/65"> Your Stripe logged 2 new signups. Pulling back on X, doubling Reddit.</span>
@@ -1501,7 +1501,7 @@ function ResearchLayer() {
           <div className="grid gap-x-12 gap-y-12 sm:grid-cols-2">
             {RESEARCH_PILLARS.map((pillar) => (
               <div key={pillar.n} className="border-t border-white/15 pt-5">
-                <span className="font-mono text-[11px] tracking-[0.2em] text-[#d6ff3d]">
+                <span className="font-mono text-[11px] tracking-[0.2em] text-white/40">
                   {pillar.n}
                 </span>
                 <h3 className="mt-3 font-display italic text-[1.7rem] leading-tight">
@@ -1708,7 +1708,7 @@ function PageStyles() {
         background-color: #fbfaf6;
         background-image: radial-gradient(
             circle at 10% 0%,
-            rgba(214, 255, 61, 0.06),
+            rgba(10, 10, 10, 0.025),
             transparent 38%
           ),
           radial-gradient(
@@ -1766,7 +1766,7 @@ function PageStyles() {
         transform: translateY(0);
       }
 
-      /* CTA — pill, black, lime hover state. */
+      /* CTA — pill, black, ink hover state. */
       [data-page="clawlaunch-landing"] .cta-primary {
         display: inline-flex;
         align-items: center;
@@ -1785,8 +1785,8 @@ function PageStyles() {
           transform 0.15s ease;
       }
       [data-page="clawlaunch-landing"] .cta-primary:hover {
-        background: #d6ff3d;
-        color: #0a0a0a;
+        background: #2e2e2e;
+        color: #fbfaf6;
       }
       [data-page="clawlaunch-landing"] .cta-primary:active {
         transform: translateY(1px);
