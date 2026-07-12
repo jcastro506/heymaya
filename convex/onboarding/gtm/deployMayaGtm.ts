@@ -359,8 +359,16 @@ const MODEL_ROUTING = {
   // preview snapshot months ago. Re-trying it now since OpenRouter
   // pricing makes the cost difference meaningful at our call volume.
   // If instability returns, fall back via env override.
+  // 2026-07-12 — COGS: workers DOWNGRADED gemini-3-flash-preview →
+  // gemini-3.1-flash-lite ($0.075 in / $0.30 out vs $0.50/$3, 6.7-10x
+  // cheaper). The live $32/2-day burn autopsy: the 15-worker foundation
+  // fan-out ran ~3,200 turns / ~26M input tokens ≈ $13 of the bill on
+  // Flash. Lite had ALREADY proven itself on identical scan/extract work
+  // in the same run (pulse_scan + extraction_worker: 11.3M tokens for
+  // $0.85). Env override restores Flash per-deploy if quality regresses.
+  // channel_judge deliberately stays on full Flash (see its entry).
   subagent:
-    process.env.MAYA_GTM_SUBAGENT_MODEL ?? "google/gemini-3-flash-preview",
+    process.env.MAYA_GTM_SUBAGENT_MODEL ?? "google/gemini-3.1-flash-lite",
   // hard_research_beta is no longer a configured agent (Sprint 2.18 #3
   // removed it from agents.list). Routing entry retained for
   // narrative + future re-enablement; not actually used.
@@ -487,6 +495,11 @@ export function buildGatewayConfig(
   // entry stays in the routing table for narrative / cost docs.
   const extractionModel = toOpenClawModelRef(MODEL_ROUTING.extractionWorker);
   const pulseScanModel = toOpenClawModelRef(MODEL_ROUTING.pulseScan);
+  // 2026-07-12 COGS — full Flash (not Lite, not Kimi) for the two JUDGMENT
+  // workers below. They were on mainModel: 226 turns / 2.9M tokens of the
+  // $32 burn ran critique/scoring on the priciest model for no voice
+  // benefit (their output never reaches the founder verbatim).
+  const judgmentModel = toOpenClawModelRef(MODEL_ROUTING.futureDefaultResearch);
   const memorySearch = buildMemorySearchConfig();
 
   // Sprint 20 — Maya-side subagent lane. Registers per-platform research
@@ -636,7 +649,7 @@ export function buildGatewayConfig(
     {
       id: "channel_judge",
       name: "Channel Strategy Judge",
-      model: mainModel,
+      model: judgmentModel,
       // Pure synthesis — deny network-egress tools so the judge can't
       // burn external API budget mid-decision. (Removed fake
       // "scrapecreators-api"/"tiktok"/"search-x" entries which were
@@ -647,7 +660,7 @@ export function buildGatewayConfig(
     {
       id: "slop_critic",
       name: "Slop Critic",
-      model: mainModel,
+      model: judgmentModel,
       // Local-only — banned-phrase scan + voice match. Deny network
       // and exec so it can't accidentally make HTTP/shell calls.
       tools: { profile: "coding" as const, deny: ["web_fetch", "web_search", "exec", "process"] },
