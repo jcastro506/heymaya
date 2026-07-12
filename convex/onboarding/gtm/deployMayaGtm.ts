@@ -359,16 +359,25 @@ const MODEL_ROUTING = {
   // preview snapshot months ago. Re-trying it now since OpenRouter
   // pricing makes the cost difference meaningful at our call volume.
   // If instability returns, fall back via env override.
-  // 2026-07-12 — COGS: workers DOWNGRADED gemini-3-flash-preview →
-  // gemini-3.1-flash-lite ($0.075 in / $0.30 out vs $0.50/$3, 6.7-10x
-  // cheaper). The live $32/2-day burn autopsy: the 15-worker foundation
-  // fan-out ran ~3,200 turns / ~26M input tokens ≈ $13 of the bill on
-  // Flash. Lite had ALREADY proven itself on identical scan/extract work
-  // in the same run (pulse_scan + extraction_worker: 11.3M tokens for
-  // $0.85). Env override restores Flash per-deploy if quality regresses.
-  // channel_judge deliberately stays on full Flash (see its entry).
+  // 2026-07-12 — COGS: worker tier → openai/gpt-oss-120b.
+  // VERIFIED OpenRouter pricing (2026-07-12, /api/v1/models — always
+  // re-verify, an earlier comment here claimed Lite was $0.075/M and it
+  // is NOT):
+  //   gpt-oss-120b:            $0.036 in / $0.18 out per M, 131K ctx
+  //   gemini-3.1-flash-lite:   $0.25  in / $1.50 out per M, 1M ctx
+  //   gemini-3-flash-preview:  $0.50  in / $3.00 out per M, 1M ctx
+  //   kimi-k2-0905:            $0.60  in / $2.50 out per M, 262K ctx
+  // The $32/2-day burn autopsy: the 15-worker foundation fan-out ran
+  // ~3,200 turns / ~26M input tokens. On gpt-oss-120b that's ~$1 —
+  // 14x cheaper than Flash for tool-loop scan/read/save work. Open-weight
+  // 120B MoE with solid tool-calling. 131K ctx is the one constraint:
+  // worker sessions must stay bounded (they should anyway — the 138K
+  // session we saw was pathological compaction churn, not healthy work).
+  // Env override restores Flash/Lite per-deploy if quality regresses.
+  // channel_judge + slop_critic deliberately stay on full Flash (judgment
+  // quality is the anti-slop moat; their volume is small).
   subagent:
-    process.env.MAYA_GTM_SUBAGENT_MODEL ?? "google/gemini-3.1-flash-lite",
+    process.env.MAYA_GTM_SUBAGENT_MODEL ?? "openai/gpt-oss-120b",
   // hard_research_beta is no longer a configured agent (Sprint 2.18 #3
   // removed it from agents.list). Routing entry retained for
   // narrative + future re-enablement; not actually used.
@@ -378,14 +387,14 @@ const MODEL_ROUTING = {
   futureDefaultResearch:
     process.env.MAYA_GTM_RESEARCH_MODEL ?? "google/gemini-3-flash-preview",
   extractionWorker:
-    process.env.MAYA_GTM_EXTRACTION_MODEL ?? "google/gemini-3.1-flash-lite",
+    process.env.MAYA_GTM_EXTRACTION_MODEL ?? "openai/gpt-oss-120b",
   // 2026-07-07 — the discovery_pulse's dedicated scan worker. Watermark-bounded
   // "read new items on one channel, judge fit" is structured scanning, not
-  // strategic reasoning — Flash Lite ($0.075 in / $0.30 out vs Flash's
-  // $0.50/$3) is what makes an all-day pulse cost pennies per tick. The
-  // morning brief's deep research workers stay on full Flash (subagent above).
+  // strategic reasoning. 2026-07-12: → gpt-oss-120b (verified $0.036/M in;
+  // the earlier "$0.075 Lite" figure in this comment was WRONG — Lite is
+  // $0.25/M. Always verify against /api/v1/models before routing).
   pulseScan:
-    process.env.MAYA_GTM_PULSE_SCAN_MODEL ?? "google/gemini-3.1-flash-lite",
+    process.env.MAYA_GTM_PULSE_SCAN_MODEL ?? "openai/gpt-oss-120b",
 };
 
 /**
@@ -2098,10 +2107,15 @@ function toOpenClawModelRef(model: string): string {
   const prefix =
     process.env.MAYA_GTM_LLM_GATEWAY_ENABLED === "true" ? "openai" : "openrouter";
   if (model.includes("/")) {
-    const slug = model.startsWith("openrouter/")
-      ? model.slice("openrouter/".length)
-      : model.startsWith("openai/")
-        ? model.slice("openai/".length)
+    // Strip a PROVIDER prefix only when one is actually present (provider/
+    // vendor/model = 2+ slashes). A single-slash ref like "openai/gpt-oss-120b"
+    // is a bare OpenRouter slug whose VENDOR namespace happens to be openai —
+    // stripping it produced "openrouter/gpt-oss-120b", which OpenRouter
+    // rejects (caught live 2026-07-12 on the worker-model rollout).
+    const parts = model.split("/");
+    const slug =
+      parts.length >= 3 && (parts[0] === "openrouter" || parts[0] === "openai")
+        ? parts.slice(1).join("/")
         : model;
     return `${prefix}/${slug}`;
   }
