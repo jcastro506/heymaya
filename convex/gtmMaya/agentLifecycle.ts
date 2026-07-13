@@ -453,21 +453,36 @@ export const acquireFoundationLease = internalMutation({
  * Convex on connect. `strategyDeliveredAt` is set ONLY on a successful send.
  */
 export const claimFounderSynthesisSend = internalMutation({
-  args: { agentId: v.id("gtmAgents") },
+  args: {
+    agentId: v.id("gtmAgents"),
+    // 2026-07-13 LIFECYCLE_MESSAGING_V1 — the claim is CLASS-AWARE. The live
+    // failure this fixes: the class-INDEPENDENT cooldown ate the founder's
+    // replies for 30 minutes after the plan ("she's ignoring me"). Only
+    // STRATEGIC proactive sends (a plan/handover re-articulation) are ever
+    // dedup-eligible; tactical sends (acks, progress, one-tap pings) always
+    // flow. Replies (turnId present) never reach this claim at all.
+    messageClass: v.optional(
+      v.union(v.literal("strategic"), v.literal("tactical"))
+    ),
+  },
   handler: async (
     ctx,
     args
-  ): Promise<{ decision: "send" | "suppress" | "allow" }> => {
+  ): Promise<{ decision: "cache" | "suppress" | "allow" }> => {
     const agent = await ctx.db.get(args.agentId);
     if (!agent) return { decision: "allow" };
     const now = Date.now();
+    const strategic = args.messageClass === "strategic";
     const lifecycle = await computeAgentLifecycle(ctx, agent, now);
     // Work done (plan generated) → normal proactive sends (morning brief, weekly
-    // review) flow. BUT a re-articulated handover from a CONCURRENT session lands
-    // seconds after the first claim (the live 3× dupe), so within the handover
-    // cooldown of plan generation, still SUPPRESS — same plan, not a new message.
+    // review) flow. BUT a re-articulated STRATEGIC handover from a concurrent
+    // session (or the approval-reaction turn) lands minutes after the first
+    // claim (the live 2× plan), so within the handover cooldown of plan
+    // generation, strategic sends still SUPPRESS — same plan, not a new
+    // message. Tactical sends ALWAYS flow here.
     if (lifecycle.foundationComplete) {
       if (
+        strategic &&
         agent.planGeneratedAt &&
         now - agent.planGeneratedAt < SYNTH_HANDOVER_COOLDOWN_MS
       ) {
@@ -490,7 +505,11 @@ export const claimFounderSynthesisSend = internalMutation({
     // so the first proactive send AFTER it is the genuine plan handover. Below
     // it → "allow" (still researching; honest progress flows — NEVER suppress).
     if (!agent.researchCompletedAt) {
-      if (agent.planGeneratedAt) return { decision: "suppress" };
+      // A strategic re-articulation after the plan was claimed = dup; tactical
+      // progress ("still digging") always flows.
+      if (agent.planGeneratedAt) {
+        return { decision: strategic ? "suppress" : "allow" };
+      }
       // HELLO-ONCE: kill the concurrent intro burst (observed live: 4 near-
       // identical hellos in 17s from racing boot/kickstart/resume sessions). The
       // FIRST pre-research proactive send atomically claims the hello (stamps
@@ -507,16 +526,26 @@ export const claimFounderSynthesisSend = internalMutation({
       await ctx.db.patch(args.agentId, { helloSentAt: now, updatedAt: now });
       return { decision: "allow" };
     }
-    // Synthesis window: research is real, plan not yet generated. CLAIM it —
-    // stamp planGeneratedAt (work done) + advance to plan_ready. The handler then
-    // caches the plan text + (on a successful send) stamps strategyDeliveredAt.
+    // Synthesis window: research is real, plan not yet generated.
+    // LIFECYCLE_MESSAGING_V1: the plan handover must be STRATEGIC — a tactical
+    // holding message can no longer steal the claim (the live ws7bk96g bug:
+    // "still digging" won the claim, was cached as "the plan", and the real
+    // plan was suppressed). Tactical sends flow without claiming.
+    if (!strategic) return { decision: "allow" };
     if (agent.planGeneratedAt) return { decision: "suppress" };
+    // CLAIM it — stamp planGeneratedAt (work done) + advance to plan_ready,
+    // and return "cache": the handler CACHES the plan text instead of sending;
+    // Convex (pushCachedPlan — idempotent, keyed on strategyDeliveredAt)
+    // delivers it exactly once. Code owns WHEN; the model owns WHAT. This is
+    // what makes a duplicate plan message impossible rather than suppressed:
+    // every racing session's "here's the plan" lands in the same cache slot
+    // and delivery is a single-writer state transition.
     await ctx.db.patch(args.agentId, {
       planGeneratedAt: now,
       lifecycleState: "plan_ready",
       updatedAt: now,
     });
-    return { decision: "send" };
+    return { decision: "cache" };
   },
 });
 

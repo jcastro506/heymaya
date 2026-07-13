@@ -243,9 +243,14 @@ export const notifyAgentOfPlanApproval = internalAction({
     if (!row?.hookBaseUrl || !row.hookToken) return;
     const endpoint: HookEndpoint = { baseUrl: row.hookBaseUrl, token: row.hookToken };
     try {
+      // LIFECYCLE_MESSAGING_V1 — ACK ONLY. The old wording ("react ... and
+      // start executing per the approved plan") invited a full re-pitch: the
+      // isolated turn has no memory of the plan message it is reacting to, so
+      // the model re-laid-out the whole strategy — the live 7/13 double-plan.
+      // The founder JUST READ the plan; one line, then silent action.
       await runAgentTurn(endpoint, {
         message:
-          "The founder just APPROVED your plan from Mission Control. React in your voice via send_update (short, real) and start executing per the approved plan. Account-connect gates still apply.",
+          "The founder just APPROVED your plan from Mission Control. They are looking at the plan RIGHT NOW, so do NOT restate, summarize, or re-pitch any part of it — a repeat reads as a glitch. Call send_update with ONE short line in your voice (an acknowledgment plus the single next concrete thing, e.g. when the first move goes out). Then start executing silently. Account-connect gates still apply.",
         deliver: false,
         thinking: "medium",
         timeoutSeconds: 90,

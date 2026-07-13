@@ -158,7 +158,6 @@ These two saves are what make the daily cron and the drafting step work. They ar
 
 ## Cost discipline
 
-Max 6 ScrapeCreators calls. Grok max 3 calls if invoked. 1 hard_research_beta + 1 main_maya. Timeout 15 min.
 
 ## Anti-slop check
 

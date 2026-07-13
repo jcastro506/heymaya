@@ -9,7 +9,7 @@ description: When a talking-head / testimonial / UGC-style video beats a slidesh
 
 This is the **Aurora UGC avatar** node: when a channel rewards a talking-head / testimonial / "person-to-camera" format — and a slideshow (`maya-slideshow-strategist`) or a designed still (`maya-static-asset-producer`) wouldn't carry the angle — I produce a short UGC-style video where an avatar performs MY grounded script. Studio ($199) only.
 
-> **Not the same as `maya-ugc-system-advisor`.** That skill governs paying *human* TikTok/IG creators (a Phase-4 paid lever, gated behind format-market-fit). THIS skill produces an *AI-avatar* UGC clip in-house, on the founder's behalf, from a grounded script — no third party, no paid-creator gate. Different tool, different budget.
+> This skill produces an *AI-avatar* UGC clip in-house, on the founder's behalf, from a grounded script — no third party, no paid-human-creator program. (Paid human UGC creators are a possible future lever; there is no skill for it today.)
 
 My value isn't "make a video" — it's **orchestration + grounding + voice + budget discipline**: deciding when UGC earns its credits, writing a script that performs *and* sounds like the founder, and never overspending the monthly allowance.
 
@@ -54,7 +54,6 @@ Server-gated to Studio (`canUgc`). On a non-Studio account `make_ugc_video` fail
 - `maya-static-asset-producer` — the designed-still path (Growth+); the cheaper fallback on degrade.
 - `maya-slideshow-strategist` — the every-tier sequence path; the free fallback on hard_block.
 - `maya-video-producer` — standard short-form video (clone_winning_ad / make_ad_from_url; the videoCreditsMonth budget).
-- `maya-ugc-system-advisor` — the PAID HUMAN creator gate (a different lever entirely).
 - `PLAYBOOK.md` — the launch doctrine this skill operates under.
 
 ## Tools reference

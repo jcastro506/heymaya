@@ -126,7 +126,6 @@ When TikTok is a bet AND the dominant winning format is a **video** (not a slide
 
 ## Cost discipline
 
-Max 12 ScrapeCreators calls: 3-5 keywords × 1 `/search/top` + 2-3 `/search/hashtag` + 1 `/hashtags/popular` + 1-2 `/profile/videos`. 1 hard_research_beta keyword expansion + 1 main_maya. Timeout 20 min. No heartbeat spend.
 
 ## Anti-slop check
 

@@ -133,7 +133,7 @@ describe("claimFounderSynthesisSend", () => {
   it("allows progress updates while still researching (no buyer map)", async () => {
     const t = convexTest(schema, modules);
     const { agentId } = await setupAgent(t, "synth_research");
-    expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("allow");
     // The claim token (planGeneratedAt) must NOT be stamped by a progress update.
     const agent = await t.run((ctx) => ctx.db.get(agentId));
     expect(agent?.planGeneratedAt ?? null).toBeNull();
@@ -143,12 +143,12 @@ describe("claimFounderSynthesisSend", () => {
     const t = convexTest(schema, modules);
     const { agentId } = await setupAgent(t, "synth_hello_burst");
     // No research yet, no prior hello → first send flows AND records the hello.
-    expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("allow");
     const afterHello = await t.run((ctx) => ctx.db.get(agentId));
     expect(typeof afterHello?.helloSentAt).toBe("number");
     // Rapid follow-ups inside the burst window → suppressed (no 2nd/3rd/4th hello).
-    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
-    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("suppress");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("suppress");
   });
 
   it("buyer map alone is NOT enough — research-incomplete sends are 'allow', never the synthesis 'send' (premature-synthesis fix)", async () => {
@@ -158,7 +158,7 @@ describe("claimFounderSynthesisSend", () => {
     // Research not complete → progress flows ("allow"), but the synthesis is NOT
     // claimed (planGeneratedAt stays null) — the live "shipped the play on a
     // half-built foundation" bug.
-    expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("allow");
     const agent = await t.run((ctx) => ctx.db.get(agentId));
     expect(agent?.planGeneratedAt ?? null).toBeNull();
   });
@@ -176,7 +176,7 @@ describe("claimFounderSynthesisSend", () => {
     const { accountId, agentId } = await setupAgent(t, "synth_rows_no_stamp");
     await seedResearchRowsNoStamp(t, accountId, agentId);
     // Derived researchComplete is TRUE (rows exist) but the run isn't done.
-    expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("allow");
     const midResearch = await t.run((ctx) => ctx.db.get(agentId));
     expect(midResearch?.planGeneratedAt ?? null).toBeNull();
     expect(midResearch?.lifecycleState ?? "fresh").not.toBe("plan_ready");
@@ -184,7 +184,7 @@ describe("claimFounderSynthesisSend", () => {
     await t.run((ctx) =>
       ctx.db.patch(agentId, { researchCompletedAt: Date.now() })
     );
-    expect((await t.mutation(claim, { agentId })).decision).toBe("send");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("cache");
   });
 
   it("first send in the synthesis window claims it (stamps planGeneratedAt + plan_ready); the rest are suppressed", async () => {
@@ -193,7 +193,7 @@ describe("claimFounderSynthesisSend", () => {
     await seedBuyerMap(t, accountId, agentId);
 
     // First founder-facing send → claims the handover.
-    expect((await t.mutation(claim, { agentId })).decision).toBe("send");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("cache");
     const afterClaim = await t.run((ctx) => ctx.db.get(agentId));
     // ENUM REFACTOR: the claim token is planGeneratedAt (work done), NOT
     // strategyDeliveredAt (which is set only on a successful SEND, separately).
@@ -202,15 +202,15 @@ describe("claimFounderSynthesisSend", () => {
     expect(afterClaim?.lifecycleState).toBe("plan_ready");
 
     // Every subsequent send in the window → suppressed (no matter the source).
-    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
-    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("suppress");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("suppress");
   });
 
   it("a FAILED send does NOT re-claim or re-generate (the loop fix) — release is a no-op", async () => {
     const t = convexTest(schema, modules);
     const { accountId, agentId } = await setupAgent(t, "synth_retry");
     await seedBuyerMap(t, accountId, agentId);
-    expect((await t.mutation(claim, { agentId })).decision).toBe("send");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("cache");
     // Send failed → the OLD model released the claim so the agent re-generated +
     // re-sent (the delivery-failure re-synthesis loop). The NEW model holds the
     // cached plan for Convex to re-push: release is a no-op, planGeneratedAt
@@ -218,7 +218,7 @@ describe("claimFounderSynthesisSend", () => {
     await t.mutation(release, { agentId });
     const afterRelease = await t.run((ctx) => ctx.db.get(agentId));
     expect(typeof afterRelease?.planGeneratedAt).toBe("number"); // still claimed
-    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("suppress");
   });
 
   it("post-onboarding sends flow freely when no handover was delivered (legacy)", async () => {
@@ -230,7 +230,7 @@ describe("claimFounderSynthesisSend", () => {
     await t.run((ctx) =>
       ctx.db.patch(agentId, { foundationCompletedAt: Date.now() })
     );
-    expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("allow");
     // release is a no-op after completion (the plan really landed).
     await t.mutation(release, { agentId });
     const agent = await t.run((ctx) => ctx.db.get(agentId));
@@ -245,15 +245,15 @@ describe("claimFounderSynthesisSend", () => {
     const { accountId, agentId } = await setupAgent(t, "synth_straddle");
     await seedBuyerMap(t, accountId, agentId);
     // Session A claims + sends the handover (stamps strategyDeliveredAt).
-    expect((await t.mutation(claim, { agentId })).decision).toBe("send");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("cache");
     // Session A marks foundation complete seconds later.
     await t.run((ctx) =>
       ctx.db.patch(agentId, { foundationCompletedAt: Date.now() })
     );
     // Session B's re-articulated handover lands seconds after → SUPPRESS, even
     // though foundation is now complete (the former hole that sent it 3×).
-    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
-    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("suppress");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("suppress");
   });
 
   it("allows a genuine later proactive send once past the handover cooldown", async () => {
@@ -269,6 +269,6 @@ describe("claimFounderSynthesisSend", () => {
       })
     );
     // The next morning brief (proactive) flows — it's not a duplicate handover.
-    expect((await t.mutation(claim, { agentId })).decision).toBe("allow");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("allow");
   });
 });
