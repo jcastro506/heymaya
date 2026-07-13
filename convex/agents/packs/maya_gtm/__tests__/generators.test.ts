@@ -362,16 +362,23 @@ describe("Maya GTM workspace pack", () => {
         "maya-tiktok-format-researcher",
         "maya-distribution-motion-tester",
         "maya-viral-demo-moment-miner",
-        "maya-ugc-system-advisor",
         // Sprint H — YouTube as a first-class platform.
         "maya-youtube-researcher",
       ])
     );
+    // LIFECYCLE_MESSAGING_V1 skills-audit cleanup — the deleted skills must
+    // STAY deleted (deprecated stubs + the double-card inbound-triage overlap
+    // + the advisory-only UGC gate).
+    for (const gone of [
+      "maya-ugc-system-advisor",
+      "maya-approval-publisher",
+      "maya-calendar-plan-builder",
+      "maya-inbound-triage",
+    ]) {
+      expect(mayaGtmSkillSlugs()).not.toContain(gone);
+    }
     expect(files.get("skills/maya-tiktok-format-researcher/SKILL.md")).toContain(
       "slideshow_photo_mode"
-    );
-    expect(files.get("skills/maya-ugc-system-advisor/SKILL.md")).toContain(
-      "premature"
     );
     // Sprint H — YouTube researcher: transcripts + Brief-only + title=CTR.
     const yt = files.get("skills/maya-youtube-researcher/SKILL.md") ?? "";

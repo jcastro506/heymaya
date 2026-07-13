@@ -1317,11 +1317,16 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
       );
     }
   }
-  let synthClaim: { decision: "send" | "suppress" | "allow" } | null = null;
+  let synthClaim: { decision: "cache" | "suppress" | "allow" } | null = null;
   if (isProactiveSend) {
     synthClaim = await ctx.runMutation(
       internal.gtmMaya.agentLifecycle.claimFounderSynthesisSend,
-      { agentId: auth.agentId }
+      {
+        agentId: auth.agentId,
+        // Only "strategic" is dedup-eligible; every other class
+        // (tactical, accountability, ...) is treated as tactical: always flows.
+        messageClass: messageClass === "strategic" ? "strategic" : "tactical",
+      }
     );
     if (synthClaim.decision === "suppress") {
       console.warn(
@@ -1336,15 +1341,33 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
         { status: 200, headers: { "content-type": "application/json" } }
       );
     }
-    // ENUM REFACTOR: when WE claimed the synthesis ("send"), CACHE the plan text
-    // NOW — before the Telegram attempt — so a failed send holds the composed
-    // plan for Convex to re-push on connect (pushCachedPlan). No re-generation,
-    // no loop. The claim already stamped planGeneratedAt (work done).
-    if (synthClaim.decision === "send") {
+    // LIFECYCLE_MESSAGING_V1 — the plan handover is CACHED, never sent inline.
+    // The winning strategic claim stores the composed plan; Convex delivers it
+    // exactly once via pushCachedPlan (single writer, keyed on
+    // strategyDeliveredAt), scheduled immediately below so the founder still
+    // gets it within seconds. Racing sessions can't double-send what only a
+    // state transition delivers. Code owns WHEN; the model owns WHAT.
+    if (synthClaim.decision === "cache") {
       try {
         await ctx.runMutation(
           internal.gtmMaya.agentLifecycle.cacheSynthesisPlan,
           { agentId: auth.agentId, text: outboundText }
+        );
+        await ctx.scheduler.runAfter(
+          0,
+          internal.gtmMaya.synthesisDelivery.pushCachedPlan,
+          { agentId: auth.agentId }
+        );
+        console.log(
+          JSON.stringify({
+            event: "send_update.synthesis_cached_for_delivery",
+            agentId: auth.agentId,
+            textLength: outboundText.length,
+          })
+        );
+        return new Response(
+          JSON.stringify({ ok: true, cached: "plan_delivery_owned_by_convex" }),
+          { status: 200, headers: { "content-type": "application/json" } }
         );
       } catch (err) {
         console.error(
@@ -1354,6 +1377,8 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
             error: err instanceof Error ? err.message : String(err),
           })
         );
+        // Fall through to the direct send — losing the plan is worse than a
+        // rare duplicate if the cache write itself failed.
       }
     }
   }
@@ -1418,13 +1443,11 @@ export const sendUpdateHttp = httpAction(async (ctx, request) => {
     );
   }
 
-  // ENUM REFACTOR: the synthesis claim stamped planGeneratedAt (work done) and
-  // we cached the plan above. On a SUCCESSFUL send, stamp delivery
-  // (strategyDeliveredAt = "founder received it"). On a FAILED send we do NOT
-  // un-claim or re-generate — the cached plan is held and Convex re-pushes it the
-  // moment a channel connects (telegramPairing → pushCachedPlan). This is the fix
-  // for the delivery-failure re-synthesis loop (the live $22 no-channel run).
-  if (synthClaim?.decision === "send" && result.ok) {
+  // LIFECYCLE_MESSAGING_V1 — the plan handover normally returns above on the
+  // "cache" branch (pushCachedPlan stamps strategyDeliveredAt when IT sends).
+  // This inline stamp only fires on the cache-write-failure fallback path,
+  // where we did deliver the plan directly.
+  if (synthClaim?.decision === "cache" && result.ok) {
     try {
       await ctx.runMutation(
         internal.gtmMaya.agentLifecycle.markStrategyDelivered,

@@ -421,6 +421,7 @@ describe("#15 lifecycle — foundation lease (the lock)", () => {
     // The synthesis send claims it (stamps planGeneratedAt — the completion gate).
     await t.mutation(internal.gtmMaya.agentLifecycle.claimFounderSynthesisSend, {
       agentId,
+      messageClass: "strategic" as const,
     });
     await t.mutation(internal.gtmMaya.agentLifecycle.markFoundationComplete, {
       agentId,
@@ -642,7 +643,7 @@ describe("enum lifecycle — plan_ready + deliver-on-connect + activate", () => 
     await seedResearchComplete(t, accountId, agentId);
 
     // The synthesis send claims it → plan_ready, work done.
-    expect((await t.mutation(claim, { agentId })).decision).toBe("send");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("cache");
     // The handler caches the composed plan (no channel paired, so the real send
     // would fail — but the plan is HELD, not lost).
     await t.mutation(internal.gtmMaya.agentLifecycle.cacheSynthesisPlan, {
@@ -658,7 +659,7 @@ describe("enum lifecycle — plan_ready + deliver-on-connect + activate", () => 
     expect(lc?.foundationStep).toBe("complete");    // watchdog STOPS — no finalize re-run
 
     // The loop is dead: another proactive send does NOT re-claim/re-generate.
-    expect((await t.mutation(claim, { agentId })).decision).toBe("suppress");
+    expect((await t.mutation(claim, { agentId, messageClass: "strategic" as const })).decision).toBe("suppress");
   });
 
   it("plan delivery attempts are bounded (dormant, not an infinite retry)", async () => {
@@ -680,7 +681,7 @@ describe("enum lifecycle — plan_ready + deliver-on-connect + activate", () => 
     const { accountId, agentId } = await setupAgent(t, "enum_activate");
     await seedResearchComplete(t, accountId, agentId);
     // Reach plan_ready (the synthesis send claims it → planGeneratedAt → mark).
-    await t.mutation(claim, { agentId });
+    await t.mutation(claim, { agentId, messageClass: "strategic" as const });
     await t.mutation(internal.gtmMaya.agentLifecycle.markFoundationComplete, { agentId });
 
     // Plan ready but nothing connected + not approved → no-op.

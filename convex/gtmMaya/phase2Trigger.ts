@@ -133,13 +133,18 @@ export async function fireBootPhase2Webhook(input: {
   }
 
   const baseUrl = `https://${input.flyAppName}.fly.dev/hooks`;
+  // LIFECYCLE_MESSAGING_V1 — deliver:false. This was PIPE B: OpenClaw's native
+  // announce sent the turn's final text straight to the founder, bypassing
+  // send_update's firewall, the synthesis exactly-once claim, and the
+  // transcript. Every founder-facing word now travels through the ONE guarded
+  // pipe: the turn is instructed (PHASE_2_PROMPT_BODY) to deliver its plan via
+  // send_update, where the strategic claim caches it and Convex delivers it
+  // exactly once.
   const result = await runAgentTurn(
     { baseUrl, token: input.hookToken },
     {
       message: PHASE_2_PROMPT_BODY,
-      deliver: true,
-      channel: input.telegramChatId ? "telegram" : undefined,
-      to: input.telegramChatId,
+      deliver: false,
       thinking: "medium",
       // No timeoutSeconds — Sprint 2.14a.11 removed cron-level
       // caps; webhook-triggered turns follow the same policy.

@@ -162,11 +162,19 @@ export const routeInboundToMachine = internalAction({
       // in plain turn text (invisible) instead of calling send_update, so the
       // founder saw silence. The contract now rides ON the turn itself instead
       // of relying on whatever workspace context the isolated session loaded.
+      // LIFECYCLE_MESSAGING_V1 — Convex mints the turnId. Previously the agent
+      // had to invent one; when she forgot, her reply arrived turnId-less, was
+      // classified PROACTIVE, and the synthesis dedup ate it (live 7/13: two
+      // replies suppressed as "duplicate synthesis" while the founder waited).
+      // A server-minted id threaded through log_message AND send_update makes
+      // the reply unambiguously a reply — replies are never deduped.
+      const turnId = `turn-${crypto.randomUUID()}`;
       const envelope = [
         "INBOUND TELEGRAM DM FROM YOUR FOUNDER (verbatim below).",
+        `TURN_ID: ${turnId}`,
         "Non-negotiable: your reply ONLY reaches their phone through the send_update tool. Plain turn text is invisible to them and reads as you ghosting.",
-        "Before this turn ends you MUST call send_update with your actual answer (short, in your voice, per SOUL.md). If the work needs time, send_update a one-line ack now and the substance when done.",
-        "Also call log_message with their text first, per AGENTS.md.",
+        `Before this turn ends you MUST call send_update with your actual answer (short, in your voice, per SOUL.md) AND pass turnId: "${turnId}" in that call — it marks your message as the REPLY to this one so it can never be dropped as a duplicate. If the work needs time, send_update a one-line ack now (same turnId) and the substance when done.`,
+        `Also call log_message FIRST with their text below and the same turnId: "${turnId}", per AGENTS.md.`,
         "FOUNDER SAYS:",
         args.text,
       ].join("\n");
@@ -212,7 +220,12 @@ export interface ResearchHandoffSummary {
 
 function buildHandoffPrompt(summary: ResearchHandoffSummary): string {
   const lines: string[] = [];
-  lines.push("RESEARCH COMPLETE — summarize to the user via Telegram now.");
+  // LIFECYCLE_MESSAGING_V1 — the summary is DELIVERED via send_update (the
+  // one guarded pipe: firewall + exactly-once synthesis claim + transcript),
+  // never via the native announce. Plain turn text is invisible to the user.
+  lines.push(
+    "RESEARCH COMPLETE — compose the summary and deliver it via the send_update tool (messageClass: 'strategic'). Your plain turn text is NOT delivered; only send_update reaches the user."
+  );
   lines.push("");
   lines.push("State the operator must read (do not invent anything):");
   lines.push(`- Research job: ${summary.researchJobId}`);
@@ -306,14 +319,14 @@ export const handoffResearchToTelegram = internalAction({
       token: ctxRow.hookToken,
     };
     const prompt = buildHandoffPrompt(args.summary);
-    const wantsDelivery = Boolean(ctxRow.telegramChatId);
 
     try {
+      // LIFECYCLE_MESSAGING_V1 — deliver:false (was PIPE B: native announce
+      // bypassed the firewall, the exactly-once synthesis claim, and the
+      // transcript). The prompt instructs delivery via send_update instead.
       const result = await runAgentTurn(endpoint, {
         message: prompt,
-        deliver: wantsDelivery,
-        channel: wantsDelivery ? "telegram" : undefined,
-        to: wantsDelivery ? ctxRow.telegramChatId : undefined,
+        deliver: false,
         thinking: "medium",
         timeoutSeconds: 90,
       });

@@ -254,10 +254,7 @@ const SKILLS = [
   "maya-distribution-motion-tester",
   "maya-viral-demo-moment-miner",
   "maya-slop-critic",
-  "maya-calendar-plan-builder",
-  "maya-approval-publisher",
   "maya-results-reviewer",
-  "maya-ugc-system-advisor",
   // Ideal-product NO-WEEK pillar — turns the deep-research target list into
   // TODAY's turn-key plan of typed calendar events mapped to the operator's
   // PLAYBOOK § 2 phase, plus a light non-binding high-level arc (NOT an 18-25
@@ -289,7 +286,6 @@ const SKILLS = [
   "maya-morning-brief",
   "maya-evening-recap",
   "maya-weekly-review",
-  "maya-inbound-triage",
   // ─── Zernio "I POST for you" + engagement skill bundle ─────────────
   // The publishing + engagement layer: Maya auto-posts to the connected
   // channels (X/LinkedIn/IG/YouTube) via `post_to_channel` (Reddit/TikTok
@@ -1422,7 +1418,7 @@ These run on the tick and self-heal the cadence — they don't ping unless there
 - **The daily cadence (morning brief + midday pulse + the periodic discovery_pulse) is the crons' job — I do NOT "recover" or substitute for it from the heartbeat.** OpenClaw's native scheduler runs them all; the heartbeat never polls or stands in for the pulse. The cron already handles "the machine was down at 7am": a job that has run before catches up; a brand-new agent that booted after 7am gets its first brief at the NEXT 7am — it never back-fires a brief for a morning it didn't exist for. So on the heartbeat I NEVER run a morning brief / midday pulse / evening recap / weekly review inline. (The old inline brief-recovery rule did exactly that and, on a fresh boot, fabricated an overnight that never happened — e.g. "14 threads came in overnight" minutes after onboarding. Removed.) If \`foundationComplete\` is true I do monitoring only (the tasks below); the cadence messages are owned entirely by their crons.
 - **published-results-scan.** The T+2h/24h/7d result polls are scheduled at publish time (\`record_published\`) and are the primary path. As a safety net, if I see a published draft whose latest \`gtmPostResults\` snapshot is stale relative to its post age (a poll looks dropped — e.g. a machine restart ate the scheduled job), fetch its current metrics and write a fresh snapshot so the weekly review isn't reading stale data. Don't double-poll what's fresh.
 - **relationship-cadence.** The static \`gtmRelationshipTargets\` / \`gtmTargetAccounts\` list is only worth keeping if it's a *motion*. Check each target's \`lastTouchAt\` against its cadence (judgment by tier — a warm reciprocal contact more often than a cold one). For any target overdue for a touch, draft a genuine, non-spammy engagement (a real reply to something they actually posted — pull it via ScrapeCreators; value first, never a pitch), surface it to the operator as a one-tap action, and update \`lastTouchAt\` once acted on. Turn the list into recurring relationship-building, not a graveyard.
-- **inbound-poll.** Replies/mentions on the operator's OWN posts are the highest-intent inbound. For platforms where a webhook fires, triage on the event. For platforms without one, poll owned-post engagement here (rate-limited — not every tick; only posts published in the last ~7 days) and run \`maya-inbound-triage\` on anything new. A buyer asking "how does this work?" under their post is the warmest lead they'll get — never let it sit unseen.
+- **inbound-poll.** Replies/mentions on the operator's OWN posts are the highest-intent inbound. For platforms where a webhook fires, triage on the event. For platforms without one, poll owned-post engagement here (rate-limited — not every tick; only posts published in the last ~7 days) and run \`maya-engagement-responder\` on anything new. A buyer asking "how does this work?" under their post is the warmest lead they'll get — never let it sit unseen.
 - **plan-refresh (only before a tier-dependent decision).** My tier can change with no redeploy. Before any tier-gated move on a tick — offering/making video or image creative, a NEW active channel, an upgrade nudge — I call \`get_my_plan({})\` and act on the LIVE tier (an upgrade is usable at once; a flip to \`none\` I surface once, then stay quiet). Not every silent tick — only when the decision depends on the tier.
 
 ## Quiet rules
@@ -2173,14 +2169,8 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
       return "Find showable app moments, before/after contrasts, screenshot sequences, and short-form proof beats.";
     case "maya-slop-critic":
       return "Reject generic AI phrasing and rewrite drafts to sound specific and human.";
-    case "maya-calendar-plan-builder":
-      return "Build rich Plan-tab events (the internal posts queue) with briefs, links, assets, and success criteria — no Google Calendar.";
-    case "maya-approval-publisher":
-      return "Handle approval-gated publishing for channels with supported APIs.";
     case "maya-results-reviewer":
       return "Turn published results into learning loops and next experiments.";
-    case "maya-ugc-system-advisor":
-      return "Decide whether UGC recruiting is premature, useful soon, or ready based on proven short-form customer signal.";
     case "maya-calendar-populator":
       return "Build a single day's plan of typed calendar events mapped to the operator's current PLAYBOOK phase — TODAY's turn-key reply windows, warmup blocks, soft-launch posts, and engagement windows with one-tap openUrl + verbatim draftText linked to target threads + drafts. Plus a light non-binding high-level arc. NOT a rolling-week artifact — the daily morning_brief cron owns day-to-day planning.";
     case "maya-voice-matcher":
@@ -2203,8 +2193,6 @@ function skillPurpose(slug: (typeof SKILLS)[number]): string {
       return "20:00-local one-message recap. What got done grounded in gtmPostResults, performance read, tomorrow setup, learning extraction when ≥3 evidence points support a pattern.";
     case "maya-weekly-review":
       return "Sunday-19:00 strategic review. Last week's score + North-Star on-track/at-risk, learnings (write to gtmNicheLearnings), strategic shift if 2+ weeks of consistent signal. RE-WEIGHTS bet channels by what converted and advances per-channel warmth via set_channel_warmth — but does NOT regenerate a next-week rolling plan; the daily morning_brief cron owns day-to-day planning.";
-    case "maya-inbound-triage":
-      return "Event-driven reply/DM/mention triage. Classify BUYER / SUPPORTER / NOISE / HOSTILE, draft a reply for the first two, surface one-liner to operator with reply/edit/skip controls.";
     case "maya-publisher":
       return "Publish queued drafts via post_to_channel: auto-post X/LinkedIn/IG/YouTube once the founder approved auto-posting, route Reddit/TikTok to one-tap-confirm. post_to_channel also posts replies (targetCommentId). check_already_engaged first to avoid double-replies, then record_published. The ban-safety FORCE gate is server-enforced.";
     case "maya-performance-reader":
