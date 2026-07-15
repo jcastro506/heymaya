@@ -4349,6 +4349,13 @@ export default defineSchema({
     // /hooks/wake endpoints, and by the machine when calling back into
     // /lc_gtm/* HTTP actions). Provisioned at deploy.
     hookToken: v.optional(v.string()),
+    // PR 1 (2026-07-15) — gateway auth token (per-agent, DISTINCT from
+    // hookToken: OpenClaw refuses to boot when hooks.token matches the
+    // gateway auth token — live crash-loop on clawlaunch-ws799yk4). Used by
+    // Convex to call the gateway's OpenAI-compatible endpoint so founder DMs
+    // run inside the durable `agent:main:main` session. Injected on the
+    // machine as OPENCLAW_GATEWAY_TOKEN at deploy.
+    gatewayToken: v.optional(v.string()),
     // Sprint 2.14a.6 — trace whether the Sprint 2.11 deploy-time hello
     // actually fired. Live 2026-05-25 deploy showed diagnostic ping
     // landing fine but the deploy-time hello did NOT. Without these

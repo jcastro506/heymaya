@@ -37,6 +37,9 @@ export interface GtmHandoffContext {
   agent: Doc<"gtmAgents">;
   telegramChatId?: string;
   hookToken?: string;
+  /** PR 1 — gateway auth token (distinct from hookToken by runtime rule);
+   * authenticates the OpenAI-compatible chat endpoint for main-session DMs. */
+  gatewayToken?: string;
   hookBaseUrl?: string;
 }
 
@@ -49,6 +52,7 @@ export const getHandoffContext = internalQuery({
       agent,
       telegramChatId: agent.telegramChatId,
       hookToken: agent.hookToken,
+      gatewayToken: agent.gatewayToken,
       hookBaseUrl: agent.openClawFlyAppId
         ? deriveHookBaseUrl(agent.openClawFlyAppId)
         : undefined,
@@ -83,6 +87,7 @@ export const getInboundContextByChat = internalQuery({
       agent,
       telegramChatId: agent.telegramChatId,
       hookToken: agent.hookToken,
+      gatewayToken: agent.gatewayToken,
       hookBaseUrl: agent.openClawFlyAppId
         ? deriveHookBaseUrl(agent.openClawFlyAppId)
         : undefined,
@@ -199,14 +204,17 @@ export const routeInboundToMachine = internalAction({
       return { status: "skipped", reason };
     };
 
-    if (!ctxRow.hookBaseUrl || !ctxRow.hookToken) {
+    if (!ctxRow.hookBaseUrl || !ctxRow.gatewayToken) {
       // Mid-deploy window: the row exists but the machine isn't addressable
-      // yet. Retry — the deploy stamps hookToken/flyApp when the machine is up.
+      // yet (or predates gateway-token provisioning). Retry — the deploy
+      // stamps gatewayToken/flyApp when the machine is up.
       return await retryOrGiveUp("agent not deployed yet");
     }
     const endpoint: HookEndpoint = {
       baseUrl: ctxRow.hookBaseUrl,
-      token: ctxRow.hookToken,
+      // The GATEWAY token, not hookToken — the runtime requires them to be
+      // distinct, and only the gateway token authenticates /v1/*.
+      token: ctxRow.gatewayToken,
     };
 
     const result = await runMainSessionChat(endpoint, { text: args.text });

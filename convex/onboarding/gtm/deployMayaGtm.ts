@@ -1339,6 +1339,35 @@ export const ensureGtmAgentHookToken = internalMutation({
   },
 });
 
+/**
+ * PR 1 — provision (or return) the per-agent GATEWAY auth token. MUST be
+ * distinct from hookToken: OpenClaw refuses to start when hooks.token equals
+ * the gateway auth token ("Set a distinct hooks.token for hook ingress" —
+ * live crash-loop 2026-07-15). Convex uses this token to call the gateway's
+ * OpenAI-compatible endpoint (founder DMs → durable main session); the deploy
+ * injects it on the machine as OPENCLAW_GATEWAY_TOKEN.
+ */
+export const ensureGtmAgentGatewayToken = internalMutation({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (ctx, args): Promise<string> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) throw new Error(`gtmAgent ${args.agentId} not found`);
+    if (
+      agent.gatewayToken &&
+      agent.gatewayToken.length >= 32 &&
+      agent.gatewayToken !== agent.hookToken
+    ) {
+      return agent.gatewayToken;
+    }
+    const token = mintHookToken();
+    await ctx.db.patch(args.agentId, {
+      gatewayToken: token,
+      updatedAt: Date.now(),
+    });
+    return token;
+  },
+});
+
 export const buildAndUploadGtmWorkspace = internalAction({
   args: { agentId: v.id("gtmAgents") },
   handler: async (
@@ -1591,13 +1620,17 @@ export const deployMayaGtm = internalAction({
       // Sprint 2.18 — OPENCLAW_GATEWAY_TOKEN. OpenClaw 2026.5.x refuses to
       // start the gateway in container environments without explicit auth
       // ("Refusing to bind gateway to <bind> without auth").
-      // PR 1 (2026-07-15): the gateway token IS the per-agent hookToken now
-      // (assigned below, after it's fetched) instead of a per-deploy random
-      // that Convex never saw. Convex needs gateway auth to run founder DMs
-      // through the OpenAI-compatible endpoint into the durable main session,
-      // and the hookToken is already this machine's per-tenant secret with
-      // the same blast radius (it can already trigger agent turns via
-      // /hooks/agent). One secret per tenant, already stored on gtmAgents.
+      // PR 1 (2026-07-15): the token is now PERSISTED per-agent
+      // (gtmAgents.gatewayToken via ensureGtmAgentGatewayToken) instead of a
+      // per-deploy random Convex never saw — Convex needs it to run founder
+      // DMs through the OpenAI-compatible endpoint into the durable main
+      // session. NOTE it must be DISTINCT from hookToken: the runtime
+      // refuses to boot when hooks.token matches the gateway auth token
+      // (verified live: crash-loop on clawlaunch-ws799yk4).
+      const gatewayToken: string = await ctx.runMutation(
+        internal.onboarding.gtm.deployMayaGtm.ensureGtmAgentGatewayToken,
+        { agentId: args.agentId }
+      );
       // Sprint 2.18 #22 — push the per-agent hookToken as a Fly secret so
       // $HOOK_TOKEN actually resolves at curl time. Before today the token
       // was only baked as a literal into TOOLS.md, and curl commands
@@ -1687,7 +1720,7 @@ export const deployMayaGtm = internalAction({
       }
       await fly.setAppSecrets(bundle.flyAppName, {
         ...sharedTelegramSecrets,
-        OPENCLAW_GATEWAY_TOKEN: hookTokenForFly,
+        OPENCLAW_GATEWAY_TOKEN: gatewayToken,
         HOOK_TOKEN: hookTokenForFly,
         ...(telegramBotToken
           ? { TELEGRAM_BOT_TOKEN: telegramBotToken }
