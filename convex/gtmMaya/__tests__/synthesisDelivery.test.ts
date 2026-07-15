@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   assembleDeterministicPlan,
+  isOverdue,
+  SYNTHESIS_GRACE_MS,
+  type SynthesisCandidate,
   type SynthesisPlanInput,
 } from "../synthesisDelivery";
 
@@ -117,5 +120,74 @@ describe("assembleDeterministicPlan", () => {
       })
     );
     expect(text).toContain("only the channels the evidence clearly supports");
+  });
+});
+
+// 2026-07-15 regression — the live double-plan: pushCachedPlan delivered the
+// real plan (stamping strategyDeliveredAt) but the watchdog keyed on the
+// research job's strategyApprovalState (which nothing sets on the happy path
+// anymore), so it fired a second, differently-worded plan ~20min after every
+// healthy onboarding. isOverdue must key on the DELIVERY chain.
+describe("isOverdue", () => {
+  const NOW = 1_784_100_000_000;
+  const PAST_GRACE = NOW - SYNTHESIS_GRACE_MS - 60_000;
+
+  function candidate(
+    overrides: Partial<SynthesisCandidate> = {}
+  ): SynthesisCandidate {
+    return {
+      agentId: "agent1",
+      accountId: "acct1",
+      appId: null,
+      productName: "Greg",
+      openClawFlyAppId: "clawlaunch-test",
+      telegramChatId: "12345",
+      foundationCompletedAt: PAST_GRACE,
+      researchCompletedAt: PAST_GRACE,
+      killedAt: null,
+      synthesisSafetyNetFiredAt: null,
+      strategyDeliveredAt: null,
+      planGeneratedAt: null,
+      hasCachedPlan: false,
+      latestResearchJobId: null,
+      plan: null,
+      ...overrides,
+    } as SynthesisCandidate;
+  }
+
+  it("fires only when the agent never composed or delivered anything", () => {
+    expect(isOverdue(candidate(), NOW)).toBe(true);
+  });
+
+  it("does NOT fire after the cached-plan pipe delivered (the live dupe)", () => {
+    expect(
+      isOverdue(candidate({ strategyDeliveredAt: PAST_GRACE + 120_000 }), NOW)
+    ).toBe(false);
+  });
+
+  it("does NOT fire when a plan is composed+cached — pushCachedPlan owns it", () => {
+    expect(
+      isOverdue(
+        candidate({ planGeneratedAt: PAST_GRACE + 60_000, hasCachedPlan: true }),
+        NOW
+      )
+    ).toBe(false);
+    // Even a claim with no cache yet (cache write mid-flight) must hold fire.
+    expect(
+      isOverdue(candidate({ planGeneratedAt: PAST_GRACE + 60_000 }), NOW)
+    ).toBe(false);
+    expect(isOverdue(candidate({ hasCachedPlan: true }), NOW)).toBe(false);
+  });
+
+  it("respects the grace window, kill switch, own-idempotency, and channel gate", () => {
+    expect(
+      isOverdue(candidate({ researchCompletedAt: NOW - 60_000 }), NOW)
+    ).toBe(false);
+    expect(isOverdue(candidate({ researchCompletedAt: null }), NOW)).toBe(false);
+    expect(isOverdue(candidate({ killedAt: NOW - 1000 }), NOW)).toBe(false);
+    expect(
+      isOverdue(candidate({ synthesisSafetyNetFiredAt: NOW - 1000 }), NOW)
+    ).toBe(false);
+    expect(isOverdue(candidate({ telegramChatId: null }), NOW)).toBe(false);
   });
 });

@@ -1,31 +1,37 @@
 "use client";
 
 /**
- * Brain — what Maya knows, what she decided, and what the field is doing.
- * v2 merge of the old Research tab + the foundation insights that used to
- * hide inside Thinking. Order tells the story:
- *   1. Her read on your product + the channel bets (with the WHY)
- *   2. Who we're targeting (buyer map)
- *   3. The competition — and their latest moves
- *   4. The watchlist — live conversations she's tracking right now
- * All grounded in real threads. Live-subscribed.
+ * Brain — Maya's inspectable working model, grounded and correctable.
+ *
+ *   1. Her read: your product, your buyer (verbatim complaints + sources),
+ *      the channel bets and why, the angles, her voice calibration.
+ *   2. Standing instructions — read the current rules, add one; Maya
+ *      acknowledges in your Telegram thread.
+ *   3. Competitor watch — the field, with receipts, and their latest moves.
+ *   4. Archive — the approved plan doc, collapsed.
+ *
+ * Everything cites the data (source chips) and everything is a live Convex
+ * subscription — when Maya refreshes her research, this page updates itself.
  */
 
+import type { CSSProperties } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
-  Shell,
-  Section,
   Card,
-  Pill,
-  Loading,
   Empty,
+  Loading,
   NeedsOnboarding,
+  Pill,
+  Rise,
+  Section,
+  Shell,
+  SourceChip,
   timeAgo,
-  ExtLink,
 } from "../_components";
+import { PlanArchive } from "../_PlanCard";
 import { FoundationInsights } from "./_FoundationInsights";
-import { PlanApproval } from "./_PlanApproval";
+import { StandingInstructions } from "./_StandingInstructions";
 
 const KIND_TONE: Record<string, "lime" | "paper" | "rose"> = {
   direct: "rose",
@@ -42,230 +48,108 @@ const MOVE_LABEL: Record<string, string> = {
   incident: "had an incident",
 };
 
-const THREAD_STATUS_PILL: Record<string, { label: string; tone: "lime" | "paper" | "rose" }> = {
-  queued: { label: "watching", tone: "paper" },
-  replied: { label: "replied", tone: "lime" },
-  dropped: { label: "passed", tone: "paper" },
-  expired: { label: "went cold", tone: "paper" },
-};
+/** Defensive render of the voice-profile JSON — strings and string-arrays
+ *  only, so whatever shape Maya saved reads cleanly without leaking infra. */
+function VoiceCard({ voice }: { voice: unknown }) {
+  if (!voice || typeof voice !== "object") return null;
+  const entries = Object.entries(voice as Record<string, unknown>)
+    .map(([k, v]) => {
+      if (typeof v === "string" && v.trim()) return [k, v] as const;
+      if (Array.isArray(v)) {
+        const items = v.filter((x): x is string => typeof x === "string" && x.trim() !== "");
+        if (items.length > 0) return [k, items.join(" · ")] as const;
+      }
+      return null;
+    })
+    .filter((e): e is readonly [string, string] => e !== null)
+    .slice(0, 8);
+  if (entries.length === 0) return null;
+
+  return (
+    <Section title="Her voice calibration">
+      <Rise>
+        <Card>
+          <dl className="space-y-2.5">
+            {entries.map(([k, v]) => (
+              <div key={k}>
+                <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
+                  {k.replace(/([A-Z])/g, " $1").replace(/_/g, " ").toLowerCase()}
+                </dt>
+                <dd className="mt-0.5 text-sm leading-relaxed text-paper">{v}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-3 border-t border-paper-faint/10 pt-3 text-[11px] text-paper-faint">
+            How she writes when she writes as you. Off? Tell her below.
+          </p>
+        </Card>
+      </Rise>
+    </Section>
+  );
+}
 
 export default function BrainPage() {
   const snapshot = useQuery(api.gtmMaya.researchLifecycle.getMyGtmSnapshot);
   const insights = useQuery(api.gtmMaya.missionControl.getMyFoundationInsights);
-  const buyerMap = useQuery(api.gtmMaya.missionControl.getMyBuyerMap);
   const competitors = useQuery(api.gtmMaya.missionControl.getMyCompetitiveMap);
   const moves = useQuery(api.gtmMaya.missionActions.getMyCompetitorMoves, {});
-  const threads = useQuery(api.gtmMaya.targetList.getMyTargetThreads, {});
 
-  if (
-    snapshot === undefined ||
-    buyerMap === undefined ||
-    competitors === undefined
-  )
+  if (snapshot === undefined || insights === undefined || competitors === undefined)
     return <Loading />;
   if (snapshot === null) return <NeedsOnboarding />;
 
-  const stages = buyerMap?.buyerJourneyStages ?? [];
-  const intentPhrases = buyerMap?.intentPhrases ?? [];
-  const trustedVoices = buyerMap?.trustedVoices ?? [];
   const comps = competitors ?? [];
-  const watchlist = (threads ?? [])
-    .filter((t) => t.status === "queued" || t.status === "replied")
-    .sort((a, b) => {
-      // Buying-intent (T1) first, then freshest.
-      const tier = (t: { tier?: string }) => (t.tier === "T1" ? 0 : t.tier === "T2" ? 1 : 2);
-      return tier(a) - tier(b) || b.createdAt - a.createdAt;
-    })
-    .slice(0, 12);
-
-  if (!buyerMap && comps.length === 0 && !insights) {
-    return (
-      <Shell
-        title="Brain"
-        subtitle="Everything Maya knows about your product, your buyers, and your competition — grounded in real threads, not guesses."
-      >
-        <Empty
-          title="Research in progress"
-          body="Maya is still mapping your buyers and competitors — this fills in within ~15 minutes of going live."
-        />
-      </Shell>
-    );
-  }
+  const hasModel = insights.hasFoundation || Boolean(insights.productPicture);
 
   return (
     <Shell
       title="Brain"
-      subtitle="Everything Maya knows and every call she's made — grounded in real threads, not guesses."
+      subtitle="Everything Maya knows and every call she's made — grounded in real threads, not guesses. Correct her anytime; she updates."
     >
-      {/* ───────── The plan — read, argue (in Telegram), approve ───────── */}
-      <PlanApproval />
-
-      {/* ───────── Her strategy read: product picture, channel bets, angles ───────── */}
-      {insights ? <FoundationInsights data={insights} /> : null}
-
-      {/* ───────── The watchlist — conversations in play right now ───────── */}
-      <Section title="On her radar" count={watchlist.length}>
-        {watchlist.length === 0 ? (
+      {/* ── Her working model ─────────────────────────────────────────── */}
+      {hasModel ? (
+        <FoundationInsights data={insights} />
+      ) : (
+        <div className="mb-11">
           <Empty
-            title="No live threads yet"
-            body="As Maya finds conversations worth joining — people asking for exactly what you built — they show up here with her plan for each."
+            title="Research in progress"
+            body="Maya is still mapping your buyers, competitors, and channels — her working model fills in here within her first research pass."
           />
-        ) : (
-          <ol className="space-y-2">
-            {watchlist.map((t) => {
-              const pill = THREAD_STATUS_PILL[t.status] ?? {
-                label: t.status,
-                tone: "paper" as const,
-              };
-              return (
-                <li key={t._id}>
-                  <Card className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Pill tone="paper">{t.platform === "x" ? "X" : t.platform}</Pill>
-                        <Pill tone={pill.tone}>{pill.label}</Pill>
-                        {t.tier ? (
-                          <span className="font-mono text-[10px] uppercase tracking-wide text-paper-faint">
-                            {t.tier === "T1" ? "buying intent" : t.tier}
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-2 text-sm leading-snug text-paper">
-                        {t.title ?? t.excerpt?.slice(0, 120) ?? t.url}
-                      </p>
-                      <p className="mt-1 text-xs">
-                        <ExtLink href={t.url}>open the thread ↗</ExtLink>
-                      </p>
-                    </div>
-                    <span className="shrink-0 font-mono text-[11px] text-paper-faint">
-                      {timeAgo(t.createdAt)}
-                    </span>
-                  </Card>
-                </li>
-              );
-            })}
-          </ol>
-        )}
+        </div>
+      )}
+
+      {/* ── Voice ─────────────────────────────────────────────────────── */}
+      <VoiceCard voice={insights.voice} />
+
+      {/* ── Standing instructions ─────────────────────────────────────── */}
+      <Section title="Standing instructions">
+        <StandingInstructions />
       </Section>
 
-      {/* ───────── Who we're targeting ───────── */}
-      <Section title="Who we're targeting">
-        {buyerMap ? (
-          <div className="space-y-4">
-            {buyerMap.icpDescription ? (
-              <Card>
-                <p className="font-mono text-[11px] uppercase tracking-wide text-paper-faint">
-                  Your buyer
-                </p>
-                <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-paper">
-                  {buyerMap.icpDescription}
-                </p>
-              </Card>
-            ) : null}
-
-            {stages.length > 0 ? (
-              <div>
-                <p className="mb-2 font-mono text-[11px] uppercase tracking-wide text-paper-faint">
-                  How they move toward buying
-                </p>
-                <ol className="space-y-2">
-                  {stages.map((s, i) => (
-                    <li key={i}>
-                      <Card>
-                        <div className="flex items-center gap-2">
-                          <Pill tone="lime">{s.stage}</Pill>
-                        </div>
-                        {s.whereTheyHangOut ? (
-                          <p className="mt-2 text-sm text-paper">
-                            <span className="text-paper-faint">Where they hang out: </span>
-                            {s.whereTheyHangOut}
-                          </p>
-                        ) : null}
-                        {s.intentLanguage ? (
-                          <p className="mt-1 text-sm text-paper-dim">
-                            <span className="text-paper-faint">
-                              Language that signals intent:{" "}
-                            </span>
-                            {s.intentLanguage}
-                          </p>
-                        ) : null}
-                      </Card>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            ) : null}
-
-            {intentPhrases.length > 0 ? (
-              <div>
-                <p className="mb-2 font-mono text-[11px] uppercase tracking-wide text-paper-faint">
-                  In-market phrases to watch for
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {intentPhrases.map((phrase, i) => (
-                    <Pill key={i} tone="paper">
-                      {phrase}
-                    </Pill>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {trustedVoices.length > 0 ? (
-              <div>
-                <p className="mb-2 font-mono text-[11px] uppercase tracking-wide text-paper-faint">
-                  Voices they trust
-                </p>
-                <ul className="space-y-2">
-                  {trustedVoices.map((voice, i) => (
-                    <li key={i}>
-                      <Card>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-paper">{voice.handle}</span>
-                          {voice.platform ? <Pill tone="paper">{voice.platform}</Pill> : null}
-                        </div>
-                        {voice.whyTrusted ? (
-                          <p className="mt-1 text-xs leading-relaxed text-paper-dim">
-                            {voice.whyTrusted}
-                          </p>
-                        ) : null}
-                      </Card>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <Empty
-            title="Mapping your buyers"
-            body="Maya is still figuring out exactly who to target — your buyer map shows up here as soon as it's ready."
-          />
-        )}
-      </Section>
-
-      {/* ───────── The competition ───────── */}
-      <Section title="The competition" count={comps.length}>
-        {comps.length === 0 ? (
-          <Empty
-            title="Scoping the field"
-            body="Maya is still sizing up your competitors and the threads where their customers complain — they land here next."
-          />
-        ) : (
+      {/* ── Competitor watch ──────────────────────────────────────────── */}
+      {comps.length > 0 ? (
+        <Section title="Competitor watch" count={comps.length}>
           <ol className="space-y-3">
-            {comps.map((c) => (
-              <li key={c._id}>
+            {comps.map((c, i) => (
+              <li key={c._id} className="mc-rise" style={{ "--i": i } as CSSProperties}>
                 <Card>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-display text-lg leading-none text-paper">
-                      {c.url ? <ExtLink href={c.url}>{c.competitorName}</ExtLink> : c.competitorName}
+                      {c.competitorName}
                     </span>
                     <Pill tone={KIND_TONE[c.kind] ?? "paper"}>{c.kind}</Pill>
                     {c.pricing ? <Pill tone="paper">{c.pricing}</Pill> : null}
+                    {c.url ? (
+                      <span className="ml-auto">
+                        <SourceChip url={c.url} />
+                      </span>
+                    ) : null}
                   </div>
 
                   {c.positioning ? (
-                    <p className="mt-2 text-sm leading-relaxed text-paper-dim">{c.positioning}</p>
+                    <p className="mt-2 text-sm leading-relaxed text-paper-dim">
+                      {c.positioning}
+                    </p>
                   ) : null}
 
                   {c.vulnerabilities.length > 0 ? (
@@ -274,8 +158,8 @@ export default function BrainPage() {
                         Where they&apos;re weak
                       </p>
                       <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-paper">
-                        {c.vulnerabilities.map((vuln, i) => (
-                          <li key={i}>{vuln}</li>
+                        {c.vulnerabilities.map((vuln, j) => (
+                          <li key={j}>{vuln}</li>
                         ))}
                       </ul>
                     </div>
@@ -287,18 +171,18 @@ export default function BrainPage() {
                         What their customers say
                       </p>
                       <ul className="mt-2 space-y-2">
-                        {c.complaints.map((complaint, i) => (
+                        {c.complaints.map((complaint, j) => (
                           <li
-                            key={i}
-                            className="rounded-lg border-l-2 border-lime/40 bg-ink/40 py-2 pl-3 pr-2"
+                            key={j}
+                            className="rounded-lg border-l-2 border-lime/40 bg-ink/50 py-2 pl-3 pr-2"
                           >
                             <p className="text-sm italic leading-relaxed text-paper">
                               “{complaint.quote}”
                             </p>
                             {complaint.sourceUrl ? (
-                              <p className="mt-1 text-xs">
-                                <ExtLink href={complaint.sourceUrl}>see the thread ↗</ExtLink>
-                              </p>
+                              <div className="mt-1.5">
+                                <SourceChip url={complaint.sourceUrl} />
+                              </div>
                             ) : null}
                           </li>
                         ))}
@@ -309,10 +193,10 @@ export default function BrainPage() {
               </li>
             ))}
           </ol>
-        )}
-      </Section>
+        </Section>
+      ) : null}
 
-      {/* ───────── Competitor moves — the field, this week ───────── */}
+      {/* ── Competitor moves — the field, this week ───────────────────── */}
       {(moves ?? []).length > 0 ? (
         <Section title="What competitors just did" count={(moves ?? []).length}>
           <ol className="space-y-2">
@@ -329,9 +213,9 @@ export default function BrainPage() {
                         Maya&apos;s counter: {m.recommendedCounter}
                       </p>
                     ) : null}
-                    <p className="mt-1 text-xs">
-                      <ExtLink href={m.sourceUrl}>source ↗</ExtLink>
-                    </p>
+                    <div className="mt-1.5">
+                      <SourceChip url={m.sourceUrl} />
+                    </div>
                   </div>
                   <span className="shrink-0 font-mono text-[11px] text-paper-faint">
                     {timeAgo(m.observedAt)}
@@ -342,6 +226,9 @@ export default function BrainPage() {
           </ol>
         </Section>
       ) : null}
+
+      {/* ── Archive — the plan doc, collapsed ─────────────────────────── */}
+      <PlanArchive />
     </Shell>
   );
 }

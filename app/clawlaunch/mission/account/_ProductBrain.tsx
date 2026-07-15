@@ -302,7 +302,7 @@ export function ProductBrain({ app }: { app: Doc<"gtmApps"> | null }) {
                 Saved — Maya re-grounds on your next research pass.
               </span>
             ) : null}
-            {err ? <span className="text-xs text-[#b3261e]">{err}</span> : null}
+            {err ? <span className="text-xs text-rose">{err}</span> : null}
           </div>
         </div>
       </Card>

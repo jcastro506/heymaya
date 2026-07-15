@@ -8,6 +8,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import {
   deriveHookBaseUrl,
   runAgentTurn,
+  runMainSessionChat,
   type HookEndpoint,
 } from "./openclaw/hookClient";
 
@@ -36,6 +37,9 @@ export interface GtmHandoffContext {
   agent: Doc<"gtmAgents">;
   telegramChatId?: string;
   hookToken?: string;
+  /** PR 1 — gateway auth token (distinct from hookToken by runtime rule);
+   * authenticates the OpenAI-compatible chat endpoint for main-session DMs. */
+  gatewayToken?: string;
   hookBaseUrl?: string;
 }
 
@@ -48,6 +52,7 @@ export const getHandoffContext = internalQuery({
       agent,
       telegramChatId: agent.telegramChatId,
       hookToken: agent.hookToken,
+      gatewayToken: agent.gatewayToken,
       hookBaseUrl: agent.openClawFlyAppId
         ? deriveHookBaseUrl(agent.openClawFlyAppId)
         : undefined,
@@ -82,6 +87,7 @@ export const getInboundContextByChat = internalQuery({
       agent,
       telegramChatId: agent.telegramChatId,
       hookToken: agent.hookToken,
+      gatewayToken: agent.gatewayToken,
       hookBaseUrl: agent.openClawFlyAppId
         ? deriveHookBaseUrl(agent.openClawFlyAppId)
         : undefined,
@@ -105,6 +111,9 @@ export const routeInboundToMachine = internalAction({
     text: v.string(),
     username: v.optional(v.string()),
     attempt: v.optional(v.number()),
+    /** Threaded through retries so the founder row persists exactly once and
+     * the eventual reply pairs with it. Minted on attempt 0. */
+    turnId: v.optional(v.string()),
   },
   handler: async (
     ctx,
@@ -117,6 +126,57 @@ export const routeInboundToMachine = internalAction({
     );
     if (!ctxRow) return { status: "skipped", reason: "no agent for this chat" };
 
+    // PR 1 (ARCHITECTURE_OPENCLAW_NATIVE §2) — the founder's DM runs in
+    // Maya's ONE durable `agent:main:main` session and her reply is the
+    // turn's own final text. No envelope contract, no send_update/log_message
+    // choreography, no turnId discipline demanded of the model: Convex owns
+    // the transcript on both sides (channel known server-side — the old
+    // channel:"unknown" rows die here) and the delivery (leak firewall inside
+    // sendDirectTelegramMessage). The old /hooks/agent path ran every message
+    // as an ISOLATED session — total conversation amnesia, live 2026-07-15.
+    const turnId = args.turnId ?? `chat-${crypto.randomUUID()}`;
+
+    if (attempt === 0) {
+      // Transcript truth: the founder's message is recorded even if the
+      // machine turns out to be unreachable. Retries skip the insert.
+      await ctx.runMutation(
+        internal.gtmMaya.openclaw.conversationCapture.persistMayaMessage,
+        {
+          accountId: ctxRow.agent.accountId,
+          agentId: ctxRow.agent._id,
+          role: "user",
+          body: args.text,
+          channel: "telegram",
+          turnId,
+        }
+      );
+      // Steering capture — was a side effect of the agent's log_message
+      // call on the old path; now runs server-side on the same hot path.
+      // Best-effort: a classifier hiccup must never drop the message.
+      try {
+        const { classifySteeringIntent } = await import("./steering");
+        const cls = classifySteeringIntent(args.text);
+        if (cls.isSteering) {
+          await ctx.runMutation(
+            internal.gtmMaya.steering.saveSteeringDirective,
+            {
+              accountId: ctxRow.agent.accountId,
+              agentId: ctxRow.agent._id,
+              directive: args.text.slice(0, 2000),
+              laneHints: cls.laneHints,
+              intent: cls.intent,
+              source: "founder",
+              turnId,
+            }
+          );
+        }
+      } catch (err) {
+        console.error(
+          `[inbound-route] steering capture failed: ${(err as Error).message}`
+        );
+      }
+    }
+
     const retryOrGiveUp = async (reason: string): Promise<{
       status: "skipped" | "retrying";
       reason: string;
@@ -125,7 +185,7 @@ export const routeInboundToMachine = internalAction({
         await ctx.scheduler.runAfter(
           INBOUND_RETRY_DELAYS_MS[attempt],
           internal.gtmMaya.telegramHandoff.routeInboundToMachine,
-          { ...args, attempt: attempt + 1 }
+          { ...args, turnId, attempt: attempt + 1 }
         );
         return { status: "retrying", reason: `${reason} — retry ${attempt + 1}` };
       }
@@ -144,63 +204,99 @@ export const routeInboundToMachine = internalAction({
       return { status: "skipped", reason };
     };
 
-    if (!ctxRow.hookBaseUrl || !ctxRow.hookToken) {
+    if (!ctxRow.hookBaseUrl || !ctxRow.gatewayToken) {
       // Mid-deploy window: the row exists but the machine isn't addressable
-      // yet. Retry — the deploy stamps hookToken/flyApp when the machine is up.
+      // yet (or predates gateway-token provisioning). Retry — the deploy
+      // stamps gatewayToken/flyApp when the machine is up.
       return await retryOrGiveUp("agent not deployed yet");
     }
     const endpoint: HookEndpoint = {
       baseUrl: ctxRow.hookBaseUrl,
-      token: ctxRow.hookToken,
+      // The GATEWAY token, not hookToken — the runtime requires them to be
+      // distinct, and only the gateway token authenticates /v1/*.
+      token: ctxRow.gatewayToken,
     };
-    try {
-      // deliver:false — Maya replies via her `send_update` tool (→ Convex →
-      // Telegram), the single outbound pipe; we only inject the inbound turn.
-      //
-      // ENVELOPE (2026-07-06): hook turns run as ISOLATED sessions, and live
-      // machines showed them completing "without announcement" — Maya answered
-      // in plain turn text (invisible) instead of calling send_update, so the
-      // founder saw silence. The contract now rides ON the turn itself instead
-      // of relying on whatever workspace context the isolated session loaded.
-      // LIFECYCLE_MESSAGING_V1 — Convex mints the turnId. Previously the agent
-      // had to invent one; when she forgot, her reply arrived turnId-less, was
-      // classified PROACTIVE, and the synthesis dedup ate it (live 7/13: two
-      // replies suppressed as "duplicate synthesis" while the founder waited).
-      // A server-minted id threaded through log_message AND send_update makes
-      // the reply unambiguously a reply — replies are never deduped.
-      const turnId = `turn-${crypto.randomUUID()}`;
-      const envelope = [
-        "INBOUND TELEGRAM DM FROM YOUR FOUNDER (verbatim below).",
-        `TURN_ID: ${turnId}`,
-        "Non-negotiable: your reply ONLY reaches their phone through the send_update tool. Plain turn text is invisible to them and reads as you ghosting.",
-        `Before this turn ends you MUST call send_update with your actual answer (short, in your voice, per SOUL.md) AND pass turnId: "${turnId}" in that call — it marks your message as the REPLY to this one so it can never be dropped as a duplicate. If the work needs time, send_update a one-line ack now (same turnId) and the substance when done.`,
-        `Also call log_message FIRST with their text below and the same turnId: "${turnId}", per AGENTS.md.`,
-        "FOUNDER SAYS:",
-        args.text,
-      ].join("\n");
-      const result = await runAgentTurn(endpoint, {
-        message: envelope,
-        deliver: false,
-        thinking: "medium",
-        timeoutSeconds: 90,
-      });
-      if (!result.ok) {
+
+    const result = await runMainSessionChat(endpoint, { text: args.text });
+    if (!result.ok) {
+      if (result.timedOut) {
+        // The turn may STILL be running on the machine — a retry would
+        // re-inject the founder's text into her session as a duplicate.
+        // Surface instead of retrying; steer-mode means a follow-up DM from
+        // the founder lands in the same (possibly still-active) session.
         console.warn(
-          `[inbound-route] runAgentTurn ${result.status}: ${result.error ?? "?"}`
+          `[inbound-route] chat turn timed out (may still complete): ${result.error}`
         );
-        // 0 = network/unreachable, 5xx = machine unhealthy → both retryable.
-        if (result.status === 0 || result.status >= 500) {
-          return await retryOrGiveUp(`hook ${result.status}`);
-        }
-        return { status: "skipped", reason: `hook ${result.status}` };
+        await ctx.runMutation(
+          internal.gtmMaya.missionControl.recordAgentActivity,
+          {
+            accountId: ctxRow.agent.accountId,
+            agentId: ctxRow.agent._id,
+            kind: "status",
+            summary:
+              "Maya is taking unusually long on your last message — nudge her again if you don't hear back.",
+            detail: "chat turn timeout",
+          }
+        ).catch(() => {});
+        return { status: "skipped", reason: "chat turn timeout" };
       }
-      return { status: "ok", reason: "forwarded to machine" };
-    } catch (err) {
       console.warn(
-        `[inbound-route] forward failed: ${(err as Error).message}`
+        `[inbound-route] chat ${result.status}: ${result.error ?? "?"}`
       );
-      return await retryOrGiveUp("forward error");
+      // 0 = network/unreachable, 5xx = machine unhealthy → both retryable.
+      if (result.status === 0 || result.status >= 500) {
+        return await retryOrGiveUp(`chat ${result.status}`);
+      }
+      return { status: "skipped", reason: `chat ${result.status}` };
     }
+
+    const reply = (result.text ?? "").trim();
+    // Silent-turn sentinels — nothing founder-worthy came out of the turn.
+    if (!reply || reply === "NO_REPLY" || reply === "HEARTBEAT_OK") {
+      return { status: "ok", reason: "turn completed silently" };
+    }
+
+    // Deliver through the shared-bot pipe. sendDirectTelegramMessage runs the
+    // private-DM leak firewall (sanitize-and-log; block only true leak
+    // categories) before the Bot API call — same guarantees as send_update.
+    const { resolveBotForAgent } = await import("./telegramBotPerTenant");
+    const bot = await resolveBotForAgent(
+      ctx as { runQuery: <T>(ref: unknown, a: unknown) => Promise<T> },
+      ctxRow.agent._id,
+      {
+        sharedToken: process.env.TELEGRAM_BOT_TOKEN,
+        sharedUsername: process.env.TELEGRAM_BOT_USERNAME,
+      }
+    );
+    const { sendDirectTelegramMessage } = await import(
+      "../integrations/telegram/sendDirectMessage"
+    );
+    const sent = await sendDirectTelegramMessage({
+      botToken: bot.token ?? undefined,
+      chatId: args.chatId,
+      text: reply,
+    });
+    // Transcript row regardless of Telegram outcome (matches send_update).
+    await ctx.runMutation(
+      internal.gtmMaya.openclaw.conversationCapture.persistMayaMessage,
+      {
+        accountId: ctxRow.agent.accountId,
+        agentId: ctxRow.agent._id,
+        role: "maya",
+        body: reply,
+        channel: "telegram",
+        turnId,
+      }
+    ).catch((err) => {
+      console.error(
+        `[inbound-route] reply transcript write failed: ${(err as Error).message}`
+      );
+    });
+    if (!sent.ok) {
+      console.warn(`[inbound-route] reply send failed: ${sent.reason}`);
+      return { status: "skipped", reason: `reply send failed: ${sent.reason}` };
+    }
+    return { status: "ok", reason: "replied in main session" };
   },
 });
 

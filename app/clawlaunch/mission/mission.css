@@ -1,0 +1,126 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Mission Control — dark editorial theme + motion system.
+
+   The locked redesign runs DARK (night-desk editorial: ink surfaces, warm
+   paper type, one sky-blue accent). globals.css flips [data-surface=
+   "mission"] to the light marketing treatment; this sheet re-flips it with a
+   doubled attribute selector (higher specificity, no globals.css edit).
+   Accent stays the operator's sky-blue — no yellow anywhere.
+   ───────────────────────────────────────────────────────────────────────── */
+
+[data-surface="mission"][data-surface="mission"] {
+  --ink: #0b0c0f;
+  --ink-2: #121419;
+  --ink-3: #1a1d24;
+  --hairline: rgba(244, 241, 234, 0.08);
+  --hairline-strong: rgba(244, 241, 234, 0.16);
+  --paper: #f4f1ea;
+  --paper-dim: #b3aea2;
+  --paper-faint: #716c60;
+  --lime: #38bdf8;
+  --lime-soft: #7dd3fc;
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────── */
+
+/* Rise-in with per-item stagger: set style={{ "--i": n }} on the element. */
+@keyframes mc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.mc-rise {
+  opacity: 0;
+  animation: mc-rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+
+/* Skeleton shimmer for loading states. */
+@keyframes mc-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.mc-skeleton {
+  border-radius: 1rem;
+  background: linear-gradient(
+    100deg,
+    var(--ink-2) 40%,
+    var(--ink-3) 50%,
+    var(--ink-2) 60%
+  );
+  background-size: 200% 100%;
+  animation: mc-shimmer 1.8s linear infinite;
+}
+
+/* Card language: layered ink, hairline border, a whisper of top-light so
+   surfaces read as physical in the dark, gentle hover lift. */
+.mc-card {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 1px 2px rgba(0, 0, 0, 0.35);
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s ease;
+}
+.mc-card:hover {
+  border-color: var(--hairline-strong);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* Collapsible sections without the default marker. */
+details.mc-fold > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details.mc-fold > summary::-webkit-details-marker {
+  display: none;
+}
+details.mc-fold > summary .mc-caret {
+  display: inline-block;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+details.mc-fold[open] > summary .mc-caret {
+  transform: rotate(90deg);
+}
+
+/* Tab-bar active glow (mobile). */
+.mc-tab-active {
+  position: relative;
+}
+.mc-tab-active::after {
+  content: "";
+  position: absolute;
+  top: 0.125rem;
+  left: 50%;
+  width: 1rem;
+  height: 2px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: var(--lime);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mc-rise {
+    animation: none;
+    opacity: 1;
+  }
+  .mc-skeleton {
+    animation: none;
+  }
+  .mc-card,
+  details.mc-fold > summary .mc-caret {
+    transition: none;
+  }
+}

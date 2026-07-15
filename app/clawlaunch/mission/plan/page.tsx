@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** v2 IA — Plan folded into Today ("On deck today" + "Rest of the week"). */
+/** v3 IA — the schedule lives in Today ("Maya's working"). */
 export default function PlanRedirect() {
   redirect("/clawlaunch/mission");
 }

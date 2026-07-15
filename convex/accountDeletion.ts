@@ -146,7 +146,17 @@ type AccountScopedTable =
   | "gtmNichePulse"
   | "gtmActionLog"
   | "gtmNicheLearnings"
-  | "gtmMemoryWrites";
+  | "gtmMemoryWrites"
+  // 2026-07-15 — five account-scoped tables found ORPHANED after a live
+  // dashboard deletion (rows survived the purge; mayaMessages = the founder's
+  // private DM transcript, gtmAgentTrace = thinking timeline,
+  // gtmSteeringDirectives = the founder's own instructions — all
+  // privacy-relevant). All five carry a by_account index.
+  | "gtmChannelWatermarks"
+  | "gtmWatchLaneState"
+  | "gtmAgentTrace"
+  | "mayaMessages"
+  | "gtmSteeringDirectives";
 
 const CREATOR_SCOPED_TABLES: CreatorScopedTable[] = [
   "creatorHandles",
@@ -270,6 +280,11 @@ const ACCOUNT_SCOPED_TABLES: AccountScopedTable[] = [
   "gtmActionLog",
   "gtmNicheLearnings",
   "gtmMemoryWrites",
+  "gtmChannelWatermarks",
+  "gtmWatchLaneState",
+  "gtmAgentTrace",
+  "mayaMessages",
+  "gtmSteeringDirectives",
 ];
 
 export const requestMyAccountDeletion = mutation({
@@ -448,6 +463,71 @@ export const purgeGtmAccountByCreatorId = internalMutation({
     }
     const result = await purgeCreatorAccount(ctx, creator, args.source);
     return { ok: true, deleted: true, ...result } as const;
+  },
+});
+
+/**
+ * 2026-07-15 — orphan sweep. Five account-scoped tables were missing from the
+ * purge list, so rows survived past account deletions (mayaMessages — the
+ * founder's private DM transcript — among them). The list is fixed above; this
+ * mutation retro-purges rows whose accountId no longer resolves to a live
+ * creator. Idempotent; batched under the 4096-read mutation limit — re-run
+ * until it reports done:true.
+ *   npx convex run accountDeletion:sweepOrphanedAccountRows
+ */
+export const sweepOrphanedAccountRows = internalMutation({
+  args: {},
+  handler: async (
+    ctx
+  ): Promise<{ deleted: Record<string, number>; total: number; done: boolean }> => {
+    const PREVIOUSLY_MISSED: AccountScopedTable[] = [
+      "gtmChannelWatermarks",
+      "gtmWatchLaneState",
+      "gtmAgentTrace",
+      "mayaMessages",
+      "gtmSteeringDirectives",
+    ];
+    const BATCH = 600;
+    const liveAccountIds = new Set(
+      (await ctx.db.query("creators").collect()).map((c) => c._id as string)
+    );
+    const deleted: Record<string, number> = {};
+    let total = 0;
+    let readBudget = 3200;
+    let exhaustedAll = true;
+    for (const table of PREVIOUSLY_MISSED) {
+      if (readBudget <= 0) {
+        exhaustedAll = false;
+        break;
+      }
+      const take = Math.min(BATCH, readBudget);
+      const rows = await (
+        ctx.db as unknown as {
+          query: (t: string) => {
+            take: (n: number) => Promise<
+              Array<{
+                _id: Parameters<MutationCtx["db"]["delete"]>[0];
+                accountId?: string;
+              }>
+            >;
+          };
+        }
+      )
+        .query(table)
+        .take(take);
+      readBudget -= rows.length;
+      if (rows.length === take) exhaustedAll = false;
+      let n = 0;
+      for (const row of rows) {
+        if (row.accountId && !liveAccountIds.has(row.accountId)) {
+          await ctx.db.delete(row._id);
+          n += 1;
+        }
+      }
+      deleted[table] = n;
+      total += n;
+    }
+    return { deleted, total, done: exhaustedAll };
   },
 });
 

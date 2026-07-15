@@ -29,16 +29,25 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
+// The mission.css import in layout.tsx — a no-op module under vitest.
+vi.mock("../mission.css", () => ({}));
+
 // lucide icons → explicit stubs (a catch-all Proxy breaks React element detection).
 vi.mock("lucide-react", () => {
   const Stub = () => createElement("svg");
   return {
     Activity: Stub,
     Brain: Stub,
-    Inbox: Stub,
-    TrendingUp: Stub,
+    Lightbulb: Stub,
+    Map: Stub,
+    MessageCircle: Stub,
+    PenLine: Stub,
+    Search: Stub,
+    Send: Stub,
     Settings: Stub,
     Sparkles: Stub,
+    Sun: Stub,
+    TrendingUp: Stub,
   };
 });
 
@@ -48,7 +57,6 @@ vi.mock("@/convex/_generated/api", () => ({
     gtmMaya: {
       missionControl: {
         getMyAgentActivity: "getMyAgentActivity",
-        getMyBuyerMap: "getMyBuyerMap",
         getMyCompetitiveMap: "getMyCompetitiveMap",
         getMyFoundationInsights: "getMyFoundationInsights",
         getMyNicheLearnings: "getMyNicheLearnings",
@@ -56,6 +64,7 @@ vi.mock("@/convex/_generated/api", () => ({
         getMyAccount: "getMyAccount",
         getMyPostAttribution: "getMyPostAttribution",
         getMyLatestWeeklyReview: "getMyLatestWeeklyReview",
+        getMyMayaMessages: "getMyMayaMessages",
         deleteMyGtmAccount: "deleteMyGtmAccount",
       },
       missionActions: {
@@ -76,12 +85,19 @@ vi.mock("@/convex/_generated/api", () => ({
       mediaAssets: { getMyMediaAssets: "getMyMediaAssets" },
       researchLifecycle: { getMyGtmSnapshot: "getMyGtmSnapshot" },
       calendarWrite: { getMyCalendarEvents: "getMyCalendarEvents" },
-      calendarOAuth: { getMyCalendarConnection: "getMyCalendarConnection" },
-      targetList: {
-        getMyDraftedContent: "getMyDraftedContent",
-        getMyTargetThreads: "getMyTargetThreads",
-      },
+      targetList: { getMyTargetThreads: "getMyTargetThreads" },
       postResults: { getMyRecentPostResults: "getMyRecentPostResults" },
+      zernioConnect: {
+        getMyConnectedAccounts: "getMyConnectedAccounts",
+        getMyConnectCap: "getMyConnectCap",
+        getZernioConnectUrl: "getZernioConnectUrl",
+        disconnectZernioAccount: "disconnectZernioAccount",
+        refreshMyZernioHealth: "refreshMyZernioHealth",
+      },
+      accountLifecycle: {
+        cancelMyGtmSubscription: "cancelMyGtmSubscription",
+        resumeMyGtmSubscription: "resumeMyGtmSubscription",
+      },
     },
     billing: {
       gtmBilling: { createGtmCheckoutSession: "createGtmCheckoutSession" },
@@ -89,45 +105,45 @@ vi.mock("@/convex/_generated/api", () => ({
   },
 }));
 
-/** v2 IA — six live tabs. */
+vi.mock("@clerk/nextjs", () => ({
+  useClerk: () => ({ signOut: async () => {} }),
+}));
+
+/** v3 IA — four tabs + the settings gear. */
 const TABS = [
   { name: "Today", path: "../page" },
-  { name: "Thinking", path: "../thinking/page" },
-  { name: "Queue", path: "../queue/page" },
-  { name: "Brain", path: "../brain/page" },
   { name: "Results", path: "../results/page" },
-  { name: "Account", path: "../account/page" },
+  { name: "Brain", path: "../brain/page" },
+  { name: "Activity", path: "../activity/page" },
+  { name: "Settings", path: "../settings/page" },
 ];
 
-/** Old routes must 308 to their v2 homes — link rot is a product bug. */
+/** Old routes must redirect to their v3 homes — link rot is a product bug. */
 const REDIRECTS = [
   { name: "Plan", path: "../plan/page", dest: "/clawlaunch/mission" },
+  { name: "Drafts", path: "../drafts/page", dest: "/clawlaunch/mission" },
+  { name: "Queue", path: "../queue/page", dest: "/clawlaunch/mission" },
   { name: "Research", path: "../research/page", dest: "/clawlaunch/mission/brain" },
-  { name: "Drafts", path: "../drafts/page", dest: "/clawlaunch/mission/queue" },
-  { name: "Assets", path: "../assets/page", dest: "/clawlaunch/mission/queue?view=media" },
+  { name: "Thinking", path: "../thinking/page", dest: "/clawlaunch/mission/activity" },
+  { name: "Account", path: "../account/page", dest: "/clawlaunch/mission/settings" },
+  { name: "Assets", path: "../assets/page", dest: "/clawlaunch/mission/results" },
 ];
 
 describe("Mission Control — SSR render smoke", () => {
-  it("the layout renders the 6 tab nav items", async () => {
+  it("the layout renders the 4 tabs + the settings gear", async () => {
     const Layout = (await import("../layout")).default;
     const html = renderToString(
       createElement(Layout, null, createElement("div", null, "content"))
     );
-    for (const label of [
-      "Today",
-      "Thinking",
-      "Queue",
-      "Brain",
-      "Results",
-      "Account",
-    ]) {
+    for (const label of ["Today", "Results", "Brain", "Activity", "Settings"]) {
       expect(html).toContain(label);
     }
     expect(html).toContain("Mission Control");
+    expect(html).toContain("/clawlaunch/mission/settings");
   });
 
   for (const tab of TABS) {
-    it(`${tab.name} tab renders without crashing + gates to onboarding`, async () => {
+    it(`${tab.name} renders without crashing + gates to onboarding`, async () => {
       const Page = (await import(tab.path)).default;
       const html = renderToString(createElement(Page));
       // With no data + null snapshot, every gated tab shows NeedsOnboarding.

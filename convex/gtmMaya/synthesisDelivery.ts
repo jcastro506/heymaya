@@ -12,11 +12,16 @@
  * research data (buyer map + active channels + working formats + content
  * angles) and sends it directly via Telegram. The plan always reaches the user.
  *
- * Delivery signal: the agent calls set_strategy_approval (→ research job
- * `strategyApprovalState`) when it sends its own plan. If that's still unset a
- * grace period after foundationCompletedAt, the agent didn't deliver → fire.
- * The watchdog marks strategyApprovalState="proposed" + stamps
- * synthesisSafetyNetFiredAt so it never double-sends.
+ * Delivery signal (2026-07-15): `strategyDeliveredAt` on the agent row — the
+ * same field the cached-plan pipe (pushCachedPlan) stamps — plus the upstream
+ * composition signals (`planGeneratedAt` / `cachedSynthesisText`), which mean
+ * a real agent-composed plan exists and pushCachedPlan owns delivering it.
+ * Only when research is done, the grace window passed, and NONE of those are
+ * set did the agent truly never deliver → fire. The watchdog then stamps
+ * strategyDeliveredAt + synthesisSafetyNetFiredAt so nothing double-sends.
+ * (It used to key on the research job's `strategyApprovalState` — a FOUNDER
+ * DECISION field nothing sets on the happy path anymore — which made it
+ * re-send a second plan ~20min after every healthy onboarding.)
  */
 
 import { v } from "convex/values";
@@ -156,7 +161,7 @@ export function assembleDeterministicPlan(
   return lines.join("\n");
 }
 
-interface SynthesisCandidate {
+export interface SynthesisCandidate {
   agentId: Id<"gtmAgents">;
   accountId: Id<"creators">;
   appId: Id<"gtmApps"> | null;
@@ -171,7 +176,16 @@ interface SynthesisCandidate {
   researchCompletedAt: number | null;
   killedAt: number | null;
   synthesisSafetyNetFiredAt: number | null;
-  strategyApprovalState: string | null;
+  // 2026-07-15 — the "did a plan reach the founder?" signals. The watchdog
+  // previously keyed on the research job's `strategyApprovalState` being null,
+  // but under LIFECYCLE_MESSAGING_V1 the agent no longer calls
+  // set_strategy_approval on send — Convex delivers the cached plan and stamps
+  // `strategyDeliveredAt`. approvalState stayed null after every HEALTHY
+  // delivery, so the safety net re-sent a second, differently-worded plan
+  // ~20min later on every onboarding (live repro: plan 01:13, dupe 01:38).
+  strategyDeliveredAt: number | null;
+  planGeneratedAt: number | null;
+  hasCachedPlan: boolean;
   latestResearchJobId: Id<"gtmResearchJobs"> | null;
   plan: SynthesisPlanInput | null;
 }
@@ -252,7 +266,9 @@ async function buildCandidate(
     researchCompletedAt: agent.researchCompletedAt ?? null,
     killedAt: agent.killedAt ?? null,
     synthesisSafetyNetFiredAt: agent.synthesisSafetyNetFiredAt ?? null,
-    strategyApprovalState: latestJob?.strategyApprovalState ?? null,
+    strategyDeliveredAt: agent.strategyDeliveredAt ?? null,
+    planGeneratedAt: agent.planGeneratedAt ?? null,
+    hasCachedPlan: Boolean(agent.cachedSynthesisText),
     latestResearchJobId: latestJob?._id ?? null,
     plan,
   };
@@ -269,14 +285,27 @@ function safeParse(s: string): unknown {
 /** Is this candidate overdue for synthesis (agent failed to deliver)? Keys on
  *  RESEARCH being done + grace (not foundationCompletedAt) — so it still fires
  *  when the completion gate is blocked by a thin pool but the founder needs a
- *  plan. */
-function isOverdue(c: SynthesisCandidate, now: number): boolean {
+ *  plan.
+ *
+ *  The "already handled" gate is the DELIVERY chain, not approval state:
+ *  - `strategyDeliveredAt` — a plan reached the founder (any pipe).
+ *  - `planGeneratedAt` / `hasCachedPlan` — the agent composed a plan and
+ *    `pushCachedPlan` owns its delivery (idempotent, attempt-capped, re-fired
+ *    on connect + by its own sweep). Firing the deterministic fallback under
+ *    it would race the better, agent-composed plan.
+ *  The safety net's true job is only the case where the agent never composed
+ *  ANYTHING: research done, grace passed, no delivery, no cache, no claim.
+ *  (`strategyApprovalState` is deliberately NOT consulted — it means "founder
+ *  decision", and reading it as "delivered" caused the live double-plan.) */
+export function isOverdue(c: SynthesisCandidate, now: number): boolean {
   return (
     !c.killedAt &&
     !c.synthesisSafetyNetFiredAt &&
     c.researchCompletedAt !== null &&
     now - c.researchCompletedAt > SYNTHESIS_GRACE_MS &&
-    c.strategyApprovalState === null &&
+    c.strategyDeliveredAt === null &&
+    c.planGeneratedAt === null &&
+    !c.hasCachedPlan &&
     Boolean(c.telegramChatId)
   );
 }
@@ -311,21 +340,22 @@ export const markSynthesisDelivered = internalMutation({
     researchJobId: v.optional(v.id("gtmResearchJobs")),
   },
   handler: async (ctx, args): Promise<void> => {
+    const now = Date.now();
+    // `strategyDeliveredAt` is THE canonical "a plan reached the founder"
+    // signal (same field pushCachedPlan stamps) — every delivery pipe
+    // registers on the same row, so no watchdog can double-send.
+    //
+    // Deliberately does NOT touch the research job's `strategyApprovalState`:
+    // that field means "founder decision" (set by the agent's
+    // set_strategy_approval tool or the web approveMyPlan). The old write of
+    // "proposed" here overloaded approval as a delivery flag — the only reason
+    // the old isOverdue check ever worked — and polluted tryActivateAgent /
+    // getMyPlanDoc semantics.
     await ctx.db.patch(args.agentId, {
-      synthesisSafetyNetFiredAt: Date.now(),
-      updatedAt: Date.now(),
+      synthesisSafetyNetFiredAt: now,
+      strategyDeliveredAt: now,
+      updatedAt: now,
     });
-    // Flip the research job to "proposed" so the agent's own state machine +
-    // any later check sees a proposal exists (prevents a duplicate send).
-    if (args.researchJobId) {
-      const job = await ctx.db.get(args.researchJobId);
-      if (job && !job.strategyApprovalState) {
-        await ctx.db.patch(args.researchJobId, {
-          strategyApprovalState: "proposed",
-          updatedAt: Date.now(),
-        });
-      }
-    }
   },
 });
 

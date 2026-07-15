@@ -2,14 +2,15 @@
 
 /**
  * Standing instructions — the founder's steering directives, with history.
- * The engine reads only ACTIVE rows; superseded ones stay visible (struck
- * through) so the founder can see how their guidance evolved.
+ * Maya reads only ACTIVE rows; superseded ones stay visible (struck through)
+ * so the founder can see how their guidance evolved. New directives relay to
+ * Maya, who acknowledges in the founder's Telegram thread.
  */
 
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Card, Pill, ActionButton, timeAgo } from "../_components";
+import { ActionButton, Card, Pill, timeAgo } from "../_components";
 
 export function StandingInstructions() {
   const directives = useQuery(api.gtmMaya.steering.listMySteeringDirectives, {});
@@ -25,7 +26,7 @@ export function StandingInstructions() {
       await send({ directive });
       setText("");
       setState("sent");
-      setTimeout(() => setState("idle"), 2500);
+      setTimeout(() => setState("idle"), 3500);
     } catch {
       setState("error");
       setTimeout(() => setState("idle"), 3000);
@@ -47,7 +48,7 @@ export function StandingInstructions() {
             }
           }}
           rows={2}
-          placeholder='Tell Maya how to operate — "never mention competitors by name", "focus on LinkedIn this month"…'
+          placeholder='Steer her anytime — "never mention competitors by name", "go harder on Reddit"…'
           className="min-h-[3.25rem] w-full resize-none bg-transparent text-sm leading-relaxed text-paper outline-none placeholder:text-paper-faint"
         />
         <ActionButton onClick={() => void submit()} busy={state === "busy"} disabled={!text.trim()}>
@@ -55,10 +56,14 @@ export function StandingInstructions() {
         </ActionButton>
       </div>
       {state === "sent" ? (
-        <p className="mt-2 text-xs text-paper-dim">Saved — it shapes everything from here.</p>
+        <p className="mt-2 text-xs text-lime-soft">
+          Sent — Maya will confirm in your chat.
+        </p>
       ) : state === "error" ? (
-        <p className="mt-2 text-xs text-[#b3261e]">Didn&apos;t save — try again.</p>
-      ) : null}
+        <p className="mt-2 text-xs text-rose">Didn&apos;t save — try again.</p>
+      ) : (
+        <p className="mt-2 text-xs text-paper-faint">Maya will confirm in your chat.</p>
+      )}
 
       {rows.length > 0 ? (
         <ol className="mt-4 space-y-2 border-t border-paper-faint/15 pt-4">
@@ -89,8 +94,8 @@ export function StandingInstructions() {
         </ol>
       ) : (
         <p className="mt-3 text-xs leading-relaxed text-paper-faint">
-          Nothing yet. Anything you tell her here (or in Telegram) becomes a standing rule she
-          applies to every post, reply, and plan.
+          Nothing yet. Anything you tell her here (or in Telegram) becomes a
+          standing rule she applies to every post, reply, and plan.
         </p>
       )}
     </Card>

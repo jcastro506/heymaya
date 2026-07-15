@@ -148,6 +148,105 @@ export function deriveHookBaseUrl(flyAppName: string): string {
   return `https://${flyAppName}.fly.dev/hooks`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PR 1 (ARCHITECTURE_OPENCLAW_NATIVE §2) — persistent-session chat turn.
+//
+// Founder DMs run in the agent's ONE durable `agent:main:main` session via the
+// gateway's OpenAI-compatible endpoint (enabled per-deploy in
+// buildGatewayConfig; auth = the per-agent hookToken, which the deploy also
+// injects as OPENCLAW_GATEWAY_TOKEN). This is what gives Maya conversation
+// memory. Deliberately NOT /hooks/agent: hooks are hardcoded isolated+forceNew
+// in the runtime (verified in source 2026-07-15) — pointing one at the main
+// session RESETS it, and hook bodies get wrapped in untrusted-content
+// boundaries so the founder reads as a webhook, not as her user.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A main-session chat turn can legitimately run minutes (tool use, steer-mode
+ * queueing behind an active run). Convex actions allow 10; leave headroom. */
+const CHAT_TURN_TIMEOUT_MS = 480_000;
+
+export interface MainSessionChatResult {
+  ok: boolean;
+  status: number;
+  /** The agent's reply text (the turn's final message). */
+  text?: string;
+  error?: string;
+  /** True when the failure was a timeout — the turn may still be RUNNING on
+   * the machine, so callers must NOT retry (a retry re-injects the founder's
+   * text into the session as a duplicate). */
+  timedOut?: boolean;
+}
+
+export async function runMainSessionChat(
+  endpoint: HookEndpoint,
+  args: { text: string; timeoutMs?: number },
+  fetchImpl: typeof fetch = fetch
+): Promise<MainSessionChatResult> {
+  // endpoint.baseUrl is the /hooks surface; the OpenAI-compat API lives at
+  // the gateway root on the same multiplexed port.
+  const root = endpoint.baseUrl.replace(/\/$/, "").replace(/\/hooks$/, "");
+  const url = `${root}/v1/chat/completions`;
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : undefined;
+  const timeoutMs = args.timeoutMs ?? CHAT_TURN_TIMEOUT_MS;
+  const timeoutId = controller
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null;
+  try {
+    const res = await fetchImpl(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${endpoint.token}`,
+        // Explicit durable session — the whole point of this path.
+        "x-openclaw-session-key": "agent:main:main",
+        // Channel context for channel-aware prompt sections.
+        "x-openclaw-message-channel": "telegram",
+      },
+      body: JSON.stringify({
+        model: "openclaw/main",
+        messages: [{ role: "user", content: args.text }],
+        stream: false,
+      }),
+      signal: controller?.signal,
+    });
+    const raw = await res.text();
+    if (!res.ok) {
+      return {
+        ok: false,
+        status: res.status,
+        error: `chat completions ${res.status}: ${raw.slice(0, 300)}`,
+      };
+    }
+    let content: string | undefined;
+    try {
+      const parsed = JSON.parse(raw) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      content = parsed.choices?.[0]?.message?.content ?? undefined;
+    } catch {
+      return {
+        ok: false,
+        status: res.status,
+        error: `chat completions: non-JSON response: ${raw.slice(0, 200)}`,
+      };
+    }
+    return { ok: true, status: res.status, text: content };
+  } catch (err) {
+    const message = (err as Error).message ?? String(err);
+    const timedOut =
+      (err as Error).name === "AbortError" || /abort/i.test(message);
+    return {
+      ok: false,
+      status: 0,
+      timedOut,
+      error: `chat completions fetch failed: ${message}`,
+    };
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 /**
  * Generate a fresh hook token. Called once per agent at deploy and stored
  * on `gtmAgents.hookToken`. Treated as a shared secret; never exposed to

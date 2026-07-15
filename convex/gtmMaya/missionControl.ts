@@ -483,6 +483,46 @@ export const getMyFoundationInsights = query({
   },
 });
 
+/**
+ * Read-only mirror of the founder's chat with Maya (the Telegram thread,
+ * captured turn-by-turn into `mayaMessages`) — powers the Activity tab's
+ * transcript view. Slim shape ONLY: the per-turn LLM telemetry fields
+ * (model, tokens, cost, thinking budget) stay server-side — the founder
+ * never sees infra. Auth-scoped via resolveMyGtmCreator, fail-closed to [].
+ * Newest first, capped.
+ */
+export const getMyMayaMessages = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<
+    Array<{
+      _id: Id<"mayaMessages">;
+      role: "user" | "maya";
+      body: string;
+      channel: string;
+      ts: number;
+    }>
+  > => {
+    const creator = await resolveMyGtmCreator(ctx);
+    if (!creator) return [];
+    const cap = Math.min(Math.max(args.limit ?? 120, 1), 300);
+    const rows = await ctx.db
+      .query("mayaMessages")
+      .withIndex("by_account_and_ts", (q) => q.eq("accountId", creator._id))
+      .order("desc")
+      .take(cap);
+    return rows.map((m) => ({
+      _id: m._id,
+      role: m.role,
+      body: m.body,
+      channel: m.channel,
+      ts: m.ts,
+    }));
+  },
+});
+
 // ───────────────────────── activity write (agent-driven) ─────────────────────────
 
 const ACTIVITY_KIND = v.union(

@@ -541,6 +541,25 @@ export function buildGatewayConfig(
   // web_fetch, web_search, x_search, memory_*, sessions_*. With `exec`
   // they can curl with auth headers; with web_fetch they can do GETs
   // (e.g. HN Algolia search, ScrapeCreators GET endpoints).
+  //
+  // 2026-07-15 — FOUNDER-FACING + PUBLISHING TOOLS ARE MAIN-ONLY. Workers
+  // carry group:plugins for the save_*/research persist tools, but subagents
+  // run with MINIMAL prompts — they never read AGENTS.md/SOUL.md, so no
+  // send-discipline prose binds them. Live incident: competitor_move_worker
+  // (gpt-oss-120b) called send_update 8x and pushed a stale "Foundation
+  // research is complete 🚀🎉" re-announcement to the founder's phone 11.5h
+  // after completion. Every worker prompt has them save rows and return —
+  // main composes anything the founder or a public channel sees. Same policy
+  // class as deny:["cron"] on main: remove the capability, don't ask nicely.
+  const WORKER_TOOL_DENY: string[] = [
+    "send_update",
+    "send_confirm_card",
+    "send_media_to_user",
+    "post_to_channel",
+    "reply_to_comment",
+    "publish_draft",
+    "phase_1_announce",
+  ];
   const SUBAGENTS = [
     {
       id: "reddit_research",
@@ -549,6 +568,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       // Allow no further spawning — depth-1 max from main.
       subagents: { allowAgents: [] as string[] },
@@ -565,6 +585,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -580,6 +601,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -595,6 +617,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -610,6 +633,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -634,6 +658,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -652,6 +677,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -689,6 +715,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -710,6 +737,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -725,6 +753,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -740,13 +769,20 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
     {
       id: "content_angle_worker",
       name: "Content Angle Vault Researcher",
-      model: subagentModel,
+      // Flash, NOT the 120b worker tier: this worker reads the widest slice
+      // of foundation material (buyer map + scorecards + mined threads) and
+      // live 2026-07-15 it overflowed 120b's 131K window in a compaction
+      // loop (3 attempts → livenessState=blocked; finalize shipped without
+      // it). Flash's 1M window fits the read pattern; angle extraction is
+      // judgment-adjacent anyway. ~$0.08/run on Flash vs a blocked worker.
+      model: judgmentModel,
       // alsoAllow group:plugins — the `coding` profile does NOT include
       // plugin-owned tools, so without this the maya-gtm-tools typed tools
       // (research_* + save_*) are filtered out of the worker's tool set and
@@ -755,6 +791,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -770,6 +807,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -790,6 +828,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -805,6 +844,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -822,6 +862,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -839,6 +880,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -855,7 +897,19 @@ export function buildGatewayConfig(
   const allowFromMain = ["main", ...SUBAGENTS.map((s) => s.id)];
 
   return {
-    gateway: { mode: "local" },
+    gateway: {
+      mode: "local",
+      // PR 1 (ARCHITECTURE_OPENCLAW_NATIVE §2) — the OpenAI-compatible chat
+      // endpoint is how Convex runs founder DMs INSIDE the durable
+      // `agent:main:main` session (x-openclaw-session-key header), giving
+      // Maya real conversation memory. /hooks/agent can never do this: hooks
+      // are hardcoded isolated+forceNew in the runtime. Auth = gateway bearer
+      // token; the deploy injects the per-agent hookToken as
+      // OPENCLAW_GATEWAY_TOKEN, so possession is equivalent to the hook
+      // surface this machine already exposes (per-tenant secret, per-tenant
+      // blast radius).
+      http: { endpoints: { chatCompletions: { enabled: true } } },
+    },
     agents: {
       defaults: {
         workspace: "/data/workspace",
@@ -940,21 +994,33 @@ export function buildGatewayConfig(
         // stalled flows, pending approvals, due calendar events, and
         // result scans.
         heartbeat: {
-          // 30m: the heartbeat is only a watchdog/recovery net — foundation is
-          // driven by the BOOT turn, and the daily cadence by dedicated crons.
-          // 5m was a debug interval; at K2 prices a 5m tick that does real
-          // reasoning (or flails reading non-existent state files) burns ~$150/day
-          // on an idle agent. 30m = 6x fewer ticks. Most ticks must return
+          // 60m: the heartbeat is only a watchdog/recovery net — foundation is
+          // driven by the BOOT turn + the +8/16/24m resume ladder, and the
+          // daily cadence by dedicated crons. Live 2026-07-15 burn autopsy:
+          // 30m ticks + a 3-hourly discovery pulse idled at ~$2.5/hr overnight
+          // with zero founder activity. The heartbeat monitors; it never
+          // discovers and never spawns workers. Most ticks must return
           // HEARTBEAT_OK silently (see HEARTBEAT.md).
-          every: "30m",
+          every: "60m",
           lightContext: true,
           isolatedSession: true,
-          // Sprint 2.16u-fix2 — REMOVED activeHours because timezone was
-          // shipping as the literal string "operator" (never templated to
-          // a real IANA tz). OpenClaw silently fails closed when the tz
-          // can't be resolved, suppressing every heartbeat tick. Active
-          // hours are a nice-to-have we can re-enable once real timezone
-          // wiring is guaranteed.
+          // Overnight ticks are pure cost: nothing to monitor while the
+          // founder sleeps, and inbound DMs wake the agent independently of
+          // the heartbeat. `timezone: "local"` resolves against the machine's
+          // TZ env, which we set to the operator's real IANA tz (see
+          // buildMachineEnv) — NOT the old Sprint 2.16u bug where a literal
+          // "operator" string shipped as the tz and OpenClaw failed closed,
+          // suppressing every tick. If TZ is somehow unset the window shifts
+          // to UTC (ticks still run) rather than suppressing.
+          activeHours: { start: "07:00", end: "23:00", timezone: "local" },
+          // COGS — the tick is a cheap triage read (get_agent_lifecycle +
+          // HEARTBEAT.md early-exit), not strategic reasoning. On Kimi a tick
+          // costs ~$0.03 (~30-40K input); on gpt-oss-120b ($0.036/M in,
+          // verified 2026-07-12) it's ~$0.002. 16 waking-hour ticks/day:
+          // ~$0.50/day → ~$0.03/day. Anything a tick surfaces that needs real
+          // judgment ends up in a main-model turn anyway (inbound reply, cron
+          // block), so no voice/quality surface is exposed.
+          model: subagentModel,
         },
       },
       list: [
@@ -970,7 +1036,20 @@ export function buildGatewayConfig(
           // plugin-owned tools by default (verified live: toolCount was 22
           // without this, the 46 plugin tools missing). Subagents get the
           // same via their per-agent tools above.
-          tools: { profile: "coding", alsoAllow: ["group:plugins"] },
+          //
+          // deny cron — the recurring cadence ships DETERMINISTICALLY in
+          // jobs.json (renderJobs) and the prose ban wasn't enough: live
+          // 2026-07-15, the boot session registered TWO full duplicate cron
+          // sets (8 UUID jobs mirroring morning/midday/evening/weekly) despite
+          // BOOT.md/AGENTS.md forbidding it — double briefs + double cost.
+          // Structural guard per the no-regex-enforcement policy: prompt stays
+          // primary, but cron invention is a catastrophic class (duplicate
+          // founder-facing sends), so the tool is simply absent.
+          tools: {
+            profile: "coding",
+            alsoAllow: ["group:plugins"],
+            deny: ["cron"],
+          },
           // Sprint 2.18 #50 — hide reasoning tokens from operator-
           // facing output. Per OpenClaw docs: agents.list[].
           // reasoningDefault: "off" overrides the global default
@@ -1117,6 +1196,12 @@ function buildMemorySearchConfig(): Record<string, unknown> {
         temporalDecay: { enabled: true, halfLifeDays: 45 },
       },
     },
+    // ARCHITECTURE_OPENCLAW_NATIVE §1 — index past session transcripts so
+    // memory_search can recall prior conversations natively (this replaces
+    // the planned get_my_recent_messages read-back tool). Off by default in
+    // OpenClaw; embedding cost is marginal (transcript chunks on
+    // gemini-embedding-001, indexed incrementally by the sync watcher).
+    experimental: { sessionMemory: true },
     sync: {
       onSessionStart: true,
       onSearch: true,
@@ -1254,6 +1339,35 @@ export const ensureGtmAgentHookToken = internalMutation({
     const token = mintHookToken();
     await ctx.db.patch(args.agentId, {
       hookToken: token,
+      updatedAt: Date.now(),
+    });
+    return token;
+  },
+});
+
+/**
+ * PR 1 — provision (or return) the per-agent GATEWAY auth token. MUST be
+ * distinct from hookToken: OpenClaw refuses to start when hooks.token equals
+ * the gateway auth token ("Set a distinct hooks.token for hook ingress" —
+ * live crash-loop 2026-07-15). Convex uses this token to call the gateway's
+ * OpenAI-compatible endpoint (founder DMs → durable main session); the deploy
+ * injects it on the machine as OPENCLAW_GATEWAY_TOKEN.
+ */
+export const ensureGtmAgentGatewayToken = internalMutation({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (ctx, args): Promise<string> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) throw new Error(`gtmAgent ${args.agentId} not found`);
+    if (
+      agent.gatewayToken &&
+      agent.gatewayToken.length >= 32 &&
+      agent.gatewayToken !== agent.hookToken
+    ) {
+      return agent.gatewayToken;
+    }
+    const token = mintHookToken();
+    await ctx.db.patch(args.agentId, {
+      gatewayToken: token,
       updatedAt: Date.now(),
     });
     return token;
@@ -1509,18 +1623,20 @@ export const deployMayaGtm = internalAction({
     }
 
     try {
-      // Sprint 2.18 — mint a per-deploy OPENCLAW_GATEWAY_TOKEN. OpenClaw
-      // 2026.5.x refuses to start the gateway in container environments
-      // without explicit auth ("Refusing to bind gateway to <bind>
-      // without auth"). The 4.x flow auto-generated and persisted a
-      // token in gateway.auth.token; 5.x removed that for security and
-      // requires the operator to supply credentials. We mint a fresh
-      // 32-byte hex token per deploy and inject as env so the runtime
-      // satisfies the auth check without us baking a secret into the
-      // openclaw.json that lives on the volume.
-      const gatewayToken = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
+      // Sprint 2.18 — OPENCLAW_GATEWAY_TOKEN. OpenClaw 2026.5.x refuses to
+      // start the gateway in container environments without explicit auth
+      // ("Refusing to bind gateway to <bind> without auth").
+      // PR 1 (2026-07-15): the token is now PERSISTED per-agent
+      // (gtmAgents.gatewayToken via ensureGtmAgentGatewayToken) instead of a
+      // per-deploy random Convex never saw — Convex needs it to run founder
+      // DMs through the OpenAI-compatible endpoint into the durable main
+      // session. NOTE it must be DISTINCT from hookToken: the runtime
+      // refuses to boot when hooks.token matches the gateway auth token
+      // (verified live: crash-loop on clawlaunch-ws799yk4).
+      const gatewayToken: string = await ctx.runMutation(
+        internal.onboarding.gtm.deployMayaGtm.ensureGtmAgentGatewayToken,
+        { agentId: args.agentId }
+      );
       // Sprint 2.18 #22 — push the per-agent hookToken as a Fly secret so
       // $HOOK_TOKEN actually resolves at curl time. Before today the token
       // was only baked as a literal into TOOLS.md, and curl commands

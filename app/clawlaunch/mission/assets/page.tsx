@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** v2 IA — Assets folded into Queue as the Media view. */
+/** v3 IA — Maya-made media lives under Results ("Media Maya made"). */
 export default function AssetsRedirect() {
-  redirect("/clawlaunch/mission/queue?view=media");
+  redirect("/clawlaunch/mission/results");
 }
