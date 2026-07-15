@@ -75,6 +75,27 @@ the delivered signal; one ensure-plan-delivered sweep remains).
 
 ---
 
+## 2b. The voice rule: ONE mouth, many hands
+
+**Main is the only agent that ever speaks — to the founder or to a public
+channel.** Subagents are hands, not mouths: they fetch data, save rows
+(`save_foundation_*`, `save_target_thread`, …), and return their findings to
+main's session. Enforced structurally, never by prompt:
+
+- OpenClaw native: subagents get minimal prompts, no `message` tool, no
+  session tools (runtime default).
+- Ours: all worker entries deny `send_update`, `send_confirm_card`,
+  `send_media_to_user`, `post_to_channel`, `reply_to_comment`,
+  `publish_draft`, `phase_1_announce` (`WORKER_TOOL_DENY`,
+  deployMayaGtm.ts). Scar: 2026-07-15, a minimal-prompt worker with the
+  plugin bundle texted the founder a stale "research complete 🚀🎉" —
+  subagents never read SOUL.md/AGENTS.md, so voice/discipline prose cannot
+  bind them; only tool policy can.
+
+Corollary for all future tools: when adding a plugin tool, decide whether it
+is a HAND tool (data/persist — workers may hold it) or a MOUTH tool
+(founder-facing/publishing — main-only, add to `WORKER_TOOL_DENY`).
+
 ## 3. What stays custom ON PURPOSE (the scars)
 
 Per the incident record, these wrappers survive because the failure they
