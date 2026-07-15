@@ -541,6 +541,25 @@ export function buildGatewayConfig(
   // web_fetch, web_search, x_search, memory_*, sessions_*. With `exec`
   // they can curl with auth headers; with web_fetch they can do GETs
   // (e.g. HN Algolia search, ScrapeCreators GET endpoints).
+  //
+  // 2026-07-15 — FOUNDER-FACING + PUBLISHING TOOLS ARE MAIN-ONLY. Workers
+  // carry group:plugins for the save_*/research persist tools, but subagents
+  // run with MINIMAL prompts — they never read AGENTS.md/SOUL.md, so no
+  // send-discipline prose binds them. Live incident: competitor_move_worker
+  // (gpt-oss-120b) called send_update 8x and pushed a stale "Foundation
+  // research is complete 🚀🎉" re-announcement to the founder's phone 11.5h
+  // after completion. Every worker prompt has them save rows and return —
+  // main composes anything the founder or a public channel sees. Same policy
+  // class as deny:["cron"] on main: remove the capability, don't ask nicely.
+  const WORKER_TOOL_DENY: string[] = [
+    "send_update",
+    "send_confirm_card",
+    "send_media_to_user",
+    "post_to_channel",
+    "reply_to_comment",
+    "publish_draft",
+    "phase_1_announce",
+  ];
   const SUBAGENTS = [
     {
       id: "reddit_research",
@@ -549,6 +568,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       // Allow no further spawning — depth-1 max from main.
       subagents: { allowAgents: [] as string[] },
@@ -565,6 +585,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -580,6 +601,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -595,6 +617,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -610,6 +633,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -634,6 +658,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -652,6 +677,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -689,6 +715,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -710,6 +737,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -725,6 +753,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -740,6 +769,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -755,6 +785,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -770,6 +801,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -790,6 +822,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -805,6 +838,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -822,6 +856,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
@@ -839,6 +874,7 @@ export function buildGatewayConfig(
       tools: {
         profile: "coding" as const,
         alsoAllow: ["group:plugins"] as const,
+        deny: WORKER_TOOL_DENY,
       },
       subagents: { allowAgents: [] as string[] },
     },
