@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** v2 IA — Research became Brain (buyers + competitors + bets + watchlist). */
+/** v3 IA — research lives in Brain (buyer read, bets, competitor watch). */
 export default function ResearchRedirect() {
   redirect("/clawlaunch/mission/brain");
 }

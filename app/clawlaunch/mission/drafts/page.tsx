@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** v2 IA — Drafts became Queue (drafts + media, with approve/tweak/pass). */
+/** v3 IA — draft decisions live in Today's "Needs you" tray. */
 export default function DraftsRedirect() {
-  redirect("/clawlaunch/mission/queue");
+  redirect("/clawlaunch/mission");
 }
