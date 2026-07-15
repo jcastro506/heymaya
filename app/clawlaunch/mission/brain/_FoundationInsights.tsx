@@ -107,8 +107,8 @@ function ProductCard({ picture }: { picture: PictureLike }) {
         ) : null}
         <div className="mt-3 border-t border-paper-faint/15 pt-3">
           <Link
-            href="/clawlaunch/mission/account"
-            className="font-mono text-[11px] uppercase tracking-wide text-paper-dim hover:text-paper"
+            href="/clawlaunch/mission/settings"
+            className="font-mono text-[11px] uppercase tracking-wide text-paper-dim transition-colors hover:text-paper"
           >
             Correct what I got wrong →
           </Link>
@@ -147,6 +147,16 @@ export function FoundationInsights({ data }: { data: FoundationInsightsData }) {
                       <Quote key={j} text={c} />
                     ))}
                   </div>
+                ))}
+              </div>
+            ) : null}
+            {data.buyer.intentPhrases.length > 0 ? (
+              <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-paper-faint/15 pt-3">
+                <span className="font-mono text-[11px] uppercase tracking-wide text-paper-faint">
+                  In-market phrases
+                </span>
+                {data.buyer.intentPhrases.map((p, i) => (
+                  <Pill key={i}>{p}</Pill>
                 ))}
               </div>
             ) : null}

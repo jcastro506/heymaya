@@ -1,31 +1,58 @@
 "use client";
 
 /**
- * Shared UI primitives for the ClawLaunch Mission Control surface.
- * Dark theme (bg-ink / text-paper / lime accent), mirrors the mission-board +
- * creator-HQ design language. Every tab composes these.
+ * Shared UI primitives for Mission Control — the dark editorial system.
+ * Ink surfaces, warm paper type (serif display + tracked micro-caps), one
+ * sky-blue accent reserved for "look here". Every tab composes these; motion
+ * comes from the mc-* classes in mission.css (staggered rise-ins, shimmer
+ * skeletons, hover lift), all reduced-motion safe.
  */
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import Link from "next/link";
 
-/** Page shell: title + optional subtitle, then content. */
+/** Staggered rise-in wrapper. `i` is the stagger index (55ms steps). */
+export function Rise({
+  i = 0,
+  children,
+  className = "",
+}: {
+  i?: number;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`mc-rise ${className}`} style={{ "--i": i } as CSSProperties}>
+      {children}
+    </div>
+  );
+}
+
+/** Page shell: serif title + optional status line, then content. */
 export function Shell({
   title,
   subtitle,
+  status,
   children,
 }: {
   title: string;
   subtitle?: string;
+  status?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8">
-      <header className="mb-8">
-        <h1 className="font-display text-3xl leading-none sm:text-5xl">
+    <div className="mx-auto max-w-3xl px-5 pb-32 pt-8 sm:px-8 sm:pt-12 lg:pb-16">
+      <header className="mc-rise mb-9">
+        <h1 className="font-display text-4xl leading-none tracking-tight sm:text-5xl">
           {title}
         </h1>
+        {status ? (
+          <div className="mt-3 flex items-center gap-2 text-sm text-paper-dim">
+            {status}
+          </div>
+        ) : null}
         {subtitle ? (
-          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-paper-dim">
+          <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-paper-dim">
             {subtitle}
           </p>
         ) : null}
@@ -35,24 +62,28 @@ export function Shell({
   );
 }
 
-/** A titled section with a hairline rule. */
+/** A titled section with a hairline rule and optional count. */
 export function Section({
   title,
   count,
   children,
+  className = "",
 }: {
   title: string;
   count?: number;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="mb-10">
-      <div className="mb-4 flex items-baseline gap-3 border-b border-paper-faint/15 pb-2">
-        <h2 className="font-mono text-xs uppercase tracking-[0.22em] text-paper">
+    <section className={`mb-11 ${className}`}>
+      <div className="mb-4 flex items-baseline gap-3 border-b border-paper-faint/15 pb-2.5">
+        <h2 className="font-mono text-[11px] uppercase tracking-[0.24em] text-paper">
           {title}
         </h2>
         {count !== undefined ? (
-          <span className="font-mono text-xs text-paper-faint">{count}</span>
+          <span className="font-mono text-[11px] tabular-nums text-paper-faint">
+            {count}
+          </span>
         ) : null}
       </div>
       {children}
@@ -60,7 +91,7 @@ export function Section({
   );
 }
 
-/** A content card. */
+/** A content card — the one card language everything uses. */
 export function Card({
   children,
   className = "",
@@ -70,7 +101,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-xl border border-paper-faint/15 bg-ink-2 p-4 ${className}`}
+      className={`mc-card rounded-2xl border border-paper-faint/15 bg-ink-2 p-4 ${className}`}
     >
       {children}
     </div>
@@ -78,9 +109,9 @@ export function Card({
 }
 
 const PILL_TONE: Record<string, string> = {
-  lime: "bg-lime/30 text-[#0a0a0a]",
-  paper: "bg-paper/10 text-paper-dim",
-  rose: "bg-rose/20 text-[#b3261e]",
+  lime: "bg-lime/12 text-lime-soft ring-1 ring-inset ring-lime/25",
+  paper: "bg-paper/8 text-paper-dim ring-1 ring-inset ring-paper/10",
+  rose: "bg-rose/10 text-rose ring-1 ring-inset ring-rose/25",
 };
 
 /** A small status/label pill. */
@@ -93,31 +124,32 @@ export function Pill({
 }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-wide ${PILL_TONE[tone]}`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] ${PILL_TONE[tone]}`}
     >
       {children}
     </span>
   );
 }
 
-/** Loading skeleton — three shimmer bars. */
+/** Loading skeleton — mirrors the page rhythm (title, stat band, cards). */
 export function Loading() {
   return (
-    <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8" aria-busy="true">
-      <div className="mb-8 h-10 w-64 animate-pulse rounded bg-paper-faint/10" />
+    <div
+      className="mx-auto max-w-3xl px-5 pb-32 pt-8 sm:px-8 sm:pt-12"
+      aria-busy="true"
+    >
+      <div className="mc-skeleton mb-9 h-10 w-56" />
+      <div className="mc-skeleton mb-8 h-24 w-full" />
       <div className="space-y-3">
         {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            className="h-20 animate-pulse rounded-xl bg-paper-faint/10"
-          />
+          <div key={i} className="mc-skeleton h-24 w-full" />
         ))}
       </div>
     </div>
   );
 }
 
-/** Empty state with a manager-voice line + optional CTA. */
+/** Empty state — manager voice, proud not apologetic. */
 export function Empty({
   title,
   body,
@@ -128,25 +160,27 @@ export function Empty({
   cta?: { href: string; label: string };
 }) {
   return (
-    <Card className="text-center">
-      <p className="font-display text-xl">{title}</p>
-      <p className="mt-2 text-sm text-paper-dim">{body}</p>
+    <Card className="px-6 py-9 text-center">
+      <p className="font-display text-2xl leading-tight">{title}</p>
+      <p className="mx-auto mt-2.5 max-w-sm text-sm leading-relaxed text-paper-dim">
+        {body}
+      </p>
       {cta ? (
-        <a
+        <Link
           href={cta.href}
-          className="mt-4 inline-block rounded-lg bg-lime px-4 py-2 font-mono text-xs uppercase tracking-wide text-[#0a0a0a]"
+          className="mt-5 inline-block rounded-full bg-lime px-4.5 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-ink transition-opacity hover:opacity-85"
         >
           {cta.label}
-        </a>
+        </Link>
       ) : null}
     </Card>
   );
 }
 
-/** "Not onboarded yet" — shown when the operator has no GTM agent. */
+/** "Not onboarded yet" — shown when the operator has no agent. */
 export function NeedsOnboarding() {
   return (
-    <div className="mx-auto max-w-5xl px-5 py-16 sm:px-8">
+    <div className="mx-auto max-w-3xl px-5 py-20 sm:px-8">
       <Empty
         title="No agent yet"
         body="Finish setting up HeyMaya and your manager will start working — everything she finds shows up here."
@@ -167,25 +201,48 @@ export function timeAgo(ms: number): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-/** A wrapped product link should always render as the redirect; raw external
- *  links open in a new tab. */
+/** Wall-clock time, short. */
+export function clock(ms: number): string {
+  return new Date(ms).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/** External link — always opens in a new tab. */
 export function ExtLink({ href, children }: { href: string; children: ReactNode }) {
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-paper underline decoration-paper/30 underline-offset-2 hover:decoration-paper"
+      className="text-paper underline decoration-paper/30 underline-offset-2 transition-colors hover:decoration-lime hover:text-lime-soft"
     >
       {children}
     </a>
   );
 }
 
-/* ───────────────────────── Mission Control v2 primitives ─────────────────
- * The cockpit language: big serif numbers, tracked micro-labels, one accent.
- * Everything below composes the same ink/paper/accent variables as the rest
- * of the surface — no new colors, no boxes-for-the-sake-of-boxes. */
+/** Source chip — the tappable receipt behind a claim. */
+export function SourceChip({ url, label }: { url: string; label?: string }) {
+  if (!/^https?:\/\//.test(url)) return null;
+  let host: string;
+  try {
+    host = new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 rounded-full border border-paper-faint/20 bg-paper/[0.04] px-2.5 py-0.5 font-mono text-[10px] text-paper-dim transition-colors hover:border-lime/40 hover:text-lime-soft"
+    >
+      <span className="text-lime">↗</span> {label ?? host}
+    </a>
+  );
+}
 
 /** A breathing dot — "Maya is live". Pure CSS, respects reduced motion. */
 export function LiveDot({ className = "" }: { className?: string }) {
@@ -197,8 +254,7 @@ export function LiveDot({ className = "" }: { className?: string }) {
   );
 }
 
-/** One big editorial number with a tracked label under it. The stat strip is
- *  typography, not boxes — numbers do the talking. */
+/** One big editorial number with a tracked label under it. */
 export function BigStat({
   label,
   value,
@@ -227,8 +283,7 @@ export function BigStat({
   );
 }
 
-/** Primary / quiet action buttons for the decision surfaces (Queue, quick-add).
- *  Kept deliberately small — decisions should feel light, not ceremonial. */
+/** Primary / quiet / danger action buttons — decisions should feel light. */
 export function ActionButton({
   children,
   onClick,
@@ -246,14 +301,14 @@ export function ActionButton({
     tone === "primary"
       ? "bg-paper text-ink hover:opacity-85"
       : tone === "danger"
-        ? "border border-rose/40 text-[#b3261e] hover:bg-rose/10"
+        ? "border border-rose/40 text-rose hover:bg-rose/10"
         : "border border-paper-faint/25 text-paper-dim hover:border-paper-faint/50 hover:text-paper";
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled || busy}
-      className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:opacity-40 ${cls}`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 ${cls}`}
     >
       {busy ? (
         <span className="inline-block size-3 animate-spin rounded-full border border-current border-t-transparent" />
@@ -263,8 +318,7 @@ export function ActionButton({
   );
 }
 
-/** Maya speaking in first person — serif italic, like a line from a letter.
- *  This is the voice treatment for the narrative stream. */
+/** Maya speaking in first person — serif italic, a line from a letter. */
 export function MayaLine({ children }: { children: ReactNode }) {
   return (
     <p className="font-display text-[17px] italic leading-snug text-paper sm:text-lg">
@@ -273,63 +327,26 @@ export function MayaLine({ children }: { children: ReactNode }) {
   );
 }
 
-/** Session grouping for activity rollups: consecutive activity rows within
- *  GAP_MS of each other collapse into one working session. */
-export interface ActivityRowLike {
-  _id: string;
-  kind: string;
-  summary: string;
-  detail?: string;
-  linkedRef?: string;
-  createdAt: number;
-}
-
-export interface ActivitySession<T extends ActivityRowLike> {
-  startMs: number;
-  endMs: number;
-  rows: T[]; // newest first
-  counts: Record<string, number>;
-}
-
-const SESSION_GAP_MS = 20 * 60 * 1000;
-
-export function groupIntoSessions<T extends ActivityRowLike>(
-  rows: T[] // newest first
-): ActivitySession<T>[] {
-  const sessions: ActivitySession<T>[] = [];
-  for (const row of rows) {
-    const current = sessions[sessions.length - 1];
-    if (current && current.startMs - row.createdAt <= SESSION_GAP_MS) {
-      current.rows.push(row);
-      current.startMs = row.createdAt;
-      current.counts[row.kind] = (current.counts[row.kind] ?? 0) + 1;
-    } else {
-      sessions.push({
-        startMs: row.createdAt,
-        endMs: row.createdAt,
-        rows: [row],
-        counts: { [row.kind]: 1 },
-      });
-    }
-  }
-  return sessions;
-}
-
-/** "read 12 · drafted 3 · posted 1" — the session receipt line. */
-export function sessionSummary(counts: Record<string, number>): string {
-  const LABELS: Record<string, [string, string]> = {
-    researching: ["swept", "sweeps"],
-    found: ["find", "finds"],
-    drafted: ["draft", "drafts"],
-    posted: ["posted", "posted"],
-    plan_changed: ["plan change", "plan changes"],
-    thinking: ["note", "notes"],
-    status: ["update", "updates"],
-  };
-  return Object.entries(counts)
-    .map(([kind, n]) => {
-      const [one, many] = LABELS[kind] ?? [kind, kind];
-      return kind === "posted" ? `posted ${n}` : `${n} ${n === 1 ? one : many}`;
-    })
-    .join(" · ");
+/** Collapsed archive fold — quiet by default, smooth caret. */
+export function Fold({
+  label,
+  count,
+  children,
+}: {
+  label: string;
+  count?: number;
+  children: ReactNode;
+}) {
+  return (
+    <details className="mc-fold mb-11 border-t border-paper-faint/15 pt-5">
+      <summary className="flex select-none items-center gap-3 font-mono text-[11px] uppercase tracking-[0.2em] text-paper-faint transition-colors hover:text-paper">
+        <span className="mc-caret">▸</span>
+        {label}
+        {count !== undefined ? (
+          <span className="tabular-nums">· {count}</span>
+        ) : null}
+      </summary>
+      <div className="mt-5">{children}</div>
+    </details>
+  );
 }
