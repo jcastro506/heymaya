@@ -776,7 +776,13 @@ export function buildGatewayConfig(
     {
       id: "content_angle_worker",
       name: "Content Angle Vault Researcher",
-      model: subagentModel,
+      // Flash, NOT the 120b worker tier: this worker reads the widest slice
+      // of foundation material (buyer map + scorecards + mined threads) and
+      // live 2026-07-15 it overflowed 120b's 131K window in a compaction
+      // loop (3 attempts → livenessState=blocked; finalize shipped without
+      // it). Flash's 1M window fits the read pattern; angle extraction is
+      // judgment-adjacent anyway. ~$0.08/run on Flash vs a blocked worker.
+      model: judgmentModel,
       // alsoAllow group:plugins — the `coding` profile does NOT include
       // plugin-owned tools, so without this the maya-gtm-tools typed tools
       // (research_* + save_*) are filtered out of the worker's tool set and
