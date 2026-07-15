@@ -33,10 +33,15 @@ export const metadata: Metadata = CREATOR_PRODUCT_ENABLED
         "Maya plans your week, watches your performance, triages your brand emails, and tells you what to post next — every day, in your messages.",
     }
   : {
-      title:
-        "HeyMaya — your AI marketing manager before you can afford a human one.",
+      // The LIVE product (GTM / organic growth) — matches app/page.tsx's
+      // landing metadata so inherited routes (sign-in, sign-up, mission)
+      // present the same product. The previous fallback here was the
+      // abandoned service-business copy ("GBP posts, review requests"),
+      // which prod served on every route without its own metadata. No "AI"
+      // in marketing copy, per the standing voice rule.
+      title: "HeyMaya, the marketing hire for builders Cursor unlocked.",
       description:
-        "Maya turns every completed job into local marketing. GBP posts, review requests, brand-voice replies — drafted and queued for one-tap approval.",
+        "Maya finds the people already looking for what you built, posts from your accounts without getting them banned, and shows you which post got the signup.",
     };
 
 /**
