@@ -84,17 +84,16 @@ export const telegramWebhookHttp = httpAction(async (ctx, request) => {
     const chatId = String(update.message.chat.id);
     const username =
       update.message.chat.username ?? update.message.from?.username;
-    try {
-      await ctx.runMutation(
-        internal.gtmMaya.telegramPairing.claimPairingToken,
-        { token: pairingToken, chatId, username }
-      );
-    } catch (err) {
-      console.warn(
-        `[telegram-webhook] pairing claim failed: ${(err as Error).message}`
-      );
-      return new Response("ok", { status: 200 });
-    }
+    // 2026-07-15 — the claim must TALK BACK. A failed claim used to die in a
+    // server log while the founder stared at a silent chat (live repro: chat
+    // still bound to a torn-down agent's row → "already paired" throw →
+    // nothing). Every /start now gets a human reply, success or failure, via
+    // the ack action (which owns the Telegram send).
+    await ctx.scheduler.runAfter(
+      0,
+      internal.gtmMaya.telegramPairing.claimPairingTokenWithAck,
+      { token: pairingToken, chatId, username }
+    );
     return new Response("ok", { status: 200 });
   }
 
