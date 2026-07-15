@@ -501,15 +501,15 @@ describe("Maya GTM workspace pack", () => {
     // HEARTBEAT.md was slimmed in a later sprint to a thin cadence + ping
     // spec. It is still the recurring polling loop, just expressed through
     // its tick framing and an explicit interval cadence rather than the old
-    // "recurring polling loop" header and labeled task list. Assert the
-    // current wording that proves the same loop: it ticks, defaults silent,
-    // and polls on an interval (5 min during research, ~30 min in compound
-    // mode). See "possibly-dropped functionality" in the realignment report
-    // for the labeled task entries that no longer ship in this file.
+    // "recurring polling loop" header and labeled task list. 2026-07-15 burn
+    // autopsy: the tick is hourly + active-hours (the gateway config owns the
+    // window) with a mandatory cheap-triage early exit — a tick is a pulse
+    // check, never a work block, and it never spawns workers or judges.
     expect(heartbeat).toContain("Tick. Mostly silent.");
     expect(heartbeat).toContain("## Cadence");
-    expect(heartbeat).toContain("every 5 min");
-    expect(heartbeat).toContain("~30 min between ticks");
+    expect(heartbeat).toContain("hourly, operator-waking-hours only");
+    expect(heartbeat).toContain("reply HEARTBEAT_OK and stop");
+    expect(heartbeat).toContain("never spawn workers or judges from a tick");
 
     // launch-watchdog is GONE — BOOT.md now routes foundation vs
     // continuous itself; heartbeat doesn't drive launch.

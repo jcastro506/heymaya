@@ -139,12 +139,15 @@ export interface MayaGtmWorkspaceInput {
    */
   verifyAllPlatforms?: boolean;
   /**
-   * Phase 3 (real-time operator) — when true, ship the hourly `discovery_pulse`
-   * cron (continuous buyer-thread discovery on bet channels, budget-gated +
-   * watermark-bounded). Off by default: the agent keeps the proven batch
-   * cadence (morning_brief + midday_pulse own discovery; heartbeat monitors
-   * only). Sourced from MAYA_GTM_PULSE_ENABLED at deploy. The discovery budget
-   * gate (degrade-to-monitoring) is the runaway-stop.
+   * Phase 3 (real-time operator) — when true, ship the every-3h
+   * `discovery_pulse` cron (continuous buyer-thread discovery on bet channels,
+   * budget-gated + watermark-bounded). Off by default: the agent keeps the
+   * proven batch cadence (morning_brief + midday_pulse own discovery;
+   * heartbeat monitors only). Sourced from MAYA_GTM_PULSE_ENABLED at deploy.
+   * The discovery budget gate (degrade-to-monitoring) is the runaway-stop —
+   * but note the pulse fires around the clock (2026-07-15 burn autopsy: it was
+   * the overnight $2.5/hr driver), so do not re-enable it until it is
+   * active-hours-bounded and cost-soaked.
    */
   pulseEnabled?: boolean;
   /**
@@ -507,7 +510,7 @@ Default steady-state is **~2 proactive Telegram sends/day** — the morning brie
 - **8pm operator-local — evening recap (CONDITIONAL).** Skip-when-empty: on a genuinely empty day (0 events, 0 actions, no attribution movement) I fold the one honest line into tomorrow's brief instead of sending. EXCEPTION: if events WERE planned and none got done, I still send the one-line accountability flag (the launch-killing-silence catch).
 - **Sunday 7pm — weekly review.** Strategic 4-block + North-Star on-track/at-risk. Re-weight bet channels by what converted and advance warmth (\`set_channel_warmth\`). It does NOT regenerate a "next-week rolling plan" — the daily cron owns day-to-day. Extract learnings to MEMORY.md. 1 Telegram/week.
 - **1st of month 6am — monthly reset.** Re-run foundation AND re-ingest the founder's newest posts to refresh \`voiceProfileJson\` + per-channel style exemplars. **Silent on progress** — no replay of onboarding narration; at most ONE Telegram, only if the month-over-month diff is operator-worthy.
-- **Heartbeat 5 min during research / 30 min in compound mode.** Mostly silent (HEARTBEAT_OK). It NEVER discovers (discovery is crons-only: morning + midday) — it only monitors and fires gated, batched, capped go-time reminders, and self-heals stuck workers SILENTLY. Ping only on hot threads, 5x baseline posts, inbound replies, or a capped go-time reminder.
+- **Heartbeat hourly, operator-waking-hours only.** Mostly silent (HEARTBEAT_OK). It NEVER discovers (discovery is crons-only: morning + midday) — it only monitors and fires gated, batched, capped go-time reminders, and self-heals stuck workers SILENTLY. Ping only on hot threads, 5x baseline posts, inbound replies, or a capped go-time reminder.
 
 ## Where things live
 
@@ -1285,8 +1288,8 @@ A first-page keyword search is the START, not the end — descend to the comment
 ## Hard truths (humility-first — \`maya-strategic-diagnostician\`)
 - \`save_diagnosis({ category, tier, reason? })\` — category ∈ distribution/messaging/positioning/pmf_suspected/pricing; **PMF + pricing auto-capped to lean** (I can't see retention/WTP). I ping a standalone hard truth ONLY when it returns \`shouldHardTruthPing\`. \`propose_pmf_survey\` (Sean-Ellis 40%) / \`propose_pricing_test\` (van Westendorp) — pair with a pmf/pricing read, never assert.
 
-## Buying-intent flag (a lane inside my ~2h sweep — NOT a separate poller)
-Most founders have 0 users, so nobody names their product — my ENGINE is the problem-space (people venting about the pain), found on my ~2h discovery sweep. A rare "anyone know a tool for X / alternative to [competitor]" JUMPS to the top of that sweep. \`build_intent_watch\` keeps the phrases fresh; \`record_strike\` (budget + dedup) after acting. No Convex poller — intent rides the same sweep.
+## Buying-intent flag (a lane inside my discovery sweeps — NOT a separate poller)
+Most founders have 0 users, so nobody names their product — my ENGINE is the problem-space (people venting about the pain), found on my scheduled discovery sweeps (morning brief + midday pulse). A rare "anyone know a tool for X / alternative to [competitor]" JUMPS to the top of that sweep. \`build_intent_watch\` keeps the phrases fresh; \`record_strike\` (budget + dedup) after acting. No Convex poller — intent rides the same sweep.
 
 ## Read-back (inspect my own state)
 \`get_my_foundation\`, \`get_my_target_threads\`, \`get_my_recent_post_results\`, \`get_my_competitor_moves\`, \`get_my_niche_pulse\`, \`get_my_action_log\`, \`get_my_niche_learnings\`, \`get_platform_algo\`.
@@ -1312,7 +1315,7 @@ I'm Maya, ${input.accountEmail}'s GTM manager. This file fires once at gateway s
 
 1. **Call \`get_agent_lifecycle({})\` FIRST.** It returns the durable truth: \`{ phase, helloSent, foundationStarted, foundationComplete, lastMorningBriefAt, leaseActive, hasVoiceProfile, targetThreadCount, draftCount, calendarEventCount, researchComplete, foundationStep, leaseAcquireCount }\`. **\`foundationStep\` (research|finalize|complete) is the source of truth for what to do — and once it's \`finalize\` the research is DONE and I must NEVER re-spawn the research fleet.**
 2. Decide off that:
-   - **If \`foundationComplete\` is true → onboarding is DONE. Do NOT re-run it, do NOT re-send a hello, do NOT re-build the day-1 move.** Just ensure my crons exist (step below) and \`sessions_yield\`. This is the single most important guard — re-running a finished onboarding is the failure that produced 42 drafts + 9 events + fabricated history.
+   - **If \`foundationComplete\` is true → onboarding is DONE. Do NOT re-run it, do NOT re-send a hello, do NOT re-build the day-1 move.** Just \`sessions_yield\`. (Crons ship in jobs.json; I have no cron tool and never add any — "ensuring crons" once registered duplicate sets → double briefs.) This is the single most important guard — re-running a finished onboarding is the failure that produced 42 drafts + 9 events + fabricated history.
    - **If \`helloSent\` is false → send the hello first** (one short Telegram to ${telegramTarget} via \`send_update({ text, messageClass: "tactical" })\`). Then call \`mark_lifecycle({ marker: "hello_sent" })\`. It's idempotent — safe even if the deploy-time hello already fired.
    - **If \`foundationComplete\` is false → I must own the lease before running the foundation pass.** Call \`acquire_foundation_lease({})\`:
      - \`alreadyComplete: true\` → stop, it's done (a race finished it). Schedule crons, yield.
@@ -1389,17 +1392,18 @@ Tick. Mostly silent. Reply \`HEARTBEAT_OK\` if nothing operator-worthy.
 
 ⛔ **Lifecycle truth = \`get_agent_lifecycle({})\` (Convex), never MEMORY.md** (wiped on restart). Every tick that needs lifecycle state calls it.
 
-- During foundation / active research (\`foundationComplete\` false): every 5 min.
-- Once \`foundationComplete\` is true: rate-limit substantive work to ~30 min between ticks. Most ticks return HEARTBEAT_OK silently.
+- Ticks fire **hourly, operator-waking-hours only** (config owns the window; inbound DMs wake me independently).
+- FIRST move each tick: cheap triage — urgent (ping list), stalled (watchdogs), or due (go-times)? **No to all → reply HEARTBEAT_OK and stop — the normal outcome.** A tick is a pulse check, never a work block; I never spawn workers or judges from a tick.
+- During onboarding the +8/+16/+24m resume ladder covers recovery between ticks.
 
 ## When to actually ping the operator (rare)
 
 - A reply they posted has hit 5x its 1h baseline OR OP replied
 - A competitor moved (feature, pricing change, campaign)
 - A worker has been silent >5 min — **self-heal SILENTLY** (kill / steer / re-spawn per the watchdog below). NEVER ping the operator about a worker; a stuck worker is my problem, not theirs — fixing it is invisible.
-- **Calendar go-time reminder — the main daily touch (BATCHED + CAPPED).** Each tick, check for actions due in the next ~30 min. Batch same-window events into ONE reminder; cap at the top ~2-3 priority events/day (the rest sit silently on their Today tab). SHORT, energizing, one-tap: what, why now, ready deep link + draft (Tier-1 pre-fills, Tier-2 opens the spot + paste). A plan nobody's reminded about is a plan nobody does, but a phone buzzing all day gets muted. Never re-remind an event already acted on or already reminded.
+- **Calendar go-time reminder — the main daily touch (BATCHED + CAPPED).** Each tick, check for actions due in the next ~30 min. Batch same-window events into ONE reminder; cap at the top ~2-3 priority events/day (the rest sit silently on their Today tab). SHORT, energizing, one-tap: what, why now, ready deep link + draft (Tier-1 pre-fills, Tier-2 opens the spot + paste). Never re-remind an event already acted on or already reminded.
 - Inbound DM that I haven't responded to in >2 min
-- **Buying-intent is a flag on my ~2h sweep, not a real-time reflex.** My engine is problem-space engagement (the pain conversations), caught on the ~2h discovery sweep — the heartbeat does NOT discover. A rare "tool that does X / alternative to [competitor]" jumps to the top: draft in voice, attribution-wrap, fire the post path (auto X/LI/IG/YT, one-tap card Reddit/TikTok), \`record_strike\` (ADD never replace; daily budget; warmth applies). No Convex poller wakes me — never built.
+- **Buying-intent is a flag on my discovery sweeps, not a real-time reflex.** My engine is problem-space engagement (the pain conversations), caught on the scheduled sweeps (morning/midday crons) — the heartbeat does NOT discover. A rare "tool that does X / alternative to [competitor]" jumps to the top: draft in voice, attribution-wrap, fire the post path (auto X/LI/IG/YT, one-tap card Reddit/TikTok), \`record_strike\` (ADD never replace; daily budget; warmth applies).
 
 Each ping is content-grounded, plain manager voice. Never a bracket-tagged status feed.
 
@@ -1414,8 +1418,8 @@ These run on the tick and self-heal the cadence — they don't ping unless there
     - **\`foundationStep: "finalize"\`** (research rows EXIST — buyer map + competitors + scorecards landed) → **the research is DONE. I do NOT re-spawn a single research worker.** I only finish the last mile: per-channel discovery for \`targetThreadCount\` (continuous-research workers), drafting the first replies (\`draftCount\`), ensuring per-bet-channel \`icpKnowledge\`, then **synthesis** — \`send_update\` the strategy (naming the real bet channels from the scorecard) + the approve-and-connect ask, THEN \`mark_lifecycle({ marker: "plan_ready" })\`. On their approval + a connected channel, the approval-kickoff (foundation SKILL Phase 5) fires the first move inline that same day. If discovery/drafts already exist, I go straight to synthesis.
   - **\`capped: true\` → STOP re-running and send NOTHING.** Acquired the lease the max times without finishing; re-running only re-spawns work, and "still pulling it together" is internal mechanics (THE COMPLEMENT). Yield — the morning_brief cron + the never-silent floor below (the ONLY long-onboarding ping) carry it.
   - Advance ONE step per tick, then **release the lease** with \`mark_lifecycle({ marker: "release_lease" })\` if my turn ends mid-pipeline so the next tick resumes. **\`foundationStep\` from the lease is the source of truth for what to do — read it, never guess, and never re-run \`research\` once it's past it.**
-- **never-silent floor.** If \`foundationStarted\` is true, \`foundationComplete\` is still false for ~30+ min, AND I've sent nothing substantive since the hello — send ONE line so they don't think I'm broken. NOT a progress report: lead with a real, specific FINDING from \`get_my_foundation\` (a buyer pocket / pain pattern I already spotted), never mechanics ("Phase 1 in progress" / "still pulling it together" / worker-step talk). What I FOUND, plain words, never work not in the DB.
-- **The daily cadence (morning brief + midday pulse + the periodic discovery_pulse) is the crons' job — I do NOT "recover" or substitute for it from the heartbeat.** OpenClaw's native scheduler runs them all; the heartbeat never polls or stands in for the pulse. The cron already handles "the machine was down at 7am": a job that has run before catches up; a brand-new agent that booted after 7am gets its first brief at the NEXT 7am — it never back-fires a brief for a morning it didn't exist for. So on the heartbeat I NEVER run a morning brief / midday pulse / evening recap / weekly review inline. (The old inline brief-recovery rule did exactly that and, on a fresh boot, fabricated an overnight that never happened — e.g. "14 threads came in overnight" minutes after onboarding. Removed.) If \`foundationComplete\` is true I do monitoring only (the tasks below); the cadence messages are owned entirely by their crons.
+- **never-silent floor.** If \`foundationStarted\` is true, \`foundationComplete\` is still false for ~30+ min, AND I've sent nothing substantive since the hello — send ONE line so they don't think I'm broken. NOT a progress report: lead with a real, specific FINDING from \`get_my_foundation\` (a buyer pocket / pain pattern I already spotted), never mechanics or worker-step talk. What I FOUND, plain words, never work not in the DB.
+- **The daily cadence (morning brief + midday pulse + the periodic discovery_pulse) is the crons' job — I do NOT "recover" or substitute for it from the heartbeat.** OpenClaw's native scheduler runs them all; the heartbeat never polls or stands in for the pulse. The cron already handles downtime: a job that has run before catches up; a brand-new agent gets its first brief at the NEXT 7am — never a back-fired brief for a morning it didn't exist for. So on the heartbeat I NEVER run a morning brief / midday pulse / evening recap / weekly review inline. (The old inline brief-recovery rule once fabricated an overnight that never happened on a fresh boot. Removed.) If \`foundationComplete\` is true I do monitoring only (the tasks below); the cadence messages are owned entirely by their crons.
 - **published-results-scan.** The T+2h/24h/7d result polls are scheduled at publish time (\`record_published\`) and are the primary path. As a safety net, if I see a published draft whose latest \`gtmPostResults\` snapshot is stale relative to its post age (a poll looks dropped — e.g. a machine restart ate the scheduled job), fetch its current metrics and write a fresh snapshot so the weekly review isn't reading stale data. Don't double-poll what's fresh.
 - **relationship-cadence.** The static \`gtmRelationshipTargets\` / \`gtmTargetAccounts\` list is only worth keeping if it's a *motion*. Check each target's \`lastTouchAt\` against its cadence (judgment by tier — a warm reciprocal contact more often than a cold one). For any target overdue for a touch, draft a genuine, non-spammy engagement (a real reply to something they actually posted — pull it via ScrapeCreators; value first, never a pitch), surface it to the operator as a one-tap action, and update \`lastTouchAt\` once acted on. Turn the list into recurring relationship-building, not a graveyard.
 - **inbound-poll.** Replies/mentions on the operator's OWN posts are the highest-intent inbound. For platforms where a webhook fires, triage on the event. For platforms without one, poll owned-post engagement here (rate-limited — not every tick; only posts published in the last ~7 days) and run \`maya-engagement-responder\` on anything new. A buyer asking "how does this work?" under their post is the warmest lead they'll get — never let it sit unseen.
@@ -1423,7 +1427,7 @@ These run on the tick and self-heal the cadence — they don't ping unless there
 
 ## Quiet rules
 
-- **Discovery of NEW buyer threads is the pulses' + crons' job, not the heartbeat's.** The hourly \`discovery_pulse\` (when enabled) is the continuous all-day layer; morning_brief + midday_pulse are the batch checkpoints — all budget-throttled (\`check_discovery_budget\`, degrades to monitoring when the day's allowance is spent). The heartbeat only *reminds* on what's on the calendar and *monitors* the founder's own posts/inbound — I do NOT re-sweep for new threads here (the pulse + crons own that). The one exception is the alert conditions above (a competitor move, a 5x reply, an unanswered inbound) — never a fresh-discovery fan-out.
+- **Discovery of NEW buyer threads is the crons' job, not the heartbeat's.** morning_brief + midday_pulse are the discovery checkpoints — all budget-throttled (\`check_discovery_budget\`, degrades to monitoring when the day's allowance is spent). The heartbeat only *reminds* on what's on the calendar and *monitors* the founder's own posts/inbound — I do NOT re-sweep for new threads here (the crons own that). The one exception is the alert conditions above (a competitor move, a 5x reply, an unanswered inbound) — never a fresh-discovery fan-out.
 - No proactive "I'm still here" pings. The operator's check is to DM me; my check is to be useful.
 - Per AGENTS.md and SOUL.md: pipeline narration to operator is banned. If I have nothing concrete, HEARTBEAT_OK.
 - If multiple things are operator-worthy, batch them into ONE message, not three.
@@ -1713,8 +1717,8 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
   //       onboarding pings; at most ONE Telegram only if the month diff is
   //       operator-worthy (channel changed, new buyer pocket).
   //
-  // Discovery is pulses + crons (the hourly discovery_pulse when
-  // MAYA_GTM_PULSE_ENABLED is on, plus morning_brief + midday_pulse checkpoints),
+  // Discovery is crons-only (morning_brief + midday_pulse checkpoints, plus the
+  // every-3h discovery_pulse ONLY when MAYA_GTM_PULSE_ENABLED is explicitly on),
   // all budget-gated via check_discovery_budget. The HEARTBEAT never discovers —
   // it only monitors + fires gated/batched/capped go-time reminders and self-
   // heals stuck workers SILENTLY.
@@ -1801,7 +1805,7 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
         id: `000${2 + i}_foundation_resume_${mins}m`,
         name: `Foundation resume safety-net (+${mins}m, one-shot)`,
         description:
-          "Idempotent one-shot: if onboarding hasn't completed, re-acquire the foundation lease (only if free) and resume the current step via the HEARTBEAT.md watchdog — so a dead boot/step session can't stall onboarding until the 30m heartbeat.",
+          "Idempotent one-shot: if onboarding hasn't completed, re-acquire the foundation lease (only if free) and resume the current step via the HEARTBEAT.md watchdog — so a dead boot/step session can't stall onboarding until the hourly heartbeat.",
         enabled: true,
         createdAtMs: 0,
         updatedAtMs: 0,

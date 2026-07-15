@@ -940,21 +940,25 @@ export function buildGatewayConfig(
         // stalled flows, pending approvals, due calendar events, and
         // result scans.
         heartbeat: {
-          // 30m: the heartbeat is only a watchdog/recovery net — foundation is
-          // driven by the BOOT turn, and the daily cadence by dedicated crons.
-          // 5m was a debug interval; at K2 prices a 5m tick that does real
-          // reasoning (or flails reading non-existent state files) burns ~$150/day
-          // on an idle agent. 30m = 6x fewer ticks. Most ticks must return
+          // 60m: the heartbeat is only a watchdog/recovery net — foundation is
+          // driven by the BOOT turn + the +8/16/24m resume ladder, and the
+          // daily cadence by dedicated crons. Live 2026-07-15 burn autopsy:
+          // 30m ticks + a 3-hourly discovery pulse idled at ~$2.5/hr overnight
+          // with zero founder activity. The heartbeat monitors; it never
+          // discovers and never spawns workers. Most ticks must return
           // HEARTBEAT_OK silently (see HEARTBEAT.md).
-          every: "30m",
+          every: "60m",
           lightContext: true,
           isolatedSession: true,
-          // Sprint 2.16u-fix2 — REMOVED activeHours because timezone was
-          // shipping as the literal string "operator" (never templated to
-          // a real IANA tz). OpenClaw silently fails closed when the tz
-          // can't be resolved, suppressing every heartbeat tick. Active
-          // hours are a nice-to-have we can re-enable once real timezone
-          // wiring is guaranteed.
+          // Overnight ticks are pure cost: nothing to monitor while the
+          // founder sleeps, and inbound DMs wake the agent independently of
+          // the heartbeat. `timezone: "local"` resolves against the machine's
+          // TZ env, which we set to the operator's real IANA tz (see
+          // buildMachineEnv) — NOT the old Sprint 2.16u bug where a literal
+          // "operator" string shipped as the tz and OpenClaw failed closed,
+          // suppressing every tick. If TZ is somehow unset the window shifts
+          // to UTC (ticks still run) rather than suppressing.
+          activeHours: { start: "07:00", end: "23:00", timezone: "local" },
         },
       },
       list: [
@@ -970,7 +974,20 @@ export function buildGatewayConfig(
           // plugin-owned tools by default (verified live: toolCount was 22
           // without this, the 46 plugin tools missing). Subagents get the
           // same via their per-agent tools above.
-          tools: { profile: "coding", alsoAllow: ["group:plugins"] },
+          //
+          // deny cron — the recurring cadence ships DETERMINISTICALLY in
+          // jobs.json (renderJobs) and the prose ban wasn't enough: live
+          // 2026-07-15, the boot session registered TWO full duplicate cron
+          // sets (8 UUID jobs mirroring morning/midday/evening/weekly) despite
+          // BOOT.md/AGENTS.md forbidding it — double briefs + double cost.
+          // Structural guard per the no-regex-enforcement policy: prompt stays
+          // primary, but cron invention is a catastrophic class (duplicate
+          // founder-facing sends), so the tool is simply absent.
+          tools: {
+            profile: "coding",
+            alsoAllow: ["group:plugins"],
+            deny: ["cron"],
+          },
           // Sprint 2.18 #50 — hide reasoning tokens from operator-
           // facing output. Per OpenClaw docs: agents.list[].
           // reasoningDefault: "off" overrides the global default
