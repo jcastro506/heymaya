@@ -891,7 +891,19 @@ export function buildGatewayConfig(
   const allowFromMain = ["main", ...SUBAGENTS.map((s) => s.id)];
 
   return {
-    gateway: { mode: "local" },
+    gateway: {
+      mode: "local",
+      // PR 1 (ARCHITECTURE_OPENCLAW_NATIVE §2) — the OpenAI-compatible chat
+      // endpoint is how Convex runs founder DMs INSIDE the durable
+      // `agent:main:main` session (x-openclaw-session-key header), giving
+      // Maya real conversation memory. /hooks/agent can never do this: hooks
+      // are hardcoded isolated+forceNew in the runtime. Auth = gateway bearer
+      // token; the deploy injects the per-agent hookToken as
+      // OPENCLAW_GATEWAY_TOKEN, so possession is equivalent to the hook
+      // surface this machine already exposes (per-tenant secret, per-tenant
+      // blast radius).
+      http: { endpoints: { chatCompletions: { enabled: true } } },
+    },
     agents: {
       defaults: {
         workspace: "/data/workspace",
@@ -1576,18 +1588,16 @@ export const deployMayaGtm = internalAction({
     }
 
     try {
-      // Sprint 2.18 — mint a per-deploy OPENCLAW_GATEWAY_TOKEN. OpenClaw
-      // 2026.5.x refuses to start the gateway in container environments
-      // without explicit auth ("Refusing to bind gateway to <bind>
-      // without auth"). The 4.x flow auto-generated and persisted a
-      // token in gateway.auth.token; 5.x removed that for security and
-      // requires the operator to supply credentials. We mint a fresh
-      // 32-byte hex token per deploy and inject as env so the runtime
-      // satisfies the auth check without us baking a secret into the
-      // openclaw.json that lives on the volume.
-      const gatewayToken = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
+      // Sprint 2.18 — OPENCLAW_GATEWAY_TOKEN. OpenClaw 2026.5.x refuses to
+      // start the gateway in container environments without explicit auth
+      // ("Refusing to bind gateway to <bind> without auth").
+      // PR 1 (2026-07-15): the gateway token IS the per-agent hookToken now
+      // (assigned below, after it's fetched) instead of a per-deploy random
+      // that Convex never saw. Convex needs gateway auth to run founder DMs
+      // through the OpenAI-compatible endpoint into the durable main session,
+      // and the hookToken is already this machine's per-tenant secret with
+      // the same blast radius (it can already trigger agent turns via
+      // /hooks/agent). One secret per tenant, already stored on gtmAgents.
       // Sprint 2.18 #22 — push the per-agent hookToken as a Fly secret so
       // $HOOK_TOKEN actually resolves at curl time. Before today the token
       // was only baked as a literal into TOOLS.md, and curl commands
@@ -1677,7 +1687,7 @@ export const deployMayaGtm = internalAction({
       }
       await fly.setAppSecrets(bundle.flyAppName, {
         ...sharedTelegramSecrets,
-        OPENCLAW_GATEWAY_TOKEN: gatewayToken,
+        OPENCLAW_GATEWAY_TOKEN: hookTokenForFly,
         HOOK_TOKEN: hookTokenForFly,
         ...(telegramBotToken
           ? { TELEGRAM_BOT_TOKEN: telegramBotToken }
