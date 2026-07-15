@@ -995,6 +995,14 @@ export function buildGatewayConfig(
           // suppressing every tick. If TZ is somehow unset the window shifts
           // to UTC (ticks still run) rather than suppressing.
           activeHours: { start: "07:00", end: "23:00", timezone: "local" },
+          // COGS — the tick is a cheap triage read (get_agent_lifecycle +
+          // HEARTBEAT.md early-exit), not strategic reasoning. On Kimi a tick
+          // costs ~$0.03 (~30-40K input); on gpt-oss-120b ($0.036/M in,
+          // verified 2026-07-12) it's ~$0.002. 16 waking-hour ticks/day:
+          // ~$0.50/day → ~$0.03/day. Anything a tick surfaces that needs real
+          // judgment ends up in a main-model turn anyway (inbound reply, cron
+          // block), so no voice/quality surface is exposed.
+          model: subagentModel,
         },
       },
       list: [
@@ -1170,6 +1178,12 @@ function buildMemorySearchConfig(): Record<string, unknown> {
         temporalDecay: { enabled: true, halfLifeDays: 45 },
       },
     },
+    // ARCHITECTURE_OPENCLAW_NATIVE §1 — index past session transcripts so
+    // memory_search can recall prior conversations natively (this replaces
+    // the planned get_my_recent_messages read-back tool). Off by default in
+    // OpenClaw; embedding cost is marginal (transcript chunks on
+    // gemini-embedding-001, indexed incrementally by the sync watcher).
+    experimental: { sessionMemory: true },
     sync: {
       onSessionStart: true,
       onSearch: true,
