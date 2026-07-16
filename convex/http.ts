@@ -209,7 +209,7 @@ import {
   listInboxHttp,
   replyToCommentHttp,
 } from "./gtmMaya/zernioReads";
-import { sendConfirmCardHttp } from "./gtmMaya/telegramConfirm";
+import { sendConfirmCardHttp, confirmEventHttp } from "./gtmMaya/telegramConfirm";
 import { searchWebHttp } from "./gtmMaya/webSearch";
 import { searchDemandHttp } from "./gtmMaya/demandIntel";
 
@@ -725,6 +725,14 @@ http.route({
   path: "/lc_gtm/send_confirm_card",
   method: "POST",
   handler: sendConfirmCardHttp,
+});
+// The founder saying "post it" / "skip it" in the chat IS the approval — same
+// server chain as the card tap (claim + founderConfirmed publish). TikTok is
+// refused here (card-only: the inline preview is the legal consent).
+http.route({
+  path: "/lc_gtm/confirm_event",
+  method: "POST",
+  handler: confirmEventHttp,
 });
 // Sprint 1 (top-tier) — open-web search (Gemini grounded). Lets Maya read
 // competitor pages / any landing page, not just social threads.

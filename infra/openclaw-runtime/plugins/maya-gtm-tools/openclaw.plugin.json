@@ -128,7 +128,8 @@
       "get_follower_stats",
       "list_inbox",
       "reply_to_comment",
-      "send_confirm_card"
+      "send_confirm_card",
+      "confirm_event"
     ]
   }
 }

@@ -304,7 +304,7 @@ function categoryForTool(name) {
   if (/^(research_|search_|scrape_|competitor_ads$|bio_funnel$|check_already_engaged$)/.test(name))
     return "research";
   if (
-    /^(post_to_channel$|publish_draft$|record_published$|reply_to_comment$|send_media_to_user$|send_confirm_card$|approve_calendar$|approval_decision$)/.test(
+    /^(post_to_channel$|publish_draft$|record_published$|reply_to_comment$|send_media_to_user$|send_confirm_card$|confirm_event$|approve_calendar$|approval_decision$)/.test(
       name
     )
   )
@@ -2245,6 +2245,18 @@ export default defineToolPlugin({
       }),
       execute: async (p, _cfg, ctx) =>
         postLc("send_confirm_card", p, ctx.signal),
+    }),
+    tool({
+      name: "confirm_event",
+      label: "Confirm Event (conversational)",
+      description:
+        "The founder approved (or declined) a pending post IN THE CHAT — 'post it', 'yes send it', 'skip that one' — instead of tapping the card. Their words ARE the approval: this runs the exact same server path as the '✅ Post it' tap (atomic claim, then publish under their name). REQUIRED: eventId (the pending gtmCalendarEvents row awaiting their OK), decision ('post' | 'skip'). Returns { ok, outcome } — 'published' / 'cancelled' — or { ok:false, reason } if it was already handled (relay that plainly: 'already posted that one'). EXCEPTION: TikTok is refused here — it legally requires the preview card, so use send_confirm_card for TikTok. NEVER tell the founder a post is stuck in an internal state; either post it, send the card, or hand them a paste-ready draft.",
+      parameters: Type.Object({
+        eventId: Type.String(),
+        decision: Enum(["post", "skip"]),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("confirm_event", p, ctx.signal),
     }),
     ];
   },

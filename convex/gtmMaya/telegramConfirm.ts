@@ -457,6 +457,126 @@ export const handleConfirmCallback = internalAction({
   },
 });
 
+// ───────────────── conversational confirm (the "post it" path) ─────────────────
+//
+// The founder saying "post it" / "yes, send it" / "skip that" in the Telegram
+// thread IS the approval — same consent as tapping the card, so it runs the
+// IDENTICAL server chain: cross-tenant check → atomic claim → publish with
+// founderConfirmed. Without this path Maya has no legal move when the founder
+// approves in words instead of a tap (the dead-end the operator hit live).
+//
+// ONE exception: TikTok stays card-only. The card's inline preview is what
+// legally satisfies content_preview_confirmed / express_consent_given — a
+// conversational yes doesn't prove they saw the actual slides.
+
+export const confirmEventConversational = internalAction({
+  args: {
+    eventId: v.id("gtmCalendarEvents"),
+    agentId: v.id("gtmAgents"),
+    decision: v.union(v.literal("post"), v.literal("skip")),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; outcome?: string; reason?: string }> => {
+    const ev = await ctx.runQuery(internal.gtmMaya.telegramConfirm.getConfirmEvent, {
+      eventId: args.eventId,
+    });
+    if (!ev) return { ok: false, reason: "event not found" };
+    // Cross-tenant: the event must belong to the calling agent.
+    if (ev.agentId !== args.agentId) {
+      return { ok: false, reason: "event not found for this agent" };
+    }
+    if (ev.status !== "needs_confirm") {
+      // Idempotent: already acted (a tap or an earlier "post it" won).
+      return { ok: false, reason: `already ${ev.status}` };
+    }
+
+    if (args.decision === "skip") {
+      await ctx.runMutation(internal.gtmMaya.telegramConfirm.setConfirmEventStatus, {
+        eventId: args.eventId,
+        status: "cancelled",
+      });
+      return { ok: true, outcome: "cancelled" };
+    }
+
+    // decision === "post"
+    if (ev.channel === "tiktok") {
+      return {
+        ok: false,
+        reason:
+          "tiktok is card-only — send_confirm_card so the founder previews the actual slides (TikTok's legal consent flags require it)",
+      };
+    }
+    if (!ev.channel || !ev.zernioAccountId) {
+      return { ok: false, reason: "channel not connected" };
+    }
+    // Same atomic claim as the tap path: a concurrent tap + "post it" can't
+    // both publish (double-post = the ban signal this whole flow exists to avoid).
+    const claim = await ctx.runMutation(
+      internal.gtmMaya.telegramConfirm.claimConfirmEventForPublish,
+      { eventId: args.eventId, expectedAgentId: args.agentId }
+    );
+    if (!claim.claimed) {
+      return { ok: false, reason: `already ${claim.status ?? "handled"}` };
+    }
+    const result = await ctx.runAction(
+      internal.gtmMaya.publishEngine.publishContentDirect,
+      {
+        agentId: ev.agentId,
+        channel: ev.channel,
+        zernioAccountId: ev.zernioAccountId,
+        content: ev.content,
+        targetExternalId: ev.targetExternalId ?? undefined,
+        targetCommentId: ev.targetCommentId ?? undefined,
+        founderConfirmed: true,
+        mediaAssetIds: ev.mediaAssetIds.length > 0 ? ev.mediaAssetIds : undefined,
+      }
+    );
+    if (result.action === "auto") {
+      await ctx.runMutation(internal.gtmMaya.telegramConfirm.setConfirmEventStatus, {
+        eventId: args.eventId,
+        status: "published",
+      });
+      return { ok: true, outcome: "published" };
+    }
+    await ctx.runMutation(internal.gtmMaya.telegramConfirm.setConfirmEventStatus, {
+      eventId: args.eventId,
+      status: "failed",
+    });
+    return {
+      ok: false,
+      outcome: "failed",
+      reason: result.reasons?.[0] ?? "publish failed",
+    };
+  },
+});
+
+export const confirmEventHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+  let body: { eventId?: string; decision?: string };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return new Response("bad json", { status: 400 });
+  }
+  if (!body.eventId) return new Response("missing eventId", { status: 400 });
+  const decision = body.decision === "skip" ? "skip" : "post";
+  const result = await ctx.runAction(
+    internal.gtmMaya.telegramConfirm.confirmEventConversational,
+    {
+      eventId: body.eventId as Id<"gtmCalendarEvents">,
+      agentId: auth.agentId,
+      decision,
+    }
+  );
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
 // ───────────────────── agent-facing route (send_confirm_card) ─────────────────────
 
 export const sendConfirmCardHttp = httpAction(async (ctx, request) => {

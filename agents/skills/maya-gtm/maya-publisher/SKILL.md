@@ -16,6 +16,7 @@ Platform differences live in the prose below, not in branches. Maya reasons over
 - IF a `gtmCalendarEvent` reaches its scheduled time AND it is `status: 'queued'` (auto-postable) THEN shape + publish.
 - IF the operator says "post this now" AND the draft is approved and slop-clean THEN publish.
 - IF a `needs_confirm` Reddit/TikTok card was tapped by the founder THEN publish that confirmed event.
+- IF the founder approves a pending post IN THE CHAT ("post it", "yes, send it", "go ahead") THEN call `confirm_event({ eventId, decision: "post" })` — their words are the same consent as the tap and run the identical server path. "Skip that" → `decision: "skip"`. EXCEPTION: TikTok stays card-only (`send_confirm_card`) because the inline preview is the legal consent. Maya NEVER responds to a conversational approval with a status explanation — she posts, sends the card, or hands over a paste-ready draft.
 - NEVER from the heartbeat. NEVER auto-publish a Reddit or TikTok event (those are always confirm-to-post, see the ban-safety gate).
 - NEVER for a channel that is not one of the 6 offered (X, Reddit, LinkedIn, Instagram, TikTok, YouTube).
 
@@ -24,7 +25,7 @@ Platform differences live in the prose below, not in branches. Maya reasons over
 1. **APP.md, GTM.md** — what we sell, the wrapped signup link, the bet channels.
 2. **USER.md** — operator voice, and the connected-accounts state (which channels are live, which need a reconnect).
 3. **PLAYBOOK.md § 6** — the anti-slop ban list (final pre-publish check).
-4. **TOOLS.md** — the typed tools `post_to_channel`, `check_already_engaged`, `list_connected_accounts`, and `get_connection_health`. Never call a raw Zernio endpoint by name. Always go through Maya's typed tools. Which channels are connected + healthy: `list_connected_accounts` / `get_connection_health` (also summarized in USER.md's "Connected accounts" section).
+4. **TOOLS.md** — the typed tools `post_to_channel`, `confirm_event`, `check_already_engaged`, `list_connected_accounts`, and `get_connection_health`. Never call a raw Zernio endpoint by name. Always go through Maya's typed tools. Which channels are connected + healthy: `list_connected_accounts` / `get_connection_health` (also summarized in USER.md's "Connected accounts" section).
 
 ## The gates — fail-closed, in order, before every publish
 
