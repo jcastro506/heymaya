@@ -44,11 +44,18 @@ import {
  * leak; per the never-blackhole doctrine it delivers and gets logged so the
  * prompt can be tuned. Public posts are unaffected (their gate is the
  * critic + auto-publish path, not this function).
+ *
+ * 2026-07-16 — internal_term demoted too, same doctrine, same night: Maya
+ * said "building the channel scorecards now" in a status reply and the
+ * block ate it — the founder saw silence, said "Hello?", and the eventual
+ * confusion cost more trust than the word "scorecard" ever could. Jargon
+ * to the FOUNDER is drift to log and prompt-tune. Still blocking: skill
+ * slugs + workspace file paths — pure internals with zero comprehension
+ * value that read as a malfunction.
  */
 const BLOCKING_CATEGORIES = new Set([
   "skill_slug",
   "workspace_file",
-  "internal_term",
 ]);
 
 export interface DirectTelegramSendResult {
