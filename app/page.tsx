@@ -13,7 +13,7 @@ import ClawLaunchLandingPage from "./clawlaunch/page";
 export const metadata: Metadata = {
   title: "HeyMaya, the marketing hire for builders Cursor unlocked.",
   description:
-    "You shipped fast. Marketing is the wall. Maya finds where your customers are, writes AND posts the content for you, and tracks which posts are actually driving traffic, so your signup graph stops being a flat line.",
+    "Maya runs your product's organic social, every day. She finds where your customers already are, writes and posts in your voice, and shows you which post got the signup — so the graph stops being a flat line.",
 };
 
 export default function Home() {

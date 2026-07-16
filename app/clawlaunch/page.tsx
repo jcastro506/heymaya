@@ -233,9 +233,10 @@ function Hero() {
           style={{ animationDelay: "3.6s" }}
         >
           <p className="text-[18px] leading-[1.55] text-[#0a0a0a]/75 sm:text-[20px] sm:leading-[1.5]">
-            Maya finds the people already looking for what you built. She writes
-            like a person, posts from your accounts without getting them banned,
-            and shows you which post got the signup.{" "}
+            Maya runs your organic social, every day. She finds the people
+            already looking for what you built, writes like a person, posts
+            from your accounts without getting them banned, and shows you
+            which post got the signup.{" "}
             <span className="italic text-[#0a0a0a] pr-[0.12em]">You approve the plan.
             She does the rest.</span>
           </p>
@@ -734,7 +735,8 @@ function Channels() {
               Plenty of tools will post for you. Maya{" "}
               <span className="italic text-[#0a0a0a] pr-[0.12em]">makes</span> the content
               first. She writes the posts and films the videos, then posts
-              them. One real example per platform.
+              them. One real example per platform. (The filming is her Studio
+              tier — writing and posting come with every plan.)
             </p>
           </RevealOnView>
         </div>
@@ -792,7 +794,7 @@ function Channels() {
                 logo={<RedditLogo className="size-9" />}
                 name="Reddit."
                 tagline="Where your users are literally asking the question your app answers."
-                body="She finds the thread the second it lands, writes the reply so it reads like a real person, and posts it for you."
+                body="She finds the thread the second it lands, writes the reply so it reads like a real person, and hands you the post button. One tap and it's live — that tap is part of why your account never gets flagged."
               />
               <ChannelCard
                 logo={<HackerNewsLogo className="size-9" />}
