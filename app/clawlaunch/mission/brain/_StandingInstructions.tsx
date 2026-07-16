@@ -1,16 +1,15 @@
 "use client";
 
 /**
- * Standing instructions — the founder's steering directives, with history.
- * Maya reads only ACTIVE rows; superseded ones stay visible (struck through)
- * so the founder can see how their guidance evolved. New directives relay to
- * Maya, who acknowledges in the founder's Telegram thread.
+ * Standing instructions — the founder's active rules as switch-rows, plus an
+ * add input. Maya reads only ACTIVE rows (the query returns only those); a
+ * new directive relays to her and she acknowledges in the founder's chat.
  */
 
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { ActionButton, Card, Pill, timeAgo } from "../_components";
+import { Btn, monoDate } from "../_components";
 
 export function StandingInstructions() {
   const directives = useQuery(api.gtmMaya.steering.listMySteeringDirectives, {});
@@ -36,68 +35,48 @@ export function StandingInstructions() {
   const rows = directives ?? [];
 
   return (
-    <Card>
-      <div className="flex items-end gap-2">
-        <textarea
+    <>
+      {rows.map((d) => (
+        <div key={d._id} className="mc-rule">
+          <span className="mc-sw" role="img" aria-label="active" />
+          <div className="min-w-0">
+            <div className="txt">{d.directive}</div>
+            <div className="meta">
+              {d.intent ? `${d.intent} · ` : ""}
+              {monoDate(d.createdAt)}
+            </div>
+          </div>
+        </div>
+      ))}
+      <div className="mc-addrule">
+        <input
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            if (e.key === "Enter") {
               e.preventDefault();
               void submit();
             }
           }}
-          rows={2}
-          placeholder='Steer her anytime — "never mention competitors by name", "go harder on Reddit"…'
-          className="min-h-[3.25rem] w-full resize-none bg-transparent text-sm leading-relaxed text-paper outline-none placeholder:text-paper-faint"
+          placeholder="Add an instruction — e.g. “skip weekends”"
+          aria-label="Add an instruction"
         />
-        <ActionButton onClick={() => void submit()} busy={state === "busy"} disabled={!text.trim()}>
+        <Btn
+          tone="primary"
+          busy={state === "busy"}
+          disabled={!text.trim()}
+          onClick={() => void submit()}
+        >
           Add
-        </ActionButton>
+        </Btn>
       </div>
-      {state === "sent" ? (
-        <p className="mt-2 text-xs text-lime-soft">
-          Sent — Maya will confirm in your chat.
-        </p>
-      ) : state === "error" ? (
-        <p className="mt-2 text-xs text-rose">Didn&apos;t save — try again.</p>
-      ) : (
-        <p className="mt-2 text-xs text-paper-faint">Maya will confirm in your chat.</p>
-      )}
-
-      {rows.length > 0 ? (
-        <ol className="mt-4 space-y-2 border-t border-paper-faint/15 pt-4">
-          {rows.map((d) => (
-            <li key={d._id} className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p
-                  className={`text-sm leading-relaxed ${
-                    d.active ? "text-paper" : "text-paper-faint line-through"
-                  }`}
-                >
-                  {d.directive}
-                </p>
-                <div className="mt-1 flex items-center gap-2">
-                  {d.active ? <Pill tone="lime">active</Pill> : <Pill tone="paper">superseded</Pill>}
-                  {d.intent ? (
-                    <span className="font-mono text-[10px] uppercase tracking-wide text-paper-faint">
-                      {d.intent}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-              <span className="shrink-0 font-mono text-[11px] text-paper-faint">
-                {timeAgo(d.createdAt)}
-              </span>
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <p className="mt-3 text-xs leading-relaxed text-paper-faint">
-          Nothing yet. Anything you tell her here (or in Telegram) becomes a
-          standing rule she applies to every post, reply, and plan.
-        </p>
-      )}
-    </Card>
+      <div className="mc-hint">
+        {state === "sent"
+          ? "Sent — Maya will confirm in your chat."
+          : state === "error"
+            ? "Didn't save — try again."
+            : "Maya confirms every new instruction in your chat."}
+      </div>
+    </>
   );
 }
