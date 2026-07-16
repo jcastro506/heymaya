@@ -293,7 +293,17 @@ export const routeInboundToMachine = internalAction({
       );
     });
     if (!sent.ok) {
-      console.warn(`[inbound-route] reply send failed: ${sent.reason}`);
+      // Log the WHY — a bare "firewall_blocked" cost a live debugging round
+      // trip (2026-07-16: the matched category was only recoverable by
+      // re-running the firewall by hand).
+      console.warn(
+        `[inbound-route] reply send failed: ${sent.reason}` +
+          (sent.firewallFailures?.length
+            ? ` — ${sent.firewallFailures
+                .map((f) => `${f.category}:${f.matched}`)
+                .join(", ")}`
+            : "")
+      );
       return { status: "skipped", reason: `reply send failed: ${sent.reason}` };
     }
     return { status: "ok", reason: "replied in main session" };

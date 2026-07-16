@@ -28,17 +28,34 @@ import {
  * than an imperfect message that arrives. So:
  *   - punctuation AI-tells are mechanically SANITIZED (never block),
  *   - true leak categories (skill slugs, workspace files, technical
- *     internals, AI self-reference) still hard-block,
- *   - lexical slop + marketing jargon are LOG-ONLY drift counters.
+ *     internals) still hard-block,
+ *   - AI self-reference, lexical slop + marketing jargon are LOG-ONLY
+ *     drift counters.
  * The live failure this fixes: the foundation synthesis said "content
  * angle" + "relationship target" (jargon), the old blanket block
  * blackholed the founder's plan, and every retry hit the same wall.
+ *
+ * 2026-07-15 — ai_reference demoted from block to log-only ON THIS PRIVATE
+ * FOUNDER CHANNEL. Live failure: Maya introduced herself as "your AI growth
+ * manager" (SOUL bans the phrasing; the model ignored it that boot), the
+ * hard block ate BOTH her hello and her reply to the founder's first
+ * message, and onboarding read as dead silence. To the founder — who knows
+ * exactly what she is — AI self-reference is embarrassing drift, not a
+ * leak; per the never-blackhole doctrine it delivers and gets logged so the
+ * prompt can be tuned. Public posts are unaffected (their gate is the
+ * critic + auto-publish path, not this function).
+ *
+ * 2026-07-16 — internal_term demoted too, same doctrine, same night: Maya
+ * said "building the channel scorecards now" in a status reply and the
+ * block ate it — the founder saw silence, said "Hello?", and the eventual
+ * confusion cost more trust than the word "scorecard" ever could. Jargon
+ * to the FOUNDER is drift to log and prompt-tune. Still blocking: skill
+ * slugs + workspace file paths — pure internals with zero comprehension
+ * value that read as a malfunction.
  */
 const BLOCKING_CATEGORIES = new Set([
   "skill_slug",
   "workspace_file",
-  "internal_term",
-  "ai_reference",
 ]);
 
 export interface DirectTelegramSendResult {

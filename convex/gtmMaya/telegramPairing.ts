@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import {
+  internalAction,
   internalMutation,
   mutation,
   query,
@@ -248,6 +249,78 @@ export const claimPairingToken = internalMutation({
       agentId: row.agentId,
       chatId: args.chatId,
     };
+  },
+});
+
+/**
+ * 2026-07-15 — claim wrapper that TALKS BACK. The raw claim used to be
+ * fire-and-forget from the webhook: a failed claim died in a server log while
+ * the founder stared at a silent Telegram chat (live repro: chat still bound
+ * to a torn-down agent's leftover row → "already paired" throw → nothing).
+ * Every /start now gets a plain-language reply, success or failure. Failure
+ * copy never leaks internals; success is one line — the plan/hello arrives
+ * through its own pipes (pushCachedPlan is scheduled inside the claim).
+ */
+export const claimPairingTokenWithAck = internalAction({
+  args: {
+    token: v.string(),
+    chatId: v.string(),
+    username: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    let reply: string;
+    let agentIdForBot: Id<"gtmAgents"> | undefined;
+    try {
+      const res: ClaimPairingTokenResult = await ctx.runMutation(
+        internal.gtmMaya.telegramPairing.claimPairingToken,
+        { token: args.token, chatId: args.chatId, username: args.username }
+      );
+      agentIdForBot = res.agentId;
+      reply =
+        "Linked. Maya has your number now — she'll text you here from this point on.";
+    } catch (err) {
+      const msg = (err as Error).message ?? "";
+      console.warn(`[telegram-webhook] pairing claim failed: ${msg}`);
+      if (msg.includes("expired")) {
+        reply =
+          "That link expired — they only live 15 minutes. Grab a fresh QR from your dashboard and scan again.";
+      } else if (msg.includes("already paired to a different")) {
+        reply =
+          "This Telegram is already linked to a different account. Unlink it there first, or scan from the account that owns this phone.";
+      } else if (msg.includes("already claimed by a different")) {
+        reply =
+          "That QR was already used from another phone. Grab a fresh one from your dashboard.";
+      } else {
+        reply =
+          "That link didn't work. Open your dashboard and scan the QR again — a fresh one is waiting there.";
+      }
+    }
+    try {
+      const { resolveBotForAgent } = await import("./telegramBotPerTenant");
+      const shared = {
+        sharedToken: process.env.TELEGRAM_BOT_TOKEN,
+        sharedUsername: process.env.TELEGRAM_BOT_USERNAME,
+      };
+      const bot = agentIdForBot
+        ? await resolveBotForAgent(
+            ctx as { runQuery: <T>(ref: unknown, a: unknown) => Promise<T> },
+            agentIdForBot,
+            shared
+          )
+        : { token: shared.sharedToken };
+      const { sendDirectTelegramMessage } = await import(
+        "../integrations/telegram/sendDirectMessage"
+      );
+      await sendDirectTelegramMessage({
+        botToken: bot.token ?? undefined,
+        chatId: args.chatId,
+        text: reply,
+      });
+    } catch (sendErr) {
+      console.warn(
+        `[telegram-webhook] pairing ack send failed: ${(sendErr as Error).message}`
+      );
+    }
   },
 });
 

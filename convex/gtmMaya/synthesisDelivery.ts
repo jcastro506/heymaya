@@ -186,6 +186,14 @@ export interface SynthesisCandidate {
   strategyDeliveredAt: number | null;
   planGeneratedAt: number | null;
   hasCachedPlan: boolean;
+  // 2026-07-16 — persistent-session seam: Maya can deliver the plan as a
+  // CHAT REPLY (turn text), which stamps none of the delivery fields. If she
+  // has said anything substantive to the founder since research completed,
+  // she is alive and conversing — the watchdog's "LLM flaked, founder
+  // abandoned in silence" premise is false. Live repro: she delivered the
+  // full plan in a reply at 01:37; the watchdog re-sent a deterministic
+  // duplicate at 01:38.
+  mayaSpokeAfterResearch: boolean;
   latestResearchJobId: Id<"gtmResearchJobs"> | null;
   plan: SynthesisPlanInput | null;
 }
@@ -255,6 +263,23 @@ async function buildCandidate(
         }
       : null;
 
+  // Substantive = a real composed message, not an ack ("On it."). 200 chars
+  // separates the two cleanly in every live transcript we have.
+  let mayaSpokeAfterResearch = false;
+  if (agent.researchCompletedAt) {
+    const recent = await ctx.db
+      .query("mayaMessages")
+      .withIndex("by_account_and_ts", (q) =>
+        q
+          .eq("accountId", agent.accountId)
+          .gt("ts", agent.researchCompletedAt!)
+      )
+      .collect();
+    mayaSpokeAfterResearch = recent.some(
+      (m) => m.role === "maya" && m.body.length >= 200
+    );
+  }
+
   return {
     agentId,
     accountId: agent.accountId,
@@ -269,6 +294,7 @@ async function buildCandidate(
     strategyDeliveredAt: agent.strategyDeliveredAt ?? null,
     planGeneratedAt: agent.planGeneratedAt ?? null,
     hasCachedPlan: Boolean(agent.cachedSynthesisText),
+    mayaSpokeAfterResearch,
     latestResearchJobId: latestJob?._id ?? null,
     plan,
   };
@@ -306,6 +332,9 @@ export function isOverdue(c: SynthesisCandidate, now: number): boolean {
     c.strategyDeliveredAt === null &&
     c.planGeneratedAt === null &&
     !c.hasCachedPlan &&
+    // She's alive and talking to the founder — she delivers her own plan.
+    // (Persistent-session replies stamp no delivery fields; see candidate.)
+    !c.mayaSpokeAfterResearch &&
     Boolean(c.telegramChatId)
   );
 }

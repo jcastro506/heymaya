@@ -11,9 +11,9 @@ import ClawLaunchLandingPage from "./clawlaunch/page";
  * <head> at build time.
  */
 export const metadata: Metadata = {
-  title: "HeyMaya, the marketing hire for builders Cursor unlocked.",
+  title: "HeyMaya — Maya runs your organic social.",
   description:
-    "You shipped fast. Marketing is the wall. Maya finds where your customers are, writes AND posts the content for you, and tracks which posts are actually driving traffic, so your signup graph stops being a flat line.",
+    "Your app is good. Nobody knows it exists. Maya runs your organic social — finds your buyers, posts in your voice, and shows you which post got the signup.",
 };
 
 export default function Home() {

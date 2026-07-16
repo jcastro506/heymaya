@@ -1,40 +1,38 @@
 "use client";
 
 /**
- * Today — the action inbox, not a dashboard. One question: does Maya need me?
+ * Today — the 90-second clear.
  *
- *   TOP    "Needs you"      — one-tap decisions: plan approval, drafts
- *                             (approve / tweak / pass), channel connects.
- *   MIDDLE "Maya's working" — today's queue: scheduled posts, threads in
- *                             play, approved drafts waiting for their window.
- *   BOTTOM one-line pulse   — this week in one grounded sentence.
+ *   NEEDS YOU   decision cards: drafts (Post it / Tweak / Pass), the plan
+ *               when it's waiting, channel connects. Collapses to one proud
+ *               line when nothing needs the operator.
+ *   THE DAY     her schedule as a horizontal timeline — calendar events +
+ *               the known cron blocks (7am brief / 1pm pulse / 8pm recap),
+ *               with done / now / upcoming states.
+ *   PULSE       posts out today, posts gaining speed, the next work block,
+ *               and the last three moves as a ticker.
  *
- * Everything is a live Convex subscription — Maya's writes stream in as she
- * works. The empty state is a feature: nothing needing you means she's got it.
+ * All live Convex subscriptions — Maya's writes stream in as she works.
  */
 
-import { useMemo, type CSSProperties } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import {
-  Card,
+  Chip,
   clock,
-  Empty,
-  ExtLink,
-  LiveDot,
   Loading,
   NeedsOnboarding,
-  Pill,
+  Panel,
   Rise,
-  Section,
   Shell,
 } from "./_components";
-import { DraftCard, platformLabel } from "./_DraftCard";
+import { DraftCard } from "./_DraftCard";
 import { PlanDecideCard } from "./_PlanCard";
 
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const NOW_WINDOW_MS = 10 * 60 * 1000;
 
 function startOfTodayMs(): number {
   const d = new Date();
@@ -42,28 +40,46 @@ function startOfTodayMs(): number {
   return d.getTime();
 }
 
-/** Plain-language status line — infra words never leak. */
-function mayaStatusLine(lifecycleState: string | undefined, throttled: boolean): string {
-  if (throttled) return "catching her breath — back on full duty soon";
-  switch (lifecycleState) {
-    case "fresh":
-    case "researching":
-      return "deep in research on your niche";
-    case "plan_ready":
-      return "plan ready — waiting on your go";
-    default:
-      return "on the clock";
-  }
+function todayAt(hour: number): number {
+  return startOfTodayMs() + hour * 60 * 60 * 1000;
 }
 
-const EVENT_STATUS_PILL: Record<string, { label: string; tone: "lime" | "paper" | "rose" }> = {
-  queued: { label: "on deck", tone: "paper" },
-  posting: { label: "posting", tone: "lime" },
-  published: { label: "done", tone: "lime" },
-  completed: { label: "done", tone: "lime" },
-  needs_confirm: { label: "your tap, in Telegram", tone: "lime" },
-  failed: { label: "didn't land", tone: "rose" },
-  cancelled: { label: "called off", tone: "paper" },
+/** "TUE JUL 15 · 9:41 AM" — client-only (avoids SSR hydration drift). */
+function useWallClock(): string | null {
+  const [s, setS] = useState<string | null>(null);
+  useEffect(() => {
+    const fmt = () => {
+      const d = new Date();
+      const day = d
+        .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+        .toUpperCase()
+        .replace(/,/g, "");
+      setS(`${day} · ${clock(d.getTime())}`);
+    };
+    fmt();
+    const t = setInterval(fmt, 30_000);
+    return () => clearInterval(t);
+  }, []);
+  return s;
+}
+
+type Slot = {
+  key: string;
+  ms: number;
+  time: string; // rendered label
+  what: string;
+  sub?: string;
+  state: "done" | "now" | "upcoming";
+};
+
+const EVENT_DONE = new Set(["published", "completed"]);
+const EVENT_SUB: Record<string, string> = {
+  queued: "on deck",
+  posting: "posting",
+  published: "posted",
+  completed: "done",
+  needs_confirm: "your tap",
+  failed: "didn't land",
 };
 
 export default function TodayPage() {
@@ -72,45 +88,33 @@ export default function TodayPage() {
   const health = useQuery(api.gtmMaya.missionActions.getMyConnectionHealth);
   const connected = useQuery(api.gtmMaya.zernioConnect.getMyConnectedAccounts);
   const events = useQuery(api.gtmMaya.calendarWrite.getMyCalendarEvents);
-  const threads = useQuery(api.gtmMaya.targetList.getMyTargetThreads, {});
   const planDoc = useQuery(api.gtmMaya.planDoc.getMyPlanDoc);
-  const attribution = useQuery(api.gtmMaya.missionControl.getMyPostAttribution, {});
-  const conversions = useQuery(api.gtmMaya.missionControl.getMyConversions);
+  const activity = useQuery(api.gtmMaya.missionControl.getMyAgentActivity, { limit: 5 });
+  const postResults = useQuery(api.gtmMaya.postResults.getMyRecentPostResults, {});
 
+  const when = useWallClock();
   const todayStart = startOfTodayMs();
   const tomorrowStart = todayStart + DAY_MS;
+  const now = Date.now();
 
   const todaysEvents = useMemo(
     () =>
       (events ?? [])
-        .filter((e) => e.startsAtMs >= todayStart && e.startsAtMs < tomorrowStart)
+        .filter(
+          (e) =>
+            e.startsAtMs >= todayStart &&
+            e.startsAtMs < tomorrowStart &&
+            e.status !== "cancelled"
+        )
         .sort((a, b) => a.startsAtMs - b.startsAtMs),
     [events, todayStart, tomorrowStart]
-  );
-
-  const watchlist = useMemo(
-    () =>
-      (threads ?? [])
-        .filter((t) => t.status === "queued")
-        .sort((a, b) => {
-          const tier = (t: { tier?: string }) =>
-            t.tier === "T1" ? 0 : t.tier === "T2" ? 1 : 2;
-          return tier(a) - tier(b) || b.createdAt - a.createdAt;
-        })
-        .slice(0, 6),
-    [threads]
   );
 
   if (snapshot === undefined || drafts === undefined || events === undefined)
     return <Loading />;
   if (snapshot === null) return <NeedsOnboarding />;
 
-  const appName = snapshot.app?.name ?? "your product";
-  const throttled =
-    typeof snapshot.agent.spendThrottledUntil === "number" &&
-    snapshot.agent.spendThrottledUntil > Date.now();
-
-  // ── Needs-you tray ──────────────────────────────────────────────────────
+  // ── Needs you ───────────────────────────────────────────────────────────
   const decidable = (drafts ?? [])
     .filter(
       (d) =>
@@ -131,215 +135,175 @@ export default function TodayPage() {
   const needsYouCount =
     decidable.length + broken.length + (planAwaiting ? 1 : 0) + (noChannels ? 1 : 0);
 
-  // ── Working list ────────────────────────────────────────────────────────
-  const approvedWaiting = (drafts ?? []).filter((d) => d.approvalState === "approved");
-  const workingCount = todaysEvents.length + watchlist.length + approvedWaiting.length;
+  // ── The day she's running ───────────────────────────────────────────────
+  const cronBlocks: Array<{ hour: number; what: string; sub: string }> = [
+    { hour: 7, what: "Morning brief", sub: "threads + drafts" },
+    { hour: 13, what: "Midday pulse", sub: "fresh-thread sweep" },
+    { hour: 20, what: "Evening recap", sub: "skips if empty" },
+  ];
+  const slots: Slot[] = [
+    ...cronBlocks.map((b) => {
+      const ms = todayAt(b.hour);
+      return {
+        key: `cron-${b.hour}`,
+        ms,
+        time: clock(ms),
+        what: b.what,
+        sub: b.sub,
+        state: (ms <= now ? "done" : "upcoming") as Slot["state"],
+      };
+    }),
+    ...todaysEvents.map((e) => ({
+      key: String(e._id),
+      ms: e.startsAtMs,
+      time: clock(e.startsAtMs),
+      what: e.title,
+      sub: e.status ? EVENT_SUB[e.status] : undefined,
+      state: ((e.status && EVENT_DONE.has(e.status)) || e.startsAtMs <= now
+        ? "done"
+        : "upcoming") as Slot["state"],
+    })),
+  ];
+  const latest = (activity ?? [])[0];
+  if (latest && now - latest.createdAt < NOW_WINDOW_MS) {
+    slots.push({
+      key: "now",
+      ms: now,
+      time: "NOW",
+      what: latest.summary,
+      state: "now",
+    });
+  }
+  slots.sort((a, b) => a.ms - b.ms);
+  const nextSlot = slots.find((s) => s.state === "upcoming");
 
   // ── Pulse ───────────────────────────────────────────────────────────────
-  const weekStart = Date.now() - WEEK_MS;
-  const postedThisWeek = (drafts ?? []).filter(
-    (d) => d.approvalState === "published" && (d.publishedAt ?? d.updatedAt) >= weekStart
+  const postsOutToday = (drafts ?? []).filter(
+    (d) =>
+      d.approvalState === "published" && (d.publishedAt ?? d.updatedAt) >= todayStart
   ).length;
-  const clicksThisWeek = (attribution ?? [])
-    .filter((a) => a.createdAt >= weekStart)
-    .reduce((s, a) => s + a.clicks, 0);
-  const signupsThisWeek = (conversions ?? [])
-    .filter(
-      (c) => c.occurredAt >= weekStart && (c.kind === "signup" || c.kind === "activated")
-    )
-    .reduce((s, c) => s + c.count, 0);
-
-  const pulse =
-    postedThisWeek > 0
-      ? `${postedThisWeek} post${postedThisWeek === 1 ? "" : "s"} out this week · ${clicksThisWeek} click${clicksThisWeek === 1 ? "" : "s"}${
-          signupsThisWeek > 0
-            ? ` · ${signupsThisWeek} signup${signupsThisWeek === 1 ? "" : "s"}`
-            : ""
-        }`
-      : null;
-
-  // What's next — for the proud empty state.
-  const nextEvent = (events ?? [])
-    .filter((e) => e.startsAtMs > Date.now() && e.status !== "cancelled")
-    .sort((a, b) => a.startsAtMs - b.startsAtMs)[0];
-  const nextLine = nextEvent
-    ? `Next: ${nextEvent.title} at ${clock(nextEvent.startsAtMs)}${
-        nextEvent.startsAtMs >= tomorrowStart ? " tomorrow" : ""
-      }.`
-    : "Next: tomorrow's 7am brief.";
+  const gainingSpeed = new Set(
+    (postResults ?? [])
+      .filter((p) => p.snapshotAtMs >= todayStart && p.surfacedToOperator)
+      .map((p) => String(p.draftId))
+  ).size;
+  const ticker = (activity ?? []).slice(0, 3);
 
   return (
-    <Shell
-      title="Today"
-      status={
-        <>
-          <LiveDot />
-          <span>
-            Maya is {mayaStatusLine(snapshot.agent.lifecycleState, throttled)} for{" "}
-            {appName}.
-          </span>
-        </>
-      }
-    >
-      {/* ── Needs you ─────────────────────────────────────────────────── */}
-      <Section title="Needs you" count={needsYouCount}>
-        {needsYouCount === 0 ? (
-          <Rise>
-            <Empty title="Nothing needs you." body={nextLine} />
-          </Rise>
-        ) : (
-          <div className="space-y-3">
-            {planAwaiting ? (
-              <Rise i={0}>
-                <PlanDecideCard />
-              </Rise>
+    <Shell title="Today" when={when}>
+      <div className="mc-grid mc-today-grid">
+        {/* ── Needs you ─────────────────────────────────────────────────── */}
+        <Rise className="mc-a-needs">
+          <Panel title="Needs you" raised className="h-full">
+            {needsYouCount > 0 ? (
+              <span className="mc-needcount">{needsYouCount}</span>
             ) : null}
-            {noChannels ? (
-              <Rise i={planAwaiting ? 1 : 0}>
-                <Card className="flex items-center justify-between gap-4 border-l-2 border-l-lime">
-                  <div className="min-w-0">
-                    <p className="text-sm text-paper">No channels connected yet</p>
-                    <p className="mt-0.5 text-xs leading-relaxed text-paper-dim">
-                      Link at least one — X, LinkedIn, Reddit — and Maya can start
-                      putting work out.
-                    </p>
+            {needsYouCount === 0 ? (
+              <p className="text-sm text-paper">
+                Nothing needs you.
+                {nextSlot ? (
+                  <span className="text-paper-dim">
+                    {" "}
+                    Next: {nextSlot.what} · {nextSlot.time}.
+                  </span>
+                ) : null}
+              </p>
+            ) : (
+              <div className="mc-action-row">
+                {planAwaiting ? <PlanDecideCard /> : null}
+                {noChannels ? (
+                  <div className="mc-action">
+                    <div className="mc-action-src">
+                      <Chip>no channel connected</Chip>
+                    </div>
+                    <div className="mc-thread">Maya has nowhere to post.</div>
+                    <div className="mc-acts">
+                      <Link
+                        href="/clawlaunch/mission/settings"
+                        className="mc-btn mc-btn-primary flex-1 no-underline"
+                      >
+                        Connect a channel
+                      </Link>
+                    </div>
                   </div>
-                  <Link
-                    href="/clawlaunch/mission/settings"
-                    className="shrink-0 rounded-full bg-lime px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-ink transition-opacity hover:opacity-85"
-                  >
-                    Connect
-                  </Link>
-                </Card>
-              </Rise>
-            ) : null}
-            {broken.map((h, i) => (
-              <Rise key={h._id} i={i + 1}>
-                <Card className="flex items-center justify-between gap-4 border-l-2 border-l-rose">
-                  <p className="min-w-0 text-sm text-paper">
-                    Your {h.provider === "x" ? "X" : h.provider} connection needs a
-                    reconnect{h.failureReason ? ` — ${h.failureReason}` : ""}.
-                  </p>
-                  <Link
-                    href="/clawlaunch/mission/settings"
-                    className="shrink-0 rounded-full border border-paper-faint/25 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-paper-dim transition-colors hover:text-paper"
-                  >
-                    Fix
-                  </Link>
-                </Card>
-              </Rise>
-            ))}
-            {decidable.map((d, i) => (
-              <Rise key={d._id} i={i + 2}>
-                <DraftCard d={d} />
-              </Rise>
-            ))}
-          </div>
-        )}
-      </Section>
+                ) : null}
+                {broken.map((h) => (
+                  <div key={h._id} className="mc-action">
+                    <div className="mc-action-src">
+                      <Chip platform={h.provider}>
+                        {h.provider === "x" ? "X" : h.provider} · needs a reconnect
+                      </Chip>
+                    </div>
+                    {h.failureReason ? (
+                      <div className="mc-draft">{h.failureReason}</div>
+                    ) : null}
+                    <div className="mc-acts">
+                      <Link
+                        href="/clawlaunch/mission/settings"
+                        className="mc-btn flex-1 no-underline"
+                      >
+                        Fix
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+                {decidable.map((d) => (
+                  <DraftCard key={d._id} d={d} />
+                ))}
+              </div>
+            )}
+          </Panel>
+        </Rise>
 
-      {/* ── Maya's working ────────────────────────────────────────────── */}
-      <Section title="Maya's working" count={workingCount}>
-        {workingCount === 0 ? (
-          <Rise>
-            <Empty
-              title="Quiet right now"
-              body="She's between working sessions. Scheduled posts and the conversations she's tracking show up here as she lines them up."
-            />
-          </Rise>
-        ) : (
-          <div className="space-y-3">
-            {todaysEvents.length > 0 ? (
-              <ol className="space-y-2">
-                {todaysEvents.map((e, i) => {
-                  const pill = e.status ? EVENT_STATUS_PILL[e.status] : undefined;
-                  return (
-                    <li
-                      key={e._id}
-                      className="mc-rise"
-                      style={{ "--i": i } as CSSProperties}
-                    >
-                      <Card className="flex items-baseline gap-3">
-                          <span className="w-16 shrink-0 font-mono text-[11px] tabular-nums text-paper-faint">
-                            {clock(e.startsAtMs)}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm text-paper">{e.title}</p>
-                            {e.description ? (
-                              <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-paper-dim">
-                                {e.description}
-                              </p>
-                            ) : null}
-                          </div>
-                        {pill ? (
-                          <span className="shrink-0">
-                            <Pill tone={pill.tone}>{pill.label}</Pill>
-                          </span>
-                        ) : null}
-                      </Card>
-                    </li>
-                  );
-                })}
-              </ol>
+        {/* ── Pulse ─────────────────────────────────────────────────────── */}
+        <Rise i={1} className="mc-a-side">
+          <Panel title="Pulse" live className="h-full">
+            <div className="mc-ptiles">
+              <div className="mc-ptile">
+                <div className="v">{postsOutToday}</div>
+                <div className="k">posts out today</div>
+              </div>
+              <div className="mc-ptile">
+                <div className="v" style={gainingSpeed > 0 ? { color: "var(--mc-good)" } : undefined}>
+                  {gainingSpeed}
+                </div>
+                <div className="k">gaining speed</div>
+              </div>
+            </div>
+            <div className="mc-nextblock">
+              <span className="k">next work block</span>
+              <span className="v">
+                {nextSlot ? `${nextSlot.what} · ${nextSlot.time}` : "tomorrow · 7:00 AM"}
+              </span>
+            </div>
+            {ticker.length > 0 ? (
+              <ul className="mc-tick">
+                {ticker.map((a) => (
+                  <li key={a._id}>
+                    <span className="t">{clock(a.createdAt)}</span>
+                    <span className="s">{a.summary}</span>
+                  </li>
+                ))}
+              </ul>
             ) : null}
+          </Panel>
+        </Rise>
 
-            {approvedWaiting.length > 0 ? (
-              <Rise i={todaysEvents.length}>
-                <Card className="flex items-center gap-3">
-                  <Pill tone="lime">approved</Pill>
-                  <p className="text-sm text-paper-dim">
-                    {approvedWaiting.length}{" "}
-                    {approvedWaiting.length === 1 ? "piece" : "pieces"} you approved,
-                    waiting for the right posting window.
-                  </p>
-                </Card>
-              </Rise>
-            ) : null}
-
-            {watchlist.length > 0 ? (
-              <Rise i={todaysEvents.length + 1}>
-                <Card>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-paper-faint">
-                    Conversations she&apos;s tracking
-                  </p>
-                  <ol className="mt-3 space-y-2.5">
-                    {watchlist.map((t) => (
-                      <li key={t._id} className="flex items-start gap-2.5">
-                        <Pill tone={t.tier === "T1" ? "lime" : "paper"}>
-                          {t.tier === "T1" ? "buying intent" : platformLabel(t.platform)}
-                        </Pill>
-                        <p className="min-w-0 flex-1 truncate text-sm text-paper">
-                          {t.title ?? t.excerpt?.slice(0, 90) ?? t.url}
-                        </p>
-                        <span className="shrink-0 text-xs">
-                          <ExtLink href={t.url}>open ↗</ExtLink>
-                        </span>
-                      </li>
-                    ))}
-                  </ol>
-                </Card>
-              </Rise>
-            ) : null}
-          </div>
-        )}
-      </Section>
-
-      {/* ── Pulse ─────────────────────────────────────────────────────── */}
-      <Rise i={2}>
-        <div className="flex items-center justify-between gap-4 border-t border-paper-faint/15 pt-5">
-          <p className="font-mono text-[11px] tabular-nums text-paper-dim">
-            {pulse ?? "First posts land once the plan is approved and a channel is connected."}
-          </p>
-          {pulse ? (
-            <Link
-              href="/clawlaunch/mission/results"
-              className="shrink-0 font-mono text-[11px] uppercase tracking-[0.14em] text-paper-faint transition-colors hover:text-lime-soft"
-            >
-              Results →
-            </Link>
-          ) : null}
-        </div>
-      </Rise>
+        {/* ── The day she's running ─────────────────────────────────────── */}
+        <Rise i={2} className="mc-a-work">
+          <Panel title="The day she's running">
+            <div className="mc-timeline">
+              {slots.map((s) => (
+                <div key={s.key} className={`mc-tl-slot ${s.state === "now" ? "now" : s.state === "done" ? "done" : ""}`}>
+                  <div className="mc-tl-time">{s.time}</div>
+                  <div className="mc-tl-what">{s.what}</div>
+                  {s.sub ? <div className="mc-tl-sub">{s.sub}</div> : null}
+                </div>
+              ))}
+            </div>
+          </Panel>
+        </Rise>
+      </div>
     </Shell>
   );
 }

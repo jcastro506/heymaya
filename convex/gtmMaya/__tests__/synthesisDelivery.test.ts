@@ -149,6 +149,7 @@ describe("isOverdue", () => {
       strategyDeliveredAt: null,
       planGeneratedAt: null,
       hasCachedPlan: false,
+      mayaSpokeAfterResearch: false,
       latestResearchJobId: null,
       plan: null,
       ...overrides,
@@ -177,6 +178,12 @@ describe("isOverdue", () => {
       isOverdue(candidate({ planGeneratedAt: PAST_GRACE + 60_000 }), NOW)
     ).toBe(false);
     expect(isOverdue(candidate({ hasCachedPlan: true }), NOW)).toBe(false);
+  });
+
+  it("does NOT fire when Maya has spoken substantively since research — the persistent-session plan-as-reply case (2026-07-16 live dupe)", () => {
+    expect(
+      isOverdue(candidate({ mayaSpokeAfterResearch: true }), NOW)
+    ).toBe(false);
   });
 
   it("respects the grace window, kill switch, own-idempotency, and channel gate", () => {
