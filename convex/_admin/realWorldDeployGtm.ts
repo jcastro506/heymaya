@@ -155,6 +155,8 @@ export const seedGtmAgentAndApp = internalMutation({
     existingTikTokUrl: v.optional(v.string()),
     existingInstagramUrl: v.optional(v.string()),
     existingXUrl: v.optional(v.string()),
+    existingYoutubeUrl: v.optional(v.string()),
+    existingLinkedinUrl: v.optional(v.string()),
   },
   handler: async (
     ctx,
@@ -214,6 +216,8 @@ export const seedGtmAgentAndApp = internalMutation({
       existingTikTokUrl: args.existingTikTokUrl,
       existingInstagramUrl: args.existingInstagramUrl,
       existingXUrl: args.existingXUrl,
+      existingYoutubeUrl: args.existingYoutubeUrl,
+      existingLinkedinUrl: args.existingLinkedinUrl,
       createdAt: now,
       updatedAt: now,
     });
@@ -1657,6 +1661,8 @@ export const run = internalAction({
     existingTikTokUrl: v.optional(v.string()),
     existingInstagramUrl: v.optional(v.string()),
     existingXUrl: v.optional(v.string()),
+    existingYoutubeUrl: v.optional(v.string()),
+    existingLinkedinUrl: v.optional(v.string()),
     // Set true to NOT wipe existing test creators first — lets several test
     // agents (e.g. one per pricing tier) run side by side. Each run still gets a
     // unique clerkUserId, so no collision.
@@ -1710,6 +1716,8 @@ export const run = internalAction({
         existingTikTokUrl: args.existingTikTokUrl,
         existingInstagramUrl: args.existingInstagramUrl,
         existingXUrl: args.existingXUrl,
+        existingYoutubeUrl: args.existingYoutubeUrl,
+        existingLinkedinUrl: args.existingLinkedinUrl,
       }
     );
     console.log(
