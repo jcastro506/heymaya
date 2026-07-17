@@ -119,6 +119,7 @@ import {
   getAgentLifecycleHttp,
   acquireFoundationLeaseHttp,
   markLifecycleHttp,
+  setPostingModeHttp,
   logCostHttp,
   recordPublishedHttp,
 } from "./gtmMaya/openclaw/managerCallbacks";
@@ -914,6 +915,13 @@ http.route({
   path: "/lc_gtm/mark_lifecycle",
   method: "POST",
   handler: markLifecycleHttp,
+});
+// W2.5 — founder grants/revokes posting autonomy in the chat ("just post from
+// now on"); same preference as the Account control, ban-safety floor unaffected.
+http.route({
+  path: "/lc_gtm/set_posting_mode",
+  method: "POST",
+  handler: setPostingModeHttp,
 });
 // Sprint 2.25 — cost ledger write endpoint. Maya (in OpenClaw on Fly)
 // curl-POSTs cost data here after each major phase / call so the

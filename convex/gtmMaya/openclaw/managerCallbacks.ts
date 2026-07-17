@@ -1450,6 +1450,42 @@ export const markLifecycleHttp = httpAction(async (ctx, request) => {
   }
 });
 
+// ───────────────────── Posting mode (W2.5 conversational) ─────────────────────
+
+/**
+ * The founder tells Maya "you can just post from now on" / "go back to checking
+ * with me" IN THE CHAT and she flips the trust level herself — no dashboard
+ * trip. Same field the Account settings control writes (`setMyPostingMode`);
+ * the ban-safety floor (Reddit/TikTok always confirm) and plan ceiling still
+ * gate every publish, so this is a preference, never a bypass.
+ */
+export const setPostingModeHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if (!auth.ok) return new Response(auth.reason, { status: auth.status });
+
+  let mode: string | undefined;
+  try {
+    const body = (await request.json()) as { mode?: string };
+    mode = body?.mode;
+  } catch {
+    return new Response("invalid JSON body", { status: 400 });
+  }
+  if (mode !== "confirm_each" && mode !== "confirm_first_week" && mode !== "autonomous") {
+    return new Response(
+      "mode must be 'confirm_each' | 'confirm_first_week' | 'autonomous'",
+      { status: 400 }
+    );
+  }
+  const r = await ctx.runMutation(
+    internal.gtmMaya.researchLifecycle.setPostingModeByAgent,
+    { agentId: auth.agentId, mode }
+  );
+  return new Response(JSON.stringify(r), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+});
+
 // ───────────────────── Cost ledger (Sprint 2.25) ─────────────────────
 
 /**

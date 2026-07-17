@@ -316,7 +316,7 @@ function categoryForTool(name) {
   )
     return "draft";
   if (
-    /^(save_foundation_|set_north_star$|set_strategy_approval$|save_plan_doc$|save_voice_profile$|save_style_exemplars$|set_channel_warmth$|save_competitor_move$|save_niche_pulse_signal$|save_learning$|save_diagnosis$|save_experiment$|set_channel_warmth$)/.test(
+    /^(save_foundation_|set_north_star$|set_strategy_approval$|set_posting_mode$|save_plan_doc$|save_voice_profile$|save_style_exemplars$|set_channel_warmth$|save_competitor_move$|save_niche_pulse_signal$|save_learning$|save_diagnosis$|save_experiment$|set_channel_warmth$)/.test(
       name
     )
   )
@@ -2257,6 +2257,17 @@ export default defineToolPlugin({
       }),
       execute: async (p, _cfg, ctx) =>
         postLc("confirm_event", p, ctx.signal),
+    }),
+    tool({
+      name: "set_posting_mode",
+      label: "Set Posting Mode",
+      description:
+        "The founder changed how much rope I get on the auto channels (X/LinkedIn/IG/YouTube) IN THE CHAT — call this ONLY on their explicit words, never my own initiative. 'Just post from now on' / 'stop asking me' → 'autonomous'. 'Check with me first' / 'ask before posting' → 'confirm_each'. 'Let's do the ramp again' → 'confirm_first_week'. REQUIRED: mode. Returns { ok, mode }. Reddit/TikTok stay one-tap-confirm regardless (ban-safety floor — never claim otherwise). Confirm the change back plainly ('Got it — I'll post X and LinkedIn myself from here; Reddit and TikTok still get your tap.'). I may OFFER graduation after a few posts land well, but the founder's yes is what triggers this call.",
+      parameters: Type.Object({
+        mode: Enum(["confirm_each", "confirm_first_week", "autonomous"]),
+      }),
+      execute: async (p, _cfg, ctx) =>
+        postLc("set_posting_mode", p, ctx.signal),
     }),
     ];
   },

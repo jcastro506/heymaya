@@ -1,6 +1,6 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
-import { api } from "../../_generated/api";
+import { api, internal } from "../../_generated/api";
 import schema from "../../schema";
 import { modules } from "../../../tests/_modules";
 
@@ -249,5 +249,64 @@ describe("GTM Maya research lifecycle", () => {
         cacheStatus: "called",
       })
     ).rejects.toThrow("Research job does not belong to this account");
+  });
+});
+
+describe("W2.5 posting mode — conversational grant (set_posting_mode)", () => {
+  it("agent path flips the mode — 'just post from now on' → autonomous", async () => {
+    const t = convexTest(schema, modules);
+    const user = authedGtm(t, "u_pm_auto");
+    const started = await user.mutation(
+      api.gtmMaya.researchLifecycle.startGtmOnboarding,
+      { channelPreference: "telegram", timezone: "America/New_York" }
+    );
+    const r = await t.mutation(
+      internal.gtmMaya.researchLifecycle.setPostingModeByAgent,
+      { agentId: started.agentId, mode: "autonomous" }
+    );
+    expect(r.ok).toBe(true);
+    const agent = await t.run((ctx) => ctx.db.get(started.agentId));
+    expect(agent?.autonomousPosting).toBe("autonomous");
+  });
+
+  it("entering confirm_first_week stamps the ramp clock exactly once", async () => {
+    const t = convexTest(schema, modules);
+    const user = authedGtm(t, "u_pm_ramp");
+    const started = await user.mutation(
+      api.gtmMaya.researchLifecycle.startGtmOnboarding,
+      { channelPreference: "telegram", timezone: "America/New_York" }
+    );
+    await t.mutation(internal.gtmMaya.researchLifecycle.setPostingModeByAgent, {
+      agentId: started.agentId,
+      mode: "confirm_first_week",
+    });
+    const first = await t.run((ctx) => ctx.db.get(started.agentId));
+    expect(first?.autonomousSince).toBeTypeOf("number");
+    // Re-entering does NOT restart an already-running ramp.
+    await t.mutation(internal.gtmMaya.researchLifecycle.setPostingModeByAgent, {
+      agentId: started.agentId,
+      mode: "confirm_first_week",
+    });
+    const second = await t.run((ctx) => ctx.db.get(started.agentId));
+    expect(second?.autonomousSince).toBe(first?.autonomousSince);
+  });
+
+  it("agent path and web path (setMyPostingMode) write the same preference", async () => {
+    const t = convexTest(schema, modules);
+    const user = authedGtm(t, "u_pm_web");
+    const started = await user.mutation(
+      api.gtmMaya.researchLifecycle.startGtmOnboarding,
+      { channelPreference: "telegram", timezone: "America/New_York" }
+    );
+    // Grant in chat, revoke from the dashboard — the field is one and the same.
+    await t.mutation(internal.gtmMaya.researchLifecycle.setPostingModeByAgent, {
+      agentId: started.agentId,
+      mode: "autonomous",
+    });
+    await user.mutation(api.gtmMaya.researchLifecycle.setMyPostingMode, {
+      mode: "confirm_each",
+    });
+    const agent = await t.run((ctx) => ctx.db.get(started.agentId));
+    expect(agent?.autonomousPosting).toBe("confirm_each");
   });
 });

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import {
+  internalMutation,
   internalQuery,
   mutation,
   query,
@@ -449,21 +450,47 @@ const AUTONOMOUS_POSTING = v.union(
  * here). Auth-scoped + fail-closed. The publish gate enforces this inside the
  * ban-safety floor + plan ceiling, so this is a preference, never a bypass.
  */
+async function patchPostingMode(
+  ctx: MutationCtx,
+  agent: Doc<"gtmAgents">,
+  mode: "confirm_each" | "confirm_first_week" | "autonomous"
+): Promise<void> {
+  const now = Date.now();
+  await ctx.db.patch(agent._id, {
+    autonomousPosting: mode,
+    // Starting/restarting the ramp: stamp the clock if entering
+    // confirm_first_week without one already running.
+    ...(mode === "confirm_first_week" && agent.autonomousSince == null
+      ? { autonomousSince: now }
+      : {}),
+    updatedAt: now,
+  });
+}
+
 export const setMyPostingMode = mutation({
   args: { mode: AUTONOMOUS_POSTING },
   handler: async (ctx, args): Promise<{ ok: boolean }> => {
     const { agent } = await requireMyGtmAgent(ctx);
-    const now = Date.now();
-    await ctx.db.patch(agent._id, {
-      autonomousPosting: args.mode,
-      // Starting/restarting the ramp: stamp the clock if entering
-      // confirm_first_week without one already running.
-      ...(args.mode === "confirm_first_week" && agent.autonomousSince == null
-        ? { autonomousSince: now }
-        : {}),
-      updatedAt: now,
-    });
+    await patchPostingMode(ctx, agent, args.mode);
     return { ok: true };
+  },
+});
+
+/**
+ * W2.5 — the conversational path: the founder tells MAYA "you can just post
+ * from now on" / "check with me first again" and she flips it via the
+ * set_posting_mode tool (hook-token authed at the route; agentId is the
+ * caller's own). Same preference the Account control writes — never a bypass:
+ * the ban-safety floor (Reddit/TikTok always confirm) and plan ceiling still
+ * gate every publish.
+ */
+export const setPostingModeByAgent = internalMutation({
+  args: { agentId: v.id("gtmAgents"), mode: AUTONOMOUS_POSTING },
+  handler: async (ctx, args): Promise<{ ok: boolean; mode: string }> => {
+    const agent = await ctx.db.get(args.agentId);
+    if (!agent) return { ok: false, mode: args.mode };
+    await patchPostingMode(ctx, agent, args.mode);
+    return { ok: true, mode: args.mode };
   },
 });
 

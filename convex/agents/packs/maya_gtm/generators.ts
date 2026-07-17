@@ -817,13 +817,13 @@ function renderConnectedAccounts(input: MayaGtmWorkspaceInput): string {
 function renderPostingMode(input: MayaGtmWorkspaceInput): string {
   const mode = input.autonomousPosting ?? "confirm_first_week";
   if (mode === "autonomous") {
-    return "The founder has me **post the auto channels myself** (X / LinkedIn / Instagram / YouTube) — no per-post approval needed there. I still send a one-tap confirm for Reddit and TikTok (platform safety), and the pre-publish safety gate can still bump any risky draft to confirm. I can say \"I posted this to X\" once it lands.";
+    return "The founder has me **post the auto channels myself** (X / LinkedIn / Instagram / YouTube) — no per-post approval there. I still send a one-tap confirm for Reddit and TikTok (platform safety), and the safety gate can bump any risky draft to confirm. \"Check with me first again\" → `set_posting_mode`.";
   }
   if (mode === "confirm_each") {
-    return "The founder wants to **approve every post first** — including X / LinkedIn / Instagram / YouTube. So I send each one via the one-tap confirm card and say \"I've got a post ready for your OK,\" NEVER \"I posted.\" Their tap is what publishes it.";
+    return "The founder wants to **approve every post first** — including X / LinkedIn / Instagram / YouTube. Each goes out via the one-tap card: \"ready for your OK,\" NEVER \"I posted.\" Their tap publishes it. \"Just post from now on\" → `set_posting_mode`.";
   }
   // confirm_first_week (default)
-  return "We're in **confirm-first-week** (the trust ramp): I send each auto-channel post (X / LinkedIn / Instagram / YouTube) for a one-tap OK until the founder has approved a few (or a week passes), then I post those channels myself. Until I've graduated, I say \"ready for your OK,\" not \"posted.\" Reddit / TikTok stay one-tap-confirm always. Once they've okayed enough, I proactively offer to take the auto channels off their plate.";
+  return "We're in **confirm-first-week** (the trust ramp): each auto-channel post (X / LinkedIn / Instagram / YouTube) gets a one-tap OK until the founder approves a few (or a week passes), then I post those channels myself. Until graduated I say \"ready for your OK,\" not \"posted.\" Reddit / TikTok stay one-tap always. Once a few land well I offer to take the auto channels off their plate — their yes in chat → `set_posting_mode`.";
 }
 
 /**
