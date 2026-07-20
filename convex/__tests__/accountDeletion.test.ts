@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../schema";
-import { api } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import { modules } from "../../tests/_modules";
 import { _setWebhookSecretForTests } from "../lib/webhookSecret";
 import type { Id } from "../_generated/dataModel";
@@ -222,3 +222,87 @@ async function seedFullAccount(t: ReturnType<typeof convexTest>): Promise<{
     return { creatorId, businessId };
   });
 }
+
+describe("Zernio disconnect on account deletion (2026-07-20)", () => {
+  it("purging a GTM account schedules disconnectZernioAccountsInternal with the agent's connected account ids", async () => {
+    const t = convexTest(schema, modules);
+    const authed = t.withIdentity({
+      subject: "user_zdel",
+      email: "zdel@clawlaunch.test",
+    });
+    const started = await authed.mutation(
+      api.gtmMaya.researchLifecycle.startGtmOnboarding,
+      { channelPreference: "telegram", timezone: "America/New_York" }
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch(started.agentId, {
+        connectedAccountsJson: JSON.stringify([
+          { accountId: "zern_x_1", platform: "x" },
+          { accountId: "zern_li_2", platform: "linkedin" },
+        ]),
+      });
+    });
+
+    await t.mutation(internal.accountDeletion.purgeGtmAccountByCreatorId, {
+      creatorId: started.accountId,
+      source: "web",
+    });
+
+    const scheduled = await t.run(async (ctx) =>
+      (await ctx.db.system.query("_scheduled_functions").collect()).filter((f) =>
+        f.name.includes("disconnectZernioAccountsInternal")
+      )
+    );
+    expect(scheduled).toHaveLength(1);
+    const argsRow = scheduled[0].args[0] as { zernioAccountIds: string[] };
+    expect(argsRow.zernioAccountIds.sort()).toEqual(["zern_li_2", "zern_x_1"]);
+    // The creator + agent rows are gone — ids were collected BEFORE the cascade.
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get(started.accountId)).toBeNull();
+      expect(await ctx.db.get(started.agentId)).toBeNull();
+    });
+  });
+
+  it("disconnectZernioAccountsInternal DELETEs each account; 404 counts as already-disconnected", async () => {
+    const t = convexTest(schema, modules);
+    vi.stubEnv("ZERNIO_API_KEY", "test-key");
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL, init?: { method?: string }) => {
+        const u = String(url);
+        calls.push(`${init?.method} ${u}`);
+        if (u.includes("zern_gone")) {
+          return new Response("not found", { status: 404 });
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      })
+    );
+    const result = (await t.action(
+      internal.accountDeletion.disconnectZernioAccountsInternal,
+      { zernioAccountIds: ["zern_live", "zern_gone"], attempt: 1 },
+    )) as { disconnected: number; failed: string[] };
+    expect(result.disconnected).toBe(2);
+    expect(result.failed).toEqual([]);
+    expect(
+      calls.some((c) => c.startsWith("DELETE") && c.includes("/api/v1/accounts/zern_live"))
+    ).toBe(true);
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("missing ZERNIO_API_KEY fails loudly without throwing (deletion never blocks)", async () => {
+    const t = convexTest(schema, modules);
+    vi.stubEnv("ZERNIO_API_KEY", "");
+    const result = (await t.action(
+      internal.accountDeletion.disconnectZernioAccountsInternal,
+      { zernioAccountIds: ["zern_x_1"], attempt: 1 },
+    )) as { disconnected: number; failed: string[] };
+    expect(result.disconnected).toBe(0);
+    expect(result.failed).toEqual(["zern_x_1"]);
+    vi.unstubAllEnvs();
+  });
+});

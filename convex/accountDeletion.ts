@@ -610,7 +610,19 @@ async function purgeCreatorAccount(
     ...businesses.map((business) => business?.stripeCustomerId),
   ].filter((id): id is string => typeof id === "string" && id.length > 0);
   const flyAppIds = await flyAppIdsForAccount(ctx, creator, businesses);
+  const zernioAccountIds = await zernioAccountIdsForAccount(ctx, creator._id);
 
+  // Zernio disconnect is Convex-side for the same reason as Fly/Stripe below
+  // (ZERNIO_API_KEY lives here). Collected BEFORE the cascade deletes the
+  // gtmAgents rows that hold the account ids; deleting each account revokes
+  // the user's social OAuth grant and stops its pay-per-account billing.
+  if (zernioAccountIds.length > 0) {
+    await ctx.scheduler.runAfter(
+      0,
+      internal.accountDeletion.disconnectZernioAccountsInternal,
+      { zernioAccountIds, attempt: 1 }
+    );
+  }
   // Fly teardown MUST happen Convex-side: FLY_API_TOKEN lives in this
   // deployment's env, not on the web host (the Vercel route's best-effort
   // destroy silently no-ops without a token — that gap orphaned a machine on
@@ -721,6 +733,69 @@ export const deleteStripeCustomersInternal = internalAction({
 });
 
 /**
+ * Disconnect the user's Zernio-connected social accounts collected during an
+ * account purge. `DELETE /api/v1/accounts/{id}` revokes the platform OAuth
+ * grant and stops that account's pay-per-account billing. 404 / not-found =
+ * already disconnected = success. Failures re-schedule with the same backoff
+ * as the Fly teardown, then log loudly — a missed disconnect means we keep a
+ * live grant to post on a deleted user's social account.
+ */
+export const disconnectZernioAccountsInternal = internalAction({
+  args: { zernioAccountIds: v.array(v.string()), attempt: v.number() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ disconnected: number; failed: string[] }> => {
+    const failed: string[] = [];
+    let disconnected = 0;
+    if (!process.env.ZERNIO_API_KEY) {
+      // Retrying won't conjure a key; make the miss loud and actionable.
+      console.error(
+        `[accountDeletion] ZERNIO_API_KEY missing — cannot disconnect Zernio accounts ${args.zernioAccountIds.join(", ")}; disconnect them manually in the Zernio dashboard.`
+      );
+      return { disconnected: 0, failed: args.zernioAccountIds };
+    }
+    const { ZernioClient } = await import("./integrations/zernio/client");
+    const { deleteAccount } = await import("./integrations/zernio/endpoints");
+    const client = new ZernioClient({ apiKey: process.env.ZERNIO_API_KEY });
+    for (const accountId of [...new Set(args.zernioAccountIds.filter(Boolean))]) {
+      try {
+        await deleteAccount(client, accountId);
+        disconnected += 1;
+        console.log(`[accountDeletion] disconnected Zernio account ${accountId}`);
+      } catch (error) {
+        const status = (error as { status?: number }).status;
+        const message = error instanceof Error ? error.message : String(error);
+        // Already disconnected/gone reads as success (duck-typed: instanceof
+        // breaks across convex-test's module boundary).
+        if (status === 404 || /404|not found/i.test(message)) {
+          disconnected += 1;
+          continue;
+        }
+        failed.push(accountId);
+        console.error(
+          `[accountDeletion] Zernio disconnect failed for ${accountId} (attempt ${args.attempt}): ${message}`
+        );
+      }
+    }
+    if (failed.length > 0) {
+      if (args.attempt < FLY_DESTROY_MAX_ATTEMPTS) {
+        await ctx.scheduler.runAfter(
+          FLY_DESTROY_RETRY_MS,
+          internal.accountDeletion.disconnectZernioAccountsInternal,
+          { zernioAccountIds: failed, attempt: args.attempt + 1 }
+        );
+      } else {
+        console.error(
+          `[accountDeletion] ZERNIO ACCOUNTS NOT DISCONNECTED after ${args.attempt} attempts: ${failed.join(", ")} — the user's social OAuth grants are still live; disconnect manually in the Zernio dashboard.`
+        );
+      }
+    }
+    return { disconnected, failed };
+  },
+});
+
+/**
  * Destroy the per-user OpenClaw Fly apps collected during an account purge.
  * Runs Convex-side so it always has FLY_API_TOKEN. 404 = already gone =
  * success. Any app that fails is re-scheduled (60s backoff, max 4 attempts);
@@ -767,6 +842,45 @@ export const destroyFlyAppsInternal = internalAction({
     return { destroyed, failed };
   },
 });
+
+/**
+ * Collect the user's Zernio-connected social accounts (X / LinkedIn / IG / …)
+ * BEFORE the cascade deletes the gtmAgents rows that hold them. Deleting an
+ * account in Zernio (`DELETE /api/v1/accounts/{id}`) revokes the OAuth
+ * connection and stops its pay-per-account billing — without this, a deleted
+ * user's live social-posting grants sit in our shared Zernio workspace
+ * forever. (Service-product `zernioConnections` rows are NOT collected: those
+ * hold per-business Zernio API keys for the business's OWN workspace, which
+ * our shared-workspace key cannot and should not touch.)
+ */
+async function zernioAccountIdsForAccount(
+  ctx: QueryCtx | MutationCtx,
+  creatorId: Id<"creators">
+): Promise<string[]> {
+  const ids = new Set<string>();
+  const gtmAgents = await ctx.db
+    .query("gtmAgents")
+    .withIndex("by_account", (q) => q.eq("accountId", creatorId))
+    .collect();
+  for (const agent of gtmAgents) {
+    if (!agent.connectedAccountsJson) continue;
+    try {
+      const accounts = JSON.parse(agent.connectedAccountsJson) as Array<{
+        accountId?: string;
+      }>;
+      if (Array.isArray(accounts)) {
+        for (const account of accounts) {
+          if (typeof account?.accountId === "string" && account.accountId) {
+            ids.add(account.accountId);
+          }
+        }
+      }
+    } catch {
+      // Corrupt JSON: nothing recoverable to disconnect from this agent.
+    }
+  }
+  return [...ids];
+}
 
 async function flyAppIdsForAccount(
   ctx: QueryCtx | MutationCtx,
