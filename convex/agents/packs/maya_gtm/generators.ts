@@ -1626,53 +1626,15 @@ function buildCronDelivery(
 
 
 
-/** Minutes the IANA `tz` is AHEAD of UTC at instant `atMs` (DST-correct for
- *  that instant). e.g. America/New_York in summer (EDT) → -240. */
-function tzOffsetMinutes(tz: string, atMs: number): number {
-  try {
-    const d = new Date(atMs);
-    const asUtc = new Date(d.toLocaleString("en-US", { timeZone: "UTC" }));
-    const asLocal = new Date(d.toLocaleString("en-US", { timeZone: tz }));
-    return Math.round((asLocal.getTime() - asUtc.getTime()) / 60000);
-  } catch {
-    return 0; // unknown tz → treat as UTC (no shift)
-  }
-}
-
-/**
- * Convert a FIXED-HOUR cron expression from the operator's local tz to UTC.
- * OpenClaw's scheduler fires cron expressions in UTC and IGNORES the tz field
- * (verified live 2026-06-22: a `0 13 * * *` cron on America/New_York fired at
- * 13:00 UTC = 9am ET instead of 1pm ET). So we rewrite the hour ourselves.
- *
- *  - NO-OP on a non-single-integer HOUR field (`*`, lists, ranges, steps) — the
- *    hourly discovery pulse `0 * * * *` is timezone-INVARIANT and must pass
- *    through unchanged, or the budget-paced cadence breaks.
- *  - Shifts day-of-week / day-of-month when the conversion crosses midnight
- *    (single-int fields only; best-effort for the rare monthly backward cross).
- *  - Uses the offset at `atMs` (deploy time) → DST-correct now; the machine `TZ`
- *    env (set in deployMayaGtm) is the belt-and-suspenders for the twice-yearly
- *    DST flip until the next redeploy.
- */
-export function localCronToUtc(expr: string, tz: string | undefined, atMs: number): string {
-  if (!tz) return expr;
-  const parts = expr.trim().split(/\s+/);
-  if (parts.length !== 5) return expr;
-  const [min, hour, dom, mon, dow] = parts;
-  if (!/^\d+$/.test(hour)) return expr; // wildcard/list/range/step → tz-invariant
-  const offsetHours = tzOffsetMinutes(tz, atMs) / 60;
-  let utc = parseInt(hour, 10) - offsetHours; // local = utc + offset
-  let dayDelta = 0;
-  while (utc < 0) { utc += 24; dayDelta -= 1; }
-  while (utc >= 24) { utc -= 24; dayDelta += 1; }
-  let newDom = dom;
-  let newDow = dow;
-  if (dayDelta !== 0) {
-    if (/^\d+$/.test(dow)) newDow = String(((parseInt(dow, 10) + dayDelta) % 7 + 7) % 7);
-    if (/^\d+$/.test(dom)) newDom = String(parseInt(dom, 10) + dayDelta);
-  }
-  return [min, String(Math.round(utc)), newDom, mon, newDow].join(" ");
-}
+// Cron timezone contract (2026-07-20): ship the OPERATOR-LOCAL expression
+// verbatim + the IANA tz field. The OpenClaw runtime (>= the pinned image,
+// verified in dist/schedule-*.js `resolveCronTimezone`) evaluates the expr in
+// `schedule.tz` via croner, falling back to the machine timezone (which
+// deployMayaGtm sets to the operator's tz) when tz is absent. The old
+// deploy-time UTC pre-conversion (`localCronToUtc`) double-converted on this
+// runtime — every fixed-hour cron fired 4h late for a US-East founder, monthly
+// crons rendered an invalid day-of-month 0 for UTC+7..+14, and half-hour
+// timezones drifted 30min. Local expr + tz is also the only DST-correct form.
 
 function renderJobs(input: MayaGtmWorkspaceInput): string {
   // jobs.json ships the 0001_kickstart one-shot hello PLUS the recurring
@@ -1839,10 +1801,9 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
         updatedAtMs: 0,
         schedule: {
           kind: "cron" as const,
-          // OpenClaw fires cron exprs in UTC + ignores `tz`, so rewrite the
-          // fixed-hour exprs to UTC ourselves. `tz` is kept too (harmless if
-          // ignored, correct if a future runtime honors it).
-          expr: localCronToUtc(c.expr, input.timezone, cronBaseMs),
+          // Operator-local expr + tz, verbatim — the runtime evaluates the
+          // expr IN this tz (see the cron timezone contract note above).
+          expr: c.expr,
           tz: input.timezone,
         },
         sessionTarget: "isolated" as const,
@@ -1881,9 +1842,9 @@ function renderJobs(input: MayaGtmWorkspaceInput): string {
               schedule: {
                 kind: "cron" as const,
                 // Default `0 */3 * * *` (every 3h), env-tunable via
-                // MAYA_GTM_PULSE_CRON_EXPR. An interval/step expr is tz-invariant
-                // → localCronToUtc no-ops it.
-                expr: localCronToUtc(discoveryPulseExpr(), input.timezone, cronBaseMs),
+                // MAYA_GTM_PULSE_CRON_EXPR. An interval/step expr is
+                // tz-invariant, so the tz field is inert here.
+                expr: discoveryPulseExpr(),
                 tz: input.timezone,
               },
               sessionTarget: "isolated" as const,
@@ -2015,8 +1976,8 @@ const recurringCrons: ReadonlyArray<{
  * (8/day, ~3x cheaper) — still an all-day operator, far lower token burn.
  * Env-overridable per deploy (e.g. "0 * * * *" for a paid agent that wants
  * hourly). MUST stay timezone-INVARIANT (an interval/step expr, not a fixed
- * hour) so localCronToUtc no-ops it; the de-blinded $1/day kill-switch is the
- * hard backstop regardless of cadence.
+ * hour) so the cadence is identical in every operator tz; the de-blinded
+ * $1/day kill-switch is the hard backstop regardless of cadence.
  */
 const DISCOVERY_PULSE_DEFAULT_EXPR = "0 */3 * * *";
 export function discoveryPulseExpr(

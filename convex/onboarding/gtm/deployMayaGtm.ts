@@ -1978,8 +1978,9 @@ export function buildGtmMachineConfig(input: {
    *  updates still take effect even with the volume mounted. */
   memoryVolumeName?: string;
   /** Operator's IANA timezone → machine `TZ` env. Belt-and-suspenders for cron
-   *  scheduling: the cron exprs are already rewritten to UTC (localCronToUtc), but
-   *  if a future OpenClaw runtime honors the system TZ this makes it local too. */
+   *  scheduling: jobs.json ships operator-LOCAL exprs + `schedule.tz` (the
+   *  runtime evaluates them in that tz); this covers any job missing a tz —
+   *  the runtime falls back to the machine timezone. */
   timezone?: string;
 }): FlyMachineConfig {
   return {
@@ -1990,7 +1991,7 @@ export function buildGtmMachineConfig(input: {
     env: {
       OPENCLAW_STATE_DIR: "/data",
       OPENCLAW_CONFIG_PATH: "/data/openclaw.json",
-      // Belt-and-suspenders for cron tz (the exprs are already UTC-rewritten):
+      // Belt-and-suspenders for cron tz (exprs ship operator-LOCAL + schedule.tz):
       // if the runtime/cron lib honors the system TZ, this fires crons local too.
       ...(input.timezone ? { TZ: input.timezone } : {}),
       // 2026-05-30 — force IPv4-first DNS so outbound to api.telegram.org is
