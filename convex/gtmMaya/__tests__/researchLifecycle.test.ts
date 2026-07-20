@@ -269,26 +269,32 @@ describe("W2.5 posting mode — conversational grant (set_posting_mode)", () => 
     expect(agent?.autonomousPosting).toBe("autonomous");
   });
 
-  it("entering confirm_first_week stamps the ramp clock exactly once", async () => {
+  it("entering confirm_first_week ALWAYS restarts the ramp (clock + counter)", async () => {
     const t = convexTest(schema, modules);
     const user = authedGtm(t, "u_pm_ramp");
     const started = await user.mutation(
       api.gtmMaya.researchLifecycle.startGtmOnboarding,
       { channelPreference: "telegram", timezone: "America/New_York" }
     );
+    // Simulate a graduated agent: old clock, 3 confirmed posts.
+    const staleSince = Date.now() - 10 * 24 * 60 * 60 * 1000;
+    await t.run(async (ctx) => {
+      await ctx.db.patch(started.agentId, {
+        autonomousSince: staleSince,
+        confirmedPostCount: 3,
+      });
+    });
+    // The founder revokes autonomy ("check with me for a week"): the ramp MUST
+    // restart, or isRampGraduated stays true and the revoke is a silent no-op
+    // (Maya keeps auto-posting against their explicit ask).
     await t.mutation(internal.gtmMaya.researchLifecycle.setPostingModeByAgent, {
       agentId: started.agentId,
       mode: "confirm_first_week",
     });
-    const first = await t.run((ctx) => ctx.db.get(started.agentId));
-    expect(first?.autonomousSince).toBeTypeOf("number");
-    // Re-entering does NOT restart an already-running ramp.
-    await t.mutation(internal.gtmMaya.researchLifecycle.setPostingModeByAgent, {
-      agentId: started.agentId,
-      mode: "confirm_first_week",
-    });
-    const second = await t.run((ctx) => ctx.db.get(started.agentId));
-    expect(second?.autonomousSince).toBe(first?.autonomousSince);
+    const after = await t.run((ctx) => ctx.db.get(started.agentId));
+    expect(after?.autonomousSince).toBeTypeOf("number");
+    expect(after?.autonomousSince).toBeGreaterThan(staleSince);
+    expect(after?.confirmedPostCount).toBe(0);
   });
 
   it("agent path and web path (setMyPostingMode) write the same preference", async () => {

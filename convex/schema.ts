@@ -6184,7 +6184,9 @@ export default defineSchema({
   gtmPostResults: defineTable({
     accountId: v.id("creators"),
     agentId: v.id("gtmAgents"),
-    draftId: v.id("gtmDraftedContent"),
+    // Optional since 2026-07: founder-confirmed publishes stamp the dedup
+    // ledger even when no gtmDraftedContent row exists for the reply.
+    draftId: v.optional(v.id("gtmDraftedContent")),
     snapshotAtMs: v.number(),
     platform: v.union(
       v.literal("reddit"),

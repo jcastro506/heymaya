@@ -45,6 +45,108 @@ const POLL_WINDOWS_MS = {
 } as const;
 
 /**
+ * Which table does the id the agent handed us belong to? The paste flow's
+ * done-state can arrive with either a gtmDraftedContent id (publisher flow)
+ * or a gtmCalendarEvents id (one-tap/needs_confirm item the founder posted
+ * by hand) — the HTTP handler branches on this instead of throwing.
+ */
+export const resolveManualPublishTarget = internalQuery({
+  args: { rawId: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<
+    | { kind: "draft"; draftId: Id<"gtmDraftedContent"> }
+    | { kind: "event"; eventId: Id<"gtmCalendarEvents"> }
+    | { kind: "unknown" }
+  > => {
+    const draftId = ctx.db.normalizeId("gtmDraftedContent", args.rawId);
+    if (draftId) return { kind: "draft", draftId };
+    const eventId = ctx.db.normalizeId("gtmCalendarEvents", args.rawId);
+    if (eventId) return { kind: "event", eventId };
+    return { kind: "unknown" };
+  },
+});
+
+/**
+ * The founder posted a needs_confirm/draft calendar item BY HAND and told
+ * Maya "done" — flip the event row to published so tomorrow's brief doesn't
+ * re-deal an already-posted card, and stamp the dedup ledger so the thread
+ * is never re-targeted.
+ */
+export const markEventPublishedManual = internalMutation({
+  args: {
+    agentId: v.id("gtmAgents"),
+    accountId: v.id("creators"),
+    eventId: v.id("gtmCalendarEvents"),
+    providerPostId: v.string(),
+    permalink: v.optional(v.string()),
+    postedAtMs: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; reason?: string }> => {
+    const ev = await ctx.db.get(args.eventId);
+    if (!ev) return { ok: false, reason: "event not found" };
+    if (ev.agentId !== args.agentId || ev.accountId !== args.accountId) {
+      return { ok: false, reason: "event does not belong to this agent" };
+    }
+    if (ev.status === "published") {
+      return { ok: true, reason: "already published" };
+    }
+    let ap: Record<string, unknown> = {};
+    try {
+      ap = ev.autoPostJson ? (JSON.parse(ev.autoPostJson) as Record<string, unknown>) : {};
+    } catch {
+      ap = {};
+    }
+    ap.providerPostId = args.providerPostId;
+    if (args.permalink) ap.permalink = args.permalink;
+    ap.manualPublish = true;
+    await ctx.db.patch(args.eventId, {
+      status: "published",
+      autoPostJson: JSON.stringify(ap),
+      updatedAt: Date.now(),
+    });
+    // Stamp the dedup ledger for targeted replies posted by hand.
+    const platform = typeof ap.channel === "string" ? ap.channel : null;
+    const targetExternalId =
+      typeof ap.targetExternalId === "string" ? ap.targetExternalId : null;
+    if (platform && targetExternalId && isLedgerPlatform(platform)) {
+      await ctx.db.insert("gtmPostResults", {
+        accountId: args.accountId,
+        agentId: args.agentId,
+        snapshotAtMs: Date.now(),
+        platform,
+        providerPostId: args.providerPostId,
+        metrics: {},
+        surfacedToOperator: false,
+        targetExternalId,
+        targetCommentId:
+          typeof ap.targetCommentId === "string" ? ap.targetCommentId : undefined,
+      });
+    }
+    return { ok: true };
+  },
+});
+
+const LEDGER_PLATFORMS = new Set([
+  "reddit",
+  "x",
+  "hn",
+  "linkedin",
+  "instagram",
+  "tiktok",
+  "youtube",
+]);
+function isLedgerPlatform(
+  p: string
+): p is "reddit" | "x" | "hn" | "linkedin" | "instagram" | "tiktok" | "youtube" {
+  return LEDGER_PLATFORMS.has(p);
+}
+
+/**
  * Internal mutation called from the HTTP handler. Patches the draft
  * to "published", then schedules the three polling windows.
  */

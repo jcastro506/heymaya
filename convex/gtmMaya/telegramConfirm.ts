@@ -111,7 +111,10 @@ async function tgEditText(
   botToken: string,
   chatId: string,
   messageId: number,
-  text: string
+  text: string,
+  // Re-armed cards (publish failed, event back to needs_confirm) keep their
+  // buttons so "tap again" is literally possible; acted cards strip them.
+  keepButtonsForEventId?: string
 ): Promise<void> {
   try {
     await fetch(`${TG}/bot${botToken}/editMessageText`, {
@@ -121,7 +124,17 @@ async function tgEditText(
         chat_id: chatId,
         message_id: messageId,
         text,
-        reply_markup: { inline_keyboard: [] }, // strip the buttons once acted
+        reply_markup: keepButtonsForEventId
+          ? {
+              inline_keyboard: [
+                [{ text: "✅ Post it", callback_data: `gpost:${keepButtonsForEventId}` }],
+                [
+                  { text: "✏️ Edit", callback_data: `gedit:${keepButtonsForEventId}` },
+                  { text: "✕ Skip", callback_data: `gskip:${keepButtonsForEventId}` },
+                ],
+              ],
+            }
+          : { inline_keyboard: [] }, // strip the buttons once acted
       }),
     });
   } catch {
@@ -144,6 +157,10 @@ interface ConfirmEventView {
   /** Slideshow/carousel media (storage ids) persisted on the event so the tap
    *  path posts the actual slides, not just the caption. */
   mediaAssetIds: string[];
+  /** Dedup-ledger stamp + link-in-first-comment, persisted at event creation so
+   *  the founder-approved publish is byte-identical to the auto path. */
+  draftId: string | null;
+  firstComment: string | null;
 }
 
 interface ParsedAutoPost {
@@ -152,6 +169,8 @@ interface ParsedAutoPost {
   targetExternalId?: string;
   targetCommentId?: string;
   mediaAssetIds?: string[];
+  draftId?: string;
+  firstComment?: string;
 }
 
 function parseAutoPost(json: string | undefined): ParsedAutoPost {
@@ -182,6 +201,8 @@ export const getConfirmEvent = internalQuery({
       status: event.status,
       chatId: agent?.telegramChatId ?? null,
       mediaAssetIds: Array.isArray(ap.mediaAssetIds) ? ap.mediaAssetIds : [],
+      draftId: ap.draftId ?? null,
+      firstComment: ap.firstComment ?? null,
     };
   },
 });
@@ -205,6 +226,45 @@ export const setConfirmEventMedia = internalMutation({
   },
 });
 
+/**
+ * The pending-confirm queue, agent-readable. Rides the get_agent_lifecycle
+ * response so a fresh session (restart, redeploy) can always answer "what's
+ * waiting on the founder?" and bind a chat "post it" to a real eventId
+ * instead of guessing.
+ */
+export const listPendingConfirms = internalQuery({
+  args: { agentId: v.id("gtmAgents") },
+  handler: async (
+    ctx,
+    args
+  ): Promise<
+    Array<{
+      eventId: Id<"gtmCalendarEvents">;
+      channel: string | null;
+      title: string;
+      excerpt: string;
+      createdAt: number;
+    }>
+  > => {
+    const rows = await ctx.db
+      .query("gtmCalendarEvents")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .filter((q) => q.eq(q.field("status"), "needs_confirm"))
+      .order("desc")
+      .take(10);
+    return rows.map((ev) => {
+      const ap = parseAutoPost(ev.autoPostJson);
+      return {
+        eventId: ev._id,
+        channel: ap.channel ?? null,
+        title: ev.title,
+        excerpt: (ev.draftText ?? ev.description ?? ev.title).slice(0, 140),
+        createdAt: ev.createdAt,
+      };
+    });
+  },
+});
+
 /** Resolve the agent paired to a Telegram chat (for callback cross-tenant check). */
 export const getAgentIdByChatId = internalQuery({
   args: { chatId: v.string() },
@@ -217,7 +277,9 @@ export const getAgentIdByChatId = internalQuery({
   },
 });
 
-/** Flip a confirm event to its terminal state after a tap. */
+/** Flip a confirm event's state after a tap. `needs_confirm` is the re-arm:
+ *  a publish that failed (or was gate-blocked) goes BACK to needs_confirm so
+ *  the founder's next "post it" / tap can retry — never a terminal dead end. */
 export const setConfirmEventStatus = internalMutation({
   args: {
     eventId: v.id("gtmCalendarEvents"),
@@ -225,7 +287,8 @@ export const setConfirmEventStatus = internalMutation({
       v.literal("posting"),
       v.literal("published"),
       v.literal("cancelled"),
-      v.literal("failed")
+      v.literal("failed"),
+      v.literal("needs_confirm")
     ),
   },
   handler: async (ctx, args): Promise<void> => {
@@ -355,9 +418,9 @@ export const handleConfirmCallback = internalAction({
     const token = bot.token;
     const ans = (t: string) =>
       token ? tgAnswerCallback(token, args.callbackQueryId, t) : Promise.resolve();
-    const edit = (t: string) =>
+    const edit = (t: string, keepButtonsForEventId?: string) =>
       token && args.messageId
-        ? tgEditText(token, args.chatId, args.messageId, t)
+        ? tgEditText(token, args.chatId, args.messageId, t, keepButtonsForEventId)
         : Promise.resolve();
 
     const ev = await ctx.runQuery(internal.gtmMaya.telegramConfirm.getConfirmEvent, {
@@ -435,6 +498,8 @@ export const handleConfirmCallback = internalAction({
         targetCommentId: ev.targetCommentId ?? undefined,
         founderConfirmed: true,
         mediaAssetIds: ev.mediaAssetIds.length > 0 ? ev.mediaAssetIds : undefined,
+        draftId: ev.draftId ? (ev.draftId as Id<"gtmDraftedContent">) : undefined,
+        firstComment: ev.firstComment ?? undefined,
       }
     );
     if (result.action === "auto") {
@@ -446,12 +511,18 @@ export const handleConfirmCallback = internalAction({
         ev.channel[0].toUpperCase() + ev.channel.slice(1);
       await edit(`✅ Posted to ${channelLabel}. I'll confirm it's live shortly.`);
     } else {
+      // Publish failed or a gate (plan/dedup) blocked it. RE-ARM, never
+      // dead-end: the founder already approved, so the approval must survive a
+      // transient failure (expired token, Zernio blip) — flip back to
+      // needs_confirm so the next tap / "post it" retries.
       await ctx.runMutation(internal.gtmMaya.telegramConfirm.setConfirmEventStatus, {
         eventId: eventIdRaw as Id<"gtmCalendarEvents">,
-        status: "failed",
+        status: "needs_confirm",
       });
       await edit(
-        `⚠️ That didn't go through (${result.reasons[0] ?? "unknown"}). I'll take another run at it.`
+        `⚠️ Couldn't post it: ${result.reasons[0] ?? "unknown error"}. ` +
+          `It's still queued — tap again or say "post it" to retry.`,
+        eventIdRaw
       );
     }
   },
@@ -531,6 +602,8 @@ export const confirmEventConversational = internalAction({
         targetCommentId: ev.targetCommentId ?? undefined,
         founderConfirmed: true,
         mediaAssetIds: ev.mediaAssetIds.length > 0 ? ev.mediaAssetIds : undefined,
+        draftId: ev.draftId ? (ev.draftId as Id<"gtmDraftedContent">) : undefined,
+        firstComment: ev.firstComment ?? undefined,
       }
     );
     if (result.action === "auto") {
@@ -540,14 +613,19 @@ export const confirmEventConversational = internalAction({
       });
       return { ok: true, outcome: "published" };
     }
+    // RE-ARM, never dead-end: the founder's approval survives a transient
+    // failure (expired token, Zernio blip) or a gate block (plan/dedup). The
+    // event goes back to needs_confirm so a retry "post it" / tap can land.
     await ctx.runMutation(internal.gtmMaya.telegramConfirm.setConfirmEventStatus, {
       eventId: args.eventId,
-      status: "failed",
+      status: "needs_confirm",
     });
     return {
       ok: false,
-      outcome: "failed",
-      reason: result.reasons?.[0] ?? "publish failed",
+      outcome: "retryable",
+      reason:
+        `publish did not go through: ${result.reasons?.[0] ?? "unknown error"} — ` +
+        `the event is still approved-and-queued; retry confirm_event after the blocker clears (do NOT re-draft)`,
     };
   },
 });
@@ -562,15 +640,37 @@ export const confirmEventHttp = httpAction(async (ctx, request) => {
     return new Response("bad json", { status: 400 });
   }
   if (!body.eventId) return new Response("missing eventId", { status: 400 });
-  const decision = body.decision === "skip" ? "skip" : "post";
-  const result = await ctx.runAction(
-    internal.gtmMaya.telegramConfirm.confirmEventConversational,
-    {
-      eventId: body.eventId as Id<"gtmCalendarEvents">,
-      agentId: auth.agentId,
-      decision,
-    }
-  );
+  // Publishing under the founder's name is the destructive branch — a missing
+  // or malformed decision must NEVER default into it. Exact match or re-ask.
+  if (body.decision !== "post" && body.decision !== "skip") {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        reason: `invalid decision ${JSON.stringify(body.decision ?? null)} — pass exactly "post" or "skip"`,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  }
+  const decision = body.decision;
+  let result: { ok: boolean; outcome?: string; reason?: string };
+  try {
+    result = await ctx.runAction(
+      internal.gtmMaya.telegramConfirm.confirmEventConversational,
+      {
+        eventId: body.eventId as Id<"gtmCalendarEvents">,
+        agentId: auth.agentId,
+        decision,
+      }
+    );
+  } catch {
+    // A malformed/foreign id fails Convex validation — tell the agent what to
+    // do about it instead of leaking a 500 stack she can only guess at.
+    result = {
+      ok: false,
+      reason:
+        "unknown eventId — use the eventId returned by post_to_channel/propose_calendar (or get_agent_lifecycle's pendingConfirms), never an external post id",
+    };
+  }
   return new Response(JSON.stringify(result), {
     status: 200,
     headers: { "content-type": "application/json" },

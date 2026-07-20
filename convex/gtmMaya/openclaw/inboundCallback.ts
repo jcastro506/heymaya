@@ -424,16 +424,33 @@ export const calendarProposalHttp = httpAction(async (ctx, request) => {
         events: body.events,
       }
     );
+    // The agent needs the ids (confirm_event / send_confirm_card take an
+    // eventId) and MUST see rejections — a dropped event she believes is
+    // queued becomes a phantom plan item she reports as real.
     return new Response(
-      `ok (${result.stored} events stored as draft; awaiting approval)`,
-      { status: 200 }
+      JSON.stringify({
+        ok: true,
+        stored: result.stored,
+        eventIds: result.draftIds,
+        rejected: result.rejected,
+        rejectedTitles: result.rejectedTitles,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
     );
   } catch (err) {
     console.error(
       "[/lc_gtm/calendar_proposal] store failed:",
       (err as Error).message
     );
-    return new Response("ok (store failed; see logs)", { status: 200 });
+    // NEVER say "ok" on a failed write — the agent reads the leading token
+    // and reports the plan as stored. ok:false renders as BLOCKED to her.
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        reason: `store failed: ${(err as Error).message} — nothing was saved; fix the payload and retry with a NEW idempotencyKey`,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
   }
 });
 
@@ -772,27 +789,35 @@ export const draftedContentHttp = httpAction(async (ctx, request) => {
   }
 
   try {
-    await ctx.runMutation(internal.gtmMaya.targetList.recordDraftedContent, {
-      agentId: auth.agentId,
-      accountId: auth.accountId,
-      researchJobId: body.researchJobId as Id<"gtmResearchJobs"> | undefined,
-      kind: body.kind,
-      platform: body.platform,
-      targetThreadId: body.targetThreadId as
-        | Id<"gtmTargetThreads">
-        | undefined,
-      targetAccountId: body.targetAccountId as
-        | Id<"gtmTargetAccounts">
-        | undefined,
-      draftText: body.draftText,
-      rationale: typeof body.rationale === "string" ? body.rationale : undefined,
-      draftSegments: body.draftSegments,
-      attributes: body.attributes,
+    const draftId = await ctx.runMutation(
+      internal.gtmMaya.targetList.recordDraftedContent,
+      {
+        agentId: auth.agentId,
+        accountId: auth.accountId,
+        researchJobId: body.researchJobId as Id<"gtmResearchJobs"> | undefined,
+        kind: body.kind,
+        platform: body.platform,
+        targetThreadId: body.targetThreadId as
+          | Id<"gtmTargetThreads">
+          | undefined,
+        targetAccountId: body.targetAccountId as
+          | Id<"gtmTargetAccounts">
+          | undefined,
+        draftText: body.draftText,
+        rationale: typeof body.rationale === "string" ? body.rationale : undefined,
+        draftSegments: body.draftSegments,
+        attributes: body.attributes,
+      }
+    );
+    // The id is the contract: publish/voice-match/post-result tools all
+    // REQUIRE draftId, and a bare "ok" left the agent to fabricate one.
+    return new Response(JSON.stringify({ ok: true, draftId }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
     });
   } catch (err) {
     return new Response((err as Error).message, { status: 400 });
   }
-  return new Response("ok", { status: 200 });
 });
 
 /**

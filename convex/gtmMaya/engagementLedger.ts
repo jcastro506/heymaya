@@ -127,7 +127,10 @@ export const recordEngagement = internalMutation({
   args: {
     accountId: v.id("creators"),
     agentId: v.id("gtmAgents"),
-    draftId: v.id("gtmDraftedContent"),
+    // Optional: founder-confirmed publishes may have no saved draft row, but
+    // the engagement MUST still be stamped or "never reply twice" goes blind
+    // on exactly the human-approved path.
+    draftId: v.optional(v.id("gtmDraftedContent")),
     platform: v.union(
       v.literal("reddit"),
       v.literal("x"),

@@ -133,10 +133,35 @@ export const zernioPostHttp = httpAction(async (ctx, request) => {
           mode: "manual_confirm",
           targetExternalId: body.targetExternalId,
           targetCommentId: body.targetCommentId,
+          // Carried through to the confirm-path publish: without these the
+          // founder-approved post ships link-less (LI/IG/YT first-comment) and
+          // never stamps the dedup ledger (draftId).
+          draftId: body.draftId,
+          firstComment,
         }),
         dedupeKey,
       }
     );
+    // The dedupe upsert may have returned an EXISTING row — report its real
+    // state, never a stale "needs_confirm" for something already posted.
+    const evAfter = await ctx.runQuery(
+      internal.gtmMaya.telegramConfirm.getConfirmEvent,
+      { eventId }
+    );
+    if (evAfter && evAfter.status !== "needs_confirm") {
+      return new Response(
+        JSON.stringify({
+          outcome: evAfter.status,
+          eventId,
+          reasons: [
+            evAfter.status === "published"
+              ? "already posted to this target — do not post again"
+              : `an event for this target is currently '${evAfter.status}'`,
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
     return new Response(
       JSON.stringify({ ...result, outcome: "needs_confirm", eventId }),
       { status: 200, headers: { "content-type": "application/json" } }

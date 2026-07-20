@@ -458,10 +458,13 @@ async function patchPostingMode(
   const now = Date.now();
   await ctx.db.patch(agent._id, {
     autonomousPosting: mode,
-    // Starting/restarting the ramp: stamp the clock if entering
-    // confirm_first_week without one already running.
-    ...(mode === "confirm_first_week" && agent.autonomousSince == null
-      ? { autonomousSince: now }
+    // Entering confirm_first_week ALWAYS restarts the ramp (clock + counter).
+    // autonomousSince is stamped at agent creation and confirmedPostCount only
+    // ever grows, so without the reset a founder revoking autonomy after day 7
+    // (or 3 confirms) got a silent no-op: isRampGraduated stayed true and Maya
+    // kept auto-posting against their explicit ask.
+    ...(mode === "confirm_first_week"
+      ? { autonomousSince: now, confirmedPostCount: 0 }
       : {}),
     updatedAt: now,
   });

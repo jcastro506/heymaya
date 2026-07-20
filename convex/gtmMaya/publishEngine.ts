@@ -284,8 +284,10 @@ export const publishContentDirect = internalAction({
       if (!zernioPostId || row?.state === "failed") {
         return { action: "failed", reasons: [row?.error ?? "no postId returned"] };
       }
-      // Stamp the dedup ledger on reply publishes.
-      if (args.targetExternalId && args.draftId) {
+      // Stamp the dedup ledger on EVERY reply publish — draftId or not. An
+      // unstamped founder-confirmed reply makes checkAlreadyEngaged blind and
+      // invites a second reply to the same thread (the ban signal).
+      if (args.targetExternalId) {
         await ctx.runMutation(internal.gtmMaya.engagementLedger.recordEngagement, {
           accountId: agentCtx.accountId,
           agentId: args.agentId,
