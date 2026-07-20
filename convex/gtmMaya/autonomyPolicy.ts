@@ -26,9 +26,13 @@ export const RAMP_DAYS = 7;
 const RAMP_MS = RAMP_DAYS * 24 * 60 * 60 * 1000;
 
 /**
- * Has a `confirm_first_week` agent met graduation? True once the founder has
- * confirmed RAMP_POST_THRESHOLD posts OR RAMP_DAYS have elapsed since the ramp
- * clock started — whichever comes first.
+ * Has a `confirm_first_week` agent reached the ramp milestone (the founder has
+ * confirmed RAMP_POST_THRESHOLD posts OR RAMP_DAYS have elapsed)? Since
+ * 2026-07-20 this is the READY-TO-ASK signal, NOT a silent grant: Maya offers
+ * ("you've been approving my stuff — want me to stop checking every time?")
+ * and only the founder's yes (set_posting_mode 'autonomous') flips the mode.
+ * A silent behavior change was a trust landmine — posts appearing that the
+ * founder never approved — and contradicted the SOUL's own offer-first script.
  */
 export function isRampGraduated(
   autonomousSince: number | undefined | null,
@@ -45,20 +49,19 @@ export function isRampGraduated(
  * Ban-safety + plan ceiling are enforced by the publish engine separately —
  * this answers only the founder-preference question.
  *
- * Fail-closed: undefined / unrecognized / "confirm_each" → false (confirm).
+ * ONLY an explicit 'autonomous' mode grants — set by the founder's own words
+ * ("just post from now on") via set_posting_mode, or the Account toggle. The
+ * ramp milestone triggers Maya's OFFER (see isRampGraduated), never the grant.
+ *
+ * Fail-closed: everything else → false (confirm).
  */
 export function autonomyGranted(
   policy: string | undefined | null,
-  autonomousSince: number | undefined | null,
-  confirmedPostCount: number | undefined | null,
-  nowMs: number
+  _autonomousSince: number | undefined | null,
+  _confirmedPostCount: number | undefined | null,
+  _nowMs: number
 ): boolean {
-  if (policy === "autonomous") return true;
-  if (policy === "confirm_first_week") {
-    return isRampGraduated(autonomousSince, confirmedPostCount, nowMs);
-  }
-  // "confirm_each" or undefined / legacy / garbage → fail-closed to confirm.
-  return false;
+  return policy === "autonomous";
 }
 
 /**

@@ -464,7 +464,7 @@ async function patchPostingMode(
     // (or 3 confirms) got a silent no-op: isRampGraduated stayed true and Maya
     // kept auto-posting against their explicit ask.
     ...(mode === "confirm_first_week"
-      ? { autonomousSince: now, confirmedPostCount: 0 }
+      ? { autonomousSince: now, confirmedPostCount: 0, autonomyAskAt: undefined }
       : {}),
     updatedAt: now,
   });

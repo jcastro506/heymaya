@@ -459,3 +459,90 @@ describe("re-arm via post_to_channel upsert: failed rows become confirmable agai
     expect(ev?.status).toBe("published"); // stays terminal
   });
 });
+
+describe("ask-gated autonomy (2026-07-20): the ramp offers, never grants", () => {
+  it("milestone reached → autonomyReadyToAsk true; asking once stamps and silences the signal", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "c_ask", { activePlan: true });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(a.agentId, {
+        autonomousPosting: "confirm_first_week",
+        autonomousSince: Date.now() - 8 * 24 * 60 * 60 * 1000,
+        confirmedPostCount: 0,
+      });
+    });
+    const before = await t.run(async (ctx) => {
+      const agent = await ctx.db.get(a.agentId);
+      const { computeAgentLifecycle } = await import("../agentLifecycle");
+      return computeAgentLifecycle(ctx, agent!, Date.now());
+    });
+    expect(before.autonomyReadyToAsk).toBe(true);
+    expect(before.autonomyMode).toBe("confirm_first_week");
+
+    // Maya asks once (idempotent under retry).
+    const first = await t.run(async (ctx) =>
+      ctx.runMutation(internal.gtmMaya.agentLifecycle.markAutonomyAsk, {
+        agentId: a.agentId,
+      })
+    );
+    const second = await t.run(async (ctx) =>
+      ctx.runMutation(internal.gtmMaya.agentLifecycle.markAutonomyAsk, {
+        agentId: a.agentId,
+      })
+    );
+    expect(second.askedAt).toBe(first.askedAt);
+
+    const after = await t.run(async (ctx) => {
+      const agent = await ctx.db.get(a.agentId);
+      const { computeAgentLifecycle } = await import("../agentLifecycle");
+      return computeAgentLifecycle(ctx, agent!, Date.now());
+    });
+    expect(after.autonomyReadyToAsk).toBe(false); // asked — never nag again
+  });
+
+  it("a graduated-but-unasked agent still CANNOT auto-post (publish gate requires explicit grant)", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "c_nograd", { activePlan: true });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(a.agentId, {
+        autonomousPosting: "confirm_first_week",
+        autonomousSince: Date.now() - 30 * 24 * 60 * 60 * 1000,
+        confirmedPostCount: 99,
+        connectedAccountsJson: JSON.stringify([
+          { accountId: "acct_x", platform: "x" },
+        ]),
+      });
+    });
+    const fetchMock = vi.fn(async () => zernioSuccess());
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("ZERNIO_API_KEY", "test-key");
+    const r = (await t.action(
+      internal.gtmMaya.publishEngine.publishContentDirect,
+      {
+        agentId: a.agentId,
+        channel: "x",
+        zernioAccountId: "acct_x",
+        content: "a post with a number 42",
+      }
+    )) as { action: string };
+    expect(r.action).toBe("needs_confirm"); // milestone alone never auto-posts
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("re-entering confirm_first_week clears the ask stamp (fresh ramp = fresh offer later)", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "c_askreset", { activePlan: true });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(a.agentId, { autonomyAskAt: Date.now() - 1000 });
+    });
+    await t.mutation(internal.gtmMaya.researchLifecycle.setPostingModeByAgent, {
+      agentId: a.agentId,
+      mode: "confirm_first_week",
+    });
+    const agent = await t.run(async (ctx) => ctx.db.get(a.agentId));
+    expect(agent?.autonomyAskAt).toBeUndefined();
+    expect(agent?.confirmedPostCount).toBe(0);
+  });
+});

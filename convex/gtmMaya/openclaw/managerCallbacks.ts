@@ -1431,6 +1431,18 @@ export const markLifecycleHttp = httpAction(async (ctx, request) => {
         headers: { "content-type": "application/json" },
       });
     }
+    case "autonomy_ask": {
+      // Maya offered autonomy ("want me to stop checking every time?").
+      // Idempotent; the founder's yes → set_posting_mode, never this marker.
+      const r = await ctx.runMutation(
+        internal.gtmMaya.agentLifecycle.markAutonomyAsk,
+        { agentId: auth.agentId }
+      );
+      return new Response(JSON.stringify({ ok: true, ...r }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
     case "morning_brief": {
       await ctx.runMutation(
         internal.gtmMaya.agentLifecycle.markMorningBrief,

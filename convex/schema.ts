@@ -4476,6 +4476,10 @@ export default defineSchema({
     ),
     autonomousSince: v.optional(v.number()),
     confirmedPostCount: v.optional(v.number()),
+    // Unix-ms Maya ASKED the founder about going autonomous (the ramp milestone
+    // triggers her offer, never a silent grant). Null = not asked yet; reset
+    // alongside the ramp when re-entering confirm_first_week.
+    autonomyAskAt: v.optional(v.number()),
     // Off-by-default toggle: also mirror the day's plan to Google Calendar.
     // The Google flood retired; the web Today view is the primary surface.
     googleCalendarMirrorEnabled: v.optional(v.boolean()),
