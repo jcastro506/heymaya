@@ -112,3 +112,37 @@ describe("posting consent activates the agent", () => {
     expect(agent?.lifecycleState).not.toBe("active");
   });
 });
+
+describe("no-research-job deploys (admin dogfood) — consent fallback", () => {
+  it("an agent with NO gtmResearchJobs row activates on autonomy grant", async () => {
+    const t = convexTest(schema, modules);
+    const authed = t.withIdentity({ subject: "c_nojob", email: "c_nojob@clawlaunch.test" });
+    const started = await authed.mutation(
+      api.gtmMaya.researchLifecycle.startGtmOnboarding,
+      { channelPreference: "telegram", timezone: "America/New_York" }
+    );
+    await authed.mutation(api.gtmMaya.researchLifecycle.setAppProfile, {
+      url: "https://c-nojob.test",
+      stage: "live-beta",
+      weekGoal: "signups",
+      canRecordScreen: true,
+      canShowFace: false,
+      excludedAudiences: [],
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(started.agentId, {
+        foundationCompletedAt: Date.now(),
+        connectedAccountsJson: JSON.stringify([
+          { accountId: "acct_x", platform: "x", isActive: true },
+        ]),
+      });
+    });
+    await t.mutation(internal.gtmMaya.researchLifecycle.setPostingModeByAgent, {
+      agentId: started.agentId,
+      mode: "autonomous",
+    });
+    await drain(t);
+    const agent = await t.run(async (ctx) => await ctx.db.get(started.agentId));
+    expect(agent?.lifecycleState).toBe("active");
+  });
+});

@@ -377,19 +377,26 @@ export const markStrategyApprovedByPostingConsent = internalMutation({
   args: { agentId: v.id("gtmAgents") },
   handler: async (ctx, args): Promise<void> => {
     const agent = await ctx.db.get(args.agentId);
-    if (!agent || !agent.appId) return;
-    const latest = await ctx.db
-      .query("gtmResearchJobs")
-      .withIndex("by_app", (q) => q.eq("appId", agent.appId!))
-      .collect()
-      .then((jobs) => jobs.sort((a, b) => b.createdAt - a.createdAt)[0]);
-    if (!latest || latest.accountId !== agent.accountId) return;
-    if (latest.strategyApprovalState !== "approved") {
-      await ctx.db.patch(latest._id, {
-        strategyApprovalState: "approved",
-        updatedAt: Date.now(),
-      });
+    if (!agent) return;
+    if (agent.appId) {
+      const latest = await ctx.db
+        .query("gtmResearchJobs")
+        .withIndex("by_app", (q) => q.eq("appId", agent.appId!))
+        .collect()
+        .then((jobs) => jobs.sort((a, b) => b.createdAt - a.createdAt)[0]);
+      if (
+        latest &&
+        latest.accountId === agent.accountId &&
+        latest.strategyApprovalState !== "approved"
+      ) {
+        await ctx.db.patch(latest._id, {
+          strategyApprovalState: "approved",
+          updatedAt: Date.now(),
+        });
+      }
     }
+    // ALWAYS try activation — deploys without a research-job row rely on
+    // tryActivateAgent's consent fallback (autonomous mode / confirmed post).
     await ctx.scheduler.runAfter(
       0,
       internal.gtmMaya.agentLifecycle.tryActivateAgent,

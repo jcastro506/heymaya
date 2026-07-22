@@ -764,6 +764,17 @@ export const tryActivateAgent = internalMutation({
       approved = latest?.strategyApprovalState === "approved";
     }
     if (!approved) {
+      // Explicit posting consent stands in for the formal flag. Some deploy
+      // paths (admin dogfood) never create a gtmResearchJobs row, so the
+      // approval had NOWHERE to live and the agent could never activate —
+      // every cron NO_REPLYed on plan_ready forever (live 07-21/07-22). A
+      // founder who granted autonomy or landed a confirmed post has approved
+      // the plan in the only way that matters.
+      approved =
+        agent.autonomousPosting === "autonomous" ||
+        (agent.confirmedPostCount ?? 0) > 0;
+    }
+    if (!approved) {
       return { activated: false, reason: "not_approved" };
     }
     await ctx.db.patch(args.agentId, {
