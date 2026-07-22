@@ -7,6 +7,7 @@ import {
   type MutationCtx,
 } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { internal } from "../_generated/api";
 import { assertGtmSpendAllowed } from "./betaGuards";
 import { priceUsd } from "./providerPricing";
 
@@ -468,6 +469,19 @@ async function patchPostingMode(
       : {}),
     updatedAt: now,
   });
+  // "Just post from now on" is the strongest posting consent there is — count
+  // it as plan approval so lifecycleState reaches 'active' and the scheduled
+  // cadence (brief/pulse/recap) runs. Without this, a founder who granted
+  // autonomy but never said the magic plan-approval words left every cron
+  // silently NO_REPLYing on plan_ready (live 07-21/07-22: two days of dead
+  // pulses on a fully-consenting founder).
+  if (mode === "autonomous") {
+    await ctx.scheduler.runAfter(
+      0,
+      internal.gtmMaya.managerStore.markStrategyApprovedByPostingConsent,
+      { agentId: agent._id }
+    );
+  }
 }
 
 export const setMyPostingMode = mutation({

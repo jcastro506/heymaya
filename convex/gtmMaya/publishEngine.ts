@@ -147,6 +147,16 @@ export const incrementConfirmedPostCount = internalMutation({
     await ctx.db.patch(args.agentId, {
       confirmedPostCount: (agent.confirmedPostCount ?? 0) + 1,
     });
+    // A founder-confirmed publish that LANDED is posting consent — count it
+    // as plan approval too, so lifecycleState can reach 'active' and the
+    // scheduled cadence (brief/pulse/recap) actually runs. Without this, a
+    // founder who approves posts but never says the magic plan-approval words
+    // leaves every cron silently NO_REPLYing on plan_ready forever.
+    await ctx.scheduler.runAfter(
+      0,
+      internal.gtmMaya.managerStore.markStrategyApprovedByPostingConsent,
+      { agentId: args.agentId }
+    );
   },
 });
 
