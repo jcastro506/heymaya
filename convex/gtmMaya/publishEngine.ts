@@ -31,6 +31,7 @@ import {
   makeZernioContext,
   multiPlatformPost,
   getPostAnalytics,
+  replyToComment,
 } from "../integrations/zernio/endpoints";
 import type {
   ZernioPostPlatform,
@@ -70,6 +71,13 @@ function parseAutoPost(json: string | undefined | null): AutoPostJson | null {
   } catch {
     return null;
   }
+}
+
+/** X's hard post limit. URLs count as 23 chars (t.co wrapping) regardless of
+ *  actual length — mirror that so the preflight matches X's own math. */
+export const X_CHAR_LIMIT = 280;
+export function xEffectiveLength(text: string): number {
+  return text.replace(/https?:\/\/\S+/g, "x".repeat(23)).length;
 }
 
 function zernioClient(): ZernioClient {
@@ -180,6 +188,24 @@ export const publishContentDirect = internalAction({
       };
     }
 
+    // X hard character limit, checked BEFORE any gate or confirm event exists.
+    // Six days of live publish attempts (2026-07-16 → 07-22) failed on exactly
+    // this — every drafted X reply was 400-600 chars — and the Zernio error was
+    // swallowed, so the agent flailed at ghosts. Fail fast, with the numbers,
+    // so the agent's next move is obvious: shorten and retry.
+    if (channel === "x") {
+      const effective = xEffectiveLength(content);
+      if (effective > X_CHAR_LIMIT) {
+        return {
+          action: "failed",
+          reasons: [
+            `x_char_limit: this draft is ${effective} chars (URLs count as 23); ` +
+              `X caps posts at ${X_CHAR_LIMIT}. Rewrite it under ${X_CHAR_LIMIT} chars and post again — do not split it into a thread unless the founder asked for one.`,
+          ],
+        };
+      }
+    }
+
     const agentCtx = await ctx.runQuery(
       internal.gtmMaya.publishEngine.getAgentPublishContext,
       { agentId: args.agentId }
@@ -269,20 +295,59 @@ export const publishContentDirect = internalAction({
         }
         if (urls.length > 0) mediaItems = urls;
       }
-      const firstComment = args.firstComment?.trim();
-      const platformData: Partial<Record<ZernioPostPlatform, ChannelPlatformData>> | undefined =
-        firstComment && firstComment.length > 0
-          ? { [channel as ZernioPostPlatform]: { firstComment } }
-          : undefined;
-      const result = await multiPlatformPost(
-        zctx,
-        [{ platform: channel as ZernioPostPlatform, accountId: args.zernioAccountId }],
-        { text: content, mediaItems, scheduleAt, timezone: args.timezone, platformData }
-      );
-      const row = result.perPlatform[0];
-      const zernioPostId = row?.postId ?? null;
-      if (!zernioPostId || row?.state === "failed") {
-        return { action: "failed", reasons: [row?.error ?? "no postId returned"] };
+      // ── Replies thread as REAL replies (live-verified 2026-07-22) ─────────
+      // A "reply" pushed through POST /api/v1/posts publishes as a TOP-LEVEL
+      // post: on Reddit that means submitting the reply text as a new
+      // subreddit post (rejected by post-guidance rules — every live Reddit
+      // attempt failed this way), and on X a standalone tweet aimed at nobody.
+      // Reddit replies go through the inbox comments API (third-party posts
+      // supported per Zernio spec §222); X replies thread via replyToTweetId.
+      let zernioPostId: string | null = null;
+      let scheduledForIso: string | undefined;
+      if (channel === "reddit" && args.targetExternalId) {
+        const reply = await replyToComment(zernioClient(), {
+          postId: args.targetExternalId,
+          accountId: args.zernioAccountId,
+          message: content,
+          commentId: args.targetCommentId,
+        });
+        if (!reply.success) {
+          return {
+            action: "failed",
+            reasons: [
+              "reddit reply was not accepted (Zernio inbox API returned success:false) — the thread may be locked/deleted; pick another thread or hand the founder a paste-ready comment",
+            ],
+          };
+        }
+        zernioPostId = reply.id ?? `comment:${args.targetExternalId}`;
+      } else {
+        const firstComment = args.firstComment?.trim();
+        const psd: ChannelPlatformData = {
+          ...(firstComment && firstComment.length > 0 ? { firstComment } : {}),
+          ...(channel === "x" && args.targetExternalId
+            ? { replyToTweetId: args.targetExternalId }
+            : {}),
+        };
+        const platformData:
+          | Partial<Record<ZernioPostPlatform, ChannelPlatformData>>
+          | undefined =
+          Object.keys(psd).length > 0
+            ? { [channel as ZernioPostPlatform]: psd }
+            : undefined;
+        const result = await multiPlatformPost(
+          zctx,
+          [{ platform: channel as ZernioPostPlatform, accountId: args.zernioAccountId }],
+          { text: content, mediaItems, scheduleAt, timezone: args.timezone, platformData }
+        );
+        const row = result.perPlatform[0];
+        zernioPostId = row?.postId ?? null;
+        if (!zernioPostId || row?.state === "failed") {
+          return { action: "failed", reasons: [row?.error ?? "no postId returned"] };
+        }
+        scheduledForIso = scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
+      }
+      if (!zernioPostId) {
+        return { action: "failed", reasons: ["no postId returned"] };
       }
       // Stamp the dedup ledger on EVERY reply publish — draftId or not. An
       // unstamped founder-confirmed reply makes checkAlreadyEngaged blind and
@@ -311,7 +376,7 @@ export const publishContentDirect = internalAction({
         action: "auto",
         reasons: [],
         zernioPostId,
-        scheduledForIso: scheduleAt ? new Date(scheduleAt).toISOString() : undefined,
+        scheduledForIso,
       };
     } catch (err) {
       return { action: "failed", reasons: [(err as Error).message] };

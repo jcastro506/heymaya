@@ -691,9 +691,23 @@ export const sendConfirmCardHttp = httpAction(async (ctx, request) => {
   if (!body.eventId) return new Response("missing eventId", { status: 400 });
 
   // Cross-tenant: the event must belong to the calling agent.
-  const ev = await ctx.runQuery(internal.gtmMaya.telegramConfirm.getConfirmEvent, {
-    eventId: body.eventId as Id<"gtmCalendarEvents">,
-  });
+  let ev: ConfirmEventView | null;
+  try {
+    ev = await ctx.runQuery(internal.gtmMaya.telegramConfirm.getConfirmEvent, {
+      eventId: body.eventId as Id<"gtmCalendarEvents">,
+    });
+  } catch {
+    // A draftId or external id fails the Convex validator — say so plainly
+    // instead of leaking a 500 (live 2026-07-21: the agent passed a draftId).
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        reason:
+          "not a confirm-event id — pass the eventId from post_to_channel/propose_calendar (get_agent_lifecycle lists pendingConfirms), not a draftId or external post id",
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  }
   if (!ev || ev.agentId !== auth.agentId) {
     return new Response(
       JSON.stringify({ ok: false, reason: "event not found for this agent" }),

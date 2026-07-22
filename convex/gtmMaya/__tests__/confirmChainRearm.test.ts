@@ -177,7 +177,13 @@ describe("dedup ledger: every reply publish stamps, draftId or not", () => {
     const eventId = await makeNeedsConfirmEvent(t, a.agentId, a.accountId, {
       targetExternalId: "thread_777",
     });
-    vi.stubGlobal("fetch", vi.fn(async () => zernioSuccess()));
+    // Reddit replies route through the inbox comments API (real threading).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse(200, { success: true, data: { commentId: "rc_777" } })
+      )
+    );
     const r = (await t.action(
       internal.gtmMaya.telegramConfirm.confirmEventConversational,
       { eventId, agentId: a.agentId, decision: "post" }

@@ -1516,11 +1516,21 @@ export const validateOutboundHttp = httpAction(async (ctx, request) => {
     return new Response("text too long (>10000 chars)", { status: 400 });
   }
 
-  const result = await ctx.runAction(
+  const result = (await ctx.runAction(
     internal.gtmMaya.outboundFirewall.validateOutbound,
     { text: body.text }
-  );
-  return new Response(JSON.stringify(result), {
+  )) as { ok: boolean; failures?: Array<{ category?: string; matched?: string; excerpt?: string }> };
+  // The plugin renders a blocked result as `BLOCKED …: <reason>` — without a
+  // reason string the agent sees a bare "rejected" and rewrites blind (live
+  // 2026-07-21: three consecutive guesses). Name every failure.
+  const reason =
+    !result.ok && result.failures?.length
+      ? result.failures
+          .map((f) => `${f.category ?? "failure"}: ${f.matched ?? f.excerpt ?? ""}`)
+          .join(" | ")
+          .slice(0, 900)
+      : undefined;
+  return new Response(JSON.stringify(reason ? { ...result, reason } : result), {
     status: 200,
     headers: { "content-type": "application/json" },
   });

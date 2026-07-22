@@ -1032,7 +1032,9 @@ const MultiPostResponseSchema = z
         z
           .object({
             platform: z.string(),
-            accountId: z.string().optional(),
+            // Live create responses expand accountId into a full account doc;
+            // accept anything so a shape change can never fail the parse.
+            accountId: z.unknown().optional(),
             status: z.string().optional(),
             platformPostId: z.string().nullable().optional(),
             errorMessage: z.string().optional(),
@@ -1042,6 +1044,46 @@ const MultiPostResponseSchema = z
       .optional(),
     _id: z.string().optional(),
     results: z.array(z.unknown()).optional(),
+    // LIVE-VERIFIED 2026-07-22 (curl against POST /api/v1/posts): the create
+    // response is a WRAPPER — { post: {...echo with platforms[]...}, message,
+    // error, platformResults: [{platform, status, error}] }. Six days of live
+    // publish failures ("Tweet text is too long (586)... limit is 280",
+    // "Reddit POST_GUIDANCE_VALIDATION_FAILED") were reported by Zernio in
+    // BOTH platformResults[].error and post.platforms[].errorMessage — and
+    // dropped, because this schema only knew the unwrapped shapes and the
+    // all-optional parse "succeeded" as empty → "no postId returned".
+    post: z
+      .object({
+        _id: z.string().optional(),
+        platforms: z
+          .array(
+            z
+              .object({
+                platform: z.string(),
+                status: z.string().optional(),
+                platformPostId: z.string().nullable().optional(),
+                errorMessage: z.string().optional(),
+              })
+              .passthrough()
+          )
+          .optional(),
+      })
+      .passthrough()
+      .optional(),
+    platformResults: z
+      .array(
+        z
+          .object({
+            platform: z.string(),
+            status: z.string().optional(),
+            error: z.string().optional(),
+            platformPostId: z.string().nullable().optional(),
+          })
+          .passthrough()
+      )
+      .optional(),
+    message: z.string().optional(),
+    error: z.string().optional(),
   })
   .passthrough();
 
@@ -1211,8 +1253,60 @@ export async function multiPlatformPost(
       `Unexpected multi-post payload: ${parsed.error.message}`
     );
   }
-  // Prefer the real `platforms[]` echo shape; fall back to the pre-S1
-  // `perPlatform[]` fixture shape. [shape-unverified-live].
+  // LIVE shape first (verified 2026-07-22): `{ post: {...}, platformResults }`
+  // wrapper. platformResults carries the authoritative status + error string;
+  // post.platforms carries platformPostId on success. The _id fallback applies
+  // ONLY to non-failed rows — a failed publish must never masquerade as
+  // published under the post-doc id.
+  if (parsed.data.post || (parsed.data.platformResults?.length ?? 0) > 0) {
+    const doc = parsed.data.post;
+    const results = parsed.data.platformResults ?? [];
+    const echoRows = doc?.platforms ?? [];
+    const rows = results.length > 0 ? results : echoRows;
+    const perPlatform = rows.map((row) => {
+      const platform = fromWireSlug(row.platform);
+      if (!platform) {
+        throw new ZernioApiError(
+          200,
+          "multiPlatformPost",
+          `Zernio returned an unknown platform: ${row.platform}`
+        );
+      }
+      const echo = echoRows.find((e) => e.platform === row.platform);
+      let state: MultiPlatformPostResult["perPlatform"][number]["state"];
+      switch (row.status) {
+        case "scheduled":
+        case "pending":
+          state = "scheduled";
+          break;
+        case "failed":
+        case "error":
+          state = "failed";
+          break;
+        default:
+          state = "published";
+      }
+      const platformPostId =
+        ("platformPostId" in row ? row.platformPostId : undefined) ??
+        echo?.platformPostId ??
+        null;
+      const error =
+        ("error" in row && typeof row.error === "string" ? row.error : undefined) ??
+        echo?.errorMessage ??
+        (state === "failed" ? parsed.data.error : undefined);
+      return {
+        platform,
+        // Never let the post-doc _id stand in for a FAILED publish.
+        postId:
+          state === "failed" ? null : platformPostId ?? doc?._id ?? null,
+        state,
+        error,
+      };
+    });
+    if (perPlatform.length > 0) return { perPlatform };
+  }
+  // Unwrapped `platforms[]` echo shape; falls back to the pre-S1
+  // `perPlatform[]` fixture shape below.
   if (parsed.data.platforms && parsed.data.platforms.length > 0) {
     const perPlatform = parsed.data.platforms.map((row) => {
       const platform = fromWireSlug(row.platform);
@@ -1934,6 +2028,11 @@ const InboxActionResponseSchema = z
     id: z.string().optional(),
     messageId: z.string().optional(),
     commentId: z.string().optional(),
+    // Spec shape (verified 1.0.4): { success, data: { commentId, isReply } }.
+    data: z
+      .object({ commentId: z.string().optional() })
+      .passthrough()
+      .optional(),
     error: z.string().optional(),
   })
   .passthrough();
@@ -1990,7 +2089,7 @@ export async function replyToComment(
   }
   return {
     success: parsed.data.success ?? !parsed.data.error,
-    id: parsed.data.id ?? parsed.data.commentId,
+    id: parsed.data.id ?? parsed.data.commentId ?? parsed.data.data?.commentId,
     raw,
   };
 }

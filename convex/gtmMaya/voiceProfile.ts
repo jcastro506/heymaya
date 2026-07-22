@@ -228,12 +228,29 @@ export const saveVoiceProfileHttp = httpAction(async (ctx, request) => {
   } catch {
     return new Response("bad json", { status: 400 });
   }
+  // The model reaches for `voiceProfile` (often as an object) at least as
+  // often as the declared `voiceProfileJson` string — accept both. A tool
+  // that rejects the natural spelling with an unnamed-fields error just
+  // taught the live agent to give up on building a voice profile entirely
+  // (2026-07-21: two failed attempts, then "I'll work with what I have").
+  const alias = (body as { voiceProfile?: unknown }).voiceProfile;
+  if ((typeof body.voiceProfileJson !== "string" || !body.voiceProfileJson.trim()) && alias != null) {
+    body.voiceProfileJson =
+      typeof alias === "string" ? alias : JSON.stringify(alias);
+  }
   if (
     !body.idempotencyKey ||
     typeof body.voiceProfileJson !== "string" ||
     !body.voiceProfileJson.trim()
   ) {
-    return new Response("missing required fields", { status: 400 });
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        reason:
+          "missing required fields — pass voiceProfileJson (a JSON STRING of the voice profile) and idempotencyKey",
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
   }
   // NOTE: no claimIdempotencyKey() here. The CALLBACK_KIND union (schema +
   // inboundCallback.ts) is closed and frozen for this slice (schema is locked),
