@@ -74,6 +74,56 @@ async function tgSendCard(
   }
 }
 
+function htmlEscape(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * HTML-mode card: used by the paste card so the draft rides in a <pre> block —
+ * Telegram renders those TAP-TO-COPY on mobile, which is the whole point of
+ * the hand-off flow (founder in line at a coffee shop, one thumb).
+ */
+async function tgSendHtmlCard(
+  botToken: string,
+  chatId: string,
+  html: string,
+  buttons: Array<Array<{ text: string; callback_data: string }>>
+): Promise<number | null> {
+  try {
+    const res = await fetch(`${TG}/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: html,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+        reply_markup: { inline_keyboard: buttons },
+      }),
+    });
+    const j = (await res.json().catch(() => null)) as {
+      result?: { message_id?: number };
+    } | null;
+    return j?.result?.message_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The X intent link: opens the X app/site with the reply PRE-FILLED and
+ * PRE-THREADED — the founder just hits Post. Zero copy-paste.
+ */
+export function buildXIntentLink(
+  content: string,
+  inReplyToTweetId?: string | null
+): string {
+  const params = new URLSearchParams();
+  params.set("text", content);
+  if (inReplyToTweetId) params.set("in_reply_to", inReplyToTweetId);
+  return `https://x.com/intent/post?${params.toString()}`;
+}
+
 async function tgSendPhoto(
   botToken: string,
   chatId: string,
@@ -227,6 +277,38 @@ export const setConfirmEventMedia = internalMutation({
 });
 
 /**
+ * Thread context for the founder-facing cards: the founder should never
+ * approve a reply to a thread they can't see. Looked up by the reply's
+ * targetExternalId against the saved discovery row.
+ */
+export const getTargetThreadContext = internalQuery({
+  args: { agentId: v.id("gtmAgents"), externalId: v.string() },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    title: string | null;
+    url: string | null;
+    whyItFits: string | null;
+    community: string | null;
+  } | null> => {
+    const rows = await ctx.db
+      .query("gtmTargetThreads")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    const hit = rows.find((t) => t.externalId === args.externalId);
+    if (!hit) return null;
+    return {
+      title: hit.title ?? null,
+      url: hit.url ?? null,
+      whyItFits:
+        hit.whyItFits && !/^pending/i.test(hit.whyItFits) ? hit.whyItFits : null,
+      community: hit.subredditOrCommunity ?? null,
+    };
+  },
+});
+
+/**
  * The pending-confirm queue, agent-readable. Rides the get_agent_lifecycle
  * response so a fresh session (restart, redeploy) can always answer "what's
  * waiting on the founder?" and bind a chat "post it" to a real eventId
@@ -374,11 +456,107 @@ export const sendPostConfirmCard = internalAction({
       }
     }
 
-    const text =
-      `Ready to post to ${channelLabel} — I'll send it for you, tap to OK:\n\n` +
-      `${ev.content}\n\n` +
-      `(Reddit/TikTok need your tap so your account stays safe — one tap and I post it.)`;
+    // Card A — "I'll post it". The founder must SEE what they're approving:
+    // the target thread (name + link + one honest why), then the draft, then
+    // one channel-true line. Never boilerplate about channels not on the card.
+    const thread = ev.targetExternalId
+      ? await ctx.runQuery(internal.gtmMaya.telegramConfirm.getTargetThreadContext, {
+          agentId: ev.agentId,
+          externalId: ev.targetExternalId,
+        })
+      : null;
+    const where = thread?.community
+      ? `${ev.channel === "reddit" ? "r/" : ""}${thread.community}`
+      : channelLabel;
+    const header = thread
+      ? `Reply ready → ${where}: "${thread.title ?? "the thread"}"` +
+        (thread.url ? `\n${thread.url}` : "") +
+        (thread.whyItFits ? `\nWhy: ${thread.whyItFits}` : "")
+      : `Post ready for ${channelLabel}:`;
+    const channelNote =
+      ev.channel === "reddit"
+        ? "Reddit posts need your tap so your account stays safe."
+        : ev.channel === "tiktok"
+          ? "TikTok needs your tap — the preview above is exactly what posts."
+          : "Tap to OK and I'll post it for you.";
+    const text = `${header}\n\n${ev.content}\n\n${channelNote}`;
     const messageId = await tgSendCard(bot.token, ev.chatId, text, args.eventId);
+    return messageId
+      ? { ok: true, messageId }
+      : { ok: false, reason: "telegram send failed" };
+  },
+});
+
+// ───────────────────── the paste card (Card B — "you post it") ─────────────────────
+
+/**
+ * The hand-off card for anything Maya can't (or shouldn't) post herself:
+ * HN, rule-locked subreddits, or any publish the platform just rejected.
+ * Design rule: the card ends in exactly ONE founder action —
+ *   1. Open: deeplink (X gets an intent link with the reply pre-filled)
+ *   2. Paste: the draft in a <pre> block (tap-to-copy on mobile)
+ *   3. Tap "✍️ I posted it" → the event flips to published + the thread is
+ *      stamped in the never-reply-twice ledger. (Typing "done" still works.)
+ */
+export const sendPasteCard = internalAction({
+  args: {
+    eventId: v.id("gtmCalendarEvents"),
+    /** One plain-language line on WHY this needs their hands. */
+    reasonLine: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ ok: boolean; reason?: string; messageId?: number }> => {
+    const ev = await ctx.runQuery(internal.gtmMaya.telegramConfirm.getConfirmEvent, {
+      eventId: args.eventId,
+    });
+    if (!ev) return { ok: false, reason: "event not found" };
+    if (ev.status === "published" || ev.status === "cancelled") {
+      return { ok: false, reason: `event is already ${ev.status}` };
+    }
+    if (!ev.chatId) return { ok: false, reason: "no telegram chat for agent" };
+
+    const { resolveBotForAgent } = await import("./telegramBotPerTenant");
+    const bot = await resolveBotForAgent(
+      ctx as { runQuery: <T>(ref: unknown, args: unknown) => Promise<T> },
+      ev.agentId,
+      {
+        sharedToken: process.env.TELEGRAM_BOT_TOKEN,
+        sharedUsername: process.env.TELEGRAM_BOT_USERNAME,
+      }
+    );
+    if (!bot.token) return { ok: false, reason: "no telegram bot token" };
+
+    const thread = ev.targetExternalId
+      ? await ctx.runQuery(internal.gtmMaya.telegramConfirm.getTargetThreadContext, {
+          agentId: ev.agentId,
+          externalId: ev.targetExternalId,
+        })
+      : null;
+    // X: intent link pre-fills text + reply target — no copying at all.
+    const link =
+      ev.channel === "x"
+        ? buildXIntentLink(ev.content, ev.targetExternalId)
+        : thread?.url ?? null;
+    const reason = args.reasonLine ?? "this one can't go out through my account";
+    const openLine = link
+      ? ev.channel === "x"
+        ? `1. Tap to open X with the reply pre-filled (just hit Post):\n${link}`
+        : `1. Open the thread:\n${link}`
+      : `1. Open ${thread?.title ? `"${htmlEscape(thread.title)}"` : "the target"} in the app.`;
+    const pasteLine =
+      ev.channel === "x" && link
+        ? ""
+        : `\n2. Paste (tap the block below to copy):\n<pre>${htmlEscape(ev.content)}</pre>`;
+    const html =
+      `<b>This one needs your hands</b> — ${htmlEscape(reason)}.\n\n` +
+      `${openLine}${pasteLine}\n\n` +
+      `Then tap "I posted it" and I'll track it from there.`;
+    const messageId = await tgSendHtmlCard(bot.token, ev.chatId, html, [
+      [{ text: "✍️ I posted it", callback_data: `gdone:${args.eventId}` }],
+      [{ text: "✕ Skip", callback_data: `gskip:${args.eventId}` }],
+    ]);
     return messageId
       ? { ok: true, messageId }
       : { ok: false, reason: "telegram send failed" };
@@ -395,7 +573,7 @@ export const handleConfirmCallback = internalAction({
     messageId: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<void> => {
-    const m = /^g(post|skip|edit):(.+)$/.exec(args.data);
+    const m = /^g(post|skip|edit|done):(.+)$/.exec(args.data);
     if (!m) return; // not one of ours
     const action = m[1];
     const eventIdRaw = m[2];
@@ -448,6 +626,28 @@ export const handleConfirmCallback = internalAction({
       });
       await ans("Skipped.");
       await edit("✕ Skipped — I won't post this.");
+      return;
+    }
+
+    if (action === "done") {
+      // Paste-card close-the-loop: the founder posted it by hand. Flip the
+      // event to published + stamp the never-reply-twice ledger (same path as
+      // the chat "done" → record_published).
+      const done = await ctx.runMutation(
+        internal.gtmMaya.recordPublished.markEventPublishedManual,
+        {
+          agentId: agentIdByChat,
+          accountId: ev.accountId,
+          eventId: eventIdRaw as Id<"gtmCalendarEvents">,
+          providerPostId: `manual-tap:${eventIdRaw}`,
+        }
+      );
+      if (done.ok) {
+        await ans("Got it — tracked.");
+        await edit("✓ Marked posted — I'm tracking it from here.");
+      } else {
+        await ans(done.reason ?? "Couldn't mark it.");
+      }
       return;
     }
 
@@ -511,19 +711,34 @@ export const handleConfirmCallback = internalAction({
         ev.channel[0].toUpperCase() + ev.channel.slice(1);
       await edit(`✅ Posted to ${channelLabel}. I'll confirm it's live shortly.`);
     } else {
-      // Publish failed or a gate (plan/dedup) blocked it. RE-ARM, never
-      // dead-end: the founder already approved, so the approval must survive a
-      // transient failure (expired token, Zernio blip) — flip back to
-      // needs_confirm so the next tap / "post it" retries.
+      // RE-ARM, never dead-end: the founder already approved, so the approval
+      // survives the failure — back to needs_confirm so retry/tap still works.
       await ctx.runMutation(internal.gtmMaya.telegramConfirm.setConfirmEventStatus, {
         eventId: eventIdRaw as Id<"gtmCalendarEvents">,
         status: "needs_confirm",
       });
-      await edit(
-        `⚠️ Couldn't post it: ${result.reasons[0] ?? "unknown error"}. ` +
-          `It's still queued — tap again or say "post it" to retry.`,
-        eventIdRaw
-      );
+      if (result.action === "failed") {
+        // The PLATFORM rejected it — degrade straight to the paste card so
+        // the founder can ship it by hand right now instead of retrying into
+        // the same wall.
+        await edit(
+          `⚠️ ${ev.channel} wouldn't take it: ${result.reasons[0] ?? "unknown error"}. ` +
+            `Sending you a do-it-yourself card — or fix + retry the tap above.`,
+          eventIdRaw
+        );
+        await ctx.runAction(internal.gtmMaya.telegramConfirm.sendPasteCard, {
+          eventId: eventIdRaw as Id<"gtmCalendarEvents">,
+          reasonLine: result.reasons[0] ?? "the platform rejected the direct post",
+        });
+      } else {
+        // A gate (plan/dedup) blocked it before any publish — name the real
+        // blocker; a paste card would be the wrong medicine.
+        await edit(
+          `⚠️ Couldn't post it: ${result.reasons[0] ?? "unknown error"}. ` +
+            `It's still queued — tap again or say "post it" to retry.`,
+          eventIdRaw
+        );
+      }
     }
   },
 });
@@ -620,6 +835,27 @@ export const confirmEventConversational = internalAction({
       eventId: args.eventId,
       status: "needs_confirm",
     });
+    if (result.action === "failed") {
+      // Platform rejection → hand-off. Send the paste card server-side so the
+      // founder gets deeplink + tap-to-copy + "I posted it" without Maya
+      // having to compose anything.
+      const card = await ctx.runAction(
+        internal.gtmMaya.telegramConfirm.sendPasteCard,
+        {
+          eventId: args.eventId,
+          reasonLine: result.reasons?.[0] ?? "the platform rejected the direct post",
+        }
+      );
+      return {
+        ok: false,
+        outcome: card.ok ? "paste_card_sent" : "retryable",
+        reason:
+          `publish rejected: ${result.reasons?.[0] ?? "unknown error"}` +
+          (card.ok
+            ? " — I sent the founder a do-it-yourself card (deeplink + copy + 'I posted it' button); tell them it's in the thread, do NOT re-draft or resend"
+            : " — the event is still approved-and-queued; fix the blocker then retry confirm_event (do NOT re-draft)"),
+      };
+    }
     return {
       ok: false,
       outcome: "retryable",
@@ -711,6 +947,21 @@ export const sendConfirmCardHttp = httpAction(async (ctx, request) => {
   if (!ev || ev.agentId !== auth.agentId) {
     return new Response(
       JSON.stringify({ ok: false, reason: "event not found for this agent" }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  }
+  // Channels with no posting API get the paste card (deeplink + tap-to-copy
+  // + "I posted it"), never a tap-to-post card whose tap can only fail.
+  if (ev.channel === "hn") {
+    const paste = await ctx.runAction(
+      internal.gtmMaya.telegramConfirm.sendPasteCard,
+      {
+        eventId: body.eventId as Id<"gtmCalendarEvents">,
+        reasonLine: "Hacker News has no posting API, so this one is yours",
+      }
+    );
+    return new Response(
+      JSON.stringify({ ...paste, cardStyle: "paste" }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
   }
