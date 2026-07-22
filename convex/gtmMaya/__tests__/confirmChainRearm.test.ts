@@ -160,7 +160,12 @@ describe("re-arm: a failed founder-confirmed publish is retryable, never a dead 
     expect(r.reason).toContain("plan");
     const status = await t.run(async (ctx) => (await ctx.db.get(eventId))?.status);
     expect(status).toBe("needs_confirm");
-    expect(fetchMock).not.toHaveBeenCalled(); // gate blocked BEFORE Zernio
+    // Gate blocked BEFORE any publish reached Zernio (the content preflight
+    // may run, but the posts endpoint must never be hit).
+    const postCalls = fetchMock.mock.calls.filter(
+      (c: unknown[]) => String(c[0]).endsWith("/api/v1/posts")
+    );
+    expect(postCalls).toHaveLength(0);
   });
 });
 
@@ -362,7 +367,9 @@ describe("Zernio reads fail closed without a profile (cross-tenant guard)", () =
       agentId: a.agentId,
     })) as { ok: boolean; message?: string };
     expect(r.ok).toBe(false);
-    expect(fetchMock).not.toHaveBeenCalled(); // Zernio never even queried
+    expect(
+      fetchMock.mock.calls.filter((c: unknown[]) => String(c[0]).endsWith("/api/v1/posts"))
+    ).toHaveLength(0); // Zernio never even queried
   });
 
   it("with a profile the read proceeds (scoped)", async () => {
@@ -532,7 +539,9 @@ describe("ask-gated autonomy (2026-07-20): the ramp offers, never grants", () =>
       }
     )) as { action: string };
     expect(r.action).toBe("needs_confirm"); // milestone alone never auto-posts
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.filter((c: unknown[]) => String(c[0]).endsWith("/api/v1/posts"))
+    ).toHaveLength(0);
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });

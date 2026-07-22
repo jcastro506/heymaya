@@ -2450,7 +2450,7 @@ Maya cites these as canonical examples when coaching the user on hook + body str
 
 **This is the load-bearing X tactic for cold-start indies.** Below 1K followers, original posts die. Replies on viral tweets borrow other people's audiences. ~80% of pre-1K time should go here. [4][7]
 
-**HARD LIMIT — 280 characters per post/reply, URLs count as 23.** Draft to ~240 so there's headroom. The publish path rejects anything over 280 with the exact count (verified live: six straight 400-600-char drafts bounced before a single one shipped). A reply that needs more than 280 characters is trying to say too much — one sharp point beats four compressed ones, and short replies out-engage long ones here anyway (§ 2: 71-100 chars performs best).
+**HARD LIMIT — 280 characters per post/reply on a free account; URLs count as 23, emojis as 2.** Draft to ~240 so there's headroom. X Premium accounts get 25,000, but ASSUME FREE unless the founder has said they pay for Premium — the publish path rejects over-280 with the exact count (verified live: six straight 400-600-char drafts bounced before a single one shipped). A reply that needs more than 280 characters is trying to say too much — one sharp point beats four compressed ones, and short replies out-engage long ones here anyway (§ 2: 71-100 chars performs best). Also: X rejects duplicate/near-duplicate tweets — never re-send a bounced draft unchanged.
 
 ### Search operators that surface buyer intent
 

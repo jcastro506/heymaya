@@ -1683,6 +1683,80 @@ export async function getAccountsHealth(
   return { summary: parsed.data.summary, accounts: parsed.data.accounts };
 }
 
+/* -------------------------------------------------------------------------- */
+/* Validation — POST /api/v1/tools/validate/post (spec §6268)                  */
+/* -------------------------------------------------------------------------- */
+
+const ValidatePostResponseSchema = z
+  .object({
+    valid: z.boolean().optional(),
+    message: z.string().optional(),
+    errors: z
+      .array(
+        z
+          .object({ platform: z.string().optional(), error: z.string().optional() })
+          .passthrough()
+      )
+      .optional(),
+    warnings: z
+      .array(
+        z
+          .object({ platform: z.string().optional(), warning: z.string().optional() })
+          .passthrough()
+      )
+      .optional(),
+  })
+  .passthrough();
+
+/**
+ * Dry-run Zernio's FULL post-validation pipeline without publishing: per-
+ * platform character limits (X weighted counting: URLs=23, emoji=2), missing
+ * media for IG/TikTok/YouTube, hashtag limits, thread formats. Content-only —
+ * no accounts touched, no usage tracked. Run this BEFORE creating a confirm
+ * event so an unpostable draft is rejected with the platform's real reason
+ * instead of dying at publish time (the 07-16 → 07-22 failure mode).
+ */
+export async function validatePost(
+  client: ZernioClient,
+  args: {
+    content?: string;
+    platform: ZernioPostPlatform;
+    platformSpecificData?: ChannelPlatformData;
+    mediaItems?: MediaItem[];
+  }
+): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
+  const raw = await client.request<unknown>("/api/v1/tools/validate/post", {
+    method: "POST",
+    body: {
+      content: args.content,
+      platforms: [
+        {
+          platform: zernioWireSlug(args.platform),
+          ...(args.platformSpecificData
+            ? { platformSpecificData: args.platformSpecificData }
+            : {}),
+        },
+      ],
+      mediaItems: args.mediaItems,
+    },
+  });
+  const parsed = ValidatePostResponseSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new ZernioApiError(
+      200,
+      "validatePost",
+      `Unexpected validate-post payload: ${parsed.error.message}`
+    );
+  }
+  const errors = (parsed.data.errors ?? [])
+    .map((e) => (e.error ? `${e.platform ?? args.platform}: ${e.error}` : null))
+    .filter((e): e is string => e !== null);
+  const warnings = (parsed.data.warnings ?? [])
+    .map((w) => (w.warning ? `${w.platform ?? args.platform}: ${w.warning}` : null))
+    .filter((w): w is string => w !== null);
+  return { valid: parsed.data.valid !== false && errors.length === 0, errors, warnings };
+}
+
 /**
  * Disconnect / delete a connected account.
  * `DELETE /api/v1/accounts/{accountId}`.
@@ -2050,6 +2124,9 @@ export async function replyToComment(
     accountId: string;
     message: string;
     commentId?: string;
+    /** Required by Reddit when replying to third-party threads (docs:
+     *  "Subreddit parameters are required when replying to comments"). */
+    subreddit?: string;
   }
 ): Promise<{ success: boolean; id?: string; raw: unknown }> {
   if (!args.postId) {
@@ -2069,6 +2146,7 @@ export async function replyToComment(
         accountId: args.accountId,
         message: args.message,
         commentId: args.commentId,
+        subreddit: args.subreddit,
       },
     }
   );

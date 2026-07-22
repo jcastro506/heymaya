@@ -250,3 +250,130 @@ describe("live wrapper response shape — errors surface verbatim", () => {
     expect(r.zernioPostId).toBeUndefined();
   });
 });
+
+describe("Zernio-native preflight (validate/post)", () => {
+  beforeEach(() => vi.stubEnv("ZERNIO_API_KEY", "test-key"));
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("a preflight rejection fails with the platform's real error and never hits the posts endpoint", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "c_preflight", "linkedin");
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        const u = String(url);
+        calls.push(u);
+        if (u.includes("/tools/validate/post")) {
+          return jsonResponse(200, {
+            valid: false,
+            errors: [
+              { platform: "linkedin", error: "Text exceeds LinkedIn's 3000 character limit" },
+            ],
+          });
+        }
+        return jsonResponse(200, {});
+      })
+    );
+    const r = (await t.action(
+      internal.gtmMaya.publishEngine.publishContentDirect,
+      {
+        agentId: a.agentId,
+        channel: "linkedin",
+        zernioAccountId: "acct_linkedin",
+        content: "pretend this is 4000 chars",
+        founderConfirmed: true,
+      }
+    )) as { action: string; reasons: string[] };
+    expect(r.action).toBe("failed");
+    expect(r.reasons[0]).toContain("3000 character limit");
+    expect(calls.some((u) => u.endsWith("/api/v1/posts"))).toBe(false);
+  });
+
+  it("preflight API failure is advisory — the publish proceeds and reports its own truth", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "c_prefadvise", "linkedin");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        if (String(url).includes("/tools/validate/post")) {
+          return new Response("boom", { status: 500 });
+        }
+        return jsonResponse(200, {
+          post: {
+            _id: "zp_ok2",
+            platforms: [
+              { platform: "linkedin", status: "published", platformPostId: "li_1" },
+            ],
+          },
+          platformResults: [{ platform: "linkedin", status: "published" }],
+        });
+      })
+    );
+    const r = (await t.action(
+      internal.gtmMaya.publishEngine.publishContentDirect,
+      {
+        agentId: a.agentId,
+        channel: "linkedin",
+        zernioAccountId: "acct_linkedin",
+        content: "a fine post",
+        founderConfirmed: true,
+      }
+    )) as { action: string; zernioPostId?: string };
+    expect(r.action).toBe("auto");
+    expect(r.zernioPostId).toBe("li_1");
+  });
+
+  it("a Reddit reply carries the subreddit resolved from the saved target thread", async () => {
+    const t = convexTest(schema, modules);
+    const a = await setupAgent(t, "c_rsub", "reddit");
+    await t.run(async (ctx) => {
+      await ctx.db.insert("gtmTargetThreads", {
+        accountId: a.accountId,
+        agentId: a.agentId,
+        platform: "reddit",
+        externalId: "1uq1t59",
+        subredditOrCommunity: "indiehackers",
+        currentMetrics: {},
+        lastSeenMetricsAtMs: Date.now(),
+        whyItFits: "exact ICP thread",
+        title: "distribution thread",
+        url: "https://reddit.com/r/indiehackers/comments/1uq1t59/x/",
+        excerpt: "solo dev distribution",
+        status: "queued",
+        priorityScore: 0.9,
+        recommendedAction: "reply",
+        grounded: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL, init?: { body?: string }) => {
+        if (String(url).includes("/api/v1/inbox/comments/")) {
+          bodies.push(init?.body ? JSON.parse(init.body) : {});
+          return jsonResponse(200, { success: true, data: { commentId: "rc_sub" } });
+        }
+        return jsonResponse(200, {});
+      })
+    );
+    const r = (await t.action(
+      internal.gtmMaya.publishEngine.publishContentDirect,
+      {
+        agentId: a.agentId,
+        channel: "reddit",
+        zernioAccountId: "acct_reddit",
+        content: "helpful comment",
+        targetExternalId: "1uq1t59",
+        founderConfirmed: true,
+      }
+    )) as { action: string };
+    expect(r.action).toBe("auto");
+    expect(bodies[0]?.subreddit).toBe("indiehackers");
+  });
+});

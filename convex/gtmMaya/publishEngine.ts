@@ -32,6 +32,7 @@ import {
   multiPlatformPost,
   getPostAnalytics,
   replyToComment,
+  validatePost,
 } from "../integrations/zernio/endpoints";
 import type {
   ZernioPostPlatform,
@@ -87,6 +88,26 @@ function zernioClient(): ZernioClient {
 }
 
 /** Per-agent context the publish gates need. */
+/**
+ * Resolve the subreddit for a Reddit reply from the saved target thread.
+ * Zernio's inbox comment API requires the subreddit when replying to
+ * third-party Reddit threads; the agent rarely passes it explicitly, but the
+ * thread row (saved at discovery time) knows it.
+ */
+export const getThreadSubreddit = internalQuery({
+  args: { agentId: v.id("gtmAgents"), externalId: v.string() },
+  handler: async (ctx, args): Promise<string | null> => {
+    const rows = await ctx.db
+      .query("gtmTargetThreads")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .collect();
+    const hit = rows.find(
+      (t) => t.externalId === args.externalId && t.platform === "reddit"
+    );
+    return hit?.subredditOrCommunity ?? null;
+  },
+});
+
 export const getAgentPublishContext = internalQuery({
   args: { agentId: v.id("gtmAgents") },
   handler: async (
@@ -168,6 +189,9 @@ export const publishContentDirect = internalAction({
     // LinkedIn's ~40-50% link-in-post reach penalty. The caller decides which
     // channels get this; here we just attach it as platformSpecificData.
     firstComment: v.optional(v.string()),
+    // Reddit replies: the target thread's subreddit (required by Zernio's
+    // third-party comment API). Auto-resolved from gtmTargetThreads when absent.
+    subreddit: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<PublishDirectResult> => {
     const content = args.content.trim();
@@ -200,9 +224,40 @@ export const publishContentDirect = internalAction({
           action: "failed",
           reasons: [
             `x_char_limit: this draft is ${effective} chars (URLs count as 23); ` +
-              `X caps posts at ${X_CHAR_LIMIT}. Rewrite it under ${X_CHAR_LIMIT} chars and post again — do not split it into a thread unless the founder asked for one.`,
+              `X caps free-account posts at ${X_CHAR_LIMIT} (Premium accounts get 25k, but draft to ${X_CHAR_LIMIT} unless the founder says they pay for Premium). ` +
+              `Rewrite it under ${X_CHAR_LIMIT} chars and post again — do not split it into a thread unless the founder asked for one.`,
           ],
         };
+      }
+    }
+
+    // Zernio-native preflight — dry-runs their FULL validation pipeline
+    // (per-platform char limits, media-required rules for IG/TikTok/YT,
+    // hashtag caps, thread formats) with the platform's REAL error strings,
+    // BEFORE any gate or confirm event exists. Advisory on API failure (the
+    // real publish surfaces errors now); skipped for Reddit replies (inbox
+    // comments API — post validation doesn't apply) and for media posts (the
+    // content-only dry-run can't see the slides and would wrongly demand
+    // media; those validate for real at publish).
+    if (
+      !(channel === "reddit" && args.targetExternalId) &&
+      !(args.mediaAssetIds && args.mediaAssetIds.length > 0)
+    ) {
+      try {
+        const check = await validatePost(zernioClient(), {
+          content,
+          platform: channel as ZernioPostPlatform,
+        });
+        if (!check.valid) {
+          return {
+            action: "failed",
+            reasons: check.errors.length > 0
+              ? check.errors
+              : ["Zernio preflight rejected this draft (no detail returned)"],
+          };
+        }
+      } catch {
+        // Preflight unavailable — proceed; the publish itself reports truth.
       }
     }
 
@@ -305,11 +360,21 @@ export const publishContentDirect = internalAction({
       let zernioPostId: string | null = null;
       let scheduledForIso: string | undefined;
       if (channel === "reddit" && args.targetExternalId) {
+        // Zernio requires the subreddit on third-party reply calls; resolve it
+        // from the saved target-thread row when the caller didn't pass one.
+        const subreddit =
+          args.subreddit ??
+          (await ctx.runQuery(internal.gtmMaya.publishEngine.getThreadSubreddit, {
+            agentId: args.agentId,
+            externalId: args.targetExternalId,
+          })) ??
+          undefined;
         const reply = await replyToComment(zernioClient(), {
           postId: args.targetExternalId,
           accountId: args.zernioAccountId,
           message: content,
           commentId: args.targetCommentId,
+          subreddit,
         });
         if (!reply.success) {
           return {

@@ -110,7 +110,11 @@ describe("S6 confirm-to-post — publish override", () => {
       }
     )) as { action: string };
     expect(r.action).toBe("needs_confirm");
-    expect(fetchMock).not.toHaveBeenCalled();
+    // The content preflight may call Zernio's validate endpoint; the POSTS
+    // endpoint (an actual publish) must never be hit.
+    expect(
+      fetchMock.mock.calls.filter((c: unknown[]) => String(c[0]).endsWith("/api/v1/posts"))
+    ).toHaveLength(0);
   });
 
   it("Hacker News can NEVER be routed to the publish path (research-only, no API)", async () => {
@@ -149,7 +153,11 @@ describe("S6 confirm-to-post — publish override", () => {
     // Confirm is consent, not a blank cheque — the plan cap (canAutoPost:false)
     // still holds.
     expect(r.action).toBe("needs_confirm");
-    expect(fetchMock).not.toHaveBeenCalled();
+    // The content preflight may call Zernio's validate endpoint; the POSTS
+    // endpoint (an actual publish) must never be hit.
+    expect(
+      fetchMock.mock.calls.filter((c: unknown[]) => String(c[0]).endsWith("/api/v1/posts"))
+    ).toHaveLength(0);
   });
 
   it("founder confirm + plan allows → gets PAST the gate and attempts Zernio (proves the override)", async () => {
