@@ -348,7 +348,24 @@ const MODEL_ROUTING = {
   // and AVOID Groq. The bulletproof version is an OpenRouter dashboard action:
   // Provider Preferences → prefer/only "Novita" (or ignore Groq + AtlasCloud) —
   // then routing is fast AND tool-safe regardless of slug. Env-overridable.
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "moonshotai/kimi-k2-0905",
+  // 2026-07-23 — COGS: main brain kimi-k2 → qwen3-235b-a22b-2507.
+  // VERIFIED live OpenRouter pricing (2026-07-23, /api/v1/models via the Fly
+  // machine — always re-verify, never trust this comment):
+  //   kimi-k2-0905:            $0.60 in / $2.50 out per M, 262K ctx
+  //   qwen3-235b-a22b-2507:    $0.09 in / $0.55 out per M, 262K ctx  ← 6.7x/4.5x cheaper
+  //   minimax-m2:              $0.30 in / $1.20 out per M (fallback candidate)
+  // The main agent's cost is INPUT-dominated: 24 heartbeats/day each re-read
+  // the ~30K-token workspace + every cron turn + chat. On the 2.5-day agent-2
+  // ledger (~$2.30/day steady state) the main model was ~half the burn; this
+  // swap cuts main-side spend ~6x (→ roughly $1.3-1.5/day all-in) and the
+  // one-time onboarding fan-out from ~$3.30 to ~$1.50-2. Secondary rationale:
+  // kimi-k2 caused two live incidents (90s tool-call timeouts eating approval
+  // turns 07-14; 400-loop on crons 07-06). Same 262K ctx; flagship-class
+  // 235B-A22B instruct with solid tool-calling; every downstream safety net
+  // (slop critic on Flash, server-side gates, publish preflights) unchanged.
+  // If voice/judgment regresses: MAYA_GTM_MODEL=moonshotai/kimi-k2-0905
+  // reverts per-deploy with zero code.
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "qwen/qwen3-235b-a22b-2507",
   // Sprint 2.18 #42 — workers DOWNGRADED from gemini-3.5-flash to
   // gemini-3-flash-preview. Per OpenRouter pricing (verified 2026-05-28):
   //   gemini-3.5-flash:  $1.50 in / $9 out per M

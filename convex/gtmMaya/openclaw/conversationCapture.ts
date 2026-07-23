@@ -91,10 +91,15 @@ const MODEL_PRICE_PER_MTOK: ReadonlyArray<{
   in: number;
   out: number;
 }> = [
-  { match: "kimi-k2", in: 0.6, out: 2.5 }, // main brain
+  // Live-verified 2026-07-23 (/api/v1/models — re-verify before edits, do
+  // not trust these numbers later).
+  { match: "qwen3-235b", in: 0.09, out: 0.55 }, // main brain (2026-07-23 →)
+  { match: "kimi-k2", in: 0.6, out: 2.5 }, // prior main (env-revert path)
+  { match: "gpt-oss-120b", in: 0.037, out: 0.17 }, // volume workers
+  { match: "gpt-oss-20b", in: 0.03, out: 0.13 },
   { match: "gemini-3.1-flash-lite", in: 0.25, out: 1.5 }, // extraction
   { match: "gemini-3.1-flash", in: 0.5, out: 3.0 },
-  { match: "gemini-3-flash", in: 0.5, out: 3.0 }, // workers
+  { match: "gemini-3-flash", in: 0.5, out: 3.0 }, // judges
 ];
 // Conservative fallback for an unrecognized model: priced at/above our known
 // models so an unknown slug counts GENEROUSLY toward the spend cap — the
