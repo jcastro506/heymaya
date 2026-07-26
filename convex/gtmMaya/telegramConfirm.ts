@@ -995,6 +995,21 @@ export const sendConfirmCardHttp = httpAction(async (ctx, request) => {
       { status: 200, headers: { "content-type": "application/json" } }
     );
   }
+  // 2026-07-25 — CARDS ARE RETIRED except TikTok (the rendered-preview tap is
+  // the platform's legal consent evidence) and the paste hand-off. Everything
+  // else is conversational: propose in a normal message, act on the founder's
+  // words via confirm_event. Server-enforced so a prompt regression can never
+  // resurrect card ceremony on ordinary channels.
+  if (ev.channel !== "tiktok" && ev.channel !== "hn") {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        reason:
+          "cards are retired for this channel — propose it in a normal message (the draft + the thread link + 'want me to post it?'), then on their yes call confirm_event({ eventId, decision: 'post' }). Cards exist only for TikTok (legal preview).",
+      }),
+      { status: 200, headers: { "content-type": "application/json" } }
+    );
+  }
   // Channels with no posting API get the paste card (deeplink + tap-to-copy
   // + "I posted it"), never a tap-to-post card whose tap can only fail.
   if (ev.channel === "hn") {

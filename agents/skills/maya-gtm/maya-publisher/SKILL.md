@@ -16,7 +16,7 @@ Platform differences live in the prose below, not in branches. Maya reasons over
 - IF a `gtmCalendarEvent` reaches its scheduled time AND it is `status: 'queued'` (auto-postable) THEN shape + publish.
 - IF the operator says "post this now" AND the draft is approved and slop-clean THEN publish.
 - IF a `needs_confirm` Reddit/TikTok card was tapped by the founder THEN publish that confirmed event.
-- IF the founder approves a pending post IN THE CHAT ("post it", "yes, send it", "go ahead") THEN call `confirm_event({ eventId, decision: "post" })` — their words are the same consent as the tap and run the identical server path. "Skip that" → `decision: "skip"`. EXCEPTION: TikTok stays card-only (`send_confirm_card`) because the inline preview is the legal consent. Maya NEVER responds to a conversational approval with a status explanation — she posts, sends the card, or hands over a paste-ready draft.
+- IF the founder approves a pending post IN THE CHAT ("post it", "yes, send it", "go ahead") THEN call `confirm_event({ eventId, decision: "post" })` — their words are the same consent as the tap and run the identical server path. "Skip that" → `decision: "skip"`. EXCEPTION: TikTok stays card-only (`send_confirm_card`) because the inline preview is the legal consent. Maya NEVER responds to a conversational approval with a status explanation — she posts, or hands over a paste-ready draft.
 - NEVER from the heartbeat. NEVER auto-publish a Reddit or TikTok event (those are always confirm-to-post, see the ban-safety gate).
 - NEVER for a channel that is not one of the 6 offered (X, Reddit, LinkedIn, Instagram, TikTok, YouTube).
 
@@ -38,7 +38,12 @@ Maya runs these before shaping anything. If any gate fails, she does not publish
 
 ## Ban-safety gate (load-bearing)
 
-Reddit and TikTok are ALWAYS confirm-to-post. The mechanism: `post_to_channel` returns `needs_confirm` for them, and Maya then calls **`send_confirm_card({ eventId, mediaAssetIds? })`** — the founder gets a ONE-TAP Telegram card with the post preview (and the slideshow images for TikTok via `mediaAssetIds`). They tap "✅ Post it" and the post goes out via Zernio server-side; **they never leave Telegram or open the app, and there is no calendar / deep-link / paste.** That tap is the human consent — and for TikTok it's exactly what satisfies the `content_preview_confirmed` / `express_consent_given` legal flags (they previewed it right there). Maya NEVER auto-publishes Reddit/TikTok, for two independent reasons that each stand on their own:
+Reddit and TikTok are ALWAYS confirm-to-post — Maya NEVER auto-publishes them. The mechanism (cards retired 2026-07-25): `post_to_channel` returns `needs_confirm` + eventId, then the flow splits:
+
+- **Reddit — CONVERSATIONAL, no card.** Propose it as a normal message: the thread link, one honest line of why, the draft, then "want me to post it?" On the founder's yes → `confirm_event({ eventId, decision: "post" })`. Their words ARE the consent, recorded in the transcript. If they already said "post it" this turn, skip the ask — `confirm_event` immediately. (`send_confirm_card` is server-refused for Reddit.)
+- **TikTok — the ONE card channel: `send_confirm_card({ eventId, mediaAssetIds })`.** The founder must SEE the rendered slides; their tap on the preview is exactly what satisfies the `content_preview_confirmed` / `express_consent_given` legal flags. Words can't approve TikTok.
+
+Either way they never leave Telegram. The two reasons Reddit/TikTok always confirm, each standing on its own:
 
 - **Account ban risk.** Both are channels where an autonomous misfire can get the founder's account flagged or banned. The founder's account is not something Maya gambles.
 - **The technical reality.** Zernio's own docs report that more than half of all Reddit posts fail (mostly subreddit-rule violations), and TikTok's two consent flags are legal requirements (see below). Auto-posting either would break the headline outright.
@@ -57,7 +62,7 @@ Shape: 280 characters free (25,000 on Premium). URLs always count as 23 characte
 
 ### Reddit
 
-Reddit is one-tap confirm, every time. Before posting, Maya reads the subreddit's rules and fetches its flair, because the `subreddit` (named without the `r/` prefix) and a `flairId` are required and many subs mandate a specific flair. The title is capped at 300 characters and is IMMUTABLE the moment it posts, so Maya gets it exactly right before the founder taps. New accounts are capped around 10 posts per day. Given Zernio's own >50% Reddit failure rate, Maya always emits a one-tap human confirm card first, posts only on the tap, then re-polls to confirm it landed. She never claims "posted to Reddit" without that verification.
+Reddit is ask-in-chat confirm, every time. Before posting, Maya reads the subreddit's rules and fetches its flair, because the `subreddit` (named without the `r/` prefix) and a `flairId` are required and many subs mandate a specific flair. The title is capped at 300 characters and is IMMUTABLE the moment it posts, so Maya gets it exactly right before the founder taps. New accounts are capped around 10 posts per day. Given Zernio's own >50% Reddit failure rate, Maya always asks in chat first (draft + link + "want me to post it?"), posts only on the founder's yes via `confirm_event`, then re-polls to confirm it landed. She never claims "posted to Reddit" without that verification.
 
 ### LinkedIn
 

@@ -316,3 +316,101 @@ describe("buildXIntentLink", () => {
     expect(link).toContain(encodeURIComponent("hello & goodbye").replace(/%20/g, "+").slice(0, 5));
   });
 });
+
+describe("cards retired (2026-07-25): conversational is the only approval flow", () => {
+  beforeEach(() => {
+    vi.stubEnv("ZERNIO_API_KEY", "test-key");
+    vi.stubEnv("TELEGRAM_BOT_TOKEN", "tg-test-token");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("send_confirm_card on Reddit is refused with the conversational instruction", async () => {
+    const t = convexTest(schema, modules);
+    const hookToken = "hk-retired";
+    const a = await setupAgent(t, "c_retired", "reddit");
+    await t.run(async (ctx) => {
+      await ctx.db.patch(a.agentId, { hookToken });
+    });
+    const eventId = await seedThreadAndEvent(t, a, "reddit");
+    const { tg } = stubTransport({});
+    const res = await t.fetch("/lc_gtm/send_confirm_card", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${hookToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ eventId }),
+    });
+    const body = (await res.json()) as { ok: boolean; reason?: string };
+    expect(body.ok).toBe(false);
+    expect(body.reason).toContain("confirm_event");
+    expect(tg).toHaveLength(0); // no card went out
+    // The event is untouched — still confirmable by words.
+    const ev = await t.run(async (ctx) => await ctx.db.get(eventId));
+    expect(ev?.status).toBe("needs_confirm");
+  });
+
+  it("TikTok keeps its card (legal preview)", async () => {
+    const t = convexTest(schema, modules);
+    const hookToken = "hk-tiktok";
+    const authed = t.withIdentity({ subject: "c_tt", email: "c_tt@clawlaunch.test" });
+    const started = await authed.mutation(
+      api.gtmMaya.researchLifecycle.startGtmOnboarding,
+      { channelPreference: "telegram", timezone: "America/New_York" }
+    );
+    await authed.mutation(api.gtmMaya.researchLifecycle.setAppProfile, {
+      url: "https://c-tt.test",
+      stage: "live-beta",
+      weekGoal: "signups",
+      canRecordScreen: true,
+      canShowFace: false,
+      excludedAudiences: [],
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(started.agentId, {
+        telegramChatId: "chat_tt",
+        hookToken,
+        connectedAccountsJson: JSON.stringify([
+          { accountId: "acct_tiktok", platform: "tiktok" },
+        ]),
+        gtmPlanJson: JSON.stringify({ status: "active", tier: "starter" }),
+      });
+    });
+    const eventId = await t.run(async (ctx) => {
+      const now = Date.now();
+      return await ctx.db.insert("gtmCalendarEvents", {
+        accountId: started.accountId,
+        agentId: started.agentId,
+        title: "tiktok slideshow",
+        draftText: "caption for the slides",
+        startsAtMs: now,
+        endsAtMs: now + 3_600_000,
+        timezone: "America/New_York",
+        status: "needs_confirm",
+        createdBy: "maya",
+        autoPostJson: JSON.stringify({
+          channel: "tiktok",
+          zernioAccountId: "acct_tiktok",
+          mode: "manual_confirm",
+        }),
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+    const { tg } = stubTransport({});
+    const res = await t.fetch("/lc_gtm/send_confirm_card", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${hookToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ eventId }),
+    });
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(true);
+    expect(tg.length).toBeGreaterThan(0); // the card went out
+  });
+});
