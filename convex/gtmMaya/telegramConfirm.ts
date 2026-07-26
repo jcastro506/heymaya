@@ -481,6 +481,21 @@ export const sendPostConfirmCard = internalAction({
           : "Tap to OK and I'll post it for you.";
     const text = `${header}\n\n${ev.content}\n\n${channelNote}`;
     const messageId = await tgSendCard(bot.token, ev.chatId, text, args.eventId);
+    if (messageId) {
+      // Transcript truth: the card is a founder-facing send — record it so
+      // chat-Maya (and the dashboard) can see a card went out for this event
+      // (live 07-25: "did it work?" → "I can't see if you tapped").
+      await ctx
+        .runMutation(internal.gtmMaya.openclaw.conversationCapture.persistMayaMessage, {
+          accountId: ev.accountId,
+          agentId: ev.agentId,
+          role: "maya",
+          body: `[confirm card sent] ${text}`,
+          channel: "telegram",
+          turnId: `confirm-card-${args.eventId}`,
+        })
+        .catch(() => {});
+    }
     return messageId
       ? { ok: true, messageId }
       : { ok: false, reason: "telegram send failed" };
@@ -626,6 +641,16 @@ export const handleConfirmCallback = internalAction({
       });
       await ans("Skipped.");
       await edit("✕ Skipped — I won't post this.");
+      await ctx
+        .runMutation(internal.gtmMaya.openclaw.conversationCapture.persistMayaMessage, {
+          accountId: ev.accountId,
+          agentId: ev.agentId,
+          role: "maya",
+          body: "[card tap] ✕ Skipped — not posting this.",
+          channel: "telegram",
+          turnId: `confirm-outcome-${eventIdRaw}`,
+        })
+        .catch(() => {});
       return;
     }
 
@@ -645,6 +670,16 @@ export const handleConfirmCallback = internalAction({
       if (done.ok) {
         await ans("Got it — tracked.");
         await edit("✓ Marked posted — I'm tracking it from here.");
+        await ctx
+          .runMutation(internal.gtmMaya.openclaw.conversationCapture.persistMayaMessage, {
+            accountId: ev.accountId,
+            agentId: ev.agentId,
+            role: "maya",
+            body: "[card tap] ✓ Founder posted it by hand — tracked.",
+            channel: "telegram",
+            turnId: `confirm-outcome-${eventIdRaw}`,
+          })
+          .catch(() => {});
       } else {
         await ans(done.reason ?? "Couldn't mark it.");
       }
@@ -710,6 +745,16 @@ export const handleConfirmCallback = internalAction({
       const channelLabel =
         ev.channel[0].toUpperCase() + ev.channel.slice(1);
       await edit(`✅ Posted to ${channelLabel}. I'll confirm it's live shortly.`);
+      await ctx
+        .runMutation(internal.gtmMaya.openclaw.conversationCapture.persistMayaMessage, {
+          accountId: ev.accountId,
+          agentId: ev.agentId,
+          role: "maya",
+          body: `[card tap] ✅ Posted to ${channelLabel}.`,
+          channel: "telegram",
+          turnId: `confirm-outcome-${eventIdRaw}`,
+        })
+        .catch(() => {});
     } else {
       // RE-ARM, never dead-end: the founder already approved, so the approval
       // survives the failure — back to needs_confirm so retry/tap still works.
