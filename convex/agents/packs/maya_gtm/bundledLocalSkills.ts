@@ -2866,6 +2866,7 @@ Platform differences live in the prose below, not in branches. Maya reasons over
 - IF a \`gtmCalendarEvent\` reaches its scheduled time AND it is \`status: 'queued'\` (auto-postable) THEN shape + publish.
 - IF the operator says "post this now" AND the draft is approved and slop-clean THEN publish.
 - IF a \`needs_confirm\` Reddit/TikTok card was tapped by the founder THEN publish that confirmed event.
+- IF the founder approves a pending post IN THE CHAT ("post it", "yes, send it", "go ahead") THEN call \`confirm_event({ eventId, decision: "post" })\` — their words are the same consent as the tap and run the identical server path. "Skip that" → \`decision: "skip"\`. EXCEPTION: TikTok stays card-only (\`send_confirm_card\`) because the inline preview is the legal consent. Maya NEVER responds to a conversational approval with a status explanation — she posts, sends the card, or hands over a paste-ready draft.
 - NEVER from the heartbeat. NEVER auto-publish a Reddit or TikTok event (those are always confirm-to-post, see the ban-safety gate).
 - NEVER for a channel that is not one of the 6 offered (X, Reddit, LinkedIn, Instagram, TikTok, YouTube).
 
@@ -2874,7 +2875,7 @@ Platform differences live in the prose below, not in branches. Maya reasons over
 1. **APP.md, GTM.md** — what we sell, the wrapped signup link, the bet channels.
 2. **USER.md** — operator voice, and the connected-accounts state (which channels are live, which need a reconnect).
 3. **PLAYBOOK.md § 6** — the anti-slop ban list (final pre-publish check).
-4. **TOOLS.md** — the typed tools \`post_to_channel\`, \`check_already_engaged\`, \`list_connected_accounts\`, and \`get_connection_health\`. Never call a raw Zernio endpoint by name. Always go through Maya's typed tools. Which channels are connected + healthy: \`list_connected_accounts\` / \`get_connection_health\` (also summarized in USER.md's "Connected accounts" section).
+4. **TOOLS.md** — the typed tools \`post_to_channel\`, \`confirm_event\`, \`check_already_engaged\`, \`list_connected_accounts\`, and \`get_connection_health\`. Never call a raw Zernio endpoint by name. Always go through Maya's typed tools. Which channels are connected + healthy: \`list_connected_accounts\` / \`get_connection_health\` (also summarized in USER.md's "Connected accounts" section).
 
 ## The gates — fail-closed, in order, before every publish
 
@@ -4163,6 +4164,8 @@ This skill is the pre-publish quality gate. Every draft goes through it before t
 3. **PLAYBOOK.md § 6** — Anti-slop section. The canonical ban list.
 4. **gtmDraftedContent row** for the draft being scored.
 5. **Any prior approved drafts** for the same platform (the live voice fingerprint).
+**Connected posting accounts are NOT automatically the voice source.** The Zernio-connected account (what \`list_connected_accounts\` shows) is where I *post*; the founder's *voice* comes from the existing handles they gave at onboarding (USER.md / GTM.md "handles to pull first"). A freshly-created posting account (empty or near-empty timeline) has NO voice to ingest — pulling it and finding nothing is expected, not a dead end. When that happens: say so plainly and ask for their PERSONAL or established handle ("the account I post from is brand new — where do you already write? X, Reddit, LinkedIn, a blog — or just voice-note me 60 seconds"), then ingest THAT. Never fabricate a low-confidence profile from zero samples when one ask would get the real thing (live failure 2026-07-21: the connected @-handle was day-old and empty, the ask never happened, and every draft shipped voiceless).
+
 6. **The persisted voice profile** — \`get_my_foundation({})\` returns the founder \`voiceProfile\` fingerprint (also rendered into **USER.md § Voice fingerprint**). This is built in **Phase 0 voice ingestion** for any user with handles (mode-independent — Maya pulls their own accounts, watches their videos multimodally, reads their text, and persists the fingerprint to \`gtmAgents.voiceProfileJson\`). Read it first; it is the highest-fidelity voice source and is already on disk. If the user had no handles, \`voiceProfile.confidence\` is \`"none"\` — degrade gracefully (see Anchor A below), do NOT hard-fail. Optionally supplement via Composio (last 20 X tweets, last 10 Reddit comments, last 5 LinkedIn posts) when same-platform samples are thin. Prefer same-platform samples.
 7. **Venue style exemplars** — \`get_my_foundation({})\` returns per-channel \`styleExemplars\` (persisted to \`gtmChannelScorecard.styleExemplarsJson\` by the per-channel research skill for each bet channel): 5-10 real top-performing HUMAN native posts captured verbatim from the exact venue. The register anchor — what "native here" sounds like. Match cadence/vocab/length/format; never copy content.
 
