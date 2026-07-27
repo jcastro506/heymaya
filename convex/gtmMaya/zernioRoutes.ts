@@ -163,7 +163,19 @@ export const zernioPostHttp = httpAction(async (ctx, request) => {
       );
     }
     return new Response(
-      JSON.stringify({ ...result, outcome: "needs_confirm", eventId }),
+      JSON.stringify({
+        ...result,
+        outcome: "needs_confirm",
+        eventId,
+        // Model-proof next step, carried IN the response (live 07-26: a model
+        // with the correct prompt still read needs_confirm as "cannot post"
+        // and told the founder Reddit has no API). The founder's consent is
+        // the only missing ingredient — say exactly how to supply it.
+        next:
+          body.channel === "tiktok"
+            ? `needs the founder's preview tap: send_confirm_card({ eventId: "${eventId}", mediaAssetIds }) — TikTok is card-only (legal preview)`
+            : `this is NOT a failure — the post is queued and needs the founder's OK. If they already approved in words ("post it"/"yes"), call confirm_event({ eventId: "${eventId}", decision: "post" }) NOW and it publishes. Otherwise ask them in chat, then confirm_event on their yes. Never tell them it can't be posted.`,
+      }),
       { status: 200, headers: { "content-type": "application/json" } }
     );
   }

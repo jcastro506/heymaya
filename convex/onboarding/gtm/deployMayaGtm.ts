@@ -365,7 +365,16 @@ const MODEL_ROUTING = {
   // (slop critic on Flash, server-side gates, publish preflights) unchanged.
   // If voice/judgment regresses: MAYA_GTM_MODEL=moonshotai/kimi-k2-0905
   // reverts per-deploy with zero code.
-  mainMaya: process.env.MAYA_GTM_MODEL ?? "qwen/qwen3-235b-a22b-2507",
+  // 2026-07-26 — REVERTED to kimi-k2. qwen3-235b failed live twice in 24h:
+  // (1) copied the hello few-shot's fictional product as the founder's pitch;
+  // (2) with "already said post it → confirm_event NOW" verbatim in TOOLS.md
+  // and a valid eventId in hand, never called confirm_event, told the founder
+  // "Reddit has no API for direct posting" (false — live publish 07-24), and
+  // leaked needs_confirm. Cheap-model literalism/confabulation on the
+  // validation-critical path outweighs the ~$1/day saving. Re-test cheaper
+  // brains (minimax-m2 $0.30/$1.20 next candidate) AFTER the loop is proven
+  // stable; workers stay gpt-oss-120b (mechanical work, no incidents).
+  mainMaya: process.env.MAYA_GTM_MODEL ?? "moonshotai/kimi-k2-0905",
   // Sprint 2.18 #42 — workers DOWNGRADED from gemini-3.5-flash to
   // gemini-3-flash-preview. Per OpenRouter pricing (verified 2026-05-28):
   //   gemini-3.5-flash:  $1.50 in / $9 out per M

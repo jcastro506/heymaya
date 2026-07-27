@@ -41,7 +41,7 @@ describe("Maya GTM OpenClaw deploy config", () => {
     expect(bootstrap.product).toBe("clawlaunch-gtm");
     // V2 redesign: main brain is Kimi K2-0905 (handles the long workspace +
     // research build-up that broke gemini); workers stay on Gemini 3 Flash.
-    expect(bootstrap.modelRouting.mainMaya).toBe("qwen/qwen3-235b-a22b-2507");
+    expect(bootstrap.modelRouting.mainMaya).toBe("moonshotai/kimi-k2-0905");
     expect(bootstrap.modelRouting.hardResearchBeta).toContain("gemini-3-flash");
     expect(bootstrap.directPingSmoke).toBe(true);
     // Sprint 2.1 expanded the agent list from 2 → 11 (six platform
@@ -102,7 +102,7 @@ describe("Maya GTM OpenClaw deploy config", () => {
       (a: { id: string }) => a.id === "main"
     );
     expect(main.default).toBe(true);
-    expect(main.model).toBe("openrouter/qwen/qwen3-235b-a22b-2507");
+    expect(main.model).toBe("openrouter/moonshotai/kimi-k2-0905");
     expect(config.init?.cmd?.join(" ")).toContain(
       "cp /data/workspace/jobs.json /data/cron/jobs.json"
     );
@@ -146,7 +146,7 @@ describe("Maya GTM OpenClaw deploy config", () => {
     });
   });
 
-  it("uses qwen3-235b-a22b-2507 as the default GTM OpenClaw model (COGS 2026-07-23)", () => {
+  it("uses kimi-k2-0905 as the default GTM OpenClaw model (qwen reverted 2026-07-26)", () => {
     const config = buildGtmMachineConfig({
       agentId: "agent",
       flyAppName: "clawlaunch-agent",
@@ -154,7 +154,7 @@ describe("Maya GTM OpenClaw deploy config", () => {
     });
 
     expect(config.env?.OPENCLAW_MODEL).toBe(
-      "openrouter/qwen/qwen3-235b-a22b-2507"
+      "openrouter/moonshotai/kimi-k2-0905"
     );
     expect(config.env?.OPENCLAW_DISABLE_BONJOUR).toBe("1");
     expect(config.env?.MAYA_GTM_MODEL_ROUTING_JSON).toContain(
