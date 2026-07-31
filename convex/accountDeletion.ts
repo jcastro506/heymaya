@@ -14,89 +14,28 @@ import { FlyClient, FlyError } from "./lib/flyClient";
 const CONFIRMATION_PHRASE = "DELETE MAYA";
 const REQUEST_TTL_MS = 30 * 60 * 1000;
 
-const channelValidator = v.union(
-  v.literal("imessage"),
-  v.literal("whatsapp"),
-  v.literal("sms")
-);
-
 const sourceValidator = v.union(v.literal("web"), v.literal("imessage"));
 
+/**
+ * Sprint 0b — the purge lists after the schema prune.
+ *
+ * The creator and service products were deleted, and with them ~70 tables.
+ * What remains creator-scoped is the shared infrastructure that outlived both:
+ * Composio connections, the LLM call log, weekly reviews, and the deletion
+ * requests themselves. Everything else a live account owns is account-scoped
+ * (GTM) and lives in ACCOUNT_SCOPED_TABLES below.
+ */
 type CreatorScopedTable =
-  | "creatorHandles"
   | "connectedAccounts"
-  | "creatorPicture"
   | "aiCallLog"
-  | "scrapeCreatorsCache"
-  | "calendarEventOptOuts"
-  | "industryIntelSeen"
-  | "posts"
-  | "postMetrics"
-  | "dailyBriefs"
   | "weeklyReviews"
-  | "hookLibrary"
-  | "contentPlans"
-  | "brandDeals"
-  | "packetGenerations"
-  | "mayaActionLog"
-  | "pitchOutreach"
-  | "opportunityScoutSeen"
-  | "monetizationProposalLog"
-  | "collabMatchLog"
-  | "postPostmortems"
-  | "trendObservations"
-  | "competitorObservations"
-  | "pairedChannels"
-  | "gmailWebhookEvents"
-  | "opportunitySurface"
-  | "onboardingJobs"
-  | "creatorMayaV0Onboarding"
-  | "creatorMayaV0TiktokAccounts"
-  | "creatorMayaV0TiktokPosts"
-  | "creatorMayaV0CalendarConnections"
-  | "creatorMayaV0CalendarEvents"
-  | "creatorMayaV0Intake"
-  | "creatorMayaV0CreatorPictures"
-  | "creatorMayaV0DailyBriefs"
-  | "creatorMayaV0ActionLog"
-  | "creatorMayaV0OpenClawDeployments"
-  | "creatorMayaV0BrandTargets"
-  | "creatorMayaV0MediaAssets"
-  | "creatorMayaV0EditRequests"
   | "accountDeletionRequests";
 
-type BusinessScopedTable =
-  | "businessPicture"
-  | "businessMayaV0Intake"
-  | "gbpLocations"
-  | "serviceCustomers"
-  | "serviceJobs"
-  | "gbpPosts"
-  | "reviews"
-  | "reviewRequests"
-  | "serviceContent"
-  | "inboundLeads"
-  | "crmConnections"
-  | "voiceChannels"
-  | "voiceCallTranscripts"
-  | "voiceUsage"
-  | "mediaAssets"
-  | "customSkills"
-  | "approvalRules"
-  | "zernioConnections"
-  | "mayaTaskQueue"
-  | "wikiProjections"
-  | "weeklyLearnings"
-  | "gbpHealthScores"
-  | "serviceTelemetry";
-
 type AccountScopedTable =
-  | "growthAgents"
-  | "growthPosts"
   | "growthWaitlist"
-  // S7 — GTM (ClawLaunch) account-scoped tables. All scoped by_account on
-  // accountId (= creator._id). The 5 CROSS-TENANT tables are intentionally
-  // EXEMPT and never appear here: gtmPlatformBriefs / gtmPlatformClaims /
+  // GTM account-scoped tables, all indexed by_account on accountId
+  // (= creator._id). The 5 CROSS-TENANT tables are intentionally EXEMPT and
+  // never appear here: gtmPlatformBriefs / gtmPlatformClaims /
   // gtmPlatformRefreshRuns (shared platform-algo intelligence),
   // gtmArchetypeLearnings + gtmSkillImprovementProposals (cross-tenant
   // learnings) — deleting one tenant must not erase shared knowledge.
@@ -159,80 +98,14 @@ type AccountScopedTable =
   | "gtmSteeringDirectives";
 
 const CREATOR_SCOPED_TABLES: CreatorScopedTable[] = [
-  "creatorHandles",
   "connectedAccounts",
-  "creatorPicture",
   "aiCallLog",
-  "scrapeCreatorsCache",
-  "calendarEventOptOuts",
-  "industryIntelSeen",
-  "posts",
-  "postMetrics",
-  "dailyBriefs",
   "weeklyReviews",
-  "hookLibrary",
-  "contentPlans",
-  "brandDeals",
-  "packetGenerations",
-  "mayaActionLog",
-  "pitchOutreach",
-  "opportunityScoutSeen",
-  "monetizationProposalLog",
-  "collabMatchLog",
-  "postPostmortems",
-  "trendObservations",
-  "competitorObservations",
-  "pairedChannels",
-  "gmailWebhookEvents",
-  "opportunitySurface",
-  "onboardingJobs",
-  "creatorMayaV0Onboarding",
-  "creatorMayaV0TiktokAccounts",
-  "creatorMayaV0TiktokPosts",
-  "creatorMayaV0CalendarConnections",
-  "creatorMayaV0CalendarEvents",
-  "creatorMayaV0Intake",
-  "creatorMayaV0CreatorPictures",
-  "creatorMayaV0DailyBriefs",
-  "creatorMayaV0ActionLog",
-  "creatorMayaV0OpenClawDeployments",
-  "creatorMayaV0BrandTargets",
-  "creatorMayaV0EditRequests",
-  "creatorMayaV0MediaAssets",
   "accountDeletionRequests",
 ];
 
-const BUSINESS_SCOPED_TABLES: BusinessScopedTable[] = [
-  "businessPicture",
-  "businessMayaV0Intake",
-  "gbpLocations",
-  "serviceCustomers",
-  "serviceJobs",
-  "gbpPosts",
-  "reviews",
-  "reviewRequests",
-  "serviceContent",
-  "inboundLeads",
-  "crmConnections",
-  "voiceChannels",
-  "voiceCallTranscripts",
-  "voiceUsage",
-  "mediaAssets",
-  "customSkills",
-  "approvalRules",
-  "zernioConnections",
-  "mayaTaskQueue",
-  "wikiProjections",
-  "weeklyLearnings",
-  "gbpHealthScores",
-  "serviceTelemetry",
-];
-
 const ACCOUNT_SCOPED_TABLES: AccountScopedTable[] = [
-  "growthAgents",
-  "growthPosts",
   "growthWaitlist",
-  // S7 — GTM cascade (cross-tenant tables intentionally omitted; see type).
   "gtmAgents",
   "gtmTelegramPairingTokens",
   "gtmCalendarConnections",
@@ -323,86 +196,6 @@ export const cancelMyAccountDeletion = mutation({
       await ctx.db.patch(row._id, { status: "cancelled" });
     }
     return { cancelled: rows.length };
-  },
-});
-
-export const requestDeletionByPhonePublic = mutation({
-  args: {
-    secret: v.string(),
-    channel: channelValidator,
-    phoneNumber: v.string(),
-  },
-  handler: async (ctx, args) => {
-    assertWebhookSecret(args.secret);
-    const creator = await activeCreatorForPhone(ctx, args);
-    if (!creator) {
-      return {
-        ok: false,
-        reason: "active-channel-not-found",
-        confirmationPhrase: CONFIRMATION_PHRASE,
-      } as const;
-    }
-    const now = Date.now();
-    await expirePriorRequests(ctx, creator._id, now);
-    await ctx.db.insert("accountDeletionRequests", {
-      creatorId: creator._id,
-      source: "imessage",
-      confirmationPhrase: CONFIRMATION_PHRASE,
-      status: "requested",
-      requestedAt: now,
-      expiresAt: now + REQUEST_TTL_MS,
-    });
-    return {
-      ok: true,
-      confirmationPhrase: CONFIRMATION_PHRASE,
-      expiresAt: now + REQUEST_TTL_MS,
-    } as const;
-  },
-});
-
-export const confirmDeletionByPhonePublic = mutation({
-  args: {
-    secret: v.string(),
-    channel: channelValidator,
-    phoneNumber: v.string(),
-    confirmationText: v.string(),
-  },
-  handler: async (ctx, args) => {
-    assertWebhookSecret(args.secret);
-    if (normalizeConfirmation(args.confirmationText) !== CONFIRMATION_PHRASE) {
-      return {
-        ok: false,
-        reason: "confirmation-mismatch",
-        confirmationPhrase: CONFIRMATION_PHRASE,
-      } as const;
-    }
-
-    const creator = await activeCreatorForPhone(ctx, args);
-    if (!creator) {
-      return {
-        ok: false,
-        reason: "active-channel-not-found",
-        confirmationPhrase: CONFIRMATION_PHRASE,
-      } as const;
-    }
-
-    const request = await latestDeletionRequest(ctx, creator._id);
-    const now = Date.now();
-    if (!request || request.expiresAt < now) {
-      if (request) await ctx.db.patch(request._id, { status: "expired" });
-      return {
-        ok: false,
-        reason: "request-expired-or-missing",
-        confirmationPhrase: CONFIRMATION_PHRASE,
-      } as const;
-    }
-
-    await ctx.db.patch(request._id, {
-      status: "confirmed",
-      confirmedAt: now,
-    });
-    const result = await purgeCreatorAccount(ctx, creator, "imessage");
-    return { ok: true, ...result } as const;
   },
 });
 
@@ -549,37 +342,6 @@ async function creatorByClerkUserId(
     .first();
 }
 
-async function activeCreatorForPhone(
-  ctx: QueryCtx | MutationCtx,
-  args: { channel: "imessage" | "whatsapp" | "sms"; phoneNumber: string }
-): Promise<Doc<"creators"> | null> {
-  const rows = await ctx.db
-    .query("pairedChannels")
-    .withIndex("by_channel_and_phone", (q) =>
-      q.eq("channel", args.channel).eq("phoneNumber", args.phoneNumber)
-    )
-    .collect();
-  const active = rows
-    .filter((row) => row.status === "active")
-    .sort((a, b) => (b.pairedAt ?? b.requestedAt) - (a.pairedAt ?? a.requestedAt))[0];
-  if (!active) return null;
-  return await ctx.db.get(active.creatorId);
-}
-
-async function latestDeletionRequest(
-  ctx: QueryCtx | MutationCtx,
-  creatorId: Id<"creators">
-): Promise<Doc<"accountDeletionRequests"> | null> {
-  const rows = await ctx.db
-    .query("accountDeletionRequests")
-    .withIndex("by_creator_and_status", (q) =>
-      q.eq("creatorId", creatorId).eq("status", "requested")
-    )
-    .collect();
-  rows.sort((a, b) => b.requestedAt - a.requestedAt);
-  return rows[0] ?? null;
-}
-
 async function expirePriorRequests(
   ctx: MutationCtx,
   creatorId: Id<"creators">,
@@ -603,13 +365,10 @@ async function purgeCreatorAccount(
   creator: Doc<"creators">,
   source: "web" | "imessage"
 ) {
-  const businessIds = await businessIdsForAccount(ctx, creator._id);
-  const businesses = await Promise.all(businessIds.map((id) => ctx.db.get(id)));
-  const stripeCustomerIds = [
-    creator.stripeCustomerId,
-    ...businesses.map((business) => business?.stripeCustomerId),
-  ].filter((id): id is string => typeof id === "string" && id.length > 0);
-  const flyAppIds = await flyAppIdsForAccount(ctx, creator, businesses);
+  const stripeCustomerIds = [creator.stripeCustomerId].filter(
+    (id): id is string => typeof id === "string" && id.length > 0
+  );
+  const flyAppIds = await flyAppIdsForAccount(ctx, creator);
   const zernioAccountIds = await zernioAccountIdsForAccount(ctx, creator._id);
 
   // Zernio disconnect is Convex-side for the same reason as Fly/Stripe below
@@ -648,15 +407,6 @@ async function purgeCreatorAccount(
 
   const creatorDeleted = await deleteCreatorScopedRows(ctx, creator._id);
   const accountDeleted = await deleteAccountScopedRows(ctx, creator._id);
-  let businessDeleted = 0;
-  for (const businessId of businessIds) {
-    businessDeleted += await deleteBusinessScopedRows(ctx, businessId);
-    const business = await ctx.db.get(businessId);
-    if (business) {
-      await ctx.db.delete(businessId);
-      businessDeleted += 1;
-    }
-  }
   for (const customerId of stripeCustomerIds) {
     await deleteStripeWebhookRows(ctx, customerId);
   }
@@ -669,7 +419,6 @@ async function purgeCreatorAccount(
     deletedRows: {
       creatorScoped: creatorDeleted,
       accountScoped: accountDeleted,
-      businessScoped: businessDeleted,
       creator: 1,
     },
     flyAppIds,
@@ -884,32 +633,14 @@ async function zernioAccountIdsForAccount(
 
 async function flyAppIdsForAccount(
   ctx: QueryCtx | MutationCtx,
-  creator: Doc<"creators">,
-  businesses: Array<Doc<"businesses"> | null>
+  creator: Doc<"creators">
 ): Promise<string[]> {
   const ids = new Set<string>();
   if (creator.mayaFlyAppId) ids.add(creator.mayaFlyAppId);
-  for (const business of businesses) {
-    if (business?.mayaFlyAppId) ids.add(business.mayaFlyAppId);
-  }
-  const deployments = await ctx.db
-    .query("creatorMayaV0OpenClawDeployments")
-    .withIndex("by_creator", (q) => q.eq("creatorId", creator._id))
-    .collect();
-  for (const deployment of deployments) {
-    if (deployment.flyAppId) ids.add(deployment.flyAppId);
-  }
-  const growthAgents = await ctx.db
-    .query("growthAgents")
-    .withIndex("by_account", (q) => q.eq("accountId", creator._id))
-    .collect();
-  for (const agent of growthAgents) {
-    if (agent.rileyFlyAppId) ids.add(agent.rileyFlyAppId);
-  }
-  // S7 — GTM agent's Fly machine. CRITICAL for stop-answering: inbound
-  // Telegram hits the Fly machine directly, so a Convex flag alone won't
-  // silence Maya — the machine must be destroyed. Collected here (before the
-  // cascade deletes the gtmAgents row) so destroyMayaFlyApps tears it down.
+  // The GTM agent's Fly machine. CRITICAL for stop-answering: inbound Telegram
+  // hits the Fly machine directly, so a Convex flag alone won't silence Maya —
+  // the machine must be destroyed. Collected here (before the cascade deletes
+  // the gtmAgents row) so destroyFlyAppsInternal tears it down.
   const gtmAgents = await ctx.db
     .query("gtmAgents")
     .withIndex("by_account", (q) => q.eq("accountId", creator._id))
@@ -920,72 +651,13 @@ async function flyAppIdsForAccount(
   return [...ids];
 }
 
-async function businessIdsForAccount(
-  ctx: QueryCtx | MutationCtx,
-  accountId: Id<"creators">
-): Promise<Array<Id<"businesses">>> {
-  const rows = await ctx.db
-    .query("businesses")
-    .withIndex("by_account", (q) => q.eq("accountId", accountId))
-    .collect();
-  const ids = rows.map((row) => row._id);
-  const account = await ctx.db.get(accountId);
-  if (account?.businessId && !ids.includes(account.businessId)) {
-    ids.push(account.businessId);
-  }
-  return ids;
-}
-
 async function deleteCreatorScopedRows(
   ctx: MutationCtx,
   creatorId: Id<"creators">
 ): Promise<number> {
   let count = 0;
   for (const table of CREATOR_SCOPED_TABLES) {
-    if (table === "creatorMayaV0MediaAssets") {
-      const rows = await ctx.db
-        .query("creatorMayaV0MediaAssets")
-        .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
-        .collect();
-      for (const row of rows) {
-        if (row.storageId) {
-          await ctx.storage.delete(row.storageId);
-        }
-        await ctx.db.delete(row._id);
-        count += 1;
-      }
-      continue;
-    }
     const rows = await queryByIndex(ctx, table, "by_creator", "creatorId", creatorId);
-    for (const row of rows) {
-      await ctx.db.delete(row._id);
-      count += 1;
-    }
-  }
-  return count;
-}
-
-async function deleteBusinessScopedRows(
-  ctx: MutationCtx,
-  businessId: Id<"businesses">
-): Promise<number> {
-  let count = 0;
-  for (const table of BUSINESS_SCOPED_TABLES) {
-    if (table === "mediaAssets") {
-      const rows = await ctx.db
-        .query("mediaAssets")
-        .withIndex("by_business", (q) => q.eq("businessId", businessId))
-        .collect();
-      for (const row of rows) {
-        if (row.storageId) {
-          await ctx.storage.delete(row.storageId);
-        }
-        await ctx.db.delete(row._id);
-        count += 1;
-      }
-      continue;
-    }
-    const rows = await queryByIndex(ctx, table, "by_business", "businessId", businessId);
     for (const row of rows) {
       await ctx.db.delete(row._id);
       count += 1;

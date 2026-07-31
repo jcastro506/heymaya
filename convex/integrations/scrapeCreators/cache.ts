@@ -67,97 +67,11 @@ interface CacheRow {
  * Internal helper — read a cache row and return its payload only if not expired.
  * `now` is injectable for testability.
  */
-export async function getCached<T = unknown>(
-  ctx: Pick<QueryCtx, "db">,
-  creatorId: Id<"creators">,
-  key: string,
-  now: number = Date.now()
-): Promise<T | null> {
-  const row = await ctx.db
-    .query("scrapeCreatorsCache")
-    .withIndex("by_creator_and_key", (q) =>
-      q.eq("creatorId", creatorId).eq("cacheKey", key)
-    )
-    .unique();
-  if (!row) return null;
-  const ageMs = now - row.fetchedAt;
-  if (ageMs > row.ttlSec * 1000) return null;
-  return row.payload as T;
-}
 
 /**
- * Internal helper — upsert a cache row for (creatorId, key).
+ * Sprint 0b: the storage half of this module (`getCached`, `setCached`,
+ * `getCachedRow`, `setCachedRow`, `purgeCreator`) was backed by the
+ * `scrapeCreatorsCache` table, which belonged to the deleted creator product.
+ * Only the pure key/TTL helpers survive — `gtmMaya/researchQueryRunner` imports
+ * `cacheKey` and `CacheKind` and nothing else.
  */
-export async function setCached(
-  ctx: Pick<MutationCtx, "db">,
-  creatorId: Id<"creators">,
-  key: string,
-  payload: unknown,
-  ttlSec: number,
-  now: number = Date.now()
-): Promise<void> {
-  const existing = await ctx.db
-    .query("scrapeCreatorsCache")
-    .withIndex("by_creator_and_key", (q) =>
-      q.eq("creatorId", creatorId).eq("cacheKey", key)
-    )
-    .unique();
-
-  const row: Omit<CacheRow, never> = {
-    cacheKey: key,
-    creatorId,
-    payload,
-    fetchedAt: now,
-    ttlSec,
-  };
-
-  if (existing) {
-    await ctx.db.patch(existing._id, row);
-  } else {
-    await ctx.db.insert("scrapeCreatorsCache", row);
-  }
-}
-
-/* -------------------------------------------------------------------------- */
-/* Convex internalQuery / internalMutation wrappers                            */
-/* -------------------------------------------------------------------------- */
-
-export const getCachedRow = internalQuery({
-  args: {
-    creatorId: v.id("creators"),
-    key: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const payload = await getCached(ctx, args.creatorId, args.key);
-    return payload === null ? null : { payload };
-  },
-});
-
-export const setCachedRow = internalMutation({
-  args: {
-    creatorId: v.id("creators"),
-    key: v.string(),
-    payload: v.any(),
-    ttlSec: v.number(),
-  },
-  handler: async (ctx, args) => {
-    await setCached(ctx, args.creatorId, args.key, args.payload, args.ttlSec);
-  },
-});
-
-/**
- * Delete every cache row for a creator. Used on creator-deletion / GDPR export.
- */
-export const purgeCreator = internalMutation({
-  args: { creatorId: v.id("creators") },
-  handler: async (ctx, args) => {
-    const rows = await ctx.db
-      .query("scrapeCreatorsCache")
-      .withIndex("by_creator", (q) => q.eq("creatorId", args.creatorId))
-      .collect();
-    for (const r of rows) {
-      await ctx.db.delete(r._id);
-    }
-    return { deleted: rows.length };
-  },
-});
