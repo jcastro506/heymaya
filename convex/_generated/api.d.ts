@@ -202,6 +202,7 @@ import type * as maya_dailyReport from "../maya/dailyReport.js";
 import type * as maya_directives from "../maya/directives.js";
 import type * as maya_embeddings from "../maya/embeddings.js";
 import type * as maya_jobs from "../maya/jobs.js";
+import type * as maya_liveness from "../maya/liveness.js";
 import type * as maya_messages from "../maya/messages.js";
 import type * as maya_planFeatures from "../maya/planFeatures.js";
 import type * as maya_preflight from "../maya/preflight.js";
@@ -421,6 +422,7 @@ declare const fullApi: ApiFromModules<{
   "maya/directives": typeof maya_directives;
   "maya/embeddings": typeof maya_embeddings;
   "maya/jobs": typeof maya_jobs;
+  "maya/liveness": typeof maya_liveness;
   "maya/messages": typeof maya_messages;
   "maya/planFeatures": typeof maya_planFeatures;
   "maya/preflight": typeof maya_preflight;
