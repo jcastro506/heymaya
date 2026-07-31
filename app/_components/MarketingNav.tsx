@@ -1,18 +1,13 @@
 /**
  * Shared marketing nav.
  *
- * Used on every public landing (/, /creators, /business, /waitlist) so
- * cross-product navigation is always visible. Active route gets a subtle
- * highlight; the rightmost CTA is mode-gated by the shared
- * `LANDING_MODE` helper:
+ * Sprint 0: the cross-product tabs (For Creators / For Businesses) pointed at
+ * `/creators` and `/business`, and the sign-up CTA sent people to
+ * `/creator-maya-v0` — all deleted with the creator and service-business
+ * products, so every one of them was live navigation into a 404.
  *
- *   - waitlist (production default): "Join the Waitlist"
- *   - signup   (staging opt-in):    "Sign in" + "Sign up"
- *
- * When the creator product is suppressed (NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT
- * unset/false), `/` renders the business landing in-place, so we treat
- * `/` as a business pathname for the active-tab highlight. When the
- * creator product is on, `/` renders the creator landing instead.
+ * One product now, so the nav is just: home, the vibecoders landing, and the
+ * mode-gated CTA (waitlist in production, sign-in/up on staging).
  *
  * Renders client-side so usePathname() can drive the active-tab highlight
  * without burning a server roundtrip.
@@ -23,9 +18,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { LANDING_MODE } from "./landingMode";
-
-const CREATOR_PRODUCT_ENABLED =
-  process.env.NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT === "true";
 
 function NavLink({
   href,
@@ -52,15 +44,6 @@ function NavLink({
 
 export function MarketingNav() {
   const pathname = usePathname() ?? "/";
-  const onHome = pathname === "/";
-  const isCreators =
-    pathname === "/creators" ||
-    pathname.startsWith("/creators/") ||
-    (CREATOR_PRODUCT_ENABLED && onHome);
-  const isBusiness =
-    pathname === "/business" ||
-    pathname.startsWith("/business/") ||
-    (!CREATOR_PRODUCT_ENABLED && onHome);
   const isVibeCoders =
     pathname === "/vibecoders" || pathname.startsWith("/vibecoders/");
 
@@ -75,14 +58,8 @@ export function MarketingNav() {
           HeyMaya
         </Link>
         <nav className="flex items-center gap-5 text-sm">
-          <NavLink href="/creators" active={isCreators}>
-            For Creators
-          </NavLink>
           <NavLink href="/vibecoders" active={isVibeCoders}>
             For VibeCoders
-          </NavLink>
-          <NavLink href="/business" active={isBusiness}>
-            For Businesses
           </NavLink>
           {LANDING_MODE === "waitlist" ? (
             <Link
@@ -97,7 +74,7 @@ export function MarketingNav() {
                 Sign in
               </Link>
               <Link
-                href="/sign-up?redirect_url=/creator-maya-v0"
+                href="/sign-up?redirect_url=/onboarding/gtm"
                 className="inline-flex min-h-10 items-center rounded-md bg-paper px-4 text-sm font-medium text-black transition hover:bg-white"
               >
                 Sign up
