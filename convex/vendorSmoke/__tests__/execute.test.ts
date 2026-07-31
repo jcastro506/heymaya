@@ -86,7 +86,8 @@ describe("executeCheck", () => {
       expect(outcome.status).toBe("fail");
       expect(outcome.detail).toMatch(/timed out after 5000ms/);
     } finally {
-      vi.useRealTimers();
+      vi.clearAllTimers();
+  vi.useRealTimers();
     }
   });
 

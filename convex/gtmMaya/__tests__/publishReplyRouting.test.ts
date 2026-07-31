@@ -32,11 +32,18 @@ import { xEffectiveLength, X_CHAR_LIMIT } from "../publishEngine";
  * so letting a real timer fire it after teardown only produced
  * "Write outside of transaction" as an UNHANDLED rejection, which vitest
  * counts as a suite error and exits 1 even with every test green.
+ *
+ * `clearAllTimers()` before `useRealTimers()` is load-bearing, and its absence
+ * is what turned this into a CI-only flake on 2026-07-31: switching back to
+ * real timers while fake ones are still pending hands them to the real clock,
+ * which fires them after the transaction has closed. Locally the process exits
+ * before that lands; under CI's slower scheduling it doesn't.
  */
 beforeEach(() => {
   vi.useFakeTimers();
 });
 afterEach(() => {
+  vi.clearAllTimers();
   vi.useRealTimers();
 });
 
