@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -24,18 +24,27 @@ type Manifest = {
   tools: ManifestTool[];
 };
 
-const ENDPOINTS_PATH = join(
+const PLATFORMS_DIR = join(
   REPO_ROOT,
-  "convex/integrations/scrapeCreators/endpoints.ts"
+  "convex/integrations/scrapeCreators/platforms"
 );
 
 function loadManifest(): Manifest {
   return JSON.parse(readFileSync(MANIFEST_PATH, "utf8")) as Manifest;
 }
 
-/** Every `/vN/...` path our typed wrappers actually call. */
+/**
+ * Every `/vN/...` path our typed wrappers actually call.
+ *
+ * Reads the whole `platforms/` directory rather than a fixed file list, so
+ * adding a channel can't quietly fall outside the comparison — which is the
+ * same "nothing compared the two" failure this test exists to catch.
+ */
 function wrapperPaths(): Set<string> {
-  const source = readFileSync(ENDPOINTS_PATH, "utf8");
+  const source = readdirSync(PLATFORMS_DIR)
+    .filter((file) => file.endsWith(".ts"))
+    .map((file) => readFileSync(join(PLATFORMS_DIR, file), "utf8"))
+    .join("\n");
   return new Set(source.match(/"\/v[0-9]\/[^"]+"/g)?.map((m) => m.slice(1, -1)) ?? []);
 }
 
