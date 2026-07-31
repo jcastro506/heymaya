@@ -351,6 +351,15 @@ describe("Zernio-native preflight (validate/post)", () => {
     // Let the backoff elapse on the fake clock, then take the result.
     await vi.advanceTimersByTimeAsync(30_000);
     const r = (await pending) as { action: string; zernioPostId?: string };
+    // Drain the scheduler before the test ends. `clearAllTimers` in teardown
+    // cannot help here: once a scheduled function has FIRED, its mutation is
+    // an in-flight async continuation, not a pending timer — and if the test
+    // returns first, that write lands after convex-test has closed the
+    // transaction ("Write outside of transaction"). It surfaces as an
+    // unhandled rejection, which exits the suite 1 with every test green, and
+    // only under CI's slower scheduling. This is the documented convex-test
+    // pattern: advance the clock, then wait for what the clock started.
+    await t.finishInProgressScheduledFunctions();
     expect(r.action).toBe("auto");
     expect(r.zernioPostId).toBe("li_1");
   });
