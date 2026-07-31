@@ -449,15 +449,23 @@ const TikTokFollowingUserSchema = z
   })
   .passthrough();
 
-const TikTokFollowingResponseSchema = z
+/**
+ * Serves BOTH `/user/following` and `/user/followers` — the two halves of the
+ * buyer map's audience-overlap discovery (§5.0.0). Upstream returns the same
+ * envelope for each, keyed by whichever direction you asked for, so the list
+ * is read from any of the variants rather than one fixed field.
+ */
+const TikTokFollowListResponseSchema = z
   .object({
     users: z.array(TikTokFollowingUserSchema).optional(),
     following: z.array(TikTokFollowingUserSchema).optional(),
+    followers: z.array(TikTokFollowingUserSchema).optional(),
     userList: z.array(TikTokFollowingUserSchema).optional(),
     data: z
       .object({
         users: z.array(TikTokFollowingUserSchema).optional(),
         following: z.array(TikTokFollowingUserSchema).optional(),
+        followers: z.array(TikTokFollowingUserSchema).optional(),
       })
       .partial()
       .passthrough()
@@ -988,17 +996,19 @@ function normalizeTikTokAudience(
  * Sprint 4 — TikTok following normalizer. Defensive: tolerates `users` /
  * `following` / `userList` keys at top level OR under `data`.
  */
-function normalizeTikTokFollowing(
+function normalizeTikTokFollowList(
   handle: string,
   raw: unknown
 ): NormalizedFollowing {
-  const parsed = TikTokFollowingResponseSchema.parse(raw);
+  const parsed = TikTokFollowListResponseSchema.parse(raw);
   const list =
     parsed.users ??
     parsed.following ??
+    parsed.followers ??
     parsed.userList ??
     parsed.data?.users ??
     parsed.data?.following ??
+    parsed.data?.followers ??
     [];
   const total = num(parsed.total) ?? num(parsed.totalCount);
   const users = list.map((u) => ({
@@ -1435,7 +1445,45 @@ export const tiktok = {
       "/v1/tiktok/user/following",
       { query: { handle } }
     );
-    return normalizeTikTokFollowing(handle, raw);
+    return normalizeTikTokFollowList(handle, raw);
+  },
+  /**
+   * The other half of the buyer map (§5.0.0). `following` tells you who a
+   * founder's audience listens to; `followers` tells you who is listening to
+   * an account you've identified — which is how audience overlap gets
+   * computed. The manifest has advertised this endpoint to the agent all
+   * along; until now there was no typed wrapper behind it.
+   */
+  async followers(
+    handle: string,
+    deps?: EndpointDeps
+  ): Promise<NormalizedFollowing> {
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/tiktok/user/followers",
+      { query: { handle } }
+    );
+    return normalizeTikTokFollowList(handle, raw);
+  },
+  /**
+   * Replies under a single comment. Comment mining reads the top-level
+   * comments; the replies are where the disagreement and the follow-up
+   * questions live, which is the part worth turning into content.
+   */
+  async commentReplies(
+    postUrl: string,
+    commentId: string,
+    options?: EndpointDeps & { cursor?: string }
+  ): Promise<RawScrapeCreatorsResult> {
+    const query: Record<string, string | number | boolean | undefined> = {
+      url: postUrl,
+      comment_id: commentId,
+    };
+    if (options?.cursor !== undefined) query.cursor = options.cursor;
+    const raw = await clientOf(options).request<unknown>(
+      "/v1/tiktok/comment/replies",
+      { query }
+    );
+    return rawResult("tiktok_comment_replies", query, raw);
   },
   async searchUsers(
     queryText: string,
