@@ -14,6 +14,8 @@ import {
 const DAY = 86_400_000;
 /** 2026-07-31, 20:00 UTC — after both the brief and recap are due. */
 const EVENING = Date.UTC(2026, 6, 31, 20, 0, 0);
+/** Same calendar day as EVENING — a customer who signed up this morning. */
+const MORNING_TODAY = Date.UTC(2026, 6, 31, 8, 0, 0);
 
 function facts(over: Partial<LivenessInput> = {}): LivenessInput {
   return {
@@ -211,7 +213,19 @@ describe("fleet-wide vendor balances", () => {
 
 /* -------------------------------------------------------------------------- */
 
-async function seed(t: ReturnType<typeof convexTest>, suffix: string) {
+/**
+ * Seeds an ESTABLISHED account by default (30 days old).
+ *
+ * The streak walk is clamped to `createdAt`, so a customer created "today"
+ * can't have placements from three days ago — that's incoherent data, and
+ * relying on it is what let the new-customer bug hide. Pass `createdAt` to
+ * test the young-account case deliberately.
+ */
+async function seed(
+  t: ReturnType<typeof convexTest>,
+  suffix: string,
+  createdAt = EVENING - 30 * DAY
+) {
   return await t.run(async (ctx) => {
     const accountId = await ctx.db.insert("creators", {
       clerkUserId: `u_${suffix}`,
@@ -220,7 +234,7 @@ async function seed(t: ReturnType<typeof convexTest>, suffix: string) {
       timezone: "UTC",
       status: "active",
       plan: "manager",
-      createdAt: EVENING,
+      createdAt,
     });
     return await ctx.db.insert("customers", {
       accountId,
@@ -228,8 +242,8 @@ async function seed(t: ReturnType<typeof convexTest>, suffix: string) {
       plan: "mvp",
       state: "active",
       timezone: "UTC",
-      createdAt: EVENING,
-      updatedAt: EVENING,
+      createdAt,
+      updatedAt: createdAt,
     });
   });
 }
@@ -314,6 +328,25 @@ describe("gatherFacts — reads the world, judges nothing", () => {
       now: EVENING,
     });
     expect(f?.placementsToday).toBe(0);
+  });
+
+  it("A NEW CUSTOMER IS NOT A WEEK OF FAILURE", async () => {
+    // The bug the composition test caught. Without clamping the walk-back to
+    // the account's creation date, someone who signed up this morning shows a
+    // 7-day zero streak on their first evening — and opens a support thread.
+    const t = convexTest(schema, modules);
+    const customerId = await seed(t, "brand_new", MORNING_TODAY);
+    const f = await t.query(internal.maya.liveness.gatherFacts, {
+      customerId,
+      now: EVENING,
+    });
+    expect(f?.priorZeroDayStreak).toBe(0);
+
+    const breaches = evaluate({ ...f!, briefSentToday: true, recapSentToday: true });
+    const streak = breaches.find((b) => b.kind === "zero_day_streak");
+    expect(streak).toBeUndefined();
+    // A first quiet day is still reported — just not as a three-day crisis.
+    expect(kinds(breaches)).toEqual(["zero_placements_today"]);
   });
 
   it("a missing customer is null, not a crash", async () => {
