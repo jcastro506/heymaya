@@ -91,6 +91,27 @@ describe("executeCheck", () => {
     }
   });
 
+  it("a per-check timeout overrides the run default", async () => {
+    // Some vendor endpoints are legitimately slow — ScrapeCreators'
+    // shorts/trending measured 8.0s and 14.7s back to back — and a single
+    // fleet-wide limit turns that variance into a recurring false failure.
+    vi.useFakeTimers();
+    try {
+      const pending = executeCheck(
+        check({ run: () => new Promise(() => {}), timeoutMs: 60_000 }),
+        { ...opts, timeoutMs: 5_000 }
+      );
+      await vi.advanceTimersByTimeAsync(6_000);
+      // The run default would have fired by now; the per-check one has not.
+      await vi.advanceTimersByTimeAsync(55_000);
+      const outcome = await pending;
+      expect(outcome.detail).toMatch(/timed out after 60000ms/);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
   it("a non-object payload (an HTML error page, say) fails at the root", async () => {
     const outcome = await executeCheck(
       check({ run: async () => "<html>502 Bad Gateway</html>" }),

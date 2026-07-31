@@ -88,7 +88,7 @@ export async function executeCheck(
   try {
     payload = await withTimeout(
       check.run(),
-      options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+      check.timeoutMs ?? options.timeoutMs ?? DEFAULT_TIMEOUT_MS
     );
   } catch (error) {
     return {

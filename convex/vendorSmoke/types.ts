@@ -48,6 +48,16 @@ export interface SmokeCheck {
   requiredEnv: string[];
   /** Worst-case spend for one run, in USD. Reads are ~0; tier 3 is real money. */
   estCostUsd: number;
+  /**
+   * Per-check wall-clock limit, overriding the run default.
+   *
+   * Some vendor endpoints are legitimately slow — ScrapeCreators'
+   * `youtube/shorts/trending` measured 8s and 14.7s on consecutive calls — and
+   * a single fleet-wide timeout turns that variance into a recurring false
+   * failure. A suite that cries wolf gets muted, so slow-but-working endpoints
+   * get room rather than a red mark.
+   */
+  timeoutMs?: number;
   /** Performs the call. Returns the raw payload — no parsing, no normalizing. */
   run: () => Promise<unknown>;
   /**
