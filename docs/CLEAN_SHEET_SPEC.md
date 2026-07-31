@@ -3177,40 +3177,39 @@ Two parallel audits of the live codebase. Both change the sprint plan.
 The Sprint 1 P0 wrapper list below is grounded in a docs read, **not in live
 calls**. Two things came out of it that change the plan:
 
-**A suspected live defect, NOT yet fixed.** Our Instagram posts wrapper calls
-`/v1/instagram/user/posts` with a `handle`. The current docs list posts at
-**`/v2/instagram/user/posts` taking a `user_id`**. If that's right, the wrapper
-is either 404ing or serving a deprecated path — the same failure mode as the
-manifest paths in defect 5, one layer down. It was left alone deliberately:
-two doc reads disagreed with each other on parameter names elsewhere
-(`handle` vs `username` on `/v1/instagram/profile`, where the specific page
-and our working wrapper both say `handle`), so a summarized doc read is not
-strong enough evidence to change a path that may be working. **First action
-once a ScrapeCreators key exists: call both and see which answers.**
+**RESOLVED 2026-07-31 — probed live with the key.** Both the suspected defect
+and the parameter table turned out differently than the docs implied.
 
-**The P0 paths, as documented.** Param names are the least reliable part of
-this table — confirm each against a live call before trusting it.
+**The suspected Instagram defect is NOT a defect.** `/v1/instagram/user/posts?handle=`
+returns **200**. A v2 also exists and also takes `handle` — the doc summary
+claiming `user_id` was simply wrong. Nothing to fix. This is the reason the
+wrapper wasn't changed on a doc read.
 
-| Channel | Path | Param |
-|---|---|---|
-| IG | `/v2/instagram/post/comments` | `post_id` |
-| IG | `/v2/instagram/media/transcript` | `media_id` |
-| IG | `/v2/instagram/reels/search` | `query` |
-| IG | `/v1/instagram/user/reels` | `user_id` |
-| IG | `/v1/instagram/post/comment/replies` | `comment_id` |
-| YT | `/v1/youtube/search` | `query` |
-| YT | `/v1/youtube/video/comments` | `video_id` |
-| YT | `/v1/youtube/video/transcript` | `video_id` |
-| YT | `/v1/youtube/video/comment/replies` | `comment_id` |
-| YT | `/v1/youtube/channel/shorts` | `channel_id` |
-| YT | `/v1/youtube/shorts/trending` | `region` (optional) |
+**The bigger finding: ScrapeCreators is URL-first, and the docs' ID-shaped
+parameter names are wrong for every endpoint tested.** The live API answers
+`You must provide a url`.
 
-**These wrappers were deliberately NOT written yet.** Writing eleven wrappers
-against unverified paths, with fixtures invented to match, produces tests that
-prove only that the invention is self-consistent — which is the precise failure
-the vendor smoke suite (§18.0.5) exists to prevent. They are ~30–60 mechanical
-lines each once a key confirms the shapes; the blocker is a key, not effort.
+| Endpoint | Docs said | **Actually takes** | Live |
+|---|---|---|---|
+| `/v1/youtube/search` | `query` | `query` | ✅ 200 |
+| `/v1/youtube/video/comments` | `video_id` | **`url`** | ✅ 200 |
+| `/v1/youtube/video/transcript` | `video_id` | **`url`** | ✅ 200 |
+| `/v1/youtube/shorts/trending` | `region` | `region` (optional) | ✅ 200 |
+| `/v1/youtube/channel/shorts` | `channel_id` | **`handle` or `channelId`** | ✅ 200 |
+| `/v2/instagram/post/comments` | `post_id` | **`url`** | ✅ 200 |
+| `/v2/instagram/media/transcript` | `media_id` | **`url`** | ✅ 200 (404 "post does not have a video" on a photo — correct) |
+| `/v2/instagram/reels/search` | `query` | `query` | ✅ 200 |
+| `/v1/instagram/user/reels` | `user_id` | **`handle`** | ✅ 200 |
+| `/v1/instagram/user/posts` | — | `handle` | ✅ 200, not stale |
 
+**Five of ten parameter names in the docs were wrong.** Writing these wrappers
+from documentation would have shipped five endpoints that 400 on every call,
+and the tests would have passed because they'd have asserted the same wrong
+name. That is precisely why they weren't written until a key existed — the
+blocker really was verification, not effort.
+
+Wrappers now written against the verified parameters and returning raw
+envelopes; response SHAPES are pinned by tier-2 smoke rather than guessed.
 ---
 
 ## 17.85 State, and why Maya got stuck

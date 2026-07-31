@@ -64,6 +64,101 @@ function clientReturning(payload: unknown): { client: ScrapeCreatorsClient; fetc
   return { client, fetchImpl };
 }
 
+describe("Sprint 1 P0 wrappers — params VERIFIED LIVE 2026-07-31", () => {
+  // The whole point of these tests is the PARAMETER NAME. The docs summary
+  // said video_id / channel_id / post_id / media_id / user_id, and the live
+  // API rejected every one of them: "You must provide a url". Writing these
+  // wrappers from the docs would have shipped five endpoints that 400 on every
+  // call — which is why they weren't written until a key existed to check.
+
+  it("youtube.search sends `query`", async () => {
+    const { client, fetchImpl } = clientReturning({ videos: [] });
+    await youtube.search("postgres migration", { client });
+    const sent = String(fetchImpl.mock.calls[0][0]);
+    expect(sent).toContain("/v1/youtube/search");
+    expect(sent).toContain("query=postgres");
+  });
+
+  it("youtube.videoComments sends `url`, NOT video_id", async () => {
+    const { client, fetchImpl } = clientReturning({ comments: [] });
+    await youtube.videoComments("https://www.youtube.com/watch?v=abc", { client });
+    const sent = String(fetchImpl.mock.calls[0][0]);
+    expect(sent).toContain("/v1/youtube/video/comments");
+    expect(sent).toContain("url=");
+    expect(sent).not.toContain("video_id");
+  });
+
+  it("youtube.videoTranscript sends `url`, NOT video_id", async () => {
+    const { client, fetchImpl } = clientReturning({ transcript: [] });
+    await youtube.videoTranscript("https://www.youtube.com/watch?v=abc", { client });
+    const sent = String(fetchImpl.mock.calls[0][0]);
+    expect(sent).toContain("/v1/youtube/video/transcript");
+    expect(sent).not.toContain("video_id");
+  });
+
+  it("youtube.shortsTrending only sends region when given one", async () => {
+    const { client, fetchImpl } = clientReturning({ shorts: [] });
+    await youtube.shortsTrending(undefined, { client });
+    expect(String(fetchImpl.mock.calls[0][0])).not.toContain("region=");
+
+    const second = clientReturning({ shorts: [] });
+    await youtube.shortsTrending("US", { client: second.client });
+    expect(String(second.fetchImpl.mock.calls[0][0])).toContain("region=US");
+  });
+
+  it("youtube.channelShorts picks handle vs channelId by shape", async () => {
+    // The live error names both: "You must provide a 'handle' or a 'channelId'".
+    // Note channelId is camelCase — channel_id is rejected.
+    const a = clientReturning({ videos: [] });
+    await youtube.channelShorts("@MrBeast", { client: a.client });
+    expect(String(a.fetchImpl.mock.calls[0][0])).toContain("handle=%40MrBeast");
+
+    const b = clientReturning({ videos: [] });
+    await youtube.channelShorts("UCabc123", { client: b.client });
+    const sent = String(b.fetchImpl.mock.calls[0][0]);
+    expect(sent).toContain("channelId=UCabc123");
+    expect(sent).not.toContain("channel_id");
+  });
+
+  it("instagram.postComments sends `url`, NOT post_id", async () => {
+    const { client, fetchImpl } = clientReturning({ comments: [] });
+    await instagram.postComments("https://www.instagram.com/p/abc/", { client });
+    const sent = String(fetchImpl.mock.calls[0][0]);
+    expect(sent).toContain("/v2/instagram/post/comments");
+    expect(sent).not.toContain("post_id");
+  });
+
+  it("instagram.mediaTranscript sends `url`, NOT media_id", async () => {
+    const { client, fetchImpl } = clientReturning({ transcript: "" });
+    await instagram.mediaTranscript("https://www.instagram.com/p/abc/", { client });
+    const sent = String(fetchImpl.mock.calls[0][0]);
+    expect(sent).toContain("/v2/instagram/media/transcript");
+    expect(sent).not.toContain("media_id");
+  });
+
+  it("instagram.reelsSearch sends `query`", async () => {
+    const { client, fetchImpl } = clientReturning({ reels: [] });
+    await instagram.reelsSearch("postgres", { client });
+    expect(String(fetchImpl.mock.calls[0][0])).toContain("/v2/instagram/reels/search");
+  });
+
+  it("instagram.userReels sends `handle`, NOT user_id", async () => {
+    const { client, fetchImpl } = clientReturning({ items: [] });
+    await instagram.userReels("nasa", { client });
+    const sent = String(fetchImpl.mock.calls[0][0]);
+    expect(sent).toContain("/v1/instagram/user/reels");
+    expect(sent).toContain("handle=nasa");
+    expect(sent).not.toContain("user_id");
+  });
+
+  it("every P0 wrapper returns a labelled raw envelope", async () => {
+    const { client } = clientReturning({ anything: true });
+    const out = await youtube.search("x", { client });
+    expect(out.source).toBe("youtube_search");
+    expect(out.raw).toEqual({ anything: true });
+  });
+});
+
 describe("endpoints — TikTok", () => {
   it("parses profile fixture into normalized shape", async () => {
     const { client } = clientReturning(tiktokProfileFixture);
