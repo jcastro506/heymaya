@@ -937,6 +937,52 @@ Estimated reliability, **unmeasured**:
 
 **The spike decides the build:** ≥80% usable → ship with **no headless browser** and let her ask the remainder. ~50% → build capture before launch.
 
+#### 6.4.6a ⭐ THE SPIKE HAS BEEN RUN — 2026-07-31, n=20
+
+**Measured, not estimated.** 20 marketing homepages of exactly the target type
+(indie SaaS / dev tools: Linear, Cal, PostHog, Resend, Raycast, tldraw,
+Excalidraw, Supabase, Railway, Neon, Clerk, Trigger, Inngest, Liveblocks,
+Upstash, Val Town, Warp, Arc, Obsidian, Readwise). Images extracted with
+`assetClassifier.extractCandidateImages`, classified by Gemini vision with
+`CLASSIFIER_PROMPT`. 102 of 109 images classified; 7 fetch failures.
+
+| | Estimated (§6.4.6) | **MEASURED** |
+|---|---|---|
+| ≥1 real product screenshot | ~95% | **50%** (10/20) |
+| ≥3 real product screenshots | ~65% | **15%** (3/20) |
+
+**Breakdown of 102 classified images: 47 illustration · 27 logo · 19 product
+screenshot · 9 person.** Illustration outnumbers real product UI 2.5 to 1.
+
+That IS the predicted failure mode, and it is the *dominant* case rather than
+an edge case: a gradient hero with a headline passes every presence check,
+satisfies Creatify's minimum, and produces generic content nobody flags.
+
+**⚠️ This does not clear the ≥80% bar, so by §6.4.6's own rule the standing
+recommendation is wrong.** Three caveats before acting on it:
+
+1. **Homepages only.** Product/feature subpages and App Store listings were NOT
+   tested, and §6.4.6 separately estimates store listings at ~99%/~95%. The
+   cheapest next move is almost certainly *scrape more pages per site*, not
+   *add a headless browser* — a homepage is a positioning document, and the
+   screenshots live on `/features` and in store listings.
+2. **The sample skews design-forward.** These are among the best-designed dev
+   tools in the market, and design-forward sites are exactly the ones that
+   lead with illustration. A plainer indie SaaS may well screenshot more.
+3. **One classifier, one prompt.** The prompt is pinned as a constant so the
+   number is reproducible, but it hasn't been validated against human labels.
+
+**Revised recommendation: do NOT build a headless browser yet.** Re-run this
+spike against feature subpages + store listings first. If ≥1 usable clears 80%
+there, the browser is still unnecessary and the real fix is a wider crawl.
+
+**A bug this spike caught in its own instrument:** the first run reported 40%
+usable with **46 of 109 images failing to fetch**. Cause was ours — HTML
+encodes `&` as `&amp;` in attributes, and URLs with query parameters (Next.js
+image optimizer, Framer CDN) were never decoded. Fixing it moved failures from
+46 → 7 and the headline from 40% → 50%. Worth remembering as a shape: an
+instrument that under-reports looks exactly like a finding.
+
 **Recommendation pending the spike: v1 with no headless browser.** Store listings + page scrape + a vision call on the logo for brand colours. A browser is only needed for JS-only sites that expose nothing in HTML — and those fail Creatify's scrape too, so they're a known-degraded cohort either way.
 
 ---
