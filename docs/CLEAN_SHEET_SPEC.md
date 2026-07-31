@@ -3246,6 +3246,22 @@ A sprint is not complete until **all seven** hold:
 - **The 14-day soak** — the §18.1 acceptance list, run continuously on the dogfood account. A regression in sprint 8 that breaks sprint 3's guarantee must fail loudly.
 - **The model-swap test** — swap the main model, assert every directive still enforced and every publish gate still holds. Runs before any model change, ever.
 
+> ### ✅ Sprint 0a — DONE (branch `codex/sprint0-test-baseline`)
+>
+> **Shipped:** test baseline established and greened (12 failures → 0) · brittle prose-matching smoke test redesigned around structure and stable identifiers · dead `apify` integration deleted · **380 files / ~126k lines of creator + service-business product code deleted** · 34 dead `/lc_maya/*` HTTP routes pruned · `ALL_TABLES` derived from `schema.ts` instead of a rotting hand-maintained array · **CI added** (typecheck + tests blocking on `staging`/`main`, lint non-blocking).
+>
+> **Verified:** 0 typecheck errors · 231 test files / 3,242 tests passing · 0 lint errors in touched files.
+>
+> **Two near-misses caught by checking before deleting:** `integrations/google/tokenResolver` looked creator-only but is reached from GTM's calendar path; `/vibecoders` is a live marketing route that imported from the deleted creator landing (its components were promoted to shared `app/_components`).
+>
+> ### ⏸ Sprint 0b — the schema prune, split out deliberately
+>
+> **The 71 dead tables are still in `schema.ts`** — orphaned and inert, since every module that read them is gone.
+>
+> **Why it wasn't bundled:** removing the tables surfaces **64 files** that still reference them, and they include **`integrations/zernio`, `integrations/stripe`, `billing/`, `accountDeletion.ts`, and `mediaAssets/`** — all of which the **live GTM product depends on.** That is careful surgery on shared payment and posting code, not deletion, and it deserves its own session rather than the tail of another.
+>
+> **The blast radius is now much smaller than it was**, because everything that *only* read those tables has already been removed.
+
 ### Sprint 0 — Reclaim · *no features, nothing user-visible*
 
 | Task |
