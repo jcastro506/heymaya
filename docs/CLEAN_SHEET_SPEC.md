@@ -972,9 +972,44 @@ recommendation is wrong.** Three caveats before acting on it:
 3. **One classifier, one prompt.** The prompt is pinned as a constant so the
    number is reproducible, but it hasn't been validated against human labels.
 
-**Revised recommendation: do NOT build a headless browser yet.** Re-run this
-spike against feature subpages + store listings first. If ≥1 usable clears 80%
-there, the browser is still unnecessary and the real fix is a wider crawl.
+**FOLLOW-UP RUN, same day — the wider crawl does NOT help.** The obvious cheap
+fix was tested immediately: `/features`, `/product` and `/pricing` on all 20
+sites. 60 subpages tried, 25 resolved with images, 79 further images classified.
+
+| | homepage only | **+ subpages** |
+|---|---|---|
+| ≥1 real product screenshot | 50% | **50%** |
+| ≥3 real product screenshots | 15% | **15%** |
+
+**The needle did not move at all.** Of 79 subpage images, only 6 were product
+screenshots — and every one came from a site that already had screenshots on
+its homepage. Subpages are *more* illustration-heavy than homepages (50 of 79),
+because a pricing page is a table and a features page is icons.
+
+**So the "crawl more pages" hypothesis is dead**, and that reframes the
+problem. The ten sites with zero real screenshots anywhere — Linear, PostHog,
+tldraw, Excalidraw, Supabase, Railway, Neon, Inngest, Liveblocks, Upstash —
+fail for two different reasons, and only one is fixable by capture:
+
+1. **The product is embedded live rather than screenshotted.** tldraw and
+   Excalidraw put the running app on the page; there is no `<img>` of the
+   product because the product IS the page. A headless browser genuinely would
+   capture these.
+2. **The brand is illustration-first by choice.** Linear and Supabase are
+   deliberate about abstract hero art. A browser screenshot of their homepage
+   returns… the illustration. Capture doesn't help.
+
+**Revised recommendation, and it is not about the browser.** §6.4.2's
+ask-the-founder path is doing far more work than the spec assumes. At 50%,
+asking is not the fallback for a degraded minority — it is the **primary
+acquisition path for half of all customers**, and it should be designed as a
+first-class onboarding step rather than an exception. That is a product
+decision, and it is cheaper and more reliable than any capture pipeline.
+
+**Still untested: App Store / Play listings** (§6.4.6 estimates ~99%/~95%).
+Most of this sample is web-only software with no store presence, so that row
+needs a mobile-app sample to mean anything — and mobile apps are a different
+customer than the one this sample represents.
 
 **A bug this spike caught in its own instrument:** the first run reported 40%
 usable with **46 of 109 images failing to fetch**. Cause was ours — HTML
