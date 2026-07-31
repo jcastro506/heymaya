@@ -101,4 +101,35 @@ crons.interval(
   internal.gtmMaya.accountLifecycle.sweepCanceledRetention
 );
 
+// Vendor smoke suite (§18.0.5). 200 OK is not enough — the Zernio publish
+// failures returned 200s for six days because a lenient `.passthrough()` schema
+// parsed a changed response shape "successfully" into nothing. These runs parse
+// STRICTLY so a contract change is an incident the same day, not a mystery the
+// next week. Results land in `vendorHealth`; a red tier 2 blocks any deploy
+// touching that vendor. See convex/vendorSmoke/.
+//
+// Tier 1 — reachability. Free, so it runs hourly: auth valid, base URL
+// answering, credit balance readable.
+crons.interval(
+  "vendor-smoke-tier1-reachability",
+  { hours: 1 },
+  internal.vendorSmoke.runner.runTier1
+);
+
+// Tier 2 — shape. Reads only, cents a day. This is the tier that would have
+// caught the six-day incident.
+crons.daily(
+  "vendor-smoke-tier2-shape",
+  { hourUTC: 8, minuteUTC: 20 },
+  internal.vendorSmoke.runner.runTier2
+);
+
+// Tier 3 — round-trip. Real money (a post lands, a render completes), so it's
+// weekly, off-peak, and additionally run before any deploy touching a vendor.
+crons.weekly(
+  "vendor-smoke-tier3-roundtrip",
+  { dayOfWeek: "sunday", hourUTC: 9, minuteUTC: 40 },
+  internal.vendorSmoke.runner.runTier3
+);
+
 export default crons;

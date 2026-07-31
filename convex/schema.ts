@@ -3398,4 +3398,56 @@ export default defineSchema({
     .index("by_agent", ["agentId"]),
 
   // ─── end ClawLaunch / Maya GTM product ────────────────────────────────
+
+  /**
+   * Vendor smoke suite results (§18.0.5).
+   *
+   * FLEET-level, not per-tenant: this is "is Zernio's contract still what we
+   * think it is", not "is this customer's account connected" (that's
+   * `gtmConnectionHealth`). Deliberately has no `accountId` — a vendor
+   * changing its response shape is everyone's problem at once.
+   *
+   * A row per check per run. Shape drift is an incident, not a test failure
+   * someone notices on Monday, so these rows are what the operator view reads.
+   */
+  vendorHealth: defineTable({
+    vendor: v.union(
+      v.literal("zernio"),
+      v.literal("scrapecreators"),
+      v.literal("twitterapiio"),
+      v.literal("creatify"),
+      v.literal("openrouter"),
+      v.literal("r2"),
+      v.literal("gemini")
+    ),
+    /** 1 = reachability (hourly, free) · 2 = shape (daily, cents) ·
+     *  3 = round-trip (weekly + pre-deploy, real money). */
+    tier: v.union(v.literal(1), v.literal(2), v.literal(3)),
+    /** The wrapped endpoint under test, e.g. `tiktok.user/audience`.
+     *  Vendor-level tier-1 checks use the vendor name. */
+    check: v.string(),
+    /** `skipped` is first-class and must stay visible: a suite that silently
+     *  skips every check because a key is missing is a green suite that
+     *  proves nothing. The operator view surfaces skips as unverified. */
+    status: v.union(
+      v.literal("pass"),
+      v.literal("fail"),
+      v.literal("skipped")
+    ),
+    /** Why it failed or was skipped — the alert body. */
+    detail: v.optional(v.string()),
+    /** Classified drift paths, e.g. `unexpected:platformResults`. Empty on a
+     *  pass. This is what tells you WHAT the vendor changed. */
+    drifts: v.optional(v.array(v.string())),
+    latencyMs: v.optional(v.number()),
+    /** What this check actually cost, for the suite-wide budget cap. */
+    costUsd: v.optional(v.number()),
+    /** Groups every check in one invocation, so a run can be read whole. */
+    runId: v.string(),
+    ranAt: v.number(),
+  })
+    .index("by_run", ["runId"])
+    .index("by_vendor_and_ranAt", ["vendor", "ranAt"])
+    .index("by_status_and_ranAt", ["status", "ranAt"])
+    .index("by_vendor_and_check", ["vendor", "check"]),
 });
