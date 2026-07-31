@@ -199,6 +199,7 @@ import type * as lib_webhookSecret from "../lib/webhookSecret.js";
 import type * as maya_jobs from "../maya/jobs.js";
 import type * as maya_messages from "../maya/messages.js";
 import type * as maya_planFeatures from "../maya/planFeatures.js";
+import type * as maya_publishDecision from "../maya/publishDecision.js";
 import type * as migrations_coachManagerPlanRename from "../migrations/coachManagerPlanRename.js";
 import type * as onboarding_gtm_deployMayaGtm from "../onboarding/gtm/deployMayaGtm.js";
 import type * as queries_admin_usage from "../queries/admin/usage.js";
@@ -409,6 +410,7 @@ declare const fullApi: ApiFromModules<{
   "maya/jobs": typeof maya_jobs;
   "maya/messages": typeof maya_messages;
   "maya/planFeatures": typeof maya_planFeatures;
+  "maya/publishDecision": typeof maya_publishDecision;
   "migrations/coachManagerPlanRename": typeof migrations_coachManagerPlanRename;
   "onboarding/gtm/deployMayaGtm": typeof onboarding_gtm_deployMayaGtm;
   "queries/admin/usage": typeof queries_admin_usage;
