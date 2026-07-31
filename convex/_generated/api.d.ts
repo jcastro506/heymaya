@@ -197,6 +197,7 @@ import type * as lib_posthog from "../lib/posthog.js";
 import type * as lib_usageEvents from "../lib/usageEvents.js";
 import type * as lib_webhookSecret from "../lib/webhookSecret.js";
 import type * as maya_jobs from "../maya/jobs.js";
+import type * as maya_messages from "../maya/messages.js";
 import type * as maya_planFeatures from "../maya/planFeatures.js";
 import type * as migrations_coachManagerPlanRename from "../migrations/coachManagerPlanRename.js";
 import type * as onboarding_gtm_deployMayaGtm from "../onboarding/gtm/deployMayaGtm.js";
@@ -406,6 +407,7 @@ declare const fullApi: ApiFromModules<{
   "lib/usageEvents": typeof lib_usageEvents;
   "lib/webhookSecret": typeof lib_webhookSecret;
   "maya/jobs": typeof maya_jobs;
+  "maya/messages": typeof maya_messages;
   "maya/planFeatures": typeof maya_planFeatures;
   "migrations/coachManagerPlanRename": typeof migrations_coachManagerPlanRename;
   "onboarding/gtm/deployMayaGtm": typeof onboarding_gtm_deployMayaGtm;

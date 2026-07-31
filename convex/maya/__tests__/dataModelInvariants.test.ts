@@ -327,16 +327,19 @@ describe("the nine tables, and only nine", () => {
   });
 
   /**
-   * Still behavioral, still untested — deliberately listed so the gap is
-   * visible rather than assumed covered:
+   * Behavioral invariants and where they're enforced. Listed here so the gap
+   * stays visible rather than being assumed covered.
    *
-   *   2. An approved draft publishes its SNAPSHOT, never a regeneration.
-   *   3. A directive is never mutated (the append-only WRITE PATH; the shape
-   *      is asserted above, the guarantee needs the mutation that enforces it).
-   *   5. At most one open question to the founder at a time.
-   *   6. Every outbound message has a dedupe key.
-   *   7. Exactly one function decides publish-or-hold.
+   *   ✅ 5. At most one open question at a time — `messages.askFounder`,
+   *         tested in `messages.test.ts`.
+   *   ✅ 6. Every outbound message has a dedupe key — `messages.send` takes it
+   *         as a REQUIRED arg; tested in `messages.test.ts`.
    *
-   * Each lands with the function that implements it, in Sprint 2 and 3.
+   *   ⬜ 2. An approved draft publishes its SNAPSHOT, never a regeneration.
+   *   ⬜ 3. A directive is never mutated (the append-only WRITE PATH; the
+   *         shape is asserted above, the guarantee needs the mutation).
+   *   ⬜ 7. Exactly one function decides publish-or-hold.
+   *
+   * The remaining three land with the publish path, in Sprint 3.
    */
 });
