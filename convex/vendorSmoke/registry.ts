@@ -33,7 +33,13 @@ const scrapeCreatorsCredits: SmokeCheck = {
   check: "scrapecreators.credit-balance",
   requiredEnv: ["SCRAPE_CREATORS_API_KEY"],
   estCostUsd: 0,
-  schema: z.strictObject({ credits: z.number() }),
+  // VERIFIED LIVE 2026-07-31 against the staging key. The guessed `{credits}`
+  // was wrong on every field; this is what the endpoint actually returns.
+  schema: z.strictObject({
+    success: z.boolean(),
+    creditCount: z.number(),
+    message: z.string(),
+  }),
   run: async () => {
     const { getDefaultClient } = await import("../integrations/scrapeCreators/client");
     return await getDefaultClient().request<unknown>("/v1/credit-balance", {
@@ -50,14 +56,30 @@ const zernioAccountsHealth: SmokeCheck = {
   estCostUsd: 0,
   // Raw shape, not our normalized `AccountHealth` — the point is to catch the
   // wire format changing, which a normalizer would hide.
+  // VERIFIED LIVE 2026-07-31. Worth recording precisely, because this is one
+  // of the wrappers the audit flagged `[shape-unverified-live]`: the account
+  // identifier is `accountId`, NOT `id`, and the response carries a `summary`
+  // block our schema never modelled. `platform` and `status` were the only two
+  // fields the guess got right.
   schema: z.strictObject({
     accounts: z.array(
       z.strictObject({
-        id: z.string(),
+        accountId: z.string(),
         platform: z.string(),
         status: z.string(),
+        username: z.unknown(),
+        displayName: z.unknown(),
+        profileId: z.unknown(),
+        canPost: z.unknown(),
+        canFetchAnalytics: z.unknown(),
+        analyticsSupported: z.unknown(),
+        tokenValid: z.unknown(),
+        tokenExpiresAt: z.unknown(),
+        needsReconnect: z.unknown(),
+        issues: z.unknown(),
       })
     ),
+    summary: z.unknown(),
   }),
   run: async () => {
     const { ZernioClient } = await import("../integrations/zernio/client");
@@ -97,7 +119,7 @@ const openRouterModels: SmokeCheck = {
   check: "openrouter.models",
   requiredEnv: ["OPENROUTER_API_KEY"],
   estCostUsd: 0,
-  schema: z.strictObject({
+  schema: z.looseObject({
     data: z.array(
       z.looseObject({
         id: z.string(),
@@ -157,7 +179,7 @@ const geminiKeyValid: SmokeCheck = {
   check: "gemini.models",
   requiredEnv: ["GEMINI_API_KEY"],
   estCostUsd: 0,
-  schema: z.strictObject({
+  schema: z.looseObject({
     models: z.array(z.looseObject({ name: z.string() })),
   }),
   laxReason:

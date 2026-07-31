@@ -135,8 +135,20 @@ export const callMaya = internalAction({
         "callMaya: OPENROUTER_API_KEY is not set in Convex environment."
       );
     }
+    // 2026-07-31 — judge/router tier: gemini-3-flash-preview → gpt-5.6-luna.
+    // VERIFIED live OpenRouter pricing (/api/v1/models, 2026-07-31 — always
+    // re-verify, never trust this comment):
+    //   gemini-3-flash-preview:  $0.50 in / $3.00 out per M, 1.05M ctx
+    //   openai/gpt-5.6-luna:     $0.10 in / $0.60 out per M, 1.05M ctx  ← 5x/5x
+    // Same context window, and OpenRouter describes Luna as built for exactly
+    // this tier's work: "high-volume, latency-sensitive tasks such as chat,
+    // classification". It also supports tools + structured outputs.
+    // NOT applied to the volume workers: those run gpt-oss-120b at
+    // $0.037/$0.17, where Luna would be ~3x MORE expensive.
+    // NOT applied to the main brain either — see MAYA_GTM_MODEL in
+    // deployMayaGtm.ts and the Luna trial sprint in the spec (§18).
     const model =
-      process.env.OPENROUTER_DEFAULT_MODEL ?? "google/gemini-3-flash-preview";
+      process.env.OPENROUTER_DEFAULT_MODEL ?? "openai/gpt-5.6-luna";
 
     const creator: Pick<Doc<"creators">, "_id" | "plan"> | null =
       await ctx.runQuery(internal.agents.modelRouter.maya.getCreatorForRouter, {

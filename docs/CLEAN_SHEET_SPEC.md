@@ -3260,6 +3260,23 @@ That inversion is the whole design. The client can tolerate an unexpected field;
 - **Results land in a vendor-health table**, surfaced to the operator — a shape drift is an incident, not a test failure someone notices on Monday.
 - ⭐ **Price drift is a failure.** OpenRouter model prices change; a silent 5× increase should page someone. `/api/v1/models` is the only truth, **and local egress is blocked — query from the Fly machine.**
 
+**LIVE RESULT — tier 1, 2026-07-31, staging (`precise-canary-781`).** First run
+against real vendors: **1 pass, 4 fail, 2 skipped**, total spend $0.00015. All
+four failures were shape drift in OUR guessed schemas, which is the suite
+working exactly as intended — every one was a contract we had never actually
+looked at:
+
+| Vendor | What the guess got wrong |
+|---|---|
+| ScrapeCreators | Returns `{success, creditCount, message}`. We expected `{credits}` — wrong on every field. |
+| **Zernio** | The account identifier is **`accountId`, not `id`**, and the response carries a `summary` block we never modelled. `platform` and `status` were the only two fields the guess got right. This is one of the wrappers the audit flagged `[shape-unverified-live]` — now verified. |
+| OpenRouter | Catalogue root also carries `total_count` and `links`. |
+| Gemini | Catalogue root also carries `nextPageToken`. |
+
+Schemas corrected against reality; the re-run is **5 pass, 0 fail, 2 skipped**.
+Creatify and R2 skip because no keys are configured — and they report as
+`unverified`, never as healthy.
+
 **Built in Sprint 1. From Sprint 2 onward it runs on a schedule forever**, and a red tier-2 blocks any deploy touching that vendor.
 
 ### 18.0 Definition of done — applies to every sprint
@@ -3355,6 +3372,51 @@ A sprint is not complete until **all seven** hold:
 - Warm-window behavior: a second message inside 30 min never pays a cold start
 - Spend-ceiling test: a synthetic runaway throttles **that machine only**, with the other tenants unaffected
 - **Scale phases 1 and 2** (§17.36.3): burst-create 200, then thundering herd — ~$7 total
+
+### Sprint 2.5 — The Luna trial *(one flag, one week, one decision)*
+
+**Why this is its own sprint and not a config change.** The main brain has been
+swapped for cost once already. On 2026-07-23 it went kimi-k2 → qwen3-235b for a
+near-identical saving; on 07-26 it was reverted after two live failures in 24
+hours, both judgment failures on the validation-critical path — it copied the
+hello few-shot's fictional product as the founder's pitch, and with a valid
+`eventId` in hand refused to call `confirm_event` and confabulated "Reddit has
+no API for direct posting." Neither was a price problem. A swap this cheap to
+make is exactly the kind that gets made carelessly, so it gets a gate.
+
+**VERIFIED live OpenRouter pricing (`/api/v1/models`, 2026-07-31 — re-verify,
+never trust this table):**
+
+| Model | in $/M | out $/M | ctx |
+|---|---|---|---|
+| `moonshotai/kimi-k2-0905` (current main brain) | 0.60 | 2.50 | 262K |
+| **`openai/gpt-5.6-luna`** | **0.10** | **0.60** | **1.05M** |
+| `google/gemini-3-flash-preview` (was: judges) | 0.50 | 3.00 | 1.05M |
+| `openai/gpt-oss-120b` (workers) | 0.037 | 0.17 | 131K |
+
+**Already done, no trial needed:** the judge/router tier moved Flash → Luna
+(5× cheaper both directions, same context, and OpenRouter describes Luna as
+built for "high-volume, latency-sensitive tasks such as chat, classification").
+**Workers stay on `gpt-oss-120b`** — Luna is ~3× MORE expensive there.
+
+**The trial itself:**
+
+| Task |
+|---|
+| `MAYA_GTM_MODEL=openai/gpt-5.6-luna` on ONE dogfood agent. Zero code change — the env var already exists. |
+| Run a full week: onboarding fan-out, 24 heartbeats/day, cron turns, and at least one real approve→publish chain. |
+| **Replay the two qwen failures specifically** — the fictional-product pitch and the `confirm_event` refusal. Those are the known failure shapes; a model that survives them has cleared the actual bar. |
+| Watch the cost ledger against the ~$34/mo/customer main-brain baseline. |
+| Decide. Keep, or revert with one env var. |
+
+**Exit:** a week with no judgment failure on the validation-critical path, and
+a ledger showing the saving is real. **If either fails, revert and say so** —
+the $28/mo/customer is not worth a model that confabulates about publishing.
+
+**Secondary prize if it holds:** 1.05M context against kimi's 262K. The
+workspace prompt budget currently sits at **zero headroom** against a ~108.9k
+cap, which is why prose can't be added anywhere. Luna's window ends that
+constraint outright.
 
 ### Sprint 3 — X: post + reply · **the gamble**
 
