@@ -13,9 +13,10 @@ import {
   NumberLike,
   type NormalizedPost,
   type NormalizedProfile,
+  type RawScrapeCreatorsResult,
 } from "../schemas";
 import { num, str } from "../normalize";
-import { clientOf, type EndpointDeps } from "../deps";
+import { clientOf, rawResult, type EndpointDeps } from "../deps";
 
 /* ---- Instagram ---- */
 
@@ -175,5 +176,75 @@ export const instagram = {
     const list = normalizeIgPosts({ items: [raw] });
     return list[0] ?? null;
   },
+  /* ---- Sprint 1 P0 wrappers. Params VERIFIED LIVE 2026-07-31. -------------
+   *
+   * Same finding as YouTube: the docs summary named `post_id`, `media_id` and
+   * `user_id`; the live API answers `You must provide a url` and rejects
+   * `user_id`. ScrapeCreators is URL-first. Raw envelopes — shapes are pinned
+   * by tier-2 smoke, not guessed here.
+   *
+   * Note `/v1/instagram/user/posts` (the existing `lastPosts` wrapper) was
+   * SUSPECTED of being a stale v1 path. It is not — it returns 200. A v2 also
+   * exists and also takes `handle`, with a different response shape.
+   * ---------------------------------------------------------------------- */
+
+  /** Comments on a post. Takes the post URL, NOT a shortcode or post_id. */
+  async postComments(
+    postUrl: string,
+    deps?: EndpointDeps
+  ): Promise<RawScrapeCreatorsResult> {
+    const query = { url: postUrl };
+    const raw = await clientOf(deps).request<unknown>(
+      "/v2/instagram/post/comments",
+      { query }
+    );
+    return rawResult("instagram_post_comments", query, raw);
+  },
+
+  /**
+   * Transcript of a video post.
+   *
+   * 404s with "post does not have a video" on a photo post — that's the API
+   * being correct, not an error to retry, so callers should check the media
+   * type before spending the call.
+   */
+  async mediaTranscript(
+    postUrl: string,
+    deps?: EndpointDeps
+  ): Promise<RawScrapeCreatorsResult> {
+    const query = { url: postUrl };
+    const raw = await clientOf(deps).request<unknown>(
+      "/v2/instagram/media/transcript",
+      { query }
+    );
+    return rawResult("instagram_media_transcript", query, raw);
+  },
+
+  /** Reels search — the wider-world sweep on Instagram. */
+  async reelsSearch(
+    queryText: string,
+    deps?: EndpointDeps
+  ): Promise<RawScrapeCreatorsResult> {
+    const query = { query: queryText };
+    const raw = await clientOf(deps).request<unknown>(
+      "/v2/instagram/reels/search",
+      { query }
+    );
+    return rawResult("instagram_reels_search", query, raw);
+  },
+
+  /** An account's Reels. Takes `handle` — `user_id` is rejected. */
+  async userReels(
+    handle: string,
+    deps?: EndpointDeps
+  ): Promise<RawScrapeCreatorsResult> {
+    const query = { handle };
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/instagram/user/reels",
+      { query }
+    );
+    return rawResult("instagram_user_reels", query, raw);
+  },
+
 };
 
