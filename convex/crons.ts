@@ -101,6 +101,53 @@ crons.interval(
   internal.gtmMaya.accountLifecycle.sweepCanceledRetention
 );
 
+// ─── convex/maya — the watchers layer (§3.1) ──────────────────────────────
+//
+// Convex owns the CLOCK; OpenClaw owns the judgment. §3.1 traces every
+// catastrophic failure in this product's record to a harness failure —
+// orphaned sessions, a heartbeat re-spawning an 18-worker fleet, and crons
+// firing FOUR HOURS LATE — all from putting orchestration inside a
+// long-running LLM process. Two more reasons the clock can't go back there:
+// OpenClaw crons are per-agent, so shared niche sweeps would cost N times for
+// one answer; and a system cannot be the watchdog for itself.
+//
+// These fire for `agentVersion: "v2"` customers only. v1 keeps running on the
+// frozen gtmMaya agent — migration is per-customer, not a flag day.
+
+// The brief is composed and sent BEFORE any other work in the run. Three
+// briefs have orphaned historically because the message came last.
+crons.daily(
+  "maya-morning-run",
+  { hourUTC: 7, minuteUTC: 0 },
+  internal.maya.scheduler.morningRunAll,
+  {}
+);
+
+// The receipt: what went live, links, what it got. Honest about zero days.
+crons.daily(
+  "maya-evening-recap",
+  { hourUTC: 19, minuteUTC: 0 },
+  internal.maya.scheduler.eveningRecapAll,
+  {}
+);
+
+// Drains the durable job queue, reaping abandoned work first so a job whose
+// worker died is back in the queue before anything new is claimed.
+crons.interval(
+  "maya-drain-jobs",
+  { minutes: 5 },
+  internal.maya.scheduler.drainJobs,
+  {}
+);
+
+// The liveness contract (§12), independent of every worker above.
+crons.interval(
+  "maya-liveness-sweep",
+  { hours: 1 },
+  internal.maya.scheduler.livenessSweep,
+  {}
+);
+
 // Vendor smoke suite (§18.0.5). 200 OK is not enough — the Zernio publish
 // failures returned 200s for six days because a lenient `.passthrough()` schema
 // parsed a changed response shape "successfully" into nothing. These runs parse

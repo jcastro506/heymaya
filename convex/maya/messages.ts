@@ -85,9 +85,15 @@ export const send = internalMutation({
     ctx,
     args
   ): Promise<{ messageId: Id<"messages">; sent: boolean }> => {
+    // Scoped to the customer. `brief:2026-07-31` is the same string for every
+    // customer in the fleet, so a global dedupe lookup silently suppressed
+    // everyone's brief after the first — found by the fleet sweep, invisible
+    // to any single-customer test.
     const existing = await ctx.db
       .query("messages")
-      .withIndex("by_dedupe_key", (q) => q.eq("dedupeKey", args.dedupeKey))
+      .withIndex("by_customer_and_dedupe", (q) =>
+        q.eq("customerId", args.customerId).eq("dedupeKey", args.dedupeKey)
+      )
       .first();
     if (existing) return { messageId: existing._id, sent: false };
 
@@ -153,7 +159,9 @@ export const askFounder = internalMutation({
     // must not be asked twice.
     const existing = await ctx.db
       .query("messages")
-      .withIndex("by_dedupe_key", (q) => q.eq("dedupeKey", args.dedupeKey))
+      .withIndex("by_customer_and_dedupe", (q) =>
+        q.eq("customerId", args.customerId).eq("dedupeKey", args.dedupeKey)
+      )
       .first();
     if (existing) return { messageId: existing._id, asked: false };
 
