@@ -8,8 +8,6 @@
  * @module
  */
 
-import type * as _admin_peekState from "../_admin/peekState.js";
-import type * as _admin_realWorldDeploy from "../_admin/realWorldDeploy.js";
 import type * as _admin_realWorldDeployGtm from "../_admin/realWorldDeployGtm.js";
 import type * as _admin_zernioLiveSmoke from "../_admin/zernioLiveSmoke.js";
 import type * as accountDeletion from "../accountDeletion.js";
@@ -154,6 +152,9 @@ import type * as integrations_creatify_client from "../integrations/creatify/cli
 import type * as integrations_creatify_endpoints from "../integrations/creatify/endpoints.js";
 import type * as integrations_creatify_types from "../integrations/creatify/types.js";
 import type * as integrations_dataforseo_client from "../integrations/dataforseo/client.js";
+import type * as integrations_gbp_direct_client from "../integrations/gbp/direct/client.js";
+import type * as integrations_gbp_index from "../integrations/gbp/index.js";
+import type * as integrations_gbp_zernio from "../integrations/gbp/zernio.js";
 import type * as integrations_gemini_groundedSearch from "../integrations/gemini/groundedSearch.js";
 import type * as integrations_google_calendar from "../integrations/google/calendar.js";
 import type * as integrations_google_gmail from "../integrations/google/gmail.js";
@@ -169,8 +170,17 @@ import type * as integrations_scrapeCreators___tests___fixtures_linkedin from ".
 import type * as integrations_scrapeCreators___tests___fixtures_tiktok from "../integrations/scrapeCreators/__tests__/fixtures/tiktok.js";
 import type * as integrations_scrapeCreators___tests___fixtures_x from "../integrations/scrapeCreators/__tests__/fixtures/x.js";
 import type * as integrations_scrapeCreators___tests___fixtures_youtube from "../integrations/scrapeCreators/__tests__/fixtures/youtube.js";
+import type * as integrations_scrapeCreators_cache from "../integrations/scrapeCreators/cache.js";
 import type * as integrations_scrapeCreators_client from "../integrations/scrapeCreators/client.js";
+import type * as integrations_scrapeCreators_deps from "../integrations/scrapeCreators/deps.js";
 import type * as integrations_scrapeCreators_endpoints from "../integrations/scrapeCreators/endpoints.js";
+import type * as integrations_scrapeCreators_normalize from "../integrations/scrapeCreators/normalize.js";
+import type * as integrations_scrapeCreators_platforms_instagram from "../integrations/scrapeCreators/platforms/instagram.js";
+import type * as integrations_scrapeCreators_platforms_linkedin from "../integrations/scrapeCreators/platforms/linkedin.js";
+import type * as integrations_scrapeCreators_platforms_tiktok from "../integrations/scrapeCreators/platforms/tiktok.js";
+import type * as integrations_scrapeCreators_platforms_x from "../integrations/scrapeCreators/platforms/x.js";
+import type * as integrations_scrapeCreators_platforms_youtube from "../integrations/scrapeCreators/platforms/youtube.js";
+import type * as integrations_scrapeCreators_schemas from "../integrations/scrapeCreators/schemas.js";
 import type * as integrations_scrapeCreators_verifyHandle from "../integrations/scrapeCreators/verifyHandle.js";
 import type * as integrations_telegram_client from "../integrations/telegram/client.js";
 import type * as integrations_telegram_sendDirectMessage from "../integrations/telegram/sendDirectMessage.js";
@@ -186,11 +196,18 @@ import type * as lib_planFeatures from "../lib/planFeatures.js";
 import type * as lib_posthog from "../lib/posthog.js";
 import type * as lib_usageEvents from "../lib/usageEvents.js";
 import type * as lib_webhookSecret from "../lib/webhookSecret.js";
+import type * as maya_jobs from "../maya/jobs.js";
+import type * as maya_planFeatures from "../maya/planFeatures.js";
 import type * as migrations_coachManagerPlanRename from "../migrations/coachManagerPlanRename.js";
 import type * as onboarding_gtm_deployMayaGtm from "../onboarding/gtm/deployMayaGtm.js";
-import type * as prePostReview from "../prePostReview.js";
 import type * as queries_admin_usage from "../queries/admin/usage.js";
 import type * as smokeFixtures_cronHeartbeat from "../smokeFixtures/cronHeartbeat.js";
+import type * as vendorSmoke_drift from "../vendorSmoke/drift.js";
+import type * as vendorSmoke_execute from "../vendorSmoke/execute.js";
+import type * as vendorSmoke_registry from "../vendorSmoke/registry.js";
+import type * as vendorSmoke_report from "../vendorSmoke/report.js";
+import type * as vendorSmoke_runner from "../vendorSmoke/runner.js";
+import type * as vendorSmoke_types from "../vendorSmoke/types.js";
 import type * as waitlist_mayaProductWaitlist from "../waitlist/mayaProductWaitlist.js";
 
 import type {
@@ -200,8 +217,6 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  "_admin/peekState": typeof _admin_peekState;
-  "_admin/realWorldDeploy": typeof _admin_realWorldDeploy;
   "_admin/realWorldDeployGtm": typeof _admin_realWorldDeployGtm;
   "_admin/zernioLiveSmoke": typeof _admin_zernioLiveSmoke;
   accountDeletion: typeof accountDeletion;
@@ -346,6 +361,9 @@ declare const fullApi: ApiFromModules<{
   "integrations/creatify/endpoints": typeof integrations_creatify_endpoints;
   "integrations/creatify/types": typeof integrations_creatify_types;
   "integrations/dataforseo/client": typeof integrations_dataforseo_client;
+  "integrations/gbp/direct/client": typeof integrations_gbp_direct_client;
+  "integrations/gbp/index": typeof integrations_gbp_index;
+  "integrations/gbp/zernio": typeof integrations_gbp_zernio;
   "integrations/gemini/groundedSearch": typeof integrations_gemini_groundedSearch;
   "integrations/google/calendar": typeof integrations_google_calendar;
   "integrations/google/gmail": typeof integrations_google_gmail;
@@ -361,8 +379,17 @@ declare const fullApi: ApiFromModules<{
   "integrations/scrapeCreators/__tests__/fixtures/tiktok": typeof integrations_scrapeCreators___tests___fixtures_tiktok;
   "integrations/scrapeCreators/__tests__/fixtures/x": typeof integrations_scrapeCreators___tests___fixtures_x;
   "integrations/scrapeCreators/__tests__/fixtures/youtube": typeof integrations_scrapeCreators___tests___fixtures_youtube;
+  "integrations/scrapeCreators/cache": typeof integrations_scrapeCreators_cache;
   "integrations/scrapeCreators/client": typeof integrations_scrapeCreators_client;
+  "integrations/scrapeCreators/deps": typeof integrations_scrapeCreators_deps;
   "integrations/scrapeCreators/endpoints": typeof integrations_scrapeCreators_endpoints;
+  "integrations/scrapeCreators/normalize": typeof integrations_scrapeCreators_normalize;
+  "integrations/scrapeCreators/platforms/instagram": typeof integrations_scrapeCreators_platforms_instagram;
+  "integrations/scrapeCreators/platforms/linkedin": typeof integrations_scrapeCreators_platforms_linkedin;
+  "integrations/scrapeCreators/platforms/tiktok": typeof integrations_scrapeCreators_platforms_tiktok;
+  "integrations/scrapeCreators/platforms/x": typeof integrations_scrapeCreators_platforms_x;
+  "integrations/scrapeCreators/platforms/youtube": typeof integrations_scrapeCreators_platforms_youtube;
+  "integrations/scrapeCreators/schemas": typeof integrations_scrapeCreators_schemas;
   "integrations/scrapeCreators/verifyHandle": typeof integrations_scrapeCreators_verifyHandle;
   "integrations/telegram/client": typeof integrations_telegram_client;
   "integrations/telegram/sendDirectMessage": typeof integrations_telegram_sendDirectMessage;
@@ -378,11 +405,18 @@ declare const fullApi: ApiFromModules<{
   "lib/posthog": typeof lib_posthog;
   "lib/usageEvents": typeof lib_usageEvents;
   "lib/webhookSecret": typeof lib_webhookSecret;
+  "maya/jobs": typeof maya_jobs;
+  "maya/planFeatures": typeof maya_planFeatures;
   "migrations/coachManagerPlanRename": typeof migrations_coachManagerPlanRename;
   "onboarding/gtm/deployMayaGtm": typeof onboarding_gtm_deployMayaGtm;
-  prePostReview: typeof prePostReview;
   "queries/admin/usage": typeof queries_admin_usage;
   "smokeFixtures/cronHeartbeat": typeof smokeFixtures_cronHeartbeat;
+  "vendorSmoke/drift": typeof vendorSmoke_drift;
+  "vendorSmoke/execute": typeof vendorSmoke_execute;
+  "vendorSmoke/registry": typeof vendorSmoke_registry;
+  "vendorSmoke/report": typeof vendorSmoke_report;
+  "vendorSmoke/runner": typeof vendorSmoke_runner;
+  "vendorSmoke/types": typeof vendorSmoke_types;
   "waitlist/mayaProductWaitlist": typeof waitlist_mayaProductWaitlist;
 }>;
 
