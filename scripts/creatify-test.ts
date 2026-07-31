@@ -27,7 +27,7 @@ import { join } from "node:path";
 const ID = process.env.CREATIFY_API_ID;
 const KEY = process.env.CREATIFY_API_KEY;
 const BASE = "https://api.creatify.ai";
-const OUT = join(process.cwd(), "veo-test-output");
+const OUT = join(process.cwd(), "creatify-test-output");
 
 const PRODUCT_URL = process.env.PRODUCT_URL ?? "https://gemini.google.com"; // placeholder; override with a real product page
 const OVERRIDE_SCRIPT = process.env.OVERRIDE_SCRIPT; // set => HYBRID (Maya's script)
@@ -83,7 +83,7 @@ async function pollDownload(getUrl: string, outName: string, t0: number): Promis
   if (!url) { console.log("⚠ no output url:", JSON.stringify(v).slice(0, 500)); return; }
   const dl = await fetch(url);
   await writeFile(join(OUT, outName), Buffer.from(await dl.arrayBuffer()));
-  console.log(`\n✅ Done in ${((Date.now() - t0) / 1000).toFixed(1)}s (credits=${v.credits_used}) → veo-test-output/${outName}`);
+  console.log(`\n✅ Done in ${((Date.now() - t0) / 1000).toFixed(1)}s (credits=${v.credits_used}) → creatify-test-output/${outName}`);
 }
 
 async function main(): Promise<void> {
@@ -172,6 +172,6 @@ async function main(): Promise<void> {
   if (!url) { console.log("⚠ no video_output:", JSON.stringify(v).slice(0, 400)); return; }
   const dl = await fetch(url);
   await writeFile(join(OUT, "creatify-tidy.mp4"), Buffer.from(await dl.arrayBuffer()));
-  console.log(`\n✅ Done in ${((Date.now() - t0) / 1000).toFixed(1)}s (credits_used=${v.credits_used}) → veo-test-output/creatify-tidy.mp4`);
+  console.log(`\n✅ Done in ${((Date.now() - t0) / 1000).toFixed(1)}s (credits_used=${v.credits_used}) → creatify-test-output/creatify-tidy.mp4`);
 }
 main().catch((e) => { console.error("✖", e instanceof Error ? e.message : e); process.exit(1); });
