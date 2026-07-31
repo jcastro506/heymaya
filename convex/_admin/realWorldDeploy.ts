@@ -17,6 +17,7 @@ import { internalAction, internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
+import schema from "../schema";
 
 const TEST_CLERK_USER_ID_PREFIX = "test_real_world_kevin_";
 const TEST_HANDLE = "Kevin.Castro9996";
@@ -95,65 +96,6 @@ export const ensureCreator = internalMutation({
   },
 });
 
-export const run = internalAction({
-  args: {},
-  handler: async (ctx): Promise<{ ok: boolean; creatorId: string; deploy: unknown }> => {
-    // Sprint 9.7+ — wipe prior test creators + cascade. True new-user
-    // simulation: empty creator row, empty picture, empty scrape cache,
-    // empty mayaActionLog. The kickstart synth runs from scratch every
-    // time; nothing stale leaks from a prior run.
-    const wipe = await ctx.runMutation(
-      internal._admin.realWorldDeploy.wipeExistingTestCreators,
-      {}
-    );
-    console.log(`[realWorldDeploy] wiped ${wipe.wipedCount} prior test creator(s)`);
-
-    // Fresh clerkUserId per run so even if the wipe missed a corner-case
-    // table (e.g. one I forgot to add to the cascade), the new creator
-    // doesn't inherit anything.
-    const clerkUserId = `${TEST_CLERK_USER_ID_PREFIX}${Date.now().toString(36)}`;
-    const creatorId = await ctx.runMutation(
-      internal._admin.realWorldDeploy.ensureCreator,
-      { clerkUserId }
-    );
-    console.log(`[realWorldDeploy] new creatorId=${creatorId} (clerkUserId=${clerkUserId})`);
-
-    await ctx.runMutation(
-      internal.onboarding.maya.submitOnboarding.persistOnboardingSubmission,
-      {
-        creatorId,
-        displayName: TEST_NAME,
-        phoneNumber: TEST_PHONE,
-        handle: TEST_HANDLE,
-        channelPreference: "imessage",
-      }
-    );
-    console.log(`[realWorldDeploy] persisted submission`);
-
-    const deploy = await ctx.runAction(
-      internal.onboarding.maya.deployMaya.deployMaya,
-      { creatorId }
-    );
-    console.log(`[realWorldDeploy] deploy result:`, JSON.stringify(deploy, null, 2));
-
-    return { ok: true, creatorId, deploy };
-  },
-});
-
-/**
- * Sprint 11.1 — clean-slate wipe. Destroys ALL creators (not filtered to
- * test prefix) + their cascade tables + ALL maya-* Fly apps. Returns
- * a summary of what was wiped. Used to start fresh for a new round of
- * real-world testing.
- *
- * NOT TOUCHED:
- *   - heymaya-openclaw (base image)
- *   - heymaya-video-synth (multimodal worker)
- *   - any non-maya-* Fly app
- *
- * Usage:
- *   npx convex run _admin/realWorldDeploy:wipeEverything '{}'
- */
 export const wipeAllCreatorsCascade = internalMutation({
   args: {},
   handler: async (ctx): Promise<{ wipedCount: number; appNames: string[] }> => {
@@ -237,147 +179,6 @@ export const wipeEverything = internalAction({
   },
 });
 
-/**
- * Sprint 11.1 — destroy the existing Fly machine for a creator's Maya
- * app, then re-run deployMaya. Use this when the running Maya bundle
- * is stale (older AGENTS.md / standing orders / skills) and you want
- * the live machine to pick up the latest workspace WITHOUT wiping
- * Convex creator data (picture, opening answers, posts, etc.).
- *
- * Usage:
- *   npx convex run _admin/realWorldDeploy:redeployForCreator '{"creatorId":"<id>"}'
- *
- * The Fly app itself is preserved — only the machine is replaced. The
- * creator's iMessage thread continues; on next inbound message Maya
- * boots into the new bundle.
- */
-export const redeployForCreator = internalAction({
-  args: { creatorId: v.id("creators") },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{ ok: boolean; destroyed: number; deploy: unknown }> => {
-    const { FlyClient } = await import("../lib/flyClient");
-    const fly = new FlyClient();
-    const appName = `maya-${args.creatorId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).toLowerCase()}`;
-    const machines = await fly.listMachines(appName);
-    let destroyed = 0;
-    for (const m of machines) {
-      console.log(`[redeployForCreator] destroying ${appName}/${m.id} (state=${m.state})`);
-      await fly.destroyMachine(appName, m.id, { force: true });
-      destroyed += 1;
-    }
-    const deploy = await ctx.runAction(
-      internal.onboarding.maya.deployMaya.deployMaya,
-      { creatorId: args.creatorId }
-    );
-    console.log(`[redeployForCreator] deploy result:`, JSON.stringify(deploy, null, 2));
-    return { ok: true, destroyed, deploy };
-  },
-});
-
-/**
- * Sprint 12.6+ — nuclear wipe. Empties every table in the schema so the
- * deployment is back to first-boot state. Use after `wipeEverything` when
- * the operator wants a TRULY fresh start (no waitlist rows, no orphaned
- * onboardingJobs, no cron heartbeat history, no usage events, etc.) —
- * not just the creator-scoped cascade.
- *
- * Usage:
- *   npx convex run _admin/realWorldDeploy:wipeEntireDatabase '{}'
- *
- * Safety: this is destructive and irreversible. The action explicitly
- * enumerates every table from `convex/schema.ts`; tables added later
- * MUST be appended here or they'll be skipped. The `creators` table is
- * intentionally last so creator-cascade tables get wiped first (defense
- * in depth — `wipeEverything` should have run already, but this is
- * idempotent if it hasn't).
- *
- * Returns per-table delete counts so the operator can sanity-check the
- * wipe touched what they expected.
- */
-const ALL_TABLES = [
-  // Creator-scoped (creator-cascade runs in wipeEverything but listed here
-  // for the nuclear path too — second wipe is a cheap no-op).
-  "creatorPicture",
-  "creatorHandles",
-  "connectedAccounts",
-  "appleCalendarConnections",
-  "creatorFollowerSnapshots",
-  "scrapeCreatorsCreditAudit",
-  "calendarEventOptOuts",
-  "posts",
-  "postMetrics",
-  "dailyBriefs",
-  "weeklyReviews",
-  "hookLibrary",
-  "contentPlans",
-  "brandDeals",
-  "packetGenerations",
-  "mayaActionLog",
-  "pitchOutreach",
-  "brandContacts",
-  "opportunityScoutSeen",
-  "monetizationProposalLog",
-  "collabMatchLog",
-  "postPostmortems",
-  "trendObservations",
-  "competitorObservations",
-  "weeklyLearningsCreator",
-  "pairedChannels",
-  "accountDeletionRequests",
-  "opportunitySurface",
-  "firstProactivePings",
-  "oauthStateTokens",
-  // Service-business cascade.
-  "businessPicture",
-  "gbpLocations",
-  "serviceCustomers",
-  "serviceJobs",
-  "gbpPosts",
-  "reviews",
-  "reviewRequests",
-  "serviceContent",
-  "inboundLeads",
-  "crmConnections",
-  "voiceChannels",
-  "voiceCallTranscripts",
-  "voiceUsage",
-  "mediaAssets",
-  "customSkills",
-  "approvalRules",
-  "zernioConnections",
-  "mayaTaskQueue",
-  "wikiProjections",
-  "weeklyLearnings",
-  "gbpHealthScores",
-  "serviceTelemetry",
-  "growthAgents",
-  "growthPosts",
-  // Top-level / shared.
-  "mayaProductWaitlist",
-  "growthWaitlist",
-  "usageEvents",
-  "cronHeartbeat",
-  "aiCallLog",
-  "scrapeCreatorsCache",
-  "platformAlgoCache",
-  "industryIntelSeen",
-  "gmailWebhookEvents",
-  "stripeWebhookEvents",
-  "webhookEvents",
-  "onboardingJobs",
-  "businesses",
-  // Wiped last so creator-cascade tables clear before the FK targets.
-  "creators",
-] as const;
-
-/**
- * Delete up to `batchSize` rows from one table. Returns the count deleted
- * and whether more rows remain. Called by `wipeEntireDatabase` in a loop
- * to stay under Convex's 16MB-per-mutation read limit (which the
- * scrapeCreatorsCache + aiCallLog tables can blow in a single sweep).
- */
 export const wipeTableBatch = internalMutation({
   args: { table: v.string(), batchSize: v.number() },
   handler: async (
@@ -393,6 +194,16 @@ export const wipeTableBatch = internalMutation({
     return { deleted: rows.length, hasMore: rows.length === args.batchSize };
   },
 });
+
+/**
+ * Every table in the schema, derived from `schema.ts` itself rather than a
+ * hand-maintained list. The previous hardcoded array silently rotted every
+ * time a table was added or removed — and a wipe tool that misses tables is
+ * worse than no wipe tool. Sprint 0.
+ */
+const ALL_TABLES = Object.keys(schema.tables) as Array<
+  keyof typeof schema.tables & string
+>;
 
 export const wipeEntireDatabase = internalAction({
   args: {},

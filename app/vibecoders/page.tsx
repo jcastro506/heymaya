@@ -5,7 +5,7 @@ import { ArrowUpRight } from "lucide-react";
 
 import { MarketingNav } from "../_components/MarketingNav";
 import { primaryCtaHref, primaryCtaLabel } from "../_components/landingMode";
-import { FeatureSection } from "../creators/_components/FeatureSection";
+import { FeatureSection } from "../_components/FeatureSection";
 
 /**
  * /vibecoders — landing for the "you built it, now you need an audience"
