@@ -3043,12 +3043,51 @@ Two parallel audits of the live codebase. Both change the sprint plan.
 | 2 | **14 Zernio wrappers marked `[shape-unverified-live]`** using `.passthrough()` | Typed but never confirmed against the live API — including `getPostAnalytics`, `replyToComment`, `sendDm`, `listInboxComments`. **This is exactly the class of bug that hid six days of publish failures.** |
 | 3 | **YouTube missing from webhook `allowedPlatforms`** | YouTube webhook events silently drop `platform` to `undefined` |
 | 4 | **No `comment.created` event** — only a coarse `engagement.received` | Inbound routing is blunter than the design needs |
-| 5 | `agentSkill/manifest.json` advertises **404ing paths** and **3 endpoints with no wrapper** — and the test *requires* two of them | Any agent calling them gets a 404 |
-| 6 | **`apify/twitterScraper.ts` is dead code** | Superseded by twitterapi.io. Delete. |
+| 5 | ~~`agentSkill/manifest.json` advertises **404ing paths** and **3 endpoints with no wrapper**~~ **FIXED (PR #127).** Two paths corrected (`/v1/youtube/channel/videos`→`channel-videos`, `/v1/twitter/user/tweets`→`user-tweets`); `tiktok.followers` + `tiktok.commentReplies` wrapped; `tiktok_live` waived in code with a reason. A test now compares manifest to wrappers on every run. | — |
+| 6 | ~~**`apify/twitterScraper.ts` is dead code**~~ **GONE** — removed with the dead products in Sprint 0a. | — |
 | 7 | **No retry on Telegram, Gemini, twitterapi.io, App Store** | A single 500 fails the call outright |
 | 8 | **Creatify's 28 endpoint wrappers are untested**; R2's SigV4 client untested | The two least-verified paths are the ones that spend money |
 
-**One structural note:** `scrapeCreators/endpoints.ts` is already **1,698 lines**. Adding ~20 wrappers takes it past 2,500. **Split per-platform first**, then add.
+**One structural note:** ~~`scrapeCreators/endpoints.ts` is already **1,698 lines**~~ — **DONE (PR #128).** Split into `schemas.ts` / `normalize.ts` / `deps.ts` / `platforms/{tiktok,instagram,youtube,linkedin,x}.ts`, with `endpoints.ts` kept as a barrel so the public surface is unchanged.
+
+### 17.8.1 Perception endpoint paths — read from the vendor docs 2026-07-30
+
+The Sprint 1 P0 wrapper list below is grounded in a docs read, **not in live
+calls**. Two things came out of it that change the plan:
+
+**A suspected live defect, NOT yet fixed.** Our Instagram posts wrapper calls
+`/v1/instagram/user/posts` with a `handle`. The current docs list posts at
+**`/v2/instagram/user/posts` taking a `user_id`**. If that's right, the wrapper
+is either 404ing or serving a deprecated path — the same failure mode as the
+manifest paths in defect 5, one layer down. It was left alone deliberately:
+two doc reads disagreed with each other on parameter names elsewhere
+(`handle` vs `username` on `/v1/instagram/profile`, where the specific page
+and our working wrapper both say `handle`), so a summarized doc read is not
+strong enough evidence to change a path that may be working. **First action
+once a ScrapeCreators key exists: call both and see which answers.**
+
+**The P0 paths, as documented.** Param names are the least reliable part of
+this table — confirm each against a live call before trusting it.
+
+| Channel | Path | Param |
+|---|---|---|
+| IG | `/v2/instagram/post/comments` | `post_id` |
+| IG | `/v2/instagram/media/transcript` | `media_id` |
+| IG | `/v2/instagram/reels/search` | `query` |
+| IG | `/v1/instagram/user/reels` | `user_id` |
+| IG | `/v1/instagram/post/comment/replies` | `comment_id` |
+| YT | `/v1/youtube/search` | `query` |
+| YT | `/v1/youtube/video/comments` | `video_id` |
+| YT | `/v1/youtube/video/transcript` | `video_id` |
+| YT | `/v1/youtube/video/comment/replies` | `comment_id` |
+| YT | `/v1/youtube/channel/shorts` | `channel_id` |
+| YT | `/v1/youtube/shorts/trending` | `region` (optional) |
+
+**These wrappers were deliberately NOT written yet.** Writing eleven wrappers
+against unverified paths, with fixtures invented to match, produces tests that
+prove only that the invention is self-consistent — which is the precise failure
+the vendor smoke suite (§18.0.5) exists to prevent. They are ~30–60 mechanical
+lines each once a key confirms the shapes; the blocker is a key, not effort.
 
 ---
 
