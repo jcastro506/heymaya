@@ -35,6 +35,7 @@ beforeEach(() => {
   vi.useFakeTimers();
 });
 afterEach(() => {
+  vi.clearAllTimers();
   vi.useRealTimers();
 });
 
