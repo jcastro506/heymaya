@@ -283,6 +283,133 @@ const creatifyVoices: SmokeCheck = {
 };
 
 /* -------------------------------------------------------------------------- */
+/* Tier 2 — ScrapeCreators perception endpoints                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every ScrapeCreators response carries the same billing envelope. Pinning it
+ * strictly at the ROOT is the point: a new top-level key means the contract
+ * moved, and that's the class of change that hid six days of Zernio failures.
+ *
+ * Element shapes are deliberately loose — a post object is wide, vendor-owned,
+ * and gains fields constantly. Strict there would cry wolf weekly until
+ * someone silenced the whole check, which is worse than lax. The root is where
+ * the signal is.
+ */
+const SC_ENVELOPE = {
+  success: z.boolean(),
+  credits_remaining: z.number(),
+  credits_charged: z.number(),
+};
+
+const SC_LAX_REASON =
+  "Root is strict — a new top-level key is a contract change and fails. " +
+  "Individual post/comment objects are vendor-owned, very wide, and gain " +
+  "fields constantly; pinning them would cry wolf until someone muted the " +
+  "check entirely.";
+
+/** Fixed, public, stable inputs. A smoke check must not depend on a customer. */
+const PROBE = {
+  ytVideoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  ytHandle: "@MrBeast",
+  igPostUrl: "https://www.instagram.com/p/Dbd3EBdnW_u/",
+  igHandle: "nasa",
+  query: "postgres migration",
+};
+
+function scCheck(
+  check: string,
+  payloadKey: string,
+  run: () => Promise<unknown>,
+  extraRootKeys: Record<string, z.ZodType> = {}
+): SmokeCheck {
+  return {
+    vendor: "scrapecreators",
+    tier: 2,
+    check,
+    requiredEnv: ["SCRAPE_CREATORS_API_KEY"],
+    // 1 credit ≈ $0.002 at the volumes we buy. Ten of these daily is ~300
+    // credits/month — real, and the reason tier 2 is daily rather than hourly.
+    estCostUsd: 0.002,
+    schema: z.strictObject({
+      ...SC_ENVELOPE,
+      ...extraRootKeys,
+      [payloadKey]: z.array(z.looseObject({})),
+    }),
+    laxReason: SC_LAX_REASON,
+    run,
+  };
+}
+
+const perceptionChecks: SmokeCheck[] = [
+  // VERIFIED LIVE 2026-07-31. `search` returns SIX parallel result buckets, not
+  // just `videos` — a detail no wrapper reading `videos` alone would notice,
+  // and a real capability we weren't using.
+  scCheck(
+    "scrapecreators.youtube.search",
+    "videos",
+    async () => {
+      const { youtube } = await import("../integrations/scrapeCreators/endpoints");
+      return (await youtube.search(PROBE.query)).raw;
+    },
+    {
+      channels: z.array(z.looseObject({})),
+      playlists: z.array(z.looseObject({})),
+      shorts: z.array(z.looseObject({})),
+      shelves: z.array(z.looseObject({})),
+      lives: z.array(z.looseObject({})),
+      continuationToken: z.unknown(),
+    }
+  ),
+  scCheck(
+    "scrapecreators.youtube.video_comments",
+    "comments",
+    async () => {
+      const { youtube } = await import("../integrations/scrapeCreators/endpoints");
+      return (await youtube.videoComments(PROBE.ytVideoUrl)).raw;
+    },
+    { continuationToken: z.unknown() }
+  ),
+  // Measured 8.0s and 14.7s on consecutive live calls — genuinely slow, not
+  // broken. 30s produced a false failure; 60s gives it room without hiding a
+  // real hang.
+  {
+    ...scCheck("scrapecreators.youtube.shorts_trending", "shorts", async () => {
+      const { youtube } = await import("../integrations/scrapeCreators/endpoints");
+      return (await youtube.shortsTrending("US")).raw;
+    }),
+    timeoutMs: 60_000,
+  },
+  scCheck(
+    "scrapecreators.instagram.post_comments",
+    "comments",
+    async () => {
+      const { instagram } = await import("../integrations/scrapeCreators/endpoints");
+      return (await instagram.postComments(PROBE.igPostUrl)).raw;
+    },
+    { cursor: z.unknown() }
+  ),
+  scCheck(
+    "scrapecreators.instagram.reels_search",
+    "reels",
+    async () => {
+      const { instagram } = await import("../integrations/scrapeCreators/endpoints");
+      return (await instagram.reelsSearch("postgres")).raw;
+    },
+    { next_page: z.unknown() }
+  ),
+  scCheck(
+    "scrapecreators.instagram.user_reels",
+    "items",
+    async () => {
+      const { instagram } = await import("../integrations/scrapeCreators/endpoints");
+      return (await instagram.userReels(PROBE.igHandle)).raw;
+    },
+    { paging_info: z.unknown(), status: z.unknown() }
+  ),
+];
+
+/* -------------------------------------------------------------------------- */
 /* The registry                                                                */
 /* -------------------------------------------------------------------------- */
 
@@ -296,6 +423,7 @@ export const SMOKE_CHECKS: SmokeCheck[] = [
   r2Reachable,
   geminiKeyValid,
   twitterApiIoReachable,
+  ...perceptionChecks,
 ];
 
 export function checksForTier(tier: 1 | 2 | 3): SmokeCheck[] {
