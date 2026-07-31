@@ -170,6 +170,47 @@ Verified against `docs.zernio.com/platforms/*`, 2026-07-29. **This corrects an a
 | Analytics | ✅ limited + account insights | ✅ rich + **demographics, follower history** | ✅ + **daily views, demographics** | ✅ full |
 | Notable extras | privacy levels · duet/stitch toggles · **AI disclosure flag** · custom thumbnail · draft mode | **collaborators** · user tags · ice breakers | playlists · visibility · custom thumbnail (long-form only) | polls · scheduled spaces |
 
+#### 2.15.05 ⚠️ LIVE CHECK, 2026-07-31 — the matrix above is still DOC-ONLY for 3 of 4 channels
+
+`/api/v1/accounts/health` on staging returns **two** connected accounts, and
+neither is a channel this product ships:
+
+| platform | status | canPost | canFetchAnalytics | tokenValid | issues |
+|---|---|---|---|---|---|
+| `reddit` | `warning` | true | true | true | "Token expired or expiring soon (auto-refresh pending)" |
+| `twitter` (= our `x`) | `warning` | true | true | true | same |
+
+**So TikTok, Instagram and YouTube capability is unverified against live
+Zernio.** The §2.15 table is audited from their docs and nothing more. Three of
+the four channels have never had an account connected, which means every
+capability claim for them — carousel limits, comment replies, DM support,
+Shorts auto-detection — is a documentation claim, not an observation.
+
+**Operator action to close this:** connect one throwaway account per channel
+(TikTok, Instagram, YouTube) and re-run. Until then, treat the matrix as a
+hypothesis. This is the same class of gap as the 14 `[shape-unverified-live]`
+wrappers, and the same fix: connect it, call it, record what came back.
+
+**A concrete mismatch already found.** Zernio's account status vocabulary is
+`healthy | warning | error | needsReconnect` (visible in the `summary` block).
+Our `channels.status` is `connected | dormant | disconnected | error` — there
+is **no `warning`**, and a warning account is exactly the interesting case: at
+the time of this check, the X account's `tokenExpiresAt` had already passed
+while Zernio still reported `tokenValid: true`, `needsReconnect: false`,
+`canPost: true`, because an auto-refresh was pending.
+
+Two things follow:
+
+1. **Do not derive token health from `tokenExpiresAt`.** A passed expiry with a
+   pending auto-refresh is normal, not broken. `needsReconnect` is the field
+   that means "the founder has to do something"; `canPost` is the field that
+   means "we can post right now". Trust those.
+2. **`warning` needs a home in our model.** Preflight currently treats only
+   `error`/`disconnected` as a token problem, so a `warning` account reads as
+   fully healthy. That's correct *today* — it can still post — but it means we
+   have no way to say "this will need reconnecting soon" before it becomes a
+   failed publish.
+
 #### 2.15.1 The consequence: TikTok is publish-only
 
 **"Answer everyone" — one of the four things that differentiates this product — does not work on TikTok.** Not through Zernio, not through anything: TikTok's own API exposes no comment read or write.
