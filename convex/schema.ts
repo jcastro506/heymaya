@@ -3399,6 +3399,354 @@ export default defineSchema({
 
   // ─── end ClawLaunch / Maya GTM product ────────────────────────────────
 
+  /* ══════════════════════════════════════════════════════════════════════ */
+  /* convex/maya/ — the clean-sheet product (§3.4)                          */
+  /*                                                                        */
+  /* Nine per-customer tables plus two deliberately-shared ones. If a tenth  */
+  /* per-customer table looks necessary, something in the design is wrong.   */
+  /*                                                                        */
+  /* Structured blobs are stored as JSON strings rather than nested         */
+  /* validators — the schema sits near TypeScript's instantiation ceiling,  */
+  /* and deep nesting is what pushes it over (it already regressed          */
+  /* `db.get()` narrowing once).                                            */
+  /* ══════════════════════════════════════════════════════════════════════ */
+
+  /** The slowly-changing facts about one customer. */
+  customers: defineTable({
+    /** The auth + billing row. Clerk identity and the Stripe customer already
+     *  hang off `creators`, so the new module points at it rather than
+     *  forking a second identity. */
+    accountId: v.id("creators"),
+    /** Routes a customer between the frozen `gtmMaya` agent and the new one.
+     *  Migration is per-customer, not a flag day. */
+    agentVersion: v.union(v.literal("v1"), v.literal("v2")),
+    /** MVP ships ONE tier at $149 with everything unlocked (§17.2.5). Tiers
+     *  return post-PMF as BUDGETS, never booleans — so this is a union with
+     *  one member today and more later, not a set of capability flags. */
+    plan: v.union(v.literal("mvp")),
+    /** `paused` and `cancelled` both stop publishing; neither deletes data.
+     *  Trial expiry without a card lands here, not in a purge (§17.x). */
+    state: v.union(
+      v.literal("onboarding"),
+      v.literal("active"),
+      v.literal("paused"),
+      v.literal("cancelled")
+    ),
+    timezone: v.string(),
+    /** What the product actually is and does — the grounding for every claim
+     *  she makes. JSON. */
+    productTruthJson: v.optional(v.string()),
+    /** Who buys it: segments, the complaint list, where they gather. JSON. */
+    buyerJson: v.optional(v.string()),
+    /** Learned from the founder's real posts and their edits to drafts. JSON. */
+    voiceProfileJson: v.optional(v.string()),
+    /** Colors, fonts, logo refs, on-brand/off-brand examples. JSON. */
+    brandKitJson: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_state", ["state"])
+    .index("by_agent_version", ["agentVersion"]),
+
+  /** One row per connected channel. */
+  channels: defineTable({
+    customerId: v.id("customers"),
+    channel: v.union(
+      v.literal("tiktok"),
+      v.literal("instagram"),
+      v.literal("youtube"),
+      v.literal("x")
+    ),
+    /** THE switch (§17.85). On `just_go`, exactly one function decides
+     *  publish-or-hold, and nothing else may hold a publish — no ramp, no
+     *  trust score, no "this one seems sensitive". The old system had ten
+     *  ANDed gates, which is why "post it" did nothing. */
+    postingMode: v.union(v.literal("show_me_first"), v.literal("just_go")),
+    /** `dormant` is an over-cap channel after a downgrade: OAuth preserved,
+     *  reactivates instantly. Never deleted. */
+    status: v.union(
+      v.literal("connected"),
+      v.literal("dormant"),
+      v.literal("disconnected"),
+      v.literal("error")
+    ),
+    /** Zernio holds the OAuth grant; we hold its id. Raw platform tokens are
+     *  never stored here — we never hold a customer's passwords or session. */
+    zernioAccountId: v.optional(v.string()),
+    handle: v.optional(v.string()),
+    lastCheckedAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_customer", ["customerId"])
+    .index("by_customer_and_channel", ["customerId", "channel"])
+    .index("by_customer_and_status", ["customerId", "status"]),
+
+  /**
+   * Every rule the founder ever gave — APPEND-ONLY, stored VERBATIM (§10.2).
+   *
+   * Rows are never edited. Superseding writes a NEW row pointing at the old
+   * one, so "why is LinkedIn quiet?" is answered with what they actually said
+   * on the day they said it, not a paraphrase. This single behavior does more
+   * for trust than the entire dashboard.
+   */
+  directives: defineTable({
+    customerId: v.id("customers"),
+    kind: v.union(
+      v.literal("posting_mode"),
+      v.literal("channel_toggle"),
+      v.literal("cadence"),
+      v.literal("timing_window"),
+      v.literal("topic"),
+      v.literal("phrase_ban"),
+      v.literal("voice"),
+      v.literal("entity_rule"),
+      v.literal("approved_claim"),
+      v.literal("product_truth"),
+      v.literal("icp_correction"),
+      v.literal("notification_pref"),
+      v.literal("pause"),
+      v.literal("escalation"),
+      v.literal("standing_task"),
+      v.literal("campaign"),
+      v.literal("other")
+    ),
+    /** EXACTLY what they typed. Never cleaned up, never summarized. */
+    verbatim: v.string(),
+    /** Our reading of it. Separate field so the quote stays pristine. */
+    interpretationJson: v.optional(v.string()),
+    active: v.boolean(),
+    /** The older row this one overrides. Recency wins, but never silently —
+     *  the superseded rule gets named in a clause when it matters. */
+    supersedesId: v.optional(v.id("directives")),
+    supersededAt: v.optional(v.number()),
+    /** The inbound message it came from, for provenance. */
+    sourceMessageId: v.optional(v.id("messages")),
+    createdAt: v.number(),
+  })
+    .index("by_customer", ["customerId"])
+    .index("by_customer_and_active", ["customerId", "active"])
+    .index("by_customer_and_kind", ["customerId", "kind"]),
+
+  /** The idea bank — angles with evidence behind them (§7.4). */
+  ideas: defineTable({
+    customerId: v.id("customers"),
+    angle: v.string(),
+    /** What makes this worth writing: the thread, the complaint, the trend.
+     *  An idea with no evidence is a guess, and guesses don't get published. */
+    evidenceJson: v.optional(v.string()),
+    score: v.optional(v.number()),
+    status: v.union(
+      v.literal("bank"),
+      v.literal("used"),
+      v.literal("discarded")
+    ),
+    sourceKind: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_customer", ["customerId"])
+    .index("by_customer_and_status", ["customerId", "status"]),
+
+  /** Threads and posts worth engaging. Deduped, freshness-scored. */
+  targets: defineTable({
+    customerId: v.id("customers"),
+    channel: v.string(),
+    url: v.string(),
+    kind: v.union(
+      v.literal("thread"),
+      v.literal("post"),
+      v.literal("comment"),
+      v.literal("mention")
+    ),
+    /** Stable across sweeps so the same thread isn't re-surfaced every hour. */
+    dedupeKey: v.string(),
+    freshnessScore: v.optional(v.number()),
+    status: v.union(
+      v.literal("open"),
+      v.literal("engaged"),
+      v.literal("skipped"),
+      v.literal("expired")
+    ),
+    snippet: v.optional(v.string()),
+    seenAt: v.number(),
+    /** Every non-terminal state needs a timeout and an owner — no state may
+     *  be silently permanent (invariant 8). */
+    expiresAt: v.number(),
+  })
+    .index("by_customer", ["customerId"])
+    .index("by_customer_and_status", ["customerId", "status"])
+    .index("by_customer_and_dedupe", ["customerId", "dedupeKey"]),
+
+  /**
+   * Written content, SNAPSHOTTED at propose time (invariant 2).
+   *
+   * What the founder approved is what publishes — never a regeneration. The
+   * `outcome` + `editDiff` pair is also the voice training signal: what they
+   * changed is what the voice profile learns from.
+   */
+  drafts: defineTable({
+    customerId: v.id("customers"),
+    ideaId: v.optional(v.id("ideas")),
+    channel: v.string(),
+    kind: v.union(
+      v.literal("post"),
+      v.literal("reply"),
+      v.literal("cold_reply")
+    ),
+    /** The exact text shown to the founder. Publishing reads THIS. */
+    snapshotText: v.string(),
+    mediaAssetIdsJson: v.optional(v.string()),
+    outcome: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("edited"),
+      v.literal("rejected"),
+      v.literal("expired")
+    ),
+    /** What they changed, when they edited rather than approved. */
+    editDiff: v.optional(v.string()),
+    proposedAt: v.number(),
+    decidedAt: v.optional(v.number()),
+    /** Invariant 8 again: a pending draft cannot sit forever. */
+    expiresAt: v.number(),
+  })
+    .index("by_customer", ["customerId"])
+    .index("by_customer_and_outcome", ["customerId", "outcome"]),
+
+  /**
+   * Everything that went live — the unit of results AND the archive spine.
+   *
+   * `snapshotText` survives the platform deleting the post, which is what
+   * makes results provable months later. Text-search indexed (§16.8.2).
+   */
+  placements: defineTable({
+    customerId: v.id("customers"),
+    kind: v.union(
+      v.literal("post"),
+      v.literal("reply"),
+      v.literal("cold_reply")
+    ),
+    channel: v.string(),
+    /** Invariant 1: a live URL, or an explicit unknown. Never an assumption. */
+    url: v.optional(v.string()),
+    linkStatus: v.union(
+      v.literal("live"),
+      v.literal("gone"),
+      v.literal("unknown")
+    ),
+    publishedAt: v.number(),
+    snapshotText: v.string(),
+    thumbnailId: v.optional(v.string()),
+    mediaAssetIdsJson: v.optional(v.string()),
+    metricsJson: v.optional(v.string()),
+    /** Freshness stamp — metrics without one are a number with no date, which
+     *  is how dashboards start lying. */
+    metricsAsOf: v.optional(v.number()),
+    /** The provenance chain (§16.8.4): which draft, which idea, which format. */
+    draftId: v.optional(v.id("drafts")),
+    ideaId: v.optional(v.id("ideas")),
+    formatCardId: v.optional(v.string()),
+    /** Invariant 4: every publish carries one. */
+    idempotencyKey: v.string(),
+  })
+    .index("by_customer", ["customerId"])
+    .index("by_customer_and_publishedAt", ["customerId", "publishedAt"])
+    .index("by_idempotency_key", ["idempotencyKey"])
+    .searchIndex("search_snapshot_text", {
+      searchField: "snapshotText",
+      filterFields: ["customerId", "channel"],
+    }),
+
+  /** Every message in and out, including proactive. Both surfaces read this. */
+  messages: defineTable({
+    customerId: v.id("customers"),
+    direction: v.union(v.literal("in"), v.literal("out")),
+    surface: v.union(
+      v.literal("telegram"),
+      v.literal("web"),
+      v.literal("system")
+    ),
+    body: v.string(),
+    /** Invariant 6: every outbound message has one, so a retry or a double
+     *  trigger can't say the same thing twice. */
+    dedupeKey: v.optional(v.string()),
+    /** She started this one, rather than replying. */
+    proactive: v.optional(v.boolean()),
+    /** Groups a turn across the inbound message and everything it caused. */
+    turnId: v.optional(v.string()),
+    /** Invariant 5: at most one open question at a time — this marks it. */
+    awaitingAnswer: v.optional(v.boolean()),
+    ts: v.number(),
+  })
+    .index("by_customer", ["customerId"])
+    .index("by_customer_and_ts", ["customerId", "ts"])
+    .index("by_dedupe_key", ["dedupeKey"])
+    .index("by_customer_and_awaiting", ["customerId", "awaitingAnswer"]),
+
+  /**
+   * The work queue.
+   *
+   * Idempotency key, attempts, status, deadline — nothing fails silently
+   * (principle 5), and nothing runs twice on a retry.
+   */
+  jobs: defineTable({
+    /** Absent for fleet-wide work like the vendor smoke suite. */
+    customerId: v.optional(v.id("customers")),
+    kind: v.string(),
+    /** Claiming is keyed on this, so the same work enqueued twice runs once. */
+    idempotencyKey: v.string(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+      v.literal("dead")
+    ),
+    attempts: v.number(),
+    maxAttempts: v.number(),
+    payloadJson: v.optional(v.string()),
+    /** Backoff: not eligible to run before this. */
+    runAfter: v.number(),
+    /** Invariant 8: past this, a `running` job is reaped, not left hanging. */
+    deadlineAt: v.number(),
+    /** A named failure that can reach the user — never a silent drop. */
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_idempotency_key", ["idempotencyKey"])
+    .index("by_status_and_runAfter", ["status", "runAfter"])
+    .index("by_customer", ["customerId"])
+    .index("by_status_and_deadline", ["status", "deadlineAt"]),
+
+  /**
+   * SHARED ACROSS TENANTS, deliberately (§17.35.3).
+   *
+   * Trends, format cards, comment-mined ideas and benchmarks are identical for
+   * every customer in a niche, so paying for them per-tenant is paying N times
+   * for one answer. This is what makes the perception layer affordable, and it
+   * has to exist from the start — retrofitting a shared cache onto per-tenant
+   * rows is painful.
+   *
+   * Invariant 9 carve-out: because it is shared, it contains NO
+   * customer-identifying data. Nothing here may be traceable to one customer.
+   */
+  nicheCache: defineTable({
+    /** Hash of the niche descriptor — the sharing key. Never a customer id. */
+    nicheFingerprint: v.string(),
+    kind: v.string(),
+    payloadJson: v.string(),
+    fetchedAt: v.number(),
+    ttlSec: v.number(),
+    /** Which vendor call produced it, for cost attribution and invalidation. */
+    sourceKind: v.optional(v.string()),
+  })
+    .index("by_fingerprint_and_kind", ["nicheFingerprint", "kind"])
+    .index("by_kind_and_fetchedAt", ["kind", "fetchedAt"]),
+
   /**
    * Vendor smoke suite results (§18.0.5).
    *
