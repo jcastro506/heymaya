@@ -194,7 +194,6 @@ import type * as gtmMaya_zernioWebhook from "../gtmMaya/zernioWebhook.js";
 import type * as http from "../http.js";
 import type * as integrations_aggregators_unified_client from "../integrations/aggregators/unified/client.js";
 import type * as integrations_aggregators_unified_types from "../integrations/aggregators/unified/types.js";
-import type * as integrations_apify_twitterScraper from "../integrations/apify/twitterScraper.js";
 import type * as integrations_apollo_actions from "../integrations/apollo/actions.js";
 import type * as integrations_apollo_client from "../integrations/apollo/client.js";
 import type * as integrations_appStore_playScraper from "../integrations/appStore/playScraper.js";
@@ -524,7 +523,6 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "integrations/aggregators/unified/client": typeof integrations_aggregators_unified_client;
   "integrations/aggregators/unified/types": typeof integrations_aggregators_unified_types;
-  "integrations/apify/twitterScraper": typeof integrations_apify_twitterScraper;
   "integrations/apollo/actions": typeof integrations_apollo_actions;
   "integrations/apollo/client": typeof integrations_apollo_client;
   "integrations/appStore/playScraper": typeof integrations_appStore_playScraper;
