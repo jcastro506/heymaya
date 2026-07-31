@@ -196,6 +196,7 @@ import type * as lib_planFeatures from "../lib/planFeatures.js";
 import type * as lib_posthog from "../lib/posthog.js";
 import type * as lib_usageEvents from "../lib/usageEvents.js";
 import type * as lib_webhookSecret from "../lib/webhookSecret.js";
+import type * as maya_directives from "../maya/directives.js";
 import type * as maya_jobs from "../maya/jobs.js";
 import type * as maya_messages from "../maya/messages.js";
 import type * as maya_planFeatures from "../maya/planFeatures.js";
@@ -408,6 +409,7 @@ declare const fullApi: ApiFromModules<{
   "lib/posthog": typeof lib_posthog;
   "lib/usageEvents": typeof lib_usageEvents;
   "lib/webhookSecret": typeof lib_webhookSecret;
+  "maya/directives": typeof maya_directives;
   "maya/jobs": typeof maya_jobs;
   "maya/messages": typeof maya_messages;
   "maya/planFeatures": typeof maya_planFeatures;
