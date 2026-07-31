@@ -252,12 +252,21 @@ export const gatherFacts = internalQuery({
       (p) => p.publishedAt >= startOfToday
     ).length;
 
-    // Walk back day by day. Stops at the first day that HAD a placement, so
-    // an old quiet week doesn't inflate a current streak.
+    // Walk back day by day. Stops at the first day that HAD a placement, so an
+    // old quiet week doesn't inflate a current streak.
+    //
+    // It ALSO stops at the customer's own creation date, and that clamp is
+    // load-bearing: without it a brand-new account looks like seven days of
+    // silence on its first evening, because "no placements in the last week"
+    // and "failing for a week" are the same query. That opened a support
+    // thread for someone who signed up this morning — found by the
+    // day-in-the-life composition test, invisible to every unit test, since
+    // each piece was individually correct.
     let priorZeroDayStreak = 0;
     for (let back = 1; back <= 7; back += 1) {
       const dayStart = startOfToday - back * 86_400_000;
       const dayEnd = dayStart + 86_400_000;
+      if (dayEnd <= customer.createdAt) break;
       const had = placements.some(
         (p) => p.publishedAt >= dayStart && p.publishedAt < dayEnd
       );
