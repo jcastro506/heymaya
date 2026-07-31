@@ -3481,6 +3481,50 @@ prose can't be added anywhere. Luna's window ends that constraint outright.
 | `make-carousel` + set-level critic · `adapt-crosspost` |
 | `watch-formats` (transcripts + multimodal) · `ride-sounds` |
 | TikTok publish incl. rendered-preview consent |
+| ⭐ **Wrap Custom Templates — the primary video engine, currently NOT BUILT** (§7.6.5a) |
+| **Surface the silent v1 fallback** — no avatar picked must not quietly become a single-scene video (§7.6.5a) |
+
+#### 7.6.5a The Custom Templates gap — a COGS blocker, not a nice-to-have
+
+**§7.6.5 designates Custom Templates "the primary video engine". There is no
+wrapper for it.** Audited 2026-07-31 against `convex/integrations/creatify/`:
+18 endpoint functions exist, 14 are called, and none of them is Custom
+Templates. Every avatar video therefore takes the `lipsyncs_v2` path.
+
+| Path | 15s cost | Status |
+|---|---|---|
+| **Custom Template** | **~2.5 cr flat** | ⛔ not wrapped |
+| `lipsyncs_v2` (0.5 cr/sec) | 7.5 cr | ✅ what we actually use |
+| Ad Clone | 36 cr | ✅ wrapped, `AD_CLONE_CAP_WEIGHT = 4` |
+
+**This is why the COGS model doesn't reconcile.** §7.6.6's "~10 credits per
+customer per month → ~$1.50" assumes *"4 videos/mo, 15s, via Custom Templates
+≈ 2.5 cr each."* On the lipsync path those same 4 videos cost **30 credits →
+$4.53**, and API Pro supports ~66 customers instead of ~200. The plan math and
+the code disagree by 3×, and the code is what runs.
+
+**Two pieces of work:**
+
+1. **Wrap it.** Templates are authored in the Creatify dashboard (no API for
+   authoring — you read the template id out of the browser URL), but rendering
+   is an API call with variables. Build the ~5 masters once in our workspace:
+   hook-demo-CTA · talking-head-with-broll · screenshot-walkthrough ·
+   testimonial · trend-format. Then route there by default and keep
+   `lipsyncs_v2` for the cases templates can't express.
+2. **Kill the silent fallback.** `startUgcVideoJob` computes
+   `useV2 = wantsScenes && Boolean(overrideAvatar)`. With no avatar chosen it
+   drops to single-scene v1 with a provider default — the multi-scene sandwich
+   just doesn't happen, and nothing says so. Creatify does **not** auto-pick an
+   avatar; `getPersonasV2` is the roster and the model chooses. Either pick a
+   pinned avatar server-side, or report the degrade. Silent is not an option
+   (principle 5).
+
+**Also consider `videoSecondsPerMonth` over `videosPerMonth`.** Duration only
+costs money on the per-second paths (lipsync 0.5 cr/sec: 15s = 7.5 cr, 30s =
+15 cr — exactly 2×); Custom Templates and Ad Clone are flat. Budgeting in
+seconds prices the thing that actually varies, keeps 15s as a *default* rather
+than a wall, and stays consistent with budgets-never-booleans. 15s is also
+simply the format that performs on TikTok/Reels/Shorts.
 
 **Exit:** **daily TikTok for a week with zero generated renders.**
 **Tests:** set-coherence · no carbon-copy across channels · video-bytes pipeline (CDN → R2 → Gemini).
