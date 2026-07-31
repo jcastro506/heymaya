@@ -29,6 +29,20 @@ import {
 } from "../../billing/stripeClient";
 import { buildGtmPlanJson } from "../planGtm";
 
+/**
+ * Fake timers so convex-test's scheduler never fires. These tests assert that
+ * work was SCHEDULED (they query `_scheduled_functions`), never that it ran —
+ * so letting a real timer fire it after teardown only produced
+ * "Write outside of transaction" as an UNHANDLED rejection, which vitest
+ * counts as a suite error and exits 1 even with every test green.
+ */
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 const NOW = Date.UTC(2026, 5, 16, 12, 0, 0);
 const DAY = 24 * 60 * 60 * 1000;
 

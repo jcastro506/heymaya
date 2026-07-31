@@ -24,6 +24,20 @@ import schema from "../../schema";
 import { modules } from "../../../tests/_modules";
 import type { Id } from "../../_generated/dataModel";
 
+/**
+ * Fake timers so convex-test's scheduler never fires. These tests assert that
+ * work was SCHEDULED (they query `_scheduled_functions`), never that it ran —
+ * so letting a real timer fire it after teardown only produced
+ * "Write outside of transaction" as an UNHANDLED rejection, which vitest
+ * counts as a suite error and exits 1 even with every test green.
+ */
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,

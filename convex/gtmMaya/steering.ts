@@ -37,7 +37,7 @@
  *   4. Sibling-file — the CALLBACK_KIND "save_steering_directive" lane
  *      (inboundCallback.ts), the schema table (schema.ts), the http route
  *      (http.ts), and the maya-gtm-tools typed tool stay in lockstep.
- *   5. TODO grep — no unjustified TODOs.
+ *   5. TODO grep: every marker carries a sprint tag or a stated reason.
  */
 
 import { v } from "convex/values";

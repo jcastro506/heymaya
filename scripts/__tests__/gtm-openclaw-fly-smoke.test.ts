@@ -15,33 +15,63 @@ describe("gtm-openclaw-fly-smoke", () => {
     expect(fixture.image).toBe(
       "registry.fly.io/heymaya-openclaw@sha256:dd4fd47d15e641c726fc9e3914b2dbd967d07bbdc806e80e6b8743978b68deed"
     );
-    expect(fixture.workspaceFiles["AGENTS.md"]).toContain("Maya GTM");
-    expect(fixture.workspaceFiles["TOOLS.md"]).toContain(
-      "ScrapeCreators OpenClaw agent skill"
-    );
-    // BOOT.md starts launch work immediately; HEARTBEAT.md is now only
-    // the watchdog/recovery loop.
-    expect(fixture.workspaceFiles["BOOT.md"]).toContain("gateway:startup");
-    expect(fixture.workspaceFiles["BOOT.md"]).toContain("sessions_spawn");
-    expect(fixture.workspaceFiles["HEARTBEAT.md"]).toContain("launch-watchdog");
-    expect(fixture.workspaceFiles["HEARTBEAT.md"]).not.toContain("state-hello");
-    // Sprint 2.16u-fix8 — firewall removed; voice contract now in SOUL.md.
-    expect(fixture.workspaceFiles["HEARTBEAT.md"]).toContain("SOUL.md");
-    // Boot cron and heartbeat cron are GONE — only scheduled events
-    // (weekly review, monthly channel discovery) live in jobs.json.
-    expect(fixture.workspaceFiles["jobs.json"]).not.toContain("gtm_heartbeat");
-    expect(fixture.workspaceFiles["jobs.json"]).not.toContain(
-      "0001_gtm_first_research"
-    );
-    expect(fixture.workspaceFiles["jobs.json"]).toContain("gtm_weekly_review");
-    expect(fixture.workspaceFiles["jobs.json"]).toContain(
-      "gtm_channel_discovery"
-    );
-    // Sprint 2.16u-fix14 — kickstart cron RE-ADDED. Sprint 2.16u-fix15
-    // stripped its prompt to JUST the hello (was timing out at 362s when
-    // it tried to do hello + launch workflow + subagents in one turn).
-    expect(fixture.workspaceFiles["jobs.json"]).toContain("0001_kickstart");
-    expect(fixture.workspaceFiles["jobs.json"]).toContain("hello_sent_at");
+    // ── Test-design rule for this file ────────────────────────────────────
+    // ASSERT ON STRUCTURE AND STABLE IDENTIFIERS. NEVER ON GENERATED PROSE.
+    //
+    // This block previously substring-matched sentences inside AGENTS.md,
+    // BOOT.md and HEARTBEAT.md ("Maya GTM", "gateway:startup", "launch-watchdog",
+    // "ScrapeCreators OpenClaw agent skill"...). Those files are prompt prose that
+    // is edited most weeks, so every edit broke this smoke test for reasons that
+    // had nothing to do with the thing it exists to protect — that the workspace
+    // BUILDS, with every required file present and non-empty.
+    //
+    // Config identifiers (jobs.json cron ids), file presence, the gateway config
+    // shape, and the Fly command are all stable and stay asserted below.
+    const REQUIRED_WORKSPACE_FILES = [
+      "AGENTS.md",
+      "BOOT.md",
+      "HEARTBEAT.md",
+      "TOOLS.md",
+      "SOUL.md",
+      "jobs.json",
+      "skills/scrapecreators-api/SKILL.md",
+    ];
+    for (const name of REQUIRED_WORKSPACE_FILES) {
+      const contents = fixture.workspaceFiles[name];
+      expect(contents, `${name} missing from the built workspace`).toBeTypeOf(
+        "string"
+      );
+      // Catches the real failure mode: a generator that silently emits nothing.
+      expect(
+        (contents ?? "").length,
+        `${name} was emitted but is suspiciously small`
+      ).toBeGreaterThan(200);
+    }
+    // Cron ids are STABLE IDENTIFIERS (jobs.json ships them deterministically and
+    // the agent is forbidden from inventing crons at runtime), so asserting the
+    // exact set is safe — and it catches additions as well as removals, which
+    // substring checks never did. The previous assertions looked for a
+    // `gtm_weekly_review` / `gtm_channel_discovery` naming scheme that no longer
+    // exists, and for `hello_sent_at`, which is prose inside a job message.
+    const jobIds = (
+      JSON.parse(fixture.workspaceFiles["jobs.json"]) as {
+        jobs: Array<{ id: string }>;
+      }
+    ).jobs.map((j) => j.id);
+    expect(jobIds).toEqual([
+      "0001_kickstart",
+      "0002_foundation_resume_8m",
+      "0003_foundation_resume_16m",
+      "0004_foundation_resume_24m",
+      "0010_morning_brief",
+      "0011_midday_pulse",
+      "0012_evening_recap",
+      "0013_weekly_review",
+      "0014_monthly_reset",
+      "0015_dreaming",
+    ]);
+    // The heartbeat cron stays gone — re-adding it is the runaway-loop regression.
+    expect(jobIds).not.toContain("gtm_heartbeat");
     expect(
       fixture.workspaceFiles["skills/scrapecreators-api/SKILL.md"]
     ).toContain("ScrapeCreators");

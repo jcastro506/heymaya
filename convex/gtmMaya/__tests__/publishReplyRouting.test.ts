@@ -26,6 +26,20 @@ import { modules } from "../../../tests/_modules";
 import type { Id } from "../../_generated/dataModel";
 import { xEffectiveLength, X_CHAR_LIMIT } from "../publishEngine";
 
+/**
+ * Fake timers so convex-test's scheduler never fires. These tests assert that
+ * work was SCHEDULED (they query `_scheduled_functions`), never that it ran —
+ * so letting a real timer fire it after teardown only produced
+ * "Write outside of transaction" as an UNHANDLED rejection, which vitest
+ * counts as a suite error and exits 1 even with every test green.
+ */
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -313,7 +327,11 @@ describe("Zernio-native preflight (validate/post)", () => {
         });
       })
     );
-    const r = (await t.action(
+    // ZernioClient retries the failing preflight with a real setTimeout
+    // backoff. Under this file's fake timers that never resolves on its own,
+    // so drive the clock while the action is in flight rather than dropping
+    // back to real timers (which would let the scheduler fire post-teardown).
+    const pending = t.action(
       internal.gtmMaya.publishEngine.publishContentDirect,
       {
         agentId: a.agentId,
@@ -322,7 +340,10 @@ describe("Zernio-native preflight (validate/post)", () => {
         content: "a fine post",
         founderConfirmed: true,
       }
-    )) as { action: string; zernioPostId?: string };
+    );
+    // Let the backoff elapse on the fake clock, then take the result.
+    await vi.advanceTimersByTimeAsync(30_000);
+    const r = (await pending) as { action: string; zernioPostId?: string };
     expect(r.action).toBe("auto");
     expect(r.zernioPostId).toBe("li_1");
   });

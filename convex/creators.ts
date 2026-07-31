@@ -13,7 +13,7 @@ import { assertWebhookSecret } from "./lib/webhookSecret";
  * `accountType` (Sprint 0 service-product cleanup follow-up) — when set to
  * "service-business" the row is flagged for the service product onboarding.
  * The webhook bridge passes "service-business" by default when
- * `NEXT_PUBLIC_ENABLE_CREATOR_PRODUCT !== "true"`.
+ * Sprint 0: the creator product was deleted; this is no longer flag-gated.
  */
 export const createFromClerk = internalMutation({
   args: {

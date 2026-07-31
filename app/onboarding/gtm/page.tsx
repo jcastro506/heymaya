@@ -1039,7 +1039,7 @@ function GtmOnboardingBody() {
                         >
                           Open Maya in Telegram
                         </a>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        {/* eslint-disable-next-line @next/next/no-img-element -- reason: remote Telegram QR from an external host; next/image would need a domain allowlist for one decorative image */}
                         <img
                           alt="Scan to open Maya in Telegram"
                           width={140}

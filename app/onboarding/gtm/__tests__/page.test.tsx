@@ -16,6 +16,19 @@ vi.mock("convex/react", () => ({
   useConvexAuth: () => ({ isAuthenticated: true, isLoading: false }),
 }));
 
+// posthog-js touches `document` at module load, which does not exist under the
+// edge-runtime test environment. Mock our analytics wrapper so this stays a
+// hermetic render test rather than pulling in a browser SDK.
+vi.mock("@/lib/analytics", () => ({
+  track: () => {},
+  ANALYTICS_EVENTS: new Proxy({}, { get: (_t, k) => String(k) }),
+}));
+
+vi.mock("@clerk/nextjs", () => ({
+  useAuth: () => ({ isSignedIn: true, userId: "user_test" }),
+  SignOutButton: ({ children }: { children?: unknown }) => children ?? null,
+}));
+
 vi.mock("next/link", () => ({
   default: ({
     href,

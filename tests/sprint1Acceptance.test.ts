@@ -360,9 +360,22 @@ describe("Sprint 1 acceptance — TODO grep", () => {
         const trimmed = line.trim();
         const hasMarker = /\bTODO\b|\bFIXME\b|eslint-disable/.test(trimmed);
         if (!hasMarker) return;
+        // A justification may sit on the marker line itself, or on the comment
+        // line(s) directly above it — the convention already used across the
+        // repo, where the reason is too long to share a line with the rule name.
+        const precedingJustification = (): boolean => {
+          for (let back = 1; back <= 3 && idx - back >= 0; back += 1) {
+            const prev = lines[idx - back].trim();
+            if (prev === "") break;
+            if (/^(\/\/|\*|\{\/\*)/.test(prev) === false) break;
+            if (/\b(justified|justification|reason)\b\s*:/i.test(prev)) return true;
+          }
+          return false;
+        };
         const justified =
           /\bTODO\([sS]\d+\)/.test(trimmed) ||
-          /(TODO|FIXME|eslint-disable)[^:]*:\s*\S/.test(trimmed);
+          /(TODO|FIXME|eslint-disable)[^:]*:\s*\S/.test(trimmed) ||
+          precedingJustification();
         if (!justified) {
           violations.push(`${file.replace(REPO_ROOT, "")}:${idx + 1}  ${trimmed}`);
         }

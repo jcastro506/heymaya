@@ -31,7 +31,7 @@
  *      gtmHookCallbacks "log_message" kind (schema.ts), the CALLBACK_KIND
  *      validator (inboundCallback.ts), and the maya-gtm-tools log_message
  *      typed tool must all stay in lockstep.
- *   5. TODO grep — no unjustified TODOs.
+ *   5. TODO grep: every marker carries a sprint tag or a stated reason.
  */
 
 import { v } from "convex/values";
