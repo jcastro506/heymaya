@@ -32,9 +32,9 @@ describe("account deletion", () => {
     _setWebhookSecretForTests(null);
   });
 
-  it("purges creator, Creator Maya, business, growth, channel, and Stripe audit rows by Clerk id", async () => {
+  it("purges the creator, its GTM account-scoped rows, and the Stripe audit trail by Clerk id", async () => {
     const t = convexTest(schema, modules);
-    const { creatorId, businessId } = await seedFullAccount(t);
+    const { creatorId, agentId } = await seedFullAccount(t);
 
     await expect(
       t.mutation(api.accountDeletion.purgeByClerkUserIdPublic, {
@@ -51,169 +51,113 @@ describe("account deletion", () => {
     });
 
     expect(result.deleted).toBe(true);
+    // Both Fly sources are collected: the creator row's own app and the GTM
+    // agent's machine. Missing either one orphans a machine that keeps
+    // burning LLM spend with no owning row.
     expect(result.flyAppIds).toEqual(
-      expect.arrayContaining([
-        "maya-delete-creator",
-        "maya-delete-business",
-        "maya-delete-growth",
-        "maya-delete-deployment",
-      ])
+      expect.arrayContaining(["maya-delete-creator", "maya-delete-openclaw"])
     );
+
     await t.run(async (ctx) => {
       expect(await ctx.db.get(creatorId)).toBeNull();
-      expect(await ctx.db.get(businessId)).toBeNull();
+      expect(await ctx.db.get(agentId)).toBeNull();
+      // Account-scoped cascade.
       expect(
         await ctx.db
-          .query("creatorMayaV0TiktokAccounts")
-          .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
-          .collect()
-      ).toHaveLength(0);
-      expect(
-        await ctx.db
-          .query("businessPicture")
-          .withIndex("by_business", (q) => q.eq("businessId", businessId))
-          .collect()
-      ).toHaveLength(0);
-      expect(
-        await ctx.db
-          .query("growthAgents")
+          .query("gtmConnectionHealth")
           .withIndex("by_account", (q) => q.eq("accountId", creatorId))
           .collect()
       ).toHaveLength(0);
+      // mayaMessages is the private DM transcript — the 2026-07-15 orphan bug.
+      expect(
+        await ctx.db
+          .query("mayaMessages")
+          .withIndex("by_account", (q) => q.eq("accountId", creatorId))
+          .collect()
+      ).toHaveLength(0);
+      // Creator-scoped cascade.
+      expect(
+        await ctx.db
+          .query("aiCallLog")
+          .withIndex("by_creator", (q) => q.eq("creatorId", creatorId))
+          .collect()
+      ).toHaveLength(0);
+      // Stripe audit rows keyed by the deleted customer.
       expect(
         await ctx.db
           .query("stripeWebhookEvents")
           .withIndex("by_customer", (q) => q.eq("customerId", "cus_creator"))
           .collect()
       ).toHaveLength(0);
-      expect(
-        await ctx.db
-          .query("stripeWebhookEvents")
-          .withIndex("by_customer", (q) => q.eq("customerId", "cus_business"))
-          .collect()
-      ).toHaveLength(0);
     });
   });
 
-  it("requires an active iMessage channel and exact confirmation phrase", async () => {
+  it("unknown Clerk id is a no-op, not an error", async () => {
     const t = convexTest(schema, modules);
-    await seedFullAccount(t);
-
-    const request = await t.mutation(
-      api.accountDeletion.requestDeletionByPhonePublic,
-      {
-        secret: SECRET,
-        channel: "imessage",
-        phoneNumber: "+15555550123",
-      }
-    );
-    expect(request.ok).toBe(true);
-    expect(request.confirmationPhrase).toBe("DELETE MAYA");
-
-    const mismatch = await t.mutation(
-      api.accountDeletion.confirmDeletionByPhonePublic,
-      {
-        secret: SECRET,
-        channel: "imessage",
-        phoneNumber: "+15555550123",
-        confirmationText: "delete my account",
-      }
-    );
-    expect(mismatch.ok).toBe(false);
-    expect(mismatch.reason).toBe("confirmation-mismatch");
-
-    const confirmed = await t.mutation(
-      api.accountDeletion.confirmDeletionByPhonePublic,
-      {
-        secret: SECRET,
-        channel: "imessage",
-        phoneNumber: "+15555550123",
-        confirmationText: "DELETE MAYA",
-      }
-    );
-    expect(confirmed.ok).toBe(true);
-
-    const after = await t.run((ctx) =>
-      ctx.db
-        .query("creators")
-        .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", "user_delete"))
-        .first()
-    );
-    expect(after).toBeNull();
+    const result = await t.mutation(api.accountDeletion.purgeByClerkUserIdPublic, {
+      secret: SECRET,
+      clerkUserId: "user_does_not_exist",
+      source: "web",
+    });
+    expect(result.ok).toBe(true);
+    expect(result.deleted).toBe(false);
+    expect(result.flyAppIds).toEqual([]);
   });
 });
 
 async function seedFullAccount(t: ReturnType<typeof convexTest>): Promise<{
   creatorId: Id<"creators">;
-  businessId: Id<"businesses">;
+  agentId: Id<"gtmAgents">;
 }> {
   return await t.run(async (ctx) => {
     const creatorId = await ctx.db.insert("creators", {
       clerkUserId: "user_delete",
       email: "delete@example.com",
       primaryHandle: "deleteme",
-      phoneNumber: "+15555550123",
-      channelPreference: "imessage",
+      channelPreference: "web",
       timezone: "America/New_York",
       status: "active",
       plan: "manager",
       stripeCustomerId: "cus_creator",
       mayaFlyAppId: "maya-delete-creator",
-      accountType: "service-business",
+      accountType: "gtm-agent",
       createdAt: NOW,
     });
-    const businessId = await ctx.db.insert("businesses", {
+    const agentId = await ctx.db.insert("gtmAgents", {
       accountId: creatorId,
-      name: "Delete Co",
-      serviceTypes: ["marketing"],
-      planTier: "pro",
-      stripeCustomerId: "cus_business",
-      mayaFlyAppId: "maya-delete-business",
+      onboardingStep: "active",
+      channelPreference: "telegram",
+      timezone: "America/New_York",
+      openClawFlyAppId: "maya-delete-openclaw",
       createdAt: NOW,
       updatedAt: NOW,
     });
-    await ctx.db.patch(creatorId, { businessId });
-    await ctx.db.insert("creatorMayaV0TiktokAccounts", {
-      creatorId,
-      handle: "deleteme",
-      displayName: "Delete Me",
-      followerCount: 1000,
-      bio: "test",
-      verifiedAt: NOW,
-    });
-    await ctx.db.insert("pairedChannels", {
-      creatorId,
-      channel: "imessage",
-      phoneNumber: "+15555550123",
-      externalPairingId: "pair_delete",
-      externalIdentifier: "imessage:+15555550123",
-      status: "active",
-      requestedAt: NOW,
-      pairedAt: NOW,
-    });
-    await ctx.db.insert("businessPicture", {
-      businessId,
-      brandVoice: "direct",
-      recurringServicePatterns: [],
-      localCompetitors: [],
-      generatedAt: NOW,
-      model: "test",
-      sourceCitations: [],
-    });
-    await ctx.db.insert("growthAgents", {
+    await ctx.db.insert("gtmConnectionHealth", {
       accountId: creatorId,
-      onboardingStep: "complete",
-      rileyFlyAppId: "maya-delete-growth",
-      createdAt: NOW,
+      provider: "x",
+      status: "connected",
+      lastCheckedAt: NOW,
       updatedAt: NOW,
     });
-    await ctx.db.insert("creatorMayaV0OpenClawDeployments", {
+    await ctx.db.insert("mayaMessages", {
+      accountId: creatorId,
+      agentId,
+      role: "maya",
+      body: "private transcript row",
+      channel: "telegram",
+      turnId: "turn_delete_1",
+      ts: NOW,
+    });
+    await ctx.db.insert("aiCallLog", {
       creatorId,
-      mode: "production",
-      status: "deployed",
-      flyAppId: "maya-delete-deployment",
-      machineId: "machine-delete",
-      createdAt: NOW,
+      taskTag: "test",
+      model: "test-model",
+      thinkingBudget: "none",
+      inputTokens: 1,
+      outputTokens: 1,
+      costUsd: 0,
+      latencyMs: 1,
+      ts: NOW,
     });
     await ctx.db.insert("stripeWebhookEvents", {
       eventId: "evt_creator",
@@ -224,16 +168,7 @@ async function seedFullAccount(t: ReturnType<typeof convexTest>): Promise<{
       receivedAt: NOW,
       rawPayload: {},
     });
-    await ctx.db.insert("stripeWebhookEvents", {
-      eventId: "evt_business",
-      type: "customer.updated",
-      livemode: false,
-      status: "processed",
-      customerId: "cus_business",
-      receivedAt: NOW,
-      rawPayload: {},
-    });
-    return { creatorId, businessId };
+    return { creatorId, agentId };
   });
 }
 

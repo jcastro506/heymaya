@@ -853,7 +853,7 @@ describe("billing.webhook.handleSubscriptionDeleted", () => {
 });
 
 describe("billing.webhook.handleTrialWillEnd", () => {
-  it("logs to mayaActionLog with entryId=billing.trial-ending and outcome=ran", async () => {
+  it("logs to gtmAuditEvents with eventType=billing.trial-ending", async () => {
     const t = convexTest(schema, modules);
     const c = await insertCreator(t, {
       suffix: "trial_warn",
@@ -865,13 +865,14 @@ describe("billing.webhook.handleTrialWillEnd", () => {
     });
     const log = await t.run((ctx) =>
       ctx.db
-        .query("mayaActionLog")
-        .withIndex("by_creator", (q) => q.eq("creatorId", c))
+        .query("gtmAuditEvents")
+        .withIndex("by_account", (q) => q.eq("accountId", c))
         .collect()
     );
     expect(log).toHaveLength(1);
-    expect(log[0].entryId).toBe("billing.trial-ending");
-    expect(log[0].outcome).toBe("ran");
+    expect(log[0].eventType).toBe("billing.trial-ending");
+    expect(log[0].actor).toBe("system");
+    expect(log[0].severity).toBe("info");
   });
 
   it("unknown stripeCustomerId is a no-op (no log row, no error)", async () => {

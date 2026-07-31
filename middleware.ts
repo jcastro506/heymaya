@@ -35,8 +35,6 @@ const isPublic = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/clerk/webhook",
-  "/api/account/delete/request-from-imessage",
-  "/api/account/delete/from-imessage",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

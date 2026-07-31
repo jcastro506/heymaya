@@ -1,6 +1,0 @@
-{
-  "_comment": "Input is already on-voice — the skill returns unchanged: true with an empty diff. The model layer should detect this and return zero diffs, OR the orchestrating action can short-circuit on the second call via the idempotency cache (see script.ts).",
-  "draft": "your tuesday reel hit 47000 views — that is 2.1x your trailing average. today, post the wednesday hook draft from your library.",
-  "soulVoiceFingerprint": "lowercase only, em-dash heavy, no exclamation marks, conversational, contractions ok",
-  "toneSlider": "supportive"
-}
