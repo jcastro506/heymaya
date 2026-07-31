@@ -208,6 +208,7 @@ import type * as maya_planFeatures from "../maya/planFeatures.js";
 import type * as maya_preflight from "../maya/preflight.js";
 import type * as maya_publishDecision from "../maya/publishDecision.js";
 import type * as maya_quality from "../maya/quality.js";
+import type * as maya_scheduler from "../maya/scheduler.js";
 import type * as maya_voice from "../maya/voice.js";
 import type * as migrations_coachManagerPlanRename from "../migrations/coachManagerPlanRename.js";
 import type * as onboarding_gtm_deployMayaGtm from "../onboarding/gtm/deployMayaGtm.js";
@@ -428,6 +429,7 @@ declare const fullApi: ApiFromModules<{
   "maya/preflight": typeof maya_preflight;
   "maya/publishDecision": typeof maya_publishDecision;
   "maya/quality": typeof maya_quality;
+  "maya/scheduler": typeof maya_scheduler;
   "maya/voice": typeof maya_voice;
   "migrations/coachManagerPlanRename": typeof migrations_coachManagerPlanRename;
   "onboarding/gtm/deployMayaGtm": typeof onboarding_gtm_deployMayaGtm;

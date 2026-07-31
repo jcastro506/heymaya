@@ -3683,7 +3683,10 @@ export default defineSchema({
   })
     .index("by_customer", ["customerId"])
     .index("by_customer_and_ts", ["customerId", "ts"])
-    .index("by_dedupe_key", ["dedupeKey"])
+    // Dedupe is a PER-CUSTOMER guarantee. A global lookup on `dedupeKey`
+    // suppressed every customer's brief after the first one each day, because
+    // `brief:<date>` is identical across the fleet.
+    .index("by_customer_and_dedupe", ["customerId", "dedupeKey"])
     .index("by_customer_and_awaiting", ["customerId", "awaitingAnswer"]),
 
   /**
