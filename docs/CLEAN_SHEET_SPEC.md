@@ -3373,50 +3373,56 @@ A sprint is not complete until **all seven** hold:
 - Spend-ceiling test: a synthetic runaway throttles **that machine only**, with the other tenants unaffected
 - **Scale phases 1 and 2** (§17.36.3): burst-create 200, then thundering herd — ~$7 total
 
-### Sprint 2.5 — The Luna trial *(one flag, one week, one decision)*
+### Sprint 2.5 — Luna is the main brain · *watch these two failure shapes*
 
-**Why this is its own sprint and not a config change.** The main brain has been
-swapped for cost once already. On 2026-07-23 it went kimi-k2 → qwen3-235b for a
-near-identical saving; on 07-26 it was reverted after two live failures in 24
-hours, both judgment failures on the validation-critical path — it copied the
-hello few-shot's fictional product as the founder's pitch, and with a valid
-`eventId` in hand refused to call `confirm_event` and confabulated "Reddit has
-no API for direct posting." Neither was a price problem. A swap this cheap to
-make is exactly the kind that gets made carelessly, so it gets a gate.
+**Operator decision, 2026-07-31, taken with the qwen history in full view.** The
+main brain moved kimi-k2 → `openai/gpt-5.6-luna-pro`. This section is no longer
+a gate on shipping it; it's the watch list.
 
 **VERIFIED live OpenRouter pricing (`/api/v1/models`, 2026-07-31 — re-verify,
 never trust this table):**
 
-| Model | in $/M | out $/M | ctx |
-|---|---|---|---|
-| `moonshotai/kimi-k2-0905` (current main brain) | 0.60 | 2.50 | 262K |
-| **`openai/gpt-5.6-luna`** | **0.10** | **0.60** | **1.05M** |
-| `google/gemini-3-flash-preview` (was: judges) | 0.50 | 3.00 | 1.05M |
-| `openai/gpt-oss-120b` (workers) | 0.037 | 0.17 | 131K |
+| Model | in $/M | out $/M | ctx | Role |
+|---|---|---|---|---|
+| `moonshotai/kimi-k2-0905` | 0.60 | 2.50 | 262K | previous main brain |
+| **`openai/gpt-5.6-luna-pro`** | **0.10** | **0.60** | **1.05M** | **main brain** |
+| `openai/gpt-5.6-luna` | 0.10 | 0.60 | 1.05M | judges / router |
+| `openai/gpt-oss-120b` | 0.037 | 0.17 | 131K | workers — unchanged, Luna is ~3× MORE here |
 
-**Already done, no trial needed:** the judge/router tier moved Flash → Luna
-(5× cheaper both directions, same context, and OpenRouter describes Luna as
-built for "high-volume, latency-sensitive tasks such as chat, classification").
-**Workers stay on `gpt-oss-120b`** — Luna is ~3× MORE expensive there.
+`luna-pro` is the same underlying model as `luna`, served with
+`reasoning.mode: pro`, at an identical per-token price. For the brain that
+decides whether to publish, that trade is free on paper and better on judgment.
 
-**The trial itself:**
+⚠️ **The price is per token, and pro mode spends more of them** — reasoning is
+generated and billed as output. Do not read "6× cheaper input" as a 6× smaller
+bill. The honest claim until a week of ledger exists is *much cheaper per
+token, real saving unmeasured*.
+
+**Why this is a different bet from the qwen3-235b swap that was reverted after
+72 hours:** that was a cheap open-weight model, and its failures were
+literalism and confabulation on the validation-critical path. This is a
+frontier-family model in its reasoning mode. Same bet shape, materially
+different horse — but the failure modes to watch are **identical**:
+
+| # | The failure to watch for | What it looked like on qwen |
+|---|---|---|
+| 1 | **Few-shot bleed** — treating example content as fact | Copied the hello few-shot's fictional product and presented it as the founder's real pitch |
+| 2 | **Tool refusal + confabulation** on the publish path | With "already said post it → confirm_event NOW" verbatim in TOOLS.md and a valid `eventId` in hand, never called `confirm_event`; told the founder "Reddit has no API for direct posting" (false — live publish 07-24) and leaked `needs_confirm` |
 
 | Task |
 |---|
-| `MAYA_GTM_MODEL=openai/gpt-5.6-luna` on ONE dogfood agent. Zero code change — the env var already exists. |
-| Run a full week: onboarding fan-out, 24 heartbeats/day, cron turns, and at least one real approve→publish chain. |
-| **Replay the two qwen failures specifically** — the fictional-product pitch and the `confirm_event` refusal. Those are the known failure shapes; a model that survives them has cleared the actual bar. |
-| Watch the cost ledger against the ~$34/mo/customer main-brain baseline. |
-| Decide. Keep, or revert with one env var. |
+| Run a full week on a dogfood agent: onboarding fan-out, 24 heartbeats/day, cron turns, at least one real approve→publish chain. |
+| **Replay both failure shapes deliberately.** They are the bar, not a hypothetical. |
+| Watch the cost ledger against the ~$34/mo/customer main-brain baseline — and measure it, don't infer it from the price table. |
+| Watch voice quality on real drafts. Cheap-model tells (literalism, hedging, generic openers) are what the slop critic exists for, but the critic runs on Luna too now. |
 
-**Exit:** a week with no judgment failure on the validation-critical path, and
-a ledger showing the saving is real. **If either fails, revert and say so** —
-the $28/mo/customer is not worth a model that confabulates about publishing.
+**Exit:** a week with no judgment failure on the validation-critical path and a
+ledger showing the saving is real. **If either fails, revert and say so** —
+`MAYA_GTM_MODEL=moonshotai/kimi-k2-0905:exacto`, zero code change.
 
-**Secondary prize if it holds:** 1.05M context against kimi's 262K. The
-workspace prompt budget currently sits at **zero headroom** against a ~108.9k
-cap, which is why prose can't be added anywhere. Luna's window ends that
-constraint outright.
+**Secondary prize:** 1.05M context against kimi's 262K. The workspace prompt
+budget currently sits at **zero headroom** against a ~108.9k cap, which is why
+prose can't be added anywhere. Luna's window ends that constraint outright.
 
 ### Sprint 3 — X: post + reply · **the gamble**
 
