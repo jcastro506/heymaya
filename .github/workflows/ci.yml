@@ -1,0 +1,62 @@
+name: CI
+
+# Sprint 0. Before this existed, nothing ran the suite on push — the
+# definition of done said "full suite green" and nothing enforced it.
+#
+# Deliberately gates only the two long-lived release branches. `codex/*`
+# scratch branches stay fast and un-gated, matching vercel.json's deploy rules.
+
+on:
+  pull_request:
+    branches: [staging, main]
+  push:
+    branches: [staging, main]
+
+concurrency:
+  # A newer push to the same ref supersedes an in-flight run.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck + tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Typecheck first: it fails in seconds and its errors are far easier to
+      # read than a wall of downstream test failures caused by the same thing.
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Tests
+        run: npx vitest run --reporter=dot
+
+  # Lint is reported but NOT blocking. There are ~1,178 pre-existing violations
+  # in code untouched by Sprint 0; making this required today would mean either
+  # a red main or a rushed sweep. It runs so the number is visible and can be
+  # driven down deliberately — flip `continue-on-error` off once it reaches 0.
+  lint:
+    name: lint (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx eslint . --quiet
