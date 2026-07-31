@@ -335,11 +335,15 @@ describe("the nine tables, and only nine", () => {
    *   ✅ 6. Every outbound message has a dedupe key — `messages.send` takes it
    *         as a REQUIRED arg; tested in `messages.test.ts`.
    *
-   *   ⬜ 2. An approved draft publishes its SNAPSHOT, never a regeneration.
-   *   ⬜ 3. A directive is never mutated (the append-only WRITE PATH; the
-   *         shape is asserted above, the guarantee needs the mutation).
-   *   ⬜ 7. Exactly one function decides publish-or-hold.
+   *   ✅ 2. An approved draft publishes its SNAPSHOT — `publishDecision.decide`
+   *         returns the stored text; an edited draft publishes the edit.
+   *   ✅ 3. A directive is never mutated — `directives.append` supersedes by
+   *         patching only `active`/`supersededAt`, and a sibling-file scan
+   *         fails any `db.patch` in convex/maya that touches `verbatim`.
+   *   ✅ 7. Exactly one function decides publish-or-hold — and `HoldReason` is
+   *         a closed union whose membership is asserted.
    *
-   * The remaining three land with the publish path, in Sprint 3.
+   * All nine are now enforced. If a tenth is ever needed, it belongs in §3.4
+   * first and here second — the list is the contract, not the code.
    */
 });
