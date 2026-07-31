@@ -170,6 +170,47 @@ Verified against `docs.zernio.com/platforms/*`, 2026-07-29. **This corrects an a
 | Analytics | ✅ limited + account insights | ✅ rich + **demographics, follower history** | ✅ + **daily views, demographics** | ✅ full |
 | Notable extras | privacy levels · duet/stitch toggles · **AI disclosure flag** · custom thumbnail · draft mode | **collaborators** · user tags · ice breakers | playlists · visibility · custom thumbnail (long-form only) | polls · scheduled spaces |
 
+#### 2.15.05 ⚠️ LIVE CHECK, 2026-07-31 — the matrix above is still DOC-ONLY for 3 of 4 channels
+
+`/api/v1/accounts/health` on staging returns **two** connected accounts, and
+neither is a channel this product ships:
+
+| platform | status | canPost | canFetchAnalytics | tokenValid | issues |
+|---|---|---|---|---|---|
+| `reddit` | `warning` | true | true | true | "Token expired or expiring soon (auto-refresh pending)" |
+| `twitter` (= our `x`) | `warning` | true | true | true | same |
+
+**So TikTok, Instagram and YouTube capability is unverified against live
+Zernio.** The §2.15 table is audited from their docs and nothing more. Three of
+the four channels have never had an account connected, which means every
+capability claim for them — carousel limits, comment replies, DM support,
+Shorts auto-detection — is a documentation claim, not an observation.
+
+**Operator action to close this:** connect one throwaway account per channel
+(TikTok, Instagram, YouTube) and re-run. Until then, treat the matrix as a
+hypothesis. This is the same class of gap as the 14 `[shape-unverified-live]`
+wrappers, and the same fix: connect it, call it, record what came back.
+
+**A concrete mismatch already found.** Zernio's account status vocabulary is
+`healthy | warning | error | needsReconnect` (visible in the `summary` block).
+Our `channels.status` is `connected | dormant | disconnected | error` — there
+is **no `warning`**, and a warning account is exactly the interesting case: at
+the time of this check, the X account's `tokenExpiresAt` had already passed
+while Zernio still reported `tokenValid: true`, `needsReconnect: false`,
+`canPost: true`, because an auto-refresh was pending.
+
+Two things follow:
+
+1. **Do not derive token health from `tokenExpiresAt`.** A passed expiry with a
+   pending auto-refresh is normal, not broken. `needsReconnect` is the field
+   that means "the founder has to do something"; `canPost` is the field that
+   means "we can post right now". Trust those.
+2. **`warning` needs a home in our model.** Preflight currently treats only
+   `error`/`disconnected` as a token problem, so a `warning` account reads as
+   fully healthy. That's correct *today* — it can still post — but it means we
+   have no way to say "this will need reconnecting soon" before it becomes a
+   failed publish.
+
 #### 2.15.1 The consequence: TikTok is publish-only
 
 **"Answer everyone" — one of the four things that differentiates this product — does not work on TikTok.** Not through Zernio, not through anything: TikTok's own API exposes no comment read or write.
@@ -3481,6 +3522,50 @@ prose can't be added anywhere. Luna's window ends that constraint outright.
 | `make-carousel` + set-level critic · `adapt-crosspost` |
 | `watch-formats` (transcripts + multimodal) · `ride-sounds` |
 | TikTok publish incl. rendered-preview consent |
+| ⭐ **Wrap Custom Templates — the primary video engine, currently NOT BUILT** (§7.6.5a) |
+| **Surface the silent v1 fallback** — no avatar picked must not quietly become a single-scene video (§7.6.5a) |
+
+#### 7.6.5a The Custom Templates gap — a COGS blocker, not a nice-to-have
+
+**§7.6.5 designates Custom Templates "the primary video engine". There is no
+wrapper for it.** Audited 2026-07-31 against `convex/integrations/creatify/`:
+18 endpoint functions exist, 14 are called, and none of them is Custom
+Templates. Every avatar video therefore takes the `lipsyncs_v2` path.
+
+| Path | 15s cost | Status |
+|---|---|---|
+| **Custom Template** | **~2.5 cr flat** | ⛔ not wrapped |
+| `lipsyncs_v2` (0.5 cr/sec) | 7.5 cr | ✅ what we actually use |
+| Ad Clone | 36 cr | ✅ wrapped, `AD_CLONE_CAP_WEIGHT = 4` |
+
+**This is why the COGS model doesn't reconcile.** §7.6.6's "~10 credits per
+customer per month → ~$1.50" assumes *"4 videos/mo, 15s, via Custom Templates
+≈ 2.5 cr each."* On the lipsync path those same 4 videos cost **30 credits →
+$4.53**, and API Pro supports ~66 customers instead of ~200. The plan math and
+the code disagree by 3×, and the code is what runs.
+
+**Two pieces of work:**
+
+1. **Wrap it.** Templates are authored in the Creatify dashboard (no API for
+   authoring — you read the template id out of the browser URL), but rendering
+   is an API call with variables. Build the ~5 masters once in our workspace:
+   hook-demo-CTA · talking-head-with-broll · screenshot-walkthrough ·
+   testimonial · trend-format. Then route there by default and keep
+   `lipsyncs_v2` for the cases templates can't express.
+2. **Kill the silent fallback.** `startUgcVideoJob` computes
+   `useV2 = wantsScenes && Boolean(overrideAvatar)`. With no avatar chosen it
+   drops to single-scene v1 with a provider default — the multi-scene sandwich
+   just doesn't happen, and nothing says so. Creatify does **not** auto-pick an
+   avatar; `getPersonasV2` is the roster and the model chooses. Either pick a
+   pinned avatar server-side, or report the degrade. Silent is not an option
+   (principle 5).
+
+**Also consider `videoSecondsPerMonth` over `videosPerMonth`.** Duration only
+costs money on the per-second paths (lipsync 0.5 cr/sec: 15s = 7.5 cr, 30s =
+15 cr — exactly 2×); Custom Templates and Ad Clone are flat. Budgeting in
+seconds prices the thing that actually varies, keeps 15s as a *default* rather
+than a wall, and stays consistent with budgets-never-booleans. 15s is also
+simply the format that performs on TikTok/Reels/Shorts.
 
 **Exit:** **daily TikTok for a week with zero generated renders.**
 **Tests:** set-coherence · no carbon-copy across channels · video-bytes pipeline (CDN → R2 → Gemini).
