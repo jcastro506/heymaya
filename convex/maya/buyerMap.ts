@@ -169,8 +169,21 @@ export interface RankedComplaint {
   lastSeen: number;
 }
 
-/** Above this, two complaints are the same complaint said differently. */
-const COMPLAINT_CLUSTER_THRESHOLD = 0.45;
+/** Above this, two Jaccard-scored complaints are the same complaint. */
+export const JACCARD_CLUSTER_THRESHOLD = 0.45;
+
+/**
+ * How similar two complaints are, 0–1.
+ *
+ * Injectable because the default — word-overlap — has a known blind spot, and
+ * the fix costs a network call that this module must not depend on. See
+ * `embeddings.ts`: word overlap scores *"pricing is confusing"* against
+ * *"I can't work out what this would cost me"* at **0.07**, which is the same
+ * complaint counted twice as frequency-1 and therefore never surfaced. Since
+ * the ranked list IS the content plan, under-clustering is the expensive
+ * failure.
+ */
+export type SimilarityFn = (a: string, b: string) => number;
 
 /**
  * Cluster raw complaints and rank by frequency.
@@ -186,15 +199,16 @@ const COMPLAINT_CLUSTER_THRESHOLD = 0.45;
  *    founder as justification for what gets written.
  */
 export function rankComplaints(
-  sources: ReadonlyArray<ComplaintSource>
+  sources: ReadonlyArray<ComplaintSource>,
+  options: { similarityFn?: SimilarityFn; threshold?: number } = {}
 ): RankedComplaint[] {
+  const similarityFn = options.similarityFn ?? similarity;
+  const threshold = options.threshold ?? JACCARD_CLUSTER_THRESHOLD;
   const clusters: Array<{ members: ComplaintSource[] }> = [];
 
   for (const source of sources) {
     const hit = clusters.find((cluster) =>
-      cluster.members.some(
-        (m) => similarity(m.text, source.text) >= COMPLAINT_CLUSTER_THRESHOLD
-      )
+      cluster.members.some((m) => similarityFn(m.text, source.text) >= threshold)
     );
     if (hit) hit.members.push(source);
     else clusters.push({ members: [source] });
