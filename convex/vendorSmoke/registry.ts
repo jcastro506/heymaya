@@ -225,11 +225,71 @@ const twitterApiIoReachable: SmokeCheck = {
 };
 
 /* -------------------------------------------------------------------------- */
+/* Tier 2 — shape                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Creatify persona roster — the avatar picker's only input.
+ *
+ * Creatify does NOT choose an avatar for us. `lipsync_v2` scenes require an
+ * explicit `avatar_id`, so this list IS the selection mechanism: if its shape
+ * drifts, avatar choice silently degrades to whatever the fallback path does.
+ *
+ * Free GET, so it runs at tier 2 without spending. ⚠️ The schema below is
+ * docs-derived and has NEVER been checked against a live response — no
+ * Creatify key is configured. It will report `skipped` until one exists, then
+ * almost certainly report drift on the first real run. That's the intended
+ * loop, not a defect: guess, get corrected by reality, encode reality.
+ */
+const creatifyPersonas: SmokeCheck = {
+  vendor: "creatify",
+  tier: 2,
+  check: "creatify.personas_v2",
+  requiredEnv: ["CREATIFY_API_ID", "CREATIFY_API_KEY"],
+  estCostUsd: 0,
+  schema: z.array(
+    z.looseObject({
+      id: z.string(),
+    })
+  ),
+  laxReason:
+    "Persona records carry presentation metadata (thumbnails, tags, locale) " +
+    "that Creatify extends independently of anything we read. We consume the " +
+    "id; pinning the rest would cry wolf on cosmetic additions.",
+  run: async () => {
+    const { getPersonasV2 } = await import("../integrations/creatify/endpoints");
+    return await getPersonasV2({});
+  },
+};
+
+/**
+ * Voice roster — pins one consistent speaker across a multi-scene render.
+ * Free GET. Same unverified caveat as the persona roster above.
+ */
+const creatifyVoices: SmokeCheck = {
+  vendor: "creatify",
+  tier: 2,
+  check: "creatify.voices",
+  requiredEnv: ["CREATIFY_API_ID", "CREATIFY_API_KEY"],
+  estCostUsd: 0,
+  schema: z.array(z.looseObject({ id: z.string() })),
+  laxReason:
+    "Voice records carry preview URLs and locale metadata that change " +
+    "independently of the id we actually use to pin a speaker.",
+  run: async () => {
+    const { getVoices } = await import("../integrations/creatify/endpoints");
+    return await getVoices();
+  },
+};
+
+/* -------------------------------------------------------------------------- */
 /* The registry                                                                */
 /* -------------------------------------------------------------------------- */
 
 export const SMOKE_CHECKS: SmokeCheck[] = [
   scrapeCreatorsCredits,
+  creatifyPersonas,
+  creatifyVoices,
   zernioAccountsHealth,
   creatifyCredits,
   openRouterModels,
