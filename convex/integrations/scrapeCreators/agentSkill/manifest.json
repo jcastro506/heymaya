@@ -16,7 +16,14 @@
       "description": "Fetch a TikTok creator's profile (bio, follower count, verified status, bio link).",
       "method": "GET",
       "path": "/v1/tiktok/profile",
-      "params": [{ "name": "handle", "in": "query", "required": true, "type": "string" }]
+      "params": [
+        {
+          "name": "handle",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        }
+      ]
     },
     {
       "name": "tiktok_user_posts",
@@ -24,9 +31,24 @@
       "method": "GET",
       "path": "/v3/tiktok/profile/videos",
       "params": [
-        { "name": "handle", "in": "query", "required": true, "type": "string" },
-        { "name": "max_cursor", "in": "query", "required": false, "type": "string" },
-        { "name": "trim", "in": "query", "required": false, "type": "boolean" }
+        {
+          "name": "handle",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "max_cursor",
+          "in": "query",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "trim",
+          "in": "query",
+          "required": false,
+          "type": "boolean"
+        }
       ]
     },
     {
@@ -35,9 +57,24 @@
       "method": "GET",
       "path": "/v2/tiktok/video",
       "params": [
-        { "name": "url", "in": "query", "required": true, "type": "string" },
-        { "name": "get_transcript", "in": "query", "required": false, "type": "boolean" },
-        { "name": "trim", "in": "query", "required": false, "type": "boolean" }
+        {
+          "name": "url",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "get_transcript",
+          "in": "query",
+          "required": false,
+          "type": "boolean"
+        },
+        {
+          "name": "trim",
+          "in": "query",
+          "required": false,
+          "type": "boolean"
+        }
       ]
     },
     {
@@ -46,8 +83,18 @@
       "method": "GET",
       "path": "/v1/tiktok/video/comments",
       "params": [
-        { "name": "url", "in": "query", "required": true, "type": "string" },
-        { "name": "cursor", "in": "query", "required": false, "type": "string" }
+        {
+          "name": "url",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "cursor",
+          "in": "query",
+          "required": false,
+          "type": "string"
+        }
       ]
     },
     {
@@ -56,9 +103,24 @@
       "method": "GET",
       "path": "/v1/tiktok/video/transcript",
       "params": [
-        { "name": "url", "in": "query", "required": true, "type": "string" },
-        { "name": "lang", "in": "query", "required": false, "type": "string" },
-        { "name": "use_ai_as_fallback", "in": "query", "required": false, "type": "boolean" }
+        {
+          "name": "url",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "lang",
+          "in": "query",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "use_ai_as_fallback",
+          "in": "query",
+          "required": false,
+          "type": "boolean"
+        }
       ]
     },
     {
@@ -67,9 +129,24 @@
       "method": "GET",
       "path": "/v1/tiktok/comment/replies",
       "params": [
-        { "name": "url", "in": "query", "required": true, "type": "string" },
-        { "name": "comment_id", "in": "query", "required": true, "type": "string" },
-        { "name": "cursor", "in": "query", "required": false, "type": "string" }
+        {
+          "name": "url",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "comment_id",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "cursor",
+          "in": "query",
+          "required": false,
+          "type": "string"
+        }
       ]
     },
     {
@@ -77,14 +154,28 @@
       "description": "Fetch TikTok audience demographics for a public creator. Expensive endpoint; warn before use.",
       "method": "GET",
       "path": "/v1/tiktok/user/audience",
-      "params": [{ "name": "handle", "in": "query", "required": true, "type": "string" }]
+      "params": [
+        {
+          "name": "handle",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        }
+      ]
     },
     {
       "name": "tiktok_live",
       "description": "Fetch current TikTok live stream data for a public creator.",
       "method": "GET",
       "path": "/v1/tiktok/user/live",
-      "params": [{ "name": "handle", "in": "query", "required": true, "type": "string" }]
+      "params": [
+        {
+          "name": "handle",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        }
+      ]
     },
     {
       "name": "tiktok_following",
@@ -92,8 +183,18 @@
       "method": "GET",
       "path": "/v1/tiktok/user/following",
       "params": [
-        { "name": "handle", "in": "query", "required": true, "type": "string" },
-        { "name": "min_time", "in": "query", "required": false, "type": "string" }
+        {
+          "name": "handle",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "min_time",
+          "in": "query",
+          "required": false,
+          "type": "string"
+        }
       ]
     },
     {
@@ -102,8 +203,18 @@
       "method": "GET",
       "path": "/v1/tiktok/user/followers",
       "params": [
-        { "name": "handle", "in": "query", "required": true, "type": "string" },
-        { "name": "min_time", "in": "query", "required": false, "type": "string" }
+        {
+          "name": "handle",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "min_time",
+          "in": "query",
+          "required": false,
+          "type": "string"
+        }
       ]
     },
     {
@@ -111,7 +222,14 @@
       "description": "Search TikTok users by keyword.",
       "method": "GET",
       "path": "/v1/tiktok/search/users",
-      "params": [{ "name": "query", "in": "query", "required": true, "type": "string" }]
+      "params": [
+        {
+          "name": "query",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        }
+      ]
     },
     {
       "name": "tiktok_search_hashtag",
@@ -119,8 +237,18 @@
       "method": "GET",
       "path": "/v1/tiktok/search/hashtag",
       "params": [
-        { "name": "hashtag", "in": "query", "required": true, "type": "string" },
-        { "name": "cursor", "in": "query", "required": false, "type": "string" }
+        {
+          "name": "hashtag",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "cursor",
+          "in": "query",
+          "required": false,
+          "type": "string"
+        }
       ]
     },
     {
@@ -129,8 +257,18 @@
       "method": "GET",
       "path": "/v1/tiktok/search/keyword",
       "params": [
-        { "name": "query", "in": "query", "required": true, "type": "string" },
-        { "name": "cursor", "in": "query", "required": false, "type": "string" }
+        {
+          "name": "query",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "cursor",
+          "in": "query",
+          "required": false,
+          "type": "string"
+        }
       ]
     },
     {
@@ -138,14 +276,28 @@
       "description": "Search TikTok top results across videos and photo posts.",
       "method": "GET",
       "path": "/v1/tiktok/search/top",
-      "params": [{ "name": "query", "in": "query", "required": true, "type": "string" }]
+      "params": [
+        {
+          "name": "query",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        }
+      ]
     },
     {
       "name": "tiktok_trending_feed",
       "description": "Fetch TikTok trending feed for a region.",
       "method": "GET",
       "path": "/v1/tiktok/get-trending-feed",
-      "params": [{ "name": "region", "in": "query", "required": true, "type": "string" }]
+      "params": [
+        {
+          "name": "region",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        }
+      ]
     },
     {
       "name": "tiktok_popular_videos",
@@ -180,7 +332,14 @@
       "description": "Fetch TikTok song details by clip id.",
       "method": "GET",
       "path": "/v1/tiktok/song",
-      "params": [{ "name": "clipId", "in": "query", "required": true, "type": "string" }]
+      "params": [
+        {
+          "name": "clipId",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        }
+      ]
     },
     {
       "name": "tiktok_song_videos",
@@ -188,8 +347,18 @@
       "method": "GET",
       "path": "/v1/tiktok/song/videos",
       "params": [
-        { "name": "clipId", "in": "query", "required": true, "type": "string" },
-        { "name": "cursor", "in": "query", "required": false, "type": "string" }
+        {
+          "name": "clipId",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "cursor",
+          "in": "query",
+          "required": false,
+          "type": "string"
+        }
       ]
     },
     {
@@ -197,7 +366,14 @@
       "description": "Fetch an Instagram user's profile (bio, follower / following counts, verified, external URL).",
       "method": "GET",
       "path": "/v1/instagram/profile",
-      "params": [{ "name": "handle", "in": "query", "required": true, "type": "string" }]
+      "params": [
+        {
+          "name": "handle",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        }
+      ]
     },
     {
       "name": "instagram_user_posts",
@@ -205,8 +381,18 @@
       "method": "GET",
       "path": "/v1/instagram/user/posts",
       "params": [
-        { "name": "handle", "in": "query", "required": true, "type": "string" },
-        { "name": "limit", "in": "query", "required": false, "type": "number" }
+        {
+          "name": "handle",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "type": "number"
+        }
       ]
     },
     {
@@ -214,23 +400,47 @@
       "description": "Fetch a single Instagram post by shortcode.",
       "method": "GET",
       "path": "/v1/instagram/post",
-      "params": [{ "name": "shortcode", "in": "query", "required": true, "type": "string" }]
+      "params": [
+        {
+          "name": "shortcode",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        }
+      ]
     },
     {
       "name": "youtube_channel",
       "description": "Fetch a YouTube channel's profile (subscriber count, video count, description).",
       "method": "GET",
       "path": "/v1/youtube/channel",
-      "params": [{ "name": "handle", "in": "query", "required": true, "type": "string" }]
+      "params": [
+        {
+          "name": "handle",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        }
+      ]
     },
     {
       "name": "youtube_channel_videos",
       "description": "Fetch a YouTube channel's recent videos.",
       "method": "GET",
-      "path": "/v1/youtube/channel/videos",
+      "path": "/v1/youtube/channel-videos",
       "params": [
-        { "name": "handle", "in": "query", "required": true, "type": "string" },
-        { "name": "limit", "in": "query", "required": false, "type": "number" }
+        {
+          "name": "handle",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "type": "number"
+        }
       ]
     },
     {
@@ -238,14 +448,28 @@
       "description": "Fetch a single YouTube video by id.",
       "method": "GET",
       "path": "/v1/youtube/video",
-      "params": [{ "name": "id", "in": "query", "required": true, "type": "string" }]
+      "params": [
+        {
+          "name": "id",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        }
+      ]
     },
     {
       "name": "linkedin_profile",
       "description": "Fetch a LinkedIn profile (headline, summary, follower count, connection count).",
       "method": "GET",
       "path": "/v1/linkedin/profile",
-      "params": [{ "name": "handle", "in": "query", "required": true, "type": "string" }]
+      "params": [
+        {
+          "name": "handle",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        }
+      ]
     },
     {
       "name": "linkedin_posts",
@@ -253,8 +477,18 @@
       "method": "GET",
       "path": "/v1/linkedin/posts",
       "params": [
-        { "name": "handle", "in": "query", "required": true, "type": "string" },
-        { "name": "limit", "in": "query", "required": false, "type": "number" }
+        {
+          "name": "handle",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "type": "number"
+        }
       ]
     },
     {
@@ -262,16 +496,33 @@
       "description": "Fetch an X / Twitter profile (followers, bio, verified).",
       "method": "GET",
       "path": "/v1/twitter/profile",
-      "params": [{ "name": "handle", "in": "query", "required": true, "type": "string" }]
+      "params": [
+        {
+          "name": "handle",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        }
+      ]
     },
     {
       "name": "twitter_user_tweets",
       "description": "Fetch an X / Twitter user's recent tweets.",
       "method": "GET",
-      "path": "/v1/twitter/user/tweets",
+      "path": "/v1/twitter/user-tweets",
       "params": [
-        { "name": "handle", "in": "query", "required": true, "type": "string" },
-        { "name": "limit", "in": "query", "required": false, "type": "number" }
+        {
+          "name": "handle",
+          "in": "query",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "type": "number"
+        }
       ]
     }
   ]

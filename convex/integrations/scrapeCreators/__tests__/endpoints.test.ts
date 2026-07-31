@@ -367,6 +367,78 @@ describe("endpoints — TikTok", () => {
     expect(sent).toContain("handle=fitcreator99");
   });
 
+  // Sprint 1 — the other half of the buyer map (§5.0.0). `following` and
+  // `followers` together are what audience-overlap discovery is computed from.
+  it("followers parses the same envelope as following and hits /user/followers", async () => {
+    const { client, fetchImpl } = clientReturning({
+      followers: [
+        { uniqueId: "buyer_one", nickname: "Buyer One" },
+        { unique_id: "buyer_two", nickname: "Buyer Two" },
+      ],
+      total: 5120,
+    });
+    const out = await tiktok.followers("fitcreator99", { client });
+    expect(out.platform).toBe("tiktok");
+    expect(out.handle).toBe("fitcreator99");
+    expect(out.count).toBe(2);
+    expect(out.total).toBe(5120);
+    // Both the camelCase and snake_case handle spellings normalize.
+    expect(out.users.map((u) => u.handle)).toEqual(["buyer_one", "buyer_two"]);
+
+    const url = fetchImpl.mock.calls[0][0] as URL | string;
+    const sent = url instanceof URL ? url.toString() : String(url);
+    expect(sent).toContain("/v1/tiktok/user/followers");
+    expect(sent).toContain("handle=fitcreator99");
+  });
+
+  it("followers reads the list from any envelope variant upstream uses", async () => {
+    for (const payload of [
+      { users: [{ uniqueId: "a", nickname: "A" }] },
+      { userList: [{ uniqueId: "a", nickname: "A" }] },
+      { data: { followers: [{ uniqueId: "a", nickname: "A" }] } },
+    ]) {
+      const { client } = clientReturning(payload);
+      const out = await tiktok.followers("h", { client });
+      expect(out.count).toBe(1);
+      expect(out.users[0].handle).toBe("a");
+    }
+  });
+
+  it("followers on an account with none is an empty list, not a throw", async () => {
+    const { client } = clientReturning({ users: [], total: 0 });
+    const out = await tiktok.followers("nobody", { client });
+    expect(out.count).toBe(0);
+    expect(out.users).toEqual([]);
+  });
+
+  it("commentReplies passes url + comment_id and returns the raw envelope", async () => {
+    const { client, fetchImpl } = clientReturning({
+      comments: [{ text: "actually the opposite is true" }],
+    });
+    const out = await tiktok.commentReplies(
+      "https://www.tiktok.com/@h/video/123",
+      "comment_9",
+      { client }
+    );
+    expect(out.source).toBe("tiktok_comment_replies");
+
+    const url = fetchImpl.mock.calls[0][0] as URL | string;
+    const sent = url instanceof URL ? url.toString() : String(url);
+    expect(sent).toContain("/v1/tiktok/comment/replies");
+    expect(sent).toContain("comment_id=comment_9");
+  });
+
+  it("commentReplies only sends cursor when paging", async () => {
+    const { client, fetchImpl } = clientReturning({ comments: [] });
+    await tiktok.commentReplies("https://u", "c1", { client });
+    const first = String(fetchImpl.mock.calls[0][0]);
+    expect(first).not.toContain("cursor=");
+
+    const { client: c2, fetchImpl: f2 } = clientReturning({ comments: [] });
+    await tiktok.commentReplies("https://u", "c1", { client: c2, cursor: "20" });
+    expect(String(f2.mock.calls[0][0])).toContain("cursor=20");
+  });
+
   it("following tolerates the `data.users` envelope shape", async () => {
     const { client } = clientReturning({
       data: { users: [{ unique_id: "peer1" }] },
