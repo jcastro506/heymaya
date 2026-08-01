@@ -257,6 +257,7 @@ describe("drainJobs", () => {
       claimed: 0,
       succeeded: 0,
       failed: 0,
+      throttled: 0,
     });
   });
 
