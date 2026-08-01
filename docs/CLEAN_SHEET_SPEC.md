@@ -3439,6 +3439,49 @@ A sprint is not complete until **all seven** hold:
 >
 > **The blast radius is now much smaller than it was**, because everything that *only* read those tables has already been removed.
 
+### 18.0.6 STATUS — 2026-08-01
+
+Honest per-sprint state. The pattern to notice: **the deterministic half of
+almost every sprint is built and the agent half of none of them is.** That
+happened because each time the work reached the agent layer it couldn't be
+tested, so it moved to the next deterministic thing — defensible per decision,
+and cumulatively it left eight sprints half-open.
+
+**It also broke this plan's own sequencing rule.** Sprint 3 says "nothing past
+this ships until it holds", and Sprints 4, 5 and 6 were partly built anyway.
+The correction: close backward — Sprint 1, then 2, then 3 — and start nothing
+new until Sprint 3's gate holds.
+
+| Sprint | State | Built | Missing |
+|---|---|---|---|
+| **0 Reclaim** | ✅ done | both products deleted, schema 142→70, CI | — |
+| **1 Perception** | 🟡 ~85% | endpoints split per-platform · all P0 wrappers (params verified live) · X expansion · manifest 404s fixed · smoke suite tiers 1–2 green on 5 vendors · 5 of 14 Zernio wrappers verified | 9 Zernio wrappers (4 are writes) · Creatify + R2 keys · tier 3 |
+| **2 Spine** | 🟡 ~60% | data model · job queue · planFeatures · message log · agentVersion routing · **the watchers layer (Convex crons)** | Telegram transport · persistent session + volume · runtime shape · spend ceiling · thumbnails |
+| **2.5 Luna** | ✅ shipped | main brain + judges on gpt-5.6-luna | the week-long watch hasn't run |
+| **3 X — the gamble** | 🟡 ~50% | **the iron rule** · preflight (token, 280, duplicate) · brief + recap | skills + tools · rate limits · **the 7-day exit** |
+| **4 Brand** | 🟡 ~45% | buyer map · voice-from-edits · asset classifier · **the §6.4.6 spike, run** | learn-business/voice/brand · brand kit · media library |
+| **5 Perception live** | 🔴 ~10% | complaint→content · quality gates | the six sweeps · Screen model · idea bank · plan-day |
+| **6 Memory + liveness** | 🟡 ~65% | directive ledger · three commands · **liveness contract + sweep + fleet correlation** | directive compiler → server gates · balance circuit breakers |
+| **7–12** | 🔴 — | — | not started |
+
+**Three exit criteria are the real gates, and all three need a running agent:**
+
+- Sprint 2 — *"you can text her and she answers from rows, across a redeploy"*
+- Sprint 3 — *"a placement a day for 7 straight days"* (also 7 days of calendar)
+- Sprint 6 — *"a directive survives a redeploy and a deliberate model swap"*
+
+All three converge on the **OpenClaw pack for `convex/maya`** — workspace
+bundle, tools, wake protocol. That is the single missing structural piece.
+
+**⚠️ Sprint 1's exit criterion is unreachable as written.** It requires "every
+one of the six sweeps runs against real APIs", and the six sweeps are Sprint 5
+work. Amend it to: *every wrapped endpoint returns parsed rows and tier 2 is
+green.*
+
+**Operator-blocked, precisely:** Creatify and R2 keys (two vendors unverifiable)
+· one throwaway social account (tier-3 smoke + the 4 Zernio write wrappers) ·
+one deployed machine (persistent session, cold-start latency, redeploy tests).
+
 ### Sprint 0 — Reclaim · *no features, nothing user-visible*
 
 | Task |
