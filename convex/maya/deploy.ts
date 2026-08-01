@@ -232,6 +232,142 @@ function safeJson(raw: string | undefined): Record<string, unknown> {
   }
 }
 
+export const recordMachine = internalMutation({
+  args: {
+    customerId: v.id("customers"),
+    flyAppName: v.string(),
+    flyMachineId: v.string(),
+  },
+  handler: async (ctx, args): Promise<null> => {
+    await ctx.db.patch(args.customerId, {
+      flyAppName: args.flyAppName,
+      flyMachineId: args.flyMachineId,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/**
+ * Deploy one customer's machine.
+ *
+ * Deliberately thin. Every step here is an external call, so none of it can be
+ * meaningfully unit-tested — which is an argument for keeping the *judgment* out
+ * of it, not for skipping it. All the decidable parts (the machine shape, the
+ * credential, the workspace) are pure functions tested elsewhere; this is the
+ * order they happen in.
+ *
+ * **The deploy is the test.** Nothing below has run against Fly.
+ *
+ * Ordering is not arbitrary:
+ * - the token is minted and STORED before the machine exists, so a machine can
+ *   never boot holding a credential the server doesn't recognise;
+ * - the volume is created before the machine, because a machine referencing a
+ *   missing volume fails to start rather than starting without persistence —
+ *   the loud failure is the one you want;
+ * - secrets are set before create, so the first boot has them.
+ */
+export const deployMachine = internalAction({
+  args: {
+    customerId: v.id("customers"),
+    image: v.string(),
+    region: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<
+    { ok: true; appName: string; machineId: string } | { ok: false; error: string }
+  > => {
+    const workspace = await ctx.runAction(internal.maya.deploy.workspaceFor, {
+      customerId: args.customerId,
+    });
+    if (!workspace) return { ok: false, error: "no such customer" };
+
+    const openrouterKey = process.env.OPENROUTER_API_KEY;
+    if (!openrouterKey) {
+      return { ok: false, error: "OPENROUTER_API_KEY is not configured" };
+    }
+    const siteUrl = process.env.CONVEX_SITE_URL;
+    if (!siteUrl) {
+      return { ok: false, error: "CONVEX_SITE_URL is not configured" };
+    }
+
+    const { FlyClient } = await import("../lib/flyClient");
+    const fly = new FlyClient();
+    const appName = `maya-${args.customerId.toLowerCase().slice(-12)}`;
+
+    try {
+      await fly.createApp({ appName });
+    } catch (error) {
+      // Find-or-create: an existing app is the normal case on redeploy, and
+      // treating it as an error would make deploys one-shot.
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/already|taken|exists/i.test(message)) {
+        return { ok: false, error: `could not create the app: ${message}` };
+      }
+    }
+
+    try {
+      await fly.findOrCreateVolume(appName, {
+        name: "maya_data",
+        sizeGb: VOLUME_SIZE_GB,
+        region: args.region,
+      });
+
+      // Minted and stored BEFORE the machine exists. A machine holding a
+      // credential the server doesn't recognise would fail every tool call
+      // with a 401 that looks like a code bug rather than a deploy ordering
+      // bug.
+      const token = generateAgentToken();
+      const stored = await ctx.runMutation(
+        internal.maya.deploy.storeAgentTokenHash,
+        { customerId: args.customerId, tokenHash: await hashToken(token) }
+      );
+      if (!stored.stored) return { ok: false, error: "customer vanished mid-deploy" };
+
+      await fly.setAppSecrets(appName, {
+        MAYA_AGENT_TOKEN: token,
+        OPENROUTER_API_KEY: openrouterKey,
+      });
+
+      const config = buildMachineConfig({
+        image: args.image,
+        customerId: args.customerId,
+        publicEnv: { CONVEX_SITE_URL: siteUrl },
+      });
+
+      const machine = await fly.createMachine({
+        appName,
+        name: appName,
+        region: args.region,
+        config: {
+          ...config,
+          files: Object.entries(workspace.files).map(([path, body]) => ({
+            guest_path: `/workspace/${path}`,
+            raw_value: btoa(unescape(encodeURIComponent(body))),
+          })),
+        },
+      });
+
+      await ctx.runMutation(internal.maya.deploy.recordMachine, {
+        customerId: args.customerId,
+        flyAppName: appName,
+        flyMachineId: machine.id,
+      });
+
+      return { ok: true, appName, machineId: machine.id };
+    } catch (error) {
+      // Named, never silent. A half-deployed machine that reports success is
+      // how you get a founder texting a thing that isn't there.
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  },
+});
+
 /** Assemble the workspace for one customer from their rows. */
 export const workspaceFor = internalAction({
   args: { customerId: v.id("customers") },
