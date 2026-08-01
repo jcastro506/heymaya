@@ -246,5 +246,24 @@ export const instagram = {
     return rawResult("instagram_user_reels", query, raw);
   },
 
+  /**
+   * Reels using a given audio track — the sound engine's input (§5.4).
+   *
+   * VERIFIED LIVE 2026-08-01. Takes `audio_id`; the live error is explicit
+   * ("You must provide an audio_id"). `/v1/instagram/audio/reels` is an alias
+   * with identical behaviour and shape; this uses the path the spec names.
+   */
+  async songReels(
+    audioId: string,
+    deps?: EndpointDeps
+  ): Promise<RawScrapeCreatorsResult> {
+    const query = { audio_id: audioId };
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/instagram/song/reels",
+      { query }
+    );
+    return rawResult("instagram_song_reels", query, raw);
+  },
+
 };
 
