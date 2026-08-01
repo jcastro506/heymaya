@@ -200,6 +200,71 @@ export async function sendTelegramMessage(
 }
 
 /**
+ * Show the typing indicator (§17.36.2).
+ *
+ * ## Why one small call is load-bearing
+ *
+ * The runtime architecture is *"Convex is the always-warm front door, Fly is
+ * the cold-startable brain"* — a machine that auto-stops when idle and wakes on
+ * demand. That is a **10× cost difference** at 200 customers ($100–400/mo
+ * against $1,400–3,000), and it is only viable because a webhook can wake the
+ * machine on the ~6–15 occasions a day she actually thinks.
+ *
+ * Its cost is latency: an OpenClaw boot with a workspace is plausibly 10–30s.
+ * For a webhook-driven comment reply, irrelevant. **For a founder texting her,
+ * it reads as broken** — and a founder who thinks she's broken is a churn
+ * event, not a patient user.
+ *
+ * This call is what covers that gap. The webhook hits Convex, Convex shows
+ * typing *immediately*, then wakes the machine. The founder sees the most
+ * ordinary thing in a messenger and the cold start disappears behind it.
+ *
+ * So the honest framing: without this, the auto-stop architecture doesn't work
+ * as designed and the fallback is always-on at ten times the price. It is
+ * thirty lines holding up the largest cost line in the model.
+ *
+ * ## Fire-and-forget, deliberately
+ *
+ * Never awaited on the critical path and never retried. The indicator is a
+ * courtesy — if it fails, the founder waits a beat longer, which is strictly
+ * better than delaying the actual wake to retry a cosmetic call.
+ *
+ * Telegram clears it after ~5s or when a message arrives, so a slow boot needs
+ * it re-sent rather than sent once.
+ */
+export async function sendTelegramChatAction(
+  identity: TelegramBotIdentity,
+  args: { chatId: string; action?: "typing" | "upload_photo" | "upload_video" },
+  fetchImpl: typeof fetch = fetch
+): Promise<TelegramApiResult<true>> {
+  try {
+    const res = await fetchImpl(apiUrl(identity.token, "sendChatAction"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: args.chatId,
+        action: args.action ?? "typing",
+      }),
+    });
+    if (!res.ok) {
+      return {
+        ok: false,
+        description: `HTTP ${res.status} ${res.statusText}`,
+        errorCode: res.status,
+      };
+    }
+    return (await res.json()) as TelegramApiResult<true>;
+  } catch (error) {
+    // Swallowed to a result rather than thrown: a network blip on a cosmetic
+    // call must never take down the wake path it exists to decorate.
+    return {
+      ok: false,
+      description: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
  * Set the bot's webhook URL. Idempotent. Called once per bot per
  * environment when the operator runs `npm run telegram:set-webhook`.
  */

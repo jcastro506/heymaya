@@ -166,6 +166,79 @@ export const undelivered = internalQuery({
 /* Inbound                                                                     */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Show typing, immediately, before anything slow happens (§17.36.2).
+ *
+ * The machine auto-stops when idle, so a founder's text can land on a cold
+ * machine and wait 10–30s for a boot. That silence is the difference between
+ * "she's thinking" and "she's broken", and the second one is a churn event.
+ *
+ * Best-effort by construction: never throws, never retried, and the caller
+ * never depends on its result. If the indicator fails, the founder waits a beat
+ * longer — strictly better than delaying the actual wake to retry a cosmetic
+ * call.
+ */
+export const showTyping = internalAction({
+  args: { chatId: v.string() },
+  handler: async (_ctx, args): Promise<{ shown: boolean }> => {
+    try {
+      const { resolveTelegramBotIdentity, sendTelegramChatAction } = await import(
+        "../integrations/telegram/client"
+      );
+      const identity = resolveTelegramBotIdentity({});
+      if (!identity) return { shown: false };
+      const result = await sendTelegramChatAction(identity, {
+        chatId: args.chatId,
+      });
+      return { shown: result.ok };
+    } catch {
+      return { shown: false };
+    }
+  },
+});
+
+/**
+ * Handle one inbound text: record it, then wake the machine.
+ *
+ * Runs *after* the typing indicator, deliberately. The whole cold-start design
+ * is that the founder sees the most ordinary thing in a messenger while the
+ * slow part happens behind it — reversing the order shows an indicator that
+ * arrives after the reply, which is worse than none.
+ *
+ * The wake is a job rather than an inline call so a machine that fails to boot
+ * produces a retry and then a visible dead-letter, not a message that quietly
+ * went nowhere.
+ */
+export const handleInbound = internalAction({
+  args: { chatId: v.string(), text: v.string(), ts: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ recorded: boolean; reason?: string }> => {
+    const recorded = await ctx.runMutation(
+      internal.maya.telegram.receiveInbound,
+      { chatId: args.chatId, text: args.text, ts: args.ts }
+    );
+    if (!recorded.recorded) return recorded;
+
+    const customerId = await ctx.runQuery(
+      internal.maya.telegram.customerByChatId,
+      { chatId: args.chatId }
+    );
+    if (!customerId) return { recorded: true, reason: "no customer to wake" };
+
+    await ctx.runMutation(internal.maya.jobs.enqueue, {
+      kind: "wake_agent",
+      // One wake per inbound message. Two texts in a row are two wakes; the
+      // warm window (§17.36.2) means the second costs nothing anyway.
+      idempotencyKey: `wake:${customerId}:${args.ts ?? Date.now()}`,
+      customerId,
+      payloadJson: JSON.stringify({ reason: "inbound_message" }),
+    });
+    return { recorded: true };
+  },
+});
+
 export const customerByChatId = internalQuery({
   args: { chatId: v.string() },
   handler: async (ctx, args): Promise<Id<"customers"> | null> => {
