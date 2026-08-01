@@ -157,6 +157,101 @@ export function evaluate(input: LivenessInput): Breach[] {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Fleet correlation — one incident, not N                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Above this share of the checked fleet breaching the SAME way, it is one
+ * incident with one cause, not many customers each having a bad day.
+ */
+export const FLEET_CORRELATION_THRESHOLD = 0.5;
+
+/**
+ * Below this many checked accounts, correlation is meaningless.
+ *
+ * A fleet of one where that one breaches is 100% correlated by arithmetic and
+ * zero percent an incident — it's one customer's bad day, and collapsing it
+ * would hide the only signal there is. Early on, when the fleet IS small, that
+ * distinction is the whole operator surface.
+ */
+export const FLEET_CORRELATION_MIN_ACCOUNTS = 5;
+
+export interface FleetVerdict {
+  correlated: boolean;
+  /** The breach kind shared across the fleet, when there is one. */
+  dominantKind?: BreachKind;
+  affected: number;
+  checked: number;
+  detail: string;
+}
+
+/**
+ * Decide whether a set of per-customer breaches is really one fleet incident.
+ *
+ * Why this exists: a vendor outage makes every customer breach identically. At
+ * 200 customers that's 200 support threads and 4,800 error lines a day for a
+ * single root cause — an alert storm precisely when something big is wrong,
+ * which is when the operator surface most needs to be readable.
+ *
+ * The per-customer rows are still written; they're the record, and each
+ * founder's recap still tells them the truth. What changes is the ESCALATION:
+ * one fleet incident instead of N individual ones.
+ */
+export function correlateFleet(
+  perCustomer: ReadonlyArray<{ breaches: ReadonlyArray<Breach> }>,
+  checked: number
+): FleetVerdict {
+  const affected = perCustomer.filter((c) => c.breaches.length > 0).length;
+  if (checked < FLEET_CORRELATION_MIN_ACCOUNTS || affected === 0) {
+    return {
+      correlated: false,
+      affected,
+      checked,
+      detail:
+        affected === 0
+          ? "no breaches"
+          : `${affected} of ${checked} affected — too few accounts to call it a fleet incident`,
+    };
+  }
+
+  const counts = new Map<BreachKind, number>();
+  for (const { breaches } of perCustomer) {
+    // One vote per customer per kind, so a customer breaching three ways
+    // can't outweigh three customers breaching one way.
+    for (const kind of new Set(breaches.map((b) => b.kind))) {
+      counts.set(kind, (counts.get(kind) ?? 0) + 1);
+    }
+  }
+
+  let dominantKind: BreachKind | undefined;
+  let dominantCount = 0;
+  for (const [kind, count] of counts) {
+    if (count > dominantCount) {
+      dominantKind = kind;
+      dominantCount = count;
+    }
+  }
+
+  const share = dominantCount / checked;
+  if (share < FLEET_CORRELATION_THRESHOLD) {
+    return {
+      correlated: false,
+      affected,
+      checked,
+      detail: `${affected} of ${checked} accounts affected, no single shared cause`,
+    };
+  }
+
+  return {
+    correlated: true,
+    dominantKind,
+    affected: dominantCount,
+    checked,
+    detail: `${dominantCount} of ${checked} accounts hit "${dominantKind}" in the same sweep — treating this as one incident, not ${dominantCount}`,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
 /* Fleet-wide vendor balances                                                  */
 /* -------------------------------------------------------------------------- */
 

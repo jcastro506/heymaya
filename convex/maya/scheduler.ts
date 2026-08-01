@@ -45,7 +45,7 @@ import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import { evaluate } from "./liveness";
+import { correlateFleet, evaluate, type Breach } from "./liveness";
 
 /* -------------------------------------------------------------------------- */
 /* Who the loop runs for                                                       */
@@ -269,6 +269,8 @@ export const recordBreaches = internalMutation({
     breaches: v.array(
       v.object({ kind: v.string(), action: v.string(), detail: v.string() })
     ),
+    /** True when this breach is one of many sharing a single root cause. */
+    fleetIncident: v.optional(v.boolean()),
     now: v.number(),
   },
   handler: async (ctx, args): Promise<{ recorded: number }> => {
@@ -281,7 +283,10 @@ export const recordBreaches = internalMutation({
         eventType: `liveness.${breach.kind}`,
         severity: breach.action === "open_support_thread" ? "error" : "warn",
         message: breach.detail,
-        metadata: { action: breach.action },
+        metadata: {
+          action: breach.action,
+          ...(args.fleetIncident ? { fleetIncident: true } : {}),
+        },
         createdAt: args.now,
       });
     }
@@ -301,39 +306,71 @@ export const livenessSweep = internalAction({
   handler: async (
     ctx,
     args
-  ): Promise<{ checked: number; breached: number }> => {
+  ): Promise<{ checked: number; breached: number; fleetIncident: boolean }> => {
     const now = args.now ?? Date.now();
     const customerIds = await ctx.runQuery(
       internal.maya.scheduler.activeV2Customers,
       {}
     );
 
-    let breached = 0;
+    const perCustomer: Array<{
+      customerId: (typeof customerIds)[number];
+      breaches: Breach[];
+    }> = [];
+
     for (const customerId of customerIds) {
       const facts = await ctx.runQuery(internal.maya.liveness.gatherFacts, {
         customerId,
         now,
       });
       if (!facts) continue;
-      const breaches = evaluate(facts);
-      if (breaches.length === 0) continue;
+      perCustomer.push({ customerId, breaches: evaluate(facts) });
+    }
 
+    // Is this many bad days, or one incident? A vendor outage makes every
+    // customer breach identically, and 200 support threads for one root cause
+    // buries the signal exactly when it matters most.
+    const fleet = correlateFleet(perCustomer, perCustomer.length);
+
+    let breached = 0;
+    for (const { customerId, breaches } of perCustomer) {
+      if (breaches.length === 0) continue;
       breached += 1;
+
+      // The per-customer rows are still the record — each founder's recap
+      // still tells them the truth. Only the ESCALATION is collapsed.
       await ctx.runMutation(internal.maya.scheduler.recordBreaches, {
         customerId,
+        // The original action is preserved — overwriting it would erase the
+        // severity signal (a support-thread breach is still an error even when
+        // it's one of many). Correlation is recorded alongside it.
         breaches: breaches.map((b) => ({
           kind: b.kind,
           action: b.action,
           detail: b.detail,
         })),
+        fleetIncident: fleet.correlated,
         now,
       });
-      console.error(
-        `[maya.liveness] ${customerId}: ${breaches
-          .map((b) => `${b.kind} → ${b.action}`)
-          .join(", ")}`
-      );
+
+      if (!fleet.correlated) {
+        console.error(
+          `[maya.liveness] ${customerId}: ${breaches
+            .map((b) => `${b.kind} → ${b.action}`)
+            .join(", ")}`
+        );
+      }
     }
-    return { checked: customerIds.length, breached };
+
+    // One line, one incident.
+    if (fleet.correlated) {
+      console.error(`[maya.liveness] FLEET INCIDENT — ${fleet.detail}`);
+    }
+
+    return {
+      checked: customerIds.length,
+      breached,
+      fleetIncident: fleet.correlated,
+    };
   },
 });

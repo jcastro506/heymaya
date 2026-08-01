@@ -6,6 +6,9 @@ import { modules } from "../../../tests/_modules";
 import type { Id } from "../../_generated/dataModel";
 import {
   checkBalance,
+  correlateFleet,
+  FLEET_CORRELATION_MIN_ACCOUNTS,
+  FLEET_CORRELATION_THRESHOLD,
   CREDIT_RESERVES,
   evaluate,
   type LivenessInput,
@@ -371,5 +374,97 @@ describe("gatherFacts — reads the world, judges nothing", () => {
     const streak = breaches.find((b) => b.kind === "zero_day_streak");
     expect(streak?.action).toBe("open_support_thread");
     expect(streak?.detail).toMatch(/your X token expired/);
+  });
+});
+
+describe("correlateFleet — one incident, not N", () => {
+  const breaching = (kind: string) => ({
+    breaches: [{ kind, action: "diagnose_and_report", detail: "d" }] as never,
+  });
+  const healthy = { breaches: [] as never };
+
+  it("a vendor outage is ONE incident, however many customers it hits", () => {
+    // 200 support threads for one root cause is an alert storm precisely when
+    // something big is wrong — which is when the operator surface most needs
+    // to stay readable.
+    const fleet = Array.from({ length: 200 }, () =>
+      breaching("zero_placements_today")
+    );
+    const verdict = correlateFleet(fleet, 200);
+    expect(verdict.correlated).toBe(true);
+    expect(verdict.dominantKind).toBe("zero_placements_today");
+    expect(verdict.detail).toMatch(/one incident, not 200/);
+  });
+
+  it("a handful of unrelated bad days is NOT correlated", () => {
+    // Three customers with real individual problems must each get their own
+    // escalation. Collapsing those would hide three genuine incidents.
+    const fleet = [
+      ...Array.from({ length: 197 }, () => healthy),
+      breaching("zero_placements_today"),
+      breaching("brief_missed"),
+      breaching("recap_missed"),
+    ];
+    const verdict = correlateFleet(fleet, 200);
+    expect(verdict.correlated).toBe(false);
+    expect(verdict.detail).toMatch(/no single shared cause/);
+  });
+
+  it("sits exactly on the threshold rather than near it", () => {
+    const half = Array.from({ length: 100 }, () => breaching("brief_missed"));
+    const rest = Array.from({ length: 100 }, () => healthy);
+    expect(correlateFleet([...half, ...rest], 200).correlated).toBe(true);
+
+    const justUnder = [
+      ...Array.from({ length: 99 }, () => breaching("brief_missed")),
+      ...Array.from({ length: 101 }, () => healthy),
+    ];
+    expect(correlateFleet(justUnder, 200).correlated).toBe(false);
+    expect(FLEET_CORRELATION_THRESHOLD).toBe(0.5);
+  });
+
+  it("one customer breaching three ways can't outvote three breaching once", () => {
+    // One vote per customer per kind, or a single messy account would look
+    // like a fleet incident.
+    const noisy = {
+      breaches: [
+        { kind: "brief_missed", action: "a", detail: "d" },
+        { kind: "recap_missed", action: "a", detail: "d" },
+        { kind: "zero_placements_today", action: "a", detail: "d" },
+      ] as never,
+    };
+    const verdict = correlateFleet([noisy, healthy, healthy, healthy], 4);
+    expect(verdict.correlated).toBe(false);
+  });
+
+  it("a healthy fleet correlates nothing", () => {
+    const verdict = correlateFleet(Array.from({ length: 50 }, () => healthy), 50);
+    expect(verdict.correlated).toBe(false);
+    expect(verdict.detail).toBe("no breaches");
+  });
+
+  it("an empty fleet is not an incident", () => {
+    expect(correlateFleet([], 0).correlated).toBe(false);
+  });
+
+  it("A FLEET OF ONE IS NOT AN INCIDENT, however correlated the arithmetic", () => {
+    // 1 of 1 breaching is 100% by arithmetic and 0% an incident. Collapsing it
+    // would hide the only signal there is — and early on, when the fleet IS
+    // small, that distinction is the whole operator surface.
+    const verdict = correlateFleet([breaching("zero_placements_today")], 1);
+    expect(verdict.correlated).toBe(false);
+    expect(verdict.detail).toMatch(/too few accounts/);
+  });
+
+  it("holds off until the fleet is big enough to have a shape", () => {
+    const under = Array.from({ length: FLEET_CORRELATION_MIN_ACCOUNTS - 1 }, () =>
+      breaching("brief_missed")
+    );
+    expect(correlateFleet(under, under.length).correlated).toBe(false);
+
+    const at = Array.from({ length: FLEET_CORRELATION_MIN_ACCOUNTS }, () =>
+      breaching("brief_missed")
+    );
+    expect(correlateFleet(at, at.length).correlated).toBe(true);
   });
 });
