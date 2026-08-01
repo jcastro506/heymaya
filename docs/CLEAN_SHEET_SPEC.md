@@ -2613,8 +2613,7 @@ placement = {
   channel, url, publishedAt,
 
   snapshotText,          // ⭐ what actually went out, frozen
-  thumbnailId,           // small, generated on ingest
-  mediaAssetIds[],       // the images/video used
+  mediaAssetIds[],       // the images/video used — originals, ours
 
   metrics, metricsAsOf,  // last pull + freshness stamp
   linkStatus: 'live' | 'gone',   // ⭐ checked on every metrics pull
@@ -2672,7 +2671,17 @@ the live post
 | Drafts | ~1,800 rows |
 | Media in R2 | ~1.5GB → **~$0.02/mo.** Negligible |
 
-**The real cost is egress, not storage.** Generate a **small thumbnail on ingest** and serve that in the feed; fetch originals only on demand. That's the difference between an archive that feels instant and one that crawls.
+**There is no thumbnail pipeline, and there is no "ingest."** ⭐ Both were an earlier mistake in this document, corrected here.
+
+*Ingest* implied media arriving from outside — downloading our own published post back off the platform to process it. That never happens: **we author 100% of the archive's media.** Every placement is something we made, so the original already exists in our pipeline before it is ever published. Nothing is ever fetched back.
+
+*Thumbnail* implied storing a second, derived copy of every asset. That's a pattern from before on-the-fly image serving existed. The feed asks for a display size in the URL and gets one; a stored `thumbnailId` buys nothing and adds a field, a job, an image worker, and a failure mode.
+
+So: **store the original at creation, and let the feed request the size it needs.** Serving-side concern, not a data-model one.
+
+**On egress:** R2 charges **zero** egress, so serving originals costs us nothing in dollars. The reason to request small sizes is the founder's phone — a 9:16 still is ~1–2MB and a short vertical video 3–8MB, so fifty un-sized rows is a ~100MB scroll. That's a latency and data-plan argument, not a billing one. Don't optimise this for cost; optimise it for the feed feeling instant.
+
+**Video posters need no frame extraction.** Assembled video is built *from source stills we supplied*, so the poster is one of those. Nothing has to open an MP4.
 
 **Retention:** kept for the life of the account · read-only for 30 days after cancellation, then purged · **and the export in Sprint 10 is exactly this** — their history, theirs to take.
 
@@ -3456,7 +3465,7 @@ new until Sprint 3's gate holds.
 |---|---|---|---|
 | **0 Reclaim** | ✅ done | both products deleted, schema 142→70, CI | — |
 | **1 Perception** | 🟡 ~85% | endpoints split per-platform · all P0 wrappers (params verified live) · X expansion · manifest 404s fixed · smoke suite tiers 1–2 green on 5 vendors · 5 of 14 Zernio wrappers verified | 9 Zernio wrappers (4 are writes) · Creatify + R2 keys · tier 3 |
-| **2 Spine** | 🟡 ~60% | data model · job queue · planFeatures · message log · agentVersion routing · **the watchers layer (Convex crons)** | Telegram transport · persistent session + volume · runtime shape · spend ceiling · thumbnails |
+| **2 Spine** | 🟡 ~85% | data model · job queue · planFeatures · message log · agentVersion routing · **the watchers layer (Convex crons)** · Telegram transport · spend ceiling · the archive (§16.8) | persistent session + volume · runtime shape — **both need a live machine** |
 | **2.5 Luna** | ✅ shipped | main brain + judges on gpt-5.6-luna | the week-long watch hasn't run |
 | **3 X — the gamble** | 🟡 ~50% | **the iron rule** · preflight (token, 280, duplicate) · brief + recap | skills + tools · rate limits · **the 7-day exit** |
 | **4 Brand** | 🟡 ~45% | buyer map · voice-from-edits · asset classifier · **the §6.4.6 spike, run** | learn-business/voice/brand · brand kit · media library |
@@ -3518,7 +3527,7 @@ one deployed machine (persistent session, cold-start latency, redeploy tests).
 | Task |
 |---|
 | New module + **data model (§3.4)**: customers · channels · directives · ideas · targets · drafts · placements · messages · jobs — **plus the shared `nicheCache` and `vendorHealth`** |
-| **Text-search index on `placements.snapshotText`** and thumbnail generation on ingest (§16.8) |
+| **Text-search index on `placements.snapshotText`**, the dead-link rule, and the provenance join (§16.8) |
 | Durable job queue with idempotency keys |
 | Telegram in/out through the new module; **one message log both surfaces read** |
 | Persistent OpenClaw session; **persistent volume verified** |
@@ -4247,7 +4256,7 @@ The question this table answers: *for each piece of data the design depends on, 
 | Assumed | Reality | Severity |
 |---|---|---|
 | ⭐ **Typing indicator within 1 second** | **The Telegram client has no `sendChatAction`.** It exposes `sendTelegramMessage`, `sendDirectTelegramMedia`, `setTelegramWebhook` — nothing else. **The entire 30-second cold-start UX (§17.36.2) rests on this one call.** | 🔴 **Sprint 2 blocker** |
-| ⭐ **Thumbnail generated on ingest** | **R2 has no image processing** — `uploadAsset`, `getSignedUrl`, `deleteAsset`, mime sniffing. No resize. Thumbnails are referenced 16× and drive the Activity feed's performance. | 🔴 Needs a worker or an image service |
+| ~~⭐ **Thumbnail generated on ingest**~~ | ✅ **Withdrawn — the requirement was wrong, not unmet.** R2 has no image processing, but nothing needs it: we author 100% of the archive's media, so no asset is ever ingested, and a stored derived copy is obsolete next to on-the-fly sizing. Field deleted, §16.8.5 rewritten. **A gap closed by deleting the assumption is worth more than one closed by building a worker.** | ✅ Resolved |
 | Login-wall detection at onboarding | No probe specified (§6.4.1) | 🟡 |
 | `linkStatus` 404 detection on metrics pull | Mechanism unspecified — fetch the URL, or read a provider error? | 🟡 |
 | Per-machine cost attribution for the spend ceiling | The cost ledger exists; per-machine attribution is assumed | 🟡 verify |
