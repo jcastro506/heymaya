@@ -17,6 +17,7 @@ import { stripeWebhookHttp } from "./billing/stripeWebhookHttp";
 import { savePlanDocHttp } from "./gtmMaya/planDoc";
 import { telegramWebhookHttp } from "./gtmMaya/telegramWebhook";
 import { deliveryFailureHttp } from "./gtmMaya/deliveryFailures";
+import { publishHttp, replyHttp, askFounderHttp } from "./maya/hooks";
 import {
   approvalDecisionHttp,
   approveCalendarHttp,
@@ -999,5 +1000,20 @@ http.route({
 
 
 
+
+// ---------------------------------------------------------------------------
+// convex/maya — the new module's tool surface (§18 Sprint 3).
+//
+// Deliberately NOT under /lc_gtm/*: `convex/gtmMaya` is frozen, and a shared
+// prefix would let a v1 agent's token reach a v2 handler. Separate namespace,
+// separate credential, separate blast radius.
+//
+// Every route resolves its tenant from the bearer token alone — none of them
+// accepts a customerId — and every response is the {ok, data, next, why}
+// envelope, including auth failures. See convex/maya/hooks.ts.
+// ---------------------------------------------------------------------------
+http.route({ path: "/maya/publish", method: "POST", handler: publishHttp });
+http.route({ path: "/maya/reply", method: "POST", handler: replyHttp });
+http.route({ path: "/maya/ask_founder", method: "POST", handler: askFounderHttp });
 
 export default http;
