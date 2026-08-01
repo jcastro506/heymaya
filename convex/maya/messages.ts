@@ -20,6 +20,7 @@
 
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "../_generated/server";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 
@@ -107,6 +108,20 @@ export const send = internalMutation({
       turnId: args.turnId,
       ts: args.ts ?? Date.now(),
     });
+
+    // Delivery is a JOB, not a side effect of writing. Sending inline would
+    // mean a transient Telegram 502 silently loses a brief; through the queue
+    // it retries with backoff and, if it never lands, ends up in the
+    // dead-letter view where someone can see it.
+    if (args.surface === "telegram") {
+      await ctx.runMutation(internal.maya.jobs.enqueue, {
+        kind: "deliver_message",
+        idempotencyKey: `deliver:${messageId}`,
+        customerId: args.customerId,
+        payloadJson: JSON.stringify({ messageId }),
+      });
+    }
+
     return { messageId, sent: true };
   },
 });

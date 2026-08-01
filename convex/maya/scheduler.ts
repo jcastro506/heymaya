@@ -222,7 +222,40 @@ export const eveningRecapAll = internalAction({
  * is deliberately absent, because production needs the Write model and the
  * agent pack, neither of which exists yet.
  */
-const HANDLED_KINDS = new Set<string>([]);
+const HANDLED_KINDS = new Set<string>(["deliver_message"]);
+
+/** Route a claimed job to its handler. */
+async function runHandler(
+  ctx: { runAction: (ref: never, args: never) => Promise<unknown> },
+  job: { kind: string; payloadJson?: string }
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (job.kind === "deliver_message") {
+    let messageId: string | undefined;
+    try {
+      messageId = (JSON.parse(job.payloadJson ?? "{}") as { messageId?: string })
+        .messageId;
+    } catch {
+      return { ok: false, error: "delivery job payload is not valid JSON" };
+    }
+    if (!messageId) return { ok: false, error: "delivery job has no messageId" };
+
+    const result = (await (
+      ctx as unknown as {
+        runAction: (
+          ref: typeof internal.maya.telegram.deliverMessage,
+          args: { messageId: string }
+        ) => Promise<{ delivered: boolean; reason?: string }>;
+      }
+    ).runAction(internal.maya.telegram.deliverMessage, {
+      messageId,
+    })) as { delivered: boolean; reason?: string };
+
+    return result.delivered
+      ? { ok: true }
+      : { ok: false, error: result.reason ?? "delivery failed" };
+  }
+  return { ok: false, error: `unrouted job kind "${job.kind}"` };
+}
 
 /**
  * Drain the queue.
@@ -256,8 +289,27 @@ export const drainJobs = internalAction({
         failed += 1;
         continue;
       }
-      await ctx.runMutation(internal.maya.jobs.succeed, { jobId: job._id });
-      succeeded += 1;
+
+      try {
+        const outcome = await runHandler(ctx, job);
+        if (outcome.ok) {
+          await ctx.runMutation(internal.maya.jobs.succeed, { jobId: job._id });
+          succeeded += 1;
+        } else {
+          await ctx.runMutation(internal.maya.jobs.fail, {
+            jobId: job._id,
+            error: outcome.error,
+          });
+          failed += 1;
+        }
+      } catch (error) {
+        // A handler that throws is a failed job, never a lost one.
+        await ctx.runMutation(internal.maya.jobs.fail, {
+          jobId: job._id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        failed += 1;
+      }
     }
     return { claimed, succeeded, failed };
   },

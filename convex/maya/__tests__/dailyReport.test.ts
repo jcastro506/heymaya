@@ -117,8 +117,12 @@ describe("SEND-FIRST — the brief goes out before any work", () => {
     await t.mutation(internal.maya.dailyReport.runMorningRun, args);
     const second = await t.mutation(internal.maya.dailyReport.runMorningRun, args);
     expect(second.jobsEnqueued).toBe(0);
-    const jobs = await t.run((ctx) => ctx.db.query("jobs").collect());
-    expect(jobs).toHaveLength(1);
+    // Kind-specific: a telegram send also enqueues its own delivery job, so a
+    // bare count would conflate production work with message delivery.
+    const jobs = (await t.run((ctx) => ctx.db.query("jobs").collect())) as Array<{
+      kind: string;
+    }>;
+    expect(jobs.filter((j) => j.kind === "produce_post")).toHaveLength(1);
   });
 
   it("the next day gets its own brief", async () => {
