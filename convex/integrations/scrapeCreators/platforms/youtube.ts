@@ -234,6 +234,23 @@ export const youtube = {
   },
 
   /**
+   * Hashtag search. Same six-bucket envelope as `search` — VERIFIED LIVE
+   * 2026-08-01 at the documented path with a `hashtag` param, which is one of
+   * the few times the docs were right.
+   */
+  async searchHashtag(
+    hashtag: string,
+    deps?: EndpointDeps
+  ): Promise<RawScrapeCreatorsResult> {
+    const query = { hashtag: hashtag.replace(/^#/, "") };
+    const raw = await clientOf(deps).request<unknown>(
+      "/v1/youtube/search/hashtag",
+      { query }
+    );
+    return rawResult("youtube_search_hashtag", query, raw);
+  },
+
+  /**
    * A channel's Shorts. Accepts a handle (`@name`) or a channelId — the live
    * error names both, and passing `channel_id` fails.
    */

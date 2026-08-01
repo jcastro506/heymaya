@@ -151,6 +151,23 @@ describe("Sprint 1 P0 wrappers — params VERIFIED LIVE 2026-07-31", () => {
     expect(sent).not.toContain("user_id");
   });
 
+  it("youtube.searchHashtag strips a leading # and hits the documented path", async () => {
+    const { client, fetchImpl } = clientReturning({ videos: [] });
+    await youtube.searchHashtag("#postgres", { client });
+    const sent = String(fetchImpl.mock.calls[0][0]);
+    expect(sent).toContain("/v1/youtube/search/hashtag");
+    expect(sent).toContain("hashtag=postgres");
+    expect(sent).not.toContain("%23");
+  });
+
+  it("instagram.songReels sends `audio_id` — the live error names it explicitly", async () => {
+    const { client, fetchImpl } = clientReturning({ reels: [], has_more: false });
+    await instagram.songReels("1234567890", { client });
+    const sent = String(fetchImpl.mock.calls[0][0]);
+    expect(sent).toContain("/v1/instagram/song/reels");
+    expect(sent).toContain("audio_id=1234567890");
+  });
+
   it("every P0 wrapper returns a labelled raw envelope", async () => {
     const { client } = clientReturning({ anything: true });
     const out = await youtube.search("x", { client });
