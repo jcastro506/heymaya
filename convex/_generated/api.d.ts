@@ -16,6 +16,9 @@ import type * as agents_modelRouter_logCall from "../agents/modelRouter/logCall.
 import type * as agents_modelRouter_maya from "../agents/modelRouter/maya.js";
 import type * as agents_modelRouter_openRouterClient from "../agents/modelRouter/openRouterClient.js";
 import type * as agents_modelRouter_taskTags from "../agents/modelRouter/taskTags.js";
+import type * as agents_packs_maya_bundledPlugin from "../agents/packs/maya/bundledPlugin.js";
+import type * as agents_packs_maya_bundledSkills from "../agents/packs/maya/bundledSkills.js";
+import type * as agents_packs_maya_generators from "../agents/packs/maya/generators.js";
 import type * as agents_packs_maya_gtm_bundledGtmPlugin from "../agents/packs/maya_gtm/bundledGtmPlugin.js";
 import type * as agents_packs_maya_gtm_bundledLocalSkills from "../agents/packs/maya_gtm/bundledLocalSkills.js";
 import type * as agents_packs_maya_gtm_bundledPlaybook from "../agents/packs/maya_gtm/bundledPlaybook.js";
@@ -201,6 +204,7 @@ import type * as maya_archive from "../maya/archive.js";
 import type * as maya_assetClassifier from "../maya/assetClassifier.js";
 import type * as maya_buyerMap from "../maya/buyerMap.js";
 import type * as maya_dailyReport from "../maya/dailyReport.js";
+import type * as maya_deploy from "../maya/deploy.js";
 import type * as maya_directives from "../maya/directives.js";
 import type * as maya_embeddings from "../maya/embeddings.js";
 import type * as maya_hooks from "../maya/hooks.js";
@@ -242,6 +246,9 @@ declare const fullApi: ApiFromModules<{
   "agents/modelRouter/maya": typeof agents_modelRouter_maya;
   "agents/modelRouter/openRouterClient": typeof agents_modelRouter_openRouterClient;
   "agents/modelRouter/taskTags": typeof agents_modelRouter_taskTags;
+  "agents/packs/maya/bundledPlugin": typeof agents_packs_maya_bundledPlugin;
+  "agents/packs/maya/bundledSkills": typeof agents_packs_maya_bundledSkills;
+  "agents/packs/maya/generators": typeof agents_packs_maya_generators;
   "agents/packs/maya_gtm/bundledGtmPlugin": typeof agents_packs_maya_gtm_bundledGtmPlugin;
   "agents/packs/maya_gtm/bundledLocalSkills": typeof agents_packs_maya_gtm_bundledLocalSkills;
   "agents/packs/maya_gtm/bundledPlaybook": typeof agents_packs_maya_gtm_bundledPlaybook;
@@ -427,6 +434,7 @@ declare const fullApi: ApiFromModules<{
   "maya/assetClassifier": typeof maya_assetClassifier;
   "maya/buyerMap": typeof maya_buyerMap;
   "maya/dailyReport": typeof maya_dailyReport;
+  "maya/deploy": typeof maya_deploy;
   "maya/directives": typeof maya_directives;
   "maya/embeddings": typeof maya_embeddings;
   "maya/hooks": typeof maya_hooks;
