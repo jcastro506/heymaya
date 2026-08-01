@@ -106,6 +106,34 @@ export const telegramWebhookHttp = httpAction(async (ctx, request) => {
     const chatId = String(update.message.chat.id);
     const username =
       update.message.chat.username ?? update.message.from?.username;
+
+    // ── agentVersion routing (§18 Sprint 2) ────────────────────────────────
+    // The shared bot has ONE webhook, so this is the fork between the frozen v1
+    // agent and `convex/maya`. A v1 chat has no `customers` row at all, so it
+    // falls through untouched — migration is per-customer, not a flag day.
+    const v2Customer = await ctx.runQuery(
+      internal.maya.telegram.customerByChatId,
+      { chatId }
+    );
+    if (v2Customer) {
+      // TYPING FIRST, INLINE, AND AWAITED (§17.36.2).
+      //
+      // Not scheduled. The machine auto-stops when idle, so this text may be
+      // waiting on a 10–30s boot, and the indicator is the only thing that
+      // makes that read as thinking rather than broken. Scheduling it would
+      // race the wake and could show the indicator *after* the reply, which is
+      // worse than not showing it.
+      //
+      // Safe to await: the call swallows its own errors, so it can add latency
+      // but can never fail the webhook.
+      await ctx.runAction(internal.maya.telegram.showTyping, { chatId });
+      await ctx.scheduler.runAfter(0, internal.maya.telegram.handleInbound, {
+        chatId,
+        text: update.message.text,
+      });
+      return new Response("ok", { status: 200 });
+    }
+
     await ctx.scheduler.runAfter(
       0,
       internal.gtmMaya.telegramHandoff.routeInboundToMachine,
