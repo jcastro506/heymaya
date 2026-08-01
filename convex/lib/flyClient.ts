@@ -67,6 +67,29 @@ export interface FlyMachineConfig {
     ports: Array<{ port: number; handlers?: string[] }>;
     protocol: string;
     internal_port: number;
+    /**
+     * ⭐ AUTO-STOP — the single largest cost lever in the model (§17.36).
+     *
+     * `"stop"` lets Fly halt the machine when the service goes idle;
+     * `autostart` brings it back on the next request. At 200 customers that is
+     * **~$100–400/mo instead of $1,400–3,000** — a 10× difference — because a
+     * machine that thinks for ~45 minutes a day otherwise bills for 24 hours of
+     * idle.
+     *
+     * It only works because she is event-driven. A machine that schedules
+     * itself never goes idle, which is why the v2 workspace ships no
+     * `jobs.json` and Convex owns the clock.
+     *
+     * The price is cold-start latency, paid down by the typing indicator
+     * (§17.36.2) and the warm window below.
+     */
+    autostop?: "off" | "stop" | "suspend";
+    autostart?: boolean;
+    /**
+     * Machines Fly keeps running regardless. **Zero is the point** — any other
+     * value silently reinstates always-on billing for that many machines.
+     */
+    min_machines_running?: number;
   }>;
   guest?: {
     cpu_kind: "shared" | "performance";
