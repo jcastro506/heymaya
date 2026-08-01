@@ -342,8 +342,12 @@ describe("a full day, walked through every module", () => {
 
     // Two customers, two briefs, two jobs — and the jobs' idempotency keys
     // are scoped so one tenant's run can never satisfy the other's.
-    const jobs = await t.run((ctx) => ctx.db.query("jobs").collect());
-    expect(jobs).toHaveLength(2);
-    expect(new Set(jobs.map((j) => j.idempotencyKey)).size).toBe(2);
+    const jobs = (await t.run((ctx) => ctx.db.query("jobs").collect())) as Array<{
+      kind: string;
+      idempotencyKey: string;
+    }>;
+    const produce = jobs.filter((j) => j.kind === "produce_post");
+    expect(produce).toHaveLength(2);
+    expect(new Set(produce.map((j) => j.idempotencyKey)).size).toBe(2);
   });
 });

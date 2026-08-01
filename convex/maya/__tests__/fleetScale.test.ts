@@ -125,8 +125,13 @@ describe("the morning sweep at 200 customers", () => {
     const jobs = (await t.run((ctx) =>
       ctx.db.query("jobs").collect()
     )) as Doc<"jobs">[];
-    expect(jobs).toHaveLength(FLEET);
-    expect(new Set(jobs.map((j) => j.idempotencyKey)).size).toBe(FLEET);
+    const produce = jobs.filter((j) => j.kind === "produce_post");
+    expect(produce).toHaveLength(FLEET);
+    expect(new Set(produce.map((j) => j.idempotencyKey)).size).toBe(FLEET);
+    // Every brief also queues its own delivery — one per customer, no collisions.
+    const deliver = jobs.filter((j) => j.kind === "deliver_message");
+    expect(deliver).toHaveLength(FLEET);
+    expect(new Set(deliver.map((j) => j.idempotencyKey)).size).toBe(FLEET);
   });
 
   it("a second sweep the same day is a full no-op across the fleet", async () => {
@@ -138,9 +143,10 @@ describe("the morning sweep at 200 customers", () => {
     expect(
       await t.run((ctx) => ctx.db.query("messages").collect())
     ).toHaveLength(FLEET);
-    expect(await t.run((ctx) => ctx.db.query("jobs").collect())).toHaveLength(
-      FLEET
-    );
+    const jobs2 = (await t.run((ctx) =>
+      ctx.db.query("jobs").collect()
+    )) as Doc<"jobs">[];
+    expect(jobs2.filter((j) => j.kind === "produce_post")).toHaveLength(FLEET);
   });
 
   it("work grows LINEARLY with fleet size, not quadratically", async () => {

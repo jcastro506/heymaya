@@ -184,6 +184,7 @@ import type * as integrations_scrapeCreators_schemas from "../integrations/scrap
 import type * as integrations_scrapeCreators_verifyHandle from "../integrations/scrapeCreators/verifyHandle.js";
 import type * as integrations_telegram_client from "../integrations/telegram/client.js";
 import type * as integrations_telegram_sendDirectMessage from "../integrations/telegram/sendDirectMessage.js";
+import type * as integrations_twitterApiIo_endpoints from "../integrations/twitterApiIo/endpoints.js";
 import type * as integrations_twitterApiIo_twitterSearch from "../integrations/twitterApiIo/twitterSearch.js";
 import type * as integrations_unipile_client from "../integrations/unipile/client.js";
 import type * as integrations_videoSynthWorker_client from "../integrations/videoSynthWorker/client.js";
@@ -209,6 +210,7 @@ import type * as maya_preflight from "../maya/preflight.js";
 import type * as maya_publishDecision from "../maya/publishDecision.js";
 import type * as maya_quality from "../maya/quality.js";
 import type * as maya_scheduler from "../maya/scheduler.js";
+import type * as maya_telegram from "../maya/telegram.js";
 import type * as maya_voice from "../maya/voice.js";
 import type * as migrations_coachManagerPlanRename from "../migrations/coachManagerPlanRename.js";
 import type * as onboarding_gtm_deployMayaGtm from "../onboarding/gtm/deployMayaGtm.js";
@@ -405,6 +407,7 @@ declare const fullApi: ApiFromModules<{
   "integrations/scrapeCreators/verifyHandle": typeof integrations_scrapeCreators_verifyHandle;
   "integrations/telegram/client": typeof integrations_telegram_client;
   "integrations/telegram/sendDirectMessage": typeof integrations_telegram_sendDirectMessage;
+  "integrations/twitterApiIo/endpoints": typeof integrations_twitterApiIo_endpoints;
   "integrations/twitterApiIo/twitterSearch": typeof integrations_twitterApiIo_twitterSearch;
   "integrations/unipile/client": typeof integrations_unipile_client;
   "integrations/videoSynthWorker/client": typeof integrations_videoSynthWorker_client;
@@ -430,6 +433,7 @@ declare const fullApi: ApiFromModules<{
   "maya/publishDecision": typeof maya_publishDecision;
   "maya/quality": typeof maya_quality;
   "maya/scheduler": typeof maya_scheduler;
+  "maya/telegram": typeof maya_telegram;
   "maya/voice": typeof maya_voice;
   "migrations/coachManagerPlanRename": typeof migrations_coachManagerPlanRename;
   "onboarding/gtm/deployMayaGtm": typeof onboarding_gtm_deployMayaGtm;

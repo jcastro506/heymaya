@@ -3442,10 +3442,13 @@ export default defineSchema({
     voiceProfileJson: v.optional(v.string()),
     /** Colors, fonts, logo refs, on-brand/off-brand examples. JSON. */
     brandKitJson: v.optional(v.string()),
+    /** Where she texts them. Absent until Telegram pairing completes. */
+    telegramChatId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_account", ["accountId"])
+    .index("by_telegram_chat", ["telegramChatId"])
     .index("by_state", ["state"])
     .index("by_agent_version", ["agentVersion"]),
 
@@ -3679,6 +3682,18 @@ export default defineSchema({
     turnId: v.optional(v.string()),
     /** Invariant 5: at most one open question at a time — this marks it. */
     awaitingAnswer: v.optional(v.boolean()),
+    /**
+     * When it actually reached them.
+     *
+     * A row in this table means "we wrote it", NOT "they got it". Conflating
+     * those is how the old system produced eaten replies: the transcript
+     * showed a message the founder never received, so every later decision was
+     * made against a conversation that only existed on our side. Outbound rows
+     * are undelivered until proven otherwise.
+     */
+    deliveredAt: v.optional(v.number()),
+    /** Why delivery failed, in plain language. Never silently dropped. */
+    deliveryError: v.optional(v.string()),
     ts: v.number(),
   })
     .index("by_customer", ["customerId"])
@@ -3687,7 +3702,8 @@ export default defineSchema({
     // suppressed every customer's brief after the first one each day, because
     // `brief:<date>` is identical across the fleet.
     .index("by_customer_and_dedupe", ["customerId", "dedupeKey"])
-    .index("by_customer_and_awaiting", ["customerId", "awaitingAnswer"]),
+    .index("by_customer_and_awaiting", ["customerId", "awaitingAnswer"])
+    .index("by_delivery", ["direction", "deliveredAt"]),
 
   /**
    * The work queue.
