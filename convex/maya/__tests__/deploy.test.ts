@@ -316,3 +316,53 @@ async function addChannel(
     })
   );
 }
+
+describe("deployMachine fails loudly and early", () => {
+  it("a missing customer is a named failure, not a half-built machine", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seedCustomer(t, "deploy_gone");
+    await t.run((ctx) => ctx.db.delete(customerId));
+
+    const result = await t.action(internal.maya.deploy.deployMachine, {
+      customerId,
+      image: "img",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toMatch(/no such customer/);
+  });
+
+  it("MISSING CREDENTIALS ARE CAUGHT BEFORE ANYTHING IS CREATED", async () => {
+    // The ordering that matters: bail before creating a Fly app, a volume, or a
+    // machine. A deploy that half-succeeds and then dies on a missing env var
+    // leaves paid infrastructure behind that nothing points at.
+    const t = convexTest(schema, modules);
+    const customerId = await seedCustomer(t, "deploy_nokey");
+
+    const result = await t.action(internal.maya.deploy.deployMachine, {
+      customerId,
+      image: "img",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.error).toMatch(/OPENROUTER_API_KEY|CONVEX_SITE_URL/);
+
+    // And nothing was written to the customer — no token, no machine.
+    const row = (await t.run((ctx) => ctx.db.get(customerId))) as Doc<"customers">;
+    expect(row.agentTokenHash).toBeUndefined();
+    expect(row.flyMachineId).toBeUndefined();
+  });
+
+  it("records the machine so a redeploy is idempotent on it", async () => {
+    const t = convexTest(schema, modules);
+    const customerId = await seedCustomer(t, "deploy_record");
+    await t.mutation(internal.maya.deploy.recordMachine, {
+      customerId,
+      flyAppName: "maya-abc",
+      flyMachineId: "m_123",
+    });
+    const row = (await t.run((ctx) => ctx.db.get(customerId))) as Doc<"customers">;
+    expect(row.flyAppName).toBe("maya-abc");
+    expect(row.flyMachineId).toBe("m_123");
+  });
+});

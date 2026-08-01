@@ -3454,6 +3454,9 @@ export default defineSchema({
      * confused or compromised agent cannot name a tenant it isn't.
      */
     agentTokenHash: v.optional(v.string()),
+    /** Her machine. Absent until the first deploy; a deploy is idempotent on it. */
+    flyAppName: v.optional(v.string()),
+    flyMachineId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
