@@ -3467,7 +3467,7 @@ new until Sprint 3's gate holds.
 | **1 Perception** | 🟡 ~85% | endpoints split per-platform · all P0 wrappers (params verified live) · X expansion · manifest 404s fixed · smoke suite tiers 1–2 green on 5 vendors · 5 of 14 Zernio wrappers verified | 9 Zernio wrappers (4 are writes) · Creatify + R2 keys · tier 3 |
 | **2 Spine** | 🟡 ~85% | data model · job queue · planFeatures · message log · agentVersion routing · **the watchers layer (Convex crons)** · Telegram transport · spend ceiling · the archive (§16.8) | persistent session + volume · runtime shape — **both need a live machine** |
 | **2.5 Luna** | ✅ shipped | main brain + judges on gpt-5.6-luna | the week-long watch hasn't run |
-| **3 X — the gamble** | 🟡 ~50% | **the iron rule** · preflight (token, 280, duplicate) · brief + recap | skills + tools · rate limits · **the 7-day exit** |
+| **3 X — the gamble** | 🟡 ~75% | **the iron rule** · preflight (token, 280, duplicate) · brief + recap · **the tool surface** (`publish`/`reply`/`ask_founder`, tenant-safe by shape) · **the three skills + CONVENTIONS** · **the `maya-tools` plugin** | rate limits · workspace bundle + wake protocol · **the 7-day exit** |
 | **4 Brand** | 🟡 ~45% | buyer map · voice-from-edits · asset classifier · **the §6.4.6 spike, run** | learn-business/voice/brand · brand kit · media library |
 | **5 Perception live** | 🔴 ~10% | complaint→content · quality gates | the six sweeps · Screen model · idea bank · plan-day |
 | **6 Memory + liveness** | 🟡 ~65% | directive ledger · three commands · **liveness contract + sweep + fleet correlation** | directive compiler → server gates · balance circuit breakers |
@@ -3480,7 +3480,13 @@ new until Sprint 3's gate holds.
 - Sprint 6 — *"a directive survives a redeploy and a deliberate model swap"*
 
 All three converge on the **OpenClaw pack for `convex/maya`** — workspace
-bundle, tools, wake protocol. That is the single missing structural piece.
+bundle, tools, wake protocol.
+
+**Status: the tools half is built** (`convex/maya/hooks.ts` + the `maya-tools`
+plugin + the three skills). **Nothing about it is verified live** — no machine
+has ever loaded the plugin. What remains structurally is the **workspace bundle
+and the wake protocol**; what remains to *prove any of it* is a deployed
+machine, which is operator-blocked.
 
 **⚠️ Sprint 1's exit criterion is unreachable as written.** It requires "every
 one of the six sweeps runs against real APIs", and the six sweeps are Sprint 5
