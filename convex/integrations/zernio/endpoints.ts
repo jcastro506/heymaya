@@ -1605,7 +1605,7 @@ const AccountsListResponseSchema = z
 /**
  * List connected accounts under a profile.
  * `GET /api/v1/accounts?profileId&platform&includeOverLimit&page&limit`.
- * [shape-unverified-live] — `accounts[]` rows passed through verbatim.
+ * VERIFIED LIVE 2026-08-01: GET /api/v1/accounts → {accounts, hasAnalyticsAccess} — `accounts[]` rows passed through verbatim.
  */
 export async function listAccounts(
   client: ZernioClient,
@@ -1658,7 +1658,7 @@ const AccountHealthResponseSchema = z
 /**
  * Health summary for connected accounts.
  * `GET /api/v1/accounts/health?profileId&platform&status`.
- * [shape-unverified-live].
+ * VERIFIED LIVE 2026-08-01: GET /api/v1/accounts/health → accountId (NOT id) + summary.
  */
 export async function getAccountsHealth(
   client: ZernioClient,
@@ -1998,17 +1998,73 @@ export async function getFollowerStats(
 /* Inbox — comments + conversations                                            */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The real envelope both inbox endpoints return. VERIFIED LIVE 2026-08-01.
+ *
+ * Two things our previous schema got wrong, and both were silent:
+ *
+ * 1. **`nextCursor` is nested inside `pagination`**, not at the root. Reading
+ *    it at the root always yielded `undefined`, so paging never advanced and
+ *    we only ever saw the FIRST page of the inbox. For a product whose core
+ *    job is "answer everyone", that's the difference between answering
+ *    everyone and answering whoever happens to be on page one.
+ * 2. **`meta` reports PARTIAL FAILURE** — `accountsQueried`, `accountsFailed`,
+ *    and a `failedAccounts` list. The live call returned
+ *    `accountsQueried: 2, accountsFailed: 1`: the API told us it couldn't read
+ *    one of the connected accounts, and we discarded that and returned success.
+ *    Silently reading half the inbox and reporting "all clear" is exactly the
+ *    failure class this product exists to eliminate.
+ */
+const InboxPaginationSchema = z
+  .object({
+    hasMore: z.boolean().optional(),
+    nextCursor: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+const InboxMetaSchema = z
+  .object({
+    accountsQueried: z.number().optional(),
+    accountsFailed: z.number().optional(),
+    failedAccounts: z
+      .array(
+        z
+          .object({
+            accountId: z.string().optional(),
+            accountUsername: z.string().optional(),
+            platform: z.string().optional(),
+          })
+          .passthrough()
+      )
+      .optional(),
+  })
+  .passthrough();
+
+/** What a caller needs to page correctly AND to know what it didn't see. */
+export interface InboxPage<T> {
+  items: T[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  /** Accounts the API could not read. NEVER silently dropped. */
+  failedAccounts: Array<{
+    accountId?: string;
+    accountUsername?: string;
+    platform?: string;
+  }>;
+}
+
 const InboxCommentsResponseSchema = z
   .object({
     data: z.array(z.record(z.string(), z.unknown())).default([]),
-    nextCursor: z.string().nullable().optional(),
+    pagination: InboxPaginationSchema.optional(),
+    meta: InboxMetaSchema.optional(),
   })
   .passthrough();
 
 /**
  * List inbound comments across connected accounts.
  * `GET /api/v1/inbox/comments?profileId&platform&minComments&since&sortBy&
- * sortOrder&limit&cursor&accountId`. [shape-unverified-live].
+ * sortOrder&limit&cursor&accountId`. VERIFIED LIVE 2026-08-01: GET /api/v1/inbox/comments → {data, pagination, meta}.
  */
 export async function listInboxComments(
   client: ZernioClient,
@@ -2023,7 +2079,7 @@ export async function listInboxComments(
     cursor?: string;
     accountId?: string;
   } = {}
-): Promise<InboxComment[]> {
+): Promise<InboxPage<InboxComment>> {
   const raw = await client.request<unknown>("/api/v1/inbox/comments", {
     method: "GET",
     query: {
@@ -2046,20 +2102,26 @@ export async function listInboxComments(
       `Unexpected inbox-comments payload: ${parsed.error.message}`
     );
   }
-  return parsed.data.data.map((row) => row as unknown as InboxComment);
+  return {
+    items: parsed.data.data.map((row) => row as unknown as InboxComment),
+    nextCursor: parsed.data.pagination?.nextCursor ?? null,
+    hasMore: parsed.data.pagination?.hasMore ?? false,
+    failedAccounts: parsed.data.meta?.failedAccounts ?? [],
+  };
 }
 
 const ConversationsResponseSchema = z
   .object({
     data: z.array(z.record(z.string(), z.unknown())).default([]),
-    nextCursor: z.string().nullable().optional(),
+    pagination: InboxPaginationSchema.optional(),
+    meta: InboxMetaSchema.optional(),
   })
   .passthrough();
 
 /**
  * List inbound DM conversations across connected accounts.
  * `GET /api/v1/inbox/conversations?profileId&platform&status&sortOrder&limit&
- * cursor&accountId`. [shape-unverified-live].
+ * cursor&accountId`. VERIFIED LIVE 2026-08-01: GET /api/v1/inbox/conversations → {data, pagination, meta}.
  */
 export async function listConversations(
   client: ZernioClient,
@@ -2072,7 +2134,7 @@ export async function listConversations(
     cursor?: string;
     accountId?: string;
   } = {}
-): Promise<Conversation[]> {
+): Promise<InboxPage<Conversation>> {
   const raw = await client.request<unknown>("/api/v1/inbox/conversations", {
     method: "GET",
     query: {
@@ -2093,7 +2155,12 @@ export async function listConversations(
       `Unexpected conversations payload: ${parsed.error.message}`
     );
   }
-  return parsed.data.data.map((row) => row as unknown as Conversation);
+  return {
+    items: parsed.data.data.map((row) => row as unknown as Conversation),
+    nextCursor: parsed.data.pagination?.nextCursor ?? null,
+    hasMore: parsed.data.pagination?.hasMore ?? false,
+    failedAccounts: parsed.data.meta?.failedAccounts ?? [],
+  };
 }
 
 const InboxActionResponseSchema = z
@@ -2312,7 +2379,7 @@ const WebhookCreateResponseSchema = z
  * List registered webhook subscriptions.
  * `GET /api/v1/webhooks/settings`. Used to make webhook registration
  * idempotent (find-by-url before create). The response envelope varies
- * (`{ webhooks: [...] }` vs a bare array) so we accept both. [shape-unverified-live].
+ * (`{ webhooks: [...] }` vs a bare array) so we accept both. VERIFIED LIVE 2026-08-01: GET /api/v1/webhooks/settings → {webhooks}.
  */
 export async function listWebhooks(
   client: ZernioClient

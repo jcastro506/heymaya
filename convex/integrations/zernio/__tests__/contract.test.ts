@@ -419,7 +419,47 @@ describe("read wrappers hit the right paths with the right query params", () => 
     expect(url.pathname).toBe("/api/v1/inbox/comments");
     expect(url.searchParams.get("platform")).toBe("instagram");
     expect(url.searchParams.get("cursor")).toBe("cur_1");
-    expect(out[0].id).toBe("c1");
+    expect(out.items[0].id).toBe("c1");
+  });
+
+  it("listInboxComments reads nextCursor from `pagination`, not the root", async () => {
+    // VERIFIED LIVE 2026-08-01: the cursor is nested. Reading it at the root
+    // always yielded undefined, so paging never advanced and we only ever saw
+    // page one of the inbox — for a product whose core job is "answer
+    // everyone".
+    const rec = recordingClient({
+      data: [{ id: "c1" }],
+      pagination: { hasMore: true, nextCursor: "cur_2" },
+    });
+    const out = await listInboxComments(rec.client, {});
+    expect(out.nextCursor).toBe("cur_2");
+    expect(out.hasMore).toBe(true);
+  });
+
+  it("listInboxComments SURFACES partial failure instead of reporting all-clear", async () => {
+    // The live call returned accountsQueried: 2, accountsFailed: 1 — the API
+    // told us it couldn't read one connected account and we discarded it.
+    // Reading half the inbox and saying "all clear" is the exact failure class
+    // this product exists to eliminate.
+    const rec = recordingClient({
+      data: [],
+      meta: {
+        accountsQueried: 2,
+        accountsFailed: 1,
+        failedAccounts: [{ accountId: "a1", platform: "reddit" }],
+      },
+    });
+    const out = await listInboxComments(rec.client, {});
+    expect(out.failedAccounts).toHaveLength(1);
+    expect(out.failedAccounts[0].platform).toBe("reddit");
+  });
+
+  it("an empty inbox reports no failures rather than undefined", async () => {
+    const rec = recordingClient({ data: [] });
+    const out = await listInboxComments(rec.client, {});
+    expect(out.failedAccounts).toEqual([]);
+    expect(out.nextCursor).toBeNull();
+    expect(out.hasMore).toBe(false);
   });
 
   it("listConversations → GET /api/v1/inbox/conversations", async () => {
@@ -428,7 +468,18 @@ describe("read wrappers hit the right paths with the right query params", () => 
     const url = new URL(rec.lastUrl());
     expect(url.pathname).toBe("/api/v1/inbox/conversations");
     expect(url.searchParams.get("status")).toBe("open");
-    expect(out[0].id).toBe("conv_1");
+    expect(out.items[0].id).toBe("conv_1");
+  });
+
+  it("listConversations paginates and surfaces partial failure the same way", async () => {
+    const rec = recordingClient({
+      data: [{ id: "conv_1" }],
+      pagination: { hasMore: true, nextCursor: "cur_9" },
+      meta: { failedAccounts: [{ accountId: "a2", platform: "reddit" }] },
+    });
+    const out = await listConversations(rec.client, {});
+    expect(out.nextCursor).toBe("cur_9");
+    expect(out.failedAccounts).toHaveLength(1);
   });
 });
 
