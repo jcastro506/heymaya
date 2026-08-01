@@ -3444,13 +3444,24 @@ export default defineSchema({
     brandKitJson: v.optional(v.string()),
     /** Where she texts them. Absent until Telegram pairing completes. */
     telegramChatId: v.optional(v.string()),
+    /**
+     * SHA-256 of the agent's bearer token — the credential her runtime presents
+     * on every tool call.
+     *
+     * Hashed, never plaintext: a leaked database read shouldn't hand over the
+     * ability to act as any customer's agent. And it's what the tool surface
+     * resolves tenancy FROM — no hook accepts a customerId in its body, so a
+     * confused or compromised agent cannot name a tenant it isn't.
+     */
+    agentTokenHash: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_account", ["accountId"])
     .index("by_telegram_chat", ["telegramChatId"])
     .index("by_state", ["state"])
-    .index("by_agent_version", ["agentVersion"]),
+    .index("by_agent_version", ["agentVersion"])
+    .index("by_agent_token", ["agentTokenHash"]),
 
   /** One row per connected channel. */
   channels: defineTable({

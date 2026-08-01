@@ -55,6 +55,24 @@ export const ALWAYS_ALLOWED_KINDS: readonly string[] = [
   "answer_comment",
   "answer_dm",
   "answer_mention",
+  /**
+   * ⭐ Publishing an ALREADY-DECIDED post. Not an exception — a correction.
+   *
+   * The unclassified default is "throttleable", which fails toward spending
+   * less. That's the right default and the wrong answer here, because it would
+   * mean a founder says yes and the post silently never goes out — the exact
+   * silent hold the iron rule (§9.1) exists to eliminate, smuggled back in one
+   * layer down through the job queue.
+   *
+   * `publishDecision` deliberately refuses to consult budgets, because failing
+   * after a yes is the worst possible sequence. That refusal is worth nothing
+   * if the queue re-checks a budget on the way out.
+   *
+   * And there is no money here to save: the expensive part (production) already
+   * happened upstream, where the pre-spend gate belongs. This is one vendor API
+   * call and zero model tokens.
+   */
+  "publish_placement",
 ] as const;
 
 /**
