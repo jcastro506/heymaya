@@ -3642,7 +3642,6 @@ export default defineSchema({
     ),
     publishedAt: v.number(),
     snapshotText: v.string(),
-    thumbnailId: v.optional(v.string()),
     mediaAssetIdsJson: v.optional(v.string()),
     metricsJson: v.optional(v.string()),
     /** Freshness stamp — metrics without one are a number with no date, which
