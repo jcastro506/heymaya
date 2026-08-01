@@ -3733,10 +3733,21 @@ export default defineSchema({
     deadlineAt: v.number(),
     /** A named failure that can reach the user — never a silent drop. */
     lastError: v.optional(v.string()),
+    /**
+     * What this job actually spent, in USD.
+     *
+     * §8.1: budgets are "rows the server draws down, not instructions". Daily
+     * spend is therefore DERIVED by summing this across a customer's jobs
+     * rather than kept in a counter — a counter can drift, and a drifted spend
+     * counter either throttles someone who spent nothing or fails to throttle
+     * a runaway.
+     */
+    costUsd: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_idempotency_key", ["idempotencyKey"])
+    .index("by_customer_and_createdAt", ["customerId", "createdAt"])
     .index("by_status_and_runAfter", ["status", "runAfter"])
     .index("by_customer", ["customerId"])
     .index("by_status_and_deadline", ["status", "deadlineAt"]),

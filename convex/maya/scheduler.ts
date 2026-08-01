@@ -46,6 +46,7 @@ import { internalAction, internalMutation, internalQuery } from "../_generated/s
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { correlateFleet, evaluate, type Breach } from "./liveness";
+import { allowsKind } from "./spendCeiling";
 
 /* -------------------------------------------------------------------------- */
 /* Who the loop runs for                                                       */
@@ -268,18 +269,47 @@ export const drainJobs = internalAction({
   handler: async (
     ctx,
     args
-  ): Promise<{ claimed: number; succeeded: number; failed: number }> => {
+  ): Promise<{
+    claimed: number;
+    succeeded: number;
+    failed: number;
+    throttled: number;
+  }> => {
     await ctx.runMutation(internal.maya.jobs.reapExpired, {});
 
     const max = args.max ?? 25;
     let claimed = 0;
     let succeeded = 0;
     let failed = 0;
+    let throttled = 0;
 
     for (let i = 0; i < max; i += 1) {
       const job = await ctx.runMutation(internal.maya.jobs.claimNext, {});
       if (!job) break;
       claimed += 1;
+
+      // The spend ceiling, consulted at the point work actually happens. A
+      // ceiling nothing checks is decoration. Throttled work goes back to the
+      // queue rather than failing — it isn't broken, it's deferred, and it
+      // should run tomorrow when the budget resets.
+      if (job.customerId) {
+        const spend = await ctx.runQuery(
+          internal.maya.spendCeiling.spendToday,
+          { customerId: job.customerId }
+        );
+        if (!allowsKind(spend.state, job.kind)) {
+          await ctx.runMutation(internal.maya.jobs.fail, {
+            jobId: job._id,
+            error: `deferred — ${spend.detail}`,
+          });
+          await ctx.runMutation(internal.maya.spendCeiling.alertThrottled, {
+            customerId: job.customerId,
+            detail: spend.detail,
+          });
+          throttled += 1;
+          continue;
+        }
+      }
 
       if (!HANDLED_KINDS.has(job.kind)) {
         await ctx.runMutation(internal.maya.jobs.fail, {
@@ -311,7 +341,7 @@ export const drainJobs = internalAction({
         failed += 1;
       }
     }
-    return { claimed, succeeded, failed };
+    return { claimed, succeeded, failed, throttled };
   },
 });
 
