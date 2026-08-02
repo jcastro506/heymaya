@@ -3684,7 +3684,10 @@ production.
 - She answers a text, and **after a redeploy still knows what was said**.
 - A fact from Monday is **recalled on Wednesday via memory search**, not read
   from a static file.
-- **Dreaming produces a `DREAMS.md` entry overnight.**
+- **Dreaming produces a `DREAMS.md` entry overnight**, and a promoted line
+  appears in `MEMORY.md` that nobody wrote by hand.
+- ⭐ **A redeploy does NOT wipe `MEMORY.md`** — the single most important one,
+  because as built it does.
 
 #### 2.9.5 Tests
 
@@ -3698,7 +3701,128 @@ production.
   anything outside it fails. This is the structural guard against re-drifting,
   and it is the test whose absence let this happen.
 
-#### 2.9.6 Cost, recorded honestly
+#### 2.9.6 Memory and context — what OpenClaw actually provides
+
+**Read from the shipped 2026.5.27 docs, not assumed.** The short version: memory
+is substantially more capable than this build treated it, and almost everything
+we need is **configuration, not construction.** Two of my earlier concerns were
+simply wrong and are corrected below.
+
+##### The three layers
+
+| Layer | What | Injected every turn? |
+|---|---|---|
+| `MEMORY.md` | Curated durable facts, preferences, standing decisions. **Agent-written.** | Yes — and **never temporally decayed** ("evergreen") |
+| `memory/YYYY-MM-DD.md` | Daily working notes, observations, raw context | No — today + yesterday only; the rest is **indexed for `memory_search`** |
+| `DREAMS.md` · `memory/.dreams/` | Consolidation output and machine state | No |
+
+Tools: **`memory_search`** (hybrid — vector similarity *plus* keyword FTS, so
+IDs and code symbols still match) and **`memory_get`**.
+
+##### ⭐ Correction 1 — MEMORY.md truncation is not data loss
+
+I previously called this a silent cliff. It isn't:
+
+> *"If `MEMORY.md` grows past the bootstrap file budget, OpenClaw keeps the file
+> on disk intact but truncates the copy injected into the model context."*
+
+The file survives; only the injected copy is cut, and `/context list`,
+`/context detail`, and `openclaw doctor` report **raw vs injected sizes and
+truncation status**. So the fix is a monitor, not a redesign — and the monitor
+already exists, we just have to read it.
+
+##### ⭐ Correction 2 — the heartbeat is the memory system
+
+Distillation of daily notes into `MEMORY.md` runs through *"the generated
+workspace instructions and heartbeat flow."* **Commitments** — inferred
+short-lived follow-ups — are *"delivered through heartbeat"* too.
+
+So disabling the heartbeat (§2.9.1) didn't only remove proactivity. **It removed
+memory consolidation and follow-through.** That is a third independent reason
+the drift was wrong, and I hadn't connected it.
+
+##### The long-horizon features exist, and are off by default
+
+This is the direct answer to *"is it good over months and years?"*
+
+- **Temporal decay** — old notes lose ranking weight on a 30-day half-life so
+  recent information surfaces first. `MEMORY.md` is exempt as evergreen. The
+  docs recommend it explicitly *"if your agent has months of daily notes."*
+- **MMR (diversity)** — stops five near-duplicate daily notes crowding out the
+  top results.
+- **Dreaming** (opt-in, **disabled by default**) — Light stages candidates, Deep
+  scores and promotes to `MEMORY.md` behind `minScore` / `minRecallCount` /
+  `minUniqueQueries` gates and **rehydrates from live daily files so deleted or
+  stale snippets are skipped**, REM extracts recurring themes.
+- **Automatic memory flush** — before compaction, a silent turn reminds the
+  agent to save important context. **On by default.**
+
+##### `memory-wiki` — the layer that matches this product
+
+Bundled, and a better fit for the niche-knowledge problem than anything we would
+write: structured **claims with evidence**, page-level **provenance and
+confidence**, plus generated `reports/contradictions.md`,
+`reports/stale-pages.md`, `reports/claim-health.md`, and
+`reports/provenance-coverage.md`. Tools: `wiki_search`, `wiki_get`, `wiki_apply`,
+`wiki_lint`.
+
+Map that onto §7.5 and §14: *what works in this niche* is a claim with evidence
+that **goes stale** and can be **contradicted by later results**. Contradiction
+and freshness tracking is exactly the machinery that loop needs, and it ships.
+
+##### `active-memory` — worth it for the Telegram session
+
+An optional blocking memory sub-agent that runs **before** the main reply, so
+relevant memory surfaces without the agent having to decide to go looking.
+Documented as a good fit for *"persistent and user-facing"* sessions and a poor
+fit for *"automation, internal workers, one-shot API tasks."*
+
+That is precisely our split: **on for the founder's DM session, off for
+subagents.**
+
+##### What we configure vs what stays ours
+
+| Configure (OpenClaw) | Stays Convex |
+|---|---|
+| `memorySearch` + embedding provider · temporal decay · MMR · dreaming · `memory-wiki` · `active-memory` on the DM session · heartbeat | placements · drafts · ideas · metrics · directives · the archive (§16.8) |
+
+The distinction is **reader**, not content: `memory-wiki` is the *agent's*
+knowledge with provenance; the archive is the *customer's* record, rendered in
+Mission Control and exported in Sprint 10. Both are justified; neither replaces
+the other.
+
+##### Residual risks — the honest list
+
+1. 🔴 **`MEMORY.md` clobbering — blocks any deploy.** The workspace generator
+   emits a `MEMORY.md` and the deploy writes it via Fly `config.files` on every
+   machine create. OpenClaw's `MEMORY.md` is **agent-curated and is where
+   dreaming's Deep phase appends promoted memories.** As built, **every redeploy
+   wipes everything she has learned.** Fix: conventions move into `AGENTS.md`;
+   `MEMORY.md` becomes **seed-if-absent, never overwritten**.
+2. 🔴 **No backup.** Notes and the memory sqlite live on one Fly volume —
+   single region, single copy. Lose it and everything outside Convex is gone.
+   OpenClaw's own docs recommend git-backing the workspace; we do neither.
+   Fix: nightly workspace + sqlite snapshot to R2.
+3. 🟡 **Injected-context truncation** as `MEMORY.md` grows. Not data loss, but
+   she stops seeing the tail. Fix: read `openclaw doctor` truncation status in
+   the liveness sweep (§12) rather than guessing.
+4. 🟡 **Embedding cost at fleet scale** — ~1,100 daily files per customer-year.
+   Cheap per unit, unmeasured in aggregate. Sanity-check before 200 customers.
+
+##### Added tasks
+
+| Task |
+|---|
+| 🔴 **`MEMORY.md` seed-if-absent**; move memory conventions into `AGENTS.md`. **Blocks deploy.** |
+| Configure `memorySearch` (Gemini embeddings, sqlite vector store on the volume) — currently absent entirely |
+| Enable **temporal decay** and **MMR** — the multi-year features, off by default |
+| Enable **dreaming** — opt-in, off by default |
+| Install **`memory-wiki`** for niche knowledge: claims, provenance, contradictions, staleness |
+| Enable **`active-memory`** on the founder DM session only; off for subagents |
+| Nightly backup of workspace + memory sqlite to R2 |
+| Wire `openclaw doctor` truncation status into the liveness sweep |
+
+#### 2.9.7 Cost, recorded honestly
 
 Always-on moves the Fly line from **$0.50–2 → $5–15** per customer, all-in COGS
 from ~$29–41 → **~$33–54**, gross margin at $149 from ~72–80% → **~64–78%**.
