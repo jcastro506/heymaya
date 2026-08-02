@@ -265,7 +265,11 @@ async function runHandler(
  * so a job abandoned by a dead worker is back in the queue before we claim.
  */
 export const drainJobs = internalAction({
-  args: { max: v.optional(v.number()) },
+  // `now` is a TEST SEAM, and it exists because its absence was a time bomb:
+  // the spend window is derived from the real clock, so a test seeding spend at
+  // a fixed fixture date silently stopped throttling the moment UTC rolled past
+  // that date. It passed all day and failed at midnight.
+  args: { max: v.optional(v.number()), now: v.optional(v.number()) },
   handler: async (
     ctx,
     args
@@ -295,7 +299,7 @@ export const drainJobs = internalAction({
       if (job.customerId) {
         const spend = await ctx.runQuery(
           internal.maya.spendCeiling.spendToday,
-          { customerId: job.customerId }
+          { customerId: job.customerId, now: args.now }
         );
         if (!allowsKind(spend.state, job.kind)) {
           await ctx.runMutation(internal.maya.jobs.fail, {

@@ -178,22 +178,68 @@ export const undelivered = internalQuery({
  * longer — strictly better than delaying the actual wake to retry a cosmetic
  * call.
  */
+/**
+ * How many times to re-send during a wake.
+ *
+ * **Telegram clears the indicator after ~5 seconds.** A single send therefore
+ * covers 5s of a 10–30s cold start and then leaves the founder looking at
+ * nothing for the rest of it — which is the exact "reads as broken" failure the
+ * indicator exists to prevent. The first version of this shipped a single send
+ * under a comment that said a slow boot needs it re-sent.
+ *
+ * Six sends at 4s covers ~24s, past the p95 boot target of 30s minus the first
+ * send. Once the machine is up, OpenClaw's own `typingMode: "instant"` takes
+ * over and this stops mattering.
+ */
+const TYPING_REFRESHES = 6;
+const TYPING_REFRESH_MS = 4_000;
+
+async function sendOneChatAction(chatId: string): Promise<boolean> {
+  try {
+    const { resolveTelegramBotIdentity, sendTelegramChatAction } = await import(
+      "../integrations/telegram/client"
+    );
+    const identity = resolveTelegramBotIdentity({});
+    if (!identity) return false;
+    return (await sendTelegramChatAction(identity, { chatId })).ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * One indicator, immediately. **Awaited by the webhook**, so it must stay fast.
+ */
 export const showTyping = internalAction({
   args: { chatId: v.string() },
-  handler: async (_ctx, args): Promise<{ shown: boolean }> => {
-    try {
-      const { resolveTelegramBotIdentity, sendTelegramChatAction } = await import(
-        "../integrations/telegram/client"
-      );
-      const identity = resolveTelegramBotIdentity({});
-      if (!identity) return { shown: false };
-      const result = await sendTelegramChatAction(identity, {
-        chatId: args.chatId,
-      });
-      return { shown: result.ok };
-    } catch {
-      return { shown: false };
+  handler: async (_ctx, args): Promise<{ shown: boolean }> => ({
+    shown: await sendOneChatAction(args.chatId),
+  }),
+});
+
+/**
+ * Keep the indicator alive across the boot. **Scheduled, never awaited.**
+ *
+ * Split from `showTyping` for a specific reason: the webhook awaits the first
+ * send to guarantee it lands before the wake, and a webhook that then sat for
+ * 24 seconds re-painting an indicator would blow Telegram's delivery ACK and
+ * earn a retry — turning one message into several.
+ *
+ * So: one send inline, the rest out here.
+ */
+export const holdTyping = internalAction({
+  args: { chatId: v.string() },
+  handler: async (_ctx, args): Promise<{ sends: number }> => {
+    let sends = 0;
+    for (let i = 0; i < TYPING_REFRESHES; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, TYPING_REFRESH_MS));
+      const ok = await sendOneChatAction(args.chatId);
+      sends += 1;
+      // Telegram refusing, or the bot unconfigured. Either way, stop — a failed
+      // cosmetic call is not worth retrying twenty more times.
+      if (!ok) break;
     }
+    return { sends };
   },
 });
 

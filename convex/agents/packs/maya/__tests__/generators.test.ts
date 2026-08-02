@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildMayaWorkspace,
   ALWAYS_LOADED_TARGET_CHARS,
-  PROMPT_BUDGET_CHARS,
+  BOOTSTRAP_MAX_CHARS_PER_FILE,
+  BOOTSTRAP_TOTAL_MAX_CHARS,
+  OPENCLAW_CONFIG_PATH,
+  WORKSPACE_DIR,
   type MayaWorkspaceInput,
 } from "../generators";
 import { BUNDLED_MAYA_SKILLS, MAYA_CONVENTIONS } from "../bundledSkills";
@@ -21,15 +24,49 @@ const INPUT: MayaWorkspaceInput = {
 
 describe("THE PROMPT BUDGET IS MEASURED, NOT HOPED FOR", () => {
   it("the always-loaded set fits, with real headroom", () => {
-    // §15.1.2: ~108,900 char cap, ~76k target for the always-loaded set. The
-    // frozen v1 pack is at ZERO headroom, which is why it can't take another
-    // sentence without something being cut first. Failing here is a build
-    // failure; discovering it on a deploy is a broken agent.
     const bundle = buildMayaWorkspace(INPUT);
     expect(bundle.alwaysLoadedChars).toBeLessThan(ALWAYS_LOADED_TARGET_CHARS);
-    expect(bundle.alwaysLoadedChars).toBeLessThan(PROMPT_BUDGET_CHARS);
+    expect(bundle.alwaysLoadedChars).toBeLessThan(BOOTSTRAP_TOTAL_MAX_CHARS);
     // And it isn't empty — a budget test passes trivially if nothing renders.
     expect(bundle.alwaysLoadedChars).toBeGreaterThan(3_000);
+  });
+
+  it("NO SINGLE FILE EXCEEDS THE PER-FILE INJECTION CAP", () => {
+    // The check the first version of this test was missing entirely.
+    //
+    // OpenClaw truncates any bootstrap file over `bootstrapMaxChars` SILENTLY.
+    // The v1 pack hit this in production on 2026-05-27: BOOT.md 15K, TOOLS.md
+    // 17K and AGENTS.md 14.5K were each cut to 12K, dropping end-of-file
+    // content including a hard gate and several procedures — with no error.
+    //
+    // A total-only budget test would pass a workspace whose AGENTS.md the
+    // runtime then quietly halves, which is the worst kind of green.
+    const bundle = buildMayaWorkspace(INPUT);
+    for (const [name, body] of bundle.files) {
+      if (name === OPENCLAW_CONFIG_PATH) continue; // config, not injected
+      expect(
+        body.length,
+        `${name} would be silently truncated at injection`
+      ).toBeLessThan(BOOTSTRAP_MAX_CHARS_PER_FILE);
+    }
+  });
+
+  it("the config RAISES both caps rather than relying on defaults", () => {
+    // Defaults are 12,000 per file and 60,000 total. Both default failure modes
+    // are documented production incidents on v1, and both are silent — the
+    // second one dropped BOOT.md entirely and the agent came up with no
+    // instructions at all.
+    const config = JSON.parse(
+      buildMayaWorkspace(INPUT).files.get(OPENCLAW_CONFIG_PATH)!
+    );
+    expect(config.agents.defaults.bootstrapMaxChars).toBe(
+      BOOTSTRAP_MAX_CHARS_PER_FILE
+    );
+    expect(config.agents.defaults.bootstrapTotalMaxChars).toBe(
+      BOOTSTRAP_TOTAL_MAX_CHARS
+    );
+    expect(config.agents.defaults.bootstrapMaxChars).toBeGreaterThan(12_000);
+    expect(config.agents.defaults.bootstrapTotalMaxChars).toBeGreaterThan(60_000);
   });
 
   it("counts every always-loaded file and nothing else", () => {
@@ -95,17 +132,96 @@ describe("CONVEX OWNS THE CLOCK", () => {
     }
   });
 
-  it("HEARTBEAT.md says she is woken rather than self-spinning", () => {
-    const heartbeat = buildMayaWorkspace(INPUT).files.get("HEARTBEAT.md")!;
-    expect(heartbeat).toMatch(/do not schedule myself/i);
-    expect(heartbeat).toMatch(/Convex owns the clock/i);
+  it("THE HEARTBEAT IS DISABLED IN CONFIG, not just in prose", () => {
+    // OpenClaw's heartbeat defaults to every 30m — 48 wakes a day on a machine
+    // that should wake ~6–15 times. That alone would undo the auto-stop
+    // economics the deploy path is built around, and no amount of doctrine in
+    // a markdown file changes a gateway default.
+    const config = JSON.parse(
+      buildMayaWorkspace(INPUT).files.get(OPENCLAW_CONFIG_PATH)!
+    );
+    expect(config.agents.defaults.heartbeat.every).toBe("0m");
   });
 
-  it("a woken turn puts inbound first and allows doing nothing", () => {
-    // Manufacturing activity to look busy is how a founder learns to ignore her.
-    const heartbeat = buildMayaWorkspace(INPUT).files.get("HEARTBEAT.md")!;
-    expect(heartbeat).toMatch(/inbound first/i);
-    expect(heartbeat).toMatch(/silence is a valid turn/i);
+  it("ships NO HEARTBEAT.md, because a disabled heartbeat never loads one", () => {
+    // Per the runtime docs: with `every: "0m"`, normal runs also omit
+    // HEARTBEAT.md from bootstrap context. This pack used to ship one anyway —
+    // budget spent on a file that could never load, and a lie to the next
+    // person who read it and assumed it was live.
+    expect([...buildMayaWorkspace(INPUT).files.keys()]).not.toContain(
+      "HEARTBEAT.md"
+    );
+  });
+});
+
+describe("the gateway config exists at all", () => {
+  const config = JSON.parse(
+    buildMayaWorkspace(INPUT).files.get(OPENCLAW_CONFIG_PATH)!
+  );
+
+  it("is emitted — a workspace with no config is a folder, not an agent", () => {
+    // The pack previously shipped NO config, so a machine would have booted on
+    // defaults that contradict nearly every decision here: 30m heartbeat, the
+    // wrong workspace directory, our bootstrap files re-seeded over, no plugin
+    // allow-list, and no model.
+    expect(config).toBeTruthy();
+    expect(OPENCLAW_CONFIG_PATH.startsWith("/")).toBe(true);
+  });
+
+  it("points the workspace at the PERSISTENT VOLUME", () => {
+    // Default is ~/.openclaw/workspace, which is ephemeral root. Sprint 2's
+    // exit is "she answers from rows across a redeploy" — that needs the
+    // workspace on the volume.
+    expect(config.agents.defaults.workspace).toBe(WORKSPACE_DIR);
+    expect(WORKSPACE_DIR.startsWith("/data")).toBe(true);
+  });
+
+  it("skips OpenClaw's bootstrap ritual so our files aren't re-seeded", () => {
+    expect(config.agents.defaults.skipBootstrap).toBe(true);
+  });
+
+  it("allow-lists only our plugin", () => {
+    expect(config.plugins.allow).toEqual(["maya-tools"]);
+  });
+
+  it("turns typing on for the post-boot half", () => {
+    // Convex covers the cold-start window; this covers everything after the
+    // model loop starts. Neither layer can see both halves.
+    expect(config.agents.defaults.typingMode).toBe("instant");
+    expect(config.agents.defaults.typingIntervalSeconds).toBeLessThanOrEqual(5);
+  });
+});
+
+describe("THE CRITIC RUNS ON A GENUINELY DIFFERENT MODEL", () => {
+  const config = JSON.parse(
+    buildMayaWorkspace(INPUT).files.get(OPENCLAW_CONFIG_PATH)!
+  );
+  const critic = config.subagents.find(
+    (s: { id: string }) => s.id === "critique"
+  );
+
+  it("binds critique to a model, structurally", () => {
+    // The skill asks the model to refuse the verdict if it notices it IS the
+    // writer's model — a prompt asking a model to introspect, which is the
+    // weakest enforcement available. Configuration makes it true instead.
+    expect(critic?.model).toBeTruthy();
+    expect(critic.model).not.toBe(config.agents.defaults.model.primary);
+  });
+
+  it("is not merely a different REASONING MODE of the same model", () => {
+    // The trap: `openai/gpt-5.6-luna` looks like a different model from
+    // `openai/gpt-5.6-luna-pro` and isn't — the spec is explicit that luna-pro
+    // "is the same underlying model as luna, served with reasoning.mode: pro".
+    // A luna critic judging a luna-pro writer grades its own register and
+    // catches nothing, which is exactly what the rule exists to prevent.
+    const family = (m: string) => m.split("/")[1]?.replace(/-pro$/, "");
+    expect(family(critic.model)).not.toBe(
+      family(config.agents.defaults.model.primary)
+    );
+    // Different vendor entirely, which is the strongest available signal.
+    expect(critic.model.split("/")[0]).not.toBe(
+      config.agents.defaults.model.primary.split("/")[0]
+    );
   });
 });
 

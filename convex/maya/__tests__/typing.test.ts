@@ -227,3 +227,49 @@ describe("the cold-start budget is real, and this is what buys it", () => {
     expect(client).toMatch(/"sendChatAction"/);
   });
 });
+
+describe("the indicator survives a whole cold boot", () => {
+  it("holdTyping re-sends rather than relying on one paint", async () => {
+    // Telegram clears the indicator after ~5s; a cold boot is 10-30s. The first
+    // version of this sent ONCE, under a comment saying a slow boot needs it
+    // re-sent — so the founder saw nothing for most of the wait, which is the
+    // exact "reads as broken" failure the indicator exists to prevent.
+    const source = readFileSync(
+      join(__dirname, "..", "telegram.ts"),
+      "utf8"
+    );
+    expect(source).toMatch(/export const holdTyping/);
+    expect(source).toMatch(/TYPING_REFRESHES/);
+    // Enough sends, close enough together, to outlast the 30s p95 boot target.
+    const refreshes = Number(source.match(/TYPING_REFRESHES = (\d+)/)![1]);
+    const intervalMs = Number(source.match(/TYPING_REFRESH_MS = ([\d_]+)/)![1].replace(/_/g, ""));
+    expect(intervalMs).toBeLessThanOrEqual(5_000); // Telegram's clear window
+    expect(refreshes * intervalMs).toBeGreaterThanOrEqual(20_000);
+  });
+
+  it("the webhook AWAITS one send but SCHEDULES the rest", async () => {
+    // A webhook that sat for 24s re-painting would blow Telegram's delivery ACK
+    // and earn a retry — turning one founder message into several.
+    const source = readFileSync(
+      join(__dirname, "..", "..", "gtmMaya", "telegramWebhook.ts"),
+      "utf8"
+    );
+    expect(source).toMatch(
+      /await ctx\.runAction\(\s*internal\.maya\.telegram\.showTyping/
+    );
+    expect(source).toMatch(
+      /scheduler\.runAfter\(0, internal\.maya\.telegram\.holdTyping/
+    );
+    // And holdTyping is never awaited inline.
+    expect(source).not.toMatch(/await ctx\.runAction\([^)]*holdTyping/);
+  });
+
+  it("holdTyping stops early rather than retrying a refused call", async () => {
+    // No bot configured in tests, so the first send fails and it bails.
+    const t = convexTest(schema, modules);
+    const result = await t.action(internal.maya.telegram.holdTyping, {
+      chatId: "chat_x",
+    });
+    expect(result.sends).toBe(1);
+  });
+});

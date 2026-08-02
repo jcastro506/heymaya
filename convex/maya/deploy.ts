@@ -37,7 +37,11 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { FlyMachineConfig } from "../lib/flyClient";
 import { hashToken } from "./hooks";
-import { buildMayaWorkspace, type MayaWorkspaceInput } from "../agents/packs/maya/generators";
+import {
+  buildMayaWorkspace,
+  WORKSPACE_DIR,
+  type MayaWorkspaceInput,
+} from "../agents/packs/maya/generators";
 import {
   BUNDLED_MAYA_PLUGIN_ID,
   BUNDLED_MAYA_PLUGIN_TGZ_NAME,
@@ -343,8 +347,17 @@ export const deployMachine = internalAction({
         region: args.region,
         config: {
           ...config,
+          // Absolute paths (the config) are written where they say; everything
+          // else is a workspace-relative file.
+          //
+          // This previously wrote to `/workspace/…`, which OpenClaw never reads
+          // — its workspace is `~/.openclaw/workspace` unless configured, and
+          // we configure it onto the persistent volume. A machine would have
+          // booted with no doctrine, no skills, and no tools documentation,
+          // and the only symptom would have been an agent that ignored
+          // everything.
           files: Object.entries(workspace.files).map(([path, body]) => ({
-            guest_path: `/workspace/${path}`,
+            guest_path: path.startsWith("/") ? path : `${WORKSPACE_DIR}/${path}`,
             raw_value: btoa(unescape(encodeURIComponent(body))),
           })),
         },
