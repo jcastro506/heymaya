@@ -2984,6 +2984,26 @@ Six sweeps per customer ≈ **55 requests/day** → ~1,650/month → **330,000/m
 
 ### 17.36 The agent runtime — auto-stop is the lever
 
+> ⛔ **SUPERSEDED for the pilot — see §18 Sprint 2.9 (2026-08-02).** The section
+> below is cost-correct and product-wrong, and it was followed into a build that
+> disabled OpenClaw's heartbeat, cron, dreaming, and memory search.
+>
+> **The trap is in the sentence "auto-stop only works because she's
+> event-driven."** That reads as a happy consequence of the design. It is
+> actually a *requirement imposed on* the design — a heartbeat on an
+> auto-stopping machine doesn't spin, it **silently dies**, because it generates
+> no inbound request to keep the machine alive and there is no process to fire
+> it once stopped. So auto-stop doesn't coexist with the agent loop; it removes
+> it, quietly.
+>
+> And the lever is smaller than it looks: 10× on this line is **~5–8
+> gross-margin points at $149**, because Fly is one line of a ~$29–41 COGS. That
+> is a cheap price for the behaviour that makes her an employee, and the wrong
+> thing to optimise at zero customers.
+>
+> **Pilot ships always-on.** Revisit when the line is material, and only with a
+> mechanism that keeps the loop intact.
+
 **This is the largest unresolved line in the model, and the event-driven design (§3.1) unlocks a fix I hadn't applied.**
 
 #### 17.36.1 Three architectures
@@ -3467,7 +3487,8 @@ new until Sprint 3's gate holds.
 | **1 Perception** | 🟡 ~85% | endpoints split per-platform · all P0 wrappers (params verified live) · X expansion · manifest 404s fixed · smoke suite tiers 1–2 green on 5 vendors · 5 of 14 Zernio wrappers verified | 9 Zernio wrappers (4 are writes) · Creatify + R2 keys · tier 3 |
 | **2 Spine** | 🟡 ~85% | data model · job queue · planFeatures · message log · agentVersion routing · **the watchers layer (Convex crons)** · Telegram transport · spend ceiling · the archive (§16.8) | persistent session + volume · runtime shape — **both need a live machine** |
 | **2.5 Luna** | ✅ shipped | main brain + judges on gpt-5.6-luna | the week-long watch hasn't run |
-| **3 X — the gamble** | 🟡 ~75% | **the iron rule** · preflight (token, 280, duplicate) · brief + recap · **the tool surface** (`publish`/`reply`/`ask_founder`, tenant-safe by shape) · **the three skills + CONVENTIONS** · **the `maya-tools` plugin** | rate limits · workspace bundle + wake protocol · **the 7-day exit** |
+| **2.9 Harness correction** | 🔴 0% | — | **everything** — always-on · cron · heartbeat · memory search · dreaming · shrink `scheduler.ts`. **Blocks Sprint 3's exit:** a placement a day needs an agent that wakes up. |
+| **3 X — the gamble** | 🟡 ~60% | **the iron rule** · preflight (token, 280, duplicate) · **the tool surface** (`publish`/`reply`/`ask_founder`, tenant-safe by shape) · **the three skills + CONVENTIONS** · **the `maya-tools` plugin** | ⚠️ **brief + recap were counted as done and are not** — they were Convex crons feeding a `wake_agent` job with no handler · rate limits · **the 7-day exit** |
 | **4 Brand** | 🟡 ~45% | buyer map · voice-from-edits · asset classifier · **the §6.4.6 spike, run** | learn-business/voice/brand · brand kit · media library |
 | **5 Perception live** | 🔴 ~10% | complaint→content · quality gates | the six sweeps · Screen model · idea bank · plan-day |
 | **6 Memory + liveness** | 🟡 ~65% | directive ledger · three commands · **liveness contract + sweep + fleet correlation** | directive compiler → server gates · balance circuit breakers |
@@ -3602,6 +3623,89 @@ ledger showing the saving is real. **If either fails, revert and say so** —
 **Secondary prize:** 1.05M context against kimi's 262K. The workspace prompt
 budget currently sits at **zero headroom** against a ~108.9k cap, which is why
 prose can't be added anywhere. Luna's window ends that constraint outright.
+
+### Sprint 2.9 — The harness correction · *give the loop back to OpenClaw*
+
+**Operator decision, 2026-08-02.** Inserted after the fact, because the build
+drifted and this is the correction.
+
+#### 2.9.1 What went wrong
+
+`convex/maya` was built with OpenClaw's heartbeat disabled (`0m`), no
+`jobs.json`, no memory search, and no dreaming — replaced by Convex crons, a
+durable job queue, and a `wake_agent` job. The stated reason was auto-stop
+(§17.36).
+
+Three things were wrong with that:
+
+1. **It reimplemented the harness.** `convex/maya/scheduler.ts` + `jobs.ts` +
+   `wake_agent` is a heartbeat-and-cron replacement, written next to a framework
+   that ships both. This is exactly what
+   `feedback_openclaw_native_first.md` forbids.
+2. **The replacement was never finished.** `wake_agent` and `publish_placement`
+   have no handlers — both dead-letter. The working v1 loop was removed and
+   nothing took its place, so v2 currently does nothing proactive at all.
+3. **The cost case doesn't carry the weight put on it.** Auto-stop is 10× on
+   *one COGS line*, which is **~5–8 gross-margin points at $149** — not 10× on
+   the business. That is a cheap price for the behaviour that makes her an
+   employee rather than a scheduler, and it is the wrong thing to optimise at
+   zero customers.
+
+#### 2.9.2 The line, stated once
+
+> **OpenClaw owns the agent's life. Convex owns facts and enforcement.**
+
+| OpenClaw | Convex |
+|---|---|
+| heartbeat · cron · dreaming · memory search · session · workspace · skills · subagents · the agent loop | rows as truth · the publish decision (§9.1) · budgets · delivery receipts · Telegram routing · placements + the archive |
+
+**Telegram routing stays Convex** and is not a harness concern: OpenClaw allows
+one active poller per bot token (`channels/telegram.md`), we run one shared bot
+across all tenants, and this project has already hit that conflict in
+production.
+
+**The iron rule stays Convex.** Prompts drift; rows don't.
+
+#### 2.9.3 Tasks
+
+| Task |
+|---|
+| **Machine shape → always-on.** `min_machines_running: 1`, autostop off, `restart: always`. Reverts the §17.36 config. |
+| **Restore OpenClaw cron.** Ship `jobs.json` → `/data/cron/jobs.json` with stable ids in operator-local time. Registered at deploy, never by the agent at runtime — the v1 path let her invent crons and she stacked duplicates. |
+| **Restore the heartbeat** + a real `HEARTBEAT.md` checklist (deleted in the drift because a disabled heartbeat never loads one). |
+| **Wire `memorySearch`** — embeddings + sqlite vector store on the volume, matching v1. Currently absent entirely; recall today is a static generated file. |
+| **Enable dreaming.** |
+| **Shrink `convex/maya/scheduler.ts`** to message delivery and the publish path only. Delete the watchers layer, `wake_agent`, and every Convex cron that duplicates an OpenClaw one. |
+| ⭐ **Use the gateway persistent-session path, not `/hooks/agent`** — that entry point is hardcoded isolated+forceNew, which is what made v1's amnesia structural (five DMs = five fresh sessions). Verify, don't assume. |
+
+#### 2.9.4 Exit — demonstrated live, per §18.0
+
+- **She wakes on her own** at 07:00 local and sends a brief nobody asked for.
+- She answers a text, and **after a redeploy still knows what was said**.
+- A fact from Monday is **recalled on Wednesday via memory search**, not read
+  from a static file.
+- **Dreaming produces a `DREAMS.md` entry overnight.**
+
+#### 2.9.5 Tests
+
+- Cron store ships with stable ids; a redeploy does not duplicate them.
+- Heartbeat enabled **in config**, not asserted in prose.
+- `memorySearch` enabled and pointed at the persistent volume.
+- Every job kind the drainer can claim **has a handler** — no silent
+  dead-letter class. This is what would have caught `wake_agent`.
+- ⭐ **The anti-drift test: no Convex cron may schedule anything OpenClaw's
+  cron or heartbeat owns.** A named allow-list of Convex-side schedules, and
+  anything outside it fails. This is the structural guard against re-drifting,
+  and it is the test whose absence let this happen.
+
+#### 2.9.6 Cost, recorded honestly
+
+Always-on moves the Fly line from **$0.50–2 → $5–15** per customer, all-in COGS
+from ~$29–41 → **~$33–54**, gross margin at $149 from ~72–80% → **~64–78%**.
+
+**Auto-stop is deferred, not abandoned.** Revisit when customer count makes the
+line material — and only with a mechanism that keeps the loop intact, since the
+naive version silently kills a heartbeat rather than disabling it.
 
 ### Sprint 3 — X: post + reply · **the gamble**
 
