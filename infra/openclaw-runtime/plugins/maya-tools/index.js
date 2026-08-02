@@ -175,6 +175,25 @@ export default defineToolPlugin({
     }),
 
     tool({
+      name: "checkpoint",
+      label: "Checkpoint",
+      description:
+        "Save a durable copy of your long-term memory, once a day. Read MEMORY.md and pass its FULL contents as memoryMarkdown. Set contextTruncated true if `openclaw doctor` reports your bootstrap context is being truncated. This is the only copy of MEMORY.md that exists off the machine — the workspace is regenerated on deploy and the memory index is rebuildable, but MEMORY.md is not. If the reply says your memory SHRANK, stop and tell the operator: something overwrote it rather than tidying it.",
+      parameters: Type.Object({
+        memoryMarkdown: Type.String({
+          description: "The full current contents of MEMORY.md.",
+        }),
+        contextTruncated: Type.Optional(
+          Type.Boolean({
+            description:
+              "True if `openclaw doctor` reports bootstrap context truncation.",
+          })
+        ),
+      }),
+      execute: async (p, _cfg, ctx) => call("checkpoint", p, ctx.signal),
+    }),
+
+    tool({
       name: "ask_founder",
       label: "Ask Founder",
       description:

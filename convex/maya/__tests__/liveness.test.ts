@@ -29,6 +29,12 @@ function facts(over: Partial<LivenessInput> = {}): LivenessInput {
     placementsToday: 1,
     priorZeroDayStreak: 0,
     customerState: "active",
+    // A healthy machine checked in this morning and isn't truncating context.
+    // Defaulted here so tests about placements and briefs don't each have to
+    // restate an unrelated healthy fact — the checkpoint breaches get their own
+    // block below.
+    hoursSinceCheckpoint: 6,
+    contextTruncated: false,
     ...over,
   };
 }

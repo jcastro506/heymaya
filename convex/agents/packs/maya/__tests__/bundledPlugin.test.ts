@@ -111,9 +111,12 @@ describe("THE SHIPPED BYTES MATCH THE SOURCE", () => {
 });
 
 describe("the install contract", () => {
-  it("ships exactly the three Sprint 3 tools", () => {
+  it("ships exactly the tools this build supports", () => {
+    // `checkpoint` joined in Sprint 2.9 — it mirrors MEMORY.md off the machine,
+    // which is the one artifact on the volume that isn't reproducible.
     expect([...BUNDLED_MAYA_PLUGIN_TOOLS].sort()).toEqual([
       "ask_founder",
+      "checkpoint",
       "publish",
       "reply",
     ]);

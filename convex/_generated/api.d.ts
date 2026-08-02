@@ -203,6 +203,7 @@ import type * as lib_webhookSecret from "../lib/webhookSecret.js";
 import type * as maya_archive from "../maya/archive.js";
 import type * as maya_assetClassifier from "../maya/assetClassifier.js";
 import type * as maya_buyerMap from "../maya/buyerMap.js";
+import type * as maya_checkpoint from "../maya/checkpoint.js";
 import type * as maya_dailyReport from "../maya/dailyReport.js";
 import type * as maya_deploy from "../maya/deploy.js";
 import type * as maya_directives from "../maya/directives.js";
@@ -433,6 +434,7 @@ declare const fullApi: ApiFromModules<{
   "maya/archive": typeof maya_archive;
   "maya/assetClassifier": typeof maya_assetClassifier;
   "maya/buyerMap": typeof maya_buyerMap;
+  "maya/checkpoint": typeof maya_checkpoint;
   "maya/dailyReport": typeof maya_dailyReport;
   "maya/deploy": typeof maya_deploy;
   "maya/directives": typeof maya_directives;
