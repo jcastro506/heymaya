@@ -4,6 +4,7 @@ import {
   ALWAYS_LOADED_TARGET_CHARS,
   BOOTSTRAP_MAX_CHARS_PER_FILE,
   BOOTSTRAP_TOTAL_MAX_CHARS,
+  CRON_STORE_PATH,
   OPENCLAW_CONFIG_PATH,
   WORKSPACE_DIR,
   type MayaWorkspaceInput,
@@ -116,41 +117,115 @@ describe("THE PROMPT BUDGET IS MEASURED, NOT HOPED FOR", () => {
   });
 });
 
-describe("CONVEX OWNS THE CLOCK", () => {
-  it("emits NO jobs.json — the machine must not schedule itself", () => {
-    // v1 ships agent-side crons. That makes the machine awake in order to check
-    // whether it should be awake, and a spinning heartbeat keeps it hot 24/7 by
-    // definition. Auto-stop is a 10× cost lever ($100–400/mo against
-    // $1,400–3,000 at 200 customers); a self-scheduling agent throws it away.
-    //
-    // Pinned because this is exactly what gets re-added by someone porting a
-    // feature across from the v1 pack.
-    const bundle = buildMayaWorkspace(INPUT);
-    expect([...bundle.files.keys()]).not.toContain("jobs.json");
-    for (const key of bundle.files.keys()) {
-      expect(key).not.toMatch(/cron|schedule\.json/i);
+describe("OPENCLAW OWNS THE CLOCK", () => {
+  const config = JSON.parse(
+    buildMayaWorkspace(INPUT).files.get(OPENCLAW_CONFIG_PATH)!
+  );
+
+  it("THE HEARTBEAT IS ON, in config and not merely in prose", () => {
+    // The heartbeat is the agent's pulse, and it is also how daily notes get
+    // distilled into MEMORY.md and how inferred commitments are delivered.
+    // An earlier version of this pack set "0m" to protect an auto-stop cost
+    // lever and silently took proactivity, memory consolidation, and
+    // follow-through with it.
+    expect(config.agents.defaults.heartbeat.every).not.toBe("0m");
+    expect(config.agents.defaults.heartbeat.every).toMatch(/^\d+m$/);
+  });
+
+  it("ships a HEARTBEAT.md, because an enabled heartbeat loads one", () => {
+    const heartbeat = buildMayaWorkspace(INPUT).files.get("HEARTBEAT.md")!;
+    expect(heartbeat).toBeTruthy();
+    // A checklist, not doctrine — it is re-injected on every heartbeat turn.
+    expect(heartbeat.length).toBeLessThan(2_500);
+  });
+
+  it("ships a cron store with STABLE ids", () => {
+    // Registered at deploy, never by the agent. v1 let her add crons and she
+    // re-added the same jobs every boot with no dedupe, then invented an ad-hoc
+    // recovery cron that timed out and spammed failures.
+    const cron = JSON.parse(
+      buildMayaWorkspace(INPUT).files.get(CRON_STORE_PATH)!
+    );
+    const ids = cron.jobs.map((j: { id: string }) => j.id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ids) expect(id).toMatch(/^\d{4}_[a-z_]+$/);
+  });
+
+  it("EVERY CRON FIRES IN THE FOUNDER'S TIMEZONE", () => {
+    // A 07:00 "morning brief" evaluated in UTC is a 23:00 brief in Los Angeles.
+    // v1 shipped a double-timezone bug that made everything four hours late.
+    const bundle = buildMayaWorkspace({
+      ...INPUT,
+      founder: { ...INPUT.founder, timezone: "America/Los_Angeles" },
+    });
+    const cron = JSON.parse(bundle.files.get(CRON_STORE_PATH)!);
+    for (const job of cron.jobs) {
+      expect(job.schedule.tz).toBe("America/Los_Angeles");
+      expect(job.schedule.kind).toBe("cron");
     }
   });
 
-  it("THE HEARTBEAT IS DISABLED IN CONFIG, not just in prose", () => {
-    // OpenClaw's heartbeat defaults to every 30m — 48 wakes a day on a machine
-    // that should wake ~6–15 times. That alone would undo the auto-stop
-    // economics the deploy path is built around, and no amount of doctrine in
-    // a markdown file changes a gateway default.
-    const config = JSON.parse(
-      buildMayaWorkspace(INPUT).files.get(OPENCLAW_CONFIG_PATH)!
+  it("the agent is told not to invent crons", () => {
+    expect(buildMayaWorkspace(INPUT).files.get("HEARTBEAT.md")!).toMatch(
+      /never add cron jobs/i
     );
-    expect(config.agents.defaults.heartbeat.every).toBe("0m");
+  });
+});
+
+describe("MEMORY IS CONFIGURED FOR YEARS, NOT WEEKS", () => {
+  const config = JSON.parse(
+    buildMayaWorkspace(INPUT).files.get(OPENCLAW_CONFIG_PATH)!
+  );
+
+  it("memory search is enabled at all", () => {
+    // Absent entirely from the first version of this pack, which left recall as
+    // a static generated file.
+    expect(config.agents.defaults.memorySearch.enabled).toBe(true);
+    expect(config.agents.defaults.memorySearch.store.path).toMatch(/^\/data\//);
   });
 
-  it("ships NO HEARTBEAT.md, because a disabled heartbeat never loads one", () => {
-    // Per the runtime docs: with `every: "0m"`, normal runs also omit
-    // HEARTBEAT.md from bootstrap context. This pack used to ship one anyway —
-    // budget spent on a file that could never load, and a lie to the next
-    // person who read it and assumed it was live.
-    expect([...buildMayaWorkspace(INPUT).files.keys()]).not.toContain(
-      "HEARTBEAT.md"
-    );
+  it("TEMPORAL DECAY AND MMR ARE ON — both default to off", () => {
+    // These are the two features that exist specifically for an agent with
+    // months-to-years of daily notes: decay stops last quarter outranking last
+    // week, MMR stops five near-identical notes filling all eight slots.
+    const hybrid = config.agents.defaults.memorySearch.query.hybrid;
+    expect(hybrid.temporalDecay.enabled).toBe(true);
+    expect(hybrid.mmr.enabled).toBe(true);
+  });
+
+  it("dreaming is on — it also defaults to off", () => {
+    // Deep phase is what promotes durable lines into MEMORY.md. Without it,
+    // MEMORY.md only grows when she happens to remember to write to it.
+    expect(config.agents.defaults.dreaming.enabled).toBe(true);
+  });
+
+  it("MEMORY.md IS SEEDED, NEVER OVERWRITTEN", () => {
+    // The bug this sprint exists to fix. OpenClaw's MEMORY.md is agent-curated
+    // and dreaming APPENDS promoted memories to it. Shipping it as a normal
+    // deploy file wipes everything she has learned, on every redeploy, silently.
+    const bundle = buildMayaWorkspace(INPUT);
+    expect([...bundle.files.keys()]).not.toContain("MEMORY.md");
+    expect(bundle.seedFiles.has("MEMORY.md")).toBe(true);
+    // And the seed is nearly empty — anything substantive in it would invite
+    // someone to "keep it up to date", which means rewriting it, which is the
+    // bug returning.
+    expect(bundle.seedFiles.get("MEMORY.md")!.length).toBeLessThan(400);
+  });
+
+  it("memory doctrine lives in AGENTS.md, which we DO own", () => {
+    // Operating instructions about memory are ours to rewrite freely. They just
+    // can't live in the file she writes to.
+    const agents = buildMayaWorkspace(INPUT).files.get("AGENTS.md")!;
+    expect(agents).toMatch(/database is the truth/i);
+    expect(agents).toMatch(/memory_search/);
+  });
+
+  it("MEMORY.md is not counted in our always-loaded budget", () => {
+    // OpenClaw loads it every session, but it is agent-owned and grows on its
+    // own — we can neither generate nor budget it. Counting it would make the
+    // accounting a guess.
+    expect(buildMayaWorkspace(INPUT).alwaysLoaded).not.toContain("MEMORY.md");
   });
 });
 
@@ -180,8 +255,26 @@ describe("the gateway config exists at all", () => {
     expect(config.agents.defaults.skipBootstrap).toBe(true);
   });
 
-  it("allow-lists only our plugin", () => {
-    expect(config.plugins.allow).toEqual(["maya-tools"]);
+  it("allow-lists our plugin plus the two memory plugins", () => {
+    // memory-wiki: claims with evidence, provenance, contradiction and
+    // staleness tracking — "what works on X right now" is a claim that expires.
+    // active-memory: surfaces relevant memory BEFORE the reply instead of
+    // waiting for her to decide to search.
+    expect([...config.plugins.allow].sort()).toEqual([
+      "active-memory",
+      "maya-tools",
+      "memory-wiki",
+    ]);
+  });
+
+  it("active-memory is scoped to the FOUNDER'S DM SESSION only", () => {
+    // The docs call it a good fit for "persistent and user-facing" and a poor
+    // fit for "automation, internal workers". A subagent silently personalising
+    // its output is worse than useless.
+    const entry = config.plugins.entries["active-memory"];
+    expect(entry.enabled).toBe(true);
+    expect(entry.sessionTypes).toEqual(["dm"]);
+    expect(entry.agents).toEqual(["main"]);
   });
 
   it("turns typing on for the post-boot half", () => {

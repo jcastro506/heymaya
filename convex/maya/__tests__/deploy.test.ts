@@ -4,7 +4,9 @@ import schema from "../../schema";
 import { internal } from "../../_generated/api";
 import { modules } from "../../../tests/_modules";
 import {
+  buildBootScript,
   buildMachineConfig,
+  PLUGIN_TGZ_PATH,
   generateAgentToken,
   REQUIRED_SECRET_NAMES,
   VOLUME_MOUNT_PATH,
@@ -18,35 +20,73 @@ const CONFIG = buildMachineConfig({
   customerId: "cust_1",
 });
 
-describe("AUTO-STOP IS THE COST LEVER, AND IT IS ON", () => {
-  it("the service stops on idle and starts on demand", () => {
-    // §17.36.1 — ~$100–400/mo at 200 customers instead of $1,400–3,000. A
-    // machine thinks for roughly 45 minutes a day; always-on bills for 24 hours
-    // of idle to serve it.
+describe("ALWAYS-ON, SO THE HEARTBEAT CAN ACTUALLY RUN", () => {
+  it("the service does not stop on idle", () => {
+    // A heartbeat cannot run on a machine Fly is allowed to stop: it generates
+    // no inbound request to keep the machine alive, and once stopped there is
+    // no process to fire it. Auto-stop doesn't coexist with the agent loop —
+    // it removes it, silently, along with memory consolidation and commitment
+    // follow-through, which both ride the heartbeat.
     const service = CONFIG.services![0];
-    expect(service.autostop).toBe("stop");
-    expect(service.autostart).toBe(true);
+    expect(service.autostop).toBe("off");
+    expect(service.min_machines_running).toBeGreaterThanOrEqual(1);
   });
 
-  it("min_machines_running is ZERO", () => {
-    // Any other value silently reinstates always-on billing for that many
-    // machines — the lever looks pulled and isn't.
-    expect(CONFIG.services![0].min_machines_running).toBe(0);
+  it("restarts always — a crashed agent that stays crashed is silence", () => {
+    // Silence is the failure mode this product exists to eliminate. The old
+    // `on-failure` existed only to avoid fighting auto-stop.
+    expect(CONFIG.restart?.policy).toBe("always");
   });
 
-  it("the restart policy does not fight auto-stop", () => {
-    // `always` restarts a machine Fly deliberately stopped, which converts this
-    // back into an always-on machine at ten times the price while every setting
-    // above still reads as correct. The subtlest way to lose the lever.
-    expect(CONFIG.restart?.policy).toBe("on-failure");
-    expect(CONFIG.restart?.policy).not.toBe("always");
+  it("has enough memory for the gateway, workspace, sqlite and embeddings", () => {
+    // Being OOM-killed hourly would look exactly like an agent that ignores its
+    // heartbeat.
+    expect(CONFIG.guest?.memory_mb).toBeGreaterThanOrEqual(2048);
   });
 
-  it("shared multi-tenant is not what this builds", () => {
-    // One crash would take out N customers, and session isolation is the whole
-    // premise of "an employee". The metadata pins one customer per machine.
+  it("is still one machine per customer", () => {
+    // Shared multi-tenant would take out N customers on one crash, and session
+    // isolation is the whole premise of "an employee".
     expect(CONFIG.metadata?.customerId).toBe("cust_1");
     expect(CONFIG.metadata?.agentVersion).toBe("v2");
+  });
+});
+
+describe("THE BOOTSTRAP ACTUALLY DOES SOMETHING", () => {
+  const script = buildBootScript();
+
+  it("INSTALLS THE PLUGIN — the first version never did", () => {
+    // The deploy set MAYA_PLUGIN_ID/MAYA_PLUGIN_TGZ env vars that nothing
+    // consumed. The machine would have booted with zero Maya tools, and she
+    // would have fallen back to improvising with `exec` — which is how research
+    // workers fabricated results on the live v1 machine.
+    expect(script).toMatch(/openclaw plugins install npm-pack:/);
+    expect(script).toContain(PLUGIN_TGZ_PATH);
+  });
+
+  it("SEEDS MEMORY.md ONLY IF ABSENT", () => {
+    // The bug this sprint exists to fix. A plain copy here would wipe every
+    // promoted memory on every redeploy.
+    expect(script).toMatch(/if \[ ! -f .*MEMORY\.md \]/);
+    // And it must not be an unconditional copy anywhere.
+    expect(script).not.toMatch(/^\s*cp .*seed\/MEMORY\.md/m);
+  });
+
+  it("execs the gateway so Fly sees ITS exit code, not the shell's", () => {
+    expect(script).toMatch(/^exec openclaw gateway/m);
+  });
+
+  it("survives a plugin-install failure rather than failing to boot", () => {
+    // A machine that won't boot is a worse outcome than one with missing tools,
+    // because the missing tools are visible and a dead machine is silence.
+    const installLine = script
+      .split("\n")
+      .find((l) => l.includes("plugins install"))!;
+    expect(installLine).toMatch(/\|\|/);
+  });
+
+  it("does not silently half-run", () => {
+    expect(script.startsWith("set -e")).toBe(true);
   });
 });
 
