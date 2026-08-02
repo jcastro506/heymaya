@@ -114,10 +114,10 @@ describe("showTyping never breaks the caller", () => {
   });
 });
 
-describe("handleInbound records, then wakes", () => {
-  it("records the message and enqueues exactly one wake", async () => {
+describe("handleInbound records — and no longer wakes anything", () => {
+  it("records the message", async () => {
     const t = convexTest(schema, modules);
-    const customerId = await seed(t, "wake", "chat_w");
+    await seed(t, "wake", "chat_w");
 
     const result = await t.action(internal.maya.telegram.handleInbound, {
       chatId: "chat_w",
@@ -131,16 +131,25 @@ describe("handleInbound records, then wakes", () => {
     )) as Doc<"messages">[];
     expect(messages).toHaveLength(1);
     expect(messages[0].direction).toBe("in");
-
-    const wakes = (
-      (await t.run((ctx) => ctx.db.query("jobs").collect())) as Doc<"jobs">[]
-    ).filter((j) => j.kind === "wake_agent");
-    expect(wakes).toHaveLength(1);
-    expect(wakes[0].customerId).toBe(customerId);
   });
 
-  it("an unpaired chat wakes nothing", async () => {
-    // Someone who found the bot. Must not mint a customer or boot a machine.
+  it("ENQUEUES NO WAKE JOB — the machine is always on", async () => {
+    // A `wake_agent` job used to be enqueued on every inbound message to boot
+    // an auto-stopped machine. It had NO HANDLER, so it dead-lettered every
+    // single time while the queue reported ordinary failures and the suite
+    // stayed green. Always-on removed the reason for it to exist at all.
+    const t = convexTest(schema, modules);
+    await seed(t, "nowake", "chat_n");
+    await t.action(internal.maya.telegram.handleInbound, {
+      chatId: "chat_n",
+      text: "hello",
+      ts: NOW,
+    });
+    expect(await t.run((ctx) => ctx.db.query("jobs").collect())).toEqual([]);
+  });
+
+  it("an unpaired chat records nothing", async () => {
+    // Someone who found the bot. Must not mint a customer.
     const t = convexTest(schema, modules);
     await seed(t, "other", "chat_known");
 
@@ -149,29 +158,7 @@ describe("handleInbound records, then wakes", () => {
       text: "hello?",
     });
     expect(result.recorded).toBe(false);
-    expect(await t.run((ctx) => ctx.db.query("jobs").collect())).toEqual([]);
-  });
-
-  it("two messages produce two wakes, not one collapsed by dedupe", async () => {
-    // The warm window makes the second wake free, so collapsing them would only
-    // risk dropping the second message's turn.
-    const t = convexTest(schema, modules);
-    await seed(t, "two", "chat_two");
-    await t.action(internal.maya.telegram.handleInbound, {
-      chatId: "chat_two",
-      text: "first",
-      ts: NOW,
-    });
-    await t.action(internal.maya.telegram.handleInbound, {
-      chatId: "chat_two",
-      text: "second",
-      ts: NOW + 1000,
-    });
-
-    const wakes = (
-      (await t.run((ctx) => ctx.db.query("jobs").collect())) as Doc<"jobs">[]
-    ).filter((j) => j.kind === "wake_agent");
-    expect(wakes).toHaveLength(2);
+    expect(await t.run((ctx) => ctx.db.query("messages").collect())).toEqual([]);
   });
 });
 

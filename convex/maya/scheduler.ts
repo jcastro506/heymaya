@@ -101,129 +101,57 @@ export interface DayPlan {
  * same: hand her context, get a plan back. It must never grow into a list of
  * steps for her to execute.
  */
-export const planTheDay = internalQuery({
-  args: { customerId: v.id("customers") },
-  handler: async (ctx, args): Promise<DayPlan> => {
-    const channels = (await ctx.db
-      .query("channels")
-      .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))
-      .collect()) as Doc<"channels">[];
-
-    const blockedChannels = channels
-      .filter((c) => c.status === "error" || c.status === "disconnected")
-      .map((c) => ({
-        channel: c.channel,
-        reason: "it needs reconnecting",
-      }));
-
-    const connected = channels.filter((c) => c.status === "connected");
-    const ideas = (await ctx.db
-      .query("ideas")
-      .withIndex("by_customer_and_status", (q) =>
-        q.eq("customerId", args.customerId).eq("status", "bank")
-      )
-      .collect()) as Doc<"ideas">[];
-
-    // Highest-scored ideas first; one per connected channel. Crude on purpose —
-    // this is the floor that keeps the day moving, not the product.
-    const ranked = [...ideas].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-    const plannedPosts: Array<{ channel: string; angle: string }> = [];
-    connected.forEach((channel, i) => {
-      const idea = ranked[i];
-      if (idea) plannedPosts.push({ channel: channel.channel, angle: idea.angle });
-    });
-
-    return { plannedPosts, blockedChannels, fromAgent: false };
-  },
-});
-
 /* -------------------------------------------------------------------------- */
-/* The crons                                                                   */
+/* What Convex still schedules — and what it deliberately does not             */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Morning run, fleet-wide.
+ * `planTheDay`, `morningRunAll`, and `eveningRecapAll` lived here and are gone
+ * (§18 Sprint 2.9).
  *
- * Per-customer failures are isolated: one broken account must not stop the
- * other 199 from getting their brief. A sweep that dies on the first error is
- * a sweep that silently stops working the day one customer gets into a weird
- * state.
+ * They were a reimplementation of OpenClaw's cron: a Convex daily cron at
+ * 07:00 **UTC** composing a brief and waking the machine to deliver it. Three
+ * problems, in ascending order of seriousness:
+ *
+ * 1. **UTC.** A 07:00 brief is a 23:00 brief in Los Angeles. v1 shipped the
+ *    same double-timezone bug and everything arrived four hours late.
+ * 2. **It duplicated a scheduler we already pay for.** OpenClaw's cron store
+ *    persists, survives restarts, reschedules overdue jobs on startup, and
+ *    evaluates in the founder's timezone.
+ * 3. **It routed through a `wake_agent` job that had no handler**, so the whole
+ *    path dead-lettered. The brief never actually happened.
+ *
+ * The cadence now lives in `/data/cron/jobs.json` (see the workspace
+ * generator). What stays here is only work that must survive the machine being
+ * unreachable:
+ *
+ * - **`drainJobs`** — message delivery. A brief written but not delivered is
+ *   indistinguishable from one never written, from the founder's side.
+ * - **`livenessSweep`** — the watchdog. This one stays in Convex for a reason
+ *   that isn't cost or habit: **a system cannot be the watchdog for itself.**
+ *   An agent that has stopped waking up cannot notice that it has stopped
+ *   waking up.
  */
-export const morningRunAll = internalAction({
-  args: { now: v.optional(v.number()) },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{ ran: number; failed: number; errors: string[] }> => {
-    const customerIds = await ctx.runQuery(
-      internal.maya.scheduler.activeV2Customers,
-      {}
-    );
-    let ran = 0;
-    let failed = 0;
-    const errors: string[] = [];
-
-    for (const customerId of customerIds) {
-      try {
-        const plan = await ctx.runQuery(internal.maya.scheduler.planTheDay, {
-          customerId,
-        });
-        await ctx.runMutation(internal.maya.dailyReport.runMorningRun, {
-          customerId,
-          plannedPosts: plan.plannedPosts,
-          blockedChannels: plan.blockedChannels,
-          now: args.now,
-        });
-        ran += 1;
-      } catch (error) {
-        failed += 1;
-        const message = error instanceof Error ? error.message : String(error);
-        errors.push(`${customerId}: ${message}`);
-        console.error(`[maya.scheduler] morning run failed for ${customerId}: ${message}`);
-      }
-    }
-    return { ran, failed, errors };
-  },
-});
-
-/** Evening recap, fleet-wide. Same isolation. */
-export const eveningRecapAll = internalAction({
-  args: { now: v.optional(v.number()) },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{ ran: number; failed: number }> => {
-    const customerIds = await ctx.runQuery(
-      internal.maya.scheduler.activeV2Customers,
-      {}
-    );
-    let ran = 0;
-    let failed = 0;
-    for (const customerId of customerIds) {
-      try {
-        await ctx.runMutation(internal.maya.dailyReport.sendEveningRecap, {
-          customerId,
-          now: args.now,
-        });
-        ran += 1;
-      } catch {
-        failed += 1;
-      }
-    }
-    return { ran, failed };
-  },
-});
 
 /**
- * Job kinds this build knows how to run.
+ * ⭐ Every job kind this build can actually execute. **The single source of
+ * truth**, and the drainer refuses anything not in it.
  *
- * A claimed job whose kind has no handler is FAILED with a named reason, not
- * silently succeeded and not left running. Pretending to do work we can't do
- * is the failure mode the whole product is a reaction to — and `produce_post`
- * is deliberately absent, because production needs the Write model and the
- * agent pack, neither of which exists yet.
+ * This is deliberately a short list, and it should stay short. An earlier
+ * version of this module enqueued `wake_agent` and `publish_placement` while
+ * routing neither — both dead-lettered, so the entire proactive path silently
+ * did nothing while every test stayed green. The queue looked healthy because
+ * failing jobs *is* a healthy queue behaviour; what was missing was anyone
+ * asking whether the kinds being enqueued could ever succeed.
+ *
+ * A sibling test now asserts that every kind enqueued anywhere in `convex/maya`
+ * appears here, so adding a producer without a consumer fails the build rather
+ * than the customer.
  */
-const HANDLED_KINDS = new Set<string>(["deliver_message"]);
+export const HANDLED_KINDS = new Set<string>([
+  "deliver_message",
+  "publish_placement",
+]);
 
 /** Route a claimed job to its handler. */
 async function runHandler(
@@ -255,6 +183,23 @@ async function runHandler(
       ? { ok: true }
       : { ok: false, error: result.reason ?? "delivery failed" };
   }
+  if (job.kind === "publish_placement") {
+    // The decision was already made by the iron rule (§9.1) before this was
+    // enqueued. What's missing is the vendor call: Zernio's four WRITE wrappers
+    // aren't built, because building them needs a real connected account to
+    // test against and there isn't one yet.
+    //
+    // So this fails with a reason a human can act on, rather than dead-lettering
+    // as an unknown kind. The distinction matters: "not built yet" is a state
+    // someone can resolve; "unrouted job kind" reads as a bug and sends whoever
+    // finds it looking in the wrong place.
+    return {
+      ok: false,
+      error:
+        "publishing isn't wired yet — the Zernio write path needs a connected account (Sprint 1, operator-blocked)",
+    };
+  }
+
   return { ok: false, error: `unrouted job kind "${job.kind}"` };
 }
 
