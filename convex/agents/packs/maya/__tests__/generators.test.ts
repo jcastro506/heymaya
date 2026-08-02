@@ -397,7 +397,12 @@ describe("the doctrine stays coherent with the server", () => {
     // nothing from; a route with no docs is one it never learns exists.
     const tools = files.get("TOOLS.md")!;
     const documented = [...tools.matchAll(/\| `(\w+)` \|/g)].map((m) => m[1]);
-    expect(documented.sort()).toEqual(["ask_founder", "publish", "reply"]);
+    expect(documented.sort()).toEqual([
+      "ask_founder",
+      "checkpoint",
+      "publish",
+      "reply",
+    ]);
   });
 
   it("TOOLS.md states the envelope contract verbatim", () => {

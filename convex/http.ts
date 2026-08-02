@@ -17,7 +17,12 @@ import { stripeWebhookHttp } from "./billing/stripeWebhookHttp";
 import { savePlanDocHttp } from "./gtmMaya/planDoc";
 import { telegramWebhookHttp } from "./gtmMaya/telegramWebhook";
 import { deliveryFailureHttp } from "./gtmMaya/deliveryFailures";
-import { publishHttp, replyHttp, askFounderHttp } from "./maya/hooks";
+import {
+  publishHttp,
+  replyHttp,
+  askFounderHttp,
+  checkpointHttp,
+} from "./maya/hooks";
 import {
   approvalDecisionHttp,
   approveCalendarHttp,
@@ -1015,5 +1020,6 @@ http.route({
 http.route({ path: "/maya/publish", method: "POST", handler: publishHttp });
 http.route({ path: "/maya/reply", method: "POST", handler: replyHttp });
 http.route({ path: "/maya/ask_founder", method: "POST", handler: askFounderHttp });
+http.route({ path: "/maya/checkpoint", method: "POST", handler: checkpointHttp });
 
 export default http;

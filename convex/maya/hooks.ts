@@ -363,6 +363,70 @@ export const replyHttp = httpAction(async (ctx, request) => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* checkpoint                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Daily: mirror her curated memory somewhere durable, and report whether her
+ * own context is being truncated.
+ *
+ * Both are things Convex genuinely cannot see — they live inside the machine.
+ * This is the agent reporting *observations* (a file's contents, a boolean from
+ * `openclaw doctor`); Convex does the judging. A machine that stops checking in
+ * is a breach detected by a sweep running somewhere else, so the watchdog is
+ * still not marking its own homework.
+ */
+export const checkpointHttp = httpAction(async (ctx, request) => {
+  const auth = await authenticate(ctx, request);
+  if ("error" in auth) return auth.error;
+  const parsed = await readJson(request);
+  if ("error" in parsed) return parsed.error;
+
+  const markdown = parsed.body.memoryMarkdown;
+  if (typeof markdown !== "string") {
+    return respond(
+      {
+        ok: false,
+        why: "no memoryMarkdown was given",
+        next: "read MEMORY.md and send its contents",
+      },
+      400
+    );
+  }
+
+  const result = await ctx.runMutation(internal.maya.checkpoint.record, {
+    customerId: auth.customer._id,
+    markdown,
+    contextTruncated: parsed.body.contextTruncated === true,
+  });
+
+  if (!result.stored) {
+    return respond(
+      { ok: false, why: "that account no longer exists", next: "stop and report this" },
+      404
+    );
+  }
+
+  // A sharp drop is reported back to her, not just logged. If she just
+  // overwrote her own memory, the next thing she does should be about that.
+  if (result.shrankBy !== undefined) {
+    return respond({
+      ok: true,
+      data: { bytes: result.bytes, shrankBy: result.shrankBy },
+      why: `checkpoint saved — but MEMORY.md shrank by ${result.shrankBy} bytes since the last one`,
+      next: "tell the operator; something may have overwritten your memory rather than tidying it",
+    });
+  }
+
+  return respond({
+    ok: true,
+    data: { bytes: result.bytes, pruned: result.pruned },
+    why: "checkpoint saved",
+    next: "carry on — nothing to do with this",
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* ask_founder                                                                 */
 /* -------------------------------------------------------------------------- */
 

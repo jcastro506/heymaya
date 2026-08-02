@@ -356,6 +356,7 @@ Every tool returns the same envelope:
 | \`publish\` | \`{draftId, alreadyApproved?}\` | \`{published, queued, holdReason?}\` |
 | \`reply\` | \`{draftId, inReplyTo, alreadyApproved?}\` | same as publish |
 | \`ask_founder\` | \`{question}\` | \`{asked, openQuestion?}\` |
+| \`checkpoint\` | \`{memoryMarkdown, contextTruncated?}\` | \`{bytes, shrankBy?}\` |
 
 **None of them takes a customer id.** The server knows which account I am from
 my credential. There is nothing for me to pass and nothing for me to get wrong.
@@ -558,6 +559,15 @@ function renderCronJobs(input: MayaWorkspaceInput): string {
       expr: "0 20 * * *",
       message:
         "Evening recap. What actually went live today, with links, and what came back — replies, questions, anything that needs them. Placements only: a draft is not a result.",
+    },
+    {
+      id: "0009_checkpoint",
+      name: "Memory checkpoint",
+      // Before the morning brief, so the copy reflects a full day plus
+      // overnight dreaming rather than a day already in progress.
+      expr: "30 6 * * *",
+      message:
+        "Daily checkpoint. Read MEMORY.md in full, run `openclaw doctor` to see whether bootstrap context is being truncated, and call `checkpoint` with both. This is the only copy of your memory that exists off this machine. If the reply says it SHRANK, stop and tell the operator — something overwrote it rather than tidying it. Otherwise say nothing; this is housekeeping and the founder doesn't need a report about it.",
     },
     {
       id: "0013_weekly_review",

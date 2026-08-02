@@ -141,6 +141,15 @@ describe("the liveness sweep at 200 customers", () => {
           deliveredAt: EVENING - 600_000,
           dedupeKey: `recap:${new Date(EVENING).toISOString().slice(0, 10)}`,
         });
+        // And the machine checked in this morning (§2.9.6) — a fleet that has
+        // never mirrored its memory is a real breach, just not this test's.
+        await ctx.db.insert("memorySnapshots", {
+          customerId,
+          capturedAt: EVENING - 12 * 3600_000,
+          markdown: "# MEMORY.md\n",
+          bytes: 13,
+          contextTruncated: false,
+        });
         await ctx.db.insert("placements", {
           customerId,
           kind: "post",

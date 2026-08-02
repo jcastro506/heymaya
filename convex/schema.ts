@@ -3676,6 +3676,30 @@ export default defineSchema({
       filterFields: ["customerId", "channel"],
     }),
 
+  /**
+   * Point-in-time copies of the agent's curated long-term memory (§2.9.6).
+   *
+   * Everything else about a machine is reproducible: the workspace is
+   * regenerated on deploy, and the memory vector index is DERIVED — one
+   * `openclaw memory index --force` rebuilds it from the markdown. `MEMORY.md`
+   * is the one thing that isn't. She writes it, dreaming promotes into it, and
+   * it lives on a single Fly volume with a single copy.
+   *
+   * So this mirrors just that file into Convex, where the rest of the durable
+   * record already lives. Daily notes are deliberately NOT copied: they're bulk,
+   * and their value is mostly as raw material for the distillation that lands
+   * here.
+   */
+  memorySnapshots: defineTable({
+    customerId: v.id("customers"),
+    capturedAt: v.number(),
+    /** The whole file. Small by design — it's the curated layer, not a log. */
+    markdown: v.string(),
+    bytes: v.number(),
+    /** True when OpenClaw was truncating the injected copy at capture time. */
+    contextTruncated: v.optional(v.boolean()),
+  }).index("by_customer_and_capturedAt", ["customerId", "capturedAt"]),
+
   /** Every message in and out, including proactive. Both surfaces read this. */
   messages: defineTable({
     customerId: v.id("customers"),

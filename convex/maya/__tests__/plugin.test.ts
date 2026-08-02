@@ -53,9 +53,12 @@ describe("the manifest and the code agree", () => {
     expect(registeredTools().sort()).toEqual([...manifest.contracts.tools].sort());
   });
 
-  it("ships the three Sprint 3 tools", () => {
+  it("ships exactly the tools this build supports", () => {
+    // `checkpoint` joined in Sprint 2.9 — it mirrors MEMORY.md off the machine,
+    // the one artifact on the volume that isn't reproducible.
     expect(manifest.contracts.tools.sort()).toEqual([
       "ask_founder",
+      "checkpoint",
       "publish",
       "reply",
     ]);
@@ -89,7 +92,7 @@ describe("NO TOOL CAN NAME A TENANT", () => {
     // isn't — re-opening the exact class of bug the server surface was shaped
     // to eliminate, at the one layer that isn't guarded by it.
     const schemas = index.match(/parameters:\s*Type\.Object\(\{[\s\S]*?\n\s*\}\)/g) ?? [];
-    expect(schemas.length).toBe(3);
+    expect(schemas.length).toBe(4);
     for (const schema of schemas) {
       expect(schema).not.toMatch(/customerId|accountId|tenantId|customer_id/i);
     }
@@ -119,7 +122,7 @@ describe("NO TOOL CAN NAME A TENANT", () => {
     // adds nothing of its own. If this ever built a body by hand, the schema
     // test would stop being sufficient.
     expect(index).toMatch(/body: JSON\.stringify\(payload \?\? \{\}\)/);
-    for (const tool of ["publish", "reply", "ask_founder"]) {
+    for (const tool of ["publish", "reply", "ask_founder", "checkpoint"]) {
       expect(index).toContain(`call("${tool}", p, ctx.signal)`);
     }
   });

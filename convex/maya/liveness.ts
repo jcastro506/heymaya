@@ -45,14 +45,17 @@ export type BreachKind =
   | "brief_missed"
   | "recap_missed"
   | "zero_placements_today"
-  | "zero_day_streak";
+  | "zero_day_streak"
+  | "memory_not_checkpointed"
+  | "context_truncated";
 
 export type BreachAction =
   | "reenqueue_brief"
   | "diagnose_and_report"
   | "state_plainly_in_recap"
   | "operator_alert_and_tell_founder"
-  | "open_support_thread";
+  | "open_support_thread"
+  | "operator_alert_only";
 
 export interface Breach {
   kind: BreachKind;
@@ -75,6 +78,28 @@ export interface LivenessInput {
   customerState: Doc<"customers">["state"];
   /** Set when something already knows why — a dead token, a spend throttle. */
   knownReason?: string;
+  /**
+   * Hours since her memory was last mirrored off the machine (§2.9.6).
+   *
+   * When she has never checkpointed, this is measured from the account's
+   * creation, NOT left undefined — otherwise a customer who signed up an hour
+   * ago is instantly "never backed up", which is the same shape as the
+   * zero-day-streak bug that opened a support thread for someone on their first
+   * morning. A new account hasn't failed to do something; it hasn't been around
+   * long enough to do it yet.
+   */
+  hoursSinceCheckpoint?: number;
+  /** False when there has never been one — changes the wording, not the clock. */
+  everCheckpointed?: boolean;
+  /**
+   * OpenClaw reported at the last checkpoint that it is truncating the injected
+   * copy of her bootstrap context.
+   *
+   * NOT data loss — the files stay intact on disk — but she stops seeing the
+   * tail of whatever got cut, which on `MEMORY.md` means quietly forgetting the
+   * oldest durable facts while appearing to work normally.
+   */
+  contextTruncated?: boolean;
 }
 
 /**
@@ -100,6 +125,34 @@ export function evaluate(input: LivenessInput): Breach[] {
   if (customerState !== "active") return [];
 
   const breaches: Breach[] = [];
+
+  // Memory checkpointing. Two full days of grace so one missed daily cron
+  // doesn't page anyone — but a machine that has gone a week without mirroring
+  // its memory is one volume failure away from losing all of it.
+  if (
+    input.hoursSinceCheckpoint === undefined ||
+    input.hoursSinceCheckpoint > 48
+  ) {
+    breaches.push({
+      kind: "memory_not_checkpointed",
+      action: "operator_alert_only",
+      detail:
+        input.everCheckpointed === false
+          ? "her memory has never been copied off the machine"
+          : `her memory hasn't been copied off the machine in ${Math.floor(input.hoursSinceCheckpoint ?? 0)}h`,
+    });
+  }
+
+  // Operator-only on purpose: the founder cannot act on this and telling them
+  // their agent's context is truncated is noise dressed as transparency.
+  if (input.contextTruncated) {
+    breaches.push({
+      kind: "context_truncated",
+      action: "operator_alert_only",
+      detail:
+        "her bootstrap context is being truncated — she's losing the tail of her own instructions",
+    });
+  }
 
   if (!briefSentToday && hourUtc >= BRIEF_DUE_HOUR_UTC + BRIEF_GRACE_HOURS) {
     breaches.push({
@@ -369,6 +422,16 @@ export const gatherFacts = internalQuery({
       priorZeroDayStreak += 1;
     }
 
+    // The machine's last self-report. Absent means it has never checked in,
+    // which is a different (and worse) signal than a stale one.
+    const checkpoint = (await ctx.db
+      .query("memorySnapshots")
+      .withIndex("by_customer_and_capturedAt", (q) =>
+        q.eq("customerId", args.customerId)
+      )
+      .order("desc")
+      .first()) as Doc<"memorySnapshots"> | null;
+
     return {
       now,
       hourUtc: new Date(now).getUTCHours(),
@@ -377,6 +440,12 @@ export const gatherFacts = internalQuery({
       placementsToday,
       priorZeroDayStreak,
       customerState: customer.state,
+      // Clamped to account age when she has never checked in — see the field
+      // docs. A two-hour-old account is two hours behind, not infinitely.
+      hoursSinceCheckpoint:
+        (now - (checkpoint?.capturedAt ?? customer.createdAt)) / 3_600_000,
+      everCheckpointed: checkpoint !== null,
+      contextTruncated: checkpoint?.contextTruncated === true,
     };
   },
 });

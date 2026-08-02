@@ -208,6 +208,16 @@ describe("livenessSweep — independent of everything it checks", () => {
       ts: EVENING - 60_000,
     });
 
+    // A healthy machine also checked in this morning (§2.9.6) — memory
+    // mirrored, context not truncated. Seeded explicitly because "never
+    // checked in" is itself a breach now.
+    await t.mutation(internal.maya.checkpoint.record, {
+      customerId: c,
+      markdown: "# MEMORY.md\n",
+      contextTruncated: false,
+      now: MORNING,
+    });
+
     const result = await t.action(internal.maya.scheduler.livenessSweep, {
       now: EVENING,
     });
