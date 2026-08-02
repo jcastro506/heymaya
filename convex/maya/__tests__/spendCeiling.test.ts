@@ -353,7 +353,7 @@ describe("the drainer enforces the ceiling — where it actually matters", () =>
       customerId,
     });
 
-    const result = await t.action(internal.maya.scheduler.drainJobs, {});
+    const result = await t.action(internal.maya.scheduler.drainJobs, { now: NOW });
     expect(result.throttled).toBe(1);
     expect(result.succeeded).toBe(0);
 
@@ -376,7 +376,7 @@ describe("the drainer enforces the ceiling — where it actually matters", () =>
       dedupeKey: "urgent",
     });
 
-    const result = await t.action(internal.maya.scheduler.drainJobs, {});
+    const result = await t.action(internal.maya.scheduler.drainJobs, { now: NOW });
     expect(result.throttled).toBe(0);
     // It was attempted (and fails only because no chat is paired in this test),
     // rather than being deferred by the ceiling.
@@ -396,7 +396,7 @@ describe("the drainer enforces the ceiling — where it actually matters", () =>
       idempotencyKey: "r9",
       customerId,
     });
-    await t.action(internal.maya.scheduler.drainJobs, {});
+    await t.action(internal.maya.scheduler.drainJobs, { now: NOW });
 
     const job = (await t.run((ctx) => ctx.db.get(jobId))) as Doc<"jobs">;
     expect(job.status).toBe("queued");
@@ -419,10 +419,43 @@ describe("the drainer enforces the ceiling — where it actually matters", () =>
       customerId: fine,
     });
 
-    const result = await t.action(internal.maya.scheduler.drainJobs, {});
+    const result = await t.action(internal.maya.scheduler.drainJobs, { now: NOW });
     expect(result.throttled).toBe(1);
     // The other one reached its handler — no handler for produce_post yet, so
     // it fails on that rather than on the ceiling.
     expect(result.failed).toBe(1);
+  });
+});
+
+describe("the ceiling is not a time bomb", () => {
+  it("THROTTLES REGARDLESS OF WHEN THE SUITE RUNS", async () => {
+    // This suite passed all day on 2026-08-01 and started failing at UTC
+    // midnight. The drainer derived "today" from the real clock while the
+    // fixtures seeded spend at a frozen date, so once UTC rolled past that
+    // date the seeded spend fell outside today's window, read $0, and nothing
+    // throttled. Green for hours, then red, with no code change.
+    //
+    // Fixed by threading `now` through the drainer — the same seam
+    // `spendToday` already had. Pinned here across a day boundary so the bomb
+    // can't be re-armed by someone dropping the argument.
+    for (const at of [
+      Date.UTC(2026, 0, 1, 0, 0, 0), // midnight exactly
+      Date.UTC(2026, 0, 1, 23, 59, 59), // one second to rollover
+      Date.UTC(2026, 11, 31, 23, 0, 0), // year boundary
+    ]) {
+      const t = convexTest(schema, modules);
+      const customerId = await seed(t, `bomb_${at}`);
+      await spend(t, customerId, 20, `burned_${at}`, at);
+      await t.mutation(internal.maya.jobs.enqueue, {
+        kind: "produce_post",
+        idempotencyKey: `p_${at}`,
+        customerId,
+      });
+
+      const result = await t.action(internal.maya.scheduler.drainJobs, {
+        now: at,
+      });
+      expect(result.throttled, `not throttled at ${new Date(at).toISOString()}`).toBe(1);
+    }
   });
 });

@@ -31,6 +31,18 @@ import { BUNDLED_MAYA_SKILLS, MAYA_CONVENTIONS } from "./bundledSkills";
 
 export type MayaChannel = "tiktok" | "instagram" | "youtube" | "x";
 
+/**
+ * Where things go on the machine.
+ *
+ * The workspace is NOT `/workspace` — OpenClaw defaults to
+ * `~/.openclaw/workspace` and we point it at the persistent volume instead, so
+ * it survives a machine recreate. The gateway config lives outside the
+ * workspace by design (`concepts/agent-workspace.md`: config, credentials, and
+ * sessions are explicitly not workspace files).
+ */
+export const WORKSPACE_DIR = "/data/workspace";
+export const OPENCLAW_CONFIG_PATH = "/data/openclaw.json";
+
 export interface MayaWorkspaceInput {
   founder: {
     email: string;
@@ -78,9 +90,58 @@ const ALWAYS_LOADED = [
   "MEMORY.md",
 ] as const;
 
-/** §15.1.2 — the cap, and the always-loaded target inside it. */
-export const PROMPT_BUDGET_CHARS = 108_900;
-export const ALWAYS_LOADED_TARGET_CHARS = 76_000;
+/**
+ * The bootstrap-injection limits — **OpenClaw's numbers, not the spec's.**
+ *
+ * §15.1.2 quotes ~108,900 total and a ~76k always-loaded target. Those are
+ * product-side aspirations. The numbers that actually bite are the runtime's:
+ * `bootstrapMaxChars` (per file, default 12,000) and `bootstrapTotalMaxChars`
+ * (default 60,000). **Exceeding either truncates or drops files SILENTLY.**
+ *
+ * Both failure modes are documented production incidents on the v1 pack:
+ *
+ * - 2026-05-27 — `BOOT.md` 15K, `TOOLS.md` 17K, `AGENTS.md` 14.5K were each
+ *   silently truncated to 12K, dropping end-of-file content including a hard
+ *   gate and several procedures.
+ * - 2026-06-03 — `TOOLS.md` grew to 36K and ate the whole 60K total, so
+ *   `BOOT.md` was **silently skipped entirely** and the agent came up with no
+ *   instructions at all.
+ *
+ * So the caps are raised explicitly in the config below AND asserted against
+ * here. The previous version of this file tested against the spec's 76,000
+ * with no per-file check at all — which would have passed a workspace whose
+ * `AGENTS.md` the runtime then quietly cut in half.
+ */
+export const BOOTSTRAP_MAX_CHARS_PER_FILE = 30_000;
+export const BOOTSTRAP_TOTAL_MAX_CHARS = 110_000;
+
+/**
+ * Where the always-loaded set should sit — well under the configured total, so
+ * doctrine can grow for several sprints before anything needs cutting.
+ */
+export const ALWAYS_LOADED_TARGET_CHARS = 60_000;
+
+/* -------------------------------------------------------------------------- */
+/* Models                                                                      */
+/* -------------------------------------------------------------------------- */
+
+/** The main brain (Sprint 2.5). Writes, converses, decides. */
+export const MAIN_MODEL = "openai/gpt-5.6-luna-pro";
+
+/**
+ * The critic — and it must be a **different family**, not a different mode.
+ *
+ * The obvious pick is `openai/gpt-5.6-luna`, and it is wrong. The spec is
+ * explicit that `luna-pro` *"is the same underlying model as `luna`, served
+ * with `reasoning.mode: pro`"* — so a luna critic judging a luna-pro writer is
+ * the model grading its own register, which is precisely the failure the
+ * different-model rule exists to prevent. It would read as satisfied and catch
+ * nothing.
+ *
+ * kimi-k2 is a genuinely different family, was the previous main brain, and
+ * matches §470's "mid, strong instruction-following" requirement for Critique.
+ */
+export const CRITIC_MODEL = "moonshotai/kimi-k2-0905";
 
 export function buildMayaWorkspace(
   input: MayaWorkspaceInput
@@ -96,9 +157,14 @@ export function buildMayaWorkspace(
     ["MEMORY.md", renderMemory()],
     // On demand only — never against the always-loaded budget.
     ["BOOT.md", renderBoot()],
-    ["HEARTBEAT.md", renderHeartbeat()],
     ["CONVENTIONS.md", MAYA_CONVENTIONS],
   ]);
+
+  // NOT a workspace file — the gateway config lives outside the workspace,
+  // at /data/openclaw.json. Carried in the same bundle because the deploy
+  // writes both, and shipping a workspace with no config is how a machine
+  // boots on defaults that contradict the architecture.
+  files.set(OPENCLAW_CONFIG_PATH, renderOpenClawConfig());
 
   // Only this customer's channels. A founder on X alone should never carry
   // TikTok, Instagram, and YouTube norms in context (§15.1.2).
@@ -363,24 +429,83 @@ Runs once. Idempotent — if it half-ran before, running it again is safe.
 `;
 }
 
-function renderHeartbeat(): string {
-  return `# HEARTBEAT.md — a woken turn
+/**
+ * The gateway config (`/data/openclaw.json`).
+ *
+ * The previous version of this pack shipped **no config at all**, which meant a
+ * machine would boot on OpenClaw's defaults — and the defaults contradict
+ * nearly every architectural decision here: heartbeat every 30 minutes (48
+ * wakes/day, which guts auto-stop), a workspace at `~/.openclaw/workspace`
+ * rather than the persistent volume, bootstrap files re-seeded over ours, no
+ * plugin allow-list, and no model configured.
+ *
+ * A workspace without its config isn't a deployable agent; it's a folder.
+ */
+function renderOpenClawConfig(): string {
+  return JSON.stringify(
+    {
+      agents: {
+        defaults: {
+          workspace: WORKSPACE_DIR,
 
-**I do not schedule myself.** Convex owns the clock and wakes me; I decide what
-to do with the turn. There is no cron in this workspace, on purpose — a machine
-that spins to check whether it should be awake is a machine that is always
-awake, and that costs ten times as much.
+          // Our onboarding already collected identity and preferences, and
+          // IDENTITY.md is rendered from a template. Without this, OpenClaw
+          // runs its first-run Q&A and seeds its own bootstrap files.
+          skipBootstrap: true,
 
-On a woken turn:
+          // See the constants above — both limits raised because BOTH default
+          // failure modes are documented production incidents, and both are
+          // SILENT.
+          bootstrapMaxChars: BOOTSTRAP_MAX_CHARS_PER_FILE,
+          bootstrapTotalMaxChars: BOOTSTRAP_TOTAL_MAX_CHARS,
 
-1. **Inbound first.** Anything unanswered outranks anything I was going to make.
-2. Is there an open question I'm waiting on? Then I don't ask another.
-3. Anything the founder needs to know that they don't already? Say it.
-4. Otherwise: the work — homework, draft, critique, publish.
+          // ⭐ HEARTBEAT OFF. Convex owns the clock.
+          //
+          // The default is every 30m — 48 wakes a day on a machine that should
+          // wake ~6–15 times, which would quietly undo the auto-stop economics
+          // the whole deploy path is built around ($100–400/mo vs
+          // $1,400–3,000 at 200 customers).
+          //
+          // `0m` also stops HEARTBEAT.md being injected at all, which is why
+          // this pack no longer ships one — a file that never loads is budget
+          // spent on nothing and a lie to the next reader.
+          heartbeat: { every: "0m" },
 
-If there's genuinely nothing to do, I do nothing. **Silence is a valid turn.**
-Manufacturing activity to look busy is how a founder learns to ignore me.
-`;
+          // Typing starts the moment the model loop begins, and refreshes
+          // every 5s because Telegram clears the indicator after ~5.
+          //
+          // This covers the POST-boot half only. The machine is asleep before
+          // that, so Convex sends the indicator itself during the wake — see
+          // maya/telegram.ts. Two halves, because no single layer can see both.
+          typingMode: "instant",
+          typingIntervalSeconds: 5,
+
+          model: { primary: MAIN_MODEL },
+        },
+      },
+
+      // Only ours. An allow-list rather than a default-open posture: the
+      // machine should not be able to load a plugin nobody put there.
+      plugins: { allow: ["maya-tools"] },
+
+      subagents: [
+        {
+          id: "critique",
+          name: "Critique",
+          // ⭐ THE STRUCTURAL HALF OF "must be a different model".
+          //
+          // The skill says to refuse the verdict if it finds itself running as
+          // the writer's model. That's a prompt asking a model to notice
+          // something about itself, which is the weakest possible enforcement.
+          // Binding the subagent to a different family makes it true by
+          // configuration instead.
+          model: CRITIC_MODEL,
+        },
+      ],
+    },
+    null,
+    2
+  );
 }
 
 function renderPlatformAlgo(channel: MayaChannel): string {

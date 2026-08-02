@@ -127,6 +127,13 @@ export const telegramWebhookHttp = httpAction(async (ctx, request) => {
       // Safe to await: the call swallows its own errors, so it can add latency
       // but can never fail the webhook.
       await ctx.runAction(internal.maya.telegram.showTyping, { chatId });
+      // Telegram clears the indicator after ~5s and a cold boot is 10–30s, so
+      // one send leaves the founder staring at nothing for most of the wait.
+      // Scheduled, never awaited: a webhook that sat here re-painting for 24s
+      // would blow Telegram's delivery ACK and earn a retry.
+      await ctx.scheduler.runAfter(0, internal.maya.telegram.holdTyping, {
+        chatId,
+      });
       await ctx.scheduler.runAfter(0, internal.maya.telegram.handleInbound, {
         chatId,
         text: update.message.text,
