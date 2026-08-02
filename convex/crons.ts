@@ -114,22 +114,17 @@ crons.interval(
 // These fire for `agentVersion: "v2"` customers only. v1 keeps running on the
 // frozen gtmMaya agent — migration is per-customer, not a flag day.
 
-// The brief is composed and sent BEFORE any other work in the run. Three
-// briefs have orphaned historically because the message came last.
-crons.daily(
-  "maya-morning-run",
-  { hourUTC: 7, minuteUTC: 0 },
-  internal.maya.scheduler.morningRunAll,
-  {}
-);
-
-// The receipt: what went live, links, what it got. Honest about zero days.
-crons.daily(
-  "maya-evening-recap",
-  { hourUTC: 19, minuteUTC: 0 },
-  internal.maya.scheduler.eveningRecapAll,
-  {}
-);
+// ⛔ The morning brief and evening recap USED to be Convex crons here, at
+// 07:00 and 19:00 UTC. They are OpenClaw cron jobs now (§18 Sprint 2.9).
+//
+// Two things were wrong with them beyond the duplication: they fired in UTC, so
+// a "morning" brief landed at 23:00 for a Los Angeles founder — the same
+// double-timezone bug v1 shipped — and they routed through a `wake_agent` job
+// that had no handler, so the brief never actually reached anyone.
+//
+// The cadence lives in /data/cron/jobs.json with the founder's timezone on
+// every expression. What remains below is only what must survive the machine
+// being unreachable.
 
 // Drains the durable job queue, reaping abandoned work first so a job whose
 // worker died is back in the queue before anything new is claimed.

@@ -81,96 +81,6 @@ async function seedFleet(
   });
 }
 
-describe("the morning sweep at 200 customers", () => {
-  it("EVERY customer gets a brief — not just the first", async () => {
-    // The regression that matters most. A global dedupe key meant exactly one
-    // brief went out per day across the whole fleet, and every single-customer
-    // test passed while it did.
-    const t = convexTest(schema, modules);
-    const ids = await seedFleet(t, FLEET);
-
-    const result = await t.action(internal.maya.scheduler.morningRunAll, {
-      now: MORNING,
-    });
-    expect(result.ran).toBe(FLEET);
-    expect(result.failed).toBe(0);
-
-    const messages = (await t.run((ctx) =>
-      ctx.db.query("messages").collect()
-    )) as Doc<"messages">[];
-    expect(messages).toHaveLength(FLEET);
-    expect(new Set(messages.map((m) => m.customerId)).size).toBe(FLEET);
-  });
-
-  it("each brief carries that customer's OWN angle, never a neighbour's", async () => {
-    const t = convexTest(schema, modules);
-    await seedFleet(t, 25);
-    await t.action(internal.maya.scheduler.morningRunAll, { now: MORNING });
-
-    const messages = (await t.run((ctx) =>
-      ctx.db.query("messages").collect()
-    )) as Doc<"messages">[];
-    // Every body is distinct, and each names its own index.
-    expect(new Set(messages.map((m) => m.body)).size).toBe(25);
-    for (const m of messages) {
-      expect(m.body).toMatch(/angle for customer \d+/);
-    }
-  });
-
-  it("enqueues one job per customer, with keys that can't collide", async () => {
-    const t = convexTest(schema, modules);
-    await seedFleet(t, FLEET);
-    await t.action(internal.maya.scheduler.morningRunAll, { now: MORNING });
-
-    const jobs = (await t.run((ctx) =>
-      ctx.db.query("jobs").collect()
-    )) as Doc<"jobs">[];
-    const produce = jobs.filter((j) => j.kind === "produce_post");
-    expect(produce).toHaveLength(FLEET);
-    expect(new Set(produce.map((j) => j.idempotencyKey)).size).toBe(FLEET);
-    // Every brief also queues its own delivery — one per customer, no collisions.
-    const deliver = jobs.filter((j) => j.kind === "deliver_message");
-    expect(deliver).toHaveLength(FLEET);
-    expect(new Set(deliver.map((j) => j.idempotencyKey)).size).toBe(FLEET);
-  });
-
-  it("a second sweep the same day is a full no-op across the fleet", async () => {
-    const t = convexTest(schema, modules);
-    await seedFleet(t, FLEET);
-    await t.action(internal.maya.scheduler.morningRunAll, { now: MORNING });
-    await t.action(internal.maya.scheduler.morningRunAll, { now: MORNING });
-
-    expect(
-      await t.run((ctx) => ctx.db.query("messages").collect())
-    ).toHaveLength(FLEET);
-    const jobs2 = (await t.run((ctx) =>
-      ctx.db.query("jobs").collect()
-    )) as Doc<"jobs">[];
-    expect(jobs2.filter((j) => j.kind === "produce_post")).toHaveLength(FLEET);
-  });
-
-  it("work grows LINEARLY with fleet size, not quadratically", async () => {
-    // A sweep that is O(n²) in customers looks fine at 5 and dies at 500. The
-    // signal here is the ratio of rows written, which must track the ratio of
-    // customers rather than its square.
-    const small = convexTest(schema, modules);
-    await seedFleet(small, 20);
-    await small.action(internal.maya.scheduler.morningRunAll, { now: MORNING });
-    const smallRows = (
-      (await small.run((ctx) => ctx.db.query("messages").collect())) as unknown[]
-    ).length;
-
-    const large = convexTest(schema, modules);
-    await seedFleet(large, 200);
-    await large.action(internal.maya.scheduler.morningRunAll, { now: MORNING });
-    const largeRows = (
-      (await large.run((ctx) => ctx.db.query("messages").collect())) as unknown[]
-    ).length;
-
-    expect(largeRows / smallRows).toBe(10);
-  });
-});
-
 describe("the liveness sweep at 200 customers", () => {
   it("checks the whole fleet and flags every stalled account", async () => {
     const t = convexTest(schema, modules);
@@ -208,6 +118,29 @@ describe("the liveness sweep at 200 customers", () => {
     const ids = await seedFleet(t, 50);
     await t.run(async (ctx) => {
       for (const [i, customerId] of ids.entries()) {
+        // The brief. Seeded directly rather than by running a fleet sweep —
+        // the sweep moved to OpenClaw's cron (§18 Sprint 2.9), and a test that
+        // establishes its precondition through a function that no longer
+        // exists is testing the wrong thing anyway.
+        await ctx.db.insert("messages", {
+          customerId,
+          direction: "out",
+          surface: "telegram",
+          body: "morning brief",
+          ts: EVENING - 7200_000,
+          deliveredAt: EVENING - 7200_000,
+          // Liveness recognises the brief by its dedupe key, not its text.
+          dedupeKey: `brief:${new Date(EVENING).toISOString().slice(0, 10)}`,
+        });
+        await ctx.db.insert("messages", {
+          customerId,
+          direction: "out",
+          surface: "telegram",
+          body: "evening recap",
+          ts: EVENING - 600_000,
+          deliveredAt: EVENING - 600_000,
+          dedupeKey: `recap:${new Date(EVENING).toISOString().slice(0, 10)}`,
+        });
         await ctx.db.insert("placements", {
           customerId,
           kind: "post",
@@ -219,9 +152,6 @@ describe("the liveness sweep at 200 customers", () => {
         });
       }
     });
-    await t.action(internal.maya.scheduler.morningRunAll, { now: MORNING });
-    await t.action(internal.maya.scheduler.eveningRecapAll, { now: EVENING });
-
     const result = await t.action(internal.maya.scheduler.livenessSweep, {
       now: EVENING,
     });
@@ -249,52 +179,13 @@ describe("a mixed fleet — v1, v2, paused, cancelled", () => {
     await seedFleet(t, 20, { state: "paused" });
     await seedFleet(t, 20, { state: "cancelled" });
 
-    const result = await t.action(internal.maya.scheduler.morningRunAll, {
-      now: MORNING,
-    });
-    expect(result.ran).toBe(40);
-
-    const messages = (await t.run((ctx) =>
-      ctx.db.query("messages").collect()
-    )) as Doc<"messages">[];
-    expect(messages).toHaveLength(40);
-    const touched = new Set(messages.map((m) => String(m.customerId)));
-    for (const id of v2) expect(touched.has(String(id))).toBe(true);
-  });
-});
-
-describe("the recap sweep at fleet size", () => {
-  it("every customer's recap reports only their own placements", async () => {
-    const t = convexTest(schema, modules);
-    const ids = await seedFleet(t, 30);
-    await t.run(async (ctx) => {
-      for (const [i, customerId] of ids.entries()) {
-        await ctx.db.insert("placements", {
-          customerId,
-          kind: "post",
-          channel: "x",
-          url: `https://x.com/c${i}/1`,
-          linkStatus: "live",
-          publishedAt: EVENING - 3600_000,
-          snapshotText: `post for ${i}`,
-          idempotencyKey: `rp_${i}`,
-        });
-      }
-    });
-
-    const result = await t.action(internal.maya.scheduler.eveningRecapAll, {
-      now: EVENING,
-    });
-    expect(result.ran).toBe(30);
-
-    const messages = (await t.run((ctx) =>
-      ctx.db.query("messages").collect()
-    )) as Doc<"messages">[];
-    expect(messages).toHaveLength(30);
-    // Each recap names exactly one URL, and it's that customer's.
-    for (const m of messages) {
-      const urls = m.body.match(/https:\/\/x\.com\/c\d+\/1/g) ?? [];
-      expect(urls).toHaveLength(1);
-    }
+    // The cadence moved to OpenClaw's cron, so what Convex still owns at fleet
+    // scale is deciding WHO the loop runs for. Everything downstream is
+    // per-machine.
+    const active = await t.query(internal.maya.scheduler.activeV2Customers, {});
+    expect(active).toHaveLength(40);
+    expect(new Set(active.map(String)).size).toBe(40);
+    const selected = new Set(active.map(String));
+    for (const id of v2) expect(selected.has(String(id))).toBe(true);
   });
 });

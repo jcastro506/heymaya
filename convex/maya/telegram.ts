@@ -267,20 +267,13 @@ export const handleInbound = internalAction({
     );
     if (!recorded.recorded) return recorded;
 
-    const customerId = await ctx.runQuery(
-      internal.maya.telegram.customerByChatId,
-      { chatId: args.chatId }
-    );
-    if (!customerId) return { recorded: true, reason: "no customer to wake" };
-
-    await ctx.runMutation(internal.maya.jobs.enqueue, {
-      kind: "wake_agent",
-      // One wake per inbound message. Two texts in a row are two wakes; the
-      // warm window (§17.36.2) means the second costs nothing anyway.
-      idempotencyKey: `wake:${customerId}:${args.ts ?? Date.now()}`,
-      customerId,
-      payloadJson: JSON.stringify({ reason: "inbound_message" }),
-    });
+    // No wake job. The machine is always on (§18 Sprint 2.9), so there is
+    // nothing to boot — OpenClaw's own Telegram-inbound path picks the message
+    // up on its persistent session.
+    //
+    // A `wake_agent` job used to be enqueued here to start an auto-stopped
+    // machine. It had no handler, so it dead-lettered on every single inbound
+    // message while the queue reported perfectly normal failures.
     return { recorded: true };
   },
 });
