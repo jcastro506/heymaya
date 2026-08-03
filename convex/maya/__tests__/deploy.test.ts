@@ -18,6 +18,7 @@ const NOW = Date.UTC(2026, 7, 1, 9, 0, 0);
 const CONFIG = buildMachineConfig({
   image: "registry.fly.io/heymaya-openclaw:v1",
   customerId: "cust_1",
+  timezone: "America/Los_Angeles",
 });
 
 describe("ALWAYS-ON, SO THE HEARTBEAT CAN ACTUALLY RUN", () => {
@@ -49,6 +50,18 @@ describe("ALWAYS-ON, SO THE HEARTBEAT CAN ACTUALLY RUN", () => {
     // isolation is the whole premise of "an employee".
     expect(CONFIG.metadata?.customerId).toBe("cust_1");
     expect(CONFIG.metadata?.agentVersion).toBe("v2");
+  });
+});
+
+describe("THE HEARTBEAT CAN ACTUALLY RESOLVE ITS OWN CLOCK", () => {
+  it("ships the founder's IANA timezone as TZ", () => {
+    // `activeHours: { timezone: "local" }` resolves against this. v1 once
+    // shipped the literal string "operator" as a timezone; OpenClaw failed
+    // closed and suppressed EVERY heartbeat tick — an agent that looked alive
+    // and never woke up.
+    expect(CONFIG.env?.TZ).toBe("America/Los_Angeles");
+    // A real zone, not a placeholder.
+    expect(CONFIG.env?.TZ).toMatch(/^[A-Za-z]+\/[A-Za-z_]+$|^UTC$/);
   });
 });
 
@@ -124,6 +137,7 @@ describe("SECRETS NEVER ENTER THE MACHINE CONFIG", () => {
     const smuggled = buildMachineConfig({
       image: "img",
       customerId: "c",
+      timezone: "UTC",
       publicEnv: { MAYA_AGENT_TOKEN: "tok_leaked", HARMLESS: "keep-me" },
     });
     const serialized = JSON.stringify(smuggled);
@@ -134,6 +148,7 @@ describe("SECRETS NEVER ENTER THE MACHINE CONFIG", () => {
       const leak = buildMachineConfig({
         image: "img",
         customerId: "c",
+        timezone: "UTC",
         publicEnv: { [name]: "leaked-value" },
       });
       expect(JSON.stringify(leak), `${name} leaked`).not.toContain("leaked-value");

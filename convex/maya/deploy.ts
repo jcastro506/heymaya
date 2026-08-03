@@ -78,6 +78,15 @@ export interface MachineConfigInput {
   /** Non-secret settings only. Anything sensitive goes through app secrets. */
   publicEnv?: Record<string, string>;
   customerId: string;
+  /**
+   * The founder's IANA timezone, e.g. `America/Los_Angeles`.
+   *
+   * Load-bearing, not cosmetic: the heartbeat's waking-hours window resolves
+   * `timezone: "local"` against this. v1 once shipped the literal string
+   * `"operator"` here, OpenClaw failed closed, and EVERY heartbeat tick was
+   * suppressed — an agent that looked alive and never woke up.
+   */
+  timezone: string;
 }
 
 /** Where the plugin tarball lands, and where the bootstrap installs it from. */
@@ -149,6 +158,9 @@ export function buildMachineConfig(input: MachineConfigInput): FlyMachineConfig 
       MAYA_PLUGIN_ID: BUNDLED_MAYA_PLUGIN_ID,
       MAYA_PLUGIN_TGZ: BUNDLED_MAYA_PLUGIN_TGZ_NAME,
       OPENCLAW_STATE_DIR: VOLUME_MOUNT_PATH,
+      // What `activeHours: { timezone: "local" }` resolves against. A bad value
+      // here doesn't degrade the heartbeat — it silences it.
+      TZ: input.timezone,
     },
     mounts: [{ volume: "maya_data", path: VOLUME_MOUNT_PATH }],
     services: [
@@ -400,6 +412,10 @@ export const deployMachine = internalAction({
       const config = buildMachineConfig({
         image: args.image,
         customerId: args.customerId,
+        // From the customer row, same source as the cron expressions — so the
+        // heartbeat's waking hours and the morning brief agree about what
+        // "morning" means.
+        timezone: workspace.timezone,
         publicEnv: { CONVEX_SITE_URL: siteUrl },
       });
 
@@ -469,6 +485,8 @@ export const workspaceFor = internalAction({
     files: Record<string, string>;
     seedFiles: Record<string, string>;
     alwaysLoadedChars: number;
+    /** Carried out so the machine's TZ and the cron expressions agree. */
+    timezone: string;
   } | null> => {
     const input = await ctx.runQuery(internal.maya.deploy.workspaceInput, {
       customerId: args.customerId,
@@ -479,6 +497,7 @@ export const workspaceFor = internalAction({
       files: Object.fromEntries(bundle.files),
       seedFiles: Object.fromEntries(bundle.seedFiles),
       alwaysLoadedChars: bundle.alwaysLoadedChars,
+      timezone: input.founder.timezone,
     };
   },
 });
