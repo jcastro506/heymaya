@@ -13,13 +13,28 @@
  * from send_update — the message always proceeds past the gates to delivery.
  *
  * Because /lc_gtm/send_update is an httpAction, we test via convex-test's
- * in-process router. We don't actually reach Telegram (no network in tests) —
- * the send fails downstream — so the meaningful assertion is that the response
- * reason is never one of the grounding-block reasons.
+ * in-process router. The send fails downstream, so the meaningful assertion is
+ * that the response reason is never one of the grounding-block reasons.
+ *
+ * ## The Telegram stub is load-bearing
+ *
+ * This comment used to claim "we don't actually reach Telegram (no network in
+ * tests)". That was FALSE — the handler resolved the fake bot token and made a
+ * real request to api.telegram.org, which normally 401s fast enough that nobody
+ * noticed. On a CI runner without egress to Telegram it hung until ETIMEDOUT,
+ * failing three tests for reasons unrelated to anything under test.
+ *
+ * It is invisible locally, because a dev machine HAS egress to Telegram — the
+ * test passes either way here. That is exactly why it survived: the environment
+ * that could catch it was the only one nobody ran.
+ *
+ * So the assumption is enforced now rather than asserted in prose. A test whose
+ * correctness depends on a network call NOT happening has to make it
+ * impossible, or it is a flake waiting for a bad day.
  */
 
 import { convexTest } from "convex-test";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { api } from "../../_generated/api";
 import schema from "../../schema";
 import { modules } from "../../../tests/_modules";
@@ -30,9 +45,29 @@ const GROUNDING_BLOCK_REASONS = [
   "evidence_blocked",
 ];
 
+const realFetch = globalThis.fetch;
+
 beforeAll(() => {
   process.env.ENCRYPTION_KEY = btoa("\0".repeat(32));
   process.env.TELEGRAM_BOT_TOKEN = "fake:shared-bot-token";
+
+  // Telegram never gets called. Everything else passes through, so an unrelated
+  // fetch on this path still behaves normally rather than being swallowed by an
+  // over-broad stub.
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("api.telegram.org")) {
+      return new Response(
+        JSON.stringify({ ok: false, error_code: 401, description: "Unauthorized" }),
+        { status: 401, headers: { "content-type": "application/json" } }
+      );
+    }
+    return realFetch(input as RequestInfo, init);
+  }) as typeof fetch;
+});
+
+afterAll(() => {
+  globalThis.fetch = realFetch;
 });
 
 async function setupAgent(t: ReturnType<typeof convexTest>, subject: string) {
