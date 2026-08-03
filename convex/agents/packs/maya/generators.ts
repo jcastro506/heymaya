@@ -203,7 +203,7 @@ export function buildMayaWorkspace(
   // the workspace, per the image's layout contract. Carried in the same bundle
   // because the deploy writes all of them, and shipping a workspace with no
   // config is how a machine boots on defaults that contradict the design.
-  files.set(OPENCLAW_CONFIG_PATH, renderOpenClawConfig());
+  files.set(OPENCLAW_CONFIG_PATH, renderOpenClawConfig(input.founder.timezone));
   files.set(CRON_STORE_PATH, renderCronJobs(input));
 
   /**
@@ -626,7 +626,7 @@ function renderCronJobs(input: MayaWorkspaceInput): string {
  *
  * A workspace without its config isn't a deployable agent; it's a folder.
  */
-function renderOpenClawConfig(): string {
+function renderOpenClawConfig(tz: string): string {
   return JSON.stringify(
     {
       agents: {
@@ -786,16 +786,6 @@ function renderOpenClawConfig(): string {
             archiveAfterMinutes: 60,
             thinking: "medium",
           },
-
-          /**
-           * Dreaming — opt-in, off by default.
-           *
-           * Deep phase is what promotes durable lines into MEMORY.md behind
-           * score/recall-count/unique-query gates, and rehydrates from live
-           * daily files so deleted snippets don't get promoted. Without it,
-           * MEMORY.md only grows when she remembers to write to it.
-           */
-          dreaming: { enabled: true },
         },
       },
 
@@ -812,12 +802,53 @@ function renderOpenClawConfig(): string {
       // below — the docs call it a poor fit for automation and workers, and a
       // subagent silently personalising its output is worse than useless.
       plugins: {
-        allow: ["maya-tools", "memory-wiki", "active-memory"],
+        allow: ["maya-tools", "memory-core", "memory-wiki", "active-memory"],
         entries: {
+          /**
+           * ⭐ DREAMING LIVES HERE, not on `agents.defaults`.
+           *
+           * A pre-flight check against the installed type definitions caught
+           * this: there IS a `dreaming` key in OpenClaw's types, but it belongs
+           * to the memory-LANCEDB extension's config. Putting it on
+           * `agents.defaults` would have been rejected as `Invalid input` — or
+           * worse, ignored, leaving MEMORY.md growing only when she happened to
+           * remember to write to it.
+           *
+           * `timezone` so the nightly sweep runs at the founder's 3am, not UTC's.
+           */
+          "memory-core": {
+            enabled: true,
+            config: {
+              dreaming: { enabled: true, timezone: tz },
+            },
+          },
+
+          /**
+           * Claims with evidence, provenance, contradiction and staleness —
+           * "what works on X right now" is a claim that expires.
+           */
+          "memory-wiki": { enabled: true },
+
+          /**
+           * Surfaces relevant memory BEFORE the reply rather than waiting for
+           * her to decide to search.
+           *
+           * Scoped to direct messages and the main agent: the docs call it a
+           * poor fit for "automation, internal workers", and a subagent
+           * silently personalising its output is worse than useless.
+           *
+           * The nesting matters — settings go under `config`, not on the entry.
+           * The first version of this put them on the entry, which the schema
+           * would have rejected.
+           */
           "active-memory": {
             enabled: true,
-            agents: ["main"],
-            sessionTypes: ["dm"],
+            config: {
+              enabled: true,
+              agents: ["main"],
+              allowedChatTypes: ["direct"],
+              model: WORKER_MODEL,
+            },
           },
         },
       },
