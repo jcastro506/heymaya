@@ -17,6 +17,12 @@ const REQUEST_TTL_MS = 30 * 60 * 1000;
 const sourceValidator = v.union(v.literal("web"), v.literal("imessage"));
 
 /**
+ * Rows deleted per pass. Well under Convex's 4,096-read ceiling, because the
+ * scan itself costs reads too — a budget at the limit would still throw.
+ */
+const DELETE_BUDGET = 1_000;
+
+/**
  * Sprint 0b — the purge lists after the schema prune.
  *
  * The creator and service products were deleted, and with them ~70 tables.
@@ -405,21 +411,43 @@ async function purgeCreatorAccount(
     });
   }
 
-  const creatorDeleted = await deleteCreatorScopedRows(ctx, creator._id);
-  const accountDeleted = await deleteAccountScopedRows(ctx, creator._id);
-  for (const customerId of stripeCustomerIds) {
-    await deleteStripeWebhookRows(ctx, customerId);
+  /**
+   * Deleted in bounded passes, not all at once.
+   *
+   * Convex caps one mutation at 4,096 reads, so a single sweep threw on any
+   * account with real history — which is to say, on every account this is
+   * actually for. `done: false` means rows remain and the caller should invoke
+   * again; the creator row itself is deleted LAST, so a partially-purged
+   * account is still findable and resumable rather than orphaned.
+   *
+   * External teardown (Fly, Stripe, Zernio) was already scheduled above, on the
+   * first pass — the machine stops billing immediately rather than waiting for
+   * the row-delete to finish.
+   */
+  const creatorDeleted = await deleteCreatorScopedRows(ctx, creator._id, DELETE_BUDGET);
+  const accountDeleted = await deleteAccountScopedRows(
+    ctx,
+    creator._id,
+    DELETE_BUDGET - creatorDeleted.count
+  );
+  const done = !creatorDeleted.exhausted && !accountDeleted.exhausted;
+
+  if (done) {
+    for (const customerId of stripeCustomerIds) {
+      await deleteStripeWebhookRows(ctx, customerId);
+    }
+    await ctx.db.delete(creator._id);
   }
-  await ctx.db.delete(creator._id);
 
   return {
     source,
+    done,
     clerkUserId: creator.clerkUserId,
     email: creator.email,
     deletedRows: {
-      creatorScoped: creatorDeleted,
-      accountScoped: accountDeleted,
-      creator: 1,
+      creatorScoped: creatorDeleted.count,
+      accountScoped: accountDeleted.count,
+      creator: done ? 1 : 0,
     },
     flyAppIds,
   };
@@ -653,32 +681,57 @@ async function flyAppIdsForAccount(
 
 async function deleteCreatorScopedRows(
   ctx: MutationCtx,
-  creatorId: Id<"creators">
-): Promise<number> {
+  creatorId: Id<"creators">,
+  budget: number
+): Promise<{ count: number; exhausted: boolean }> {
   let count = 0;
   for (const table of CREATOR_SCOPED_TABLES) {
-    const rows = await queryByIndex(ctx, table, "by_creator", "creatorId", creatorId);
+    if (count >= budget) return { count, exhausted: true };
+    const rows = await queryByIndex(
+      ctx,
+      table,
+      "by_creator",
+      "creatorId",
+      creatorId,
+      budget - count
+    );
     for (const row of rows) {
       await ctx.db.delete(row._id);
       count += 1;
     }
+    // A full page means there is probably more behind it.
+    if (rows.length >= budget - (count - rows.length)) {
+      return { count, exhausted: true };
+    }
   }
-  return count;
+  return { count, exhausted: false };
 }
 
 async function deleteAccountScopedRows(
   ctx: MutationCtx,
-  accountId: Id<"creators">
-): Promise<number> {
+  accountId: Id<"creators">,
+  budget: number
+): Promise<{ count: number; exhausted: boolean }> {
   let count = 0;
   for (const table of ACCOUNT_SCOPED_TABLES) {
-    const rows = await queryByIndex(ctx, table, "by_account", "accountId", accountId);
+    if (count >= budget) return { count, exhausted: true };
+    const rows = await queryByIndex(
+      ctx,
+      table,
+      "by_account",
+      "accountId",
+      accountId,
+      budget - count
+    );
     for (const row of rows) {
       await ctx.db.delete(row._id);
       count += 1;
     }
+    if (rows.length >= budget - (count - rows.length)) {
+      return { count, exhausted: true };
+    }
   }
-  return count;
+  return { count, exhausted: false };
 }
 
 async function deleteStripeWebhookRows(
@@ -688,17 +741,29 @@ async function deleteStripeWebhookRows(
   const rows = await ctx.db
     .query("stripeWebhookEvents")
     .withIndex("by_customer", (q) => q.eq("customerId", customerId))
-    .collect();
+    .take(500);
   for (const row of rows) await ctx.db.delete(row._id);
   return rows.length;
 }
 
+/**
+ * Read at most `limit` rows.
+ *
+ * `.collect()` was the bug: it reads every matching row in one mutation, and
+ * Convex caps a single execution at 4,096 reads. A GTM account with a week of
+ * messages, cost-ledger entries and traces blows straight past that, so
+ * `purgeGtmAccountByCreatorId` THREW on exactly the accounts it existed to
+ * delete — and deletion is something this product promises customers, not a
+ * convenience. Found trying to tear down the staging dogfood account, which had
+ * all of $20 of history.
+ */
 async function queryByIndex(
   ctx: QueryCtx | MutationCtx,
   table: string,
   index: string,
   field: string,
-  value: unknown
+  value: unknown,
+  limit: number
 ): Promise<Array<{ _id: Parameters<MutationCtx["db"]["delete"]>[0] }>> {
   type UntypedIndexBuilder = {
     eq: (fieldName: string, fieldValue: unknown) => unknown;
@@ -709,9 +774,9 @@ async function queryByIndex(
         indexName: string,
         builder: (q: UntypedIndexBuilder) => unknown
       ) => {
-        collect: () => Promise<
-          Array<{ _id: Parameters<MutationCtx["db"]["delete"]>[0] }>
-        >;
+        take: (
+          n: number
+        ) => Promise<Array<{ _id: Parameters<MutationCtx["db"]["delete"]>[0] }>>;
       };
     };
   };
@@ -719,7 +784,7 @@ async function queryByIndex(
   return await db
     .query(table)
     .withIndex(index, (q) => q.eq(field, value))
-    .collect();
+    .take(limit);
 }
 
 function normalizeConfirmation(value: string): string {
