@@ -3676,6 +3676,7 @@ production.
 | **Wire `memorySearch`** — embeddings + sqlite vector store on the volume, matching v1. Currently absent entirely; recall today is a static generated file. |
 | **Enable dreaming.** |
 | **Shrink `convex/maya/scheduler.ts`** to message delivery and the publish path only. Delete the watchers layer, `wake_agent`, and every Convex cron that duplicates an OpenClaw one. |
+| ⭐ **A way to actually deploy one.** `deployMachine` is an `internalAction` — CLI-only by definition, so no operator can start a v2 machine. Needs a public action wrapper and a minimal trigger. **This is harness plumbing, NOT Sprint 11.** Sprint 11 owns the *designed* six-screen onboarding (§18.9.25) and depends on the perception layer; this owns "a machine can be started at all", which Sprint 3's exit criterion silently assumes. Scope: sign in → product URL → pair Telegram → deploy. No streaming read, no connect cards, no payment. |
 | ⭐ **Use the gateway persistent-session path, not `/hooks/agent`** — that entry point is hardcoded isolated+forceNew, which is what made v1's amnesia structural (five DMs = five fresh sessions). Verify, don't assume. |
 
 #### 2.9.4 Exit — demonstrated live, per §18.0

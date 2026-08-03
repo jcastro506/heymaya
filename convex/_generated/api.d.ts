@@ -217,6 +217,7 @@ import type * as maya_preflight from "../maya/preflight.js";
 import type * as maya_publishDecision from "../maya/publishDecision.js";
 import type * as maya_quality from "../maya/quality.js";
 import type * as maya_scheduler from "../maya/scheduler.js";
+import type * as maya_setup from "../maya/setup.js";
 import type * as maya_spendCeiling from "../maya/spendCeiling.js";
 import type * as maya_telegram from "../maya/telegram.js";
 import type * as maya_voice from "../maya/voice.js";
@@ -448,6 +449,7 @@ declare const fullApi: ApiFromModules<{
   "maya/publishDecision": typeof maya_publishDecision;
   "maya/quality": typeof maya_quality;
   "maya/scheduler": typeof maya_scheduler;
+  "maya/setup": typeof maya_setup;
   "maya/spendCeiling": typeof maya_spendCeiling;
   "maya/telegram": typeof maya_telegram;
   "maya/voice": typeof maya_voice;
