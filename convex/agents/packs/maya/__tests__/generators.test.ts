@@ -262,10 +262,29 @@ describe("MEMORY IS CONFIGURED FOR YEARS, NOT WEEKS", () => {
     );
   });
 
-  it("dreaming is on — it also defaults to off", () => {
-    // Deep phase is what promotes durable lines into MEMORY.md. Without it,
-    // MEMORY.md only grows when she happens to remember to write to it.
-    expect(config.agents.defaults.dreaming.enabled).toBe(true);
+  it("DREAMING IS ON, AND IN THE RIGHT PLACE", () => {
+    // A pre-flight check against the installed type definitions caught this:
+    // there IS a `dreaming` key in OpenClaw's types, but it belongs to the
+    // memory-LANCEDB extension's config. On `agents.defaults` it would have
+    // been rejected as `Invalid input` — or worse, silently ignored, leaving
+    // MEMORY.md growing only when she happened to write to it.
+    expect(config.agents.defaults.dreaming).toBeUndefined();
+    const core = config.plugins.entries["memory-core"];
+    expect(core.enabled).toBe(true);
+    expect(core.config.dreaming.enabled).toBe(true);
+    // The nightly sweep at the FOUNDER'S 3am, not UTC's.
+    expect(core.config.dreaming.timezone).toBe("UTC");
+  });
+
+  it("plugin settings are nested under `config`, not on the entry", () => {
+    // The other half of the same mistake. The first version put active-memory's
+    // settings directly on the entry, which the schema rejects.
+    const am = config.plugins.entries["active-memory"];
+    expect(am.enabled).toBe(true);
+    expect(am.config.agents).toEqual(["main"]);
+    // `allowedChatTypes: ["direct"]` — NOT the `sessionTypes: ["dm"]` I invented.
+    expect(am.config.allowedChatTypes).toEqual(["direct"]);
+    expect(config.plugins.entries["memory-wiki"].enabled).toBe(true);
   });
 
   it("MEMORY.md IS SEEDED, NEVER OVERWRITTEN", () => {
@@ -323,7 +342,7 @@ describe("the gateway config exists at all", () => {
     expect(config.agents.defaults.skipBootstrap).toBe(true);
   });
 
-  it("allow-lists our plugin plus the two memory plugins", () => {
+  it("allow-lists our plugin plus the memory plugins", () => {
     // memory-wiki: claims with evidence, provenance, contradiction and
     // staleness tracking — "what works on X right now" is a claim that expires.
     // active-memory: surfaces relevant memory BEFORE the reply instead of
@@ -331,6 +350,7 @@ describe("the gateway config exists at all", () => {
     expect([...config.plugins.allow].sort()).toEqual([
       "active-memory",
       "maya-tools",
+      "memory-core",
       "memory-wiki",
     ]);
   });
@@ -341,8 +361,8 @@ describe("the gateway config exists at all", () => {
     // its output is worse than useless.
     const entry = config.plugins.entries["active-memory"];
     expect(entry.enabled).toBe(true);
-    expect(entry.sessionTypes).toEqual(["dm"]);
-    expect(entry.agents).toEqual(["main"]);
+    expect(entry.config.allowedChatTypes).toEqual(["direct"]);
+    expect(entry.config.agents).toEqual(["main"]);
   });
 
   it("turns typing on for the post-boot half", () => {
