@@ -171,6 +171,17 @@ export const MAIN_MODEL = "openai/gpt-5.6-luna-pro";
  */
 export const CRITIC_MODEL = "moonshotai/kimi-k2-0905";
 
+/**
+ * Workers and heartbeat ticks. Cheap on purpose.
+ *
+ * A heartbeat tick is a triage read, not strategic reasoning — and v1's burn
+ * autopsy put real numbers on the difference: ~$0.03 a tick on the main brain
+ * against ~$0.002 on a worker model. Over 16 waking ticks a day that is
+ * $0.50/day versus $0.03/day, per customer. Anything a tick surfaces that needs
+ * real judgment ends up in a main-model turn anyway.
+ */
+export const WORKER_MODEL = "openai/gpt-oss-120b";
+
 export function buildMayaWorkspace(
   input: MayaWorkspaceInput
 ): MayaWorkspaceBundle {
@@ -643,7 +654,31 @@ function renderOpenClawConfig(): string {
           // Hourly rather than the 30m default: her work is measured in hours,
           // and a turn that finds nothing to do still costs input tokens for
           // the whole always-loaded set.
-          heartbeat: { every: "60m" },
+          heartbeat: {
+            every: "60m",
+
+            // Only HEARTBEAT.md from the workspace, not the whole always-loaded
+            // set. A tick re-reading every doctrine file is the single most
+            // wasteful thing an idle agent can do.
+            lightContext: true,
+
+            // Each tick in a fresh session, so routine housekeeping never
+            // pollutes the founder's actual conversation.
+            isolatedSession: true,
+
+            // ⭐ WAKING HOURS ONLY. v1's live burn autopsy (2026-07-15):
+            // round-the-clock ticks idled at ~$2.50/hr overnight with zero
+            // founder activity. Nothing needs monitoring while they sleep, and
+            // an inbound DM wakes her independently of the heartbeat.
+            //
+            // `local` resolves against the machine's TZ env, which the deploy
+            // sets to the founder's real IANA zone. v1 once shipped the literal
+            // string "operator" as a timezone; OpenClaw failed closed and
+            // suppressed EVERY tick.
+            activeHours: { start: "07:00", end: "23:00", timezone: "local" },
+
+            model: WORKER_MODEL,
+          },
 
           // Typing starts the moment the model loop begins, and refreshes
           // every 5s because Telegram clears the indicator after ~5.
@@ -668,6 +703,9 @@ function renderOpenClawConfig(): string {
             provider: "gemini",
             model: "gemini-embedding-001",
             outputDimensionality: 768,
+            // No silent downgrade to a different provider mid-corpus — an index
+            // built from two embedding models ranks incoherently.
+            fallback: "none",
             store: {
               // On the volume. Losing this loses every recall beyond MEMORY.md,
               // which is why §2.9.6 lists a nightly R2 snapshot as a task.
@@ -679,6 +717,12 @@ function renderOpenClawConfig(): string {
               maxResults: 8,
               minScore: 0.25,
               hybrid: {
+                enabled: true,
+                // Vector-leaning, but keyword still carries a third: exact
+                // terms (a post id, a handle, a product name) have to match
+                // even when nothing is semantically near them.
+                vectorWeight: 0.65,
+                textWeight: 0.35,
                 // ⭐ THE TWO MULTI-YEAR FEATURES. Both off by default.
                 //
                 // temporalDecay: 30-day half-life on ranking weight, so a note
@@ -686,12 +730,61 @@ function renderOpenClawConfig(): string {
                 // exempt as evergreen. The docs recommend this explicitly once
                 // an agent has "months of daily notes" — which every customer
                 // will have by month three.
-                temporalDecay: { enabled: true },
+                // 45 days rather than the 30-day default: a social playbook
+                // turns over in about a quarter, so last month should still
+                // rank while last spring shouldn't.
+                temporalDecay: { enabled: true, halfLifeDays: 45 },
                 // mmr: stops five near-identical daily notes filling all eight
                 // result slots with the same fact.
                 mmr: { enabled: true },
               },
             },
+
+            /**
+             * ⭐ Index past session transcripts.
+             *
+             * Off by default in OpenClaw, and it is what lets her recall an
+             * actual earlier conversation rather than only the notes she
+             * happened to write about it. v1's note is blunt: this replaces the
+             * planned `get_my_recent_messages` read-back tool outright — the
+             * agent cannot otherwise read what she already said, which was the
+             * root enabler of her repeating herself.
+             */
+            experimental: { sessionMemory: true },
+
+            /**
+             * When the index updates. Without this the corpus goes stale and
+             * `memory_search` quietly answers from last week's world.
+             *
+             * `postCompactionForce` matters most: compaction is exactly when
+             * detail leaves the context window, so it is exactly when that
+             * detail has to be searchable instead.
+             */
+            sync: {
+              onSessionStart: true,
+              onSearch: true,
+              watch: true,
+              intervalMinutes: 30,
+              sessions: {
+                deltaBytes: 100_000,
+                deltaMessages: 50,
+                postCompactionForce: true,
+              },
+            },
+          },
+
+          /**
+           * Subagent limits. Depth 1 is the load-bearing one — it stops a
+           * worker spawning workers, which is how a research fan-out becomes a
+           * runaway loop. This product has already had one, at ~$30/hr.
+           */
+          subagents: {
+            maxConcurrent: 4,
+            maxChildrenPerAgent: 3,
+            maxSpawnDepth: 1,
+            runTimeoutSeconds: 900,
+            archiveAfterMinutes: 60,
+            thinking: "medium",
           },
 
           /**

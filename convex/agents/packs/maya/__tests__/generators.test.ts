@@ -132,6 +132,36 @@ describe("OPENCLAW OWNS THE CLOCK", () => {
     expect(config.agents.defaults.heartbeat.every).toMatch(/^\d+m$/);
   });
 
+  it("THE HEARTBEAT DOESN'T RUN OVERNIGHT", () => {
+    // v1's live burn autopsy, 2026-07-15: round-the-clock ticks idled at
+    // ~$2.50/hr overnight with zero founder activity. Nothing needs monitoring
+    // while they sleep, and an inbound DM wakes her independently.
+    const hb = config.agents.defaults.heartbeat;
+    expect(hb.activeHours.start).toBe("07:00");
+    expect(hb.activeHours.end).toBe("23:00");
+    // "local", not UTC — resolved against the machine's TZ env.
+    expect(hb.activeHours.timezone).toBe("local");
+  });
+
+  it("a tick runs on the CHEAP model, not the main brain", () => {
+    // A tick is a triage read, not strategic reasoning. v1 measured ~$0.03 on
+    // the main brain against ~$0.002 on a worker — $0.50/day vs $0.03/day per
+    // customer across 16 waking ticks.
+    const hb = config.agents.defaults.heartbeat;
+    expect(hb.model).toBeTruthy();
+    expect(hb.model).not.toBe(config.agents.defaults.model.primary);
+  });
+
+  it("a tick carries LIGHT context and its own session", () => {
+    // lightContext: only HEARTBEAT.md, not every doctrine file. A tick
+    // re-reading the whole always-loaded set is the most wasteful thing an idle
+    // agent can do. isolatedSession keeps housekeeping out of the founder's
+    // actual conversation.
+    const hb = config.agents.defaults.heartbeat;
+    expect(hb.lightContext).toBe(true);
+    expect(hb.isolatedSession).toBe(true);
+  });
+
   it("ships a HEARTBEAT.md, because an enabled heartbeat loads one", () => {
     const heartbeat = buildMayaWorkspace(INPUT).files.get("HEARTBEAT.md")!;
     expect(heartbeat).toBeTruthy();
@@ -192,6 +222,44 @@ describe("MEMORY IS CONFIGURED FOR YEARS, NOT WEEKS", () => {
     const hybrid = config.agents.defaults.memorySearch.query.hybrid;
     expect(hybrid.temporalDecay.enabled).toBe(true);
     expect(hybrid.mmr.enabled).toBe(true);
+  });
+
+  it("SESSION TRANSCRIPTS ARE INDEXED", () => {
+    // Off by default, and it is what lets her recall an actual earlier
+    // conversation rather than only the notes she wrote about it. v1's note is
+    // blunt: this replaces a read-back tool outright — an agent that cannot
+    // read what she already said was the root enabler of her repeating herself.
+    expect(config.agents.defaults.memorySearch.experimental.sessionMemory).toBe(
+      true
+    );
+  });
+
+  it("the index actually re-syncs, including after compaction", () => {
+    // Compaction is exactly when detail leaves the context window, so it is
+    // exactly when that detail has to become searchable instead.
+    const sync = config.agents.defaults.memorySearch.sync;
+    expect(sync.watch).toBe(true);
+    expect(sync.intervalMinutes).toBeLessThanOrEqual(60);
+    expect(sync.sessions.postCompactionForce).toBe(true);
+  });
+
+  it("hybrid search keeps real weight on keywords", () => {
+    // Exact terms — a post id, a handle, a product name — have to match even
+    // when nothing is semantically near them.
+    const hybrid = config.agents.defaults.memorySearch.query.hybrid;
+    expect(hybrid.enabled).toBe(true);
+    expect(hybrid.textWeight).toBeGreaterThan(0.2);
+    expect(hybrid.vectorWeight + hybrid.textWeight).toBeCloseTo(1);
+  });
+
+  it("subagents cannot spawn subagents", () => {
+    // Depth 1 is the load-bearing limit: a worker spawning workers is how a
+    // research fan-out becomes a runaway loop, and this product has already had
+    // one at ~$30/hr.
+    expect(config.agents.defaults.subagents.maxSpawnDepth).toBe(1);
+    expect(config.agents.defaults.subagents.runTimeoutSeconds).toBeLessThanOrEqual(
+      1800
+    );
   });
 
   it("dreaming is on — it also defaults to off", () => {
